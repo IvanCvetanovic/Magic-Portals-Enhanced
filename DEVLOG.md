@@ -217,3 +217,54 @@ the one part that produced more than was asked for — the `flipY`/`flipX` bug a
 "animation is script-only" finding are both things that would have cost days if discovered
 in month two instead of hour two. One nagging thread remains: none of it can be validated
 against the actual game until the APK lands.
+
+---
+
+### 2026-07-25 15:07 — Session 1b: First commit + push
+
+**Correction to the entry above:** it says "0 commits (setup stops before committing, by
+request)". That was true when written; Ivan then asked for the commit and push. Recording
+it here rather than editing the entry, per the append-only rule.
+
+**Built:** Nothing new — packaging only. Root commit `0cfb733`, 21 files, 3336 insertions,
+pushed to `origin/main` (`github.com/IvanCvetanovic/Magic-Portals-Remake`, **private** —
+confirmed by an unauthenticated API fetch returning 404 before pushing, since a public
+push would have been the irreversible version of this action). Authored and committed as
+Ivan Cvetanovic, no co-author trailers, matching the Wolf Brigade convention.
+
+**Broke / dead ends:**
+- **`git add` warned "LF will be replaced by CRLF"** on `.gitattributes`, `.gitignore` and
+  `tools/converter/.gitignore`. Dotfiles have no extension, so every `*.ext text eol=lf`
+  rule missed them and the catch-all `* text=auto` took over. This is the exact annoyance
+  Wolf Brigade logged as firing "on every git touch all loop" — pinned
+  `.gitignore`/`.gitattributes` to `eol=lf` explicitly before committing, so it never
+  starts. Cost ~2 minutes because the fix was already known from the other project.
+
+**Decision:**
+- **One root commit, not five.** CLAUDE.md says keep diffs commit-sized, but a greenfield
+  scaffold is genuinely atomic: the `.gitignore` is what protects the `reference/` tree
+  that was *already on disk* before anything else existed, so splitting it into
+  "hygiene → project → converter → docs" would create intermediate commits where the
+  protection isn't in place yet. The small-commits rule starts applying next session.
+- **Checked repo visibility before pushing, not after.** `gh` isn't installed, so used an
+  unauthenticated `api.github.com` fetch — 404 means private. Worth the extra call: the
+  push is the publish, and "it's private, right?" is not a question worth answering
+  optimistically when the project's central rule is about redistribution.
+
+**Assets check:** yes — three gates run against the actual commit tree (`git ls-tree -r
+HEAD`), not the working directory: (1) no path under `reference/`, `out/`, `.godot/`,
+`.venv/`, `__pycache__/`; (2) no file with an asset or game-data extension
+(`.apk .png .ogg .ent .esc .par .enml .as` …); (3) pack size 0.00 MB, which is itself
+evidence no binary slipped in. All 21 files are hand-authored text.
+
+**[CLIP] —** None. Still headless.
+
+**[BROLL]** — None.
+
+**Numbers:** commit `0cfb733`, 21 files, 3336 insertions, 0 deletions, 0.00 MB packed.
+Remote had 0 refs before, 2 after (`HEAD`, `refs/heads/main`). 18 converter tests green,
+ruff clean, Godot import + headless run both exit 0 at time of commit.
+
+**Inferred mood:** guess — brisk and uneventful, which is the correct feeling for a push.
+The only judgement call worth anything was spending one extra API call to confirm the repo
+was private before making the history public-shaped. Everything else was mechanical.
