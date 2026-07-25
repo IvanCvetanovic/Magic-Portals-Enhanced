@@ -1,0 +1,73 @@
+# ============================================================================
+#  reference/ IS DELIBERATELY EXCLUDED. DO NOT "CLEAN THIS UP".
+# ============================================================================
+#  Everything under reference/ originates from third parties and MUST NOT
+#  enter this repository's history:
+#
+#    reference/apk/        the original Magic Portals APK (Asantee Games)
+#    reference/extracted/  unpacked APK contents — art, audio, scene/entity
+#                          data. We have written permission to REBUILD the
+#                          game and REUSE assets; we do NOT have permission
+#                          to REDISTRIBUTE them, and a public git repo is
+#                          redistribution.
+#    reference/ethanon/    Ethanon Engine source (MIT). Vendoring it would be
+#                          legal, but it is read-only decoding reference with
+#                          its own upstream — it is cloned, not committed.
+#                          (It also carries its own nested .git/.)
+#
+#  Git history is effectively permanent: a commit that lands here is a
+#  licensing problem that a later `git rm` does not undo. Whoever is reading
+#  this and considering an exception — don't. Put the file somewhere else.
+#
+#  Consequence, by design: a fresh clone has NO reference/ directory. See
+#  README.md for how to recreate it locally.
+#
+#  DELIBERATELY UNANCHORED (no leading slash): this matches reference/ at ANY
+#  depth, not just the repo root. The converter's default input path is
+#  cwd-relative, so running it from tools/converter/ would create
+#  tools/converter/reference/extracted/ — which a root-anchored "/reference/"
+#  would NOT ignore. Do not "tidy" this by adding the slash back.
+# ============================================================================
+reference/
+
+
+# --- Godot ---------------------------------------------------------------
+# Import cache & editor-generated data. The Godot project root is game/, so in
+# practice this is game/.godot/ — left unanchored anyway, for the same reason as
+# reference/ above: a second Godot project anywhere in the tree should also be
+# covered, and .godot/ is never something worth committing.
+.godot/
+# Exported builds (APK output — large, reproducible)
+build/
+/game/android/build/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# --- Python converter ----------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+
+# --- Converter output staging --------------------------------------------
+# The converter reads reference/extracted/ and writes .tscn/assets. Anything
+# it emits that still carries Asantee-origin content (textures, audio, level
+# data) is subject to the same rule as reference/ above. Keep generated
+# output here and it stays out of history until it has been reviewed.
+# Unanchored for the same reason as reference/ — the converter's default output
+# path is cwd-relative, so out/ can appear below tools/converter/ too.
+out/
+
+# --- OS / editor cruft ---------------------------------------------------
+Thumbs.db
+.DS_Store
+desktop.ini
+.idea/
+.vscode/

@@ -1,0 +1,29 @@
+# Line-ending policy.
+# Batch files MUST be CRLF or cmd.exe mis-parses them (a LF .bat makes `@echo off`
+# fail and comment lines execute as commands). Everything else stays LF so Godot,
+# Python and data files are byte-stable across machines and the working tree stops
+# warning "LF will be replaced by CRLF" on every touch.
+
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+*.gd    text eol=lf
+*.tscn  text eol=lf
+*.tres  text eol=lf
+*.godot text eol=lf
+*.cfg   text eol=lf
+*.json  text eol=lf
+*.py    text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.uid   text eol=lf
+*.sh    text eol=lf
+
+# Dotfiles have no extension, so the rules above miss them and `text=auto` below
+# normalises them to LF in the repo while checking them out as CRLF — which makes
+# git warn "LF will be replaced by CRLF" on every single touch. Pin them.
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+
+# Let git decide for anything not listed.
+*       text=auto

@@ -1,0 +1,53 @@
+; Engine configuration file.
+; Magic Portals Remake — see ../CLAUDE.md for rules, ../MILESTONE_1.md for scope.
+; config_version MUST be 5 for Godot 4.x (4 = Godot 3, loads wrong).
+
+config_version=5
+
+[application]
+
+config/name="Magic Portals Remake"
+run/main_scene="res://scenes/main.tscn"
+; Target is Godot 4.6 per project spec. NOTE: the editor installed on this machine
+; is 4.7.1.stable.steam — it will open this fine and will rewrite this tag to "4.7"
+; the first time the project is saved from the editor. See CLAUDE.md → Environment.
+config/features=PackedStringArray("4.6", "GL Compatibility")
+
+[display]
+
+; ---------------------------------------------------------------------------
+; PROVISIONAL — these are placeholders, NOT the original game's values.
+; The authoritative numbers come from the original APK: Ethanon reads its window
+; setup from `app.enml` (fixedWidth / fixedHeight / windowTitle — see
+; engine/Platform/ETHAppEnmlFile.cpp). Once reference/extracted/ exists, read
+; app.enml and replace everything in this block, including the orientation.
+; ---------------------------------------------------------------------------
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+; Godot 4 stores orientation as an int enum, NOT the Godot-3 string "landscape".
+; 0=Landscape, 1=Portrait, 2=Reverse Landscape, 3=Reverse Portrait,
+; 4=Sensor Landscape, 5=Sensor Portrait, 6=Sensor.
+; (A string here only "works" by to_int() coincidence and silently becomes 0.)
+window/handheld/orientation=4
+
+[input_devices]
+
+; Keep exactly ONE pointer stream per device so input is never double-processed.
+; Desktop = mouse only; Android = touch only. emulate_mouse_from_touch defaults
+; to TRUE in Godot and must be disabled, or every touch also fires an emulated
+; mouse event on the primary target platform.
+pointing/emulate_mouse_from_touch=false
+pointing/emulate_touch_from_mouse=false
+
+[rendering]
+
+; Compatibility renderer for the broadest Android device support. Set for both
+; the default and the mobile override — the mobile override is what an Android
+; export actually uses.
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+2d/snap/snap_2d_transforms_to_pixel=true
+; ETC2/ASTC compression is required for GLES3-class Android GPUs.
+textures/vram_compression/import_etc2_astc=true
