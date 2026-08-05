@@ -20,10 +20,14 @@ The authoritative record of the grant and its scope is `docs/permission.md`.
 
 ## Status
 
-**Chapter 1 plays.** All 32 levels convert from the original and are playable: move, place
-portals, travel through them, collect crystals, die, retry instantly, reach the exit,
-advance. Verified in-engine — a player dropped into every level lands on geometry decoded
-from the original's own bytes.
+**All 128 levels convert and play.** Four chapters, zero converter skips across 4,065
+entity instances. Move, place portals, travel through them, collect crystals, ride lifts
+and platforms, press switches, break walls, burn crates, carry keys, dodge minions, die,
+retry instantly, reach the exit, advance.
+
+Verified in-engine: a player dropped into every one of the 128 levels lands on geometry
+decoded from the original's own bytes — and floats, correctly, in chapter 4's
+zero-gravity levels.
 
 **It does not yet play *like* Magic Portals.** The mechanic's structure is established, but
 every timing, speed and distance is a marked guess. `MILESTONE_1.md` §3 requires those

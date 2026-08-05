@@ -166,6 +166,10 @@ func _run() -> void:
 		"got %s" % _hazards.get(&"locked_door", 0))
 	_check("minion spawners exist", int(_hazards.get(&"enemy_spawn", 0)) == 62,
 		"got %s" % _hazards.get(&"enemy_spawn", 0))
+	# One boss marker per chapter, always in level 32 - plus dragon_knight_spawn, which
+	# shares 2-32 with the dragon itself.
+	_check("every chapter has a boss", int(_hazards.get(&"boss_spawn", 0)) == 5,
+		"got %s" % _hazards.get(&"boss_spawn", 0))
 	_check("hinges pivot", int(_hazards.get(&"hinge", 0)) == 10,
 		"got %s" % _hazards.get(&"hinge", 0))
 
@@ -321,7 +325,7 @@ func _count_behaviours(root: Node, runtime: LevelRuntime) -> void:
 			_doors += 1
 	for role: StringName in [&"demolisher", &"explosive", &"fire_source", &"shock_field",
 			&"gravity_well", &"turret", &"launcher", &"key", &"keyhole", &"locked_door",
-			&"enemy_spawn", &"hinge"]:
+			&"enemy_spawn", &"hinge", &"boss_spawn"]:
 		for node: Node2D in runtime.nodes_with_role(role):
 			if (node.get_node_or_null("Hazard") != null
 					or node.get_node_or_null("Actor") != null

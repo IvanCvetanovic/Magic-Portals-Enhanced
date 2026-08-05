@@ -30,6 +30,8 @@ static func attach(node: Node2D, role: StringName, runtime: LevelRuntime) -> voi
 			_add(node, Keyhole.new(runtime))
 		&"enemy_spawn":
 			_add(node, Spawner.new(runtime))
+		&"boss_spawn":
+			_add(node, BossSpawn.new(runtime))
 		_:
 			pass
 
@@ -304,3 +306,67 @@ class Minion:
 		var hit: Dictionary = space.intersect_ray(query)
 		# Nothing between us, or the first thing hit IS the player.
 		return hit.is_empty() or hit.get("collider") == player
+
+
+class BossSpawn:
+	extends Node
+	## The chapter boss. Exactly one per chapter, always in level 32:
+	##
+	##   1-32  `adder` carrying `entity: beholder.ent`   → the beholder
+	##   2-32  `dragon.ent` + `dragon_claw.ent` + `dragon_knight_spawn`
+	##   3-32  `ghost_pos`                               → the ghost
+	##   4-32  `dark_dragon_spawn`                       → the dark dragon
+	##
+	## ⚠ WHAT IS IMPLEMENTED IS THE STRUCTURE, NOT THE FIGHT. That a boss exists in each
+	## level 32, that it is killable, and that killing it ends the level are all supported
+	## by the data and by achievement text ("Finish level 2-32 (dragon boss) with 22
+	## portals or less", "Killing the dragon", "Defeat the dragon and finish level with 12
+	## portals or less").
+	##
+	## The ATTACK PATTERNS are not. Each boss is a bespoke AngelScript class
+	## (`Beholder.angelscript`, `Dragon.angelscript`, `DarkDragon.angelscript`) whose
+	## behaviour lives in bytecode we can name but not read — `beholder_spike`,
+	## `dragon_claw`, `enemy_shoot`, `ghost_appear_effect` are identifiers, not decoded
+	## logic. Inventing four boss fights would be exactly the kind of plausible-but-wrong
+	## content MILESTONE_1 §3 warns against, so this deliberately does not.
+	##
+	## What you get: a hittable boss that dies to the destruction economy and completes the
+	## level. It is a placeholder, and it is labelled one.
+
+	var _runtime: LevelRuntime
+
+	func _init(runtime: LevelRuntime = null) -> void:
+		_runtime = runtime
+
+	func _ready() -> void:
+		call_deferred("_spawn")
+
+	func _spawn() -> void:
+		var parent: Node2D = get_parent() as Node2D
+		if _runtime == null or _runtime.level_root == null or not is_instance_valid(parent):
+			return
+
+		var boss: CharacterBody2D = CharacterBody2D.new()
+		boss.name = "Boss"
+		boss.global_position = parent.global_position
+		boss.add_to_group("enemy")
+		boss.add_to_group("boss")
+		# `adder` names its spawn in custom data; the other three markers are the boss.
+		var kind: String = String(parent.get_meta("entity", parent.get_meta("entity_name", "boss")))
+		boss.set_meta("entity_name", kind)
+		# Killable by the same economy as everything else — crushed, burned, or portalled
+		# onto the kill floor. That is how the "Killing the dragon" achievements read.
+		boss.set_meta("breakable", "1")
+		boss.set_meta("teleportable", "1")
+
+		var shape: CollisionShape2D = CollisionShape2D.new()
+		var capsule: CapsuleShape2D = CapsuleShape2D.new()
+		capsule.radius = 28.0
+		capsule.height = 80.0
+		shape.shape = capsule
+		boss.add_child(shape)
+
+		_runtime.level_root.add_child(boss)
+		EventBus.boss_spawned.emit(boss, kind)
+		# Killing the boss is what finishes a chapter-32 level.
+		boss.tree_exiting.connect(func() -> void: EventBus.boss_defeated.emit(kind))

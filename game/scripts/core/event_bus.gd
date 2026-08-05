@@ -88,6 +88,11 @@ signal enemy_spawned(enemy: Node2D)
 ## achievements, and the exclamation/question marks the original pops.
 signal enemy_alerted(enemy: Node2D, spotted: bool)
 
+signal boss_spawned(boss: Node2D, kind: String)
+
+## The chapter boss died. Level 32 of each chapter ends on this.
+signal boss_defeated(kind: String)
+
 ## --- Progression --------------------------------------------------------------
 ## Owned by GameState.
 

@@ -46,10 +46,13 @@ evidence of four-way player movement.
 **IDENTIFIER.** Ground contact is a *sensor entity*, not a raycast: `char_feet.ent` with
 `ETHBeginContactCallback_char_feet` / `ETHEndContactCallback_char_feet`.
 
-**ABSENCE.** `jumpForth` is the **only** jump-related identifier in the entire binary. With
-no jump button in `SCREEN_PAD_BUTTON`, the most likely reading is that the character does
-not jump on demand at all. *The remake currently implements a jump — that is a **GUESS** and
-is probably wrong.*
+**ABSENCE.** `jumpForth` is the **only** jump-related identifier in the entire binary.
+
+**OWNER (2026-08-05).** Ivan confirms the original had only move-left and move-right, plus
+screen taps for portals. **There is no jump**, and the remake now ships with it disabled
+(`player.json` → `jump.enabled: false`). Three independent sources agree — a decoded enum,
+an exhaustive absence, and testimony — which makes this the best-established fact in this
+document.
 
 **ABSENCE.** Zero hits for coyote-time or input-buffering identifiers. Evidence the
 original has no forgiveness window. `player.json` sets both to 0 on this basis.
@@ -234,3 +237,107 @@ The clean 239-byte decode already proves the format matches this AngelScript ver
 
 Until then: values live in `game/data/*.json` marked `_guess`, and
 `MILESTONE_1.md` §3 stays open.
+
+---
+
+## 6. Entity behaviours — the authoritative test
+
+**DECODED.** The engine builds each entity's script hook as
+`"ETHCallback_" + RemoveExtension(entityName)`. So **an entity has behaviour if and only
+if a matching `ETHCallback_*` symbol exists in `android_game.bin`.** 96 do.
+
+That turns "which of these 178 entities actually do something?" from judgement into an
+exact byte search — and it immediately rules three out. `moving_platform_single.ent`
+carries a `moveStride`, and inline `platform` and `anchor` carry `speed`/`stride`, that
+**nothing reads**. Dead copy-paste. Animating them would invent motion the original never
+had; `verify_gameplay.gd` asserts they stay inert.
+
+### 6.1 The `stride` disambiguation rule
+
+**DATA.** Applied throughout the converter and the runtime:
+
+| Condition | Meaning |
+|---|---|
+| paired with a `speed` float | `stride` is a **distance in pixels** |
+| a bare uint, no `speed` | `stride` is a **duration in milliseconds** |
+
+Corroborated twice: `carranca` carries both `stride` and `startStride` (an unambiguous
+initial delay), and a `button`'s 300 on a 26×16 body cannot be a distance.
+
+### 6.2 The destruction economy
+
+**DATA.** Four flags, read through one predicate the binary names
+`isBreakableOrExplosiveOrBurnable`:
+
+| Flag | Only on | Effect |
+|---|---|---|
+| `demolisher` | rolling stones (27/27) | destroys anything `breakable` on contact |
+| `explosive` | barrel bombs (31/31) | detonates and chains — **on request, not on contact** |
+| `burnable` | crates, shock agents (65) | burns for a duration, then is **removed entirely** |
+| `breakable` | walls, carrancas | marks what can be smashed |
+
+Almost all of it is also `teleportable`, which is the whole puzzle: **route a destructive
+object onto a destructible one through a portal pair.** Burning removes collision too, so
+torching a crate deletes a platform.
+
+Notes that change implementation:
+- A rolling stone is **not** a touch-kill hazard — in level 1-9 the player spawns 58 px
+  from one on the same platform.
+- A barrel bomb is **inert on contact**: no `ETHBeginContactCallback_barrel_bomb` exists,
+  only a per-frame callback whose one local is `brightness` — a "live bomb" emissive tell.
+- A shock field's ring is **drawn** at radius `areaRadius`; hiding it makes it unfair.
+- `blink` is **purely cosmetic** and must never gate anything.
+
+### 6.3 Switches, keys and locks
+
+**DATA.** `button.idx` ↔ `door_lift.switchIdx` — identical multisets in all 37 levels that
+use them, zero mismatches across 46 buttons and 46 doors, never more than one button per
+`(level, idx)`. Not a latch: the original counts touching entities and has both begin- and
+end-contact callbacks, so a plate releases the instant the last body leaves.
+
+Keys pair with keyholes and locked doors **by colour** (yellow 33 / blue 6 / red 2 per
+role, identical multisets per level) — **never by proximity**, since a keyhole and its
+door can sit 200–340 px apart.
+
+### 6.4 Minions
+
+**DATA.** Worlds 3–4 only; 62 spawners, none in chapters 1–2. **No enemy is ever placed
+directly in a scene** — every one is script-spawned from an invisible marker.
+`waypointName` is a **PREFIX**: `wayA` patrols `wayA0` ↔ `wayA1`, holding `holdTime`
+**milliseconds** at each. A lone `wayX0` with a sentinel hold of 9999999 is an authored
+**stationary guard**, not missing data.
+
+Minions carry `breakable`, `burnable` **and** `teleportable`: they are puzzle objects as
+much as threats, crushable or portallable onto `enemy_killer` — the invisible kill floor
+below every world-3 level. That is what the "Kill all minions" achievements are for.
+
+### 6.5 Hinges
+
+**DATA.** `<Joints>` is nested **inside `<Collision>`**, alongside `<Polygon>` and
+`<Compound>`. The general rule in this format: *every ENML payload lives under the
+collision root* — there is no counter-example, and looking one level higher returns
+nothing while raising no error.
+
+**Angles are RADIANS**, now settled from data rather than inferred: the shipped `±1.57075`
+is `±π/2`. Only 10 instances exist, all in worlds 2–4.
+
+### 6.6 Level properties
+
+**DATA.** The `properties` entity, in 102 of 128 levels. Chapter 4 is where they matter:
+
+| Levels | Flag | Effect |
+|---|---|---|
+| 4-2 … 4-19 | `no_gravity` | **the zero-gravity chapter.** Applies to EVERY dynamic body, not just the player — a crate falling under normal gravity shoves the player out of the level |
+| 4-20 … 4-32 | `darkest` | the unlit levels the "Alone in the dark" achievements name |
+| 4-1, 4-19, 4-32 | `no_music` | silent by design |
+
+### 6.7 Bosses
+
+**DATA.** Exactly one per chapter, always level 32: `adder` carrying `entity: beholder.ent`
+(1-32), `dragon.ent` (2-32), `ghost_pos` (3-32), `dark_dragon_spawn` (4-32).
+
+⚠ **Only the structure is implemented.** That a boss exists, is killable, and ends the
+level is supported by data and achievement text. The **attack patterns are not** — each is
+a bespoke AngelScript class whose logic is in bytecode we can name but not read
+(`beholder_spike`, `dragon_claw`, `enemy_shoot` are identifiers, not decoded behaviour).
+Inventing four boss fights would be exactly the plausible-but-wrong content §3 warns about.

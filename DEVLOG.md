@@ -1272,3 +1272,45 @@ ruff clean, main 0 errors. Still zero converter skips across 4065 instances.
 counts are doing real work now: every one of the five new numbers was checked against the
 corpus before being asserted, and two bugs surfaced purely because a count looked wrong
 rather than because anything threw.
+
+### 2026-08-05 16:40 — Session 11: bosses; the behaviour layer is complete
+
+**Built:** boss spawns, and with them every entity family the corpus contains. Exactly one
+boss per chapter, always level 32 — `adder` carrying `entity: beholder.ent` (1-32),
+`dragon.ent` (2-32), `ghost_pos` (3-32), `dark_dragon_spawn` (4-32), plus
+`dragon_knight_spawn` sharing 2-32. Five markers, and the test asserts that count.
+
+**Deliberately only the STRUCTURE.** That a boss exists in each level 32, is killable, and
+ends the level is supported by data and by achievement text ("Killing the dragon", "Defeat
+the dragon and finish level with 12 portals or less"). The **attack patterns are not**:
+each boss is a bespoke AngelScript class whose logic sits in bytecode we can name but not
+read — `beholder_spike`, `dragon_claw`, `enemy_shoot`, `ghost_appear_effect` are
+identifiers, not decoded behaviour. Inventing four boss fights would be exactly the
+plausible-but-wrong content §3 warns against, so the code says placeholder and the doc
+says placeholder.
+
+**Documented.** `docs/original-gameplay.md` now carries a §6 covering the whole behaviour
+layer with per-claim provenance: the `ETHCallback_` test, the `stride` disambiguation rule,
+the destruction economy, switches/keys/locks, minions, hinges, level properties and bosses.
+Also corrected a claim that had gone stale in it — §1 still said "the remake currently
+implements a jump", which stopped being true two sessions ago.
+
+**Final state of the behaviour layer**, all counts measured against the corpus before being
+asserted: 29 movers · 46 switches · 46 doors · 27 demolishers · 31 explosives · 65 burnable
+· 28 turrets · 22 fire sources · 21 shock fields · 10 gravity wells · 3 launchers · 39 keys
+· 41 keyholes · 41 locked doors · 62 minion spawners · 10 hinges · 5 bosses.
+
+**Assets check:** yes — full pipeline re-run from clean; only hand-written source visible
+to git.
+
+**[CLIP] 16:31** — the chapter-1 beholder spawning in 1-32. **[BROLL]** — None; headless.
+
+**Numbers:** levels 128/128, core 57/57, gameplay **547/547**, converter 52 tests, ruff
+clean, main 0 errors. 4065 instances, 0 converter skips.
+
+**Inferred mood:** guess — satisfied, with one reservation I want on the record. The
+behaviour layer is complete in the sense that every entity family in the data now has a
+component, and every count is pinned to the corpus. It is NOT complete in the sense of
+matching the original: the bosses are placeholders, and every timing and speed value in
+the game is still a marked guess. Those are different claims and I would rather say so
+plainly than let "finished" blur them.

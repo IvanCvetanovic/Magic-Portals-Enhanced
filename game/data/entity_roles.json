@@ -289,6 +289,20 @@
         "spinning_platform_no_emissive.ent",
         "spinning_cross"
       ]
+    },
+    "boss_spawn": {
+      "_note": [
+        "Exactly one per chapter, always level 32. 1-32 adder (entity:beholder.ent),",
+        "2-32 dragon.ent, 3-32 ghost_pos, 4-32 dark_dragon_spawn.",
+        "STRUCTURE only - the attack patterns are bespoke AngelScript we can name but not read."
+      ],
+      "names": [
+        "adder",
+        "dragon.ent",
+        "ghost_pos",
+        "dark_dragon_spawn",
+        "dragon_knight_spawn"
+      ]
     }
   }
 }
