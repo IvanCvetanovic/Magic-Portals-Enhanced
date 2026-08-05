@@ -1,0 +1,64 @@
+{
+  "_about": [
+    "Destruction-economy tunables.",
+    "",
+    "EVERY NUMBER HERE IS A GUESS. The original's constants live inside AngelScript",
+    "bytecode we can name but not yet read - see docs/original-gameplay.md section 5.",
+    "",
+    "WHAT IS ESTABLISHED (structure, from level data + binary identifiers):",
+    "  - Four flags drive everything, read through one predicate the binary names",
+    "    isBreakableOrExplosiveOrBurnable: demolisher / explosive / burnable / breakable.",
+    "  - demolisher appears ONLY on rolling_stone (27/27 placements).",
+    "  - explosive appears ONLY on barrel_bomb (31/31).",
+    "  - burning REMOVES the body entirely, collision included - that removal is the",
+    "    puzzle, since burning a crate deletes a platform or a blocker. Five chapter-2",
+    "    achievements are gated on burning, or not burning, a specific crate.",
+    "  - Burning is reversible upstream (healBurn, extinguish_fire.ent,",
+    "    playFireExtinguishSound). NOT modelled: nothing in the level data puts a fire out.",
+    "  - A shock_agent's ring is DRAWN at radius areaRadius (shock_area.ent, white_ring.png",
+    "    at 128px, so scale = areaRadius/64). It is an honest read-out of the danger zone,",
+    "    so it must be visible or the hazard is unfair.",
+    "  - A carranca fires the entity in its `entity` key (always fireball.ent) along",
+    "    (dirX,dirY): first shot after startStride ms, then every stride ms. Both are bare",
+    "    uints with no `speed`, hence milliseconds - and startStride existing alongside",
+    "    stride is what proves the millisecond reading for this whole family."
+  ],
+
+  "burning": {
+    "_guess": true,
+    "_note": "Long enough to be a race the player can win or lose; not measured.",
+    "burn_time_s": 2.0
+  },
+
+  "explosion": {
+    "_guess": true,
+    "_note": "Chains to other explosives. Radius invented; explosion_small/huge both exist.",
+    "radius_px": 96.0
+  },
+
+  "fire": {
+    "_guess": true,
+    "_note": [
+      "fire_agent has NO physics body (shape=BS_NONE) - only a 38x38 legacy AABB, so 24px",
+      "is roughly half that box. Ticked on a staggered timer, never per frame (rule 6)."
+    ],
+    "reach_px": 24.0
+  },
+
+  "gravity_well": {
+    "_guess": true,
+    "_note": [
+      "Chapter 4 only - the zero-gravity chapter, where a well is the only thing that",
+      "moves loose objects. Linear falloff rather than inverse-square: stable at the",
+      "centre and more predictable in a puzzle. Both the law and the number are guesses."
+    ],
+    "strength_px_s2": 400.0
+  },
+
+  "turret": {
+    "_guess": true,
+    "_note": "Carranca fireballs. Speed and lifetime invented; direction comes from data.",
+    "projectile_speed_px_s": 180.0,
+    "projectile_life_s": 4.0
+  }
+}

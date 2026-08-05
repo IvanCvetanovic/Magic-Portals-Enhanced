@@ -111,9 +111,20 @@ func bind(root: Node) -> void:
 
 	# Behaviours attach AFTER triggers, because several of them (switch, reflector) bind
 	# to the Trigger node the step above creates.
-	for role: StringName in _by_role:
-		for node: Node2D in nodes_with_role(role):
-			Behaviours.attach(node, role, self)
+	#
+	# Roles go to the role-classified nodes; FLAGS go to EVERY entity. That split matters:
+	# a crate has no gameplay role — it is a physics prop — but it still carries
+	# `burnable`, and an earlier version only ran the flag pass over role-classified nodes,
+	# so 11 of the game's burnable objects were flagged and the rest silently were not.
+	for child: Node in root.get_children():
+		var node: Node2D = child as Node2D
+		if node == null or not node.has_meta("entity_name"):
+			continue
+		var role: Variant = _name_to_role.get(String(node.get_meta("entity_name")))
+		var key: StringName = role if role != null else &""
+		if role != null:
+			Behaviours.attach(node, key, self)
+		Hazards.attach(node, key, self)
 
 	_wire_channels()
 	_apply_gravity_mode(root)

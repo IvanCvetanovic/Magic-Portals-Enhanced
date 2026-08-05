@@ -38,6 +38,7 @@ var _movers: int = 0
 var _switches: int = 0
 var _doors: int = 0
 var _inert_animated: int = 0
+var _hazards: Dictionary = {}
 
 
 func _ready() -> void:
@@ -139,6 +140,22 @@ func _run() -> void:
 	_check("INERT entities stayed inert", _inert_animated == 0,
 		"%d inert entities were animated" % _inert_animated)
 
+	# The destruction economy. Counts are measured from the level data, so a drop here
+	# means the role table and the corpus have drifted apart.
+	_check("rolling stones demolish", int(_hazards.get(&"demolisher", 0)) == 27,
+		"got %s" % _hazards.get(&"demolisher", 0))
+	_check("barrel bombs are explosive", int(_hazards.get(&"explosive", 0)) == 31,
+		"got %s" % _hazards.get(&"explosive", 0))
+	_check("shock fields exist", int(_hazards.get(&"shock_field", 0)) > 0)
+	_check("gravity wells exist (chapter 4)", int(_hazards.get(&"gravity_well", 0)) > 0)
+	_check("carranca turrets exist", int(_hazards.get(&"turret", 0)) > 0)
+	# Exact, not "> 0". Measured from the corpus: 65 instances carry burnable=1, and one
+	# carries burnable="0" which must NOT count — 0 is a real "off" value, not absence.
+	# An earlier version applied flags only to role-classified nodes and got 11 here;
+	# crates have no gameplay role, so most of the game's burnables were silently skipped.
+	_check("all 65 burnable objects are flagged", int(_hazards.get("burnable", 0)) == 65,
+		"got %s" % _hazards.get("burnable", 0))
+
 	await _test_portal_mechanic()
 
 	print("--------------------------------------------------")
@@ -146,6 +163,7 @@ func _run() -> void:
 	print("crystals      : %d" % total_crystals)
 	print("static portals: %d" % total_portals)
 	print("behaviours    : %d movers, %d switches, %d doors" % [_movers, _switches, _doors])
+	print("hazards       : %s" % _hazards)
 	if not _fell_through.is_empty():
 		printerr("FELL THROUGH GEOMETRY: %s" % ", ".join(_fell_through))
 	if not _no_ground.is_empty():
@@ -288,10 +306,17 @@ func _count_behaviours(root: Node, runtime: LevelRuntime) -> void:
 	for node: Node2D in runtime.nodes_with_role(&"switched_door"):
 		if node.get_node_or_null("Behaviour") != null:
 			_doors += 1
+	for role: StringName in [&"demolisher", &"explosive", &"fire_source", &"shock_field",
+			&"gravity_well", &"turret", &"launcher"]:
+		for node: Node2D in runtime.nodes_with_role(role):
+			if node.get_node_or_null("Hazard") != null:
+				_hazards[role] = int(_hazards.get(role, 0)) + 1
 	for child: Node in root.get_children():
 		var node: Node2D = child as Node2D
 		if node == null or not node.has_meta("entity_name"):
 			continue
+		if node.get_node_or_null("Burnable") != null:
+			_hazards["burnable"] = int(_hazards.get("burnable", 0)) + 1
 		if String(node.get_meta("entity_name")) in ["moving_platform_single.ent", "platform", "anchor"]:
 			if node.get_node_or_null("Behaviour") != null:
 				_inert_animated += 1

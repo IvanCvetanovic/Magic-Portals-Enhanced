@@ -59,6 +59,21 @@ signal channel_changed(channel: int, pressed: bool)
 ## Something was mirrored by a reflect_agent.
 signal reflected(body: Node2D)
 
+## An entity was removed by the destruction economy. `cause` is one of `demolished`,
+## `exploded` or `burned`.
+signal entity_destroyed(entity: Node2D, cause: StringName)
+
+## A burnable entity caught fire. It is removed when its burn timer expires.
+signal entity_ignited(entity: Node2D)
+
+## A turret fired.
+signal projectile_fired(projectile: Node2D)
+
+## An entity_launcher wants to spawn `entity_name`. Unhandled for now: the converter emits
+## levels, not per-entity scenes, so there is nothing to instance by name yet. Announced
+## rather than silently dropped.
+signal spawn_requested(entity_name: String, origin: Vector2, bounds: Rect2)
+
 ## --- Progression --------------------------------------------------------------
 ## Owned by GameState.
 

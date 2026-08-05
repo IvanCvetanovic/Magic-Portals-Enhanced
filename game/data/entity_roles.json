@@ -172,6 +172,61 @@
         "no_portal_sign.ent",
         "help_block.ent"
       ]
+    },
+    "demolisher": {
+      "_note": "Destroys anything flagged `breakable` on contact. demolisher=1 on all 27 placements.",
+      "names": [
+        "rolling_stone",
+        "rolling_stone.ent",
+        "rolling_stone_no_emissive.ent"
+      ]
+    },
+    "explosive": {
+      "_note": [
+        "Inert on contact - no ETHBeginContactCallback_barrel_bomb exists, only a per-frame",
+        "emissive pulse. Detonation is REQUESTED by a fireball, fire or another explosion."
+      ],
+      "names": [
+        "barrel_bomb",
+        "barrel_bomb.ent",
+        "barrel_bomb_low_emissive.ent"
+      ]
+    },
+    "fire_source": {
+      "_note": "Permanent open flame; ignites burnable and detonates explosive in reach.",
+      "names": [
+        "fire_agent",
+        "fire_agent.ent"
+      ]
+    },
+    "shock_field": {
+      "_note": "Lethal ring of radius areaRadius, drawn so the danger zone is honest.",
+      "names": [
+        "shock_agent",
+        "shock_agent.ent"
+      ]
+    },
+    "gravity_well": {
+      "_note": "Local gravity well of radius `radius`. Chapter 4 (zero-g) only.",
+      "names": [
+        "gravity_agent",
+        "gravity_agent.ent"
+      ]
+    },
+    "turret": {
+      "_note": "Carranca - a wall-mounted gargoyle spitting fireballs along (dirX,dirY).",
+      "names": [
+        "carranca",
+        "carranca.ent",
+        "carranca_right",
+        "carranca_right.ent"
+      ]
+    },
+    "launcher": {
+      "_note": "Spawns `entity` every `stride` ms; min/max is a cull box.",
+      "names": [
+        "entity_launcher"
+      ]
     }
   }
 }

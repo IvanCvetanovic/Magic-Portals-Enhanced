@@ -1159,3 +1159,65 @@ finding that makes the rest of the work smaller rather than larger, and the zero
 chain (test fails → wrong hypothesis → still fails → right hypothesis) is the clearest
 example yet of the tests doing real work rather than confirming what I already believed.
 Two of those three failures I would have shipped without noticing.
+
+### 2026-08-05 12:40 — Session 9: pushed; destruction economy
+
+**Pushed** `036590b` to `origin/main` under Ivan's identity (already the configured git
+user). Pre-commit gates run against the staged tree, not the working directory: no path
+under `reference/`, `out/` or `game/assets/`, no asset extension, and re-confirmed the
+repo is private with an unauthenticated API probe (404) before publishing — the push IS
+the publish, and this project's central rule is about redistribution. 58 files, 86 KiB
+pack, zero assets in `git ls-tree -r HEAD`.
+
+**Built — the destruction economy.** The original reads four per-instance flags through a
+single predicate it literally names `isBreakableOrExplosiveOrBurnable`:
+`demolisher` destroys `breakable`; `explosive` detonates and chains; `burnable` enters a
+timed burning state; `breakable` marks what can be smashed. Every hazard is a source or a
+target, and almost all of it is `teleportable` — so the puzzle is always *route a
+destructive object onto a destructible one through a portal pair*.
+
+Components: `Demolisher`, `Explosive`, `Burnable`, `FireSource`, `ShockField`,
+`GravityWell`, `Turret` (carranca) + `Projectile`, `Launcher`, `Blink`.
+
+Counts attached, and they corroborate the research independently: **demolisher 27**
+(research: 27/27 placements), **explosive 31** (31/31), turret 28, fire 22, shock 21,
+gravity wells 10, launchers 3, burnable 65.
+
+Notes worth keeping:
+- A rolling stone is **not** a touch-kill hazard. In level 1-9 — the level the "Like a
+  rolling stone" achievement names — the player spawns 58 px from one on the same
+  platform, so it must be safe to stand beside. It is a physics prop that breaks things.
+- A barrel bomb is **inert on contact**: no `ETHBeginContactCallback_barrel_bomb` exists,
+  only a per-frame callback whose single local is `brightness` — an emissive "live bomb"
+  tell. Detonation is *requested* by something else, so `detonate()` is exposed rather
+  than self-triggered. Chains are deferred a frame so a long chain cannot recurse.
+- A shock field's ring is **drawn**, not invisible. The original scales `white_ring.png`
+  so its radius equals `areaRadius`; hiding it would make the hazard unfair.
+- `blink` is **purely cosmetic** — a designer telegraph. It must never gate anything, and
+  it yields `modulate` to a burning crate rather than fighting it for the property.
+
+**Broke / dead ends:**
+- **Flags were only applied to role-classified nodes.** A crate has no gameplay role — it
+  is a physics prop — but it still carries `burnable`, so only **11 of 65** burnable
+  objects were flagged and the rest silently were not. Found because the count looked too
+  small against the corpus, not because anything failed. Split the pass: roles to
+  role-classified nodes, flags to *every* entity. Now 65, cross-checked against the raw
+  data.
+- The corpus also carries exactly one `burnable="0"`, which must NOT count. `0` is a real
+  "off" value, not absence — the same trap as the golden score, where 0 means "finish
+  using zero portals". The flag reader handles it and the test pins the exact number
+  rather than `> 0`, so a regression to the 11-behaviour cannot pass.
+
+**Assets check:** yes — post-commit audit on the real tree: 0 asset-extension files, 0
+paths under a gitignored dir.
+
+**[CLIP] 12:31** — a rolling stone smashing a breakable wall it was routed into through a
+portal. **[BROLL]** — None; still headless.
+
+**Numbers:** gates levels 128/128, core 57/57, gameplay **541/541**, converter 52 tests,
+ruff clean, main 0 errors. Commit `036590b`, 6773 insertions.
+
+**Inferred mood:** guess — steady. The flag-coverage bug is the interesting one: nothing
+failed, nothing errored, and the only reason I caught it was that 11 looked wrong next to
+a corpus I had already measured. Having the counts in the test as exact numbers rather
+than `> 0` is what turns that from a lucky glance into a permanent guard.
