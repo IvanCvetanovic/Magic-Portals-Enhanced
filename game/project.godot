@@ -13,14 +13,42 @@ run/main_scene="res://scenes/main.tscn"
 ; the first time the project is saved from the editor. See CLAUDE.md → Environment.
 config/features=PackedStringArray("4.6", "GL Compatibility")
 
+[autoload]
+
+; EXACTLY THREE (CLAUDE.md rule 3). Do not add a fourth without asking.
+; Load order matters and is not alphabetical: DataLoader must be ready before GameState,
+; because GameState.load_progress() validates against DataLoader.level_count().
+; EventBus is first and depends on nothing — it is signal declarations only.
+EventBus="*res://scripts/core/event_bus.gd"
+DataLoader="*res://scripts/core/data_loader.gd"
+GameState="*res://scripts/core/game_state.gd"
+
 [display]
 
 ; ---------------------------------------------------------------------------
-; PROVISIONAL — these are placeholders, NOT the original game's values.
-; The authoritative numbers come from the original APK: Ethanon reads its window
-; setup from `app.enml` (fixedWidth / fixedHeight / windowTitle — see
-; engine/Platform/ETHAppEnmlFile.cpp). Once reference/extracted/ exists, read
-; app.enml and replace everything in this block, including the orientation.
+; STILL PROVISIONAL — but for a DIFFERENT reason than this block used to claim.
+;
+; The old note said "read app.enml and replace these". That was investigated on
+; 2026-08-04 and it does NOT work — do not spend another session on it:
+;   * app.enml's `width`/`height` are consumed only by machine/main.cpp:143-144
+;     and editor/main.cpp:171 — DESKTOP ONLY. On Android the surface size arrives
+;     from JNI (gs2d/src/Platform/android/main.cpp:91).
+;   * `fixedWidth`/`fixedHeight` are the mobile path, but the shipped app.enml has
+;     NO `android` block and its fixedHeight is commented out, and LoadProperties
+;     bails on a missing entity (ETHAppEnmlFile.cpp:113-114).
+;   * ETHGlobalScaleManager (the engine's other adaptation path) is never engaged:
+;     the compiled bytecode never calls the setters, so its factor stays 1.0.
+;   => app.enml does not determine the Android viewport. Nothing left to read.
+;
+; Best-supported inference is a ~512-tall landscape design space, from .esc
+; geometry (ymin -64 in 92 of 133 levels, modal ymax 384, median vertical span
+; 448) agreeing with the commented-out `//fixedHeight = 512;` in app.enml.
+; 1136x640 is the last-wins value of app.enml's duplicate width/height keys, but
+; that is the DESKTOP dev window, not the mobile viewport.
+;
+; SETTLE THIS BY PLAYTESTING against recorded original footage (MILESTONE_1 §7.6),
+; not by reading more files. Values below are the 16:9 placeholder until then.
+; See docs/ethanon-formats.md, the 2026-08-04 correction block.
 ; ---------------------------------------------------------------------------
 window/size/viewport_width=1280
 window/size/viewport_height=720
@@ -30,7 +58,13 @@ window/stretch/aspect="expand"
 ; 0=Landscape, 1=Portrait, 2=Reverse Landscape, 3=Reverse Portrait,
 ; 4=Sensor Landscape, 5=Sensor Portrait, 6=Sensor.
 ; (A string here only "works" by to_int() coincidence and silently becomes 0.)
-window/handheld/orientation=4
+;
+; SETTLED 2026-08-04 (was 4 = Sensor Landscape, a placeholder): the original APK's
+; AndroidManifest.xml declares android:screenOrientation="0" — LOCKED landscape, not
+; sensor. Corroborated by every commented-out resolution pair in app.enml being
+; landscape and by 455x256 background art. This is independent of the still-open
+; viewport-size question below, so it is promoted to fact on its own.
+window/handheld/orientation=0
 
 [input_devices]
 

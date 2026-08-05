@@ -53,6 +53,15 @@ Chapters 2+, the full level set, save/cloud sync, achievements, ads/IAP, setting
 beyond a volume slider, localisation, menus beyond what chapter 1 needs, particle-perfect
 VFX parity, leaderboards, any level editor.
 
+> ⚠ **SCOPE BOUNDARY SUPERSEDED 2026-08-05.** Ivan asked for the full game and to proceed
+> without check-ins, so chapters 2-4, menus and audio are now IN scope and built. See the
+> note in `CLAUDE.md` → "What this is".
+>
+> **The rest of this document still governs.** In particular §3's rule stands and is the
+> reason the milestone is not closeable yet: portal values must be MEASURED, and a guessed
+> value must be marked. Widening what gets built does not lower the bar for calling it
+> done. Still genuinely out of scope: ads/IAP, cloud sync, leaderboards, level editor.
+
 ---
 
 ## 3. The portal mechanic — the part that matters

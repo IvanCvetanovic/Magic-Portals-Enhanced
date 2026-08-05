@@ -1,0 +1,177 @@
+{
+  "_about": [
+    "Maps the original's <EntityName> strings onto gameplay ROLES.",
+    "",
+    "This mapping is OUR design decision, which is why it lives here and not in the",
+    "converter: the converter is a data pipeline and emits the raw name as node metadata",
+    "(metadata/entity_name), leaving interpretation to the game. CLAUDE.md rule 1.",
+    "",
+    "Names are matched EXACTLY against metadata/entity_name. The original writes the same",
+    "logical entity both bare and with a .ent suffix, and those are genuinely DIFFERENT",
+    "entities with different inline bodies (e.g. inline 'crate' has density 0.2 while",
+    "crate.ent has 0.4), so both spellings are listed where both occur. Do not collapse",
+    "them by stripping the extension.",
+    "",
+    "Anything not listed here is scenery: it still converts, renders and collides, it just",
+    "has no gameplay behaviour attached."
+  ],
+  "roles": {
+    "player_spawn": {
+      "_note": "Where the character starts. Present in all 32 chapter-1 scenes.",
+      "names": [
+        "main_char"
+      ]
+    },
+    "camera_start": {
+      "_note": "Initial camera position. Corroborated by readCameraStartPos in the bytecode.",
+      "names": [
+        "camera_start"
+      ]
+    },
+    "level_bounds": {
+      "_note": [
+        "Far corner of the playable area; present in all 32 scenes. Paired with the",
+        "minX/maxX/minY/maxY custom-data keys seen on some levels, and with",
+        "clampCameraPos in the bytecode."
+      ],
+      "names": [
+        "max"
+      ]
+    },
+    "level_properties": {
+      "_note": [
+        "Carries per-level settings in custom data - notably max_portals, the portal",
+        "budget. Only 6 of 32 chapter-1 scenes place one; absent means 'use defaults'."
+      ],
+      "names": [
+        "properties"
+      ]
+    },
+    "exit_door": {
+      "_note": "The level exit. In all 32 scenes. shape=0, so its <Collision> box is a trigger.",
+      "names": [
+        "door.ent"
+      ]
+    },
+    "collectible": {
+      "_note": [
+        "Crystals. 106 placements across 28 of 32 chapter-1 scenes - the most-placed",
+        "gameplay entity. Bytecode has crystalCounter / _numCrystals / getCrystalCount."
+      ],
+      "names": [
+        "crystal.ent",
+        "crystal"
+      ]
+    },
+    "hazard": {
+      "_note": [
+        "Kills on contact - ETHBeginContactCallback_death_area in the bytecode. sensor=1.",
+        "Only one placement in chapter 1 (an early level), many more in later worlds."
+      ],
+      "names": [
+        "death_area.ent",
+        "destroyier.ent",
+        "lava",
+        "enemy_killer"
+      ]
+    },
+    "static_portal": {
+      "_note": [
+        "Pre-placed portals. Custom data carries index, destiny (the index it links TO),",
+        "color (blue/red) and active. So static portals are explicitly PAIRED in the data",
+        "rather than inferred - see docs/ethanon-formats.md."
+      ],
+      "names": [
+        "portal_static"
+      ]
+    },
+    "no_portal_zone": {
+      "_note": [
+        "Regions where the player may not place a portal. antiportal carries a 'scale'",
+        "multiplier; the bytecode has isPointInAntiPortalField and AntiPortalManager."
+      ],
+      "names": [
+        "antiportal",
+        "no_portal",
+        "no_portal_sign.ent"
+      ]
+    },
+    "moving_platform": {
+      "_note": [
+        "Oscillates VERTICALLY. speed is a FREQUENCY and stride a",
+        "distance in pixels (they are inversely correlated so speed*stride is near-constant).",
+        "Only the inline 'moving_platform' is live: ETHCallback_moving_platform exists, but",
+        "ETHCallback_moving_platform_single / _platform / _anchor do NOT, so those are INERT",
+        "and their custom data is dead copy-paste. Do not animate them."
+      ],
+      "names": [
+        "moving_platform"
+      ]
+    },
+    "lift": {
+      "_note": [
+        "Vertical shuttle. 'a' and 'b' are ENTITY NAMES of invisible marker",
+        "entities (liftA/liftB, or liftA2/liftB2 where a level has two). The lift spawns on 'a'."
+      ],
+      "names": [
+        "lift",
+        "lift.ent"
+      ]
+    },
+    "lift_marker": {
+      "_note": "Invisible endpoint markers referenced by lift.a / lift.b.",
+      "names": [
+        "liftA",
+        "liftB",
+        "liftA2",
+        "liftB2"
+      ]
+    },
+    "switch": {
+      "_note": [
+        "Pressure plate. 'idx' is the channel; pairs with a switched door's",
+        "'switchIdx'. NOT a latch - the original counts touching entities and has both begin-",
+        "and end-contact callbacks, so it releases as soon as the last body leaves."
+      ],
+      "names": [
+        "button"
+      ]
+    },
+    "switched_door": {
+      "_note": [
+        "Opens while its channel is pressed. 'stride' is a bare uint",
+        "with no 'speed', so it is MILLISECONDS (300-16000), not a distance."
+      ],
+      "names": [
+        "door_lift"
+      ]
+    },
+    "reflector": {
+      "_note": [
+        "plane = vertical|horizontal. GUESS as to what it reflects; the",
+        "binary has both portal_reflect.mp3 and projectile_reflect.mp3."
+      ],
+      "names": [
+        "reflect_agent",
+        "reflect_agent.ent"
+      ]
+    },
+    "scenery_hint": {
+      "_note": [
+        "Tutorial hint graphics. All shape=0 (no collision) with",
+        "identical hard-coded speed/stride on every placement - purely cosmetic, and a wrong",
+        "animation here cannot break a puzzle."
+      ],
+      "names": [
+        "hand_tap.ent",
+        "hand_drawn_arrow.ent",
+        "dashed_circle.ent",
+        "dashed_square.ent",
+        "up_down_arrow.ent",
+        "hand_waypoint1",
+        "no_portal_sign.ent",
+        "help_block.ent"
+      ]
+    }
+  }
+}

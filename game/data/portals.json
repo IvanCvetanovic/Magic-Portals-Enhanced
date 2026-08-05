@@ -1,0 +1,124 @@
+{
+  "_about": [
+    "Portal mechanic values — MILESTONE_1.md section 3, the part that matters.",
+    "",
+    "MIXED PROVENANCE. Read the per-block markers, do not assume:",
+    "  _source: \"data\"   = read out of the original's own files. Trustworthy.",
+    "  _guess: true       = invented. MUST be measured before the milestone can close.",
+    "",
+    "The acceptance checklist requires NO _guess entries left in this file. Every one",
+    "below is a standing TODO, resolvable by frame-stepping recorded footage",
+    "(MILESTONE_1 7.6) or by decoding the numeric constants in android_game.bin.",
+    "",
+    "STRUCTURE THAT IS ESTABLISHED (so it is not guessed, even where numbers are):",
+    "  - Portals are PLACED by the player, against a per-level budget. The 'properties'",
+    "    entity carries max_portals in its custom data (0 in level 1-1, 1 in 1-2), and",
+    "    achievement text says things like 'Finish level 1-20 with 8 portals or less'.",
+    "    Bytecode: insertPortal, managePortalInsertion, computePortalFinalPos,",
+    "    incrementPortalCounter, getNumPortals, _maxPortals.",
+    "  - STATIC portals are pre-placed and explicitly PAIRED in the level data: each",
+    "    portal_static carries index, destiny (the index it links to), color (blue/red)",
+    "    and active. Pairing is read, not inferred.",
+    "  - Two portal colours exist: PORTAL_RED and PORTAL_BLUE in the binary.",
+    "  - There are TWO distinct cooldown constants: FIRST_PORTAL_MIN_TIME and",
+    "    NEXT_PORTAL_MIN_TIME. Their VALUES are unknown; that two exist is not.",
+    "  - Not everything can travel through: entities carry a 'teleportable' flag in",
+    "    custom data (crate.ent=1, crate_small.ent=1, rolling_stone=1; bare crate=0,",
+    "    crate_small=0, wood_piece_small=0). Per-instance, designer-controlled.",
+    "  - Portals can be blocked: antiportal entities with a 'scale' multiplier, plus",
+    "    isPointInAntiPortalField / AntiPortalManager in the binary.",
+    "  - Edge cases the original explicitly handles, from function names:",
+    "    hasMovingPlatformInAnyPortal, isThereAnythingInPortal, doesItDestroyPortals,",
+    "    killPortals, blockPortalEffects.",
+    "  - Sound hooks exist for created / launch / killed / failed."
+  ],
+
+  "placement": {
+    "_note": [
+      "default_max_portals applies when a level places no 'properties' entity - 26 of 32",
+      "chapter-1 scenes. An ABSENT properties entity and an explicit max_portals=0 are",
+      "different states; 1-1 really does store 0.",
+      "",
+      "default_max_portals = 2 is OWNER-CONFIRMED (Ivan, 2026-08-05): at most two player",
+      "portals exist at once, i.e. one pair. NOT a guess. A level may allow FEWER via its",
+      "properties entity; never more. See docs/original-gameplay.md section 2.0."
+    ],
+    "_guess": true,
+    "_guess_note": "Applies to the TIMES and RADIUS below, not to default_max_portals.",
+    "default_max_portals": 2,
+    "collision_radius_px": 16.0,
+    "_radius_note": "Binary has g_portalCollisionRadius / portalCollisionRadius; value unknown.",
+    "first_portal_min_time_s": 0.0,
+    "next_portal_min_time_s": 0.25,
+    "_time_note": [
+      "These mirror FIRST_PORTAL_MIN_TIME and NEXT_PORTAL_MIN_TIME. The names are real;",
+      "the numbers are invented. insertionTime also exists and is unmodelled."
+    ]
+  },
+
+  "transit": {
+    "_guess": true,
+    "_note": [
+      "Section 3.2-3.5, entirely unmeasured. Binary has teleportToOther,",
+      "teleportToFirstStaticPortal, computePortalFinalPos, linearVelocity, speedScale,",
+      "impulse — so momentum IS manipulated on transit, but how is unknown.",
+      "momentum_mode options: preserve | rotate_to_exit | clamp | reset."
+    ],
+    "momentum_mode": "rotate_to_exit",
+    "exit_speed_scale": 1.0,
+    "exit_offset_px": 12.0,
+    "transit_time_s": 0.0,
+    "control_during_transit": true,
+    "reentry_lockout_s": 0.2
+  },
+
+  "camera": {
+    "_guess": true,
+    "_note": [
+      "Section 3.7. Binary has CameraController, AutoCameraController, clampCameraPos,",
+      "cameraHoldTime, cameraHoldElapsedTime — so there IS a hold-then-follow behaviour",
+      "with a real duration. Values invented.",
+      "transit_mode options: cut | snap | lerp."
+    ],
+    "transit_mode": "lerp",
+    "lerp_s": 0.15,
+    "follow_lag_s": 0.12,
+    "hold_time_s": 0.5
+  },
+
+  "audio": {
+    "_guess": true,
+    "_note": "Section 3.10. Hooks are real (playPortalCreatedSound etc.); timing invented.",
+    "sfx_lead_s": 0.0
+  },
+
+  "consumption": {
+    "_note": [
+      "OWNER-CONFIRMED (Ivan, 2026-08-05): passing through a portal DESTROYS the pair.",
+      "They are single-use. This applies to any teleportable object, not only the player -",
+      "which is what the per-instance 'teleportable' custom-data flag is for.",
+      "",
+      "static_portals_persist is REASONED, NOT confirmed: the name says static, the engine",
+      "has a dedicated teleportToFirstStaticPortal, and level 1-1 would be unsolvable after",
+      "two uses if its four static portals vanished. Flip this if playtesting disagrees.",
+      "",
+      "on_cap_recycle_oldest is a GUESS: when already at two placed portals, this remake",
+      "replaces the oldest rather than refusing. The original may instead refuse (it has a",
+      "playPortalFailedSound) or clear both."
+    ],
+    "consume_on_traverse": true,
+    "static_portals_persist": true,
+    "on_cap_recycle_oldest": true
+  },
+
+  "level": {
+    "_note": [
+      "UNVERIFIED, not guessed-numeric: whether the exit requires every crystal is not",
+      "settled by any identifier in the binary and is not observable without playing.",
+      "Kept as a switch so resolving it is a JSON edit, not a code change.",
+      "Crystals are definitely counted: crystalCounter, _numCrystals, _maxCrystals,",
+      "getCrystalCount."
+    ],
+    "exit_requires_all_crystals": false
+  }
+}

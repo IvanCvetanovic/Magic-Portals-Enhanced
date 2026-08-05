@@ -47,6 +47,170 @@ to this commit.
 
 ---
 
+## ⚠️ 2026-08-04 — READ THIS BEFORE USING ANY NUMBER IN THIS DOCUMENT
+
+The APK arrived. A six-way adversarial audit re-checked this document against the engine
+source **and, for the first time, against the real game data** (133 `.esc`, 190 `.ent` in
+`reference/apk/`). 320 claims checked. The result splits cleanly in two:
+
+**The C++ layer is excellent — trust it.** Roughly 200 line citations were resolved and
+essentially none had drifted. Blocks quoted as "verbatim" are character-for-character
+correct. The subtle claims (empty ENML entity names are legal, `}` is not a name
+terminator, a stray backslash aborts the whole file, fixture order is alphabetical) are
+right, and are the kind of thing only source-reading produces.
+
+**The empirical layer was measured against the wrong corpus — do not trust any frequency.**
+Every "shipped" / "corpus-wide" / "all N scenes" statistic in this document describes the
+**11-scene MIT testbed**, not Magic Portals. The header above says so honestly (line 22),
+but §§4, 5, 11 and 12 use the word *shipped* for the testbed, which reads as the game.
+Reproduced exactly against the testbed — and materially wrong for the target:
+
+| # | Doc says | Magic Portals actually | Converter consequence |
+|---|---|---|---|
+| 1 | `blendMode=1` (AM_ADD) **"never appears in any shipped entity"** (§5.5, §12.2) | **111 occurrences** — 11 `.ent` + 100 `.esc` tags: `portal`, `portal_static`, `antiportal`, `fireball`, `halo`, `projectile`, `spiral`, `satellite`, `shock_area`, `door_highlight`, `red_key_state`. Plus `black_halo.ent` = `4` (AM_MODULATE), absent from the doc entirely. **Chapter 1 (world 0): 2 entities, 22 instances** — `antiportal.ent` ×15, `portal_static.ent` ×7; no AM_MODULATE | **The headline defect.** Treat blendMode as always-alpha and every portal and glow renders as a flat quad — the additive glow *is* the game's visual identity. Needs `BLEND_MODE_ADD`. `BLEND_MODE_MUL` (value 4) is **not** needed for milestone 1 |
+| 2 | `ZAxisDirection` is `(0,-1)`; `(0,0)` is a degenerate one-off in `physicsTest.esc` (§4.2, §12.2) | `(0,0)` in **all 133 scenes**; `(0,-1)` never occurs | Pseudo-3D z-projection is **fully disabled**. `ToScreenPos` (`engine/Util/ETHASUtil.cpp:123-126`) multiplies the z term out, so Godot position = `(x, y)` directly and `z` is depth-ordering only. Building the documented `(0,-1)` path misplaces every entity with non-zero z |
+| 3 | `enableLimit` / `upperAngle` / `lowerAngle` "source-verified, never exercised by data" (§12.2) | Exercised by 14 files — `seesaw.ent`, `spinning_platform.ent`, `spinning_platform_no_emissive.ent`, `spinning_cross.ent` + 10 scenes. `enableMotor` and `motorSpeed=-5.0` too. **⚠ NOT chapter 1:** all 10 scenes are suffixed (`level10c`, `14b`, `18b`, `19b`, `21b`, `27a`, `28a`, `29a`, `30a`, `30c`) = worlds 1–3. Measured: **zero** world-0 scenes contain `revoluteJoint` and **zero** of the 49 world-0 `.ent` carry `<Joints>` | Seesaws and swinging platforms are built from joint limits — but they are **out of scope for milestone 1**. Defer the joint path entirely. When it is built: `±1.57075` = `±π/2`, so **radians**, mapping onto Godot angular limits directly |
+| 4 | `shape=3` (BS_POLYGON) ↔ one file, `half_metal_crate.ent` (§5.4) | **24** `.ent` files; **1049 polygons** vs 19 compounds in the APK. **Chapter 1:** `shape="3"` on **220 of 934** inline instances (24%), and **all 220 carry `<Polygon>`** | Priority is *inverted* — polygon is the main collision path, not the exotic one, and it is required for milestone 1. `<Polygon>` nests **inside `<Collision>`**, not under `<Entity>` — see below |
+| 5 | `layerDepth` is "legacy writer output", `type=5` (ET_LAYERABLE) unused (§5.2, §5.3) | `layerDepth` on **169 of 190** `.ent`; `type=5` present. **Chapter 1 (corrected): absent from all 934** inline instances | Live code path *for the game as a whole*, but **not reachable in chapter 1** — the earlier "46 of 49" measured `.ent` files that no chapter-1 level reads. Defer. When built: `ComputeDepth` returns `Max(layrableMinimumDepth, layerDepth)` and **ignores z entirely** |
+| 6 | Outer `<Entity>` attributes are exhaustively `id`, `spriteFrame`, `shadowZ` (§4.3) | A fourth, **`hide`**, in `level_select0-3.esc` + `loading_screen.esc`. **In chapter 1's path:** no world-0 *level* uses it, but `level_select0.esc` — chapter 1's own menu — does | An assert-on-unknown-attribute parser hard-fails on 5 of 133 scenes, including the chapter-1 level select |
+| 7 | `hdDensityValue` 2.0 / `fullHdDensityValue` **4.0**; thresholds 720 / 1080 (§8.3, §8.5) | Both density values are **2**; thresholds **480 / 600** | Using 4.0 halves the world size of the 7 `fullhd/` sprites. With 480/600 essentially every Android device lands in the FULL_HD branch |
+| 8 | "The sprite namespace is deliberately flat" (§8.6); audio is "the one exception" (§8.1) | `LoadAndGetSprite` (`ETHScriptWrapper.Drawing.cpp:60-65`) does the same `resourceDirectory + file` join as audio | Flattening to basenames is right for `.ent`/`.esc` fields but **wrong** for the 157 files under `assets/sprites/` and 18 under `ETHFramework/`, which are addressed by full relative path — flattening collides |
+| 9 | "An HD asset occupies the same world size as its 1x counterpart" (§8.5) | Broken by 4 of 7 `fullhd/` files: `sky`, `icy_sky`, `red_sky`, `sky_purple` are 455×256 at 1x but 1024×512 at fullhd → 512×256 virtual, a **1.125×** change | Never mix tiers per sprite. Pick one tier and derive world size from *that* tier, or four sky backgrounds are 12.5% off |
+
+**Two corrections that are good news:**
+
+- **There is no engine fork.** §12.1 called this undeterminable. It isn't: the 190 shipped
+  `.ent` use exactly 23 `<Entity>` attributes and 33 element names, and *every one* is read
+  by `ETHEntityProperties::ReadFromXMLFile` (`engine/Entity/ETHEntityProperties.cpp:226-265`)
+  or is one of the three legacy fields already flagged dead. No unknown token in either
+  vocabulary. Nothing in the shipped corpus needs format knowledge outside this checkout.
+- **Element/attribute order never matters on read.** §4.3's child-order finding is a *writer*
+  artifact. Every read is name-keyed (`ETHEntity.cpp:212-248`, `ETHSceneProperties.cpp:33-61`).
+  Look children up by name; do not build a positional parser.
+
+**Chapter-1 inventory (answers `MILESTONE_1.md` §7.2), measured 2026-08-04, CORRECTED 22:40.**
+
+> ⚠️ **This subsection was published wrong at 22:05 and is restated here.** The first version
+> claimed "49 of 66 names resolve to a file in `assets/entities/`, because the engine appends
+> `.ent` when the name lacks it", and that branch B covered "236 of 934 instances (25%)".
+> **Both are false.** §4.5 of this document was right all along — *nothing appends `.ent`* — and
+> the real branch split is the opposite of what I published. Kept visible rather than silently
+> overwritten, because the wrong version was inside a block that claims authority over the rest
+> of the doc.
+
+World 0 = `level0.esc`..`level31.esc`: **32 scenes, 934 outer `<Entity>` instances, 66 distinct
+`EntityName`.**
+
+**Chapter-1 levels are fully self-contained. `<FileName>` occurs ZERO times across all 32
+scenes; all 934 instances carry an inline `<Entity>` body — branch B, 100%.** Branch A (the
+`.ent` cache lookup) is *never exercised by any chapter-1 level*. **The converter does not need
+to read a single `.ent` file to load chapter 1.** This is the largest single simplification
+found so far, and it inverts the earlier claim that both branches were needed up front.
+
+The 66 distinct names split as: **35** end in `.ent` and the file exists · **3** end in `.ent`
+and the file is **absent** (`collision_128_sqr.ent`, `moving_platform_single.ent`,
+`single_block.ent`) · **28** are written bare. Those counts are inventory only — *the name is a
+label, not a reference*. Fourteen of the bare names do have a same-named `.ent` on disk
+(`crate`, `crystal`, `sky`, `antiportal`, `portal_static`, …), and pairing them would be a
+**bug**: the inline bodies are materially different entities. Verified — `crate.ent` is
+`density=0.4 friction=0.96`, while inline `crate` occurs as both `0.4/0.96` *and*
+`0.2/1.0`; `crate_small` inline uses `smaller_crate.png`; bare `sky` has at least four sprite
+variants (`sky.png`, `dark_sky.png`, `icy_sky.png`, `red_sky.png`) against `sky.ent`'s one.
+Resolving a bare name to its `.ent` twin silently loads the wrong physics and the wrong art.
+
+Two rows in the table above were also derived from the wrong source — they measured the `.ent`
+files rather than the inline blocks chapter 1 actually uses. **Measured over the 934 inline
+bodies:** `blendMode` = `{0: 838, 2: 74, 1: 22}` — the 22 AM_ADD are `antiportal` ×15 and
+`portal_static` ×7, so **row 1's chapter-1 figure stands**. `layerDepth` is **absent from all
+934**, so row 5 does *not* apply to chapter 1.
+
+**`<Polygon>` nests inside `<Collision>`, not under `<Entity>` — and chapter 1 is polygon-heavy.**
+An earlier version of this block reported "`<Polygon>` 0 of 934" and raised it as an open
+question. That was a measurement error: it looked for `<Polygon>` as a direct child of the inline
+`<Entity>`. The writer puts it under the collision root
+(`ETHEntityProperties.cpp:490-505`, `pCollisionRoot->LinkEndChild(pElement)`). Re-measured at the
+correct depth: **all 220 `shape="3"` instances carry `<Polygon>` inside `<Collision>` — 220/220,
+no exceptions.** There is no fallback path and no missing data. (17 `shape="1"` circle instances
+also carry a `<Polygon>`; it is vestigial — the switch at `ETHPhysicsSimulator.cpp:85-98`
+dispatches on `shape` and calls `GetCircleShape` for those, so their polygon is never read.)
+
+Payload is ENML in **normalised −1..1 coordinates**, 8 vertices being the common case, e.g.
+`v0{x=-0.95;y=1;} v1{x=-1;y=0.8;} … v7{x=0.95;y=1;}`. `GetPolygonShape`
+(`ETHPhysicsSimulator.cpp:40-53`) maps each vertex to world space as
+`(box.size * 0.5) * vertex + box.pos` — so **the polygon is a unit-square-relative outline scaled
+by the `<Collision>` box**, which is exactly the shape a Godot `CollisionPolygon2D` wants.
+Note `GetPolygonShape` dereferences the polygon pointer with **no null check**, which is
+consistent with the data: a `shape=3` entity without polygon data would crash the original, so
+the 220/220 result is what the engine requires, not a coincidence.
+
+*Count reconciliation:* an audit agent independently reported "41 world-0 names resolve" using a
+bare→`.ent` pairing convention. That convention is invalid per the paragraph above; the
+authoritative split is **35 / 3 / 28**, and resolved-file counts are inventory trivia rather than
+a reference list, since chapter 1 reads no `.ent` file at all.
+
+Most-placed chapter-1 entities: `crystal.ent` (106, in 28/32), `platform.ent` (67),
+`collision_128x768.ent` (64, in **32/32**), `arch.ent` (48), `wall_w3.ent` (46, in 32/32),
+`block00.ent` (45), `double_block_plat.ent` (42). Present in all 32 scenes: `camera_start`,
+`max`, `main_char`, `door.ent`, `door_bg.ent`, `collision_128x768.ent`, `collision_768x128.ent`,
+`wall_w3.ent` — that octet is the minimum viable entity set for a level to load at all.
+Note 155 of the 190 `.ent` files are referenced by no world-0 level at all, so this is the
+**static placement list**, not the complete chapter-1 asset list — script-spawned entities
+(`portal.ent` itself among them) are not visible in `.esc` data.
+
+**Progression (answers §7.3): LINEAR, not star-gated.** State is two persisted integers,
+`net.asantee.magicportals.lastWorldAllowed` / `lastLevelAllowed` — a single high-water mark, and
+`sprites/skip_level_button.png` exists, so a level can be skipped. Medals are cosmetic. A
+*second, orthogonal* gate is purchase (`net.asantee.magicportals.free`, `BuyButton.angelscript`,
+`LastFreeLevelPopup.angelscript`) — free vs paid, not performance. **A "golden score" is a
+per-level MAXIMUM PORTAL COUNT** to earn gold: seven thresholds are literally `0`, which is
+incoherent as a time or par score and coherent only as "finish using zero portals".
+
+**World↔chapter mapping is positively pinned**, not inferred, from achievement strings compiled
+into `android_game.bin` cross-referenced against entity placement: *"Finish level 2-32 (dragon
+boss)"* ↔ `dragon.ent` occurs in exactly one scene of 128, `level31a.esc`; *"Get the red key on
+level 4-19"* ↔ `red_key_state.ent` only in `level18c.esc`; *"Score gold on level 1-9"* / *"1-23"*
+↔ `rolling_stone.ent` in `level8.esc` and `level22.esc`. So suffix `''`/`a`/`b`/`c` = chapters
+1–4, indices 0-based on disk and displayed 1-based. `Chapter 1..4` badge strings exist in the
+bytecode; **no Chapter 5 string does.**
+
+⚠️ **`assets/achievements.en.lang` is stale — do not use it.** It covers only chapters 1–3 and
+disagrees with the bytecode (*"18 portals or less"* vs bytecode `22`; *"at least 9 boulders"* vs
+`8`). The compiled bytecode is authoritative.
+
+**Also newly established (was §7.4 in `MILESTONE_1.md`):**
+
+- ENML duplicate keys: **last wins** — `Entity::Add` is `m_map[key] = value`
+  (`gs2d/src/Enml/Enml.cpp:148-153`). On the real `app.enml` that yields `width=1136, height=640`.
+- …but those are **desktop-only**. `width`/`height` are consumed solely by `machine/main.cpp:143-144`
+  and `editor/main.cpp:171`. On Android the surface size arrives from JNI
+  (`gs2d/src/Platform/android/main.cpp:91`).
+- The shipped `app.enml` has **no `android` block** and its `fixedHeight` is commented out, and
+  `LoadProperties` bails on a missing entity (`ETHAppEnmlFile.cpp:113-114`). **So `app.enml` does
+  not determine the Android viewport at all.** Anything treating 1136×640, 640 or 512 as "the"
+  virtual resolution is unsupported.
+- **Orientation IS settled: locked landscape** (`AndroidManifest` `screenOrientation=0`) — so
+  `project.godot`'s `window/handheld/orientation=4` (Sensor Landscape) should be `0`.
+- Best-supported viewport inference is a **~512-tall landscape design space**, from `.esc`
+  geometry (ymin −64 in 92 of 133 levels, modal ymax 384, median vertical span 448) agreeing
+  with the commented-out `//fixedHeight = 512;`. **PROVISIONAL** — settle it by playtesting,
+  not by reading more files.
+- ⚠ **New constraint on §7.4, added 2026-08-05:** the original draws an on-screen movement
+  pad — the `SCREEN_PAD_BUTTON` enum decodes to exactly `NO_SCREEN_BUTTON`,
+  `LEFT_SCREEN_BUTTON`, `RIGHT_SCREEN_BUTTON` (see `docs/original-gameplay.md` §1). Those
+  buttons occupy viewport space and must clear the ≥96 px touch-target floor
+  (CLAUDE.md rule 4), so pad size and viewport height have to be resolved *together*.
+  Whoever closes §7.4 should read that section first.
+- Undocumented mechanism: **`ETHGlobalScaleManager`** (`engine/Util/ETHGlobalScaleManager.cpp:26-64`)
+  is the engine's other viewport-adaptation path. For Magic Portals it is *not* engaged — the
+  compiled bytecode never calls the setters, so the factor stays 1.0.
+
+**Rule of thumb going forward:** treat every count in this document as an **existence proof,
+never as a range**, and re-measure against `reference/apk/` before sizing any table, enum or
+assertion. Corrections above are not yet folded into the section bodies — where a section and
+this block disagree, **this block wins**.
+
+---
+
 ## 1. Orientation: where to look in the engine source
 
 Curated to the ~25 files that answer >90% of format questions.

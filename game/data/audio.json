@@ -1,0 +1,76 @@
+{
+  "_about": [
+    "Cue name -> filename in res://assets/soundfx/.",
+    "",
+    "The FILENAMES are the original's own (DATA). The MAPPING - which cue fires on which",
+    "game event - is ours, and mostly obvious from the names. Where a cue's trigger is a",
+    "guess it is marked below.",
+    "",
+    "Several of these are corroborated by the compiled script: playPortalCreatedSound,",
+    "playPortalLaunchSound, playPortalKilledSound, playPortalFailedSound all exist as",
+    "identifiers, which is why the four portal cues are confident rather than assumed.",
+    "",
+    "Audio is converter output and gitignored. A fresh clone has none, every cue no-ops,",
+    "and the game runs silently. Missing audio must never be fatal."
+  ],
+
+  "enabled": true,
+
+  "cues": {
+    "_portal_note": "All four confirmed by playPortal*Sound identifiers in android_game.bin.",
+    "portal_created": "portal_created.mp3",
+    "portal_launch": "portal_launch.mp3",
+    "portal_killed": "portal_killed.mp3",
+    "portal_fail": "portal_fail.mp3",
+    "portal_reflect": "portal_reflect.mp3",
+    "teleport": "teleport.mp3",
+
+    "_pickup_note": "crystal_gather has _E and _G variants - GUESS: a pitch ladder for combos.",
+    "crystal": "crystal_gather.mp3",
+    "crystal_alt_e": "crystal_gather_E.mp3",
+    "crystal_alt_g": "crystal_gather_G.mp3",
+    "red_key": "red_key_got.mp3",
+
+    "door_open": "door_open.mp3",
+    "final_door": "final_door_sound.mp3",
+    "button": "button.mp3",
+    "elevator": "elevator.mp3",
+
+    "_hazard_note": "Trigger mapping is GUESS; the filenames are self-describing.",
+    "death": "fall.mp3",
+    "explosion_small": "explosion_small.mp3",
+    "explosion_huge": "explosion_huge.mp3",
+    "burn": "burn.mp3",
+    "demolition": "demolition.mp3",
+    "stone_hit": "stone_hit.mp3",
+    "spikes": "spikes.mp3",
+    "spike_hit": "spike_hit.mp3",
+    "shock_strike": "shock_strike.mp3",
+    "fireball": "fireball.mp3",
+    "projectile_reflect": "projectile_reflect.mp3",
+    "wood_break": "wood01.mp3",
+    "wood_drag": "wood_drag.mp3",
+
+    "_enemy_note": "Worlds 3-4. enemy_spotted matches the 'without being noticed' achievements.",
+    "enemy_spotted": "enemy_spotted.mp3",
+    "enemy_confused": "enemy_confused.mp3",
+    "beholder_appear": "beholder_appear.mp3",
+    "beholder_damage": "beholder_damage.mp3",
+    "ghost_appear": "ghost_appear_whoosh.mp3",
+    "dragon_lost": "dragon_lost.mp3",
+
+    "_stinger_note": "GUESS which plays on level complete; both are transition stingers.",
+    "level_complete": "magical_sweep_08.mp3",
+    "level_fail": "reverse_magical_sweep_08.mp3",
+    "transition": "orchestral_transition_stinger_06.mp3",
+
+    "_music_note": [
+      "Four loops ship. Which world uses which is UNKNOWN - the mapping below is a GUESS.",
+      "The 'properties' entity has a no_music flag, so some levels are silent by design."
+    ],
+    "music_world0": "finding_wonderland_60_loop.mp3",
+    "music_world1": "running_with_wolves_loop_b.mp3",
+    "music_world2": "warlords_loop_a.mp3",
+    "music_world3": "back_to_nestopia.mp3"
+  }
+}

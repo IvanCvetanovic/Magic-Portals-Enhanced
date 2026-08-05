@@ -65,6 +65,42 @@ dist/
 # path is cwd-relative, so out/ can appear below tools/converter/ too.
 out/
 
+# --- Converted / original-derived game assets ----------------------------
+# DEFAULT-DENY, added 2026-08-04. Same reasoning as reference/ and out/ above,
+# applied one step further down the pipeline.
+#
+# out/ is where the converter STAGES its output; game/assets/ is where reviewed
+# output is meant to LAND (CLAUDE.md → Directory layout: "our own + converted
+# art"). That promotion step is a human review gate, and until now the gate had
+# nothing behind it: game/assets/ was tracked, so a single `git add -A` after a
+# conversion run would have committed original art permanently.
+#
+# WRITTEN AS `**/game/assets/`, NOT `game/assets/` — this is not cosmetic.
+# A gitignore pattern containing a slash anywhere but the end is ANCHORED to the
+# directory holding the .gitignore, so a bare `game/assets/` matches ONLY the
+# repo-root one. `reference/` and `out/` above are single-segment patterns, which
+# git treats as matching at any depth — this one is not, and does not get that
+# for free. Running the converter from tools/converter/ with `-o game/assets`
+# would produce tools/converter/game/assets/, which a bare pattern does NOT
+# ignore. Verified with git check-ignore, both at root and nested.
+# This is the same defect session 1 fixed on /reference/ — re-introduced here by
+# a pattern that merely LOOKS unanchored. Do not "tidy" the `**/` away.
+#
+# To commit something that is genuinely OURS, force-add it explicitly. The
+# friction is the point — it is what makes "did a human look at this?" true:
+#
+#     git add -f game/assets/ui/our_own_button.png
+#
+# Do NOT replace this with a negation exception (`!game/assets/...`). Same rule
+# as reference/: if a file needs to be committed, force-add that file.
+**/game/assets/
+
+# NOTE — game/data/*.json is deliberately NOT ignored: CLAUDE.md rule 1 requires
+# gameplay values to live there as committed data. But the converter GENERATES
+# some of it from original level data, so generated .json still needs a human
+# read before its first commit. Layout geometry derived from a .esc is Asantee
+# level data in a different encoding; hand-authored tuning values are ours.
+
 # --- OS / editor cruft ---------------------------------------------------
 Thumbs.db
 .DS_Store

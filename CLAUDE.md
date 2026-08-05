@@ -10,8 +10,14 @@ on the **Ethanon Engine** (Asantee's own 2D engine, MIT-licensed).
 - **Language:** GDScript only. No C#. No GDExtension unless explicitly requested.
 - **Targets:** Android (primary). Desktop is the development/playtest surface.
 - **Renderer:** Compatibility (`gl_compatibility`) — broadest Android device support.
-- **Original scope:** ~120 levels. **Current scope: chapter 1 only** — see `MILESTONE_1.md`.
-  Do not build ahead of the current milestone.
+- **Original scope:** 128 levels (4 worlds × 32 — pinned exactly, not "~120").
+- **SCOPE WIDENED 2026-08-05, by Ivan, explicitly.** The previous rule here was "chapter 1
+  only — do not build ahead of the milestone", and `MILESTONE_1.md` excluded menus, audio
+  and chapters 2+. Ivan has asked for the full game and to proceed without check-ins, so
+  that restriction no longer applies. `MILESTONE_1.md` is kept as the **quality bar** —
+  especially §3's rule that portal values must be measured, not guessed — but its scope
+  boundary is superseded. Where the two disagree, this note wins.
+- All 128 levels now convert. The remaining work is *behaviour*, not data.
 
 This is a *remake*, not an emulator or a repack. Ethanon's runtime is not being ported;
 its **file formats** are being decoded so that level and entity data can be *translated*
@@ -97,21 +103,27 @@ AngelScript and is **not** converted — it is read as design reference and reim
 
 ## Environment (Ivan's machine)
 
-- OS: Windows. Project lives on `D:` in a path without spaces — keep it so.
-- Godot is the **Steam install**:
-  `D:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe`
-  - Verified 2026-07-25: reports **`4.7.1.stable.steam.a13da4feb`**.
-  - The path contains spaces — always quote it, or add `tools\godot.bat` forwarding
-    all args to it.
-  - **Version mismatch, stated plainly:** the spec says Godot 4.6; the only installed
-    editor is 4.7.1. `project.godot` declares `config/features=("4.6", ...)` as
-    specified. 4.7.1 opens it without complaint and will rewrite that tag to `"4.7"` the
-    first time the project is saved from the editor GUI. Nothing breaks. If 4.6 is a
-    hard requirement (e.g. to match a collaborator), install 4.6 explicitly — don't rely
-    on the feature tag to pin it.
-  - Steam auto-updates Godot. Recommended: Steam → Godot Engine → Properties → Updates →
-    "Only update the game when I launch it".
-- Python 3.11.9 on PATH as `python`. The converter targets `>=3.11`.
+**Re-verified 2026-08-04.** The block below previously described a `D:` drive and a Steam
+Godot install; neither exists on this machine any more. Corrected facts:
+
+- OS: Windows 11. Project lives at `C:\Users\icvet\Desktop\Magic-Portals-Remake`.
+  **There is no `D:` drive** — `C:` is the only filesystem drive. The path still has no
+  spaces; keep it that way.
+- **Godot 4.6.3 — installed 2026-08-04.** Reports `4.6.3.stable.official.7d41c59c4`.
+  - Installed with `winget install GodotEngine.GodotEngine --version 4.6.3` (Standard,
+    not .NET). Binary lives at
+    `%LOCALAPPDATA%\Microsoft\WinGet\Packages\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\Godot_v4.6.3-stable_win64.exe`
+  - **Use `tools\godot.bat`** — it forwards all args to that path, so the path lives in
+    exactly one place. `winget` may or may not have created a `godot` PATH alias
+    (it cannot without admin rights), so don't rely on the bare command.
+  - **The old 4.6-vs-4.7.1 mismatch is gone.** 4.6.3 matches `project.godot`'s
+    `config/features=("4.6", …)` exactly, so the editor will no longer rewrite that tag.
+    Deliberately NOT the Steam build — Steam auto-updates and would reintroduce the drift.
+  - Both mandatory verify commands pass clean on this install (exit 0).
+- Python **3.14.3** on PATH as `python` (was documented as 3.11.9). The converter targets
+  `>=3.11`, so 3.14 satisfies it. **Verified 2026-08-04** in `tools/converter/.venv`:
+  `pip install -e ".[dev]"` clean, `pytest` 41 passed, `ruff check` clean. The converter
+  has zero runtime deps by design, so the 3.11→3.14 jump costs nothing.
 - The Godot project root is **`game/`**, not the repo root. All `--path` invocations and
   `res://` paths are relative to `game/`.
 

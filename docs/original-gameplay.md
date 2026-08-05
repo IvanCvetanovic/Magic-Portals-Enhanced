@@ -1,0 +1,236 @@
+# Magic Portals — how the original behaves
+
+Design reference for the remake. **Separate from `ethanon-formats.md` on purpose:** that
+file documents Ethanon's *file formats*, this one documents *this game's* behaviour.
+
+CLAUDE.md: Ethanon gameplay logic "is **not** converted — it is read as design reference
+and reimplemented." Nothing here is translated code. It is observations, each carrying its
+provenance:
+
+| Marker | Means |
+|---|---|
+| **DATA** | Read from the original's own level/entity files. Highest confidence. |
+| **DECODED** | Decoded from `android_game.bin` with `tools/asbc/`. Cited, verified. |
+| **IDENTIFIER** | An identifier string exists in the compiled script. Proves the *concept* exists; says nothing about values. |
+| **ABSENCE** | An exhaustive search found nothing. Weak but real evidence. |
+| **OWNER** | Stated by Ivan from having played the original. Not measured, but primary testimony from the project owner — outranks IDENTIFIER and ABSENCE, and is the best source available for behaviour that leaves no trace in the data. |
+| **GUESS** | Invented. Must be measured. |
+
+Established 2026-08-05.
+
+---
+
+## 1. Controls — the character is player-driven
+
+**DECODED.** `tools/asbc/asbc.py` decodes the module's three enums cleanly
+(239 bytes, no desync). Two matter:
+
+```
+enum DIRECTION           MOVING_DOWN=0  MOVING_LEFT=1  MOVING_RIGHT=2  MOVING_UP=3
+enum SCREEN_PAD_BUTTON   NO_SCREEN_BUTTON=0  LEFT_SCREEN_BUTTON=240  RIGHT_SCREEN_BUTTON=255
+```
+
+**`SCREEN_PAD_BUTTON` contains only LEFT and RIGHT.** There is no up, down, jump or action
+button in the on-screen pad. So the touch control scheme for *movement* is two buttons,
+horizontal only — and everything else the player does (placing portals) must happen
+through direct taps on the world rather than through the pad.
+
+`DIRECTION` carries all four compass values, but that is a general-purpose enum also used
+by `anti_portal_agent` (whose custom data includes `direction: horizontal`) — it is not
+evidence of four-way player movement.
+
+**IDENTIFIER.** `ScreenPad` (`assets/ScreenPad.angelscript`), `setDirection`,
+`MainCharacter` (`assets/MainCharacter.angelscript`), `getMainCharacter`,
+`killMainCharacter`, `isCharacterDead`.
+
+**IDENTIFIER.** Ground contact is a *sensor entity*, not a raycast: `char_feet.ent` with
+`ETHBeginContactCallback_char_feet` / `ETHEndContactCallback_char_feet`.
+
+**ABSENCE.** `jumpForth` is the **only** jump-related identifier in the entire binary. With
+no jump button in `SCREEN_PAD_BUTTON`, the most likely reading is that the character does
+not jump on demand at all. *The remake currently implements a jump — that is a **GUESS** and
+is probably wrong.*
+
+**ABSENCE.** Zero hits for coyote-time or input-buffering identifiers. Evidence the
+original has no forgiveness window. `player.json` sets both to 0 on this basis.
+
+---
+
+## 2. Portals
+
+### 2.0 The core loop — OWNER, 2026-08-05
+
+Stated by Ivan, and it resolves the questions the data could not:
+
+1. **Movement is two buttons, left and right.** Independently confirmed by the decoded
+   `SCREEN_PAD_BUTTON` enum (§1) — testimony and decode agree.
+2. **Portals are created by tapping the screen.** So the pad moves, taps place. This is why
+   there is no third pad button.
+3. **At most TWO portals exist at once** — one pair.
+4. **Passing through a portal destroys the pair.** They are consumed on use, not permanent.
+5. **The same applies to other items**, not just the player — a crate or rolling stone
+   travelling through consumes the pair too. This meshes exactly with the `teleportable`
+   flag in §2.4.
+
+**This makes the mechanic legible.** A level is a puzzle about *where* to spend a limited
+number of one-shot portal pairs, and the golden score (a maximum portal count, §3) is a
+budget on how many pairs you spend getting through. That also reconciles the achievement
+text — "Finish level 1-20 with 8 portals or less" is a running total across the attempt,
+not a simultaneous cap.
+
+⚠ **Not covered by this testimony, still open:** whether `portal_static` entities are also
+consumed. The remake assumes **they persist** — the name says static, the engine has a
+dedicated `teleportToFirstStaticPortal`, and level 1-1 would become unsolvable after two
+uses if its four static portals vanished. Reasoned, not confirmed.
+
+### 2.1 The player places them, against a per-level budget
+
+**DATA.** A `properties` entity carries `max_portals` in its custom data. Chapter 1 values:
+level 1-1 → `0`, level 1-2 → `1`, level 1-15 → `0`. Only 6 of 32 chapter-1 scenes place a
+`properties` entity at all; **absent is not the same as zero** — 1-1 stores an explicit 0.
+
+**DECODED-ADJACENT (achievement text in the binary).** "Finish level 1-20 with 8 portals or
+less", "Finish level 1-21 with 4 portals or less", "Finish level 2-14 with seven portals".
+So portal count is a scored resource the player spends.
+
+**IDENTIFIER.** `insertPortal`, `managePortalInsertion`, `computePortalFinalPos`,
+`incrementPortalCounter`, `decrementPortalCounter`, `getPortalCounter`, `getNumPortals`,
+`_maxPortals`, `insertionTime`, `killPortals`, `blockPortalEffects`.
+
+### 2.2 Static portals are explicitly paired in the level data
+
+**DATA.** Each `portal_static` carries `index`, `destiny`, `color` and `active`.
+`destiny` is the index it sends the traveller to. All seven in chapter 1:
+
+| Level | index → destiny | colour |
+|---|---|---|
+| 1-1 | 1 → 0 | blue |
+| 1-1 | 0 → 1 | red |
+| 1-1 | 2 → 3 | red |
+| 1-1 | 3 → 2 | blue |
+| 1-2 | 0 → **1** | blue |
+| 1-15 | 2 → 3 | red |
+| 1-15 | 3 → 2 | blue |
+
+Pairs are mutual (0↔1, 2↔3) and always one red + one blue. **DECODED:** `PORTAL_RED` and
+`PORTAL_BLUE` exist as identifiers.
+
+### 2.3 Player-placed portals share the static index space
+
+**DATA, and the most useful inference here.** Level 1-2 ships **one** static portal —
+`index 0`, `destiny 1` — and grants `max_portals: 1`. There is no static portal with index
+1. The destination is the portal *the player places*.
+
+So static and placed portals occupy **one index space**, and 1-2 is the tutorial for
+placement: a fixed blue portal already pointing at the red one you are about to create.
+
+This was found by an assertion failing in `verify_gameplay.gd` — the test asserted every
+`destiny` resolved to a static portal, and 1-2 disproved it.
+
+### 2.4 Not everything can travel
+
+**DATA.** A `teleportable` flag in per-instance custom data:
+
+| `teleportable = 1` | `teleportable = 0` |
+|---|---|
+| `crate.ent`, `crate_small.ent`, `rolling_stone.ent`, `rolling_stone` | `crate` (inline), `crate_small` (inline), `wood_piece_small` |
+
+Per-instance and designer-controlled — the same logical object is teleportable in one
+placement and not in another. This answers MILESTONE_1 §3.8 from data.
+
+### 2.5 Portals can be blocked
+
+**DATA.** `antiportal` entities carry a `scale` multiplier (chapter-1 values 1.8 … 9).
+`no_portal` and `no_portal_sign.ent` also appear.
+**IDENTIFIER.** `AntiPortalManager`, `isPointInAntiPortalField`, `inAntiportalField`,
+`anti_portal_agent` (custom data: `speed`, `stride`, `direction: horizontal`).
+
+### 2.6 Two distinct cooldowns exist — values unknown
+
+**IDENTIFIER.** `FIRST_PORTAL_MIN_TIME` and `NEXT_PORTAL_MIN_TIME`, plus `lastPortalTimer`
+and `insertionTime`. That there are **two** separate constants is itself a design fact: the
+first portal and subsequent portals are rate-limited differently.
+
+⚠ **The numbers are not extracted.** See §5.
+
+### 2.7 Edge cases the original explicitly handles
+
+**IDENTIFIER.** `hasMovingPlatformInAnyPortal`, `isThereAnythingInPortal`,
+`doesItDestroyPortals`, `teleportToFirstStaticPortal`, `teleportToOther`,
+`computePortalFinalPos`, `g_portalCollisionRadius`. Also
+`addClearPortalsButton` / `removeClearPortalsButton` — the player can clear placed portals.
+
+**IDENTIFIER.** Audio hooks: `playPortalCreatedSound`, `playPortalLaunchSound`,
+`playPortalKilledSound`, `playPortalFailedSound`. A "failed" sound implies placement can be
+rejected — consistent with the antiportal fields.
+
+---
+
+## 3. Level objectives
+
+**DATA.** Every one of the 32 chapter-1 scenes contains exactly one `main_char`, one
+`camera_start`, one `max` (bounds) and one `door.ent` (exit).
+
+**DATA.** 114 crystals across chapter 1 (106 `crystal.ent` + 8 inline `crystal`), in 28 of
+32 levels. **IDENTIFIER.** `crystalCounter`, `_numCrystals`, `_maxCrystals`,
+`getCrystalCount`, `crystalPicker`, `crystal_pick.ent`, `crystal_vanish.ent`.
+
+⚠ **UNRESOLVED:** whether the exit requires all crystals. No identifier settles it.
+Modelled as a data switch (`portals.json` → `level.exit_requires_all_crystals`, default
+`false`).
+
+**IDENTIFIER.** `DoorLockedChooser`, and an achievement "Close all doors before finishing" —
+doors have locked states, and `door_lift` entities carry `switchIdx`/`idx` custom data
+pairing them with `button` entities. Not implemented in the remake yet.
+
+**IDENTIFIER.** `death_area.ent` kills on contact (`ETHBeginContactCallback_death_area`,
+`sensor=1`). Only one placement in chapter 1; far more in later worlds.
+
+**MEASURED (§7.3).** Progression is a linear high-water mark — two persisted integers
+`lastWorldAllowed`/`lastLevelAllowed`. Not star-gated; a skip-level button exists and
+medals are cosmetic. A separate free-vs-paid purchase gate exists and is out of scope.
+
+**DATA.** A "golden score" is a per-level **maximum portal count**; seven levels across the
+game ship a threshold of `0`, which only parses as "finish using zero portals".
+
+---
+
+## 4. Camera
+
+**IDENTIFIER.** `CameraController`, `AutoCameraController` (`assets/AutoCameraController.angelscript`),
+`ICameraController`, `clampCameraPos`, `readCameraStartPos`, `cameraHoldTime`,
+`cameraHoldElapsedTime`, `dragMoveCamera`, `autoCamera`.
+
+Two readings supported: the camera follows automatically, **and** the player can drag it to
+look around (`dragMoveCamera`) — which makes sense for a puzzle game where you must survey
+the level before placing portals. `cameraHoldTime` implies a hold-then-resume behaviour.
+
+**DATA.** Some levels carry `minX`/`maxX`/`minY`/`maxY` custom data — explicit camera
+clamps, matching `clampCameraPos`.
+
+⚠ All camera *durations* are **GUESS**.
+
+---
+
+## 5. What is still unknown, and the one way to get it
+
+Every numeric constant. The structure above is well established; the numbers are not.
+
+`tools/asbc/asbc.py` decodes the header and all three enums cleanly and stops there,
+honestly, at byte 239 of 523,826. Reaching the named constants means reaching
+`scriptGlobals` (`as_restore.cpp:1349`), which sits behind `classTypes`, funcdefs,
+interface methods, class methods, class properties and typedefs — so it needs ports of
+`ReadObjectTypeDeclaration` phase 2, `ReadDataType`, `ReadFunctionSignature` and
+`ReadFunction`.
+
+And even arriving there is not enough: `ReadGlobalProperty` stores a name, a namespace, a
+type and an **initialisation function** — not a value. `FIRST_PORTAL_MIN_TIME = x` is
+computed by bytecode, so the value is an immediate operand inside that function and needs
+`ReadByteCode` (`:1621`) plus instruction decoding.
+
+**Feasible, and clearly the right path — but a substantial piece of work, not a quick win.**
+The clean 239-byte decode already proves the format matches this AngelScript version
+(2.26.1), which was the main risk.
+
+Until then: values live in `game/data/*.json` marked `_guess`, and
+`MILESTONE_1.md` §3 stays open.

@@ -1,0 +1,51 @@
+{
+  "_about": [
+    "Hand-authored config. OUR design decisions, not values measured from the original.",
+    "CLAUDE.md rule 1: gameplay numbers live here, never in a .gd file.",
+    "JSON has no comments, so notes use _-prefixed keys. DataLoader ignores them.",
+    "",
+    "NOT IN THIS FILE, deliberately: every portal value (momentum_mode, exit_offset_px,",
+    "reentry_lockout_s, transit_time_s, camera_lerp_s, sfx_lead_s, ...). Those belong in",
+    "portals.json and MILESTONE_1.md section 3 requires each to be MEASURED by",
+    "frame-stepping recorded footage of the original. That footage does not exist yet",
+    "(blocker 7.6). A plausible guess is worse than a blank, because the feel target is",
+    "exactly what fails silently. Do not create portals.json from estimates."
+  ],
+
+  "input": {
+    "_note": [
+      "Ours, provisional. Touch-first per CLAUDE.md rule 4. These are pointer-gesture",
+      "thresholds, not portal-feel values, so authoring them now is safe - but they",
+      "should still be sanity-checked on a real device before the milestone closes."
+    ],
+    "min_touch_target_px": 96,
+    "tap_max_duration_s": 0.25,
+    "tap_max_travel_px": 24,
+    "drag_start_px": 16
+  },
+
+  "progression": {
+    "_note": [
+      "MEASURED, not invented (MILESTONE_1 7.3, resolved 2026-08-04). The original keeps",
+      "two integers - lastWorldAllowed / lastLevelAllowed - a single high-water mark.",
+      "Levels are NOT gated on stars or medals: a skip-level button exists and medals are",
+      "cosmetic. The original's other gate is free-vs-paid purchase, deliberately not",
+      "modelled here - it is a store concern and out of scope for this milestone."
+    ],
+    "unlock_mode": "linear_high_water",
+    "start_world": 0,
+    "start_level": 0,
+    "advance_on_complete": true
+  },
+
+  "level": {
+    "_note": [
+      "MILESTONE_1 section 4: 'Level failure and retry must be instant - no load screen",
+      "between retries.' retry_transition_s MUST stay 0. LevelManager caches the",
+      "PackedScene so a retry is an instantiate, never a disk load. If a transition is",
+      "ever wanted, put it on level ADVANCE, never on retry."
+    ],
+    "retry_transition_s": 0.0,
+    "advance_transition_s": 0.0
+  }
+}

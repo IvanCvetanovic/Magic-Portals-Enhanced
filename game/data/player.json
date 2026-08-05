@@ -1,0 +1,82 @@
+{
+  "_about": [
+    "Character movement values.",
+    "",
+    "⚠ EVERY NUMBER IN THIS FILE IS A GUESS. Not one has been measured against the",
+    "original. They are marked with _guess: true so the marking survives, per",
+    "MILESTONE_1.md section 3's rule: 'if a value is guessed rather than measured, it",
+    "gets a # GUESS comment in the JSON. No silent guesses.' The milestone's acceptance",
+    "checklist requires zero guesses remaining, so this file is a standing TODO.",
+    "",
+    "WHAT IS ACTUALLY KNOWN (from the compiled AngelScript in android_game.bin, so it is",
+    "structure rather than numbers):",
+    "  - The character is player-driven, NOT auto-walking: there is a ScreenPad /",
+    "    SCREEN_PAD_BUTTON and a DIRECTION enum of MOVING_UP/DOWN/LEFT/RIGHT plus",
+    "    setDirection. So a virtual d-pad drives it.",
+    "  - char_feet.ent is a separate ground-contact sensor entity, with",
+    "    ETHBeginContactCallback_char_feet / ETHEndContactCallback_char_feet. Ground",
+    "    detection is a sensor, not a raycast.",
+    "  - 'jumpForth' is the ONLY jump-related identifier in the whole binary, which is",
+    "    weak evidence that jumping is limited or situational rather than a core verb.",
+    "    Do not treat the jump values below as confirmed to even exist.",
+    "  - killMainCharacter / isCharacterDead confirm an explicit death state.",
+    "",
+    "TO RESOLVE: record the original and frame-step it (MILESTONE_1 7.6), or decode the",
+    "numeric constants out of android_game.bin. Until then, playtest feel means nothing."
+  ],
+
+  "movement": {
+    "_guess": true,
+    "_note": "Pixel units, matching the original's coordinate space (1 unit = 1 px at scale 1).",
+    "walk_speed_px_s": 160.0,
+    "acceleration_px_s2": 1400.0,
+    "friction_px_s2": 1800.0,
+    "air_control": 0.65
+  },
+
+  "gravity": {
+    "_guess": true,
+    "_note": [
+      "Ethanon runs Box2D with gravity (0, +10) in Box2D units at a 1/50 world scale",
+      "(docs/ethanon-formats.md section 10), i.e. +y down like Godot. The value below is",
+      "NOT that converted figure - it is a platformer-feel guess and will not match."
+    ],
+    "gravity_px_s2": 1200.0,
+    "max_fall_speed_px_s": 900.0
+  },
+
+  "jump": {
+    "_guess": true,
+    "_note": [
+      "⚠ JUMP PROBABLY DOES NOT EXIST IN THE ORIGINAL. Two independent signals:",
+      "  1. DECODED - the SCREEN_PAD_BUTTON enum contains exactly three members:",
+      "     NO_SCREEN_BUTTON=0, LEFT_SCREEN_BUTTON=240, RIGHT_SCREEN_BUTTON=255.",
+      "     There is no jump button on the on-screen pad. (tools/asbc, docs/original-gameplay.md)",
+      "  2. ABSENCE - 'jumpForth' is the only jump-related identifier in the whole binary.",
+      "",
+      "  3. OWNER-CONFIRMED (Ivan, 2026-08-05): the original had only move-left and",
+      "     move-right buttons, plus screen taps to create portals. No jump.",
+      "",
+      "NOW DISABLED. The portal mechanic exists, so the harness no longer needs a jump to",
+      "be playable. Kept as data rather than deleted so a debug build can re-enable it,",
+      "but it is OFF in normal play and a jump-based level solution proves nothing."
+    ],
+    "enabled": false,
+    "jump_velocity_px_s": -420.0,
+    "coyote_time_s": 0.0,
+    "jump_buffer_s": 0.0,
+    "_coyote_note": [
+      "Deliberately 0. A sweep of the binary for buffer/coyote identifiers returned ZERO",
+      "hits, which is real evidence the original has no such forgiveness system. This is",
+      "the one value here that is closer to measured than guessed - it is an argument",
+      "from absence, so still verify it."
+    ]
+  },
+
+  "body": {
+    "_guess": true,
+    "_note": "Collision capsule. The original's char_feet.ent implies feet sit below the body.",
+    "width_px": 20.0,
+    "height_px": 44.0
+  }
+}
