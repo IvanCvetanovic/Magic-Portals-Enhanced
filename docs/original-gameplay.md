@@ -219,8 +219,21 @@ clamps, matching `clampCameraPos`.
 
 Every numeric constant. The structure above is well established; the numbers are not.
 
-`tools/asbc/asbc.py` decodes the header and all three enums cleanly and stops there,
-honestly, at byte 239 of 523,826. Reaching the named constants means reaching
+`tools/asbc/` now decodes to byte **13,028 of 523,826** — up from 239 — covering the
+header, all 3 enums, all **132** class declarations, 5 funcdefs, 9 interfaces and **6
+complete classes with every method's decoded bytecode**. It then desynchronises inside
+class `Button`.
+
+Four real bugs were found and fixed getting there, each of which had produced a
+confident-looking wrong parse: `ttIdentifier` is 5 not 14 (an unnumbered C enum, so its
+value is its ordinal); `asFUNC_SCRIPT` is 1 not 2; **every** function reads a trailing
+script-section name when debug info is present, not just script functions; and class
+phase 2 skips the destructor and constructors entirely for interfaces.
+
+It is NOT the pointer width — 32- and 64-bit runs fail at the identical byte, which they
+could not if a pointer-sized instruction had already been misread.
+
+The original stopping point was byte 239. Reaching the named constants means reaching
 `scriptGlobals` (`as_restore.cpp:1349`), which sits behind `classTypes`, funcdefs,
 interface methods, class methods, class properties and typedefs — so it needs ports of
 `ReadObjectTypeDeclaration` phase 2, `ReadDataType`, `ReadFunctionSignature` and

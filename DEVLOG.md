@@ -1314,3 +1314,56 @@ component, and every count is pinned to the corpus. It is NOT complete in the se
 matching the original: the bosses are placeholders, and every timing and speed value in
 the game is still a marked guess. Those are different claims and I would rather say so
 plainly than let "finished" blur them.
+
+### 2026-08-05 19:10 — Session 12: the bytecode decoder — 54x further, still short
+
+**Built:** a real AngelScript module decoder. `tools/asbc/` now ports `asCReader` far
+enough to read **13,028 of 523,826 bytes** — up from 239 — covering the header, all 3
+enums, all **132** class declarations, 5 funcdefs, 9 interfaces, and **6 complete classes
+with every method's signature and decoded bytecode**. `opcodes.py` carries the full
+256-entry instruction table, generated from the engine's own header.
+
+**It still does not reach `scriptGlobals`.** It desynchronises inside class `Button`'s
+method bytecode, so the constants — `FIRST_PORTAL_MIN_TIME`, `NEXT_PORTAL_MIN_TIME`,
+`g_portalCollisionRadius` — remain unextracted, and every timing value in the game is
+still a marked guess. Saying that plainly matters more than the distance covered.
+
+**Four real bugs, each of which had produced a confident-looking wrong parse:**
+1. **`ttIdentifier` is 5, not 14.** It is an unnumbered C enum (`as_tokendef.h:46-58`), so
+   its value is its ordinal. I had guessed from the token's position in the *documentation*
+   rather than counting the enum. This misparses every object-typed parameter.
+2. **`asFUNC_SCRIPT` is 1, not 2.**
+3. **Every function reads a trailing script-section name** when debug info is present —
+   not only script functions. Missing it desyncs on the first funcdef.
+4. **Class phase 2 skips the destructor and constructors entirely for interfaces**
+   (`if(!IsInterface() && flags != TYPEDEF && flags != ENUM)`), and the constructor loop
+   reads function **pairs** — a constructor and its factory — not one each.
+
+**Two findings worth keeping regardless of whether the decode ever finishes:**
+- **All raw 4-byte fields in this file are big-endian**, which is not what the engine's
+  `ReadData` memcpy implies. Confirmed twice over: the first type's flags are `10 00 00 00`,
+  which equals `asOBJ_ENUM` (`0x10000000`) only big-endian, and `DIRECTION`'s members then
+  come out `0,1,2,3` rather than `0, 16777216, …`. Either alone would be a coincidence;
+  both together are not.
+- **It is not the pointer width.** 32- and 64-bit runs fail at the *identical* byte, which
+  they could not do if a pointer-sized instruction had already been misread.
+
+**Broke / dead ends:**
+- **I hand-wrote the 256-entry opcode table from memory** before deciding to generate it
+  from the header. The generated version disagreed — `CpyVtoG4` is `rW_PTR_ARG`, not
+  `wW_PTR_ARG`. Writing a lookup table from recall in a project whose entire method is
+  "read the source" was the wrong instinct, and it would have desynced somewhere subtle.
+
+**Assets check:** yes — only hand-written source; gitignored dirs invisible.
+
+**[CLIP] —** None. **[BROLL]** — None.
+
+**Numbers:** decoder 239 → **13,028 bytes** (2.5% of the file), 132 classes named, 4 bugs
+fixed. Game gates unchanged and green: levels 128/128, core 57/57, gameplay 547/547,
+converter 52 tests, ruff clean.
+
+**Inferred mood:** guess — genuinely torn. The decoder is 54x further along and every step
+was earned from the C++ rather than guessed, which is the right way to be stuck. But the
+thing it was built to produce — actual numbers — is still not produced, and I would rather
+say "13,028 of 523,826, stopped in `Button`" than let the distance travelled imply the
+destination was reached.

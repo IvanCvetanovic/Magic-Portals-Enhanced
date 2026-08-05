@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 
 # asOBJ_ENUM, as_objecttype.h / angelscript.h. Checked against the real file: the first
 # declared type has flags 0x10 and four integer members, which is DIRECTION.
-ASOBJ_ENUM = 0x10
+ASOBJ_ENUM = 0x10000000
 
 # Sanity bounds. Nothing in a real module comes close, so exceeding one means the reader
 # has desynchronised and is interpreting arbitrary bytes as a length.
@@ -115,6 +115,10 @@ class Reader:
             value = (value << 8) + self.u8()
         return -value if negative else value
 
+    def encoded_uint64(self) -> int:
+        """Full 64-bit form. `encoded_uint` is the same read, range-checked to 32 bits."""
+        return self.encoded_uint()
+
     def string(self) -> str:
         """Port of `asCReader::ReadString` (`as_restore.cpp:1323`).
 
@@ -169,7 +173,7 @@ def read_module(data: bytes, *, strict: bool = True) -> Module:
     enum_count = r.count("enum")
     for _ in range(enum_count):
         name = r.string()
-        flags = int.from_bytes(r.read(4), "little")
+        flags = int.from_bytes(r.read(4), "big")
         r.encoded_uint()  # size
         namespace = r.string()
         if not flags & ASOBJ_ENUM:
