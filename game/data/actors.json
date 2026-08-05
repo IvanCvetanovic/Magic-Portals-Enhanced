@@ -1,0 +1,43 @@
+{
+  "_about": [
+    "Keys, locks and enemies. Worlds 3-4 only; chapter 1 places none of this.",
+    "",
+    "EVERY NUMBER IS A GUESS. The structure below is DATA, read from the level files:",
+    "  - No enemy is ever placed directly in a scene. Every minion, boss and projectile is",
+    "    script-spawned from an invisible marker, which is why the data has minion_spawn",
+    "    markers and zero minion instances. 60 spawners across 35 levels: 28 in world 3,",
+    "    7 in world 4 (levels 4-25..4-31), none in worlds 1-2.",
+    "  - waypointName is a PREFIX, not a name: 'wayA' means patrol wayA0 <-> wayA1.",
+    "  - holdTime is MILLISECONDS. A lone wayX0 with a sentinel hold of 9999999 is how the",
+    "    designers authored a STATIONARY GUARD - so one resolved waypoint means 'stand",
+    "    still', not 'data missing'. Clamped rather than taken literally.",
+    "  - Minions carry breakable, burnable AND teleportable, all set. They are puzzle",
+    "    objects as much as threats: crushable by a rolling stone, burnable, or portalled",
+    "    off the level onto enemy_killer - an invisible solid kill floor below the bounds",
+    "    of every world-3 level. That is what the 'Kill all minions' achievements are for.",
+    "  - Keys pair with keyholes and locked doors BY COLOUR (yellow 33 / blue 6 / red 2 per",
+    "    role, identical multisets per level), never by proximity: a keyhole and its door",
+    "    can be 200-340px apart.",
+    "  - There is NO physics contact callback for a key in the binary; pickup is distance-",
+    "    polled from a per-frame update, so it is a range test rather than an overlap."
+  ],
+
+  "key": {
+    "_guess": true,
+    "_note": "Ranges invented. The colour pairing they operate on is DATA.",
+    "pickup_range_px": 40.0,
+    "unlock_range_px": 40.0
+  },
+
+  "minion": {
+    "_guess": true,
+    "_note": [
+      "Sight drives the 'without getting noticed by any minion' achievements, so range and",
+      "occlusion matter to scoring - but neither number is measured. The original occludes",
+      "sight with anti_sight_wall.ent, an invisible bar; modelled here as a physics raycast",
+      "against level geometry, which is the closest honest equivalent."
+    ],
+    "patrol_speed_px_s": 60.0,
+    "sight_range_px": 220.0
+  }
+}

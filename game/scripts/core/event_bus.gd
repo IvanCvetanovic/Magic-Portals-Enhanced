@@ -74,6 +74,20 @@ signal projectile_fired(projectile: Node2D)
 ## rather than silently dropped.
 signal spawn_requested(entity_name: String, origin: Vector2, bounds: Rect2)
 
+## --- Actors ---------------------------------------------------------------------
+
+## The player picked up a key. `colour` is yellow | blue | red.
+signal key_taken(key: Node2D, colour: String)
+
+## A keyhole consumed a key; every same-colour locked door is now gone.
+signal lock_opened(colour: String)
+
+signal enemy_spawned(enemy: Node2D)
+
+## A minion gained or lost sight of the player. Drives the "without being noticed"
+## achievements, and the exclamation/question marks the original pops.
+signal enemy_alerted(enemy: Node2D, spotted: bool)
+
 ## --- Progression --------------------------------------------------------------
 ## Owned by GameState.
 

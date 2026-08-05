@@ -124,6 +124,9 @@ func bind(root: Node) -> void:
 		var key: StringName = role if role != null else &""
 		if role != null:
 			Behaviours.attach(node, key, self)
+			Actors.attach(node, key, self)
+		# Hazards runs for EVERY entity, role or not: it also applies the per-instance
+		# flags (burnable, blink), and a crate carries those while having no role at all.
 		Hazards.attach(node, key, self)
 
 	_wire_channels()
@@ -136,6 +139,21 @@ func bind(root: Node) -> void:
 ## The original references markers BY NAME from custom data — a lift's `a`/`b` name
 ## `liftA`/`liftB`. Resolved here rather than in the converter so the level data keeps the
 ## original's own vocabulary and the mapping stays inspectable.
+func marker_named(entity_name: String) -> Node2D:
+	"""Any entity placed under that exact EntityName, whatever its role.
+
+	Waypoints and lift endpoints are both referenced by name from custom data, so this is
+	the one lookup the runtime genuinely needs to do by string.
+	"""
+	if entity_name.is_empty():
+		return null
+	for role: StringName in _by_role:
+		for node: Node2D in nodes_with_role(role):
+			if String(node.get_meta("entity_name", "")) == entity_name:
+				return node
+	return null
+
+
 func marker_position(entity_name: String, fallback: Vector2) -> Vector2:
 	if entity_name.is_empty():
 		return fallback

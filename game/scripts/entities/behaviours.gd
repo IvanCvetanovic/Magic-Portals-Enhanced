@@ -43,6 +43,8 @@ static func attach(node: Node2D, role: StringName, runtime: LevelRuntime) -> voi
 				_attach(node, TimedCollectible.new())
 		&"reflector":
 			_attach(node, Reflector.new())
+		&"hinge":
+			_attach(node, Hinge.new())
 		_:
 			pass
 
@@ -231,3 +233,49 @@ class Reflector:
 			var rigid: RigidBody2D = body
 			rigid.linear_velocity = rigid.linear_velocity.bounce(normal)
 		EventBus.reflected.emit(body)
+
+
+class Hinge:
+	extends Node
+	## A revolute joint — seesaws, spinning platforms, motor seesaws.
+	##
+	## The joint data is nested inside `<Collision>` in the level file, alongside
+	## `<Polygon>` and `<Compound>` (the same nesting that hid polygons earlier). The
+	## converter resolves the anchor into world units and emits it as metadata.
+	##
+	## **Angles are RADIANS.** The shipped `±1.57075` is `±π/2`, which is what settles the
+	## units question the format notes left open — a degree reading would be nonsensical.
+	##
+	## Only 10 instances exist in the whole game, all in worlds 2-4.
+
+	func _ready() -> void:
+		var parent: Node2D = get_parent() as Node2D
+		var body: Node = parent.get_node_or_null("Body")
+		var rigid: RigidBody2D = body as RigidBody2D
+		if rigid == null:
+			# A hinge on a static body cannot rotate. Report rather than silently do
+			# nothing — it would mean the converter emitted the wrong body type.
+			push_warning(
+				"Hinge: %s has no RigidBody2D to pivot" % parent.get_meta("entity_name", "?")
+			)
+			return
+
+		var pin: PinJoint2D = PinJoint2D.new()
+		pin.name = "Pin"
+		# The anchor is normalised -1..1 of the collision half-box in the source data; the
+		# converter has already scaled it, so this is a plain local offset.
+		pin.position = Vector2(
+			Behaviours.meta_float(parent, "joint_anchor_x", 0.0),
+			Behaviours.meta_float(parent, "joint_anchor_y", 0.0)
+		)
+		pin.node_a = rigid.get_path()
+
+		if Behaviours.meta_float(parent, "joint_enable_limit", 0.0) != 0.0:
+			pin.angular_limit_enabled = true
+			pin.angular_limit_lower = Behaviours.meta_float(parent, "joint_lower_angle", 0.0)
+			pin.angular_limit_upper = Behaviours.meta_float(parent, "joint_upper_angle", TAU)
+		if Behaviours.meta_float(parent, "joint_enable_motor", 0.0) != 0.0:
+			pin.motor_enabled = true
+			pin.motor_target_velocity = Behaviours.meta_float(parent, "joint_motor_speed", 0.0)
+
+		parent.add_child(pin)

@@ -1221,3 +1221,54 @@ ruff clean, main 0 errors. Commit `036590b`, 6773 insertions.
 failed, nothing errored, and the only reason I caught it was that 11 looked wrong next to
 a corpus I had already measured. Having the counts in the test as exact numbers rather
 than `> 0` is what turns that from a lucky glance into a permanent guard.
+
+### 2026-08-05 15:20 — Session 10: keys, locks, minions, hinges
+
+**Built:** the actor layer and hinges. Attached counts all match the corpus exactly:
+keys **39**, keyholes **41**, locked doors **41**, minion spawners **62**, hinges **10**.
+
+- **Keys/locks** pair BY COLOUR, never by proximity — per level the colour multisets of
+  key, keyhole and door_locked are identical, but a keyhole and its door can sit 200-340 px
+  apart, so a nearest-neighbour heuristic would mis-pair them. There is no physics contact
+  callback for a key anywhere in the binary; pickup is distance-polled, so it is a range
+  test rather than an overlap.
+- **Minions.** No enemy is ever placed directly in a scene — every one is script-spawned
+  from an invisible marker. `waypointName` is a **PREFIX**: `wayA` means patrol `wayA0` ↔
+  `wayA1`, holding `holdTime` MILLISECONDS at each. A lone `wayX0` with a sentinel hold of
+  9999999 is how the designers authored a stationary guard, so one resolved waypoint means
+  "stand still", not "data missing" — clamped rather than taken literally.
+  Minions carry `breakable`, `burnable` AND `teleportable`: they are puzzle objects as much
+  as threats, crushable or portallable onto `enemy_killer`, the invisible kill floor under
+  every world-3 level. Line of sight is a raycast, standing in for the original's
+  `anti_sight_wall.ent` occluder bars.
+- **Hinges** — seesaws, spinning platforms, motor seesaws. `PinJoint2D` with angular
+  limits.
+
+**Broke / dead ends:**
+- **`<Joints>` is nested inside `<Collision>`**, alongside `<Polygon>` and `<Compound>` —
+  and I queried it as a direct child of `<Entity>` and got zero. **Exactly the same nesting
+  trap `<Polygon>` set two sessions ago**, and I walked into it again despite having written
+  the warning myself. Worth stating the general rule rather than the instance: in this
+  format, *every ENML payload lives under the collision root*. There is no counter-example.
+- **`Actors.attach` was never called.** A string replacement did not match and I did not
+  check, so keys, keyholes and spawners all reported 0 while `locked_door` reported 41 —
+  the role table was fine, the attach pass simply was not running for it. Caught because
+  0 next to a measured 39 is obviously wrong. Patching source by string-replace keeps
+  failing silently; the edit tools error instead, which is the whole point of using them.
+
+**Angles are RADIANS, now settled from data.** The shipped `±1.57075` is `±π/2` — the
+format notes had left the units open by inference; the corpus closes it.
+
+**Assets check:** yes — only hand-written source visible; `reference/`, `out/` and
+`game/assets/**` invisible.
+
+**[CLIP] 15:11** — a motor seesaw pivoting, and a minion patrolling between two waypoints.
+**[BROLL]** — None; still headless.
+
+**Numbers:** gates levels 128/128, core 57/57, gameplay **546/546**, converter 52 tests,
+ruff clean, main 0 errors. Still zero converter skips across 4065 instances.
+
+**Inferred mood:** guess — mildly embarrassed by the joint-nesting repeat. The measured
+counts are doing real work now: every one of the five new numbers was checked against the
+corpus before being asserted, and two bugs surfaced purely because a count looked wrong
+rather than because anything threw.

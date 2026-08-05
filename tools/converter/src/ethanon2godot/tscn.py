@@ -282,6 +282,11 @@ def write_scene(
         # data: the original does its own overlap tests against it. door.ent, crystal.ent
         # and portal_static are all shape=0 with a real box. Dropping it (because it
         # produces no physics fixture) would throw away every trigger region in the game.
+        if ent.collision is not None and ent.collision.joint:
+            # A revolute joint. Emitted as metadata rather than as a Godot joint node
+            # because the pivot has to be attached at runtime, once the body exists.
+            for key in sorted(ent.collision.joint):
+                body.append(f"metadata/joint_{key} = {_num(ent.collision.joint[key])}")
         if ent.collision is not None and not ent.is_collidable:
             body.append(f"metadata/trigger_size = {_vec2(*ent.collision.size)}")
             if ent.collision.offset != (0.0, 0.0):

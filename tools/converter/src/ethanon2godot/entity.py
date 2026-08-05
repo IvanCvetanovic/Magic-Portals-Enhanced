@@ -108,6 +108,9 @@ class Collision:
     compound: list[tuple[str, tuple[float, float], tuple[float, float]]] = field(
         default_factory=list
     )
+    # A revolute joint, present iff the entity ships <Joints>. Keys are the ENML ones,
+    # values already converted: anchor in world units, angles in radians.
+    joint: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -217,6 +220,52 @@ def _parse_compound(
     return out
 
 
+def _parse_joint(collision_el: ET.Element, box: tuple[float, float]) -> dict[str, float]:
+    """Read a ``<Joints>`` payload — a revolute (pin) joint, as ENML.
+
+    Nested inside ``<Collision>``, exactly like ``<Polygon>`` and ``<Compound>``. Looking
+    one level higher finds nothing, which is the same trap ``<Polygon>`` set earlier.
+
+    Only revolute joints exist: the ENML entity name must START WITH ``revoluteJoint``
+    (a prefix test, ``ETHJoint::IsRevoluteJoint``), and shipped names are ``revoluteJoint``,
+    ``revoluteJoint0/1`` and ``revoluteJointA``.
+
+    Anchors are normalised −1..1 of the entity's scaled collision half-box
+    (``ETHRevoluteJoint.cpp:60-64``) and are converted to world units here. Angles are
+    RADIANS — the shipped ``±1.57075`` is ``±π/2``, which is what settles the units
+    question the format notes left open.
+    """
+    node = collision_el.find("Joints")
+    if node is None or not (node.text or "").strip():
+        return {}
+    parsed = enml.parse(node.text or "")
+    def number(attrs: dict[str, str], name: str, fallback: float) -> float:
+        raw = attrs.get(name, "").strip()
+        try:
+            return float(raw)
+        except ValueError:
+            return fallback
+
+    def truthy(attrs: dict[str, str], name: str) -> float:
+        return 1.0 if attrs.get(name, "").strip().lower() in ("true", "1") else 0.0
+
+    for key, attrs in parsed.items():
+        if not key.startswith("revoluteJoint"):
+            continue
+        return {
+            "anchor_x": number(attrs, "attachPointAX", 0.0) * box[0] * 0.5,
+            "anchor_y": number(attrs, "attachPointAY", 0.0) * box[1] * 0.5,
+            "enable_limit": truthy(attrs, "enableLimit"),
+            # ETHJoint.cpp:80-92 — upper defaults to 2*pi, lower to 0.
+            "lower_angle": number(attrs, "lowerAngle", 0.0),
+            "upper_angle": number(attrs, "upperAngle", 6.2831853),
+            "enable_motor": truthy(attrs, "enableMotor"),
+            "motor_speed": number(attrs, "motorSpeed", 0.0),
+            "max_motor_torque": number(attrs, "maxMotorTorque", 100.0),
+        }
+    return {}
+
+
 def parse_element(element: ET.Element, *, name: str = "") -> Entity:
     """Parse an ``<Entity>`` XML element into an :class:`Entity`.
 
@@ -256,6 +305,7 @@ def parse_element(element: ET.Element, *, name: str = "") -> Entity:
             size=box,
             polygon=_parse_polygon(collision_el),
             compound=_parse_compound(collision_el, box),
+            joint=_parse_joint(collision_el, box),
         )
 
     custom = element.find("CustomData")

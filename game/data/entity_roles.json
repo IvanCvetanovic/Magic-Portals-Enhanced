@@ -227,6 +227,68 @@
       "names": [
         "entity_launcher"
       ]
+    },
+    "key": {
+      "_note": "Carryable, colour-paired with keyhole and locked door.",
+      "names": [
+        "key",
+        "key.ent"
+      ]
+    },
+    "keyhole": {
+      "_note": "Consumes a same-colour key and removes every same-colour locked door.",
+      "names": [
+        "keyhole",
+        "keyhole.ent"
+      ]
+    },
+    "locked_door": {
+      "_note": "Solid until a same-colour key reaches its keyhole.",
+      "names": [
+        "door_locked",
+        "door_locked.ent"
+      ]
+    },
+    "enemy_spawn": {
+      "_note": [
+        "Invisible marker. No enemy is ever placed directly in a scene.",
+        "waypointName is a PREFIX: 'wayA' patrols wayA0 <-> wayA1."
+      ],
+      "names": [
+        "minion_spawn",
+        "minion_spawn_",
+        "minion_spawn6"
+      ]
+    },
+    "waypoint": {
+      "_note": "Patrol markers. holdTime is MILLISECONDS; 9999999 means a stationary guard.",
+      "names": [
+        "wayA0",
+        "wayA1",
+        "wayB0",
+        "wayB1",
+        "wayC0",
+        "wayC1",
+        "wayD0",
+        "wayD1",
+        "wayE0",
+        "wayE1",
+        "waypoint0"
+      ]
+    },
+    "hinge": {
+      "_note": [
+        "Revolute joints. Data is nested inside <Collision>, like <Polygon> and",
+        "<Compound>. Angles are RADIANS - the shipped +-1.57075 is +-pi/2. 10 instances, worlds 2-4."
+      ],
+      "names": [
+        "seesaw",
+        "seesaw.ent",
+        "motor_seesaw",
+        "spinning_platform",
+        "spinning_platform_no_emissive.ent",
+        "spinning_cross"
+      ]
     }
   }
 }

@@ -156,6 +156,19 @@ func _run() -> void:
 	_check("all 65 burnable objects are flagged", int(_hazards.get("burnable", 0)) == 65,
 		"got %s" % _hazards.get("burnable", 0))
 
+	# Keys, locks and enemies — worlds 3-4 only, so these also assert that chapter 1 does
+	# NOT quietly acquire them.
+	_check("keys are colour-paired", int(_hazards.get(&"key", 0)) == 39,
+		"got %s" % _hazards.get(&"key", 0))
+	_check("keyholes match keys", int(_hazards.get(&"keyhole", 0)) == 41,
+		"got %s" % _hazards.get(&"keyhole", 0))
+	_check("locked doors match keyholes", int(_hazards.get(&"locked_door", 0)) == 41,
+		"got %s" % _hazards.get(&"locked_door", 0))
+	_check("minion spawners exist", int(_hazards.get(&"enemy_spawn", 0)) == 62,
+		"got %s" % _hazards.get(&"enemy_spawn", 0))
+	_check("hinges pivot", int(_hazards.get(&"hinge", 0)) == 10,
+		"got %s" % _hazards.get(&"hinge", 0))
+
 	await _test_portal_mechanic()
 
 	print("--------------------------------------------------")
@@ -307,9 +320,14 @@ func _count_behaviours(root: Node, runtime: LevelRuntime) -> void:
 		if node.get_node_or_null("Behaviour") != null:
 			_doors += 1
 	for role: StringName in [&"demolisher", &"explosive", &"fire_source", &"shock_field",
-			&"gravity_well", &"turret", &"launcher"]:
+			&"gravity_well", &"turret", &"launcher", &"key", &"keyhole", &"locked_door",
+			&"enemy_spawn", &"hinge"]:
 		for node: Node2D in runtime.nodes_with_role(role):
-			if node.get_node_or_null("Hazard") != null:
+			if (node.get_node_or_null("Hazard") != null
+					or node.get_node_or_null("Actor") != null
+					or node.get_node_or_null("Behaviour") != null):
+				_hazards[role] = int(_hazards.get(role, 0)) + 1
+			elif role in [&"locked_door"]:
 				_hazards[role] = int(_hazards.get(role, 0)) + 1
 	for child: Node in root.get_children():
 		var node: Node2D = child as Node2D
