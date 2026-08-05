@@ -23,19 +23,16 @@
     "    uints with no `speed`, hence milliseconds - and startStride existing alongside",
     "    stride is what proves the millisecond reading for this whole family."
   ],
-
   "burning": {
     "_guess": true,
     "_note": "Long enough to be a race the player can win or lose; not measured.",
     "burn_time_s": 2.0
   },
-
   "explosion": {
     "_guess": true,
     "_note": "Chains to other explosives. Radius invented; explosion_small/huge both exist.",
     "radius_px": 96.0
   },
-
   "fire": {
     "_guess": true,
     "_note": [
@@ -44,7 +41,6 @@
     ],
     "reach_px": 24.0
   },
-
   "gravity_well": {
     "_guess": true,
     "_note": [
@@ -54,11 +50,26 @@
     ],
     "strength_px_s2": 400.0
   },
-
   "turret": {
     "_guess": true,
     "_note": "Carranca fireballs. Speed and lifetime invented; direction comes from data.",
     "projectile_speed_px_s": 180.0,
     "projectile_life_s": 4.0
+  },
+  "bounce": {
+    "_guess": true,
+    "_note": [
+      "A COSMETIC SCALE PULSE, not a trampoline. Established from the identifier set:",
+      "m_bounceScaleA/B, m_bounceStride, m_currentBounceScale, enableBounceEffects, and",
+      "highlightButtonBounceMin/Max + setCreditButtonBounceEffect - all about SCALE, two",
+      "about menu buttons. There is ETHCallback_bounce (per-frame) but NO",
+      "ETHBeginContactCallback_bounce, the same evidence that shows barrel_bomb is not",
+      "contact-triggered.",
+      "",
+      "An earlier version launched the player and threw them out of level 4-7. The test",
+      "caught it. Amplitude and rate are invented; that it is visual is not."
+    ],
+    "scale_amount": 0.06,
+    "rate": 2.0
   }
 }

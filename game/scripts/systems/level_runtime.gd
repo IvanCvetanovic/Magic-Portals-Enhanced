@@ -18,7 +18,7 @@ extends Node
 ## overlap itself, so the converter preserves that box as `metadata/trigger_size`.
 const TRIGGER_ROLES: Array[StringName] = [
 	&"exit_door", &"collectible", &"hazard", &"static_portal", &"no_portal_zone",
-	&"switch", &"reflector"
+	&"switch", &"reflector", &"pickup"
 ]
 
 ## Roles whose node must be able to MOVE and carry riders. A teleported StaticBody2D does

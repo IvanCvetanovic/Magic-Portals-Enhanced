@@ -45,6 +45,14 @@ static func attach(node: Node2D, role: StringName, runtime: LevelRuntime) -> voi
 			_attach(node, Reflector.new())
 		&"hinge":
 			_attach(node, Hinge.new())
+		&"no_portal_zone":
+			# Only the mobile ones patrol; a plain antiportal is stationary.
+			if node.has_meta("speed") and node.has_meta("stride"):
+				_attach(node, Mover.patrolling(node))
+		&"bouncer":
+			_attach(node, Bouncer.new())
+		&"torch":
+			_attach(node, Torch.new())
 		_:
 			pass
 
@@ -99,6 +107,22 @@ class Mover:
 		# that share its y-centre, with a stride of 110 — it cannot move sideways.
 		mover.axis = Vector2.DOWN
 		mover.travel_px = Behaviours.meta_float(node, "stride", 64.0)
+		mover.rate = Behaviours.meta_float(node, "speed", 1.0)
+		return mover
+
+	static func patrolling(node: Node2D) -> Mover:
+		"""A mobile agent — same oscillation as a platform, but its axis is authored.
+
+		`anti_portal_agent` carries `direction: horizontal`, which is the only place in the
+		data an axis is stated rather than inferred. A moving no-portal field changes which
+		placements are legal over time, so this is gameplay, not decoration.
+		"""
+		var mover: Mover = Mover.new()
+		mover.profile = Profile.OSCILLATE
+		mover.origin = node.position
+		var direction: String = String(node.get_meta("direction", "vertical"))
+		mover.axis = Vector2.RIGHT if direction == "horizontal" else Vector2.DOWN
+		mover.travel_px = Behaviours.meta_float(node, "stride", 48.0)
 		mover.rate = Behaviours.meta_float(node, "speed", 1.0)
 		return mover
 
@@ -279,3 +303,86 @@ class Hinge:
 			pin.motor_target_velocity = Behaviours.meta_float(parent, "joint_motor_speed", 0.0)
 
 		parent.add_child(pin)
+
+
+class Bouncer:
+	extends Node
+	## A COSMETIC SCALE PULSE — not a trampoline.
+	##
+	## I first implemented this as a launcher and it threw the player out of level 4-7. The
+	## test caught it, and the identifier set settles what it actually is:
+	## `m_bounceScaleA`, `m_bounceScaleB`, `m_bounceStride`, `m_currentBounceScale`,
+	## `enableBounceEffects`, plus `highlightButtonBounceMin/Max` and
+	## `setCreditButtonBounceEffect` — every one of them is about SCALE, and two are about
+	## menu buttons. There is also `ETHCallback_bounce` (per-frame) but **no**
+	## `ETHBeginContactCallback_bounce`, exactly like `barrel_bomb`, which is the same
+	## evidence that told us bombs are not contact-triggered.
+	##
+	## So the entity stays solid geometry — it is `shape=3`, static, non-sensor, and works
+	## as a platform already — and this only pulses its scale.
+
+	var _t: float = 0.0
+	var _base: Vector2 = Vector2.ONE
+	var _amount: float = 0.06
+	var _rate: float = 2.0
+
+	func _ready() -> void:
+		_base = (get_parent() as Node2D).scale
+		_amount = float(DataLoader.get_value("hazards", ["bounce", "scale_amount"], 0.06))
+		_rate = float(DataLoader.get_value("hazards", ["bounce", "rate"], 2.0))
+
+	func _process(delta: float) -> void:
+		_t += delta
+		(get_parent() as Node2D).scale = _base * (1.0 + sin(_t * _rate) * _amount)
+
+
+class Torch:
+	extends Node
+	## An unlit torch in chapter 4's `darkest` levels. Lighting it is what makes those
+	## levels navigable — they are the ones the "Alone in the dark" achievements name.
+	##
+	## Modelled as a PointLight2D switched on by proximity. ⚠ GUESS: whether the original
+	## lights on contact, on a portal arriving, or via its `switch` custom data is not
+	## established — `ETHCallback_light_off` exists but its logic is in bytecode.
+
+	var _light: PointLight2D
+
+	func _ready() -> void:
+		var parent: Node2D = get_parent() as Node2D
+		_light = PointLight2D.new()
+		_light.name = "Flame"
+		_light.enabled = false
+		_light.energy = 1.2
+		_light.texture_scale = 4.0
+		# A gradient texture built in code so the remake ships no borrowed art.
+		var gradient: GradientTexture2D = GradientTexture2D.new()
+		gradient.width = 128
+		gradient.height = 128
+		gradient.fill = GradientTexture2D.FILL_RADIAL
+		gradient.fill_from = Vector2(0.5, 0.5)
+		gradient.fill_to = Vector2(1.0, 0.5)
+		var ramp: Gradient = Gradient.new()
+		ramp.set_color(0, Color(1.0, 0.85, 0.55))
+		ramp.set_color(1, Color(0, 0, 0, 0))
+		gradient.gradient = ramp
+		_light.texture = gradient
+		parent.add_child(_light)
+
+		var area: Area2D = Area2D.new()
+		area.name = "TorchArea"
+		area.monitorable = false
+		var shape: CollisionShape2D = CollisionShape2D.new()
+		var circle: CircleShape2D = CircleShape2D.new()
+		circle.radius = 40.0
+		shape.shape = circle
+		area.add_child(shape)
+		parent.add_child(area)
+		area.body_entered.connect(func(body: Node2D) -> void:
+			if body.is_in_group("player"):
+				light_up())
+
+	func light_up() -> void:
+		if _light.enabled:
+			return
+		_light.enabled = true
+		EventBus.torch_lit.emit(get_parent() as Node2D)

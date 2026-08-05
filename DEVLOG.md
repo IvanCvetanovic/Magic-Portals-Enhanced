@@ -1367,3 +1367,54 @@ was earned from the C++ rather than guessed, which is the right way to be stuck.
 thing it was built to produce — actual numbers — is still not produced, and I would rather
 say "13,028 of 523,826, stopped in `Button`" than let the distance travelled imply the
 destination was reached.
+
+### 2026-08-05 21:05 — Session 13: closing the coverage gap to zero
+
+**Asked "is anything left?" and answered it from the data**, not from memory: cross-referenced
+every entity PLACED in the 128 levels against the `ETHCallback_` liveness list and against
+the role table. **29 placed entities had a live callback and no handling.** Now zero.
+
+Real gameplay gaps closed:
+- **`antiportal.ent` was simply missing from the role list** — 7 placements that did not
+  block portal placement at all. **`anti_portal_agent`** (21) is the same field but MOBILE:
+  the 5 inline ones carry `direction`/`speed`/`stride` and now patrol, so the forbidden
+  region moves.
+- **`torch`** (10) — chapter 4's `darkest` levels, lit by proximity. Those are the levels
+  the "Alone in the dark" achievements name, and without a light source they are unplayable.
+- **`pickup`** (13) — shock/fire diamonds. Distinct from crystals: `shock_diamond_pick.mp3`
+  is its own cue and the callbacks are separate. Deliberately grants nothing — what
+  collecting one DOES is not established, so it collects and announces, and that is all.
+- **`projectile_blocker`** (4) — invisible 64×128 barrier, `shape=0`, no sprite.
+
+**Broke / dead ends — and the test caught both:**
+1. **I implemented `bounce` as a trampoline and it threw the player out of level 4-7.**
+   Wrong. The identifier set settles it: `m_bounceScaleA`, `m_bounceScaleB`,
+   `m_bounceStride`, `m_currentBounceScale`, `enableBounceEffects`, plus
+   `highlightButtonBounceMin/Max` and `setCreditButtonBounceEffect` — every one is about
+   SCALE, and two are about menu buttons. There is `ETHCallback_bounce` but **no**
+   `ETHBeginContactCallback_bounce`, the identical evidence that showed barrel bombs are
+   not contact-triggered. It is a cosmetic pulse; the entity was already solid geometry and
+   works as a platform without help. I invented a mechanic and a level failure found it.
+2. **A name in two role lists silently resolved to one.** `no_portal_sign.ent` was listed
+   under both `no_portal_zone` and `scenery_hint`, so three portal zones vanished and
+   nothing errored — the count came out 93 against a measured 96. Resolved in favour of
+   `scenery_hint` (a sign is signage; the field is the `antiportal`), and `LevelRuntime`
+   now **warns** on any duplicate rather than quietly picking the last one.
+
+**Also classified the final 7** — `arrows`, `gutter_mouth`, `hand_waypoint0`, `dragon_claw`,
+`rocket_launch`/`_landing`, `red_key_state` — as `scenery_fx` with a note on each, so the
+sweep reports zero *unexplained* entities rather than a list someone has to re-triage.
+
+**Assets check:** yes — only hand-written source; gitignored dirs invisible.
+
+**[CLIP] 20:58** — a mobile antiportal patrolling, so a placement that was legal a moment
+ago is refused. **[BROLL]** — None.
+
+**Numbers:** coverage gap 29 → **0**. Gates: levels 128/128, core 57/57, gameplay
+**552/552**, converter 52 tests, ruff clean, main 0 errors, 0 duplicate-role warnings.
+
+**Inferred mood:** guess — the right way to end a build phase. Two of the three things found
+were mine, both were found by a test rather than by review, and the `bounce` one is the
+clearest example in the whole project of the rule that keeps paying: when the data does not
+say a mechanic exists, do not add it. I had a plausible story (a 64×64 solid block called
+"bounce") and the identifiers said "no, it pulses".

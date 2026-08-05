@@ -40,6 +40,10 @@ static func attach(node: Node2D, role: StringName, runtime: LevelRuntime) -> voi
 			_add(node, Turret.new(runtime))
 		&"launcher":
 			_add(node, Launcher.new(runtime))
+		&"pickup":
+			_add(node, Pickup.new())
+		&"projectile_blocker":
+			_add(node, ProjectileBlocker.new())
 		_:
 			pass
 	# Flags are orthogonal to role: a crate is `burnable` AND `teleportable`, a wall is
@@ -468,3 +472,51 @@ class Blink:
 			return
 		var pulse: float = (cos(_t * 4.0) + 1.0) * 0.5
 		parent.modulate = Color.WHITE.lerp(Color(1.4, 1.4, 1.2), pulse * 0.5)
+
+
+class Pickup:
+	extends Node
+	## A diamond. Distinct from a crystal: `shock_diamond_pick.mp3` is its own audio cue and
+	## `ETHCallback_shock_diamond` / `_fire_diamond` are separate callbacks, so the original
+	## treats them as a different collectible rather than a re-skinned crystal.
+	##
+	## ⚠ GUESS: what collecting one DOES. The names suggest it charges a shock or fire
+	## ability, but nothing in the level data or the identifier set settles it, so this only
+	## collects and announces — it deliberately grants nothing.
+
+	func _ready() -> void:
+		var parent: Node2D = get_parent() as Node2D
+		var trigger: Area2D = parent.get_node_or_null("Trigger")
+		if trigger == null:
+			return
+		trigger.body_entered.connect(func(body: Node2D) -> void:
+			if not body.is_in_group("player"):
+				return
+			if not is_instance_valid(parent) or parent.is_queued_for_deletion():
+				return
+			EventBus.pickup_collected.emit(String(parent.get_meta("entity_name", "")))
+			parent.queue_free())
+
+
+class ProjectileBlocker:
+	extends Node
+	## An invisible 64x128 barrier that stops projectiles but not the player — `shape=0`
+	## and no sprite, so it is pure logic. Same family as `anti_sight_wall.ent`, which
+	## blocks a minion's line of sight rather than its shots.
+
+	func _ready() -> void:
+		var parent: Node2D = get_parent() as Node2D
+		var area: Area2D = Area2D.new()
+		area.name = "BlockArea"
+		area.monitorable = false
+		var shape: CollisionShape2D = CollisionShape2D.new()
+		var rect: RectangleShape2D = RectangleShape2D.new()
+		rect.size = parent.get_meta("trigger_size", Vector2(64, 128))
+		shape.shape = rect
+		area.add_child(shape)
+		parent.add_child(area)
+		area.area_entered.connect(func(other: Area2D) -> void:
+			# Projectiles are Area2D with a `fire` marker; the player is a body, so it
+			# passes straight through.
+			if other.has_meta("fire"):
+				other.queue_free())

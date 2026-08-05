@@ -93,6 +93,12 @@ signal boss_spawned(boss: Node2D, kind: String)
 ## The chapter boss died. Level 32 of each chapter ends on this.
 signal boss_defeated(kind: String)
 
+## A diamond was collected. Distinct from a crystal.
+signal pickup_collected(kind: String)
+
+## A torch was lit in one of chapter 4's dark levels.
+signal torch_lit(torch: Node2D)
+
 ## --- Progression --------------------------------------------------------------
 ## Owned by GameState.
 

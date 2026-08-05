@@ -38,6 +38,7 @@ var _movers: int = 0
 var _switches: int = 0
 var _doors: int = 0
 var _inert_animated: int = 0
+var _no_portal_zones: int = 0
 var _hazards: Dictionary = {}
 
 
@@ -172,6 +173,21 @@ func _run() -> void:
 		"got %s" % _hazards.get(&"boss_spawn", 0))
 	_check("hinges pivot", int(_hazards.get(&"hinge", 0)) == 10,
 		"got %s" % _hazards.get(&"hinge", 0))
+	# The gap pass: entities that had a live ETHCallback but no component until now.
+	_check("bouncers exist", int(_hazards.get(&"bouncer", 0)) == 4,
+		"got %s" % _hazards.get(&"bouncer", 0))
+	_check("torches exist", int(_hazards.get(&"torch", 0)) == 10,
+		"got %s" % _hazards.get(&"torch", 0))
+	_check("diamonds are pickups", int(_hazards.get(&"pickup", 0)) == 13,
+		"got %s" % _hazards.get(&"pickup", 0))
+	_check("projectile blockers exist", int(_hazards.get(&"projectile_blocker", 0)) == 4,
+		"got %s" % _hazards.get(&"projectile_blocker", 0))
+	# antiportal + antiportal.ent + no_portal + no_portal_sign + both agent spellings.
+	# Counted by ROLE MEMBERSHIP, not by component: a static antiportal needs no component
+	# at all — PortalSystem reads the role list directly when testing a placement. Only the
+	# mobile agents carry a behaviour.
+	_check("all no-portal zones classified", _no_portal_zones == 93,
+		"got %d" % _no_portal_zones)
 
 	await _test_portal_mechanic()
 
@@ -323,9 +339,11 @@ func _count_behaviours(root: Node, runtime: LevelRuntime) -> void:
 	for node: Node2D in runtime.nodes_with_role(&"switched_door"):
 		if node.get_node_or_null("Behaviour") != null:
 			_doors += 1
+	_no_portal_zones += runtime.nodes_with_role(&"no_portal_zone").size()
 	for role: StringName in [&"demolisher", &"explosive", &"fire_source", &"shock_field",
 			&"gravity_well", &"turret", &"launcher", &"key", &"keyhole", &"locked_door",
-			&"enemy_spawn", &"hinge", &"boss_spawn"]:
+			&"enemy_spawn", &"hinge", &"boss_spawn", &"bouncer", &"torch", &"pickup",
+			&"projectile_blocker", &"no_portal_zone"]:
 		for node: Node2D in runtime.nodes_with_role(role):
 			if (node.get_node_or_null("Hazard") != null
 					or node.get_node_or_null("Actor") != null
