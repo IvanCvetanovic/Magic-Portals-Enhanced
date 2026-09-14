@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import __version__, manifest, tscn
+from . import __version__, manifest, tscn, uiassets
 from .scene import parse_file
 
 # Defaults are repo-relative. Both are gitignored — see the repo .gitignore.
@@ -79,7 +79,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--copy-ui",
         action="store_true",
         help=(
-            "also copy assets/sprites/ (UI, menus, medals) and assets/soundfx/ into "
+            "also copy assets/sprites/ (UI, menus, medals) with its hd/ tier, the bitmap fonts "
+            "from assets/data/, and assets/soundfx/ into "
             "<output>/assets/. Output stays gitignored."
         ),
     )
@@ -181,26 +182,15 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"warning: texture not found: {found}", file=sys.stderr)
 
     if args.copy_ui and not args.dry_run:
-        # UI sprites and audio are copied WHOLESALE, unlike entity textures which are
-        # copied only when a level references one. There is no level data naming a menu
-        # button, so there is nothing to filter on.
-        #
-        # The `hd/` and `fullhd/` tiers are deliberately SKIPPED. §8.5 of the format notes
-        # records that four of the seven fullhd sky files have a different aspect ratio
-        # from their 1x counterparts, so mixing tiers changes world sizes. One tier only.
-        for group, patterns in (("sprites", ("*.png", "*.bmp")), ("soundfx", ("*.mp3",))):
-            src_dir = args.input / "assets" / group
-            dst_dir = args.output / "assets" / group
-            if not src_dir.is_dir():
-                print(f"warning: no {src_dir}", file=sys.stderr)
-                continue
-            dst_dir.mkdir(parents=True, exist_ok=True)
-            copied = 0
-            for pattern in patterns:
-                for found in sorted(src_dir.glob(pattern)):
-                    shutil.copy2(found, dst_dir / found.name)
-                    copied += 1
-            print(f"copied {copied} file(s) to {dst_dir}")
+        # Wholesale, and tier-aware: see uiassets.py for why `hd/` is safe and `fullhd/`
+        # is not.
+        ui = uiassets.copy_ui_assets(args.input, args.output)
+        for group, count in ui.copied.items():
+            print(f"copied {count} {group} file(s) to {args.output / 'assets'}")
+        for line in ui.rewritten:
+            print(f"rewrote {line}")
+        for line in ui.skipped:
+            print(f"SKIPPED {line}", file=sys.stderr)
 
     verb = "would convert" if args.dry_run else "converted"
     print(

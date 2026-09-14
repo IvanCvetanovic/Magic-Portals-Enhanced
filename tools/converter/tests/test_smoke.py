@@ -492,3 +492,69 @@ def test_collidable_entities_do_not_get_a_trigger_box() -> None:
     text, report = tscn.write_scene(scene.parse(_MINIMAL_ESC))
     assert report.colliders == 1
     assert "metadata/trigger_size" not in text
+
+
+# --- uiassets ------------------------------------------------------------------------------
+
+
+def _fake_png(path, width: int, height: int) -> None:
+    """A header-only PNG: read_size needs the signature and IHDR, nothing else."""
+    import struct
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ihdr = struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", width, height)
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + ihdr)
+
+
+def test_ui_copy_takes_exact_hd_and_refuses_the_rest(tmp_path) -> None:
+    from ethanon2godot.uiassets import copy_ui_assets
+
+    sprites = tmp_path / "in" / "assets" / "sprites"
+    _fake_png(sprites / "button.png", 32, 32)
+    _fake_png(sprites / "hd" / "button.png", 64, 64)  # exact x2: copied
+    _fake_png(sprites / "sky.png", 455, 256)
+    _fake_png(sprites / "hd" / "sky.png", 1024, 512)  # aspect change: refused
+    _fake_png(sprites / "hd" / "orphan_.png", 64, 64)  # no 1x file: refused
+
+    report = copy_ui_assets(tmp_path / "in", tmp_path / "out")
+
+    out = tmp_path / "out" / "assets" / "sprites"
+    assert (out / "hd" / "button.png").is_file()
+    assert not (out / "hd" / "sky.png").exists()
+    assert not (out / "hd" / "orphan_.png").exists()
+    assert report.copied["sprites/hd"] == 1
+    assert len(report.skipped) == 2
+
+
+def test_ui_copy_brings_font_pages_and_refuses_incomplete_fonts(tmp_path) -> None:
+    from ethanon2godot.uiassets import copy_ui_assets
+
+    data = tmp_path / "in" / "assets" / "data"
+    data.mkdir(parents=True)
+    (data / "Good.fnt").write_text(
+        'info face="X"\npage id=0 file="Good_0.png"\npage id=1 file="Good_1.png"\n'
+    )
+    _fake_png(data / "Good_0.png", 8, 8)
+    _fake_png(data / "Good_1.png", 8, 8)
+    (data / "Broken.fnt").write_text('page id=0 file="Broken_0.png"\n')  # page absent
+
+    report = copy_ui_assets(tmp_path / "in", tmp_path / "out")
+
+    fonts = tmp_path / "out" / "assets" / "fonts"
+    assert {p.name for p in fonts.iterdir()} == {"Good.fnt", "Good_0.png", "Good_1.png"}
+    assert report.copied["fonts"] == 1
+    assert any("Broken.fnt" in line for line in report.skipped)
+
+
+def test_ui_copy_rewrites_the_one_channel_code_godot_rejects(tmp_path) -> None:
+    from ethanon2godot.uiassets import copy_ui_assets
+
+    data = tmp_path / "in" / "assets" / "data"
+    data.mkdir(parents=True)
+    (data / "V.fnt").write_text('common alphaChnl=2 redChnl=4\npage id=0 file="V.png"\n')
+    _fake_png(data / "V.png", 8, 8)
+
+    copy_ui_assets(tmp_path / "in", tmp_path / "out")
+
+    written = (tmp_path / "out" / "assets" / "fonts" / "V.fnt").read_text()
+    assert "alphaChnl=0" in written and "alphaChnl=2" not in written

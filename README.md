@@ -87,6 +87,14 @@ cp out/assets/entities/*  game/assets/entities/
 cp out/data/chapters.json game/assets/data/
 ```
 
+UI art, its `hd/` tier, the bitmap fonts and audio come from `--copy-ui` (no level
+references them, so they are copied wholesale):
+
+```bash
+python -m ethanon2godot --world 0 --copy-ui
+cp -r out/assets/sprites out/assets/fonts out/assets/soundfx game/assets/
+```
+
 `chapters.json` is the level order plus each level's gold threshold, read from the
 original's `goldenScores.enml`. Without it the game has levels but no chapter.
 
