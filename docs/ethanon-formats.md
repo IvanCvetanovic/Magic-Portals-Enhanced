@@ -221,16 +221,26 @@ Captures stay in `out/parity/`; only the measurements are recorded here.
 mortar gaps sit at x = 174, 355, 532, 714, 894, 1074 — pitches 181, 177, 182, 180, 180, mean
 **180 px**. The same stones are 64 units wide in the level data (`single_stone_contrast.png` is
 64×32), so the scale is 180 ÷ 64 = **2.8125 = 720 ÷ 256**. The upper ledge agrees (169, 178). This
-closes MILESTONE_1 §7.4 by measurement and supersedes the "~512-tall" inference above. It also
-explains the art: `sky.png` is 455×256, i.e. exactly one screen. Whether the rule is height-locked
+closes MILESTONE_1 §7.4 by measurement and supersedes the "~512-tall" inference above. The 1×
+`sky.png` is 455×256, exactly one 16:9 screen (the `fullhd/` sky the original actually draws is wider —
+see the tier paragraph below). Whether the rule is height-locked
 or width-locked cannot be told from a 16:9 screen; an 1184×720 capture of the menu (nav bar
 present) showed menu buttons at the same pixel size as at 1280×720, which points to
 **height-locked**, but that is one observation.
 
-**At 720 px the original draws the `hd/` texture tier.** `ETHSpriteDensityManager` picks `hd/` for
-screen height ≥ `minScreenHeightForHdVersion` = 720 (§8.5). The APK ships 53 `entities/hd/`, 7
-`entities/fullhd/`, 69 `sprites/hd/` and a `particles/hd/` set, e.g. `single_stone_contrast.png`
-64×32 → `hd/` 128×64. A remake drawing the 1× files at 2.8125× is visibly softer than the original.
+**At 720 px the original draws the best tier present PER FILE: `fullhd/`, else `hd/`, else 1×.**
+⚠ *Corrected the same day.* This paragraph first said "`hd/`, because
+`minScreenHeightForHdVersion` = 720" — that is the engine's default, and the game overrides it. The
+shipped `app.enml` sets `minScreenHeightForHdVersion = 480`, `minScreenHeightForFullHdVersion = 600`,
+`hdDensityValue = 2`, `fullHdDensityValue = 2`, so at 720 px `ETHSpriteDensityManager` (§8.5) tries
+`fullhd/` first. Both tiers use density 2: a file's world size is its pixel size ÷ 2. The APK ships 53
+`entities/hd/`, 7 `entities/fullhd/`, 69 `sprites/hd/` and a `particles/hd/` set. `hd/` is an exact 2× of
+1× (e.g. `single_stone_contrast.png` 64×32 → 128×64), so it changes no size; `fullhd/` is NOT — the skies
+go 455×256 → 1024×512, i.e. **512×256 world units, wider than the 1× file**. Measured, not assumed: a
+pixel fit of the running original (`out/parity/specs/lighting/fit.md`, local) matches
+`fullhd/arch_with_base_blur.png` and `fullhd/sky.png` but `hd/STONE03A4x10_contrast.png` in the same
+frame, and forcing 1× everywhere worsens the fit on every sprite class. A remake drawing the 1× files at
+2.8125× is visibly softer than the original, and one using the 1× skies draws them 11% too narrow.
 
 **Progress is `scores.enml` in global external storage, and medals gate chapters.** File:
 `<GetGlobalExternalStorageDirectory()>/scores.enml` = `/sdcard/.ethanon/<package>/files/`

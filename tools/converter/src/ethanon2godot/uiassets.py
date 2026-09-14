@@ -3,13 +3,14 @@
 These are copied wholesale, unlike entity textures, because there is no level data naming
 a menu button to filter on. Output is Asantee-origin content and stays gitignored.
 
-TIERS. The original picks a density tier by physical screen height
-(`ETHSpriteDensityManager`, docs/ethanon-formats.md §8.5): at 720 px and above it draws `hd/`.
-Measured 2026-09-14 over the APK, `hd/` is a clean 2x of the 1x art — 66/69 UI sprites and
-52/53 entity textures exactly — so it changes no layout. `fullhd/` is NOT: its skies go
-455x256 -> 1024x512, a different aspect ratio. So `hd/` is copied and `fullhd/` never is, and
-an `hd/` file that is not exactly 2x its 1x counterpart is skipped and reported rather than
-allowed to resize something silently.
+TIERS. The original picks the best density tier present per file by physical screen height
+(`ETHSpriteDensityManager`, docs/ethanon-formats.md §8.5, and the 2026-09-14 block for the game's
+own thresholds: hd >= 480 px, fullhd >= 600 px, both density 2). The UI has no `fullhd/` folder,
+so for sprites `hd/` is what the original draws. Measured over the APK, `hd/` is a clean 2x of
+the 1x art — 66/69 UI sprites exactly — so it changes no layout; an `hd/` file that is not
+exactly 2x its 1x counterpart is skipped and reported rather than allowed to resize something
+silently. (Entity textures are a different case: their `fullhd/` files ARE drawn and change
+world size, e.g. the skies become 512 units wide. That belongs to the entity texture copy.)
 """
 
 from __future__ import annotations
