@@ -26,32 +26,27 @@ GameState="*res://scripts/core/game_state.gd"
 [display]
 
 ; ---------------------------------------------------------------------------
-; STILL PROVISIONAL — but for a DIFFERENT reason than this block used to claim.
+; SETTLED 2026-09-14 BY MEASURING THE RUNNING ORIGINAL (MILESTONE_1 §7.4).
 ;
-; The old note said "read app.enml and replace these". That was investigated on
-; 2026-08-04 and it does NOT work — do not spend another session on it:
-;   * app.enml's `width`/`height` are consumed only by machine/main.cpp:143-144
-;     and editor/main.cpp:171 — DESKTOP ONLY. On Android the surface size arrives
-;     from JNI (gs2d/src/Platform/android/main.cpp:91).
-;   * `fixedWidth`/`fixedHeight` are the mobile path, but the shipped app.enml has
-;     NO `android` block and its fixedHeight is commented out, and LoadProperties
-;     bails on a missing entity (ETHAppEnmlFile.cpp:113-114).
-;   * ETHGlobalScaleManager (the engine's other adaptation path) is never engaged:
-;     the compiled bytecode never calls the setters, so its factor stays 1.0.
-;   => app.enml does not determine the Android viewport. Nothing left to read.
+; The original shows a world 256 units tall. Level 1-1 at 1280x720: floor mortar
+; pitch 181/177/182/180/180 px against 64-unit stones = 2.8125 = 720/256. It is
+; corroborated by the data (94 of 128 levels place their `max` corner at y=256,
+; i.e. exactly one screen tall) and by the art (sky.png is 455x256, one screen).
+; This replaces the earlier ~512-tall inference from .esc geometry.
 ;
-; Best-supported inference is a ~512-tall landscape design space, from .esc
-; geometry (ymin -64 in 92 of 133 levels, modal ymax 384, median vertical span
-; 448) agreeing with the commented-out `//fixedHeight = 512;` in app.enml.
-; 1136x640 is the last-wins value of app.enml's duplicate width/height keys, but
-; that is the DESKTOP dev window, not the mobile viewport.
+; 455x256 + canvas_items + expand is the Godot-native form of that: rendering stays
+; at native resolution, 256 units always fill the height, and a wider screen shows
+; more world sideways. Height-locked is what one 1184x720 capture of the original
+; suggested; only a non-16:9 device can confirm it. Evidence and method:
+; docs/ethanon-formats.md, 2026-09-14 block; the rig itself: docs/parity.md.
 ;
-; SETTLE THIS BY PLAYTESTING against recorded original footage (MILESTONE_1 §7.6),
-; not by reading more files. Values below are the 16:9 placeholder until then.
-; See docs/ethanon-formats.md, the 2026-08-04 correction block.
+; The window override only sets the desktop window, so a playtest opens at the
+; same 1280x720 the parity captures use instead of at 455x256.
 ; ---------------------------------------------------------------------------
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=455
+window/size/viewport_height=256
+window/size/window_width_override=1280
+window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 ; Godot 4 stores orientation as an int enum, NOT the Godot-3 string "landscape".
@@ -62,8 +57,7 @@ window/stretch/aspect="expand"
 ; SETTLED 2026-08-04 (was 4 = Sensor Landscape, a placeholder): the original APK's
 ; AndroidManifest.xml declares android:screenOrientation="0" — LOCKED landscape, not
 ; sensor. Corroborated by every commented-out resolution pair in app.enml being
-; landscape and by 455x256 background art. This is independent of the still-open
-; viewport-size question below, so it is promoted to fact on its own.
+; landscape and by 455x256 background art.
 window/handheld/orientation=0
 
 [input_devices]

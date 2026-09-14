@@ -54,6 +54,38 @@ def capture(path: Path) -> Path:
     return path
 
 
+class Recording:
+    """`with Recording(path, seconds):` — screenrecord on the device, pulled on exit.
+
+    Still captures cost ~0.3 s each, which is too slow for camera pans, transitions and
+    motion. The device-side encoder gives real frame timing instead.
+    """
+
+    DEVICE_PATH = "/sdcard/parity_rec.mp4"
+
+    def __init__(self, path: Path, seconds: int) -> None:
+        self.path = path
+        self.seconds = seconds
+        self._proc: subprocess.Popen[bytes] | None = None
+
+    def __enter__(self) -> Recording:
+        shell(f"rm -f {self.DEVICE_PATH}")
+        self._proc = subprocess.Popen(
+            ["adb", "-s", SERIAL, "shell",
+             f"screenrecord --bit-rate 12000000 --time-limit {self.seconds} {self.DEVICE_PATH}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        wait(0.5)  # the encoder needs a moment before the first frame is real
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        assert self._proc is not None
+        self._proc.wait(timeout=self.seconds + 30)
+        wait(1.0)  # let the muxer finalise the file before pulling it
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        _adb("pull", self.DEVICE_PATH, str(self.path))
+
+
 def is_running() -> bool:
     return bool(shell(f"pidof {PACKAGE}").strip())
 

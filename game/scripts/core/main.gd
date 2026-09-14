@@ -10,6 +10,9 @@ extends Node2D
 
 enum Screen { MENU, PLAYING }
 
+## Camera2D's own default for an unset limit.
+const CAMERA_UNBOUNDED: int = 10000000
+
 @onready var _levels: Node2D = $Levels
 
 var _input: InputController
@@ -123,8 +126,13 @@ func _on_level_instantiated(root: Node) -> void:
 	root.add_child(_player)
 	_portals.set_player(_player)
 
-	_camera.position = _runtime.camera_start
+	_apply_camera_bounds()
+	# The original opens with the view on the player, clamped to the level — not on the
+	# camera_start marker, which 1-1 places at (651, 0) while showing (0, 0). The limits
+	# do the clamping, so starting on the player is enough.
+	_camera.position = _player.position
 	_camera.make_current()
+	_camera.reset_smoothing()
 	_hud.set_level_stats(_runtime.crystals_total, _runtime.max_portals)
 	_apply_level_properties(root)
 
@@ -138,6 +146,21 @@ func _process(delta: float) -> void:
 	_camera.position = _camera.position.lerp(
 		_player.position, clampf(delta / maxf(lag, 0.001), 0.0, 1.0)
 	)
+
+
+func _apply_camera_bounds() -> void:
+	# Camera2D limits clamp the visible rectangle natively, which is what the original's
+	# clampCameraPos does: the view never shows past the origin or the `max` marker.
+	var bounds_min: Array = DataLoader.get_value("portals", ["camera", "bounds_min"], [0, 0])
+	_camera.limit_left = int(bounds_min[0])
+	_camera.limit_top = int(bounds_min[1])
+	if _runtime.bounds_max == Vector2.ZERO:
+		push_warning("Main: level has no `max` marker; the camera is unbounded right and down")
+		_camera.limit_right = CAMERA_UNBOUNDED
+		_camera.limit_bottom = CAMERA_UNBOUNDED
+		return
+	_camera.limit_right = int(_runtime.bounds_max.x)
+	_camera.limit_bottom = int(_runtime.bounds_max.y)
 
 
 func _on_intent_pressed(intent: int, _screen_position: Vector2) -> void:

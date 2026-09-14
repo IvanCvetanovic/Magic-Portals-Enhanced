@@ -74,11 +74,21 @@
 
   "camera": {
     "_guess": true,
+    "_guess_note": "Applies to transit_mode, lerp_s, follow_lag_s and hold_time_s, NOT to bounds_min.",
     "_note": [
       "Section 3.7. Binary has CameraController, AutoCameraController, clampCameraPos,",
       "cameraHoldTime, cameraHoldElapsedTime — so there IS a hold-then-follow behaviour",
       "with a real duration. Values invented.",
       "transit_mode options: cut | snap | lerp."
+    ],
+    "bounds_min": [0, 0],
+    "_bounds_note": [
+      "MEASURED on the running original, 2026-09-14. The view is clamped to the rectangle",
+      "from bounds_min to the level's `max` marker. Level 1-1 opens with the view's top-left",
+      "at world (0, 0) - four reference points (three static portals and the player) agree",
+      "to within 1 unit - while the player stands at x=36, so the view is NOT centred on",
+      "the player and NOT at the camera_start marker (651, 0). Walking right, the view stays",
+      "at x=0 until the player passes mid-screen, then follows and stops at max.x - 455."
     ],
     "transit_mode": "lerp",
     "lerp_s": 0.15,
