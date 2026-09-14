@@ -52,6 +52,10 @@ class SceneProperties:
     light_intensity: float = 2.0
     parallax_intensity: float = 0.0
     z_axis_direction: tuple[float, float] = (0.0, -1.0)
+    # Whether the file had a <SceneProperties> at all. The engine loads a file without one
+    # as all-defaults (docs §3.6), but every shipped level carries one, so the writer only
+    # emits the scene lighting keys when this is true instead of inventing defaults.
+    declared: bool = False
 
 
 @dataclass
@@ -64,6 +68,10 @@ class Instance:
     angle: float = 0.0
     sprite_frame: int = 0
     entity: Entity | None = None
+    # The instance <Color r g b a>, read off the OUTER element (ETHEntity.cpp:236) and
+    # defaulting to ETH_DEFAULT_COLOR (1,1,1,1) (:96). ETHEntityProperties has no <Color>
+    # read at all, so an inline body's <Color> would mean nothing.
+    color: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
 
     def screen_pos(self, z_axis_direction: tuple[float, float]) -> tuple[float, float]:
         """World position projected to screen space.
@@ -106,6 +114,7 @@ def parse(text: str, *, name: str = "") -> Scene:
             z_axis_direction=(_f(zaxis, "x", 0.0), _f(zaxis, "y", -1.0))
             if zaxis is not None
             else (0.0, -1.0),
+            declared=True,
         )
 
     container = root.find("EntitiesInScene")
@@ -121,6 +130,14 @@ def parse(text: str, *, name: str = "") -> Scene:
             angle=_f(pos_el, "angle"),
             sprite_frame=_i(inst_el, "spriteFrame"),
         )
+        color_el = inst_el.find("Color")
+        if color_el is not None:
+            inst.color = (
+                _f(color_el, "r", 1.0),
+                _f(color_el, "g", 1.0),
+                _f(color_el, "b", 1.0),
+                _f(color_el, "a", 1.0),
+            )
         # Branch B: an inline <Entity> child IS the definition. Branch A (a <FileName>
         # child, meaning "look this up in the entity cache") never occurs in chapter 1,
         # so resolving it is left to the caller that has an entity directory to hand.
@@ -130,6 +147,18 @@ def parse(text: str, *, name: str = "") -> Scene:
         scene.instances.append(inst)
 
     return scene
+
+
+def lightmap_directory(esc_path: Path) -> Path:
+    """The baked-lightmap directory beside a scene file.
+
+    ``ETHScene::ConvertFileNameToLightmapDirectory`` (``ETHScene.cpp:429-443``) replaces
+    EVERY ``.`` in the file name with ``-``: ``scenes/level0.esc`` -> ``scenes/level0-esc/``.
+    Each entity's file in it is ``add<id>.png`` (``ETHSpriteEntity.cpp:434-439``), keyed on
+    the instance id, which is why ids are never renumbered.
+    """
+    p = Path(esc_path)
+    return p.parent / p.name.replace(".", "-")
 
 
 def parse_file(path: Path) -> Scene:

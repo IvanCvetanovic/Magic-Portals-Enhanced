@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+from collections import Counter
 from pathlib import Path
 
-from . import __version__, manifest, tscn, uiassets
-from .scene import parse_file
+from . import __version__, lighting, manifest, tscn, uiassets
+from .scene import lightmap_directory, parse_file
 
 # Defaults are repo-relative. Both are gitignored — see the repo .gitignore.
 # reference/extracted/ holds unpacked APK contents; out/ is conversion staging.
@@ -85,6 +86,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--copy-lighting",
+        action="store_true",
+        help=(
+            "also copy the files the eth_* lighting keys name: attached lightmaps into "
+            "<output>/assets/lightmaps/<scene>/, every normal map into "
+            "<output>/assets/entities/normalmaps/, and the named halo bitmaps into "
+            "<output>/assets/entities/, recording each file's density tier in "
+            "<output>/assets/lighting_files.json. Output stays gitignored."
+        ),
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="parse and report what would be converted, writing nothing",
@@ -122,6 +134,12 @@ def main(argv: list[str] | None = None) -> int:
     all_textures: set[str] = set()
     all_skipped: list[str] = []
     converted = 0
+    lighting_keys: Counter[str] = Counter()
+    lighting_ungated: Counter[str] = Counter()
+    static_lights = 0
+    all_lightmaps: list[tuple[Path, str]] = []
+    all_normals: set[str] = set()
+    all_halos: set[str] = set()
 
     for name in names:
         src = scenes_dir / f"{name}.esc"
@@ -131,7 +149,10 @@ def main(argv: list[str] | None = None) -> int:
 
         scene = parse_file(src)
         text, report = tscn.write_scene(
-            scene, root_name=name, sprite_dir=args.input / "assets" / "entities"
+            scene,
+            root_name=name,
+            sprite_dir=args.input / "assets" / "entities",
+            lightmap_dir=lightmap_directory(src),
         )
 
         total_nodes += report.nodes
@@ -140,6 +161,12 @@ def main(argv: list[str] | None = None) -> int:
         all_textures |= report.textures
         all_skipped += report.skipped
         converted += 1
+        lighting_keys += report.lighting
+        lighting_ungated += report.lighting_ungated
+        static_lights += report.static_lights
+        all_lightmaps += report.lightmaps
+        all_normals |= report.normals
+        all_halos |= report.halos
 
         if not args.dry_run:
             (out_dir / f"{name}.tscn").write_text(text, encoding="utf-8")
@@ -191,6 +218,38 @@ def main(argv: list[str] | None = None) -> int:
             print(f"rewrote {line}")
         for line in ui.skipped:
             print(f"SKIPPED {line}", file=sys.stderr)
+
+    if args.copy_lighting and not args.dry_run:
+        lit = lighting.copy_lighting_assets(
+            args.input,
+            args.output,
+            lightmaps=all_lightmaps,
+            normals=all_normals,
+            halos=all_halos,
+        )
+        tiers = Counter(entry["tier"] for entry in lit.files.values())
+        for group, count in lit.copied.items():
+            print(f"copied {count} {group} file(s) to {args.output / 'assets'}")
+        print(
+            "lighting file tiers: "
+            + ", ".join(f"{tier} {count}" for tier, count in sorted(tiers.items()))
+            + f" (recorded in {args.output / 'assets' / lighting.MANIFEST_NAME})"
+        )
+        for line in lit.skipped:
+            print(f"SKIPPED {line}", file=sys.stderr)
+
+    # Every lighting key, so a downstream pin can be set from this output rather than
+    # from an inventory. "all instances" ignores the sprite-or-light gate (see tscn.py).
+    print("lighting keys (emitted / over all instances):")
+    for key in tscn.ETH_SCENE_KEYS:
+        print(f"  {key}: {lighting_keys[key]}")
+    for key in tscn.ETH_ENTITY_KEYS:
+        print(f"  {key}: {lighting_keys[key]} / {lighting_ungated[key]}")
+    print(f"  lights on static owners: {static_lights}")
+    print(
+        f"  metadata strings added: {sum(lighting_keys.values())}; distinct normal maps "
+        f"{len(all_normals)}, halo bitmaps {len(all_halos)}"
+    )
 
     verb = "would convert" if args.dry_run else "converted"
     print(

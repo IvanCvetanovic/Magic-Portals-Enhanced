@@ -1464,3 +1464,45 @@ nothing. Captures, saves, rebuilt APKs and the keystore are all under gitignored
 
 **Inferred mood:** guess — a long unblocking grind that paid out completely: every wall had a
 readable cause, and the scale measurement alone retires a question three sessions left open.
+
+### 2026-09-14 17:40 — Session 14b: the target moves to Supersonic; lighting decoded to 1/255
+
+**Built:** the verified reference library of the original (all 128 levels, every menu, save states
+fresh/bronze/gold), and the converter now emits the original's lighting as `metadata/eth_*` keys plus
+`--copy-lighting` (lightmaps, normal maps, halo bitmaps). Staged only in `out/staging_lighting`; `out/levels`
+is untouched until the Supersonic port can read the keys.
+
+**Decision — the game being compared changed.** Mid-session Ivan clarified that the remake now lives in
+his own engine, `Desktop/Supersonic-Engine/games/magicportals`, a C++ port that reads this repo's
+converter output and `game/data`. The Godot runtime is no longer the target; this repo stays as the port's
+data source. A HUD rebuild aimed at Godot's `hud.gd` was stopped before it edited anything and re-aimed at
+the port. Captures of the port are bit-identical run to run under `--fixed-step`.
+
+**Broke / dead ends:**
+1. The first library capture slept fixed intervals and lost **47 of 128** levels to menus and the splash
+   when the machine was busy. Rebuilt on screen markers (normalised correlation; a pixel difference read
+   torch-lit 1-2 as "not a level" because the HUD buttons are translucent).
+2. I wrote this morning that the original draws `hd/` at 720 px. Wrong: that was the engine default; the
+   game's `app.enml` puts fullhd at 600 px. Corrected and pushed the same day (f654ff2).
+3. The converter's first pass under-counted `eth_z` by 204 and `eth_emissive` by 6, and its docs said the
+   player's z is 0 everywhere — 2-09 has it at 2. Both caught by an adversarial reviewer, both fixed.
+
+**Measured:** a numerical fit of the original's pixels settles the lighting model to about 1/255 per block:
+`min(1, ambient + emissive) * texture + lightmap`, added on encoded (not linear) values; `lightIntensity`
+is already baked into `add<id>.png`; there is no "unlit = full bright" rule; the moving player IS lit by
+the torch per pixel; halos are additive in world units. Linear-light blending scores 13.59 against the
+model's 0.28. The port today draws no lighting at all and tone-maps every sprite (whites cap near 186).
+
+**Assets check:** yes — `git status --short` shows only tools/converter, docs, README, DEVLOG. Captures,
+lightmaps and staged output are under `out/`.
+
+**[CLIP] 17:10** — the library contact sheet: 128 original levels, chapter 4's space and pitch-black sets.
+**[BROLL]** — None.
+
+**Numbers:** converter 80 tests, ruff clean. Emitted over 128 levels: 730 lightmaps, 72 lights (68 static
+owners), 71 halos, 1,720 normal maps, 2,140 emissive, 1,533 z — every figure equal to the design's census;
+11,234 metadata lines added, every other byte of every `.tscn` identical. Library: 128/128 levels, 26
+screens. Port suites: 34/34 against the data changed today.
+
+**Inferred mood:** guess — a day that changed direction twice and still ended with the hardest unknown
+(how the original lights a pixel) answered by numbers rather than by reading.

@@ -43,6 +43,15 @@ _DEFAULT_FRICTION = 1.0
 _DEFAULT_DENSITY = 1.0
 _DEFAULT_RESTITUTION = 0.0
 _DEFAULT_GRAVITY_SCALE = 1.0
+# ETH_DEFAULT_EMISSIVE_COLOR / ETH_DEFAULT_SCALE, ETHEntityProperties.cpp:79 and :82.
+_DEFAULT_EMISSIVE = (0.0, 0.0, 0.0, 0.0)
+_DEFAULT_SCALE = (1.0, 1.0)
+
+# ETHLight::ETHLight (ETHLight.cpp:27-38), constructed as ETHLight(true) — so `active`
+# defaults to TRUE when the attribute is absent (ETHEntityProperties.cpp:341).
+_DEFAULT_LIGHT_RANGE = 256.0
+_DEFAULT_HALO_SIZE = 64.0
+_DEFAULT_HALO_BRIGHTNESS = 1.0
 
 
 def _f(element: ET.Element | None, attr: str, default: float = 0.0) -> float:
@@ -92,6 +101,67 @@ def _vec(element: ET.Element | None, tag: str) -> tuple[float, float] | None:
     return (_f(child, "x"), _f(child, "y"))
 
 
+def _text(element: ET.Element, tag: str) -> str:
+    """Text of a direct child, stripped; ``""`` when absent or empty.
+
+    The engine's ``GetText()`` is NULL on an empty element (docs §3.6), so empty is
+    treated as the field default rather than as a value.
+    """
+    child = element.find(tag)
+    if child is None or not child.text:
+        return ""
+    return child.text.strip()
+
+
+@dataclass
+class Light:
+    """An accepted ``<Light>`` block, as authored — NOT yet scaled by the owner.
+
+    Scaling differs per consumer, so it is applied by the writer: lighting uses
+    ``pos * scale.y`` and ``range * scale.y`` (``BuildChildLight``,
+    ``ETHEntityRenderingManager.cpp:174-184``); the halo uses ``pos`` unscaled and
+    ``haloSize * scale`` per axis (``ETHRenderEntity.cpp:378-385``).
+
+    There is no ``static`` field on purpose: the file's value is read and then
+    overwritten with the owner's (``ETHEntityProperties.cpp:347``), so the owner's
+    ``Entity.static`` is the only meaningful one. ``castShadows`` is not kept either —
+    no shadow pass can run in this game (``engine_math`` §6.4).
+    """
+
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    color: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    range: float = _DEFAULT_LIGHT_RANGE
+    halo_size: float = _DEFAULT_HALO_SIZE
+    halo_brightness: float = _DEFAULT_HALO_BRIGHTNESS
+    halo_bitmap: str = ""
+
+
+def _parse_light(element: ET.Element) -> Light | None:
+    """Read ``<Light>``, applying the engine's acceptance test.
+
+    ``ETHLight::ReadFromXMLFile`` (``ETHLight.cpp:40-63``) reads every field
+    independently, so a partial ``<Position>`` or ``<Color>`` keeps the constructor's
+    value per component. The light is then kept only if ``active && range > 0``
+    (``ETHEntityProperties.cpp:343``); otherwise the entity simply has no light.
+    """
+    light_el = element.find("Light")
+    if light_el is None:
+        return None
+    if not _i(light_el, "active", 1) or _f(light_el, "range", _DEFAULT_LIGHT_RANGE) <= 0.0:
+        return None
+    pos = light_el.find("Position")
+    color = light_el.find("Color")
+    return Light(
+        position=(_f(pos, "x"), _f(pos, "y"), _f(pos, "z")),
+        # The Vector3 overload of ReadColorPropertyFromXmlElement (:677-693): no alpha.
+        color=(_f(color, "r", 1.0), _f(color, "g", 1.0), _f(color, "b", 1.0)),
+        range=_f(light_el, "range", _DEFAULT_LIGHT_RANGE),
+        halo_size=_f(light_el, "haloSize", _DEFAULT_HALO_SIZE),
+        halo_brightness=_f(light_el, "haloBrightness", _DEFAULT_HALO_BRIGHTNESS),
+        halo_bitmap=_text(light_el, "HaloBitmap"),
+    )
+
+
 @dataclass
 class Collision:
     """A ``<Collision>`` block: an axis-aligned box, plus optional polygon outline."""
@@ -132,6 +202,17 @@ class Entity:
     pivot_adjust: tuple[float, float] = (0.0, 0.0)
     collision: Collision | None = None
     custom_data: dict[str, str] = field(default_factory=dict)
+    # --- lighting (docs/ethanon-formats.md, 2026-09-14 "lighting keys" subsection) ---
+    # int-bool like `static`; read at ETHEntityProperties.cpp:231, default false (:89).
+    apply_light: int = 0
+    # <EmissiveColor r g b a>, all four read (:265 via :658-675) but only rgb has a
+    # consumer (ETHRenderEntity.cpp:113-117).
+    emissive: tuple[float, float, float, float] = _DEFAULT_EMISSIVE
+    # <Scale x y> (:268). An entity-block property, not an instance one (docs §4.3).
+    scale: tuple[float, float] = _DEFAULT_SCALE
+    # <Normal> basename under entities/normalmaps/ (:284-292, ETHSpriteEntity.cpp:97-101).
+    normal: str = ""
+    light: Light | None = None
 
     @property
     def is_collidable(self) -> bool:
@@ -285,6 +366,7 @@ def parse_element(element: ET.Element, *, name: str = "") -> Entity:
         density=_f(element, "density", _DEFAULT_DENSITY),
         restitution=_f(element, "restitution", _DEFAULT_RESTITUTION),
         gravity_scale=_f(element, "gravityScale", _DEFAULT_GRAVITY_SCALE),
+        apply_light=_i(element, "applyLight"),
     )
 
     sprite = element.find("Sprite")
@@ -294,6 +376,21 @@ def parse_element(element: ET.Element, *, name: str = "") -> Entity:
     pivot = _vec(element, "PivotAdjust")
     if pivot is not None:
         ent.pivot_adjust = pivot
+
+    emissive = element.find("EmissiveColor")
+    if emissive is not None:
+        # Per component: an absent attribute keeps the (all-zero) default (docs §3.4).
+        ent.emissive = (
+            _f(emissive, "r"),
+            _f(emissive, "g"),
+            _f(emissive, "b"),
+            _f(emissive, "a"),
+        )
+    scale = element.find("Scale")
+    if scale is not None:
+        ent.scale = (_f(scale, "x", 1.0), _f(scale, "y", 1.0))
+    ent.normal = _text(element, "Normal")
+    ent.light = _parse_light(element)
 
     collision_el = element.find("Collision")
     if collision_el is not None:

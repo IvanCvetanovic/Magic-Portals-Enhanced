@@ -75,7 +75,7 @@ cd tools/converter && python -m venv .venv && .venv\Scripts\activate && pip inst
 **3. Convert chapter 1** (world 0 — `level0.esc`…`level31.esc`, 32 levels):
 
 ```bash
-python -m ethanon2godot --world 0 --copy-textures
+python -m ethanon2godot --world 0 --copy-textures --copy-lighting
 ```
 
 Output lands in `out/`. Stage all three pieces into the Godot project — every
@@ -86,6 +86,10 @@ cp out/levels/*.tscn      game/assets/levels/
 cp out/assets/entities/*  game/assets/entities/
 cp out/data/chapters.json game/assets/data/
 ```
+
+`--copy-lighting` copies each level's baked lightmaps (`add<id>.png`), the normal maps and halo
+bitmaps the emitted `metadata/eth_*` keys point at. The keys are written with or without it, so a
+run for the Supersonic port must include it or the port's reader finds paths with no file behind them.
 
 UI art, its `hd/` tier, the bitmap fonts and audio come from `--copy-ui` (no level
 references them, so they are copied wholesale):

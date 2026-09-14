@@ -254,6 +254,153 @@ cosmetic, they drive the chapter gate (identifier `MINIMUM_ACCOMPLISHMENT_TO_UNL
 file holds the `lastWorldAllowed` / `lastLevelAllowed` integers — whatever those shared-data keys
 do, they are not the persisted store. `2` = silver is expected but was not observed.
 
+### 2026-09-14 (lighting) — what the converter reads, emits and copies: the `eth_*` keys
+
+Source citations below are `toolkit/Source/src/engine/…` in `reference/ethanon/` unless a path says
+otherwise. The research behind them is local and gitignored: `out/parity/specs/lighting/engine_math.md`
+(the engine's maths, from source), `fit.md` (a numerical fit of that maths against the running
+original's pixels) and `design_port.md` §3 (the key vocabulary). **Where the fit and the source
+disagree, the fit wins** — that is the only way the colour-space question below could be settled.
+
+**The model the keys serve, per sprite pixel** (every value an 8-bit *encoded* value ÷ 255):
+`base = clamp(T·C·min(1, A+E) + LM)`, then one additive `clamp(T·C·light.color·LI·att·dl)` per live light,
+and halos added on top. `A` = scene ambient, `E` = emissive rgb, `C` = instance colour, `LM` =
+`add<id>.png` sampled at the sprite's UV, `LI` = `lightIntensity`.
+
+| Question | Verdict | Source | MEASURED (fit, block MAE /255 unless stated) |
+|---|---|---|---|
+| Lightmap added or multiplied? | **Added**, in the ambient pass, unscaled by `C`, `A` or `LI` | `ETHRenderEntity.cpp:83-92`, `add1.ps` (`gs2d/src/Video/glslShaderCode.h:19-30`) | added 0.92 vs multiplied 26.95 (1,042 blocks); `C` blink `(actual−LM)/T` = 0.853/0.850/0.853 (uniform) |
+| `lightIntensity` at draw time? | **No** — already baked into the file | `ETHPixelLightDiffuseSpecular.cpp:146`, `ETHLightmapGen.cpp:121` | 0.92 vs ×LI 26.36 vs ÷LI 6.81 |
+| Ambient on a lightmapped sprite? | **Yes**, `min(1, A+E)` per channel, clamped before `C` | `ETHRenderEntity.cpp:112-117` | 0.92 vs no-ambient 54.67; fitted gain = scene ambient ±0.02 |
+| Sprite without a lightmap: full bright? | **No**: `T·min(1, A+E)`; brightness comes only from `E` | same | 0.28 vs full-bright 45.30 (1,359 blocks) |
+| Blend in linear light? | **No** — encoded values are multiplied and blended directly | the source is silent; the fit decides | 0.28 vs `gamma_linear` 13.59 (no LM), 0.92 vs 11.90 (LM) |
+| PNG or the ETC1 `.pkm` beside it? | **PNG** | `gs2d/src/Video/GLES2/GLES2Texture.cpp:241-281` would pick `.pkm` on a non-PowerVR GPU | PNG better on 11/11 entities (pooled 0.92 vs 1.23) — margin small |
+| Live light on a moving receiver | Yes, per pixel, from static lights too | `ETHEntitySpriteRenderer.cpp:70` | player past the 1-1 torch: residual flat +6.1 ± 1.3 R with the term, +11→+27 without; fitted scale 1.20 R / 0.96 G / 0.86 B |
+| Halo units and brightness | World units; brightness ≈ 0.5–1 × `color·haloBrightness` | `ETHRenderEntity.cpp:354-388` (× owner particle ratio, `:371-376`) | 300 units fits (bMAE 4.06), 300 px rejected (9.70); ×0.5 on the strongest-signal entity, ×1 on weak ones — **not a measured constant** |
+| Framebuffer | RGB565, no dither | `gs2d/projects/Android/Ethanon/src/net/asantee/gs2d/GL2JNIView.java:94`, `ConfigChooser.java:48-67` | dark no-LM sprites 0.28 with 5/6/5 vs 0.62 without |
+
+This refines §5.6: `<EmissiveColor>` is not an additive glow; it can only raise the ambient multiplier
+to 1.
+
+**What is parsed** (`tools/converter/src/ethanon2godot/entity.py`, `scene.py`). Defaults are the
+engine's, never 0-by-omission (§3.4):
+
+| Field | XML | Default | Read at |
+|---|---|---|---|
+| `apply_light` | `<Entity applyLight>` | 0 | `ETHEntityProperties.cpp:231`; reset `:89` |
+| `emissive` | `<EmissiveColor r g b a>`, all four read, rgb consumed | (0,0,0,0) | `:265` via `:658-675`; reset `:79`, `:87` |
+| `scale` | `<Scale x y>` on the entity block | (1,1) | `:268`; reset `:82`, `:173` |
+| `normal` | `<Normal>` text, a basename under `entities/normalmaps/` | "" | `:284-292`; loaded only with rich lighting, `ETHSpriteEntity.cpp:97-101` |
+| `light` | `<Light range haloBrightness haloSize>` + `<Position x y z>`, `<Color r g b>`, `<HaloBitmap>` | range 256, haloSize 64, haloBrightness 1, pos 0, colour 1, `active` 1 | `ETHLight.cpp:40-63`; defaults `:27-38`; built as `ETHLight(true)`, `ETHEntityProperties.cpp:341` |
+| `color` | **instance** `<Color r g b a>` | (1,1,1,1) | `ETHEntity.cpp:236`; `ETH_DEFAULT_COLOR` `:96` |
+| `declared` | whether `<SceneProperties>` exists | — | the ambient/`lightIntensity` reads are `ETHSceneProperties.cpp:37-41`, reset `:88-94` |
+
+A `<Light>` is kept only if `active && range > 0` (`ETHEntityProperties.cpp:343`); its own `static` is
+then overwritten with the owner's at **`:347`** (§5.7 above says `:349`; the source says 347), so the
+converter stores no light `static` and no `castShadows` (no shadow pass can run, `engine_math` §6.4).
+
+⚠ **Correction — `<Color>` is an instance property, not an entity-block one.** `design_port.md` §3.1
+lists it with the entity fields. `ETHEntityProperties::ReadFromXMLFile` (`:226-413`) has no `<Color>`
+read; `ETHEntity::ReadInSceneDataFromXMLFile` reads it off the outer element (`ETHEntity.cpp:236`). An
+inline body's `<Color>` means nothing. No level instance carries one, so no key is affected.
+
+**What is emitted into the `.tscn`** (`tscn.py`). Every value is a **quoted string** of space-separated
+numbers or a `res://` path — no `ExtResource`, no `Vector2`, no bare number — so the keys are inert in
+Godot and no `load_steps` header changes. Keys are appended **after every existing line** of their
+node, which makes the diff against pre-lighting output pure insertions.
+
+| Key | Node | Value | Written when | Citation |
+|---|---|---|---|---|
+| `eth_ambient` | root | `"r g b"` | **always**, if `<SceneProperties>` exists | `ETHSceneProperties.cpp:88-94` |
+| `eth_light_intensity` | root | `"LI"` | **always**, if `<SceneProperties>` exists | `ETHTypes.h:55` (default 2.0) |
+| `eth_z` | entity | unrounded z | z ≠ 0, on **every** node (`z_index` is unchanged, rounded) | light geometry uses the receiver's world z, `engine_math` §4.4 |
+| `eth_static` | entity | `"1"` | static | `ETHEntityProperties.cpp:230` |
+| `eth_apply_light` | entity | `"1"` | applyLight | `:231` |
+| `eth_emissive` | entity | `"r g b"` | rgb ≠ 0 (alpha ignored), on **every** node | `ETHRenderEntity.cpp:113-116` |
+| `eth_color` | entity | `"r g b a"` | ≠ (1,1,1,1) | `ETHEntity.cpp:236`, `ETHRenderEntity.cpp:117` |
+| `eth_normal` | entity | `res://assets/entities/normalmaps/<name>` | `<Normal>` present | `ETHDirectories.cpp:29` |
+| `eth_lightmap` | entity | `res://assets/lightmaps/<scene>/add<id>.png` | static **and** applyLight **and** a sprite **and** the file exists | `ETHLightmapGen.cpp:42`; path `ETHScene.cpp:429-443`, `ETHSpriteEntity.cpp:434-439` |
+| `eth_light_offset` | entity | `light.pos × scale.y`, 3 numbers | ≠ (0,0,0) | `ETHEntityRenderingManager.cpp:180` |
+| `eth_light_range` | entity | `range × scale.y` | **always**, when a light is kept | `:181` |
+| `eth_light_color` | entity | `"r g b"`, may exceed 1 | ≠ (1,1,1) | `ETHLight.cpp:51`; × LI at draw, `ETHPixelLightDiffuseSpecular.cpp:146` |
+| `eth_halo` | entity | `res://assets/entities/<HaloBitmap>` | the light has a `<HaloBitmap>` | `ETHSpriteEntity.cpp:103-104`, `ETHDirectories.cpp:30` |
+| `eth_halo_offset` | entity | `light.pos` x y, **unscaled** | halo present and ≠ (0,0) | `ETHRenderEntity.cpp:378` |
+| `eth_halo_size` | entity | `haloSize × scale`, per axis | halo present and ≠ (64,64) | `:381-385` |
+| `eth_halo_brightness` | entity | `haloBrightness` | halo present and ≠ 1 | `:380` |
+
+Rules the table implies, and why:
+- **Entity keys go only on nodes that draw a sprite or own a light** (`design_port.md` §3.2), **except
+  `eth_z` and `eth_emissive`, which go on every node.** The gate trims `eth_static`/`eth_apply_light` to
+  the drawn nodes (the port draws nothing else) and would trim `eth_normal`, which shades nothing without
+  a sprite (no shipped spriteless instance names one). It must not trim `eth_z`: spriteless nodes are
+  where the port's own actors take their lighting height (`design_port.md` §5.4 reads the player's z from
+  the `main_char` node, which has no sprite), and `main_char` is **not** always at z 0 — 2-09
+  (`level8a.esc`, instance 29) places it at z 2; the other 127 are at 0. Nor `eth_emissive`: the design's
+  totals and the pins it plans for `test_mp_lighting`/`test_mp_start` (§3.5) count it over all instances
+  (2,140).
+  Invariant: a node carries `eth_z` exactly when it carries `z_index` (1,533 of each over the 128 levels,
+  0 mismatches).
+- **Three exceptions to "no key at the default".** The root keys are always written when the file has
+  `<SceneProperties>`, so a reader can refuse a level without one instead of inheriting invented values
+  (all 128 levels have it). `eth_light_range` is always written because a reader identifies a light by
+  it, and `fire_agent.ent` really does use the default 256 (13 placements). Halo keys are written only when a
+  `<HaloBitmap>` exists: without one no halo piece is created (`ETHEntityRenderingManager.cpp:78`), so the
+  numbers have no consumer (the one such light, 1-2's `portal_static`, is at the defaults anyway).
+- **Scaling differs per consumer**: lighting uses `scale.y` for position and range; the halo is centred
+  on the unscaled offset and sized per axis. No shipped light owner has a `<Scale>`, so only the hand-written
+  fixture exercises this (`tests/test_lighting.py`: `Scale 2×3` → offset `"0 -30 60"`, range `"750"`, halo
+  offset `"0 -10"`, halo size `"560 840"`).
+- **A lightmap file on an instance that fails the gate is reported, not attached.** The engine's
+  `LoadLightmapsFromBitmapFiles` tries every entity (`ETHScene.cpp:315-334`) and `DrawAmbientPass` would
+  apply one to any static entity, but none of the 1,554 `static=1 applyLight=0` instances in the 128 levels has a file, and
+  the converter's report on all 128 levels lists none. A `.bmp`-only lightmap (the engine's fallback,
+  `:327-331`) is also reported; none exists.
+
+**What `--copy-lighting` copies** (`lighting.py`), into `<output>/assets/`:
+`scenes/<scene>-esc/add<id>.png` → `lightmaps/<scene>/add<id>.png` (only attached ones; never `.pkm`/`.pvr`);
+every file in `entities/normalmaps/` → `entities/normalmaps/` (44, because script-spawned entities use
+files no level names, e.g. the player's `normalmap_77.png`); each named `<HaloBitmap>` → `entities/`.
+**Tiers:** all three kinds load through `ETHGraphicResourceManager::AddFile` →
+`ETHSpriteDensityManager::ChooseSpriteVersion` (`Resource/ETHResourceManager.cpp:133-134`,
+`Resource/ETHSpriteDensityManager.cpp:88-113`), which prefers `fullhd/<name>` then `hd/<name>` at the
+original's 720 px, exactly like a sprite. MEASURED over the APK: no `hd/` or `fullhd/` directory exists
+under any of the 67 `-esc/` directories or under `normalmaps/`, and no halo bitmap has one in
+`entities/hd/` or `entities/fullhd/` — so every copied lighting file is the base (1×) tier, which the fit
+also confirms for lightmaps (0.5× the **1×** frame, 730/730). The copier checks this per file rather than
+assuming it (a tier sibling makes the file SKIPPED and reported) and records `"tier": "1x"` for each copied
+file in `<output>/assets/lighting_files.json`. (`ld/`/`xld/` apply only below the density thresholds and do
+not exist in the APK.)
+
+**Counts over all 128 levels** (converter report, 2026-09-14, re-run after the gate fix above and
+recounted from the emitted `.tscn` files; "all instances" ignores the sprite-or-light gate; "design" is
+`design_port.md` §3.2, measured by an independent parser):
+
+| Key | Emitted | All instances | Design | |
+|---|---|---|---|---|
+| `eth_ambient`, `eth_light_intensity` | 128 each | — | 128 | = |
+| `eth_lightmap` | **730** | 730 files match an instance | 730 | = (in 67 levels; level0 has 9) |
+| `eth_light_range` (= lights kept) | **72**, 68 on static owners | 72 | 72 / 68 | = |
+| `eth_halo` | **71** (`spark_halo.bmp`, `halo.bmp`, `portal_halo.png`) | 71 | 71 | = |
+| `eth_normal` | **1,720** (27 distinct files, all present) | 1,720 | 1,720 | = |
+| `eth_emissive` | **2,140** | 2,140 | 2,140 | = (6 of them on spriteless, lightless triggers: `destroyier.ent` ×4, `death_area.ent` ×2) |
+| `eth_z` | **1,533** | 1,533 | 1,533 | = (204 of them on spriteless nodes: `camera_start` ×128, `max` ×39, `liftA` ×12, `liftB` ×5, `minion_spawn` ×4, `anti_sight_wall.ent` ×2, 14 singletons incl. `main_char` in `level8a`) |
+| `eth_static` | 2,676 | 3,725 | 3,725 | gate (`collision_*` bodies, `main_char`, `properties`, …) |
+| `eth_apply_light` | 1,719 | 2,452 | 2,452 | gate; 1,719 = every lit sprite, all of which have a `<Normal>` (+1 unlit `static_sphere`) |
+| `eth_color` | 0 | 0 | 0 | = |
+| `eth_light_offset` / `eth_light_color` | 71 / 72 | | | `portal_static`'s offset is (0,0,0) |
+| `eth_halo_offset` / `eth_halo_size` | 54 / 54 | | | the 17 `fire_agent` halos sit at (0,0) and 64 |
+| `eth_halo_brightness` | 66 | | | the 5 `blue_light` halos are at 1.0 |
+| **all `metadata` strings added** | **11,234** | | | the port's `metaStrings` pin rises by exactly this |
+
+Level 1-1's torch (`light_ent_696`) comes out as `eth_z "-18"`, `eth_light_offset "0 -12 24"`,
+`eth_light_range "300"`, `eth_light_color "1 0.5 0.1"`, `eth_halo_size "300 300"`,
+`eth_halo_brightness "0.7"`, `eth_lightmap ".../level0/add696.png"`; the root carries
+`eth_ambient "0.35 0.3 0.35"`, `eth_light_intensity "3"`.
+
+Not carried by any key, deliberately: `castShadows` (no effect), `specularPower`/`Brightness` (GLES2 has
+no specular), `type = 2`'s vertical light variant (the 10 `light_off` instances), script-driven runtime
+emissive (`design_port.md` §5.8). An absent `eth_z` means z 0 on every node, spriteless ones included.
+
 ---
 
 ## 1. Orientation: where to look in the engine source
