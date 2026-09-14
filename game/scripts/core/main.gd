@@ -73,6 +73,9 @@ func _ready() -> void:
 
 	_show(Screen.MENU)
 
+	if ParityCapture.requested():
+		add_child(ParityCapture.new(_start_level))
+
 
 func _show(screen: Screen) -> void:
 	_screen = screen

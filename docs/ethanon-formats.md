@@ -211,6 +211,41 @@ this block disagree, **this block wins**.
 
 ---
 
+## ⚠️ 2026-09-14 — measured on the RUNNING original
+
+The original now runs in an emulator (`docs/parity.md`). These are observations of the live game,
+not readings of data or source, and where they disagree with anything above, **they win**.
+Captures stay in `out/parity/`; only the measurements are recorded here.
+
+**The visible world is 256 units tall, not ~512.** Level 1-1 at 1280×720: the bottom floor row's
+mortar gaps sit at x = 174, 355, 532, 714, 894, 1074 — pitches 181, 177, 182, 180, 180, mean
+**180 px**. The same stones are 64 units wide in the level data (`single_stone_contrast.png` is
+64×32), so the scale is 180 ÷ 64 = **2.8125 = 720 ÷ 256**. The upper ledge agrees (169, 178). This
+closes MILESTONE_1 §7.4 by measurement and supersedes the "~512-tall" inference above. It also
+explains the art: `sky.png` is 455×256, i.e. exactly one screen. Whether the rule is height-locked
+or width-locked cannot be told from a 16:9 screen; an 1184×720 capture of the menu (nav bar
+present) showed menu buttons at the same pixel size as at 1280×720, which points to
+**height-locked**, but that is one observation.
+
+**At 720 px the original draws the `hd/` texture tier.** `ETHSpriteDensityManager` picks `hd/` for
+screen height ≥ `minScreenHeightForHdVersion` = 720 (§8.5). The APK ships 53 `entities/hd/`, 7
+`entities/fullhd/`, 69 `sprites/hd/` and a `particles/hd/` set, e.g. `single_stone_contrast.png`
+64×32 → `hd/` 128×64. A remake drawing the 1× files at 2.8125× is visibly softer than the original.
+
+**Progress is `scores.enml` in global external storage, and medals gate chapters.** File:
+`<GetGlobalExternalStorageDirectory()>/scores.enml` = `/sdcard/.ethanon/<package>/files/`
+(`gs2d/projects/Android/Ethanon/src/net/asantee/gs2d/GS2DActivity.java:219-220`); `achievements.enml`
+sits beside it. Grammar: `version { number = 1_4; }` then one entity per world,
+`world<W> { level<L> = <medal>; }`. Finishing 1-1 with zero portals wrote `level0 = 3` (gold).
+Setting every level of every world to `1` unlocked all 32 chapter-1 levels and showed **33 %**
+(bronze) — but chapter 2 stayed locked, captioned **"requires 60%"**; setting all to `3` showed
+100 % and unlocked all four chapters. This **corrects §7.3 as recorded above**: medals are *not*
+cosmetic, they drive the chapter gate (identifier `MINIMUM_ACCOMPLISHMENT_TO_UNLOCK`), and no
+file holds the `lastWorldAllowed` / `lastLevelAllowed` integers — whatever those shared-data keys
+do, they are not the persisted store. `2` = silver is expected but was not observed.
+
+---
+
 ## 1. Orientation: where to look in the engine source
 
 Curated to the ~25 files that answer >90% of format questions.

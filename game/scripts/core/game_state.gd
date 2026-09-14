@@ -28,6 +28,10 @@ var current_level: int = 0
 ## Absent key means "never completed", which is different from "completed with 0 portals".
 var best_portals: Dictionary = {}
 
+## False while a dev tool drives the game with injected progression (parity capture), so a
+## level that happens to finish mid-capture cannot write that fake unlock into the real save.
+var persist_enabled: bool = true
+
 
 func _ready() -> void:
 	load_progress()
@@ -85,6 +89,8 @@ func is_chapter_complete(world: int) -> bool:
 
 
 func save_progress() -> void:
+	if not persist_enabled:
+		return
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
 		push_warning("GameState: could not write %s" % SAVE_PATH)

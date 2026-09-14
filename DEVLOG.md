@@ -1418,3 +1418,49 @@ were mine, both were found by a test rather than by review, and the `bounce` one
 clearest example in the whole project of the rule that keeps paying: when the data does not
 say a mechanic exists, do not add it. I had a plausible story (a 64×64 solid block called
 "bounce") and the identifiers said "no, it pulses".
+
+### 2026-09-14 11:47 — Session 14: the original runs; parity rig
+
+**Built:** the original Magic Portals running in an Android emulator, driven and screenshotted over
+adb (`tools/parity/emu.py`), plus a remake capture mode (`--parity-level/--parity-out`,
+`game/scripts/dev/parity_capture.gd`). Every one of the 128 original levels is reachable. Full
+setup in `docs/parity.md`. Ivan's goal: side-by-side every screen and level, and close the gaps.
+
+**Broke / dead ends:** four walls in a row, each diagnosed rather than guessed.
+1. Only one of 8 installed images can run it — the APK is `armeabi` only, and every x86_64 image
+   has an empty `abilist32`. The existing API 37 AVD would have failed outright.
+2. `INSTALL_PARSE_FAILED_NO_CERTIFICATES`: the "public archive" had all 128 `.angelscript`
+   sources stripped after signing (3251 manifest entries, 128 missing). Re-signed a local copy.
+3. Crash in `eglCreateContext`. Read `ConfigChooser.java:48-66`: exact-RGB565-or-null, and null is
+   passed straight on. The host GPU path offers no 565 config; `-gpu swiftshader_indirect` does.
+4. `adb shell input tap` did nothing — shorter than one frame at this speed. Held swipes work.
+Also a wasted detour: rebuilt the APK debuggable with apktool to reach app-private saves, then
+found progress is not there at all — it is in `/sdcard/.ethanon/`, which the shell can write.
+
+**Decision:** traverse levels by writing `scores.enml`, not by skip buttons or play-through — it is
+deterministic and reaches all 128 in one push. Ivan's rulings this session: proceed although
+`docs/permission.md` is still a stub (local-only, captures never leave `out/`), license-patching a
+local APK is allowed, dead store/social buttons are omitted. Commits go out under his name only.
+
+**Measured, and it overturns an inference:** the original's visible world is **256 units tall**, not
+~512. Floor mortar pitch 181/177/182/180/180 px against 64-unit stones → 2.8125 = 720/256. And
+medals are NOT cosmetic: all-bronze leaves chapter 2 locked, "requires 60%". Both recorded in the
+new 2026-09-14 block of `docs/ethanon-formats.md`.
+
+**First side-by-side (1-1):** remake is ~2.8x zoomed out, camera centred instead of clamped with
+the player far left, unlit (original has per-pixel normal-mapped torchlight — the log loads `*_nm.png`),
+no torch particles, portal art wrong, placeholder HUD, no "Part 1" caption, no pause or
+level-finished screens, 1x textures where the original draws the `hd/` tier.
+
+**Assets check:** yes — `git status --short | grep -E "reference/|out/|game/assets/"` returned
+nothing. Captures, saves, rebuilt APKs and the keystore are all under gitignored paths.
+
+**[CLIP] 12:06** — the original's level 1-1 finished by holding the right pad, "level finished" gold.
+**[BROLL]** — None.
+
+**Numbers:** gates: import 0, quit-after 0, levels 128/128, core 57/57, gameplay 552/552.
+`verify_gameplay` prints 40× `SCRIPT ERROR: Invalid call. Nonexistent 'String' constructor` —
+**pre-existing**: identical count on a clean stash of HEAD, and it still reports 552 passed.
+
+**Inferred mood:** guess — a long unblocking grind that paid out completely: every wall had a
+readable cause, and the scale measurement alone retires a question three sessions left open.
