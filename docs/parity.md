@@ -97,3 +97,38 @@ golden-score plaque, sound/music toggles and Achievements. Finishing shows "leve
 the medal with the portal count, and restart / next / level-list buttons.
 
 Tap coordinates are in `tools/parity/emu.py` → `Screen`.
+
+## 6. The reference library (captured 2026-09-14)
+
+Everything under `out/parity/original/` (gitignored). Built by two scripts that **verify every screen
+before tapping** (`tools/parity/markers.py`): a fixed-sleep first pass lost 47 of 128 levels when the
+machine was busy — the taps landed on the splash or the wrong menu and "level" frames were menus.
+
+- `levels/<W>-<LL>_h0.3.png`, `_h2.8.png`, `_h6.3.png` — every level, seconds after its HUD first
+  appears (the fade-in). All-gold save, so each opens with a gold "current score" plaque.
+  `<W>-<LL>.json` records the load time and any popup. `1-02_popup.png` and `1-03_popup.png` are the
+  tutorial popups, dismissed before the level frames. `2-32_h6.3.png` is the original's game-over
+  screen: the dragon kills a player who stands still.
+- `levels/<W>-<LL>_t2.0/_t4.5/_t8.0.png` — the first, unverified pass, kept only for the 81 levels whose
+  frame the markers confirm is a level (seconds after the TAP, not after the HUD).
+- `screens/` — main menu (+ `main_menu_intro.mp4`), info/credits, achievements, sound/music off,
+  chapter select for fresh / bronze / gold saves, both grid pages of all four chapters, pause with and
+  without the skip button, level finished (+ `finish_1-1.mp4`).
+
+Markers are normalised correlation of small reference crops, because HUD buttons are translucent:
+a pixel difference read a torch-lit level (1-2) as "not a level". The level marker is the pause OR the
+restart button, because 3-25's corner fire can wash out either one.
+
+## 7. The game being compared is the Supersonic port
+
+Ivan moved the remake to his own engine: `Desktop/Supersonic-Engine/games/magicportals`. It reads this
+repo's converter output and `game/data`, so converter and data fixes still land here; rendering, HUD and
+menus land there. Capture it from **Bash** (PowerShell 5.1 mangles the arguments):
+
+```
+cd ~/Desktop/Supersonic-Engine
+build/games/magicportals/MagicPortals.exe --level level0 --window 1280x720 --fixed-step --frames 420 --screenshot out.png
+```
+
+`--fixed-step` makes each frame 1/60 s of game time, and two runs of the same level and frame come out
+bit-identical, so a capture is a reproducible fixture. Build with `tools\parity\port_build.bat --target MagicPortals`.
