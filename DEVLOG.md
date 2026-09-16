@@ -1506,3 +1506,83 @@ screens. Port suites: 34/34 against the data changed today.
 
 **Inferred mood:** guess — a day that changed direction twice and still ended with the hardest unknown
 (how the original lights a pixel) answered by numbers rather than by reading.
+
+### 2026-09-15 21:29 — Session 14c: lighting and menu screens in the port (written 2026-09-16)
+
+*Written the next day from git, the workflow journals and the files on disk: the session ended
+before its own SESSION END procedure ran.*
+
+**Built (Supersonic port, pushed):** lighting steps G3 ambient + emissive (e5cb31d), E2 the engine's
+overlay map, 2D sprite record and premultiplied blend (0656311, 6d55f68), G4 lightmaps drawn (827ea6c).
+Level 1-01 compare.py mean_abs against the original: 29.7 before any lighting step → 15.86 after G4; 1-09 8.21.
+**Built (committed, not pushed that day):** E3, the engine's 2D point light with a height and the
+shader loop that adds it (1aa34b9, e1c64f3) — every existing frame byte-identical, nothing places a light.
+**Built (branch `ui2-screens`, a separate git worktree so UI work could run beside lighting):** the
+pause over a level, level finished + game over, the tutorial/help popups, overlay quads that rotate
+(engine), and the loading screen + main menu (fa2c17f, 84b61ab, 04ff978, 6fb5f15, b541898).
+
+**Broke / dead ends:**
+1. G3 was verified three times and failed each time on the *gate definitions*, not the code: a
+   placeholder fireball box under one frame's blocks, a "tier moves detail not the mean" premise the
+   numbers refuted (+3.3 on 1-09 LM_E=1), and a torch check that belonged to G4. The design owner amended
+   the gates (design_port.md §10) instead of dimming the placeholder to pass.
+2. Windows Smart App Control refused freshly linked test exes in every build — 28, 7, 2, 1 suites in one
+   round. Each needs delete + relink; it cost minutes per build all day.
+3. Two port captures of level0a exited 1 with no PNG and no message during E3's gates; six reruns were
+   identical and clean. Cause unknown.
+4. **The session died mid-step.** The machine went idle ~22:57, the agents woke at 03:04 and the process
+   ended: G5 (lights placed, halos) was uncommitted with 23/128 levels swept, the credits + achievements
+   step uncommitted and its suite never compiled. The G5 sweep's background shell then failed with
+   `fork: Resource temporarily unavailable` at 03:32.
+
+**Decision:** menus follow the original exactly (rulings R1–R4: two chapters per page, back quits,
+locking from the save, the Asantee loading screen). Achievement titles/descriptions are Asantee content:
+extracted by a committed tool into gitignored `out/data/achievements.json`, read at run time.
+At 21:28 Ivan asked for no new agents (usage credits); the backlog went to `out/parity/BACKLOG.md`.
+
+**Assets check:** checked the next day — `git status --short` in this repo showed only the untracked
+`tools/asbc/achievements.py` (tool source, no achievement text: grep for the titles returns 0).
+
+**[CLIP] —** None recorded.
+**[BROLL]** — None.
+
+**Numbers:** Supersonic ctest 113 → 114 suites (test_light2d). 1-01 mean_abs 15.86 after G4. E3's
+predicted-pixel scene: 30,256 pixels, none more than 1/255 off. 128/128 levels byte-identical across E3.
+
+**Inferred mood:** guess — productive but brittle: two tracks landed a lot of verified work, and then
+the night ate both in-flight steps.
+
+### 2026-09-16 11:30 — Session 15: recover the dead session's work, merge, push
+
+**Built:** nothing new — finished what session 14c left half-done. Supersonic: G5 lights + halos committed
+(e68a386), credits + achievements dashboard + locking committed on the branch (bd03f70), the `ui2-screens` branch
+merged into main (e6a3cca) and pushed with E3; worktree and branch removed. This repo: `tools/asbc/achievements.py`
+committed, backlog committed as `docs/parity-backlog.md`. No new agents — Ivan's standing instruction (credits).
+
+**Broke / dead ends:**
+1. The dead session's G5 sweep had reached 23/128; rerun in full on the same source: 128/128 exit 0.
+2. The credits/achievements suite had never compiled: one check of its own making was wrong (it asked a fling to peak
+   above the 48 u it was released at; the decoded decay → move → band order lands the next tick at 41.16), three
+   double comparisons went through the harness's float `nearly` and MSVC warned. Fixed in the test, not the code.
+3. Merge: 5 conflicted files, and 11 failing checks in main's lighting cases — not conflicts: since the branch, the back
+   key in a level opens the pause and 1-02 raises a tutorial popup, so "back to the grid" and "tap on level1" no longer
+   did what the tests assumed. Added `OutToTheGrid` (popup, back, pause's Levels) instead of weakening the checks.
+4. Smart App Control refused 32 → 11 → 3 → 2 → 1 suites after the merge build, then `test_mp_layer.exe` five relinks
+   in a row ("An Application Control policy has blocked this file"); the sixth link ran.
+
+**Decision:** G5 committed with its misses recorded rather than tuned: 1-09's halo class 6.17 vs ≤ 6.0 and the orange
+excess beside the torch are halo-magnitude questions the backlog already held, and tuning them is new work. Steps
+50-54 renumbered in the planning doc; commit bodies keep the branch's numbers.
+
+**Assets check:** yes — `git status --short` here before committing listed only `DEVLOG.md`,
+`docs/parity-backlog.md` and `tools/asbc/achievements.py`; `grep -ciE "badge|enter the portal|apprentice|cleared"` on
+the tool returns 0; `out/data/achievements.json` is ignored by `.gitignore:66`.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** Supersonic ctest 118/118 on the merged build (test_mp_layer 765 checks, test_mp_info 389). G5: 1-01
+mean_abs 15.86 → 12.72, torch pass R scale 0.969. Credits vs original 6.79, dashboard 2.89. Merged build byte-identical
+to G5 on 18 gate frames + MainScene + Wolf Brigade, and to the branch on 4 menu frames.
+
+**Inferred mood:** guess — tidy-up with a tight budget: no discoveries, but nothing is at risk any more.
