@@ -1586,3 +1586,38 @@ mean_abs 15.86 → 12.72, torch pass R scale 0.969. Credits vs original 6.79, da
 to G5 on 18 gate frames + MainScene + Wolf Brigade, and to the branch on 4 menu frames.
 
 **Inferred mood:** guess — tidy-up with a tight budget: no discoveries, but nothing is at risk any more.
+
+### 2026-09-16 15:30 — Session 15b: the last lighting step, chapter select and the level grid
+
+**Built (Supersonic, pushed):** step 55 G6 — the 5/6/5 surface and the runtime bake a lit torch starts, with
+`light_from_projectile.ent`'s light and halo (ad1e97c); step 56 — chapter select and the level grid rebuilt as the
+original pages them, `sim/Selector` over `sim/Locking` (87886c6). No agents (Ivan's standing instruction).
+
+**Broke / dead ends:**
+1. Ivan was being flooded with "C:\Strawberry\c\bin\ctest.exe has been blocked" notifications: Smart App Control
+   refuses freshly linked test exes and every refusal notifies. My relink-and-retry ctest loops fired dozens (37 in
+   one round). Stopped them; now only the touched suites run, once. Ivan chose to turn SAC off; Windows still
+   reported it on afterwards, and 4 untouched suites stayed refused in the last ctest.
+2. MagicPortals.exe was refused four relinks running (rc 126), then ran. A probe with rc 127 was my own shell
+   quoting, not a block.
+3. First lighting-rules path used the remake's data dir, not the port's: the quantise never applied until the
+   layer test caught it.
+4. The torch test first used 4-25 (level25c), where the shot hits a platform before the torch; 4-22 works.
+5. The G6 sweep showed one new diagnostic on 2-32 (a player death, then a stone breaking under the lost screen).
+   Traced to the UI merge (84b61ab added the death log and the lost screen over a running level), not to G6.
+6. `requires` as a member name — a C++20 keyword — caught before compiling.
+
+**Decision:** G6 and the selector were in the same working tree; G6 was committed alone by staging its hunks from
+a classified `git diff -U0` patch (`git apply --cached --unidiff-zero`), so each step is its own commit.
+
+**Assets check:** yes — `git status --short` here lists only DEVLOG.md and docs/parity-backlog.md; captures stay
+in `out/parity/ui3/select/` and `out/parity/specs/lighting/work/g6/`.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** G6: 2-05 port vs engine 2.14 / vs engine_no565 2.32; 4-22 noLM_E<1 vs original 0.95 → 0.13; 128/128
+levels. Selector vs original stills: 1.72, 2.08, 1.93, 2.55, 2.86 mean_abs, edge IoU 0.82-0.89. test_mp_select 112,
+test_mp_layer 783, test_mp_lighting 495. ctest 115/119 (4 refused, untouched).
+
+**Inferred mood:** guess — steady progress under a tight budget, with the notification flood the one real irritant.

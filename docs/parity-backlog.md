@@ -9,7 +9,8 @@ markers, locate, compare, frames, port_build.bat). Port captures: Bash only,
 `build/games/magicportals/MagicPortals.exe --level <name> --window 1280x720 --fixed-step --frames N --screenshot <png>`.
 Windows Smart App Control sometimes blocks a freshly linked exe ("Not Run" / "Permission denied" / "An Application Control
 policy has blocked this file"): delete the exe and relink. Touching the source is not enough when the rebuild produces the
-same bytes; keep deleting and relinking until one runs.
+same bytes. **Every blocked launch shows Ivan a Windows notification: never loop relink/ctest retries** — run the
+suites a change touches once each, and report what stayed blocked.
 
 ---
 
@@ -34,9 +35,11 @@ same bytes; keep deleting and relinking until one runs.
 
 Done and pushed: G1 reader, E0 descriptor sets, E1 scene encoding, G2 display-encoded scene, G3 ambient/emissive,
 E2 overlay map, G4 lightmaps (1-01 mean_abs vs original 29.7 → 15.9), E3 2D point lights (step 48), G5 lights placed,
-the player and the shot lit, halos drawn (step 49; 1-01 15.86 → 12.72).
+the player and the shot lit, halos drawn (step 49; 1-01 15.86 → 12.72), G6 the 5/6/5 surface and the runtime bake
+after a torch is lit (step 55; 4-22 noLM_E<1 vs original 0.95 → 0.13). The design's plan is complete.
 
-- [ ] **G6** — darkest levels lit at run time + the RGB565 framebuffer (design §7.1). Not started.
+- [ ] G6 leftovers: the screen overlay (HUD, pause, menus) is not quantised; the torch light's z is a `_guess`;
+      `light_from_projectile.ent`'s own sprite and flame are not built; no capture of 4-22 lit (footage L1 missing).
 - [ ] **G5's missed gates** (step 49, never independently verified — the session that built it died before its verify):
       1-09 `LM_E<1_halo` 6.17 against ≤ 6.0 (no single halo scale passes both LM_E<1 rows with 1x art); the orange R−B
       excess beside the 1-01 torch at 60/90/150 u is 47/18/18 below the original (asked ±15); "red rises monotonically"
@@ -85,7 +88,9 @@ Open after the plan (design §8):
 - [x] HUD + level start (steps 38-40), pause / finished / game over / popups (steps 50-52).
 - [x] UI3 loading screen + main menu (step 53); credits, achievements dashboard and locking (step 54). Rulings applied:
       two chapters per page, back quits, locking as the original, loading screen.
-- [ ] **UI3 chapter select + level grid** (ui3 spec §5, §6) — not started; they must read `sim/Locking` (ruling R3).
+- [x] UI3 chapter select + level grid (step 56, `sim/Selector`): vs the stills 1.72-2.86 mean_abs at offset (0, 0).
+- [ ] Step 56 leftovers: spec 7.5/7.6 rows needing footage (slide frame by frame vs nav_gold, arrow entrance, swipe
+      paths); silver chapter medal uncaptured (U3); the page counter's dot fits worse than its digit (U4).
 - [ ] Step 54 was never independently verified and its §7.3 / §7.4 acceptance rows were not each measured: only
       compare.py on two frames (credits 6.79, dashboard 2.89) and the suites. The gold-save dashboard shows 315 points
       against the original's 325 (an unlock the port's medals cannot decide).
