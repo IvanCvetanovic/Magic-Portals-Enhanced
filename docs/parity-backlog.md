@@ -62,6 +62,13 @@ Open after the plan (design §8):
 - [ ] **System 2 particles**: emitter origin at the entity position (torch flame 13.4 u too low), spin sign
       (counter-clockwise ~108°/s), alpha, depth (particles 2.5 layers in front of their sprite), square quads,
       following moving owners; AM_MODULATE blend (engine has alpha + additive only).
+- [ ] **Step 59's two recorded particle deviations** (SE step 59, committed with them, not tuned): on 1-01's static
+      portals, the ring excess r 25-45 px on 582 is 106.5 against the original's 65.6 +-25% (1.62x; 1.33x against the
+      58 footage frames), and the iris core's temporal s.d. on 604 and 582 is 3.41 / 3.19 against <= 3 on 51 frames
+      (before the step 8.1 / 9.9 on 6). Both are the rings' brightness over their life (the original's pulse s.d. peaks at
+      49-57 px, the port's rings alone at 23-33 px); tint, 0.8 scale, inline systems and the shipped AM_ADD blend
+      (`libApplication.so` `SetAlphaMode` at 0x11eac0: `glBlendFunc(GL_ONE, GL_ONE)`) are ruled out. Next: root-cause
+      the rings' life-versus-brightness curve against footage (`out/parity/visuals/particles/verify3/measure_v3.txt`).
 - [ ] **System 3 player**: start frame 8 (facing right; `startFrame` is a dead field), walk 10.8 fps, space-suit sheet on
       the 19 zero-g levels, eye glow; 2.8 u rest-height difference is a body/collider question.
 - [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u), red tint; note the refusal radius (16×scale in the port
