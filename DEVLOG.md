@@ -1621,3 +1621,116 @@ levels. Selector vs original stills: 1.72, 2.08, 1.93, 2.55, 2.86 mean_abs, edge
 test_mp_layer 783, test_mp_lighting 495. ctest 115/119 (4 refused, untouched).
 
 **Inferred mood:** guess — steady progress under a tight budget, with the notification flood the one real irritant.
+
+### 2026-09-16 15:40 — Session 16: sky, particles, the visuals briefs, batches 0-4 started; the battery ran out (written 2026-09-17)
+
+*Written the next day from git, the planning doc, the workflow scripts, journals and role reports, and the files on disk:
+at 02:43 the laptop's battery ran out and the session ended before its own SESSION END procedure. Agents were back on
+(workflows), after 15 and 15b ran without them.*
+
+**Built (Supersonic, committed locally, 6 commits):** step 57 `29448a8` (16:04, the only engine commit): `--screenshot-every N`
+writes every Nth frame of one capture run beside the screenshot. Step 58 `e891731` (19:38) + docs-only `1d2468c` (23:39): the
+sky the original pins to the camera (`StaticSky` → `sim/Sky`, `data/sky.json`; SpaceSky for the 19 space levels recorded, not
+ported). Step 59 `c9f500b` (23:43): particles at their entity's node and angle, in Ethanon's random-number order, added whole,
+square, following moving owners (`sim/Particles`), and static portals scaled 0.8 and tinted as `ETHCallback_portal_static`
+does. Step 60 `12a10f3` (01:02): a JPEG's size read from its frame header, so 2-32's dragon builds its `explosion.JPG` fire.
+Step 61 `823e3d7` (01:58): `sim/Tiers`, the hd/fullhd file the original picks, sized in whole units, one sheet-cut rule;
+nothing draws through it yet. SE origin/main stood at `e891731` when track B's worktree was set up just before midnight;
+`1d2468c` to `823e3d7` were local only when the power went.
+**Built (this repo):** `0e6daec`, step 59's two recorded deviations as one open item in `docs/parity-backlog.md` §2.
+**Built (gitignored, `out/parity/`):** five system briefs and `visuals/briefs/00_order.md` (1,541 lines, batches 0-13), from a
+read-only workflow run beside the building one (20:12, 70 min); decodes D1-D8 and D10, each checked by a second reader,
+appended as `00_order.md` §8 (23:32, 62 min); footage of the original on the emulator for F12, F13, L1 and F3, with notes.
+**In flight at 02:43:** 1.1 (player facing, stride, column carry-over) built and measured in SE main, uncommitted, not yet
+written up as a planning step (`out/parity/visuals/1.1/`, its sweep result at 02:42); 3.1 (the timer dial) uncommitted as
+Step 80 in the worktree `Supersonic-Engine-vis2` (branch `visuals-b`), its third verifier mid-run (last file 02:38); F2
+(1-03, a portal pair) recorded at 02:17, its files copied out at 02:43, `F2.md` never written; the footage `INDEX.md` never
+written; the merge-and-push phase never reached. Session 17 found this state, pushed SE main through step 61 and resumed.
+
+**Broke / dead ends:**
+1. **Smart App Control, all night**, still in enforce mode (`VerifiedAndReputablePolicyState` = 1, step 58's record). The step
+   records and role reports count at least 101 refused launches, each a notification on Ivan's screen: step 57's ctest 26;
+   step 58's ctest 26 plus four links of `MagicPortals.exe` in a row; step 59 14; step 60 10 (`test_mp_sky` refused again after
+   its one relink, so not run); step 61 2; 3.1's ctest 18 plus one exe. The roles kept to one relink and one ctest each.
+2. **StaticSky (58) failed verification twice for want of a frame.** r1: no capture gate had an after, and the record said
+   `test_mp_layer` had not run when it had (790/0). r2: bare ground, compare, lightgate, byte-identity and the 128-level sweep
+   all NOT RUN (the fourth refused link, `6b2d0d04`). The second fix round deleted the exe and relinked once; `5a435cad` ran,
+   every capture was taken on it (69 min), r3 passed. Two numbers got worse and stay: 1-01 mean_abs 12.72 → 14.01 and its halo
+   rings, both from the 1x sky picture's tier, not the placement (the fullhd picture pinned there scores 10.97).
+3. **Particles (59) failed all three rounds, and batch 1 stopped itself at 23:28** so nothing built on it. r1: torch top 14.2 u
+   on the plan's 6 frames (1.3 short; one flame tip decides it; 18.1 on 51 frames), ring excess pushed 604 out of band
+   (1.22 / 1.44 / 2.08x), and two random draws inside one `glm::dvec2` whose order C++ leaves open (MSVC drew y first; putting
+   them in order moved 1-01 f420 `b19ce71a` → `7138a7bc`). r2: ring excess unchanged, square quads never pinned on a
+   non-square cell, step 49's halo profile worse at every band. That verifier guessed the static portals' tint was
+   `portalColorA/B` (the antiportal's); the fix round found the portal's own script, `Scale(0.8)` then `SetColor`. r3: 582's
+   ring excess 1.62x, and the iris core's temporal s.d. newly failing, 3.41 / 3.19, because of that 0.8 scale.
+4. **3.1 (Step 80) failed two rounds.** r1: the dial began shrinking on the pickup tick, one tick before the original (whose
+   frame still runs on its stale local elapsedTime); and 00_order's level23 f270 → f420 gate cannot be measured as written,
+   both crystals expire on ticks 300 and 360. r2: `test_mp_layer` failed at :4456 on the binary the fix round had reported
+   966/0: `DialOf` returned a pointer into the vector `TimerReports()` returns by value, six use-after-free reads, so that pass
+   was undefined behaviour. Fixed to return a copy, 966/0 on `ac056aaa`. The third verifier was running when the power went.
+5. **L1's put-out is impossible on 4-22.** The orbiting fire signal spawns only on a level with a `light_wall.ent`
+   (`addFireSignalIfNecessary`, `all_functions.txt` line 97829); level21c has none. Lighting recorded on 4-22, lighting then
+   putting out on 4-29 (4-26 had no clear shot). Every lighting take hides the moment in a ~500 ms recording gap (503 / 500 /
+   536 ms). F3's first hourglass take missed: two taps in one adb call ran 1.24 s apart. The emulator records 16-29 fps, never 60.
+6. **Step 58's wording corrections, twice.** Its verifier asked for four text fixes; the commit agent applied them and amended
+   its commit once (`57fed4c` → `e891731`). The finish-59 role was then handed the same four: three were already in, only the
+   two pivot citations still ran a line long (`ETHSpriteEntity.cpp:742-752` → `742-751`, `ETHEntity.cpp:270-297` → `270-296`),
+   so `1d2468c` went in under another title than the one given. Step 61's commit agent refused a verifier's citation change
+   (`:652-684`) with evidence: the closing brace is line 683.
+7. **The workflow gave the main-tree roles the worktree's build script.** `tree.includes('worktree')` matched the main tree's
+   own description ("Another track works in a separate worktree"), so they were told to use `vis2_build.bat`, which the
+   worktree setup had just rewritten to build `Supersonic-Engine-vis2`. 0.1 and 0.2 noticed and built main through copies.
+8. **00_order was wrong in places.** PRE-3's baseline, `particles/after/` (`b19ce71a`), is the superseded first build's; the
+   committed build draws `a1f8d7ae` (`fix2/`), which 0.1 and 3.1 each found on their own. K16 names four entities on
+   `explosion.JPG`; there are five. D3 came back NOT CONFIRMED (two supporting claims refuted, one branch missed; its four
+   direct answers hold).
+9. **The footage contradicted three of our records**, none edited yet. `specs/ui2/pause_finished.md` says restart and pause
+   vanish in one frame; F12 and the library's `finish_1-1.mp4` show them sliding out and fading over ~0.5 s. The port's
+   `data/torch.json` `signal._note` puts the signal at (-cos, sin), counter-clockwise; the footage and the bytecode read
+   last-argument-first give (sin, -cos), clockwise (one clip). F3: the antiportal refuses a tap 267 px from its centre and
+   accepts one at 273 px, at scale 3: a radius of 32 × scale, not the port's 16 nor `placement.json`'s 64, which misses the
+   script's `Scale(0.5)` at load.
+
+**Decision:**
+- Step 59 committed with two RECORDED DEVIATIONS, not tuned, under Ivan's delegation toward what the original does: portal
+  582's ring excess (106.5 against 65.6 ± 25%, 1.62x) and the iris core's temporal s.d. on 604 and 582 (3.41 / 3.19 against
+  ≤ 3). Both are the rings' brightness over their life; no script lever reaches a static portal's particles, and the shipped
+  `libApplication.so` rules out the blend (`SetAlphaMode` at 0x11eac0: AM_ADD is `glBlendFunc(GL_ONE, GL_ONE)`).
+- Two tracks for batches 0-4: track A (0.1, 0.2, 1.1-1.3, 2.1-2.3) in SE main, track B (3.1-3.3, 4.1-4.3) in a worktree on
+  `visuals-b`, its planning steps numbered from 80 so the two cannot collide; only a merge agent at the end pushes. A step
+  failing three verify rounds goes to a disposition agent: commit with recorded deviations, or shelve to a stash.
+- Research beside the builds, read-only: the briefs and decodes wrote only under `out/parity/visuals/briefs/`; the footage
+  workflow drove the emulator and launched nothing of Supersonic.
+- Rulings R1-R18 taken toward the original; step 61 records R10 (player at z 4), R12 (tier fixed at the 720 px choice) and
+  R13 (route B: the port resolves tiers, `out/levels` stays byte-identical). The decodes' R19-R23 are proposed, not adopted.
+- 3.1 deletes the remake's guessed crystal fade and replaces its test pin on purpose; its level23 gate is kept in the closed
+  form int(t2/T·8) − int(t1/T·8), and amending 00_order is left to Ivan.
+
+**Assets check:** yes — `git status --short` here, run after appending this entry, lists only ` M DEVLOG.md`. Everything else
+this session made on this side is under `out/`: 4.1 GB of footage (8 delivered `.mp4` clips of the original plus extracted frames) and
+4.0 GB of captures, briefs and decodes under `out/parity/visuals/`; `git check-ignore -v` gives `.gitignore:66:out/` for both.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** step 57: 14 stamped files for 420 frames at N = 30, `_f420` byte-identical to a plain run, 10.9 s against 7.9 s
+(14 launches ≈ 110 s). Step 58: bare ground 3,634,104 px on 34 levels → 1,593 px on 3; the original's sky centre (640, 360)
+± 1 px on 16 of 16 library levels; 2-02 mean_abs 34.16 → 9.30, 4-20 19.95 → 1.87, 1-21 50.08 → 19.37. Step 59: torch flame
+centroid (288.9, 62.5) → (288.8, 46.9) u against the original's (288.0, 47.5), top 35.9 → 18.5 against 18.5; ring spin +100 →
+-120 / -120 / -110 °/s against -95 to -119; ring reach 81 / 77 / 79 px against 81 / 79 / 83; 1-01 mean_abs 14.01 → 14.76, f420
+md5 `a1f8d7ae`. Step 60: 1,182 original images, 0 sized otherwise than stb_image reads them; "particle image could not be
+read" 1 → 0 of 128 logs; 128/128 f420 byte-identical. Step 61: 249 1x images, 5 draw at another size. Suites: test_mp_sky
+361, test_mp_tiers 527, test_mp_layer 790 → 854 → 860, test_mp_sprites 336 → 372; ctest 93/119 (57, 58), 111 then 117/120
+(59), 112/120 (60), 120/121 (61), 0 failed. 1.1 (uncommitted): normal f8 0.970 vs f4 0.807 on 1-01, 0.926 vs 0.796 on 1-09,
+centres exactly x 101 and 396; B-onset period 21.6 frames (gate 21.6 ± 1.0); f8 wins 52 of the 54 gate levels at f420, 1-02
+and 1-03 losing by 0.004 and 0.002 under their help popups and winning at 0.894 / 0.903 with the popup tapped away; 125 of
+128 frames change, 122 only inside the player quad, 1-02, 2-15 and 2-28 outside it, unexplained at the crash; test_mp_sprites
+392, test_mp_layer 875, test_mp_start 726. 3.1 (uncommitted): 35 dials in 20 levels, cell from the tick count on 17/17
+frames, alpha 0.459-0.528, test_mp_layer 966, test_mp_timed 80. Workflows: batch 1 16 agents, 7 h 51 min, 4.20 M tokens;
+briefs 6 agents, 70 min, 2.67 M; decodes 19 agents, 62 min, 4.34 M; batches 0-4 had started 15 agents and the footage
+workflow 5 when the power went. Session length 11 h 12 min.
+
+**Inferred mood:** guess — a long night on autopilot that mostly worked: five steps landed and the verifiers caught real
+faults (a test that passed on freed memory), but Smart App Control notified all night and the battery left two steps and a
+clip half-done, uncommitted and unlogged.
