@@ -103,8 +103,27 @@ Open after the plan (design §8):
       playing flipbook's count is 1. Cannot happen today; `TheWalkKeepsItsColumnAndItsTime` guards it on level8. Next:
       1.2 (280 ms zero-gravity column) and 1.3 (pushing rows) keep that test running, or comment the coupling, if they
       touch that block.
-- [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u), red tint; note the refusal radius (16×scale in the port
-      vs decoded 64×scale) is an owner gameplay call.
+- [ ] **Step 83 deviation, 2-26's edge scan** (SE step 83 committed with it; 00_order §7 step 4.1,
+      `work_s34/antiportal_edge.py`): required half/scale 31.5-34.0 on `antiportal_955` at node scale 3.6; measured
+      **30.50** (17.08 before, so the row moved 13.4 of the 14.4 it was short). NOT MET as written. Attributed cause,
+      measured on both sides and reproduced by the verifier on its own capture, its own re-implementation and both grids
+      (the brief's fixed 40-70.5 u port grid and the per-scale 24s-40s grid): saturation, not size. The port's rim is
+      still additive white and clips at 255 over that level's bright ground (inside-band median (255, 255, 255), 54-66 %
+      of its pixels at 255 in all three channels, outside band summing 217-221), so the summed step is a plateau of 509.5
+      tied at halves 30.5 / 30.75 / 31.0 / 31.25 / 31.5 / 33.25 and the estimator's strict `>` keeps the first; the
+      original's same ring does not clip over 30.5-33.5 ×scale (≤ 0.5 % of the band at 255 in all three channels) and
+      reads 33.25. The ring's drawn size is correct: a clipping-immune estimator reads 32.10 ×scale there against the
+      original's 31.82-32.03 on six library frames, and the outermost-changed-pixel reading gives 32.06. The gate band
+      also misses ground truth — 4 of the original's 30 frame readings by the same estimator fall below its own 31.5
+      floor (1-10 at t2.0/t4.5/t8.0, 2-26 at h6.3). Next: step 4.2 (Blink and spin) removes the cause, because its own
+      gates put c_G and c_B ≤ 0.03 so the rim stops being additive white — but 4.2's §7 gate list names only 3-12, 4-02,
+      4-07 and 1-07 and contains no size re-read, so an explicit 2-26 `antiportal_955` edge-scan re-read has to be added
+      to 4.2's gates (or the row's wording amended in 00_order §7: last maximum, tie midpoint, or a brightness-independent
+      reading). Without that addition this NOT MET row has no owner and would silently disappear.
+- [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 83**; the red tint is still open
+      (order 4.2). The refusal radius stays 16×scale in the port against the decoded **32×scale** (128 u × the manager's
+      `Scale(0.5)` × the node's scale, halved; footage F3 brackets the original's refusal at (31.6, 32.4]×scale). Ruled
+      R1 — what the original does — but no step in 00_order §7 plays it yet.
 - [ ] **System 5 actors with sheets**: minions/knights (63 spawns in 35 levels) have no sprites; dragon draws the whole sheet.
 - [ ] **System 6 texture tiers**: hd/fullhd per file (fullhd skies are 512 u wide). Converter + port together, or sprites
       draw twice too big; the Sprite offset × scale trap applies.
