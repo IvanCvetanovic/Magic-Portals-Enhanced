@@ -70,7 +70,39 @@ Open after the plan (design §8):
       (`libApplication.so` `SetAlphaMode` at 0x11eac0: `glBlendFunc(GL_ONE, GL_ONE)`) are ruled out. Next: root-cause
       the rings' life-versus-brightness curve against footage (`out/parity/visuals/particles/verify3/measure_v3.txt`).
 - [ ] **System 3 player**: start frame 8 (facing right; `startFrame` is a dead field), walk 10.8 fps, space-suit sheet on
-      the 19 zero-g levels, eye glow; 2.8 u rest-height difference is a body/collider question.
+      the 19 zero-g levels, eye glow; 2.8 u rest-height difference is a body/collider question. (SE step 62, order 1.1:
+      frame 8, the decoded 90 ms stride and the column carried across a stop are built; the rest stays open.)
+- [ ] **Step 62 deviation, the sweep gate** (SE step 62 committed with it; 00_order section 7 step 1.1): required normal f8
+      wins in all 54 levels where the original's h6.3 f8 >= 0.85; measured 52 of 54 at f420. Misses 1-02 (best space f8
+      0.7967, lead 0.004; normal f8 0.7927) and 1-03 (best space f8 0.8123, lead 0.0025; normal f8 0.8098): the
+      level-start tutorial popup covers the player in the port's f420 frame, while the library's h6.3 frames of exactly
+      these two were taken after the popup was closed (sidecars `popup_pages 1`; `tools/parity/capture_original.py:86-113`).
+      Popup closed in the port (`--tap 1178,358@300-305`): 54 of 54, 0.894 at x 1100 and 0.903 at x 287 against the
+      original's 0.906 and 0.894; popup up on both sides: 52 of 52; lowest winner 1-29 at 0.8575, lead 0.050. Next: amend
+      the 00_order gate wording so 1-02 and 1-03 are captured with the popup closed, as the library did. Only those two
+      chapter-1 levels, not every sweep gate; 1.2's gates are chapter 4 and unaffected.
+- [ ] **Step 62 deviation, the stride's data shape**: systems_3_4 3a asked for `character.animation.frames_per_second
+      11.111111`; the port stores the decoded `stride_ms 90` (`SideScrollerCharacter` ctor 9-11), rate derived as 1000 /
+      stride, `idle_column 0`. Same decode, different block shape. Next: 1.2 builds its 280 ms zero-gravity column on
+      `stride_ms`.
+- [ ] **Step 62 deviation, the zero-gravity player**: `MainCharacter::linearMotion` runs every update only when
+      `noGravity` is set (3-6) and calls `FrameTimer` `set(0,3,280,true)` (163-171). On the 18 `no_gravity` levels the
+      standing player cycles columns every 280 ms, a walking update adds its time twice, and the player hovers by
+      1.2*cos(a) on y; step 62's timer holds only with gravity (recorded in `art.json` `_source`). Next: step 1.2.
+- [ ] **Step 62 deviation, facing a portal tap**: the original turns the player toward a portal tap and the port never
+      does. `PortalManager::managePortalInsertion` #101-124 (listing L:27784) calls `setDirection(1)` if the player is
+      right of the tap, else `setDirection(2)`, on an accepted request with no `projectile.ent` alive. Not a 1.1
+      regression. Next: step 1.3 or a new 1.x: `m_facingRight = !(playerX > tapX)` under the sim's acceptance, pinned
+      in `test_mp_layer` (a tap left of the standing level0 player gives `firstFrame` 4).
+- [ ] **Step 62 deviation, evidence for the carried column**: no clip of the original resolves a column across a stop.
+      F12 holds right once; F9 r7b (`F9_flyin_3-18.mp4`) walks right, stops and steps back left, but at about 17 fps
+      (median gap 50 ms) it cannot resolve a 90 ms column. Carry-over rests on the decode plus the port's tick-for-tick
+      stop-and-turn capture (step 62's wording corrected at commit). Next: a 60 fps stop-and-resume clip.
+- [ ] **Step 62 deviation, a fragile invariant**: carry-over depends on `syncDrawables` (`MagicPortalsLayer.cpp:2611-2614`)
+      writing `playing` and `frameCount` together, because `SpriteAnimationSystem::Advance` resets `frame` to 0 when a
+      playing flipbook's count is 1. Cannot happen today; `TheWalkKeepsItsColumnAndItsTime` guards it on level8. Next:
+      1.2 (280 ms zero-gravity column) and 1.3 (pushing rows) keep that test running, or comment the coupling, if they
+      touch that block.
 - [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u), red tint; note the refusal radius (16×scale in the port
       vs decoded 64×scale) is an owner gameplay call.
 - [ ] **System 5 actors with sheets**: minions/knights (63 spawns in 35 levels) have no sprites; dragon draws the whole sheet.
