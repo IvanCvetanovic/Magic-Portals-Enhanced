@@ -1734,3 +1734,48 @@ workflow 5 when the power went. Session length 11 h 12 min.
 **Inferred mood:** guess — a long night on autopilot that mostly worked: five steps landed and the verifiers caught real
 faults (a test that passed on freed memory), but Smart App Control notified all night and the battery left two steps and a
 clip half-done, uncommitted and unlogged.
+
+### 2026-09-17 17:16 — Session 17 (step 2.1): the converter copies the tier file the original draws
+
+**Built:** `--copy-textures` now copies, beside each 1x texture a level names, the `fullhd/` or `hd/` file the
+original's loader picks at 720 px, and records every choice in `out/assets/entity_tiers.json` (new
+`tools/converter/src/ethanon2godot/tiers.py`; five tests in `test_smoke.py`; the "2026-09-17 (tiers)" block in
+`docs/ethanon-formats.md`, with a pointer at §8.5; a README line). Route B (owner ruling R13): the `.tscn` does not
+change, the Supersonic port resolves the file itself (its step 61 `sim/Tiers`, drawn from in 2.2). The densities and
+thresholds are read from `app.enml` the way `ETHAppEnmlFile` reads it, because the engine's own default would size a
+fullhd sky at half. Recorded in Supersonic's planning doc as step 65 (uncommitted, like this).
+
+**Broke / dead ends:**
+1. My first search-order test said a 480 px screen tries only `ld/`. The engine's tests are `>= 480` for hd and
+   `<= 480` for ld, so at exactly 480 both run: `[hd, ld]`. The test was wrong, not the code; fixed to the engine.
+2. `from . import tiers` collided with a local `tiers = Counter(...)` in `main`'s lighting block (ruff F823, "referenced
+   before assignment"); the local is `lit_tiers` now.
+3. The track's build script (`vis2_build.bat`) builds the worktree, not SE main. Not needed: nothing in SE was built.
+
+**Decision:**
+- **No rewrite under a reader.** The other track captures from `out/assets` right now, so the copy skips a destination
+  that already holds the same bytes (and the manifest when unchanged), and deletes nothing. The real run went to
+  `out/staging_tiers/`; its levels, `chapters.json` and 1x files were compared with `out/` (all identical), then only
+  the 45 new files and the manifest were copied in with `cp -n -p`.
+- A tier file of another size is copied and reported (`tier size change`), not refused as the UI copy refuses one.
+- Not run: `--copy-lighting` (nothing to change there) and the Godot headless pair (`tscn.py` unchanged; the Godot
+  runtime is retired, `17c5061`).
+
+**Assets check:** yes — `git status --short` lists ` M` `DEVLOG.md`, `README.md`, `docs/ethanon-formats.md`,
+`tools/converter/src/ethanon2godot/__main__.py`, `tools/converter/tests/test_smoke.py` and `??`
+`tools/converter/src/ethanon2godot/tiers.py`; `git check-ignore -v` gives `.gitignore:66:out/` for
+`out/assets/entity_tiers.json`, `out/assets/entities/fullhd/sky.png` and `out/staging_tiers/`.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** 66 textures over 128 levels: 7 fullhd, 38 hd, 21 1x; 45 tier files copied (27 + 3 + 8 + 7 over worlds
+0-3), each byte-identical to its APK file; placements 2,248 hd / 146 fullhd / 489 1x of 2,883; size changes exactly
+`sky`, `icy_sky`, `red_sky`, `sky_purple` (512x256 units against 455x256), the other 41 exactly 2x; stderr empty;
+`out/levels` 128 of 128 md5-identical; `out/assets/entities` 112 → 157 files, 0 of the 112 changed. pytest 80 → 85
+passed, ruff clean. The port with the files in place: 1-01 f420 `6d5f4435` (step 64's, binary `a936f44f`);
+`test_mp_sprites` 464, `test_mp_start` 726, `test_mp_lighting` 495, `test_mp_levels` 128, 0 failures; no Smart App
+Control refusal.
+
+**Inferred mood:** guess — a short, clean data step: the census matched the brief on the first run, and the only
+real care went into not pulling files out from under the other track.

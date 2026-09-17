@@ -558,3 +558,182 @@ def test_ui_copy_rewrites_the_one_channel_code_godot_rejects(tmp_path) -> None:
 
     written = (tmp_path / "out" / "assets" / "fonts" / "V.fnt").read_text()
     assert "alphaChnl=0" in written and "alphaChnl=2" not in written
+
+# --- entity texture tiers ------------------------------------------------------------------
+# tiers.py. Every image below is a header-only PNG written here, under invented names. The sizes
+# have the shapes the original ships: an exact-2x hd file, a 1024x512 fullhd sky over a 455x256 1x
+# file, and an odd hd width (973 over 486) whose half is truncated.
+
+_GAME_APP_ENML = (
+    "default\n{\n\twidth = 1280; height = 720;\n\tminScreenHeightForHdVersion = 480;\n"
+    "\tminScreenHeightForFullHdVersion = 600;\n\thdDensityValue = 2;\n"
+    "\tfullHdDensityValue = 2;\n}\n"
+)
+
+
+def _tier_input(root) -> None:
+    entities = root / "assets" / "entities"
+    _fake_png(entities / "a.png", 32, 32)
+    _fake_png(entities / "hd" / "a.png", 64, 64)
+    _fake_png(entities / "sky.png", 455, 256)
+    _fake_png(entities / "fullhd" / "sky.png", 1024, 512)
+    _fake_png(entities / "hd" / "sky.png", 910, 512)  # both tiers: fullhd is tried first
+    _fake_png(entities / "hd" / "b.png", 64, 64)  # no 1x file and referenced by nothing
+    _fake_png(entities / "wide.png", 486, 128)
+    _fake_png(entities / "hd" / "wide.png", 973, 256)
+    _fake_png(entities / "plain.png", 16, 8)
+    _fake_png(entities / "hd" / "only.png", 40, 20)  # no 1x file: the loader never asks for one
+    (root / "assets" / "app.enml").write_text(_GAME_APP_ENML, encoding="utf-8")
+
+
+def test_tier_search_reads_app_enml_like_the_engine(tmp_path) -> None:
+    from ethanon2godot import tiers
+
+    app = tmp_path / "app.enml"
+    app.write_text(_GAME_APP_ENML, encoding="utf-8")
+    game, warning = tiers.read_density_settings(app)
+    assert warning is None
+    assert tiers.search_order(game) == [("fullhd", 2.0), ("hd", 2.0)]
+    # Below 600 px no fullhd file is tried. At 480 px both the hd and the ld test pass.
+    assert tiers.search_order(game, 599) == [("hd", 2.0)]
+    assert tiers.search_order(game, 480) == [("hd", 2.0), ("ld", 0.5)]
+    assert tiers.search_order(game, 479) == [("ld", 0.5)]
+    assert tiers.search_order(game, 320) == [("xld", 0.25), ("ld", 0.5)]
+
+    # No file: the ETHAppEnmlFile constructor's numbers, which are not the game's. At 720 px only
+    # hd is tried, and a fullhd file would be density 4.
+    defaults, warning = tiers.read_density_settings(tmp_path / "absent.enml")
+    assert warning is not None and "defaults" in warning
+    assert tiers.search_order(defaults) == [("hd", 2.0)]
+    assert tiers.search_order(defaults, 1080) == [("fullhd", 4.0), ("hd", 2.0)]
+
+    # `window`, then the Android block, override `default` key by key; `ios` is not read.
+    app.write_text(
+        _GAME_APP_ENML + "window { hdDensityValue = 3; }\nandroid { fullHdDensityValue = 1.5; }\n"
+        "ios { hdDensityValue = 9; }\n",
+        encoding="utf-8",
+    )
+    merged, _ = tiers.read_density_settings(app)
+    assert tiers.search_order(merged) == [("fullhd", 1.5), ("hd", 3.0)]
+
+
+def test_tier_units_truncate_after_the_divide() -> None:
+    from ethanon2godot import tiers
+
+    assert tiers.units((973, 256), 2.0) == (486, 128)
+    assert tiers.units((1024, 512), 2.0) == (512, 256)
+    assert tiers.units((155, 217), 1.0) == (155, 217)
+
+
+def test_tier_copy_copies_the_drawn_tier_and_reports_size_changes(tmp_path) -> None:
+    import json
+
+    from ethanon2godot import tiers
+
+    _tier_input(tmp_path / "in")
+    settings, _ = tiers.read_density_settings(tmp_path / "in" / "assets" / "app.enml")
+    textures = {"a.png", "sky.png", "wide.png", "plain.png", "only.png", "missing.png"}
+
+    report = tiers.copy_entity_textures(tmp_path / "in", tmp_path / "out", textures, settings)
+
+    out = tmp_path / "out" / "assets" / "entities"
+    assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*.png")) == [
+        "a.png",
+        "fullhd/sky.png",
+        "hd/a.png",
+        "hd/only.png",
+        "hd/wide.png",
+        "plain.png",
+        "sky.png",
+        "wide.png",
+    ]
+    assert report.copied == {"1x": 4, "tier": 4}
+    assert report.tiers == {"hd": 3, "fullhd": 1, "1x": 1}
+    # Only the sky changes size: 973 / 2 truncates to the 1x file's 486.
+    assert report.size_changes == [
+        "entities/fullhd/sky.png: 512x256 units against the 1x file's 455x256"
+    ]
+    assert report.no_base == ["entities/hd/only.png: no 1x file; drawn at 20x10 units"]
+    assert report.skipped == ["entities/missing.png: not found, and no tier file either"]
+
+    record = json.loads((tmp_path / "out" / "assets" / tiers.MANIFEST_NAME).read_text("utf-8"))
+    assert record["format"] == 1
+    assert record["choice"] == {
+        "screen_height_px": 720,
+        "search": [{"tier": "fullhd", "density": 2}, {"tier": "hd", "density": 2}],
+    }
+    assert record["files"]["entities/sky.png"] == {
+        "drawn": "entities/fullhd/sky.png",
+        "tier": "fullhd",
+        "density": 2,
+        "texels": [1024, 512],
+        "units": [512, 256],
+    }
+    assert record["files"]["entities/wide.png"]["units"] == [486, 128]
+    assert record["files"]["entities/plain.png"] == {
+        "drawn": "entities/plain.png",
+        "tier": "1x",
+        "density": 1,
+        "texels": [16, 8],
+        "units": [16, 8],
+    }
+    assert "entities/missing.png" not in record["files"]
+    assert "entities/b.png" not in record["files"]
+
+
+def test_tier_copy_rewrites_no_identical_file_and_no_identical_manifest(tmp_path) -> None:
+    import os
+
+    from ethanon2godot import tiers
+    from ethanon2godot.imagesize import read_size
+
+    _tier_input(tmp_path / "in")
+    settings, _ = tiers.read_density_settings(tmp_path / "in" / "assets" / "app.enml")
+    textures = {"a.png", "sky.png"}
+    tiers.copy_entity_textures(tmp_path / "in", tmp_path / "out", textures, settings)
+
+    assets = tmp_path / "out" / "assets"
+    kept = [
+        assets / "entities" / "a.png",
+        assets / "entities" / "fullhd" / "sky.png",
+        assets / tiers.MANIFEST_NAME,
+    ]
+    for path in kept:
+        os.utime(path, (1_000_000, 1_000_000))  # a copy or a rewrite would move this
+    (assets / "entities" / "hd" / "a.png").write_bytes(b"stale")  # other bytes: replaced
+
+    report = tiers.copy_entity_textures(tmp_path / "in", tmp_path / "out", textures, settings)
+
+    assert report.copied == {"1x": 0, "tier": 1}
+    assert report.unchanged == {"1x": 2, "tier": 1}
+    assert all(path.stat().st_mtime == 1_000_000 for path in kept)
+    assert read_size(assets / "entities" / "hd" / "a.png") == (64, 64)
+
+
+def test_cli_copies_tiers_and_merges_the_manifest_across_worlds(tmp_path, capsys) -> None:
+    import json
+
+    _tier_input(tmp_path / "in")
+    scenes = tmp_path / "in" / "assets" / "scenes"
+    scenes.mkdir(parents=True)
+    (scenes / "level0.esc").write_text(_MINIMAL_ESC.replace("block.png", "a.png"), "utf-8")
+    (scenes / "level0a.esc").write_text(_MINIMAL_ESC.replace("block.png", "sky.png"), "utf-8")
+    out = tmp_path / "out"
+    base = ["-i", str(tmp_path / "in"), "-o", str(out), "--level", "0", "--copy-textures"]
+
+    assert main([*base, "--world", "0"]) == 0
+    first = capsys.readouterr().out
+    assert "entity texture tiers: hd 1 (" in first
+    assert "tier size change" not in first
+    assert main([*base, "--world", "1"]) == 0
+    second = capsys.readouterr().out
+    assert "tier size change: entities/fullhd/sky.png: 512x256 units" in second
+
+    record = json.loads((out / "assets" / "entity_tiers.json").read_text(encoding="utf-8"))
+    assert sorted(record["files"]) == ["entities/a.png", "entities/sky.png"]
+    assert (out / "assets" / "entities" / "hd" / "a.png").is_file()
+    assert (out / "assets" / "entities" / "fullhd" / "sky.png").is_file()
+    # The scene does not name the tier: the port resolves it (route B).
+    level = (out / "levels" / "level0a.tscn").read_text(encoding="utf-8")
+    assert 'path="res://assets/entities/sky.png"' in level
+    assert "fullhd" not in level

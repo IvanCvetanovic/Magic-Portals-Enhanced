@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 from collections import Counter
 from pathlib import Path
 
-from . import __version__, lighting, manifest, tscn, uiassets
+from . import __version__, lighting, manifest, tiers, tscn, uiassets
 from .scene import lightmap_directory, parse_file
 
 # Defaults are repo-relative. Both are gitignored — see the repo .gitignore.
@@ -72,8 +71,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--copy-textures",
         action="store_true",
         help=(
-            "also copy every referenced sprite into <output>/assets/entities/. "
-            "Output stays gitignored; see the hard rule in CLAUDE.md."
+            "also copy every referenced sprite into <output>/assets/entities/, and the "
+            "density tier file the original draws at 720 px into entities/<tier>/, recording "
+            "the choice in <output>/assets/entity_tiers.json. Output stays gitignored; see "
+            "the hard rule in CLAUDE.md."
         ),
     )
     p.add_argument(
@@ -199,14 +200,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"manifest: {manifest_path}")
 
     if args.copy_textures and not args.dry_run:
+        # The 1x file and the density tier file the original draws at 720 px (tiers.py; owner
+        # rulings R12, R13). A tier file never changes the .tscn: the port resolves it.
         tex_dir.mkdir(parents=True, exist_ok=True)
-        entities_src = args.input / "assets" / "entities"
-        for tex in sorted(all_textures):
-            found = entities_src / tex
-            if found.is_file():
-                shutil.copy2(found, tex_dir / tex)
-            else:
-                print(f"warning: texture not found: {found}", file=sys.stderr)
+        settings, warning = tiers.read_density_settings(args.input / "assets" / "app.enml")
+        if warning:
+            print(f"warning: {warning}", file=sys.stderr)
+        tex_report = tiers.copy_entity_textures(args.input, args.output, all_textures, settings)
+        print(
+            f"entity textures: 1x copied {tex_report.copied[tiers.TIER_BASE]}, "
+            f"unchanged {tex_report.unchanged[tiers.TIER_BASE]}; tier files copied "
+            f"{tex_report.copied['tier']}, unchanged {tex_report.unchanged['tier']} (to {tex_dir})"
+        )
+        print(
+            "entity texture tiers: "
+            + ", ".join(f"{name} {count}" for name, count in sorted(tex_report.tiers.items()))
+            + f" (recorded in {args.output / 'assets' / tiers.MANIFEST_NAME})"
+        )
+        for line in tex_report.size_changes:
+            print(f"tier size change: {line}")
+        for line in tex_report.no_base:
+            print(f"tier file without a 1x file: {line}")
+        for line in tex_report.skipped:
+            print(f"SKIPPED {line}", file=sys.stderr)
 
     if args.copy_ui and not args.dry_run:
         # Wholesale, and tier-aware: see uiassets.py for why `hd/` is safe and `fullhd/`
@@ -227,12 +243,12 @@ def main(argv: list[str] | None = None) -> int:
             normals=all_normals,
             halos=all_halos,
         )
-        tiers = Counter(entry["tier"] for entry in lit.files.values())
+        lit_tiers = Counter(entry["tier"] for entry in lit.files.values())
         for group, count in lit.copied.items():
             print(f"copied {count} {group} file(s) to {args.output / 'assets'}")
         print(
             "lighting file tiers: "
-            + ", ".join(f"{tier} {count}" for tier, count in sorted(tiers.items()))
+            + ", ".join(f"{tier} {count}" for tier, count in sorted(lit_tiers.items()))
             + f" (recorded in {args.output / 'assets' / lighting.MANIFEST_NAME})"
         )
         for line in lit.skipped:

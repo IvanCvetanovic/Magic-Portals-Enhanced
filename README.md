@@ -146,7 +146,9 @@ World N is chapter N+1, and its levels are `level0`…`level31` with the suffix 
 - `out/levels/<name>.tscn` — one per level;
 - `out/data/chapters.json` — the level order plus each level's gold threshold, read from
   the original's `goldenScores.enml`;
-- `out/assets/entities/` — every sprite a level references (`--copy-textures`);
+- `out/assets/entities/` — every sprite a level references (`--copy-textures`), plus the density
+  tier file the original draws at 720 px in `entities/hd/` or `entities/fullhd/`, recorded in
+  `out/assets/entity_tiers.json` (the port picks the tier file itself; the `.tscn` names the 1× path);
 - `out/assets/lightmaps/`, the normal maps, the halo bitmaps and
   `out/assets/lighting_files.json` (`--copy-lighting`).
 

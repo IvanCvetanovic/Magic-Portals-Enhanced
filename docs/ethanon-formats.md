@@ -401,6 +401,67 @@ Not carried by any key, deliberately: `castShadows` (no effect), `specularPower`
 no specular), `type = 2`'s vertical light variant (the 10 `light_off` instances), script-driven runtime
 emissive (`design_port.md` §5.8). An absent `eth_z` means z 0 on every node, spriteless ones included.
 
+### 2026-09-17 (tiers) — the entity texture tier copy (`--copy-textures`, `tiers.py`)
+
+Source citations are `toolkit/Source/src/…` in `reference/ethanon/`. The research is local and gitignored:
+`out/parity/visuals/briefs/system_6.md` §4.1 C2 and `00_order.md` step 2.1. This block **supersedes** §8.5's
+thresholds (1080 / 720), its "an HD asset occupies the same world size as its 1× counterpart", and its
+"pick one density tier" for this game.
+
+**Which file the original draws.** Every image goes through `ETHGraphicResourceManager::AddFile`
+(`engine/Resource/ETHResourceManager.cpp:133-144`), which asks `ChooseSpriteVersion`
+(`engine/Resource/ETHSpriteDensityManager.cpp:88-139`) for `<dir>/fullhd/<file>` when the screen height is
+`>= minScreenHeightForFullHdVersion`, then `<dir>/hd/<file>` when it is `>= minScreenHeightForHdVersion`
+**or the fullhd test passed** (`:105`), then `xld/` and `ld/` on short screens (`:116-135`), each guarded
+by `FileExists`, else the named file at density 1 (`:137-138`). Only the tier names are tried: **whether
+the 1× file exists is never asked**, so a tier file with no 1× file beside it would still be drawn.
+
+**Which numbers.** `ETHAppEnmlFile`'s constructor defaults are hd density 2, fullhd density **4**, ld 0.5,
+xld 0.25, thresholds 720 / 1080 / 480 / 320 (`engine/Platform/ETHAppEnmlFile.cpp:39-52`). It then reads
+the `default`, `window` and platform blocks in that order (`:59-66`; names `engine/ETHTypes.h:41-42`), each
+key overriding only when present (`LoadProperties` `:111-148`, `GetFloat`/`GetUInt`
+`gs2d/src/Enml/Enml.cpp:523-549`), and hands them to the density manager (`:68`,
+`ETHSpriteDensityManager.cpp:47-59`). The platform on Android is `android`
+(`gs2d/src/Platform/android/Platform.android.cpp:31-34`); the shipped `app.enml` has only `default` and
+`ios`. Its `default` block sets `minScreenHeightForHdVersion = 480`, `minScreenHeightForFullHdVersion = 600`,
+`hdDensityValue = 2`, `fullHdDensityValue = 2`. **At 720 px the search is fullhd (D 2), then hd (D 2)**;
+`ld/` and `xld/` need a screen at most 480 / 320 px tall and the APK ships neither folder.
+
+**Which size.** `SetSpriteDensityValue` sets the bitmap to `texels / D` as a float
+(`gs2d/src/Video/GLES2/GLES2Sprite.cpp:429-438`) and `GetBitmapSize` casts it to int (`:389-392`), so an
+uncut image is `int(texels / D)` units: an odd 973-texel hd width is 486 units, not 486.5.
+
+**What the converter does** (owner rulings R12 and R13, 2026-09-16: the choice is fixed at the 720 px one,
+and the Supersonic port resolves the tier from the file name, so no `.tscn` changes). For every texture a
+level names, `--copy-textures` copies the 1× file to `<output>/assets/entities/<name>` as before, then the
+first tier file the 720 px search finds to `<output>/assets/entities/<tier>/<name>`, reading the numbers
+from `assets/app.enml` as above (a missing or unparsable file falls back to the constructor defaults, with a
+warning, as the engine does). A destination that already holds the same bytes is not rewritten, and nothing
+is deleted. It records the choice in `<output>/assets/entity_tiers.json`, merged across `--world` runs:
+`{"format": 1, "choice": {"screen_height_px": 720, "search": [{"tier", "density"}…]}, "files":
+{"entities/<name>": {"drawn", "tier", "density", "texels": [w, h], "units": [int(w/D), int(h/D)]}}}`.
+Unlike `uiassets._copy_hd` it does **not** refuse a tier file of another size (the original draws it): it
+prints each one as `tier size change`, and a tier file with no 1× file as `tier file without a 1x file`.
+
+**Measured over the 128 levels** (four `--world` runs, 2026-09-17; `out/parity/visuals/2.1/run/`):
+- 66 distinct textures: **7 fullhd, 38 hd, 21 1×**, so **45 tier files** copied; over the 2,883 sprite
+  placements that is **2,248 hd / 146 fullhd / 489 1×**. All 45 are byte-identical to their APK files.
+- **Exactly four change size**, all fullhd skies: `sky`, `icy_sky`, `red_sky`, `sky_purple`, 1024×512 texels
+  = **512×256 units** against their 455×256 1× files. The other 41 tier files are exactly 2× (their units
+  equal the 1× size); `arch_with_base_blur`, `satellite_sky` and `spiral` are the fullhd ones among them.
+- No texture lacks a 1× file, and none has a size the header reader cannot read.
+- The `.tscn` output is byte-identical with and without the copy (128 of 128 md5s). `tscn.py`'s
+  `_vertical_offset` reads the **1×** height; that equals the tier's units for all 10 `type = 2` placements
+  (`torch_small.png`, hd exactly 2×), but would not for a vertical fullhd sky (none exists).
+
+**Not copied, deliberately.** Particle bitmaps: the port reads `particles/` from the extracted APK. Normal
+maps, lightmaps and halo bitmaps: none has a tier file (the 2026-09-14 lighting block; `lighting.py` refuses
+a tier sibling). **Orphan tier files** that no name reaches: `particles/hd/exclamation_mark_.png` and
+`particles/hd/tesla_shock_.png` have no 1× file, and neither name occurs in any of the APK's 413
+`.ent`/`.par`/`.esc`/`.enml` files (levels reference `tesla_shock_black_bg.png`, a different name), so the
+original never picks them; the same holds for `sprites/hd/game_main_title_.png` and
+`sprites/hd/world_icon3_.png`. `entities/hd/` has no orphan: all 53 files have a 1× name.
+
 ---
 
 ## 1. Orientation: where to look in the engine source
@@ -1578,6 +1639,11 @@ The canonical mobile config, `documentation/Sample-Projects/Sample-project/app.e
 with only `default` and `windows` — no `fixedHeight` at all. The value must come from the game's own `app.enml`.
 
 ### 8.5 Density variants — a folder inserted before the basename
+⚠ **2026-09-17: three statements below are wrong for Magic Portals** — the thresholds 1080 / 720 are
+the engine's defaults, not the game's (480 / 600); "the same world size as its 1× counterpart" fails for
+four `fullhd/` skies; and the converter now copies the tier file per texture. See "2026-09-17 (tiers)"
+near the top of this document; where the two disagree, that block wins.
+
 `ETHSpriteDensityManager` (`:30-33`, `:81-86`, `:88-139`). **There is no filename suffix convention.**
 ```cpp
 AssembleResourceName(fullPath, versionPathName) = GetFileDirectory(fullPath) + versionPathName + GetFileName(fullPath)
