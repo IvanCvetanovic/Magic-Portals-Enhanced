@@ -103,7 +103,7 @@ Open after the plan (design §8):
       playing flipbook's count is 1. Cannot happen today; `TheWalkKeepsItsColumnAndItsTime` guards it on level8. Next:
       1.2 (280 ms zero-gravity column) and 1.3 (pushing rows) keep that test running, or comment the coupling, if they
       touch that block.
-- [ ] **Step 83 deviation, 2-26's edge scan** (SE step 83 committed with it; 00_order §7 step 4.1,
+- [x] **Step 83 deviation, 2-26's edge scan** — CLOSED 2026-09-18 (SE step 83 committed with it; 00_order §7 step 4.1,
       `work_s34/antiportal_edge.py`): required half/scale 31.5-34.0 on `antiportal_955` at node scale 3.6; measured
       **30.50** (17.08 before, so the row moved 13.4 of the 14.4 it was short). NOT MET as written. Attributed cause,
       measured on both sides and reproduced by the verifier on its own capture, its own re-implementation and both grids
@@ -120,10 +120,116 @@ Open after the plan (design §8):
       4-07 and 1-07 and contains no size re-read, so an explicit 2-26 `antiportal_955` edge-scan re-read has to be added
       to 4.2's gates (or the row's wording amended in 00_order §7: last maximum, tie midpoint, or a brightness-independent
       reading). Without that addition this NOT MET row has no owner and would silently disappear.
-- [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 83**; the red tint is still open
-      (order 4.2). The refusal radius stays 16×scale in the port against the decoded **32×scale** (128 u × the manager's
-      `Scale(0.5)` × the node's scale, halved; footage F3 brackets the original's refusal at (31.6, 32.4]×scale). Ruled
-      R1 — what the original does — but no step in 00_order §7 plays it yet.
+      **Closed by SE step 84 (order 4.2) as a measurement, not an amendment**: with the ring drawn red its rim
+      stops being additive white and the same scan reads **33.25 ×scale** on `antiportal_955` — inside 31.5-34.0
+      and the original's own reading on that ring (33.25 in five of its six library frames), `c` there now
+      (0.305, -0.009, 0.000). The other four readable rings of that gate read 33.25 / 32.00 / 32.89 / 33.00,
+      all in band; 1-10 `638` still has fewer than 8 sectors on screen. `out/parity/visuals/4.2/work/edge_after_42.json`,
+      reproduced independently by 4.2's verifier at 33.26 on its own capture. No amendment to 00_order §7 4.1 needed.
+- [ ] **Step 84 deviation, the port draws 1-07's antiportal ring BEHIND art the original draws it in front of**
+      (SE step 84, order 4.2; 00_order §7 step 4.2's 1-07 `antiportal_687` row, required max `c_R` 0.36-0.42 and min
+      0.18-0.24, measured **0.2875 / 0.1786** — NOT MET as written). **The row fails on draw order, not on colour.**
+      Measured three ways on the step's own frames. (a) Sector by sector: 15 of the ring's 28 readable sectors carry no
+      blink step in the port and 4 carry none in the original — **12 dead in the port alone**, the 10° sectors 130-150
+      and 200-280. The rule the count comes from, since it moves with the rule: the port's f378 minus f360 against the
+      original's `1-07_t8.0.png` minus `1-07_h2.8.png`, in the gate estimator's inside band ([0.90, 0.95] × the decoded
+      half) about the node at camera (0, 0), read as the red excess `R − (G + B) / 2`; readable = both pairs put ≥ 6 px
+      in the sector (28 of 36), dead = a step under 3 grey levels (the gate's stricter readable rule gives 26 sectors
+      and the same 12). The discriminating test — the original's spread over all six of that level's library frames, per
+      channel — puts 8 of the port-dead sectors (140, 150, 210-260) at 16-25 grey levels in RED with green and blue at
+      exactly 0; the same test finds 0 such sectors on 4-07. (b) Four single points in the band, over
+      `single_block_plat_ent_784` (sector 270), `block00_ent_702` (225, 240) and `platform_ent_7` (140), are byte-equal
+      across the port's f378, its f360 and its white before-frame, while the original's two frames differ there by +8.9,
+      +8.7, +9.0 and +9.6 in red alone — the step its clear sectors show (+8.2). (c) By eye
+      (`4.2/verify1/crop_107.png`): a complete annulus in the original, an annulus with the blocks cut out of it in the
+      port. The loss predates step 84 — the same estimator read this ring's WHITE ring at 0.3964 where an unoccluded one
+      reads 0.93-1.00 — and what the port draws is not low: the ring's own blink amplitude on the difference frame is
+      0.2135, 107 % of the decoded 0.200. **The port's side is traced**: `Sprites::Find` orders a level's pictures by
+      `z_index` then by the scene file and `buildSprites` draws each at `SlotZ(sprite.order)`
+      (`MagicPortalsLayer.cpp:2302`), so at `z_index` 0 the file decides and the ring (12th node of `level6.tscn`) goes
+      under `platform_ent_7` (16th), `block00_ent_702` (20th) and `single_block_plat_ent_784` (23rd). **The original's
+      side is named and NOT settled**: Ethanon keys one multimap by a draw hash that for a type-0 entity is its z
+      normalised over the level's height range (`ETHEntityRenderingManager.cpp:68-73`, `:119-131`,
+      `ETHSpriteEntity.cpp:611-630`, `ETHScene.cpp:277-279`, `:531-532`), so equal z ties and the tie falls to insertion
+      order — visible buckets row by row then the bucket's load order (`ETHScene.cpp:542-576`,
+      `ETHBucketManager.cpp:81-91`, `:277`). On the `.esc`'s own coordinates with the default 256 u bucket that predicts
+      two of the three blocks; on positions scaled to the screen it predicts all three, but no entity of `level6.esc`
+      carries the `scalable` custom data `SGlobalScale::scaleEntities` needs. It is not systematic: 4-02 loses no sector
+      in either build, 3-12 `1376` loses ten in each (two sectors apart, its 4 % larger ring), 4-07's 11 dead sectors are
+      a subset of the original's 14. The brief's fallback ratio carries **no verdict** here: 4b(5) offers it "if the
+      port's max reads about 10 % low on a ring whose white ring read 0.9 today", and this one's white ring read 0.3964
+      and its max is 28 % low, so its 1.61 is a reading and not a gate measurement. Note also that the 0.36-0.42 band was
+      set from "the rings that reached the ceiling in the original" — 3-12, 4-02 and 4-07 — with 1-07 added "plus", so it
+      was never established on this ring. Next: settle what the original orders two type-0 entities at z 0 by (and
+      whether the engine buckets the file's coordinates or the drawn ones), then re-read the row **as written**; sweep
+      the other 51 levels that place a ring for the same divergence. Owned outside 4.2 — a colour step cannot move a
+      draw order, and the row is not to be re-specified to a cover-immune reading, which would hide exactly this signal.
+- [ ] **Step 84 deviation, 4-07's gate ring reads low under art BOTH builds draw in front of it** (SE step 84;
+      00_order §7 step 4.2's 4-07 `antiportal_2166` row): required max `c_R` 0.36-0.42 and min 0.18-0.24, measured
+      **0.2679 / 0.1089** — NOT MET as written. **An offset, not a gain**: the ring's blink amplitude on the difference
+      frame is 0.1786, 89 % of the decoded 0.200, and the f378−f360 read there is R +24.59 with G/B at −0.03/−0.06. The
+      cover is faithful, not a divergence — that node carries `eth_z` **−12** (`level6c.esc`, `out/levels/level6c.tscn`
+      `z_index = -12`), so the ring sits behind that level's z 0 art in the original by depth and in the port by slot,
+      and **0 of its 36 sectors is dead in the port alone** (the port's 11 dead sectors are a subset of the original's
+      14). The gate rings that pass read 0.3964 / 0.2135 (3-12 `1376`) and 0.3964 / 0.2178 (4-02 `2074`). The brief's
+      fallback ratio carries **no verdict** here either: its precondition wants a white ring that read 0.9 and a max
+      about 10 % low, and this one's white ring read 0.8604 and its max is 33 % low, so its 2.46 is a reading and not a
+      gate measurement. **What is NOT explained**: the brief's census reads this same ring at 0.377 on the ORIGINAL's
+      frames with the same estimator — the same art in front of the same ring — so the port's background around it is
+      not yet the original's. Next: re-read the row once chapter 4's lighting, its effects and the texture tier (steps
+      2.2, 7.x, 11.x) have landed, since all three move that background; do not re-specify it to a cover-immune reading
+      while 1-07's draw order is open.
+- [ ] **Step 84 deviation, `c_G`/`c_B` over its bound** (SE step 84; same gate): required `c_G`, `c_B` ≤ 0.03, read on
+      **magnitude** (the decode gives green and blue exactly 0, so either sign is a colour the original does not draw).
+      **NOT MET on 2 of the 4 rings the gate names** — 3-12 `1376` `c_B` **+0.0349** and 4-07 `c_G`
+      **−0.0436 / −0.0349 / −0.0349** (min/median/max) with `c_B` −0.0349; 1-07 and 4-02 are inside. Of the six rings
+      read, 3-12 `1533` `c_B` **+0.0392** also misses, leaving 3 inside. One grey level is 1/229.55 = **0.00436 in `c`**,
+      so these are 1.1 to 3.1 grey levels over. **Cause: the background's own step at that radius, not the ring**, and
+      measured three ways rather than asserted — on the f378−f360 difference the ring's green and blue are exactly
+      0.0000 on all six rings; 3-12 `1375` and 4-02 read `c_G` = `c_B` = 0.0000 exactly although their rings are drawn
+      there; and `test_mp_layer` reads the quad's own `albedoColor` on 80 ticks and fails on any non-zero g or b. All
+      three residuals are constant over a whole period (green moves ≤ 0.0087, blue 0.0000, against a red that moves
+      0.074-0.183). Next: say in 00_order §7 4.2 whether the bound is signed or on magnitude, and bound the channel's
+      **movement** over a period (0.0087 and 0.0000 here) rather than its absolute level, which the background sets.
+- [ ] **Step 84 deviation, the census sanity check's band** (SE step 84; 00_order §7 4.2 carries systems_3_4 4b(5) as a
+      "sanity check only"): required port `c_R` in [0.15, 0.42] and `c_G`, `c_B` ≤ 0.06 over the camera-confirmed rings.
+      Measured **17 of 22 in band** under the step's matched-filter rule (median 0.259, p90 0.322, max 0.322, G/B within
+      0.06 on 21 of 22) and **22 of 33 rings on 27 levels** under the wider quad-containment rule (median 0.233, G/B over
+      0.06 on 2) — NOT MET, **every miss low, none high**. The counts move with the admission rule and must be quoted
+      with it: the 22 are the rings whose matched-filter peak sits within 12 px of their node (`census_42.py`); the 33
+      are every level whose ring quads at the nodes contain every changed pixel (`4.2/fix1/work/census_f1.py`). Cause:
+      the estimator and the art in front of the rings — at f420 every ring is drawn at the same `c_R` 0.3333 (7,000 ms,
+      leg 23, bias 0.667), the best-read rings reach 97 % of it, and four of the five low rings read 0.000-0.196 on the
+      WHITE ring too (1-21 `822` and 4-30 `ent_2005` read exactly 0 in BOTH builds). **On 1-07 that art is art the
+      ORIGINAL draws the ring in front of** (the first item above), so an unknown share of the low rings may be that same
+      divergence rather than the estimator — that item's sweep of the other 51 ring levels is what separates them. The
+      brief itself calls this check "too loose to catch a wrong implementation" and the original's own census p10 is
+      0.115, under the band's floor. Next: state the admission rule inside 4b(5), and replace the per-ring band with a
+      check on the readable rings' upper envelope (or exclude rings that read ~0 on a white ring). **It stays a sanity
+      check and must not be promoted to a §7 gate.**
+- [ ] **PORT-WIDE: the original's script clock is a FLOOR of each frame's milliseconds, and the port's is not**
+      (decoded in SE step 84; it also answers step 80's "the whole milliseconds `getLastFrameElapsedTime` returns … are
+      not decoded"). The Android loop measures a frame as a float of milliseconds (`ComputeElapsedTimeF`, gs2d
+      `Application.cpp:36-50`, off `clock_gettime(CLOCK_MONOTONIC)`: `AndroidGLES2Video.cpp:66-69`), caps it at 1000 ms
+      (`Min(1000.0f, …)`, `android/main.cpp:180-181`), and `ETHEngine::Update` stores `static_cast<unsigned long>` of it
+      (`ETHEngine.cpp:147`) — confirmed in the SHIPPED library: `gs2d::ETHEngine::Update(float)` at `0xb4100` calls
+      `ETHDrawableManager::RemoveTheDead` (+0x0e), then `__aeabi_f2uiz` at `0x1cb364` (+0x14) and
+      `ETHScriptWrapper::SetLastFrameElapsedTime(unsigned long)` at `0xf2038` (+0x18). The C++ scene keeps the float
+      (`:166`); the SCRIPT only ever sees the truncated `uint`, which both `STimeManager::getLastFrameElapsedTime`
+      (listing bytes 7894..7961) and `STimeManager::unitsPerSecond` (8045..8162) read. **So at a steady 60 Hz every
+      scripted motion in the original advances 16 ms a frame where the port advances 1000/60: the port runs 4.17 % fast**
+      (a 600 ms antiportal period against 625 ms of wall clock; opposite phase after 450 ticks, 7.5 s), and the rate is
+      frame-rate dependent in the original (`floor(33.3)` loses 1 %, `floor(16.7)` 4 %). It touches the antiportal blink
+      and turn, every `Motion` the port steps, and the timed crystal's dial. **Not changed in step 84 on purpose**:
+      flooring the one clock every scripted motion reads moves every committed step's captures. Next: the owner's call on
+      whether the port floors its script-facing delta and at which frame rate the original is to be matched, then one
+      re-capture of the committed baselines.
+- [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 83**; the red blink (0.2 → 0.4 → 0.2
+      on 300 ms legs) and the 10°/s turn — **built, SE step 84** (order 4.2), with the five deviations above. What is
+      left of the system: the refusal radius stays 16×scale in the port against the decoded **32×scale**
+      (128 u × the manager's `Scale(0.5)` × the node's scale, halved; footage F3 brackets the original's
+      refusal at (31.6, 32.4]×scale). Ruled R1 — what the original does — but no step in 00_order §7
+      plays it yet.
 - [ ] **System 5 actors with sheets**: minions/knights (63 spawns in 35 levels) have no sprites; dragon draws the whole sheet.
 - [ ] **System 6 texture tiers**: hd/fullhd per file (fullhd skies are 512 u wide). Converter + port together, or sprites
       draw twice too big; the Sprite offset × scale trap applies.
@@ -136,10 +242,14 @@ Open after the plan (design §8):
 - [ ] **StaticSky** (camera-pinned sky) not ported → **34 levels show black ground** (found at G2).
 - [ ] Placeholder boxes draw darker since the display-encoded scene.
 - [ ] Footage to record (plan §4): F1 walk left, F2 place + enter a portal, F3 failed shot / antiportal, F4 crystal bob,
-      F5 knight patrol, F6 carranca fire + barrel, F7 2-32/4-32 in-level frames, F8 antiportal pulse, F9 key pickup,
-      F10 zero-g recoil.
-- [ ] Cannot be known from footage (needs the bytecode decode): exact red/blue portal tint (`portalColorA/B`), shot frame
-      timer, which script spawns `appear_effect.ent`.
+      F5 knight patrol, F6 carranca fire + barrel, F7 2-32/4-32 in-level frames, F9 key pickup, F10 zero-g recoil.
+      (F8 antiportal pulse is RETIRED — SE step 84 decoded the blink instruction by instruction, and no still can show
+      the phase the original starts at anyway.)
+- [ ] Cannot be known from footage (needs the bytecode decode): the shot frame timer, which script spawns
+      `appear_effect.ent`. The portal tint is DONE — `ETHCallback_portal_static` sets vector3(1, 0.3, 0.3) or
+      vector3(0.3, 0.3, 1) by the placement's `color` string (SE step 59's `art.json static_portal`), and the
+      `_portalColorA/B` globals this row named turn out to be the ANTIPORTAL's — vector3(0.2, 0, 0) and
+      vector3(0.4, 0, 0), the blink's two ends (SE step 84).
 
 ## 3. UI
 
