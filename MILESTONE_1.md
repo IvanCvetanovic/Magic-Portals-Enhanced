@@ -22,7 +22,7 @@ exactly what silently fails.
 The `TBD`s are not vague; each names a specific question and how to answer it. §7 is the
 checklist that closes them. **Do not start building §3–§5 until §7 is done.**
 
-Everything resolved goes into `game/data/*.json`, not into a `.gd` file (`CLAUDE.md` rule 1).
+Everything resolved goes into `data/*.json`, not into a `.gd` file (`CLAUDE.md` rule 1).
 
 ---
 
@@ -71,7 +71,7 @@ This is the milestone. Everything else is scaffolding around it.
 Portals are the game's identity, and "feels correct" is not a checkbox — it's a set of
 small timing and momentum decisions that are individually invisible and collectively the
 whole game. Each question below must be answered **by observing the original**, then
-encoded as a named, tunable value in `game/data/portals.json`.
+encoded as a named, tunable value in `data/portals.json`.
 
 | # | Question | How to answer | Lands in |
 |---|---|---|---|
@@ -134,7 +134,7 @@ and where the time went — not "needs optimisation".
 ## 6. Acceptance checklist
 
 Portal feel:
-- [ ] Every question in §3 answered from observation, values in `game/data/portals.json`
+- [ ] Every question in §3 answered from observation, values in `data/portals.json`
 - [ ] No `# GUESS` comments left in `portals.json`
 - [ ] Side-by-side transit video recorded; Ivan signs off on feel
 - [ ] Edge cases from §3.9 behave sanely (no soft-locks, no falling out of the world)

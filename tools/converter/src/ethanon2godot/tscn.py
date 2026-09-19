@@ -407,7 +407,7 @@ def write_scene(
         body.append(f"position = {_vec2(sx, sy)}")
         # The original's EntityName is the ONLY thing identifying what a node is — the
         # converter deliberately does not decide roles, because that is a game-design
-        # mapping and belongs in committed JSON (game/data/entity_roles.json), not in
+        # mapping and belongs in committed JSON (data/entity_roles.json), not in
         # the data pipeline. Emit the raw name and let the game interpret it.
         body.append(f"metadata/entity_name = {quote(inst.entity_name)}")
         # Entities with shape=BS_NONE still carry a <Collision> box, and it is not dead

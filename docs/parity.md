@@ -127,7 +127,7 @@ restart button, because 3-25's corner fire can wash out either one.
 ## 7. The game being compared is the Supersonic port
 
 Ivan moved the remake to his own engine: `Desktop/Supersonic-Engine/games/magicportals`. It reads this
-repo's converter output and `game/data`, so converter and data fixes still land here; rendering, HUD and
+repo's converter output and `data/`, so converter and data fixes still land here; rendering, HUD and
 menus land there. Capture it from **Bash** (PowerShell 5.1 mangles the arguments):
 
 ```

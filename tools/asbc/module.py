@@ -53,7 +53,7 @@ confident-looking wrong parse:
    (``if(!IsInterface() && flags != TYPEDEF && flags != ENUM)``).
 
 Until it reaches ``scriptGlobals``, the named constants are still unextracted and every
-timing value in ``game/data/*.json`` remains a marked guess.
+timing value in ``data/*.json`` remains a marked guess.
 """
 
 from __future__ import annotations

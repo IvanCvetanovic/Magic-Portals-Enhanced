@@ -38,7 +38,7 @@ captures of the original running in an emulator:
 - entity visuals — particle brightness, minions and knights that still have no sprites,
   image tiers, spawned effects;
 - the lighting and UI differences still open;
-- the numbers the port still reads from `game/data` as marked guesses: the player's walk
+- the numbers the port still reads from `data/` as marked guesses: the player's walk
   speed, acceleration, friction, air control, gravity, fall speed and body size, and the
   camera's follow lag and hold time;
 - last, a sweep of all 128 levels against the reference library.
@@ -61,7 +61,7 @@ its gates), and `docs/parity-backlog.md` here (what is left, in order).
   out/data/chapters.json
   out/assets/  entity art, lightmaps
         │
-        │        game/data/*.json   (committed gameplay data)
+        │        data/*.json        (committed gameplay data)
         │               │
         ▼               ▼
   Supersonic-Engine/games/magicportals  ◄── reference/extracted/assets, read directly
@@ -69,12 +69,12 @@ its gates), and `docs/parity-backlog.md` here (what is left, in order).
 
 The converter writes each level as a `.tscn` text scene: that is the level format the
 port's reader parses (`games/magicportals/sim/Tscn.cpp`). Nothing is copied into the
-engine's repository. The port reads `out/`, `game/data/` and `reference/extracted/assets/`
+engine's repository. The port reads `out/`, `data/` and `reference/extracted/assets/`
 where they are, through CMake cache paths set when the engine is configured (steps 5 and 7
 below).
 
 ```
-game/data/         gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
+data/              gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
 tools/converter/   ethanon2godot — Python 3; .esc/.ent → out/levels, chapters.json, entity art, lightmaps
 tools/asbc/        AngelScript bytecode reader; achievements.py writes out/data/achievements.json
 tools/parity/      emulator driver, reference-library capture, frame comparison, port_build.bat
@@ -191,7 +191,7 @@ The two must be sibling directories (`<parent>/Magic-Portals-Remake` and
 |---|---|
 | `SUPERSONIC_MAGICPORTALS_LEVELS` | `Magic-Portals-Remake/out/levels` |
 | `SUPERSONIC_MAGICPORTALS_CHAPTERS` | `Magic-Portals-Remake/out/data/chapters.json` |
-| `SUPERSONIC_MAGICPORTALS_DATA` | `Magic-Portals-Remake/game/data` |
+| `SUPERSONIC_MAGICPORTALS_DATA` | `Magic-Portals-Remake/data` |
 | `SUPERSONIC_MAGICPORTALS_ORIGINAL` | `Magic-Portals-Remake/reference/extracted/assets` |
 | `SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS` | `Magic-Portals-Remake/out/data/achievements.json` |
 
@@ -326,7 +326,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--saves <dir>` | DEV: keep the medals (`scores.json`) here instead of the user's data directory, for a capture that needs a medal recorded |
 | `--levels <dir>` | read the converted levels from here instead of the configured path |
 | `--art <dir>` | the directory the levels' art paths resolve against (default: the one above the levels) |
-| `--data <dir>` | read `game/data` from here instead of the configured path |
+| `--data <dir>` | read the remake's `data/` from here instead of the configured path |
 | `--light-masks-off` | DEV: draw lights and halos but let no light reach a sprite |
 | `--visit-levels <lightmapped\|all\|name,...>` | DEV: visit these levels in one process; the run fails unless the engine's material descriptor sets return to its pool |
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |

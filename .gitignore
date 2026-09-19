@@ -95,7 +95,7 @@ out/
 # as reference/: if a file needs to be committed, force-add that file.
 **/game/assets/
 
-# NOTE — game/data/*.json is deliberately NOT ignored: CLAUDE.md rule 1 requires
+# NOTE — data/*.json is deliberately NOT ignored: CLAUDE.md rule 1 requires
 # gameplay values to live there as committed data. But the converter GENERATES
 # some of it from original level data, so generated .json still needs a human
 # read before its first commit. Layout geometry derived from a .esc is Asantee

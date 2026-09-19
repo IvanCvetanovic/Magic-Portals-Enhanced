@@ -10,7 +10,7 @@ published by **Asantee Games** and delisted in 2025. The original was built on t
 EnTT): `C:\Users\icvet\Desktop\Supersonic-Engine\games\magicportals`, "SE" below. Its
 record, every step with its gates, is SE's `docs/planning/2026-09-11-magic-portals-remaster.md`
 (CRLF). **This repository is the port's data source and parity rig:** the converter
-(`tools/converter`), the gameplay data the port reads (`game/data/*.json`), the AngelScript
+(`tools/converter`), the gameplay data the port reads (`data/*.json`), the AngelScript
 bytecode reader (`tools/asbc`), the parity tools (`tools/parity`) and the docs. The Godot 4
 project that first lived in `game/` stopped being the target on 2026-09-14 and was removed
 on 2026-09-19. `C:\Users\icvet\Desktop\Game-Engine` is **not** Ivan's engine: never touch it.
@@ -98,7 +98,7 @@ the record is incomplete: say so and stop rather than assuming scope.**
         │  .esc / .ent  →  out/levels/*.tscn, out/data/chapters.json, out/assets/
         ▼
   SE games/magicportals/   the actual remake (C++20, hand-written gameplay); reads out/,
-                           game/data/ and reference/extracted/assets/ where they are
+                           data/ and reference/extracted/assets/ where they are
 ```
 
 Each arrow is a separate, checkable step. The rule of thumb: **the engine source is the
@@ -110,7 +110,7 @@ AngelScript and is **not** converted — it is read as design reference and reim
 
 The port finds this repository through absolute paths baked into SE's
 `build/CMakeCache.txt` when SE is configured: `SUPERSONIC_MAGICPORTALS_LEVELS` (`out/levels`),
-`_CHAPTERS` (`out/data/chapters.json`), `_DATA` (`game/data`), `_ORIGINAL`
+`_CHAPTERS` (`out/data/chapters.json`), `_DATA` (`data`), `_ORIGINAL`
 (`reference/extracted/assets`) and `_ACHIEVEMENTS` (`out/data/achievements.json`). Moving
 or renaming any of them breaks the port's runs and turns its level suites into skips (exit 77,
 which ctest reports as SKIPPED, never a pass). The build still compiles: the paths are only
@@ -153,8 +153,7 @@ compile definitions (SE's `games/magicportals/sim/CMakeLists.txt`).
 ## Directory layout
 
 ```
-game/
-  data/                gameplay JSON, committed; the port reads it in place (_DATA above)
+data/                  gameplay JSON, committed; the port reads it in place (_DATA above)
 tools/converter/       ethanon2godot — Python 3, src layout, venv-friendly
 tools/asbc/            AngelScript bytecode reader; achievements.py → out/data/achievements.json
 tools/parity/          emulator driver, reference-library capture, frame comparison, port_build.bat
@@ -167,7 +166,7 @@ out/                   converter output and parity captures (gitignored); the po
                        out/levels, out/data and out/assets
 ```
 
-There is no Godot project any more: `game/` holds only `data/`. `reference/` does not
+There is no Godot project any more, and its `game/data/` is now `data/`. `reference/` does not
 exist in a fresh clone. Recreate it locally — README.md says how.
 
 ---
@@ -175,7 +174,7 @@ exist in a fresh clone. Recreate it locally — README.md says how.
 ## Architecture rules (this repository)
 
 1. **Data-driven, with provenance.** Gameplay numbers live in JSON, never in code:
-   `game/data/*.json` here, SE's `games/magicportals/data/*.json` for the port's own. A
+   `data/*.json` here, SE's `games/magicportals/data/*.json` for the port's own. A
    designer must be able to retune without touching code. Every number says where it came
    from — decoded (with its citation), measured on the original (with the capture), or
    guessed and marked (`"_guess": true` beside it, as `player.json` does). No silent
@@ -259,7 +258,7 @@ exist in a fresh clone. Recreate it locally — README.md says how.
 - [ ] Port change: `port_build.bat` with zero warnings, and the `test_mp_*` suites it
       touches run once each — counts recorded, refused launches reported as not run
 - [ ] `git status` shows nothing from `reference/` or `out/` — **check this literally**
-- [ ] New tunable values are in JSON (`game/data/*.json` or SE's
+- [ ] New tunable values are in JSON (`data/*.json` or SE's
       `games/magicportals/data/*.json`) with their provenance, not in code
 - [ ] A port change has its Step in SE's planning doc, with its gates
 - [ ] Input goes through the port's one pointer path: the mouse stands in for the

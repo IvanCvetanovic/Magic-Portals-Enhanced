@@ -248,7 +248,7 @@ computed by bytecode, so the value is an immediate operand inside that function 
 The clean 239-byte decode already proves the format matches this AngelScript version
 (2.26.1), which was the main risk.
 
-Until then: values live in `game/data/*.json` marked `_guess`, and
+Until then: values live in `data/*.json` marked `_guess`, and
 `MILESTONE_1.md` §3 stays open.
 
 ---
