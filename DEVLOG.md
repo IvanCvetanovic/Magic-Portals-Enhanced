@@ -1960,3 +1960,163 @@ unexplained); a portal shot ≈ 200 u/s, a fireball ≈ 130 u/s; 2.8125 px/u fit
 that failed three rounds each were committed with their reasons written down, not tuned. Undercut by the laptop: two thirds
 of the wall clock was standby, one step took 22 hours for about 5 hours of work, the power-setting question sat unanswered,
 and the session is the second in a row to end without its own SESSION END.
+
+### 2026-09-19 09:00 — Session 18: the third shutdown recovered, batches 0-4 closed, Godot removed
+
+*Written at 15:20 by the step that removed Godot, from git in both repositories, Supersonic's planning steps 73-75,
+`docs/parity-backlog.md` and `out/parity/visuals/merge_b2/` and `merge_tiers/`; not from the session's transcript.
+Times are commit times unless stated.*
+
+**The shutdown, recovered first.** At 08:54 the machine went down uncleanly while 4.3's after-sweep was capturing 4-07
+(session 17b's entry has the System log). Step 73's resume found what it NUL-padded: `4.3/after/capture.txt` held 98 NUL
+bytes where the 4-06 line had been, `after/sweep/4-06_level5c_f420.png` was 1,084,417 bytes of NUL, and the 4-06 and
+4-07 logs ended in NULs. Nothing was trusted before it was checked: the other 101 sweep frames and all 6 gate frames
+match their logged md5s, and none of the 113 surviving logs holds a NUL byte. The capture log was rebuilt from its
+readable lines and the sweep's own copy (the damaged file kept as `capture_damaged_by_power_loss.txt`), the three
+damaged files deleted, and the 27 levels from 4-06 on captured again, 09:19 to 09:23, on the same exe (`9b1da36b`,
+shown current by a ninja dry run on a copy of `build.ninja`, not by relinking): 27 of 27 exit 0, no refusal.
+
+**Built (Supersonic main, pushed):** game-only; no engine file.
+- `6949cc3` (10:27, on `visuals-b`), order 4.3: the green ring a gravity well wears. Its record was Step 85 and is Step
+  73 after the merge. The ten wells of chapter 4 draw `white_ring.png` added, constant green, `radius x 2 - 24` units
+  across at depth -5, a ring no level file names (only `ETHCallback_gravity_agent` adds it). All five gate rings pass
+  (green 0.479-0.521 against [0.40, 0.60]); of the 128 sweep levels 123 are byte-identical and the 5 that move are
+  exactly the well levels. `test_mp_wells` 98 and `test_mp_layer` 1,183, run directly once each, 0 failures; the commit
+  round's full build 72 steps, 25 objects, 46 links, 0 warnings.
+- `e81c21b` (11:13): `visuals-b` merged into main. Steps 80-85 renumbered 68-73, with the 58 places where they name one
+  another and seven outside the doc (two code comments, five `_source` lines). Conflicts in two files. 87 build steps,
+  0 warnings. Run directly, once each, 0 failures: `test_mp_layer` 1,190 (923 + 1,183 - 916, so no check was dropped),
+  `test_mp_sprites` 650, `test_mp_start` 752, `test_mp_sky` 380, `test_mp_play` 147, `test_mp_motion` 146,
+  `test_mp_torch` 123, `test_mp_wells` 98, `test_mp_timed` 84. ctest once, `test_mp_lighting` left out: 119 of 121
+  passed, 0 failed, 2 Not Run. The sweep (`merge_b2/sweep/`: 128 exit 0, validation ACTIVE and silent in 128 logs) was
+  set three ways, against the base (`1.3/after`), main's step 67 and the branch's step 73: 9 levels byte-identical to
+  main's and none to the branch's. On the 74 others with no antiportal the frame is main's everywhere outside the
+  pictures the branch changed, but for 31 pixels in 14 levels, each within one RGB565 step. On the 45 with one, 32,776
+  pixels differ from main's outside those pictures: 23,722 where the ring's tier file acts, 6,613 on the rims steps 71
+  and 72 replace, 2,441 within one RGB565 step.
+- `591e143` (14:23) and `7281ca5` (14:25), integration Step 74. The merge left the gravity well's ring on the 1x
+  `white_ring.png`; it now draws `entities/hd/white_ring.png` (256 x 256 at density 2, the same 128 units) through step
+  67's `drawnImage`. The crystal's dial takes the same path and still draws `timer.png`, which has no tier file: checked,
+  and correct at 1x, every dial frame byte-identical. 123 of 128 f420 frames byte-identical to the merge's, the 5 that
+  change are the well levels with every changed pixel inside a ring's quad; 473 of 473 gate-series frames
+  byte-identical. `test_mp_sprites` 659 / 0, `test_mp_layer` 1,190 / 0; 8 build steps, 0 warnings; 140 launches exit 0,
+  no refusal.
+- `80a4ed2` (15:02), Step 75: the skip code, below.
+
+**Built (this repo, pushed):** `22ee48d` (09:21, session 17b's entry), `7bea54a` (10:27, step 85's owed refusal and a
+latent slot count), `f777925` (14:23, step 74's two open instruments, the rim estimator and the blink centre),
+`368d46c` (14:33, the backlog after batches 0-4).
+
+**Closed.** SE main pushed at `7281ca5` (the backlog's §0 row); the `Supersonic-Engine-vis2` worktree and the `visuals-b`
+branch removed (`git worktree list` shows main alone; the branch never went to the remote). The visuals plan's batches
+0-4 are steps 62-74 of the planning doc, and all are committed.
+
+**The skip code (SE `80a4ed2`, Step 75; `origin/main` is at it by the local ref).** README step 8 flagged it on 09-17:
+nine `mp_` suites (`turrets`, `fire`, `hinge`, `minions`, `ghost`, `torch`, `keys`, `diamonds`, `fields`, added by steps
+21-30) exit 77 without the converted levels, as 18 others do, but the `SKIP_RETURN_CODE 77` list in
+`tests/CMakeLists.txt` did not name them, so ctest would report them Failed. That is ctest's rule, not a run: no run
+without the levels was made. Now `add_mp_test(name [SKIPS_WITH_77])` marks a suite on its own line, all 27 that can
+exit 77 carry the mark, and the separate list is gone. Only `tests/CMakeLists.txt` and the record changed; the
+reconfigure compiled, linked and launched nothing (`build.ninja` byte-identical, md5 `20d3e2d3`). A word CMake reads as
+false (`OFF`, `0`, `NO`, ...) still passes the guard unmarked; Step 75 leaves the code fix to Ivan.
+
+**Godot removed (this change; not committed).** The second half of Ivan's 09-17 request. `git rm` of
+`game/project.godot`, `game/scenes/` (3 files), `game/scripts/` (19 `.gd`, 19 `.uid`) and `tools/godot.bat`: 43 files,
+4,363 lines. First, a search of this repo (without `out/`, `reference/` and the venvs) and of SE's `games/magicportals`,
+`tests`, `cmake`, `CMakeLists.txt` and `docs` for anything that reads or runs them found nothing: no test launches
+Godot, the converter's tests check emitted `.tscn` text only, and from `game/` SE reads only `game/data`
+(`SUPERSONIC_MAGICPORTALS_DATA`: `entity_roles.json`, `player.json`, `portals.json`). SE does name the removed files,
+but as provenance, never as something to read or run: 77 lines in 37 files under `games/magicportals` and
+`tests/test_mp_*` (the port's code, its tests and six of its own data files), and 29 more in its three Magic Portals
+planning docs, by a `git grep -nE` for the 19 script names with `.gd`, `project.godot`, `godot.bat`, `verify_gameplay`
+and `game/assets/levels`. 71 of the 77 cite a script, mostly as `file.gd:line` (`portal_system.gd`, `behaviours.gd`,
+`hazards.gd`, `level_runtime.gd`, `level_manager.gd`, `main.gd`, `player.gd`, `hud.gd`); `project.godot` twice
+(`sim/Units.hpp:27`, `data/view.json:18`), `verify_gameplay` without the extension three times (`sim/Tscn.hpp:10`,
+`spike/main.cpp:63`, `tests/test_mp_play.cpp:272`) and the deleted local `game/assets/levels` copy once
+(`tests/test_mp_levels.cpp:5`). Every cited script and `project.godot` stays readable at `368d46c`
+(`git show 368d46c:game/scripts/systems/portal_system.gd`), so the line numbers still resolve; the `game/assets` copy
+was never tracked and is gone. Five header comments name "the Godot remake" as the port's source (`CMakeLists.txt:499`,
+`tests/CMakeLists.txt:131`, and line 1 of `games/magicportals/CMakeLists.txt`, `main.cpp` and `sim/CMakeLists.txt`).
+None of it is edited here: SE is clean at `80a4ed2`, and `docs/parity-backlog.md` §0 has a row for an SE step. (An earlier draft of this
+entry said SE had "two mentions"; the count above is from the grep.)
+`game/data/*.json` stays.
+- `CLAUDE.md` rewritten for the port: header, pipeline's last box, environment, layout, architecture, workflow and
+  definition of done. The hard rule, the legal basis and the scope note are kept verbatim, the hard rule's "our own
+  GDScript, our own scenes" line included.
+- `.gitattributes` drops `*.gd`, `*.tres`, `*.godot`, `*.uid` and `*.cfg` (nothing tracked or emitted uses them) and
+  keeps `*.tscn`; `port_build.bat`'s comment no longer names `tools\godot.bat`.
+- `tools/converter/README.md` without "Scaffolding only" and its old setup, pointing at the root README; dated
+  superseded notes in `MILESTONE_1.md` §6 and §7.4; three Godot-runtime sentences in `docs/ethanon-formats.md` (the
+  orientation line, §10's intro, §12.4), every format fact kept.
+- README step 8 now says 27 suites skip with 77, and 6 skip a part, not 5: `motion` was missing from the old list.
+  Its Docs list loses the "predate the move" caveats.
+- `docs/parity-backlog.md`'s Godot item closed; stale references fixed in `docs/original-gameplay.md` (a present-tense
+  "asserts" about `verify_gameplay.gd`), `manifest.py` (the manifest "staged into `game/assets/data/`"), `__init__.py`
+  ("reimplemented in GDScript") and a `test_smoke.py` comment (the "Godot-side DataLoader").
+- Local, untracked: `game/.godot`, Godot's cache (615 files, 12 MB), deleted. `game/assets` (687 files, 14 MB) was
+  inventoried first: 279 `.import` files and 408 others, every one md5-identical to a file under `out/` (the 128 levels
+  match the pre-lighting copies in `out/parity/specs/lighting/work/g1/levels_before/`, not today's `out/levels`), so it
+  was deleted too. Nothing else untracked was touched.
+
+**Broke / dead ends:**
+1. The shutdown's damage (above): three files, each found by a NUL scan or an md5, none reused.
+2. **Smart App Control at the merge.** `test_mp_levels` and `test_mp_geometry` were Not Run in the one ctest;
+   `test_mp_lighting`, left out of ctest, was refused when run directly. Each got one relink: `test_mp_levels` then ran
+   (128 / 0), the other two were refused again. Five refused launches by my count from step 73's merge note, each a
+   notification. `test_mp_lighting` (last run 503 / 0 at step 66) and `test_mp_geometry` have not run on current
+   binaries. Step 73's resume, step 74 and step 75 had no refusal.
+3. **Step 74 failed its first verification** on 4-02's blink maximum: 0.4269 against 0.36-0.42 on the merged build. Two
+   fix rounds and a third verification found the instrument, not the ring: `blink_42.py` centres on the node's pixel
+   index, and about the ring's drawn centre the row reads 0.3964 / 0.2178, step 72's value, on both builds. The tool fix
+   is left for Ivan.
+4. The brief for the Godot removal (and an older note) said SE's cache has `GLSL_COMPILER-NOTFOUND`. It does not:
+   `build/CMakeCache.txt` (dated 09-16 10:53) has `GLSL_COMPILER=C:/VulkanSDK/1.4.357.0/Bin/glslc.exe`. `CLAUDE.md`
+   says what the cache says.
+5. The brief said to keep `tools/parity/port_build.bat` CRLF. Its blob is LF, as `*.bat text eol=crlf` stores it, and
+   a checkout writes CRLF; this working copy is LF because a tool wrote it after checkout (git warns it will convert it
+   the next time it touches the file). The one-line comment edit was made on the bytes, so no other line and no line
+   ending moved, and a fresh checkout still gets CRLF.
+
+**Decision:**
+- All seven `game/data/*.json` stay: the port reads three through the baked path, and the port's own data files cite
+  `actors.json` and `hazards.json` as the remake's first guesses.
+- Kept, with reasons: the package name `ethanon2godot` and the `.tscn` / `res://` vocabulary (the level format the port
+  reads); the `.gitignore` Godot block, untouched (it also carries `build/`, `*.apk`, `*.aab`, `*.keystore`, `*.jks`),
+  and its `**/game/assets/` comment, which still quotes a `CLAUDE.md` layout line ("our own + converted art") that is
+  gone; `docs/permission.md`, the legal record, whose line 88 still calls Godot 4 "The remake's engine", left untouched
+  as instructed; `uiassets.py`'s font rewrite for Godot's loader (behaviour of `--copy-ui`,
+  which the port does not use); the "+y down like Godot" note in `player.json` and the `res://` note in `audio.json`;
+  this file's past entries and procedure block.
+- Dropped from `CLAUDE.md` with the Godot runtime, deliberately, and not restored: "Targets: Android (primary)", the
+  old input rule's "touch targets >= 96 px", and rule 6's performance discipline (60 fps mobile target, no target scans
+  in `_process`, staggered logic ticks, pooling, draw calls and atlas batching for the Compatibility renderer). The port
+  does not run on Android: SE's `ARCHITECTURE.md` (*Platform support*) and `README.md` (*Platforms*) call it not
+  functional, and the port is built and played on Windows. It has no touch path; the mouse is the original's touch
+  (README, *Run it*), which the definition of done keeps. Its tick is a fixed 60 Hz (`MagicPortalsLayer::kTick`), and
+  how port code spends a frame is SE's to rule: `CLAUDE.md` rule 5 sends port code to SE's `AGENTS.md`,
+  `CONTRIBUTING.md` and `ARCHITECTURE.md`. Ivan to say if any of them should come back.
+- No build, no suite and no capture for the removal: nothing in it reaches SE.
+- `docs/permission.md` still holds its placeholder; this change asks nothing of the grant's scope.
+
+**Assets check:** yes — `git status --short`, run after appending this entry, lists 43 `D ` lines, the staged
+deletions above (`game/project.godot`, 3 under `game/scenes/`, 38 under `game/scripts/`, `tools/godot.bat`), and ` M`
+on `.gitattributes`, `CLAUDE.md`, `DEVLOG.md`, `MILESTONE_1.md`, `README.md`, `docs/ethanon-formats.md`,
+`docs/original-gameplay.md`, `docs/parity-backlog.md`, `tools/converter/README.md`,
+`tools/converter/src/ethanon2godot/__init__.py`, `tools/converter/src/ethanon2godot/manifest.py`,
+`tools/converter/tests/test_smoke.py` and `tools/parity/port_build.bat`. Nothing under `reference/` or `out/`; the
+forbidden-extension grep over `git diff --name-only` and `git diff --cached --name-only` prints nothing.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** the resume: 101 + 27 = 128 sweep frames, 6 gates, 0 NUL bytes in 113 logs. The merge: 58 references
+renumbered, `test_mp_layer` 1,190, ctest 119 / 121 with 0 failed and 2 Not Run, 5 refused launches, three-way sweep
+over 128 levels (9 / 74 / 45). Step 74: 123 of 128 frames and 473 of 473 gate frames byte-identical, 659 and 1,190
+checks, 140 launches. Step 75: 27 of 44 `add_mp_test` suites marked. The removal: 43 files, 4,363 lines; 615 + 687 local
+files (12 + 14 MB) deleted, 408 of 408 non-import files matched by md5; converter `pytest` 85 passed in 0.47 s, `ruff
+check` "All checks passed!"; `godot` (any case) left in 17 tracked files besides this one; in SE, 77 lines in 37 files
+(and 29 in three planning docs) cite a removed file, and none reads one.
+
+**Inferred mood:** guess — a recovery morning that ended as housekeeping: the crash cost three files, found by checking
+rather than assumed away, and the one scare of the day (4-02's blink) was a ruler read from the wrong centre. The two
+suites Smart App Control keeps refusing are what is still hanging.

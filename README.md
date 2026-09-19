@@ -258,15 +258,16 @@ ctest --test-dir build -R mp_
 These are the `test_mp_*` suites (a multi-config generator such as Visual Studio also needs
 `-C Release`). Convert the levels (step 3) before running them. Without the converted levels:
 
-- 18 suites (`levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
+- 27 suites (`levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
   `hazards`, `demolish`, `launchers`, `shot`, `boss`, `layer`, `zerog`, `bounce`, `wells`,
-  `dragon`, `darkdragon`) exit 77, which ctest reports as SKIPPED, and print the path they
-  looked in;
-- 9 suites (`turrets`, `fire`, `hinge`, `minions`, `ghost`, `torch`, `keys`, `diamonds`,
-  `fields`) also exit 77 and print the path, but the engine's `tests/CMakeLists.txt` does not
-  give them `SKIP_RETURN_CODE 77` yet, so ctest reports them as **Failed**;
-- 5 suites (`sprites`, `lighting`, `sky`, `tiers`, `sounds`) skip only the part that needs
-  the converted levels or the original's extracted assets, say so, and report Passed.
+  `dragon`, `darkdragon`, `turrets`, `fire`, `hinge`, `minions`, `ghost`, `torch`, `keys`,
+  `diamonds`, `fields`) exit 77 and print the path they looked in, which ctest reports as
+  SKIPPED: each carries `SKIPS_WITH_77` on its `add_mp_test` line in the engine's
+  `tests/CMakeLists.txt` (Supersonic-Engine `80a4ed2`; before it, the last nine were missing
+  from the skip list, so ctest would have reported them as Failed);
+- 6 suites (`sprites`, `lighting`, `sky`, `tiers`, `motion`, `sounds`) skip only the part
+  that needs the converted levels or the original's extracted assets, say so, and report
+  Passed.
 
 ## Run it
 
@@ -373,19 +374,18 @@ well, so they also go under `out/parity/`, never inside Supersonic-Engine.
 
 ## Docs
 
-- `CLAUDE.md` — the project's rules: legal basis, the hard rule on committed assets (its
-  engine, environment, layout and verify sections predate the move to Supersonic)
+- `CLAUDE.md` — the project's rules: legal basis, the hard rule on committed assets, the
+  environment, and how to verify a converter or port change
 - `DEVLOG.md` — append-only build diary
 - `docs/parity.md` — the parity rig: emulator, reaching levels, reference library, captures
 - `docs/parity-backlog.md` — what remains to match the original, in order
 - `docs/ethanon-formats.md` — Ethanon file formats, decoded from the engine source
 - `docs/original-gameplay.md` — how the ORIGINAL behaves, every claim tagged with its
   provenance (DATA / DECODED / IDENTIFIER / ABSENCE / OWNER / GUESS)
-- `MILESTONE_1.md` — the first milestone, chapter 1 as a vertical slice. Its scope, and its
-  §6/§7 verify and project items, predate the move to Supersonic; it is kept as the quality
-  bar, above all §3's rule that the portal mechanic's values are measured, not guessed
+- `MILESTONE_1.md` — the first milestone, chapter 1 as a vertical slice. Its scope boundary
+  is superseded and its Godot items carry dated notes; it is kept as the quality bar, above
+  all §3's rule that the portal mechanic's values are measured, not guessed
 - `tools/asbc/` — AngelScript bytecode reader, ported from the engine's own deserialiser
-- `tools/converter/README.md` — the converter's test-fixture rule (its Status, Setup and Use
-  sections predate the working converter; convert with step 3 here)
+- `tools/converter/README.md` — the converter's modules, its checks and its test-fixture rule
 - Supersonic-Engine `docs/planning/2026-09-11-magic-portals-remaster.md` — the port's
   record: every step, with its gates

@@ -189,7 +189,8 @@ disagrees with the bytecode (*"18 portals or less"* vs bytecode `22`; *"at least
   not determine the Android viewport at all.** Anything treating 1136×640, 640 or 512 as "the"
   virtual resolution is unsupported.
 - **Orientation IS settled: locked landscape** (`AndroidManifest` `screenOrientation=0`) — so
-  `project.godot`'s `window/handheld/orientation=4` (Sensor Landscape) should be `0`.
+  a remake locks it too. (The retired Godot project had `window/handheld/orientation=4`,
+  Sensor Landscape, which should have been `0`; that project was removed on 2026-09-19.)
 - Best-supported viewport inference is a **~512-tall landscape design space**, from `.esc`
   geometry (ymin −64 in 92 of 133 levels, modal ymax 384, median vertical span 448) agreeing
   with the commented-out `//fixedHeight = 512;`. **PROVISIONAL** — settle it by playtesting,
@@ -1863,7 +1864,10 @@ for the desktop-vs-GLES2 backend caveat.
 ## 10. Converter implications — Ethanon → Godot 4
 
 Everything in this section is engineering judgement layered on the verified facts above. **Godot 4 property
-spellings are from memory and must be verified against your target 4.x.**
+spellings were written from memory.** *2026-09-19: the Godot runtime this section was written for is removed.
+The node types and properties below are the `.tscn` vocabulary the converter writes; what they mean at run time is
+now what the Supersonic port's reader (`games/magicportals/sim/Tscn.cpp`) makes of them. Statements about how Godot
+itself behaves (its physics units, its particle model, `flip_h`) are kept as written, as history.*
 
 ### 10.1 Node mapping
 
@@ -2186,6 +2190,8 @@ Grouped by whether they block conversion.
   convention.
 
 ### 12.4 Godot-side assumptions to verify before trusting the recipes
+*2026-09-19: written for the Godot runtime, which is removed. They matter now only where the Supersonic port's
+`.tscn` reader interprets the same properties.*
 - `Sprite2D.offset` in texture pixels, applied **before** node scale (§10.2).
 - `Sprite2D.flip_h` does **not** mirror `offset` (§10.2).
 - `CPUParticles2D.lifetime_randomness` formula `lifetime * (1 − randf()*lr)` — the derivation in §10.5

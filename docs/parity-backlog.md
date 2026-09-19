@@ -37,8 +37,15 @@ suites a change touches once each, and report what stayed blocked.
 - [ ] MPR `docs/permission.md` is still the unfilled stub — Ivan to paste the grant.
 - [ ] MPR converter low items: `_i()` should parse `int(float(raw))` (TinyXML `%d` reads "1.000000" as 1);
       the CLI lighting report is not asserted by a test.
-- [ ] Godot runtime in MPR (`game/scripts`, `project.godot`) is no longer the target. Ivan allowed deleting it, but the
-      port still reads MPR `game/data/*.json` and the converter's `out/` — move those (or re-point the port) first.
+- [x] Godot runtime in MPR removed 2026-09-19: `game/project.godot`, `game/scenes/`, `game/scripts/`, `tools/godot.bat`,
+      and locally the `game/.godot` cache and the `game/assets` copies. Nothing had to move: `game/data/*.json` and the
+      converter's `out/` stay where they are, and the port reads them through the paths baked into SE's CMake cache.
+- [ ] SE still cites the removed Godot files as provenance: 77 lines in 37 files under `games/magicportals` and
+      `tests/test_mp_*` (e.g. `portal_system.gd:230-263` in `sim/Portal.hpp`, `verify_gameplay.gd:259` in
+      `tests/test_mp_play.cpp`, `project.godot` in `sim/Units.hpp:27` and `data/view.json:18`, the gone local
+      `game/assets/levels` copy in `tests/test_mp_levels.cpp:5`), and 29 lines in its three Magic Portals planning docs.
+      None reads a file. The scripts stay readable at MPR `368d46c`; an SE step should pin that commit where they are
+      cited, or reword the lines. See MPR `DEVLOG.md`, session 18.
 
 ## 1. Lighting (design: `lighting/design_port.md`, gates amended in its §10)
 

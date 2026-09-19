@@ -156,6 +156,13 @@ Hygiene:
 - [ ] `docs/ethanon-formats.md` updated with anything new learned, with citations
 - [ ] `DEVLOG.md` entries appended per session
 
+> ⚠ **2026-09-19 — Godot items superseded by the move to Supersonic.** The remake is now the
+> port on the Supersonic Engine (`CLAUDE.md` → "What this is"), and the Godot project was
+> removed. The `godot --headless` hygiene item above is replaced by `CLAUDE.md` → Workflow
+> rules 2: the converter's pytest and ruff; for the port, `tools/parity/port_build.bat` with
+> zero warnings and the `test_mp_*` suites the change touches. §5's `Performance.get_monitor()`
+> method and Compatibility renderer were Godot's too. The items are kept as written, as history.
+
 ---
 
 ## 7. Blockers — resolve these first
@@ -170,6 +177,10 @@ Cloudflare; it's Ivan's to supply).
 - [ ] **7.3** Determine progression/gating: linear? stars? collectibles?
 - [ ] **7.4** Read `app.enml` for the authoritative viewport size and orientation, and
       replace the provisional values in `game/project.godot` (they are marked as such).
+      ⚠ **2026-09-19 — superseded:** `game/project.godot` was removed with the move to
+      Supersonic, so there are no provisional values left to replace. The findings stand in
+      `docs/ethanon-formats.md`: `app.enml` does not set the Android viewport, and the
+      orientation is locked landscape.
 - [ ] **7.5** Pick and name the target Android device for §5.
 - [ ] **7.6** Record video of the original running, for the §3 frame-stepping. This is
       the only irreplaceable artefact here — if the original ever stops running on

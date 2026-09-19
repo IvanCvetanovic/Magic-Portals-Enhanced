@@ -263,7 +263,8 @@ That turns "which of these 178 entities actually do something?" from judgement i
 exact byte search — and it immediately rules three out. `moving_platform_single.ent`
 carries a `moveStride`, and inline `platform` and `anchor` carry `speed`/`stride`, that
 **nothing reads**. Dead copy-paste. Animating them would invent motion the original never
-had; `verify_gameplay.gd` asserts they stay inert.
+had; `verify_gameplay.gd` asserted they stayed inert (it went with the Godot runtime on
+2026-09-19).
 
 ### 6.1 The `stride` disambiguation rule
 

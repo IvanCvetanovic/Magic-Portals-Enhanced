@@ -5,7 +5,7 @@ emits Godot 4 ``.tscn`` files for the Magic Portals remake.
 
 Scope note: this converts *data*, not *code*. Ethanon gameplay logic lives in
 AngelScript and is deliberately not translated — it is read as design reference
-and reimplemented in GDScript. See ``../../CLAUDE.md``.
+and reimplemented in the Supersonic port. See ``../../CLAUDE.md``.
 
 Legal note: input comes from ``reference/extracted/`` and output goes to ``out/``.
 Both are gitignored. Nothing this package reads or writes may be committed --

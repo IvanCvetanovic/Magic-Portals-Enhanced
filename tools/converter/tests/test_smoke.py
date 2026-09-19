@@ -365,7 +365,7 @@ def test_manifest_build_shape(tmp_path) -> None:
 
 def test_manifest_unknown_threshold_is_minus_one_not_zero(tmp_path) -> None:
     # 0 is a real threshold, so it cannot double as "unknown" — that is why the
-    # sentinel is -1 everywhere, including in the Godot-side DataLoader.
+    # sentinel is -1 everywhere; the Supersonic port awards gold only when it is >= 0.
     data = manifest.build(0, ["level0", "level1"], {0: {0: 0}})
     assert data["worlds"][0]["levels"][0]["golden_score"] == 0
     assert data["worlds"][0]["levels"][1]["golden_score"] == manifest.UNKNOWN_GOLDEN_SCORE

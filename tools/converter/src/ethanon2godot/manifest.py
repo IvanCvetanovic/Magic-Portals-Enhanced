@@ -15,8 +15,8 @@ gold. Seven levels ship a threshold of ``0``, which is incoherent as a time or a
 score and coherent only as "finish using zero portals". That is why ``-1`` and not ``0``
 is the "unknown" sentinel everywhere downstream.
 
-Because it is original-derived design data, the manifest is written to ``out/`` and
-staged into the gitignored ``game/assets/data/``, exactly like converted art and levels.
+Because it is original-derived design data, the manifest is written to the gitignored
+``out/data/``, exactly like converted art and levels, and the Supersonic port reads it there.
 """
 
 from __future__ import annotations
