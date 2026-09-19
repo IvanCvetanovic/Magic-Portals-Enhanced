@@ -2120,3 +2120,73 @@ check` "All checks passed!"; `godot` (any case) left in 17 tracked files besides
 **Inferred mood:** guess — a recovery morning that ended as housekeeping: the crash cost three files, found by checking
 rather than assumed away, and the one scare of the day (4-02's blink) was a ruler read from the wrong centre. The two
 suites Smart App Control keeps refusing are what is still hanging.
+
+### 2026-09-19 17:13 — Session 19: the Supersonic port moves in from the engine repository, with its history
+
+Ivan's call, 2026-09-19: each game's port leaves the Supersonic Engine repository for its own game's repository,
+with its history, the engine as a submodule pinned to a commit, and every output proved identical after the move.
+This entry is the Magic Portals part, on branch `supersonic-port` (not pushed, not merged into `main`).
+
+**Built:**
+- `game/` is SE's `games/magicportals` (151 files, structure unchanged), `tests/` its 44 `test_mp_*` suites, and
+  `docs/planning/` its three planning docs — 198 files, every blob identical to SE `2237554` (P). Their history came
+  with them: `git filter-repo` on a scratch clone of SE at P kept exactly those paths and renamed `games/magicportals/`
+  to `game/`; 120 commits (116 + 4 merges), 2026-09-10 to 2026-09-19, all by IvanCvetanovic, messages byte-identical
+  (`--preserve-commit-hashes`, so the SE hashes they cite still name SE commits). Merged with
+  `--allow-unrelated-histories` (`27ae5e2`).
+- Before the merge, the remake's seven tables moved from `game/data` to `data/` (`1680635`), because the port brings
+  a `game/data/hazards.json` of its own; every reference followed except `DEVLOG.md` (append-only) and one dated
+  backlog line.
+- `engine/`: submodule of `https://github.com/IvanCvetanovic/Supersonic-Engine.git` pinned to `4bfcf67` (C, "The
+  games moved to their own repositories", on the engine's `games-out` branch). Not SE `main`: `main` is still P, which
+  has `games/` and would define every Magic Portals target twice.
+- A top-level `CMakeLists.txt` (engine as a subproject, then `game/` and `tests/`; C++20;
+  `SUPERSONIC_BUILD_MAGICPORTALS` ON by default here; `MAGICPORTALS_BUILD_TESTS`), `tests/CMakeLists.txt` (the same
+  `add_mp_test` over the engine's `supersonic_add_test`, the same 27 `SKIPS_WITH_77`), and the port's input defaults
+  made this repository's own: `out/levels`, `data`, and chapters, achievements and `reference/extracted/assets`
+  derived from the levels as before (`59068aa`). The port's own references to "the remake's game/data" say `data/`
+  (`63742b0`: the `--data` help, two `_about` strings, two comments). `tools/parity/port_build.bat` configures and
+  builds this repo's `build/` (`ef812ad`). README, CLAUDE.md, `docs/parity.md` §4/§7, the backlog header, the converter
+  README and one `ethanon-formats.md` note describe the new layout (`e357541`).
+
+**Broke / dead ends:**
+- Smart App Control refused 5 of the 44 new suite exes on their first launch (`fire`, `zerog`, `dragon`, `diamonds`,
+  `shot`). One delete and relink each: `fire`, `dragon` and `shot` then ran; `zerog` and `diamonds` were refused again
+  and are **not run** (7 refused launches, 7 notifications for Ivan). `MagicPortals.exe` and `MagicPortalsSpike.exe`
+  launched on the first try.
+- A fresh clone's `git submodule update --init` failed on the VMA docs' long file names under the scratch directory: a
+  submodule does not inherit the superproject's `core.longpaths`. `git -c core.longpaths=true submodule update --init`
+  worked. The real repo's path is short enough.
+- The baseline md5 list is CRLF: the first interim comparison read all 14 frames so far as different, until the `\r`
+  was stripped. Every frame matched.
+- `ctestN.txt` appeared untracked in this repo's root at 17:41 — another role's `ctest -N` output for Wolf Brigade,
+  written with this directory as its working directory. Not mine; left in place and not committed.
+
+**Decision:**
+- Rename before the merge, so the remake's `game/data` and the port's `game/data` never share a tree.
+- The game runs from the repo root: the engine's `SUPERSONIC_ASSET_ROOT` points at `engine/`, the game changes its
+  working directory there before it opens anything, so every path flag gets an absolute path (README, CLAUDE.md).
+- No `branch =` in `.gitmodules`: the pin is the contract. `git submodule update --remote` would follow SE `main`,
+  which is P until Ivan moves it to C.
+
+**Assets check:** yes — `git status --porcelain` after appending this entry: ` M DEVLOG.md` and `?? ctestN.txt` (above),
+nothing under `reference/` or `out/`; the forbidden-extension grep over `git diff --cached --name-only` printed nothing
+before every commit. Over the imported history, `git log --diff-filter=A` finds no png, bmp, jpg, jpeg, mp3, ogg, wav,
+esc, ent, tscn, enml, par or fnt in any of the 120 commits; the only extensions ever present are cpp, hpp, json, md
+and txt.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** build 281 steps, 0 compiler warnings (11 D9025 notes, the vendored `/W0` override); every game and suite
+translation unit compiles with SE's flags, and across the whole graph only glfw's generated include directory and
+`SUPERSONIC_ASSET_ROOT` on `ExecutablePath.cpp` differ. Suites: 42 of 44 run, all 42 with the baseline's count and 0
+failures (8,163 checks: e.g. `test_mp_layer` 1,190, `test_mp_start` 752, `test_mp_sprites` 659); `zerog` (88) and
+`diamonds` (126) not run. `ctest -N`: 44, `SKIP_RETURN_CODE` 77 on the same 27. Spike: rc 0, 133 lines, normalized
+stdout md5 `e52180ba` = baseline. Sweep: 128 of 128 f420 frames byte-identical to `merge_tiers/after` (SE's build),
+captured from this repo's root into `out/parity/split/after/sweep/`, 128 logs with validation ACTIVE and 0
+validation messages, rc 0 for all; the saved medal file (`f5b7a121`) unchanged. 157 commits on the branch: `main`'s 29, the
+120 imported, and 8 new, this entry's included.
+
+**Inferred mood:** guess — a mechanical day that went to plan: the frames matched on the first sweep, and the only
+friction was Smart App Control, which still owns two suites.
