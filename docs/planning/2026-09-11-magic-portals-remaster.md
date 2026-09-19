@@ -12915,3 +12915,201 @@ relinked, no warning); a comment and prose change the code of neither, so every 
 `test_mp_sprites`, which reads `art.json`, was run once more: 704 checks, 0 failures. Nothing else was launched.
 The review also took its own 128-level f420 sweep on the after build: 128 of 128 byte-identical to
 `out/parity/split/after/sweep/` (`6.1/verify1/compare_sweep.json`), a superset of the five lit levels above.
+
+## Step 91 - an effect's .ent read as the engine reads it, a pool that is over, and where the teleport's three effects land (built)
+
+The visuals plan's step 6.2 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 6; its brief
+`system_7.md` 7a-1). Track B, on the `visuals-c` tree, numbered after step 90 (the merge renumbers). Game-only:
+the engine submodule stays at `4bfcf67`. Changed: `game/sim/Art.{hpp,cpp}`, `game/sim/Particles.{hpp,cpp}`, new
+`game/sim/Effects.{hpp,cpp}` and `game/data/effects.json`, `game/sim/CMakeLists.txt`, `tests/test_mp_sprites.cpp`,
+new `tests/test_mp_effects.cpp`, `tests/CMakeLists.txt`. **The pure half of the effects runtime, and no layer
+change: `Art::LoadEnt` reads any of the original's 190 `.ent` files as `ETHEntityProperties::ReadFromXMLFile`
+does - the engine's own default where a file states nothing, a refusal where it states something unreadable -
+into an `Art::Entity` (a `Picture` plus its blend, pivot, per-axis `<Scale>`, systems and `Temporary()`);
+`Particles::Scaled` and `Particles::Finished` are the engine's system scale and `m_finished`; `sim/Effects` and
+`effects.json` hold the teleport's three AddEntity calls and the arithmetic of where they land. Nothing draws
+with any of it yet (6.3), and the 128-level f420 sweep is byte-identical.**
+
+**BLOCKERS CHECKED.** 6.2's one blocker, 6.1, is step 90, committed on this tree (`e620810`). Section 8.13
+amends 3.1, 3.4, 5.1, 5.2, 10.1, 10.3, 10.4, 11.1, 11.2, 12.1, 12.2 and 13.1-13.4, not 6.2, so section 7's row
+stands as written. 0.1 (the JPEG probe `fireball.ent`'s `explosion.JPG` needs) is step 60. K8's `m_effectRandom`
+and K13's between-slot table are 6.3's and are not started: `slotAfter` stays the `buildSprites` lambda.
+
+**THE OWNER'S STANDING RULINGS.** None of R1-R23 names this step; R22 and R23 are not built. Four choices the
+brief left open were made under the owner's standing instruction that the original wins:
+- **What a file does not state is the engine's default, not a refusal.** The brief asked for a strict loader,
+  and art.json's rule is "required, no default". An `.ent` is different: `portal.ent` states no `<Scale>`,
+  `<SpriteCut>` or `<PivotAdjust>`, `fireball.ent` no `<Sprite>`, `explosion_large.ent`'s light no
+  `<HaloBitmap>`, and the engine reads each as its `Reset()` or `ETHLight(true)` leaves it
+  (`ETHEntityProperties.cpp:79-109, 166-180`; `ETHLight.cpp:27-38`). Refused instead: a file not in the
+  original's UTF-16, a stated number that is not one (the engine would keep its default in silence), a cut below
+  one, a particle system missing a field, and a third system (`ETH_MAX_PARTICLE_SYS_PER_ENTITY` is 2,
+  `ETHTypes.h:33`; the engine would drop it). No file of the 190 hits any refusal.
+- **`<StartPoint>`'s z is read and scaled.** Ethanon reads the start point as a vector3
+  (`ETHParticleSystem.cpp:130`) and scales all three components (`:33`). `Particles::System` gains
+  `startPointZ`; all 102 systems state it. Nothing draws with it: level placements keep their owner's slot
+  (step 59, plan 2d), and 6.3 is what adds `slotAfter(round(z + startPoint.z))` for a spawned effect.
+- **The vanish angle in the script's floats** (`atan2f`, `GameMath.h:711-715`, through `DetMath`), as
+  `Art::Shot::AngleDegrees` does the shot's. `sim/Loading` computes the loading screen's same call in doubles
+  and is left alone (a pixel risk this step's gate forbids); `test_mp_effects` pins the two to agree, 1e-4.
+- **`appear_effect`'s z is a bare literal.** `appearEffect` #13 pushes `2f`, not `g_scale.scale(2)` (00_order
+  8.12b): the row says `"scaled": false`. The port's unit is one level unit and reads it as 2; the flag keeps
+  the decode's difference for K13's table.
+
+**WHAT THE ORIGINAL DOES** (the engine source under `reference/ethanon/toolkit/Source/src/engine/`; the listing
+`out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`).
+- **Reading an `.ent`.** `ETHEntityProperties(filePath)` takes the root's first child element as the entity
+  (`:154-164`) and `ReadFromXMLFile` (`:226-413`) reads each fact from the entity's first DIRECT child of that
+  name (`TiXmlNode::FirstChild`), so a particle system's `<SpriteCut>` or a collision's `<Position>` is never the
+  entity's own. Its light is kept only active with a range above 0 (`:343`), and a halo is drawn only for a
+  light naming a `<HaloBitmap>` (`ETHEntityRenderingManager.cpp:78`), at the light's UNSCALED position plus the
+  entity's (`ETHRenderEntity.cpp:376-386`).
+- **Temporary.** `ETHEntity::IsTemporary` (`ETHEntity.cpp:697-716`): no sprite, at least one system with
+  particles, and every such system with `repeat > 0`. Only such an entity is deleted by the engine, once
+  `AreParticlesOver` (`ETHActiveEntityHandler.cpp:123, 169-171`; `ETHSpriteEntity.cpp:547-567`); any other is its
+  script's to delete.
+- **Over.** `ETHParticleManager::UpdateParticleSystem` skips a particle past its last life (`:204-206`) and marks
+  the pool drawn for any other (`:215`); `m_finished = !anythingDrawn` (`:264`). So a pool is over when every
+  particle is past its last life, which a repeat-0 system never is - killed or not, since a killed particle is
+  only not renewed (`:259`). The removal test runs at the START of a frame, before the update that stores
+  `m_finished`, so the original deletes a temporary on the second frame after the one that spent its last
+  particle; `Particles::Finished`, asked before a frame's `Step`, says so one frame earlier, a frame on which
+  neither draws anything (`Drawn` refuses a spent particle by the same test).
+- **Scale.** `AddEntity` makes the entity at `<Scale>` x its scale argument x the global scale, 1 in this game
+  (`ETHScriptWrapper.Scene.cpp:146-148`, `ETHSpriteEntity.cpp:56-65`), and each system at the mean of that
+  scale's two axes (`ETHSpriteEntity.cpp:316-319`, `ETHParticleManager.cpp:70-90`).
+- **`vanishEffect`** (Portal.angelscript, bytes 356384..356958): #2-13 `direction = normalize(objectPos -
+  portalPos)` (zero for a zero vector, `GameMath.h:755-761`); #14-26 `offset = direction x g_scale.scale(32)`;
+  #28-34 `angle = radianToDegree(getAngle(direction)) - 90`; #36-69 `AddEntity('suck_effect.ent',
+  vector3(portalPos + offset, g_scale.scale(32)), angle, @effect, '', g_scale.getScale())`; #83-112
+  `AddEntity('sparkles.ent', vector3(objectPos, g_scale.scale(32)), angle, ...)` (#100-101 `VAR objectPos`,
+  `GETOBJREF 0`: the stack slot VAR filled, 00_order 8.0 rule 1). **`appearEffect`** (357060..357278):
+  `AddEntity('appear_effect.ent', vector3(pos, 2), 0, ..., g_scale.getScale())`. Callers:
+  `PortalManager::teleportToOther` (144944..145873) #61 vanish with the traveller's position BEFORE #69 moves
+  it, #75 appear at the exit; `teleportToFirstStaticPortal` #44/#58; `ETHCallback_portal_static` #144/#165;
+  `LoadingScreen::loop` #241.
+- **`explosion.ent` is added by nothing**: the listing holds no string `'explosion.ent'`, and none of the 133
+  `.esc` files names it (a scan of their `<EntityName>` and custom-data values that finds `barrel_bomb` in 16).
+  Recorded in `effects.json` `_never_spawned`; the barrel's blast is `explosion_large.ent` (system_7 S10).
+
+**WHAT CHANGED.**
+- **`game/sim/Art`.** `struct Entity : Picture` (`blendMode`, `pivotPx`, `scale` per axis, `systems`,
+  `Temporary()`, `ScaleAt(s)`, `ParticleScale(s)`) and `LoadEnt(path, Entity&, error)`, over a small XML reader
+  (elements, double-quoted attributes, text, comments and CDATA - `light_wall.ent` and `minion.ent` write their
+  collision polygons in CDATA). Integer and boolean attributes read as TinyXML's `%d` does (`"10.000000"` is
+  10). The light maps as the converter maps a level's (`tscn.py:313-333`): offset = `<Position>`, halo offset =
+  its x and y, halo size = `haloSize` on both axes, unscaled. `framesPerSecond` and `z` stay 0: the call gives
+  the depth, and a sheet's rate is the script's. art.json and `LoadRules` are untouched.
+- **`game/sim/Particles`.** `startPointZ` (read strictly, scaled by `Scale`); `Load` split into `ReadEnt` (the
+  UTF-16 decode, now shared) and `Parse`, the same code; `Scaled` (`Scale` on a copy); `Finished`.
+- **`game/sim/Effects` and `game/data/effects.json`.** A row per AddEntity call: `entity`, `offset_units`,
+  `z` (`value`, `scaled`), `angle` (a number or `toward_traveller_minus_90`), `scale` (in `getScale()`s),
+  `_source`; every field required, and `appear_effect` refused unless unturned with no offset. `Suck`,
+  `Sparkles`, `Appear` return what AddEntity receives. **Scope decision: only the three rows whose arithmetic
+  this step pins.** Each later effect adds its row with the step that draws it; a missing row is an effect not
+  yet drawn, not one the script lacks.
+- **Tests.** `test_mp_effects` (new, pure, no skip mark): the rows as read; 1-01's portal 603 at (150, 74) with
+  the player at (125.9, 83.8) - direction, suck at (120.357, 86.054) on the portal's rim (system_7's (120.4,
+  86.1)), turned 202.1286 degrees, sparkles exactly at the player, flash at the exit at a bare z 2; the four
+  compass sides (0 / -90 / 180 / 90) and a traveller on the portal (-90); agreement with `sim/Loading` and
+  ui.json's `loading.vanish`; ten refusals by name, and a missing file. `test_mp_sprites`: `Finished` (a
+  two-particle repeat-1 pool over on frame 5, the first spent alone before it; repeat 0 never, killed or not; an
+  empty pool); `Scaled` on a copy, and `startPointZ`; `LoadEnt` on 17 files it writes (eight read: the defaults,
+  a light's acceptance, only the entity's own children, `Temporary`; nine refused by name); the six pins below,
+  on the original's files; all 190 read, their systems equal to `Particles::Load`'s, and the census counts; the
+  seven pictures art.json copies equal to `LoadEnt`'s.
+
+**BASELINE.** The committed build (`e620810`) reproduces 1-01 f420 `52549d7f` of the
+starting baseline `out/parity/split/after/sweep/` (`6.2/before/`), which step 90's review found 128 of 128
+byte-identical on step 90's after build: this step's "before" is that sweep. 6.2 is not in section 7's list of
+steps that move the baseline.
+
+**GATES.** 1280x720, `--fixed-step`, captures under `out/parity/visuals/6.2/`.
+
+| Gate (00_order section 7, 6.2) | Required | Before | After |
+|---|---|---|---|
+| `LoadEnt` pin: `suck_effect` | one system, temporary | no reader | **no sprite, 1 system (`inverted_explosion.bmp` 10 x 1, 1 particle, repeat 1, 64 across, 500 ms), temporary, no light: passes** |
+| `LoadEnt` pin: `fireball` | no sprite, repeat 0, not temporary, halo 60, `<Scale>` 1.2 | - | **no sprite; one system repeat 0 (`explosion.JPG`, 5, StartPoint z 4); not temporary; light range 50 (1, 0.5, 0.2) z 1, `halo.bmp` 60 (its Light's Position, not its Collision's); `<Scale>` 1.2, pivot (4, 0): passes.** At `getScale()` through `Lighting::OwnerScaled`: halo 72, range 60 (system_7 S11) |
+| `LoadEnt` pin: `red_eyes` | repeat 0 | - | **no sprite, one system (`hard_halo.png`, 12, repeat 0, z 2, (1, 0.1, 0.1)), not temporary: passes** |
+| `LoadEnt` pin: `portal` | sprite, two systems, sys1 a0 | - | **`portal_halo.png` added; sys0 `portal_spiral.png` a1 x 4, sys1 `portal.png` a0, both z 10; not temporary; no light; no `<Scale>`/`<SpriteCut>`/`<PivotAdjust>` read as (1, 1), 1 x 1, (0, 0): passes** |
+| `LoadEnt` pin: `enemy_shoot` | sprite 6 x 1, light and halo | - | **`projectile_transparent.png` 6 x 1, no systems, not temporary, applies light; light 64 (2, 0, 0) z -28, `halo.bmp` 146 at 0.25; pivot (4, 0): passes** |
+| `Scaled(explosion_large, 1.4)` | the engine's system scale | - | **`<Scale>` (1.4, 1.4), made at 1.4; sys0 size 128 -> 179.2, growth 2.6 -> 3.64, max 250 -> 350, no time, angle, count or cut; sys1 2 -> 2.8, 7.5 -> 10.5; the entity's own systems unchanged. Temporary; a light of 191 with no halo: passes** |
+| New `test_mp_effects`: the vanish arithmetic | passes | - | **78 checks, 0 failures** |
+| No pixel change (and the proof for the split `Particles::Load`, the now-required StartPoint z and `Scale`'s new line, which every level's emitters and the static portals go through) | the sweep byte-identical to 6.1's | 1-01 f420 `52549d7f` (committed build) | **128 of 128 byte-identical to `out/parity/split/after/sweep/` (`6.2/after/compare_sweep.json`; every png opened), on exe `1694785c`: passes** |
+| Reported: the 190 `.ent` files through `LoadEnt` | - | - | **190 read; 51 temporary, 19 keep a light (9 a halo), 121 a sprite, 9 a `<Scale>` other than 1 - each equal to an independent count (Python's XML parser and the engine's rules); every file's systems equal to `Particles::Load`'s** |
+| Reported: art.json's seven copied pictures | - | - | **equal to `LoadEnt` in sprite, blend, cut, emissive, static, applyLight, normal and light, and in pivot for the three whose art.json entry has one (`shot`, `character`, `spike`; the other four have no pivot field there) - but for `torch_light`'s halo offset (below)** |
+| Validation | exit 0, silent | - | **129 launches, every one exit 0; the 128 sweep logs have validation active and 0 messages** |
+
+**THE SUITES**, run directly on this tree's binaries. **`test_mp_effects` 78 checks, 0 failures** (new; run on
+the first build and again on the final one, the same count). **`test_mp_sprites` 809, 0 failures** (704 at step
+90; +105) - on its SECOND run: the first read 809 checks with 2 failures, both this step's own census meeting
+`light_wall.ent` and `minion.ent`, whose CDATA the first reader refused; CDATA was added, the library rebuilt and
+the suite run once more. **`test_mp_layer` 1,204, 0 failures** (as at step 90), run once because the layer reads
+every level's particle systems through the split `Particles::Load`. **ctest was not run**: the step's
+definition of done names these suites.
+
+**BUILD: no warnings** (MSVC, Release, Ninja, /W4). `Particles.cpp`, `Effects.cpp`, `test_mp_effects.cpp` and the
+sim files that include the changed headers were compiled by a targeted build (`--target test_mp_effects`) whose
+output was read for warnings, and had none, but was NOT saved; `6.2/build1.txt` (the rest, 55 steps) and
+`6.2/build2.txt` (`Art.cpp` after the CDATA fix, 50 steps, everything relinked) have 0 warnings and no D9025
+note (no engine file compiled). `6.2/dryrun.txt`, taken after the gates, lists only the glob re-check (step 73):
+nothing is stale, so every object linked into the measured binaries was built from its final content, and
+`MagicPortals.exe` is still the swept `1694785c`.
+
+**SMART APP CONTROL.** No refusal and no notification: `MagicPortals.exe` launched 129 times (1 before, 128
+in the sweep), `test_mp_effects` and `test_mp_sprites` twice each, `test_mp_layer` once.
+
+**LEFT FOR THE OWNER AND THE LATER STEPS.**
+- **Found: a lit torch's halo is drawn 12 units low.** `light_from_projectile.ent`'s light stands at (0, -12, 24)
+  and `DrawHalo` draws its halo at that (x, y) from the torch (`ETHRenderEntity.cpp:376-386`; its z moves
+  nothing, since all 133 scenes state `<ZAxisDirection x=0 y=0>` and `ToScreenPos` adds z times it); art.json
+  `torch_light.light.halo_offset` is (0, 0) (step 55), and the layer places the halo at the torch's point. A
+  hand copy drifting from its file, which is what `LoadEnt` is for. Not fixed here (a pixel change on every
+  frame a torch is lit); `test_mp_sprites` pins the `.ent`'s (0, -12). For the step that draws the lit torch
+  (00_order 7f-5) or a follow-up, with a lit-torch capture.
+- **Found: `LoadEnt` reads the entity's `type` and its `layerDepth` for nothing.** The engine reads both
+  (`ETHEntityProperties.cpp:228, :237`); `Art::Entity` keeps neither, so every file it reads comes back
+  ET_HORIZONTAL at layer depth 0. Of the 190, 188 state `type="0"`. `black_bar.ent` states `type="5"`
+  (ET_LAYERABLE, `ETHEntityProperties.h:84-89`) with `layerDepth="1.000000"`, the only non-zero of the 169
+  that state one (21 state none and take `Reset()`'s 0, `:177`), and `ETHSpriteEntity::ComputeDepth` draws a
+  layerable at `Max(m_layrableMinimumDepth, layerDepth)` instead of from its z (`:611-631`) - which is
+  00_order 8.13's "`black_bar` layerDepth 1.0 (in front of all)", a row 13.3 must build. `light_off.ent`
+  states `type="2"` (ET_VERTICAL), and that is what gives its two repeat-0 sparkle systems INDIVIDUAL_OFFSET
+  sorting: `ComputeParticleDepth` adds each particle's own offset and the engine's particle depth shift to its
+  `startPoint.z`, which the other two modes do not - `SAME_DEPTH_AS_OWNER` takes the bare `startPoint.z` and a
+  layerable takes the owner's depth (`ETHEntityProperties.cpp:108-121`; `ETHParticleManager.cpp:306-335`). It
+  is placed once in each of 10 of the 133 scenes - `light_off.ent` in 21c-26c, `light_off` in 28c-31c.
+  Nothing draws through `LoadEnt` yet, so no pixel moves today; 13.3/13.4 and the step that draws a lit torch
+  want the two attributes read into `Entity` first, and `Art.hpp`'s header names the fields it leaves at 0
+  without naming these.
+- **For 6.3.** Free a temporary effect when every one of its systems is `Finished` (one frame before the
+  original, drawing nothing either way); never use `Finished` for a placed portal's kill (repeat 0: 7.4 keeps
+  the script's 400 ms clock). Its systems' depth takes `startPointZ`, already scaled by `Scaled`. `LoadEnt`
+  reads the file each call: cache an entity per name rather than read at every spawn.
+- **For 7.3.** `sim/Loading` duplicates `vanishEffect` in doubles for the loading screen; pointing it at
+  `Effects::Suck` needs a byte check of the loading-screen frames first. `spawnStone`'s `appear_effect` (z 0,
+  scale 1.5) is another call site with a row of its own to come.
+- **Latent, recorded:** `Particles::Load` reads any number of systems where Ethanon reads two, and refuses a
+  zero-particle system Ethanon would drop; no file has either. `Particles::Finished` asks `repeat > 0` first, so
+  an EMPTY pool of repeat 0 reads not over where the engine's `!anythingDrawn` reads over; no pool is empty
+  (`Parse` refuses a count below 1, `CreateParticleSystem` `nParticles <= 0`, `ETHParticleManager.cpp:78`).
+  6.3 may put the empty check first when it wires the function in.
+
+**THE COMMIT'S REVIEW PASS** (text only). The review re-derived the rule from the decode and the engine before
+reading the code, and measured on its own: a census of the 190 files by an independent reader
+(`6.2/verify1/ent_census.py`, Python's XML parser and Ethanon's rules) gives 51 temporary, 19 lit (9 haloed), 121
+with a sprite, 9 with a `<Scale>` other than 1, 102 systems, at most two per file, none without a StartPoint z
+and none empty; its own 128-level f420 sweep on exe `1694785c` is 128 of 128 byte-identical to
+`out/parity/split/after/sweep/` and to `6.2/after/` (`6.2/verify1/compare_v1.json`; every png 1280 x 720, every
+md5 equal to its log line, every exit 0, validation active and silent in all 128 logs); `test_mp_effects` 78,
+`test_mp_sprites` 809 and `test_mp_layer` 1,204 checks, 0 failures, one run each. It compiled `Art.cpp`,
+`Effects.cpp`, `Particles.cpp`, `test_mp_effects.cpp` and `test_mp_sprites.cpp` with the build's own flags
+(`6.2/verify1/compile_check.txt`): 0 warnings, which closes the unsaved targeted-build log above. Its low findings
+were applied as text: the BASELINE no longer names the committed build's exe md5, which no file recorded;
+`Particles::Finished`'s comment, which said an empty pool is over without the repeat-0 exception (the latent note
+above; the code is unchanged); and the art.json row above, which now names the pivots it checks. So the
+binaries were rebuilt after the gates (`6.2/build_commit.txt`: 9 translation units recompiled for the header's
+comment, 47 executables relinked, 0 warnings; `6.2/dryrun_commit.txt` stops at the glob re-check); a comment
+changes no code, so every gate above stands. Nothing was relaunched: `MagicPortals.exe` is now `fdc2da8a`,
+relinked from the same code. A second review pass, on the commit itself, added the `type` and
+`layerDepth` note above: text only, no code, nothing rebuilt and nothing relaunched.

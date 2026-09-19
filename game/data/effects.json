@@ -1,0 +1,98 @@
+{
+  "_about": [
+    "The effects the original's script ADDS - entities spawned by name with AddEntity - as each call",
+    "adds its one: which .ent, where from the point the call is given, at what depth, turned how and",
+    "at what scale. The call site's facts only: what the entity itself is (its sprite, its particle",
+    "systems, its light, its own <Scale>) is read from the original's .ent at run time by",
+    "Art::LoadEnt and never copied here, since hand copies of the fifty-odd files would drift.",
+    "Decoded from android_game.bin through the remake's asbc listing (out/parity/asbc/",
+    "all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0). Step 91 of",
+    "docs/planning/2026-09-11-magic-portals-remaster.md (the visuals plan's 6.2, system_7 7a-1).",
+    "",
+    "WHAT IS HERE. The rows of vanishEffect and appearEffect (Portal.angelscript), whose",
+    "arithmetic test_mp_effects pins: the teleport's three effects, drawn by the visuals plan's",
+    "step 7.3. Every other effect the script adds gets its row with the step that draws it, so a",
+    "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
+    "sim/Effects, strictly: every field below is required.",
+    "",
+    "UNITS. AddEntity(file, vector3(xy, z), angle, @out, altName, scale), its arguments pushed",
+    "last-first (00_order 8.0 rule 3; ETHScriptWrapper.Scene.cpp:131-158). The script's",
+    "g_scale.scale(n) is n x screenHeight / 256 (00_order 8.12a), which is n of the port's units,",
+    "so offset_units and a z whose `scaled` is true are those n. A z the call writes as a bare",
+    "literal is in the engine's own units and does not grow with the screen (00_order 8.12b):",
+    "`scaled` false says so; the port, whose unit is one level unit, reads the number as it is.",
+    "`scale` is a multiple of g_scale.getScale(), the script's scale for anything it adds at its",
+    "own size, which is 1 in the port's units; the entity is drawn at that times its .ent's",
+    "<Scale> (Art::Entity::ScaleAt). `angle` is Ethanon's, in degrees, counter-clockwise on the",
+    "screen: a number, or the named rule toward_traveller_minus_90, radianToDegree(getAngle(d)) -",
+    "90 with d = normalize(traveller - portal) and getAngle(v) = atan2f(v.x, v.y) wrapped into",
+    "[0, 2 pi) (GameMath.h:711-715), computed in floats as the script computes it."
+  ],
+
+  "_never_spawned": {
+    "entities": ["explosion.ent"],
+    "_source": [
+      "explosion.ent is an .ent of the original's that nothing adds: the listing holds no string",
+      "'explosion.ent' (its explosion names are 'explosion_large.ent', 'small_explosion.ent',",
+      "'small_explosion_no_light.ent' and 'antiportal_explosion.ent'), and no level places it -",
+      "no <EntityName> or custom-data value of any of the 133 .esc files names it. A barrel's",
+      "blast is explode()'s explosion_large.ent (MiscCallbacks, bytes 342023..342895, #23;",
+      "ETHCallback_barrel_bomb #56-60), which is what the plan's 7e row 'explosion.ent /",
+      "explosion_large.ent on barrel detonations' should read (system_7 S10)."
+    ]
+  },
+
+  "suck_effect": {
+    "entity": "suck_effect.ent",
+    "offset_units": 32,
+    "z": {"value": 32, "scaled": true},
+    "angle": "toward_traveller_minus_90",
+    "scale": 1,
+    "_source": [
+      "vanishEffect (Portal.angelscript, bytes 356384..356958), called with the traveller's",
+      "position before it moves and the entry portal's: #2-13 direction = normalize(objectPos -",
+      "portalPos) (normalize of a zero vector is zero, GameMath.h:755-761); #14-26 offset =",
+      "direction x g_scale.scale(32); #28-34 angle = radianToDegree(getAngle(direction)) - 90;",
+      "#36-69 AddEntity('suck_effect.ent', vector3(portalPos + offset, g_scale.scale(32)),",
+      "angle, @effect, '', g_scale.getScale()). Its callers: PortalManager::teleportToOther",
+      "(bytes 144944..145873) #61, before #69 moves the traveller;",
+      "PortalManager::teleportToFirstStaticPortal (145999..146550) #44;",
+      "ETHCallback_portal_static (360571..361404) #144; and LoadingScreen::loop",
+      "(178170..179373) #241 - the loading screen, which ui.json's loading.vanish reads with",
+      "the same 32 and -90 (test_mp_effects pins that the two agree)."
+    ]
+  },
+
+  "sparkles": {
+    "entity": "sparkles.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": "toward_traveller_minus_90",
+    "scale": 1,
+    "_source": [
+      "vanishEffect #83-112: AddEntity('sparkles.ent', vector3(objectPos, g_scale.scale(32)),",
+      "angle, @effect, '', g_scale.getScale()) - at the traveller where it stood, turned as the",
+      "suck effect is (#93 pushes the same local). #100-101: VAR objectPos then GETOBJREF 0,",
+      "which names the stack slot VAR just filled, not the portal (00_order 8.0 rule 1)."
+    ]
+  },
+
+  "appear_effect": {
+    "entity": "appear_effect.ent",
+    "offset_units": 0,
+    "z": {"value": 2, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "appearEffect (Portal.angelscript, bytes 357060..357278), called with the exit portal's",
+      "position once the traveller stands there (teleportToOther #71-75, after #69):",
+      "AddEntity('appear_effect.ent', vector3(pos, 2), 0, @effect, '', g_scale.getScale()) -",
+      "#12 the angle 0, #13 the z 2, a bare literal (PshC4 2f, not through g_scale.scale). The",
+      "same pair of calls ends teleportToFirstStaticPortal (#44, #58) and ETHCallback_portal_static",
+      "(#144, #165).",
+      "Beholder's spawnStone (bytes 373491..373647) adds the same .ent at a rock another way,",
+      "AddScaledEntity('appear_effect.ent', vector3(pos, 0), g_scale.scale(1.5)) (#5-22): z 0",
+      "and scale 1.5, a row of its own for the step that draws the rocks' effect."
+    ]
+  }
+}

@@ -4,10 +4,16 @@
 #include "core/Json.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
+#include <exception>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace MagicPortals::Art {
 
@@ -543,6 +549,349 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     timer.decayFramesPerSecond = decayRate["value"].AsNumber();
     timer.goneBelowScale = timerEntry["gone_below_scale"].AsNumber();
     timer.screenPxPerUnit = timerEntry["screen_px_per_unit"].AsNumber();
+    out = std::move(read);
+    return true;
+}
+
+// ---- an entity the script adds, read out of its .ent ----------------------------
+
+namespace {
+
+// One element of an .ent, as TinyXML holds it: its name, its attributes in the
+// order written, the text directly inside it, and its child elements. Enough XML
+// for the files Ethanon's editor writes - a declaration, elements, double-quoted
+// attributes, text and CDATA - and anything else is refused rather than guessed at.
+struct Element {
+    std::string name;
+    std::vector<std::pair<std::string, std::string>> attributes;
+    std::string text;
+    std::vector<Element> children;
+
+    // TiXmlNode::FirstChild(name): the first DIRECT child of that name, so a
+    // <SpriteCut> or <Position> inside a particle system or a light is never the
+    // entity's own.
+    const Element* Child(const std::string& childName) const {
+        for (const Element& child : children) {
+            if (child.name == childName) return &child;
+        }
+        return nullptr;
+    }
+    const std::string* Attribute(const std::string& attributeName) const {
+        for (const auto& [key, value] : attributes) {
+            if (key == attributeName) return &value;
+        }
+        return nullptr;
+    }
+};
+
+class XmlReader {
+public:
+    explicit XmlReader(const std::string& text) : m_text(text) {}
+
+    // The document's one root element, after its declaration and any comment.
+    bool Document(Element& root, std::string& why) {
+        SkipMisc();
+        if (!Parse(root, why, 0)) return false;
+        SkipMisc();
+        if (m_at != m_text.size()) {
+            why = "text after the root element";
+            return false;
+        }
+        return true;
+    }
+
+private:
+    static bool NameChar(char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' || c == '-' || c == '.' || c == ':';
+    }
+
+    void SkipSpace() {
+        while (m_at < m_text.size() && std::isspace(static_cast<unsigned char>(m_text[m_at])) != 0) ++m_at;
+    }
+
+    bool StartsWith(const char* what) const { return m_text.compare(m_at, std::strlen(what), what) == 0; }
+
+    // Space, the <?xml ... ?> declaration and <!-- comments -->.
+    void SkipMisc() {
+        while (true) {
+            SkipSpace();
+            const char* close = StartsWith("<?") ? "?>" : StartsWith("<!--") ? "-->" : nullptr;
+            if (close == nullptr) return;
+            const std::size_t end = m_text.find(close, m_at);
+            m_at = end == std::string::npos ? m_text.size() : end + std::strlen(close);
+        }
+    }
+
+    bool Name(std::string& out) {
+        const std::size_t from = m_at;
+        while (m_at < m_text.size() && NameChar(m_text[m_at])) ++m_at;
+        out = m_text.substr(from, m_at - from);
+        return !out.empty();
+    }
+
+    bool Parse(Element& out, std::string& why, int depth) {
+        if (depth > 32) {
+            why = "elements nested deeper than any .ent";
+            return false;
+        }
+        if (m_at >= m_text.size() || m_text[m_at] != '<') {
+            why = "an element was expected";
+            return false;
+        }
+        ++m_at;
+        if (!Name(out.name)) {
+            why = "an element without a name";
+            return false;
+        }
+        while (true) {
+            SkipSpace();
+            if (StartsWith("/>")) {
+                m_at += 2;
+                return true;
+            }
+            if (StartsWith(">")) {
+                ++m_at;
+                break;
+            }
+            std::string key;
+            if (!Name(key)) {
+                why = "<" + out.name + "> has an attribute without a name";
+                return false;
+            }
+            SkipSpace();
+            if (!StartsWith("=\"")) {
+                why = "<" + out.name + ">'s " + key + " is not written =\"...\"";
+                return false;
+            }
+            m_at += 2;
+            const std::size_t end = m_text.find('"', m_at);
+            if (end == std::string::npos) {
+                why = "<" + out.name + ">'s " + key + " is never closed";
+                return false;
+            }
+            out.attributes.emplace_back(key, m_text.substr(m_at, end - m_at));
+            m_at = end + 1;
+        }
+        // Its content: text, comments and child elements, to its own end tag.
+        while (true) {
+            const std::size_t open = m_text.find('<', m_at);
+            if (open == std::string::npos) {
+                why = "<" + out.name + "> is never closed";
+                return false;
+            }
+            out.text += m_text.substr(m_at, open - m_at);
+            m_at = open;
+            if (StartsWith("<!--")) {
+                SkipMisc();
+                continue;
+            }
+            // A CDATA section is text, taken as written: light_wall.ent and
+            // minion.ent write their collision polygons in one.
+            if (StartsWith("<![CDATA[")) {
+                const std::size_t from = m_at + 9;
+                const std::size_t end = m_text.find("]]>", from);
+                if (end == std::string::npos) {
+                    why = "<" + out.name + ">'s CDATA is never closed";
+                    return false;
+                }
+                out.text += m_text.substr(from, end - from);
+                m_at = end + 3;
+                continue;
+            }
+            if (StartsWith("</")) {
+                m_at += 2;
+                std::string closing;
+                if (!Name(closing) || closing != out.name) {
+                    why = "<" + out.name + "> is closed by </" + closing + ">";
+                    return false;
+                }
+                SkipSpace();
+                if (!StartsWith(">")) {
+                    why = "</" + closing + " is never finished";
+                    return false;
+                }
+                ++m_at;
+                return true;
+            }
+            out.children.emplace_back();
+            if (!Parse(out.children.back(), why, depth + 1)) return false;
+        }
+    }
+
+    const std::string& m_text;
+    std::size_t m_at = 0;
+};
+
+std::string Trimmed(const std::string& text) {
+    std::size_t from = 0;
+    std::size_t to = text.size();
+    while (from < to && std::isspace(static_cast<unsigned char>(text[from])) != 0) ++from;
+    while (to > from && std::isspace(static_cast<unsigned char>(text[to - 1])) != 0) --to;
+    return text.substr(from, to - from);
+}
+
+// An attribute read as TinyXML reads one - QueryFloatAttribute and, for the
+// engine's ints and booleans, QueryIntAttribute, whose %d takes the whole part of
+// "10.000000" - leaving `into` as it is when the attribute is absent. A stated
+// value that is not a number is refused: the engine would keep its default in
+// silence, and no file of the original's states one.
+bool FloatAttribute(const Element& element, const char* name, double& into, std::string& why) {
+    const std::string* value = element.Attribute(name);
+    if (value == nullptr) return true;
+    try {
+        std::size_t used = 0;
+        const double parsed = std::stod(*value, &used);
+        if (used == 0 || !std::isfinite(parsed)) throw std::invalid_argument(*value);
+        into = parsed;
+        return true;
+    } catch (const std::exception&) {
+        why = "<" + element.name + ">'s " + name + " is not a number: '" + *value + "'";
+        return false;
+    }
+}
+
+bool IntAttribute(const Element& element, const char* name, int& into, std::string& why) {
+    const std::string* value = element.Attribute(name);
+    if (value == nullptr) return true;
+    try {
+        std::size_t used = 0;
+        const int parsed = std::stoi(*value, &used);
+        if (used == 0) throw std::invalid_argument(*value);
+        into = parsed;
+        return true;
+    } catch (const std::exception&) {
+        why = "<" + element.name + ">'s " + name + " is not a whole number: '" + *value + "'";
+        return false;
+    }
+}
+
+// ReadVector2PropertyFromXmlElement and its kin (ETHEntityProperties.cpp:606-674):
+// the first child of that name, each of its components read where stated.
+bool ChildFloats(const Element& parent, const char* name, const char* const* keys, double* into, std::size_t count,
+                 std::string& why) {
+    const Element* child = parent.Child(name);
+    if (child == nullptr) return true;
+    for (std::size_t i = 0; i < count; ++i) {
+        if (!FloatAttribute(*child, keys[i], into[i], why)) return false;
+    }
+    return true;
+}
+
+// The text inside the first child of that name, or `into` as it is.
+void ChildText(const Element& parent, const char* name, std::string& into) {
+    if (const Element* child = parent.Child(name)) into = Trimmed(child->text);
+}
+
+bool ReadEntLight(const Element& entity, std::optional<Lighting::Light>& out, std::string& why) {
+    out.reset();
+    const Element* element = entity.Child("Light");
+    if (element == nullptr) return true;
+    // ETHLight(true) (ETHLight.cpp:27-38), then its ReadFromXMLFile (:40-63).
+    int active = 1;
+    double range = 256.0;
+    double haloBrightness = 1.0;
+    double haloSize = 64.0;
+    double position[3] = {0.0, 0.0, 0.0};
+    double colour[3] = {1.0, 1.0, 1.0};
+    std::string halo;
+    static const char* const kXyz[] = {"x", "y", "z"};
+    static const char* const kRgb[] = {"r", "g", "b"};
+    if (!IntAttribute(*element, "active", active, why) || !FloatAttribute(*element, "range", range, why) ||
+        !FloatAttribute(*element, "haloBrightness", haloBrightness, why) ||
+        !FloatAttribute(*element, "haloSize", haloSize, why) ||
+        !ChildFloats(*element, "Position", kXyz, position, 3, why) ||
+        !ChildFloats(*element, "Color", kRgb, colour, 3, why)) {
+        return false;
+    }
+    ChildText(*element, "HaloBitmap", halo);
+    // Kept only active and with a range (ETHEntityProperties.cpp:343).
+    if (active == 0 || !(range > 0.0)) return true;
+    Lighting::Light light;
+    light.range = range;
+    light.offset = glm::dvec3(position[0], position[1], position[2]);
+    light.colour = glm::dvec3(colour[0], colour[1], colour[2]);
+    light.halo = halo;
+    // The halo is drawn at the light's position, unscaled (ETHRenderEntity.cpp:376-386),
+    // haloSize on both axes: the converter's mapping (tscn.py:313-333).
+    light.haloOffset = glm::dvec2(position[0], position[1]);
+    light.haloSize = glm::dvec2(haloSize, haloSize);
+    light.haloBrightness = haloBrightness;
+    out = light;
+    return true;
+}
+
+} // namespace
+
+bool Entity::Temporary() const {
+    // Every system the reader keeps holds particles (Particles::Load refuses one
+    // that does not), so each is one IsTemporary counts as existing.
+    if (systems.empty() || !sprite.empty()) return false;
+    return std::all_of(systems.begin(), systems.end(),
+                       [](const Particles::System& system) { return system.repeat > 0; });
+}
+
+double Entity::ParticleScale(double scriptScale) const {
+    const glm::dvec2 made = ScaleAt(scriptScale);
+    return (made.x + made.y) / 2.0;
+}
+
+bool LoadEnt(const std::string& path, Entity& out, std::string& error) {
+    std::string text;
+    if (!Particles::ReadEnt(path, text, error)) return false;
+    Element root;
+    std::string why;
+    XmlReader reader(text);
+    if (!reader.Document(root, why)) {
+        error = path + ": " + why;
+        return false;
+    }
+    // hDoc.FirstChildElement() is the root, and its first child element the
+    // entity (ETHEntityProperties.cpp:154-164). Every .ent names them so.
+    if (root.name != "Ethanon" || root.children.empty() || root.children.front().name != "Entity") {
+        error = path + ": is not <Ethanon><Entity>";
+        return false;
+    }
+    const Element& entity = root.children.front();
+
+    Entity read;
+    int isStatic = 0;
+    int applyLight = 0;
+    double emissive[4] = {0.0, 0.0, 0.0, 0.0};
+    double cut[2] = {1.0, 1.0};
+    double scale[2] = {1.0, 1.0};
+    double pivot[2] = {0.0, 0.0};
+    static const char* const kRgba[] = {"r", "g", "b", "a"};
+    static const char* const kXy[] = {"x", "y"};
+    if (!IntAttribute(entity, "static", isStatic, why) || !IntAttribute(entity, "applyLight", applyLight, why) ||
+        !IntAttribute(entity, "blendMode", read.blendMode, why) ||
+        !ChildFloats(entity, "EmissiveColor", kRgba, emissive, 4, why) ||
+        !ChildFloats(entity, "SpriteCut", kXy, cut, 2, why) || !ChildFloats(entity, "Scale", kXy, scale, 2, why) ||
+        !ChildFloats(entity, "PivotAdjust", kXy, pivot, 2, why) || !ReadEntLight(entity, read.light, why)) {
+        error = path + ": " + why;
+        return false;
+    }
+    // A cut is read as ints (ReadVector2iPropertyFromXmlElement, :623-638).
+    read.columns = static_cast<int>(cut[0]);
+    read.rows = static_cast<int>(cut[1]);
+    if (read.columns < 1 || read.rows < 1) {
+        error = path + ": its SpriteCut is not a grid";
+        return false;
+    }
+    read.isStatic = isStatic != 0;
+    read.applyLight = applyLight != 0;
+    read.additive = read.blendMode == Particles::kAlphaAdd;
+    read.emissive = glm::dvec3(emissive[0], emissive[1], emissive[2]);
+    read.scale = glm::dvec2(scale[0], scale[1]);
+    read.pivotPx = glm::dvec2(pivot[0], pivot[1]);
+    ChildText(entity, "Sprite", read.sprite);
+    ChildText(entity, "Normal", read.normal);
+
+    if (!Particles::Parse(text, path, read.systems, error)) return false;
+    if (read.systems.size() > 2) {
+        error = path + ": carries " + std::to_string(read.systems.size()) +
+                " particle systems, and Ethanon reads two (ETH_MAX_PARTICLE_SYS_PER_ENTITY)";
+        return false;
+    }
     out = std::move(read);
     return true;
 }

@@ -2064,6 +2064,435 @@ void EveryAddedBitmapIsWithoutAlpha() {
     }
 }
 
+// ---- a pool that is over, and a system made at its entity's scale ----------------
+
+// ETHParticleManager's m_finished: every particle past its last life. A system of
+// repeat 1 and two particles: over only once BOTH have lived once, and from then on
+// nothing of it is drawn. A system of repeat 0 is never over, killed or not.
+void APoolIsOverWhenEveryParticleIsSpent() {
+    Particles::System s;
+    s.count = 2;
+    s.repeat = 1;
+    s.lifeTimeMs = 40.0;
+    s.size = 10.0;
+    s.maxSize = 100.0;
+    s.colour0 = glm::dvec4(1.0);
+    s.colour1 = glm::dvec4(1.0);
+    const Particles::Owner owner{glm::dvec2(0.0), 0.0};
+    const double tick = 1000.0 / 60.0;
+    std::vector<Particles::Particle> pool = Particles::MakePool(s, 2, owner, kMiddle);
+    CHECK_MSG(!Particles::Finished(s, pool), "a new pool is not over");
+    int frames = 0;
+    bool firstSpentAlone = false;
+    while (!Particles::Finished(s, pool) && frames < 60) {
+        for (std::size_t i = 0; i < pool.size(); ++i) {
+            Particles::Step(s, pool[i], static_cast<int>(i), 2, owner, tick, false, kMiddle);
+        }
+        ++frames;
+        if (pool[0].repeats >= 1 && pool[1].repeats < 1) firstSpentAlone = true;
+    }
+    CHECK_MSG(firstSpentAlone, "the first particle is spent while the second still lives");
+    // Index 0 is released on the first frame and spent on the fourth, its age 50
+    // past a life of 40; index 1 is released on the second (20 ms in) and spent on
+    // the fifth - and the pool is over from then.
+    CHECK_MSG(frames == 5, "over after 5 frames: " + std::to_string(frames));
+    for (const Particles::Particle& p : pool) CHECK_MSG(!Particles::Drawn(s, p, false), "nothing of it is drawn");
+
+    // Repeat 0 is forever: its particles are renewed, and a killed one lives on
+    // past its life without ever counting as spent.
+    Particles::System forever = s;
+    forever.repeat = 0;
+    std::vector<Particles::Particle> lasting = Particles::MakePool(forever, 2, owner, kMiddle);
+    for (int f = 0; f < 120; ++f) {
+        for (std::size_t i = 0; i < lasting.size(); ++i) {
+            Particles::Step(forever, lasting[i], static_cast<int>(i), 2, owner, tick, f >= 30, kMiddle);
+        }
+    }
+    CHECK_MSG(!Particles::Finished(forever, lasting), "repeat 0 never ends, killed or not");
+    CHECK_MSG(Particles::Finished(s, {}), "an empty pool is over, as a loop over nothing draws nothing");
+}
+
+// Scaled is Scale on a copy, and the start point's z is a length like its x and y
+// (ETHParticleSystem.cpp:33 scales the vector3).
+void AScaledCopyLeavesItsSystemAsItWas() {
+    Particles::System s = TorchFlame();
+    s.startPointZ = 10.0;
+    const Particles::System copy = Particles::Scaled(s, 1.5);
+    Particles::System inPlace = s;
+    Particles::Scale(inPlace, 1.5);
+    CHECK_MSG(copy.size == inPlace.size && copy.growth == inPlace.growth && copy.startPoint == inPlace.startPoint &&
+                  copy.direction == inPlace.direction && copy.maxSize == inPlace.maxSize,
+              "the same numbers as Scale");
+    CHECK_MSG(copy.startPointZ == 15.0 && inPlace.startPointZ == 15.0, "the start point's z scales");
+    CHECK_MSG(s.size == 28.0 && s.startPointZ == 10.0, "and the system it was made from is untouched");
+}
+
+// ---- an entity the script adds, read out of its .ent (Art::LoadEnt) --------------
+
+// The .ent files are UTF-16 LE with a byte-order mark; this writes ASCII as one.
+std::vector<unsigned char> Utf16(const std::string& text) {
+    std::vector<unsigned char> bytes = {0xFF, 0xFE};
+    for (const char c : text) {
+        bytes.push_back(static_cast<unsigned char>(c));
+        bytes.push_back(0);
+    }
+    return bytes;
+}
+
+std::string EntFile(const std::string& entityAttributes, const std::string& children) {
+    return "<?xml version=\"1.0\" ?>\n<Ethanon>\n    <Entity" + entityAttributes + ">\n" + children +
+           "    </Entity>\n</Ethanon>\n";
+}
+
+// One whole particle system, every field stated, as all 102 of the original's are.
+std::string OneSystem(int repeat) {
+    return "<ParticleSystem particles=\"2\" allAtOnce=\"0\" alphaMode=\"1\" repeat=\"" + std::to_string(repeat) +
+           "\" animationMode=\"1\" boundingSphere=\"8\" lifeTime=\"100\" randomLifeTime=\"0\" angleDir=\"0\" "
+           "randAngle=\"0\" size=\"8\" randomizeSize=\"0\" growth=\"0\" minSize=\"0\" maxSize=\"100\" "
+           "angleStart=\"0\" randAngleStart=\"0\"><Bitmap>spark.png</Bitmap><Gravity x=\"0\" y=\"0\" />"
+           "<Direction x=\"0\" y=\"0\" /><RandomizeDir x=\"0\" y=\"0\" /><SpriteCut x=\"3\" y=\"2\" />"
+           "<StartPoint x=\"0\" y=\"0\" z=\"6\" /><RandStartPoint x=\"0\" y=\"0\" />"
+           "<Color0 r=\"1\" g=\"1\" b=\"1\" a=\"1\" /><Color1 r=\"1\" g=\"1\" b=\"1\" a=\"1\" />"
+           "<Luminance r=\"1\" g=\"1\" b=\"1\" /></ParticleSystem>";
+}
+
+bool ReadEnt(const std::string& name, const std::string& text, Art::Entity& out, std::string& error) {
+    const std::filesystem::path path = Scratch() / name;
+    Write(path, Utf16(text));
+    return Art::LoadEnt(path.string(), out, error);
+}
+
+// What the file does not state is the ENGINE's default, not a refusal: portal.ent
+// states no <Scale>, fireball.ent no <Sprite>. What it states wrongly is refused.
+void AnEntReadsAsTheEngineReadsIt() {
+    Art::Entity bare;
+    std::string error;
+    CHECK_MSG(ReadEnt("bare.ent", EntFile("", ""), bare, error), error);
+    CHECK_MSG(bare.sprite.empty() && bare.normal.empty() && bare.systems.empty() && !bare.light.has_value(),
+              "nothing stated: no picture, no systems, no light");
+    CHECK_MSG(bare.scale == glm::dvec2(1.0) && bare.pivotPx == glm::dvec2(0.0) && bare.columns == 1 &&
+                  bare.rows == 1 && bare.blendMode == 0 && !bare.additive,
+              "Scale (1, 1), PivotAdjust (0, 0), SpriteCut (1, 1), AM_PIXEL (ETHEntityProperties.cpp:79-109)");
+    CHECK_MSG(bare.emissive == glm::dvec3(0.0) && !bare.isStatic && !bare.applyLight,
+              "EmissiveColor black, not static, applies no light");
+    CHECK_MSG(!bare.Temporary(), "no system: never temporary, as IsTemporary's existent count says");
+
+    // A light with nothing stated but a halo: ETHLight(true)'s range 256, halo 64,
+    // brightness 1, white, at the entity.
+    Art::Entity lit;
+    CHECK_MSG(ReadEnt("lit.ent", EntFile("", "<Light><HaloBitmap>halo.bmp</HaloBitmap></Light>"), lit, error), error);
+    CHECK_MSG(lit.light.has_value(), "an unstated light is active");
+    if (lit.light) {
+        CHECK_MSG(lit.light->range == 256.0 && lit.light->haloSize == glm::dvec2(64.0) &&
+                      lit.light->haloBrightness == 1.0 && lit.light->colour == glm::dvec3(1.0) &&
+                      lit.light->offset == glm::dvec3(0.0) && lit.light->halo == "halo.bmp",
+                  "ETHLight's defaults (ETHLight.cpp:27-38)");
+    }
+    // Kept only active and with a range; a light with no <HaloBitmap> has no halo.
+    Art::Entity off;
+    CHECK_MSG(ReadEnt("off.ent", EntFile("", "<Light active=\"0\" range=\"90\" />"), off, error), error);
+    CHECK_MSG(!off.light.has_value(), "an inactive light is dropped (ETHEntityProperties.cpp:343)");
+    CHECK_MSG(ReadEnt("dark.ent", EntFile("", "<Light range=\"0\" />"), off, error), error);
+    CHECK_MSG(!off.light.has_value(), "and a light of range 0");
+    Art::Entity haloless;
+    CHECK_MSG(ReadEnt("haloless.ent",
+                      EntFile("", "<Light range=\"78\"><Position x=\"0\" y=\"0\" z=\"14\" /></Light>"), haloless,
+                      error),
+              error);
+    CHECK_MSG(haloless.light.has_value() && haloless.light->halo.empty() && haloless.light->range == 78.0 &&
+                  haloless.light->offset.z == 14.0,
+              "a light that names no halo bitmap lights and has no halo");
+
+    // Only the entity's OWN children: a <SpriteCut> inside its particle system
+    // and a <Position> inside its collision are not its.
+    Art::Entity own;
+    CHECK_MSG(ReadEnt("own.ent",
+                      EntFile(" blendMode=\"1\" static=\"1\" applyLight=\"1\"",
+                              "<Particles>" + OneSystem(1) + "</Particles><Collision><Position x=\"5\" y=\"5\" "
+                              "z=\"5\" /></Collision><Light range=\"50\"><Position x=\"1\" y=\"2\" z=\"3\" />"
+                              "</Light><Scale x=\"1.4\" y=\"1.2\" />"),
+                      own, error),
+              error);
+    CHECK_MSG(own.columns == 1 && own.rows == 1, "the system's cut is not the entity's");
+    CHECK_MSG(own.light && own.light->offset == glm::dvec3(1.0, 2.0, 3.0) &&
+                  own.light->haloOffset == glm::dvec2(1.0, 2.0),
+              "the light's own position, and its halo there unscaled");
+    CHECK_MSG(own.additive && own.blendMode == 1 && own.isStatic && own.applyLight, "its attributes");
+    CHECK_MSG(own.systems.size() == 1 && own.systems.front().columns == 3 && own.systems.front().startPointZ == 6.0,
+              "its system, as Particles reads it");
+    CHECK_MSG(own.Temporary(), "no sprite and every system repeats: temporary");
+    CHECK_MSG(own.scale == glm::dvec2(1.4, 1.2) && NearP(own.ScaleAt(2.0), glm::dvec2(2.8, 2.4)) &&
+                  NearD(own.ParticleScale(2.0), 2.6),
+              "<Scale> per axis; AddEntity's x 2 makes it (2.8, 2.4), its systems at the mean 2.6");
+
+    // A sprite, or a system that lives forever, keeps it until its script deletes it.
+    Art::Entity pictured;
+    CHECK_MSG(ReadEnt("pictured.ent", EntFile("", "<Sprite>x.png</Sprite><Particles>" + OneSystem(1) + "</Particles>"),
+                      pictured, error),
+              error);
+    CHECK_MSG(pictured.sprite == "x.png" && !pictured.Temporary(), "with a sprite: not temporary");
+    Art::Entity lasting;
+    CHECK_MSG(ReadEnt("lasting.ent", EntFile("", "<Particles>" + OneSystem(1) + OneSystem(0) + "</Particles>"),
+                      lasting, error),
+              error);
+    CHECK_MSG(lasting.systems.size() == 2 && !lasting.Temporary(), "one system of repeat 0: not temporary");
+
+    // Refused, each by what is wrong.
+    const auto refused = [&](const char* name, const std::string& text, const char* named) {
+        Art::Entity out;
+        out.sprite = "untouched";
+        std::string why;
+        const bool ok = ReadEnt(name, text, out, why);
+        CHECK_MSG(!ok && why.find(named) != std::string::npos && out.sprite == "untouched",
+                  std::string(name) + " is refused by name, leaving what it was given: " + why);
+    };
+    refused("scale.ent", EntFile("", "<Scale x=\"big\" y=\"1\" />"), "Scale");
+    refused("blend.ent", EntFile(" blendMode=\"add\"", ""), "blendMode");
+    refused("cut.ent", EntFile("", "<SpriteCut x=\"0\" y=\"1\" />"), "SpriteCut");
+    refused("range.ent", EntFile("", "<Light range=\"far\" />"), "range");
+    refused("root.ent", "<?xml version=\"1.0\" ?>\n<Entity></Entity>\n", "<Ethanon><Entity>");
+    refused("open.ent", "<Ethanon><Entity><Sprite>x.png</Entity></Ethanon>", "closed by");
+    refused("three.ent", EntFile("", "<Particles>" + OneSystem(1) + OneSystem(1) + OneSystem(1) + "</Particles>"),
+            "reads two");
+    std::string brokenSystem = OneSystem(1);
+    brokenSystem.replace(brokenSystem.find(" z=\"6\""), 6, "");
+    refused("nozed.ent", EntFile("", "<Particles>" + brokenSystem + "</Particles>"), "StartPoint z");
+    {
+        const std::filesystem::path path = Scratch() / "ascii.ent";
+        Write(path, {'<', 'E', 't', 'h', 'a', 'n', 'o', 'n', '>'});
+        Art::Entity out;
+        std::string why;
+        CHECK_MSG(!Art::LoadEnt(path.string(), out, why) && why.find("UTF-16") != std::string::npos,
+                  "a file not in the original's UTF-16 is refused: " + why);
+    }
+}
+
+// The five the visuals plan names (00_order step 6.2; system_7 7a), and the one it
+// scales: each read out of the original's own file.
+void TheEffectsAreTheirEnts() {
+    const auto load = [](const char* name) {
+        Art::Entity entity;
+        std::string error;
+        CHECK_MSG(Art::LoadEnt(kOriginal + "/entities/" + name, entity, error), error);
+        return entity;
+    };
+
+    // suck_effect.ent: no sprite, one system that lives once - temporary, freed by
+    // the engine when it is over.
+    const Art::Entity suck = load("suck_effect.ent");
+    CHECK_MSG(suck.sprite.empty() && suck.systems.size() == 1 && suck.Temporary() && !suck.light,
+              "suck_effect: no sprite, one system, temporary, no light");
+    if (suck.systems.size() == 1) {
+        const Particles::System& s = suck.systems.front();
+        CHECK_MSG(s.bitmap == "inverted_explosion.bmp" && s.count == 1 && s.repeat == 1 && s.columns == 10 &&
+                      s.rows == 1 && s.additive && s.size == 64.0 && s.lifeTimeMs == 500.0,
+                  "its burst: inverted_explosion.bmp 10 x 1, one particle, once, 64 across for 500 ms");
+    }
+
+    // fireball.ent: no sprite, but its one system repeats 0, so it is NOT
+    // temporary - its script deletes it. <Scale> 1.2, and a light whose 60-unit
+    // halo is drawn 72 across (system_7 S11).
+    const Art::Entity fireball = load("fireball.ent");
+    CHECK_MSG(fireball.sprite.empty(), "fireball: no sprite");
+    CHECK_MSG(fireball.systems.size() == 1 && fireball.systems.front().repeat == 0, "one system, repeat 0");
+    CHECK_MSG(!fireball.Temporary(), "not temporary: ETHCallback_fireball deletes it");
+    CHECK_MSG(fireball.scale == glm::dvec2(1.2) && fireball.pivotPx == glm::dvec2(4.0, 0.0) &&
+                  fireball.additive && fireball.emissive == glm::dvec3(0.3, 0.3, 0.8),
+              "<Scale> 1.2, PivotAdjust (4, 0), blendMode 1, emissive (0.3, 0.3, 0.8)");
+    CHECK_MSG(fireball.columns == 1 && fireball.rows == 1, "its system's SpriteCut is not its own");
+    CHECK_MSG(fireball.light.has_value(), "fireball has a light");
+    if (fireball.light) {
+        const Lighting::Light& light = *fireball.light;
+        CHECK_MSG(light.range == 50.0 && light.colour == glm::dvec3(1.0, 0.5, 0.2) &&
+                      light.offset == glm::dvec3(0.0, 0.0, 1.0) && light.halo == "halo.bmp" &&
+                      light.haloSize == glm::dvec2(60.0) && light.haloBrightness == 1.0,
+                  "range 50, (1, 0.5, 0.2), 1 above it; halo.bmp, 60 across - its Light's Position, not its "
+                  "Collision's");
+        const Lighting::Light drawn = Lighting::OwnerScaled(light, fireball.ScaleAt(1.0));
+        CHECK_MSG(NearP(drawn.haloSize, glm::dvec2(72.0), 1e-9) && NearD(drawn.range, 60.0),
+                  "added at getScale(): its halo 72 across and its light's range 60");
+    }
+    if (!fireball.systems.empty()) {
+        const Particles::System& s = fireball.systems.front();
+        CHECK_MSG(s.bitmap == "explosion.JPG" && s.count == 5 && s.startPointZ == 4.0,
+                  "explosion.JPG, five, 4 above the entity");
+        CHECK_MSG(NearD(fireball.ParticleScale(1.0), 1.2), "its system made at 1.2");
+    }
+
+    // red_eyes.ent: the player's eyes. A system that never ends, owned by the
+    // player and never freed.
+    const Art::Entity eyes = load("red_eyes.ent");
+    CHECK_MSG(eyes.sprite.empty() && eyes.systems.size() == 1 && !eyes.Temporary() && !eyes.light,
+              "red_eyes: no sprite, one system, not temporary, no light");
+    if (eyes.systems.size() == 1) {
+        const Particles::System& s = eyes.systems.front();
+        CHECK_MSG(s.bitmap == "hard_halo.png" && s.count == 12 && s.repeat == 0 && s.startPointZ == 2.0 &&
+                      s.colour0 == glm::dvec4(1.0, 0.1, 0.1, 1.0),
+                  "hard_halo.png, twelve, forever, 2 above, red");
+    }
+
+    // portal.ent: a sprite and two systems, the second alpha-blended. The file
+    // states no <Scale>, <SpriteCut> or <PivotAdjust>: the engine's defaults.
+    const Art::Entity portal = load("portal.ent");
+    CHECK_MSG(portal.sprite == "portal_halo.png" && portal.additive && portal.systems.size() == 2 &&
+                  !portal.Temporary() && !portal.light,
+              "portal: portal_halo.png added, two systems, not temporary, no light");
+    CHECK_MSG(portal.scale == glm::dvec2(1.0) && portal.columns == 1 && portal.rows == 1 &&
+                  portal.pivotPx == glm::dvec2(0.0),
+              "no <Scale>, <SpriteCut> or <PivotAdjust>: (1, 1), 1 x 1, (0, 0)");
+    if (portal.systems.size() == 2) {
+        CHECK_MSG(portal.systems[0].bitmap == "portal_spiral.png" && portal.systems[0].alphaMode == 1 &&
+                      portal.systems[0].count == 4 && portal.systems[0].startPointZ == 10.0,
+                  "sys0 the spiral, added, four, 10 above");
+        CHECK_MSG(portal.systems[1].bitmap == "portal.png" && portal.systems[1].alphaMode == Particles::kAlphaPixel,
+                  "sys1 the iris, alpha-blended (a0)");
+    }
+
+    // enemy_shoot.ent: the minions' shot. A sheet of six and a light with a halo,
+    // and no systems - so never temporary.
+    const Art::Entity shoot = load("enemy_shoot.ent");
+    CHECK_MSG(shoot.sprite == "projectile_transparent.png" && shoot.columns == 6 && shoot.rows == 1 &&
+                  shoot.systems.empty() && !shoot.Temporary() && shoot.applyLight && !shoot.additive,
+              "enemy_shoot: projectile_transparent.png 6 x 1, no systems, applies light, mixed");
+    CHECK_MSG(shoot.pivotPx == glm::dvec2(4.0, 0.0), "PivotAdjust (4, 0)");
+    CHECK_MSG(shoot.light && shoot.light->range == 64.0 && shoot.light->colour == glm::dvec3(2.0, 0.0, 0.0) &&
+                  shoot.light->offset == glm::dvec3(0.0, 0.0, -28.0) && shoot.light->halo == "halo.bmp" &&
+                  shoot.light->haloSize == glm::dvec2(146.0) && shoot.light->haloBrightness == 0.25,
+              "its light: range 64, (2, 0, 0), 28 below; halo.bmp 146 across at 0.25");
+
+    // explosion_large.ent, what a barrel's blast adds (explode #23): <Scale> 1.4,
+    // so both systems are MADE at 1.4 - every length, no time.
+    const Art::Entity large = load("explosion_large.ent");
+    CHECK_MSG(large.scale == glm::dvec2(1.4) && large.systems.size() == 2 && large.Temporary(),
+              "explosion_large: <Scale> 1.4, two systems, temporary");
+    CHECK_MSG(large.light && large.light->halo.empty() && large.light->range == 191.0 &&
+                  large.light->offset.z == 14.0,
+              "a light of range 191, 14 above, and no halo: it names no bitmap");
+    if (large.systems.size() == 2) {
+        const double made = large.ParticleScale(1.0);
+        CHECK_MSG(NearD(made, 1.4), "made at 1.4");
+        const Particles::System burst = Particles::Scaled(large.systems[0], made);
+        CHECK_MSG(NearD(burst.size, 179.2) && NearD(burst.growth, 3.64) && NearD(burst.maxSize, 350.0) &&
+                      burst.minSize == 0.0 && burst.randomizeSize == 0.0,
+                  "sys0: 128 -> 179.2 across, growth 2.6 -> 3.64, up to 250 -> 350");
+        CHECK_MSG(burst.lifeTimeMs == 450.0 && burst.randomLifeTimeMs == 355.0 && burst.randAngleStart == 360.0 &&
+                      burst.count == 3 && burst.columns == 4 && burst.rows == 3,
+                  "and no time, angle, count or cut");
+        const Particles::System ring = Particles::Scaled(large.systems[1], made);
+        CHECK_MSG(NearD(ring.size, 2.8) && NearD(ring.growth, 10.5) && NearD(ring.maxSize, 350.0) &&
+                      ring.lifeTimeMs == 500.0,
+                  "sys1, the ring: 2 -> 2.8, growth 7.5 -> 10.5");
+        CHECK_MSG(large.systems[0].size == 128.0, "the entity's own systems stay as the file states them");
+    }
+}
+
+// Counted over the 190 files by an independent reading (Python's XML parser and
+// the engine's rules, step 91): 51 are temporary, 19 keep a light, 9 of those a
+// halo, 121 name a sprite and 9 a <Scale> other than 1 (the barrel bombs 1.3,
+// black_halo 4, eclipse and wall02_blur 2, explosion_large 1.4, fireball 1.2,
+// both small explosions 0.8).
+constexpr int kTemporaryEnts = 51;
+constexpr int kLitEnts = 19;
+constexpr int kHaloedEnts = 9;
+constexpr int kPicturedEnts = 121;
+constexpr int kScaledEnts = 9;
+
+// Every .ent of the original's reads as an entity, its systems exactly as
+// Particles::Load reads them; and the pictures art.json copies out of seven of them
+// are what LoadEnt reads there - but for one number, below.
+void EveryEntReadsAsAnEntity() {
+    int files = 0;
+    int temporary = 0;
+    int lit = 0;
+    int haloed = 0;
+    int pictured = 0;
+    int scaled = 0;
+    int mismatched = 0;
+    std::string firstError;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kOriginal + "/entities", ec)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".ent") continue;
+        ++files;
+        Art::Entity entity;
+        std::string error;
+        if (!Art::LoadEnt(entry.path().string(), entity, error)) {
+            if (firstError.empty()) firstError = error;
+            continue;
+        }
+        std::vector<Particles::System> systems;
+        Particles::Load(entry.path().string(), systems, error);
+        if (systems.size() != entity.systems.size()) ++mismatched;
+        if (entity.Temporary()) ++temporary;
+        if (entity.light) ++lit;
+        if (entity.light && !entity.light->halo.empty()) ++haloed;
+        if (!entity.sprite.empty()) ++pictured;
+        if (entity.scale != glm::dvec2(1.0)) ++scaled;
+    }
+    CHECK_MSG(firstError.empty(), "an .ent would not read as an entity: " + firstError);
+    CHECK_EQ(files, 190);
+    CHECK_EQ(mismatched, 0);
+    std::printf("  LoadEnt: %d files; %d temporary, %d with a light (%d with a halo), %d with a sprite, "
+                "%d with a <Scale> other than 1\n",
+                files, temporary, lit, haloed, pictured, scaled);
+    CHECK_EQ(temporary, kTemporaryEnts);
+    CHECK_EQ(lit, kLitEnts);
+    CHECK_EQ(haloed, kHaloedEnts);
+    CHECK_EQ(pictured, kPicturedEnts);
+    CHECK_EQ(scaled, kScaledEnts);
+
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", rules, error), error);
+    const auto same = [&](const char* file, const Art::Picture& copied, bool haloOffset) {
+        Art::Entity read;
+        std::string why;
+        CHECK_MSG(Art::LoadEnt(kOriginal + "/entities/" + file, read, why), why);
+        bool lightSame = read.light.has_value() == copied.light.has_value();
+        if (lightSame && read.light) {
+            const Lighting::Light& a = *read.light;
+            const Lighting::Light& b = *copied.light;
+            lightSame = a.range == b.range && a.offset == b.offset && a.colour == b.colour && a.halo == b.halo &&
+                        (!haloOffset || a.haloOffset == b.haloOffset) && a.haloSize == b.haloSize &&
+                        a.haloBrightness == b.haloBrightness;
+        }
+        CHECK_MSG(read.sprite == copied.sprite && read.additive == copied.additive &&
+                      read.columns == copied.columns && read.rows == copied.rows &&
+                      read.emissive == copied.emissive && read.isStatic == copied.isStatic &&
+                      read.applyLight == copied.applyLight && read.normal == copied.normal && lightSame,
+                  std::string("art.json's picture of ") + file + " is what LoadEnt reads there");
+    };
+    same("portal.ent", rules.portal, true);
+    same("projectile.ent", rules.shot, true);
+    same("light_from_projectile.ent", rules.torchLight, false);
+    same("dark_mage.ent", rules.character, true);
+    same("beholder.ent", rules.beholder, true);
+    same("beholder_spike.ent", rules.spike, true);
+    same("timer.ent", rules.timer, true);
+    // The one number that is not: a lit torch's halo. DrawHalo draws it at the
+    // light's own position (ETHRenderEntity.cpp:376-386), 12 above the torch's point
+    // in light_from_projectile.ent, as the converter places every level light's
+    // (tscn.py:328); art.json's torch_light carries a halo_offset of (0, 0), so the
+    // port draws that halo 12 units low. Found by this reader, recorded in step 91
+    // and left for the step that draws the lit torch (00_order 7f-5): not a change
+    // this step makes, whose gate is no pixel change.
+    {
+        Art::Entity torch;
+        std::string why;
+        CHECK_MSG(Art::LoadEnt(kOriginal + "/entities/light_from_projectile.ent", torch, why) && torch.light &&
+                      torch.light->haloOffset == glm::dvec2(0.0, -12.0),
+                  "light_from_projectile.ent's halo stands at its light's (0, -12)");
+    }
+    // And the pivots art.json copies.
+    Art::Entity read;
+    std::string why;
+    CHECK(Art::LoadEnt(kOriginal + "/entities/projectile.ent", read, why) &&
+          read.pivotPx == glm::dvec2(rules.shot.pivotXPx, rules.shot.pivotYPx));
+    CHECK(Art::LoadEnt(kOriginal + "/entities/dark_mage.ent", read, why) &&
+          read.pivotPx == glm::dvec2(rules.character.pivotXPx, rules.character.pivotYPx));
+    CHECK(Art::LoadEnt(kOriginal + "/entities/beholder_spike.ent", read, why) &&
+          read.pivotPx == glm::dvec2(rules.spike.pivotXPx, rules.spike.pivotYPx));
+}
+
 int main() {
     AnImageSaysItsSizeInItsHeader();
     AnythingElseIsRefusedByName();
@@ -2094,6 +2523,9 @@ int main() {
     AScaledSystemIsEthanonsScale();
     TheLoopKeepsEthanonsOrder();
     TheRandomNumbersAreDrawnInEthanonsOrder();
+    APoolIsOverWhenEveryParticleIsSpent();
+    AScaledCopyLeavesItsSystemAsItWas();
+    AnEntReadsAsTheEngineReadsIt();
 
     std::error_code original;
     if (std::filesystem::is_directory(kOriginal + "/entities", original)) {
@@ -2102,6 +2534,8 @@ int main() {
         EveryOriginalImageIsSizedAsTheRendererReadsIt();
         TheOriginalsParticlesAreRead();
         AnEntityWithoutParticlesSaysSoWithoutFailing();
+        TheEffectsAreTheirEnts();
+        EveryEntReadsAsAnEntity();
         EveryAddedBitmapIsWithoutAlpha();
         TheOriginalsMp3sDecode();
     } else {
