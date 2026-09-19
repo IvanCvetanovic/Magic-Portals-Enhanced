@@ -21,6 +21,7 @@
 # git warn "LF will be replaced by CRLF" on every single touch. Pin them.
 .gitignore     text eol=lf
 .gitattributes text eol=lf
+.gitmodules    text eol=lf
 
 # Let git decide for anything not listed.
 *       text=auto
