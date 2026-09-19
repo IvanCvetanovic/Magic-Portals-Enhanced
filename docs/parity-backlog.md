@@ -230,6 +230,20 @@ Open after the plan (design §8):
       (128 u × the manager's `Scale(0.5)` × the node's scale, halved; footage F3 brackets the original's
       refusal at (31.6, 32.4]×scale). Ruled R1 — what the original does — but no step in 00_order §7
       plays it yet.
+- [ ] **Gravity wells, the refusal (R2)** — the green ring is **built, SE step 85 on `visuals-b`** (order 4.3,
+      `6949cc3`); the gameplay half is not. Decided for the original: its well refuses no portal and its shot does
+      not die on one. `'gravity_area'` is in exactly two functions of the listing (`ETHCallback_gravity_agent` ins 29,
+      `checkForLevelAchievements` ins 1542), and `AntiPortalManager` fills its `fields` from `Game::preLoop` before
+      any agent has added its area (00_order §8.4, §8.14). The port still refuses: `Game::Start` hands each well to
+      `Portals::State::zones`, and `test_mp_wells.cpp:312-313` assert it. 00_order §6 lists it as a gameplay hand-off
+      in no batch. Next: drop the well zone, let a shot pass, flip the two assertions, with its own captures. It
+      cannot move the ring: the picture is sized by `Well::RingSizePx` and the zone is derived from it.
+- [ ] **Latent, found verifying SE step 85: `buildLights` counts a between-slot picture as a slot.** Its branch for
+      a light with no picture of its own (`MagicPortalsLayer.cpp:3406`) counts every `m_sprites` entry at or below the
+      light's z, and the gravity-well rings are the first between-slot pictures in `m_sprites`. No pixel moves today
+      (four of the five well levels place no light; level27c's `fire_agent_ent_1919` has its own picture), but such a
+      light on a well level would sit a slot too deep. Next: step 6.3's slot table leaves between-slot pictures out of
+      that count, pinned in `test_mp_layer`.
 - [ ] **System 5 actors with sheets**: minions/knights (63 spawns in 35 levels) have no sprites; dragon draws the whole sheet.
 - [ ] **System 6 texture tiers**: hd/fullhd per file (fullhd skies are 512 u wide). Converter + port together, or sprites
       draw twice too big; the Sprite offset × scale trap applies.
