@@ -1,6 +1,6 @@
 # Magic Portals parity — backlog
 
-State at 2026-09-16 (first written 2026-09-15). What remains to make the **Supersonic port** (`Desktop/Supersonic-Engine/games/magicportals`)
+State at 2026-09-19 (first written 2026-09-15). What remains to make the **Supersonic port** (`Desktop/Supersonic-Engine/games/magicportals`)
 match the original, in the order it should be done. Every spec named here lives under
 `Magic-Portals-Remake/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
 
@@ -18,6 +18,15 @@ suites a change touches once each, and report what stayed blocked.
 
 - [x] Merge branch `ui2-screens` into `main` — done 2026-09-16 (e6a3cca, pushed): its steps became 50-54, ctest 118/118,
       the worktree and branch removed. See the planning doc's step 54 merge note.
+- [x] Merge branch `visuals-b` into `main` — done 2026-09-19 (`e81c21b`; SE main pushed at `7281ca5`): its steps 80-85
+      became 68-73 (80→68, 81→69, 82→70, 83→71, 84→72, 85→73; the branch's own commit messages keep 80-85). The one
+      tier gap the merge found (the gravity well's ring still loading the 1x `white_ring.png`) is closed by integration
+      step 74 (`591e143`, `7281ca5`). Worktree `Supersonic-Engine-vis2` and branch `visuals-b` removed. Build current
+      (ninja dry run: no work to do), 0 warnings; merge suites 0 failures; full ctest (with `test_mp_lighting` left
+      out) 119 of 121 passed and 0 failed, and `test_mp_levels`, one of the two Smart App Control refusals, passed when run
+      directly after one relink (128 checks, 0 failures). Not run, because Smart App Control blocked the launch:
+      `test_mp_lighting` (last run 503/0 at step 66) and `test_mp_geometry` (neither track touched it). Both binaries
+      are current; they were never launched. See step 73's merge note.
 - [ ] Planning doc Step 45 (G3) still reports pre-amendment verdicts; add a note citing `design_port.md` §10 (gate
       amendments) and relabel the two attribution rows as the gates.
 - [ ] `test_mp_launchers`: add a refusal case for a missing/bad throwable emissive.
@@ -57,7 +66,34 @@ Open after the plan (design §8):
 
 ## 2. Entity visuals (plan: `visuals/plan_port.md`, ranked)
 
-- [ ] **Step 0** — engine `--screenshot-every N` (every temporal check depends on it).
+**The batch order, `visuals/briefs/00_order.md` §7 — batches 0-4 closed 2026-09-19.** None shelved. The commit is on SE
+main and pushed, and "Step" is the SE planning doc's number since the merge. The commits for 3.1-4.3 were made on
+`visuals-b` and their messages still say steps 80-85. "Recorded deviations" are the step's own RECORDED DEVIATIONS
+section. Where they have rows below, those rows stay open. Next: batches 5-13 (about 25 steps).
+
+| Order | What | Outcome | Commit | Step |
+|---|---|---|---|---|
+| 0.1 | JPEG size probe | committed | `12a10f3` | 60 |
+| 0.2 | `sim/Tiers`, one cut rule | committed | `823e3d7` | 61 |
+| 1.1 | facing, stride, column carry-over | committed with six recorded deviations (the six "Step 62" rows below) | `441ce6e` | 62 |
+| 1.2 | space suit on the 18 `no_gravity` levels | committed with three recorded deviations, none a failing gate row: the brief's "zero-g never walks" decoded otherwise (the column turns while standing), the `no_gravity_motion` block, the hover is 1.2 screen px | `a0207e1` | 63 |
+| 1.3 | pushing rows | committed with five recorded deviations: the wall gate ran on 1-22's wall (level0 has none on its right); row 2 appears the step after the release; the ray as decoded, not as briefed; data shape; the airborne aim follows the port's `air_control` `_guess` | `9c454a7` | 64 |
+| 2.1 | converter copies tier files, writes a manifest | committed with five recorded deviations, all on code and file layout: `tiers.py`, manifest shape, densities read from `app.enml`, a tier file with no 1x file copied, staging run | MPR `e9611e4`, SE `5de8509` | 65 |
+| 2.2 | level art through the resolver | committed with seven recorded deviations; the bare-ground row is met as amended and re-baselined at 5,312 px | `c404615` | 66 |
+| 2.3 | port art and particles through the resolver | committed with three recorded deviations: a cut particle sheet is still split evenly (`tesla_shock_black_bg`, `shock_strike`; for 13.1); the UI fold-in was not taken; the level1c pin was rewritten | `494f6e2` | 67 |
+| 3.1 | timer dial, no fade | committed | `0be2725` | 68 |
+| 3.2 | crystal and key bob, `sim/Motion` | committed | `5ba5b86` | 69 |
+| 3.3 | sway, alpha 0.55, dashed-circle spin | committed | `a32d356` | 70 |
+| 4.1 | antiportal drawn at 64×scale | committed with one recorded deviation (the 2-26 edge scan), closed by 4.2 | `bbb3c78` | 71 |
+| 4.2 | blink and spin | committed with five recorded deviations (the four "Step 72" rows and the PORT-WIDE clock row below) | `5ae1b6d`, `5a544ac` | 72 |
+| 4.3 | gravity-well green ring | committed with two recorded deviations, neither a failing gate row: the `test_mp_wells` gate is met across two suites, and the ring exists from the first frame | `6949cc3` | 73 |
+
+Merge `e81c21b` (§0). Integration step 74 (`591e143`, `7281ca5`) sends the well ring and the crystal dial through the
+tier resolver. The ten rings now draw `hd/white_ring.png`. The dial keeps `timer.png`, which has no tier file. It
+records no deviation of its own. It re-read 4.1's and 4.2's rows on the merged build, which gave the two open
+instrument items below.
+
+- [x] **Step 0** — engine `--screenshot-every N` (every temporal check depends on it). Done: SE step 57 (`29448a8`).
 - [ ] System 1 colour transfer — largely done by lighting E1/G2; re-check its remaining rows.
 - [ ] **System 2 particles**: emitter origin at the entity position (torch flame 13.4 u too low), spin sign
       (counter-clockwise ~108°/s), alpha, depth (particles 2.5 layers in front of their sprite), square quads,
@@ -71,7 +107,9 @@ Open after the plan (design §8):
       the rings' life-versus-brightness curve against footage (`out/parity/visuals/particles/verify3/measure_v3.txt`).
 - [ ] **System 3 player**: start frame 8 (facing right; `startFrame` is a dead field), walk 10.8 fps, space-suit sheet on
       the 19 zero-g levels, eye glow; 2.8 u rest-height difference is a body/collider question. (SE step 62, order 1.1:
-      frame 8, the decoded 90 ms stride and the column carried across a stop are built; the rest stays open.)
+      frame 8, the decoded 90 ms stride and the column carried across a stop are built. SE step 63, order 1.2: the
+      space-suit sheet on the 18 `no_gravity` levels, its 280 ms standing column and its hover. SE step 64, order 1.3:
+      the pushing rows. Still open: the eye glow (7.1) and the 2.8 u rest height.)
 - [ ] **Step 62 deviation, the sweep gate** (SE step 62 committed with it; 00_order section 7 step 1.1): required normal f8
       wins in all 54 levels where the original's h6.3 f8 >= 0.85; measured 52 of 54 at f420. Misses 1-02 (best space f8
       0.7967, lead 0.004; normal f8 0.7927) and 1-03 (best space f8 0.8123, lead 0.0025; normal f8 0.8098): the
@@ -84,16 +122,21 @@ Open after the plan (design §8):
 - [ ] **Step 62 deviation, the stride's data shape**: systems_3_4 3a asked for `character.animation.frames_per_second
       11.111111`; the port stores the decoded `stride_ms 90` (`SideScrollerCharacter` ctor 9-11), rate derived as 1000 /
       stride, `idle_column 0`. Same decode, different block shape. Next: 1.2 builds its 280 ms zero-gravity column on
-      `stride_ms`.
+      `stride_ms`. (1.2, SE step 63, built that column as a separate block, `no_gravity_motion` `column_stride_ms 280`.
+      The row stays open for the owner.)
 - [ ] **Step 62 deviation, the zero-gravity player**: `MainCharacter::linearMotion` runs every update only when
       `noGravity` is set (3-6) and calls `FrameTimer` `set(0,3,280,true)` (163-171). On the 18 `no_gravity` levels the
       standing player cycles columns every 280 ms, a walking update adds its time twice, and the player hovers by
       1.2*cos(a) on y; step 62's timer holds only with gravity (recorded in `art.json` `_source`). Next: step 1.2.
+      (SE step 63 built it: the standing column turns every 280 ms, and the pivot hovers 1.2 screen px, which is
+      0.4267 u at 720 px. The row stays open, as step 62's deviation, together with step 63's owner items: the hover
+      at other window heights and the eyes, which stay put.)
 - [ ] **Step 62 deviation, facing a portal tap**: the original turns the player toward a portal tap and the port never
       does. `PortalManager::managePortalInsertion` #101-124 (listing L:27784) calls `setDirection(1)` if the player is
       right of the tap, else `setDirection(2)`, on an accepted request with no `projectile.ent` alive. Not a 1.1
       regression. Next: step 1.3 or a new 1.x: `m_facingRight = !(playerX > tapX)` under the sim's acceptance, pinned
-      in `test_mp_layer` (a tap left of the standing level0 player gives `firstFrame` 4).
+      in `test_mp_layer` (a tap left of the standing level0 player gives `firstFrame` 4). Step 1.3 (SE step 64) did
+      not build it, because a step covers one system. It still needs a new 1.x step.
 - [ ] **Step 62 deviation, evidence for the carried column**: no clip of the original resolves a column across a stop.
       F12 holds right once; F9 r7b (`F9_flyin_3-18.mp4`) walks right, stops and steps back left, but at about 17 fps
       (median gap 50 ms) it cannot resolve a 90 ms column. Carry-over rests on the decode plus the port's tick-for-tick
@@ -102,8 +145,10 @@ Open after the plan (design §8):
       writing `playing` and `frameCount` together, because `SpriteAnimationSystem::Advance` resets `frame` to 0 when a
       playing flipbook's count is 1. Cannot happen today; `TheWalkKeepsItsColumnAndItsTime` guards it on level8. Next:
       1.2 (280 ms zero-gravity column) and 1.3 (pushing rows) keep that test running, or comment the coupling, if they
-      touch that block.
-- [x] **Step 83 deviation, 2-26's edge scan** — CLOSED 2026-09-18 (SE step 83 committed with it; 00_order §7 step 4.1,
+      touch that block. (`TheWalkKeepsItsColumnAndItsTime` still passes at steps 63 and 64. Step 63 adds a still
+      flipbook on `no_gravity` levels only, and step 64 leaves the coupling as it was.)
+- [x] **Step 71 deviation (83 on `visuals-b`), 2-26's edge scan** — CLOSED 2026-09-18 (SE step 71 committed with it;
+      00_order §7 step 4.1,
       `work_s34/antiportal_edge.py`): required half/scale 31.5-34.0 on `antiportal_955` at node scale 3.6; measured
       **30.50** (17.08 before, so the row moved 13.4 of the 14.4 it was short). NOT MET as written. Attributed cause,
       measured on both sides and reproduced by the verifier on its own capture, its own re-implementation and both grids
@@ -120,14 +165,15 @@ Open after the plan (design §8):
       4-07 and 1-07 and contains no size re-read, so an explicit 2-26 `antiportal_955` edge-scan re-read has to be added
       to 4.2's gates (or the row's wording amended in 00_order §7: last maximum, tie midpoint, or a brightness-independent
       reading). Without that addition this NOT MET row has no owner and would silently disappear.
-      **Closed by SE step 84 (order 4.2) as a measurement, not an amendment**: with the ring drawn red its rim
+      **Closed by SE step 72 (order 4.2) as a measurement, not an amendment**: with the ring drawn red its rim
       stops being additive white and the same scan reads **33.25 ×scale** on `antiportal_955` — inside 31.5-34.0
       and the original's own reading on that ring (33.25 in five of its six library frames), `c` there now
       (0.305, -0.009, 0.000). The other four readable rings of that gate read 33.25 / 32.00 / 32.89 / 33.00,
       all in band; 1-10 `638` still has fewer than 8 sectors on screen. `out/parity/visuals/4.2/work/edge_after_42.json`,
       reproduced independently by 4.2's verifier at 33.26 on its own capture. No amendment to 00_order §7 4.1 needed.
-- [ ] **Step 84 deviation, the port draws 1-07's antiportal ring BEHIND art the original draws it in front of**
-      (SE step 84, order 4.2; 00_order §7 step 4.2's 1-07 `antiportal_687` row, required max `c_R` 0.36-0.42 and min
+- [ ] **Step 72 deviation (84 on `visuals-b`), the port draws 1-07's antiportal ring BEHIND art the original draws
+      it in front of**
+      (SE step 72, order 4.2; 00_order §7 step 4.2's 1-07 `antiportal_687` row, required max `c_R` 0.36-0.42 and min
       0.18-0.24, measured **0.2875 / 0.1786** — NOT MET as written). **The row fails on draw order, not on colour.**
       Measured three ways on the step's own frames. (a) Sector by sector: 15 of the ring's 28 readable sectors carry no
       blink step in the port and 4 carry none in the original — **12 dead in the port alone**, the 10° sectors 130-150
@@ -142,7 +188,7 @@ Open after the plan (design §8):
       across the port's f378, its f360 and its white before-frame, while the original's two frames differ there by +8.9,
       +8.7, +9.0 and +9.6 in red alone — the step its clear sectors show (+8.2). (c) By eye
       (`4.2/verify1/crop_107.png`): a complete annulus in the original, an annulus with the blocks cut out of it in the
-      port. The loss predates step 84 — the same estimator read this ring's WHITE ring at 0.3964 where an unoccluded one
+      port. The loss predates step 72 — the same estimator read this ring's WHITE ring at 0.3964 where an unoccluded one
       reads 0.93-1.00 — and what the port draws is not low: the ring's own blink amplitude on the difference frame is
       0.2135, 107 % of the decoded 0.200. **The port's side is traced**: `Sprites::Find` orders a level's pictures by
       `z_index` then by the scene file and `buildSprites` draws each at `SlotZ(sprite.order)`
@@ -164,7 +210,8 @@ Open after the plan (design §8):
       whether the engine buckets the file's coordinates or the drawn ones), then re-read the row **as written**; sweep
       the other 51 levels that place a ring for the same divergence. Owned outside 4.2 — a colour step cannot move a
       draw order, and the row is not to be re-specified to a cover-immune reading, which would hide exactly this signal.
-- [ ] **Step 84 deviation, 4-07's gate ring reads low under art BOTH builds draw in front of it** (SE step 84;
+- [ ] **Step 72 deviation (84 on `visuals-b`), 4-07's gate ring reads low under art BOTH builds draw in front of it**
+      (SE step 72;
       00_order §7 step 4.2's 4-07 `antiportal_2166` row): required max `c_R` 0.36-0.42 and min 0.18-0.24, measured
       **0.2679 / 0.1089** — NOT MET as written. **An offset, not a gain**: the ring's blink amplitude on the difference
       frame is 0.1786, 89 % of the decoded 0.200, and the f378−f360 read there is R +24.59 with G/B at −0.03/−0.06. The
@@ -179,7 +226,8 @@ Open after the plan (design §8):
       not yet the original's. Next: re-read the row once chapter 4's lighting, its effects and the texture tier (steps
       2.2, 7.x, 11.x) have landed, since all three move that background; do not re-specify it to a cover-immune reading
       while 1-07's draw order is open.
-- [ ] **Step 84 deviation, `c_G`/`c_B` over its bound** (SE step 84; same gate): required `c_G`, `c_B` ≤ 0.03, read on
+- [ ] **Step 72 deviation (84 on `visuals-b`), `c_G`/`c_B` over its bound** (SE step 72; same gate): required `c_G`,
+      `c_B` ≤ 0.03, read on
       **magnitude** (the decode gives green and blue exactly 0, so either sign is a colour the original does not draw).
       **NOT MET on 2 of the 4 rings the gate names** — 3-12 `1376` `c_B` **+0.0349** and 4-07 `c_G`
       **−0.0436 / −0.0349 / −0.0349** (min/median/max) with `c_B` −0.0349; 1-07 and 4-02 are inside. Of the six rings
@@ -191,7 +239,8 @@ Open after the plan (design §8):
       three residuals are constant over a whole period (green moves ≤ 0.0087, blue 0.0000, against a red that moves
       0.074-0.183). Next: say in 00_order §7 4.2 whether the bound is signed or on magnitude, and bound the channel's
       **movement** over a period (0.0087 and 0.0000 here) rather than its absolute level, which the background sets.
-- [ ] **Step 84 deviation, the census sanity check's band** (SE step 84; 00_order §7 4.2 carries systems_3_4 4b(5) as a
+- [ ] **Step 72 deviation (84 on `visuals-b`), the census sanity check's band** (SE step 72; 00_order §7 4.2 carries
+      systems_3_4 4b(5) as a
       "sanity check only"): required port `c_R` in [0.15, 0.42] and `c_G`, `c_B` ≤ 0.06 over the camera-confirmed rings.
       Measured **17 of 22 in band** under the step's matched-filter rule (median 0.259, p90 0.322, max 0.322, G/B within
       0.06 on 21 of 22) and **22 of 33 rings on 27 levels** under the wider quad-containment rule (median 0.233, G/B over
@@ -221,7 +270,7 @@ Open after the plan (design §8):
       refuses a corr-0 camera, and re-reads step 72's rows there. 1-07 and 4-07 stay out of band at every centre
       within 1 px (max ≤ 0.285), so their deviations above stand.
 - [ ] **PORT-WIDE: the original's script clock is a FLOOR of each frame's milliseconds, and the port's is not**
-      (decoded in SE step 84; it also answers step 80's "the whole milliseconds `getLastFrameElapsedTime` returns … are
+      (decoded in SE step 72; it also answers step 68's "the whole milliseconds `getLastFrameElapsedTime` returns … are
       not decoded"). The Android loop measures a frame as a float of milliseconds (`ComputeElapsedTimeF`, gs2d
       `Application.cpp:36-50`, off `clock_gettime(CLOCK_MONOTONIC)`: `AndroidGLES2Video.cpp:66-69`), caps it at 1000 ms
       (`Min(1000.0f, …)`, `android/main.cpp:180-181`), and `ETHEngine::Update` stores `static_cast<unsigned long>` of it
@@ -233,50 +282,56 @@ Open after the plan (design §8):
       scripted motion in the original advances 16 ms a frame where the port advances 1000/60: the port runs 4.17 % fast**
       (a 600 ms antiportal period against 625 ms of wall clock; opposite phase after 450 ticks, 7.5 s), and the rate is
       frame-rate dependent in the original (`floor(33.3)` loses 1 %, `floor(16.7)` 4 %). It touches the antiportal blink
-      and turn, every `Motion` the port steps, and the timed crystal's dial. **Not changed in step 84 on purpose**:
+      and turn, every `Motion` the port steps, and the timed crystal's dial. **Not changed in step 72 on purpose**:
       flooring the one clock every scripted motion reads moves every committed step's captures. Next: the owner's call on
       whether the port floors its script-facing delta and at which frame rate the original is to be matched, then one
       re-capture of the committed baselines.
-- [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 83**; the red blink (0.2 → 0.4 → 0.2
-      on 300 ms legs) and the 10°/s turn — **built, SE step 84** (order 4.2), with the five deviations above. What is
+- [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 71**; the red blink (0.2 → 0.4 → 0.2
+      on 300 ms legs) and the 10°/s turn — **built, SE step 72** (order 4.2), with the five deviations above. What is
       left of the system: the refusal radius stays 16×scale in the port against the decoded **32×scale**
       (128 u × the manager's `Scale(0.5)` × the node's scale, halved; footage F3 brackets the original's
       refusal at (31.6, 32.4]×scale). Ruled R1 — what the original does — but no step in 00_order §7
       plays it yet.
-- [ ] **Gravity wells, the refusal (R2)** — the green ring is **built, SE step 85 on `visuals-b`** (order 4.3,
-      `6949cc3`); the gameplay half is not. Decided for the original: its well refuses no portal and its shot does
-      not die on one. `'gravity_area'` is in exactly two functions of the listing (`ETHCallback_gravity_agent` ins 29,
+- [ ] **Gravity wells, the refusal (R2)** — the green ring is **built, SE step 73** (order 4.3, `6949cc3`, made as
+      step 85 on `visuals-b`; drawn from `hd/white_ring.png` since step 74); the gameplay half is not. Decided for the
+      original: its well refuses no portal and its shot does not die on one. `'gravity_area'` is in exactly two functions of the listing (`ETHCallback_gravity_agent` ins 29,
       `checkForLevelAchievements` ins 1542), and `AntiPortalManager` fills its `fields` from `Game::preLoop` before
       any agent has added its area (00_order §8.4, §8.14). The port still refuses: `Game::Start` hands each well to
       `Portals::State::zones`, and `test_mp_wells.cpp:312-313` assert it. 00_order §6 lists it as a gameplay hand-off
       in no batch. Next: drop the well zone, let a shot pass, flip the two assertions, with its own captures. It
       cannot move the ring: the picture is sized by `Well::RingSizePx` and the zone is derived from it.
-- [ ] **Latent, found verifying SE step 85: `buildLights` counts a between-slot picture as a slot.** Its branch for
+- [ ] **Latent, found verifying SE step 73 (85 on `visuals-b`): `buildLights` counts a between-slot picture as a
+      slot.** Its branch for
       a light with no picture of its own (`MagicPortalsLayer.cpp:3406`) counts every `m_sprites` entry at or below the
       light's z, and the gravity-well rings are the first between-slot pictures in `m_sprites`. No pixel moves today
       (four of the five well levels place no light; level27c's `fire_agent_ent_1919` has its own picture), but such a
       light on a well level would sit a slot too deep. Next: step 6.3's slot table leaves between-slot pictures out of
       that count, pinned in `test_mp_layer`.
 - [ ] **System 5 actors with sheets**: minions/knights (63 spawns in 35 levels) have no sprites; dragon draws the whole sheet.
-- [ ] **System 6 texture tiers**: hd/fullhd per file (fullhd skies are 512 u wide). Converter + port together, or sprites
-      draw twice too big; the Sprite offset × scale trap applies.
+- [x] **System 6 texture tiers**: hd/fullhd per file (fullhd skies are 512 u wide). Converter + port together, or sprites
+      draw twice too big; the Sprite offset × scale trap applies. Built by orders 0.2, 2.1, 2.2 and 2.3 (SE steps 61, 65,
+      66 and 67; MPR `e9611e4`) and step 74 for track B's two pictures. What is left is in those steps' RECORDED
+      DEVIATIONS and LEFT FOR THE OWNER, for example the evenly split particle sheet (step 67, for 13.1).
 - [ ] System 7 spawned effect entities: teleport effects, player-placed portal spiral, pickup/explosion effects,
       `portal_fail*`, key/keyhole effects; carranca fireballs are tan placeholder boxes today.
 - [x] System 8 light halos — landed in G5 (step 49); magnitude still open under §1.
 - [ ] System 9 converter-carried per-placement data: scale, sprite frames, the levels' own particle systems
       (45 placements load the wrong data).
-- [ ] System 10 small scripted motions: crystal bob, arrow sway (2.5 u, 1.52 s), timed-crystal fade.
+- [x] System 10 small scripted motions: crystal bob, arrow sway (2.5 u, 1.52 s), timed-crystal fade. Built by orders
+      3.1-3.3: the timed crystal's dial with no fade (SE step 68), the crystal and free-key bob in `sim/Motion` (69),
+      and the sway of the arrow, dashed circle and tapping hand at alpha 0.55 (70). No recorded deviations; owner items
+      are in each step's LEFT FOR THE OWNER, and the script clock is the PORT-WIDE row above.
 - [ ] **StaticSky** (camera-pinned sky) not ported → **34 levels show black ground** (found at G2).
 - [ ] Placeholder boxes draw darker since the display-encoded scene.
 - [ ] Footage to record (plan §4): F1 walk left, F2 place + enter a portal, F3 failed shot / antiportal, F4 crystal bob,
       F5 knight patrol, F6 carranca fire + barrel, F7 2-32/4-32 in-level frames, F9 key pickup, F10 zero-g recoil.
-      (F8 antiportal pulse is RETIRED — SE step 84 decoded the blink instruction by instruction, and no still can show
+      (F8 antiportal pulse is RETIRED — SE step 72 decoded the blink instruction by instruction, and no still can show
       the phase the original starts at anyway.)
 - [ ] Cannot be known from footage (needs the bytecode decode): the shot frame timer, which script spawns
       `appear_effect.ent`. The portal tint is DONE — `ETHCallback_portal_static` sets vector3(1, 0.3, 0.3) or
       vector3(0.3, 0.3, 1) by the placement's `color` string (SE step 59's `art.json static_portal`), and the
       `_portalColorA/B` globals this row named turn out to be the ANTIPORTAL's — vector3(0.2, 0, 0) and
-      vector3(0.4, 0, 0), the blink's two ends (SE step 84).
+      vector3(0.4, 0, 0), the blink's two ends (SE step 72).
 
 ## 3. UI
 
