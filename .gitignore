@@ -38,12 +38,17 @@ reference/
 # covered, and .godot/ is never something worth committing.
 .godot/
 # Exported builds (APK output — large, reproducible)
-build/
 /game/android/build/
 *.apk
 *.aab
 *.keystore
 *.jks
+
+# --- The Supersonic port ------------------------------------------------
+# The CMake build tree: tools/parity/port_build.bat configures build/ at the
+# root. Unanchored, like reference/ and out/: a build/ at any depth is
+# generated. The engine at engine/ is a submodule and keeps its own ignores.
+build/
 
 # --- Python converter ----------------------------------------------------
 .venv/
