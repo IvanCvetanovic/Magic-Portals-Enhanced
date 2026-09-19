@@ -11,7 +11,8 @@
 #                     level30 through the engine's solver and prints the numbers
 #                     the spike doc records, each beside a threshold written down
 #                     before it ran.
-#   Both executables are off by default, like the other games'.
+#   Both executables are gated by SUPERSONIC_BUILD_MAGICPORTALS, which the
+#   repository's top-level CMakeLists.txt declares, ON by default.
 #
 # See docs/planning/2026-09-10-magic-portals-port.md.
 
