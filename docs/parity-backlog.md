@@ -207,6 +207,19 @@ Open after the plan (design §8):
       0.115, under the band's floor. Next: state the admission rule inside 4b(5), and replace the per-ring band with a
       check on the readable rings' upper envelope (or exclude rings that read ~0 on a white ring). **It stays a sanity
       check and must not be promoted to a §7 gate.**
+- [ ] **Step 72 follow-up (SE main; step 84 on `visuals-b`), the 4.1 rim row's estimator**: `antiportal3.py`'s rim /
+      scale (systems_3_4 4a(5)), required 28-33, reads **15.56** on 1-10 `574` and **23.20** on 1-12 `574` on the
+      merged build (15.56 and 19.20 on step 72's own sweep, `4.2/work/edge_after_42.json`): its median-luminance peak
+      stopped landing on the ring once step 72 drew it a dim red. The 00_order 4.1 gate, the edge scan, passes on all
+      five rings (33.25 / 31.75 / 33.61 / 34.00 / 33.25). Recorded in SE step 74's RECORDED DEVIATIONS. Next: point
+      the rim estimator at the red channel, or retire it in favour of the edge scan.
+- [ ] **Step 72's gate instrument, `blink_42.py`, reads about the node's pixel index** (found by SE step 74's third
+      verification). On 4-02 `antiportal_2074` it reads `c_R` max 0.4269 there and 0.3964 / 0.2178, in band, about
+      the ring's drawn centre, (+0.40, -1.20) px from the index; and its matched-filter camera check returns corr 0,
+      unnoticed, when before = after. Next: the step that re-reads 4.2 locates each ring's drawn centre from its own
+      blink (point symmetry of the red channel's temporal s.d., `visuals/merge_tiers/verify3/centre_refine_v3.py`),
+      refuses a corr-0 camera, and re-reads step 72's rows there. 1-07 and 4-07 stay out of band at every centre
+      within 1 px (max ≤ 0.285), so their deviations above stand.
 - [ ] **PORT-WIDE: the original's script clock is a FLOOR of each frame's milliseconds, and the port's is not**
       (decoded in SE step 84; it also answers step 80's "the whole milliseconds `getLastFrameElapsedTime` returns … are
       not decoded"). The Android loop measures a frame as a float of milliseconds (`ComputeElapsedTimeF`, gs2d
