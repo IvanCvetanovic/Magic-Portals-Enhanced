@@ -485,8 +485,8 @@ void ASpriteIsDrawnFromItsTier() {
 // ---- art.json: what no level pictures ------------------------------------------
 
 void ThePortalAndTheShotAreTheirEnts() {
-    // The .ent files' facts, pinned. How fast the shot's sheet plays is a guess
-    // and only has to be something.
+    // The .ent files' facts, pinned, and what the shot's script does to its
+    // picture (planning step 90): Scale(0.8), a 30 ms cell, turned to its flight.
     Art::Rules rules;
     std::string error;
     const bool ok = Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", rules, error);
@@ -495,7 +495,12 @@ void ThePortalAndTheShotAreTheirEnts() {
               "portal.ent: its halo, added");
     CHECK_MSG(rules.shot.sprite == "projectile.png" && rules.shot.additive, "projectile.ent: its sheet, added");
     CHECK_MSG(rules.shot.columns == 6 && rules.shot.rows == 1, "cut 6 x 1, as its SpriteCut says");
-    CHECK_MSG(rules.shot.framesPerSecond > 0.0, "and a six-frame sheet says how fast it plays");
+    CHECK_MSG(rules.shot.strideMs == 30.0 && std::fabs(rules.shot.framesPerSecond - 1000.0 / 30.0) < 1e-9,
+              "_projectileFrameTimer.set(0, 5, 30, true): a cell every 30 ms (ETHCallback_projectile #89-100)");
+    CHECK_MSG(rules.shot.scale == 0.8, "Scale(0.8) once it is added (addProjectile #158-165)");
+    CHECK_MSG(rules.shot.pivotXPx == 4.0 && rules.shot.pivotYPx == 0.0, "its PivotAdjust (4, 0), on the bolt's head");
+    CHECK_MSG(rules.shot.turnsToFlight, "turned to its flight every frame (ETHCallback_projectile #102-111)");
+    CHECK_MSG(64.0 * rules.shot.scale == 51.2, "a 64-unit cell drawn at 51.2");
 
     const Art::Character& mage = rules.character;
     CHECK_MSG(mage.sprite == "magic_portals_hd.png" && !mage.additive && mage.columns == 4 && mage.rows == 4,
@@ -781,26 +786,94 @@ void APulseGoesThereAndBack() {
     CHECK(near(p.ScaleAt(1200.0), 1.0, 1.0));
 }
 
-void ASheetThatDoesNotSayHowFastIsRefused() {
-    const std::filesystem::path path = Scratch() / "art.json";
-    // Everything else in order, so the shot's missing rate is what is refused.
-    const std::string text = R"({"portal": {"sprite": "a.png", "additive": true, "emissive": [1, 1, 1],
-                                            "static": false, "apply_light": false},
-                                 "shot": {"sprite": "b.png", "additive": true, "columns": 6, "emissive": [1, 1, 1],
-                                          "static": false, "apply_light": false},
-                                 "torch_light": {"sprite": "d.png", "additive": false, "emissive": [0, 0, 0],
-                                                 "static": true, "apply_light": true},
-                                 "character": {"sprite": "c.png", "additive": false, "columns": 4, "rows": 4,
-                                               "emissive": [1, 1, 1], "static": false, "apply_light": true,
-                                               "initial_direction": 2, "pivot_px": [0, 2],
-                                               "rows_by_direction": {"left": 1, "right": 2},
-                                               "animation": {"stride_ms": 90, "idle_column": 0}}})";
-    Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+// ETHCallback_projectile's SetAngle(radianToDegree(getAngle(dir)) - 90), getAngle
+// being atan2(x, y) wrapped into [0, 2 PI) (GameMath.h:711-715), in level units
+// with y down; and ComputeInScreenSpriteCenter's pivot, x the scale and turned by
+// -angle in those axes (ETHSpriteEntity.cpp:699-709). projectile.png's head is its
+// +x, so the angle turns the head onto the flight and the centre falls 3.2 units
+// behind the entity's point.
+void TheShotTurnsItsHeadOntoItsFlight() {
     Art::Rules rules;
     std::string error;
-    const bool ok = Art::LoadRules(path.string(), rules, error);
-    CHECK(!ok);
-    CHECK_MSG(error.find("frames_per_second") != std::string::npos, error);
+    CHECK_MSG(Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", rules, error), error);
+    const Art::Shot& shot = rules.shot;
+    const auto nearly = [](double got, double want) { return std::fabs(got - want) < 1e-4; };
+    const auto nearV = [](const glm::dvec2& got, double x, double y) {
+        return std::fabs(got.x - x) < 1e-5 && std::fabs(got.y - y) < 1e-5;
+    };
+    const glm::dvec2 at(100.0, 50.0);
+    struct Way {
+        glm::dvec2 direction;
+        double angle;
+        glm::dvec2 centre;
+        const char* says;
+    };
+    const Way ways[] = {
+        {{1.0, 0.0}, 0.0, {96.8, 50.0}, "right: getAngle 90, less 90 - unturned, the centre 3.2 behind"},
+        {{0.0, -1.0}, 90.0, {100.0, 53.2}, "up (y down): getAngle 180, 90 counter-clockwise"},
+        {{-1.0, 0.0}, 180.0, {103.2, 50.0}, "left: getAngle 270, turned half round"},
+        {{0.0, 1.0}, -90.0, {100.0, 46.8}, "down: getAngle 0, -90"},
+        {{-3.0, -3.0}, 135.0, {100.0 + 3.2 * 0.70710678, 50.0 + 3.2 * 0.70710678}, "up-left: getAngle 225"},
+        {{250.0, -120.0}, std::atan2(120.0, 250.0) * 180.0 / 3.14159265358979, {0.0, 0.0}, "any length"},
+    };
+    for (const Way& way : ways) {
+        const float angle = shot.AngleDegrees(way.direction);
+        CHECK_MSG(nearly(angle, way.angle), std::string(way.says) + ": " + std::to_string(angle));
+        if (way.centre != glm::dvec2(0.0)) {
+            const glm::dvec2 centre = shot.CentrePx(at, angle);
+            CHECK_MSG(nearV(centre, way.centre.x, way.centre.y),
+                      std::string(way.says) + ", centre (" + std::to_string(centre.x) + ", " +
+                          std::to_string(centre.y) + ")");
+        }
+        // The head - the pivot's point of the turned picture - is on the entity,
+        // and the centre is 3.2 units from it: 4 x 0.8.
+        const glm::dvec2 centre = shot.CentrePx(at, angle);
+        CHECK_MSG(nearly(glm::length(centre - at), 3.2), std::string(way.says) + ": 3.2 from the centre");
+        const glm::dvec2 unit = glm::normalize(way.direction);
+        CHECK_MSG(nearV(at - centre, 3.2 * unit.x, 3.2 * unit.y), std::string(way.says) + ": ahead along the flight");
+    }
+    Art::Shot upright = shot;
+    upright.turnsToFlight = false;
+    CHECK_MSG(upright.AngleDegrees(glm::dvec2(0.0, -1.0)) == 0.0f && nearV(upright.CentrePx(at, 0.0f), 96.8, 50.0),
+              "turn none: upright, the pivot straight across");
+}
+
+void ASheetThatDoesNotSayHowFastIsRefused() {
+    // Everything else in order, so the missing rate is what is refused: a picture
+    // that plays says frames_per_second, and the shot, whose rate is decoded, its
+    // stride (planning step 90).
+    const auto refused = [](const std::string& portal, const std::string& shot, const std::string& says) {
+        const std::filesystem::path path = Scratch() / "art.json";
+        const std::string text = R"({"portal": {"sprite": "a.png", "additive": true, "emissive": [1, 1, 1],
+                                                "static": false, "apply_light": false)" + portal + R"(},
+                                     "shot": {"sprite": "b.png", "additive": true, "columns": 6, "emissive": [1, 1, 1],
+                                              "static": false, "apply_light": false)" + shot + R"(},
+                                     "torch_light": {"sprite": "d.png", "additive": false, "emissive": [0, 0, 0],
+                                                     "static": true, "apply_light": true},
+                                     "character": {"sprite": "c.png", "additive": false, "columns": 4, "rows": 4,
+                                                   "emissive": [1, 1, 1], "static": false, "apply_light": true,
+                                                   "initial_direction": 2, "pivot_px": [0, 2],
+                                                   "rows_by_direction": {"left": 1, "right": 2},
+                                                   "animation": {"stride_ms": 90, "idle_column": 0}}})";
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules rules;
+        std::string error;
+        const bool ok = Art::LoadRules(path.string(), rules, error);
+        CHECK_MSG(!ok, "refused: portal" + portal + " shot" + shot);
+        CHECK_MSG(error.find(says) != std::string::npos, error);
+    };
+    refused(R"(, "columns": 6)", "", "portal has 6 frames and no animation.frames_per_second");
+    const std::string drawn = R"(, "scale": {"value": 0.8}, "pivot_px": [4, 0], "turn": "toward_flight_minus_90")";
+    refused("", drawn, "shot needs scale.value above 0, pivot_px, turn and animation.stride_ms above 0");
+    refused("", drawn + R"(, "animation": {"frames_per_second": 15})", "animation.stride_ms above 0");
+    refused("", drawn + R"(, "animation": {"stride_ms": 0})", "animation.stride_ms above 0");
+    const std::string timed = R"(, "animation": {"stride_ms": 30})";
+    refused("", R"(, "scale": {"value": 0}, "pivot_px": [4, 0], "turn": "none")" + timed, "shot needs scale.value");
+    refused("", R"(, "scale": 0.8, "pivot_px": [4, 0], "turn": "none")" + timed, "shot needs scale.value");
+    refused("", R"(, "scale": {"value": 0.8}, "pivot_px": [4], "turn": "none")" + timed, "pivot_px");
+    refused("", R"(, "scale": {"value": 0.8}, "pivot_px": [4, 0])" + timed, "turn");
+    refused("", R"(, "scale": {"value": 0.8}, "pivot_px": [4, 0], "turn": "toward_flight")" + timed,
+            "shot's turn is toward_flight_minus_90 or none, not 'toward_flight'");
 }
 
 // The player's walk is decoded, so none of it is defaulted: without the way it
@@ -2000,6 +2073,7 @@ int main() {
     WhatTheReaderDoesNotDrawIsNamed();
     ASpriteIsDrawnFromItsTier();
     ThePortalAndTheShotAreTheirEnts();
+    TheShotTurnsItsHeadOntoItsFlight();
     AStaticPortalWithoutItsScriptIsRefused();
     TheAntiportalBlinksRedAndTurns();
     AnAntiportalWithoutItsBlinkIsRefused();

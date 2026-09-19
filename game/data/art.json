@@ -57,10 +57,10 @@
       "projectile.ent: <Entity static=0 applyLight=0>, no <Normal>, and <Particles /> empty, so neither its",
       "light nor its halo is scaled by a particle ratio. <Light active=1 static=0 range=70 haloBrightness=0.65",
       "haloSize=50> with <Position x=0 y=0 z=-12>, <Color r=0.6 g=0.6 b=1>, <HaloBitmap>halo.bmp</HaloBitmap>",
-      "(the remake's data_inventory.md, 'projectile.ent'). It has no <Scale>, so the light's offset and",
-      "range and the halo's size are the file's own (ETHEntityRenderingManager.cpp:180-181,",
-      "ETHRenderEntity.cpp:378-385). A live light: it reaches every sprite that applies light, static",
-      "ones included."
+      "(the remake's data_inventory.md, 'projectile.ent'). These are the file's numbers; the script's",
+      "Scale(0.8) below scales the light's offset and range and the halo's size when they are drawn",
+      "(Lighting::OwnerScaled). A live light: it reaches every sprite that applies light, static ones",
+      "included."
     ],
     "light": {
       "range": 70.0,
@@ -72,23 +72,64 @@
       "halo_brightness": 0.65
     },
     "z": {
-      "_note": [
-        "The shot's own depth, which its light's height is measured from (z + the light's -12). The",
-        "script's AddEntity position for projectile.ent is not decoded. 0 is the port's own placement",
-        "of the shot, drawn in the player's slot among the art: the player is added at z 0."
+      "_source": [
+        "addProjectile (Portal.angelscript, bytes 354113..355121) #26-31: AddEntity('projectile.ent',",
+        "vector3(casterPos, 0), 0, ...) - the caster's x and y at z 0. The depth its light's height is",
+        "measured from (z + the light's -12, scaled). The port draws the shot a quarter slot in front of",
+        "the player, which is Ethanon's order at an equal z for what is added after the player; the",
+        "decoded player is at z 4 (00_order K14, R10), which puts the shot behind it once the port's",
+        "player moves there (step 5.1)."
       ],
-      "_guess": true,
       "value": 0.0
     },
+    "scale": {
+      "_source": [
+        "addProjectile #158-165: projectile.Scale(vector2(0.8, 0.8)), once, after the AddEntity at",
+        "g_scale.getScale() (#16-19), which is one port unit (00_order 8.12a); projectile.ent has no",
+        "<Scale>. ETHEntity::Scale multiplies m_properties.scale (ETHEntity.cpp:581-589), which the engine",
+        "draws the cell at (ETHSpriteEntity.cpp:678-682, ETHRenderEntity.cpp:122), the pivot at",
+        "(ETHSpriteEntity.cpp:702, ETHEntity.cpp:296), the halo's size at (ETHRenderEntity.cpp:376-386) and",
+        "the light's position and range at, by scale.y (ETHEntityRenderingManager.cpp:109-115, 174-183): a",
+        "cell of 51.2 units, a pivot of 3.2, a halo of 40, a range of 56 and a height of -9.6.",
+        "SetLightRange(70) at #54-56 sets the unscaled range, the .ent's own 70."
+      ],
+      "value": 0.8
+    },
+    "pivot_px": [4.0, 0.0],
+    "_pivot": [
+      "projectile.ent's <PivotAdjust x=4 y=0>: the point of the image, from its centre, that stands on",
+      "the entity, before the scale. projectile.png's bolt has its head right of centre and its streaks",
+      "to the left, so the entity's point is on the head."
+    ],
+    "turn": "toward_flight_minus_90",
+    "_turn": [
+      "ETHCallback_projectile (Portal.angelscript, bytes 358053..359141) #102-111, every frame:",
+      "SetAngle(radianToDegree(getAngle(dir)) - 90), dir its 'direction'. getAngle(v) is atan2(v.x, v.y)",
+      "wrapped into [0, 2 PI) (GameMath.h:711-715) and an Ethanon angle turns counter-clockwise as the",
+      "screen shows it (ETHSpriteEntity.cpp:699-709): the image's +x is turned onto the flight, so the",
+      "head leads and a shot flying right is drawn unturned. 'none' draws it upright."
+    ],
     "columns": 6,
     "rows": 1,
     "animation": {
-      "_note": [
-        "How fast the six frames play. The original keeps a _projectileFrameTimer, whose",
-        "stride is not decoded."
+      "_source": [
+        "ETHCallback_projectile #89-100, every frame a shot is alive: SetFrame(_projectileFrameTimer.set(0,",
+        "5, 30, true)) - the six cells of the cut in order, 30 ms a cell, round again (FrameTimer::set's",
+        "arguments are pushed last-first; footage F2's 0.1). _projectileFrameTimer is ONE script global",
+        "(PshGPtr), not the shot's own, and set steps at most one cell a call once its time reaches the",
+        "stride (Art::FrameTimer). Nothing resets it between shots, so a shot joins the cycle where the",
+        "last one left it: the port keeps one timer for the whole run and steps it on each tick a shot flies.",
+        "The minions' shots share it: ETHCallback_enemy_shoot (ETHCallback_minion.angelscript, bytes",
+        "435266..436701) #126-137 calls the same _projectileFrameTimer.set(0, 5, 30, true), so the step that",
+        "draws them (12.2) steps this one timer, not one of its own.",
+        "A STATED DIVERGENCE: the port steps the timer only when a level step runs, so under the pause or a",
+        "popup a shot in flight holds its cell. The original's keeps cycling there: STimeManager::pause's",
+        "setFactor(0) reaches only SetTimeStepScale (physics and particles, ETHScene.cpp:464-491), every",
+        "callback still runs each frame (ETHActiveEntityHandler.cpp:134-138), FrameTimer::set reads the raw",
+        "GetLastFrameElapsedTime and ETHCallback_projectile has no pause check before #89-100. A decode and",
+        "engine inference; no footage shows a shot under the pause."
       ],
-      "_guess": true,
-      "frames_per_second": 15.0
+      "stride_ms": 30.0
     }
   },
 

@@ -157,6 +157,37 @@ bool ReadPicture(const Json::Value& entry, const std::string& name, Picture& out
     return true;
 }
 
+// What the shot adds to its picture, none of it defaulted: a scale nobody decoded
+// would draw it at the wrong size, and a stride nobody decoded is the 15 fps
+// guess this replaced.
+bool ReadShot(const Json::Value& entry, Shot& out, std::string& error) {
+    Shot read;
+    if (!ReadPicture(entry, "shot", static_cast<Picture&>(read), error, false)) return false;
+    const Json::Value& scale = entry["scale"];
+    const Json::Value& animation = entry["animation"];
+    glm::dvec2 pivot(0.0);
+    if (!scale.IsObject() || !Finite(scale["value"]) || scale["value"].AsNumber() <= 0.0 ||
+        !Pair(entry["pivot_px"], pivot) || !std::isfinite(pivot.x) || !std::isfinite(pivot.y) ||
+        !entry["turn"].IsString() || !animation.IsObject() || !Finite(animation["stride_ms"]) ||
+        animation["stride_ms"].AsNumber() <= 0.0) {
+        error = "shot needs scale.value above 0, pivot_px, turn and animation.stride_ms above 0";
+        return false;
+    }
+    const std::string turn = entry["turn"].AsString("");
+    if (turn != "toward_flight_minus_90" && turn != "none") {
+        error = "shot's turn is toward_flight_minus_90 or none, not '" + turn + "'";
+        return false;
+    }
+    read.scale = scale["value"].AsNumber();
+    read.pivotXPx = pivot.x;
+    read.pivotYPx = pivot.y;
+    read.turnsToFlight = turn == "toward_flight_minus_90";
+    read.strideMs = animation["stride_ms"].AsNumber();
+    read.framesPerSecond = 1000.0 / read.strideMs;
+    out = std::move(read);
+    return true;
+}
+
 bool ReadPulse(const Json::Value& entry, Pulse& out) {
     Pulse read;
     if (!entry.IsObject() || !Pair(entry["from"], read.fromScale) || !Pair(entry["to"], read.toScale) ||
@@ -178,6 +209,28 @@ glm::dvec2 Pulse::ScaleAt(double elapsedMs) const {
     if (std::fmod(strides, 2.0) == 1.0) bias = 1.0 - bias;
     const double eased = Supersonic::DetMath::sin(static_cast<float>(bias) * 1.570796327f);
     return fromScale + (toScale - fromScale) * eased;
+}
+
+float Shot::AngleDegrees(const glm::dvec2& directionPx) const {
+    if (!turnsToFlight) return 0.0f;
+    // ETHCallback_projectile #102-111: getAngle(dir), radianToDegree, SUBIf 90f,
+    // SetAngle - in floats, as the script's are.
+    constexpr float kPi = 3.141592654f; // gs2d::math::constant::PI
+    float radians = Supersonic::DetMath::atan2(static_cast<float>(directionPx.x), static_cast<float>(directionPx.y));
+    if (radians < 0.0f) radians += 2.0f * kPi;
+    return radians / (kPi * 2.0f) * 360.0f - 90.0f;
+}
+
+glm::dvec2 Shot::CentrePx(const glm::dvec2& atPx, float angleDegrees) const {
+    // pivotAdjust x scale, turned by -DegreeToRadian(angle) in the screen's y-down
+    // axes (which is counter-clockwise as it is seen), and taken off the position.
+    const glm::dvec2 pivot = glm::dvec2(pivotXPx, pivotYPx) * scale;
+    float s = 0.0f;
+    float c = 1.0f;
+    Supersonic::DetMath::sincos(-angleDegrees * (3.141592654f / 180.0f), s, c);
+    const double sd = static_cast<double>(s);
+    const double cd = static_cast<double>(c);
+    return atPx - glm::dvec2(cd * pivot.x - sd * pivot.y, sd * pivot.x + cd * pivot.y);
 }
 
 glm::dvec3 Antiportal::ColourAt(double elapsedMs) const {
@@ -311,7 +364,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     Rules read;
     std::string why;
     if (!ReadPicture(root["portal"], "portal", read.portal, why) ||
-        !ReadPicture(root["shot"], "shot", read.shot, why) ||
+        !ReadShot(root["shot"], read.shot, why) ||
         !ReadPicture(root["torch_light"], "torch_light", read.torchLight, why, false) ||
         // The player's rate is its stride, read with the rest of its walk below.
         !ReadPicture(root["character"], "character", static_cast<Picture&>(read.character), why, false)) {

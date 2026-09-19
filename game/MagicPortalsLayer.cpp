@@ -3186,29 +3186,36 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     }
 
     // The shot in flight, made when one is fired and unmade when it lands or fails:
-    // a box, and projectile.ent's sheet played round when the original's image is
-    // there, just in front of the player it leaves.
+    // a box, and projectile.ent's sheet when the original's image is there, just in
+    // front of the player it leaves - as addProjectile and ETHCallback_projectile
+    // draw it (art.json shot): Scale(0.8) on its cell and its pivot, turned so the
+    // head of the bolt leads along its flight, on the cell the one timer gives.
     if (m_level.portals.flight) {
         if (m_shot == entt::null) {
             m_shot = makeBox(registry, "Magic Portals Shot", glm::vec3(0.0f), glm::vec3(1.0f), kShotColour);
         }
         placeBox(registry, m_shot, m_level.portals.flight->atPx, glm::dvec2(kShotSizePx), kMarkerZ, kMarkerDepth,
                  0.0f);
-        const Art::Picture& bolt = m_artRules.shot;
+        const Art::Shot& bolt = m_artRules.shot;
         const Sprites::Image& sheet = drawnImage(originalImage(bolt.sprite));
         const glm::dvec2 cellPx = frameUnits(sheet, bolt.columns, bolt.rows);
         if (m_shotQuad == entt::null && m_artReady && cellPx != glm::dvec2(0.0)) {
             m_shotQuad = makeSprite(registry, "Magic Portals Shot Sprite", sheet.path, bolt.additive);
-            // Played on the tick by the engine's SpriteAnimationSystem.
+            // A still: the cell is chosen, not played (stepLevel steps the timer).
             auto& animation = registry.emplace<SpriteAnimationComponent>(m_shotQuad);
             animation.columns = static_cast<uint32_t>(bolt.columns);
             animation.rows = static_cast<uint32_t>(bolt.rows);
-            animation.framesPerSecond = static_cast<float>(bolt.framesPerSecond);
-            animation.loop = true;
+            animation.frameCount = 1;
+            animation.playing = false;
         }
         if (m_shotQuad != entt::null) {
-            placeSprite(registry, m_shotQuad, m_level.portals.flight->atPx, cellPx,
-                        SlotZ(m_playerSlot) + 0.25f * kSpriteSlotZ, 0.0f);
+            registry.get<SpriteAnimationComponent>(m_shotQuad).firstFrame = static_cast<uint32_t>(m_shotCell);
+            // Its 'direction': toward where it opens a portal, which a reflector
+            // mirrors (Portals::Flight).
+            const Portals::Flight& flight = *m_level.portals.flight;
+            const float angle = bolt.AngleDegrees(flight.toPx - flight.atPx);
+            placeSprite(registry, m_shotQuad, bolt.CentrePx(flight.atPx, angle), cellPx * bolt.scale,
+                        SlotZ(m_playerSlot) + 0.25f * kSpriteSlotZ, angle * (3.14159265f / 180.0f));
         }
     } else {
         if (m_shot != entt::null && registry.valid(m_shot)) registry.destroy(m_shot);
@@ -3556,8 +3563,14 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
     const double haloScale = m_data.lighting.haloBrightnessScale;
 
     // A light, its halo and where they stand, in the colours `ratio` gives them.
-    const auto place = [&](entt::entity light, entt::entity halo, const Lighting::Light& from, const glm::dvec2& ownerPx,
-                           double ownerZ, bool ownerStatic, double ratio, float haloZ, bool present) {
+    // `ownerScale` is the owner's m_properties.scale, which draws its light and halo
+    // (Lighting::OwnerScaled): 1 for a level placement, whose <Scale> the converter
+    // has already written into its light (00_order K7), and <Scale> x the script's
+    // Scale() for what the script adds.
+    const auto place = [&](entt::entity light, entt::entity halo, const Lighting::Light& unscaled,
+                           const glm::dvec2& ownerPx, double ownerZ, bool ownerStatic, double ratio, float haloZ,
+                           bool present, const glm::dvec2& ownerScale) {
+        const Lighting::Light from = Lighting::OwnerScaled(unscaled, ownerScale);
         if (light != entt::null && registry.valid(light)) {
             const glm::vec3 at = Units::ToWorld(ownerPx.x + from.offset.x, ownerPx.y + from.offset.y);
             registry.get<TransformComponent>(light).position = glm::vec3(at.x, at.y, 0.0f);
@@ -3586,8 +3599,9 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
             present = owner.quad != entt::null && registry.valid(owner.quad);
             ownerPx = owner.ownerPx;
         }
+        // A level placement: its <Scale> is in its light already (K7).
         place(placed.entity, placed.halo, placed.light, ownerPx, placed.ownerZ, placed.ownerStatic,
-              particleRatioOf(placed.emitter), placed.haloZ, present);
+              particleRatioOf(placed.emitter), placed.haloZ, present, glm::dvec2(1.0));
     }
 
     // light_from_projectile.ent's, at each torch while it is lit (step 55, the
@@ -3624,12 +3638,14 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
         if (made.halo == entt::null && m_artReady && torchHalo.units != glm::ivec2(0)) {
             made.halo = makeSprite(registry, "Magic Portals Torch Halo", torchHalo.path, true);
         }
+        // ETHCallback_light_off adds it with AddScaledEntity at g_scale.getScale(), one
+        // port unit (#71-83), and light_from_projectile.ent's <Scale> is 1: scale 1.
         place(made.light, made.halo, *torchLight.light, torches[i].atPx, ownerZ, torchLight.isStatic,
-              Lighting::ParticleRatio(0, 0), haloZ, true);
+              Lighting::ParticleRatio(0, 0), haloZ, true, glm::dvec2(1.0));
     }
 
     // The shot's, while it flies.
-    const Art::Picture& shot = m_artRules.shot;
+    const Art::Shot& shot = m_artRules.shot;
     if (!m_level.portals.flight || !shot.light) {
         auto destroy = [&registry](entt::entity& e) {
             if (e != entt::null && registry.valid(e)) registry.destroy(e);
@@ -3649,11 +3665,12 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
     if (m_shotHalo == entt::null && m_artReady && haloImage.units != glm::ivec2(0)) {
         m_shotHalo = makeSprite(registry, "Magic Portals Shot Halo", haloImage.path, true);
     }
-    // projectile.ent has no particle system, so nothing scales either. Its halo a
-    // quarter slot in front of its own picture, which is a quarter slot in front
-    // of the player's.
+    // projectile.ent has no particle system, so no ratio dims either. Scale(0.8)
+    // does draw them smaller: a range of 56, a height of -9.6, a halo of 40 (K7).
+    // Its halo a quarter slot in front of its own picture, which is a quarter slot
+    // in front of the player's; at the entity's point, which the pivot does not move.
     place(m_shotLight, m_shotHalo, *shot.light, m_level.portals.flight->atPx, shot.z, shot.isStatic,
-          Lighting::ParticleRatio(0, 0), SlotZ(m_playerSlot) + 0.5f * kSpriteSlotZ, true);
+          Lighting::ParticleRatio(0, 0), SlotZ(m_playerSlot) + 0.5f * kSpriteSlotZ, true, glm::dvec2(shot.scale));
 }
 
 void MagicPortalsLayer::syncTurrets(entt::registry& registry) {
@@ -5014,6 +5031,14 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     if (m_level.noGravity && m_playerQuad != entt::null && !m_finishing && !m_dying) {
         m_noGravityColumn = Art::UpdateNoGravity(m_artRules.character, m_noGravityPlayer, m_direction != 0.0f,
                                                  static_cast<double>(fixedDelta) * 1000.0);
+    }
+    // ETHCallback_projectile's SetFrame(_projectileFrameTimer.set(0, 5, 30, true)),
+    // once a step while a shot flies: the one timer, so a shot starts on the cell
+    // the last one left. No step runs under a pause or popup, so the cell holds there,
+    // where the original's keeps cycling (a stated divergence, art.json shot.animation).
+    if (m_level.portals.flight) {
+        const Art::Shot& bolt = m_artRules.shot;
+        m_shotCell = m_shotFrames.Set(0, bolt.Frames() - 1, bolt.strideMs, true, static_cast<double>(fixedDelta) * 1000.0);
     }
     // linearMotion's calls BEFORE the pictures are placed: a call steps the angle and
     // writes the position in one, and the frame draws what it wrote (motions.json).

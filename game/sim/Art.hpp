@@ -9,7 +9,8 @@
 // its sheet is cut. Those are the .ent's facts, and test_mp_sprites pins them.
 // How fast a sheet plays is mostly not decoded, so it is carried as a _guess and
 // pinned by nothing - except the player's walk, whose stride and standing
-// frame are decoded from its script (Character).
+// frame are decoded from its script (Character), and the shot's cells, stepped
+// by the one timer its script keeps (Shot).
 //
 // Each also carries its .ent's <EmissiveColor>: the original draws every sprite
 // at min(1, ambient + emissive) of its colour (Lighting::AmbientTerm), what no
@@ -43,8 +44,10 @@ struct Picture {
     bool isStatic = false;        // the .ent's static; required
     bool applyLight = false;      // the .ent's applyLight; required
     std::string normal;           // its <Normal>, a file under the original's entities/normalmaps/; empty = none
-    // Its <Light>, with no scale to apply (none of these .ent files carries a
-    // <Scale> other than 1). `halo` is a file among the original's entities, not
+    // Its <Light>, as the .ent writes it: before any scale. None of these .ent
+    // files carries a <Scale> other than 1, but the script can scale what it adds
+    // - the shot's Scale(0.8) - and the layer applies that through
+    // Lighting::OwnerScaled. `halo` is a file among the original's entities, not
     // yet a path.
     std::optional<Lighting::Light> light;
     double z = 0.0;               // the depth its light's height is measured from; read only with a light
@@ -133,6 +136,31 @@ struct NoGravityPlayer {
 // the update before left. Then linearMotion turns the angle and sets the idle
 // column, set(0, 3, columnStrideMs, true).
 int UpdateNoGravity(const Character& mage, NoGravityPlayer& player, bool walking, double elapsedMs);
+
+// The shot, as projectile.ent draws it and addProjectile and ETHCallback_projectile
+// run it (art.json's shot). Added with Scale(0.8), which the engine applies to
+// its cell, its pivot, its halo and its light; turned every frame so the head of
+// the bolt leads along its flight; and its cell stepped by _projectileFrameTimer,
+// ONE FrameTimer for the whole game, set(0, last cell, strideMs, true) each frame
+// a shot is alive.
+struct Shot : Picture {
+    double scale = 1.0;         // <Scale> x the script's Scale(): m_properties.scale
+    double pivotXPx = 0.0;      // its PivotAdjust, in the .ent's units, before the scale
+    double pivotYPx = 0.0;
+    double strideMs = 0.0;      // _projectileFrameTimer's stride: a cell's time
+    bool turnsToFlight = false; // SetAngle(radianToDegree(getAngle(dir)) - 90), every frame
+
+    // The angle Ethanon is given for a shot flying along `directionPx` (level
+    // units, y down), counter-clockwise on the screen in degrees: getAngle is
+    // atan2(x, y) wrapped into [0, 2 PI) (GameMath.h:711-715), in floats as the
+    // script computes it. 0 when it does not turn.
+    float AngleDegrees(const glm::dvec2& directionPx) const;
+    // Where its picture's centre is drawn for the entity at `atPx` turned by
+    // `angleDegrees`: the pivot, times the scale, turned with the picture and
+    // taken off the entity's point (ETHSpriteEntity::ComputeInScreenSpriteCenter,
+    // ETHSpriteEntity.cpp:699-709).
+    glm::dvec2 CentrePx(const glm::dvec2& atPx, float angleDegrees) const;
+};
 
 // How a picture pulses: from one scale to the other and back, each way a
 // stride, eased by smoothEnd - the original's bounce().
@@ -236,7 +264,7 @@ struct Timer : Picture {
 
 struct Rules {
     Picture portal;      // portal.ent
-    Picture shot;        // projectile.ent
+    Shot shot;           // projectile.ent
     Picture torchLight;  // light_from_projectile.ent, added where a shot lights a torch
     Character character; // dark_mage.ent, the player
     Beholder beholder;   // beholder.ent, chapter 1's boss

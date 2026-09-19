@@ -12718,3 +12718,200 @@ Strawberry's `cmake.exe`, `ninja.exe` and `ctest.exe`, plus `vcvars64.bat`. No r
   stop those too, and was left out because the review round changed text only.
 - **Skipped** is still to be seen on a machine without the levels (a fresh clone, or CI). There, all 27 should
   report Skipped, with the path each one looked in.
+
+## Step 90 - the shot drawn as its script adds it: a fifth smaller, turned to its flight, on the one timer, and the owner's scale on its light (built)
+
+The visuals plan's step 6.1 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 6; its brief
+`system_7.md` 7d-0; conflict K7). Track B, on the `visuals-c` tree, numbered from 90 so as not to collide with
+track A's steps (the merge renumbers). Game-only: the engine submodule stays at `4bfcf67`, and no file under
+`engine/` changed. Changed: `game/data/art.json`, `game/sim/Art.{hpp,cpp}`, `game/sim/Lighting.{hpp,cpp}`,
+`game/MagicPortalsLayer.{hpp,cpp}`, `tests/test_mp_sprites.cpp`, `tests/test_mp_lighting.cpp`,
+`tests/test_mp_layer.cpp`. **The portal shot is now drawn as `addProjectile` and `ETHCallback_projectile` draw
+it: its 64-unit cell at the script's `Scale(0.8)`, 51.2 units; turned every frame so the bolt's head leads
+along its flight (it was drawn upright, so a shot flying left or up-left led with its streaks); standing on
+its pivot, 3.2 units behind the shot's point; its cells stepped every 30 ms by ONE timer for the whole run, as
+the script's global `_projectileFrameTimer` is (it was a per-shot 15 fps `_guess`). The same scale reaches its
+light and halo through one new rule, `Lighting::OwnerScaled`: halo 50 -> 40 units, range 70 -> 56, height -12
+-> -9.6. Level placements pass 1 (K7), and are byte-identical: five lit levels at f420 match the baseline.
+Step 49's "portal shot on level1" gate still passes on all three of its rows, re-captured because step 52's
+popup had silently disarmed its replay. `art.json`'s shot has no `_guess` left.**
+
+**BLOCKERS CHECKED.** 6.1's one blocker, PRE-2 (step 59 committed), holds: steps 59-75 are built and committed
+at MPR `27aac4a`. Section 8.13 amends 3.1, 3.4, 5.1, 5.2, 10.1, 10.3, 10.4, 11.1, 11.2, 12.1, 12.2 and 13.1-13.4,
+**not 6.1**, so section 7's row stands as written. No numbered ruling (R1-R23) names this step.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; the engine
+source under `reference/ethanon/toolkit/Source/src/engine/`).
+- **`addProjectile`** (Portal.angelscript, bytes 354113..355121). #16-40: `AddEntity('projectile.ent',
+  vector3(casterPos, 0), 0, @projectile, '', g_scale.getScale())` - z **0** (#26-31; the vector3's z is the
+  second `PshC4 0`, pushed first), at scale `getScale()`, one port unit (00_order 8.12a). #54-56:
+  `SetLightRange(70)`, the `.ent`'s own range. **#158-165: `projectile.Scale(vector2(0.8, 0.8))`**, once.
+  `projectile.ent` has no `<Scale>`.
+- **What a scale does** (`ETHEntity::Scale`, `ETHEntity.cpp:581-589`: `m_properties.scale *= scale`):
+  - the cell is drawn at frame size x scale (`GetCurrentSize`, `ETHSpriteEntity.cpp:678-682`, drawn at
+    `ETHRenderEntity.cpp:122`): **51.2 units**;
+  - the pivot is `pivotAdjust x scale` (`ETHEntity.cpp:296`) and turns with the picture
+    (`ComputeInScreenSpriteCenter`, `ETHSpriteEntity.cpp:699-709`): `projectile.ent`'s `(4, 0)` is **3.2 units**;
+  - the halo is `haloSize x m_properties.scale` at `light->pos + position`, the light's UNSCALED position
+    (`DrawHalo`, `ETHRenderEntity.cpp:376-386`): **40 units**;
+  - the light is `BuildChildLight(light, position, GetScale())`, position and range x **scale.y**
+    (`ETHEntityRenderingManager.cpp:109-115, 174-183`; the lightmap baker, `ETHScene.cpp:394-397`, the same):
+    **range 56, height -9.6**. The converter already applies exactly this rule to a level placement's `<Scale>`
+    (`tools/converter/src/ethanon2godot/tscn.py:313-333`: offset and range x sy, halo size x (sx, sy), halo
+    offset unscaled), which is K7's reason a placement must not be scaled again.
+- **`ETHCallback_projectile`** (bytes 358053..359141), every frame the shot lives:
+  - #89-100: `SetFrame(_projectileFrameTimer.set(0, 5, 30, true))` - the six cells, 30 ms each, round again
+    (arguments pushed last-first; `SetV1 v8, v1` is the constant 1, 00_order 8.0 rule 1; footage F2's 0.1).
+    **`_projectileFrameTimer` is a script global** (`PshGPtr`): one timer, never reset between shots;
+    `FrameTimer::set` adds the frame's time and steps at most one cell a call (`Art::FrameTimer`, step 62).
+  - #102-111: `SetAngle(radianToDegree(getAngle(dir)) - 90)`, `dir` its `direction`. `getAngle(v)` is
+    `atan2f(v.x, v.y)` wrapped into [0, 2 PI) (`GameMath.h:711-715`), and an Ethanon angle turns
+    counter-clockwise as the screen shows it (`ETHSpriteEntity.cpp:699-709` turns the pivot by `-angle` in
+    y-down axes). So the image's +x is turned onto the flight: right 0, up 90, left 180, down -90.
+  - **The image's +x is the head.** `projectile.png`'s six 64 x 64 cells: the ball sits right of centre
+    (luminance centroid x 33.7-34.8 against 31.5) with the streaks to its left, and the pivot's +4 is on the
+    ball. A shot flying right is drawn unturned; the port's upright bolt led with its streaks on every shot
+    flying left.
+- **Found in passing, NOT built (gameplay, for the owner):** #113-116 move the shot at
+  `scaledUnitsPerSecond(200)`, **200 units a second**; the port's `shot.json` `speed_px_s` is **600**, a
+  `_guess` whose note says the speed "is not decoded". And #29-55 jump the shot 24 units along its way on its
+  first frame (before `projectile_shoot.ent`, step 7d-2's). Both belong to the `Shot` sim, not to a picture.
+- **Found, NOT built: a script's Scale on a LEVEL placement.** `ETHCallback_portal_static` scales the static
+  portal by 0.8 once (step 59 round 2, `art.json` `static_portal`), and `BuildChildLight` then draws that
+  placement's own inline light at range **90 x 0.8 = 72** on the live pass, the one that reaches the player
+  (static walls hold it in the lightmap baked at load, before any callback). K7 as written passes 1 for every
+  level placement, which is right for the `<Scale>` the converter bakes but not for a Scale its script adds.
+  Of the 7 static portals (1-01, 1-02, 1-15) one carries a light, 1-02's `portal_static_582`; the player there
+  is lit by a range of 90. Left for the owner.
+
+**THE OWNER'S STANDING RULINGS APPLIED.** None of R1-R23 names this step, and R22 and R23 are not built. Two
+choices the brief left open were made under the owner's standing instruction that the original wins (the
+bytecode decode, with measured footage winning where they disagree):
+- **The frame timer.** 7d-0 accepted a stated divergence: a per-quad flipbook at 33.3 fps, restarting at cell 0
+  with every shot. This step takes the original's global timer instead: the layer keeps one `Art::FrameTimer`
+  for the run (`m_shotFrames`), stepped by `set(0, 5, 30, true)` on each tick a shot flies and never reset, and
+  the quad shows the cell it gives. **7d-0's stated divergence is retired**: 6.2, 6.3 and 7.x must not bring a
+  per-quad flipbook back for the shot.
+- **The light takes the scale too.** The brief names the halo (40 units); `BuildChildLight` scales the
+  light's range and position as well, so range 56 and height -9.6 are drawn - the original's.
+- **Two divergences are left in the timer.** The port-wide clock, not this step's: the original floors each
+  frame to whole milliseconds (16 at 60 Hz) where the port's tick adds 1000/60, so the shot's cells turn 4.17 %
+  fast, like every scripted clock (step 72; `Antiportal::ColourAt`'s comment and `art.json` `antiportal`
+  `_source`). And the pause, a stated divergence (found by the step's review): the port steps `m_shotFrames`
+  only in `stepLevel`, so under the pause or a popup a shot in flight holds its cell, where the original's keeps
+  cycling - `STimeManager::pause` is `setFactor(0)`, which reaches only `SetTimeStepScale` (the listing,
+  `STimeManager::pause`/`setFactor`; physics and particles, `ETHScene.cpp:464-491`), every callback still runs
+  each frame (`ETHActiveEntityHandler.cpp:134-138`), `FrameTimer::set` reads the raw `GetLastFrameElapsedTime`,
+  and `ETHCallback_projectile` has no pause check before #89-100. A decode and engine inference; no footage
+  shows a shot under the pause. Recorded in `art.json` `shot.animation._source` and the layer's comment.
+
+**WHAT CHANGED.**
+- **`game/data/art.json` `shot`.** `z` 0 loses its `_guess` and cites `addProjectile` #26-31; `animation`
+  becomes `stride_ms` 30 (#89-100), replacing the `frames_per_second` 15 `_guess`; new `scale` 0.8 (#158-165,
+  with the engine lines it reaches), `pivot_px` (4, 0) (the `.ent`'s `PivotAdjust`) and `turn`
+  `toward_flight_minus_90` (#102-111). The `_lighting` note no longer says the light is drawn unscaled. **The
+  shot's two `_guess` markers are gone; it has none.**
+- **`game/sim/Art`.** `Shot : Picture` adds `scale`, the pivot, `strideMs` and `turnsToFlight`, read by a strict
+  `ReadShot` (no default: a missing or non-positive scale or stride, a pivot not of two numbers, or a `turn`
+  other than `toward_flight_minus_90` or `none` refuses the file). `Shot::AngleDegrees` is the script's angle in
+  floats through `DetMath::atan2`; `Shot::CentrePx` is `ComputeInScreenSpriteCenter`'s pivot. `Picture::light`'s
+  comment ("none of these .ent files carries a `<Scale>` other than 1", system_7 S1) now says the script can scale.
+- **`game/sim/Lighting`.** `OwnerScaled(light, scale)`: range and offset x scale.y, halo size x scale, halo offset
+  unchanged - K7's rule, one function, which 6.3's effects will pass `<Scale>` x the script's scale.
+- **`MagicPortalsLayer`.** The shot's quad is placed at `CentrePx`, `cell x 0.8`, turned by the angle; its
+  `SpriteAnimationComponent` is a still (`playing` false, one cell) whose cell `stepLevel` sets from
+  `m_shotFrames` while a flight exists. `syncLights`' `place` takes the owner's scale: **1 for a level
+  placement** (K7), **1 for a lit torch's `light_from_projectile.ent`** (`ETHCallback_light_off` #71-83 adds it
+  with `AddScaledEntity` at `getScale()`, and its `.ent` `<Scale>` is 1), **0.8 for the shot**. The shot's
+  depth is unchanged: a quarter slot in front of the player, its halo half a slot.
+- **Tests.** `test_mp_sprites`: the shot's scale, pivot, turn and stride pinned exactly (the old
+  `framesPerSecond > 0`); `TheShotTurnsItsHeadOntoItsFlight` (six directions, the angle and the centre 3.2
+  units behind the point along the flight; `none` upright); the rate refusals now cover the portal's
+  `frames_per_second` and each of the shot's new rows. `test_mp_lighting`: `AnOwnersScaleDrawsItsLightAndHalo`
+  (0.8, 1 and an uneven (2, 0.5)). `test_mp_layer`: the quad's size, turn and centre on a shot fired straight
+  up; the shot's light at range 56 and height -9.6 and its halo at 40 units centred on the shot;
+  `TheShotsCellsRunOnOneTimer` (every tick's cell equals a mirror timer's, from cell 0; the second shot joins
+  the cycle rather than restarting it); the 1-01 torch halo's 300 units named as the K7 pin.
+
+**BASELINE.** This tree's committed build reproduces the starting baseline (`out/parity/split/after/sweep/`,
+1-01 f420 byte-identical, the setup's check). This step draws only while a shot flies, which no f420 sweep
+frame shows, and it is not in section 7's list of steps that move the baseline, so no sweep was taken: five
+lit levels were re-captured at f420 on the after build instead (Non-regression, below). The "before" of the
+shot gate was captured on the committed build before any change.
+
+**STEP 49's GATE WAS DISARMED, AND IS RE-ARMED HERE.** Its `tap_left.replay` (a tap at (640, 150) on tick 300)
+now only closes 1-2's `LevelHelp1Popup`, raised since step 52 ("popup closed on tick 301"), and no shot flies
+- the first "before" run showed exactly that, 10 launches spent. A DEV `--tap` does not fire either: it drives
+popups and controls, while the portal tap reads `Input` (`readInput`). The gate now replays
+`out/parity/visuals/6.1/close_then_tap_left.replay`: a touch on tick 60 closes the popup (closed on 61, game
+time resumed on 121), then step 49's tap at (640, 150) on tick 420 - a level age of 299 ticks against step
+49's 300. Frames 419 (no shot) and 422-431 every 3, step 49's 299 and 302-311 plus 120, each drawn and with
+`--light-masks-off` (`6.1/capture_shot.sh`). The gate's rules are step 49's own, in a copy with the frames moved
+(`6.1/work/shot_gate_61.py`); "Replay reproduced 431 of 1200 recorded tick(s) across 0 checkpoint(s)" in both builds.
+
+**GATES.** 1280x720, `--fixed-step`, captures under `out/parity/visuals/6.1/{before,after}/`.
+
+| Gate (00_order section 7, 6.1) | Required | Before (committed build) | After |
+|---|---|---|---|
+| `test_mp_layer`: the shot quad | 51.2 u, turned toward its flight | 64 u, upright | **51.2 u (1.024 m), rotation the flight's angle to 1e-3 degrees, centre 3.2 u behind the shot's point: passes** |
+| `test_mp_layer`: the shot's halo | 40 u | 50 u | **40 u (0.8 m), centred on the shot: passes** |
+| `test_mp_layer`: a level placement's halo unscaled (K7) | unscaled | 1-01 torch 300 u | **300 u: passes**; `OwnerScaled(light, 1)` returns the light as read (`test_mp_lighting`). **Latent**: no level placement with a `<Scale>` other than 1 has a light, and the port reads no `scale` key until 9.1 |
+| Step 49: the zero-shot frame changes nothing outside the player | 0 px | 0 | **0: passes** |
+| Step 49: blue rises within 70 u of the shot, every shot frame (f422 / 425 / 428 / 431) | > 0 | 3.89 / 4.33 / 5.81 / 9.25 | **2.64 / 2.22 / 3.12 / 7.13: passes** |
+| Step 49: and more than red and green there | B > max(R, G) | R, G (2.27, 2.27) / (2.55, 2.51) / (3.39, 3.32) / (5.43, 5.26) | **(1.54, 1.55) / (1.30, 1.27) / (1.81, 1.76) / (4.14, 4.02): passes** |
+| `art.json` loses two `_guess` markers | 2 fewer | the shot 2 (`z`, `animation`), the file 4 | **the shot 0, the file 2; `git diff` removes 2 `_guess` lines and adds none: passes** |
+| Reported (not a gate): what the light changes outside the player's box | - | 23,982 / 22,164 / 31,420 / 47,352 px | 11,826 / 10,778 / 16,253 / 27,719 px (range 70 -> 56, an area of 0.64); the farthest changed pixel from the shot's point **70.8 / 71.3 / 71.8 / 72.6 u -> 56.2 / 56.8 / 57.2 / 58.3 u**, the point located by the before-vs-after masks-off difference box (the review's `6.1/verify1/gate_v1.json`). The blob centroid first used here gave 69.0 / 56.5 / 65.4 / 56.0 u: at f422 the blob is ONE pixel, about 35 px off the point, so its f422 numbers (here and in the blue rows, where the difference-box point gives B 4.67 / 2.27 / 2.95 / 7.13, the same pass) are measured round the wrong point |
+| Reported (not a gate): the shot's blob (new pixels brighter by 60, outside the player's box and the tutorial's whites) | - | 340 / 4,083 / 1,324 / 3,672 px | 1 / 2,628 / 489 / 2,578 px (f422's bolt is inside the player's box) |
+| Non-regression: frame 419, before the tap | byte-identical | drawn `f52da3b6`, masks off `3df8cf92` | **the same two md5s: passes** |
+| Non-regression: level placements (K7), f420, no input | byte-identical to the baseline | - | **5 of 5**: 1-01 `52549d7f`, 1-02 `33bc43b7`, 1-09 `502c1f6a`, 1-15 `e9d6732c`, 2-26 `431d79e0` (the three static-portal levels among them) |
+| Reported (not a gate): where the frames changed (`6.1/work/before_after_61.py`) | - | - | masks off (the picture and halo only): every changed pixel within 29.5-39.5 u of the shot's blob; drawn: within 70.5-83.1 u (the old light's 70 plus the blob's lean; at f422 the blob sits in the player's box) |
+| Reported (not a gate): which way the bolt points (`6.1/crop_f4{25,31}_before_over_after.png`) | - | streaks ahead of the ball on a shot flying up-left | ball ahead, streaks trailing down-right |
+| Validation | exit 0, silent | - | **37 launches of `MagicPortals.exe`, every one exit 0; the 25 gate logs have the messenger active and 0 validation messages** (the two Steam loader notices every run prints aside) |
+
+**THE SUITES**, run directly on this tree's binaries. **`test_mp_sprites` 704 checks, 0 failures** (659 at
+step 74; +45). **`test_mp_lighting` 510, 0 failures** (+7). **`test_mp_layer` 1,204, 0 failures** (1,190 at
+step 74; +14) - on its SECOND run: the first read 1,204 checks with **1 failure, in this step's own new pin**,
+which asked for ten ticks of flight when a shot 48 units up at `shot.json`'s 600 units a second flies five
+(the tick-by-tick match against the mirror timer passed on that run). The short flight is the unbuilt speed
+finding above, not a weaker gate: at the decoded 200 units a second the same shot flies fourteen ticks. The pin
+now checks as many of the ten cells as the flight shows, at least four; the suite was rebuilt and run once more. **ctest was not run**: the
+step's definition of done names these suites, and the other 41 were relinked, not run.
+
+**BUILD: no warnings in the final state** (MSVC, Release, Ninja, /W4). The full build (`6.1/build1.txt`, 82
+steps: every changed translation unit compiled, the game and every suite relinked) printed exactly one
+warning, a C4456 in this step's own `tests/test_mp_layer.cpp` (a `want` hiding another). That file was the
+only one edited after it: renamed, then recompiled twice (`build2.txt`, and `build3.txt` after the pin fix
+below), each with no warning. So every translation unit was last compiled at its final content without a
+warning. No engine file was compiled, so no D9025 notes. The dry run stops at the glob re-check, as ever
+(step 73).
+
+**SMART APP CONTROL.** No refusal and no notification: `MagicPortals.exe` launched 37 times (10 on the old
+replay, 2 input probes with `--tap`, 10 before, 10 after, 5 non-regression), `test_mp_sprites` and `test_mp_lighting`
+once each, `test_mp_layer` twice.
+
+**LEFT FOR THE OWNER AND THE MERGE.**
+- **K14 and the shot's depth.** The shot is at z 0 and the decoded player at z 4 (R10), so once step 5.1 moves
+  the port's player there, the original draws the shot **behind** the player. This step keeps the port's
+  order (a quarter slot in front of a player the port still places at z 0, which is Ethanon's order at an
+  equal z for what is added later); whoever lands second re-derives it, and 6.3's between-slot table (K13) is
+  where it belongs.
+- The shot's speed (200 u/s decoded, 600 played) and its first-frame 24-unit jump, above: gameplay.
+- 1-02's static portal's live light at its script's scale (range 72, not 90), above: K7 extended to a script's
+  Scale on a placement.
+- **The K7 pin is latent.** The 1-01 torch's 300 units would pass even if `place` multiplied a placement by its
+  `<Scale>`. When 9.1 teaches the reader `scale`, it adds a hand-authored fixture: a placement with a scale
+  other than 1 that owns a light, its halo pinned at `eth_halo_size`, not `eth_halo_size` x scale.
+- **The minions' shots share the timer.** `ETHCallback_enemy_shoot` (ETHCallback_minion.angelscript, bytes
+  435266..436701) #126-137 calls the same global `_projectileFrameTimer.set(0, 5, 30, true)`: when 12.2 draws
+  them, it steps `m_shotFrames`, not a timer of its own (`art.json` `shot.animation._source`).
+- The pause divergence of the shot's cells, above: the port holds the cell, the original cycles it.
+
+**THE COMMIT'S REVIEW PASS** (text only). The review's low findings were applied as text: the pause divergence
+and the shared timer in `art.json` `shot.animation._source` (strings appended to the existing array, no key
+added), the layer's comment at the timer's step (it had read "never under a pause" as if the original did so;
+same four lines), and the notes above. So the binaries were rebuilt after the gates were measured
+(`6.1/build_commit.txt`: `MagicPortalsLayer.cpp` recompiled, `MagicPortals.exe` and `test_mp_layer.exe`
+relinked, no warning); a comment and prose change the code of neither, so every gate above stands.
+`test_mp_sprites`, which reads `art.json`, was run once more: 704 checks, 0 failures. Nothing else was launched.
+The review also took its own 128-level f420 sweep on the after build: 128 of 128 byte-identical to
+`out/parity/split/after/sweep/` (`6.1/verify1/compare_sweep.json`), a superset of the five lit levels above.

@@ -878,6 +878,12 @@ private:
     static constexpr std::uint32_t kMotionSeed = 20260917u;
     std::vector<entt::entity> m_portalQuads; // one per placed portal, when its image is there
     entt::entity m_shotQuad{entt::null};    // the shot in flight, when its image is there
+    // _projectileFrameTimer: ONE timer for the whole run, as the original's is a
+    // script global. Stepped on each tick a shot flies (stepLevel) and never
+    // reset, so a shot joins the cycle where the last one left it (art.json
+    // shot.animation).
+    Art::FrameTimer m_shotFrames;
+    int m_shotCell{0};                      // the cell the last step gave the shot
     entt::entity m_playerQuad{entt::null};  // the player, when its image is there
     double m_playerZ{0.0};                  // the level's player marker's eth_z: the player's lighting height
 

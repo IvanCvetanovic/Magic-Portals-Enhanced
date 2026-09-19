@@ -1316,10 +1316,34 @@ void APortalAndAShotAreTheOriginals() {
         if (tag.tag != "Magic Portals Shot Sprite") continue;
         shotIsTheOriginal = material.blend == MaterialComponent::BlendMode::Additive &&
                             material.albedoTexturePath.find("projectile.png") != std::string::npos &&
-                            animation.columns == 6 && animation.rows == 1 && animation.loop;
+                            animation.columns == 6 && animation.rows == 1 && !animation.playing &&
+                            animation.frameCount == 1;
     }
-    CHECK_MSG(shotIsTheOriginal, "projectile.ent's six frames, added, played round");
+    CHECK_MSG(shotIsTheOriginal, "projectile.ent's six frames, added, one cell at a time chosen by the timer");
     CHECK_MSG(Shown(registry, "Magic Portals Shot") == 0, "and its box stands behind it");
+
+    // As addProjectile and ETHCallback_projectile draw it (planning step 90): the
+    // 64-unit cell at Scale(0.8), 51.2 units; turned so the bolt's head leads, which
+    // for a shot fired straight up is 90 degrees counter-clockwise; and standing on
+    // its pivot, (4, 0) x 0.8 turned with it - 3.2 units behind the shot's point.
+    {
+        const MagicPortals::Portals::Flight& flight = *layer.SimLevel()->portals.flight;
+        const glm::dvec2 way = flight.toPx - flight.atPx;
+        const entt::entity quad = FirstTagged(registry, "Magic Portals Shot Sprite");
+        const TransformComponent& placed = registry.get<TransformComponent>(quad);
+        const float cellM = static_cast<float>(MagicPortals::Units::ToMetres(51.2));
+        CHECK_MSG(std::fabs(placed.scale.x - cellM) < 1e-5f && std::fabs(placed.scale.y - cellM) < 1e-5f,
+                  "51.2 units square: " + std::to_string(placed.scale.x) + " x " + std::to_string(placed.scale.y));
+        const double wayDeg = std::atan2(-way.y, way.x) * 180.0 / 3.14159265358979;
+        CHECK_MSG(std::fabs(wayDeg - 90.0) < 1.0, "the tap is straight above: " + std::to_string(wayDeg));
+        CHECK_MSG(std::fabs(static_cast<double>(placed.rotation.z) * 180.0 / 3.14159265358979 - wayDeg) < 1e-3,
+                  "turned to its flight, counter-clockwise: " + std::to_string(placed.rotation.z) + " rad");
+        const glm::dvec2 centre = MagicPortals::Units::ToPixels(placed.position);
+        const glm::dvec2 ahead = glm::normalize(way) * 3.2;
+        CHECK_MSG(glm::distance(centre + ahead, flight.atPx) < 1e-3,
+                  "its centre 3.2 units behind the shot, whose point is the bolt's head: " + Point(centre) +
+                      " for " + Point(flight.atPx));
+    }
 
     landShot(layer, registry);
     CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1, "it landed: " + lastFailure(layer));
@@ -1339,6 +1363,60 @@ void APortalAndAShotAreTheOriginals() {
     CHECK_MSG(Shown(registry, "Magic Portals Portal") == 1, "B shows the portal's box too");
     layer.OnDetach(registry);
     CHECK_EQ(Tagged(registry, "Magic Portals Portal Sprite"), 0);
+}
+
+// ETHCallback_projectile's SetFrame(_projectileFrameTimer.set(0, 5, 30, true)),
+// once a tick while a shot flies (planning step 90): the one FrameTimer of the
+// whole run. The first set of the run resets the constructor's (0, 0) to cell 0,
+// then one cell every 30 ms of tick time, at most one a tick; and a second shot
+// does not start over - it takes up the cycle where the first left it.
+void TheShotsCellsRunOnOneTimer() {
+    if (!OriginalArtIsThere("TheShotsCellsRunOnOneTimer")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level1");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr) return;
+    CloseTheLevelStartPopup(layer, registry);
+    waitForFirstTap(layer, registry);
+    const auto cell = [&registry]() {
+        const entt::entity quad = FirstTagged(registry, "Magic Portals Shot Sprite");
+        return quad == entt::null ? -1 : static_cast<int>(registry.get<SpriteAnimationComponent>(quad).firstFrame);
+    };
+    // The same timer, stepped by hand the same way: once on the tap's tick, then
+    // once on each tick the shot still flies.
+    MagicPortals::Art::FrameTimer mirror;
+    const double tickMs = static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
+    const auto fly = [&](const std::string& which) {
+        tap(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
+        CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), which + " fired: " + lastFailure(layer));
+        std::vector<int> drawn;
+        std::vector<int> want;
+        while (layer.SimLevel()->portals.flight && drawn.size() < 240) {
+            drawn.push_back(cell());
+            want.push_back(mirror.Set(0, 5, 30.0, true, tickMs));
+            tickWith(layer, registry, kRest, {}, {});
+        }
+        CHECK_MSG(!drawn.empty() && drawn == want, which + ": every tick's cell is the timer's");
+        return drawn;
+    };
+    const std::vector<int> first = fly("the first shot");
+    // 48 units at shot.json's speed is a few ticks: the cells those ticks show.
+    const std::vector<int> cycle({0, 0, 1, 1, 2, 2, 3, 3, 4, 5});
+    const std::size_t shown = std::min(first.size(), cycle.size());
+    CHECK_MSG(shown >= 4 && std::equal(first.begin(), first.begin() + static_cast<std::ptrdiff_t>(shown), cycle.begin()),
+              "from cell 0, a cell every 30 ms of 16.7 ms ticks, at most one a tick: " + std::to_string(first.size()) +
+                  " ticks");
+    landShot(layer, registry);
+    CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1, "it landed: " + lastFailure(layer));
+    const std::vector<int> second = fly("the second shot");
+    // Started over, it would be what a fresh timer gives.
+    MagicPortals::Art::FrameTimer fresh;
+    std::vector<int> restarted;
+    for (std::size_t i = 0; i < second.size(); ++i) restarted.push_back(fresh.Set(0, 5, 30.0, true, tickMs));
+    CHECK_MSG(second != restarted, "and a second shot joins the cycle rather than starting it over");
+    layer.OnDetach(registry);
 }
 
 void WithoutTheOriginalThePortalIsABox() {
@@ -5896,8 +5974,11 @@ void TheTorchIsALightAndAHalo() {
                       material.blend == MaterialComponent::BlendMode::Additive && !material.sprite2D.enabled,
                   "halo.bmp, added, taking no ambient: " + material.albedoTexturePath);
         const TransformComponent& transform = registry.get<TransformComponent>(halo);
+        // THE OWNER-SCALE RULE (00_order K7, planning step 90): a level placement's
+        // halo and light are drawn at the size the converter wrote, owner scale 1 -
+        // its <Scale> is in them already, and is not applied a second time.
         CHECK_MSG(std::fabs(transform.scale.x - 6.0f) < 1e-5f && std::fabs(transform.scale.y - 6.0f) < 1e-5f,
-                  "300 units square: " + ShowV(transform.scale));
+                  "300 units square, a level placement's halo unscaled (K7): " + ShowV(transform.scale));
         CHECK_MSG(glm::distance(MagicPortals::Units::ToPixels(transform.position), glm::dvec2(288.0, 52.0)) < 1e-3,
                   "centred on the light, the offset unscaled: " + Point(MagicPortals::Units::ToPixels(transform.position)));
         const float torchZ = registry.get<TransformComponent>(torch).position.z;
@@ -6120,8 +6201,9 @@ void AShotCarriesItsOwnLight() {
     const entt::entity shot = FirstTagged(registry, "Magic Portals Shot Light");
     if (shot == entt::null) return;
     // projectile.ent's: not static, so the live layer, which static walls take;
-    // range 70; (0.6, 0.6, 1) at level1's intensity 3, whole (no particle system);
-    // 12 below the shot's depth.
+    // (0.6, 0.6, 1) at level1's intensity 3, whole (no particle system); and drawn
+    // at the owner's scale, the Scale(0.8) addProjectile gives it (planning step 90,
+    // BuildChildLight): range 70 x 0.8 = 56, 12 x 0.8 = 9.6 below the shot's depth.
     const auto followsTheShot = [&]() {
         const glm::vec3 at = registry.get<TransformComponent>(shot).position;
         const glm::vec3 want = MagicPortals::Units::ToWorld(layer.SimLevel()->portals.flight->atPx.x,
@@ -6133,8 +6215,9 @@ void AShotCarriesItsOwnLight() {
         CHECK_MSG(light.layers == Lighting::kLiveLights && light.enabled, "the shot's light is live");
         CHECK_MSG(NearV(light.color * light.intensity, glm::vec3(1.8f, 1.8f, 3.0f)),
                   "(0.6, 0.6, 1) x 3: " + ShowV(light.color * light.intensity));
-        CHECK_MSG(::test::nearly(light.range, ToMetres(70.0), 1e-6f), "range 70 units");
-        CHECK_MSG(::test::nearly(light.height, ToMetres(-12.0), 1e-6f), "12 below the shot's depth of 0");
+        CHECK_MSG(::test::nearly(light.range, ToMetres(56.0), 1e-6f), "range 56 units: " + std::to_string(light.range));
+        CHECK_MSG(::test::nearly(light.height, ToMetres(-9.6), 1e-6f),
+                  "9.6 below the shot's depth of 0: " + std::to_string(light.height));
         CHECK_MSG(followsTheShot(), "where the shot is");
     }
     const glm::dvec2 from = layer.SimLevel()->portals.flight->atPx;
@@ -6153,8 +6236,17 @@ void AShotCarriesItsOwnLight() {
                           material.blend == MaterialComponent::BlendMode::Additive && !material.sprite2D.enabled &&
                           NearV(glm::vec3(material.albedoColor), want),
                       "halo.bmp, added, (0.6, 0.6, 1) x 0.65 x the scale: " + ShowV(glm::vec3(material.albedoColor)));
-            const glm::vec3 scale = registry.get<TransformComponent>(halo).scale;
-            CHECK_MSG(std::fabs(scale.x - 1.0f) < 1e-5f && std::fabs(scale.y - 1.0f) < 1e-5f, "50 units: " + ShowV(scale));
+            // DrawHalo's haloSize x m_properties.scale: 50 x 0.8 = 40 units, 0.8 m, at the
+            // shot's own point (the pivot moves its picture, not its light).
+            const TransformComponent& placed = registry.get<TransformComponent>(halo);
+            CHECK_MSG(std::fabs(placed.scale.x - 0.8f) < 1e-5f && std::fabs(placed.scale.y - 0.8f) < 1e-5f,
+                      "40 units: " + ShowV(placed.scale));
+            if (layer.SimLevel()->portals.flight) {
+                const glm::vec3 shotAt = MagicPortals::Units::ToWorld(layer.SimLevel()->portals.flight->atPx.x,
+                                                                      layer.SimLevel()->portals.flight->atPx.y);
+                CHECK_MSG(std::fabs(placed.position.x - shotAt.x) < 1e-5f && std::fabs(placed.position.y - shotAt.y) < 1e-5f,
+                          "centred on the shot: " + ShowV(placed.position));
+            }
         }
         // The shot's own picture takes no light: projectile.ent applies none.
         const entt::entity picture = FirstTagged(registry, "Magic Portals Shot Sprite");
@@ -6486,6 +6578,7 @@ void runTests() {
     AnAntiportalBlinksRedAndTurnsAndAPauseHoldsBoth();
     WithoutTheArtTheLevelIsBoxes();
     APortalAndAShotAreTheOriginals();
+    TheShotsCellsRunOnOneTimer();
     WithoutTheOriginalThePortalIsABox();
     ThePlayerIsTheDarkMage();
     TheWalkKeepsItsColumnAndItsTime();
