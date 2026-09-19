@@ -82,12 +82,13 @@ Saves for specific states are kept in `out/parity/saves/`. Force-stop the app be
 
 The remake being compared is the Supersonic port. `README.md` → *Local setup* steps 5-7 configure and
 build it, and → *Capture flags* has the capture command and lists the flags a capture uses (`--help`
-prints every flag). §7 below is the owner's layout: its `cd` and `tools\parity\port_build.bat` assume
-`%USERPROFILE%\Desktop\Supersonic-Engine` with an already configured `build/`.
+prints every flag). §7 below is the owner's layout: `tools\parity\port_build.bat` configures (the first
+time) and builds this repository's `build/`.
 
 A port capture is drawn with the original's art, so it goes under `out/parity/` like the original's
-captures — never inside Supersonic-Engine, whose `.gitignore` does not cover a stray PNG. Give
-`--screenshot` a path under this repository's `out/parity/port/`, as §7 does (the directory must exist).
+captures — never inside `engine/`, whose `.gitignore` does not cover a stray PNG. Give
+`--screenshot` an absolute path under this repository's `out/parity/port/`, as §7 does (the directory
+must exist; a relative path resolves inside `engine/`, where the game runs).
 
 A capture that needs a medal recorded (the original shows its current-score plaque only then) passes
 `--saves <dir>` with a `scores.json` written for the purpose, so the player's own save is never touched.
@@ -126,14 +127,16 @@ restart button, because 3-25's corner fire can wash out either one.
 
 ## 7. The game being compared is the Supersonic port
 
-Ivan moved the remake to his own engine: `Desktop/Supersonic-Engine/games/magicportals`. It reads this
-repo's converter output and `data/`, so converter and data fixes still land here; rendering, HUD and
-menus land there. Capture it from **Bash** (PowerShell 5.1 mangles the arguments):
+Ivan moved the remake to his own engine, Supersonic-Engine. The port lived in that repository's
+`games/magicportals` until 2026-09-19 and lives here since, in `game/`, built against the engine as a
+submodule at `engine/`. It reads this repo's converter output and `data/`. Converter, data and port
+fixes all land here; an engine fix lands in the engine's repository, and `engine/` then moves to it.
+Capture it from **Bash** (PowerShell 5.1 mangles the arguments), with an absolute `--screenshot`:
 
 ```
-cd ~/Desktop/Supersonic-Engine
-mkdir -p ~/Desktop/Magic-Portals-Remake/out/parity/port
-build/games/magicportals/MagicPortals.exe --level level0 --window 1280x720 --fixed-step --frames 420 --screenshot ~/Desktop/Magic-Portals-Remake/out/parity/port/level0.png
+cd ~/Desktop/Magic-Portals-Remake
+mkdir -p out/parity/port
+build/game/MagicPortals.exe --level level0 --window 1280x720 --fixed-step --frames 420 --screenshot ~/Desktop/Magic-Portals-Remake/out/parity/port/level0.png
 ```
 
 `--fixed-step` makes each frame 1/60 s of game time, and two runs of the same level and frame come out

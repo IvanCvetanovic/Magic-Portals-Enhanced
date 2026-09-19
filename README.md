@@ -2,10 +2,10 @@
 
 A remake of **Magic Portals**, a 2D mobile puzzle-platformer originally published by
 **Asantee Games** and delisted in 2025, running on the **Supersonic Engine**. This
-repository holds the data pipeline — decoding the original's files and converting its
-levels — plus the parity tools that compare the remake with the original, and the docs.
-The game itself is `games/magicportals` in
-[Supersonic-Engine](https://github.com/IvanCvetanovic/Supersonic-Engine).
+repository holds the game itself — the port, in `game/`, built against the engine as a git
+submodule at `engine/` — together with the data pipeline that decodes the original's files
+and converts its levels, the parity tools that compare the remake with the original, and
+the docs.
 
 ## Permission
 
@@ -43,11 +43,32 @@ captures of the original running in an emulator:
   camera's follow lag and hold time;
 - last, a sweep of all 128 levels against the reference library.
 
-The live record is the engine's planning doc,
-`docs/planning/2026-09-11-magic-portals-remaster.md` in Supersonic-Engine (every step, with
-its gates), and `docs/parity-backlog.md` here (what is left, in order).
+The live record is the port's planning doc,
+`docs/planning/2026-09-11-magic-portals-remaster.md` (every step, with its gates), and
+`docs/parity-backlog.md` (what is left, in order).
 
-## How the two repositories fit
+## The Supersonic port
+
+The game is `game/`: Magic Portals in C++20 on
+[Supersonic-Engine](https://github.com/IvanCvetanovic/Supersonic-Engine), which this
+repository builds as a subproject from a git submodule at `engine/`, pinned to one engine
+commit. Its suites are `tests/test_mp_*`. It moved here from the engine repository's
+`games/magicportals` on 2026-09-19, with its history.
+
+```bash
+git clone --recurse-submodules https://github.com/IvanCvetanovic/Magic-Portals-Remake.git
+# in a clone made without --recurse-submodules:  git submodule update --init
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=ON
+cmake --build build
+ctest --test-dir build
+```
+
+Configure and build in a shell with MSVC's environment (an x64 Native Tools prompt, or after
+`vcvars64.bat`); `tools\parity\port_build.bat` does both steps on the owner's machine. It
+compiles from a fresh clone, but it plays nothing until the original's levels are converted
+locally, and 27 of the 44 suites skip without them: *Local setup* below, steps 5-8.
+
+## How it fits together
 
 ```
   reference/apk/              original APK                  (you supply it — never committed)
@@ -61,26 +82,31 @@ its gates), and `docs/parity-backlog.md` here (what is left, in order).
   out/data/chapters.json
   out/assets/  entity art, lightmaps
         │
-        │        data/*.json        (committed gameplay data)
+        │               data/*.json   (the remake's tables, committed)
         │               │
         ▼               ▼
-  Supersonic-Engine/games/magicportals  ◄── reference/extracted/assets, read directly
+  game/  (the port, built on engine/)   ◄── reference/extracted/assets, read directly
 ```
 
 The converter writes each level as a `.tscn` text scene: that is the level format the
-port's reader parses (`games/magicportals/sim/Tscn.cpp`). Nothing is copied into the
-engine's repository. The port reads `out/`, `data/` and `reference/extracted/assets/`
-where they are, through CMake cache paths set when the engine is configured (steps 5 and 7
-below).
+port's reader parses (`game/sim/Tscn.cpp`). Nothing is copied into the engine's
+repository. The port reads `out/`, `data/` and `reference/extracted/assets/` where they are,
+through CMake cache paths baked in when `build/` is configured (steps 5 and 7 below).
 
 ```
-data/              gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
+CMakeLists.txt     the build: engine/ as a subproject, then game/ and tests/
+engine/            Supersonic-Engine, a git submodule pinned to one commit
+game/              the port: main.cpp, MagicPortalsLayer, LevelVisit, sim/, spike/, and data/ (its own JSON)
+tests/             the port's test_mp_* suites
+data/              the remake's gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
 tools/converter/   ethanon2godot — Python 3; .esc/.ent → out/levels, chapters.json, entity art, lightmaps
 tools/asbc/        AngelScript bytecode reader; achievements.py writes out/data/achievements.json
 tools/parity/      emulator driver, reference-library capture, frame comparison, port_build.bat
 docs/              format notes, the original's behaviour, parity rig and backlog, permission record
+docs/planning/     the port's planning records
 reference/         ⛔ gitignored in full — not present in a fresh clone (see below)
 out/               converter output and parity captures — gitignored
+build/             the CMake build tree — gitignored
 ```
 
 ## Local setup after cloning
@@ -176,34 +202,34 @@ This writes `out/data/achievements.json`. Achievement titles, descriptions, icon
 are Asantee content, so they exist only in that gitignored file; without it the
 achievements dashboard draws no rows, and nothing else changes.
 
-**5. Clone Supersonic-Engine beside this repository:**
+**5. Check out the engine.** It is a git submodule at `engine/`, pinned to one commit of
+[Supersonic-Engine](https://github.com/IvanCvetanovic/Supersonic-Engine). A clone made with
+`--recurse-submodules` has it already; otherwise, from the repo root:
 
 ```bash
-cd ..
-git clone https://github.com/IvanCvetanovic/Supersonic-Engine.git
+git submodule update --init
 ```
 
-The two must be sibling directories (`<parent>/Magic-Portals-Remake` and
-`<parent>/Supersonic-Engine`): that is where the port's CMake defaults look
-(`games/magicportals/sim/CMakeLists.txt`). Anywhere else, set these when configuring:
+The port's inputs default to their places in this repository (`game/sim/CMakeLists.txt`).
+Set these when configuring only to read them from somewhere else:
 
-| Cache variable | Points at |
+| Cache variable | Default |
 |---|---|
-| `SUPERSONIC_MAGICPORTALS_LEVELS` | `Magic-Portals-Remake/out/levels` |
-| `SUPERSONIC_MAGICPORTALS_CHAPTERS` | `Magic-Portals-Remake/out/data/chapters.json` |
-| `SUPERSONIC_MAGICPORTALS_DATA` | `Magic-Portals-Remake/data` |
-| `SUPERSONIC_MAGICPORTALS_ORIGINAL` | `Magic-Portals-Remake/reference/extracted/assets` |
-| `SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS` | `Magic-Portals-Remake/out/data/achievements.json` |
+| `SUPERSONIC_MAGICPORTALS_LEVELS` | `out/levels` |
+| `SUPERSONIC_MAGICPORTALS_CHAPTERS` | `out/data/chapters.json` |
+| `SUPERSONIC_MAGICPORTALS_DATA` | `data` |
+| `SUPERSONIC_MAGICPORTALS_ORIGINAL` | `reference/extracted/assets` |
+| `SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS` | `out/data/achievements.json` |
 
 Pass each as `-D<variable>=<path>` on the configure line of step 7, e.g.
-`-DSUPERSONIC_MAGICPORTALS_LEVELS=C:/path/Magic-Portals-Remake/out/levels`.
-`_CHAPTERS`, `_ORIGINAL` and `_ACHIEVEMENTS` default relative to `_LEVELS`, so on the
-**first** configure of an empty `build/` a clone elsewhere needs only `_LEVELS` and `_DATA`.
-CMake never overwrites a cache entry that already exists: if `build/` was configured before,
-pass all five, or delete `build/CMakeCache.txt` first. The paths are baked in as absolute
-paths when the engine is configured.
+`-DSUPERSONIC_MAGICPORTALS_LEVELS=C:/elsewhere/out/levels`. `_CHAPTERS`, `_ORIGINAL` and
+`_ACHIEVEMENTS` default relative to `_LEVELS`, so on the **first** configure of an empty
+`build/` levels converted elsewhere need only `_LEVELS`. CMake never overwrites a cache entry
+that already exists: if `build/` was configured before, pass all five, or delete
+`build/CMakeCache.txt` first. The paths are baked in as absolute paths when `build/` is
+configured.
 
-**6. Engine prerequisites** (Supersonic-Engine's README, *Requirements*):
+**6. Engine prerequisites** (`engine/README.md`, *Requirements*):
 
 - a C++20 compiler — MSVC 2022, GCC 11+ or Clang 13+;
 - CMake 3.20 or newer;
@@ -217,21 +243,25 @@ paths when the engine is configured.
 Every other dependency is vendored in the engine's `third_party/`. The owner builds with
 MSVC from Visual Studio Build Tools and the Ninja generator.
 
-**7. Configure and build.** From the Supersonic-Engine root, in a shell with MSVC's
+**7. Configure and build.** From this repository's root, in a shell with MSVC's
 environment (an x64 Native Tools prompt, or after `vcvars64.bat`):
 
 ```bat
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=ON -DSUPERSONIC_BUILD_TESTS=ON -DSUPERSONIC_BUILD_MAGICPORTALS=ON
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=ON
 cmake --build build
 ```
 
-`SUPERSONIC_BUILD_MAGICPORTALS` is off by default and gates only the executables
-(`MagicPortals.exe` and the `MagicPortalsSpike` measurement tool); the port's libraries and
-test suites build without it. `SUPERSONIC_ENABLE_VALIDATION=ON` keeps the Vulkan validation
-layers on in a Release build. The owner's build also turns on the engine's other games and
-passes the SDK's `glslc` as `GLSL_COMPILER`; neither matters to Magic Portals.
+The engine is a subproject here: it builds its library and nothing else — no editor, no
+script plugin, none of its own suites — and leaves its committed shaders alone.
+`SUPERSONIC_BUILD_MAGICPORTALS` (on) gates only the executables (`MagicPortals.exe` and the
+`MagicPortalsSpike` measurement tool), and `MAGICPORTALS_BUILD_TESTS` (on) the suites; the
+port's libraries always build. `SUPERSONIC_ENABLE_VALIDATION=ON` keeps the Vulkan validation
+layers on in a Release build. The owner's build also passes the SDK's `glslc` as
+`GLSL_COMPILER` and names MSVC's `cl` as the compiler (`-DCMAKE_C_COMPILER=cl
+-DCMAKE_CXX_COMPILER=cl`), since CMake takes Strawberry Perl's GCC when that comes first on
+`PATH`.
 
-To rebuild from this repository, from cmd or PowerShell:
+On the owner's machine, from cmd or PowerShell:
 
 ```bat
 tools\parity\port_build.bat --target MagicPortals
@@ -239,20 +269,19 @@ tools\parity\port_build.bat --target MagicPortals
 
 From Git Bash, which would eat the backslashes, hand it to cmd:
 `cmd //c "tools\parity\port_build.bat --target MagicPortals"`. It sets up MSVC's
-environment and runs `cmake --build` on an already configured
-`%USERPROFILE%\Desktop\Supersonic-Engine\build`, with the owner's Visual Studio Build Tools
-path written into it. On any other machine, run `cmake --build build --target MagicPortals`
-from the engine root instead.
+environment with the owner's Visual Studio Build Tools path, configures `build/` as above
+the first time (when it has no `CMakeCache.txt`), and runs `cmake --build` on it with the
+arguments given. On any other machine, run the two lines above instead.
 
 On Windows 11, Smart App Control sometimes blocks a freshly linked exe ("An Application
 Control policy has blocked this file"). Deleting the exe and relinking gets past it. Each
 blocked launch raises a Windows notification, so relink and relaunch once rather than in a
 retry loop, and run only the suites a change touches.
 
-**8. Run the port's tests.** From the Supersonic-Engine root, after a full build:
+**8. Run the port's tests.** From this repository's root, after a full build:
 
 ```bat
-ctest --test-dir build -R mp_
+ctest --test-dir build
 ```
 
 These are the `test_mp_*` suites (a multi-config generator such as Visual Studio also needs
@@ -262,21 +291,25 @@ These are the `test_mp_*` suites (a multi-config generator such as Visual Studio
   `hazards`, `demolish`, `launchers`, `shot`, `boss`, `layer`, `zerog`, `bounce`, `wells`,
   `dragon`, `darkdragon`, `turrets`, `fire`, `hinge`, `minions`, `ghost`, `torch`, `keys`,
   `diamonds`, `fields`) exit 77 and print the path they looked in, which ctest reports as
-  SKIPPED: each carries `SKIPS_WITH_77` on its `add_mp_test` line in the engine's
-  `tests/CMakeLists.txt` (Supersonic-Engine `80a4ed2`; before it, the last nine were missing
-  from the skip list, so ctest would have reported them as Failed);
+  SKIPPED: each carries `SKIPS_WITH_77` on its `add_mp_test` line in `tests/CMakeLists.txt`
+  (a mark made in Supersonic-Engine `80a4ed2`, before the port moved here; before it, the
+  last nine were missing from the skip list, so ctest would have reported them as Failed);
 - 6 suites (`sprites`, `lighting`, `sky`, `tiers`, `motion`, `sounds`) skip only the part
   that needs the converted levels or the original's extracted assets, say so, and report
   Passed.
 
 ## Run it
 
-From the Supersonic-Engine root (a build-tree run finds the engine's shaders relative to
-the working directory):
+From this repository's root:
 
 ```bat
-build\games\magicportals\MagicPortals.exe
+build\game\MagicPortals.exe
 ```
+
+The game finds the engine's shaders in `engine/` by itself (the engine's
+`SUPERSONIC_ASSET_ROOT`, set to the submodule) and makes `engine/` its working directory
+before it opens anything, so it runs from any directory — and a relative path given to one
+of its flags resolves inside `engine/`. Give the path flags below absolute paths.
 
 With no `--level` the game opens as the original does: loading screen, then main menu.
 `--level level0` starts straight in 1-01. Diagnostics also go to `%TEMP%\magicportals.log`.
@@ -301,12 +334,13 @@ and right (the decoded `SCREEN_PAD_BUTTON` enum), and the project owner confirms
 
 Run captures from **Bash** (Git Bash): PowerShell 5.1 mangles the arguments. A capture is
 drawn with the original's art, so it is written under this repository's gitignored
-`out/parity/`, never inside Supersonic-Engine, whose `.gitignore` does not cover a stray PNG.
-From the Supersonic-Engine root, with the sibling layout of step 5:
+`out/parity/`, never inside `engine/`, whose `.gitignore` does not cover a stray PNG. From
+this repository's root, with an absolute `--screenshot` path (a relative one would land in
+`engine/`, where the game runs):
 
 ```bash
-mkdir -p ../Magic-Portals-Remake/out/parity/port
-build/games/magicportals/MagicPortals.exe --level level0 --window 1280x720 --fixed-step --frames 420 --screenshot ../Magic-Portals-Remake/out/parity/port/level0.png
+mkdir -p out/parity/port
+build/game/MagicPortals.exe --level level0 --window 1280x720 --fixed-step --frames 420 --screenshot "$PWD/out/parity/port/level0.png"
 ```
 
 The flags a capture uses (`--help` prints every flag):
@@ -317,7 +351,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--window <W>x<H>` | window size, which is also the render resolution; parity captures use `1280x720` |
 | `--fixed-step [s]` | simulate at a constant step (default 1/60 s), so a run reproduces: two runs of the same level and frame are bit-identical |
 | `--frames <n>` | render exactly `n` frames, then exit |
-| `--screenshot <path>` | write a PNG of the last frame of a `--frames` run (without `--frames`, nothing is written); the directory must exist |
+| `--screenshot <path>` | write a PNG of the last frame of a `--frames` run (without `--frames`, nothing is written); the directory must exist; give it absolute |
 | `--screenshot-every <n>` | with `--screenshot`, also write every `n`th frame as `<stem>_f<frame>.png`; pair it with `--fixed-step` |
 | `--hold <left\|right>@<from>-<to>` | DEV: hold a walk from game tick `from` to `to` |
 | `--tap <help\|x,y>@<tick>[-<release>]` | DEV: a touch at pixel `x,y` of 1280x720, or on the level's first help block, released on the next tick or at `release` |
@@ -332,7 +366,8 @@ The flags a capture uses (`--help` prints every flag):
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |
 | `--help` | every flag, the engine's own included |
 
-`--hold`, `--tap`, `--drag` and `--press` repeat. A run exits non-zero on any Vulkan
+`--hold`, `--tap`, `--drag` and `--press` repeat. `--screenshot`, `--saves`, `--levels`,
+`--art` and `--data` take absolute paths: a relative one resolves inside `engine/`. A run exits non-zero on any Vulkan
 validation error — when the validation layers are loaded, which needs the Vulkan SDK
 (step 6). The log says which: `Vulkan validation layers: ACTIVE` or `NOT LOADED`; without
 them the engine warns at startup and a run validates nothing.
@@ -370,7 +405,7 @@ docstring:
 
 Everything captured from the original is Asantee-origin imagery and stays under
 `out/parity/`, which is gitignored. Captures of the port are drawn with the original's art as
-well, so they also go under `out/parity/`, never inside Supersonic-Engine.
+well, so they also go under `out/parity/`, never inside `engine/`.
 
 ## Docs
 
@@ -387,5 +422,7 @@ well, so they also go under `out/parity/`, never inside Supersonic-Engine.
   all §3's rule that the portal mechanic's values are measured, not guessed
 - `tools/asbc/` — AngelScript bytecode reader, ported from the engine's own deserialiser
 - `tools/converter/README.md` — the converter's modules, its checks and its test-fixture rule
-- Supersonic-Engine `docs/planning/2026-09-11-magic-portals-remaster.md` — the port's
-  record: every step, with its gates
+- `docs/planning/2026-09-11-magic-portals-remaster.md` — the port's record: every step,
+  with its gates; beside it, the port's plan and the spike that started it
+- `engine/README.md`, `engine/AGENTS.md`, `engine/ARCHITECTURE.md` — the engine the port
+  is built on, and the conventions port code follows

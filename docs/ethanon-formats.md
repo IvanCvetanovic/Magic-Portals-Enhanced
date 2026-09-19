@@ -1866,7 +1866,7 @@ for the desktop-vs-GLES2 backend caveat.
 Everything in this section is engineering judgement layered on the verified facts above. **Godot 4 property
 spellings were written from memory.** *2026-09-19: the Godot runtime this section was written for is removed.
 The node types and properties below are the `.tscn` vocabulary the converter writes; what they mean at run time is
-now what the Supersonic port's reader (`games/magicportals/sim/Tscn.cpp`) makes of them. Statements about how Godot
+now what the Supersonic port's reader (`game/sim/Tscn.cpp`) makes of them. Statements about how Godot
 itself behaves (its physics units, its particle model, `flip_h`) are kept as written, as history.*
 
 ### 10.1 Node mapping

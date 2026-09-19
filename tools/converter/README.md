@@ -3,8 +3,8 @@
 Converts the original game's Ethanon Engine data (scenes, entities, `goldenScores.enml`)
 into the files the Magic Portals port on the Supersonic Engine reads: one `.tscn` text
 scene per level, the chapter manifest, and copies of the art and lighting files the levels
-name. The port parses the `.tscn` with its own reader (`games/magicportals/sim/Tscn.cpp` in
-Supersonic-Engine); the package keeps its name from when the target was Godot 4, whose text
+name. The port parses the `.tscn` with its own reader (`game/sim/Tscn.cpp` in this
+repository); the package keeps its name from when the target was Godot 4, whose text
 scene format it still writes.
 
 The format spec is [`../../docs/ethanon-formats.md`](../../docs/ethanon-formats.md), derived
