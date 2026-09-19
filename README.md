@@ -210,6 +210,11 @@ achievements dashboard draws no rows, and nothing else changes.
 git submodule update --init
 ```
 
+On Windows, a clone at a deeply nested path can stop here with `Filename too long` on the
+engine's vendored files (the Vulkan headers, VulkanMemoryAllocator's docs). A submodule does
+not take the superproject's `core.longpaths`, so pass it on the command line, in the clone:
+`git -c core.longpaths=true submodule update --init`.
+
 The port's inputs default to their places in this repository (`game/sim/CMakeLists.txt`).
 Set these when configuring only to read them from somewhere else:
 

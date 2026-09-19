@@ -2190,3 +2190,104 @@ validation messages, rc 0 for all; the saved medal file (`f5b7a121`) unchanged. 
 
 **Inferred mood:** guess — a mechanical day that went to plan: the frames matched on the first sweep, and the only
 friction was Smart App Control, which still owns two suites.
+
+### 2026-09-19 — Session 18c: the games leave the engine
+
+*Written at 18:40 from the split's role reports (in the session's scratchpad, `split/*.md`), git in the four
+repositories and the Supersonic Engine's `build/`, not from a transcript. Numbered as the brief asked, so it sits after
+session 19's entry, which is the Magic Portals part of the same work; this one is the whole split and how it closed.*
+
+Ivan's call, 2026-09-19: each game's port leaves the Supersonic Engine repository (SE) for its own game's repository,
+with its history and the engine as a submodule pinned to a commit, and every game's output is shown to be unchanged. SE
+keeps only the engine.
+
+**Built:**
+- **SE holds only the engine.** Two commits, both pushed. `2237554` (P, "The engine usable from a game's own
+  repository"): built as a subproject, the engine turns its editor, script plugin and own suites off by default, bakes
+  `SUPERSONIC_ASSET_ROOT` to its checkout, and gives the game `supersonic_add_test` (`cmake/SupersonicTesting.cmake`).
+  `4bfcf67` (C, "The games moved to their own repositories"): `games/` and the 65 game suites are gone, with their
+  registrations, and the engine's README says where each game went. C went out first on a branch, `games-out`, and
+  the game repositories pinned it there. At the close SE `main` was fast-forwarded `2237554..4bfcf67` and pushed, and
+  `games-out` was deleted locally and on origin, only after `git ls-remote` showed `main` at `4bfcf67`. The pin is
+  now SE's `main`.
+- **Magic Portals → this repository's root** (session 19's entry). `main` fast-forwarded `6961d26..66dbb53`, pushed.
+- **HUSK → Test-Game `supersonic/`**: 250 files, 6 commits of history, 6 new commits. `main` `721e19e..85b950c`,
+  pushed. `origin/feat/m0-foundations` (`59cc392`) not touched.
+- **The Wolf Brigade → The-Wolf-Brigade `supersonic/`**: 88 files, 70 commits of history, 5 new commits (the last,
+  `88b3547`, is the DEVLOG and TODO entries its review found missing under WB's own rules). `main`
+  `50741d1..88b3547`, pushed.
+- All four pushes were fast-forwards: nothing forced, no merge commit on any `main`. `git submodule status` in all
+  three game repositories shows `4bfcf67` with no `+` or `-`.
+- **SE's `build/` reconfigured at C**: rc 0, 13 → 7 CMake files, `ninja: no work to do`, 0 warning lines; `ctest -N`
+  lists 57 tests and no `test_mp_`, `test_wb_` or `test_husk_`.
+- **Here, this commit.** The docs were already rewritten for the new layout by `e357541` (README, CLAUDE.md,
+  `docs/parity.md` §4 and §7, the backlog's header, the converter README, one `ethanon-formats.md` note) and
+  `ef812ad` (`port_build.bat`). Every command in CLAUDE.md and the README was checked against the tree: the paths
+  exist, and the flags are in the argument parsers (the port's `game/main.cpp`, the engine's
+  `src/core/LaunchOptions.cpp`, the converter's and `achievements.py`'s `--help`). Two things were missing and are
+  added: README step 5 says what to do when the submodule checkout stops on `Filename too long`, and `docs/parity.md`
+  §7 gives the Git Bash form of the build command. CLAUDE.md is unchanged.
+
+**Broke / dead ends:**
+1. **Smart App Control: 10 refused launches, so 10 notifications for Ivan.** Magic Portals 7: the first launches of
+   `test_mp_fire`, `zerog`, `dragon`, `diamonds` and `shot`, one delete and relink each, then `zerog` and `diamonds`
+   refused again. HUSK 1: `Husk.exe`'s first launch (exit 126); it ran after one relink. The Wolf Brigade 2:
+   `test_wb_worker` and `test_wb_match` (ctest BAD_COMMAND); both ran after one relink. The survey, engine, review and
+   closing roles had none. **Not run: `test_mp_zerog` (88 checks at baseline) and `test_mp_diamonds` (126).** Their
+   sources are blob-identical to SE's, so only the launch is unproven.
+2. **Windows path limits in the scratch clones.** A fresh clone's submodule checkout failed with `Filename too long` on
+   the engine's Vulkan headers and VMA docs. A submodule does not take the superproject's `core.longpaths`;
+   `git -c core.longpaths=true` fixed it. The Wolf Brigade review's configure of a deep clone also failed CMake's
+   compiler test (an object path over 250 characters) and needed `subst`. The real repositories' paths are short
+   enough. README step 5 now has the first fix.
+3. The Wolf Brigade review's `ctest -N` output, `ctestN.txt`, was written into this repository's root. The closing
+   role moved it to the scratchpad: not deleted, not committed.
+4. The Wolf Brigade review failed the move on one point: WB's definition of done (a DEVLOG and a TODO entry every
+   task) had not been followed. `88b3547` fixed it before the push.
+
+**Decision:**
+- The docs `e357541` wrote stay as written; this commit adds only what the check found missing. It has no hunk in
+  CLAUDE.md, so the hard rule and the legal basis are byte-identical to `66dbb53`. The hard rule's "What IS committed"
+  line is the one `e357541` wrote (our own code, the engine's pin, docs, fixtures), no longer session 18's "our own
+  GDScript, our own scenes".
+- Dated records are left as written: the closed Godot item in `docs/parity-backlog.md` §0 (it names
+  `game/data/*.json` and "SE's CMake cache"); the backlog's "SE step N" labels, which are steps of
+  `docs/planning/2026-09-11-magic-portals-remaster.md`, the same doc, now here; the three planning docs' SE paths
+  (12 lines in the remaster doc name `games/magicportals`); this file's earlier entries, session 19's "SE `main` is
+  still P" included. It is not any more.
+- No build, suite or capture this session. Nothing in this commit is compiled, and every launch risks a notification.
+  Run: `ctest --test-dir build -N` (44 tests, launches nothing), the converter's and `achievements.py`'s `--help`.
+- `docs/permission.md` still holds its placeholder. This change asks nothing of the grant's scope.
+
+Left for Ivan, found at the close and not fixed (none needs a push to work):
+- Test-Game's `.gitmodules` still says `branch = games-out`, and its `supersonic/README.md:49` and
+  `TECH_NOTES.md:2502` say the pin is on `games-out`. The commit is on SE `main` now; only
+  `git submodule update --remote` is affected.
+- The engine checkouts here and in Test-Game are on a local branch `games-out` whose upstream is gone. The commit is
+  `main`'s, so only the label is stale.
+- SE's `build/` keeps what C no longer builds: `build/games/` (4 exes, 192 MB of the tree's 645 MB), 65 old game suite
+  exes in `build/tests`, and the cache entries `SUPERSONIC_BUILD_{HUSK,MAGICPORTALS,WOLFBRIGADE}=ON` and five
+  `SUPERSONIC_MAGICPORTALS_*` paths into this repository, which nothing reads. Nothing deleted.
+- Here, the Godot-era `.gitignore` lines `/game/android/build/` and `**/game/assets/` now apply to the port's `game/`,
+  so a future `game/assets/` would be silently ignored. `**/game/assets/` is part of the asset guard, so it is not
+  touched.
+- HUSK has had no CI since it left SE (SE's ran its three suites on Windows, Linux and ASan).
+
+**Assets check:** yes — `git status --short`, run after appending this entry, lists ` M DEVLOG.md`, ` M README.md`
+and ` M docs/parity.md`, and nothing under `reference/` or `out/`. The forbidden-extension grep over
+`git diff --cached --name-only` printed nothing before the commit.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** Magic Portals: 198 files and 120 commits moved; 42 of 44 suites at their baseline counts (8,163 checks,
+0 failures); 128 of 128 sweep frames byte-identical; the spike's normalized output md5 `e52180ba`, as at baseline.
+HUSK: 250 files, 6 commits; 3 of 3 suites with byte-identical stdout (69, 142 and 30 checks); the First Light replay
+60 of 60 ticks, 4 PNGs byte-identical. The Wolf Brigade: 88 files, 70 commits; 18 of 18 suites with byte-identical
+stdout (2,378 checks); the replay 600 of 600 ticks, PNG `c8af3b36` and run.json `8e155f7b` identical. SE at C: one
+ctest in a scratch build, 57 of 57 suites passed (6,771 checks). P changed no capture: AllPasses `160662a5`, Magic
+Portals 1-01 f420 `52549d7f` and both replays were identical before and after it. Pushes: 4 fast-forwards and 1 branch
+deletion, 0 forced. Smart App Control: 10 refused launches. This commit: 3 files, 0 compiled.
+
+**Inferred mood:** guess — a long day of careful plumbing that closed cleanly: every output that was measured matched,
+and the cost was ten Smart App Control notifications and two suites it still will not run.

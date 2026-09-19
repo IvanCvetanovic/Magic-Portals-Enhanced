@@ -140,4 +140,5 @@ build/game/MagicPortals.exe --level level0 --window 1280x720 --fixed-step --fram
 ```
 
 `--fixed-step` makes each frame 1/60 s of game time, and two runs of the same level and frame come out
-bit-identical, so a capture is a reproducible fixture. Build with `tools\parity\port_build.bat --target MagicPortals`.
+bit-identical, so a capture is a reproducible fixture. Build with `tools\parity\port_build.bat --target MagicPortals`
+from cmd or PowerShell; from Git Bash, which eats the backslashes, `cmd //c "tools\parity\port_build.bat --target MagicPortals"`.
