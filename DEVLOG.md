@@ -1779,3 +1779,184 @@ Control refusal.
 
 **Inferred mood:** guess — a short, clean data step: the census matched the brief on the first run, and the only
 real care went into not pulling files out from under the other track.
+
+### 2026-09-17 10:20 — Session 17b: batches 0-4 resumed, the footage finished, the README moved to Supersonic; two sleeps and a shutdown (written 2026-09-19)
+
+*Written on 2026-09-19 by session 18, from this session's transcript (`4c55b24b`), the visuals workflow's role reports,
+the footage `INDEX.md` and `<ID>.md` notes, git in both repos, the planning doc's steps 62-67 and 80-84, and the Windows
+System log. The session never reached its own SESSION END. The entry above, "Session 17 (step 2.1)", was written by step
+2.1's commit agent and covers that step only (SE step 65, MPR `e9611e4`); this one covers the rest of the session.*
+
+**Timeline.** 10:17 Ivan: the battery had died, where did we leave off; 10:19: "if there is anything unfinshed, go ahead
+and start the job to finish it. You may start as many agents as you need." The session found SE main two commits ahead
+(steps 60, 61) and pushed them (`c9f500b..823e3d7`, 10:22); 1.1 built and measured in SE main but unrecorded; 3.1
+uncommitted in the worktree with its third verifier dead; F2 recorded without notes. At 10:26 it relaunched both jobs from
+disk: `visuals-resume-batches-0-4` (`wf_a1e1cae9-c7a`) and `original-footage-resume` (`wf_8b0450d4-9ed`). 11:01 Ivan asked
+for the README to cover Supersonic and for the Godot mentions and files to go (below). 14:33 he asked how complete the
+remaster is: about 60-65 % weighted by how it looks and plays, nearer 90 % counted as "all 128 levels play, every screen
+exists". 18:08 the footage job finished and the emulator was shut down. Track A (SE main) finished at 21:07 with step 67.
+Track B committed step 83 at 21:24; step 84 then took until 19:18 on 09-18 and 4.3 never finished, because from 22:24 the
+machine was mostly asleep:
+- **Standby, from the System log** (Kernel-Power 506 in, 507 out): 09-17 22:24 → 09-18 08:58 (wakes at 03:31, 08:35 and
+  08:55); 09-18 10:44 → 11:08; 09-18 12:06 → 18:27 (a wake at 12:29); 09-18 19:54 → 09-19 08:48 (a wake at 21:56). The
+  heading's two sleeps are the overnight ones; the 6 h 21 min on 09-18's afternoon cost as much as either. Of the 46 h 37 min
+  from 10:17 on 09-17 to the crash, the machine was out of standby about 16 h 24 min.
+- The session's own report at 09:44 on 09-18 said no agent wrote "between 21:25 last night and 08:35". Wrong by an hour:
+  21:25 is when 4.2's implementer started, and it wrote until 22:23.
+- 09:42 on 09-18 Ivan: "can you tell me about the progress again, its been 8 hours". The session found the sleep and proposed
+  `powercfg /change standby-timeout-ac 0`, asking for Ivan's yes first because it changes a setting on his laptop. No answer
+  is in the transcript, nothing was changed, and the machine went into standby three more times.
+- **The shutdown.** At 08:48 on 09-19 the machine woke, the workflow restarted 4.3's implementer, and at 08:54 the machine went
+  down uncleanly: last capture written 08:54:05, OS start 08:54:29, Kernel-Power 41 at 08:54:35, EventLog 6008 at 08:54:47.
+  6008 names "19:39:57 on 18.09.2026" as the unexpected shutdown; that is the log's last heartbeat before the standby, not
+  the crash (the agent wrote until 08:53).
+- **Left by it:** 4.3 (the gravity-well green ring) built and captured but unrecorded: no Step 85 in the planning doc, only a
+  17.7 KB draft from 21:56; its 128-level after-sweep at 101 frames logged `rc=0` (the last, 4-05, at 08:53:57); the 102nd
+  png, `4-06_level5c_f420.png`, is 1,084,417 bytes of NUL, and `4.3/after/capture.txt` holds 98 NULs. **4.3 and the merge of
+  `visuals-b` into main are being finished by session 18 (this one) and are not part of this entry's results.**
+
+**Built (Supersonic main, pushed, origin/main `494f6e2`):** one game commit per order step, each with its planning record;
+no engine commit (nothing under `src/` or `assets/shaders/`).
+- Step 62 `441ce6e` (13:55), order 1.1: every level opens on frame 8 facing right; a column every 90 ms; the column kept
+  across a stop and a turn. Normal f8 0.808 → 0.970 on 1-01, 0.804 → 0.926 on 1-09; centres x 101 and 396 exactly.
+- Step 63 `a0207e1` (15:30), 1.2: the 18 `no_gravity` levels draw `dark_mage_in_space.png` (space f8 wins 18/18, 0.811-0.971),
+  its column turning every 280 ms while standing, hovering 1.2 screen px. F10 of the original gives 282.75 ms, which is 280 on
+  the emulator's slow clock.
+- Step 64 `9c454a7` (17:01), 1.3: the arm-out rows 3 and 0 against a wall, one tick behind the ray as in the original; a replay
+  of each wall walk reproduces its state hash on 250 of 250 ticks.
+- Step 65 `5de8509` (17:31), 2.1: the record of the converter's tier copy (the entry above).
+- Step 66 `c404615` (19:48), 2.2: a level's art drawn from its hd/fullhd file (2,248 hd, 146 fullhd, 489 1x placements); 1-01
+  `compare.py` 14.69 / 0.462 → 7.14 / 0.762; 1-09 `LM_E=1` 11.74 → 1.16; the worst halo class 20.72 → 1.16.
+- Step 67 `494f6e2` (21:07), 2.3: the port's own pictures and every particle bitmap through the same rule; 1-01's player
+  locates at 0.9708 → 0.9817 (the original's own frame: 0.9716).
+
+**Built (Supersonic `visuals-b`, worktree `Supersonic-Engine-vis2`, committed, NOT pushed):**
+- Step 80 `0be2725` (11:41), 3.1: the timed crystal's dial, deleted when its stored scale (pulse × 720/256) drops under 0.1:
+  drawn shrinking on 32 frames from 1.1497 at expiry, 31 after a pickup; the remake's guessed fade removed.
+- Merge `345932b` (11:46, sync B1).
+- Step 81 `5ba5b86` (15:53), 3.2: 470 crystals and 39 lying keys bob 1.5 u over π s in a new `sim/Motion`; F13 of the
+  original reads 1.459 / 1.500 u and 3.182 / 3.187 s.
+- Step 82 `a32d356` (17:45), 3.3: the hint arrow swings 2.502 u over 1.5708 s at alpha 0.55; the dashed circle turns 8.003 °/s
+  counter-clockwise.
+- Merge `d3311c9` (17:53, sync B2).
+- Step 83 `bbb3c78` (21:24), 4.1: the antiportal ring at 0.5 × its node's scale. The five gate rings read 21.33 / 13.67 /
+  35.56 / 24.20 / 17.08 → 33.50 / 32.50 / 32.33 / 33.00 / 30.50 per unit of scale (31.5-34.0 required).
+- Step 84 `5ae1b6d` (09-18 19:11) and record fix `5a544ac` (19:18), 4.2: the ring blinks red 0.2 → 0.4 → 0.2 on 300 ms legs
+  and turns 10 °/s; period 36 frames on 6 of 6 rings. Drawn red, 2-26's ring reads 33.25, which closes step 83's row.
+
+**Built (this repo, pushed):** `af998f4` (session 16's entry, by the workflow's side agent, 10:36), `17c5061` (README),
+`b6569cf` (step 62's six deviations into `docs/parity-backlog.md`), `e9611e4` (2.1, the entry above), `f12f814` (step 83's
+deviation), `10f9c9e` (step 84's five deviations, and step 83's row closed).
+**Built (gitignored):** F2's notes, then clips F6, F9, F10, F16, F15, F17 and F14 of the original: 14 new mp4s with pts,
+contact sheets and crops. `out/parity/footage/INDEX.md` (719 lines) covers all 12 IDs; F12, F13, L1 and F3 are session
+16's. Captures, scripts and JSON for every step are under `out/parity/visuals/<step>/`.
+
+**Broke / dead ends:**
+1. **Smart App Control all session**, still enforcing. The role reports count 71 refused launches, each a notification on
+   Ivan's screen: 1.2 11 (10 in ctest, `test_mp_sprites` once); 1.3 14; 2.2 10; 2.3 7; 3.2 10 (9, plus `test_mp_layer`'s
+   first link) and its verifier 1; 3.3 8 (6, plus both first links); 4.1 3; 4.2 5; sync B1 2 (`test_mp_tiers` refused on its
+   first link and on its one relink, so the merged binary never ran; its last pass is main's 527/0). Refused suites were not
+   relinked, and every report names them as not run. The roles kept to one ctest and one relink each.
+2. **1.1 failed three verify rounds on one row** and went to a disposition agent. The sweep gate asks normal f8 to win on 54
+   levels; it wins on 52. 1-02 and 1-03 open under their tutorial popup at f420, and they are the only two levels whose
+   library frame was taken after the popup was closed (`capture_original.py:86-113`; popup_pages 1 in exactly those two
+   sidecars). With the popup closed on both sides: 54/54. With it up on both sides: 52/52. The fixers changed no code, so
+   each round re-measured the same 52 of 54; the fix is the order's wording, which is Ivan's to change. Committed with six
+   recorded deviations, one of them a new decode: the original turns the player toward a portal tap (`managePortalInsertion`
+   #101-124); the port never does, and no brief named it.
+3. **3.1 failed its third round** (session 16's two were the first). The dial was deleted when its pulse fell under 0.1, but
+   the original compares the stored scale, pulse × 720/256, so the port deleted it 9 ticks early. Fixed by making R12's 720
+   data (`timer.screen_px_per_unit` 2.8125); round 4 passed. 00_order's level23 f270 → f420 gate still cannot be measured as
+   written: both crystals expire on ticks 300 and 360.
+4. **2.2 failed round 1** on a row its order does not list: `system_6.md`'s bare-ground census went 1,593 → 5,312 px. 3,612 of
+   the new pixels are inside carranca sprites on 7 chapter-2 levels, where the hd file has 858 more opaque texels and the
+   original draws that fuller outline. The fixer applied the standing ruling (the original on screen is ground truth) and
+   re-baselined at 5,312; round 2 passed it "as amended".
+5. **4.1 failed three rounds**, each on 2-26's edge scan: 30.50 against 31.5-34.0. The ring was still additive white and
+   clips at 255 over that level's bright ground, so six halves tie on a summed step of 509.5 and the script's strict `>` keeps
+   the first; the original's same ring does not clip and reads 33.25. Round 2 caught the record claiming an owner acceptance
+   that did not exist. Round 3 caught "no `.ent` carries a `<Scale>` other than 1 × 1": false, nine do (the barrel bombs 1.3,
+   `black_halo` 4.0, `eclipse` 2.0, …), which step 9.1 needs. Committed with the row NOT MET; 4.2's red ring then read 33.25
+   there, and `10f9c9e` closed it.
+6. **4.2 failed three rounds, and each found something real.** Round 1 (high): 1-07's low ring was recorded as neutral cover
+   but is a port-side draw-order divergence. 12 of its 28 sectors are dead in the port alone: the port draws the ring behind
+   three z-0 blocks that the original draws it in front of. The backlog's proposed "cover-immune" gate would have hidden it.
+   Round 2: the original's script clock floors each frame's milliseconds (`ETHEngine.cpp:147`; in the shipped
+   `libApplication.so`, `Update(float)` at `0xb4100` calls `__aeabi_f2uiz`), so at 60 Hz it advances 16 ms a frame and the
+   port runs 4.17 % fast. Round 3: 1-07 reads 0.2875 / 0.1786 and 4-07 0.2679 / 0.1089 against 0.36-0.42 / 0.18-0.24, and
+   `c_G`/`c_B` are over 0.03 on 2 of the 4 gate rings, by 1 to 3 grey levels. Committed with five deviations. The clock was
+   deliberately not emulated, because it would move every committed baseline; it is backlog item 5, Ivan's call.
+7. **Five wakes killed the running agent** (08:35, 08:55, 12:29 and 18:27 on 09-18, 08:48 on 09-19; each transcript ends
+   "[Request interrupted by user]"), and the workflow re-ran the role from the start. 4.2's implementer ran three times
+   (21:25, 08:35, 08:55); the third inherited the dead one's 355-line diff and captures and finished its sweep check, which
+   had stopped at 4-14 of 128. 4.2's third verifier ran three times (11:52, 12:29, 18:27); 4.3's implementer twice (19:18,
+   08:48). Step 84 took from 21:25 on 09-17 to 19:18 on 09-18, about 4 h 35 min of it awake.
+8. **`test_jobs`** (an engine suite, not relinked) failed in 1.3's ctest and again when run directly ("the dispatch must have
+   run on more than one thread"), then passed in 2.2's and 2.3's ctest. Not investigated.
+9. **3.2's first build** gave every level the same seed, so every level's first crystal bobbed in the same phase. The seed now
+   mixes in the level name, and the superseded captures are kept. Its before run on 4-29 shot and placed a portal with no
+   `--tap` in the command, so 4-29's f570 and f780 were never measured; two other before-captures stalled once.
+10. **Footage, partly achieved.** F2: the portal pair worked, but the emulator gave 16.3 fps, so the shot's 30 ms cell comes
+    from the decode. F16: the dark dragon's DAMAGE flash needs a barrel explosion within 190 u; not attempted. F15: the
+    ghost's rage was not recorded, because fire passes straight through it and 4 barrel attempts failed. F9 took 8 probes and
+    7 takes; F17's 4-19 came on r5 after 3 probes and 5 failed takes; F17's 4-01 mp4 is a lossy re-encode, so
+    `work/F17/r1_frames/` is the pixel source. 60 fps was never available: 28-29 fps with the host idle, 13-24 fps while the
+    builds ran.
+11. The main-tree roles again could not use `vis2_build.bat`, which builds the worktree, and built through a `main_build.bat`
+    copy; every report says so. `vcvars` prints "'vswhere.exe' is not recognized" on every build, harmlessly.
+
+**Decision:**
+- Resume, not redo: every dead-run artefact was re-checked (binaries against their sources, captures byte-identical) and
+  reused.
+- Track A pushed each step as it landed. Track B committed on `visuals-b` and merged main in twice (B1: 2 conflicts; B2: 3,
+  plus 12 px on 4-05 where two steps' changes stack), leaving the final merge and push for the end.
+- Three steps (1.1, 4.1, 4.2) went to a disposition agent after three failed rounds. All three were committed with recorded
+  deviations and none was shelved; each deviation went into `docs/parity-backlog.md` in the same commit round.
+- R1 (the antiportal's refusal radius, 16 → 32 × scale) is recorded in the data and not played; no step in 00_order owns it.
+- `INDEX.md` lists nine port data or spec rows the footage contradicts, six from this run's clips (the shot stride guess, the
+  dark dragon's summon timing, fire hurting the ghost, the rocket bridge's clamp, the earthquake model, the ghost's 12.2
+  behaviour). Reported, none edited.
+- Sleep: switching off AC standby was proposed and left to Ivan.
+
+**README, and the Godot removal still pending.** `17c5061` (11:34, pushed) rewrote `README.md` (389 lines) around the
+Supersonic port: the two repos side by side, converting all four worlds with `--copy-textures --copy-lighting`, cloning and
+building the engine, the `mp_` suites, running, the controls, the capture flags. It also pointed `docs/parity.md` §4 and §7
+at the port. A 5-agent workflow (a writer, three verifiers, a fixer; 28 min) caught three real mistakes before the commit:
+- a capture example that wrote an original-art PNG into the Supersonic tree, where git does not ignore it (high; captures
+  now go under `out/parity/port/`);
+- build steps missing Ninja, and a `port_build.bat` call that did not survive Git Bash;
+- 9 `mp_` suites that show **Failed**, not skipped, without converted levels: a missing setting in Supersonic's test config,
+  not fixed.
+
+**Not done**, because running builds execute `port_build.bat` and it waits for the workflows: deleting `game/project.godot`,
+`game/scenes/`, `game/scripts/` and `tools/godot.bat`; rewriting `CLAUDE.md`'s Godot rules (it still says to verify with
+`godot --headless`); `port_build.bat`'s comment, `tools/converter/README.md` ("Scaffolding only") and `MILESTONE_1.md`'s Godot
+items; the local `game/.godot` and `game/assets`, both still on disk; and the 9 suites. `game/data/` stays, because the port
+reads `entity_roles.json`, `player.json` and `portals.json` from it.
+
+**Assets check:** yes — `git status --short` here, run after appending this entry, lists only ` M DEVLOG.md`. No commit
+of the session in either repo staged anything from `reference/` or `out/`: every commit agent's forbidden-extension grep
+printed nothing. The footage (21 GB under `out/parity/footage/`, 20 GB of it `work/`) and the captures stay under `out/`,
+ignored by `.gitignore:66`.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** visuals workflow: 60 agent runs over 55 roles (5 restarts after wakes); 19 verify rounds, 8 passed and 11
+failed; 1.2, 1.3, 2.1, 2.3, 3.2 and 3.3 passed on the first round; never completed (killed at 08:54 on 09-19). Footage
+workflow: 9 agents, 7 h 42 min, 3.83 M tokens, 1,118 tool calls. README workflow: 5 agents, 28 min, 0.77 M tokens. Suites at
+track A's end: `test_mp_sprites` 574, `test_mp_layer` 923, `test_mp_start` 752, `test_mp_boss` 126, `test_mp_frontdoor` 194.
+At step 84: `test_mp_sprites` 540, `test_mp_layer` 1,120, `test_mp_motion` 146, `test_mp_timed` 84, `test_mp_zerog` 88; 0
+failures. ctest per step: 111/121 (1.2), 106/121 with 1 failure (1.3), 111/121 (2.2), 114/121 (2.3), 113/122 (3.2), 116/122
+(3.3), 119/122 (4.1), 117/122 (4.2); every other suite was refused, not failed. Sync B1 lost nothing: `test_mp_layer` 972 =
+966 + 860 − 854, `test_mp_sprites` 410 = 374 + 372 − 336. f420 frames changed of 128: 1.1 125 (122 only inside the player's
+quad), 1.2 18, 1.3 0, 2.2 128, 2.3 125; at 4.1 and 4.2, 76 of 76 levels without an antiportal byte-identical. 1-01 f420 is
+`6d5f4435` from step 62 through step 84. Across all 12 clips (`INDEX.md`): a shake is intensity × scale × 0.35 px, clamped
+at 50, measured at intensities 3 to 40; level won or lost to its screen 1.43-1.64 s (decoded 1,400 ms; F16's 1.52-1.64 s
+unexplained); a portal shot ≈ 200 u/s, a fireball ≈ 130 u/s; 2.8125 px/u fits every position measured. Session: 46 h
+37 min of wall clock, about 16 h 24 min of it out of standby.
+
+**Inferred mood:** guess — the most productive stretch of the parity work so far: eleven steps in two tracks, and the three
+that failed three rounds each were committed with their reasons written down, not tuned. Undercut by the laptop: two thirds
+of the wall clock was standby, one step took 22 hours for about 5 hours of work, the power-setting question sat unanswered,
+and the session is the second in a row to end without its own SESSION END.
