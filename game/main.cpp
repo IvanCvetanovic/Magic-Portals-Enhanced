@@ -282,7 +282,7 @@ int main(int argc, char** argv) {
                   << "                    the game opens its menu.\n"
                   << "  --levels <dir>    the converted levels (default " << paths.levels << ")\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
-                  << "  --data <dir>      the remake's game/data directory (default " << paths.data << ")\n"
+                  << "  --data <dir>      the remake's data directory (default " << paths.data << ")\n"
                   << "  --saves <dir>     DEV: keep the medals (scores.json) here instead of the user's\n"
                   << "                    data directory - for a capture that needs a medal recorded\n"
                   << "  --press <what>@<tick>\n"

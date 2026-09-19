@@ -1,7 +1,7 @@
 {
   "_about": [
     "Keys, keyholes and locked doors, decoded from android_game.bin. Where the remake's",
-    "game/data/actors.json guesses a different number it is carried beside as",
+    "data/actors.json guesses a different number it is carried beside as",
     "_remake_*_not_applied so the disagreement stays visible.",
     "",
     "ONE range, used twice. The key's init writes squaredRange = scale(26)^2, and that same",

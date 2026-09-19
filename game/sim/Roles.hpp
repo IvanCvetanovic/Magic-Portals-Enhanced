@@ -2,7 +2,7 @@
 
 // The remake's role table: what each of the original's entity names does.
 //
-// entity_roles.json (the remake's game/data) maps every EntityName the original
+// entity_roles.json (the remake's data/) maps every EntityName the original
 // writes onto one gameplay role - `door.ent` is the exit, `door_lift` a switched
 // door, `button` a pressure plate. The mapping is the remake's design decision,
 // not the converter's, which is why it lives in the remake's data rather than in

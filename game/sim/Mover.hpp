@@ -46,7 +46,7 @@ struct Door {
 // when the node has no stride.
 bool DoorFromNode(const Tscn::Node& node, Door& out, std::string& error);
 
-// The port's own mover numbers, games/magicportals/data/movers.json: two of the
+// The port's own mover numbers, game/data/movers.json: two of the
 // remake's guesses, which it keeps in behaviours.gd rather than in its data.
 struct Rules {
     double oscillationRateScale = 0.0; // RATE_SCALE_K, _guess

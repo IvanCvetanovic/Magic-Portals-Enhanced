@@ -1,7 +1,7 @@
 {
   "_about": [
     "The minions of worlds 3 and 4, decoded from android_game.bin. Every number here is",
-    "READ, not guessed; where the remake's game/data/actors.json guesses a different one it",
+    "READ, not guessed; where the remake's data/actors.json guesses a different one it",
     "is carried beside as _remake_*_not_applied so the disagreement stays visible.",
     "",
     "Census, counted over all 128 converted levels against the role table's three names",
