@@ -237,6 +237,25 @@ struct Timer : Picture {
     bool Gone(double scaleX) const;
 };
 
+// The level's exit door where the level's properties carry `shadowless_door`,
+// and the glow the script hangs behind it (art.json's door; Game::readProperties,
+// which runs before the level is scaled). The door is drawn on `shadowlessSprite`
+// instead of its own, and on a level that also sets `no_gravity` a
+// door_highlight.ent is added at the door's own point, at `highlightZ`. All three
+// bob (motions.json's `door` row).
+struct Door {
+    std::string entity;           // the exit door's entity, without .ent
+    std::string backgroundEntity; // door_bg.ent, the doorway's black
+    std::string shadowlessFlag;   // the level property that swaps the sprite and adds the glow
+    std::string shadowlessSprite; // what SetSprite swaps the door's picture for
+    Picture highlight;            // door_highlight.ent
+    // Its AddEntity depth, IN THE LEVEL'S UNITS and not the world's: it is added
+    // before SGlobalScale::scaleEntities, which multiplies its position by the
+    // scale factor exactly as it does every node the level file places. So
+    // Rules::LevelDepth is not applied to it.
+    double highlightZ = 0.0;
+};
+
 // A minion or a knight of worlds 3 and 4, as minion.ent draws it and
 // ETHCallback_minion frames it (art.json's minion). Its row is the way it last
 // walked; its column is the walk's FrameTimer while it walks and the hold column
@@ -298,6 +317,7 @@ struct Rules {
     Antiportal antiportal;
     Timer timer;         // timer.ent, the dial behind a timed crystal
     Minion minion;       // minion.ent, the minions and knights
+    Door door;           // the exit door's second sheet, and door_highlight.ent behind it
     // What a depth a script adds something at is in the level's units: that depth
     // over this (art.json depth). A level's nodes were multiplied by it at load and
     // what a script adds at a literal z was not.

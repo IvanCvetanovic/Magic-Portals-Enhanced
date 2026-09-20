@@ -2360,6 +2360,23 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     m_dragonSprite = -1;
     m_clawSprite = -1;
     m_dragonCut = Tiers::Cut{};
+    m_doorSprite = -1;
+    m_doorBgSprite = -1;
+    m_doorHighlight = -1;
+    // From the constant start angle Game::loop passes, not from the level's phase
+    // stream: nothing here draws a phase (00_order K8), so no crystal's or key's
+    // moves because a door bobs.
+    m_doorBob = Motion::Start(m_motionRules.door, m_motionRules.door.startFrom);
+    // THE LEVEL'S OWN PROPERTIES, as Game::readProperties reads them before
+    // anything is scaled (art.json `door`): `shadowless_door` draws the exit door
+    // on another sheet and, on a level that also sets `no_gravity`, hangs a glow
+    // behind it; `no_gravity` alone bobs the door. The first `properties` node, as
+    // SeekEntity finds it, and PRESENCE alone, which is what CheckCustomData tests:
+    // the datum's value is never read.
+    const Tscn::Node* properties = FirstOfRole(m_data, Roles::kLevelProperties);
+    m_shadowlessDoor =
+        properties != nullptr && properties->Meta(m_artRules.door.shadowlessFlag.c_str()) != nullptr;
+    m_doorBobRuns = m_level.noGravity;
     if (!Sprites::Find(m_data.scene, m_paths.art, m_tierRules, sprites, m_artError)) {
         // Played anyway, as boxes: the art is the original's, and a machine
         // without it can still play the port.
@@ -2449,11 +2466,49 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     m_antiportalTurn.degPerS = m_artRules.antiportal.spinDegPerS;
     Motion::Phases phases(Motion::LevelSeed(
         kMotionSeed, m_current >= 0 ? m_chapters.levels[static_cast<std::size_t>(m_current)].name : std::string()));
+    // THE SHEET A `shadowless_door` LEVEL'S EXIT DOOR IS DRAWN ON (art.json door):
+    // the file the original's loader finds for the name, as for every picture the
+    // port adds for itself (drawnImage). window01_shadowless.png has an hd twin and
+    // no fullhd one and is the same size as window01.png, so the swap changes the
+    // picture and not its units. One that cannot be read leaves the door on its own
+    // sheet and says so once.
+    std::string shadowlessTexture;
+    if (m_shadowlessDoor) {
+        const Sprites::Image& sheet = drawnImage(originalImage(m_artRules.door.shadowlessSprite));
+        if (sheet.units.x <= 0 || sheet.units.y <= 0) {
+            SUPERSONIC_LOG_WARN("Magic Portals")
+                << "the door keeps its own sheet: " << sheet.path << " could not be read" << std::endl;
+        } else {
+            shadowlessTexture = sheet.path;
+        }
+    }
     for (Sprites::Sprite& sprite : sprites) {
+        // ETHEntity::SetSprite, which readProperties calls before the level's first
+        // frame, so the picture is made from the swapped file. The first `door` node
+        // is the one SeekEntity finds, and every one of the 128 levels has exactly
+        // one (art.json door's census).
+        const bool isDoor = m_doorSprite < 0 && [this, &sprite] {
+            const Tscn::Node* node = m_data.scene.FindNode(sprite.node);
+            return node != nullptr && BareEntityName(*node) == m_artRules.door.entity;
+        }();
+        if (isDoor && !shadowlessTexture.empty()) sprite.texture = shadowlessTexture;
         DrawnSprite drawn;
         drawn.quad = makeSprite(registry, "Magic Portals Sprite", sprite.texture, sprite.additive);
         // The player's slot is kept free.
         drawn.z = SlotZ(sprite.order < m_playerSlot ? sprite.order : sprite.order + 1);
+        // THE EXIT DOOR AND THE DOORWAY'S BLACK, each the first node of its entity,
+        // as readProperties' two SeekEntity calls find them (art.json door). Both
+        // bob on a `no_gravity` level, with the glow this function adds at its end.
+        if (isDoor) {
+            m_doorSprite = static_cast<int>(m_sprites.size());
+            drawn.doorBob = m_doorBobRuns;
+        } else if (m_doorBgSprite < 0) {
+            const Tscn::Node* node = m_data.scene.FindNode(sprite.node);
+            if (node != nullptr && BareEntityName(*node) == m_artRules.door.backgroundEntity) {
+                m_doorBgSprite = static_cast<int>(m_sprites.size());
+                drawn.doorBob = m_doorBobRuns;
+            }
+        }
         // Its instance colour and emissive, as its node gives them. A node the
         // look does not hold keeps the engine's defaults, colour 1 and emissive 0;
         // Lighting::Read holds every entity node, so that is only ever a level
@@ -2764,6 +2819,62 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             m_sprites.push_back(std::move(made));
         }
     }
+    // THE GLOW BEHIND A `shadowless_door` LEVEL'S EXIT DOOR (art.json door), which
+    // no level file places: Game::readProperties adds a door_highlight.ent at the
+    // door's own point on the 17 levels that set `shadowless_door` and
+    // `no_gravity`, and the pass that scales the level then scales it with
+    // everything else, so its -22 is a depth in the level's units. A picture with
+    // no node, like the well rings and the dark dragon's dropped platform.
+    //
+    // Added last, after every slotAfter above has been taken, for the reason the
+    // rings are: that lambda counts what is in m_sprites, and a picture at -22
+    // pushed before them would be counted by every one of their higher depths and
+    // put a dial or a ring a slot too deep. Its own count cannot move the other
+    // way - no picture added here stands at or below -22.
+    const Art::Door& doorRules = m_artRules.door;
+    if (m_doorSprite >= 0 && m_shadowlessDoor && m_doorBobRuns) {
+        const Sprites::Image& glow = drawnImage(originalImage(doorRules.highlight.sprite));
+        if (glow.units.x <= 0 || glow.units.y <= 0) {
+            SUPERSONIC_LOG_WARN("Magic Portals")
+                << "no glow behind the door: " << glow.path << " could not be read" << std::endl;
+        } else {
+            const DrawnSprite& door = m_sprites[static_cast<std::size_t>(m_doorSprite)];
+            const int glowZIndex = static_cast<int>(std::floor(doorRules.highlightZ));
+            DrawnSprite made;
+            made.sprite.node = door.sprite.node + "#highlight";
+            made.sprite.texture = glow.path;
+            made.sprite.tier = glow.tier;
+            made.sprite.density = glow.density;
+            made.sprite.texels = glow.texels;
+            // AddEntity's position is the door's ENTITY point, and the .ent's
+            // PivotAdjust is (0, 0), so the picture is centred on it.
+            made.sprite.atPx = door.ownerPx;
+            made.sprite.sizePx = glm::dvec2(glow.units);
+            made.sprite.additive = doorRules.highlight.additive;
+            made.sprite.zIndex = glowZIndex;
+            made.z = slotAfter(doorRules.highlightZ);
+            made.emissive = doorRules.highlight.emissive;
+            made.isStatic = doorRules.highlight.isStatic;
+            made.applyLight = doorRules.highlight.applyLight;
+            made.lookZ = doorRules.highlightZ;
+            made.centrePx = made.sprite.atPx;
+            made.ownerPx = made.sprite.atPx;
+            made.doorBob = true;
+            // No lightmap: applyLight 0 is what ETHLightmapGen refuses to bake for,
+            // and a bake belongs to an entity the level file placed anyway.
+            made.quad = makeSprite(registry, "Magic Portals Door Highlight", glow.path, made.sprite.additive);
+            m_doorHighlight = static_cast<int>(m_sprites.size());
+            m_sprites.push_back(std::move(made));
+            SUPERSONIC_LOG_INFO("Magic Portals")
+                << "the door is drawn shadowless, with " << glow.path << " behind it" << std::endl;
+        }
+    } else if (m_shadowlessDoor && m_doorSprite >= 0) {
+        // readProperties' ins 327-330 gate: the swap without the glow. No shipped
+        // level reaches it - `shadowless_door` is on 17 levels and every one of them
+        // sets `no_gravity` too - so it is logged rather than drawn.
+        SUPERSONIC_LOG_INFO("Magic Portals")
+            << "the door is drawn shadowless, with no glow: the level does not set no_gravity" << std::endl;
+    }
     m_artReady = true;
     // And what the level's own art does not show: the entities' particles.
     buildEmitters(registry);
@@ -2919,6 +3030,17 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             rotation = Units::ToWorldRotation(sprite.rotation - turnedRad);
             ownerAngleDeg += m_antiportalTurn.turnedDeg;
         }
+        // AND WHERE GAME::LOOP'S LINEAR MOTION HAS PUT IT (motions.json door): the
+        // exit door of a `no_gravity` level, the black behind it and the glow behind
+        // that, one unit either way on a 5.24 s cycle. Picture and particles
+        // together - the doorway's fire hangs off its entity's point - and after the
+        // branches above, so it lands on whatever put the picture there. The port
+        // leaves the exit's own sensor where the level put it (`door._not_built`).
+        if (drawn.doorBob) {
+            const glm::dvec2 bob = Motion::OffsetPx(m_doorBob);
+            centrePx += bob;
+            ownerPx += bob;
+        }
         if (gone) {
             registry.destroy(drawn.quad);
             drawn.quad = entt::null;
@@ -3012,6 +3134,11 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
         if (script.moves) Motion::Advance(m_motionRules, script.motion, frameMs);
         Motion::Advance(m_motionRules, script.turn, frameMs);
     }
+    // AND GAME::LOOP'S OWN CALL on a `no_gravity` level (motions.json door): one
+    // step a tick for the door, the black behind it and the glow, which share an
+    // angle because the original steps all three in that one loop with that one
+    // frame. It runs whether or not the level has a glow or a background to bob.
+    if (m_doorBobRuns) Motion::Advance(m_motionRules, m_doorBob, frameMs);
     // And ETHCallback_antiportal's AddToAngle, once for every ring the level placed:
     // they are turned by the same step on the same frames, so the port keeps one
     // angle for them (m_antiportalTurn). Its step is unitsPerSecond's, capped at
@@ -4049,6 +4176,37 @@ MagicPortalsLayer::DragonReport MagicPortalsLayer::DragonPicture() const {
         const DrawnSprite& drawn = m_sprites[static_cast<std::size_t>(m_clawSprite)];
         report.clawQuad = drawn.quad;
         report.clawCentrePx = drawn.centrePx;
+    }
+    return report;
+}
+
+MagicPortalsLayer::DoorReport MagicPortalsLayer::DoorPicture() const {
+    DoorReport report;
+    report.shadowless = m_shadowlessDoor;
+    report.bobs = m_doorBobRuns;
+    report.motion = m_doorBob;
+    report.offsetPx = Motion::OffsetPx(m_doorBob);
+    const auto at = [this](int index) -> const DrawnSprite* {
+        return index >= 0 && index < static_cast<int>(m_sprites.size())
+                   ? &m_sprites[static_cast<std::size_t>(index)]
+                   : nullptr;
+    };
+    if (const DrawnSprite* door = at(m_doorSprite); door != nullptr) {
+        report.quad = door->quad;
+        report.texture = door->sprite.texture;
+        report.atPx = door->ownerPx;
+    }
+    if (const DrawnSprite* background = at(m_doorBgSprite); background != nullptr) {
+        report.bgQuad = background->quad;
+        report.bgAtPx = background->ownerPx;
+    }
+    if (const DrawnSprite* glow = at(m_doorHighlight); glow != nullptr) {
+        report.glowQuad = glow->quad;
+        report.glowTexture = glow->sprite.texture;
+        report.glowCentrePx = glow->centrePx;
+        report.glowSizePx = glow->sprite.sizePx;
+        report.glowZ = glow->z;
+        report.glowAdditive = glow->sprite.additive;
     }
     return report;
 }

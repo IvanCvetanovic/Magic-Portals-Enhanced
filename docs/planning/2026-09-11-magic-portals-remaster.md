@@ -13381,3 +13381,156 @@ sweep). No test binary was refused.
   so the next step's before is still that one (binary `e5a82fa3`), EXCEPT `3-15 level14b`, which is now
   `7a3553fa` (`3.4/after/sweep/3-15_level14b_f420.png`): a knight standing on `button_1666` presses it and the button
   sinks under it. A reader diffing against the old row will find that one level differing on purpose.
+
+## Step 79 - the shadowless door of a weightless room, the glow behind it, and the bob all three take (built)
+
+The visuals plan's step 13.2 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, as section 8.13 amends
+it, from decode `decode/D5.md` and its check; plan_port's "in scope, owned by no brief" row `door_highlight.ent`). On
+MPR `main`, `build/`. Game-only: no file under `engine/`, and the engine pin is unchanged. Changed:
+`game/data/art.json`, `game/data/motions.json`, `game/sim/Art.{hpp,cpp}`, `game/sim/Motion.{hpp,cpp}`,
+`game/sim/Game.cpp` (one comment), `game/MagicPortalsLayer.{hpp,cpp}`, `tests/test_mp_motion.cpp`,
+`tests/test_mp_layer.cpp` - 10 files.
+
+**Chapter 4's weightless rooms now draw their exit door the way the original does.** Three things, all of them
+`Game::readProperties`', none of them in the port before this step (D5 section 1b: "The port has neither the swap nor
+the bob", and no `door_highlight` anywhere in it):
+
+- **the sheet.** On the 17 levels whose `properties` entity carries `shadowless_door` - 4-02 to 4-18 - the door is
+  drawn on `window01_shadowless.png` instead of `window01.png`, which is the same picture without its drop shadow;
+- **the glow.** On those same levels a `door_highlight.ent` is added at the door's own point, 128 x 192 units,
+  additive, at full brightness, **at depth -22** - behind both the door (eth_z -14) and the doorway's black
+  (door_bg, -19), so what shows is a rim of light around the frame;
+- **the bob.** On the 18 levels that carry `no_gravity` - those 17 and 4-19 - `Game::loop` calls `linearMotion` on the
+  door, on `door_bg` where the level has one and on the glow, every frame: **one unit either way, 1.2 rad/s, a period
+  of 5.236 s**, all three on one angle from a start angle of 0.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; every number is in
+`data/art.json` `door` and `data/motions.json` `door` with its instructions).
+- `Game::readProperties` (116676..118260) is called from `Game::preLoop` #33, **before** `SGlobalScale::scaleEntities`
+  at #37. So everything it adds is multiplied by the scale factor with the level's own nodes, and the glow's `-22`
+  is a depth in the LEVEL's units - not a raw literal like the player's 4 (step 76) or a minion's 2.
+  - #223-237 `Game.door = SeekEntity('door.ent')`, with #268-283 falling back to `SeekEntity('door')`; #239-253
+    `Game.doorBg = SeekEntity('door_bg.ent')`, with no second spelling.
+  - #302-325 `CheckCustomData('shadowless_door') != 0` - PRESENCE, whatever the datum holds
+    (`ETHCustomDataManager.h:36`) - then `SetSprite('window01_shadowless.png')`. **Not** under the `no_gravity` gate.
+  - #327-330 `Game.noGravity`, `JLowZ -> 431`; #332-343 the inner `shadowless_door` gate; #345-362
+    `AddEntity('door_highlight.ent', vector3(door.GetPositionXY(), -22f), @Game.doorHighlight)` - the three-argument
+    overload, so angle 0, no name and scale 1 (`ETHScriptWrapper.Scene.cpp:166-169`).
+  - #377-430 `setNoGravityLinearMotionProperties` (353522..353694) on the door, on `doorBg` and on the highlight:
+    `speed` 1.2 (#1-10) and `stride` 1 (#14-23).
+- `Game::loop` (114414..114716) #12-15 gates on `Game.noGravity`, then #17-28, #30-55 and #57-82 call
+  `linearMotion(entity, vertical = 1, angle = 0f, startAngle = 0f)` on the three. **The start angle is the constant
+  0, not `randF(PI)`:** nothing here draws from the level's phase stream, so **K8 does not arise** and no crystal's or
+  key's phase moves because a door bobs.
+- `door_highlight.ent`: type 0 (so `EO_CENTER`), static 1, applyLight 0, blendMode 1 (`AM_ADD`), EmissiveColor
+  (1,1,1), Scale 1, PivotAdjust (0,0), no particles, no light, no custom data. `min(1, ambient + 1)` is 1
+  (`ETHRenderEntity.cpp:113-117`), so it is added at full brightness on chapter 4's dark levels; applyLight 0 also
+  means no lightmap (`ETHLightmapGen.cpp:42-45`).
+- **The census the port now pins** (`test_mp_motion`, over the 128 converted levels): one `door.ent` in every level,
+  one `door_bg.ent` in all but 4-19, `shadowless_door` on exactly 4-02..4-18 and `no_gravity` on those and 4-19. So
+  the #327-330 gate excludes nothing, the second door spelling is never reached, and SeekEntity's "the first one"
+  never has to choose.
+
+**WHERE IT IS BUILT.** `buildSprites` swaps the door's texture before its quad is made, so the picture is the swapped
+one from the first frame, and adds the glow **last of all** - after the timed crystals' dials and the gravity wells'
+rings. That order is forced: `slotAfter` counts what is in `m_sprites`, every other caller asks about a depth at or
+above -5, and a picture at -22 pushed before them would be counted by each of those and put a dial or a ring a slot
+too deep. The glow's own slot cannot move the other way, because nothing this function adds stands at or below -22.
+The bob is one `Motion::Linear` for the three, which is exact rather than a shortcut: the original steps all three in
+that one loop, with that one frame, from that one start angle.
+
+**WHAT IS NOT BUILT: the exit's sensor does not move with the picture.** `linearMotion` calls `SetPosition`, and
+`door.ent` is `static="1"` with a `<Collision>` (Position (0,20), Size (8,57)), so the original moves the door's
+sensor body with its picture. The port bobs the picture alone and leaves `Goals::State::exit` where the level put it -
+which is what `sim/Motion` does for every other `linearMotion` (a crystal's and a key's pick-up ranges, step 69's
+"the picture moves, not the crystal Goals takes"). **R21, the owner's standing ruling, is the button's and names no
+door**, and section 8.13's 13.2 row asks for the bob "of door, door_bg and highlight" - three pictures. The geometry,
+so the owner can rule without re-measuring: +-1 unit on a box 57 units tall cannot change WHETHER the exit is
+reachable, only by a frame or two WHEN, and in these levels the player drifts rather than walks (`Zerog.hpp`).
+Recorded in `motions.json` `door._not_built` and proposed as a ruling beside R21.
+
+**HOW IT WAS MEASURED.** Captures under `out/parity/visuals/13.2/`, all `--window 1280x720 --fixed-step`:
+- **the glow**, `measure_gates.py`: 4-02 (`level1c`) at f420, before against after. The quad is predicted from the
+  door's node (344, 120) and the level's 2.8125 px a unit, and the glow is sampled through it from the very file the
+  run logged loading. Three masks: the pixels **neither** door sheet covers and that are outside the door's own
+  silhouette box (so never the doorway's black or its fire) for the picture and the additive rows; the door's
+  **opaque** stone, eroded by three pixels, for the depth row. The depth row compares a frame whose bob is level with
+  the level's own (f393, the closed form -0.008 u) against the committed build's f420.
+- **the bob**, `measure_bob.py`: the same level every third frame to f420, the vertical shift of the door's two stone
+  sides (never the doorway) against the first frame after the level's fade-in, to a fraction of a pixel by a parabola
+  on the interpolated sum of squares, then a cosine fitted through the 116 samples. Windows that take in background
+  the bob does not move read a few per cent low (0.949 u over y 100..580, 0.981 u over 110..535); the row below is the
+  window inside the stone alone. The verification measured the same three rows independently - Lucas-Kanade with a
+  Catmull-Rom resample, on the door's own stone against the committed build's f420, which recovers a known synthetic
+  shift to 1e-4 px - and its figures are the ones the rows below lead with. **The phase row is read at the zero
+  crossing**, where the cosine's slope is steepest: at its flat top a tick is worth 0.00002 u and no estimator can
+  separate one, which is why the first writing of that row (the fit's highest "at tick -0.1", f420 at -0.533 u) read
+  a tick out when the port is not.
+- **presence and non-regression**, `sweep.sh` and `compare_sweep.py`: all 128 levels at f420 against the standing
+  baseline `5.2/verify1/sweep`, with `3-15 level14b` taken from `3.4/after/sweep` (step 78's one deliberate row), and
+  the per-level change boxes from `boxes.py`.
+
+| Gate (00_order 8.13's 13.2, and the run's own) | Required | Today, on the baseline | This step |
+|---|---|---|---|
+| The glow is drawn, and only where the original draws it | the 17 levels 4-02 to 4-18 | **none**: no `door_highlight` anywhere in the port, and 0 of the 128 baseline logs name one | **passes: 17 logs**, and they are exactly 4-02 to 4-18 |
+| Its size | 128 x 192 u = 360 x 540 px at 2.8125 px a unit, centred on the door's node | - | **passes**: the changed pixels of 4-02 f420 fill x 787..1147, y 66..605 against the quad its node (344, 120) gives, x 787.5..1147.5, y 66.0..606.0, and not one falls outside it |
+| Additive | an added picture never darkens | - | **passes**: least change **0** over the 41,718 px outside both door sheets and the doorway |
+| It is `door_highlight.png`, through that quad | the file's own texels | - | mean \|after - before - texel\| **1.080** of 255 over those px, worst 18; mean added 3.42 against the file's 3.38 |
+| Its depth, -22: behind the door (-14) and the doorway's black (-19) | nothing of it reaches the stone in front of it | - | **passes**: over 75,453 px of opaque stone, mean \|change\| **0.047**, worst 9 - against the **216.0** the glow would add there were it in front. That 0.047 is also what says the stone holds still over the 27 ticks between the two frames compared: anything time-varying on it would show here first. `test_mp_layer` pins the three slots in order |
+| The door's sheet | `window01_shadowless.png` on the 17 | `hd/window01.png` (the baseline's own log) | **`hd/window01_shadowless.png`**, 256 x 384 at density 2, the same 128 x 192 u |
+| The bob's amplitude | 1 unit either way | **0**: the baseline draws the door at its node (its log: the quad at y -2.40 m = 120 px) | **0.9996 u** (the verification's fit, against the committed build's still frame, residual rms 0.0016 u = 0.0046 px); this step's own fit over 116 frames reads **1.0010 u**. The raw peak to peak of those samples, 2.0049 u, is the estimator's noise either side of a unit cosine and not an amplitude above 1 - read the fit, not the extremes |
+| The bob's rate | 1.2 rad/s, a period of 5.2360 s (314.16 ticks) | 0 | **1.2000 rad/s**, period **5.2359 s** (the verification's fit); this step's own reads 1.2002 rad/s and 5.2350 s (314.10 ticks), the cosine's rms **0.0027 u** |
+| Its phase | the start angle is 0, stepped once before the first frame is drawn | - | measured where a cosine can carry a tick, at the zero crossing, not at its flat top: the crossing lands at frame **78.52** against the **78.54** the closed form gives when the frame's label equals the step count, so the first drawn frame carries exactly one step (one tick here is 0.02 u = 0.056 px). Fitted phase **-0.014 ticks**; f420 stands **-0.5211 u** off the node against cos(0.02 x 420) = -0.5193 u |
+| Door, door_bg and glow move together | one angle for the three | - | `test_mp_layer`: **0 of 420 ticks** had them apart, or off cos(1.2 t), or their quads off their centres |
+| A unit test | one | - | **`test_mp_motion` 167 checks** and **`test_mp_layer` 1275**, 0 failures. Four new cases: the row, the levels' census, 4-02 and 1-01 |
+| Non-regression | no level but the 17 moves | - | **passes**: all 128 levels at f420 against the standing baseline (`5.2/verify1/sweep`, with `3-15 level14b` from `3.4/after/sweep`): **111 byte-identical, 17 differing**, and the 17 are exactly 4-02 to 4-18. Each of them changes inside one box no wider than 361 px and no taller than 541 - the door's own quad, clipped by the screen's edge on the levels whose door stands near one (`boxes.py`) |
+
+**THE SUITES,** run directly, once each: **`test_mp_motion` 167** checks, **`test_mp_layer` 1275**,
+**`test_mp_sprites` 732**, **`test_mp_minions` 99**, **`test_mp_timed` 84**, **`test_mp_zerog` 88**. 0 failures each.
+`::test::summary`'s second argument is a FLOOR that catches a suite skipping its work (`engine/tests/TestHarness.hpp`:
+"ran %d checks, expected at least %d"), not the count - `test_mp_sprites` runs 732 against 60, `test_mp_zerog` 88
+against 55 - and this step raises `test_mp_motion`'s from 105 to 124 and its skip path's from 90 to 101, and
+`test_mp_layer`'s from 35 to 50, each by the checks it adds. The last five are the other readers of `art.json`, which now requires its
+`door` section; `test_mp_motion` and `test_mp_layer` read `motions.json`, which now requires its `door` row. New:
+`TheDoorsRowIsGameLoops` and `EveryLevelsDoors` in `test_mp_motion`,
+`AWeightlessRoomsDoorIsDrawnShadowlessAndBobsUnderItsGlow` and `AnOrdinaryRoomsDoorKeepsItsSheetAndStandsStill` in
+`test_mp_layer`. **The full ctest was not run:** this step's definition of done names its gates and a unit test, and
+the sim library changed under all 44 binaries, so a full run would relink and launch every one of them under Smart App
+Control. `game/sim/Game.cpp` changed by one comment only - the flag is read by the layer, not by `Game::Start`, so no
+suite over `Game::Start` is touched.
+
+**BUILD: no warnings** (MSVC, Release, Ninja, /W4). **SMART APP CONTROL:** `test_mp_zerog` was refused once (126) on
+its fresh link, and ran after one delete and relink. No other test binary was refused. `MagicPortals.exe` was not
+refused and ran all **138** of its launches (4 on the committed build for the "before", 2 on a first build of this
+step, 130 on `90fcf51d` - the bob run, 4-19 and the 128-level sweep - and 2 on the final `a008be11`). **The final
+binary reproduces the sweep:** a comment moved `MagicPortalsLayer.cpp`'s timestamp after the sweep was taken, so it
+was relinked from that same source and 1-01 and 4-02 captured again (`13.2/after/final/`) - `81a39d45` and
+`e78d63ae`, byte-identical to the sweep's own rows. `test_mp_layer`, which that link also rebuilt, was run again on
+it: 1275 checks, 0 failures.
+
+**RULINGS APPLIED** (each the owner's standing ruling, recorded rather than re-argued):
+- **R12** - the 720 px selection, so the door's swapped sheet resolves to `hd/window01_shadowless.png` (256 x 384 at
+  density 2, the same 128 x 192 units as the 1x file) and the glow, which has no tier twin, to the file named.
+- **K8** does not arise: the door's start angle is the constant `Game::loop` passes, so no phase is drawn and no
+  crystal or key on the 18 levels moves. The sweep's 111 byte-identical levels include every level that bobs a
+  crystal outside chapter 4.
+- **K13** - the glow is a new between-slot user, `slotAfter(-22)`, which section 8.13's K13 row already lists
+  ("`door_highlight` z -22") among the rows for step 6.3's table. 6.3 is landing in the other tree, so this step uses
+  the lambda in `buildSprites`, as 3.1, 4.3 and 5.1 did, and 6.3 migrates it.
+- **K5** does not arise: nothing here is cut. **R21** is the button's and does not reach the door (above).
+
+**LEFT FOR LATER.**
+- **The glow's magnitudes are not gated against the original**, by section 8.13's instruction: D5 measured the
+  original's own bands about 40 % under the 1x prediction and said not to calibrate on them. What the picture row
+  below gates is that the port draws the file it loaded, through the quad the decode gives it.
+- **4-19 is not a capture gate**, though it is the one weightless level with no swap and no glow. Its exit door is
+  `rocket.png`, 256 x 256 u at (590, 128); the player spawns at (238, 190) and in zero gravity does not walk, so the
+  camera holds a view of about x 10..466 u against a rocket at 462..718 - at most a sliver of its transparent left
+  edge. Its f420 frame is byte-identical to the baseline's, which says nothing either way about its bob. What pins
+  4-19 is `test_mp_motion`'s census: it carries `no_gravity`, does not carry `shadowless_door`, and is the one level
+  of the 128 with no `door_bg` to bob beside its door.
+- **The bucket clock is not built**, as for the button in step 78: `door.ent` and `door_bg.ent` are static, but
+  `Game::loop` is the Game's own and runs every frame whatever the buckets do, so only the glow's own callback -
+  which `door_highlight.ent` does not have - could have been held.
+- **The standing sweep baseline is now this step's** `13.2/after/sweep` (binary `90fcf51d`, reproduced by the final
+  `a008be11`), which supersedes `5.2/verify1/sweep` and step 78's one-row exception.

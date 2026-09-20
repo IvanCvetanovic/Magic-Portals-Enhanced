@@ -138,6 +138,9 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
         if (const Tscn::Value* value = node.Meta("darkest"); value != nullptr && value->AsNumber(on) && on != 0.0) {
             darkest = true;
         }
+        // `shadowless_door` is read by the LAYER and not here (buildSprites,
+        // art.json `door`): its whole effect is the exit door's sheet and the glow
+        // behind it, and nothing in the simulation acts on it.
     }
 
     if (noGravity) {

@@ -386,6 +386,29 @@ public:
     };
     DragonReport DragonPicture() const;
 
+    // The exit door of a chapter-4 room, for the suites: which sheet it is drawn
+    // on, the glow door_highlight.ent puts behind it on a `shadowless_door` level,
+    // and the bob Game::loop gives all three on a `no_gravity` one (art.json
+    // `door`, motions.json `door`). As the last tick left it.
+    struct DoorReport {
+        bool shadowless = false;           // the level's properties carry `shadowless_door`
+        bool bobs = false;                 // and `no_gravity`, so Game::loop bobs the three
+        Motion::Linear motion;             // the one angle the three share
+        glm::dvec2 offsetPx{0.0};          // what the last call put on them
+        entt::entity quad{entt::null};     // the door's picture
+        std::string texture;               // and the file it is drawn from
+        glm::dvec2 atPx{0.0};              // where its entity stands, bob and all
+        entt::entity bgQuad{entt::null};   // the doorway's black, where a level has one
+        glm::dvec2 bgAtPx{0.0};
+        entt::entity glowQuad{entt::null}; // the glow, on the 17 levels that have one
+        std::string glowTexture;
+        glm::dvec2 glowCentrePx{0.0};      // its centre, which is the door's own point
+        glm::dvec2 glowSizePx{0.0};        // its units: door_highlight.png's 128 x 192
+        float glowZ{0.0f};                 // the slot it is drawn in, behind the door's
+        bool glowAdditive = false;
+    };
+    DoorReport DoorPicture() const;
+
     // The slot the player's picture is drawn in, and its depth in the level's units:
     // GameCharacter's 4 over the scale factor (art.json character.z, depth).
     float PlayerSlotZ() const;
@@ -693,6 +716,9 @@ private:
         // claw's rides the camera. Both are drawn from the sim, not from the node.
         bool dragon{false};
         bool claw{false};
+        // Game::loop bobs it on a `no_gravity` level: the exit door, the black
+        // behind it, and the glow added behind that (m_doorBob, art.json `door`).
+        bool doorBob{false};
     };
     // A placed picture's callback (motions.json `placed`): its row, its
     // linearMotion when it has one, and its turn.
@@ -923,6 +949,21 @@ private:
     // run on the same frames with the same step, so they hold one angle between
     // them. Reset with the level, like the level's age, which the blink reads.
     Motion::Turn m_antiportalTurn;
+    // THE ZERO-G DOOR BOB (motions.json `door`). Game::loop calls linearMotion on
+    // the exit door, the black behind it and the glow readProperties added, in that
+    // order, on every frame of a `no_gravity` level. One state for all three: they
+    // start at the same constant angle of 0 and are stepped in one loop with one
+    // frame, so they never come apart. Picture-side only, like m_motions: the
+    // original's SetPosition moves the door's sensor with it and the port's does
+    // not (motions.json `door._not_built`).
+    Motion::Linear m_doorBob;
+    bool m_doorBobRuns{false}; // the level sets `no_gravity`: the loop's gate
+    // The level's properties carry `shadowless_door`: its door is drawn on the
+    // other sheet and, where the bob runs too, a glow is added behind it.
+    bool m_shadowlessDoor{false};
+    int m_doorSprite{-1};      // in m_sprites: the exit door, as SeekEntity finds it
+    int m_doorBgSprite{-1};    // and the doorway's black
+    int m_doorHighlight{-1};   // and door_highlight.ent, which no level places
     // The start angles' stream, re-seeded for every level it builds with this mixed
     // with the level's name (Motion::LevelSeed), so a level's phases are its own,
     // do not depend on what was played before it, and no other generator's draws

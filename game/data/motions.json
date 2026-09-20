@@ -121,6 +121,49 @@
     ]
   },
 
+  "door": {
+    "entities": ["door", "door_bg", "door_highlight"],
+    "speed": 1.2,
+    "stride": 1.0,
+    "vertical": true,
+    "axis_deg": 0.0,
+    "start_angle_from": 0.0,
+    "start_angle_to": 0.0,
+    "_source": [
+      "The exit door of a `no_gravity` level, the black behind it and the glow readProperties adds (the",
+      "visuals plan's step 13.2, decode/D5.md; art.json's `door` holds the pictures). NOT an entity",
+      "callback: Game::loop calls linearMotion on all three itself, so the row's `entities` are the three",
+      "it calls it on rather than three callbacks.",
+      "  setNoGravityLinearMotionProperties, MiscCallbacks.angelscript bytes 353522..353694, called once",
+      "  by readProperties ins 377-430 on each of them:",
+      "    ins 1-10    SetFloat('speed', 1.2f)",
+      "    ins 14-23   SetFloat('stride', 1f)",
+      "  Game::loop, Game.angelscript bytes 114414..114716, every frame:",
+      "    ins 12-15   LoadThisR Game.noGravity; JLowZ -> 83: on any other level none of this runs",
+      "    ins 17-28   linearMotion(Game.door, vertical = 1 (ins 19 SetV1 v3, v1), angle = 0f, startAngle =",
+      "                0f) - a call pushes its last argument first, so ins 17 is the start angle and ins 18",
+      "                the axis",
+      "    ins 30-55   the same for Game.doorBg when it is not null",
+      "    ins 57-82   and for Game.doorHighlight when it is not null",
+      "So the start angle is the CONSTANT 0 and not randF(PI): nothing is drawn from the level's phase",
+      "stream for it (00_order K8), and the three move together on one angle - they are stepped in the",
+      "same loop with the same frame, from the same start.",
+      "An amplitude of 1 unit either way and a period of 2 PI / 1.2 = 5.236 s. The first drawn frame",
+      "already carries one step (00_order 8.0 rule 6), as every linearMotion does.",
+      "door.ent and door_bg.ent are both static=1, so in the original their callbacks - and this loop's",
+      "SetPosition - run whatever the bucket does; Game::loop is the Game's own and runs every frame."
+    ],
+    "_not_built": [
+      "THE SENSOR DOES NOT MOVE WITH THE PICTURE. linearMotion calls SetPosition, and door.ent is",
+      "static=1 with a <Collision> (Position (0,20), Size (8,57)), so the original moves the exit's",
+      "sensor body with the picture; the port bobs the picture alone and leaves Goals::State::exit where",
+      "the level put it, which is what sim/Motion does for every other linearMotion (the crystal's and",
+      "the key's pick-up ranges, planning step 69). +-1 unit on a 57-unit-tall box cannot change whether",
+      "the exit is reachable, only by a frame or two when - and in these levels the player drifts rather",
+      "than walks. Proposed to the owner beside R21, the button's sensor ruling, in planning step 79."
+    ]
+  },
+
   "placed": [
     {
       "entity": "hand_drawn_arrow",

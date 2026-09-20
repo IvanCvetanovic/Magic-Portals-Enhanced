@@ -23,7 +23,11 @@
 // axis 0 and a start angle randF(PI). And (3.3) the placed pictures whose own
 // callbacks call it with the node's `speed` and `stride` (motions.json `placed`):
 // the hint arrow along its own angle, the dashed circle up and down, the tapping
-// hand along its angle less 90; each from a start angle of 0. The same rows say
+// hand along its angle less 90; each from a start angle of 0. And (13.2) the
+// exit door, the black behind it and the glow its script adds, on a `no_gravity`
+// level: Game::loop calls linearMotion on all three every frame, vertical, from a
+// start angle of 0, with the speed 1.2 and stride 1 readProperties wrote on them.
+// The same rows say
 // which of them SetAlpha(0.55) and which turn a set number of degrees a second
 // (the dashed circle, AddToAngle(unitsPerSecond(8))). The ghost's hover of 12.2
 // takes the same helper with another row.
@@ -79,6 +83,12 @@ struct Rules {
     double wrapRad = 0.0;    // 2 PI: above it, one turn is taken off
     Row crystal;             // ETHCallback_crystal's
     Row key;                 // ETHCallback_key's, while unowned and not spent
+    // Game::loop's own, on a `no_gravity` level: the exit door, the black behind
+    // it and the glow readProperties adds, all three from a start angle of 0 and
+    // stepped in one loop, so they share an angle. Its `entities` are the three it
+    // is called ON, not three callbacks, and nothing keys off Names() for it: the
+    // level's `no_gravity` says whether it runs (the layer, art.json `door`).
+    Row door;
     std::vector<Placed> placed; // the placed pictures' callbacks, one entity each
 
     // The row whose callback a placement of this entity (without .ent) runs, or null.

@@ -19,6 +19,11 @@
 //   the census   over the 128 converted levels: 470 crystals (35 `crystal`, 435
 //                `crystal.ent`) and 39 keys (8 `key`, 31 `key.ent`), none carrying
 //                `speed` or `stride`, so every one takes its callback's defaults.
+//   the door     (13.2) Game::loop's own row: speed 1.2, stride 1, vertical, axis 0
+//                and a start angle that is the constant 0, on the three entities it
+//                calls it on; one unit either way on 5.236 s. And its census: one
+//                exit door in each of the 128 levels, a door_bg in 127, and the 17
+//                `shadowless_door` levels inside the 18 `no_gravity` ones.
 //   the placed   (3.3) the arrow's, dashed circle's, dashed square's and tapping
 //                hand's rows: which call linearMotion, along what axis, from what
 //                start, which SetAlpha(0.55) and which turn 8 degrees a second; a
@@ -100,10 +105,15 @@ const std::string kPlaced = "{\"entity\": \"hand_drawn_arrow\", \"linear_motion\
                             "\"axis\": \"node\", \"axis_add_deg\": 0.0, \"start_angle\": 0.0}, \"set_alpha\": 0.55, "
                             "\"spin_deg_s\": 0.0}";
 
+// The door's row, which every fixture carries so that a refusal is the one the
+// case is about: it is required, like the crystal's and the key's.
+const std::string kDoorRow = "\"entities\": [\"door\"], \"speed\": 1.2, \"stride\": 1.0, \"vertical\": true, "
+                             "\"axis_deg\": 0.0, \"start_angle_from\": 0.0, \"start_angle_to\": 0.0";
+
 std::string File(const std::string& linear, const std::string& crystal, const std::string& key,
-                 const std::string& placed = "[" + kPlaced + "]") {
+                 const std::string& placed = "[" + kPlaced + "]", const std::string& door = kDoorRow) {
     return "{\"linear_motion\": {" + linear + "}, \"crystal\": {" + crystal + "}, \"key\": {" + key +
-           "}, \"placed\": " + placed + "}";
+           "}, \"door\": {" + door + "}, \"placed\": " + placed + "}";
 }
 
 const std::string kLinear = "\"frame_cap_ms\": 200.0, \"wrap_rad\": 6.2831854820251465";
@@ -143,6 +153,8 @@ void TheRulesAreMotionsJsons() {
     CHECK(Refused(File("\"frame_cap_ms\": 0.0, \"wrap_rad\": 6.28", kRow, kRow), "frame_cap_ms"));
     CHECK(Refused(File("\"frame_cap_ms\": 200.0", kRow, kRow), "wrap_rad"));
     CHECK(Refused("{\"linear_motion\": {" + kLinear + "}, \"crystal\": {" + kRow + "}}", "key is missing"));
+    CHECK(Refused("{\"linear_motion\": {" + kLinear + "}, \"crystal\": {" + kRow + "}, \"key\": {" + kRow + "}}",
+                  "door is missing"));
     std::string still = kRow;
     still.replace(still.find("\"stride\": 1.5"), 13, "\"stride\": 0.0");
     CHECK(Refused(File(kLinear, still, kRow), "stride is above 0"));
@@ -158,6 +170,52 @@ void TheRulesAreMotionsJsons() {
     std::string noAxis = kRow;
     noAxis.replace(noAxis.find("\"vertical\": true"), 16, "\"vertical\": 1");
     CHECK(Refused(File(kLinear, noAxis, kRow), "vertical"));
+}
+
+// Game::loop's own call, on the exit door of a `no_gravity` level, the black
+// behind it and the glow readProperties adds: speed 1.2, stride 1, vertical, axis
+// 0, and a start angle that is the CONSTANT 0 - not randF(PI), so it draws nothing
+// from the level's phase stream (00_order K8).
+void TheDoorsRowIsGameLoops() {
+    const Motion::Rules rules = TheRules();
+    const Motion::Row& door = rules.door;
+    CHECK_EQ(door.speed, 1.2);
+    CHECK_EQ(door.stride, 1.0);
+    CHECK(door.vertical);
+    CHECK_EQ(door.axisDeg, 0.0);
+    CHECK_MSG(door.startFrom == 0.0 && door.startTo == 0.0, "the start angle is the constant Game::loop passes");
+    CHECK_MSG(door.entities.size() == 3 && door.Names("door") && door.Names("door_bg") &&
+                  door.Names("door_highlight") && !door.Names("door_lift"),
+              "the three entities Game::loop calls it on, and not a switched door");
+
+    // One unit either way on 2 PI / 1.2 = 5.236 s, from the highest of the swing:
+    // the first drawn frame already carries one step, as every linearMotion does.
+    Motion::Linear bob = Motion::Start(door, door.startFrom);
+    CHECK_MSG(Motion::OffsetPx(bob) == glm::dvec2(0.0), "before the first call it is where the level put it");
+    double highest = -1e9;
+    double lowest = 1e9;
+    int off = 0;
+    double expected = 0.0;
+    for (int tick = 1; tick <= 20000; ++tick) {
+        Motion::Advance(rules, bob, kTickMs);
+        expected += 1.2 * kTickMs / 1000.0;
+        if (expected > kFloatTwoPi) expected -= kFloatTwoPi;
+        const glm::dvec2 offset = Motion::OffsetPx(bob);
+        if (!NearV(offset, glm::dvec2(0.0, std::cos(expected)), 1e-9)) ++off;
+        highest = std::max(highest, offset.y);
+        lowest = std::min(lowest, offset.y);
+    }
+    std::printf("  the door's bob over 20000 ticks: y %.4f..%.4f\n", lowest, highest);
+    CHECK_MSG(off == 0, std::to_string(off) + " ticks off cos(1.2 t)");
+    CHECK_MSG(highest > 0.9999 && highest <= 1.0 && lowest < -0.9999 && lowest >= -1.0, "the amplitude is 1 unit");
+    // The period, on the continuous angle: 2 PI / 1.2 seconds later it is where it was.
+    Motion::Linear a = Motion::Start(door, 0.0);
+    Motion::Advance(rules, a, 100.0);
+    Motion::Linear b = a;
+    for (int step = 0; step < 52; ++step) Motion::Advance(rules, b, 100.0);
+    Motion::Advance(rules, b, (kFloatTwoPi / 1.2 - 5.2) * 1000.0);
+    CHECK_MSG(NearV(Motion::OffsetPx(a), Motion::OffsetPx(b), 1e-6),
+              "5.236 s later it is where it was: " + Show(Motion::OffsetPx(a)) + " and " + Show(Motion::OffsetPx(b)));
 }
 
 void TheFirstCallStepsBeforeTheOffsetIsRead() {
@@ -390,6 +448,60 @@ std::string PlacedRow(const std::string& entity, const std::string& linear, cons
 
 const std::string kSwing = "{\"vertical\": true, \"axis\": \"fixed\", \"axis_add_deg\": 0.0, \"start_angle\": 0.0}";
 
+// What the 128 levels carry for step 13.2: one exit door each, a door_bg in all
+// but 4-19, `shadowless_door` on 4-02 to 4-18 and `no_gravity` on those and 4-19.
+// So readProperties' inner gate excludes nothing, and the glow is drawn on 17.
+void EveryLevelsDoors() {
+    int levels = 0, doors = 0, backgrounds = 0, twice = 0;
+    std::set<std::string> shadowless;
+    std::set<std::string> weightless;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (entry.path().extension() != ".tscn") continue;
+        ++levels;
+        const std::string level = entry.path().stem().string();
+        Tscn::Scene scene;
+        std::string error;
+        if (!Tscn::Load(entry.path().string(), scene, error)) {
+            CHECK_MSG(false, level + ": " + error);
+            continue;
+        }
+        int here = 0;
+        int background = 0;
+        for (const Tscn::Node& node : scene.nodes) {
+            if (node.parent != ".") continue;
+            const std::string name = Roles::EntityName(node);
+            if (name == "door.ent" || name == "door") ++here;
+            if (name == "door_bg.ent" || name == "door_bg") ++background;
+            // The entity readProperties seeks, which is the one entity_roles.json
+            // maps to level_properties; matched here by name so this census needs
+            // the levels alone.
+            if (name != "properties") continue;
+            if (node.Meta("shadowless_door") != nullptr) shadowless.insert(level);
+            if (node.Meta("no_gravity") != nullptr) weightless.insert(level);
+        }
+        doors += here > 0 ? 1 : 0;
+        backgrounds += background > 0 ? 1 : 0;
+        // SeekEntity takes the first: more than one would make the choice matter.
+        if (here > 1 || background > 1) ++twice;
+    }
+    std::printf("  %d levels: %d with a door, %d with a door_bg, %zu shadowless_door, %zu no_gravity\n", levels, doors,
+                backgrounds, shadowless.size(), weightless.size());
+    CHECK_EQ(levels, 128);
+    CHECK_EQ(doors, 128);
+    CHECK_EQ(backgrounds, 127);
+    CHECK_MSG(twice == 0, std::to_string(twice) + " levels place a door or a door_bg twice");
+    CHECK_EQ(static_cast<int>(shadowless.size()), 17);
+    CHECK_EQ(static_cast<int>(weightless.size()), 18);
+    std::set<std::string> expected;
+    for (int i = 1; i <= 17; ++i) expected.insert("level" + std::to_string(i) + "c"); // 4-02 to 4-18
+    CHECK_MSG(shadowless == expected, "4-02 to 4-18 carry shadowless_door");
+    expected.insert("level18c"); // 4-19, which has no door_bg and no glow
+    CHECK_MSG(weightless == expected, "and those 17 and 4-19 carry no_gravity");
+    CHECK_MSG(std::includes(weightless.begin(), weightless.end(), shadowless.begin(), shadowless.end()),
+              "every shadowless_door level is weightless, so the second gate excludes none");
+}
+
 void ThePlacedRowsAreTheCallbacks() {
     const Motion::Rules rules = TheRules();
     CHECK_EQ(rules.placed.size(), std::size_t{4});
@@ -418,7 +530,8 @@ void ThePlacedRowsAreTheCallbacks() {
               "bare names, and only the four");
 
     // What would run another callback than the script's is refused, by name.
-    CHECK(Refused("{\"linear_motion\": {" + kLinear + "}, \"crystal\": {" + kRow + "}, \"key\": {" + kRow + "}}",
+    CHECK(Refused("{\"linear_motion\": {" + kLinear + "}, \"crystal\": {" + kRow + "}, \"key\": {" + kRow +
+                      "}, \"door\": {" + kDoorRow + "}}",
                   "placed is missing"));
     const auto one = [](const std::string& row) { return File(kLinear, kRow, kRow, "[" + row + "]"); };
     CHECK(Refused(one(PlacedRow("hand_tap",
@@ -660,6 +773,7 @@ void EveryLevelsPlacedPictures() {
 
 int main() {
     TheRulesAreMotionsJsons();
+    TheDoorsRowIsGameLoops();
     TheFirstCallStepsBeforeTheOffsetIsRead();
     TheFrameIsCappedAndAPausedFrameHolds();
     OneTurnIsTakenOffOnlyAboveATurnAndOnce();
@@ -676,9 +790,10 @@ int main() {
         std::printf("test_mp_motion: the levels' census SKIPPED - needs the converted levels at %s.\n"
                     "  They live outside this repository; configure with -DSUPERSONIC_MAGICPORTALS_LEVELS=...\n",
                     kLevels.c_str());
-        return ::test::summary("test_mp_motion", 90);
+        return ::test::summary("test_mp_motion", 101);
     }
     EveryLevelsCrystalsAndKeys();
     EveryLevelsPlacedPictures();
-    return ::test::summary("test_mp_motion", 105);
+    EveryLevelsDoors();
+    return ::test::summary("test_mp_motion", 124);
 }

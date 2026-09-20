@@ -564,6 +564,73 @@
     ]
   },
 
+  "door": {
+    "_source": [
+      "The level's exit door on the levels whose `properties` entity carries `shadowless_door`, and the glow",
+      "the script hangs behind it. The visuals plan's step 13.2 (the remake's",
+      "out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.13, and decode/D5.md with its check), planning",
+      "step 79. From the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
+      "  Game::readProperties, Game.angelscript bytes 116676..118260, called by Game::preLoop ins 33 - BEFORE",
+      "  g_scale.scaleEntities() at ins 37, so everything it writes is scaled once with the level's own nodes:",
+      "    ins 223-237  Game.door = SeekEntity('door.ent'); ins 268-283, when that is null, SeekEntity('door')",
+      "    ins 239-253  Game.doorBg = SeekEntity('door_bg.ent'), with no second spelling",
+      "    ins 302-325  CheckCustomData('shadowless_door') != 0 (DT_NODATA is 0, so this is PRESENCE, whatever",
+      "                 the datum's type or value; Entity/ETHCustomDataManager.h:36):",
+      "                 Game.door.SetSprite('window01_shadowless.png'). NOT under the no_gravity gate",
+      "    ins 327-330  LoadThisR Game.noGravity; JLowZ -> 431: without `no_gravity` nothing below runs",
+      "    ins 332-343  CheckCustomData('shadowless_door') again; JZ -> 376",
+      "    ins 345-362  AddEntity('door_highlight.ent', vector3(Game.door.GetPositionXY(), -22f),",
+      "                 @Game.doorHighlight): the 3-argument overload, so angle 0, no name and scale 1",
+      "                 (Script/ETHScriptWrapper.Scene.cpp:166-169)",
+      "    ins 377-430  setNoGravityLinearMotionProperties on the door, on doorBg when it is there and on the",
+      "                 highlight when it is there - the bob, which motions.json's `door` row holds",
+      "  The census over the 128 converted levels (tests/test_mp_motion): `shadowless_door` on 17 (4-02 to",
+      "  4-18), `no_gravity` on 18 (those 17 and 4-19), one `door.ent` in every level and one `door_bg.ent` in",
+      "  all but 4-19. So the ins 327-330 gate excludes nothing, the second spelling is never reached, and the",
+      "  glow is drawn on exactly the 17."
+    ],
+    "entity": "door",
+    "_entity": "SeekEntity('door.ent'), then SeekEntity('door'); the port matches the entity name without its extension, as it does for every other script-driven entity, and the census finds one door in every level",
+    "background_entity": "door_bg",
+    "_background_entity": "SeekEntity('door_bg.ent'). It carries the doorway's black (black.bmp, 40 x 100, AM_PIXEL) and an inline fire system, and bobs with the door",
+    "shadowless_flag": "shadowless_door",
+    "shadowless_sprite": "window01_shadowless.png",
+    "_shadowless_sprite": [
+      "window01.png without its drop shadow (D5_work/windiff.py): the 1x files differ in rgb by up to 25 and in",
+      "alpha by up to 132 inside (5,2)-(124,181), the hd files in alpha alone by up to 125 inside",
+      "(9,3)-(246,361). Both tiers are the same size as window01's, so the swap changes the picture and not",
+      "its 128 x 192 units. Neither file has a fullhd twin; the port draws it through the one loader every",
+      "script-added picture goes through (Tiers::Resolve of the original's entities/), so at 720 px it is the",
+      "hd file, the owner's standing ruling R12."
+    ],
+    "highlight": {
+      "_source": [
+        "door_highlight.ent: type 0 (ET_HORIZONTAL, so the origin is EO_CENTER, Entity/ETHEntity.cpp:27-36),",
+        "static 1, applyLight 0, blendMode 1 (AM_ADD, gs2d/src/Video.h:62-63), EmissiveColor (1,1,1),",
+        "SpriteCut 1x1, Scale 1, PivotAdjust (0,0), no <Particles>, no <Light>, no <CustomData>. Sprite",
+        "door_highlight.png, 128 x 192 RGB with no alpha and no hd or fullhd twin: a white ring round the",
+        "door's outline, black in its middle and at its edges (nonzero rows stop at y 184 of 192, L >= 32",
+        "spans (7,3)-(122,178)). applyLight 0 also means no lightmap: ETHLightmapGen.cpp:42-45 returns",
+        "before baking one."
+      ],
+      "sprite": "door_highlight.png",
+      "additive": true,
+      "emissive": [1.0, 1.0, 1.0],
+      "_emissive": "min(1, ambient + 1) is 1 (Entity/ETHRenderEntity.cpp:113-117), so it is added at full brightness on chapter 4's dark levels as on any other",
+      "static": true,
+      "apply_light": false,
+      "z": -22.0,
+      "_z": [
+        "readProperties ins 345-354 pushes -22 before the vector2, which is vector3(const vector2 &in, float",
+        "z). It is added before scaleEntities, so SGlobalScale::scaleEntity multiplies its position by the",
+        "scale factor, z included (bytes 6072..6337 ins 38-53) - exactly as it multiplies every node the",
+        "level file places. THIS DEPTH IS THEREFORE IN THE LEVEL'S OWN UNITS, unlike the player's 4 or a",
+        "minion's 2, which their scripts add after that pass (see `depth` below). The level's own door sits",
+        "at eth_z -14 and its door_bg at -19, so the glow is drawn behind both."
+      ]
+    }
+  },
+
   "depth": {
     "_source": [
       "What a depth the script writes as a raw number is, among the level's art (step 76). The original draws",

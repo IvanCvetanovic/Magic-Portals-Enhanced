@@ -592,6 +592,35 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     minion.searchRightAfterMs = search["right_after_ms"].AsNumber();
     minion.darkestZeroesEmissive = minionEntry["darkest_zeroes_emissive"].AsBool();
     minion.blackEntity = black["entity"].AsString("");
+
+    // The exit door's second sheet and the glow behind it. None has a default:
+    // without the names the port would swap nothing, and a highlight with no depth
+    // of its own would be drawn over the door it is meant to stand behind.
+    if (!root.Has("door")) {
+        error = path + ": door is an object";
+        return false;
+    }
+    const Json::Value& doorEntry = root["door"];
+    Door& door = read.door;
+    const Json::Value& highlight = doorEntry["highlight"];
+    if (!ReadPicture(highlight, "door.highlight", door.highlight, why, false)) {
+        error = path + ": " + why;
+        return false;
+    }
+    const auto name = [&doorEntry](const char* key, std::string& into) {
+        if (!doorEntry[key].IsString() || doorEntry[key].AsString("").empty()) return false;
+        into = doorEntry[key].AsString("");
+        return true;
+    };
+    const bool doorOk = name("entity", door.entity) && name("background_entity", door.backgroundEntity) &&
+                        name("shadowless_flag", door.shadowlessFlag) &&
+                        name("shadowless_sprite", door.shadowlessSprite) && Finite(highlight["z"]);
+    if (!doorOk) {
+        error = path + ": door needs entity, background_entity, shadowless_flag and shadowless_sprite, each a "
+                       "name, and highlight.z";
+        return false;
+    }
+    door.highlightZ = highlight["z"].AsNumber();
     out = std::move(read);
     return true;
 }

@@ -20,6 +20,9 @@
 //    light while it flies (step 49).
 //  - a minion or knight is minion.ent's sheet where its body stands, cut and
 //    framed as the original cuts and frames it, behind the player (step 76).
+//  - a weightless room's exit door is drawn on window01_shadowless.png with
+//    door_highlight.ent behind it, and door, door_bg and glow bob together on one
+//    angle; a room with gravity keeps its own sheet and stands still (step 79).
 //
 // No window and no Vulkan. The app steps physics once before each layer tick at
 // 60 Hz, so this suite does the same.
@@ -5815,6 +5818,102 @@ void ABobsPhasesAreTheLevelsOwn() {
     layer.OnDetach(registry);
 }
 
+// 4-02's exit door: the other sheet, the glow behind it, and the bob Game::loop
+// gives door, door_bg and glow on a weightless level (art.json and motions.json
+// `door`; the visuals plan's 13.2).
+void AWeightlessRoomsDoorIsDrawnShadowlessAndBobsUnderItsGlow() {
+    if (!OriginalArtIsThere("AWeightlessRoomsDoorIsDrawnShadowlessAndBobsUnderItsGlow")) return;
+    namespace Motion = MagicPortals::Motion;
+    const Motion::Rules rules = MotionRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level1c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    const MagicPortalsLayer::DoorReport atLoad = layer.DoorPicture();
+    CHECK_MSG(atLoad.shadowless && atLoad.bobs, "4-02 carries shadowless_door and no_gravity");
+    CHECK_MSG(atLoad.texture.find("window01_shadowless.png") != std::string::npos,
+              "the door is drawn on the swapped sheet: " + atLoad.texture);
+    CHECK_MSG(atLoad.glowQuad != entt::null &&
+                  atLoad.glowTexture.find("door_highlight.png") != std::string::npos,
+              "and door_highlight.ent behind it: " + atLoad.glowTexture);
+    CHECK_MSG(atLoad.glowSizePx == glm::dvec2(128.0, 192.0),
+              "at door_highlight.png's own units: " + Point(atLoad.glowSizePx));
+    CHECK(atLoad.glowAdditive);
+    CHECK_MSG(atLoad.glowCentrePx == atLoad.atPx, "centred on the door's own point: " + Point(atLoad.glowCentrePx));
+    CHECK_MSG(atLoad.offsetPx == glm::dvec2(0.0), "before the first call all three are where the level put them");
+    // Behind the door and behind the doorway's black: -22 against their -14 and -19.
+    const glm::dvec2 doorPx = QuadPx(registry, atLoad.quad);
+    const float doorZ = registry.get<TransformComponent>(atLoad.quad).position.z;
+    const float bgZ = registry.get<TransformComponent>(atLoad.bgQuad).position.z;
+    CHECK_MSG(atLoad.glowZ < bgZ && bgZ < doorZ,
+              "the glow is drawn behind both: " + std::to_string(atLoad.glowZ) + ", " + std::to_string(bgZ) + ", " +
+                  std::to_string(doorZ));
+    CHECK_MSG(glm::distance(QuadPx(registry, atLoad.glowQuad), atLoad.atPx) < 1e-3,
+              "and its quad is on the door: " + Point(QuadPx(registry, atLoad.glowQuad)));
+    CloseTheLevelStartPopup(layer, registry);
+
+    // One call a tick, on one angle for the three, and each picture moved by it
+    // from where the level put it.
+    Motion::Linear expected = atLoad.motion;
+    double lowest = 1e9;
+    double highest = -1e9;
+    int wrong = 0;
+    for (int tick = 0; tick < 420; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        Motion::Advance(rules, expected, static_cast<double>(MagicPortalsLayer::kTick) * 1000.0);
+        const MagicPortalsLayer::DoorReport now = layer.DoorPicture();
+        const glm::dvec2 offset = Motion::OffsetPx(expected);
+        const bool ok = now.motion.angle == expected.angle && now.offsetPx == offset && offset.x == 0.0 &&
+                        glm::distance(now.atPx, atLoad.atPx + offset) < 1e-9 &&
+                        glm::distance(now.bgAtPx, atLoad.bgAtPx + offset) < 1e-9 &&
+                        glm::distance(now.glowCentrePx, atLoad.glowCentrePx + offset) < 1e-9 &&
+                        glm::distance(QuadPx(registry, now.glowQuad), now.glowCentrePx) < 1e-3 &&
+                        glm::distance(QuadPx(registry, now.quad) - doorPx, offset) < 1e-3;
+        if (!ok) ++wrong;
+        lowest = std::min(lowest, offset.y);
+        highest = std::max(highest, offset.y);
+    }
+    std::printf("  4-02's door, its background and its glow: y %.4f..%.4f over 7 s\n", lowest, highest);
+    CHECK_MSG(wrong == 0, std::to_string(wrong) + " ticks the three were not together on cos(1.2 t)");
+    CHECK_MSG(highest > 0.9999 && highest <= 1.0 && lowest < -0.9999 && lowest >= -1.0,
+              "one unit either way over its 5.24 s");
+    layer.OnDetach(registry);
+}
+
+// And a level that carries neither flag keeps its own sheet, its glow and its bob:
+// 1-01, whose door is the same window01.png.
+void AnOrdinaryRoomsDoorKeepsItsSheetAndStandsStill() {
+    if (!OriginalArtIsThere("AnOrdinaryRoomsDoorKeepsItsSheetAndStandsStill")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    const MagicPortalsLayer::DoorReport atLoad = layer.DoorPicture();
+    CHECK_MSG(!atLoad.shadowless && !atLoad.bobs, "1-01 carries neither flag");
+    CHECK_MSG(atLoad.quad != entt::null && atLoad.texture.find("window01.png") != std::string::npos &&
+                  atLoad.texture.find("shadowless") == std::string::npos,
+              "its door is drawn on its own sheet: " + atLoad.texture);
+    CHECK_MSG(atLoad.glowQuad == entt::null, "and has no glow behind it");
+    CloseTheLevelStartPopup(layer, registry);
+    const glm::dvec2 doorPx = QuadPx(registry, atLoad.quad);
+    int moved = 0;
+    for (int tick = 0; tick < 240; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::DoorReport now = layer.DoorPicture();
+        if (now.offsetPx != glm::dvec2(0.0) || now.atPx != atLoad.atPx || QuadPx(registry, now.quad) != doorPx) {
+            ++moved;
+        }
+    }
+    CHECK_MSG(moved == 0, std::to_string(moved) + " ticks moved a door on a level with gravity");
+    layer.OnDetach(registry);
+}
+
 void ATimedCrystalsDialBobsWithIt() {
     // The dial takes its crystal's drawn centre every tick (ETHCallback_timer ins
     // 93-100, SetPositionXY(crystal.GetPositionXY())), which is the bobbed one.
@@ -6988,6 +7087,8 @@ void runTests() {
     ALyingKeyBobsAndACarriedOneDoesNot();
     ABobsPhasesAreTheLevelsOwn();
     ATimedCrystalsDialBobsWithIt();
+    AWeightlessRoomsDoorIsDrawnShadowlessAndBobsUnderItsGlow();
+    AnOrdinaryRoomsDoorKeepsItsSheetAndStandsStill();
     AnArrowSwaysAlongItsAngleAtItsAlpha();
     AnArrowAndAHandSwayAlongTheirOwnAngles();
     ADashedCircleBobsAndTurns();
@@ -7013,5 +7114,5 @@ int main() {
         return 77;
     }
     runTests();
-    return ::test::summary("test_mp_layer", 35);
+    return ::test::summary("test_mp_layer", 50);
 }
