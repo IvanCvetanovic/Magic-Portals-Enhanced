@@ -89,7 +89,12 @@ struct Rules {
     double settlePx = 0.0;       // minDist * 2: only a lone guard stops inside this
     double brake = 0.0;          // what a minion serving its hold multiplies x by
     double bodyRadiusPx = 0.0;   // one circle for the original's two
+    double entityAboveFeetPx = 0.0; // where the original's entity stands over its feet
     std::string killerName;      // the entity name of the floor that kills a minion
+
+    // The body's centre less this is the original's entity point, which arrivePx
+    // and settlePx are measured from (minions.json body.entity_above_feet_px).
+    double EntityAboveCentrePx() const { return entityAboveFeetPx - bodyRadiusPx; }
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -100,9 +105,26 @@ struct Waypoint {
     double holdMs = 0.0;       // the dwell on ARRIVING here
 };
 
+// Which way a minion's last walk went: ETHCallback_minion's moveVec, whose sign
+// is all its row is chosen by. None until it has walked.
+enum class Facing { None, Left, Right };
+
+// Which of the patrol's arms the last Tick took for a minion - what its picture
+// is framed by (Art::UpdateMinion), and nothing the sim reads back.
+enum class Arm {
+    None,    // not ticked: gone, bodiless, or with no waypoints
+    Walk,    // its velocity set toward its destination
+    Hold,    // serving its hold: braked
+    Settled, // a lone guard inside the wider threshold: left alone
+};
+
 struct Minion {
     std::string name;         // the spawner's node name; the minion answers to it
     std::string waypointName; // the prefix, not a name
+    // The marker's metadata/entityName, empty for the default minion.ent. Read for
+    // the picture only: the body spawned is the default one whatever it names.
+    std::string entityName;
+    bool summoned = false;    // called up by the chapter-3 boss (Summon), not spawned by a marker
     glm::dvec2 spawnPx{0.0, 0.0};
     entt::entity body = entt::null;
     std::vector<Waypoint> waypoints;
@@ -111,6 +133,8 @@ struct Minion {
     double elapsedMs = 0.0;    // since that arrival
     double holdMs = 0.0;       // adopted on arrival, from the waypoint reached
     bool gone = false;         // killed, by the floor
+    Facing facing = Facing::None; // set only where the walk sets the velocity
+    Arm arm = Arm::None;          // the last Tick's
 };
 
 // An invisible solid floor that destroys a minion and nothing else.

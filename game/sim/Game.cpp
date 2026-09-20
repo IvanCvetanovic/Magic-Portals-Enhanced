@@ -393,12 +393,20 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // every minion still standing - the first place two of the port's own modules
     // meet. What a keyhole takes away is a door the builder made, so it goes
     // through Forget as a burnt crate does.
+    //
+    // Each is offered at its entity point, which the key measures from and trails
+    // (Carry::Carrier). A minion's is its body's centre less EntityAboveCentrePx,
+    // the point its patrol arrives by. The player's is left at its capsule's
+    // centre: that body is the remake's 20 x 44, whose centre stands 22 over the
+    // feet where the original's entity stands 18.1 (dark_mage.ent's compound is
+    // minion.ent's), a deviation of the player's body and not decided here.
     {
-        std::vector<entt::entity> carriers;
+        std::vector<Carry::Carrier> carriers;
         carriers.reserve(level.minions.minions.size() + 1);
-        if (level.player != entt::null) carriers.push_back(level.player);
+        if (level.player != entt::null) carriers.push_back(Carry::Carrier{level.player, glm::dvec2(0.0, 0.0)});
+        const glm::dvec2 minionPoint(0.0, -level.minions.rules.EntityAboveCentrePx());
         for (const Minions::Minion& minion : level.minions.minions) {
-            if (!minion.gone && minion.body != entt::null) carriers.push_back(minion.body);
+            if (!minion.gone && minion.body != entt::null) carriers.push_back(Carry::Carrier{minion.body, minionPoint});
         }
         for (const entt::entity gone : level.keys.Tick(registry, carriers, dt)) Forget(level, gone);
     }
@@ -406,10 +414,12 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // only a character may take one, so the player alone is offered it and every
     // minion is prey instead. What it strikes is destroyed by Minions rather than
     // here - that module walks its own list every frame, and a body destroyed
-    // behind its back would still be in it.
+    // behind its back would still be in it. The prey is still measured from each
+    // body's centre, where ETHCallback_shock_diamond ins 421-430 measure from the
+    // minion's GetPositionXY, 11.1 higher: a deviation recorded for Diamonds.
     {
-        std::vector<entt::entity> carriers;
-        if (level.player != entt::null) carriers.push_back(level.player);
+        std::vector<Carry::Carrier> carriers;
+        if (level.player != entt::null) carriers.push_back(Carry::Carrier{level.player, glm::dvec2(0.0, 0.0)});
         std::vector<entt::entity> prey;
         prey.reserve(level.minions.minions.size());
         for (const Minions::Minion& minion : level.minions.minions) {

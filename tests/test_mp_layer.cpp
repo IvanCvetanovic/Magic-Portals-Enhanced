@@ -18,6 +18,8 @@
 //  - a level's <Light>s are 2D lights with their halos, following their owners,
 //    a sprite takes the lights its mask lets through, and a shot carries its own
 //    light while it flies (step 49).
+//  - a minion or knight is minion.ent's sheet where its body stands, cut and
+//    framed as the original cuts and frames it, behind the player (step 76).
 //
 // No window and no Vulkan. The app steps physics once before each layer tick at
 // 60 Hz, so this suite does the same.
@@ -1763,6 +1765,238 @@ void Level31DrawsTheBeholder() {
     }
     CHECK_MSG(dropped && Tagged(registry, "Magic Portals Thrown Sprite") == 1, "its rock is drawn as a stone");
     layer.OnDetach(registry);
+}
+
+// ---- the minions (step 76, the visuals plan's 5.1) ------------------------------
+
+const MagicPortalsLayer::MinionReport* MinionOf(const std::vector<MagicPortalsLayer::MinionReport>& reports,
+                                                const std::string& name) {
+    for (const MagicPortalsLayer::MinionReport& report : reports) {
+        if (report.name == name) return &report;
+    }
+    return nullptr;
+}
+
+const MagicPortals::Minions::Minion* SimMinion(const MagicPortalsLayer& layer, const std::string& name) {
+    return layer.SimLevel() != nullptr ? layer.SimLevel()->minions.FindMinion(name) : nullptr;
+}
+
+// The level's own pictures standing at `px`, their z's.
+std::vector<float> SpriteZsAt(entt::registry& registry, const glm::dvec2& px) {
+    std::vector<float> out;
+    for (auto [entity, tag, transform] : registry.view<TagComponent, TransformComponent>().each()) {
+        (void)entity;
+        if (tag.tag != "Magic Portals Sprite") continue;
+        if (glm::distance(MagicPortals::Units::ToPixels(transform.position), px) < 0.5) out.push_back(transform.position.z);
+    }
+    return out;
+}
+
+int SpritesBehind(entt::registry& registry, float z) {
+    int count = 0;
+    for (auto [entity, tag, transform] : registry.view<TagComponent, TransformComponent>().each()) {
+        (void)entity;
+        if (tag.tag == "Magic Portals Sprite" && transform.position.z < z) ++count;
+    }
+    return count;
+}
+
+void AMinionWalksOnItsSheet() {
+    // level0b (3-01): the patroller minion_spawn_1811 spawns at x 546 and walks left
+    // to wayA0 at 509, holds 4000 ms and walks right to wayA1; the guard
+    // minion_spawn_913 walks right to its lone post and settles. Each is minion.ent's
+    // hd sheet, cut as SetupSpriteRects cuts it and framed as ETHCallback_minion
+    // frames it (art.json minion): row 1 walking left and 2 right, a column every
+    // 120 ms of walking in the order 0, 1, 2, 3, column 0 of that row while it holds,
+    // and its feet on what its body stands on.
+    if (!OriginalArtIsThere("AMinionWalksOnItsSheet")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CHECK_EQ(Tagged(registry, "Magic Portals Minion"), 2);
+    std::vector<MagicPortalsLayer::MinionReport> reports = layer.MinionReports();
+    CHECK_EQ(reports.size(), static_cast<std::size_t>(2));
+    const double playerDepth = 4.0 / 2.8125;
+    CHECK_MSG(std::fabs(layer.PlayerDepth() - playerDepth) < 1e-12, "the player at GameCharacter's 4 over 2.8125");
+    for (const MagicPortalsLayer::MinionReport& report : reports) {
+        CHECK_MSG(report.quad != entt::null && registry.valid(report.quad), report.name + " is drawn");
+        if (report.quad == entt::null || !registry.valid(report.quad)) continue;
+        // Frame 0 before its first update: the entity's default.
+        CHECK_MSG(report.column == 0 && report.row == 0 && !report.black, report.name + " on frame 0, not black");
+        const auto& material = registry.get<MaterialComponent>(report.quad);
+        CHECK_MSG(EndsWith(material.albedoTexturePath, "/entities/hd/minion.png"),
+                  "its hd sheet: " + material.albedoTexturePath);
+        // The uneven cut, written by the layer: no flipbook, whose even split
+        // would sample column 3 4.5 texels off.
+        CHECK_MSG(!registry.all_of<SpriteAnimationComponent>(report.quad), "no flipbook on a minion");
+        CHECK_MSG(std::fabs(material.uvScale.x - 38.0f / 155.0f) < 1e-7f &&
+                      std::fabs(material.uvScale.y - 54.0f / 217.0f) < 1e-7f && material.uvOffset == glm::vec2(0.0f),
+                  "frame 0 of the cut: 38 / 155 by 54 / 217 at (0, 0)");
+        const glm::vec3 scale = registry.get<TransformComponent>(report.quad).scale;
+        const glm::dvec2 frame = glm::dvec2(scale.x, scale.y) * MagicPortals::Units::kPixelsPerMetre;
+        CHECK_MSG(std::fabs(frame.x - 38.0) < 1e-4 && std::fabs(frame.y - 54.0) < 1e-4, "38 x 54 units: " + Point(frame));
+        // Behind the player (2 < 4), and at the depth minion_spawn adds it at.
+        CHECK_MSG(report.z < layer.PlayerSlotZ() && std::fabs(report.lookZ - 2.0 / 2.8125) < 1e-12,
+                  report.name + " behind the player");
+    }
+
+    // Walking left until it arrives at wayA0 by its own walk: row 1, a column every
+    // 7 or 8 ticks (120 ms of 16.7), in order, standing where its body stands.
+    const std::string patroller = "minion_spawn_1811";
+    const glm::dvec2 wayA0(509.0, 112.0);
+    std::vector<int> changes;
+    int lastColumn = 0;
+    int walkTicks = 0;
+    bool rowsRight = true;
+    std::string firstWrong;
+    bool feetRight = true;
+    bool orderRight = true;
+    bool arrived = false;
+    glm::dvec2 arrivedBody(0.0);
+    for (int tick = 1; tick <= 120; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const MagicPortals::Minions::Minion* sim = SimMinion(layer, patroller);
+        reports = layer.MinionReports();
+        const MagicPortalsLayer::MinionReport* drawn = MinionOf(reports, patroller);
+        if (sim == nullptr || drawn == nullptr || !registry.valid(sim->body)) break;
+        const glm::dvec2 body = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(sim->body).position);
+        if (sim->arm != MagicPortals::Minions::Arm::Walk) {
+            arrived = sim->arm == MagicPortals::Minions::Arm::Hold && sim->arrivedAt == 0 && sim->dest == 1;
+            arrivedBody = body;
+            break;
+        }
+        ++walkTicks;
+        if (drawn->row != 1 && rowsRight) {
+            rowsRight = false;
+            firstWrong = "tick " + std::to_string(tick) + ": row " + std::to_string(drawn->row);
+        }
+        // The body's circle of 7 on the floor, the entity 18.1 above its bottom, the
+        // picture 4 above the entity: the centre 15.1 above the body's.
+        if (glm::distance(drawn->centrePx, body + glm::dvec2(0.0, 7.0 - 18.1 - 4.0)) > 1e-9) feetRight = false;
+        if (drawn->column != lastColumn) {
+            if (drawn->column != (lastColumn + 1) % 4) orderRight = false;
+            changes.push_back(tick);
+            lastColumn = drawn->column;
+        }
+    }
+    CHECK_MSG(walkTicks >= 40, "it walked left for " + std::to_string(walkTicks) + " ticks");
+    CHECK_MSG(rowsRight, "row 1 on every tick it walked left; the first that was not: " + firstWrong);
+    CHECK_MSG(feetRight, "its picture's centre 15.1 above its body's on every tick");
+    bool strides = changes.size() >= 4 && changes[0] == 9;
+    for (std::size_t i = 1; i < changes.size(); ++i) {
+        const int gap = changes[i] - changes[i - 1];
+        if (gap != 7 && gap != 8) strides = false;
+    }
+    CHECK_MSG(strides && orderRight, "the first column on tick 9, then one every 7 or 8 ticks, in the order 0 1 2 3: " +
+                                         std::to_string(changes.size()) + " changes");
+    // And it ARRIVES, by its own walk, measured as the original measures it: from its
+    // entity, 18.1 above its feet, which is 11.1 above the port's body centre
+    // (minions.json body.entity_above_feet_px). Measured from the centre it walked
+    // 9.3 below wayA0, never came within the 8 of arrive_px, and turned across the
+    // waypoint on every tick after (step 76's finding): its row strobed at 30 Hz.
+    const glm::dvec2 entityAt = arrivedBody - glm::dvec2(0.0, 18.1 - 7.0);
+    CHECK_MSG(arrived && glm::distance(entityAt, wayA0) < 8.0 && std::fabs(entityAt.y - wayA0.y) < 3.0,
+              "it arrived at wayA0 by its own walk, its entity at " + Point(entityAt) + " within 8");
+
+    // The hold it arrived into: column 0 of row 1, the row it walked, and the walk's
+    // column kept in the timer.
+    const int kept = lastColumn;
+    const MagicPortals::Minions::Minion* held = SimMinion(layer, patroller);
+    const MagicPortalsLayer::MinionReport* holding = MinionOf(reports, patroller);
+    CHECK_MSG(held != nullptr && held->arm == MagicPortals::Minions::Arm::Hold && holding != nullptr &&
+                  holding->column == 0 && holding->row == 1,
+              "holding at wayA0 on column 0 of row 1: " +
+                  (holding != nullptr ? std::to_string(holding->column) + ", " + std::to_string(holding->row) : "none"));
+
+    // Through the 4000 ms hold and off to the right: row 2, from the column the
+    // timer kept, not from column 0.
+    int firstRight = -1;
+    for (int tick = 0; tick < 300 && firstRight < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const MagicPortals::Minions::Minion* sim = SimMinion(layer, patroller);
+        reports = layer.MinionReports();
+        const MagicPortalsLayer::MinionReport* drawn = MinionOf(reports, patroller);
+        if (sim == nullptr || drawn == nullptr) break;
+        if (sim->arm == MagicPortals::Minions::Arm::Hold && (drawn->column != 0 || drawn->row != 1)) {
+            CHECK_MSG(false, "held on column 0 of row 1 throughout");
+            break;
+        }
+        if (sim->arm == MagicPortals::Minions::Arm::Walk) {
+            firstRight = drawn->column;
+            CHECK_MSG(drawn->row == 2 && sim->facing == MagicPortals::Minions::Facing::Right, "walking right on row 2");
+        }
+    }
+    CHECK_MSG(firstRight == kept || firstRight == (kept + 1) % 4,
+              "walking again on the column it stopped on: " + std::to_string(firstRight) + " after " +
+                  std::to_string(kept));
+
+    // The guard: walked right to its post and settled, which writes no frame - it
+    // stands on the walk's last frame, facing right.
+    const MagicPortals::Minions::Minion* guard = SimMinion(layer, "minion_spawn_913");
+    const MagicPortalsLayer::MinionReport* guardDrawn = MinionOf(reports, "minion_spawn_913");
+    CHECK_MSG(guard != nullptr && guard->arm == MagicPortals::Minions::Arm::Settled && guardDrawn != nullptr &&
+                  guardDrawn->row == 2,
+              "the guard settled on row 2");
+
+    // A minion the killer floor takes takes its picture with it.
+    if (const MagicPortals::Minions::Minion* sim = SimMinion(layer, patroller); sim != nullptr && registry.valid(sim->body)) {
+        auto& transform = registry.get<TransformComponent>(sim->body);
+        transform.position = MagicPortals::Units::ToWorld(1152.0, 448.0);
+        for (int tick = 0; tick < 3; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(SimMinion(layer, patroller) != nullptr && SimMinion(layer, patroller)->gone &&
+                      Tagged(registry, "Magic Portals Minion") == 1,
+                  "taken by the floor, and its picture with it");
+    }
+    layer.OnDetach(registry);
+    CHECK_MSG(Tagged(registry, "Magic Portals Minion") == 0, "no minion outlives the layer");
+}
+
+void TheMinionsStandBehindThePlayerAndTheArtAtTwo() {
+    // R10 and minion_spawn's 2, both raw depths over the scale factor the level's
+    // own nodes were multiplied by (art.json depth): the player at 1.42 and a minion
+    // at 0.71 in the level's units. On level16b (3-17) the minions stand after every
+    // node at 0 or below, immediately behind the player, and both behind the block
+    // at eth_z 2 (block00_low_emissive_ent_1511 at (368, 206)).
+    if (!OriginalArtIsThere("TheMinionsStandBehindThePlayerAndTheArtAtTwo")) return;
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level16b");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        const std::vector<MagicPortalsLayer::MinionReport> reports = layer.MinionReports();
+        CHECK_EQ(reports.size(), static_cast<std::size_t>(3));
+        const std::vector<float> block = SpriteZsAt(registry, glm::dvec2(368.0, 206.0));
+        CHECK_MSG(block.size() == 1 && block[0] > layer.PlayerSlotZ(), "the block at 2 is in front of the player");
+        for (const MagicPortalsLayer::MinionReport& report : reports) {
+            CHECK_MSG(report.z < layer.PlayerSlotZ() && (block.empty() || report.z < block[0]),
+                      report.name + " behind the player and the block");
+            // Nothing stands between it and the player: no node of level16b is at 1.
+            CHECK_MSG(SpritesBehind(registry, report.z) == SpritesBehind(registry, layer.PlayerSlotZ()) &&
+                          SpritesBehind(registry, report.z) > 0,
+                      report.name + " after every node at 0 or below, and right behind the player");
+        }
+        layer.OnDetach(registry);
+    }
+    {
+        // level22a (2-23): the one node in 128 levels at eth_z 1, the platform at
+        // (320, 304), which the player now stands in front of (2.8125 < 4).
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level22a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        const std::vector<float> platform = SpriteZsAt(registry, glm::dvec2(320.0, 304.0));
+        CHECK_MSG(platform.size() == 1 && platform[0] < layer.PlayerSlotZ() &&
+                      SpritesBehind(registry, layer.PlayerSlotZ()) == SpritesBehind(registry, platform[0]) + 1,
+                  "the platform at 1 is drawn right behind the player");
+        layer.OnDetach(registry);
+    }
 }
 
 // ---- the menu ----------------------------------------------------------------
@@ -4901,6 +5135,47 @@ MagicPortals::Art::Timer TimerRules() {
     return rules.timer;
 }
 
+void ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack() {
+    // ETHCallback_minion zeroes its emissive every frame the ambient is
+    // DARKEST_AMBIENT_LIGHT: on 4-27 (level26c, darkest) each knight is drawn at
+    // min(1, 0.01 + 0), a silhouette; on 3-05 (level4b) at min(1, A + 1), whole. And
+    // level31b's marker spawns ghost_minion.ent, which its script sets to colour 0
+    // every frame: black on any level.
+    if (!OriginalArtIsThere("ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack")) return;
+    struct Case {
+        const char* level;
+        float grey;
+        std::size_t knights;
+    };
+    for (const Case& c : {Case{"level26c", 0.01f, 2}, Case{"level4b", 1.0f, 2}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), c.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty() && layer.LightingError().empty(),
+                  std::string(c.level) + ": " + layer.LoadError() + layer.ArtError() + layer.LightingError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) continue;
+        tickWith(layer, registry, kRest, {}, {});
+        const std::vector<glm::vec4> colours = ColoursOf(registry, "Magic Portals Minion", "/entities/hd/minion.png");
+        CHECK_MSG(colours.size() == c.knights && AllAre(colours, c.grey, c.grey, c.grey),
+                  std::string(c.level) + "'s knights at " + std::to_string(c.grey) + ": " + Show(colours));
+        layer.OnDetach(registry);
+    }
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    tickWith(layer, registry, kRest, {}, {});
+    const std::vector<MagicPortalsLayer::MinionReport> reports = layer.MinionReports();
+    const MagicPortalsLayer::MinionReport* black = MinionOf(reports, "minion_spawn_908");
+    CHECK_MSG(black != nullptr && black->black && black->quad != entt::null, "level31b's marker is the black knight");
+    const std::vector<glm::vec4> colours = ColoursOf(registry, "Magic Portals Minion", "/entities/hd/minion.png");
+    CHECK_MSG(colours.size() == 1 && AllAre(colours, 0.0f, 0.0f, 0.0f), "drawn black: " + Show(colours));
+    layer.OnDetach(registry);
+}
+
 void EveryTimedCrystalHasADialBehindIt() {
     // Every level whose file carries a `time`, as the layer loads it: 35 timed
     // crystals in 20 levels (the brief's census), one dial each, behind its
@@ -5967,8 +6242,12 @@ void TheTorchIsALightAndAHalo() {
                       "the player is not static: every light reaches it, the torch's included");
             CHECK_MSG(EndsWith(material.normalTexturePath, "/entities/normalmaps/normalmap_77.png"),
                       "through dark_mage.ent's normal map: " + material.normalTexturePath);
-            CHECK_MSG(material.sprite2D.height == 0.0f && material.sprite2D.normalYDown,
-                      "at main_char's depth, 0, the map's green down");
+            // GameCharacter's 4 over the scale factor, 1.42 in the level's units (R10,
+            // step 76), not main_char's eth_z: its marker gives only x and y.
+            CHECK_MSG(std::fabs(material.sprite2D.height - MagicPortals::Units::ToMetres(4.0 / 2.8125)) < 1e-7f &&
+                          material.sprite2D.normalYDown,
+                      "at GameCharacter's depth, 4 / 2.8125, the map's green down: " +
+                          std::to_string(material.sprite2D.height));
         }
     }
 
@@ -6472,6 +6751,9 @@ void AWeightlessPlayerWearsTheSuit() {
 void runTests() {
     TheLayerPlaysLevel30();
     Level31DrawsTheBeholder();
+    AMinionWalksOnItsSheet();
+    TheMinionsStandBehindThePlayerAndTheArtAtTwo();
+    ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack();
     ATapLandsWhereItPoints();
     Level8FromTheSpawnWithTapsAndWalking();
     LevelsFollowInOrderAndRetryIsInstant();

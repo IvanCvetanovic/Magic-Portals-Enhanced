@@ -15,7 +15,8 @@
 //   the diamond's tests isCharacter and skips anything else before it ever
 //   measures a distance. That is not a flag here either - the CALLER builds the
 //   list of carriers, so a key is offered the player and every minion still
-//   standing, and a diamond only the player.
+//   standing, and a diamond only the player; and the caller says where on each
+//   body its entity point is (Carrier).
 // - What happens on ARRIVAL: a key opens a keyhole of its colour, a diamond
 //   strikes a minion. Neither is a carry concern.
 // - What a LOST owner means. Both go back to being unowned - the original writes
@@ -44,6 +45,18 @@ struct Rules {
     double strideMs = 0.0; // how long one of those takes to travel
 };
 
+// Something that may take a carried thing, and the point it is taken and led
+// from. The original measures the pickup from the carrier's GetPositionXY and
+// trails that same point (ETHCallback_key ins 744-753, 932-957, 959-976): the
+// ENTITY's point, which is not where the port's body has its centre. A minion's
+// stands 11.1 above its body's centre (Minions::Rules::EntityAboveCentrePx), so
+// a key it carries rides at its chest, behind the picture, and not at its feet.
+// Which body is which is the caller's to know, as who may carry is.
+struct Carrier {
+    entt::entity body = entt::null;
+    glm::dvec2 pointFromCentrePx{0.0, 0.0}; // the entity's point less the body's centre, +y down
+};
+
 // Where a carried thing is, and who has it. Not a body: the original touches no
 // velocity anywhere in this path, which is why the port does not build one and
 // then fight gravity for it.
@@ -52,7 +65,8 @@ struct Carried {
     glm::dvec2 fromPx{0.0, 0.0}; // the trail's last destination, and the next
     glm::dvec2 toPx{0.0, 0.0};
     double sinceAimMs = 0.0;
-    entt::entity owner = entt::null; // who is carrying it, or null
+    entt::entity owner = entt::null;          // who is carrying it, or null
+    glm::dvec2 ownerPointFromCentrePx{0.0, 0.0}; // that owner's Carrier point, kept from the pickup
 };
 
 // Lets go of an owner that has ceased to be: the original's shallLeave, which
@@ -60,16 +74,16 @@ struct Carried {
 // one taken by a killer floor. True if it was holding one and now is not.
 bool Drop(Carried& carried, entt::registry& registry);
 
-// The FIRST carrier within rangePx takes it, not the nearest: the original scans
-// the buckets around itself and stops at the first that fits. True if one just
-// did, leaving the trail aimed at where the thing already lies.
-bool Acquire(Carried& carried, entt::registry& registry, const std::vector<entt::entity>& carriers, double rangePx);
+// The FIRST carrier within rangePx of its point takes it, not the nearest: the
+// original scans the buckets around itself and stops at the first that fits.
+// True if one just did, leaving the trail aimed at where the thing already lies.
+bool Acquire(Carried& carried, entt::registry& registry, const std::vector<Carrier>& carriers, double rangePx);
 
-// One tick of following whoever holds it. Beyond the leash both ends of the
-// interpolation and the position are slammed onto the owner - which is also what
-// carries a thing through a portal, since its owner arrives somewhere new -
-// and inside it the trail re-aims every reaimMs and travels over strideMs, so a
-// carried thing sits perpetually just behind its owner.
+// One tick of following whoever holds it, at that owner's point. Beyond the
+// leash both ends of the interpolation and the position are slammed onto the
+// point - which is also what carries a thing through a portal, since its owner
+// arrives somewhere new - and inside it the trail re-aims every reaimMs and
+// travels over strideMs, so a carried thing sits perpetually just behind it.
 void Trail(Carried& carried, entt::registry& registry, const Rules& rules, double ms);
 
 } // namespace MagicPortals::Carry

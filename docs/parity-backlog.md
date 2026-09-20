@@ -94,11 +94,15 @@ section. Where they have rows below, those rows stay open. Next: batches 5-13 (a
 | 4.1 | antiportal drawn at 64×scale | committed with one recorded deviation (the 2-26 edge scan), closed by 4.2 | `bbb3c78` | 71 |
 | 4.2 | blink and spin | committed with five recorded deviations (the four "Step 72" rows and the PORT-WIDE clock row below) | `5ae1b6d`, `5a544ac` | 72 |
 | 4.3 | gravity-well green ring | committed with two recorded deviations, neither a failing gate row: the `test_mp_wells` gate is met across two suites, and the ring exists from the first frame | `6949cc3` | 73 |
+| 5.1 | minions and knights on their sheets | committed with deviations, and **two sim changes applied under no adopted ruling - proposed R24 (the patrol's arrival point) and R25 (a carrier's point), THE OWNER'S TO RULE** (the "Step 76" rows below). Two gate rows NOT MET as written and recorded, not tuned: the non-regression sweep on 10 of the 128 f420 frames, where the repaired patrols carry keys, press 3-15's button and weigh 3-22's seesaw (each checked against the original's own frame and moving toward it), and G5a-5's lit R on one widened-series detection that sits on the line. Three deviations left to their owners: the lone guards' coast, the player's carrier point, a shock diamond's prey point | (this commit) | 76 |
 
 Merge `e81c21b` (§0). Integration step 74 (`591e143`, `7281ca5`) sends the well ring and the crystal dial through the
 tier resolver. The ten rings now draw `hd/white_ring.png`. The dial keeps `timer.png`, which has no tier file. It
 records no deviation of its own. It re-read 4.1's and 4.2's rows on the merged build, which gave the two open
 instrument items below.
+
+**Batch 5 opens after that merge.** Its first step, 5.1, is the table's last row (planning step 76) and the first
+step committed in this repository rather than the engine's.
 
 - [x] **Step 0** — engine `--screenshot-every N` (every temporal check depends on it). Done: SE step 57 (`29448a8`).
 - [ ] System 1 colour transfer — largely done by lighting E1/G2; re-check its remaining rows.
@@ -314,7 +318,79 @@ instrument items below.
       (four of the five well levels place no light; level27c's `fire_agent_ent_1919` has its own picture), but such a
       light on a well level would sit a slot too deep. Next: step 6.3's slot table leaves between-slot pictures out of
       that count, pinned in `test_mp_layer`.
-- [ ] **System 5 actors with sheets**: minions/knights (63 spawns in 35 levels) have no sprites; dragon draws the whole sheet.
+- [ ] **System 5 actors with sheets**: the minions and knights (62 markers in 35 levels, and the chapter-3 boss's
+      escorts) are drawn on `hd/minion.png` cut as the original cuts it, on the decoded rows 1/2, behind the player at
+      its decoded depth 4 (R10), on patrols that now arrive where the original's do - **built, planning step 76**
+      (order 5.1; written 2026-09-19, not yet committed at the time of writing), with the "Step 76" rows below.
+      What is left of the system: the 2-32 dragon still draws the whole sheet (5.2), the dark dragon (12.1), the
+      ghost (12.2), the knights' dark aura (11.4).
+- [ ] **Step 76, THE OWNER'S TO RULE: two sim changes applied under no adopted ruling** (proposed as **R24** the
+      patrol's arrival point and **R25** a carrier's point, appended to `00_order` §8.15 by 5.1's third round;
+      neither is one of R1-R23, and the step's first record called them "the same standing ruling", which was an
+      extension by analogy). Both are the decode's (R24: `ETHCallback_minion` ins 369-374, 413-425, 198-210;
+      R25: `ETHCallback_key` ins 744-753, 932-957, 959-976), and both change gameplay, not only pictures.
+      **Why they were applied anyway:** 5.1's own gates G5a-4 ("holds on column 0") and half of G5a-8 ("MAE <= 10 at
+      the holds") are unmeasurable without R24 - with the arrival measured from the body's centre the port serves no
+      hold on any level - and R25 was forced by R24 (a knight reached a key for the first time and carried it at its
+      boots). **What refusing them costs:** R24 returns those gates to NOT MEASURED and puts the 30 Hz row strobe
+      back; R25 leaves the key at the boots on 11 levels; it moves 11 f420 frames but moves none of them
+      across the non-regression rule (MEASURED: the sweep of the binary with R24 in and R25 out has the same 61
+      changed frames and the same 15 carrying an out-of-cell change; that sweep's 128 pngs open and match their
+      logged md5s). The two rows below record what each one did.
+- [x] **Step 76 finding, fixed in step 76: no patrolling minion arrived at a waypoint.** `Minions::Tick` measured the
+      8 u arrival from the body's centre, 9 below the waypoints the levels place at the original's entity height, so
+      every patroller crossed its first waypoint and turned on every tick after: once drawn, a 30 Hz row 1/2 strobe
+      (MEASURED: 81 flips in 81 frames on 3-23, `5.1/verify1/turn`). Now measured from the entity point, the body's
+      centre less 11.1 (`minions.json` `body.entity_above_feet_px` 18.1 less `radius_px` 7): over 1,083 tracked
+      knight-frames the facing changes only where a hold ends, and G5a-4 and G5a-8 are measured on captures. The
+      patrols' gameplay changes with it, each as the original plays it: knights carry the keys on their routes (11
+      levels), press 3-15's button and weigh 3-22's seesaw. Step 76's non-regression row (changes only in knights'
+      and the player's cells) is therefore NOT MET as written on 10 of those levels' f420 frames, recorded there.
+- [x] **Step 76 finding (the second verification), fixed in step 76: a knight's carried key rode at its boots.**
+      `Carry::Acquire` and `Carry::Trail` measured the pickup and led the key from the carrier's body centre;
+      `ETHCallback_key` measures it from the carrier's `GetPositionXY` (ins 744-753) and leads the key to that same
+      point (ins 932-957 the leash and `forceFollowUpPosition`, 959-976 `followUp`) - the ENTITY's point, 11.1 above
+      a minion's body centre (`dark_mage.ent` carries `minion.ent`'s compound). Invisible until the arrival fix let
+      a knight reach a key; then the key stood at its boots on 11 f420 frames. Now `Carry::Carrier` carries a body
+      AND its point, and `Game` offers each minion at its centre less `Minions::Rules::EntityAboveCentrePx()`.
+      MEASURED (`out/parity/visuals/5.1/fix2/work/key_fix2.py`): the key's yellow inside the knight's cell falls
+      45 -> 26 px on 3-10 and 136 -> 28 px on 3-17, and its centroid from 19.5 and 23.1 u below the cell's centre to
+      2.4 and 3.5 u above it, against 1.5 u below in the original's `3-10_t8.0` and `_h6.3` - the edge behind the
+      shoulder the original draws, with a residual of 3.9-5.0 u in height where the error was 21.0-24.6 u.
+      `test_mp_keys` pins the point (124 checks).
+- [ ] **Step 76 deviation, the player's carrier point**: the player is offered to keys and shock diamonds at its
+      capsule's centre, **22 u over its feet** (`data/player.json`'s 20 x 44 body, the remake's guess), where the
+      original's entity point stands **18.1** over them (`dark_mage.ent`'s compound, `ETHCompoundShape.cpp:66-69`).
+      So a key or a diamond the player carries rides 3.9 u low, and both its 26 and the diamond's 30 are polled from
+      3.9 u low. Not applied here: the capsule is the player's body to settle, not the carry's. Next: the player's
+      body, with `Carry::Carrier`'s point already in place to take it.
+- [ ] **Step 76 deviation, a shock diamond's prey point**: `Diamonds::Tick` measures its 30 to a minion from that
+      minion's body centre; `ETHCallback_shock_diamond` ins 421-430 measure it from the minion's `GetPositionXY`,
+      11.1 higher, which is about 3.7 u more reach on a shared floor. Next: Diamonds, with the same point.
+- [ ] **Step 76 deviation, the lone guards' coast** (beside R5): the original's guard is frictionless (`minion.ent`
+      friction 0), so once `shouldntMove` stops driving it at the wider 16 it coasts on to its 8, arrives, adopts the
+      999999999 hold and is braked to a stop on column 0. The port's body grips (`kBodyFriction` 1) and stops about
+      where the drive stops: the guards of 3-01 and 3-29 stand **15.1 and 15.2 u short of their posts at f420, on a
+      stride cell (cell 11)**, and never serve a hold (measured on 2 of the 6 lone guards; the other four stand where
+      the capture, read at camera x 0, cannot place them). Next: a frictionless minion body, after reading what the
+      engine's friction combine gives against a floor of 1.
+- [ ] **Step 76 deviation, G5a-5 lit R >= 60**: required R >= 60 inside the mask of every lit knight on 3-05 and 3-23.
+      On the brief's frames (f270-f420) 18 of 18 pass (R 60.2-67.9 on this round's captures, 60.2-68.0 before
+      them) - **by two tenths of a grey level at the bottom, so the row is not headroom in its own window
+      either** (the third verification reads that lowest detection at 60.16); 6.3 and 11.4 must not read
+      >= 60 as slack. On the widened series (f120-f840 every 30),
+      **one detection sits ON the line and the result flips with the sub-pixel centre the mask is placed at**:
+      3-05 f210 reads **59.9** at the step's centre (79 of 80) and **60.02** at a render-model best centre
+      (80 of 80 - the verification's reading, re-measured by the third round: 60.02,
+      `out/parity/visuals/5.1/fix3/work/g5_ratio3.py`). It is a stride cell 5 (row 1, column 1), whose own texels
+      average **60.0** inside the same alpha >= 200 mask (columns 0 and 2 67.2-67.3, column 3 63.7), and **the
+      original's own frames never show a column-1 cell** - its eight lit knights on 3-05 and 3-23 stand on columns
+      0 and 2, texels 67.17-67.38 - so the 60 was set where nothing can fail it. **The measured residual, which the
+      gate does not capture:** the original draws its lit knight at **1.019-1.023x** its cell's own texel mean
+      (drawn R 68.61-68.87, 8 of 8 library knights) where the port draws at **1.000-1.001x**, about 2% dimmer on
+      every cell - which is the whole reason a column-1 cell lands on 60. Next: the owner's call whether the row
+      reads standing cells only, or R at or above 0.98x the drawn cell's own texel mean, and whether the 2% is
+      worth chasing - a gate re-spec, not a tuned threshold.
 - [x] **System 6 texture tiers**: hd/fullhd per file (fullhd skies are 512 u wide). Converter + port together, or sprites
       draw twice too big; the Sprite offset × scale trap applies. Built by orders 0.2, 2.1, 2.2 and 2.3 (SE steps 61, 65,
       66 and 67; MPR `e9611e4`) and step 74 for track B's two pictures. What is left is in those steps' RECORDED

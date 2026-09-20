@@ -133,7 +133,7 @@ struct State {
     // player alone. `prey` is every minion still standing. Returns the minion
     // bodies a shock diamond struck, which the caller must hand to Minions::Take
     // - this module never destroys one itself.
-    std::vector<entt::entity> Tick(entt::registry& registry, const std::vector<entt::entity>& carriers,
+    std::vector<entt::entity> Tick(entt::registry& registry, const std::vector<Carry::Carrier>& carriers,
                                    const std::vector<entt::entity>& prey, float dt);
 
     const Diamond* Find(const std::string& name) const;
