@@ -79,6 +79,8 @@ main and pushed, and "Step" is the SE planning doc's number since the merge. The
 section. Where they have rows below, those rows stay open. Next: batches 5-13 (about 25 steps).
 **3.4 is out of batch order on purpose**: §7 had dropped it for "no data, no footage, no decode", and §8.13 proposed
 it back from decode D10 after batch 3 had closed, so it is built during batch 5's run and filed in its own place here.
+**13.2 is out of batch order on purpose too**: §8.13 named it ready from decode D5 - the sheet swap, the glow and the
+bob are one script gate and need no brief of their own - so it is built during batch 5's run and filed last here.
 
 | Order | What | Outcome | Commit | Step |
 |---|---|---|---|---|
@@ -99,6 +101,7 @@ it back from decode D10 after batch 3 had closed, so it is built during batch 5'
 | 4.3 | gravity-well green ring | committed with two recorded deviations, neither a failing gate row: the `test_mp_wells` gate is met across two suites, and the ring exists from the first frame | `6949cc3` | 73 |
 | 5.1 | minions and knights on their sheets | committed with deviations, and **two sim changes applied under no adopted ruling - proposed R24 (the patrol's arrival point) and R25 (a carrier's point), THE OWNER'S TO RULE** (the "Step 76" rows below). Two gate rows NOT MET as written and recorded, not tuned: the non-regression sweep on 10 of the 128 f420 frames, where the repaired patrols carry keys, press 3-15's button and weigh 3-22's seesaw (each checked against the original's own frame and moving toward it), and G5a-5's lit R on one widened-series detection that sits on the line. Three deviations left to their owners: the lone guards' coast, the player's carrier point, a shock diamond's prey point | `9d25691` | 76 |
 | 5.2 | the 2-32 dragon and its claw follow the sim | committed with deviations. One gate row NOT MET as written and recorded, not tuned: `test_mp_dragon` "stays at 151" reads **230 checks, 0 failures** - **R19** and 8.13 ("fireball direction pending R19") rewrite the aim the suite pinned, and the diff removes no assertion. Two deviations left to the owner (the "Step 77" rows below): two clock bases where the original keeps one, and the `2-32_h2.8`-versus-f168 flight-timing gap, which predates the step | `cbbf169` | 77 |
+| 13.2 | the weightless rooms' door: shadowless sheet, glow, bob | committed with four recorded deviations, no gate row unmet. Built from decode D5 as §8.13 amends §7: `window01_shadowless.png` on the 17 levels that carry `shadowless_door` (4-02 to 4-18), `door_highlight.ent` at the door's point, 128 x 192 u, additive, at depth -22 (a depth in the LEVEL's units - `readProperties` runs before `scaleEntities`), and the 1 u / 1.2 rad/s bob of door, `door_bg` and glow on the 18 `no_gravity` levels. Measured: the glow on exactly 17 of 128 levels; its quad inside the node's prediction to a pixel; least change 0 (additive); mean |after - before - texel| 1.080 of 255; mean |change| 0.047 on the stone in front of it against the 216.0 it would add were it not behind; the bob 0.9996 u at 1.2000 rad/s, period 5.2359 s, its zero crossing at frame 78.52 against 78.54. **Deviations**: (1) the exit's SENSOR does not move with the picture - `linearMotion` ends in `SetPosition` on a body `door.ent` carries (8 x 57 u at (0,20)); the port bobs pictures alone, as `sim/Motion` does everywhere, and it is proposed to the owner beside R21 (row below); (2) the glow's band magnitudes are NOT gated against the original, by §8.13's own instruction (D5 measured them about 40 % under the 1x prediction); (3) 4-19, the one weightless level with no swap and no glow, is not a capture gate - its rocket door sits outside the f420 camera - and is pinned by the 128-level census and the layer's negative case instead; (4) the bucket-visibility clock is not built, as for 3.4. **K13**: the glow is a new between-slot user at `slotAfter(-22)`, pushed last in `buildSprites` so no dial or ring slot moves; §8.13 already lists the row for 6.3's table. **K8** does not arise: the start angle is the constant 0, and the 111 byte-identical levels of the sweep say no phase moved. **Sweep baseline**: `13.2/after/sweep` now stands for all 128 levels, superseding `5.2/verify1/sweep` and 3.4's one-row `3-15` exception | `dc8d3cc` | 79 |
 
 Merge `e81c21b` (§0). Integration step 74 (`591e143`, `7281ca5`) sends the well ring and the crystal dial through the
 tier resolver. The ten rings now draw `hd/white_ring.png`. The dial keeps `timer.png`, which has no tier file. It
@@ -315,6 +318,16 @@ repository rather than the engine's; 5.2 (planning step 77) follows it.
       body-linked picture in the port, not the button's alone, which is why step 78 recorded it rather than changing
       it. Next: the owner's call on whether a body's picture is drawn at its tick's own position, then a re-capture of
       the committed baselines - it moves any frame taken while a body is moving.
+- [ ] **Step 79 deviation (order 13.2): the exit's sensor does not move with the bobbing door.** `linearMotion` ends in
+      `SetPosition` (ins 180-208), and `door.ent` is `static="1"` with a `<Collision>` (Position (0,20), Size (8,57)),
+      so the original moves the exit's sensor body with its picture on all 18 `no_gravity` levels. The port bobs
+      pictures alone - `syncSprites` adds the offset to the quads and `Goals::State::exit` stays where the level put it
+      - which is what `sim/Motion` does for every other `linearMotion` (the crystal's and the key's pick-up ranges,
+      step 69). One unit either way on a box 57 units tall changes by a frame or two WHEN the exit is reached, never
+      WHETHER, so it fails no gate of step 79 and was recorded rather than built. Recorded in `motions.json`
+      `door._not_built`. Next: the owner's ruling, proposed beside R21 (which moved the button's body under its
+      picture) - either offset the exit trigger by the bob each tick, as `SetPosition` does, or rule that the port's
+      scripted motions move pictures only.
 - [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 71**; the red blink (0.2 → 0.4 → 0.2
       on 300 ms legs) and the 10°/s turn — **built, SE step 72** (order 4.2), with the five deviations above. What is
       left of the system: the refusal radius stays 16×scale in the port against the decoded **32×scale**
