@@ -100,6 +100,72 @@ void TheRowsAreTheDecodedCalls() {
     CHECK(appear.turn == Effects::Turn::Fixed);
     CHECK_EQ(appear.angleDeg, 0.0);
     CHECK_EQ(appear.scale, 1.0);
+
+    // MainCharacter's own: the constructor's AddScaledEntity (#85-101) and
+    // updateEyes' offset (#15-31), every number in level units because the
+    // vector3 overload of g_scale.scale multiplies all three components.
+    const Effects::EyeRule& eyes = rules.eyes;
+    CHECK_MSG(eyes.entity == "red_eyes.ent", "eyes: " + eyes.entity);
+    CHECK_EQ(eyes.xFrameAboveSeven, 7.0);
+    CHECK_EQ(eyes.xElse, -7.0);
+    CHECK_EQ(eyes.y, -14.25);
+    CHECK_EQ(eyes.yNoGravity, -15.65);
+    CHECK_EQ(eyes.z, 1.0);
+    CHECK_EQ(eyes.scale, 1.0);
+    CHECK(eyes.hideWithPlayer);
+}
+
+// ---- the eyes -----------------------------------------------------------------
+
+// updateEyes #15-31, cell by cell of dark_mage.ent's 4 x 4 sheet: rows 0 and 1
+// (frames 0-7, pushing left and walking left) take -7, rows 2 and 3 (frames 8-15,
+// walking right and pushing right) take +7. The y is the character's noGravity
+// flag and nothing else, and the z is the same 1 either way.
+void TheEyeSideIsTheCellTheCharacterIsDrawnOn() {
+    const Effects::Rules rules = TheRules();
+    for (int frame = 0; frame <= 15; ++frame) {
+        const glm::dvec3 offset = Effects::EyeOffset(rules.eyes, frame, false);
+        const double want = frame > 7 ? 7.0 : -7.0;
+        CHECK_MSG(offset.x == want, "frame " + Num(frame) + " puts the eye at x " + Num(offset.x));
+        CHECK_MSG(offset.y == -14.25 && offset.z == 1.0, "frame " + Num(frame) + " at y " + Num(offset.y));
+        const glm::dvec3 weightless = Effects::EyeOffset(rules.eyes, frame, true);
+        CHECK_MSG(weightless.y == -15.65, "frame " + Num(frame) + " weightless at y " + Num(weightless.y));
+        CHECK_MSG(weightless.x == want && weightless.z == 1.0, "weightless takes the same x and z");
+    }
+    // The four cells the port actually draws the player on: the idle row 2 column
+    // 0 a level starts with (art.json initial_direction), walking left, and the
+    // two pushing rows, 0 facing left and 3 any other way (findFinalDirection).
+    CHECK_EQ(Effects::EyeOffset(rules.eyes, 8, false).x, 7.0);   // idle and walking right
+    CHECK_EQ(Effects::EyeOffset(rules.eyes, 4, false).x, -7.0);  // walking left
+    CHECK_EQ(Effects::EyeOffset(rules.eyes, 3, false).x, -7.0);  // pushing left
+    CHECK_EQ(Effects::EyeOffset(rules.eyes, 12, false).x, 7.0);  // pushing right
+}
+
+// The whole call, as the layer spawns it: the character's point plus the offset,
+// the character's own depth plus the offset's z, turned 0 (AddScaledEntity passes
+// 0f) and at the script's scale.
+void TheEyesAreAddedOnTheCharacter() {
+    const Effects::Rules rules = TheRules();
+    const glm::dvec2 character(125.9, 83.8);
+    // art.json's player depth: the decoded 4 over the level's scale factor at
+    // 720 p (R10), which is what MagicPortalsLayer passes.
+    const double characterZ = 4.0 / 2.8125;
+
+    const Effects::Spawn right = Effects::RedEyes(rules, character, characterZ, 8, false);
+    CHECK_MSG(right.entity == "red_eyes.ent", right.entity);
+    CHECK_MSG(Near(right.atPx.x, character.x + 7.0, 1e-9) && Near(right.atPx.y, character.y - 14.25, 1e-9),
+              "the eyes at " + At(right.atPx));
+    CHECK_MSG(Near(right.z, characterZ + 1.0, 1e-9) && right.zScaled, "at z " + Num(right.z));
+    CHECK_EQ(right.angleDeg, 0.0f);
+    CHECK_EQ(right.scale, 1.0);
+
+    const Effects::Spawn left = Effects::RedEyes(rules, character, characterZ, 4, false);
+    CHECK_MSG(Near(left.atPx.x, character.x - 7.0, 1e-9), "facing left at x " + Num(left.atPx.x));
+    CHECK_MSG(Near(left.atPx.x - right.atPx.x, -14.0, 1e-9), "the turn moves it 14 units");
+
+    const Effects::Spawn weightless = Effects::RedEyes(rules, character, characterZ, 8, true);
+    CHECK_MSG(Near(weightless.atPx.y, character.y - 15.65, 1e-9), "weightless at y " + Num(weightless.atPx.y));
+    CHECK_MSG(Near(weightless.z, right.z, 1e-9), "and at the same depth");
 }
 
 // ---- the arithmetic -----------------------------------------------------------
@@ -246,6 +312,15 @@ void ARowMissingAFactIsRefused() {
     refused("appear_turned.json", "\"angle\": 0,", "\"angle\": \"toward_traveller_minus_90\",", "appear_effect");
     refused("appear_offset.json", "\"offset_units\": 0,\n    \"z\": {\"value\": 2,",
             "\"offset_units\": 3,\n    \"z\": {\"value\": 2,", "appear_effect");
+    refused("no_eyes.json", "\"red_eyes\": {", "\"red_eyes_gone\": {", "red_eyes");
+    refused("no_eye_x.json", "\"x_frame_gt_7\": 7,", "", "red_eyes.offset_units.x_frame_gt_7");
+    refused("no_eye_zerog.json", "\"y_zero_g\": -15.65,", "", "red_eyes.offset_units.y_zero_g");
+    refused("no_eye_z.json", "\"z\": 1\n    },", "\"z\": \"one\"\n    },", "red_eyes.offset_units.z");
+    refused("eye_scale.json", "\"scale\": 1,\n    \"hide_with_player\"", "\"scale\": -1,\n    \"hide_with_player\"",
+            "red_eyes.scale");
+    refused("no_eye_hide.json", "\"hide_with_player\": true,", "", "red_eyes.hide_with_player");
+    refused("eye_shown.json", "\"hide_with_player\": true,", "\"hide_with_player\": false,",
+            "red_eyes.hide_with_player");
 
     Effects::Rules rules;
     std::string why;
@@ -257,6 +332,8 @@ void ARowMissingAFactIsRefused() {
 
 int main() {
     TheRowsAreTheDecodedCalls();
+    TheEyeSideIsTheCellTheCharacterIsDrawnOn();
+    TheEyesAreAddedOnTheCharacter();
     AVanishLandsWhereTheScriptPutsIt();
     TheTurnFollowsTheSideTheTravellerCameFrom();
     TheLoadingScreenIsTheSameCall();

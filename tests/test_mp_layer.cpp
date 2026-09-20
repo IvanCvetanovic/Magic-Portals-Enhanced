@@ -6977,6 +6977,24 @@ void TheTableIsTheFractionTheLayerDrawsAt() {
 // zero exactly, and every row is then anchored to a real slot rather than to its
 // neighbour. A case that only checked halo == picture + 1/4 would pass with the
 // whole effect half a slot too deep.
+// EVERY LEVEL NOW ADDS ONE EFFECT AS IT LOADS: MainCharacter's red eyes, which
+// the constructor adds on every level (effects.json red_eyes; the visuals plan's
+// 7.1). So it is number 1 on every level, a case that adds its own starts from
+// number 2, and every case below looks its own up by the id SpawnEffect gave it
+// rather than by where it sits in the list.
+//
+// A COPY, not a pointer: EffectReports() returns its vector by value, so a
+// pointer into ByIdIn(layer.EffectReports(), id) would dangle the moment the
+// statement ended - and read a plausible z beside an empty systemZ, which is
+// exactly how this was found. The id of what comes back is 0 when there is no
+// such effect, since SpawnEffect numbers from 1.
+MagicPortalsLayer::EffectReport ByIdIn(const std::vector<MagicPortalsLayer::EffectReport>& reports, int id) {
+    for (const MagicPortalsLayer::EffectReport& report : reports) {
+        if (report.id == id) return report;
+    }
+    return MagicPortalsLayer::EffectReport{};
+}
+
 void AnEffectsPictureHaloAndSystemsStandWhereTheTableSays() {
     if (!OriginalArtIsThere("AnEffectsPictureHaloAndSystemsStandWhereTheTableSays")) return;
     entt::registry registry;
@@ -7011,14 +7029,15 @@ void AnEffectsPictureHaloAndSystemsStandWhereTheTableSays() {
     torch.entity = "light.ent";
     torch.atPx = glm::dvec2(288.0, 64.0);
     torch.zUnits = -20.0;
-    CHECK(layer.SpawnEffect(registry, torch) > 0);
+    const int torchId = layer.SpawnEffect(registry, torch);
+    CHECK(torchId > 0);
     std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
-    CHECK(reports.size() == 1);
-    if (reports.size() != 1) {
+    CHECK_MSG(reports.size() == 2, "the level's own eyes and this lamp: " + std::to_string(reports.size()));
+    if (ByIdIn(reports, torchId).id == 0) {
         layer.OnDetach(registry);
         return;
     }
-    const MagicPortalsLayer::EffectReport lamp = reports[0];
+    const MagicPortalsLayer::EffectReport lamp = ByIdIn(reports, torchId);
     // Read before it is used, and not guarded away: a halo that failed to load
     // would otherwise turn into a green check.
     CHECK_MSG(lamp.drawn, "light.ent draws a picture");
@@ -7054,19 +7073,21 @@ void AnEffectsPictureHaloAndSystemsStandWhereTheTableSays() {
     gate.entity = "portal.ent";
     gate.atPx = glm::dvec2(320.0, 64.0);
     gate.zUnits = -20.0;
-    CHECK(layer.SpawnEffect(registry, gate) > 0);
+    const int gateId = layer.SpawnEffect(registry, gate);
+    CHECK(gateId > 0);
     // The same entity ten units in front, whose PICTURE therefore stands in the
     // slot the first one's SYSTEMS must be in. That is what <StartPoint> z means,
     // measured against the level rather than assumed from the number.
     MagicPortalsLayer::EffectSpawn probe = gate;
     probe.zUnits = -10.0;
     probe.atPx = glm::dvec2(352.0, 64.0);
-    CHECK(layer.SpawnEffect(registry, probe) > 0);
+    const int probeId = layer.SpawnEffect(registry, probe);
+    CHECK(probeId > 0);
     reports = layer.EffectReports();
-    CHECK(reports.size() == 3);
-    if (reports.size() == 3 && reports[1].systemZ.size() == 2) {
-        const MagicPortalsLayer::EffectReport& two = reports[1];
-        const MagicPortalsLayer::EffectReport& atTen = reports[2];
+    CHECK_MSG(reports.size() == 4, "the eyes and three added: " + std::to_string(reports.size()));
+    const MagicPortalsLayer::EffectReport two = ByIdIn(reports, gateId);
+    const MagicPortalsLayer::EffectReport atTen = ByIdIn(reports, probeId);
+    if (two.id != 0 && atTen.id != 0 && two.systemZ.size() == 2) {
         CHECK_MSG(std::fabs(fractionOfSlot(two.z) + 0.5) < tol,
                   "portal.ent's picture half a slot behind its slot: " + std::to_string(fractionOfSlot(two.z)));
         int wrong = 0;
@@ -7134,13 +7155,15 @@ void AnEffectIsAddedLivesAndIsFreed() {
     spawn.zUnits = 32.0;
     spawn.angleDeg = 90.0;
     const int id = layer.SpawnEffect(registry, spawn);
-    CHECK_MSG(id == 1, "the first effect added is number 1: " + std::to_string(id));
+    CHECK_MSG(id == 2, "the eyes are number 1 on every level, so this is number 2: " + std::to_string(id));
     std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
-    CHECK(reports.size() == 1);
-    if (reports.size() != 1) return;
-    CHECK_MSG(reports[0].temporary && reports[0].systems == 1 && !reports[0].drawn && !reports[0].hasLight,
+    CHECK_MSG(reports.size() == 2, "the level's own eyes and this one: " + std::to_string(reports.size()));
+    const MagicPortalsLayer::EffectReport suck = ByIdIn(reports, id);
+    if (suck.id == 0) return;
+    CHECK_MSG(suck.temporary && suck.systems == 1 && !suck.drawn && !suck.hasLight,
               "suck_effect.ent: one system, no picture, no light, temporary");
-    CHECK_MSG(reports[0].atPx == spawn.atPx, "added where the call puts it: " + Point(reports[0].atPx));
+    CHECK_MSG(suck.alwaysActive, "and always active, so the engine keeps it burning down even hidden");
+    CHECK_MSG(suck.atPx == spawn.atPx, "added where the call puts it: " + Point(suck.atPx));
 
     // Live: its particles are drawn, and they are its own quads and not the
     // level's (they carry their own tag).
@@ -7149,16 +7172,25 @@ void AnEffectIsAddedLivesAndIsFreed() {
     for (int frame = 0; frame < 240 && freedOn < 0; ++frame) {
         tickWith(layer, registry, kRest, {}, {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-        if (Tagged(registry, "Magic Portals Effect Particle") > 0) ++liveFrames;
-        if (layer.EffectReports().empty()) freedOn = frame + 1;
+        const std::vector<MagicPortalsLayer::EffectReport> now = layer.EffectReports();
+        const MagicPortalsLayer::EffectReport mine = ByIdIn(now, id);
+        if (mine.quads > 0) ++liveFrames;
+        if (mine.id == 0) freedOn = frame + 1;
     }
     CHECK_MSG(liveFrames > 10, "its particles are drawn while it lives: " + std::to_string(liveFrames) + " frames");
     CHECK_MSG(freedOn > 0, "a temporary effect is freed once its pool is over");
-    CHECK_MSG(layer.EffectsSpawned() == 1 && layer.EffectsFreed() == 1,
-              "one added, one freed: " + std::to_string(layer.EffectsSpawned()) + " / " +
+    CHECK_MSG(layer.EffectsSpawned() == 2 && layer.EffectsFreed() == 1,
+              "the eyes and this one added, this one freed: " + std::to_string(layer.EffectsSpawned()) + " / " +
                   std::to_string(layer.EffectsFreed()));
-    CHECK_MSG(Tagged(registry, "Magic Portals Effect Particle") == 0 && Tagged(registry, "Magic Portals Effect") == 0,
-              "and it leaves no quad behind");
+    // Its quads go with it: what is left on the registry is exactly what the
+    // effects still standing say they hold, which is the eyes' pool and nothing
+    // else. Counting "no quad at all" would be the old level, with no eyes in it.
+    int heldQuads = 0;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) heldQuads += report.quads;
+    CHECK_MSG(Tagged(registry, "Magic Portals Effect Particle") == heldQuads &&
+                  Tagged(registry, "Magic Portals Effect") == 0,
+              "and it leaves no quad behind: " + std::to_string(Tagged(registry, "Magic Portals Effect Particle")) +
+                  " on the registry against " + std::to_string(heldQuads) + " the live effects hold");
     std::printf("  suck_effect.ent: drawn on %d frames, freed on frame %d\n", liveFrames, freedOn);
     layer.OnDetach(registry);
 }
@@ -7193,40 +7225,188 @@ void AnEffectFollowsItsOwnerAndNothingHappensOnATick() {
                                                      : std::vector<std::string>{MagicPortalsLayer::kLeft},
                  {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-        const std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
-        if (reports.empty()) break;
+        const MagicPortalsLayer::EffectReport mine = ByIdIn(layer.EffectReports(), id);
+        if (mine.id == 0) break;
         const glm::dvec2 want = playerPx(registry, layer) + spawn.follow.offsetPx;
-        worst = std::max(worst, glm::length(reports[0].atPx - want));
+        worst = std::max(worst, glm::length(mine.atPx - want));
     }
     const std::vector<MagicPortalsLayer::EffectReport> after = layer.EffectReports();
-    CHECK_MSG(after.size() == 1 && !after[0].temporary,
+    const MagicPortalsLayer::EffectReport carried = ByIdIn(after, id);
+    CHECK_MSG(carried.id != 0 && !carried.temporary,
               "an effect with a repeat-0 system is never over, so it stays until its owner goes");
+    CHECK_MSG(carried.id != 0 && !carried.alwaysActive,
+              "and it is not always active either, so being hidden freezes it");
     CHECK_MSG(worst < 0.5, "it is carried by its owner: worst " + std::to_string(worst) + " units off");
 
     // NOTHING ON THE TICK. Ticks with no frame between them add no quad and move
     // no particle: the effects runtime is the frame's, as the particles are.
     const int quadsBefore = Tagged(registry, "Magic Portals Effect Particle");
-    const int activeBefore = after.empty() ? 0 : after[0].active;
+    const int activeBefore = carried.active;
     for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
-    const std::vector<MagicPortalsLayer::EffectReport> still = layer.EffectReports();
+    const MagicPortalsLayer::EffectReport still = ByIdIn(layer.EffectReports(), id);
     CHECK_MSG(Tagged(registry, "Magic Portals Effect Particle") == quadsBefore,
               "no quad is made on a tick: " + std::to_string(quadsBefore) + " before, " +
                   std::to_string(Tagged(registry, "Magic Portals Effect Particle")) + " after 30 ticks");
-    CHECK_MSG(still.size() == 1 && still[0].active == activeBefore, "and no particle moves on one");
-    CHECK_MSG(layer.EffectsSpawned() == 1, "and latchSimEffects queues nothing until a rule is wired");
+    CHECK_MSG(still.id != 0 && still.active == activeBefore, "and no particle moves on one");
+    CHECK_MSG(layer.EffectsSpawned() == 2, "and latchSimEffects queues nothing until a rule is wired");
 
     // AND NOTHING OUTLIVES ITS LEVEL: a retry takes the level's effects with it,
-    // as it takes its emitters.
+    // as it takes its emitters. Read before the frame that follows draws: the
+    // retry has already added the new level's own eyes, whose pool has no quad
+    // until a frame asks for one.
     press(layer, registry, MagicPortalsLayer::kRetry);
-    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-    CHECK_MSG(layer.EffectReports().empty() && layer.EffectsFreed() == 1,
-              "a retry frees what the level added");
+    CHECK_MSG(ByIdIn(layer.EffectReports(), id).id == 0 && layer.EffectsFreed() == 2,
+              "a retry frees what the level added, the eyes with it: " + std::to_string(layer.EffectsFreed()) +
+                  " freed");
+    CHECK_MSG(layer.EffectReports().size() == 1 && layer.EffectsSpawned() == 3,
+              "and the level it loads adds its own eyes again");
     CHECK_MSG(Tagged(registry, "Magic Portals Effect") == 0 && Tagged(registry, "Magic Portals Effect Particle") == 0 &&
                   Tagged(registry, "Magic Portals Effect Light") == 0 &&
                   Tagged(registry, "Magic Portals Effect Halo") == 0,
               "and no quad, light or halo of it is left in the registry");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     std::printf("  red_eyes.ent carried by the player: worst %.4f units off over 300 frames\n", worst);
     layer.OnDetach(registry);
+}
+
+// 7.1. THE PLAYER'S RED EYES (effects.json red_eyes), the one effect every level
+// carries. MainCharacter's constructor adds red_eyes.ent at the character
+// (#85-101) and updateEyes puts it on the face every frame (#15-31): 7 units to
+// the side the drawn cell faces, 14.25 above the character's point, or 15.65
+// where gravity is off - and hides it with the character. Its repeat 0 makes it
+// neither temporary nor always active, so the engine never deletes it and a
+// doorway stops it being updated at all.
+void ThePlayerWearsItsRedEyes() {
+    if (!OriginalArtIsThere("ThePlayerWearsItsRedEyes")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+
+    // BEFORE ANY FRAME HAS RUN. The eyes are added at the END of buildDrawables,
+    // after the player quad, and read the cell that quad was just given - so they
+    // start on the right side rather than being put there by the first syncEyes.
+    // Every other check below runs after a frame, by which point syncEyes has
+    // corrected the offset whatever it was: without this one, buildEyes could sit
+    // anywhere that runs before a frame and nothing would say so.
+    const MagicPortalsLayer::EffectReport born = ByIdIn(layer.EffectReports(), 1);
+    const glm::dvec2 bornOffset = born.id == 0 ? glm::dvec2(1e9) : born.atPx - playerPx(registry, layer);
+    CHECK_MSG(born.id == 1 && NearD(bornOffset.x, 7.0, 1e-9) && NearD(bornOffset.y, -14.25, 1e-9),
+              "added on the face before any frame runs: " + Point(bornOffset));
+
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    const std::vector<MagicPortalsLayer::EffectReport> first = layer.EffectReports();
+    CHECK_MSG(first.size() == 1 && layer.EffectsSpawned() == 1,
+              "the level adds one effect of its own as it loads: " + std::to_string(first.size()));
+    if (first.size() != 1) {
+        layer.OnDetach(registry);
+        return;
+    }
+    CHECK_MSG(first[0].entity == "red_eyes.ent", "which is " + first[0].entity);
+    CHECK_MSG(!first[0].drawn && !first[0].hasLight && first[0].systems == 1,
+              "red_eyes.ent: no <Sprite>, no <Light>, one <ParticleSystem>");
+    CHECK_MSG(!first[0].temporary && !first[0].alwaysActive,
+              "its repeat 0 makes it neither temporary nor always active");
+
+    const auto offset = [&registry, &layer]() {
+        const MagicPortalsLayer::EffectReport eyes = ByIdIn(layer.EffectReports(), 1);
+        return eyes.id == 0 ? glm::dvec2(1e9) : eyes.atPx - playerPx(registry, layer);
+    };
+    // The cell a level starts on is initial_direction's row 2, column 0 - frame
+    // 8 - so GetFrame() > 7 and the eye is on the right.
+    CHECK_MSG(NearD(offset().x, 7.0, 1e-9) && NearD(offset().y, -14.25, 1e-9),
+              "on the right of the face at the level's start: " + Point(offset()));
+    for (int tick = 0; tick < 60; ++tick) {
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kLeft}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(NearD(offset().x, -7.0, 1e-9) && NearD(offset().y, -14.25, 1e-9),
+              "and on the left once the character is drawn on a cell of 0-7: " + Point(offset()));
+
+    // IN FRONT OF THE PLAYER. Its entity stands at the character's own depth plus
+    // 1 and its system's <StartPoint> z 2 on top of that, so its specks are drawn
+    // after the player's picture whatever the level puts between them.
+    const MagicPortalsLayer::EffectReport placed = ByIdIn(layer.EffectReports(), 1);
+    CHECK_MSG(placed.systemZ.size() == 1 && placed.systemZ[0] > layer.PlayerSlotZ(),
+              "its specks stand in front of the player's picture: system z " +
+                  std::to_string(placed.systemZ.empty() ? 0.0f : placed.systemZ[0]) + ", the player's slot " +
+                  std::to_string(layer.PlayerSlotZ()) + ", its own picture " + std::to_string(placed.z));
+
+    // THE CONTROL for the freeze below: while the character is drawn, its eyes
+    // are stepped, so their particles' clock moves on every frame.
+    const double liveAges = ByIdIn(layer.EffectReports(), 1).ageSumMs;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(ByIdIn(layer.EffectReports(), 1).ageSumMs != liveAges,
+              "while the character is drawn its eyes are stepped on every frame");
+
+    // THE DOORWAY. The character is hidden and not deleted (ETHEntity::Hide), so
+    // the eyes are hidden with it - and, not being always active, they are not
+    // updated at all while it is: nothing more is released and nothing is drawn.
+    const auto shown = [&registry]() {
+        int count = 0;
+        for (auto [entity, tag, renderable] : registry.view<TagComponent, RenderableComponent>().each()) {
+            (void)entity;
+            if (tag.tag == "Magic Portals Effect Particle" && renderable.isVisible) ++count;
+        }
+        return count;
+    };
+    int door = -1;
+    for (int tick = 1; tick <= 600 && door < 0; ++tick) {
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (layer.Finishing()) door = tick;
+    }
+    CHECK_MSG(door > 0, "holding right reaches level0's door");
+    const MagicPortalsLayer::EffectReport atDoor = ByIdIn(layer.EffectReports(), 1);
+    CHECK_MSG(atDoor.id == 1 && atDoor.hidden, "the eyes are hidden with the character, not freed");
+    const int released = atDoor.released;
+    const double ageSum = atDoor.ageSumMs;
+    CHECK_MSG(released > 0 && ageSum > 0.0, "and they had been releasing until then: " + std::to_string(released));
+    int drawnAfter = 0;
+    int moved = 0;
+    for (int tick = 0; tick < 60; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        drawnAfter += shown();
+        const MagicPortalsLayer::EffectReport now = ByIdIn(layer.EffectReports(), 1);
+        if (now.id != 1 || now.released != released || now.ageSumMs != ageSum) ++moved;
+    }
+    const MagicPortalsLayer::EffectReport after = ByIdIn(layer.EffectReports(), 1);
+    CHECK_MSG(after.id == 1 && after.released == released,
+              "nothing is released after the door: " + std::to_string(after.released) + " against " +
+                  std::to_string(released));
+    // The pool is 12 and all 12 had been released by the door, so a release count
+    // alone cannot fall: what says the eyes are FROZEN and not merely saturated is
+    // that not one particle's clock moved on any of the 60 frames.
+    CHECK_MSG(moved == 0, "and not one of its particles ages after it: " + std::to_string(moved) +
+                              " of 60 frames moved its clock");
+    CHECK_MSG(drawnAfter == 0, "and not one speck is drawn over 60 frames: " + std::to_string(drawnAfter));
+    std::printf("  red_eyes: %d released and %.1f ms of life by the door on tick %d; %d released and %.1f ms after "
+                "60 frames more, %d frames drawn\n",
+                released, ageSum, door, after.released, after.ageSumMs, drawnAfter);
+    layer.OnDetach(registry);
+
+    // WHERE GRAVITY IS OFF the eye sits 15.65 above the character's point and not
+    // 14.25 (updateEyes #24-31 reads the character's own noGravity flag).
+    entt::registry weightless;
+    publishViewport(weightless);
+    MagicPortalsLayer zero(TestPaths(), "level1c");
+    zero.OnAttach(weightless);
+    CHECK_MSG(zero.SimLevel() != nullptr && zero.ArtError().empty(), zero.LoadError() + zero.ArtError());
+    if (zero.SimLevel() == nullptr || !zero.ArtError().empty()) return;
+    CloseTheLevelStartPopup(zero, weightless);
+    zero.OnUpdate(weightless, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport zeroEyes = ByIdIn(zero.EffectReports(), 1);
+    const glm::dvec2 zeroOffset =
+        zeroEyes.id == 0 ? glm::dvec2(1e9) : zeroEyes.atPx - playerPx(weightless, zero);
+    CHECK_MSG(zero.SimLevel()->noGravity, "level1c is a no_gravity level");
+    CHECK_MSG(NearD(zeroOffset.y, -15.65, 1e-9), "on level1c the eye is 15.65 up: " + Point(zeroOffset));
+    CHECK_MSG(NearD(zeroOffset.x, 7.0, 1e-9), "and on the same side as on a level with gravity");
+    zero.OnDetach(weightless);
 }
 
 // A barrel chain adds one light per blast, and one frame carries 64 of them
@@ -7338,6 +7518,7 @@ void runTests() {
     AnEffectsPictureHaloAndSystemsStandWhereTheTableSays();
     AnEffectIsAddedLivesAndIsFreed();
     AnEffectFollowsItsOwnerAndNothingHappensOnATick();
+    ThePlayerWearsItsRedEyes();
     FiveBlastsFitUnderTheLightCap();
     AnEffectMovesNoParticleOfTheLevels();
     Level31DrawsTheBeholder();

@@ -17,7 +17,9 @@
 // THE ROWS BUILT. vanishEffect and appearEffect (Portal.angelscript): a traveller
 // leaving through a portal is sucked in at the portal's rim on its own side and
 // sparkles where it stood, and the exit portal flashes. Their drawing is step
-// 7.3's; each later effect brings its own row with the step that draws it.
+// 7.3's; each later effect brings its own row with the step that draws it. And
+// red_eyes (MainCharacter), the one effect every level shows: added once at the
+// level's start and moved onto the character's face every frame.
 
 #include <string>
 
@@ -46,10 +48,32 @@ struct Rule {
     double scale = 1.0;       // in g_scale.getScale()s: 1 is the entity at its own size
 };
 
+// The player's red eyes: MainCharacter's own effect, and the one effect every
+// level shows. Not a call site of the shape above - AddScaledEntity takes no
+// angle (ETHScriptWrapper.Scene.cpp:176-178 passes 0f) and the offset is not
+// along any direction but the character's facing - so it has a row of its own.
+//
+// The constructor adds it once at the character's point; updateEyes then moves
+// it every frame onto the face, and hides it with the character.
+struct EyeRule {
+    std::string entity;
+    // g_scale.scale(vector3(eyeX, eyeY, z)) - the vector3 overload multiplies all
+    // THREE components by the scale factor (SGlobalScale::scale, bytes
+    // 5975..6072: vector3::opMul_r), so every number here is in level units.
+    double xFrameAboveSeven = 0.0; // GetFrame() > 7: the sheet's right-facing half
+    double xElse = 0.0;
+    double y = 0.0;
+    double yNoGravity = 0.0;
+    double z = 0.0;                // above the CHARACTER's own depth, not the level's zero
+    double scale = 1.0;            // AddScaledEntity's g_scale.getScale(): 1 in the port's units
+    bool hideWithPlayer = false;   // updateEyes' redEyes.Hide(true) while the character is hidden
+};
+
 struct Rules {
     Rule suck;     // vanishEffect's suck_effect.ent, at the entry portal
     Rule sparkles; // vanishEffect's sparkles.ent, where the traveller stood
     Rule appear;   // appearEffect's appear_effect.ent, at the exit portal
+    EyeRule eyes;  // MainCharacter's red_eyes.ent, on the character's face
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -86,5 +110,17 @@ Spawn Sparkles(const Rules& rules, const glm::dvec2& travellerPx, const glm::dve
 
 // appearEffect(exitPortalPx): at the exit portal.
 Spawn Appear(const Rules& rules, const glm::dvec2& exitPortalPx);
+
+// updateEyes' g_scale.scale(vector3(eyeX, eyeY, z)), in level units: what is
+// added to the CHARACTER's own position, its z included. `drawnFrame` is the
+// character's cell in its 4 x 4 sheet - ETHEntity::GetFrame, which the port reads
+// as SpriteAnimationComponent.firstFrame + frame - so rows 2 and 3 (frames 8-15,
+// walking right and pushing right) take the right-hand x.
+glm::dvec3 EyeOffset(const EyeRule& rule, int drawnFrame, bool noGravity);
+
+// MainCharacter's constructor AddScaledEntity, as updateEyes leaves it on the
+// frame: at the character's point plus that offset, at the character's own depth
+// plus its z, turned 0 and at the rule's scale.
+Spawn RedEyes(const Rules& rules, const glm::dvec2& characterPx, double characterZ, int drawnFrame, bool noGravity);
 
 } // namespace MagicPortals::Effects

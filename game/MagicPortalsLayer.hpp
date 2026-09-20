@@ -401,6 +401,14 @@ public:
         int pool = 0;           // the particles they were made with, summed
         int active = 0;         // GetNumActiveParticles, summed over them
         int quads = 0;          // the pooled particle quads it holds, drawn or not
+        int released = 0;       // the particles that have been released at all, summed
+        // Every particle's elapsed life, summed over every emitter: ONE number
+        // that moves on any frame this effect is stepped and does not move on one
+        // it is not, whatever the pool does. What "frozen" is measured with.
+        double ageSumMs = 0.0;
+        // Whether the engine would go on updating it while it is hidden
+        // (ETHActiveEntityHandler::ShouldEntityBeAlwaysActive).
+        bool alwaysActive = false;
     };
     std::vector<EffectReport> EffectReports() const;
     // How many effects have been added and freed since the layer was attached,
@@ -927,6 +935,16 @@ private:
     // What the TICK adds to the frame's queue. Nothing is wired yet: the rules
     // arrive with the steps that draw each effect.
     void latchSimEffects();
+    // The player's red eyes (effects.json red_eyes; the visuals plan's 7.1).
+    // MainCharacter's constructor adds the entity at the level's start, so
+    // buildEyes runs at the end of buildDrawables - after the player quad, whose
+    // cell it reads - and updateEyes moves it onto the face every frame, so
+    // syncEyes runs beside updateEffects.
+    void buildEyes(entt::registry& registry);
+    void syncEyes(entt::registry& registry);
+    // The character's cell in its 4 x 4 sheet - ETHEntity::GetFrame, which is the
+    // player quad's firstFrame + frame. The last one seen while the quad is gone.
+    int playerDrawnFrame(const entt::registry& registry) const;
     // A light and its halo placed the one way (Lighting::OwnerScaled): a level's
     // placement passes an owner scale of 1, and what a script adds passes its
     // <Scale> times the script's (00_order K7).
@@ -1105,6 +1123,7 @@ private:
     Tiers::Rules m_tierRules;               // the port's tiers.json: which file of a level's image is drawn
     Sky::Controller m_sky;                  // the level's StaticSky, built with its sprites
     Motion::Rules m_motionRules;            // the port's motions.json
+    Effects::Rules m_effectRules;           // the port's effects.json: the calls that add an entity
     // One per crystal and key whose picture is drawn, in the level's drawing order
     // (DrawnSprite::motion). Picture-side only: never Game::Level or the state hash.
     std::vector<Motion::Linear> m_motions;
@@ -1286,6 +1305,14 @@ private:
         glm::dvec2 scale{1.0};    // times its <Scale>: what its picture, halo and light take
         double zUnits = 0.0;
         bool temporary = false; // the engine frees it once its pools are over
+        // Whether the engine updates it while it is HIDDEN. A hidden entity is not
+        // drawn either way (ETHScene.cpp:568, ETHRenderEntity.cpp:396), but only an
+        // always-active one goes on being stepped: the handler's own list is walked
+        // whatever each entry's state (ETHActiveEntityHandler.cpp:119-134), while
+        // anything else is put on the frame list by the bucket walk, which skips a
+        // hidden entity (ETHScene.cpp:568-572, handler :151-157). So a hidden effect
+        // that is not always active FREEZES - it releases nothing more.
+        bool alwaysActive = false;
         bool hidden = false;    // its owner is hidden, so nothing of it draws
         glm::dvec2 cellPx{0.0}; // its picture's frame, scaled; zero when it has none
         float z = 0.0f;         // Slot::Effect
@@ -1323,6 +1350,14 @@ private:
     std::vector<EffectSpawn> m_effectQueue;
     int m_effectsSpawned{0};
     int m_effectsFreed{0};
+    // The player's red eyes, by id: the one effect a level starts with, and the
+    // only one the port moves every frame rather than leaving where it was added.
+    // -1 while the level has none (no art, or the .ent could not be read).
+    int m_eyes{-1};
+    // The cell the player was last drawn on, kept across the door: updateEyes
+    // reads GetFrame every frame, and the quad it comes from is destroyed when the
+    // character is hidden.
+    int m_playerFrame{0};
 
     // ---- sound: the original's AudioManager, carried as data ----------------
     //

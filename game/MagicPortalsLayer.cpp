@@ -241,6 +241,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Sky::LoadRules(m_paths.portData + "/sky.json", m_skyRules, error) &&
                       Tiers::LoadRules(m_paths.portData + "/tiers.json", m_tierRules, error) &&
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
+                      Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
                       Hud::LoadRules(m_paths.portData + "/ui.json", m_hudRules, error) &&
                       Pause::LoadRules(m_paths.portData + "/ui.json", m_pauseRules, error) &&
                       LevelEnd::LoadRules(m_paths.portData + "/ui.json", m_levelEndRules, error) &&
@@ -1110,6 +1111,13 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     effect.zUnits = spawn.zUnits;
     effect.follow = spawn.follow;
     effect.temporary = art.Temporary();
+    // ShouldEntityBeAlwaysActive (ETHActiveEntityHandler.cpp:70-74): temporary, or
+    // dynamic with a callback or a simulated body. The port models the first arm
+    // only, because nothing it spawns has the second: red_eyes has no
+    // ETHCallback_/ETHConstructorCallback_ of its own in the listing and no shape,
+    // and it is the only effect anything can hide. The step that spawns an effect
+    // whose .ent names a callback is the step to widen this.
+    effect.alwaysActive = effect.temporary;
     effect.z = slotAfter(std::round(spawn.zUnits), Slot::Effect);
     effect.haloZ = slotAfter(std::round(spawn.zUnits), Slot::EffectHalo);
     // What it is to follow, before it is counted as added: an effect added to
@@ -1234,6 +1242,7 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     for (Effect& effect : m_effects) freeEffect(registry, effect);
     m_effects.clear();
     m_effectQueue.clear();
+    m_eyes = -1;
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -1278,10 +1287,21 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
                        effect.art.isStatic, ratio, effect.haloZ, !hidden, effect.scale);
         }
 
+        // A HIDDEN entity is not drawn (ETHScene.cpp:568, ETHRenderEntity.cpp:396),
+        // and only an ALWAYS-ACTIVE one is still stepped while it is: the handler
+        // walks its own list whatever each entry's state (:119-134), but anything
+        // else reaches the frame list from the bucket walk, which skips a hidden
+        // entity (ETHScene.cpp:568-572). So the player's eyes in a doorway freeze
+        // where they are and release nothing more, which is what 00_order's 7.1
+        // asks of them; a temporary effect the player carried would go on burning
+        // down unseen.
+        const bool steps = !hidden || effect.alwaysActive;
         bool over = effect.temporary;
         for (Emitter& emitter : effect.emitters) {
-            emitter.owner = Particles::Owner{effect.atPx, effect.angleDeg};
-            stepEmitter(registry, emitter, elapsedMs, random, true);
+            if (steps) {
+                emitter.owner = Particles::Owner{effect.atPx, effect.angleDeg};
+                stepEmitter(registry, emitter, elapsedMs, random, true);
+            }
             if (hidden) {
                 for (entt::entity& quad : emitter.quads) {
                     if (quad != entt::null && registry.valid(quad)) {
@@ -1316,6 +1336,7 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         report.scriptScale = effect.scriptScale;
         report.scale = effect.scale;
         report.temporary = effect.temporary;
+        report.alwaysActive = effect.alwaysActive;
         report.hidden = effect.hidden;
         report.drawn = effect.quad != entt::null;
         report.hasLight = effect.light != entt::null;
@@ -1326,12 +1347,97 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
             report.systemZ.push_back(emitter.z);
             report.active += emitter.active;
             report.pool += static_cast<int>(emitter.particles.size());
+            for (const Particles::Particle& particle : emitter.particles) {
+                if (!particle.released) continue;
+                ++report.released;
+                report.ageSumMs += particle.elapsedMs;
+            }
             report.quads += static_cast<int>(std::count_if(emitter.quads.begin(), emitter.quads.end(),
                                                            [](entt::entity q) { return q != entt::null; }));
         }
         reports.push_back(std::move(report));
     }
     return reports;
+}
+
+// ---- the player's red eyes (effects.json red_eyes; the visuals plan's 7.1) ----
+//
+// The one effect every level shows, and the only one the original both adds at a
+// level's start and moves every frame. MainCharacter's constructor runs
+// AddScaledEntity("red_eyes.ent", entity.GetPosition(), getScale()) (#85-101) and
+// keeps the handle SeekEntity gives it (#105-119); MainCharacter::update then runs
+// updateEyes first thing, before its own pause test (#4), and updateEyes puts the
+// entity at GetPosition() + g_scale.scale(vector3(eyeX, eyeY, 1)) - eyeX the sheet
+// side the character faces, eyeY -14.25 or -15.65 where gravity is off - or hides
+// it while the character is hidden.
+//
+// It has no <Sprite> and one <ParticleSystem> of 12 red hard_halo.png at
+// alphaMode 1 and repeat 0, so what is drawn is a trail of added red specks that
+// live 120 +- 100 ms in WORLD space: the eyes glimmer, and a walk leaves a short
+// wake. Repeat 0 also makes it not temporary, so the engine never deletes it
+// (Art::Entity::Temporary); it goes when the level goes.
+//
+// DEPTH is the table's, as every effect's is: the entity's own z is the
+// CHARACTER's plus the offset's 1, and its system's <StartPoint> z 2 goes on top
+// of that before the slot is counted, so the specks stand in front of the player
+// and of everything the level puts between them.
+//
+// THE STREAM is m_effectRandom (00_order K8). This is the step the conflict was
+// written for: an emitter on all 128 levels drawing from the placement stream
+// would move every particle of every level.
+
+int MagicPortalsLayer::playerDrawnFrame(const entt::registry& registry) const {
+    // ETHEntity::GetFrame: the cell in the 4 x 4 sheet, which for the port's quad
+    // is the run's first cell plus how far into the run it has played. Kept from
+    // the last frame that had one, because the quad is destroyed when the
+    // character is hidden and updateEyes still reads a frame on that frame.
+    if (m_playerQuad == entt::null || !registry.valid(m_playerQuad)) return m_playerFrame;
+    const auto* animation = registry.try_get<Supersonic::SpriteAnimationComponent>(m_playerQuad);
+    if (animation == nullptr) return m_playerFrame;
+    return static_cast<int>(animation->firstFrame + animation->frame);
+}
+
+void MagicPortalsLayer::buildEyes(entt::registry& registry) {
+    using namespace Supersonic;
+    m_eyes = -1;
+    m_playerFrame = 0;
+    if (m_level.player == entt::null || !registry.valid(m_level.player)) return;
+    // The cell the level starts on: initial_direction's row on the idle column,
+    // which buildDrawables has already written onto the quad.
+    m_playerFrame = playerDrawnFrame(registry);
+    const glm::dvec2 atPx = Units::ToPixels(registry.get<TransformComponent>(m_level.player).position);
+    // Where the constructor's entity stands once the first updateEyes has moved
+    // it. The port adds it there rather than at the bare GetPosition() of the
+    // constructor: the original's first frame runs update before it draws, so no
+    // frame of the original's ever shows the eyes at the character's own point.
+    const Effects::Spawn spawn =
+        Effects::RedEyes(m_effectRules, atPx, m_playerZ, m_playerFrame, m_level.noGravity);
+    EffectSpawn add;
+    add.entity = spawn.entity;
+    add.atPx = spawn.atPx;
+    add.zUnits = spawn.z;
+    add.angleDeg = spawn.angleDeg;
+    add.scale = spawn.scale;
+    // Carried by the player, which is what updateEyes' SetPosition every frame and
+    // its Hide(true) together are: the port's player owner follows AND hides, and
+    // effects.json's hide_with_player is refused unless it says so.
+    add.follow.kind = EffectOwner::Kind::Player;
+    add.follow.offsetPx = spawn.atPx - atPx;
+    m_eyes = SpawnEffect(registry, add);
+}
+
+void MagicPortalsLayer::syncEyes(entt::registry& registry) {
+    if (m_eyes < 0) return;
+    m_playerFrame = playerDrawnFrame(registry);
+    const glm::dvec3 offset = Effects::EyeOffset(m_effectRules.eyes, m_playerFrame, m_level.noGravity);
+    for (Effect& effect : m_effects) {
+        if (effect.id != m_eyes) continue;
+        // Only the offset: the z is the same number every frame, and the point it
+        // is measured from is the owner's, which updateEffects reads.
+        effect.follow.offsetPx = glm::dvec2(offset);
+        return;
+    }
+    m_eyes = -1; // freed with its owner, so there is nothing left to move
 }
 
 std::vector<MagicPortalsLayer::MinionReport> MagicPortalsLayer::MinionReports() const {
@@ -2648,6 +2754,11 @@ void MagicPortalsLayer::buildDrawables(entt::registry& registry) {
         animation.frameCount = 1;
         animation.playing = false;
     }
+
+    // AND THE ONE ENTITY THE CHARACTER'S OWN CONSTRUCTOR ADDS on every level, last
+    // of all: the eyes read the cell the player quad was just given, so they must
+    // be added after it and not with the level's own emitters.
+    buildEyes(registry);
 }
 
 // ---- the level's art ----------------------------------------------------------
@@ -6175,8 +6286,12 @@ void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
     // early return, so a level drawn without one does not freeze them.
     if (!GameTimeStopped()) updateEmitters(registry, deltaTime);
     // And the effects the script added, which the tick queued and this frame
-    // adds: the same frame, for the same reason.
-    if (!GameTimeStopped()) updateEffects(registry, deltaTime);
+    // adds: the same frame, for the same reason. The eyes move first, as
+    // MainCharacter::update runs updateEyes before anything else it does.
+    if (!GameTimeStopped()) {
+        syncEyes(registry);
+        updateEffects(registry, deltaTime);
+    }
     // And the lights and halos those particles brighten and dim.
     syncLights(registry);
     // And the sounds the tick latched, played here for the same reason: a

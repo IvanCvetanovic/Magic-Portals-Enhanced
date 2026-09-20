@@ -11,7 +11,9 @@
     "",
     "WHAT IS HERE. The rows of vanishEffect and appearEffect (Portal.angelscript), whose",
     "arithmetic test_mp_effects pins: the teleport's three effects, drawn by the visuals plan's",
-    "step 7.3. Every other effect the script adds gets its row with the step that draws it, so a",
+    "step 7.3. And red_eyes, MainCharacter's own, drawn by step 7.1 - added once at a level's",
+    "start rather than at a call site, so it has a shape and a reader of its own. Every other",
+    "effect the script adds gets its row with the step that draws it, so a",
     "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
     "sim/Effects, strictly: every field below is required.",
     "",
@@ -93,6 +95,50 @@
       "Beholder's spawnStone (bytes 373491..373647) adds the same .ent at a rock another way,",
       "AddScaledEntity('appear_effect.ent', vector3(pos, 0), g_scale.scale(1.5)) (#5-22): z 0",
       "and scale 1.5, a row of its own for the step that draws the rocks' effect."
+    ]
+  },
+
+  "red_eyes": {
+    "entity": "red_eyes.ent",
+    "offset_units": {
+      "x_frame_gt_7": 7,
+      "x_else": -7,
+      "y": -14.25,
+      "y_zero_g": -15.65,
+      "z": 1
+    },
+    "scale": 1,
+    "hide_with_player": true,
+    "_source": [
+      "MainCharacter's own effect, and the one effect every level shows. It is NOT a call site",
+      "of the shape above: AddScaledEntity takes no angle and no direction, and the entity is",
+      "added once and then moved every frame, so its row is read by its own reader.",
+      "MainCharacter::MainCharacter (bytes 126650..127790) #85-101 AddScaledEntity('red_eyes.ent',",
+      "entity.GetPosition(), g_scale.getScale()) and #105-119 SeekEntity('red_eyes.ent') into the",
+      "redEyes handle: at the level's start, on every level, at the character's own point and its",
+      "own depth. AddScaledEntity is AddEntity(file, pos, 0f, 0, '', scale) (Ethanon",
+      "ETHScriptWrapper.Scene.cpp:176-178), so the angle is 0.",
+      "MainCharacter::updateEyes (bytes 134329..134672), run first thing every frame by",
+      "MainCharacter::update #4, before its own pause test: #6 if the character is NOT hidden,",
+      "#15-22 eyeX = GetFrame() > 7 ? 7f : -7f; #24-31 eyeY = noGravity ? -15.65f : -14.25f;",
+      "#33-64 redEyes.SetPosition(entity.GetPosition() + g_scale.scale(vector3(eyeX, eyeY, 1f)));",
+      "#66-72 otherwise redEyes.Hide(true) (SetV1's second operand is an 8-bit immediate, so",
+      "#67 is the literal 1). GetFrame is the cell in dark_mage.ent's 4 x 4 sheet, and rows 2",
+      "and 3 - frames 8-15, walking right and pushing right - are the ones above 7 (art.json",
+      "rows_by_direction).",
+      "UNITS. The vector3 overload of g_scale.scale (bytes 5975..6072) is vector3::opMul_r of",
+      "the scale factor, which multiplies all three components, so 7, -14.25, -15.65 and the z 1",
+      "are all in level units. The z is added to the CHARACTER's depth (art.json character.z over",
+      "the level's scale factor), not to the level's zero.",
+      "THE ENTITY ITSELF is red_eyes.ent, read at run time by Art::LoadEnt: no <Sprite>, one",
+      "<ParticleSystem> of 12 hard_halo.png at alphaMode 1, repeat 0, life 120 +- 100 ms, size 4",
+      "growing -0.03, colour (1, 0.1, 0.1) to black, <StartPoint> z 2. Repeat 0 makes it NOT",
+      "temporary (Art::Entity::Temporary), so the engine never deletes it and it lives as long as",
+      "the character does.",
+      "HIDE_WITH_PLAYER IS A RECORDED FACT AND NOT A KNOB. It has exactly one legal value: Effects::LoadRules",
+      "refuses a row that says false, because the port's player owner both moves the eyes and hides them, and a",
+      "row that said otherwise would need an owner of its own. The field writes down #66-72 redEyes.Hide(true)",
+      "beside the arithmetic it belongs to; it is not a number a designer retunes."
     ]
   }
 }

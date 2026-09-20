@@ -13792,3 +13792,230 @@ once - `3e039305` - and that one launched and took the eight captures. No test b
 - **`EffectOwner` resolves five kinds** - none, the player, a level sprite (a crystal, a key, a torch), a carranca's
   fireball and a placed portal by its id. Those are what this tree can point at. A fireball's or a portal's is by
   INDEX and by ID respectively, and the id is the right one: a pair going takes the ones after it along a place.
+
+
+## Step 93 - the red eyes the character adds on every level, on the side its cell faces, frozen in the doorway (built)
+
+The visuals plan's step 7.1 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 7; its briefs
+`system_7.md` 7b and `systems_3_4.md` 3d, merged by the conflict K1; E7). Track B, on the `visuals-c` tree, after
+steps 90 (6.1), 91 (6.2) and 92 (6.3) - the merge renumbers. Game-only: the engine submodule stays at `4bfcf67` and
+no file under `engine/` is touched. Changed: `game/data/effects.json`, `game/sim/Effects.{hpp,cpp}`,
+`game/MagicPortalsLayer.{hpp,cpp}`, `tests/test_mp_effects.cpp` and `tests/test_mp_layer.cpp`. **The first thing the
+effects runtime actually draws, and the only effect every level shows: `MainCharacter`'s constructor adds
+`red_eyes.ent` at the character and `updateEyes` puts it on the face every frame - 7 units to the side the drawn cell
+faces, 14.25 above the character's point, 15.65 where gravity is off, one unit in front of it - and hides it with the
+character. It is 12 added red specks that live 120 +- 100 ms in world space, so the eyes glimmer and a walk leaves a
+short wake. They draw on `m_effectRandom`, so no particle of any level's own emitters moves: of the 128 f420 frames,
+123 change 87-97 pixels inside a box 4.3 units across at the character's face, 4 do not change at all, and one
+zero-g drift leaves two lone trail pixels behind it.**
+
+**BLOCKERS CHECKED.** 7.1's two blockers are met: 6.3 is step 92, committed on this tree (`d36abef`), and 1.1 is
+step 62, which came in with sync 1's merge of main (`fd4bede`) - the facing it built is what `GetFrame() > 7` is read
+against, and without it the port would have stood on frame 4 and drawn the eye on the wrong side. Section 8.13 amends
+3.1, 3.4, 5.1, 5.2, 10.1, 10.3, 10.4, 11.1, 11.2, 12.1, 12.2 and 13.1-13.4, **not 7.1**, so section 7's row stands
+exactly as written. Of the rows it names, K1 is the merge this step is - one step, the rule in `effects.json` rather
+than `art.json`, 3d's decode and centroid gate with 7b's mask-mean brightness gate - and E7 is the gate change it
+asks for: "peak R >= 240" is dropped, because an unmasked frame-8 cell reaches R 245 from hood highlights alone, and
+the gate is the MEAN R inside the mask. K8 is what dated this step after 6.3 and is honoured by `m_effectRandom`;
+K13 is what its depth is read from, and no new class joins the table - the eyes are an effect and take
+`Slot::Effect`, `Slot::EffectHalo` and `Slot::EffectSystems` as they stand.
+
+**THE OWNER'S STANDING RULINGS.** None of R1-R25 names this step. R10 - the player at the decoded z 4, which is 1.42
+in the level's units - is what the eyes' own depth is measured from, since `updateEyes` adds its offset to the
+CHARACTER's position and not to the level's zero; the eyes inherit it rather than restate it. Under the owner's
+standing instruction that the original wins, one thing section 7 asks for is NOT built the way it is worded, and the
+record says so rather than quietly meeting it:
+
+- **"Nothing released after the door" is built, but from the engine and not from the brief's reasoning.**
+  `systems_3_4` 3d says the emitter "stops releasing when the player quad is gone"; `system_7` 7b says only "hidden
+  when `m_playerQuad` is destroyed". Hiding alone would NOT stop it: `ETHRenderEntity::DrawParticles` (`:396`) and
+  `ETHScene`'s bucket walk (`:568`) only stop a hidden entity being DRAWN, while
+  `ETHActiveEntityHandler::UpdateAlwaysActiveEntities` (`:119-134`) walks its own list and calls `Update` on every
+  entry whatever its state. What settles it is which list `red_eyes` is on. `ShouldEntityBeAlwaysActive` (`:70-74`)
+  is `((callback || simulated body) && !static) || temporary`, and `red_eyes.ent` has none of the three: the listing
+  holds no `ETHCallback_red_eyes` and no `ETHConstructorCallback_red_eyes` (`ETHTypes.h:64-65` gives the two
+  prefixes `ETHScene::AssignCallbackScript` looks for), its `<Entity shape="0">` gives it no body, and its one
+  system's `repeat="0"` means it is not temporary (`ETHEntity.cpp:697-716`). So it reaches
+  `UpdateCurrentFrameEntities` from the bucket walk instead (`ETHScene.cpp:568-572`, handler `:151-157`) - and that
+  walk skips a hidden entity. **The original's eyes in a doorway are not updated at all: they freeze.** The port now
+  models that rule and not the brief's sentence: `Effect::alwaysActive` is `temporary`, and a hidden effect that is
+  not always active is not stepped. The second arm of the engine's test - a callback or a simulated body - is not
+  modelled, because nothing this port spawns has one; the step that spawns an effect whose `.ent` names a callback
+  is the step to widen it. **And the same walk carries a second condition the port does not model either:** it
+  visits only the buckets the camera can see (`ETHScene::FillCurrentlyVisibleBucketList`, `ETHScene.cpp:517-524`,
+  walked at `:543-546`, the hidden skip at `:567-568`), so in the original an effect that is not always active
+  freezes when it is merely OFF CAMERA as well as when it is hidden, while the port steps it wherever it stands.
+  The eyes can never reach that arm - their owner is what the camera follows - but it is the other half of the
+  same rule, and the first free-standing spawned effect owes both halves.
+
+Three smaller choices the briefs left open, each made the way the decode reads:
+
+- **The z is the character's, plus one.** `updateEyes` #33-64 is
+  `SetPosition(GetPosition() + g_scale.scale(vector3(eyeX, eyeY, 1)))`, and the vector3 overload of
+  `SGlobalScale::scale` (bytes 5975..6072) is `vector3::opMul_r` of the scale factor, which multiplies all three
+  components - so the 1 is one LEVEL unit, not a raw literal, and `red_eyes`'s `z` is `scaled` in the sense
+  `effects.json` already uses. The entity stands at 2.42 in the level's units and its system's own `<StartPoint>`
+  z 2 goes on top of that before the slot is counted, which is the runtime's rule from step 92 and not a new one.
+- **`hide_with_player` is refused unless it is true.** `updateEyes` both moves the eyes onto the character and hides
+  them with it, and the port's player owner does both; a row that said false would need an owner of its own, so
+  `Effects::LoadRules` refuses it by name rather than half-honouring it. The field is kept because it is the decoded
+  fact `redEyes.Hide(true)` (#66-72), read off `SetV1`'s second operand, which is an 8-bit IMMEDIATE and not a
+  variable - the 849 `SetV1` in the listing take 0, 1, 255, 200, 155, 100, 33, 22, 180 and 11 - so `SetV1 v4, v1` is
+  `= 1` and the eyes are hidden, not shown. The row's own `_source` says as much in the file, so no one reads it as
+  a knob with one legal value: it is a decoded fact written where the arithmetic it belongs to is.
+- **The port adds the eyes where the first `updateEyes` would put them, not at the bare `GetPosition()` the
+  constructor passes.** The original's first frame runs `MainCharacter::update` - whose instruction 4 is
+  `updateEyes`, before its own pause test - before it draws, so no frame of the original's ever shows the eyes at
+  the character's own point.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; the engine source
+under `reference/ethanon/toolkit/Source/src/engine/`; the entity under `reference/extracted/assets/`).
+- **Added once, by the character.** `MainCharacter::MainCharacter` (bytes 126650..127790) #85-101 is
+  `AddScaledEntity("red_eyes.ent", entity.GetPosition(), g_scale.getScale())`, and #105-119 keeps the handle
+  `SeekEntity("red_eyes.ent")` returns. `AddScaledEntity` is `AddEntity(file, pos, 0.0f, 0, "", scale)`
+  (`ETHScriptWrapper.Scene.cpp:176-178`), so the angle is 0 and the `altName` empty.
+- **Moved every frame.** `MainCharacter::updateEyes` (bytes 134329..134672), called first thing by
+  `MainCharacter::update` (#4): #6 if the character is not hidden, #15-22 `eyeX = GetFrame() > 7 ? 7f : -7f`,
+  #24-31 `eyeY = noGravity ? -15.65f : -14.25f`, #33-64 the `SetPosition` above; #66-72 otherwise
+  `redEyes.Hide(true)`. `GetFrame` is the cell in `dark_mage.ent`'s 4 x 4 sheet, so the halves are rows 0 and 1
+  (frames 0-7, pushing left and walking left) against rows 2 and 3 (frames 8-15, walking right and pushing right) -
+  which is `art.json`'s `rows_by_direction` and step 64's `findFinalDirection`, and is why 1.1 had to land first.
+- **What it draws.** `red_eyes.ent`: no `<Sprite>`, no `<Light>`, one `<ParticleSystem>` of 12 `hard_halo.png` at
+  `alphaMode` 1, `repeat` 0, life 120 +- 100 ms, size 4 growing -0.03, colour (1, 0.1, 0.1) to black, `<StartPoint>`
+  z 2. Added particles take no ambient (`ETHParticleManager.cpp:382-389`), which is why the blob stays full on a
+  `darkest` level - measured below on 4-22.
+
+**WHAT CHANGED.**
+- **`game/data/effects.json`: one row, `red_eyes`.** `entity`, `offset_units` (`x_frame_gt_7` 7, `x_else` -7, `y`
+  -14.25, `y_zero_g` -15.65, `z` 1), `scale` 1 and `hide_with_player` true, each with the instruction that decodes
+  it. It sits after `appear_effect`, so the refusal fixtures that find the first `"angle": 0` still find that row.
+- **`game/sim/Effects.{hpp,cpp}`: `EyeRule`, and the two sums.** A row of its own rather than a fourth `Rule`,
+  because this call has no direction to be offset along or turned by and its z is relative to the character.
+  `EyeOffset(rule, drawnFrame, noGravity)` is `updateEyes`' vector3, and `RedEyes(rules, characterPx, characterZ,
+  drawnFrame, noGravity)` is the whole call as the layer spawns it. The reader is as strict as the others: every
+  field required, `scale` above 0, `hide_with_player` true.
+- **`game/MagicPortalsLayer.{hpp,cpp}`.** `m_effectRules` joins the strict load chain in `OnAttach`, so
+  `effects.json` is read at start-up and a fault in it stops the game as loudly as a missing level. `buildEyes` runs
+  at the END of `buildDrawables`, after the player quad - whose cell it reads - and keeps the effect's id in
+  `m_eyes`; `syncEyes` runs on the frame just before `updateEffects`, as `MainCharacter::update` runs `updateEyes`
+  before anything else, and writes the frame's offset onto the effect's owner. `playerDrawnFrame` is
+  `ETHEntity::GetFrame`: the player quad's `SpriteAnimationComponent.firstFrame + frame`, kept in `m_playerFrame`
+  across the door, where the quad the cell comes from is destroyed and `updateEyes` still reads a frame.
+  `unloadEffects` clears `m_eyes` with the rest.
+- **The freeze, and what reports it.** `Effect::alwaysActive`; `updateEffects` steps an effect only when it is not
+  hidden or is always active, and hides its quads either way. `EffectReport` gains `released` (the particles that
+  have been released at all), `ageSumMs` (every released particle's elapsed life, summed - one number that moves on
+  any frame the effect is stepped and does not move on one it is not) and `alwaysActive`. Nothing else in the
+  runtime changed: no level's emitters, no depth, no stream.
+- **Tests.** `test_mp_effects` (+101 checks) pins the row, walks all 16 cells of the sheet through `EyeOffset` and
+  the whole `RedEyes` call, and adds 8 refusal fixtures. `test_mp_layer` gains `ThePlayerWearsItsRedEyes` and a
+  `ByIdIn` helper, and its four older effects cases are rewritten to look their own effect up by id, because every
+  level now carries one of its own and a case that indexed `EffectReports()[0]` would read the eyes.
+
+**TWO THINGS THE RUNS CAUGHT, AND BOTH ARE NOW PINNED.**
+- **`ByIdIn` returned a POINTER into the vector `EffectReports()` returns BY VALUE**, so every
+  `ByIdIn(layer.EffectReports(), id)` kept for a statement longer dangled. It did not crash: it read a plausible `z`
+  (-1.426, the right answer) beside an EMPTY `systemZ`, and the depth gate failed with a number that looked like a
+  depth fault in the runtime. The helper now returns a copy whose id is 0 when there is no such effect, and its
+  header says why.
+- **`buildEyes` was first written at the end of `buildSprites`, which runs BEFORE the player quad is built**, so the
+  spawn read no cell at all and started the eyes on the left; the first `syncEyes` then corrected it, and every
+  check in the new case ran after a frame, so the whole suite passed over it. It now runs at the end of
+  `buildDrawables`, and the case reads `EffectReports()` once BEFORE any `OnUpdate` and asserts (+7, -14.25) there.
+  A gate that cannot fail is not a gate.
+
+**BASELINE.** Step 92's `6.3/after/sweep/` is this step's "before", as its own record says (byte-identical to
+`6.3/fix1/sweep/` and to `5.1/fix2/sweep/`). Checked before being leant on: this tree's committed build, on the
+commit this step starts from, reproduces its 1-01 f420 md5 `81a39d457ca2ad3b8dae5a1dc27abd84` exactly
+(`7.1/before/gates/1-01_level0_f420.png`), and its 4-22 and 2-05 "before" frames are byte-identical to that sweep's.
+**This step moves pixels on 124 of 128 levels** - every level has a player and every player has eyes - so its own
+`7.1/after/sweep/` is the next step's "before" (1-01 f420 `e2da5131f9a4fe2f561aa6ab446becf2`).
+
+**THE GATE'S HOLD-LEFT RUN DOES LAND; WHAT FAILS ON IT IS THE WHOLE-CELL LOCATOR.** Section 7 asks for
+`--hold left@300-360` then idle. On 1-01 the camera starts already clamped on the level's left bound, so the
+character walks into the left wall and half its sprite leaves the frame: no WHOLE cell of the sheet locates better
+than 0.83 there, against 0.98 standing (`7.1/before/gates/holdleft_level0_f420.png`). This step first read that as
+the run leaving the frame and took the gate's number off a run that adds `--hold right@1-100` in front of it - the
+same 60 ticks of walking left, the same idle, a character the whole-cell locator finds at 0.918. The independent
+verification round showed the fault is the locator's and not the run's: matching the RIGHT HALF of each cell, which
+is the half still on screen, finds the character at (27.0, 220.0) with score 0.983-0.990
+(`7.1/verify1/halfloc_v1.py`), a method checked against the idle run, where the half-cell and the whole-cell locate
+agree on (101.0, 220.0). **The literal run then reads dx -7.16, -7.12, -6.98 and -6.99 u at f330, f360, f390 and
+f420 - inside the gate's band - and that is what the row below now carries**, with the turn run kept as
+corroboration. Nothing was re-captured for it: `7.1/verify1/gates/holdleft_level0_f*.png` are byte-identical to
+`7.1/after/gates/`, and only the measurement changed.
+
+**GATES.** 1280 x 720, `--fixed-step`, captures, scripts and logs under `out/parity/visuals/7.1/`
+(`capture_71.sh`, `spot_71.sh`, `eyes_71.py`, `k8_box.py`, `sweep_boxes.py`, `check_sweep.py`). Every "today" was
+re-read on this tree's own baseline rather than taken from the brief: the briefs' figures come from `g6`, which is
+four steps and two tier changes old. The cell is located ONCE per case on the BEFORE frame and that centre reused for
+the AFTER frame, since the player's own pixels are identical between them; all 16 cells of the sheet are tried,
+because the walk's column carries over across a stop and the zero-g column runs on its own timer. The hold-left
+case is the one exception: there the character stands half off the frame, so the RIGHT HALF of each cell is
+matched instead, as the paragraph above describes.
+
+| Gate (00_order section 7, 7.1) | Required | Today (7.1/before) | After (7.1/after) |
+|---|---|---|---|
+| `eyes.py` on 1-01 f270-f420 every 30: blob size | **>= 40 px** on at least 5 of 6 frames | 15 px on 6 of 6 - the sheet's own eye, 0 of 6 over the bar | **64-68 px on 6 of 6: passes.** The original's own blob is 58-61 px on this level and 55-58 px on 4-22 (`system_7` G.1), so the port's is a little LARGER; no gate bounds the area from above, and the gap is recorded below rather than rounded away |
+| the same frames: brightness (E7) | mask-mean R **>= 235** on at least 5 of 6 | mean R 184.8 (max 214), 0 of 6 | **239.9-244.6 on 6 of 6: passes.** The original reads 247-248, so the port's is a little dimmer as well as larger - the same recorded gap |
+| the same frames every 3 (`systems_3_4` 3d section 5's flicker, which section 7's row for 7.1 does NOT list) | temporal s.d. of blob-peak grey **>= 8**, marked INFERRED in the brief from rec11's 19.6 | - | **6.50 over the 51 frames f270-f420, peak grey 173.7-194.0: UNDER the inferred bar, and written down as the number it is rather than met** (`7.1/verify1/flicker/`). The emitter is demonstrably live - 49 of the 51 frames carry a distinct (area, peak, mean R) triple, the blob breathes 58-68 px and its summed R runs 14,414-16,631 - and K1 selects 3d's DECODE and centroid gate beside 7b's brightness gate, not the whole of 3d's section 5, so no row of section 7 asks for this one. The 19.6 it is inferred from was measured on 30 fps video of the original, where codec noise inflates a peak; re-deriving it on a like-for-like sample is the owner's call, not a reason to tighten the port |
+| the same six frames again (every 30): centroid | within **+-1 u of (+6.83, -12.41) u** from the cell centre, +x on frames 8-15 | (+6.54, -12.68) | **(+6.86, -12.36) to (+6.91, -12.31): worst 0.08 u in x and 0.10 u in y, an eighth of the tolerance. The located cell is 8 on all six, so the +x half: passes** |
+| 4-22 (`darkest`) | blob >= 40 px, mean R >= 235, within 60 px of the cell | 14 px, mean R 188.1 | **62-66 px, mean R 241.7-247.2, centroid 40.2 px from the located cell centre on all six frames: passes.** An added particle takes no ambient, which is what this measures |
+| zero-g 4-03 and 4-11 | y **-13.60 +- 1 u** from the cell centre | 4-03 -13.65..-13.79 on the four frames that show a blob at all, 0 px on the other two; 4-11 -13.57..-13.79 and the same two blank | **4-03 -13.53..-14.22, 4-11 -13.43..-14.11, all 12 frames inside the band: passes. THIS ROW DOES NOT DISCRIMINATE**, and the record says so: the suit's own visor already sits at -13.6..-13.8, inside the band, so the row passed BEFORE as well on the four frames it shows at all. What the eyes change on these two levels is size and brightness - 0-28 px at mean R 197-216 becomes 61-72 px at mean R 243-248, the two frames where the suit's cell shows no red at all included. The 0.7 u spread of the after column is the suit's hover, which moves the picture and not the eye: `updateEyes` reads `GetPosition()`, and the zero-g bob is a pivot |
+| `--hold left@300-360`, then idle | **dx -7.2 +- 1 u** | -6.86 u, the sheet's own eye | **the gate's LITERAL run: -7.16, -7.12, -6.98 and -6.99 u at f330, f360, f390 and f420, located by the right-half template above (score 0.983-0.990): passes.** The run that walks right first corroborates at -7.16 u on f390 and f420, and on the literal run the blob also flips to the character's left and grows 14 px / R 187 -> 63 px / R 245 |
+| 1-01 and 2-05 byte-identical outside a 30 x 30 u box around the eyes (K8) | one box, <= 30 u | - | **1-01 f420: 93 pixels changed, bounding box 3.91 x 4.27 u, every side within 2.06 u of the decoded eye. 2-05 f420: 90 pixels, 3.56 x 3.91 u, its centre 1.5 px from the decoded eye, which is where `locate.py` plus the decode says the eye is. Passes: against a 30 x 30 u box CENTRED on the eye, whose half-extent is 15 u, 1-01's worst side is 2.06 u out - 13 u of margin.** Both named frames are STANDING frames. On a walking frame the wake is longer: the turn run's f330 changes a band of 80 x 11 pixels - 28.8 u wide, 3.9 u tall - every row of it at the eye's own y. That is a trail and not a box centred on the eye, and it is recorded as what it is; what the row is really for is that no particle of the level's own moved, and on every frame measured the whole difference is one band at the character's face |
+| `test_mp_layer`: -15.65 on level1c | the zero-g y | - | **level1c: the effect stands at exactly (+7.0, -15.65) units from the character's point, against (+7.0, -14.25) on level0: passes** |
+| `test_mp_layer`: nothing released after the door | - | - | **At the door (tick 203) the eyes are HIDDEN and not freed, with 12 of 12 particles released and 766.7 ms of life between them. Over the next 60 frames: still 12 released, still 766.7 ms, not one of the 60 frames moved a particle's clock, and 0 visible `Magic Portals Effect Particle` quads. The control on the frame before - the character drawn - does move that clock: passes.** A release count alone could not fail here, since the pool is 12 and all 12 were out; what is pinned is the particles' own clock |
+| the eyes are on the face before any frame runs, and in front of the player | - | - | **`EffectReports()` read before the first `OnUpdate`: (+7.0, -14.25) from the character's point, so the spawn reads the cell the player quad was built with. Their one system's z is above `PlayerSlotZ()`: passes** |
+| Sweep: no level changes outside its own eye box | 128 levels, one small box each | 1-01 f420 `81a39d45` (`6.3/after/sweep`, reproduced by the committed build) | **128 of 128 captured, exit 0. 123 levels change 87-97 pixels inside a box of at most 4.27 x 4.27 u. 4 do not change at all, each for a reason this step predicts: 1-02 and 1-03 open under a level-help popup, which stops game time, and no particle of any kind moves under one (step 52's rule, which step 59 gave the level's own emitters); 2-12's and 2-32's players die on ticks 180 and 287, so the character is hidden and its eyes freeze. 1 level, 4-06 (`level5c`), reads 97.07 x 25.96 u - 94 of its 96 changed pixels are one blob at the face and the other TWO are single isolated pixels 90 u behind it, the wake of a zero-g drift released in world space, which is the `repeat 0` trail the decode describes. So the 30 u box holds on 127 of 128 and the exception is two pixels of the trail itself: passes, with the exception recorded rather than rounded away** |
+| Validation | exit 0, silent | - | **All 128 sweep frames open at 1280 x 720, every md5 equal to its `capture.txt` line, every run exit 0, `Vulkan validation layers: ACTIVE` in all 128 logs and 0 `[Validation]`, error or fatal lines in any of them beyond the two benign Steam `loader_get_json` notices every run on this machine prints (`7.1/after/check_sweep.json`, 128 frames, 0 bad): passes** |
+
+**A MEASURED GAP NO GATE BOUNDS.** Every row above passes, and two of them pass from the wrong side: the port's
+blob is **62-68 px at mask-mean R 240-245** where the original's is **55-61 px at 247-248** (1-01 and 4-22,
+`system_7` G.1). Bigger and slightly duller - a particle-size or blend difference and not a placement one, since
+the centroid lands within a tenth of a unit of the decode. No row of section 7 bounds the area from above, so
+nothing here fails; the pair of numbers is written down so that the step which touches the halo's size or its
+blend has the target, and it goes to the backlog as a deviation rather than being tuned inside a step whose gates
+are all met.
+
+**THE SUITES**, run directly on this tree's binaries. **`test_mp_effects` 179 checks, 0 failures** (78 at step 91;
++101) and **`test_mp_layer` 1,362 checks, 0 failures** (1,339 at step 92; +23, the new case's checks against the four
+older ones rewritten). `test_mp_effects` was run twice, both green (`7.1/test_mp_effects.txt` and
+`test_mp_effects_final.txt`). `test_mp_layer` was run five times: the first found the dangling-pointer fault above
+(1,359 / 1), the second printed the numbers that identified it (1,359 / 1), the third was green after the fix
+(1,359 / 0), the fourth after the freeze gate was strengthened from a release count to the particles' own clock
+(1,361 / 0), and the fifth after `buildEyes` moved and its before-the-frame check was added (1,362 / 0,
+`test_mp_layer_final2.txt`, on the binaries this commit carries). No test binary has been refused by Smart App
+Control. **No other suite was run.** The step changes `game/sim/Effects`, `game/data/effects.json` and
+`MagicPortalsLayer`; `grep -ln "sim/Effects.hpp" tests/*.cpp` names `test_mp_effects` alone and
+`grep -ln MagicPortalsLayer tests/*.cpp` names `test_mp_layer` alone, and those two are the suites run. **ctest was
+not run**: 7.1's definition of done names `test_mp_layer`, and the backlog's Smart App Control rule keeps a full
+ctest to the roles that need one.
+
+**THE BINARY THE GATES WERE MEASURED ON, AND WHY THE SWEEP STILL STANDS.** The seven gate captures and the 128-level
+sweep were taken on `MagicPortals.exe` **`73b3d276`**. Two edits landed after them - `EffectReport::ageSumMs`, which
+only reports, and `buildEyes` moving from `buildSprites` to the end of `buildDrawables`, which is an
+initialisation-order change and not a reporting one - so nothing above is claimed on reasoning alone. On the final
+binary **`4f098e6f`**, built from the sources this commit carries: **all 91 gate pngs re-captured byte-identical**
+(`7.1/fix1/gates/`, `cmp` over every frame of all seven runs, 91 identical and 0 different), and **10 of the sweep's
+levels re-captured byte-identical** to `7.1/after/sweep/` (`spot_71.sh`: 1-01, 1-09, 1-32, 2-05, 2-32, 3-15, 3-24,
+4-03, 4-22 and 4-32 - one per chapter and both of the K8 row's levels, the boss level and one that ends byte-identical
+because its player dies). The move is render-neutral for the reason the re-capture confirms: a pool's particles are
+made unreleased, and `Particles::Release` places each one at the LIVE owner when it is released, so the owner the
+pool was made with never reaches a pixel - and the number of draws from `m_effectRandom` does not depend on it.
+**On disk now:** `MagicPortals.exe` `4f098e6f9f0b15f49323a61362d8fac4`, `test_mp_layer.exe`
+`fff0b3f5863dd85d237e6486e235b232`, `test_mp_effects.exe` `a147cc0a0d9a215be48b89ce27e875c3`. All three have
+launched, so the next role owes them no Smart App Control retry. `7.1/dryrun.txt`, taken after the gates, lists only
+the CMake glob re-check and the CMake re-run - two edges, no compile and no link.
+
+**BUILD: no warnings** (MSVC, Release, Ninja, /W4). Seven logs, all exit 0 and all silent: `7.1/build1.txt` (the
+full build the gates and the sweep ran on), `build2.txt` and `build3.txt` (`--target test_mp_layer`, the debug print
+and the `ByIdIn` fix), `build4.txt` (a full build that found nothing to do), `build5.txt` (the freeze gate's
+strengthening), `relink1.txt` (the Smart App Control relink below) and `build_final.txt` (the final full build, the
+binaries above). No engine file was compiled, so no `D9025` note appears in any of them.
+
+**SMART APP CONTROL.** The first `MagicPortals.exe` this step linked, `2688151c`, was refused (exit 126) on its
+first launch, on the first capture of the "after" gates. It was deleted and relinked once; the relinked `73b3d276` then ran 135 times
+(7 gate captures and the 128-level sweep), every one exit 0, and the final `4f098e6f` has run 17 times (7 gate
+captures and 10 spot captures), every one exit 0. The committed build's `3e039305` ran the 8 "before" captures - the
+baseline currency check and the seven gate runs - before any of this. One refusal, one relink, no loop.

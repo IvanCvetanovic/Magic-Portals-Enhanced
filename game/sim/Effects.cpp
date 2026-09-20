@@ -66,6 +66,55 @@ bool ReadRule(const Json::Value& root, const char* name, Rule& out, std::string&
     return true;
 }
 
+// The eyes' row, every field stated, as the rows above are.
+bool ReadEyes(const Json::Value& root, const char* name, EyeRule& out, std::string& error) {
+    const Json::Value& row = root[name];
+    const std::string where = std::string(name);
+    if (!row.IsObject()) {
+        error = where + " is not an object";
+        return false;
+    }
+    EyeRule read;
+    if (!row["entity"].IsString() || row["entity"].AsString().empty()) {
+        error = where + ".entity is not a file name";
+        return false;
+    }
+    read.entity = row["entity"].AsString();
+    const Json::Value& offset = row["offset_units"];
+    if (!offset.IsObject()) {
+        error = where + ".offset_units is not an object";
+        return false;
+    }
+    struct Field {
+        const char* key;
+        double* into;
+    };
+    const Field fields[] = {{"x_frame_gt_7", &read.xFrameAboveSeven},
+                            {"x_else", &read.xElse},
+                            {"y", &read.y},
+                            {"y_zero_g", &read.yNoGravity},
+                            {"z", &read.z}};
+    for (const Field& field : fields) {
+        if (!Finite(offset[field.key])) {
+            error = where + ".offset_units." + field.key + " is not a number";
+            return false;
+        }
+        *field.into = offset[field.key].AsNumber();
+    }
+    if (!Finite(row["scale"]) || !(row["scale"].AsNumber() > 0.0)) {
+        error = where + ".scale is not a number above 0";
+        return false;
+    }
+    read.scale = row["scale"].AsNumber();
+    if (!row["hide_with_player"].IsBool()) {
+        error = where + ".hide_with_player is not true or false";
+        return false;
+    }
+    read.hideWithPlayer = row["hide_with_player"].AsBool();
+    out = std::move(read);
+    return true;
+}
+
 Spawn SpawnOf(const Rule& rule, const glm::dvec2& fromPx, const glm::dvec2& direction) {
     Spawn spawn;
     spawn.entity = rule.entity;
@@ -98,7 +147,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     Rules read;
     std::string why;
     if (!root.IsObject() || !ReadRule(root, "suck_effect", read.suck, why) ||
-        !ReadRule(root, "sparkles", read.sparkles, why) || !ReadRule(root, "appear_effect", read.appear, why)) {
+        !ReadRule(root, "sparkles", read.sparkles, why) || !ReadRule(root, "appear_effect", read.appear, why) ||
+        !ReadEyes(root, "red_eyes", read.eyes, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -106,6 +156,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     // along or turned by.
     if (read.appear.turn != Turn::Fixed || read.appear.offsetUnits != 0.0) {
         error = path + ": appear_effect has no direction: its angle is a number and its offset_units 0";
+        return false;
+    }
+    // updateEyes both moves the eyes onto the character and hides them with it,
+    // and the port has one owner that does both. A row that said otherwise would
+    // need an owner of its own, so it is refused rather than half-honoured.
+    if (!read.eyes.hideWithPlayer) {
+        error = path + ": red_eyes.hide_with_player is the decoded redEyes.Hide(true), and the port's player owner "
+                       "hides what it carries: a row that says false needs an owner of its own";
         return false;
     }
     out = std::move(read);
@@ -143,6 +201,29 @@ Spawn Sparkles(const Rules& rules, const glm::dvec2& travellerPx, const glm::dve
 Spawn Appear(const Rules& rules, const glm::dvec2& exitPortalPx) {
     // appearEffect has no direction: its row's offset is 0 and its angle a literal.
     return SpawnOf(rules.appear, exitPortalPx, glm::dvec2(0.0));
+}
+
+glm::dvec3 EyeOffset(const EyeRule& rule, int drawnFrame, bool noGravity) {
+    // updateEyes #15-22: GetFrame() > 7 picks the right-hand x - the sheet's rows
+    // 2 and 3, which are walking right and pushing right (art.json's DIRECTION
+    // enum) - and #24-31 picks the y by the character's own noGravity flag.
+    return glm::dvec3(drawnFrame > 7 ? rule.xFrameAboveSeven : rule.xElse, noGravity ? rule.yNoGravity : rule.y,
+                      rule.z);
+}
+
+Spawn RedEyes(const Rules& rules, const glm::dvec2& characterPx, double characterZ, int drawnFrame, bool noGravity) {
+    const glm::dvec3 offset = EyeOffset(rules.eyes, drawnFrame, noGravity);
+    Spawn spawn;
+    spawn.entity = rules.eyes.entity;
+    // #33-64: SetPosition(entity.GetPosition() + g_scale.scale(vector3(eyeX, eyeY,
+    // z))), so the z is the CHARACTER's own plus the offset's - not a depth of the
+    // level's own.
+    spawn.atPx = characterPx + glm::dvec2(offset);
+    spawn.z = characterZ + offset.z;
+    spawn.zScaled = true;
+    spawn.angleDeg = 0.0f; // AddScaledEntity's own 0f
+    spawn.scale = rules.eyes.scale;
+    return spawn;
 }
 
 } // namespace MagicPortals::Effects
