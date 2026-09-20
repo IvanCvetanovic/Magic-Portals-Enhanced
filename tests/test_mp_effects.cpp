@@ -422,6 +422,74 @@ void TheExitFlashShrinksAsTheEngineShrinksIt() {
                 walked.front().size, lastDrawn * tick);
 }
 
+// ---- a portal the player opened (the visuals plan's 7.4) -----------------------
+
+void ThePortalsOwnThreeCallsArePointsAndNothingElse() {
+    const Effects::Rules rules = TheRules();
+
+    // insertPortal's two, in its order: the summon bubble at g_scale.scale(32)
+    // and the portal itself at a bare 0. Both at the portal's point, both
+    // unturned, both at the script's own size.
+    const glm::dvec2 at(150.0, 74.0);
+    const Effects::Spawn summon = Effects::Summon(rules, at);
+    CHECK_MSG(summon.entity == "portal_summon_effect.ent" && summon.atPx == at && summon.z == 32.0 &&
+                  summon.zScaled && summon.angleDeg == 0.0f && summon.scale == 1.0,
+              "portal_summon_effect at the portal, z scale(32): " + At(summon.atPx) + " z " + Num(summon.z));
+    const Effects::Spawn portal = Effects::Portal(rules, at);
+    CHECK_MSG(portal.entity == "portal.ent" && portal.atPx == at && portal.z == 0.0 && !portal.zScaled &&
+                  portal.angleDeg == 0.0f && portal.scale == 1.0,
+              "portal.ent at the portal, z a bare 0: " + At(portal.atPx) + " z " + Num(portal.z));
+    // And ETHCallback_portal's, at the entity's own vector3 - whose z is that
+    // same bare 0 - on the frame it dies.
+    const Effects::Spawn death = Effects::Death(rules, at);
+    CHECK_MSG(death.entity == "portal_death.ent" && death.atPx == at && death.z == 0.0 && !death.zScaled &&
+                  death.angleDeg == 0.0f && death.scale == 1.0,
+              "portal_death at the portal, z a bare 0: " + At(death.atPx) + " z " + Num(death.z));
+}
+
+void TheManagerColoursTheFirstTwoAndBlanksALonePortal() {
+    const Effects::PlacedPortal& rules = TheRules().placedPortal;
+    // The decoded globals, which are also what 00_order 8.2 reads.
+    CHECK_MSG(rules.colourFirst == glm::dvec3(1.0, 0.3, 0.4), "PORTAL_RED is (1, 0.3, 0.4)");
+    CHECK_MSG(rules.colourSecond == glm::dvec3(0.3, 0.4, 1.0), "PORTAL_BLUE is (0.3, 0.4, 1)");
+    CHECK_MSG(rules.colourAlone == glm::dvec3(0.0), "and a lone portal's is V3_ZERO");
+
+    glm::dvec3 colour(-1.0);
+    CHECK(Effects::ManagerColour(rules, 0, 2, 2, colour) && colour == rules.colourFirst);
+    CHECK(Effects::ManagerColour(rules, 1, 2, 2, colour) && colour == rules.colourSecond);
+    // #185-246 colour the first two of an array and no more.
+    CHECK_MSG(!Effects::ManagerColour(rules, 2, 3, 3, colour), "nothing colours a third portal");
+    // #282-300: one portal where the level grants two is black, which on an added
+    // sprite is a halo that does not draw - what the original's 1-3 still shows.
+    CHECK(Effects::ManagerColour(rules, 0, 1, 2, colour) && colour == rules.colourAlone);
+    // #248-279: one portal where the level grants exactly one is red instead.
+    CHECK(Effects::ManagerColour(rules, 0, 1, 1, colour) && colour == rules.colourFirst);
+    CHECK_MSG(!Effects::ManagerColour(rules, 0, 0, 2, colour), "and an empty array colours nothing");
+}
+
+void TheKillFadeIsNineTenthsAFrame() {
+    const Effects::PlacedPortal& rules = TheRules().placedPortal;
+    CHECK_MSG(rules.killFadePerFrame == 0.9, "SetColor(GetColor() x 0.9) per frame");
+    CHECK_MSG(Near(rules.killFadeFrameMs, 1000.0 / 60.0, 1e-9), "of 1/60 s of frame time (INFERRED)");
+    CHECK_MSG(rules.deathAfterKillMs == 400.0, "and portal_death 400 ms after killTime");
+
+    const glm::dvec3 red = rules.colourFirst;
+    const glm::dvec3 one = Effects::KillFade(rules, red, rules.killFadeFrameMs);
+    CHECK_MSG(Near(one.r, red.r * 0.9, 1e-12) && Near(one.g, red.g * 0.9, 1e-12) && Near(one.b, red.b * 0.9, 1e-12),
+              "one frame of it takes nine tenths: " + Num(one.r));
+    // Twenty-four frames is the 400 ms the death waits, and 0.9^24 is what is
+    // left of the portal when its burst is added: about 8 % of what it was.
+    glm::dvec3 walked = red;
+    for (int i = 0; i < 24; ++i) walked = Effects::KillFade(rules, walked, rules.killFadeFrameMs);
+    const glm::dvec3 once = Effects::KillFade(rules, red, 24.0 * rules.killFadeFrameMs);
+    CHECK_MSG(Near(walked.r, once.r, 1e-9), "and a long frame is the same as its frames: " + Num(walked.r) + " for " +
+                                                Num(once.r));
+    CHECK_MSG(Near(walked.r / red.r, 0.079766, 1e-6), "0.9 ^ 24 is " + Num(walked.r / red.r));
+    std::printf("  the kill fade: %.4f of its colour left when portal_death is added\n", walked.r / red.r);
+    // A frame of nothing - a paused one - fades nothing.
+    CHECK(Effects::KillFade(rules, red, 0.0) == red);
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
@@ -474,6 +542,15 @@ void ARowMissingAFactIsRefused() {
             "fireball");
     refused("large_offset.json", "\"entity\": \"explosion_large.ent\",\n    \"offset_units\": 0,",
             "\"entity\": \"explosion_large.ent\",\n    \"offset_units\": 5,", "explosion_large");
+    refused("no_summon.json", "\"portal_summon_effect\": {", "\"summon_gone\": {", "portal_summon_effect");
+    refused("no_portal.json", "\"portal\": {", "\"portal_gone\": {", "portal");
+    refused("no_death.json", "\"portal_death\": {", "\"death_gone\": {", "portal_death");
+    refused("no_placed.json", "\"placed_portal\": {", "\"placed_gone\": {", "placed_portal");
+    refused("two_channels.json", "\"colour_first\": [1.0, 0.3, 0.4],", "\"colour_first\": [1.0, 0.3],",
+            "placed_portal.colour_first");
+    refused("no_fade.json", "\"kill_fade_per_frame\": 0.9,", "", "placed_portal.kill_fade_per_frame");
+    refused("brightening.json", "\"kill_fade_per_frame\": 0.9,", "\"kill_fade_per_frame\": 1.0,",
+            "placed_portal.kill_fade_per_frame");
     refused("no_eyes.json", "\"red_eyes\": {", "\"red_eyes_gone\": {", "red_eyes");
     refused("no_eye_x.json", "\"x_frame_gt_7\": 7,", "", "red_eyes.offset_units.x_frame_gt_7");
     refused("no_eye_zerog.json", "\"y_zero_g\": -15.65,", "", "red_eyes.offset_units.y_zero_g");
@@ -500,6 +577,9 @@ int main() {
     TheTurnFollowsTheSideTheTravellerCameFrom();
     TheLoadingScreenIsTheSameCall();
     TheExitFlashShrinksAsTheEngineShrinksIt();
+    ThePortalsOwnThreeCallsArePointsAndNothingElse();
+    TheManagerColoursTheFirstTwoAndBlanksALonePortal();
+    TheKillFadeIsNineTenthsAFrame();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

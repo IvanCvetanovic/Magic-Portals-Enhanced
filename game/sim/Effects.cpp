@@ -115,6 +115,57 @@ bool ReadEyes(const Json::Value& root, const char* name, EyeRule& out, std::stri
     return true;
 }
 
+// The placed portal's own block: three colours, the fade and the delay.
+bool ReadPlacedPortal(const Json::Value& root, const char* name, PlacedPortal& out, std::string& error) {
+    const Json::Value& row = root[name];
+    const std::string where = std::string(name);
+    if (!row.IsObject()) {
+        error = where + " is not an object";
+        return false;
+    }
+    PlacedPortal read;
+    const struct {
+        const char* key;
+        glm::dvec3* into;
+    } colours[] = {{"colour_first", &read.colourFirst},
+                   {"colour_second", &read.colourSecond},
+                   {"colour_alone", &read.colourAlone}};
+    for (const auto& colour : colours) {
+        const Json::Value& value = row[colour.key];
+        if (!value.IsArray() || value.AsArray().size() != 3) {
+            error = where + "." + colour.key + " is not three numbers";
+            return false;
+        }
+        for (std::size_t i = 0; i < 3; ++i) {
+            const Json::Value& channel = value.AsArray()[i];
+            if (!Finite(channel) || channel.AsNumber() < 0.0) {
+                error = where + "." + colour.key + " is not three numbers at or above 0";
+                return false;
+            }
+            (*colour.into)[static_cast<glm::length_t>(i)] = channel.AsNumber();
+        }
+    }
+    const struct {
+        const char* key;
+        double* into;
+    } numbers[] = {{"kill_fade_per_frame", &read.killFadePerFrame},
+                   {"kill_fade_frame_ms", &read.killFadeFrameMs},
+                   {"death_after_kill_ms", &read.deathAfterKillMs}};
+    for (const auto& number : numbers) {
+        if (!Finite(row[number.key]) || !(row[number.key].AsNumber() > 0.0)) {
+            error = where + "." + number.key + " is not a number above 0";
+            return false;
+        }
+        *number.into = row[number.key].AsNumber();
+    }
+    if (read.killFadePerFrame >= 1.0) {
+        error = where + ".kill_fade_per_frame is the 0.9 a dying portal is multiplied by: it fades";
+        return false;
+    }
+    out = read;
+    return true;
+}
+
 Spawn SpawnOf(const Rule& rule, const glm::dvec2& fromPx, const glm::dvec2& direction) {
     Spawn spawn;
     spawn.entity = rule.entity;
@@ -150,7 +201,11 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "sparkles", read.sparkles, why) || !ReadRule(root, "appear_effect", read.appear, why) ||
         !ReadRule(root, "fireball", read.fireball, why) ||
         !ReadRule(root, "small_explosion", read.smallExplosion, why) ||
-        !ReadRule(root, "explosion_large", read.largeExplosion, why) || !ReadEyes(root, "red_eyes", read.eyes, why)) {
+        !ReadRule(root, "explosion_large", read.largeExplosion, why) ||
+        !ReadRule(root, "portal_summon_effect", read.summon, why) || !ReadRule(root, "portal", read.portal, why) ||
+        !ReadRule(root, "portal_death", read.death, why) ||
+        !ReadPlacedPortal(root, "placed_portal", read.placedPortal, why) ||
+        !ReadEyes(root, "red_eyes", read.eyes, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -164,7 +219,10 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     } pointOnly[] = {{"appear_effect", &read.appear},
                      {"fireball", &read.fireball},
                      {"small_explosion", &read.smallExplosion},
-                     {"explosion_large", &read.largeExplosion}};
+                     {"explosion_large", &read.largeExplosion},
+                     {"portal_summon_effect", &read.summon},
+                     {"portal", &read.portal},
+                     {"portal_death", &read.death}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
@@ -226,6 +284,34 @@ Spawn SmallExplosion(const Rules& rules, const glm::dvec2& atPx) {
 
 Spawn LargeExplosion(const Rules& rules, const glm::dvec2& atPx) {
     return SpawnOf(rules.largeExplosion, atPx, glm::dvec2(0.0));
+}
+
+Spawn Summon(const Rules& rules, const glm::dvec2& atPx) { return SpawnOf(rules.summon, atPx, glm::dvec2(0.0)); }
+
+Spawn Portal(const Rules& rules, const glm::dvec2& atPx) { return SpawnOf(rules.portal, atPx, glm::dvec2(0.0)); }
+
+Spawn Death(const Rules& rules, const glm::dvec2& atPx) { return SpawnOf(rules.death, atPx, glm::dvec2(0.0)); }
+
+bool ManagerColour(const PlacedPortal& rules, int index, int placed, int maxPortals, glm::dvec3& out) {
+    // #185-188: more than one portal in the array colours the first two and
+    // nothing else. #248-259: exactly one colours it red where the level grants
+    // exactly one, and black - a halo that adds nothing - where it grants more.
+    if (placed > 1) {
+        if (index == 0) out = rules.colourFirst;
+        else if (index == 1) out = rules.colourSecond;
+        else return false;
+        return true;
+    }
+    if (placed == 1 && index == 0) {
+        out = maxPortals == 1 ? rules.colourFirst : rules.colourAlone;
+        return true;
+    }
+    return false;
+}
+
+glm::dvec3 KillFade(const PlacedPortal& rules, const glm::dvec3& colour, double frameMs) {
+    if (!(frameMs > 0.0) || !(rules.killFadeFrameMs > 0.0)) return colour;
+    return colour * std::pow(rules.killFadePerFrame, frameMs / rules.killFadeFrameMs);
 }
 
 glm::dvec3 EyeOffset(const EyeRule& rule, int drawnFrame, bool noGravity) {

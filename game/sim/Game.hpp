@@ -65,6 +65,7 @@ struct Data {
     Player::Tuning tuning;
     Goals::Rules goals;
     Portals::Rules portals;       // the remake's portals.json, with the port's transit.json
+    Motion::Rules motion;         // and motions.json: linearMotion's own arithmetic
     Mover::Rules movers;          // the port's own movers.json
     Demolish::Rules demolish;     // and demolish.json
     Launchers::Rules launchers;   // and launchers.json

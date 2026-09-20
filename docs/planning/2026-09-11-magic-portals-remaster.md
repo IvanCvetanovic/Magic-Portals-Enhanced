@@ -14684,3 +14684,397 @@ comes from.
   the stream (deviation 2) - so the teleport frames were found by the ring's own template fit instead. What that
   costs is an absolute no-ring baseline for the +0.55 s row: the exit portal's own art keeps a residual
   correlation, so the discriminator there is the fitted SIZE leaving the -6.4 u line, not a score falling to zero.
+
+## Step 96 - the two entities a portal the player opens is, the colour its manager gives it, the twenty seconds it has, and the burst it leaves (built)
+
+The visuals plan's step 7.4 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 7; its brief
+`system_7.md` 7d-1 and G.3). Track B, on the `visuals-c` tree, after steps 90 (6.1), 91 (6.2), 92 (6.3), 93 (7.1),
+94 (7.2) and 95 (7.3) - the merge renumbers. Game-only: the engine submodule stays at `4bfcf67` and no file under
+`engine/` is touched. Changed: `game/data/{effects,placement}.json`, `game/sim/{Effects,Portals,Game}.{hpp,cpp}`,
+`game/MagicPortalsLayer.{hpp,cpp}` and `tests/test_mp_{effects,statics,layer,play,launchers}.cpp`.
+**A portal the player opens is no longer a white disc the port draws for it: it is the entity the original's script
+adds, with the spiral and the iris the entity carries, the colour its manager gives it, the hover its callback gives
+it, twenty seconds to live, and a burst where it dies.**
+
+**BLOCKERS CHECKED.** 7.4's blockers are **6.3**, F2 and **R14**. 6.3 is step 92 (`d36abef`), committed in this
+tree. **F2 exists** and is complete (`out/parity/footage/F2.md`, 1-3 at 16.3 fps): the row says it confirms dynamics
+and does not measure them, and that is how it is used below. **R14, the unapplied 20,000 ms perish, is decided as
+the original plays it** - the owner's standing ruling that every one of R1-R23 goes the way of the decode - so it is
+applied here. Section **8.13 does not amend 7.4**, so section 7's row stands as written. Two other standing rulings
+are used rather than decided: **R10**, the player at the z 4 the decode gives it (1.42 on the level's axis), which is
+what a portal's decoded z of 0 is read against; and **R12**, the 720 selection, whose 720 / 256 = 2.8125 is the
+factor `art.json depth` carries.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; the entities under
+`reference/extracted/assets/entities/`).
+- **`PortalManager::insertPortal`** (142281..142841) adds **two** entities for every portal a shot opens:
+  #4-33 `AddEntity('portal_summon_effect.ent', vector3(pos, g_scale.scale(32)), 0, @out, '', getScale())`, then
+  #47-71 `AddEntity('portal.ent', vector3(pos, 0f), 0f, @portal, 'portal.ent', getScale())`. The bubble is added
+  FIRST, which is the order the two draw their random in.
+- **`portal.ent` IS the portal.** `<Sprite>portal_halo.png</Sprite>` at blendMode 1 (added), applyLight 0, emissive
+  (1, 1, 1), no `<Light>`; sys0 4 x `portal_spiral.png` a1 rep0, life 900 +- 450, size 70, growth -0.8, angleDir 1.3,
+  `<StartPoint>` z 10; sys1 1 x `portal.png` a0 rep0, life 100, size 64, `<StartPoint>` z 10; and `<CustomData>`
+  float `speed` 1, float `stride` 2, which are `linearMotion`'s.
+- **`ETHCallback_portal`** (359141..359885) runs on it every frame, and it is four arms.
+  - **#1-10 it hovers:** `linearMotion(thisEntity, vertical true, 0f, 0f)`, arguments pushed last-first (00_order
+    8.0 rule 3; #3 `SetV1 v3, v1` is the 8-bit immediate 1). With the `.ent`'s speed 1 and stride 2 that is
+    `y = y_opened + 2 cos(t)`, one radian a second, a 6.283 s period, from its lowest point.
+  - **#12-86 it perishes:** uint `elapsedTime` is SET TO 0 on the first call (#22-37) and adds
+    `getLastFrameElapsedTime()` on every later one (#38-53); past 20000 (#65, a strict compare) and with uint
+    `dontPerish` zero (#67-79) it calls `killPortal`. **`dontPerish` is set by exactly one scene, and it is not a
+    level**: `scenes/loading_screen.esc` carries `<Type>uint</Type><Name>dontPerish</Name><Value>1</Value>` in the
+    `<CustomData>` of its own entity named `portal` - the same `portal.png` system, lifeTime 100, size 64, beside
+    float `speed` 1 and `stride` 2 - so the loading screen's portal is the one portal in the game that stands for
+    ever. **No level scene and none of the 190 `.ent` files names it**, and `insertPortal` never sets it on a portal
+    a shot opens, so every portal the PLAYER opens perishes; `GetUInt` of a name that is not there is 0
+    (`ETHEntity.cpp:865-870`), which is what those portals read. **This line said "never set" until the fix round
+    below**: all 323 `.ent` and `.esc` files are UTF-16, so a plain grep over them finds nothing at all, and the
+    census that produced it was one. Re-run with a BOM-driven reader it finds this one hit and no other; the two
+    other `.esc`/`.ent` censuses of this batch (step 94's `explosion.ent`, step 91's ten `light_off` scenes) were
+    made by parsers rather than greps and both reproduce exactly.
+  - **#87-158 it fades:** `killTime` is READ (#99-101) before the block that WRITES it (#113-123), so the frame that
+    notices the kill neither fades nor counts; from the next, `SetColor(GetColor() x 0.9)` every frame (#130-142).
+  - **#159-185 it dies:** once `GetTime() - killTime` passes 400 (#157),
+    `AddScaledEntity('portal_death.ent', GetPosition(), getScale())` and then `DeleteEntity`.
+- **`killPortal`** (357278..357358) is `KillParticleSystem(0)` and `(1)`, which is `Kill(true)`
+  (`ETHSpriteEntity.cpp:812-819`): no particle is renewed and each lives out the life it has. `ParticlesKilled(n)`
+  returns that flag itself (`:821-828`), so it is true from the kill on and not when the pool is spent.
+- **`PortalManager::update`** (138545..139692) is POP, THEN SIZE, THEN COLOUR, THEN POP, and the order is the whole
+  of it. **#164-180** reads `portals[0].ParticlesKilled(0)` and, if it is set, calls `popFront` - ONE conditional
+  (`#177 JLowZ -> 181`), no loop. **#181-188** then reads the size and compares it with the immediate 1.
+  **Above one**: **#189-208 `portals[0]` = PORTAL_RED (1, 0.3, 0.4)** and **#209-228 `portals[1]` = PORTAL_BLUE
+  (0.3, 0.4, 1)**, and only THEN, **#230-246**, a killed `portals[1]` is popped with `popBack` - again one
+  conditional. **Exactly one** (#248-255): **#261-280 red** where `maxPortals` is 1, **#282-301 V3_ZERO**
+  anywhere else - and that branch jumps to #302 WITHOUT popping, so a lone killed portal is coloured this frame and
+  taken by the NEXT frame's front-pop. Zero: nothing at all, and #64-72 has already returned on an empty array.
+  Nothing colours index 2 or beyond, and nothing recolours a portal it has popped. The globals are listing lines
+  60476 and 60485. **`killAll` pops nothing** (147664..148016 #28-82: `killPortal` per entry and
+  `decrementPortalCounter` for each that carried nothing), and it runs at **#105-106 of update**, before all of the
+  above - so the clear button's pair is popped and coloured by the rest of that same update. **The port passes
+  `budget` where the original reads `maxPortals`**, and `budget` is `min(maxPortals, 2)`: the two differ only above
+  2, and there the original's answer for a lone portal is V3_ZERO either way, so every value the game can reach
+  agrees.
+- **Only the SPRITE reads that colour.** `SetColor` writes `m_v4Color` (`ETHEntity.cpp:493-498`); the sprite draws
+  `min(1, ambient + emissive) x m_v4Color` (`ETHRenderEntity.cpp:112-117`); the particle pass draws
+  `particle.color x ambient` and never reads it (`ETHParticleManager.cpp:381-389`). 00_order 8.2 cites the same four
+  call sites while ruling the STATIC portal's tint out of them. **So V3_ZERO on an added sprite is a halo that does
+  not draw**, which is exactly what the original's own 1-3 still shows (`out/parity/smoke/nav/01`): a white spiral, a
+  black core, and no glow.
+- **The footage agrees.** F2 measures the hover at amplitude 1.95 and 1.89 u and omega 1.012 and 0.998 rad/s on the
+  two portals of a 1-3 pair; it sees the summon bubble grow 382 u/s against the `.ent`'s 384; it records "no halo
+  tint" on a lone portal and "A's halo turns pink on this same frame" that B opens; and it sees both ends killed by
+  a teleport, `portal_death` about 0.45 s later, and the pair gone.
+
+**WHAT CHANGED.**
+- **`data/effects.json`** gains `portal_summon_effect`, `portal` and `portal_death` - three point-only rows, refused
+  by `Effects::LoadRules` if either is given a direction - and **`placed_portal`**, the callback's own six numbers:
+  the three colours, the 0.9 a frame, the 1/60 s of frame time it is taken over, and the 400 ms.
+- **`data/placement.json`** gains `portal.perish_ms` 20000 and `portal.bob` (speed, stride, vertical, axis, start
+  angle), both read by `Portals::LoadPlacement`, both with the instruction ranges above.
+- **`sim/Effects`** gains those rows, `Summon`/`Portal`/`Death`, `ManagerColour` (the manager's #185-300 read in its
+  own order) and `KillFade`.
+- **`sim/Portals`.** `Placed` gains `basePx` - `linearMotion`'s `originalPos`, where the shot opened it - a
+  `Motion::Linear` of its own, and `ageMs`. `Tick` runs the callback's first two arms over every placed portal
+  before anything reads where one is: `Motion::Advance`, then `atPx = basePx + OffsetPx`, then `Centre`, which puts
+  the entry circle back over the point. **ONE POINT AND NOT TWO** (00_order 8.15 R25's rule, here for a portal):
+  `linearMotion` ends in `SetPosition` and `PortalManager::doTeleporting` reads that same `GetPositionXY`, so the
+  circle a traveller enters by hovers with the picture. `sim/Motion` is step 69's, reused rather than copied;
+  `Game::LoadData` reads `motions.json` once into `Data::motion` and hands it to the portals' rules.
+- **AND `State` GAINS `nextPortalId`, WHICH IS NOT THE COUNT OF PORTALS USED.** The original's manager holds
+  ETHEntity HANDLES, and a handle is never handed out twice; `portalsUsed` is the GOLDEN SCORE's count, and
+  `killAll(true)` gives it back for every portal that carried nothing (`decrementPortalCounter`, killAll #47-72).
+  Naming a portal by that refundable count - which is what `TryPlace` did until the fix round below - let the
+  clear-portals button hand a new portal the id of one whose entity was still inside its 400 ms, and the layer's
+  id-keyed drawing then gave the new portal the dying one's colour, withheld its own two entities, and burst it.
+  `nextPortalId` is handed out once and never given back, so an id is a portal's for the level's life.
+- **`MagicPortalsLayer::syncPlacedPortals`**, per FRAME beside `updateEffects`, and it is `PortalManager::update`'s
+  own four steps in its own order: a new id adds the bubble and then `portal.ent` through the effects runtime; an id
+  that has left the simulation's list has its two systems killed; **the manager's array** - the drawn portals it has
+  not popped, which is NOT the list of portals in play - has a killed front popped, then what is left coloured by
+  its size, then a killed `portals[1]` popped; and from the frame after a kill the colour falls and the 400 ms runs
+  out into `portal_death.ent` and the end of the entity. `DrawnPortal` carries `popped` for exactly that array.
+  `m_portalQuads` - the port's own white halo quad - is gone with it.
+- **`EffectSpawn` gains `pictureSlot` and `colour`, and `Effect` a `colour`.** The between-slot table names a portal
+  the player opened in its own right (00_order K13), so its picture keeps `Slot::PlacedPortal` where every other
+  added entity takes `Slot::Effect`; the table itself is untouched, and its halo and systems keep their own classes.
+  The colour is written onto the picture's quad in `updateEffects` and not in `syncLighting`, because an effect is
+  added and faded on the frame: a tint that waited for the next tick would draw a new portal white for a frame and a
+  dying one at its old brightness.
+- **The capture harness learns the tap it always meant.** `readInput` read the pointer through `Input` directly for
+  the shot, so a scheduled `--tap` - which owns the pointer through `touchThisTick` - could close a popup and press a
+  help block but could never fire a portal, and 7.4's gate could not be run at all. `readInput` now reads the tick's
+  touch ONCE, hands it to `helpBlockInput` and fires the shot from it, and `ScreenToLevelPx` splits into
+  `ViewportToLevelPx` so a touch that has no cursor can be mapped. **For a REAL pointer it changes nothing** - the
+  touch it now reads carries the same `pointerOverGame` and `TickWasPressed(kTap)` it read before - and for a
+  scheduled tap it changes one thing: a tap that used to do nothing now fires. The 128-level sweep takes no tap at
+  all, and the only tap in this step's own captures besides the shots is the popup close, which the popup consumes
+  before `readInput` reaches the shot. 10.1's gates need the same seam.
+- **`Slot`, `SlotRow` and `kSlotTable` moved up the header** above the effects block, unchanged, so that
+  `EffectSpawn` can name a class. No line of the table itself changed.
+
+**THE DEPTH THIS MOVES, and it is one level.** A placed portal used to be drawn at `slotAt(m_playerSlot, ...)` -
+the player's own slot - and is now drawn at `slotAfter(0, ...)`, which is the decoded z 0 of `portal.ent`. The two
+are the same wherever no node stands between 0 and the player's 1.42, which is every level but level22a
+(`art.json depth`: one node at eth_z 1 in the whole game). No capture here shows level22a with a portal on it, and
+the change is written down rather than measured.
+
+**THE GATES** (00_order section 7's 7.4 row and `system_7` G.3). The original's still is
+`out/parity/smoke/nav/01_after_pause_levellist.png` (1-3, one portal), and `7.4/radial.py` reads the profile about
+the darkest 3-px-blurred point within 40 px of (537, 308) - the same method on both sides, which reproduces the
+brief's own fourteen-radius table of that still to within **4.0 grey**, a mean of 1.4 (the annulus is two pixels
+wide here and the brief does not say what its own was). `7.4/scan_gate.py` takes the frame that best matches it by
+mean absolute error over those radii, and it scans the WHOLE run rather than the window G.3 names. **That wide scan
+is a STRENGTHENING of the brief's window and not a reading of it**: G.3 says to capture from 1.0 s to 3.0 s after
+the shot lands, and the shot lands at f252 here (the summon bubble's first frame), so the brief's own window is
+f312..f432 while the scan runs f246..f900 - about five times as wide. The row below reports the in-window answer
+too, and it is the same verdict either way. **A single frame IS the
+unit the brief asks for, and it has to be**: the spiral pulses on its own 900 +- 450 ms lives, so over the 107
+frames of the run that have one portal on them the four numbers range core **9.5-29.1**, ring peak **80.1-251.0**,
+r 62 **38.8-61.9** and arm p95 **72.3-156.3**. Individual frames would read a core above 25 and a ring below 130;
+what the gate asks is whether the frame that matches the still matches it, and f726 does, at an error of 6.57 grey
+over fourteen radii. Captures, scripts and logs: `out/parity/visuals/7.4/`.
+
+| Gate | Required | Today | Measured |
+|---|---|---|---|
+| `--level level2 --tap`, the best-matching frame: the core | mean grey **<= 25** at r <= 10 px (the original reads 23.25) | NO CAPTURE, and none could be taken: on the committed build a scheduled tap could not fire a shot at all (the harness arm above), and what it drew for a portal was `portal_halo.png` alone - white, added, no spiral, no iris, so neither a dark core nor an arm | **10.72: passes.** f726 of the run below, MAE **6.57** grey over the fourteen radii. **Re-taken in the fix round on `53e9de65...`, and all 151 frames of the run are byte-identical to the round before's**, so `scan_gate.py` picks the same f726 and reads the same number; the verifier's own script, which shares no code with it (`verify1/prof.py`, its own blur and its own annuli), picks f726 too, at MAE 6.52, and reads **10.18** |
+| the same frame: the bright ring | mean **>= 130** at r 34..50 (original 155.28) | - | **154.34: passes** (the independent script: **152.90**) |
+| the same frame: the background by r 62 | mean **<= 70** (original 49.43) | - | **61.87: passes** (independently **61.87**) |
+| the same frame: the arm tips | p95 **>= 100** at r 70..74 (original 120.80) | - | **100.88: passes** (independently **100.32** - the thinnest of the four margins, 0.3 grey, and stated as such) |
+| Frame selection (NOT a gate of the brief; measured because the gate is frame-picked) | the frame that best matches the still must not be the only one that passes | - | **measured, and it is not.** Over the 110 one-portal frames f246..f900 all four gates pass on **30**, and the frames that pass are MAE ranks **1, 2, 3, 6, 11, 12, 13, 14, 16, 18, ...** - the frame the method picks is rank 1 and passes. Ranges over the run: core 8.85..64.92, ring 40.37..244.91, r 62 36.87..68.66, arms 72.33..255.00 (`fix1/prof_scan.txt`) |
+| The best match inside G.3's OWN window (1.0-3.0 s after the shot lands = f312..f432), since the four rows above were picked out of a scan five times wider | the in-window frame must pass the same four gates, or the wide scan is doing the work | - | **f354, MAE 8.08 - core 16.05, ring 148.12, r 62 52.26, arm p95 101.00: passes all four.** **6 of the 21 in-window frames** pass all four. Measured by the verifier's second reader, which shares no code with `scan_gate.py` (`verify2/gates2.txt`, `verify2/scan2_gate.json`); that reader picks the same global f726 independently, at MAE 6.44 |
+| `test_mp_layer`: quads keyed by id | each portal's entity drawn on its own portal's point, by id | the quads were a list parallel to the simulation's | **passes**: two portals, two `portal.ent` effects, each following its own id's point; the third tap recycles the oldest and its entity outlives the list it left. The fix round adds the clear button: the pair is popped and coloured in the manager's order, and the portal opened inside their 400 ms takes **id 2, not the refunded 0** - its own bubble, its own entity, its own point - while the two bursts land where the cleared pair stood |
+| K8: 1-01 and 2-01 f420 byte-identical | step 95's `e2da5131...` and `1babb1c0...` | step 95's own after | **passes, both md5-identical**, re-captured in the fix round on `53e9de65...` (1-01 on its own as well, `fix1/k8/`, and both again in the sweep below). Nothing places a portal on a 420-frame capture with no input, so neither of this step's two new draws on `m_effectRandom` is taken there |
+| K8: the 128-level sweep | what changed is a placed portal's own | step 95's `7.3/after/sweep` | **passes: 128 of 128 byte-identical** to step 95's own sweep, and **128 of 128 to this step's own pre-fix-round sweep** as well (`fix1/compare_sweep.py`, `fix1/compare_sweep.txt`, which hashes the PNG FILES rather than the logs' recorded md5s and opens all 128 at 1280 x 720 - the power-loss check). 128 launches, every one exit 0, none blocked. Nothing opens a portal on a 420-frame capture with no input, so this step's pixels are on none of the 128, and its two new draws on `m_effectRandom` are taken on none of them |
+| K8: the gate and pair runs | the fix round must move no frame the step already measured | the round before's `7.4/after/{gate,pair}` | **passes: 151 of 151 and 161 of 161 byte-identical.** The pair run is the only capture in the set in which a portal is ever killed (its third tap recycles the first, `portal_death` at f762..f786), so this is what says the fix round's kill, fade and burst are where they were |
+| Validation | exit 0, silent | - | **passes**: validation ACTIVE in all **131** launches of the binary the captures come from (128 sweep, the single 1-01 K8 run, the 900-frame gate run, the 960-frame pair run), every one exit 0, and **0** `[Validation]` lines in any of their logs beyond the two Steam overlay layer notices every launch on this machine prints |
+
+**EACH NUMBER WITH THE READER THAT PRODUCED IT.** Two of the four G.3 gates hold by less than the spread between
+readers, so a later step that re-baselines these rows has to quote the script beside the number - otherwise a
+half-grey change of method reads as a regression.
+- **The core's `<= 25` sits inside the method noise of the reference it came from.** Read on the ORIGINAL's still,
+  the threshold's own source reads **23.25** by `7.4/radial.py` (two-pixel annuli, a 3-px blur), **25.26** by
+  `verify1/prof.py` (one-pixel annuli at +-0.5) and **27.27** by `verify2/prof2.py` (a box blur over the centre) -
+  so two of the three FAIL the `<= 25` that was derived from it. The port's pass is not in doubt on any of them:
+  the same three read f726 at **10.72, 10.18 and 11.73**, under half the threshold. What is written down here is
+  that 25 is one reader's reading of that still and not a property of the still.
+- **The arm tips pass by less than one grey on every reader**: **100.88** (`scan_gate.py`), **100.32**
+  (`verify1/prof.py`) and **101.00** (`verify2/prof2.py`) against the `>= 100`. Those three differ only in blur
+  kernel and annulus width, and their spread - **0.7 grey** - is the size of the margin itself.
+
+**MEASURED BUT NOT GATED** (00_order's 7.4 row lists no dynamics gate, and says F2 confirms rather than measures).
+Every number here was read on the gate and pair runs of the round before the fix round; the fix round re-took both
+runs on its own binary and all **151** gate frames and all **161** pair frames came out byte-identical, so these
+stand unchanged rather than being re-derived.
+- **The hover, off the same 900-frame run** (`7.4/bob_fit.py`, frames 264..900, more than a whole period): fitting
+  `y = base + A cos(w (t - t0))` to the portal's darkest blurred point gives **A 5.148 px = 1.830 u** against the
+  `.ent`'s stride 2, **w 0.9875 rad/s** (period 6.363 s) against the decoded 1, at an rms of 0.613 px. The tracker
+  follows the spiral's darkest point and not the quad's centre, which is why it reads a little under 2 - the
+  original's own footage, measured the same way, reads 1.95 and 1.89 u. **What is pinned exactly is the
+  simulation**: `test_mp_statics` holds `atPx.y` to 0.01 u of `base + 2 cos(k / 60)` on four ticks of a 240-tick run
+  and checks the entry circle stands on the same point.
+- **The manager's colour, off the 960-frame run** (`7.4/tint.py`): in a 45 px disc about the FIRST portal, R - B is
+  **-27.64** (the mean of the twelve frames f420-f486) while it stands alone - the sky's own blue, through a halo
+  that adds nothing - and **+12.77** (the mean of the twenty-eight frames f528-f690) once the second portal has
+  opened, a step of **40.4 grey levels**; G - B falls from -14.22 to -19.26 across the same step, which is
+  PORTAL_RED's G below its B. **The measuring window starts at f528 and not at the step itself**: the second
+  portal's own summon bubble grows to about 265 px from a centre 117 px away, so it crosses this disc for the
+  500 ms after f492 and the five samples in between (+15.7, +7.0, +4.6, +8.7, +8.5) carry it. The step's FRAME is
+  f492, the frame after the tick the array's size passes 1 (a tap
+  at tick 480).
+- **The death**, on the same run: the third tap recycles the first portal, and 24 frames later `portal_death.ent`
+  bursts white where it stood while the new portal turns on beside it (f762..f786).
+- The 20,000 ms perish is **20.017 s** of the port's sixtieths: tick 1201, the first tick past 20,000 ms, since the
+  first tick writes zero rather than adding.
+- **The summon bubble's growth reads 7 % under its own `.ent`** and is reported rather than gated.
+  `portal_summon_effect.ent` is one `onda.png` of size 33 growing +6.4 a frame, so its RING's radius grows 3.2 u a
+  frame; the brightest ring of the difference against the frame before the portal opened sits at **33.4, 51.9 and
+  69.0 u** on f258, f264 and f270 of the gate run, which is **2.97 u a frame, 356 u/s** against the `.ent`'s 384.
+  The tracker takes the brightest ring of a fading, expanding shell, whose trailing edge is the brighter, so it
+  reads under; the original's own footage reads 382 on the clearer of its two bubbles and 337 on the other, by the
+  same kind of fit. The arithmetic itself is `Particles::Step`'s, which `test_mp_effects` pins exactly on the
+  teleport's ring (step 95).
+
+**THE BINARY THE CAPTURES WERE MEASURED ON.** Every number in the table above and every capture under
+`7.4/fix1/` comes from `MagicPortals.exe` md5 **`53e9de65...`**, the binary the fix round below left in this tree:
+the source that is here is the source the gates were read on. The round before it measured `53c2c99a...` and then
+`e51e8a98...`, and the verifier re-measured `e51e8a98...`; all three give **`e2da5131...`** on 1-01 f420 and agree
+frame for frame on the gate and pair runs, which is what lets the fix round's numbers be compared with theirs. The
+exe's own md5 moves on every relink (the PE header carries a timestamp) and is not a claim about the pixels; the
+captures are, and they are byte-deterministic under `--fixed-step`. Earlier in this step the thirteen C++ files it
+rewrote were put back on CRLF, which every other `.cpp` and `.hpp` in this checkout has (`.gitattributes` pins
+`.json`, `.md`, `.py` and `.sh` to LF and leaves C++ to `text=auto`, so writing them through Python had made these
+thirteen the only LF ones and made git warn on every touch; the index sees LF either way, so no commit changes).
+
+**THE SUITES**, each run once (the backlog's Smart App Control rule), all on the binary above:
+`test_mp_effects` **285 checks, 0 failures**; `test_mp_statics` **106, 0**; `test_mp_layer` **1463, 0**;
+`test_mp_shot` **90, 0**; `test_mp_play` **181, 0**; `test_mp_launchers` **98, 0**; `test_mp_wells` **98, 0**;
+`test_mp_movers` **53, 0**; `test_mp_boss` **126, 0**; `test_mp_darkdragon` **99, 0**; `test_mp_levels` **128, 0**;
+`test_mp_start` **752, 0**. Every one of them is a suite this step touches: the first three are its own, and the
+rest place a portal or read the data `Game::LoadData` now also reads. The full `ctest` was NOT run: 7.4's definition
+of done does not ask for it. `test_mp_boss.exe` and `test_mp_start.exe` were refused by Smart App Control
+(exit 126) on their one launch, were deleted and relinked once each, and ran on that relink's single launch;
+nothing else was blocked, and nothing was launched twice on one link. Logs in `7.4/fix1/`.
+- **`test_mp_effects`** gains the three rows as points with no direction, the manager's colour table (both ends of a
+  pair, a third portal coloured by nothing, a lone portal black where the level grants two and red where it grants
+  one), and the fade: one frame is nine tenths, twenty-four frames is 0.9 ^ 24 = 0.0798 of what it was, a long frame
+  equals its frames, and a paused frame fades nothing. Seven more fixtures refuse a `placed_portal` missing a
+  number, a colour of two channels, and a fade that brightens.
+- **`test_mp_statics`** gains the hover and the perish, both on 1-02, the one chapter-1 level a suite can open a
+  portal on by hand.
+- **`test_mp_layer`** gains the whole life of one: two entities in insertPortal's order, the bubble temporary and the
+  portal never, its sprite and its two systems behind the player with the systems in front of its own halo, black
+  alone and red-then-blue as a pair, each drawn on its own id's point, then the recycle, the fade, the 400 ms and
+  `portal_death` where it stood, and nothing of it outliving a retry. The fix round adds **the clear button**, the
+  one control that kills a whole pair on one frame: the popped front keeps PORTAL_RED, the one left in the array is
+  written V3_ZERO, and the portal opened while both are still fading takes its own name (**id 2, not 0**), its own
+  summon bubble and its own `portal.ent`, neither dying entity follows it, and the two bursts land where the
+  cleared pair stood, 23 frames later.
+- **`test_mp_play`** gains three replays that reach the twenty seconds: a pair opened two seconds apart perishing
+  one at a time (**ticks 1201 and 1201 of their own clocks**) with the level still played through a fresh pair
+  afterwards; a portal perishing under the player's feet after 1,200 ticks of it standing inside the circle; and a
+  stone on the hovered circle's rim going through while one on the rim of where the portal was OPENED does not -
+  both distances asserted, so the case cannot pass unless the trigger moved with the picture.
+- **Three cases were rewritten because this step makes them stale**, not because they broke. Two read the portal's
+  picture off the tag `Magic Portals Portal Sprite` on the tick it landed; it is now an effect's quad, added on the
+  frame after. `test_mp_play`'s and `test_mp_launchers`' exit-point cases compared what came out of a portal against
+  the point the portal was OPENED at; they now read the point the traversal tick wrote down (`Traversal::exitPx`,
+  step 95's record) and check that it is within the hover's stride of where it opened.
+
+**RECORDED DEVIATIONS AND DECISIONS.**
+1. **The placed portal's TINT is applied here although no batch owns it.** 00_order 8.2 decodes it as a side result
+   of D1 and section 4 gives it to nobody. It is taken now because the kill fade this step builds multiplies exactly
+   that colour: a fade from white would be the wrong colour on every frame of every death, and a lone portal drawn
+   white would fail this step's own core gate. It is the original's behaviour, which is the owner's standing ruling.
+2. **The hover and the perish are gameplay, and they are built in the simulation.** Both are arms of the callback
+   this step owns, both move `Portals::State`, and both are ruled the original's way - the perish by **R14** by
+   name, the hover by 8.15 **R25**'s rule that a carrier has one point and not two. A portal now drifts two units
+   up and down under the player's feet and is gone twenty seconds after it opened; three suites' pins moved with it.
+3. **The port's clock for both is its TICK**, sixty a second and frozen with the level under a pause, where the
+   original's is its rendered frame. The 0.9 a frame is applied per 1/60 s of frame time for the same reason
+   (system_7 7a calls that reading INFERRED, and `effects.json` says so). **This costs ONE FRAME on a teleport and
+   nothing anywhere else.** `doTeleporting` is #303-304 of `update`, AFTER that update's pops and colouring, so the
+   original colours the consumed pair red and blue on the frame the teleport happens and blacks the survivor out on
+   the next; the port's traversal is the TICK's, so the frame that follows it already sees both gone and the
+   survivor takes V3_ZERO there. Every other kill path - the clear button (#105-106), the recycle
+   (`managePortalInsertion`, #59) and the perish - is called BEFORE the pops in the original too, so the port's
+   frame and the original's agree on it exactly.
+4. **`portal_death.ent` is added on the frame the entity is freed**, and the entity is taken out of the list before
+   the burst is added rather than after. The original's order is the other way about (#174 before #183); freeing an
+   effect draws no random, so the two orders give the same stream and the same frame.
+5. **The summon bubble does not follow its portal.** It is added at the portal's point and stays there while the
+   portal hovers away from it, which is what a separate `AddEntity` with no owner does in the original.
+6. **The brief's own shape is not what is built, and the original's is.** `system_7` 7d-1 says to add "`portal.ent`'s
+   two systems owned by the id, next to the existing halo quad" - two objects, the port's quad and the script's
+   systems. What the original has is ONE entity whose sprite IS that halo, so the port now spawns `portal.ent`
+   whole through the effects runtime and `m_portalQuads` is gone. That is what makes the colour and the fade
+   reach the sprite at all, and it is why the picture arrives on the frame rather than the tick.
+7. **A placed portal's box** (the placeholder a level with no art shows) is now hidden whenever the original's
+   `portal_halo.png` can be read at all, rather than whenever its quad happens to exist - the same rule a
+   fireball's box follows, and for the same reason: the picture arrives one frame after the tick that opened the
+   portal, and a box that waited would flash for that frame every time.
+
+**WHAT IS LEFT OPEN.**
+- **The depth of a placed portal on level22a** (above): decoded, applied, and shown by no capture.
+- **`<StartPoint>` z as a raw literal** stays where step 95 left it, for the K13 owner. `portal.ent`'s two systems
+  carry z 10, so they draw at 0 + 10 rather than at 0 + 10 / 2.8125; that is the same trap and the same number.
+- **The shot-side marks and failures** (`portal_mark`, `projectile_shoot`, `portal_fail*`, `red_cross`,
+  `red_waves`, `hourglass`) are 10.1's, and `red_cross` still waits on R15.
+- **The gameplay the perish touches beyond the picture** - whether a level's golden score or a tutorial's timing
+  reads differently now that a portal expires - is still not SURVEYED across the 128 levels, and this is narrower
+  than it was. The fix round's three `test_mp_play` replays reach past 1,201 ticks and pin what the verifier said
+  nothing exercised: a pair expiring while a level is being played, a portal going out from under the player, and a
+  traveller meeting the entry circle where the hover put it. What is still unmeasured is the whole-game question -
+  which of the 128 levels' golden scores a twenty-second life changes - and that is a level-sweep of gameplay, not
+  a case. **Said plainly, so no later reader has to work it out: NO AUTOMATED EVIDENCE IN THIS TREE COVERS THE
+  OTHER 125 LEVELS.** `test_mp_levels`' 128 checks are not it - that suite reads the converted `.tscn` files and
+  counts nodes, resources and properties, replays nothing and knows no score, so its 128 of 128 says nothing at all
+  about what a twenty-second portal does to a golden score. The three replays above are three levels' worth. What
+  would answer it is one scripted replay sweep of the 128 with `perish_ms` 20000 against 0, diffing cleared/not,
+  `portalsUsed` and golden - and that is not run here.
+
+**STEP 96'S FIX ROUND (2026-09-20), AFTER THE VERIFIER FAILED IT.** It failed on DEFECTS, not on the gates: it
+re-measured every gate above and every one passed - including the frame-selection question nobody had asked, which
+it answered on the pixels. What it found were four problems, and this round fixes the three that were defects and
+the fourth as well, because the fourth was the original's behaviour and this step already had the decode for it in
+its own text. **Source, data and tests changed, so the tree was rebuilt (zero warnings, 54 steps), the twelve
+suites were re-run, and the gate, pair and 128-level sweep captures were all re-taken.** Everything of this round
+is under `7.4/fix1/`.
+
+1. **A REUSED ID (high, and a real defect).** `TryPlace` named a portal `portalsUsed`, and `KillAll(true)` - the
+   clear-portals button - decrements `portalsUsed` for every portal that carried nothing. So the next portal took
+   the id of one whose entity was still inside its 400 ms fade, and the layer's id-keyed list then did three wrong
+   things at once: the `known` check suppressed the new portal's summon bubble and `portal.ent` entirely, the
+   re-bind handed the DYING entry the live portal's point, and 400 ms later that entry freed the picture and burst
+   `portal_death.ent` on a portal that was alive. **The verifier's own two-line guard was not enough** and the fix
+   is the sim's, not the layer's: `effectOwnerPoint` looks an effect's owner up by id over `m_portalDraws` and
+   returns the FIRST match, so with a frozen dying entry ahead of a live one sharing its id, the new portal's own
+   picture would still have followed the dead one's point. `Portals::State::nextPortalId` splits the two things the
+   original keeps apart - the refundable SCORE counter and the never-reused entity HANDLE - and the layer keeps a
+   `!drawn.killed` guard on its identity search anyway, so its drawing is right on its own terms. Pinned by
+   `test_mp_layer`'s new clear-button case, which drives the real control (the suite can press it; a scheduled
+   `--tap` still cannot, because `readInput` takes `under = devTap ? nullptr : ...`).
+2. **`dontPerish` IS SET (medium, and a real defect in the record).** `placement.json`'s `_perish_source` and this
+   step's own decode both said "never set". It is set once, by `scenes/loading_screen.esc`, on that scene's entity
+   named `portal`. **The census that produced the claim was a plain grep, and every one of the 323 `.ent` and
+   `.esc` files is UTF-16**, so it could not have found anything. Both texts are corrected above, and R14's
+   conclusion survives untouched: no level scene sets it and `insertPortal` never does, so every portal the player
+   opens still perishes. The verifier also asked for the batch's other censuses to be re-run with a BOM-driven
+   reader; both were, and both hold exactly - step 94's `explosion.ent` is named by no `.esc` and no `.ent`, and
+   step 91's `light_off` is in exactly the ten scenes it names. Neither was a grep.
+3. **THE PERISH AND THE HOVER HAD NO REPLAY THAT REACHED THEM (medium, and true).** `test_mp_play` gains three,
+   and they run past 1,201 ticks: a pair opened two seconds apart perishing one at a time (**1201 and 1201** ticks
+   of their own clocks, one while the other still stands) with the budget free afterwards and the level still
+   played through a fresh pair; a portal perishing under the player after **1,200 ticks** of it standing inside
+   the circle, going nowhere because it has no partner, and the player walking away afterwards; and a stone on the
+   hovered circle's rim carried while one on the rim of where the portal OPENED is not. The last case asserts both
+   distances against the reach before it asserts the carry, so it cannot pass unless the trigger moved with the
+   picture.
+4. **THE SURVIVOR OF A CONSUMED PAIR (low, and the original's own behaviour).** The port coloured over the list of
+   portals IN PLAY; the original colours over its manager's ARRAY, which still holds a killed portal until a pop
+   takes it. Re-read in the listing rather than taken from the verifier's prose: **#164-180 pop a killed front -
+   `#177 JLowZ -> 181`, one conditional and no loop - #181-188 read the size, #189-228 colour, #230-246 pop a
+   killed `portals[1]`, and the size-1 branch (#248-301) colours and jumps to #302 WITHOUT popping**. So the second
+   end of a consumed pair is written V3_ZERO by the frame after the kill and only then popped, where the port was
+   fading it from PORTAL_BLUE over the whole 400 ms. `syncPlacedPortals` now models the array with a `popped` flag
+   and runs those four steps in that order. **It moves no capture, and the reach of that claim is stated rather
+   than implied.** The pair run is the only capture in the whole set in which a portal is ever killed - its third
+   tap recycles the first portal, and `portal_death` follows at f762..f786 - and all 161 of its frames are
+   byte-identical, which is what says the kill, the fade and the burst are where they were. The branch this item
+   actually changes - a killed LONE portal, coloured V3_ZERO by the size-1 branch before the next frame's front-pop
+   takes it - is reached only by a clear or by a teleport, and no capture in this step drives either: a scheduled
+   `--tap` cannot press a control, and no replay in the harness walks a body through a pair. It is pinned by
+   `test_mp_layer`'s clear-button case instead, on the one path where the port's frame and the original's agree
+   exactly (deviation 3).
+5. **What the verifier left NOT RUN, and what became of it.** `test_mp_movers` ran here (53, 0) on its first
+   launch. The gate table's "Today" column still cannot be re-taken, for the reason it gives. The level22a depth
+   is still shown by no capture, above. The teleport survivor is item 4; the clear-portals path, which it called
+   undrivable, is drivable in the suite and is now driven there.
+6. **OBSERVED AND NOT OWNED, because the new decode invites the question.** The clear-portals button's own life
+   follows the ARRAY in the original, not the portals in play: `update` removes it only at `portals.size() == 0`
+   (#64-72) and re-adds it at #161-162 after `killAll`, so it stands for the frame or two in which the cleared
+   pair is still being popped. The port's `ControlRect(Clear)` follows `m_level.portals.placed`, so it goes on the
+   tick of the press. That is the HUD's, no gate of 7.4 touches it, and nothing here changes it; it is written down
+   so a reader of the paragraph above does not have to find the mismatch themselves.
+7. **WHERE THE DEVIATIONS LIVE.** They are in this step, as RECORDED DEVIATIONS AND DECISIONS and WHAT IS LEFT
+   OPEN; **no row is added to `docs/parity-backlog.md` here**, which is the convention step 94's own fix round 2
+   settled on - the backlog rows are the close agent's, and this branch does not carry track A's file. The one
+   candidate a close agent may want is the open item above: which of the 128 levels' golden scores a portal's
+   twenty-second life changes, which is a gameplay sweep and not a case.
+
+**WHAT THIS ROUND MEASURED.** Gate and pair runs with `verify1/gates.txt`'s own commands
+(`fix1/capture_gate.sh`), read by BOTH `scan_gate.py` (this step's) and `verify1/prof.py` (the verifier's, which
+imports none of it): `fix1/scan_gate.txt`, `fix1/prof_scan.txt`. The 128-level sweep with `fix1/sweep_fix1.sh` and
+`fix1/compare_sweep.py`, which hashes the PNG FILES rather than trusting a log and opens every one of them:
+**128 identical against step 95's sweep, 128 identical against this step's own pre-fix-round sweep, 128 of 128
+decoding at 1280 x 720, 128 rows all rc=0, validation ACTIVE in all 128 logs and no `[Validation]` line in any of
+them beyond the two Steam notices.** The gate, pair and single 1-01 logs read the same three ways.
+
+**THE SECOND VERIFICATION PASSED THE STEP, AND ITS FOUR REMARKS ARE ANSWERED IN TEXT ONLY.** It re-measured every
+gate on its own reader (`verify2/prof2.py`, which imports neither `scan_gate.py` nor `verify1/prof.py`), re-took
+the gate and pair runs byte-identically, re-hashed the sweep and re-ran the `dontPerish` census, and raised no
+defect: **no source, data or test file changed for it, the binary is still `53e9de65...` and no capture was
+re-taken.** What it asked for is written above, not built - the in-window frame row and the "strengthening, not a
+reading" wording (its frame-window remark), the three readings of the original's core and the three of the arm tips
+with the reader beside each (its two threshold remarks), and the plain sentence that no automated evidence covers
+the other 125 levels (its one medium remark, whose other branch - a 128-level gameplay sweep of `perish_ms` - is
+out of this step and stays open above).

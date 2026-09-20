@@ -916,11 +916,19 @@ void ThePlayerGoesThroughAndThePairIsSpent() {
     const auto& rigid = play.registry.get<RigidBodyComponent>(play.player);
     const glm::dvec2 exitVelocityPx(rigid.velocity.x * Units::kPixelsPerMetre,
                                     -rigid.velocity.y * Units::kPixelsPerMetre);
-    const glm::dvec2 expected = Portal::ExitPosition(glm::dvec2(300.0, 120.0), exitVelocityPx, g_portalRules.transit);
+    // THE EXIT AS THE TRAVERSAL TICK LEFT IT, not the point the portal was opened
+    // at: a placed portal hovers two units up and down (ETHCallback_portal's
+    // linearMotion), and the record that tick wrote carries the point it stood on.
+    CHECK_EQ(play.portals.transits.size(), std::size_t{1});
+    const glm::dvec2 exitPx =
+        play.portals.transits.empty() ? glm::dvec2(300.0, 120.0) : play.portals.transits.front().exitPx;
+    CHECK_MSG(glm::length(exitPx - glm::dvec2(300.0, 120.0)) <= 2.0,
+              "the second portal hovers within its stride of where it was opened");
+    const glm::dvec2 expected = Portal::ExitPosition(exitPx, exitVelocityPx, g_portalRules.transit);
     const glm::dvec2 at = PlayerPx(play);
     CHECK_MSG(glm::length(at - expected) < 0.01, "out of the second portal, as transit.json puts it: at (" +
                                                      std::to_string(at.x) + ", " + std::to_string(at.y) + ")");
-    CHECK_MSG(glm::length(at - glm::dvec2(300.0, 120.0)) < 0.01, "and that is the exit itself");
+    CHECK_MSG(glm::length(at - exitPx) < 0.01, "and that is the exit itself");
     CHECK_MSG(exitVelocityPx.x > 0.0, "still walking right, at " + std::to_string(exitVelocityPx.x) + " px/s");
     const double speedPx = glm::length(exitVelocityPx);
     const double wantPx = g_portalRules.transit.momentumMode == "reset"
@@ -981,6 +989,177 @@ void ACratePortalledOntoAButtonOpensItsDoor() {
     CHECK_MSG(DoorShut(play, "door_lift_977") && DoorShut(play, "door_lift_976"), "977 and 976 stay shut");
 }
 
+// ---- The twenty seconds a placed portal has, played out ---------------------
+//
+// 7.4 built ETHCallback_portal's perish and its hover into the SIMULATION, and
+// test_mp_statics pins both as arithmetic on a single portal. What no replay
+// reached was either of them changing a level being played: a pair expiring
+// mid-puzzle, a portal going while the player stands in it, or a traveller
+// meeting the entry circle where the hover has carried it. These three do.
+
+std::string Px(const glm::dvec2& at) {
+    return "(" + std::to_string(at.x) + ", " + std::to_string(at.y) + ")";
+}
+
+// Whether a portal opened this run is still in play.
+bool StillPlaced(Play& play, int id) {
+    return std::any_of(play.portals.placed.begin(), play.portals.placed.end(),
+                       [id](const Portals::Placed& portal) { return portal.id == id; });
+}
+
+void APlacedPairPerishesAndTheLevelPlaysOn() {
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    CHECK_MSG(g_portalRules.perishMs == 20000.0, "ETHCallback_portal #65's 20,000 ms");
+    for (int tick = 0; tick < 30; ++tick) Tick(play, 0.0f);
+
+    // Two portals in open air, clear of the player and of each other, and
+    // STAGGERED by two seconds: each carries its own clock (#22-53 starts it on
+    // the portal's own first call), so they are not due on one tick.
+    CHECK_MSG(play.portals.TryPlace(glm::dvec2(250.0, 60.0)), "the first portal opens");
+    if (play.portals.placed.empty()) return;
+    const int firstId = play.portals.placed.back().id;
+    int sinceFirst = 0;
+    for (int tick = 0; tick < 120; ++tick) {
+        Tick(play, 0.0f);
+        ++sinceFirst;
+    }
+    CHECK_MSG(play.portals.TryPlace(glm::dvec2(420.0, 60.0)), "and a second two seconds after it");
+    if (play.portals.placed.size() != 2u) return;
+    const int secondId = play.portals.placed.back().id;
+    CHECK_MSG(firstId != secondId, "each is named in its own right");
+
+    int sinceSecond = 0;
+    int firstWent = -1;
+    int secondWent = -1;
+    int leftWhenTheFirstWent = -1;
+    for (int tick = 0; tick < 1400 && secondWent < 0; ++tick) {
+        Tick(play, 0.0f);
+        ++sinceFirst;
+        ++sinceSecond;
+        if (firstWent < 0 && !StillPlaced(play, firstId)) {
+            firstWent = sinceFirst;
+            leftWhenTheFirstWent = static_cast<int>(play.portals.placed.size());
+        }
+        if (secondWent < 0 && !StillPlaced(play, secondId)) secondWent = sinceSecond;
+    }
+    // Each goes 20,000 ms after ITS OWN opening: 1,200 sixtieths, plus the tick
+    // its clock started on, and the compare is strict - so the one after that.
+    CHECK_MSG(firstWent >= 1200 && firstWent <= 1203,
+              "the first went " + std::to_string(firstWent) + " ticks after it opened");
+    CHECK_MSG(secondWent >= 1200 && secondWent <= 1203,
+              "and the second " + std::to_string(secondWent) + " ticks after it opened");
+    CHECK_MSG(leftWhenTheFirstWent == 1, "one at a time, two seconds apart, as they were opened");
+    CHECK_MSG(play.portals.placed.empty(), "and the level holds no portal");
+    CHECK_MSG(play.portals.traversals == 0, "nothing went through: they stood in the air alone");
+    // A portal that perished is still one the golden score counted: only
+    // killAll(true) gives that back (PortalManager::killAll #47-72).
+    CHECK_MSG(play.portals.portalsUsed == 2, "both are still counted against the score");
+
+    // AND THE LEVEL PLAYS ON. Both slots are free again, and a fresh pair carries
+    // the player exactly as ThePlayerGoesThroughAndThePairIsSpent's does.
+    CHECK_MSG(play.portals.TryPlace(glm::dvec2(230.0, 208.0)) && play.portals.TryPlace(glm::dvec2(300.0, 120.0)),
+              "both slots are free again");
+    for (int tick = 1; tick <= 90 && play.portals.traversals == 0; ++tick) Tick(play, 1.0f);
+    CHECK_MSG(play.portals.traversals == 1 && play.portals.placed.empty(),
+              "and the player still walks into one and out of the other");
+    std::printf("  level30: a pair opened two seconds apart perished on ticks %d and %d of their own, and the "
+                "level still played\n",
+                firstWent, secondWent);
+}
+
+void APortalPerishesUnderThePlayer() {
+    // The portal opens ON the player and stays under its feet for the whole
+    // twenty seconds. It has no partner - the level grants two and only one is
+    // open - so nobody goes anywhere through it, and what is being watched is
+    // the record the sweep reads going out from under a traveller standing in it.
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    for (int tick = 0; tick < 30; ++tick) Tick(play, 0.0f);
+    const glm::dvec2 under = PlayerPx(play);
+    CHECK_MSG(play.portals.TryPlace(under), "a portal opens on the player");
+    if (play.portals.placed.empty()) return;
+
+    int inside = 0;
+    int went = -1;
+    for (int tick = 1; tick <= 1300 && went < 0; ++tick) {
+        Tick(play, 0.0f);
+        if (!play.portals.placed.empty() && !play.portals.placed.front().inside.empty()) ++inside;
+        if (play.portals.placed.empty()) went = tick;
+    }
+    CHECK_MSG(went >= 1200 && went <= 1203, "it went on tick " + std::to_string(went));
+    CHECK_MSG(inside > 1100, "the player stood in it for the whole of its life: " + std::to_string(inside) + " ticks");
+    CHECK_MSG(play.portals.traversals == 0, "and went nowhere: a lone portal has no partner");
+    CHECK_MSG(glm::distance(PlayerPx(play), under) < 2.0, "the player is where it stood");
+    for (int tick = 0; tick < 60; ++tick) Tick(play, 1.0f);
+    CHECK_MSG(PlayerPx(play).x > under.x + 10.0, "and walks away from where it was");
+}
+
+void AStoneEntersTheCircleTheHoverPutThere() {
+    // ONE POINT AND NOT TWO (00_order 8.15 R25's rule): linearMotion ends in
+    // SetPosition and PortalManager::doTeleporting reads that same
+    // GetPositionXY, so the circle a traveller enters by is where the hover has
+    // carried the portal - not where the shot opened it. test_mp_statics pins the
+    // two points being one; this plays the difference.
+    //
+    // Half a turn in the hover is at its full stride and barely moving:
+    // 2 cos(188 / 60) = -1.99997 u, and the next tick moves it 0.0002 u. So the
+    // portal stands its whole stride ABOVE the point it was opened at, and a
+    // stone can be put a unit inside one circle and a unit outside the other.
+    const int kHalfTurn = 188;
+    const double kStonePx = 2.0;
+    const double reach = g_portalRules.entryRadiusPx + kStonePx;
+    for (const bool onTheHover : {true, false}) {
+        const std::string how = onTheHover ? "on the hovered circle: " : "on the circle where it opened: ";
+        Play play;
+        std::string error;
+        CHECK_MSG(StartLevel30(play, true, error), error);
+        if (play.player == entt::null) return;
+        for (int tick = 0; tick < 30; ++tick) Tick(play, 0.0f);
+        CHECK_MSG(play.portals.TryPlace(glm::dvec2(300.0, 100.0)) && play.portals.TryPlace(glm::dvec2(460.0, 100.0)),
+                  how + "a pair opens");
+        if (play.portals.placed.size() != 2u) return;
+        for (int tick = 0; tick < kHalfTurn; ++tick) Tick(play, 0.0f);
+
+        const glm::dvec2 atPx = play.portals.placed.front().atPx;
+        const glm::dvec2 basePx = play.portals.placed.front().basePx;
+        const glm::dvec2 exitPx = play.portals.placed.back().atPx;
+        CHECK_MSG(atPx.y < basePx.y - 1.99 && atPx.x == basePx.x,
+                  how + "the portal stands its stride above where it opened: " + Px(atPx) + " from " + Px(basePx));
+
+        // A unit inside the circle it is meant for, a unit outside the other, and
+        // both distances are checked rather than assumed: without them this case
+        // would pass whether or not the trigger moved with the picture.
+        const glm::dvec2 at =
+            onTheHover ? atPx + glm::dvec2(0.0, -(reach - 1.0)) : basePx + glm::dvec2(0.0, reach - 1.0);
+        const double toHover = glm::distance(at, atPx);
+        const double toBase = glm::distance(at, basePx);
+        CHECK_MSG(std::fabs(toHover - (onTheHover ? reach - 1.0 : reach + 1.0)) < 0.01 &&
+                      std::fabs(toBase - (onTheHover ? reach + 1.0 : reach - 1.0)) < 0.01,
+                  how + "the stone is " + std::to_string(toHover) + " from the portal and " + std::to_string(toBase) +
+                      " from where it opened, against a reach of " + std::to_string(reach));
+
+        const entt::entity stone =
+            LevelBuilder::BuildRigidCircle(play.registry, "test_stone", at, kStonePx, LevelBuilder::Options{});
+        play.portals.travellers.push_back(stone);
+        Tick(play, 0.0f);
+        const glm::dvec2 now = Units::ToPixels(play.registry.get<TransformComponent>(stone).position);
+        if (onTheHover) {
+            CHECK_MSG(play.portals.traversals == 1 && glm::distance(now, exitPx) < 1.0,
+                      how + "it goes through, to " + Px(now) + " for an exit at " + Px(exitPx));
+            CHECK_MSG(play.portals.placed.empty(), how + "and the pair is spent");
+        } else {
+            CHECK_MSG(play.portals.traversals == 0 && play.portals.placed.size() == 2u,
+                      how + "nothing goes through: the circle is not there any more");
+            CHECK_MSG(glm::distance(now, at) < 1.0, how + "and the stone is where it was put: " + Px(now));
+        }
+    }
+}
+
 void runTests() {
     Level30HasTheRolesItsPuzzleNeeds();
     TheMoversAreKinematic();
@@ -1007,6 +1186,9 @@ void runTests() {
     ThePlayerGoesThroughAndThePairIsSpent();
     OnlyTeleportablesTravel();
     ACratePortalledOntoAButtonOpensItsDoor();
+    APlacedPairPerishesAndTheLevelPlaysOn();
+    APortalPerishesUnderThePlayer();
+    AStoneEntersTheCircleTheHoverPutThere();
 }
 
 } // namespace

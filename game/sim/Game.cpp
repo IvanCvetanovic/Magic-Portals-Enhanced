@@ -57,6 +57,13 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     // And over its guessed collision_radius_px, the two decoded radii: a
     // portal's own, and the quite separate one an antiportal refuses a tap in.
     if (!Portals::LoadPlacement(portDataDirectory + "/placement.json", read.portals, error)) return false;
+    // linearMotion's shared arithmetic - the frame its step is capped at and the
+    // turn it wraps at - which a placed portal's own hover is taken over
+    // (ETHCallback_portal #1-10). One reading of motions.json rather than a second
+    // copy of two decoded constants; the layer keeps its own for the pictures it
+    // moves, and both read the same file.
+    if (!Motion::LoadRules(portDataDirectory + "/motions.json", read.motion, error)) return false;
+    read.portals.motion = read.motion;
     if (!Mover::LoadRules(portDataDirectory + "/movers.json", read.movers, error)) return false;
     if (!Demolish::LoadRules(portDataDirectory + "/demolish.json", read.demolish, error)) return false;
     if (!Launchers::LoadRules(portDataDirectory + "/launchers.json", read.launchers, error)) return false;

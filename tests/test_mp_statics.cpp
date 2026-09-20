@@ -18,6 +18,7 @@
 #include "sim/Roles.hpp"
 #include "sim/Units.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <iterator>
@@ -185,6 +186,99 @@ void ATraversalWritesDownWhatTheEffectsNeed() {
     CHECK_MSG(run.level.portals.transits.empty(), "the record is one tick's");
 }
 
+// ---- a portal the player opened: its hover and its twenty seconds -------------
+//
+// ETHCallback_portal's own two arms (placement.json `portal`, the visuals plan's
+// 7.4). Both are the SIMULATION's and not the picture's: linearMotion ends in
+// SetPosition, and PortalManager::doTeleporting reads that same point.
+void APlacedPortalHoversOnOnePoint() {
+    // level1 (1-02), the one level whose single placement partners a static
+    // portal, and the only chapter-1 level the suite can open a portal on by
+    // hand: level0 grants none at all.
+    Run run;
+    if (!Begin("level1", run)) return;
+    Portals::State& portals = run.level.portals;
+    const Portals::Rules& rules = portals.rules;
+    CHECK_MSG(rules.bob.speed == 1.0 && rules.bob.stride == 2.0 && rules.bob.vertical && rules.bob.axisDeg == 0.0 &&
+                  rules.bob.startFrom == 0.0 && rules.bob.startTo == 0.0,
+              "portal.ent's own speed 1 and stride 2, vertical, unturned, from angle 0");
+
+    // Over the spawn and clear of the player standing there, as
+    // Level1sPortalLeadsToThePlacedOne places one.
+    const glm::dvec2 at = PlayerPx(run) + glm::dvec2(0.0, -48.0);
+    CHECK_MSG(portals.TryPlace(at), "a portal opens 48 units over the player");
+    if (portals.placed.empty()) return;
+    CHECK_MSG(portals.placed.front().basePx == at && portals.placed.front().atPx == at,
+              "it starts where the shot opened it: " + Px(portals.placed.front().atPx));
+
+    // cos(k / 60) x 2 after k ticks of a sixtieth, from its lowest point (the
+    // level's +y is down, and cos 0 is +1). The angle moves BEFORE the offset is
+    // read, so the first tick is already off the bottom.
+    for (int tick = 1; tick <= 240; ++tick) {
+        Tick(run);
+        if (portals.placed.empty()) break;
+        const Portals::Placed& portal = portals.placed.front();
+        const double want = at.y + 2.0 * std::cos(static_cast<double>(tick) * (1.0 / 60.0));
+        if (tick == 1 || tick == 94 || tick == 188 || tick == 240) {
+            CHECK_MSG(std::fabs(portal.atPx.y - want) < 0.01 && portal.atPx.x == at.x,
+                      "tick " + std::to_string(tick) + ": " + Px(portal.atPx) + " for y " + std::to_string(want));
+            // ONE POINT: the circle a traveller enters by rides with it.
+            const glm::vec3 centre = Units::ToWorld(portal.atPx.x, portal.atPx.y);
+            CHECK_MSG(portal.trigger.centre == glm::vec2(centre.x, centre.y),
+                      "and its entry circle stands on it, not on where it opened");
+        }
+        if (tick == 240) {
+            // Four seconds in it has passed its highest point and is coming back:
+            // a whole turn is 2 PI seconds.
+            std::printf("  1-02's placed portal: y %.3f at 4 s, from %.1f (base), stride 2\n", portal.atPx.y, at.y);
+        }
+    }
+    CHECK_MSG(!portals.placed.empty(), "and it is still there four seconds in");
+    if (!portals.placed.empty()) {
+        CHECK_MSG(portals.placed.front().basePx == at, "with the point it opened at kept as its own");
+    }
+}
+
+void APlacedPortalPerishesAfterTwentySeconds() {
+    Run run;
+    if (!Begin("level1", run)) return;
+    Portals::State& portals = run.level.portals;
+    CHECK_MSG(portals.rules.perishMs == 20000.0, "ETHCallback_portal #65's 20,000 ms");
+    const glm::dvec2 at = PlayerPx(run) + glm::dvec2(0.0, -48.0);
+    CHECK_MSG(portals.TryPlace(at), "a portal opens");
+    if (portals.placed.empty()) return;
+    const int used = portals.portalsUsed;
+
+    // The FIRST tick writes zero and adds nothing (#22-53), so the clock is one
+    // tick behind the ticks.
+    Tick(run);
+    CHECK_MSG(portals.placed.size() == 1 && portals.placed.front().ageMs == 0.0,
+              "the first tick starts its clock at nothing");
+    int went = -1;
+    for (int tick = 2; tick <= 1300; ++tick) {
+        Tick(run);
+        if (portals.placed.empty()) {
+            went = tick;
+            break;
+        }
+        if (tick == 1195) {
+            CHECK_MSG(portals.placed.front().ageMs > 19800.0 && portals.placed.front().ageMs <= 20000.0,
+                      "at 1195 ticks it has lived " + std::to_string(portals.placed.front().ageMs) + " ms");
+        }
+    }
+    CHECK_MSG(went > 0, "it perishes rather than standing for ever");
+    // 20,000 ms of sixtieths is 1200 of them, plus the one the clock started on,
+    // and the compare is strict - so the tick after that.
+    CHECK_MSG(went >= 1200 && went <= 1203, "it went on tick " + std::to_string(went) + " (20,000 ms is 1,201)");
+    std::printf("  1-02's placed portal perished on tick %d of a sixtieth: %.3f s\n", went,
+                static_cast<double>(went) / 60.0);
+    // And the budget it took is free again, as insertPortal's own cap is the size
+    // of the manager's array: the count of portals USED is not given back, which
+    // is the golden score's and only killAll(true) touches.
+    CHECK_MSG(portals.portalsUsed == used, "the count of portals used is not given back");
+    CHECK_MSG(portals.TryPlace(at), "and the slot it held is free");
+}
+
 void AStoneThroughAStaticPairGoesOnce() {
     // The original puts a traveller down at its exit itself, so a stone comes out
     // of a static portal inside it. Entries are edges, and the lockout covers the
@@ -317,6 +411,8 @@ void runTests() {
     Level0ShipsTwoPairs();
     AStaticPortalSendsThePlayerToItsPartnerAndStays();
     ATraversalWritesDownWhatTheEffectsNeed();
+    APlacedPortalHoversOnOnePoint();
+    APlacedPortalPerishesAfterTwentySeconds();
     AStoneThroughAStaticPairGoesOnce();
     WithStaticPortalsSpentBothEndsGo();
     Level1sPortalLeadsToThePlacedOne();

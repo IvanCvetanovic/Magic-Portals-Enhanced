@@ -24,6 +24,7 @@
 //   traveller put down inside its exit does not go back until it has left.
 
 #include "sim/LevelBuilder.hpp"
+#include "sim/Motion.hpp"
 #include "sim/Mover.hpp"
 #include "sim/Portal.hpp"
 #include "sim/Roles.hpp"
@@ -82,6 +83,23 @@ struct Rules {
     bool staticPortalsPersist = false; // owner-confirmed 11 September: they stay
     bool recycleOldestAtCap = false;   // _guess
     Portal::Transit transit;           // _guess, every field
+
+    // AND WHAT ETHCallback_portal DOES TO A PORTAL ONCE IT IS THERE, both decoded
+    // (placement.json `portal`, the visuals plan's 7.4).
+    //
+    // It perishes: 20,000 ms of the level's own clock after it opened, unless the
+    // entity says dontPerish, which nothing in the game ever says. That is the
+    // owner's standing ruling R14, taken as the original plays it. Zero is off,
+    // stated rather than implied, so a suite that wants a portal to stay can say so.
+    double perishMs = 0.0;
+    // And it HOVERS: linearMotion(thisEntity, vertical, 0, 0) every frame, with
+    // portal.ent's own speed 1 and stride 2, so it rides 2 units up and down on a
+    // 6.28 s cosine from where the shot opened it. One point, not two: the call
+    // ends in SetPosition, which is the point a traveller enters by.
+    Motion::Row bob;
+    // linearMotion's shared arithmetic (motions.json), which Game::LoadData hands
+    // over: the frame cap its step is taken over and the turn it wraps at.
+    Motion::Rules motion;
 };
 
 // The remake's portals.json: its placement, consumption and transit objects.
@@ -125,8 +143,22 @@ struct NoPortalZone {
 };
 
 struct Placed {
-    int id = 0; // its place in the count of portals placed, which names it once others go
+    // WHAT NAMES IT, for as long as anything remembers it - the simulation's own
+    // list, the layer's drawing of it, and a traversal's record. It is NOT the
+    // count of portals used: see State::nextPortalId.
+    int id = 0;
+    // WHERE IT STANDS THIS TICK, which is where the shot opened it plus its hover
+    // (rules.bob). Everything plays by this one point, the circle below included,
+    // because the original's linearMotion moves the portal entity itself and
+    // PortalManager::doTeleporting reads that same position.
     glm::dvec2 atPx{0.0};
+    glm::dvec2 basePx{0.0}; // linearMotion's originalPos: where the shot opened it
+    Motion::Linear bob;     // its hover, as the last tick left it
+    // ETHCallback_portal's elapsedTime, in milliseconds of the level's clock: the
+    // FIRST tick writes 0 rather than adding, as #22-53 do, and the portal is
+    // killed once this is past rules.perishMs.
+    double ageMs = 0.0;
+    bool aged = false;
     Trigger::Circle trigger;
     std::vector<entt::entity> inside; // the travellers overlapping it as of the last tick
     // Whether a pair ever carried anything through it: the original's
@@ -224,6 +256,17 @@ struct State {
     std::vector<Static> statics;          // in the level's order
     std::vector<Placed> placed;           // oldest first
     int portalsUsed = 0;                  // every portal placed: what the golden score counts
+    // AND WHAT NAMES ONE, which is a different thing and has to be. The original
+    // keeps an array of ETHEntity HANDLES, and a handle is never handed out
+    // twice; the count above is the score's, and killAll(true) gives it back for
+    // every portal that carried nothing (PortalManager::killAll #47-72, which
+    // calls decrementPortalCounter and pops nothing off the array).
+    //
+    // Naming a portal by the refundable count let the clear-portals button hand a
+    // new portal the id of one whose entity was still fading out its 400 ms, so
+    // the new portal wore the dying one's colour and burst with it. This counter
+    // is never given back, so an id is a portal's for the level's life.
+    int nextPortalId = 0;
     int traversals = 0;
     std::vector<Traversal> transits; // what went through this tick, for the frame to draw
     float lockoutS = 0.0f;
@@ -279,6 +322,10 @@ struct State {
     // swings on, a shot flies on, and a traveller newly inside a portal goes out
     // of its partner.
     void Tick(entt::registry& registry, float dt);
+
+    // A placed portal's entry circle, put back over its point: the hover moves
+    // both, because the original has one position and not two.
+    static void Centre(Placed& portal);
 };
 
 // A built level's portals, no-portal zones and projectile blockers. A

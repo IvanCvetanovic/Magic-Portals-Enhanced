@@ -69,6 +69,23 @@ struct EyeRule {
     bool hideWithPlayer = false;   // updateEyes' redEyes.Hide(true) while the character is hidden
 };
 
+// What PortalManager::update and ETHCallback_portal do to the entity a placed
+// portal IS (effects.json placed_portal): the colour the manager gives it while
+// it is in its array, and the fade and the delay its own callback runs once its
+// particle systems have been killed. Colours are Ethanon's (0..1), and only the
+// entity's SPRITE reads them.
+struct PlacedPortal {
+    glm::dvec3 colourFirst{1.0};  // PORTAL_RED, portals[0] of a pair
+    glm::dvec3 colourSecond{1.0}; // PORTAL_BLUE, portals[1]
+    // V3_ZERO: the one portal of a level that grants more than one. Its sprite is
+    // additive, so this is a halo that does not draw. A level that grants exactly
+    // one colours its lone portal colourFirst instead.
+    glm::dvec3 colourAlone{0.0};
+    double killFadePerFrame = 0.0; // SetColor(GetColor() x this) once killTime is set
+    double killFadeFrameMs = 0.0;  // of frame time: the original's rendered frame, INFERRED as 1/60 s
+    double deathAfterKillMs = 0.0; // then portal_death.ent and DeleteEntity
+};
+
 struct Rules {
     Rule suck;     // vanishEffect's suck_effect.ent, at the entry portal
     Rule sparkles; // vanishEffect's sparkles.ent, where the traveller stood
@@ -82,6 +99,13 @@ struct Rules {
     // and explode()'s explosion_large.ent, where a bomb went off.
     Rule smallExplosion;
     Rule largeExplosion;
+    // The two entities PortalManager::insertPortal adds for every portal the
+    // player opens - the summon bubble, then the portal itself - and the burst
+    // ETHCallback_portal leaves where it dies.
+    Rule summon;
+    Rule portal;
+    Rule death;
+    PlacedPortal placedPortal;
     EyeRule eyes; // MainCharacter's red_eyes.ent, on the character's face
 };
 
@@ -133,6 +157,22 @@ Spawn Fireball(const Rules& rules, const glm::dvec2& atPx);
 // g_scale.scale(32). Neither is given a direction or an angle.
 Spawn SmallExplosion(const Rules& rules, const glm::dvec2& atPx);
 Spawn LargeExplosion(const Rules& rules, const glm::dvec2& atPx);
+
+// insertPortal's two AddEntity calls, in its order, and ETHCallback_portal's
+// AddScaledEntity: all three at the portal's own point and given no direction.
+Spawn Summon(const Rules& rules, const glm::dvec2& atPx);
+Spawn Portal(const Rules& rules, const glm::dvec2& atPx);
+Spawn Death(const Rules& rules, const glm::dvec2& atPx);
+
+// The colour PortalManager::update gives the portal at `index` of an array of
+// `placed` portals on a level whose maxPortals is `maxPortals`, or nothing when
+// it colours that index at all (2 and beyond, which no level reaches today).
+// #185-300, read in its own order.
+bool ManagerColour(const PlacedPortal& rules, int index, int placed, int maxPortals, glm::dvec3& out);
+
+// One frame of the kill fade: GetColor() x killFadePerFrame per killFadeFrameMs
+// of frame time.
+glm::dvec3 KillFade(const PlacedPortal& rules, const glm::dvec3& colour, double frameMs);
 
 // updateEyes' g_scale.scale(vector3(eyeX, eyeY, z)), in level units: what is
 // added to the CHARACTER's own position, its z included. `drawnFrame` is the

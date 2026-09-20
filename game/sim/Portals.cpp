@@ -149,6 +149,31 @@ bool LoadPlacement(const std::string& path, Rules& out, std::string& error) {
     out.firstPortalMinMs = firstMs;
     out.nextPortalMinMs = nextMs;
 
+    // HOW LONG A PORTAL LASTS, and how it hovers while it does: ETHCallback_portal's
+    // own two arms, both required. Zero perish is legal and means "never", which is
+    // what a suite that wants a portal to stay for a long run asks for.
+    if (!portal["perish_ms"].IsNumber() || portal["perish_ms"].AsNumber(-1.0) < 0.0) {
+        error = path + ": portal.perish_ms is a number at or above zero";
+        return false;
+    }
+    out.perishMs = portal["perish_ms"].AsNumber(0.0);
+    const Json::Value& bob = portal["bob"];
+    if (!bob.IsObject() || !bob["speed"].IsNumber() || !bob["stride"].IsNumber() || !bob["vertical"].IsBool() ||
+        !bob["axis_deg"].IsNumber() || !bob["start_angle"].IsNumber()) {
+        error = path + ": portal.bob needs speed, stride, vertical, axis_deg and start_angle";
+        return false;
+    }
+    Motion::Row row;
+    row.speed = bob["speed"].AsNumber(0.0);
+    row.stride = bob["stride"].AsNumber(0.0);
+    row.vertical = bob["vertical"].AsBool();
+    row.axisDeg = bob["axis_deg"].AsNumber(0.0);
+    // linearMotion takes ONE start angle here, not a drawn one: the call passes a
+    // literal 0f, so both ends of the row are it.
+    row.startFrom = bob["start_angle"].AsNumber(0.0);
+    row.startTo = row.startFrom;
+    out.bob = row;
+
     const double entry = portal["entry_radius_px"].AsNumber(0.0);
     const double field = antiportal["radius_px"].AsNumber(0.0);
     // A radius of nothing is a portal nobody can walk into and a field that
@@ -197,11 +222,19 @@ bool State::TryPlace(const glm::dvec2& atPx) {
         placed.erase(placed.begin());
     }
     Placed portal;
-    portal.id = portalsUsed;
+    // ITS OWN NAME, AND NEVER THE COUNT: nextPortalId is handed out once and
+    // never given back, where portalsUsed is the golden score's and KillAll
+    // refunds it. State::nextPortalId has what tying the two together cost.
+    portal.id = nextPortalId++;
+    // linearMotion's originalPos is the position of its FIRST call, which is the
+    // frame the entity was added on and before anything moved it: where the shot
+    // opened it. The hover below is measured from there.
+    portal.basePx = atPx;
     portal.atPx = atPx;
-    const glm::vec3 centre = Units::ToWorld(atPx.x, atPx.y);
+    portal.bob = Motion::Start(rules.bob, rules.bob.startFrom);
     // And the PORTAL's own, g_portalCollisionRadius.
-    portal.trigger = Trigger::Circle{glm::vec2(centre.x, centre.y), Units::ToMetres(rules.entryRadiusPx)};
+    portal.trigger = Trigger::Circle{glm::vec2(0.0f), Units::ToMetres(rules.entryRadiusPx)};
+    Centre(portal);
     placed.push_back(portal);
     ++portalsUsed;
     return true;
@@ -271,6 +304,11 @@ const NoPortalZone* State::FindZone(const std::string& name) const {
     return nullptr;
 }
 
+void State::Centre(Placed& portal) {
+    const glm::vec3 centre = Units::ToWorld(portal.atPx.x, portal.atPx.y);
+    portal.trigger.centre = glm::vec2(centre.x, centre.y);
+}
+
 void State::Tick(entt::registry& registry, float dt) {
     // What went through last tick has been drawn; this tick starts with none.
     transits.clear();
@@ -281,6 +319,30 @@ void State::Tick(entt::registry& registry, float dt) {
     sinceTapMs += elapsedMs;
     for (NoPortalZone& zone : zones) {
         if (zone.moving) zone.motion.t += dt;
+    }
+
+    // EVERY PLACED PORTAL'S OWN CALLBACK, before anything reads where it is
+    // (ETHCallback_portal, the visuals plan's 7.4). Its first arm hovers it, and
+    // its second counts the 20 seconds it has to live.
+    //
+    // The clock is the original's own shape: the first call WRITES ZERO and adds
+    // nothing (#22-37), every later one adds the frame (#38-53), and the portal
+    // goes once the total is ABOVE the limit (#65, a strict compare). What the
+    // original then does is kill its particle systems and let its manager pop it
+    // on the next frame; the port has one list, so it leaves it here and the
+    // layer runs the death the frame it sees the id go.
+    for (Placed& portal : placed) {
+        Motion::Advance(rules.motion, portal.bob, elapsedMs);
+        portal.atPx = portal.basePx + Motion::OffsetPx(portal.bob);
+        Centre(portal);
+        if (!portal.aged) portal.aged = true;
+        else portal.ageMs += elapsedMs;
+    }
+    if (rules.perishMs > 0.0) {
+        const double limit = rules.perishMs;
+        placed.erase(std::remove_if(placed.begin(), placed.end(),
+                                    [limit](const Placed& portal) { return portal.ageMs > limit; }),
+                     placed.end());
     }
 
     // The shot flies on, through this tick's stretch of its way, against the
