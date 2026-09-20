@@ -11,7 +11,9 @@
 //   pickup  a distance poll rather than a contact, and anything that is a
 //           character OR a minion can take one. A minion carrying a key is
 //           therefore tested, because it is the kind of thing a remake drops
-//           without noticing.
+//           without noticing. Both the poll and the trail run from the
+//           carrier's ENTITY point, which for a minion is not its body's
+//           centre, and that is tested too.
 //   fade    an unlocked keyhole holds 1000 ms and fades over 500, and only then
 //           is the door deleted. Nothing re-locks it: `unlocked` is written in
 //           one place in the whole binary and read in one other.
@@ -246,6 +248,84 @@ void aMinionCanCarryAKey() {
     CHECK_MSG(after->owner == minion, "a minion took the key");
     CHECK_MSG(after->owner != run.level.player, "and it was not the player, which is a level away");
     CHECK_EQ(run.level.keys.picked, 1);
+
+    // And it leads the key at its entity point, the body's centre less 11.1, as
+    // Game offers it: not at the centre, where the key would ride at its feet.
+    // Read once the minion has stood still in y for half a second on the ledge
+    // under the key, so the trail's lag is in x alone.
+    int still = 0;
+    double lastY = Units::ToPixels(run.registry.get<TransformComponent>(minion).position).y;
+    for (int tick = 0; tick < 240 && still < 30 && run.registry.valid(minion); ++tick) {
+        Tick(run);
+        if (!run.registry.valid(minion)) break;
+        const double y = Units::ToPixels(run.registry.get<TransformComponent>(minion).position).y;
+        still = std::fabs(y - lastY) < 0.05 ? still + 1 : 0;
+        lastY = y;
+    }
+    CHECK_MSG(still >= 30, "the minion came to rest in y");
+    const Keys::Key* led = run.level.keys.FindKey(kKey);
+    CHECK(led != nullptr);
+    if (led == nullptr || !run.registry.valid(minion)) return;
+    CHECK_MSG(led->owner == minion, "the minion still has it");
+    const glm::dvec2 bodyPx = Units::ToPixels(run.registry.get<TransformComponent>(minion).position);
+    const double pointY = bodyPx.y - run.level.minions.rules.EntityAboveCentrePx();
+    CHECK_MSG(std::fabs(led->atPx.y - pointY) < 1.0,
+              "the key rides at the minion's entity point: y " + std::to_string(led->atPx.y) + " against " +
+                  std::to_string(pointY) + ", the body's centre " + std::to_string(bodyPx.y));
+    CHECK_MSG(std::fabs(led->atPx.x - bodyPx.x) <= run.level.keys.rules.leashPx, "and within the leash in x");
+}
+
+// The carry path itself, on a bare registry with no physics to move anything:
+// the pickup and the trail both run from the carrier's POINT. ETHCallback_key
+// measures the 26 from the carrier's GetPositionXY (ins 744-753) and follows the
+// same GetPositionXY (932-957 the leash, 959-976 followUp), the entity's point;
+// a minion's stands EntityAboveCentrePx over its body's centre. So a key 30 above
+// that centre is 18.9 from the point and taken, one 25 below is 36.1 from it and
+// left, and a taken key comes to rest ON the point and is slammed onto it once
+// its owner is past the leash.
+void theCarryRunsFromTheCarriersPoint() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+    const Keys::Rules& rules = run.level.keys.rules;
+    const double above = run.level.minions.rules.EntityAboveCentrePx();
+    CHECK_MSG(std::fabs(above - 11.1) < 1e-9, "a minion's entity point is 11.1 over its body's centre (18.1 - 7)");
+
+    entt::registry registry;
+    const entt::entity body = registry.create();
+    const glm::dvec2 centre(100.0, 100.0);
+    registry.emplace<TransformComponent>(body).position = Units::ToWorld(centre.x, centre.y);
+    const Carry::Carrier atPoint{body, glm::dvec2(0.0, -above)};
+    const Carry::Carrier atCentre{body, glm::dvec2(0.0, 0.0)};
+    const auto within = [](double a, double b) { return std::fabs(a - b) < 1e-3; };
+
+    Carry::Carried over;
+    over.atPx = centre + glm::dvec2(0.0, -30.0);
+    CHECK_MSG(!Carry::Acquire(over, registry, {atCentre}, rules.rangePx), "30 from a body's centre is outside 26");
+    CHECK_MSG(Carry::Acquire(over, registry, {atPoint}, rules.rangePx), "and 18.9 from its point is inside it");
+    CHECK(over.owner == body);
+    CHECK(within(over.ownerPointFromCentrePx.y, -above));
+
+    Carry::Carried under;
+    under.atPx = centre + glm::dvec2(0.0, 25.0);
+    CHECK_MSG(!Carry::Acquire(under, registry, {atPoint}, rules.rangePx),
+              "25 from the centre is 36.1 from the point: left lying");
+    CHECK(under.owner == entt::null);
+
+    for (int tick = 0; tick < 120; ++tick) Carry::Trail(over, registry, rules, 1000.0 / 60.0);
+    CHECK_MSG(within(over.atPx.x, centre.x) && within(over.atPx.y, centre.y - above),
+              "a carried key comes to rest on its owner's point: " + std::to_string(over.atPx.x) + ", " +
+                  std::to_string(over.atPx.y));
+
+    const glm::dvec2 moved(400.0, 100.0);
+    registry.get<TransformComponent>(body).position = Units::ToWorld(moved.x, moved.y);
+    Carry::Trail(over, registry, rules, 1000.0 / 60.0);
+    CHECK_MSG(within(over.atPx.x, moved.x) && within(over.atPx.y, moved.y - above),
+              "and past the leash it is slammed onto that point, not onto the centre");
+
+    registry.destroy(body);
+    CHECK_MSG(Carry::Drop(over, registry), "an owner that has ceased to be lets go");
+    CHECK(over.owner == entt::null);
+    CHECK(within(over.ownerPointFromCentrePx.y, 0.0));
 }
 
 // The whole of what unlocking does to a level: after the hold and the fade, the
@@ -341,6 +421,7 @@ void runTests() {
     aKeyIsTakenAtTwentySixPixels();
     aCarriedKeyTrailsItsOwner();
     aMinionCanCarryAKey();
+    theCarryRunsFromTheCarriersPoint();
     unlockingHoldsThenFadesThenTakesTheDoor();
     twoPairsOfOneColourStillPairCorrectly();
     everyLevelWithAKeyholePairsIt();

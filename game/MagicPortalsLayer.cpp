@@ -464,13 +464,12 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
         std::sort(m_heldLightmaps.begin(), m_heldLightmaps.end());
         m_heldLightmaps.erase(std::unique(m_heldLightmaps.begin(), m_heldLightmaps.end()), m_heldLightmaps.end());
     }
-    // The player's lighting height: its marker's depth in the level file. The
-    // player is added where the marker stands, and the reader holds a look for
-    // the spriteless marker for exactly this (2-09's stands at z 2).
-    m_playerZ = 0.0;
-    if (const Tscn::Node* spawn = FirstOfRole(m_data, Roles::kPlayerSpawn); m_lit && spawn != nullptr) {
-        if (const auto look = m_look.nodes.find(spawn->name); look != m_look.nodes.end()) m_playerZ = look->second.z;
-    }
+    // The player's depth, where it is drawn among the art and its lighting height:
+    // GameCharacter's 4, in the world's units, over the scale factor the level's own
+    // nodes were multiplied by (art.json character.z and depth; R10). Its marker
+    // gives only x and y (GetPositionXY): before step 76 this was the marker's
+    // eth_z, 0 but for 2-09's 2.
+    m_playerZ = m_artRules.LevelDepth(m_artRules.character.z);
     buildDrawables(registry);
     m_aspect = viewportAspect(registry);
     // THE LEVEL OPENS ON THE PLAYER, by the owner's choice.
@@ -557,6 +556,8 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_antiportalTurn = Motion::Turn{};
     for (TimerDial& dial : m_timers) destroy(dial.quad);
     m_timers.clear();
+    for (MinionQuad& minion : m_minions) destroy(minion.quad);
+    m_minions.clear();
     // The walk arrows and the corner buttons go with the level they were built
     // for, and so does what the level opened with.
     unloadControls();
@@ -977,6 +978,30 @@ std::vector<MagicPortalsLayer::EmitterReport> MagicPortalsLayer::EmitterReports(
     }
     return reports;
 }
+
+std::vector<MagicPortalsLayer::MinionReport> MagicPortalsLayer::MinionReports() const {
+    std::vector<MinionReport> reports;
+    const std::vector<Minions::Minion>& minions = m_level.minions.minions;
+    for (std::size_t i = 0; i < m_minions.size() && i < minions.size(); ++i) {
+        const MinionQuad& drawn = m_minions[i];
+        MinionReport report;
+        report.name = minions[i].name;
+        report.quad = drawn.quad;
+        report.black = drawn.black;
+        report.column = drawn.pose.column;
+        report.row = drawn.pose.row;
+        report.z = drawn.z;
+        report.lookZ = drawn.lookZ;
+        report.centrePx = drawn.centrePx;
+        report.sizePx = glm::dvec2(m_minionCut.frameUnits);
+        report.uvScale = m_minionCut.uvScale;
+        report.uvOffset = Tiers::UvOffset(m_minionCut, drawn.pose.column, drawn.pose.row);
+        reports.push_back(std::move(report));
+    }
+    return reports;
+}
+
+float MagicPortalsLayer::PlayerSlotZ() const { return SlotZ(m_playerSlot); }
 
 std::vector<MagicPortalsLayer::TimerReport> MagicPortalsLayer::TimerReports() const {
     std::vector<TimerReport> reports;
@@ -2175,6 +2200,27 @@ void MagicPortalsLayer::buildDrawables(entt::registry& registry) {
     }
     buildSprites(registry);
 
+    // The minions' sheet: minion.png's tier file, hd/minion.png, 310 x 434 texels at
+    // density 2, cut 4 x 4 as SetupSpriteRects cuts it - frames of 38 x 54 units
+    // (76 x 108 texels) that cover 152 of its 155 units across and 216 of 217 down
+    // (00_order E1). Their quads come with the first sync, an escort's when it is
+    // called; a sheet that cannot be read or cut draws none, and says so once.
+    m_minions.clear();
+    m_minionSheet.clear();
+    m_minionCut = Tiers::Cut{};
+    if (!m_level.minions.minions.empty() || m_level.ghost.present) {
+        const Art::Minion& art = m_artRules.minion;
+        const Sprites::Image& sheet = drawnImage(originalImage(art.sprite));
+        std::string why;
+        if (sheet.units.x > 0 && sheet.units.y > 0 &&
+            Tiers::FrameCut(sheet.texels, sheet.density, art.columns, art.rows, m_minionCut, why)) {
+            m_minionSheet = sheet.path;
+        } else if (m_artReady) {
+            SUPERSONIC_LOG_WARN("Magic Portals")
+                << "the minions are not drawn: " << sheet.path << " could not be cut " << why << std::endl;
+        }
+    }
+
     // The player, as dark_mage.ent draws it, standing on the idle column of the
     // way GameCharacter faces it when it is made (Art.hpp): each level starts
     // there, and its walk's column and time start from nothing. On a no_gravity
@@ -2358,8 +2404,14 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "the sky is drawn where the level put it: " << why << std::endl;
         m_sky = Sky::Controller{};
     }
-    m_playerSlot = static_cast<int>(std::count_if(sprites.begin(), sprites.end(),
-                                                  [](const Sprites::Sprite& s) { return s.zIndex <= 0; }));
+    // THE PLAYER'S SLOT: after every sprite at or below its depth, which it was
+    // added after (R10, art.json character.z). At 4 / 2.8125 = 1.42 in the level's
+    // units that is after the nodes at eth_z 1 or below: one more than the slot after
+    // z_index 0 the port gave it before step 76 on level22a, whose platform at 1 is
+    // the only node in 128 levels between the two, and the same slot everywhere else.
+    m_playerSlot = static_cast<int>(std::count_if(sprites.begin(), sprites.end(), [this](const Sprites::Sprite& s) {
+        return static_cast<double>(s.zIndex) <= m_playerZ;
+    }));
     const auto indexOf = [](const auto& list, const std::string& name) {
         for (std::size_t i = 0; i < list.size(); ++i) {
             if (list[i].name == name) return static_cast<int>(i);
@@ -2516,11 +2568,19 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         m_sprites.push_back(std::move(drawn));
     }
     // The beholder at its adder's z_index and a spike at -4: after the sprites
-    // drawn at or below it and before the next, the player's slot counted in.
-    const auto slotAfter = [this](int zIndex) {
-        const int below = static_cast<int>(std::count_if(
-            m_sprites.begin(), m_sprites.end(), [zIndex](const DrawnSprite& d) { return d.sprite.zIndex <= zIndex; }));
-        return SlotZ(below < m_playerSlot ? below : below + 1) - 0.5f * kSpriteSlotZ;
+    // drawn at or below it and before the next - and after the player only where
+    // it stands at the player's depth or in front of it. The original orders by
+    // depth alone and keeps the order things were added in at equal depth
+    // (ETHEntityRenderingManager.cpp:70-106), and the player is added after the
+    // level's nodes. `levelZ` in the level's units (art.json depth). Before step 76
+    // this asked `below < m_playerSlot`, which took the player's depth for 0; with
+    // it at 1.42 the two agree for every depth passed below but the minions' (the
+    // step's census).
+    const auto slotAfter = [this](double levelZ) {
+        const int below = static_cast<int>(std::count_if(m_sprites.begin(), m_sprites.end(), [levelZ](const DrawnSprite& d) {
+            return static_cast<double>(d.sprite.zIndex) <= levelZ;
+        }));
+        return SlotZ(m_playerZ <= levelZ ? below + 1 : below) - 0.5f * kSpriteSlotZ;
     };
     int adderZ = 0;
     if (m_level.boss.beholder) {
@@ -2533,6 +2593,27 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     }
     m_beholderZ = slotAfter(adderZ);
     m_spikeZ = slotAfter(kSpikeZIndex);
+    // THE MINIONS (art.json minion z): minion_spawn adds each at a raw 2, which is
+    // 2 / 2.8125 = 0.71 in the level's units - after every node at 0 or below and,
+    // being behind the player at 1.42, before it. An escort the chapter-3 boss calls
+    // stands at its anchor's own depth (minion_spawn_point, eth_z 0 in level31b), a
+    // placed node's and so already in the level's units. The two share a slot here
+    // where the original draws the marker's minion in front (2 > 0): a tie the
+    // between-slot table of the visuals plan's 6.3 (00_order K13) is to order.
+    m_minionZ = slotAfter(m_artRules.LevelDepth(m_artRules.minion.z));
+    // The anchor as Ghost::Find takes it: by entity name, the last such node.
+    m_escortLookZ = 0.0;
+    for (const Tscn::Node& node : m_data.scene.nodes) {
+        if (!m_level.ghost.present || node.parent != "." ||
+            Roles::EntityName(node) != m_level.ghost.rules.summonAnchorName) {
+            continue;
+        }
+        double z = 0.0;
+        const Tscn::Value* eth = node.Meta("eth_z");
+        const Tscn::Value* index = node.Find("z_index");
+        m_escortLookZ = eth != nullptr && eth->AsNumber(z) ? z : (index != nullptr && index->AsNumber(z) ? z : 0.0);
+    }
+    m_escortZ = slotAfter(m_escortLookZ);
     // A TIMED CRYSTAL'S DIAL (art.json timer), which addTimerToCrystal adds
     // `zOffset` behind its crystal: after the sprites at or below the crystal's
     // z_index + zOffset and before the next, so what stands between the two
@@ -3117,6 +3198,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     }
 
     syncBoss(registry);
+    syncMinions(registry);
     syncTurrets(registry);
 
     const auto boxPx = [](const Trigger::Box& box, glm::dvec2& centrePx, glm::dvec2& sizePx) {
@@ -3392,6 +3474,19 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
     // A thrown stone takes no light yet: rolling_stone.ent applies light, and
     // launchers.json does not carry that or its normal map (step 49's open items).
     for (const ThrownBox& thrown : m_thrown) tint(registry, thrown.quad, white, thrown.emissive);
+    // The minions (art.json minion). Every update ETHCallback_minion sets its
+    // emissive to minion.ent's, or to 0 while the ambient is DARKEST_AMBIENT_LIGHT
+    // (canSeeAnything): a knight on a dark level is a silhouette, and lights up
+    // again with its room once a torch is lit. The black knight's script sets its
+    // colour to 0 every frame over that, and its own emissive is 0.
+    const Art::Minion& minionArt = m_artRules.minion;
+    const bool blind = m_lit && minionArt.darkestZeroesEmissive && m_ambient == m_data.lighting.darkestAmbient;
+    for (const MinionQuad& minion : m_minions) {
+        if (minion.quad == entt::null) continue;
+        const glm::dvec3 emissive = blind ? glm::dvec3(0.0) : (minion.black ? minionArt.blackEmissive : minionArt.emissive);
+        const glm::vec4 colour = minion.black ? glm::vec4(glm::vec3(minionArt.blackColour), 1.0f) : white;
+        tint(registry, minion.quad, colour, emissive, {}, receiverOf(minionArt, minion.lookZ));
+    }
 
     // The lights, placed after everything that owns one.
     syncLights(registry);
@@ -3781,6 +3876,83 @@ void MagicPortalsLayer::syncBoss(entt::registry& registry) {
         } else {
             placeBox(registry, m_spikes[i], flying.atPx, glm::dvec2(kSpikeBoxPx), kMarkerZ, kMarkerDepth, rotation);
         }
+    }
+}
+
+void MagicPortalsLayer::matchMinions() {
+    // The sim's list only grows - a summoned escort is pushed onto it - so one
+    // entry each, in its order, added as they come.
+    const std::vector<Minions::Minion>& minions = m_level.minions.minions;
+    const Art::Minion& art = m_artRules.minion;
+    while (m_minions.size() < minions.size()) {
+        const Minions::Minion& minion = minions[m_minions.size()];
+        MinionQuad made;
+        made.pose.row = art.startRow;
+        // ghost_minion.ent by its marker's entityName; the boss's escorts are
+        // minion.ent (ETHCallback_ghost ins 1137, 'minion.ent').
+        made.black = !minion.summoned && minion.entityName == art.blackEntity;
+        made.z = minion.summoned ? m_escortZ : m_minionZ;
+        made.lookZ = minion.summoned ? m_escortLookZ : m_artRules.LevelDepth(art.z);
+        m_minions.push_back(made);
+    }
+}
+
+void MagicPortalsLayer::advanceMinions(float fixedDelta) {
+    matchMinions();
+    const Art::Minion& art = m_artRules.minion;
+    const std::vector<Minions::Minion>& minions = m_level.minions.minions;
+    const double ms = static_cast<double>(fixedDelta) * 1000.0;
+    for (std::size_t i = 0; i < minions.size(); ++i) {
+        const Minions::Minion& minion = minions[i];
+        // The sim's arms, one for one; the blocked-way Search arm is not among
+        // them, since the port's minion casts no ray to its waypoint
+        // (minions.json _destination_reachability_not_built).
+        Art::MinionArm arm = Art::MinionArm::None;
+        switch (minion.arm) {
+        case Minions::Arm::Walk: arm = Art::MinionArm::Walk; break;
+        case Minions::Arm::Hold: arm = Art::MinionArm::Hold; break;
+        case Minions::Arm::Settled: arm = Art::MinionArm::Settled; break;
+        case Minions::Arm::None: break;
+        }
+        Art::UpdateMinion(art, m_minions[i].pose, arm, minion.facing == Minions::Facing::Right, ms, minion.elapsedMs);
+    }
+}
+
+void MagicPortalsLayer::syncMinions(entt::registry& registry) {
+    using namespace Supersonic;
+    matchMinions();
+    const Art::Minion& art = m_artRules.minion;
+    const std::vector<Minions::Minion>& minions = m_level.minions.minions;
+    const glm::dvec2 framePx(m_minionCut.frameUnits);
+    for (std::size_t i = 0; i < minions.size(); ++i) {
+        const Minions::Minion& minion = minions[i];
+        MinionQuad& drawn = m_minions[i];
+        const bool standing = !minion.gone && minion.body != entt::null && registry.valid(minion.body) &&
+                              registry.all_of<TransformComponent>(minion.body);
+        if (!standing || !m_artReady || m_minionSheet.empty()) {
+            if (drawn.quad != entt::null && registry.valid(drawn.quad)) registry.destroy(drawn.quad);
+            drawn.quad = entt::null;
+            continue;
+        }
+        if (drawn.quad == entt::null) {
+            drawn.quad = makeSprite(registry, "Magic Portals Minion", m_minionSheet, art.additive);
+            // Bodies move on the tick and are drawn between ticks.
+            registry.emplace<InterpolatedTransformComponent>(drawn.quad);
+        }
+        // Its feet on what the port's one circle stands on, the entity the
+        // compound's feet bottom below them, and the picture on its pivot, as
+        // Ethanon draws it (the player's rule). The body turns on nothing: it is
+        // fixedRotation.
+        const glm::dvec2 bodyPx = Units::ToPixels(registry.get<TransformComponent>(minion.body).position);
+        const glm::dvec2 entityPx =
+            bodyPx + glm::dvec2(0.0, m_level.minions.rules.bodyRadiusPx - art.feetBelowEntityPx);
+        drawn.centrePx = entityPx - glm::dvec2(art.pivotXPx, art.pivotYPx);
+        placeSprite(registry, drawn.quad, drawn.centrePx, framePx, drawn.z, 0.0f);
+        // The frame as the original's rect for it: its stride in whole units, so
+        // the uv is written here and not by a flipbook's even split.
+        auto& material = registry.get<MaterialComponent>(drawn.quad);
+        material.uvScale = glm::vec2(m_minionCut.uvScale);
+        material.uvOffset = glm::vec2(Tiers::UvOffset(m_minionCut, drawn.pose.column, drawn.pose.row));
     }
 }
 
@@ -5043,6 +5215,9 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     // linearMotion's calls BEFORE the pictures are placed: a call steps the angle and
     // writes the position in one, and the frame draws what it wrote (motions.json).
     advanceMotions(fixedDelta);
+    // ETHCallback_minion sets a minion's velocity and its frame in one update:
+    // Minions::Tick, in BeforeStep above, chose each one's arm, and this frames it.
+    advanceMinions(fixedDelta);
     syncDrawables(registry);
     m_pushing = pushing;
     // StaticSky::update's order: every sky placed (syncSprites, just now), and

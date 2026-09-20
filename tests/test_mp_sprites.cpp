@@ -768,6 +768,147 @@ void ATimerWithoutItsClockIsRefused() {
     refused("\"screen_px_per_unit\": 2.8125,", "\"screen_px_per_unit\": 0,", "no scale factor", "timer needs frames");
 }
 
+// The minions and knights (art.json minion, step 76): minion.ent's facts and the
+// numbers ETHCallback_minion frames it by, pinned; and the depth a script's raw z is
+// among the level's art (art.json depth), with the player's decoded 4 (R10).
+void TheMinionIsMinionEnt() {
+    Art::Rules rules;
+    std::string error;
+    const bool ok = Art::LoadRules(kPortData + "/art.json", rules, error);
+    CHECK_MSG(ok, error);
+    const Art::Minion& minion = rules.minion;
+    CHECK_MSG(minion.sprite == "minion.png" && !minion.additive && minion.columns == 4 && minion.rows == 4,
+              "minion.ent: minion.png, cut 4 x 4, mixed");
+    CHECK_MSG(minion.emissive == glm::dvec3(1.0) && !minion.isStatic && !minion.applyLight && minion.normal.empty() &&
+                  !minion.light,
+              "emissive 1, not static, applies no light, no normal map, no light");
+    CHECK_MSG(minion.framesPerSecond == 0.0, "its frame is chosen by its script, never played");
+    CHECK_MSG(minion.pivotXPx == 0.0 && minion.pivotYPx == 4.0, "PivotAdjust (0, 4)");
+    CHECK_MSG(std::fabs(minion.feetBelowEntityPx - 18.1) < 1e-12, "its feet 9 + 9.1 below the entity");
+    CHECK_MSG(minion.firstColumn == 0 && minion.lastColumn == 3 && minion.strideMs == 120.0,
+              "the walk: set(0, 3, 120, true)");
+    CHECK_MSG(minion.holdColumn == 0 && minion.startRow == 0, "the hold on column 0, and row 0 before any walk");
+    CHECK_MSG(minion.leftRow == 1 && minion.rightRow == 2, "the decoded rows: 1 walking left, 2 right (R3)");
+    CHECK_MSG(minion.searchPeriodMs == 4000.0 && minion.searchRightAfterMs == 2000.0,
+              "a blocked minion looks right while elapsedTime % 4000 > 2000");
+    CHECK_MSG(minion.darkestZeroesEmissive, "blind, and unlit, where the ambient is DARKEST_AMBIENT_LIGHT");
+    CHECK_MSG(minion.blackEntity == "ghost_minion.ent" && minion.blackColour == glm::dvec3(0.0) &&
+                  minion.blackEmissive == glm::dvec3(0.0),
+              "the black knight: ghost_minion.ent, SetColor(0), emissive 0");
+    // The depths: a raw 2 and a raw 4 in the world's units, over the factor the
+    // level's own nodes were multiplied by - the timer's m_scaleFactor, 720 / 256.
+    CHECK_MSG(rules.scaleFactor == 2.8125 && rules.scaleFactor == rules.timer.screenPxPerUnit,
+              "the scale factor is m_scaleFactor at 720 px, the timer's");
+    CHECK_MSG(minion.z == 2.0 && rules.character.z == 4.0, "minion_spawn's 2 and GameCharacter's 4");
+    CHECK_MSG(std::fabs(rules.LevelDepth(rules.character.z) - 1.4222222222) < 1e-9 &&
+                  std::fabs(rules.LevelDepth(minion.z) - 0.7111111111) < 1e-9,
+              "in the level's units: the player at 1.42, between eth_z 1 and 2; a minion at 0.71, behind it");
+}
+
+// Without its framing the port would draw a minion on rows, columns or feet nobody
+// read; without the depth factor, the player in front of art the original draws over it.
+void AMinionWithoutItsFramingIsRefused() {
+    std::ifstream file(kPortData + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const auto refused = [&real](const std::string& from, const std::string& to, const std::string& name,
+                                 const std::string& says) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos && text.find(from, at + 1) == std::string::npos, "once: " + from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-minion-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules rules;
+        std::string error;
+        const bool ok = Art::LoadRules(path.string(), rules, error);
+        CHECK_MSG(!ok, "refused: " + name);
+        CHECK_MSG(error.find(says) != std::string::npos, name + ": " + error);
+    };
+    refused("\"minion\": {", "\"minion_gone\": {", "absent", "minion is an object");
+    refused("\"sprite\": \"minion.png\",", "", "no sprite", "minion needs sprite and additive");
+    refused("\"feet_below_entity_px\": 18.1,", "", "no feet", "minion needs");
+    refused("\"last_column\": 3,", "\"last_column\": 4,", "a walk past the sheet", "minion needs");
+    refused("\"stride_ms\": 120.0", "\"stride_ms\": 0", "a walk of no stride", "minion needs");
+    refused("\"hold_column\": 0,", "\"hold_column\": 0.5,", "a hold between columns", "minion needs");
+    refused("\"start_row\": 0,", "", "no start row", "minion needs");
+    refused("\"right_after_ms\": 2000.0", "\"right_after_ms\": 4000.0", "a search that never looks right",
+            "minion needs");
+    refused("\"darkest_zeroes_emissive\": true,", "\"darkest_zeroes_emissive\": 1,", "a flag not a bool",
+            "minion needs");
+    refused("\"entity\": \"ghost_minion.ent\",", "\"entity\": \"\",", "no black knight", "minion needs");
+    refused("\"scale_factor\": 2.8125", "\"scale_factor\": 0", "no depth factor", "depth needs a scale_factor");
+    refused("\"value\": 4.0", "\"value\": \"4\"", "a player depth not a number", "character needs z.value");
+    refused("\"value\": 2.0", "\"value\": \"2\"", "a minion depth not a number", "minion needs");
+}
+
+// ETHCallback_minion's frame writes, one update at a time (Art::UpdateMinion): the
+// walk's row by its way and its column by the FrameTimer, whose column and time
+// carry across a hold and a turn; the hold on column 0 of the row last walked, row
+// 0 before any; the blocked arm looking right then left; and nothing written where
+// the script writes nothing.
+void AMinionIsFramedAsItsScriptFramesIt() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    const Art::Minion& art = rules.minion;
+    const double tick = 1000.0 / 60.0;
+
+    Art::MinionPose pose;
+    pose.row = art.startRow;
+    Art::UpdateMinion(art, pose, Art::MinionArm::Hold, false, tick, 0.0);
+    CHECK_MSG(pose.column == 0 && pose.row == 0 && pose.dirRow == -1, "held before any walk: SetFrame(0, 0)");
+
+    // Walking right: the first set(0, 3) resets the constructor's (0, 0), then one
+    // column each time 120 ms have gathered.
+    Art::UpdateMinion(art, pose, Art::MinionArm::Walk, true, tick, 0.0);
+    CHECK_MSG(pose.column == 0 && pose.row == 2 && pose.dirRow == 2 && pose.timer.timeMs == 0.0,
+              "the first walk: row 2, column 0, no time");
+    std::vector<int> steps;
+    for (int i = 2; i <= 40; ++i) {
+        const int before = pose.column;
+        Art::UpdateMinion(art, pose, Art::MinionArm::Walk, true, tick, 0.0);
+        if (pose.column != before) steps.push_back(i);
+    }
+    // Ticks 9, 16, 23, 30, 37: the time the first update reset, then 8 ticks
+    // (133 ms) to the first step and 7 or 8 to each after.
+    CHECK_MSG(steps.size() == 5 && steps[0] == 9 && steps[1] == 16 && steps[2] == 23 && steps[3] == 30,
+              "a column every 120 ms of walking");
+    const int walkedTo = pose.column;
+    const double timeLeft = pose.timer.timeMs;
+
+    // A hold: column 0 of row 2, and the timer untouched.
+    for (int i = 0; i < 30; ++i) Art::UpdateMinion(art, pose, Art::MinionArm::Hold, false, tick, 0.0);
+    CHECK_MSG(pose.column == 0 && pose.row == 2 && pose.timer.frame == walkedTo && pose.timer.timeMs == timeLeft,
+              "held: column 0 of the row it walked, the walk's column and time kept");
+
+    // Turning left: row 1, the column resuming where the timer stood.
+    Art::UpdateMinion(art, pose, Art::MinionArm::Walk, false, tick, 0.0);
+    CHECK_MSG(pose.row == 1 && pose.dirRow == 1 && (pose.column == walkedTo || pose.column == (walkedTo + 1) % 4),
+              "walking left: row 1, on from the column it had");
+
+    // Settled, or not updated: nothing written.
+    const Art::MinionPose kept = pose;
+    Art::UpdateMinion(art, pose, Art::MinionArm::Settled, true, tick, 0.0);
+    Art::UpdateMinion(art, pose, Art::MinionArm::None, true, tick, 0.0);
+    CHECK_MSG(pose.column == kept.column && pose.row == kept.row && pose.timer.timeMs == kept.timer.timeMs,
+              "shouldntMove writes no frame");
+
+    // The blocked arm: right while elapsedTime % 4000 > 2000, else left, and stored.
+    Art::UpdateMinion(art, pose, Art::MinionArm::Search, false, tick, 1000.0);
+    CHECK_MSG(pose.column == 0 && pose.row == 1 && pose.dirRow == 1, "searching at 1000 ms: looking left");
+    Art::UpdateMinion(art, pose, Art::MinionArm::Search, false, tick, 2000.0);
+    CHECK_MSG(pose.row == 1, "at 2000 ms: still left (not above 2000)");
+    Art::UpdateMinion(art, pose, Art::MinionArm::Search, false, tick, 2500.0);
+    CHECK_MSG(pose.row == 2 && pose.dirRow == 2, "at 2500 ms: looking right");
+    Art::UpdateMinion(art, pose, Art::MinionArm::Search, false, tick, 6500.0);
+    CHECK_MSG(pose.row == 2, "at 6500 ms: right again");
+    Art::UpdateMinion(art, pose, Art::MinionArm::Hold, false, tick, 0.0);
+    CHECK_MSG(pose.row == 2 && pose.column == 0, "and a hold after keeps the row the search stored");
+}
+
 void APulseGoesThereAndBack() {
     // bounce(): from one scale to the other in a stride, eased by smoothEnd, and
     // back in the next.
@@ -1105,6 +1246,34 @@ void TheOriginalsImagesAreCutAsTheEntsSay() {
     // segment and two tables, says 32 x 32.
     const bool explosion = Sprites::ImageSize(kOriginal + "/particles/explosion.JPG", w, h, error);
     CHECK_MSG(explosion && w == 32 && h == 32, "explosion.JPG is 32 x 32: " + error);
+}
+
+// The one sheet of the port's own pictures an even split does NOT cut where the
+// original does (00_order E1, K5; step 76): hd/minion.png, 310 x 434 texels at
+// density 2, is 155 x 217 units and frames of 38 x 54 units - 76 x 108 texels -
+// so its uv is its stride over the whole, 38 / 155 and 54 / 217, and column 3
+// starts 4.5 texels left of where a quarter of the width would put it.
+void TheMinionSheetIsCutWhereTheOriginalCutsIt() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    Sprites::Image image;
+    const bool drawn = Sprites::Drawn(TheTiers(), kOriginal + "/entities/" + rules.minion.sprite, image, error);
+    CHECK_MSG(drawn && image.tier == "hd" && image.texels == glm::ivec2(310, 434) && image.density == 2.0f &&
+                  image.units == glm::ivec2(155, 217),
+              "minion.png is drawn from hd/, 310 x 434 at density 2: " + image.path + " " + error);
+    Tiers::Cut cut;
+    CHECK_MSG(Tiers::FrameCut(image.texels, image.density, rules.minion.columns, rules.minion.rows, cut, error) &&
+                  cut.frameUnits == glm::ivec2(38, 54) && cut.frameTexels == glm::dvec2(76.0, 108.0),
+              "frames of 38 x 54 units, 76 x 108 texels " + error);
+    CHECK_MSG(std::fabs(cut.uvScale.x - 38.0 / 155.0) < 1e-12 && std::fabs(cut.uvScale.y - 54.0 / 217.0) < 1e-12,
+              "a frame samples 38 / 155 by 54 / 217 of the texture");
+    const glm::dvec2 third = Tiers::UvOffset(cut, 3, 2);
+    CHECK_MSG(std::fabs((0.75 - third.x) * 310.0 - 4.5) < 1e-9 && std::fabs(third.y - 108.0 / 217.0) < 1e-12,
+              "column 3 at 228 of 310 texels, 4.5 left of an even split's; row 2 at 216 of 434");
+    // Drawn at a 720 px screen's 2.8125 px a unit: 106.9 x 151.9 px (G5a-1).
+    CHECK_MSG(std::fabs(38.0 * rules.scaleFactor - 106.875) < 1e-9 && std::fabs(54.0 * rules.scaleFactor - 151.875) < 1e-9,
+              "106.875 x 151.875 px on the screen");
 }
 
 // 00_order 2.3: the pictures the port draws for itself and every particle bitmap, by
@@ -2508,6 +2677,9 @@ int main() {
     AnAntiportalWithoutItsBlinkIsRefused();
     TheTimerIsTimerEnt();
     ATimerWithoutItsClockIsRefused();
+    TheMinionIsMinionEnt();
+    AMinionWithoutItsFramingIsRefused();
+    AMinionIsFramedAsItsScriptFramesIt();
     APulseGoesThereAndBack();
     ASheetThatDoesNotSayHowFastIsRefused();
     APlayerWithoutItsWalkIsRefused();
@@ -2531,6 +2703,7 @@ int main() {
     if (std::filesystem::is_directory(kOriginal + "/entities", original)) {
         TheOriginalsImagesAreCutAsTheEntsSay();
         ThePortsOwnPicturesAreDrawnFromTheirTiers();
+        TheMinionSheetIsCutWhereTheOriginalCutsIt();
         EveryOriginalImageIsSizedAsTheRendererReadsIt();
         TheOriginalsParticlesAreRead();
         AnEntityWithoutParticlesSaysSoWithoutFailing();

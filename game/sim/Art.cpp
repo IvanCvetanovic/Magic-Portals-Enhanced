@@ -347,6 +347,37 @@ int UpdateNoGravity(const Character& mage, NoGravityPlayer& player, bool walking
     return drawn;
 }
 
+void UpdateMinion(const Minion& art, MinionPose& pose, MinionArm arm, bool right, double elapsedMs,
+                  double sinceArrivalMs) {
+    const int stored = pose.dirRow < 0 ? art.startRow : pose.dirRow;
+    switch (arm) {
+    case MinionArm::Walk:
+        // ins 1122-1162: dirRow from the way it walks, stored, then
+        // SetFrame(timer.set(first, last, stride, true), dirRow).
+        pose.dirRow = right ? art.rightRow : art.leftRow;
+        pose.row = pose.dirRow;
+        pose.column = pose.timer.Set(art.firstColumn, art.lastColumn, art.strideMs, true, elapsedMs);
+        return;
+    case MinionArm::Hold:
+        // ins 1202-1205: SetFrame(0, GetUInt('dirRow')), the timer untouched.
+        pose.row = stored;
+        pose.column = art.holdColumn;
+        return;
+    case MinionArm::Search:
+        // ins 1243-1321: elapsedTime % 4000 > 2000 looks right, else left, and that
+        // is stored as dirRow before SetFrame(0, dirRow). The time is a uint.
+        pose.dirRow = std::fmod(std::floor(std::max(0.0, sinceArrivalMs)), art.searchPeriodMs) > art.searchRightAfterMs
+                          ? art.rightRow
+                          : art.leftRow;
+        pose.row = pose.dirRow;
+        pose.column = art.holdColumn;
+        return;
+    case MinionArm::None:
+    case MinionArm::Settled:
+        return;
+    }
+}
+
 bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
@@ -401,6 +432,13 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     mage.pivotYPx = pivot.AsArray()[1].AsNumber();
     mage.strideMs = walk["stride_ms"].AsNumber();
     mage.framesPerSecond = 1000.0 / mage.strideMs;
+    // Its depth, the decoded one (R10): without it the player is ordered among the
+    // art, and lit, by a number nobody read.
+    if (!character["z"].IsObject() || !Finite(character["z"]["value"])) {
+        error = path + ": character needs z.value, the depth GameCharacter adds it at";
+        return false;
+    }
+    mage.z = character["z"]["value"].AsNumber();
 
     // Its arm out: the ray detectPushing casts and the rows findFinalDirection
     // draws while it meets something. None defaulted - without them a wall is
@@ -549,6 +587,70 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     timer.decayFramesPerSecond = decayRate["value"].AsNumber();
     timer.goneBelowScale = timerEntry["gone_below_scale"].AsNumber();
     timer.screenPxPerUnit = timerEntry["screen_px_per_unit"].AsNumber();
+
+    // What a script's raw depth is among the level's art. No default: a factor of 1
+    // is the reading the decode refused, and puts the player in front of 99
+    // placements the original draws over it.
+    const Json::Value& depth = root["depth"];
+    if (!depth.IsObject() || !Finite(depth["scale_factor"]) || !(depth["scale_factor"].AsNumber() > 0.0)) {
+        error = path + ": depth needs a scale_factor above 0";
+        return false;
+    }
+    read.scaleFactor = depth["scale_factor"].AsNumber();
+
+    // The minions and knights: minion.ent's picture, whose frame is chosen by its
+    // script rather than played, and every number that script frames it by. None
+    // has a default: without them it is drawn on rows, columns or feet nobody read.
+    if (!root.Has("minion")) {
+        error = path + ": minion is an object";
+        return false;
+    }
+    const Json::Value& minionEntry = root["minion"];
+    if (!ReadPicture(minionEntry, "minion", static_cast<Picture&>(read.minion), why, false)) {
+        error = path + ": " + why;
+        return false;
+    }
+    Minion& minion = read.minion;
+    glm::dvec2 minionPivot(0.0);
+    const Json::Value& minionWalk = minionEntry["walk"];
+    const Json::Value& minionRows = minionEntry["rows_by_direction"];
+    const Json::Value& search = minionEntry["search"];
+    const Json::Value& black = minionEntry["black_knight"];
+    const bool minionOk =
+        Pair(minionEntry["pivot_px"], minionPivot) && minionEntry["z"].IsObject() &&
+        Finite(minionEntry["z"]["value"]) && Finite(minionEntry["feet_below_entity_px"]) &&
+        minionEntry["feet_below_entity_px"].AsNumber() >= 0.0 && minionWalk.IsObject() &&
+        WholeBelow(minionWalk["first_column"], minion.columns, minion.firstColumn) &&
+        WholeBelow(minionWalk["last_column"], minion.columns, minion.lastColumn) &&
+        minion.firstColumn <= minion.lastColumn && Finite(minionWalk["stride_ms"]) &&
+        minionWalk["stride_ms"].AsNumber() > 0.0 &&
+        WholeBelow(minionEntry["hold_column"], minion.columns, minion.holdColumn) &&
+        WholeBelow(minionEntry["start_row"], minion.rows, minion.startRow) && minionRows.IsObject() &&
+        WholeBelow(minionRows["left"], minion.rows, minion.leftRow) &&
+        WholeBelow(minionRows["right"], minion.rows, minion.rightRow) && search.IsObject() &&
+        Finite(search["period_ms"]) && search["period_ms"].AsNumber() > 0.0 && Finite(search["right_after_ms"]) &&
+        search["right_after_ms"].AsNumber() >= 0.0 &&
+        search["right_after_ms"].AsNumber() < search["period_ms"].AsNumber() &&
+        minionEntry["darkest_zeroes_emissive"].IsBool() && black.IsObject() && black["entity"].IsString() &&
+        !black["entity"].AsString("").empty() && Emissive(black["colour"], minion.blackColour) &&
+        Emissive(black["emissive"], minion.blackEmissive);
+    if (!minionOk) {
+        error = path + ": minion needs pivot_px, z.value, feet_below_entity_px from 0, walk.first_column and "
+                       ".last_column in order and a walk.stride_ms above 0, hold_column, start_row and "
+                       "rows_by_direction.left and .right inside its sheet, search.period_ms above 0 with "
+                       "search.right_after_ms inside it, darkest_zeroes_emissive, and black_knight's entity, "
+                       "colour and emissive";
+        return false;
+    }
+    minion.pivotXPx = minionPivot.x;
+    minion.pivotYPx = minionPivot.y;
+    minion.z = minionEntry["z"]["value"].AsNumber();
+    minion.feetBelowEntityPx = minionEntry["feet_below_entity_px"].AsNumber();
+    minion.strideMs = minionWalk["stride_ms"].AsNumber();
+    minion.searchPeriodMs = search["period_ms"].AsNumber();
+    minion.searchRightAfterMs = search["right_after_ms"].AsNumber();
+    minion.darkestZeroesEmissive = minionEntry["darkest_zeroes_emissive"].AsBool();
+    minion.blackEntity = black["entity"].AsString("");
     out = std::move(read);
     return true;
 }

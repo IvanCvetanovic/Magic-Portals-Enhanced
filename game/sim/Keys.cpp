@@ -113,7 +113,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-std::vector<entt::entity> State::Tick(entt::registry& registry, const std::vector<entt::entity>& carriers, float dt) {
+std::vector<entt::entity> State::Tick(entt::registry& registry, const std::vector<Carry::Carrier>& carriers, float dt) {
     std::vector<entt::entity> removed;
     const double ms = static_cast<double>(dt) * 1000.0;
     const double range2 = rules.rangePx * rules.rangePx;

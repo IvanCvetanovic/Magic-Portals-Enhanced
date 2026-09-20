@@ -95,6 +95,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!number("patrol", "settle_px", read.settlePx)) return false;
     if (!number("patrol", "brake", read.brake)) return false;
     if (!number("body", "radius_px", read.bodyRadiusPx)) return false;
+    if (!number("body", "entity_above_feet_px", read.entityAboveFeetPx)) return false;
 
     const Json::Value& killer = root["killer"];
     if (!killer.Has("entity_name") || !killer["entity_name"].IsString()) {
@@ -132,6 +133,12 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     if (read.bodyRadiusPx <= 0.0) {
         error = path + ": body.radius_px is above zero";
+        return false;
+    }
+    // An entity inside its own feet circle would put the point the walk measures
+    // from below the body's centre, which no minion.ent does.
+    if (read.entityAboveFeetPx < read.bodyRadiusPx) {
+        error = path + ": body.entity_above_feet_px is at least body.radius_px";
         return false;
     }
     if (read.killerName.empty()) {
@@ -172,6 +179,7 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
                            const std::vector<Waypoint>& patrol) {
     Minion minion;
     minion.name = name;
+    minion.summoned = true;
     minion.spawnPx = atPx;
     minion.waypoints = patrol;
     // Built exactly as Spawn builds one. The locked rotation is not a detail
@@ -192,14 +200,23 @@ void State::Tick(entt::registry& registry, float dt) {
     const float speed = Units::ToMetres(SpeedPxPerSecond());
 
     for (Minion& minion : minions) {
+        minion.arm = Arm::None;
         if (minion.gone || minion.body == entt::null || !registry.valid(minion.body)) continue;
         if (minion.waypoints.empty()) continue;
         if (!registry.all_of<RigidBodyComponent, TransformComponent>(minion.body)) continue;
 
         minion.elapsedMs += ms;
 
+        // Both thresholds are measured from the original's ENTITY point, as its
+        // waypoints are placed: GetPositionXY (ins 369-374) against a waypoint's own
+        // GetPositionXY. That point stands entity_above_feet_px over the feet, and the
+        // port's one circle has its centre radius_px over them, so it is the centre
+        // less the difference. Measured from the centre, 9 below the waypoints the
+        // levels place, no patroller ever came within arrivePx: it crossed its first
+        // waypoint and turned back on every tick after (step 76).
         const glm::dvec2 atPx = PxOf(registry, minion.body);
-        const double distance = Length(minion.waypoints[minion.dest].atPx - atPx);
+        const glm::dvec2 entityPx = atPx - glm::dvec2(0.0, rules.EntityAboveCentrePx());
+        const double distance = Length(minion.waypoints[minion.dest].atPx - entityPx);
 
         // Arrival, at minDist. The walk takes the NEXT waypoint, and adopts the
         // hold of the one it just reached - the dwell belongs to where it is
@@ -227,6 +244,7 @@ void State::Tick(entt::registry& registry, float dt) {
         // parks it at its post.
         if (minion.elapsedMs <= minion.holdMs) {
             rigid.velocity.x *= static_cast<float>(rules.brake);
+            minion.arm = Arm::Hold;
             continue;
         }
 
@@ -243,16 +261,23 @@ void State::Tick(entt::registry& registry, float dt) {
         // And when it holds, NO velocity is set: the original leaves the body to
         // carry on and to friction, which is how a frictionless minion coasts the
         // last stretch in. This port's bodies grip (kBodyFriction 1), so its guard
-        // parks a pixel or so short instead. Same post, reached differently, and
-        // the difference is written down in minions.json rather than papered over
+        // stops about where the drive stops, some 15 px out, and never arrives.
+        // The difference is written down in minions.json rather than papered over
         // with a zero the original never writes.
-        if (minion.waypoints.size() == 1 && distance < rules.settlePx) continue;
+        if (minion.waypoints.size() == 1 && distance < rules.settlePx) {
+            minion.arm = Arm::Settled;
+            continue;
+        }
 
         // Horizontal only: the original's moveVec is (+-1, 0), and it takes -1
         // when the two x's are exactly equal. What it falls at is the world's,
-        // which is why nothing here touches y.
+        // which is why nothing here touches y. Its sign is also the row the
+        // picture walks on, which is why the facing is set here and nowhere else.
         const double destX = minion.waypoints[minion.dest].atPx.x;
-        rigid.velocity.x = destX > atPx.x ? speed : -speed;
+        const bool right = destX > atPx.x;
+        rigid.velocity.x = right ? speed : -speed;
+        minion.facing = right ? Facing::Right : Facing::Left;
+        minion.arm = Arm::Walk;
     }
 }
 
@@ -352,6 +377,7 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
         Minion minion;
         minion.name = node.name;
         minion.waypointName = MetaText(node, "waypointName");
+        minion.entityName = MetaText(node, "entityName");
         if (!PositionOf(node, minion.spawnPx)) {
             error = node.name + " is a minion marker with no position";
             return false;

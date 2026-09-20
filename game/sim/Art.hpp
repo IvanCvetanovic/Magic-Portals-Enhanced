@@ -52,7 +52,10 @@ struct Picture {
     // Lighting::OwnerScaled. `halo` is a file among the original's entities, not
     // yet a path.
     std::optional<Lighting::Light> light;
-    double z = 0.0;               // the depth its light's height is measured from; read only with a light
+    // The depth its light's height is measured from, read with a light; and for the
+    // player and a minion, the depth its script adds it at, in the world's units
+    // (Rules::scaleFactor turns it into the level's).
+    double z = 0.0;
 
     int Frames() const { return columns * rows; }
 };
@@ -264,6 +267,54 @@ struct Timer : Picture {
     bool Gone(double scaleX) const;
 };
 
+// A minion or a knight of worlds 3 and 4, as minion.ent draws it and
+// ETHCallback_minion frames it (art.json's minion). Its row is the way it last
+// walked; its column is the walk's FrameTimer while it walks and the hold column
+// while it does not, and the timer's column and time carry across a hold and a
+// turn, as the player's do. It stands with its feet, not its centre, on what the
+// port's one-circle body stands on.
+struct Minion : Picture {
+    double pivotXPx = 0.0;          // its PivotAdjust
+    double pivotYPx = 0.0;
+    double feetBelowEntityPx = 0.0; // its compound's feet circle's bottom, below the entity
+    int firstColumn = 0;            // the walk: timer.set(first, last, stride, true)
+    int lastColumn = 0;
+    double strideMs = 0.0;
+    int holdColumn = 0;             // SetFrame(hold, dirRow) while it does not walk
+    int startRow = 0;               // dirRow before its first walk
+    int leftRow = 0;                // dirRow walking left
+    int rightRow = 0;               // and right
+    double searchPeriodMs = 0.0;    // the blocked arm looks right while elapsedTime % period > rightAfter
+    double searchRightAfterMs = 0.0;
+    bool darkestZeroesEmissive = false; // emissive 0 while the ambient is DARKEST_AMBIENT_LIGHT
+    std::string blackEntity;        // the entity drawn black: ghost_minion.ent
+    glm::dvec3 blackColour{0.0};    // its SetColor, every frame
+    glm::dvec3 blackEmissive{0.0};  // its .ent's <EmissiveColor>
+};
+
+// Which of ETHCallback_minion's arms an update took, as far as its frame goes.
+enum class MinionArm {
+    None,    // no update ran for it: nothing written
+    Walk,    // it walked: its row, and the walk's column
+    Hold,    // it did not walk, its way clear: the hold column of the row it last walked
+    Search,  // its way blocked and nothing spotted: the hold column, looking one way then the other
+    Settled, // a lone guard inside minDist x 2 (shouldntMove): nothing written
+};
+
+// A minion's frame and what its script keeps for it.
+struct MinionPose {
+    FrameTimer timer; // the walk's, from the constructor's (0, 0)
+    int column = 0;   // the frame shown: frame 0 until a write, the entity's default
+    int row = 0;
+    int dirRow = -1;  // its custom data's dirRow; -1 until written, which reads as startRow
+};
+
+// One update's frame writes. `right` is which way a Walk went (moveVec.x > 0);
+// `elapsedMs` the update's time, which only a Walk adds to the timer;
+// `sinceArrivalMs` its elapsedTime, which the Search arm reads.
+void UpdateMinion(const Minion& art, MinionPose& pose, MinionArm arm, bool right, double elapsedMs,
+                  double sinceArrivalMs);
+
 struct Rules {
     Picture portal;      // portal.ent
     Shot shot;           // projectile.ent
@@ -276,6 +327,14 @@ struct Rules {
     // antiportal: placed by the levels, blinked and turned by its script
     Antiportal antiportal;
     Timer timer;         // timer.ent, the dial behind a timed crystal
+    Minion minion;       // minion.ent, the minions and knights
+    // What a depth a script adds something at is in the level's units: that depth
+    // over this (art.json depth). A level's nodes were multiplied by it at load and
+    // what a script adds at a literal z was not.
+    double scaleFactor = 0.0;
+
+    // A script's raw depth in the level's units, where the port orders its art.
+    double LevelDepth(double worldZ) const { return worldZ / scaleFactor; }
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);

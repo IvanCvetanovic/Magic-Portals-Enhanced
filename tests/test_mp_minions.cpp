@@ -12,6 +12,10 @@
 //            two separate tests in the original. Collapsing them into one
 //            constant is the easy mistake, and it gives a minion that either
 //            jitters at its waypoint or never settles, so both are pinned.
+//            Both are measured from the ENTITY's point, 18.1 above the feet,
+//            which the levels place the waypoints at - not from the port's body
+//            centre, 11.1 below it. From the centre no patroller ever arrived,
+//            and turned across its first waypoint on every tick (step 76).
 //   hold     a DWELL in milliseconds, adopted from the waypoint just REACHED.
 //            A lone waypoint carrying the 999999999 sentinel is a stationary
 //            guard, and needs no special case: it is a wait nothing outlasts.
@@ -25,6 +29,10 @@
 // tested, because that is exactly the kind of thing a role table smooths over:
 // the floor is no hazard and kills no player, and it does take a minion.
 //
+// And, since step 76, the two facts the picture is framed by and nothing in the sim
+// reads back: which arm each tick took (walk, hold, settled), and the facing the
+// walk alone sets - moveVec's sign, not the velocity's.
+//
 // level0b is the first level of world 3 and carries all of it at once: a minion
 // patrolling wayA0 <-> wayA1 (both holding 4000), a guard on a lone wayB0 with
 // the sentinel, and a 768 x 128 enemy_killer floor.
@@ -35,6 +43,7 @@
 #include "TestHarness.hpp"
 
 #include "core/Components.hpp"
+#include "sim/Art.hpp"
 #include "sim/Game.hpp"
 #include "sim/Minions.hpp"
 #include "sim/Units.hpp"
@@ -87,6 +96,12 @@ void PutAt(entt::registry& registry, entt::entity body, const glm::dvec2& atPx) 
     auto& transform = registry.get<TransformComponent>(body);
     transform.position = glm::vec3(world.x, world.y, transform.position.z);
     registry.get<RigidBodyComponent>(body).velocity = glm::vec3(0.0f);
+}
+
+// Stood on level0b's floor (top 128) at x: the body's centre radius_px above it, so
+// its entity point 18.1 above - where a walk that arrives there stands.
+void StandAt(Run& run, entt::entity body, double x) {
+    PutAt(run.registry, body, glm::dvec2(x, 128.0 - run.level.minions.rules.bodyRadiusPx));
 }
 
 float VelocityX(entt::registry& registry, entt::entity body) {
@@ -176,10 +191,53 @@ void aPatrollerWalksToItsFirstWaypoint() {
     // which is 0.78 m/s in the engine's units.
     CHECK(VelocityX(run.registry, body) < 0.0f);
     CHECK(::test::nearly(VelocityX(run.registry, body), -Units::ToMetres(39.0), 1e-3f));
+    // And the picture's two facts (step 76): the walk arm, facing the way moveVec
+    // points - which, not the velocity's sign, is what the original's row follows.
+    const Minions::Minion* walked = run.level.minions.FindMinion(kPatroller);
+    CHECK_MSG(walked != nullptr && walked->arm == Minions::Arm::Walk && walked->facing == Minions::Facing::Left,
+              "the walk arm, facing left");
+    CHECK_MSG(walked != nullptr && !walked->summoned && walked->entityName.empty(),
+              "a marker's minion.ent: no entityName on level0b's markers");
+}
+
+// The facing is set only where the walk sets the velocity, and a minion that has
+// never walked faces nothing: the original's dirRow is unset until then (step 76).
+void theFacingIsTheWalksAndOnlyTheWalks() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+
+    const Minions::Minion* found = run.level.minions.FindMinion(kPatroller);
+    CHECK(found != nullptr);
+    if (found == nullptr || found->body == entt::null) return;
+    const entt::entity body = found->body;
+    CHECK_MSG(found->arm == Minions::Arm::None && found->facing == Minions::Facing::None,
+              "nothing chosen before the first tick");
+
+    // Stood on its first waypoint before it has walked (its entity 2.1 above wayA0):
+    // it arrives, adopts the hold, and holds - facing nothing yet.
+    StandAt(run, body, 509.0);
+    Tick(run);
+    const Minions::Minion* held = run.level.minions.FindMinion(kPatroller);
+    CHECK_MSG(held != nullptr && held->arm == Minions::Arm::Hold && held->facing == Minions::Facing::None,
+              "held on arriving, having never walked");
+
+    // Through the hold and off to wayA1 at 547: the walk, facing right.
+    for (int tick = 0; tick < 250; ++tick) Tick(run);
+    const Minions::Minion* off = run.level.minions.FindMinion(kPatroller);
+    CHECK_MSG(off != nullptr && off->arm == Minions::Arm::Walk && off->facing == Minions::Facing::Right,
+              "walking to wayA1, facing right");
+
+    // Shoved the other way while it walks right, it still faces the way it is
+    // driven: a velocity's sign is not its facing.
+    if (run.registry.valid(body)) run.registry.get<RigidBodyComponent>(body).velocity.x = -Units::ToMetres(200.0);
+    const Minions::Minion* shoved = run.level.minions.FindMinion(kPatroller);
+    CHECK_MSG(shoved != nullptr && shoved->facing == Minions::Facing::Right, "a shove is not a turn");
 }
 
 // Arrival adopts the hold of the waypoint REACHED, and the walk resumes only
-// once the dwell is served.
+// once the dwell is served. Driven there by its own walk, not placed: the arrival
+// is measured from the entity's point, 11.1 above the body's centre, and placing
+// the centre on the waypoint is exactly what hid that it never arrived (step 76).
 void arrivingAdoptsTheHoldAndServesIt() {
     Run run;
     if (!Begin(kLevel, run)) return;
@@ -188,20 +246,41 @@ void arrivingAdoptsTheHoldAndServesIt() {
     CHECK(found != nullptr);
     if (found == nullptr || found->body == entt::null) return;
     const entt::entity body = found->body;
+    CHECK(::test::nearly(static_cast<float>(run.level.minions.rules.EntityAboveCentrePx()), 11.1f, 1e-5f));
 
-    PutAt(run.registry, body, glm::dvec2(509.0, 112.0));
-    Tick(run);
+    // From x 546 to wayA0 at 509: it walks left, and arrives with no turn on the way.
+    int ticks = 0;
+    bool turned = false;
+    const Minions::Minion* walking = run.level.minions.FindMinion(kPatroller);
+    while (walking != nullptr && walking->dest == 0 && ticks < 120 && run.registry.valid(body)) {
+        Tick(run);
+        ++ticks;
+        walking = run.level.minions.FindMinion(kPatroller);
+        if (walking != nullptr && walking->facing == Minions::Facing::Right) turned = true;
+    }
+    CHECK(run.registry.valid(body));
+    if (!run.registry.valid(body)) return;
 
     const Minions::Minion* arrived = run.level.minions.FindMinion(kPatroller);
     CHECK(arrived != nullptr);
     if (arrived == nullptr) return;
-    CHECK_EQ(arrived->dest, static_cast<std::size_t>(1));
-    CHECK_EQ(arrived->arrivedAt, static_cast<std::size_t>(0));
+    CHECK_MSG(arrived->dest == 1 && arrived->arrivedAt == 0,
+              "it arrived at wayA0 by its own walk, in " + std::to_string(ticks) + " ticks");
+    CHECK_MSG(!turned, "and never turned on the way");
+    const glm::dvec2 bodyPx = Units::ToPixels(run.registry.get<TransformComponent>(body).position);
+    const glm::dvec2 entityPx = bodyPx - glm::dvec2(0.0, run.level.minions.rules.EntityAboveCentrePx());
+    CHECK_MSG(glm::distance(entityPx, arrived->waypoints[0].atPx) < run.level.minions.rules.arrivePx &&
+                  bodyPx.x > arrived->waypoints[0].atPx.x,
+              "its entity within arrive_px of wayA0, short of crossing it");
     CHECK(::test::nearly(static_cast<float>(arrived->holdMs), 4000.0f));
+    CHECK_MSG(arrived->arm == Minions::Arm::Hold, "holding from the tick it arrived");
+
+    // The brake takes 0.3 of what is left each tick: gone to nothing in ten.
+    for (int tick = 0; tick < 10; ++tick) Tick(run);
     CHECK(::test::nearly(VelocityX(run.registry, body), 0.0f));
 
     // Most of the way through the 4000 ms hold: still standing.
-    for (int tick = 0; tick < 150; ++tick) Tick(run);
+    for (int tick = 0; tick < 140; ++tick) Tick(run);
     CHECK(run.registry.valid(body));
     if (!run.registry.valid(body)) return;
     CHECK_MSG(::test::nearly(VelocityX(run.registry, body), 0.0f), "still serving the hold at 2.5 s");
@@ -213,6 +292,52 @@ void arrivingAdoptsTheHoldAndServesIt() {
     CHECK_MSG(VelocityX(run.registry, body) > 0.0f, "walking again once the hold is served");
 }
 
+// The patrol, left alone for 1000 ticks: wayA0, wayA1, wayA0 and wayA1 again (by
+// about 0.8, 5.4, 10.0 and 14.6 s at 39 u/s with 4000 ms holds), and it
+// turns only where it arrives. Measured from the body's centre it arrived nowhere
+// and turned on every tick from its first crossing of wayA0 (step 76's finding,
+// a 30 Hz strobe between rows 1 and 2 once the knights were drawn).
+void aPatrolTurnsOnlyWhereItArrives() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+
+    const Minions::Minion* found = run.level.minions.FindMinion(kPatroller);
+    CHECK(found != nullptr);
+    if (found == nullptr || found->body == entt::null) return;
+
+    int arrivals = 0;
+    int turns = 0;
+    std::size_t dest = found->dest;
+    Minions::Facing facing = found->facing;
+    for (int tick = 0; tick < 1000; ++tick) {
+        Tick(run);
+        const Minions::Minion* now = run.level.minions.FindMinion(kPatroller);
+        if (now == nullptr || now->gone) break;
+        if (now->dest != dest) ++arrivals;
+        if (facing != Minions::Facing::None && now->facing != facing) ++turns;
+        dest = now->dest;
+        facing = now->facing;
+    }
+    CHECK_MSG(arrivals >= 4, "four arrivals in 16.7 s: " + std::to_string(arrivals));
+    CHECK_MSG(turns >= 3 && turns <= arrivals,
+              std::to_string(turns) + " turns for " + std::to_string(arrivals) + " arrivals");
+}
+
+// minions.json's entity height is the decode art.json places the picture by: one
+// number, read twice, and the two must not drift apart.
+void theEntityStandsWhereThePictureStands() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+
+    Art::Rules art;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", art, error), error);
+    if (!error.empty()) return;
+    CHECK(::test::nearly(static_cast<float>(run.level.minions.rules.entityAboveFeetPx), 18.1f, 1e-5f));
+    CHECK_MSG(run.level.minions.rules.entityAboveFeetPx == art.minion.feetBelowEntityPx,
+              "minions.json body.entity_above_feet_px equals art.json minion.feet_below_entity_px");
+}
+
 // A lone waypoint, and the wider threshold that belongs to it alone.
 //
 // The guard is NOT motionless from the start, which is the part worth pinning: it
@@ -221,9 +346,10 @@ void arrivingAdoptsTheHoldAndServesIt() {
 // with exactly one waypoint - and from there the two engines part company. The
 // original's minion is frictionless (minion.ent friction 0.000000), so it coasts
 // the last stretch in, arrives, adopts the 999999999 sentinel, and is parked by
-// the brake. This port's bodies grip (kBodyFriction 1), so its guard parks a
-// pixel or so short of arriving instead. Either way it ends up at its post and
-// stays there, which is what is pinned here; minions.json carries the difference.
+// the brake. This port's bodies grip (kBodyFriction 1), so its guard stops about
+// where the drive stops, inside the wider threshold and short of arriving. Either
+// way it ends up by its post and stays there, which is what is pinned here;
+// minions.json carries the difference.
 void aLoneWaypointIsWalkedToAndThenHeldForGood() {
     Run run;
     if (!Begin(kLevel, run)) return;
@@ -250,6 +376,9 @@ void aLoneWaypointIsWalkedToAndThenHeldForGood() {
               "the guard stopped within the wider threshold of its post");
     CHECK_MSG(posted->waypoints.size() == 1, "and it got there on one waypoint, which is why it stopped");
     CHECK(::test::nearly(VelocityX(run.registry, body), 0.0f));
+    // shouldntMove: the settled arm, which writes no frame, still facing its walk.
+    CHECK_MSG(posted->arm == Minions::Arm::Settled && posted->facing == Minions::Facing::Right,
+              "settled, facing the way it walked in");
 
     // Still there three seconds later: the wait is never restarted.
     const double atPost = PixelX(run.registry, body);
@@ -382,7 +511,10 @@ void runTests() {
     theWalkIsTheDecodedSpeedNotTheRemakesGuess();
     aMarkerResolvesItsWaypointsByPrefix();
     aPatrollerWalksToItsFirstWaypoint();
+    theFacingIsTheWalksAndOnlyTheWalks();
     arrivingAdoptsTheHoldAndServesIt();
+    aPatrolTurnsOnlyWhereItArrives();
+    theEntityStandsWhereThePictureStands();
     aLoneWaypointIsWalkedToAndThenHeldForGood();
     aGuardCarryingMomentumStillParks();
     theKillerFloorIsTheShapeNotTheFallback();

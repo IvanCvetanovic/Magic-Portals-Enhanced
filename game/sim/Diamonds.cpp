@@ -136,7 +136,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-std::vector<entt::entity> State::Tick(entt::registry& registry, const std::vector<entt::entity>& carriers,
+std::vector<entt::entity> State::Tick(entt::registry& registry, const std::vector<Carry::Carrier>& carriers,
                                       const std::vector<entt::entity>& prey, float dt) {
     std::vector<entt::entity> hit;
     const double ms = static_cast<double>(dt) * 1000.0;

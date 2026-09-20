@@ -38,6 +38,19 @@
       "The original eases with a smoothEnd filter; the port blends linearly between aims.",
       "Nothing in the carry path touches velocity, which is why a key is state with a",
       "position here rather than a body: key.ent is density 0 with no custom data but color."
+    ],
+    "_carrier_point": [
+      "DECODED (the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce): ETHCallback_key",
+      "measures the pickup from the carrier's GetPositionXY (ins 744-753, squaredDistance against",
+      "squaredRange) and leads the key to that same GetPositionXY (ins 932-957 the scale(40)",
+      "leash and forceFollowUpPosition, 959-976 followUp): the carrier's ENTITY point, not the",
+      "centre of whatever body the port gives it. A minion's entity point stands",
+      "minions.json body.entity_above_feet_px (18.1) over its feet, which is 11.1 over the",
+      "port's body centre, so Game offers each minion to the keys at that point (Carry::Carrier)",
+      "and a key a knight carries rides at its chest, drawn behind it (the keys are placed at",
+      "eth_z 0 or below, the minion at world 2). The player is offered at its capsule's centre,",
+      "22 over its feet against the original's 18.1 (dark_mage.ent's compound is minion.ent's):",
+      "a deviation of the player's body, recorded in docs/parity-backlog.md, not applied here."
     ]
   },
 

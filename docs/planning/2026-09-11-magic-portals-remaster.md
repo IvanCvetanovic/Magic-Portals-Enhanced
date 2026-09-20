@@ -12719,6 +12719,370 @@ Strawberry's `cmake.exe`, `ninja.exe` and `ctest.exe`, plus `vcvars64.bat`. No r
 - **Skipped** is still to be seen on a machine without the levels (a fresh clone, or CI). There, all 27 should
   report Skipped, with the path each one looked in.
 
+## Step 76 - the minions and knights on the sheet the original cuts, behind a player the original adds at 4, on patrols that arrive where the original's do (built)
+
+The visuals plan's step 5.1 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, as section 8.13 amends it;
+its brief `system_5.md` 5a; decode `decode/D2.md` and its check). On MPR `main`, `build/`. Game-only: no file under
+`engine/`, and the engine pin is unchanged. Changed: `game/data/art.json`, `game/data/minions.json`,
+`game/data/keys.json`, `game/sim/Art.{hpp,cpp}`, `game/sim/Minions.{hpp,cpp}`, `game/sim/Carry.{hpp,cpp}`,
+`game/sim/Keys.{hpp,cpp}`, `game/sim/Diamonds.{hpp,cpp}`, `game/sim/Game.cpp`, `game/MagicPortalsLayer.{hpp,cpp}`,
+`tests/test_mp_layer.cpp`, `tests/test_mp_sprites.cpp`, `tests/test_mp_minions.cpp`, `tests/test_mp_ghost.cpp`,
+`tests/test_mp_keys.cpp` - **21 files, which is exactly what `git status` shows beside this record and
+`docs/parity-backlog.md` (CHECKED, 23 in all). A hand-off note listing 13 files, or saying the arrival was recorded and
+not fixed, is a draft from before the two fix rounds: this record and `git status` are the commit's source of truth.**
+**The 62 minions of worlds 3 and 4, and the chapter-3 boss's escorts, are drawn for the
+first time: `hd/minion.png` cut as the original cuts it (frames of
+38 x 54 units, 76 x 108 texels, where an even split would take 77.5 x 108.5), on the decoded rows 1 walking left and 2
+walking right, a column every 120 ms of walking and column 0 while a hold is served, with feet standing where the body
+stands. The player's depth is now the decoded 4 and a minion's the decoded 2, both raw depths in the world's units,
+divided by the level's scale factor to 1.42 and 0.71 in the level's units: a minion is drawn behind the player, and both
+behind every node at eth_z 2 or more (325 over the 128 levels, 122 of them with a picture; the 54 at exactly 2 are the
+nearest). The step's verification found that the port's patrollers never arrived at a waypoint, so the newly drawn
+knights turned on every tick at their first waypoint, a 30 Hz strobe between rows 1 and 2
+(MEASURED on 3-23: 81 flips in 81 frames). That is fixed here, as the original does it: the sim measures its arrival
+from the entity's point, 18.1 above the feet, where the levels place the waypoints. The patrollers now arrive, hold and
+turn back as the original's do; the knights hold within 0.4-3.1 u of the original's hold positions on 3-05 and 3-23, and
+on 11 levels they now carry keys, on 3-15 press the button that holds a door open and on 3-22 weigh the seesaw. The
+step's SECOND verification found that carried key riding at the knight's boots: the port led it from the carrier's
+body centre where the original leads it from the carrier's ENTITY point, 11.1 above it. That is fixed here too - a
+carrier is now offered at its point (`Carry::Carrier`) - and the key rides at the knight's chest, drawn behind it,
+showing as the yellow edge behind the shoulder that the original's 3-10 and 3-17 frames show (MEASURED: the key's
+yellow inside the knight's cell falls from 45 to 26 px on 3-10 and from 136 to 28 px on 3-17, and its centroid from
+19.5 and 23.1 u BELOW the cell's centre to 2.4 and 3.5 u above it, against the original's 1.5 u below - a residual of
+3.9-5.0 u, where the error was 21.0-24.6 u). Of the 128
+f420 frames, 67 are byte-identical to the baseline. **Both sim changes are the original's behaviour, and neither is
+one of R1-R23: they are put to the owner as proposed R24 (the arrival point) and R25 (the carrier point) in
+`00_order` 8.15, and applied here because G5a-4 and half of G5a-8 cannot be measured without R24.** Two capture rows
+are NOT MET as written and recorded, not tuned:
+G5a-5's lit R on one stride-cell detection outside the brief's frames (59.9 or 60.02 - it sits ON the line and the
+reading flips with the sub-pixel centre; the row records the port's own 2% shortfall against the original's draw
+instead), and the non-regression row on 10 levels, where
+the knights now carry keys, press a button or weigh a seesaw. The lone guards' coast is a RECORDED DEVIATION. All
+three are in `docs/parity-backlog.md` section 2.**
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; every number is in
+`art.json` `minion`, `character.z` and `depth`, or `minions.json` `body`, with its instructions).
+- **`minion.ent`:** `minion.png` cut 4 x 4, PivotAdjust (0, 4), EmissiveColor 1, static 0, applyLight 0, and a
+  compound of two circles (r 1.3 at posY -0.5 and +0.5) in a 14 x 36 Collision. `ETHCompoundShape.cpp:66-69` scales
+  these by half the size, so the feet circle's bottom is 9 + 9.1 = **18.1 below the entity**. The original draws
+  the hd twin (310 x 434 at density 2), cut by `Tiers::FrameCut` (00_order E1).
+- **Rows (D2, R3):** `ETHCallback_minion` ins 1013-1025 `moveVec = (currentPos.x < destPos.x ? 1 : -1, 0)`;
+  1112-1127 `dirRow = findCharacterDirection(getAngle(moveVec), true) == 1 ? 1 : 2`; 1141-1162
+  `SetFrame(timer.set(0, 3, 120, true), dirRow)`. The hold arm (1164-1205) brakes x by 0.3 and, with nothing in
+  sight, does `SetFrame(0, dirRow)`. A missing `dirRow` reads 0 (`ETHEntity.cpp:865-870`). `shouldntMove` (1089 ->
+  1163 -> 1450) writes no frame. The blocked-way search arm (1207-1321) looks right while `elapsedTime % 4000 > 2000`
+  (`CMPIu` / `JNP` at 1245-1246, the fall-through pushing 0 then 1f) and left otherwise. D2.md's own section 1
+  states this inverted; 8.3's check and the listing agree.
+- **Arrival, and the point it is measured from (this step's fix):** ins 369-374 `currentPos = GetPositionXY()`, the
+  entity's point; ins 420-425 `distance(currentPos, destPos) < minDist` (8), and for a lone guard ins 1074-1080 the
+  same distance against minDist x 2. `destPos` is a waypoint entity's own point (ins 198-210 store
+  `SeekEntity(name).GetPositionXY()`). So both thresholds run from a point 18.1 above the feet, and the levels place
+  their waypoints there: level0b's wayA0 at y 112 over a floor at 128, and the knights' waypoints on 3-05 and 3-23 at
+  208 over floors at 224.
+- **Emissive:** every frame, `SetEmissiveColor(GetAmbientLight() != DARKEST_AMBIENT_LIGHT ? originalEmissive : 0)`
+  (ins 20-36, 266-298). `ETHCallback_ghost_minion` ins 8-18 `SetColor(V3_ZERO)` every frame, then ins 25 runs
+  `ETHCallback_minion`.
+- **Depth, and the units it is in (this step's decode; it closes 00_order 8.12b's INFERRED "raw literals versus
+  scaled offsets").** `SGlobalScale::scaleEntity` (bytes 6072..6337) ins 38-53 is
+  `SetPosition(GetPosition() * getScale())`, a vector3 times a float, so z is multiplied too. `scaleEntities`
+  (6838..7228) runs it on every entity not marked `scalable` 0, from `Game::preLoop` ins 37. A script's literal z is
+  not scaled: `AddEntity` keeps the position it is given (`ETHScriptWrapper.Scene.cpp:131-158`,
+  `SetOrphanPosition`).
+  - The player is `AddScaledEntity(name, vector3(pos, 4f), getScale())` (`GameCharacter` ins 10-24), so it stands
+    at world 4.
+  - A minion is `vector3(GetPositionXY(), 2f)` (`ETHCallback_minion_spawn` ins 12-18, `spawnMinion` 25-39), so it
+    stands at world 2.
+  - The boss's escort stands at `SeekEntity('minion_spawn_point').GetPosition()`, a placed node's scaled depth
+    (`ETHCallback_ghost` ins 1096-1149; level31b's node at eth_z 0).
+  - Ethanon orders by depth alone and keeps the order entities were added in at equal depth
+    (`ETHEntityRenderingManager.cpp:70-106`).
+  - At the R12 screen, where m_scaleFactor = 720 / 256 = 2.8125 (8.12a), the player is at **1.42** in the level's
+    units and a minion at **0.71**. The one node at eth_z 1 (level22a's platform) is behind the player and in front
+    of a minion. The 54 nodes at 2 and the 45 at 4 are in front of both.
+  - K14's "55 decor placements at z 1-2 change order" used 3f's superseded factor of 1.5. With 2.8125 the count is
+    1.
+
+**THE OWNER'S STANDING RULINGS APPLIED** (each is decided for what the original does: the bytecode decode, with
+measured footage winning where they disagree, gameplay included).
+- **R3, the rows: the decoded 1 and 2.** The measured 0/3 is kept as `_measured_rows_not_applied`. The verification's
+  sub-pixel render model (premultiplied bilinear redraw of `hd/minion.png` over a knight-free frame) reads the row on
+  the port's pixels: the shipped row wins 6 of 6 of its cases and 6 of 6 holds here, its best column beating the
+  pair row's best by 1.09-1.32 MAE.
+  The brief's integer discriminator does not (on 3-23 f420 it prefers cell 0 by 0.005): that was D2's point.
+- **R10, the player's depth: the decoded 4, both halves.**
+  - **The slot:** after every sprite at or below 1.42. That changes the slot only on level22a, whose f420
+    frame is byte-identical all the same: nothing that order decides overlaps there. Everything
+    that `buildSprites` or the halos place relative to `m_playerSlot` (placed portals, their halos, the shot, thrown
+    stones, ownerless halos) moves with the player on level22a alone. 7.4 and 10.1 own the true depths of those
+    pictures.
+  - **The lighting height:** 1.42 on every level, where before it was the marker's eth_z (0, or 2 on level8a). The
+    marker gives only x and y.
+- **R12, the 720 selection:** the scale factor 2.8125 (`art.json` `depth.scale_factor`, pinned equal to the
+  timer's `screen_px_per_unit`).
+- **Two sim changes here are NOT among R1-R23.** The first record called them "the same standing ruling", which is an
+  extension by analogy; they are written out instead as **proposed R24 and R25** (`00_order` section 8.15, appended by
+  this step) and applied, with the reason each is applied stated so the owner can refuse either:
+  - **R24, the arrival point.** The patrol's 8 (and a lone guard's 16) is measured from the entity's
+    `GetPositionXY` (ins 369-374, 413-425) against a waypoint entity's own point (ins 198-210), not from the body's
+    centre. **5.1's own gate list demands it:** G5a-4 is "holds on column 0" and half of G5a-8 is "MAE <= 10 against
+    the library **at the holds**", and with the arrival measured from the centre the port serves no hold at all on any
+    level (no patroller comes within 8), so both are unmeasurable by construction - and the knights this step draws
+    strobe between rows 1 and 2 at 30 Hz. It changes gameplay on the patrol levels, and that is what the
+    non-regression row records as NOT MET on 10 of them.
+  - **R25, the carrier point.** A key is polled and led from the carrier's `GetPositionXY` (`ETHCallback_key` ins
+    744-753, 932-957, 959-976). It is not a picture-only change and is not presented as one: the original polls and
+    leads from ONE point, so moving the draw and leaving the poll at the body's centre would invent a hybrid the
+    original does not have. What made it visible is this step's own work - with R24 in, a knight reached a key for
+    the first time and carried it at its boots.
+  - **Neither is this step's to number.** Both are recorded as open in `docs/parity-backlog.md`. If the owner refuses
+    R24, G5a-4 and half of G5a-8 go back to NOT MEASURED and the strobe returns, so the fix and its gates come out
+    together; refusing R25 leaves the key drawn at the knight's boots on 11 levels.
+- Not applied, and not this step's to apply:
+  - **R5** (patrol speed 39 u/s against the measured 53-64): reported under G5a-7.
+  - **R16** (the marker's entityName spawning the ghost_minion body): the name is read for the picture only.
+  - **R4**: the ghost's appearance belongs to 12.2.
+
+**THE ARRIVAL (the verification's finding, fixed in this step).**
+- **What was wrong.** `Minions::Tick` measured the 8 u arrival from the body's centre. The body is one circle of
+  radius 7, so on a floor its centre stands 7 above it, 9 below the waypoints the levels place. No patroller ever
+  came within 8 (`test_mp_layer` printed "walks 9.32 below wayA0"). It crossed its first waypoint's x and turned, and
+  by the walk rule turned again on every tick after. Once 5.1 drew the knights that was a strobe: the verification's
+  every-frame capture of 3-23 (`5.1/verify1/turn`, `turn_v1.py`) saw the upper knight flip left and right on 81 of
+  81 frames f120-f200, stepping between x 1163 and 1167 px while its column kept stepping. The holds were never
+  served, so G5a-4 and half of G5a-8 could not be measured. `test_mp_minions` missed it because its arrival test put
+  the body's centre on the waypoint.
+- **The fix.** `minions.json` `body.entity_above_feet_px` 18.1 (the compound's decode above, with its `_source`), and
+  `Rules::EntityAboveCentrePx()` = 18.1 - `radius_px` 7 = 11.1. `Tick` measures both thresholds from the body's
+  centre less 11.1, which is the original's entity point. `LoadRules` requires the number and refuses one below
+  the radius. `test_mp_minions` pins it equal to `art.json`'s `minion.feet_below_entity_px`, which places the picture
+  by the same decode.
+- **What it does, measured** (`5.1/fix1/`, every frame of 3-05 f100-f420 and 3-23 f100-f480, `turn_fix1.py`): over
+  1,083 tracked knight-frames the facing changes 4 times, each on the first frame of the walk that follows a hold. The
+  holds are still stretches of the served length: 3-05 f253-f370 (118 frames; wayB0 holds 2000 ms), 3-23's lower
+  knight f130-f429 (300 frames; 5000 ms) and its upper knight f291-f350 (60 frames; 1000 ms).
+- **Gameplay, each as the original plays it.** Patrols now cover their routes, so on the f420 sweep:
+  - knights have picked up keys that lie on their routes and carry them (the decoded rule `test_mp_keys` pins: a
+    minion within 26 of a key, measured from its entity point, takes it) on 3-10, 3-17, 3-20, 3-21, 3-23 (two keys),
+    3-26, 3-29, 3-30, 3-31, 4-28 and 4-30, and on 4-30 a carried key has reached its keyhole, which is part-way
+    through its fade at f420 (MEASURED: the keyhole's 120 x 120 px box reads mean 15.9 against the baseline's 48.4,
+    and the door's own box is byte-identical to the baseline, so the door still stands; `keyhole.fade_start_ms`
+    1000 and `fade_ms` 500 put the unlock at about 5.7 s). The original's 3-10 and 3-17 library frames show the
+    same: the key gone from the floor, and an edge of it behind the walking knight's shoulder. The other nine are
+    read by eye on the port's frames and by the decoded rule, not against library frames;
+  - on 3-15 the knight stands on the pressure button and the door it holds is open, as in the original's t8.0 and
+    h6.3 (closed at t2.0 and t4.5);
+  - on 3-22 the knight stands on the seesaw's end, and the plank's tilt changes (max 25 along its edge); read on the
+    port's frames only.
+
+**THE CARRIED KEY (the second verification's finding, fixed in this step).**
+- **What the original does.** `ETHCallback_key` measures the pickup from the CARRIER'S `GetPositionXY` (ins 744-753,
+  `squaredDistance` against `squaredRange` = scale(26)^2), snaps the key onto that same `GetPositionXY` beyond
+  scale(40) (ins 932-957, `forceFollowUpPosition`) and trails it there otherwise (ins 959-976,
+  `followUp(character.GetPositionXY(), 60, 20)`). That point is the entity's, and `dark_mage.ent` carries
+  `minion.ent`'s compound exactly, so for a minion it stands 18.1 over its feet - 11.1 over the port's body centre.
+- **What was wrong.** `Carry::Acquire` and `Carry::Trail` read the carrier's `TransformComponent`, its body's centre.
+  While no patroller arrived no knight ever reached a key, so it did not show; with the arrival fixed, the key was
+  drawn at the knight's boots on 11 of the f420 frames, beside its legs, where the original hides it behind the
+  torso.
+- **The fix.** `Carry::Carrier` is a body AND the point the carry runs from, `Carried` keeps its owner's point from
+  the pickup, and `Game` offers each minion at its body's centre less `Minions::Rules::EntityAboveCentrePx()` - the
+  same 11.1 the arrival is measured by, out of `minions.json` - and the player at its capsule's centre (below). No
+  number is invented: `keys.json` records the decode as `key._carrier_point`.
+- **What it does, measured** (`5.1/fix2/`, `key_fix2.py`, `crop_310_key.png`, `crop_317_key.png`): against the build
+  before it, 117 of the 128 f420 frames are byte-identical, and the 11 that move are the key levels (3-10, 3-17,
+  3-20, 3-21, 3-23, 3-26, 3-29, 3-30, 3-31, 4-28, 4-30). On nine of them every changed pixel lies within 88 px of the
+  carrying knight's cell; on 3-23 the second key's sparkles move at the frame's right edge, where the third knight
+  walks off screen; and on 4-30, whose knight the detector does not find on that dark level, the change is that
+  knight's own cell and the key at its chest, read by eye (`zoom_4-30b.png`). The key's own yellow inside a knight's
+  cell widened by 40 px: 3-10 45 -> 26 px, 3-17 136 -> 28 px, against 7 px in the original's `3-10_t8.0` and
+  `3-10_h6.3`, and none at all on 3-17's knights. What is left is a residual, not a match: the port's yellow sits 2.4
+  and 3.5 u above its knight's cell centre where the original's sits 1.5 u below it, so the key still rides 3.9-5.0 u
+  high of where the original's frames put it - the trail's own lag and the port's knight standing at a different
+  point in its walk both enter that, and neither is measured here.
+- **Not applied, and recorded (`docs/parity-backlog.md`):** the PLAYER is still offered at its capsule's centre, 22
+  over its feet (`data/player.json`'s 20 x 44 body, the remake's guess) where the original's entity point stands 18.1
+  over them, so a key or a shock diamond the player carries rides 3.9 u low and both polls run from 3.9 u low; and
+  `Diamonds::Tick` still measures its strike to a minion from that minion's body centre, where
+  `ETHCallback_shock_diamond` ins 421-430 measure it from the minion's `GetPositionXY`. Both belong to their own
+  owners; neither is this step's to decide.
+- **Not fixed: the lone guards' coast (RECORDED DEVIATION, beside R5).** A guard stops being driven at the wider 16
+  (`shouldntMove`, now measured from the entity too). The original's minion is frictionless (`minion.ent` friction 0),
+  so it coasts on to its 8, arrives, adopts the 999999999 hold and is parked by the brake on column 0. The port's body
+  grips (`kBodyFriction` 1), so it stops about where the drive stops: at f420 the guards of 3-01 and 3-29 stand 15.1 and
+  15.2 u short of their posts (12.2 and 12.0 before the fix, where the distance depended on how far below the waypoint
+  the floor lay), on cell 11, a stride. Measured on 2 of the 6 lone guards (`guards_fix1.py`); the other four (3-08's
+  two, 3-09, 3-19) stand where this capture, read at camera x 0, cannot place them. Next: a frictionless minion body,
+  which is a sim change of its own (what the engine's friction combine gives against a floor of 1 wants reading first).
+
+**WHAT CHANGED.**
+- **`art.json`:**
+  - `character.z` (4, `_ruling` R10);
+  - `depth` (`scale_factor` 2.8125);
+  - `minion`: its .ent facts, `pivot_px`, `z` 2, `feet_below_entity_px` 18.1, `walk` (0, 3, 120 ms),
+    `hold_column` 0, `start_row` 0, `rows_by_direction` 1/2 with `_measured_rows_not_applied`, `search`
+    (4000 / 2000), `darkest_zeroes_emissive`, `black_knight` (ghost_minion.ent, colour 0, emissive 0), and the
+    dragon_knight's row rule recorded as not drawn.
+  - `_about` and `character._lighting` updated. The `shot.z` note no longer says the player is added at 0: it
+    names GameCharacter's 4 (1.42 in the level's units) and keeps the shot's own 0 as the guess it is.
+- **`minions.json`:** `body.entity_above_feet_px` 18.1 with `_source_entity_above_feet_px`; the body note and the guard
+  paragraph of `_about` corrected (the old "parks a pixel or so short of arriving" was not what happens).
+- **`sim/Art`:**
+  - `Minion`, read strictly with no row defaulted;
+  - `Rules::scaleFactor`, `LevelDepth()` and `Character::z`, both required;
+  - `MinionArm`, `MinionPose` and `UpdateMinion`: the script's frame writes, one update at a time, on the
+    player's `FrameTimer`.
+- **`sim/Minions`:** `Rules::entityAboveFeetPx` and `EntityAboveCentrePx()`, and `Tick` measuring arrival and settle
+  from the entity point. For the picture: `Minion::facing` (set only where the walk sets the velocity: moveVec's
+  sign), `arm` (the arm the last Tick took: Walk, Hold, Settled or None), `entityName` (the marker's) and
+  `summoned`. Nothing in the sim reads those four.
+- **`sim/Carry`, `sim/Keys`, `sim/Diamonds`, `sim/Game`** (the carried key): `Carry::Carrier` (a body, and the point
+  the carry runs from), `Carried::ownerPointFromCentrePx` taken at the pickup and cleared by `Drop`, and
+  `Acquire`/`Trail` measuring and following that point. `Keys::State::Tick` and `Diamonds::State::Tick` take
+  `Carry::Carrier`s; `Game` builds them, a minion at its body's centre less `EntityAboveCentrePx()` and the player at
+  its centre. `keys.json` gains `key._carrier_point`, the decode above.
+- **`MagicPortalsLayer`:**
+  - `m_playerZ` is `LevelDepth(character.z)`, and `m_playerSlot` counts the sprites at or below it.
+  - The `slotAfter` lambda (K13's, kept a lambda for 6.3 to promote) takes a depth in the level's units, and puts
+    what it places after the player only where that depth is at or above the player's. A census of its four
+    existing users on every level (the beholder, its spikes, the dials and the rings: 47 uses) gives each the same
+    slot index as before.
+  - `m_minionZ = slotAfter(0.71)`; `m_escortZ` is at the anchor node's eth_z.
+  - `advanceMinions` runs in `stepLevel` right after `Game::BeforeStep`, and frames each minion by its arm.
+  - `syncMinions` makes one quad per standing minion (tag `Magic Portals Minion`), removes it when the minion goes,
+    places it at body + (0, 7 - 18.1) - pivot (0, 4) at 38 x 54 units, and writes `material.uvScale` 38/155 x
+    54/217 and `uvOffset` = `Tiers::UvOffset`. **It uses no `SpriteAnimationComponent`: that component's
+    `Apply` would overwrite the uv with an even split every frame.** Nothing this adds is hashed.
+  - `syncLighting` tints each quad: the black knight in colour 0, and emissive 0 while the ambient equals
+    `darkest_ambient`.
+  - `MinionReports()` and `PlayerSlotZ()` / `PlayerDepth()` are added for the suites.
+  - Minions have no box in box mode, as before.
+
+**BASELINE.** The committed build's `MagicPortals.exe` drew the task's baseline `out/parity/split/after/sweep/`
+(= step 74's `merge_tiers/after/`, 1-01 f420 `52549d7f`). The commits after it touch comments and a help string only,
+so no fresh "before" was taken. The build before the arrival fix is the verification's reference:
+`out/parity/visuals/5.1/after/` (`MagicPortals.exe` `8f7a75a7`; `5.1/verify1/` reproduced it on 128 of 128).
+**After: `out/parity/visuals/5.1/fix1/`** (`capture_fix1.sh`: `gates/`, `series/` f30-f840 every 30, `every/` every
+frame of 3-05 to f420 and 3-23 to f480, `black/`, `sweep/`), `MagicPortals.exe` `52da5004`, and `fix1/recheck/` on
+the final binary `f6e89f68` (comment-only rebuild): 1-01 f420, all 56 series frames and six of the sweep levels the
+fix moved (3-10, 3-15, 3-17, 3-22, 3-30, 4-30) are byte-identical to `fix1/`. Scripts and outputs are in
+`5.1/fix1/work/`:
+`series_fix1.py`, `turn_fix1.py`, `hold_fix1.py`, `lib_mae_fix1.py`, `sweep_fix1.py`, `guards_fix1.py`, and the
+verification's `kdet.py`, `rows_v1.py` and `dark_v1.py`, which they use.
+**After the carried key's fix: `out/parity/visuals/5.1/fix2/`** - every part captured again on `MagicPortals.exe`
+`292fefdb` (`capture_fix2.sh`, the same five parts, 134 launches). Against `fix1/`: the 1-01 anchor and all 11
+`black/` frames are byte-identical, `series/` and `every/` differ on 3-23 alone (29 of 58 and 452 of 902, every one
+of them a 3-23 frame), and 117 of the 128 sweep frames are byte-identical. **The next step's "before" is
+`5.1/fix2/sweep/` (1-01 f420 `81a39d45`).** `keys.json` gained its `_carrier_point` note 14 seconds into the sweep,
+so the three frames captured before it (1-01, 1-02, 1-03) were taken again on the file as it stands and are
+byte-identical (`fix2/work/recheck/`); the note carries no number `LoadRules` reads. Its work is in
+`5.1/fix2/work/`: `cmp_fix2.py` (integrity and the
+comparison against `fix1/`), `nonreg_fix2.py` and `nonreg_fix2_strict.py`, `key_fix2.py`, `crops_fix2.py`,
+`eye_fix2.py`, `moved_vs_fix1.json`, and the second verification's `g1.py`, `g4_wide.py`, `g5_dark.py`, `g8_lib.py`,
+`g_size.py` and `turns.py` re-pointed at `fix2/` (`kv2.py` and `render_model.py` are still the verification's).
+**No capture and no binary changed in the third round** (the step's answers to its second verification are records and
+re-measurements only: `MagicPortals.exe` is still `292fefdb`, and a ninja dry run has nothing to rebuild). Its work is
+in `5.1/fix3/work/`, written against `fix2/`, `fix1/` and `split/after/`, and using the verification's own `det.py` and
+`render_model.py` rather than this step's detector: `nonreg3.py` (the sweep diff, run on both `fix2/sweep` and
+`fix1/sweep`), `attrib3.py`, `attrib4.py` and `attrib5.py` (what each out-of-cell change IS), `crops3.py`, `crop2.py`
+and the `crop_*.png` they write, `g8_anchor3.py`, `g5_ratio3.py` and `margin3.py`.
+**Nor in the commit round.** Its corrections are this record's text only - the G5a-2, G5a-5, G5a-7 and G5a-8 rows,
+the non-regression row's reading against the original's own frames, and two LEFT FOR LATER items - taken from the
+step's third verification. No source file, no binary (`MagicPortals.exe` is still `292fefdb`, every source older
+than it, a ninja dry run with nothing to compile), no suite launched and no capture taken.
+
+**GATES.** 1280x720, `--fixed-step`. Both gate levels are 256 u tall with the camera at x 0 while the player idles,
+so level = screen / 2.8125. Detections use hd cells cut at 76 x 108 texels at 1.40625 px a texel, with
+`TM_CCORR_NORMED` masked by alpha (the verification's `kdet.py`).
+
+| Gate (00_order 5.1, as 8.13 amends it) | Required | Before | After |
+|---|---|---|---|
+| G5a-1 presence, size, facing (3-05, 3-23; the brief's frames f270-f420 every 30) | each on-screen knight found at >= 0.90; drawn 106.9 x 151.9 px +-1; facing margin >= 0.3 and the way it walks | no minion drawn | **Presence: 18 of 18 at 0.986-0.996 on the brief's frames, counting the knights whose whole cell is inside the frame: passes** (`g1.py` on `fix2/series`). 3-23's third knight (wayC) is cut by the frame's right edge on f300-f390 and is not counted: a part cell cannot score against a whole-cell template. Wider: f90-f420 34 of 36 (0.862 on 3-05 f90 and 0.889 on 3-23 f90, both under the opening title), and f120-f840 79 of 80 (0.884 on 3-05 f510, the second knight under the HUD's right-arrow button, seen by eye). **Size:** 38 x 54 units by `FrameCut` = 106.875 x 151.875 px, pinned by `test_mp_layer`; the best-scale fit is 106-107 x 151-152 px on 9 fits (`g_size.py`): passes. **Facing:** margins 0.39-0.53 on the series and 0.486-0.52 on the brief's frames, and the facing changes only where a walk starts (above): **passes on the frames the gate names**. It is not headroom, and the margin depends on the window the pair rows are searched in: over every-frame tracking the minimum is **0.287** (3-05 f113) and **0.295** (3-23's upper knight f141), both reproduced here (`fix3/work/margin3.py`, a +-45 px window, which reads the brief's own held frames at 0.314 and 0.387 where a whole-frame search reads them at 0.49-0.52). The FACING is right on all 1,082 tracked frames; a later step (6.3, 11.4) should not read 0.3 as slack |
+| G5a-2 feet (3-23 floors 224 and 64; 3-05 224) | cell centre = floor top - 22.1 +-1 u | - | **A CONSTANT 21.78 u below the floor's top on all 81 series detections, on all three floors: passes.** The third verification's sub-pixel fit reads 21.78 on 80 of the 81 and 21.83 on one, and the library by the same fit 22.16 - the 22.1 the gate asks for. This step's own detector, which places its mask on whole pixels, splits the same detections into 21.69 u on 67 and 22.04 u on 14 (library 22.0-22.4): that split is the alignment's artefact, not two populations, and the first record's reading of it is withdrawn. The 0.32 u is the body resting into the floor: the suite pins the picture's centre at body - 15.1 on every walking tick, and the body's circle of radius 7 settles about 0.32 u (0.0064 m at 50 px a metre) into what it stands on. Well inside the gate's +-1 u, and not this step's to chase |
+| G5a-3 walk cycle (3-05 knight 913 walking left, every frame f100-f200) | a column every 120 ms +-1 frame, order 0 1 2 3 | - | **passes.** `fix1/every` f100-f200 are byte-identical to the verification's `verify1/walk` (101 of 101: the walk before the first arrival is unchanged), and `fix2/every`'s 3-05 frames are byte-identical to `fix1/every`'s in turn (421 of 421; only 3-23's frames moved), so the measurement stands: 13 column changes f102-f196, gaps of 7 or 8 frames, mean 7.23 frames = 120.5 ms, the poses stride-A, stand, stride-B, stand. Columns 0 and 2 are one pose 3 texels apart, so the order is pinned by `test_mp_layer` (first step on tick 9, then every 7 or 8 ticks, 0 1 2 3) |
+| G5a-4 hold on column 0 | every detection while a hold is served | - | **passes, MEASURED on captures** (`g4_wide.py` on `fix2/series`, the render model over a frame of the same run with the knight elsewhere, each column given its own best centre). In 6 of 6 holds the best fit is column 0 of the shipped row, by MAE: 3-05 f300 cell 4 0.723 (column 2: 0.978), 3-05 f660 cell 8 0.724 (0.975), 3-23 lower f300 cell 8 1.132 (1.382), 3-23 upper f300 cell 4 2.164 (2.410), 3-23 f690 cell 4 0.732 (0.996), 3-23 f810 cell 4 1.809 (2.053) - and the pair row's columns are 0.9-1.3 further still. Only column 0 puts the picture's centre where the arrival puts the entity: 87.38, 216.85, 296.64, 307.40, 204.26 and 307.49 u against arrival windows of 87.80-88.45, 215.55-216.20, 295.55-296.20, 307.80-308.45, 204.80-205.45 and 307.80-308.45 less the brake's coast; column 2 would sit about 1.4 u beyond each. Every hold is a still stretch with one cell throughout (above). The lone guards serve no hold in the port (their deviation, above). **A second, independent render model** (the verification's own, each column given its own best sub-pixel centre) ranks column 0 of the shipped row first in **5 of 6** holds and on 3-05 f300 ranks column 2 ahead by 0.11 MAE: ambiguous on that one frame, not contrary - the shipped ROW still beats its pair there by 1.4-2.3 MAE, and column 2 would stand about 1.4 u beyond the arrival window. Recorded, not argued away |
+| G5a-5 dark and lit | 4-27 mean RGB <= 2 inside the mask; lit 3-05 and 3-23 R >= 60 | - | **4-27: (0.51, 0.75, 0.69): passes** (`dark_v1.py`, placement by the silhouette's own darkness; after the fix one knight is on screen at f420; re-measured on `fix2`, the same to two places). The original's 4-27 silhouettes read 0.3-0.8. **Lit, on the brief's frames f270-f420: R 60.2-67.9 on 18 of 18: passes** - but by two tenths of a grey level at the bottom, on the frames the gate itself names (the third verification reads the same lowest detection at 60.16). **>= 60 is not headroom in its own window either:** 6.3 and 11.4 must not read it as slack. On the widened f120-f840 one detection sits ON the line, and **the result flips with the sub-pixel centre the mask is placed at**: 3-05 f210 reads **59.9** at this step's centre (79 of 80) and **60.02** at a render-model best centre (80 of 80 - the verification's reading, re-measured here: 60.02, `fix3/work/g5_ratio3.py`). A tenth of a grey level decides it, so what is recorded is a gate to re-spec, not a dim knight: the detection is on stride cell 5 (row 1 column 1), whose own texels average **60.0** inside the alpha >= 200 mask the drawn R is read with (per-column texel means, re-measured: column 0 67.2-67.3, column 1 60.0-60.3, column 2 67.2-67.3, column 3 63.7), and **the original's own frames never show a column-1 cell** - its eight lit knights on 3-05 and 3-23 stand on columns 0 and 2, texels 67.17-67.38. **The residual worth carrying instead is the draw:** the original draws its lit knight at **1.019-1.023x** its cell's own texel mean (drawn R 68.61-68.87, 8 of 8 library knights) where the port draws at **1.000-1.001x** (67.37, 60.02 and 67.30 against texels 67.37, 60.01 and 67.27) - about 2% dimmer on every cell, which is why a column-1 cell lands on 60 at all. This step's first record cited 57.5-57.7 for column 1: that is the alpha-weighted mean over every texel with alpha > 0 (reproduced: 57.6-57.7), not the mask the drawn R is read with, and its "58.1 drawn, 12 below 60" did not reproduce |
+| G5a-6 black knight (3-32, walking right, f150 and f180, clear of the player) | mean RGB <= 2 | - | **(0.32, 0.37, 0.40) and (0.31, 0.35, 0.38): passes**, re-measured on `fix2`, whose `black/` frames are byte-identical to `fix1`'s. The suite pins its drawn colour (0, 0, 0, 1). At f300 the player is drawn over the black knight. The boss's escort is `minion.ent` (ins 1137) and is drawn lit |
+| G5a-7 x position (report only) | report | - | At the holds the knights now stand where the original's hold: 3-05 **87.4 u** (holding left from f253) against the library's t4.5 / h2.8 84.3 / 84.6, and **216.8** (holding right from between f570 and f600) against t8.0 / h6.3 217.2 / 217.6; 3-23's lower knight **296.7** against 299.1 / 298.4, its upper knight **307.4** against 305.2 / 304.5. Those library figures are this step's own whole-pixel detector; the third verification's sub-pixel fit of the same frames puts them at 85.00 / 85.39, 217.55 / 217.26, 298.74 / 298.61 and 305.77 / 304.98, 0.21-0.79 u away - the localisation's spread, on a row that gates nothing (G5a-8 carries the differences that follow from one localisation). Before the fix: 78.8, 302.8 and 432.5, never holding. The timing still differs: 3-05 is holding left at 4.5 s as the library is, and reaches its right-hand hold at 9.5-10 s where the library holds there at t8.0 (R5) |
+| G5a-8 rows as shipped | the drawn cell f4 facing left and f8 facing right; MAE <= 10 against the library at the holds | - | **passes.** Rows on pixels: the render model picks the shipped row in the verification's 6 of 6 cases and in 6 of 6 holds here (its best column beats the pair row's best by 1.09-1.32 MAE); the suites pin rows 1/2 (`test_mp_sprites` `UpdateMinion`, `test_mp_layer`). **Against the library at the holds** (`g8_lib.py` on `fix2/series`, the port's held knight against the original's over the drawn cell's alpha > 200 mask, **searched +-6 px about the LIBRARY knight's own detected cell - the anchor, which the first record left unsaid**): 3-05 hold left 5.53 (t4.5) and 7.22 (h2.8); 3-05 hold right 2.92 (t8.0) and 3.93 (h6.3); 3-23 lower hold right 3.17 (t4.5) and 8.86 (h2.8); 3-23 upper hold left 8.41 (t4.5) and 5.31 (h2.8): 8 of 8 <= 10. The last two are the pair the carried key now shows behind (8.43 and 5.36 before it). **The anchor matters, and is re-measured here** (`fix3/work/g8_anchor3.py`, which reproduces the eight MAEs at 5.56, 7.26, 2.92, 3.94, 3.18, 8.91, 8.42, 5.31): about the library knight the eight best offsets are (+2,0), (+2,0), (+4,+1), (-1,+1), (0,+1), (+5,+1), (+2,0), (+4,0) - every one inside +-6, largest 5. About the PORT's own box the same alignments are (-7,-1), (-6,-1), (+2,-1), (+1,-1), (+6,-1), (+6,-1), (-5,-1), (-7,-1), because the two knights do not stand in the same place: port - library = **+2.38, +1.99, -0.70, -0.41, -2.10, -1.97, +1.62, +2.41 u** - the third verification's sub-pixel render-model fit of BOTH knights (the port's held cells at 87.38, 216.85, 296.64 and 307.39 u against the library's at 85.00 / 85.39, 217.55 / 217.26, 298.74 / 298.61 and 305.77 / 304.98), which agrees with the arithmetic of the offsets themselves, -dx / 2.8125 = +2.49, +2.13, -0.71, -0.36, -2.13, -2.13, +1.78, +2.49 u, to within 0.16 u. **The first record's +3.41, +3.06, +0.90, -0.52, -2.14, -0.37, +2.61, +4.03 is withdrawn:** it does not follow from the offsets beside it (its third figure even flips sign), and no measurement here reproduces it. This is G5a-7 again, read with one localisation on both sides; G5a-7's own library figures come from this step's whole-pixel detector and put the same differences 0.27-0.81 u further out. No gate turns on any of them - G5a-7 is report only, and these eight MAEs are measured, not derived from a position. A verification that anchors on the port's box needs +-8 px to reach the MAEs |
+| Depth (K13, K14, R10) | minions behind the player; both behind art at eth_z 2 | player after z_index <= 0 | **passes**. `test_mp_layer` (1,237 checks, run on this round's binary): on level16b the 3 minions are behind the player, which is behind the block at 2, with no sprite between a minion and the player. level22a's platform at 1 is right behind the player. On 3-32 f300 the player is drawn over the black knight, and on 3-05 f112 a knight is drawn over the z-0 crystal |
+| Non-regression: the sweep at f420 against the baseline | changes only in knights' cells and, from R10, the player's cell | - | **NOT MET as written on 10 of the 61 changed frames, recorded; the other 51 pass** (`nonreg_fix2.py`, and **re-measured independently** in `fix3/work/nonreg3.py`, `attrib3.py`, `attrib4.py`, `attrib5.py`, `crops3.py`, which reproduce the counts: **67 byte-identical, 61 changed**; 65 of the 67 place no minion, and 3-03 and 4-31 have no knight on screen). Of the 61, 48 pass the automatic rule (every changed pixel inside a detected knight's cell, inside one player cell of 113 x 158 px at max delta 20, or inside a knight's cell widened by 40 px, where its carried key and that key's sparkles are) and 3 more pass with the detector's misses allowed. **Every change outside a knight's or the player's cell is now named on pixels, not by eye:** (a) **a key that has left the floor**, measured as the collapse of `hd/key.png`'s own match at the place it stood in the baseline: 3-10 0.937 -> 0.775, 3-17 0.986 -> 0.818, 3-20 0.988 -> 0.722, 3-21 0.929 -> 0.653, 3-23 0.926 -> 0.543, 3-26 0.934 -> 0.709, 3-29 0.991 -> 0.592, 4-30 0.979 -> 0.451 (on 3-10 the floor at u 310 is empty and the knight stands at u 220 carrying it, `crop_3-10_wide.png`); (b) **4-30's keyhole, part-way through its unlock fade**: `hd/keyhole.png` 0.990 -> 0.566 at its own place; (c) **3-15's lift door**: the knight's cell centre is at u (212.8, 74.3), which is `button_1656` at level (210, 92), and the 24,463 px change 510 px away is centred on u 430 - `door_lift_1677`'s own x (level (430, 32)) - where the door's picture stands in the baseline and is gone now (`crop_3-15_door.png`); (d) **3-22's seesaw**: 44 speckles of 1-19 px (max delta 25, on 3 px) lie on one straight band, y = 0.344x + 320 px, rms 13.7 px, max 22.9 px, over x 332-789, and the seesaw's own `joint_pivot` picture sits 12.6 px off that line; (e) **a knight the detector misses**, by the shape of the change itself (best IoU of the change mask against the 16 cell alpha masks of `hd/minion.png`): 4-27 **0.89** and 4-29 **0.89** (black silhouettes on dark levels), 3-12 **0.49** and 3-31 **0.45** (cut by the frame's bottom edge), and by eye 3-30's red cloak and key at the right edge and 4-30's two dim silhouettes (`crop_3-30_edge.png`, `crop_4-30_a.png`, `crop_4-30_b.png`); (f) **a carried key's sparkles**: 3-23's three components - two bright flecks beside its carrier, one at the frame's right edge where the third knight walks off (`crop_3-23_a.png`, `_b`, `_c`); (g) **the player's cell**: on every changed frame the changes with max delta <= 20 and clear of a knight fit ONE 113 x 158 box, except on 3-22, 3-23 and 4-30, whose extra small components are (d), (f) and the haloes of (a) and (b). **The 10 NOT MET as written** - 3-10, 3-15, 3-17, 3-20, 3-21, 3-22, 3-23, 3-26, 3-31 and 4-30 - are seven of the vacated keys, 3-15's door, 3-22's seesaw and 3-31's knight (knight-shaped, but it reaches past the frame's edge, so no widened cell contains it). **Each was read against the original's own frame where the library has one, and every one of them moves the port TOWARD the original** (the third verification, independently: 3-10's, 3-21's, 3-31's and 4-30's floors are empty in `t8.0` / `h6.3` as they are here now, with the key at a knight's chest, and 3-15's lift door stands open there as it does here now). The row is kept NOT MET, not re-specified: it was written before the port's patrols worked, and what fails it is the port doing what the original does. **R24 is what fails this row; R25 moves no frame across it.** MEASURED on `fix1/sweep`, the sweep of `MagicPortals.exe` `52da5004` - the binary with R24 in and R25 out, which `292fefdb` follows by the carried key's change alone (`Carry`, `Keys`, `Diamonds`, `Game`, `keys.json`; 32 translation units, plus comments - BASELINE above): it gives the same **67 byte-identical and 61 changed** frames and **the same 15 frames carrying an out-of-cell change** (`nonreg3_fix1.json` against `nonreg3_fix2.json`). R25 does move 11 of those frames - the key's own picture, the row below - but it moves none of them across this rule. `fix1/sweep` was written in an earlier round and is checked before being leant on (`integrity3.py`: 128 of 128 open at 1280 x 720, none NUL-tailed, 128 of 128 md5s match `fix1/capture.txt`). So refusing R25 would not pass this row - only refusing R24 would, and that costs G5a-4 and half of G5a-8. level22a is byte-identical |
+| The carried key's point (the second verification's finding; report and eye) | the key led from the carrier's entity point, as `ETHCallback_key` leads it | at the knight's boots | **fixed and MEASURED** (`key_fix2.py`, `crop_310_key.png`, `crop_317_key.png`). The key's yellow inside a knight's cell widened by 40 px: 3-10 45 -> 26 px, 3-17 136 -> 28 px; its centroid, from the cell's centre, 19.5 and 23.1 u below -> 2.4 and 3.5 u above, against 1.5 u below in the original's `3-10_t8.0` and `_h6.3` (7 px of yellow there; 3-17's library knights show none). By eye the key is now the edge behind the shoulder that the original draws, and no longer a key standing at the boots |
+| R10's lighting height against the original (not an order gate) | not worse | - | MAE on the changed pixels against the library t8.0, before -> after: 1-01 +0.26, 1-08 -0.03, 1-16 -0.26, 1-17 -0.74, 1-19 +0.06 (2-26 -2.46 at a weak 0.58 location); 2-10 and 2-17 have no t8.0 frame. Unchanged by either fix: those levels place no minion, and their f420 frames are byte-identical across both rounds |
+| 1-01 f420 | - | `52549d7f` | `81a39d45`: 154 px, max 9, inside the player's cell (R10's lighting height). Unchanged by either fix, and reproduced on every binary since, `292fefdb` included |
+| Validation | exit 0, silent | - | **134 launches of `292fefdb` (the carried key's binary) exit 0, validation ACTIVE in 134 logs, 0 messages, no WARN lines; all 1,100 captured pngs open at 1280 x 720 and every one whose md5 the log names matches it** (`cmp_fix2.py`). Before it: 134 launches of `52da5004`, and 10 of `f6e89f68` of which the first was refused by Smart App Control (126) |
+
+**THE SUITES,** run directly, once each: **`test_mp_layer` 1,237 checks** (1,190 before the step; the printed arrival
+finding is now a check), **`test_mp_minions` 99** (78), **`test_mp_sprites` 732** (659), **`test_mp_ghost` 75**,
+**`test_mp_start` 752**, and, because they play levels with minions, **`test_mp_diamonds` 126**, **`test_mp_keys`
+106**, **`test_mp_fields` 63**, **`test_mp_torch` 123**, **`test_mp_wells` 98**, **`test_mp_zerog` 88**,
+**`test_mp_darkdragon` 97**, **`test_mp_dragon` 151** and **`test_mp_play` 147**: 0 failures each. Of the suites that
+play world 3 and 4 levels, `test_mp_bounce` alone was not run: its levels (level1c, level6c, level16c, level31c) place
+no minion marker. `test_mp_minions` ran again on the final binaries (comments changed in its source and in
+`Minions.cpp`): 99, 0 failures.
+**After the carried key's fix, on its binaries, each once:** `test_mp_keys` **124** (106 before this round) and
+`test_mp_diamonds` **126** - the two the changed signatures touch, the second of them the proof that the player's own
+carry did not move - and the step's five, `test_mp_layer` **1,237**, `test_mp_sprites` **732**, `test_mp_minions`
+**99**, `test_mp_ghost` **75** and `test_mp_start` **752**, plus `test_mp_darkdragon` **97**, which plays the one
+other level where a key is dropped. 0 failures each. `test_mp_keys` ran once more, unchanged at 124, after
+`keys.json` gained its `_carrier_point` note, since a suite reads that file from the source tree. New:
+- `AMinionWalksOnItsSheet` (now driven to its arrival: it walks left, arrives at wayA0 with its entity within 8, and
+  holds on column 0 of row 1), `TheMinionsStandBehindThePlayerAndTheArtAtTwo` and
+  `ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack` (`test_mp_layer`);
+- `TheMinionIsMinionEnt`, `AMinionWithoutItsFramingIsRefused`, `AMinionIsFramedAsItsScriptFramesIt` and
+  `TheMinionSheetIsCutWhereTheOriginalCutsIt` (`test_mp_sprites`);
+- `theFacingIsTheWalksAndOnlyTheWalks`, `aPatrolTurnsOnlyWhereItArrives` (1,000 ticks: four arrivals, and no more
+  turns than arrivals), `theEntityStandsWhereThePictureStands` (18.1 in both files), and
+  `arrivingAdoptsTheHoldAndServesIt` rewritten to drive the patroller to wayA0 instead of putting it there
+  (`test_mp_minions`);
+- the escort's and the marker's names (`test_mp_ghost`);
+- `theCarryRunsFromTheCarriersPoint` (`test_mp_keys`, on a bare registry: a thing 30 above a carrier's body centre is
+  inside the 26 of its point and taken, one 25 below it is 36.1 from the point and left, a carried thing comes to
+  rest ON the point and is slammed onto it past the leash, and a lost owner clears the point), and
+  `aMinionCanCarryAKey` extended to drive the minion to rest and read the key at its entity point.
+
+`test_mp_layer`'s pin of the player's lighting height (was "main_char's depth, 0") is replaced deliberately by 4 /
+2.8125 (R10). The full ctest was not run: the step names its suites.
+
+**BUILD: no warnings** (MSVC, Release, Ninja, /W4): the full build and every rebuild after it (31 translation units
+on the arrival fix, 2 on the comment edits, 32 on the carried key's). **SMART APP CONTROL:** before the arrival fix,
+`test_mp_sprites` and `test_mp_minions` were refused on their first launch (126), and each ran after one delete and
+relink; `MagicPortals.exe` `6b3300e3` was refused once, and after one delete and relink `8f7a75a7` ran. With that
+fix: no suite was refused; `52da5004` ran all its 134 launches; `f6e89f68` was refused on its first launch and ran on
+the next nine, with no relink. With the carried key's fix: `292fefdb` ran all its 134 launches; of the suites only
+`test_mp_sprites` was refused (126), and it ran after one delete and relink; `test_mp_layer`, which the verification
+could not launch twice, ran first time on this round's binary.
+
+**LEFT FOR LATER.**
+- **The player's carrier point** (THE CARRIED KEY, above): the player is offered to keys and shock diamonds at its
+  capsule's centre, 22 over its feet, where the original's entity point stands 18.1 over them - a key or a diamond it
+  carries rides 3.9 u low. The capsule is `data/player.json`'s guess, so this is the player's body to settle, not
+  the carry's.
+- **A shock diamond's prey point:** `Diamonds::Tick` measures its 30 to a minion from the minion's body centre, 11.1
+  below the `GetPositionXY` `ETHCallback_shock_diamond` ins 421-430 measure from, which lengthens its reach by about
+  3.7 u on a shared floor. Diamonds' to apply, with the same `Carry::Carrier` point.
+- **The lone guards' coast** (THE ARRIVAL, above): a frictionless minion body, with R5.
+- **R5, the patrol's timing:** the knights now hold where the original's hold, and reach the later holds later.
+- **A carried key whose knight the killer floor takes:** knights now carry keys on 11 levels, and `enemy_killer`
+  takes minions. What becomes of the key then is covered by no gate here: an open question for Keys.
+- **6.3 (K13):** the lambda now takes a depth in the level's units and the player's true depth. Its table has to
+  keep that rule, and to order:
+  - the escort (world 0) and a marker's minion (world 2), which share a slot here where the original draws the
+    minion in front. Here nothing stands between them, so the order they are ADDED in decides, and it draws the
+    escort in front because it is added later. 6.3's table has to give the pair an explicit tie-break - the
+    marker's minion in front of a summoned escort - rather than leave it to insertion order;
+  - the thrown stone at the player's slot - 1/2, the same z as a minion's slot on levels with no node at 1;
+  - the existing users' raw-versus-scaled depths: the dial's -2 is raw (world), so -0.71 in the level's units, and
+    the spikes' -4 and the well rings' -5 are not decoded for units.
+- **The 2% the port draws a lit knight dimmer** (G5a-5 above): the original draws its lit knight at
+  1.019-1.023x its cell's own texel mean where the port draws at 1.000-1.001x. `minion.ent` is applyLight 0
+  with emissive (1, 1, 1), so the port's 1.000x is what the entity says and the original's +2% is
+  unexplained (an emulator's gamma is the obvious candidate and was not investigated). If it is ever chased,
+  chase it once for EVERY applyLight-0 sprite: it is not the minion's.
+- **11.4:** the knights' dark aura, and R16's ghost_minion body.
+- **The blocked-way search arm** is in the rule and in its test, and reached by nothing until the sim casts its ray
+  (minions.json `_destination_reachability_not_built`).
+- **The dragon knight** (after 2-32's win) is not drawn; its row rule is recorded.
+
 ## Step 90 - the shot drawn as its script adds it: a fifth smaller, turned to its flight, on the one timer, and the owner's scale on its light (built)
 
 The visuals plan's step 6.1 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 6; its brief

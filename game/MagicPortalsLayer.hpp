@@ -349,6 +349,27 @@ public:
     };
     std::vector<TimerReport> TimerReports() const;
 
+    // Each minion's and knight's picture (art.json minion), for the suites, in
+    // Minions::State's order: as the last tick left it.
+    struct MinionReport {
+        std::string name;          // the minion's (its marker's node, or the boss's escort)
+        entt::entity quad{entt::null}; // its picture; null while it has none
+        bool black = false;        // drawn as ghost_minion.ent, SetColor(0)
+        int column = 0;            // the frame it shows
+        int row = 0;
+        float z = 0.0f;            // its slot among the art
+        double lookZ = 0.0;        // its depth in the level's units
+        glm::dvec2 centrePx{0.0};  // where its picture is centred, in the level's pixels
+        glm::dvec2 sizePx{0.0};    // its frame, in units
+        glm::dvec2 uvScale{0.0};   // the share of minion.png its frame samples
+        glm::dvec2 uvOffset{0.0};  // and where
+    };
+    std::vector<MinionReport> MinionReports() const;
+    // The slot the player's picture is drawn in, and its depth in the level's units:
+    // GameCharacter's 4 over the scale factor (art.json character.z, depth).
+    float PlayerSlotZ() const;
+    double PlayerDepth() const { return m_playerZ; }
+
     // Each crystal's and key's linearMotion (sim/Motion, motions.json), for the
     // suites, in the level's drawing order (m_sprites'): as the last tick left it.
     struct MotionReport {
@@ -723,6 +744,12 @@ private:
     // a key while no one carries it and it has not found its keyhole.
     bool motionRuns(const DrawnSprite& drawn) const;
     void syncBoss(entt::registry& registry);
+    // The minions' frames, once a level step after Minions::Tick has chosen each
+    // one's arm (Art::UpdateMinion), and their pictures where their bodies stand.
+    void advanceMinions(float fixedDelta);
+    void syncMinions(entt::registry& registry);
+    // One MinionQuad per minion the sim holds, a summoned escort's added when it is.
+    void matchMinions();
     // The carrancas' fireballs. Its own function rather than a block inside
     // syncBoss: they belong to a turret, not to the beholder, and every level
     // of chapter 2 that has one has no boss at all.
@@ -885,7 +912,10 @@ private:
     Art::FrameTimer m_shotFrames;
     int m_shotCell{0};                      // the cell the last step gave the shot
     entt::entity m_playerQuad{entt::null};  // the player, when its image is there
-    double m_playerZ{0.0};                  // the level's player marker's eth_z: the player's lighting height
+    // The player's depth in the level's units: GameCharacter's 4 over the scale
+    // factor (art.json character.z, depth; R10). Its slot among the art is after
+    // every sprite at or below it, and it is its lighting height.
+    double m_playerZ{0.0};
 
     // One of the level's <Light>s: the Light2DComponent standing for it, its halo's
     // quad when it has one, and the sprite of the entity that owns it. Every light
@@ -956,6 +986,30 @@ private:
         bool shrinking{false};
     };
     std::vector<TimerDial> m_timers;
+
+    // The minions and knights (art.json minion), one per Minions::State::minions
+    // entry and in its order: that list only grows, by an escort the boss calls, and
+    // a minion taken is marked gone rather than removed. The frame is its script's,
+    // stepped once a level step; picture-side only, never Game::Level or the state
+    // hash. No flipbook component: its even split would cut minion.png where the
+    // original does not (00_order E1), so the frame's uv is written from m_minionCut.
+    struct MinionQuad {
+        entt::entity quad{entt::null};
+        Art::MinionPose pose;
+        bool black{false};  // ghost_minion.ent: SetColor(0) every frame
+        float z{0.0f};      // its slot among the art
+        double lookZ{0.0};  // its depth in the level's units, and its lighting height
+        glm::dvec2 centrePx{0.0}; // where its picture was last centred
+    };
+    std::vector<MinionQuad> m_minions;
+    Tiers::Cut m_minionCut;    // minion.png's tier file, cut as SetupSpriteRects cuts it
+    std::string m_minionSheet; // that file; empty when it cannot be read or cut
+    // A marker's minion, at the 2 minion_spawn adds it at, and an escort the boss
+    // calls, at its anchor's depth: each after the art at or below it, and both
+    // behind the player.
+    float m_minionZ{0.5f};
+    float m_escortZ{0.5f};
+    double m_escortLookZ{0.0};
 
     // The carrancas' fireballs, one quad per fireball in flight (Turrets.hpp).
     //

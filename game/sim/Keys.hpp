@@ -109,9 +109,9 @@ struct State {
     // owner, as the goals and hazards judge where it left the player.
     //
     // `carriers` is everything that can pick a key up: the player, and every
-    // minion. Returns the door bodies it deleted, which the caller must pass
-    // through Forget.
-    std::vector<entt::entity> Tick(entt::registry& registry, const std::vector<entt::entity>& carriers, float dt);
+    // minion, each with where its entity point stands on its body. Returns the
+    // door bodies it deleted, which the caller must pass through Forget.
+    std::vector<entt::entity> Tick(entt::registry& registry, const std::vector<Carry::Carrier>& carriers, float dt);
 
     const Key* FindKey(const std::string& name) const;
     const Keyhole* FindKeyhole(const std::string& name) const;

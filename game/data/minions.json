@@ -57,8 +57,10 @@
     "that stops being DRIVEN at 16 px coasts on, crosses the 8 px arrival radius, adopts the",
     "999999999 sentinel, and from then on fails the dwell gate for ever - and it is the brake,",
     "not the threshold, that parks it. The port's bodies carry kBodyFriction 1 instead, so its",
-    "guard parks a pixel or so short of arriving. Same post, reached differently; written down",
-    "here rather than papered over with a zero the original never writes.",
+    "guard stops about where the drive stops: with the threshold measured from the entity",
+    "(body.entity_above_feet_px), 15.1 and 15.2 short of its post on 3-01 and 3-29 at f420, on",
+    "the column its walk left (step 76), where the original's coasts on to its 8 and holds on",
+    "column 0. Written down here rather than papered over with a zero the original never writes.",
     "",
     "holdTime is a dwell in milliseconds, adopted from the waypoint just REACHED, and the",
     "walk resumes when the timer passes it. A lone wayX0 holding 999999999 is how the",
@@ -83,8 +85,9 @@
       "collision size of 14 x 36, with fixedRotation=1, density=0.5, gravityScale=1,",
       "sensor=0. LevelBuilder can build a rigid circle and nothing else, so the port builds",
       "one circle of the body's half-width. A minion is therefore shorter than the",
-      "original's capsule; it patrols level floors, so nothing in worlds 3-4 turns on the",
-      "difference, but a capsule builder would be the honest fix.",
+      "original's capsule; it patrols level floors, so its collisions in worlds 3-4 do not",
+      "turn on the difference, but a capsule builder would be the honest fix. Its ARRIVAL",
+      "does, and entity_above_feet_px below is what squares it.",
       "",
       "fixedRotation=1 is NOT a detail here, and the suite proved it. A circle that may turn",
       "rolls under friction rather than stopping, so a guard that stops being driven inside the",
@@ -92,7 +95,23 @@
       "happened once the port stopped writing a zero velocity there. The spawned body therefore",
       "has its z rotation locked, as the original's does. A capsule would have hidden this."
     ],
-    "radius_px": 7.0
+    "radius_px": 7.0,
+    "entity_above_feet_px": 18.1,
+    "_source_entity_above_feet_px": [
+      "What arrive_px and settle_px are measured FROM. ETHCallback_minion ins 369-374 take",
+      "currentPos = GetPositionXY(), the ENTITY's point, and ins 420-425 (and 1074-1080 for the",
+      "lone guard) compare distance(currentPos, destPos) with minDist; destPos is a waypoint",
+      "entity's point too (ins 198-210 store SeekEntity(name).GetPositionXY()). minion.ent's feet",
+      "circle {posY 0.5, radius 1.3} in a Collision of 14 x 36 is scaled by half the size",
+      "(ETHCompoundShape.cpp:66-69): its centre 9 below the entity and its radius 9.1, so the",
+      "entity stands 18.1 above the feet - the decode art.json's minion.feet_below_entity_px",
+      "places the picture by, which test_mp_minions pins equal. The port's one circle stands",
+      "radius_px above its feet, so its entity point is the body's centre less 18.1 - 7 = 11.1.",
+      "The levels place the waypoints at that height: level0b's wayA0 at y 112 over a floor at",
+      "128, 3-05's and 3-23's at 208 over 224. Measured from the body's centre, 9 below that, no",
+      "patroller ever came within the 8 of arrive_px (step 76's finding): it crossed its first",
+      "waypoint and turned on every tick after"
+    ]
   },
 
   "_destination_reachability_not_built": [

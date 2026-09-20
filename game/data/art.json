@@ -1,7 +1,7 @@
 {
   "_about": [
     "What the port draws for what no level pictures - the portals a shot opens, the shot,",
-    "the player, and chapter 1's boss with its spikes - as the original's own entities draw",
+    "the player, chapter 1's boss with its spikes, and the minions - as the original's own entities draw",
     "them. Their images are read from the extracted APK beside the remake and never",
     "committed. See docs/planning/2026-09-11-magic-portals-remaster.md, steps 9c, 9d and 11b.",
     "",
@@ -77,8 +77,10 @@
         "vector3(casterPos, 0), 0, ...) - the caster's x and y at z 0. The depth its light's height is",
         "measured from (z + the light's -12, scaled). The port draws the shot a quarter slot in front of",
         "the player, which is Ethanon's order at an equal z for what is added after the player; the",
-        "decoded player is at z 4 (00_order K14, R10), which puts the shot behind it once the port's",
-        "player moves there (step 5.1)."
+        "decoded player is at z 4 in the world's units, 4 / 2.8125 = 1.42 in the level's (character.z",
+        "and depth, 00_order K14, R10), which puts the shot behind the player now that step 5.1 has",
+        "moved it there. This 0 is the script's own z, not a guess: step 5.1's note that the",
+        "AddEntity was undecoded is superseded by step 90's decode of it."
       ],
       "value": 0.0
     },
@@ -188,7 +190,7 @@
       "dark_mage.ent: <Entity static=0 applyLight=1>, <Normal>normalmap_77.png</Normal>, no <Light>. Not",
       "static, so every light reaches it, a static torch's included (ETHEntitySpriteRenderer.cpp:70),",
       "which the remake's fit measured on the original walking past 1-1's torch (fit.md 7.1). Its",
-      "lighting height is the level's player marker's eth_z, not a number here."
+      "lighting height is its depth, z below, in the level's units (step 76; before it, the marker's eth_z)."
     ],
     "columns": 4,
     "rows": 4,
@@ -206,6 +208,19 @@
       "where the player is located (the remake's visuals/briefs/systems_3_4.md 3a)."
     ],
     "pivot_px": [0, 2],
+    "z": {
+      "_source": [
+        "DECODED (the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce): GameCharacter::GameCharacter",
+        "(bytes 119493..119839) instructions 10-24 are AddScaledEntity(entityName, vector3(pos, 4f),",
+        "g_scale.getScale()): a call pushes its last argument first, so the 4f of instruction 15 is z, and",
+        "only the marker's x and y are taken. AddEntity keeps that position as given (Ethanon",
+        "ETHScriptWrapper.Scene.cpp:131-158, SetOrphanPosition), so the player stands at 4 in the WORLD's",
+        "units, a raw literal, where every entity the level file places was multiplied by the scale factor",
+        "at load (depth, below). Its picture's depth and its lighting height are both this one number."
+      ],
+      "_ruling": "R10, the owner's standing ruling (in favour of what the original does): the player's depth is the decoded 4, not the port's old slot after z_index <= 0 and not its marker's eth_z",
+      "value": 4.0
+    },
     "rows_by_direction": {
       "_note": [
         "Which row of the sheet walks which way: derived, not testimony. The original's",
@@ -587,6 +602,142 @@
       "owner's standing ruling R12, the fixed 720 selection (as ui.json's speed_at_screen_px), so 720 / 256. The",
       "original's own dial therefore lasted longer on a taller screen; the port takes the 720 one. The port draws",
       "the dial at the pulse in its own units (the cell x scale): only the deletion test takes this factor"
+    ]
+  },
+
+  "depth": {
+    "_source": [
+      "What a depth the script writes as a raw number is, among the level's art (step 76). The original draws",
+      "by depth alone (ETHEntityRenderingManager.cpp:70-72 sorts every piece by ComputeDepth of its z; equal",
+      "depths keep the order they were added in, :74, :85, :106). Every entity the level file places is",
+      "multiplied by the scale factor at load: Game::preLoop instruction 37 calls SGlobalScale::scaleEntities",
+      "(bytes 6838..7228), which runs scaleEntity (bytes 6072..6337) on every entity not marked scalable 0, and",
+      "its instructions 38-53 are SetPosition(GetPosition() * getScale()) - a vector3 times a float, z",
+      "included. What a script adds at a literal z is not: AddEntity keeps the position it is given",
+      "(ETHScriptWrapper.Scene.cpp:131-158). So the player's 4 and a minion's 2 are depths in the world's",
+      "units, and a level node at eth_z k stands at k x scale_factor. In the level's units, where the port",
+      "draws: the player at 4 / 2.8125 = 1.42, between the one node at eth_z 1 (level22a) and the 54 at 2;",
+      "a minion at 0.71, after every node at 0 or below and before that one. 00_order 8.12b had left this",
+      "open as INFERRED ('raw literals versus scaled offsets'); the scaleEntity multiply decodes it."
+    ],
+    "_ruling": [
+      "The scale factor is SGlobalScale.m_scaleFactor, GetScreenSize().y / m_absoluteSize",
+      "(updateScaleFactor, bytes 5592..5699, ins 6-14), with m_absoluteSize 256 from main on (00_order 8.12a)",
+      "at the 720 px screen of R12, the owner's standing ruling: 720 / 256, the timer's screen_px_per_unit."
+    ],
+    "scale_factor": 2.8125
+  },
+
+  "minion": {
+    "_source": [
+      "The minions and knights of worlds 3 and 4 (sim/Minions), as minion.ent draws them and",
+      "ETHCallback_minion frames them (the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce; its",
+      "visuals/briefs/system_5.md 5a and decode/D2.md, with 00_order 8.3 and 8.13). minion.ent: Sprite",
+      "minion.png, SpriteCut 4 x 4, blendMode 0, PivotAdjust (0, 4), EmissiveColor (1, 1, 1), static 0,",
+      "applyLight 0, no <Normal>, no <Light>, no particles. The original draws its hd/ twin, 310 x 434 at",
+      "density 2 (system_5 tier_rows.py: 16 of 16 library detections): 155 x 217 units, cut as",
+      "SetupSpriteRects cuts it into frames of 38 x 54 units (76 x 108 texels; Tiers::FrameCut, 00_order E1),",
+      "not the 77.5 x 108.5 an even split gives, so column 3 starts 4.5 texels further left than an even",
+      "split samples it. Drawn 106.9 x 151.9 px on a 720 px screen."
+    ],
+    "sprite": "minion.png",
+    "additive": false,
+    "emissive": [1.0, 1.0, 1.0],
+    "_emissive": [
+      "minion.ent's <EmissiveColor r=1 g=1 b=1>. And every frame (ETHCallback_minion ins 20-36 and 266-298,",
+      "outside its init block) SetEmissiveColor(canSeeAnything ? originalEmissive : V3_ZERO), with",
+      "canSeeAnything = GetAmbientLight() != DARKEST_AMBIENT_LIGHT: darkest_zeroes_emissive"
+    ],
+    "static": false,
+    "apply_light": false,
+    "_lighting": "minion.ent: <Entity static=0 applyLight=0>, no <Normal>, no <Light>. Takes no light and gives none",
+    "columns": 4,
+    "rows": 4,
+    "pivot_px": [0, 4],
+    "z": {
+      "_source": [
+        "ETHCallback_minion_spawn (bytes 426511..426876) ins 12-18: vector3(GetPositionXY(), 2f), handed to",
+        "spawnMinion (bytes 426876..427194), whose ins 25-39 are AddEntity(entityName, that, 0, out,",
+        "alternativeName, getScale()): a raw 2 in the world's units (depth, above). Behind the player at 4.",
+        "A minion the chapter-3 boss calls (ETHCallback_ghost ins 1096-1149) is spawnMinion('minion.ent',",
+        "SeekEntity('minion_spawn_point').GetPosition(), 'wayA'): its anchor's own depth, level31b's node",
+        "1436 at eth_z 0 (00_order 8.13 K13), which the layer reads from that node"
+      ],
+      "value": 2.0
+    },
+    "feet_below_entity_px": 18.1,
+    "_feet_below_entity_px": [
+      "Where the original's minion stands: its feet circle's bottom below the entity. minion.ent's",
+      "<Compound> feet {posY 0.5, radius 1.3} in a Collision of 14 x 36, which ETHCompoundShape scales by",
+      "half the size (ETHCompoundShape.cpp:66-69): centre 0.5 x 36 / 2 = 9 below, radius 1.3 x 14 / 2 = 9.1.",
+      "The port's body is one circle (minions.json body), so the picture is placed from where the body",
+      "stands, not from its centre: MEASURED on the original, the cell's centre is the floor's top less",
+      "22.0-22.4 units over 12 knights on 3-05 and 3-23 (system_5 5a), and 18.1 + the pivot's 4 is 22.1"
+    ],
+    "walk": {
+      "_source": [
+        "ETHCallback_minion ins 1141-1162: SetFrame(column = timer.set(0, 3, 120, true), row = dirRow), on",
+        "every update that walks. FrameTimer::set (bytes 23254..23650) is Art::FrameTimer: its first and last",
+        "never change, so the column and its time carry across a hold and a turn, and only walking adds",
+        "time. The player's measured 92 ms does not carry over: 120 ms is this script's own"
+      ],
+      "first_column": 0,
+      "last_column": 3,
+      "stride_ms": 120.0
+    },
+    "hold_column": 0,
+    "_hold_column": [
+      "ETHCallback_minion ins 1164-1205: a minion not walking - serving its hold, or with its way blocked -",
+      "has its velocity times (0.3, 1) and, while nothing is in its sight (entityInSight null, always in",
+      "the port, which builds no sight), SetFrame(0, dirRow): column 0 of the last row it walked. A lone",
+      "guard inside minDist x 2 (shouldntMove, ins 1089 -> 1163 -> 1450) writes no frame at all"
+    ],
+    "start_row": 0,
+    "_start_row": "GetUInt('dirRow') of a key never set reads 0 (ETHEntity.cpp:865-870); frame 0 is also the default (ETHEntity.cpp:101)",
+    "rows_by_direction": {
+      "_source": [
+        "ETHCallback_minion ins 1013-1025: moveVec = vector2(currentPos.x < destPos.x ? 1 : -1, 0); ins",
+        "1112-1120 dir = findCharacterDirection(getAngle(moveVec), true), which with sideScroller returns 1",
+        "(MOVING_LEFT) for pi < angle <= 2 pi and 2 otherwise (bytes 337256..337748, ins 83-101); getAngle is",
+        "atan2(x, y) + 2 pi when negative, so (1, 0) is 2 and (-1, 0) is 1; ins 1122-1127 dirRow = dir == 1",
+        "? 1 : 2, stored at 1137. The only writes of dirRow (1137, 1304) store 1 or 2: row 3 is unreachable",
+        "(decode/D2.md, confirmed by D2_check.md)"
+      ],
+      "_ruling": "R3, the owner's standing ruling (in favour of what the original does): the decoded rows 1 and 2",
+      "_measured_rows_not_applied": "left 0, right 3: the library frames' within-pair preference (system_5 5a), which D2 shows is two near-copies of one pose told apart by sub-pixel phase, not a row",
+      "left": 1,
+      "right": 2
+    },
+    "search": {
+      "_source": [
+        "ETHCallback_minion ins 1207-1321, the arm a minion takes when its way to its waypoint is blocked",
+        "and it has spotted nothing: moveVec = (1, 0) when elapsedTime % 4000 > 2000 (CMPIu then JNP at",
+        "1245-1246, the fall-through pushing 0 then 1f), else (-1, 0); dirRow re-derived from it (1279-1304)",
+        "and SetFrame(0, dirRow) (1314-1321). It looks right then left, two seconds each. NOT REACHED in the",
+        "port, whose minion casts no ray to its waypoint (minions.json _destination_reachability_not_built):",
+        "the rule is here for when that lands"
+      ],
+      "period_ms": 4000.0,
+      "right_after_ms": 2000.0
+    },
+    "darkest_zeroes_emissive": true,
+    "black_knight": {
+      "_source": [
+        "level31b's marker spawns ghost_minion.ent (its metadata/entityName), the chapter-3 boss's black",
+        "knight. ETHCallback_ghost_minion (bytes 451487..451999) ins 8-18 SetColor(V3_ZERO) every frame, then",
+        "ins 25 runs ETHCallback_minion: the same rows, walk and hold. ghost_minion.ent: the same sheet, cut",
+        "and PivotAdjust, EmissiveColor (0, 0, 0). Its 24 black_portal_particle.png (alphaMode 4) are the",
+        "visuals plan's 11.4, not built here. The sim spawns the default body (R16 is 11.4's)"
+      ],
+      "entity": "ghost_minion.ent",
+      "colour": [0.0, 0.0, 0.0],
+      "emissive": [0.0, 0.0, 0.0]
+    },
+    "_dragon_knight_not_drawn": [
+      "dragon_knight.ent (the same sheet) is spawned by dragon_knight_spawn only after 2-32 is won (step 34),",
+      "and never shows. Its row, for the record (D2_check.md): ETHCallback_dragon_knight ins 507-581 take",
+      "findCharacterDirection(getAngle(GetLinearVelocity()), true) BEFORE this update's SetLinearVelocity:",
+      "the previous update's velocity x < 0 is row 1, anything else row 2"
     ]
   }
 }
