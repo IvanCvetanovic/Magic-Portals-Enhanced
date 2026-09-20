@@ -95,14 +95,15 @@ section. Where they have rows below, those rows stay open. Next: batches 5-13 (a
 | 4.2 | blink and spin | committed with five recorded deviations (the four "Step 72" rows and the PORT-WIDE clock row below) | `5ae1b6d`, `5a544ac` | 72 |
 | 4.3 | gravity-well green ring | committed with two recorded deviations, neither a failing gate row: the `test_mp_wells` gate is met across two suites, and the ring exists from the first frame | `6949cc3` | 73 |
 | 5.1 | minions and knights on their sheets | committed with deviations, and **two sim changes applied under no adopted ruling - proposed R24 (the patrol's arrival point) and R25 (a carrier's point), THE OWNER'S TO RULE** (the "Step 76" rows below). Two gate rows NOT MET as written and recorded, not tuned: the non-regression sweep on 10 of the 128 f420 frames, where the repaired patrols carry keys, press 3-15's button and weigh 3-22's seesaw (each checked against the original's own frame and moving toward it), and G5a-5's lit R on one widened-series detection that sits on the line. Three deviations left to their owners: the lone guards' coast, the player's carrier point, a shock diamond's prey point | `9d25691` | 76 |
+| 5.2 | the 2-32 dragon and its claw follow the sim | committed with deviations. One gate row NOT MET as written and recorded, not tuned: `test_mp_dragon` "stays at 151" reads **230 checks, 0 failures** - **R19** and 8.13 ("fireball direction pending R19") rewrite the aim the suite pinned, and the diff removes no assertion. Two deviations left to the owner (the "Step 77" rows below): two clock bases where the original keeps one, and the `2-32_h2.8`-versus-f168 flight-timing gap, which predates the step | `cbbf169` | 77 |
 
 Merge `e81c21b` (§0). Integration step 74 (`591e143`, `7281ca5`) sends the well ring and the crystal dial through the
 tier resolver. The ten rings now draw `hd/white_ring.png`. The dial keeps `timer.png`, which has no tier file. It
 records no deviation of its own. It re-read 4.1's and 4.2's rows on the merged build, which gave the two open
 instrument items below.
 
-**Batch 5 opens after that merge.** Its first step, 5.1, is the table's last row (planning step 76) and the first
-step committed in this repository rather than the engine's.
+**Batch 5 opens after that merge.** Its first step, 5.1 (planning step 76), is the first step committed in this
+repository rather than the engine's; 5.2 (planning step 77) follows it.
 
 - [x] **Step 0** — engine `--screenshot-every N` (every temporal check depends on it). Done: SE step 57 (`29448a8`).
 - [ ] System 1 colour transfer — largely done by lighting E1/G2; re-check its remaining rows.
@@ -322,8 +323,10 @@ step committed in this repository rather than the engine's.
       escorts) are drawn on `hd/minion.png` cut as the original cuts it, on the decoded rows 1/2, behind the player at
       its decoded depth 4 (R10), on patrols that now arrive where the original's do - **built, planning step 76**
       (order 5.1; committed 2026-09-20 as MPR `9d25691`), with the "Step 76" rows below.
-      What is left of the system: the 2-32 dragon still draws the whole sheet (5.2), the dark dragon (12.1), the
-      ghost (12.2), the knights' dark aura (11.4).
+      The 2-32 dragon follows it: its own cell, its flight, its `Follower`-driven angle and R19's fireball, and
+      its claw - **built, planning step 77** (order 5.2; committed 2026-09-20 as MPR `cbbf169`), with the
+      "Step 77" rows below.
+      What is left of the system: the dark dragon (12.1), the ghost (12.2), the knights' dark aura (11.4).
 - [ ] **Step 76, THE OWNER'S TO RULE: two sim changes applied under no adopted ruling** (proposed as **R24** the
       patrol's arrival point and **R25** a carrier's point, appended to `00_order` §8.15 by 5.1's third round;
       neither is one of R1-R23, and the step's first record called them "the same standing ruling", which was an
@@ -391,6 +394,26 @@ step committed in this repository rather than the engine's.
       every cell - which is the whole reason a column-1 cell lands on 60. Next: the owner's call whether the row
       reads standing cells only, or R at or above 0.98x the drawn cell's own texel mean, and whether the 2% is
       worth chasing - a gate re-spec, not a tuned threshold.
+- [ ] **Step 77 deviation, two clock bases where the original keeps one.** The port feeds
+      `Dragon::State::elapsedMs` the tick's 16.667 ms while `Follower::Update` takes `Follower::FrameMs`'s truncated
+      16, so the two drift about 4% apart - at 2-32's f240 shot the follower has counted 3,840 ms against
+      `elapsedMs`'s 4,000. The original has ONE basis: `elapsedTime` is advanced by
+      `g_timeManager.getLastFrameElapsedTime` (`ETHCallback_dragon` ins 277-289, `AddToUInt`), and that function
+      (`all_functions.txt` bytes 7894..7961, ins 3-9) is `uint(GetLastFrameElapsedTime() x m_factor)` - the same
+      truncated engine millisecond the follower gets, at factor 1, itself about 4% slow against the device's wall
+      clock. Step 77's first draft recorded the split as "the original's own arrangement"; that was wrong, and its
+      record and `dragon.json` now say so. **No gate measured in step 77 moves with it.** NOT applied there because
+      it is not local: feeding `elapsedMs` the truncated frame shifts level31a's whole schedule about 4% later and
+      moves the f180 / f240 / f420 / f444 frames that step quotes, and the claw's sweep and the flight run on the
+      tick too. Next: the owner's call on one basis for the module, then re-gate 5.2's schedule on it.
+- [ ] **Step 77 deviation, the dragon's flight timing against the original's library frame.** On `2-32_h2.8` the
+      original's dragon sits lower and further right than the port's at the nominal same time (f168), with no mouth
+      fire - a descent/timing gap that predates step 5.2, whose flight numbers (45, -60, 25 px/s and the 48 ceiling)
+      it does not touch; the clock row above is one candidate. Recorded so the next role does not rediscover it as a
+      5.2 regression. That frame also does not discriminate the angle: with its flame muted its four cells score
+      0.434-0.541 and a per-angle search gives 340 -> 0.462, 360 -> 0.510, 380 -> 0.581
+      (`out/parity/visuals/5.2/verify1`), which is why the decode and not the frame is what the port's angle rests
+      on. Next: measure the descent against the footage rather than the library frame.
 - [x] **System 6 texture tiers**: hd/fullhd per file (fullhd skies are 512 u wide). Converter + port together, or sprites
       draw twice too big; the Sprite offset × scale trap applies. Built by orders 0.2, 2.1, 2.2 and 2.3 (SE steps 61, 65,
       66 and 67; MPR `e9611e4`) and step 74 for track B's two pictures. What is left is in those steps' RECORDED
