@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <map>
@@ -23,6 +24,7 @@
 #include "sim/Chapters.hpp"
 #include "sim/Credits.hpp"
 #include "sim/Dashboard.hpp"
+#include "sim/Effects.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
 #include "sim/Hud.hpp"
@@ -334,6 +336,78 @@ public:
     };
     std::vector<EmitterReport> EmitterReports() const;
 
+    // ---- the effects the script ADDS (system_7 7a-2) ------------------------
+    //
+    // One AddEntity call of the original's, as the layer draws it: an entity read
+    // from its .ent when it is spawned, at a point, turned, at a scale, and
+    // optionally carried by something the level moves. sim/Effects holds the call
+    // sites' arithmetic (effects.json, step 91); this is what becomes of one.
+    //
+    // NOTHING IN THE GAME SPAWNS ONE YET. latchSimEffects is the place the TICK
+    // queues them from, and it queues nothing until the steps that draw each
+    // effect wire their rules (the visuals plan's 7.1 eyes, 7.3 teleport, 10.x
+    // pickups). The suites spawn them by hand, which is how the light cap and the
+    // free rules are measured before any rule exists.
+    struct EffectOwner {
+        enum class Kind {
+            None,         // it stays where it was added
+            Player,       // the player's point: HIDDEN with the player, not freed
+            Sprite,       // a level picture's entity point (a crystal, a key, a torch)
+            Fireball,     // a carranca's fireball while it flies
+            PlacedPortal, // a portal the player opened
+        };
+        Kind kind = Kind::None;
+        int index = -1;           // which one, for the kinds that have several
+        glm::dvec2 offsetPx{0.0}; // where on it, in the level's pixels
+    };
+    struct EffectSpawn {
+        std::string entity;    // the .ent, among the original's entities
+        glm::dvec2 atPx{0.0};  // where AddEntity puts it, in the level's pixels
+        double zUnits = 0.0;   // the vector3's z, in the level's units
+        double angleDeg = 0.0; // Ethanon's angle, counter-clockwise on the screen
+        double scale = 1.0;    // the script's Scale(), which the .ent's <Scale> multiplies
+        EffectOwner follow;
+    };
+    // AddEntity, on the FRAME and never on the tick: the effect's id, or -1 when
+    // the level has no art, the .ent cannot be read, or what it is to follow has
+    // already gone.
+    //
+    // NOT FROM INSIDE updateEffects' loop. It pushes onto m_effects, which is a
+    // vector, and that loop holds a reference into it - a rule that spawns one
+    // effect as another is freed (7.4's portal_death) queues it instead, which is
+    // what m_effectQueue and latchSimEffects are for.
+    int SpawnEffect(entt::registry& registry, const EffectSpawn& spawn);
+    // What each live effect is doing, for the suites, in the order they were added.
+    struct EffectReport {
+        int id = 0;
+        std::string entity;
+        glm::dvec2 atPx{0.0};   // where it stands now: its owner's point, where it has one
+        float z = 0.0f;         // its picture's slot (Slot::Effect)
+        float haloZ = 0.0f;
+        // Each of its emitters' z (Slot::EffectSystems), in the .ent's order: the
+        // slot its own <StartPoint> z puts it in, and that slot's quarter after
+        // the halo shared out by Particles::SlotFraction. These are the numbers
+        // the particle quads are placed with, so the suite can hold the table's
+        // three new rows to what is drawn.
+        std::vector<float> systemZ;
+        double scriptScale = 1.0; // the Scale() it was added with
+        glm::dvec2 scale{1.0};  // times its <Scale>: the one its light and picture take
+        bool temporary = false; // ETHEntity::IsTemporary: the engine frees it when its pools are over
+        bool hidden = false;    // its owner is hidden (the player in a door), so nothing of it draws
+        bool drawn = false;     // it has a picture quad
+        bool hasLight = false;
+        bool hasHalo = false;
+        int systems = 0;        // its emitters
+        int pool = 0;           // the particles they were made with, summed
+        int active = 0;         // GetNumActiveParticles, summed over them
+        int quads = 0;          // the pooled particle quads it holds, drawn or not
+    };
+    std::vector<EffectReport> EffectReports() const;
+    // How many effects have been added and freed since the layer was attached,
+    // for the suites: a temporary one is freed when its pools are over.
+    int EffectsSpawned() const { return m_effectsSpawned; }
+    int EffectsFreed() const { return m_effectsFreed; }
+
     // Each timed crystal's dial (art.json timer), for the suites, in the crystals'
     // order: as the last tick left it.
     struct TimerReport {
@@ -369,6 +443,99 @@ public:
     // GameCharacter's 4 over the scale factor (art.json character.z, depth).
     float PlayerSlotZ() const;
     double PlayerDepth() const { return m_playerZ; }
+
+    // ---- WHAT STANDS BETWEEN TWO SLOTS, in one table (00_order K13) ---------
+    //
+    // A level's own pictures are drawn one to a slot, deepest first, in the order
+    // their z_index gives them (SlotZ). Everything the port adds for a script
+    // stands BETWEEN two of those slots, and the fraction of a slot it stands at
+    // is what orders it against its neighbours. Each caller used to write its own
+    // fraction beside its own call; they are this one table now, read through
+    // slotAfter, slotAt and slotOver, and a new class joins it rather than
+    // inventing a fraction of its own.
+    //
+    // THE ORDER AT EQUAL DEPTH. The fraction belongs to the class and not to the
+    // instance, so two classes at one z_index land on exactly one z. Ethanon draws
+    // such a pair in the order the entities were ADDED - one map keyed by depth,
+    // and at equal depth the sprite, then the halo, then each system in order
+    // (ETHEntityRenderingManager.cpp:74, 85, 106) - and sharing a z is not by
+    // itself wrong: the original's escort is spawned by a dying minion and shares
+    // its depth.
+    //
+    // The rows below are in the order the layer ADDS their quads, which is the
+    // nearest thing the port has to the same rule: the dials then the rings in
+    // buildSprites, the halos in buildLights after it, then a tick's
+    // syncDrawables (a thrown stone), syncBoss (the beholder, its spikes) and
+    // syncMinions (a minion, then an escort), and an effect on the frame. What
+    // the renderer does with an exact tie is NOT pinned by this step - it is one
+    // z, and nothing here makes the two draw in a stated order - so the table
+    // states the order and test_mp_layer pins the table, which is what 00_order
+    // K13 asks for ("pins that order, not uniqueness"). Two pairs can tie today
+    // and both are named: a dial with a ring, and a minion with an escort (the
+    // tie step 76's census found). A step that needs a tie broken on the screen
+    // rather than stated is the step to give the two rows their own fractions.
+    //
+    // NOT IN THE TABLE. The loading screen draws in a space of its own (0.32 for
+    // the portal's systems, 0.6 and 0.61 for the vanish), because no level's
+    // slots exist while it is up.
+    enum class Slot {
+        TimerDial,      // a timed crystal's dial, its crystal's z_index - 2 (art.json timer)
+        WellRing,       // a gravity well's green ring, at the -5 its AddEntity gives it
+        HaloNoPicture,  // a light whose owner draws no picture, and a torch with none
+        ThrownStone,    // a stone in flight, at the player's slot
+        Beholder,       // chapter 1's boss, at its adder's z_index
+        Spike,          // and its spikes, at -4
+        Minion,         // a minion or knight, minion_spawn's raw 2 in the level's units
+        Escort,         // the escort the chapter-3 boss calls, at its anchor's depth
+        Effect,         // an entity the script ADDS (Effects::Spawn), at round(z)
+        PlacedPortal,   // a portal the player opened, just behind the player
+        EffectHalo,     // that entity's halo, a quarter in front of its own picture
+        EffectSystems,  // and its particle systems, spread over the quarter after that halo
+        Picture,        // a level's own picture, and the player's: the slot itself
+        Halo,           // a light's halo, a quarter in front of its owner's picture
+        ShotPicture,    // the portal shot, a quarter in front of the player
+        Systems,        // an entity's particle systems, spread over the quarter after its halo
+        ShotHalo,       // the shot's halo, in front of the shot
+        Count
+    };
+    struct SlotRow {
+        Slot slot;
+        const char* name;
+        // Of one slot (kSpriteSlotZ), from the slot's own zero - which is the
+        // slot's own picture, since Slot::Picture is fraction 0. `spreads` says
+        // the real fraction is Particles::SlotFraction's share of the quarter
+        // that starts here, so an entity's systems never tie with each other.
+        //
+        // `spreads` is a statement of the row, for a reader and for the suite;
+        // no arithmetic branches on it, because the only two rows that carry it
+        // (Slot::Systems and Slot::EffectSystems) are the only two systemZ is
+        // ever called with, and systemZ spreads unconditionally. A class that
+        // needs the plain fraction goes through slotAt/slotAfter/slotOver.
+        double fraction;
+        bool spreads;
+    };
+    static constexpr std::array<SlotRow, static_cast<std::size_t>(Slot::Count)> kSlotTable{{
+        {Slot::TimerDial, "timer dial", -0.5, false},
+        {Slot::WellRing, "gravity well ring", -0.5, false},
+        {Slot::HaloNoPicture, "halo with no picture", -0.5, false},
+        {Slot::ThrownStone, "thrown stone", -0.5, false},
+        {Slot::Beholder, "beholder", -0.5, false},
+        {Slot::Spike, "beholder spike", -0.5, false},
+        {Slot::Minion, "minion", -0.5, false},
+        {Slot::Escort, "escort", -0.5, false},
+        {Slot::Effect, "effect", -0.5, false},
+        {Slot::PlacedPortal, "placed portal", -0.25, false},
+        {Slot::EffectHalo, "effect halo", -0.25, false},
+        {Slot::EffectSystems, "effect particle systems", -0.25, true},
+        {Slot::Picture, "picture", 0.0, false},
+        {Slot::Halo, "halo", 0.25, false},
+        {Slot::ShotPicture, "shot", 0.25, false},
+        {Slot::Systems, "particle systems", 0.25, true},
+        {Slot::ShotHalo, "shot halo", 0.5, false},
+    }};
+    static constexpr double SlotFractionOf(Slot slot) {
+        return kSlotTable[static_cast<std::size_t>(slot)].fraction;
+    }
 
     // Each crystal's and key's linearMotion (sim/Motion, motions.json), for the
     // suites, in the level's drawing order (m_sprites'): as the last tick left it.
@@ -725,11 +892,63 @@ private:
 
     // The entities' particle systems: built with a level's art, carried per
     // FRAME, and taken away with the level.
+    // Both are defined with the members that hold them, further down.
+    struct Emitter;
+    struct Effect;
+
     void buildEmitters(entt::registry& registry);
     void unloadEmitters(entt::registry& registry);
     void updateEmitters(entt::registry& registry, float deltaTime);
+    // One emitter's frame: its pool stepped and each particle's quad placed or
+    // put away. `pool` says what becomes of the quad of a particle that is not
+    // drawn this frame - kept and made invisible for an effect's emitter, which
+    // spawns and spends particles by the dozen, destroyed for a level's, as step
+    // 59 built them and the suites count them.
+    void stepEmitter(entt::registry& registry, Emitter& emitter, double elapsedMs, const Particles::Random& random,
+                     bool pooled);
     // A number in [from, to) from the layer's OWN generator.
     double particleRandom(double from, double to);
+    // And from the one the EFFECTS draw on (00_order K8): every non-placement
+    // draw, so that adding an effect mid-level cannot move a single particle of
+    // the level's own emitters.
+    double effectRandom(double from, double to);
+
+    // The effects runtime (system_7 7a-2). Spawned on the frame, updated on the
+    // frame, and gone with the level - nothing here reaches Game::Level, the
+    // tick or the state hash, exactly as the particles do not.
+    void updateEffects(entt::registry& registry, float deltaTime);
+    void unloadEffects(entt::registry& registry);
+    void freeEffect(entt::registry& registry, Effect& effect);
+    // Where an effect's owner stands this frame: false when the owner is gone
+    // (the effect is freed), with `hidden` for the player in a door, which the
+    // original hides its effects with rather than deleting them.
+    bool effectOwnerPoint(const entt::registry& registry, const EffectOwner& owner, glm::dvec2& atPx,
+                          bool& hidden) const;
+    // What the TICK adds to the frame's queue. Nothing is wired yet: the rules
+    // arrive with the steps that draw each effect.
+    void latchSimEffects();
+    // A light and its halo placed the one way (Lighting::OwnerScaled): a level's
+    // placement passes an owner scale of 1, and what a script adds passes its
+    // <Scale> times the script's (00_order K7).
+    void placeLight(entt::registry& registry, entt::entity light, entt::entity halo, const Lighting::Light& unscaled,
+                    const glm::dvec2& ownerPx, double ownerZ, bool ownerStatic, double ratio, float haloZ,
+                    bool present, const glm::dvec2& ownerScale) const;
+
+    // ---- the between-slot table (00_order K13), read by every user ----------
+    //
+    // `levelZ` is a depth in the LEVEL's units (art.json depth). The class stands
+    // after every sprite at or below it - and after the player only where the
+    // player is at that depth or deeper, which is the rule step 76 wrote when the
+    // player moved to z 4.
+    float slotAfter(double levelZ, Slot klass) const;
+    // The same, for a slot already counted: the player's.
+    float slotAt(int slot, Slot klass) const;
+    // And against a picture's own z, for what hangs off it: a halo over its owner.
+    float slotOver(float pictureZ, Slot klass) const;
+    // An entity's system `slot` of `systems`, which share the quarter that
+    // `klass` starts at so that none of them ties with another
+    // (Particles::SlotFraction).
+    float systemZ(float base, Slot klass, int slot, int systems) const;
     float readInput(entt::registry& registry);
     void syncDrawables(entt::registry& registry);
     void syncSprites(entt::registry& registry);
@@ -1045,6 +1264,37 @@ private:
         int active = 0;
         std::vector<Particles::Particle> particles;
         std::vector<entt::entity> quads; // one per particle, null while it is not drawn
+        // What its quads are tagged with, so a level's particles and a spawned
+        // effect's can be told apart in the registry and by the suites.
+        const char* tag = "Magic Portals Particle";
+    };
+
+    // One entity the script ADDED (SpawnEffect), while it lives.
+    //
+    // Its emitters are ITS OWN, drawn on m_effectRandom and stepped here, so that
+    // the level's placed emitters keep their stream bit for bit however many
+    // effects come and go (00_order K8). Its particle quads are POOLED - hidden
+    // rather than destroyed - because a burst of sparkles would otherwise make
+    // and unmake entities every frame.
+    struct Effect {
+        int id = 0;
+        std::string entity; // the .ent it was read from
+        Art::Entity art;    // as Art::LoadEnt read it, before any scale
+        glm::dvec2 atPx{0.0};
+        double angleDeg = 0.0;
+        double scriptScale = 1.0; // the Scale() its AddEntity was given
+        glm::dvec2 scale{1.0};    // times its <Scale>: what its picture, halo and light take
+        double zUnits = 0.0;
+        bool temporary = false; // the engine frees it once its pools are over
+        bool hidden = false;    // its owner is hidden, so nothing of it draws
+        glm::dvec2 cellPx{0.0}; // its picture's frame, scaled; zero when it has none
+        float z = 0.0f;         // Slot::Effect
+        float haloZ = 0.0f;     // Slot::EffectHalo
+        entt::entity quad{entt::null};
+        entt::entity light{entt::null};
+        entt::entity halo{entt::null};
+        EffectOwner follow;
+        std::vector<Emitter> emitters;
     };
     // Every particle system of an entity of the original's, at a place: false when
     // the .ent carries none or cannot be read.
@@ -1058,6 +1308,21 @@ private:
     std::vector<Emitter> m_emitters;
     // Seeded, so a run looks the same twice and a screenshot can be compared.
     std::mt19937 m_particleRandom{20260912u};
+    // And the effects' own stream (00_order K8). The level's placed emitters draw
+    // from the one above in the order they were built; an effect the script adds
+    // mid-level would shift every later draw of theirs if it shared it, and every
+    // capture of every level would move beyond the effect itself. The loading
+    // screen's own entities (addEntityEmitters) stay on the placement stream:
+    // they are all there is while it is up, and no level's emitters are alive to
+    // be moved.
+    std::mt19937 m_effectRandom{20260919u};
+
+    // The effects the script has added, in the order they were added, and what
+    // the TICK has queued for the next frame to add.
+    std::vector<Effect> m_effects;
+    std::vector<EffectSpawn> m_effectQueue;
+    int m_effectsSpawned{0};
+    int m_effectsFreed{0};
 
     // ---- sound: the original's AudioManager, carried as data ----------------
     //

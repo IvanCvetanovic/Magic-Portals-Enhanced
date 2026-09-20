@@ -13477,3 +13477,318 @@ comment, 47 executables relinked, 0 warnings; `6.2/dryrun_commit.txt` stops at t
 changes no code, so every gate above stands. Nothing was relaunched: `MagicPortals.exe` is now `fdc2da8a`,
 relinked from the same code. A second review pass, on the commit itself, added the `type` and
 `layerDepth` note above: text only, no code, nothing rebuilt and nothing relaunched.
+
+## Step 92 - one table for what stands between two slots, a stream of its own for what the script adds, and the runtime that adds it (built)
+
+The visuals plan's step 6.3 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 6; its brief
+`system_7.md` 7a-2; the conflicts K8 and K13). Track B, on the `visuals-c` tree, numbered after steps 90 (6.1) and 91
+(6.2) - the merge renumbers. Game-only: the engine submodule stays at `4bfcf67` and no file under `engine/` is
+touched. Changed: `game/MagicPortalsLayer.{hpp,cpp}` and `tests/test_mp_layer.cpp`. **The effects runtime, and the two
+rules the rest of the plan is built on. `SpawnEffect`/`updateEffects`/`unloadEffects` add an entity of the original's
+by name - its picture on its pivot, its light and halo at the owner's scale, one pooled emitter per
+`<ParticleSystem>` - and free it the way the engine frees it; `m_effectRandom` keeps every one of those draws off the
+level's placement stream (K8); and `slotAfter` is a member over ONE table of between-slot fractions with a stated
+order at equal depth (K13), which every user in this tree now reads. Nothing in the game spawns an effect yet -
+`latchSimEffects` is the place the tick will queue them from, and it queues nothing - so the 128-level f420 sweep is
+byte-identical to the baseline.**
+
+**BLOCKERS CHECKED.** 6.3's one blocker, 6.2, is step 91, committed on this tree (`449fb4c`); 6.1 is step 90
+(`e620810`). Section 8.13 amends 3.1, 3.4, 5.1, 5.2, 10.1, 10.3, 10.4, 11.1, 11.2, 12.1, 12.2 and 13.1-13.4, not 6.3,
+so section 7's row stands as written. Its two K rows ARE amended, and both amendments are applied: 8.13's K13 note
+drops the ghost's tie with the minions (the ghost is the knight's z - 1) and adds rows for effects no step of this run
+builds - those are absolute depths for classes this tree does not draw, and each joins the table with the step that
+draws it; 8.13's K8 note records that the original's own jitter comes from a `MTRand` re-seeded from the ms clock, so
+no stream of its can be reproduced, `m_effectRandom` is the port's determinism choice, and the rule stands. Sync 1
+brought step 76 (5.1) into this tree, and its minion `slotAfter` use is migrated here with the rest.
+
+**THE OWNER'S STANDING RULINGS.** None of R1-R23 names this step; R22 and R23 are not built. R10 - the player at the
+decoded z 4 - is what `slotAfter` orders against, as step 76 left it: "after the sprites at or below this depth, and
+after the player only where the player stands at that depth or deeper". R3's rows, and R24's and R25's points, ride in
+with 5.1 untouched. Four choices the brief left open were made under the owner's standing instruction that the
+original wins:
+- **The table holds the fractions this port already drew at, not new ones.** K13 asked for the between-slot fraction
+  of each class, in one table. Every existing user's fraction is carried over exactly - the beholder, a spike, a
+  minion, an escort, a dial, a well ring, a thrown stone and a light with no picture at -1/2 of a slot; a placed
+  portal at -1/4; a halo at +1/4 in front of its owner's picture; the shot at +1/4 and its halo at +1/2; an entity's
+  systems spread over the quarter that follows its halo - so the step moves no pixel. A fraction that is wrong is now
+  wrong in one row, where one step can change it, instead of in nine places.
+- **The order at equal depth is stated, and stated for what the port can actually see.** The fraction belongs to the
+  class and not to the instance, so two classes at one z_index land on exactly one z. Ethanon draws such a pair in the
+  order the entities were added (`ETHEntityRenderingManager.cpp:74, 85, 106`), and a shared z is not by itself wrong:
+  the original's escort is spawned by a dying minion and shares its depth. The table's rows are in the order the layer
+  ADDS their quads, traced through the code - the dials then the rings in `buildSprites`, the halos in `buildLights`
+  after it, then a tick's `syncDrawables` (a thrown stone), `syncBoss` (the beholder and its spikes) and
+  `syncMinions` (a minion, then an escort), and an effect on the frame. **What the renderer does with an exact tie is
+  not pinned by this step**, and the record says so rather than claiming a draw order it did not measure: the table
+  STATES the order and `test_mp_layer` pins the table, which is what K13 asks for ("pins that order, not
+  uniqueness"). Two pairs can tie today and the suite names both - a dial with a ring, and the minion/escort tie step
+  76's census found. A step that needs a tie broken on the screen rather than stated is the step to give those two
+  rows fractions of their own.
+- **The effects' stream is theirs alone; the loading screen's entities stay on the placement stream - a stated
+  exception to K8's wording.** K8's rule is that the level's placed emitters keep their stream bit for bit, and a
+  second generator gives it. Its literal wording is wider - "`m_effectRandom` serves every non-placement draw" - and
+  the loading screen's own entities (`addEntityEmitters`: the portal, and the vanish it plays) do NOT move to it.
+  They keep drawing from `m_particleRandom`, because they are all there is while the screen is up, no level emitter
+  is alive to be moved, and the generator is never re-seeded: moving them would shift the draws of every level loaded
+  after one and change 128 captures for nothing. **This is a deviation from the conflict as written, not a reading of
+  it**, and it leaves a coupling the next step to touch the loading screen must know about: a change to its particles
+  would shift every level capture taken after a load.
+- **A level's particle quad still goes when its particle stops being drawn; an effect's is pooled.** `system_7` cites
+  the level emitters' `hide` where it asks for pooling. They are left destroying: `EmitterReport::drawn` counts the
+  quads that exist, the suites read it, and the state hash walks what is there. An effect's quads are kept and turned
+  off instead, which is what the brief's reason - a burst of 28 sparkles made and unmade every frame - is about.
+
+**WHAT THE ORIGINAL DOES** (the engine source under `reference/ethanon/toolkit/Source/src/engine/`; the listing
+`out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; the decode in `00_order` section 8).
+- **Adding one.** `AddEntity(file, vector3(xy, z), angle, @out, altName, scale)` makes the entity at `<Scale>` x that
+  scale x the global scale, which is 1 in this game (`ETHScriptWrapper.Scene.cpp:146-148`,
+  `ETHSpriteEntity.cpp:56-65`), and each of its systems at the mean of that scale's two axes
+  (`ETHSpriteEntity.cpp:316-319`).
+- **Drawing one.** Its pieces go into one map keyed by depth - the sprite, then the halo, then each system in order
+  (`ETHEntityRenderingManager.cpp:74, 85, 106`) - so at equal depth they draw in that order and before the next
+  entity. A halo is drawn only for a light that names a `<HaloBitmap>` (`:78`), at the light's unscaled position plus
+  the entity's, sized by the entity's scale (`ETHRenderEntity.cpp:376-386`).
+- **Freeing one.** Only a TEMPORARY entity is the engine's to delete - no sprite, at least one system, and every
+  system with a set repeat (`ETHEntity.cpp:697-716`) - and only once `AreParticlesOver`
+  (`ETHActiveEntityHandler.cpp:123, 169-171`). Anything else is its script's. And `ETHEntity::Hide` is not a delete:
+  what the player carries is hidden with the player and comes back with it.
+- **The random.** Every particle is drawn from one process-global `MTRand`, re-seeded from the ms clock (`00_order`
+  8.13's K8 note, decode D6), so no stream of the original's can be reproduced. What can be reproduced is that adding
+  an effect never moves a level's own particles, and that is what the port's two generators give.
+
+**WHAT THE REVIEW CAUGHT, AND THE FIX (`6.3/fix1/`).** An independent check failed this step on one row of its own
+table, and it was right. `SpawnEffect` handed `systemZ` the EFFECT's own z as the base - `slotAfter(round(z +
+startPointZ), Slot::Effect)`, which is the slot's zero less half a slot - and `systemZ` then added the
+`Slot::EffectSystems` row's own -1/4 on top of it. The -1/2 was counted twice: an effect's particle systems were
+drawn at -0.625 of a slot (one system), -0.667/-0.583 (two), **BEHIND the effect's own picture (-0.5) and halo
+(-0.25) instead of in front of them** - the exact reverse of the order this step cites from
+`ETHEntityRenderingManager.cpp:74, 85, 106`, and the reverse of the table's own row ("its particle systems, spread
+over the quarter after that halo"). The level's path was unaffected and provably so: its base is the picture's z with
+fraction 0, so the `- 0.25` and the `+ 0.25` cancel exactly, which is why the sweep was byte-identical and the defect
+invisible. **The row was right and the caller was wrong**, so the caller changed: `Slot::Picture` is the base,
+because `systemZ`'s base is the SLOT'S ZERO and Slot::Picture is fraction 0. Which way to fix it is the owner's
+standing ruling - the original wins - and the original draws an entity's sprite, then its halo, then each of its
+systems (`ETHEntityRenderingManager.cpp:74, 85, 106`), so the systems belong in FRONT; the table's row already said
+so and K13 already said so. Two things let a 1,318-check suite pass over it, and both are closed:
+- **The three rows this step introduced were asserted nowhere.** The gate row "the table is what the layer draws"
+  had been measured on `ShotPicture`, `ShotHalo` and `PlacedPortal` - three classes that existed before this step.
+  `EffectReport` now carries each emitter's z, and a seventh case reads all three rows, and the quads on the
+  registry, against the table (gate table below).
+- **The new case was run against the defect first.** With the old base restored and nothing else changed, it fails 3
+  checks and prints `light.ent: picture -0.5000, halo -0.2500, system -0.6250`, `portal.ent: ... -0.6667 /
+  -0.5833` - the numbers the review derived - and with the fix it prints -0.1250 and -0.1667/-0.0833 and is green
+  (`6.3/fix1/test_mp_layer_control.txt` against `test_mp_layer_final.txt`). A gate that cannot fail is not a gate.
+
+Three smaller things the same check raised are recorded rather than coded: `SlotRow::spreads` is a statement for the
+reader and the suite and no arithmetic branches on it (the only two rows that carry it are the only two `systemZ` is
+ever called with), and the header now says so; `unloadEffects` sits at two of `unloadEmitters`' three sites and the
+record above says which two and why the third cannot matter; and the loading screen staying on the placement stream
+is now written as an explicit deviation from K8's wording, with the coupling it leaves, rather than as a preference.
+
+**WHAT CHANGED.**
+- **The table (`MagicPortalsLayer.hpp`).** `enum class Slot` of 17 classes in drawing order, `struct SlotRow` and
+  `kSlotTable` - the fraction of a slot each class stands at, and whether its systems spread over the quarter that
+  follows it - with `SlotFractionOf`. Three members read it: `slotAfter(levelZ, klass)`, the `buildSprites` lambda
+  promoted; `slotAt(slot, klass)` for a slot already counted (the player's); and `slotOver(pictureZ, klass)` for what
+  hangs off a picture. `systemZ(base, klass, slot, systems)` adds `Particles::SlotFraction`'s share of the quarter.
+  **Every user in this tree is migrated**: the beholder, the spikes, the minions and the escort (5.1's), the timed
+  crystals' dials, the gravity wells' rings, a thrown stone, the player's picture and its box, the placed portals, the
+  shot and its halo, a placed light's halo, a lit torch's halo, and every level emitter. `SlotZ` is left as the slot's
+  own arithmetic, and the loading screen keeps its literal depths: no level's slots exist while it is up.
+- **The effects runtime (`MagicPortalsLayer.{hpp,cpp}`).** `EffectOwner`, `EffectSpawn`, `Effect`, `SpawnEffect`,
+  `updateEffects`, `unloadEffects`, `freeEffect`, `effectOwnerPoint`, `effectRandom`, `EffectReports`,
+  `EffectsSpawned`/`EffectsFreed`, and `latchSimEffects` with no rule wired. A spawn reads the `.ent` through
+  `Art::LoadEnt` (step 91) and builds a picture when it has a `<Sprite>` (centred on its entity's point less its
+  `<PivotAdjust>`, at its scale, as the player's picture is drawn), a light and a halo when it has a `<Light>` -
+  under the engine's own cap, `Supersonic::kMaxLights2D` - and one emitter per system from `Particles::Scaled` at
+  `Art::Entity::ParticleScale`. **Depth is the table's, and every fraction of it is measured from the SLOT'S OWN
+  ZERO**: the picture half a slot back (`Slot::Effect`), the halo a quarter back (`Slot::EffectHalo`), and each
+  system in the quarter AFTER that halo (`Slot::EffectSystems`), in the slot `round(z + startPointZ)` falls in - the
+  `.ent`'s own `<StartPoint>` z, which plan 2d defers for level PLACEMENTS only, which is a spawned effect's only
+  source, and which is therefore counted per system and not once for the effect. `systemZ`'s `base` argument is that
+  zero and nothing else; a level's picture IS its slot's zero (`Slot::Picture` is fraction 0), which is why
+  `buildEmitters` passes `drawn.z`, and a spawned effect has no picture there, so `SpawnEffect` passes
+  `slotAfter(round(z + startPointZ), Slot::Picture)`. It is freed when it is temporary
+  and every pool is `Particles::Finished`, or when what it follows has gone; a hidden player hides it instead of
+  freeing it. `updateEffects` runs on the frame beside `updateEmitters`, first draining what the tick queued;
+  `unloadEffects` runs at the level's unload and at the loading screen's build - the two places anything a level
+  added has to go. (`unloadEmitters` has a third site, the top of `buildEmitters`, which only ever runs straight
+  after the unload, so an effect could not be standing there.)
+- **Two shared pieces, unchanged in behaviour.** `stepEmitter` is one emitter's frame, factored out of
+  `updateEmitters` so both kinds step through the same arithmetic, with the pooling the one difference; `placeLight`
+  is `syncLights`' `place` lambda promoted to a member, so a spawned effect's light and halo are placed by the one
+  rule (`Lighting::OwnerScaled`, K7) - a level placement passing an owner scale of 1 and an effect passing its
+  `<Scale>` times the script's.
+- **Tests (`tests/test_mp_layer.cpp`), seven cases.** The table's rows, fractions, tie and spread; the fractions the
+  layer actually draws at for the classes that existed before this step, read off the registry; **the three rows this
+  step ADDS, read off an effect's own numbers and off its quads** (below); an effect added, live and freed; one
+  carried by the player, with nothing made or moved on a tick and nothing left after a retry; five blasts under the
+  light cap, and the cap; and K8, two levels played side by side with one of them given an effect.
+  The new case, `AnEffectsPictureHaloAndSystemsStandWhereTheTableSays`, measures each row as a fraction of a slot
+  **against the player's slot**, not against the effect's own picture: `PlayerSlotZ()` is a slot's own zero
+  (`Slot::Picture` is fraction 0), so a whole effect drawn half a slot too deep cannot hide behind a self-consistent
+  halo-minus-picture. It reads two entities of the original's - `light.ent` (a `<Sprite>`, a `<Light>` with a
+  `<HaloBitmap>`, one system at `<StartPoint>` z 0) and `portal.ent` (two systems at z 10) - asserts `drawn`,
+  `hasLight` and `hasHalo` outright rather than guarding on them, pins the `<StartPoint>` z against a second
+  `portal.ent` spawned ten units in front (and that the two slots actually differ, so the case cannot pass with the z
+  ignored), and finally checks that every live `Magic Portals Effect Particle` quad on the registry stands at one of
+  the z the reports name.
+
+**BASELINE.** Sync 1 merged main into this tree, so the run's starting `out/parity/split/after/sweep/` is NOT this
+step's "before": step 76 (5.1) changed 61 of its 128 frames. The baseline is the one step 76's record names - "the
+next step's before is `5.1/fix2/sweep/` (1-01 f420 `81a39d45`)" - and this tree's committed build reproduces it: this
+step's first capture reads `81a39d457ca2ad3b8dae5a1dc27abd84` on 1-01 f420. Checked before being leant on: all 128 of
+`5.1/fix2/sweep` open at 1280 x 720, and all 128 of this step's own sweep match their own log lines' md5s and exited
+0. 6.3 is not in section 7's list of steps that move the baseline, so **`6.3/fix1/sweep/`** - the review fix's sweep,
+taken on the binary this step ends on - is the next step's "before". It is byte-identical to `6.3/after/sweep/`, which
+is byte-identical to `5.1/fix2/sweep/`, so any of the three serves; `fix1/` is named because it is the one taken on
+`d39c8ecc`.
+
+**GATES.** 1280 x 720, `--fixed-step`, captures and logs under `out/parity/visuals/6.3/` (the review fix's under
+`6.3/fix1/`).
+
+| Gate (00_order section 7, 6.3) | Required | Before | After |
+|---|---|---|---|
+| `test_mp_layer`: spawn -> live -> freed | a temporary effect is added, drawn, and freed when its pools are over | no runtime | **`suck_effect.ent` (1 system, no sprite, no light, temporary) added at (288, 64) as number 1; its particles drawn on 30 frames; freed on frame 31; spawned 1, freed 1, and no quad left in the registry: passes** |
+| `test_mp_layer`: nothing on the tick | a tick with no frame makes no quad and moves no particle | - | **30 ticks with no `OnUpdate`: the effect's particle quads unchanged, its active count unchanged, and `latchSimEffects` queued nothing (1 spawned, by hand): passes** |
+| `test_mp_layer`: no quad outlives its level | - | - | **After a retry: no effect, and no `Magic Portals Effect`, `Effect Particle`, `Effect Light` or `Effect Halo` in the registry: passes** |
+| `test_mp_layer`: <= 64 lights on a 5-barrel chain | the frame's light count stays within `kMaxLights2D` | - | **1-01 carries 1 light; five `explosion_large.ent` blasts - `explode()`'s own entity, spawned by hand - make 6, each with its own light; 70 more stop at 64, the 65th and after added with no light: passes.** No rule wires a barrel yet, so what this pins is the cap and the light per blast, not a chain's timing |
+| `test_mp_layer`: the K13 tie-break order pinned | the table's order, not uniqueness | - | **17 classes, each its own row, fractions in drawing order; 9 of them between two slots at -1/2 (so two classes at one z_index tie by construction, and the rows state the order); 2 spreading by `Particles::SlotFraction`; minions before the escort, dial before ring: passes.** The order pinned is the table's, not the renderer's at an exact tie |
+| The table is what the layer draws at (this step's own row; K13) | each class's drawn z equals its row's fraction of a slot | - | **Two cases, both green. (a) The classes that existed before this step, on 1-02: the shot at the player's slot **+0.2500**, its halo **+0.5000**, a placed portal **-0.2500**, each to within 1e-7 of the table's. (b) **The three rows this step adds**, on 1-01, each measured against the PLAYER's slot (`Slot::Picture` is fraction 0, so `PlayerSlotZ()` is a slot's own zero - so the rows are anchored to a real slot and not to each other): `light.ent`, which carries a picture, a `<HaloBitmap>` halo and one system whose `<StartPoint>` z is 0, draws its picture at **-0.5000**, its halo at **-0.2500** and its system at **-0.1250** slots, all three in one slot (14 behind the player's) and in that order; `portal.ent`'s two systems, `<StartPoint>` z 10, at **-0.1667** and **-0.0833** slots into slot **-11**, which is the slot a second `portal.ent` spawned ten units in front has its PICTURE in, and is not the first one's picture slot (-14). Every live `Magic Portals Effect Particle` quad on the registry stands at one of the z the reports name: passes** |
+| Sweep byte-identical to 6.1's | 128 of 128 | 1-01 f420 `81a39d45` (`5.1/fix2/sweep`, the committed build) | **Re-measured for the review fix, on `d39c8ecc` - the binary this step ends on, not an earlier one: 128 of 128 byte-identical to `5.1/fix2/sweep` AND 128 of 128 to the step's own `6.3/after/sweep` (`6.3/fix1/check_sweep.json`, script beside it; all 128 pngs 1280 x 720 with an IEND and no NUL tail, all 128 md5s equal to their `sweep.txt` line, all 128 exit 0). 61 of them differ from the run's old `split/after/sweep` and 67 do not, which is exactly the 61 frames step 76 changed: passes.** The defect this fix corrects could not have shown here: nothing in the game spawns an effect, and the level path's own arithmetic is unchanged and bit-identical |
+| K8: an effect moves no particle of the level's (the rule's "byte-identical outside the new picture's box") | - | - | **Two 1-01s played side by side for 120 frames, one given a `sparkles.ent` at frame 20: 1,200 emitter readings (node, active, drawn, z, newest birth and its age), 0 different - and with no rule wired the whole frame is identical, not only the box: passes** |
+| Validation | exit 0, silent | - | **129 launches of `d39c8ecc` (1 currency capture of 1-01, then the 128-level sweep), every one exit 0; validation ACTIVE in all 128 sweep logs, 0 `[Validation]` lines in any beyond the two benign Steam `loader_get_json` notices every run on this machine prints, and 0 error or fatal lines (`6.3/fix1/check_sweep.json`): passes** |
+
+**THE SUITES**, run directly on this tree's binaries. **`test_mp_layer` 1,339 checks, 0 failures** (1,204 at step 91;
++135), on the final binary `d39c8ecc` (`6.3/fix1/test_mp_layer_final.txt`). Its FIRST run read 1,315 checks with 3
+failures, all three in this step's own new case - a tap aimed at a point
+on 1-01 that the level refuses, so no shot ever flew, and the case read the z of a picture that was never made. The
+case was rewritten to fire on 1-02 the way `APortalAndAShotAreTheOriginals` fires one, and every run since is 0
+failures: on the swept binary's build, on the counter fix's, and on each of the two comment rebuilds
+(`6.3/test_mp_layer{,_2,_final,_final2,_final3}.txt`, five runs in all). The review fix adds 21 checks and three more
+runs: `6.3/fix1/test_mp_layer.txt` (1,339 / 0), the deliberate control with the defect restored
+(`test_mp_layer_control.txt`, 1,339 / **3**, the three the new case is for), and the final
+`test_mp_layer_final.txt` (1,339 / 0). No test binary has ever been refused by Smart App Control.
+**No other suite was run and none was touched**: this step changes
+`MagicPortalsLayer` and `test_mp_layer` only - nothing under `game/sim`, nothing under `game/data` - and
+`test_mp_layer` is the only suite that builds a layer (`grep -ln MagicPortalsLayer tests/*.cpp`). **ctest was not
+run**: the step's definition of done names `test_mp_layer`, and the backlog's Smart App Control rule keeps a full
+ctest to the roles that need one.
+
+**BUILD: no warnings** (MSVC, Release, Ninja, /W4). Eight logs, all exit 0 and all silent: `6.3/build.txt` (the full
+build the first sweep ran on), `6.3/build2.txt` (the counter fix below, everything relinked), `6.3/relink3.txt`,
+`6.3/build3.txt` and `6.3/build4.txt` (the comment fixes), and the review fix's `6.3/fix1/build.txt`,
+`build_control.txt` (the control, `--target test_mp_layer`) and `build_final.txt` (the restored fix, everything
+relinked - **the binaries every gate below was measured on**). No engine file was compiled, so no `D9025` note
+appears in any of them. `6.3/fix1/dryrun.txt`, taken after the gates, lists only the CMake glob re-check and the
+CMake re-run, which a dry run always treats as out of date - two edges, no compile and no link - so the sources
+the gates were measured on are the sources this commit carries.
+
+**The md5s on disk are no longer the gates', and this is why.** The gates ran on `MagicPortals.exe` `d39c8ecc`.
+The header's revert (12:27:09) left `MagicPortalsLayer.cpp.obj` stale, so a later build recompiled that identical
+translation unit (12:36:36) and relinked the exe (12:38) - after the sweep's last capture at 12:37:51. The md5
+moved; nothing that a frame is drawn from did. The second independent check then found that binary
+(`cab2c73d`) refused by Smart App Control, deleted it and relinked it once from the same objects. **On disk now:
+`MagicPortals.exe` `3e03930548bc3ab8cecaba3de2d092cd` and `test_mp_layer.exe` `ced00a379badca06bcff4be0a6fc9ce5`**,
+both current - the dry run taken at this commit lists the same two CMake edges and no compile or link.
+**`3e039305` HAS launched** (eight f420 captures, every one exit 0), so the next role owes it no Smart App Control
+retry.
+
+**THE BINARY THE GATES ARE MEASURED ON.** Every gate above is measured on `MagicPortals.exe` **`d39c8ecc`** and
+`test_mp_layer.exe` from the same build (`6.3/fix1/build_final.txt`), built from the sources this commit carries:
+its 128-level sweep is `6.3/fix1/sweep/`, and `6.3/fix1/dryrun.txt` shows no stale compile or link edge. The exes on
+disk have since been relinked from those same objects (above), and the second independent check re-measured the
+step's numbers on its own `3e039305`: `test_mp_layer` **1,339 checks, 0 failures**, and eight f420 captures - 1-01,
+1-02, 1-15 (dials), 1-32 (beholder and spikes), 3-01 (minions), 4-11 (well and dials), 3-32 (escort and boss),
+4-32 - **all eight byte-identical to `5.1/fix2/sweep` and to `6.3/fix1/sweep`**, 1-01 f420 `81a39d45`, validation
+ACTIVE in 8 of 8 logs with no VUID line (`6.3/verify2/`: `notes.txt`, `sample.txt`, `cmp_sample.json`; the eight
+pngs re-checked here - 1280 x 720, IEND, no NUL tail, every md5 equal to its log line). Nothing below is relied on
+any more; it is kept because it is the record of how the step got here.
+
+**THE FIRST SWEEP'S BINARY, AND THE TWO CHANGES AFTER IT.** The step's first 128-level sweep ran on `MagicPortals.exe`
+`63a14859`, and `6.3/after/sweep/` is that sweep. Two things changed after it, neither of them anything a capture
+executes.
+- **One statement moved.** `SpawnEffect` took its number (`++m_effectsSpawned`) BEFORE resolving what the effect
+  follows, so a spawn refused because its owner had already gone still counted. The number is now taken after the
+  check. That binary, `34d44285`, was launched: `test_mp_layer` 1,318 checks, 0 failures, and 1-01 f420 re-captured -
+  `81a39d45`, the baseline's and the swept binary's own (`6.3/recheck/1-01_level0_f420.png`).
+- **Three comment blocks were corrected, and nothing else.** (a) The effects runtime's header said the
+  `<StartPoint>` z puts `appear_effect`'s systems in front of the player "while its picture stands behind it", which
+  was true of `system_7`'s player at 0 and is not true of R10's player at 1.42. (b) The table's header claimed "the
+  port keeps the order it adds their quads in", which asserts a renderer behaviour this step does not measure; it now
+  says what was traced and what is not pinned (the ruling above). (c) `SpawnEffect` carries the re-entrancy note
+  below. `6.3/build3.txt` and `6.3/build4.txt` are both exit 0 with no warnings, and `test_mp_layer` was run on each:
+  **1,318 checks, 0 failures** both times (`6.3/test_mp_layer_final2.txt`, `_final3.txt`). The final binary's own 1-01
+  recheck is **NOT RUN (Smart App Control)**: the exe linked after (b) was refused and the rule's relinks were spent.
+  The last measured capture is `34d44285`'s, which differs from the final source by comments alone - and no comment
+  is compiled into a frame. **The review fix then re-measured all of it on `d39c8ecc`, so this no longer has to be
+  argued: that binary launched, and its own 128-level sweep is the gate above.**
+
+**SMART APP CONTROL.** Six refusals while the step was being built, each one a notification to the owner, none of
+them in the review fix - and a seventh after the gates, in the second independent check (below).
+`MagicPortals.exe` was refused on its first
+link (`ffa4edd0`) and again after the first relink (`2800f280`), and launched on the second (`63a14859`) - the two
+delete-and-relink retries the backlog's rule allows - after which the sweep's 128 launches all passed. The counter
+fix's link (`7386c422`) was refused once and its one relink (`34d44285`) launched. The comment fix's link
+(`9e66c73e`) was refused, and nothing was relinked after it; the fifth build (`6.3/build4.txt`) was never launched as
+a game, only as its suite - and the independent check's one launch of it was refused too, which is why its sweep gate
+was argued rather than measured. **The review fix's binary `d39c8ecc` was NOT refused**: it launched on the first
+try, and 129 more times after it (1 currency capture plus the 128-level sweep), every one exit 0. No delete-and-relink
+was needed, so no retry of the rule's two was spent. **The seventh refusal is the rebuilt `cab2c73d`** (the stale
+object's relink, above): the second independent check's one launch of it was refused, it was deleted and relinked
+once - `3e039305` - and that one launched and took the eight captures. No test binary has ever been refused:
+`test_mp_layer` has launched nine times in all, the ninth in that check.
+
+**LEFT FOR THE OWNER AND THE LATER STEPS.**
+- **A light with no picture takes the table's rule, and no level reaches it.** `buildLights`' branch for a light whose
+  node draws no sprite used to count its slot by `below < m_playerSlot`, which is the proxy step 76 replaced for the
+  minions: it puts a light at a depth BELOW the player's in front of the player whenever no sprite stands between the
+  two. It now reads `slotAfter`, so it orders against the player by depth like everything else. This moves nothing:
+  all 72 lights of the 128 levels hang on a node that also draws a sprite (a scan of `out/levels`' 128 `.tscn` for a
+  node carrying `eth_light_range` with no `Sprite2D` child: 0 of 72; step 49 counted the same 72 of 72), so the branch
+  is the guard for a light whose picture the port could not read, and the sweep is byte-identical.
+  **What is NOT done, and is named so the next step knows:** `docs/parity-backlog.md`'s open row asks 6.3's table to
+  leave BETWEEN-SLOT pictures out of `slotAfter`'s count - a gravity well's ring is pushed into `m_sprites` and has
+  no slot of its own, so the same picture-less light on a well level would still count it and sit a slot too deep.
+  `slotAfter` still counts every `m_sprites` entry. It is left alone deliberately: the only call that happens AFTER
+  the rings are added is that one unreachable `buildLights` branch (the rings are appended after every other
+  `slotAfter` of the build has been taken, which is why step 73 added them where it did), so the change would move no
+  pixel, could be pinned by no capture, and would relink the binary this step's 128-level sweep is measured on. It
+  belongs to the step that first draws a light with no picture of its own, or to whoever closes that backlog row with
+  a level that shows it.
+- **Not built here, and named so 7.4 does not look for it:** the placed portal's kill - its halo fading by 0.9 a frame
+  of the original's 60 Hz and `portal_death` 400 ms later - is the step that spawns portals as effects, not this one.
+  Section 7's contents line for 6.3 lists the runtime, the stream, the table and the latch, and that is what is here.
+  `Particles::Finished` must not be what ends a killed portal: its systems repeat 0 and are never over.
+- **The pooled quad is built here and pinned by nothing.** Section 7's contents for 6.3 name "hidden rather than
+  destroyed quads", and `stepEmitter`'s `pooled` branch is exactly that: an effect's particle quad has its
+  `RenderableComponent::isVisible` turned off where a level's is destroyed. `EffectReport::quads` makes it
+  observable, but no case reads it - flipping `pooled` to false would leave all 1,339 checks green, while the level
+  side's destroy IS pinned (`EmitterReport::drawn`). It is named rather than coded because the step is closing on
+  the review's text corrections and a new case would relink the binary the 128-level sweep is measured on. The step
+  that first spawns an effect from a rule (7.1) should assert, on a frame where `active < pool`, that `quads ==
+  pool` and that the count does not fall while the effect lives.
+- **One scale per spawn, and the fireball needs two.** `EffectSpawn` carries a single scale, applied to the entity
+  and to each of its systems alike. `system_7` 7a-2's own description of `spawnEffect` puts a per-system factor on
+  top of it - `fireballScale` on system 0 alone (`ETHScriptWrapper.Scene.cpp:131-158`, decode S3), 2 for the dark
+  dragon's. No rule spawns a fireball at this step - that is 7.2, itself blocked on 0.1 - so nothing here can
+  measure it, and it is named so 7.2 adds the factor rather than looking for it.
+- **Carried from step 91's list, still open:** `LoadEnt` reads the file on every spawn, and an entity per name should
+  be cached. It is left for the step that wires the first rule (7.1) rather than done here, because nothing spawns an
+  effect yet, so it costs no frame today and a cache with no consumer is a cache with no measurement. Together with
+  `Particles::Finished`'s empty-pool order, also still open.
+- **For 7.1 and 7.3, the two shapes this runtime leaves open.** An effect's picture is centred on its entity's point
+  less its `<PivotAdjust>` times its scale - the rule the player's picture is drawn by, and the rule a torch's
+  picture follows (`PivotAdjust` (0, -16), 16 below its node) - but no effect with a `<Sprite>` is drawn by any rule
+  yet, so the sign is pinned by nothing but that reading. The first step that draws one (10.2's `key_effect`, 10.3's
+  `door_locked_vanish`) should measure it against the original's frame. The same for a sheet's cell: an effect's
+  picture is cut by `Tiers::FrameCut` through `frameUnits` and shown through a `SpriteAnimationComponent`, whose split
+  is even (K5/E1) - which agrees for every sheet whose texels divide, and the first uneven one needs the per-frame
+  `uvScale`/`uvOffset` the minions use.
+- **A hazard named for 7.1 and 7.4:** `SpawnEffect` must not be called from inside `updateEffects`' loop. `m_effects`
+  is a vector and the loop holds a reference into it, so a rule that spawns one effect while another is freed - 7.4's
+  `portal_death` at the end of a placed portal's kill - queues it on `m_effectQueue` instead. The header says so on
+  the function.
+- **`EffectOwner` resolves five kinds** - none, the player, a level sprite (a crystal, a key, a torch), a carranca's
+  fireball and a placed portal by its id. Those are what this tree can point at. A fireball's or a portal's is by
+  INDEX and by ID respectively, and the id is the right one: a pair going takes the ones after it along a place.

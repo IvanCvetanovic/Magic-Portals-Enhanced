@@ -6840,8 +6840,506 @@ void AWeightlessPlayerWearsTheSuit() {
     }
 }
 
+// ---- the between-slot table, and the effects runtime (6.3) ------------------
+//
+// K13. Everything the port draws between the level's own slots reads one table
+// now (MagicPortalsLayer::kSlotTable): the fraction of a slot each class stands
+// at, and - since the fraction belongs to the class and not to the instance -
+// the order the classes are drawn in where two of them land on one z. What is
+// pinned here is the table itself, the tie it states, and the fractions three
+// classes are actually drawn at on a level, read back off the registry.
+
+void TheBetweenSlotTableSaysWhereEachClassStands() {
+    using Slot = MagicPortalsLayer::Slot;
+    const auto& table = MagicPortalsLayer::kSlotTable;
+    CHECK(table.size() == static_cast<std::size_t>(Slot::Count));
+
+    int outOfPlace = 0;
+    int outOfOrder = 0;
+    double last = -1.0;
+    for (std::size_t i = 0; i < table.size(); ++i) {
+        // Its row is its own index, which is what SlotFractionOf counts on.
+        if (static_cast<std::size_t>(table[i].slot) != i) ++outOfPlace;
+        if (table[i].fraction < last) ++outOfOrder;
+        last = table[i].fraction;
+    }
+    CHECK_MSG(outOfPlace == 0, "every class is its own row: " + std::to_string(outOfPlace) + " out of place");
+    CHECK_MSG(outOfOrder == 0,
+              "the rows are in drawing order, deepest first: " + std::to_string(outOfOrder) + " out of order");
+
+    // The fractions themselves, as 00_order K13 states them.
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Beholder) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Spike) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Minion) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Escort) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::TimerDial) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::WellRing) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ThrownStone) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::HaloNoPicture) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Effect) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::PlacedPortal) == -0.25);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::EffectHalo) == -0.25);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::EffectSystems) == -0.25);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Picture) == 0.0);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Halo) == 0.25);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ShotPicture) == 0.25);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Systems) == 0.25);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ShotHalo) == 0.5);
+
+    // THE TIE THE TABLE STATES. The nine between-slot classes share one fraction,
+    // so two of them at one z_index land on exactly one z; what orders them there
+    // is the order the port adds their quads, which is the order of the rows -
+    // the minions before the escort a boss summons, as the original's escort is
+    // spawned by a minion and shares its depth. The table pins the ORDER, not
+    // uniqueness (00_order K13).
+    int tied = 0;
+    for (const auto& row : table) {
+        if (row.fraction == -0.5) ++tied;
+    }
+    CHECK_MSG(tied == 9, "nine classes stand between the slots: " + std::to_string(tied));
+    CHECK(static_cast<int>(Slot::Minion) < static_cast<int>(Slot::Escort));
+    CHECK(static_cast<int>(Slot::TimerDial) < static_cast<int>(Slot::WellRing));
+
+    // And the two classes whose systems share the quarter that follows them,
+    // evenly, so no system of an entity ties with another (Particles::SlotFraction).
+    int spreads = 0;
+    for (const auto& row : table) {
+        if (row.spreads) ++spreads;
+    }
+    CHECK_MSG(spreads == 2, "the two kinds of particle system spread: " + std::to_string(spreads));
+    CHECK(table[static_cast<std::size_t>(Slot::Systems)].spreads);
+    CHECK(table[static_cast<std::size_t>(Slot::EffectSystems)].spreads);
+    std::printf("  the between-slot table: %d classes, %d of them between two slots, %d spreading\n",
+                static_cast<int>(table.size()), tied, spreads);
+}
+
+// And the fractions the layer actually draws at, off the registry: the shot a
+// quarter of a slot in front of the player, its halo half a slot, and a portal
+// the player has placed a quarter behind it.
+void TheTableIsTheFractionTheLayerDrawsAt() {
+    if (!OriginalArtIsThere("TheTableIsTheFractionTheLayerDrawsAt")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level1");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    waitForFirstTap(layer, registry);
+
+    const float slotZ = 0.004f; // kSpriteSlotZ
+    const float playerZ = layer.PlayerSlotZ();
+
+    // A tap straight up, and the shot it fires, as APortalAndAShotAreTheOriginals
+    // fires one.
+    const glm::dvec2 target = playerPx(registry, layer) + glm::dvec2(0.0, -48.0);
+    CHECK(onScreen(registry, target));
+    tap(layer, registry, screenOf(registry, target));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick); // the halo is the frame's
+    float shotZ = 0.0f;
+    float shotHaloZ = 0.0f;
+    if (const entt::entity shot = FirstTagged(registry, "Magic Portals Shot Sprite"); shot != entt::null) {
+        shotZ = registry.get<TransformComponent>(shot).position.z;
+    }
+    if (const entt::entity halo = FirstTagged(registry, "Magic Portals Shot Halo"); halo != entt::null) {
+        shotHaloZ = registry.get<TransformComponent>(halo).position.z;
+    }
+    CHECK_MSG(std::fabs(shotZ - (playerZ + 0.25f * slotZ)) < 1e-7f,
+              "the shot a quarter of a slot in front of the player: " + std::to_string(shotZ - playerZ));
+    CHECK_MSG(std::fabs(shotHaloZ - (playerZ + 0.5f * slotZ)) < 1e-7f,
+              "and its halo half a slot: " + std::to_string(shotHaloZ - playerZ));
+
+    // And the portal that tap opened, a quarter of a slot behind the player.
+    landShot(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const entt::entity portal = FirstTagged(registry, "Magic Portals Portal Sprite");
+    CHECK_MSG(portal != entt::null, "the tap opened a portal");
+    if (portal != entt::null) {
+        const float portalZ = registry.get<TransformComponent>(portal).position.z;
+        CHECK_MSG(std::fabs(portalZ - (playerZ - 0.25f * slotZ)) < 1e-7f,
+                  "a placed portal a quarter of a slot behind the player: " + std::to_string(portalZ - playerZ));
+    }
+    std::printf("  drawn against the player's slot: shot %+.4f, shot halo %+.4f slots\n",
+                static_cast<double>(shotZ - playerZ) / slotZ, static_cast<double>(shotHaloZ - playerZ) / slotZ);
+    layer.OnDetach(registry);
+}
+
+// AND THE THREE ROWS THIS STEP ADDS, off the numbers the quads are placed with
+// and off the registry: an effect's picture half a slot behind a slot of the
+// level's, its halo a quarter behind, and its particle systems in the quarter
+// AFTER that halo - in front of the picture and halo they belong to, never
+// behind them, which is the order Ethanon draws an entity in
+// (ETHEntityRenderingManager.cpp:74, 85, 106).
+//
+// The fraction is measured against the PLAYER's slot, not against the effect's
+// own picture: Slot::Picture is fraction 0, so PlayerSlotZ() is a slot's own
+// zero exactly, and every row is then anchored to a real slot rather than to its
+// neighbour. A case that only checked halo == picture + 1/4 would pass with the
+// whole effect half a slot too deep.
+void AnEffectsPictureHaloAndSystemsStandWhereTheTableSays() {
+    if (!OriginalArtIsThere("AnEffectsPictureHaloAndSystemsStandWhereTheTableSays")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    const float slotZ = 0.004f; // kSpriteSlotZ
+    const float playerZ = layer.PlayerSlotZ();
+    // Where a z stands IN its slot, as a fraction of one, in [-1, 0). Every row
+    // this case reads is strictly negative, so the half-open end never bites.
+    const auto fractionOfSlot = [playerZ, slotZ](float z) {
+        const double slots = static_cast<double>(z - playerZ) / static_cast<double>(slotZ);
+        return slots - std::floor(slots) - 1.0;
+    };
+    // And which slot, counted from the player's.
+    const auto slotOf = [playerZ, slotZ](float z) {
+        return static_cast<int>(std::floor(static_cast<double>(z - playerZ) / static_cast<double>(slotZ))) + 1;
+    };
+    // A slot is 0.004 and these are floats near -1.5, so a thousandth of a slot
+    // is a hundred times the arithmetic's own error and five hundred times
+    // tighter than the half slot this case was written to catch.
+    const double tol = 1e-3;
+
+    // light.ent: torch_small.png, halo.bmp on its <Light>, and ONE system whose
+    // <StartPoint> z is 0 - so all three stand in one slot, in the table's order.
+    MagicPortalsLayer::EffectSpawn torch;
+    torch.entity = "light.ent";
+    torch.atPx = glm::dvec2(288.0, 64.0);
+    torch.zUnits = -20.0;
+    CHECK(layer.SpawnEffect(registry, torch) > 0);
+    std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
+    CHECK(reports.size() == 1);
+    if (reports.size() != 1) {
+        layer.OnDetach(registry);
+        return;
+    }
+    const MagicPortalsLayer::EffectReport lamp = reports[0];
+    // Read before it is used, and not guarded away: a halo that failed to load
+    // would otherwise turn into a green check.
+    CHECK_MSG(lamp.drawn, "light.ent draws a picture");
+    CHECK_MSG(lamp.hasLight && lamp.hasHalo, "and carries a light with a <HaloBitmap>");
+    CHECK_MSG(lamp.systems == 1 && lamp.systemZ.size() == 1,
+              "and one particle system: " + std::to_string(lamp.systems));
+    if (lamp.drawn && lamp.hasHalo && lamp.systemZ.size() == 1) {
+        const double picture = fractionOfSlot(lamp.z);
+        const double halo = fractionOfSlot(lamp.haloZ);
+        const double system = fractionOfSlot(lamp.systemZ[0]);
+        // Slot::Effect, Slot::EffectHalo, Slot::EffectSystems, as kSlotTable
+        // states them: -1/2, -1/4, and the quarter after that halo shared out by
+        // Particles::SlotFraction - one system takes 3/8 of it, so -1/8.
+        const double wantSystem = -0.5 + MagicPortals::Particles::SlotFraction(0, 1);
+        CHECK_MSG(std::fabs(picture + 0.5) < tol,
+                  "the picture half a slot behind its slot: " + std::to_string(picture));
+        CHECK_MSG(std::fabs(halo + 0.25) < tol, "its halo a quarter behind it: " + std::to_string(halo));
+        CHECK_MSG(std::fabs(system - wantSystem) < tol,
+                  "and its system in the quarter after the halo: " + std::to_string(system) + ", wanted " +
+                      std::to_string(wantSystem));
+        CHECK_MSG(lamp.z < lamp.haloZ && lamp.haloZ < lamp.systemZ[0],
+                  "picture, then halo, then the system - the order the engine draws them in");
+        CHECK_MSG(slotOf(lamp.z) == slotOf(lamp.haloZ) && slotOf(lamp.z) == slotOf(lamp.systemZ[0]),
+                  "all three in one slot, because light.ent's <StartPoint> z is 0");
+        std::printf("  light.ent: picture %+.4f, halo %+.4f, system %+.4f slots into slot %d\n", picture, halo,
+                    system, slotOf(lamp.z));
+    }
+
+    // portal.ent: portal_halo.png and TWO systems, both with <StartPoint> z 10 -
+    // so the systems stand ten units in front of the picture, in whatever slot
+    // that depth falls in, and share that slot's quarter between them.
+    MagicPortalsLayer::EffectSpawn gate;
+    gate.entity = "portal.ent";
+    gate.atPx = glm::dvec2(320.0, 64.0);
+    gate.zUnits = -20.0;
+    CHECK(layer.SpawnEffect(registry, gate) > 0);
+    // The same entity ten units in front, whose PICTURE therefore stands in the
+    // slot the first one's SYSTEMS must be in. That is what <StartPoint> z means,
+    // measured against the level rather than assumed from the number.
+    MagicPortalsLayer::EffectSpawn probe = gate;
+    probe.zUnits = -10.0;
+    probe.atPx = glm::dvec2(352.0, 64.0);
+    CHECK(layer.SpawnEffect(registry, probe) > 0);
+    reports = layer.EffectReports();
+    CHECK(reports.size() == 3);
+    if (reports.size() == 3 && reports[1].systemZ.size() == 2) {
+        const MagicPortalsLayer::EffectReport& two = reports[1];
+        const MagicPortalsLayer::EffectReport& atTen = reports[2];
+        CHECK_MSG(std::fabs(fractionOfSlot(two.z) + 0.5) < tol,
+                  "portal.ent's picture half a slot behind its slot: " + std::to_string(fractionOfSlot(two.z)));
+        int wrong = 0;
+        for (int i = 0; i < 2; ++i) {
+            const double want = -0.5 + MagicPortals::Particles::SlotFraction(i, 2);
+            if (std::fabs(fractionOfSlot(two.systemZ[static_cast<std::size_t>(i)]) - want) >= tol) ++wrong;
+        }
+        CHECK_MSG(wrong == 0, "both its systems share the quarter after the halo, evenly: " + std::to_string(wrong) +
+                                  " off the table");
+        CHECK_MSG(two.systemZ[0] < two.systemZ[1], "and no two systems of one entity tie");
+        CHECK_MSG(slotOf(two.systemZ[0]) == slotOf(atTen.z) && slotOf(two.systemZ[1]) == slotOf(atTen.z),
+                  "in the slot round(z + <StartPoint> z) falls in: " + std::to_string(slotOf(two.systemZ[0])) +
+                      " against " + std::to_string(slotOf(atTen.z)));
+        // Without this the case would pass just as well with <StartPoint> z
+        // dropped: level0 must have sprites between the two depths for the slots
+        // to differ at all.
+        CHECK_MSG(slotOf(two.systemZ[0]) > slotOf(two.z),
+                  "which is NOT the picture's slot, so the z 10 is what moved them: systems in " +
+                      std::to_string(slotOf(two.systemZ[0])) + ", picture in " + std::to_string(slotOf(two.z)));
+        std::printf("  portal.ent: picture in slot %d, its two systems %+.4f / %+.4f slots into slot %d\n",
+                    slotOf(two.z), fractionOfSlot(two.systemZ[0]), fractionOfSlot(two.systemZ[1]),
+                    slotOf(two.systemZ[0]));
+    }
+
+    // AND THE QUADS CARRY WHAT THE REPORTS SAY. A frame places every live
+    // particle at its emitter's z, so each one on the registry stands at one of
+    // the z the reports name - the reports are read off the same numbers, so
+    // this is what keeps them honest.
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    std::set<float> named;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        for (const float z : report.systemZ) named.insert(z);
+    }
+    int quads = 0;
+    int offTable = 0;
+    for (auto [entity, tag, transform] : registry.view<TagComponent, TransformComponent>().each()) {
+        if (tag.tag != "Magic Portals Effect Particle") continue;
+        ++quads;
+        if (named.find(transform.position.z) == named.end()) ++offTable;
+    }
+    CHECK_MSG(quads > 0, "the effects' particles are drawn: " + std::to_string(quads) + " quad(s)");
+    CHECK_MSG(offTable == 0, "every particle quad stands at the z its system was given: " + std::to_string(offTable) +
+                                 " of " + std::to_string(quads) + " elsewhere");
+    layer.OnDetach(registry);
+}
+
+// THE EFFECTS RUNTIME (system_7 7a-2). Nothing in the game spawns one yet -
+// latchSimEffects queues nothing until the steps that draw each effect wire their
+// rules - so these add them the way the script's AddEntity does.
+void AnEffectIsAddedLivesAndIsFreed() {
+    if (!OriginalArtIsThere("AnEffectIsAddedLivesAndIsFreed")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+
+    // vanishEffect's suck_effect.ent: one system, no sprite, no light, and
+    // TEMPORARY - the engine frees it once its pool is over, and so does the port.
+    MagicPortalsLayer::EffectSpawn spawn;
+    spawn.entity = "suck_effect.ent";
+    spawn.atPx = glm::dvec2(288.0, 64.0);
+    spawn.zUnits = 32.0;
+    spawn.angleDeg = 90.0;
+    const int id = layer.SpawnEffect(registry, spawn);
+    CHECK_MSG(id == 1, "the first effect added is number 1: " + std::to_string(id));
+    std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
+    CHECK(reports.size() == 1);
+    if (reports.size() != 1) return;
+    CHECK_MSG(reports[0].temporary && reports[0].systems == 1 && !reports[0].drawn && !reports[0].hasLight,
+              "suck_effect.ent: one system, no picture, no light, temporary");
+    CHECK_MSG(reports[0].atPx == spawn.atPx, "added where the call puts it: " + Point(reports[0].atPx));
+
+    // Live: its particles are drawn, and they are its own quads and not the
+    // level's (they carry their own tag).
+    int liveFrames = 0;
+    int freedOn = -1;
+    for (int frame = 0; frame < 240 && freedOn < 0; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (Tagged(registry, "Magic Portals Effect Particle") > 0) ++liveFrames;
+        if (layer.EffectReports().empty()) freedOn = frame + 1;
+    }
+    CHECK_MSG(liveFrames > 10, "its particles are drawn while it lives: " + std::to_string(liveFrames) + " frames");
+    CHECK_MSG(freedOn > 0, "a temporary effect is freed once its pool is over");
+    CHECK_MSG(layer.EffectsSpawned() == 1 && layer.EffectsFreed() == 1,
+              "one added, one freed: " + std::to_string(layer.EffectsSpawned()) + " / " +
+                  std::to_string(layer.EffectsFreed()));
+    CHECK_MSG(Tagged(registry, "Magic Portals Effect Particle") == 0 && Tagged(registry, "Magic Portals Effect") == 0,
+              "and it leaves no quad behind");
+    std::printf("  suck_effect.ent: drawn on %d frames, freed on frame %d\n", liveFrames, freedOn);
+    layer.OnDetach(registry);
+}
+
+// It is carried by what it was added to, and hidden - not freed - with a player
+// that steps into a door (ETHEntity::Hide). And nothing of it happens on a TICK:
+// a tick with no frame after it adds no quad and moves no particle.
+void AnEffectFollowsItsOwnerAndNothingHappensOnATick() {
+    if (!OriginalArtIsThere("AnEffectFollowsItsOwnerAndNothingHappensOnATick")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+
+    // red_eyes.ent, which the player carries: no sprite, one system, repeat 0 -
+    // so never temporary, and never freed while the player is there.
+    MagicPortalsLayer::EffectSpawn spawn;
+    spawn.entity = "red_eyes.ent";
+    spawn.atPx = playerPx(registry, layer);
+    spawn.zUnits = 1.0;
+    spawn.follow.kind = MagicPortalsLayer::EffectOwner::Kind::Player;
+    spawn.follow.offsetPx = glm::dvec2(7.0, -14.25);
+    const int id = layer.SpawnEffect(registry, spawn);
+    CHECK(id > 0);
+
+    double worst = 0.0;
+    for (int frame = 0; frame < 300; ++frame) {
+        tickWith(layer, registry, kRest, frame < 150 ? std::vector<std::string>{MagicPortalsLayer::kRight}
+                                                     : std::vector<std::string>{MagicPortalsLayer::kLeft},
+                 {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
+        if (reports.empty()) break;
+        const glm::dvec2 want = playerPx(registry, layer) + spawn.follow.offsetPx;
+        worst = std::max(worst, glm::length(reports[0].atPx - want));
+    }
+    const std::vector<MagicPortalsLayer::EffectReport> after = layer.EffectReports();
+    CHECK_MSG(after.size() == 1 && !after[0].temporary,
+              "an effect with a repeat-0 system is never over, so it stays until its owner goes");
+    CHECK_MSG(worst < 0.5, "it is carried by its owner: worst " + std::to_string(worst) + " units off");
+
+    // NOTHING ON THE TICK. Ticks with no frame between them add no quad and move
+    // no particle: the effects runtime is the frame's, as the particles are.
+    const int quadsBefore = Tagged(registry, "Magic Portals Effect Particle");
+    const int activeBefore = after.empty() ? 0 : after[0].active;
+    for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const std::vector<MagicPortalsLayer::EffectReport> still = layer.EffectReports();
+    CHECK_MSG(Tagged(registry, "Magic Portals Effect Particle") == quadsBefore,
+              "no quad is made on a tick: " + std::to_string(quadsBefore) + " before, " +
+                  std::to_string(Tagged(registry, "Magic Portals Effect Particle")) + " after 30 ticks");
+    CHECK_MSG(still.size() == 1 && still[0].active == activeBefore, "and no particle moves on one");
+    CHECK_MSG(layer.EffectsSpawned() == 1, "and latchSimEffects queues nothing until a rule is wired");
+
+    // AND NOTHING OUTLIVES ITS LEVEL: a retry takes the level's effects with it,
+    // as it takes its emitters.
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.EffectReports().empty() && layer.EffectsFreed() == 1,
+              "a retry frees what the level added");
+    CHECK_MSG(Tagged(registry, "Magic Portals Effect") == 0 && Tagged(registry, "Magic Portals Effect Particle") == 0 &&
+                  Tagged(registry, "Magic Portals Effect Light") == 0 &&
+                  Tagged(registry, "Magic Portals Effect Halo") == 0,
+              "and no quad, light or halo of it is left in the registry");
+    std::printf("  red_eyes.ent carried by the player: worst %.4f units off over 300 frames\n", worst);
+    layer.OnDetach(registry);
+}
+
+// A barrel chain adds one light per blast, and one frame carries 64 of them
+// (Supersonic::kMaxLights2D). Five is what a chain of five barrels asks for; the
+// cap is what stops the sixty-fifth.
+void FiveBlastsFitUnderTheLightCap() {
+    if (!OriginalArtIsThere("FiveBlastsFitUnderTheLightCap")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    const auto lights = [&registry]() { return static_cast<int>(registry.view<Light2DComponent>().size()); };
+    const int levelLights = lights();
+    MagicPortalsLayer::EffectSpawn blast;
+    blast.entity = "explosion_large.ent"; // explode()'s, a barrel's: a light of 191, no halo
+    blast.zUnits = 0.0;
+    int lit = 0;
+    for (int i = 0; i < 5; ++i) {
+        blast.atPx = glm::dvec2(200.0 + 40.0 * i, 128.0);
+        const int id = layer.SpawnEffect(registry, blast);
+        CHECK(id > 0);
+        const std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
+        if (!reports.empty() && reports.back().hasLight) ++lit;
+    }
+    CHECK_MSG(lit == 5, "a chain of five blasts is five lights: " + std::to_string(lit));
+    CHECK_MSG(lights() == levelLights + 5,
+              "on top of the level's own: " + std::to_string(lights()) + " over " + std::to_string(levelLights));
+    CHECK_MSG(lights() <= 64, "and a frame carries no more than 64: " + std::to_string(lights()));
+
+    // Past the cap the effect is still added; it is drawn without a light, which
+    // is what the shader can carry.
+    for (int i = 0; i < 70; ++i) {
+        blast.atPx = glm::dvec2(200.0 + 4.0 * i, 160.0);
+        layer.SpawnEffect(registry, blast);
+    }
+    CHECK_MSG(lights() == 64, "the cap holds at 64: " + std::to_string(lights()));
+    std::printf("  level0 has %d light(s); five blasts make %d; 70 more stop at %d\n", levelLights, levelLights + 5,
+                lights());
+    layer.OnDetach(registry);
+}
+
+// K8. An effect draws on m_effectRandom, so the level's own emitters keep their
+// stream bit for bit however many effects come and go. Two levels are played
+// side by side and one of them is given an effect; every one of the level's
+// emitters must report the same thing on both.
+void AnEffectMovesNoParticleOfTheLevels() {
+    if (!OriginalArtIsThere("AnEffectMovesNoParticleOfTheLevels")) return;
+    entt::registry plain;
+    entt::registry withEffect;
+    publishViewport(plain);
+    publishViewport(withEffect);
+    MagicPortalsLayer a(TestPaths(), "level0");
+    MagicPortalsLayer b(TestPaths(), "level0");
+    a.OnAttach(plain);
+    b.OnAttach(withEffect);
+    CHECK_MSG(a.SimLevel() != nullptr && a.ArtError().empty(), a.LoadError() + a.ArtError());
+    if (a.SimLevel() == nullptr || !a.ArtError().empty()) return;
+    CloseTheLevelStartPopup(a, plain);
+    CloseTheLevelStartPopup(b, withEffect);
+
+    int differed = 0;
+    int compared = 0;
+    for (int frame = 0; frame < 120; ++frame) {
+        tickWith(a, plain, kRest, {}, {});
+        tickWith(b, withEffect, kRest, {}, {});
+        a.OnUpdate(plain, MagicPortalsLayer::kTick);
+        b.OnUpdate(withEffect, MagicPortalsLayer::kTick);
+        if (frame == 20) {
+            MagicPortalsLayer::EffectSpawn spawn;
+            spawn.entity = "sparkles.ent";
+            spawn.atPx = glm::dvec2(300.0, 100.0);
+            spawn.zUnits = 32.0;
+            CHECK(b.SpawnEffect(withEffect, spawn) > 0);
+        }
+        const std::vector<MagicPortalsLayer::EmitterReport> left = a.EmitterReports();
+        const std::vector<MagicPortalsLayer::EmitterReport> right = b.EmitterReports();
+        if (left.size() != right.size()) {
+            ++differed;
+            continue;
+        }
+        for (std::size_t i = 0; i < left.size(); ++i) {
+            ++compared;
+            if (left[i].node == right[i].node && left[i].active == right[i].active &&
+                left[i].drawn == right[i].drawn && left[i].z == right[i].z &&
+                left[i].newestBornPx == right[i].newestBornPx && left[i].newestAgeMs == right[i].newestAgeMs) {
+                continue;
+            }
+            ++differed;
+        }
+    }
+    CHECK_MSG(compared > 1000, "the level's emitters were compared: " + std::to_string(compared) + " readings");
+    CHECK_MSG(differed == 0,
+              "an effect moves no particle of the level's own: " + std::to_string(differed) + " reading(s) differ");
+    CHECK_MSG(!b.EffectReports().empty(), "and the effect itself was there to be drawn");
+    std::printf("  K8: %d emitter readings over 120 frames, %d different with an effect alive\n", compared, differed);
+    a.OnDetach(plain);
+    b.OnDetach(withEffect);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
+    TheBetweenSlotTableSaysWhereEachClassStands();
+    TheTableIsTheFractionTheLayerDrawsAt();
+    AnEffectsPictureHaloAndSystemsStandWhereTheTableSays();
+    AnEffectIsAddedLivesAndIsFreed();
+    AnEffectFollowsItsOwnerAndNothingHappensOnATick();
+    FiveBlastsFitUnderTheLightCap();
+    AnEffectMovesNoParticleOfTheLevels();
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();
