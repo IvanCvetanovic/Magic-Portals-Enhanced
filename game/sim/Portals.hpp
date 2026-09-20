@@ -175,6 +175,34 @@ struct Reflector {
     bool vertical = false; // its plane: a vertical one turns a shot's x back, a horizontal one its y
 };
 
+// A traversal this tick: the three points the original's teleport has in hand
+// when it calls vanishEffect and appearEffect (Portal.angelscript), and nothing
+// else.
+//
+// PortalManager::teleportToOther (bytes 144944..145873) calls vanishEffect(#61)
+// with the traveller's position BEFORE #69 moves it and with the portal it went
+// in by, and appearEffect(#71-75) with the portal it comes out of;
+// teleportToFirstStaticPortal (#44, #58) and ETHCallback_portal_static (#144,
+// #165) call the same pair. So one record covers every route a traveller takes,
+// which is what the port's one Tick loop already is.
+//
+// Cleared and refilled by every Tick, as Fire::State::blastsPx and
+// Turrets::State::spentPx are. Nothing in the simulation reads it: the layer
+// reads it on the tick that fills it (latchSimEffects) and adds the teleport's
+// three effects on the next frame (effects.json's suck_effect, sparkles and
+// appear_effect rows).
+struct Traversal {
+    // vanishEffect's objectPos: where the traveller stood, its own point. The
+    // port's is its body's centre, which for the PLAYER is 22 units over its feet
+    // (player.json's capsule, a guess) against the original's character point at
+    // 18.1 - the divergence 00_order 8.15 R25 leaves with the player's owner. So
+    // the sparkles, and the direction the suck effect is placed along, both sit
+    // about 4 units high on a teleporting player.
+    glm::dvec2 travellerPx{0.0};
+    glm::dvec2 entryPx{0.0}; // vanishEffect's portalPos: the end it went in by
+    glm::dvec2 exitPx{0.0};  // appearEffect's argument: the end it came out of
+};
+
 // A portal shot on its way.
 struct Flight {
     glm::dvec2 fromPx{0.0}; // the player's centre when it was fired
@@ -197,6 +225,7 @@ struct State {
     std::vector<Placed> placed;           // oldest first
     int portalsUsed = 0;                  // every portal placed: what the golden score counts
     int traversals = 0;
+    std::vector<Traversal> transits; // what went through this tick, for the frame to draw
     float lockoutS = 0.0f;
     std::optional<Flight> flight;
     int shotsFired = 0;

@@ -1027,11 +1027,13 @@ std::vector<MagicPortalsLayer::EmitterReport> MagicPortalsLayer::EmitterReports(
 // ITS DEPTH is the table's (00_order K13): the picture at Slot::Effect, the halo
 // a quarter in front of it, and its systems over the quarter after that - and a
 // system's own <StartPoint> z is added to the entity's before the slot is
-// counted, so appear_effect's flash draws at 2 + 10 = 12 and not at the 2 its
-// own picture takes, in front of every node up to 12 rather than up to 2.
+// counted. A z the script writes as a bare literal is divided by the art's scale
+// factor first (effectAdd, below), so appear_effect's flash draws at
+// 0.711 + 10 = 10.71 and not at the 0.711 its own picture takes: in front of
+// every node under 10.71 rather than only of those under 0.711.
 // (system_7 7a-2 says "in front of the player at 0"; since R10 the player is at
-// 1.42 in the level's units, so the 2 is already in front of it and the ten is
-// what carries the flash past the level's nearer decor.)
+// 1.42 in the level's units, so it is the ten that carries the flash past the
+// player and past the level's nearer decor.)
 //
 // ITS QUADS ARE POOLED. A particle this frame does not draw keeps its quad and is
 // turned off, where a level emitter's is destroyed: a burst of sparkles would
@@ -1346,6 +1348,7 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         report.id = effect.id;
         report.entity = effect.entity;
         report.atPx = effect.atPx;
+        report.zUnits = effect.zUnits;
         report.z = effect.z;
         report.haloZ = effect.haloZ;
         report.scriptScale = effect.scriptScale;
@@ -1374,8 +1377,11 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
                 ++report.released;
                 report.ageSumMs += particle.elapsedMs;
             }
-            report.quads += static_cast<int>(std::count_if(emitter.quads.begin(), emitter.quads.end(),
-                                                           [](entt::entity q) { return q != entt::null; }));
+            for (const entt::entity quad : emitter.quads) {
+                if (quad == entt::null) continue;
+                ++report.quads;
+                report.particleQuads.push_back(quad);
+            }
         }
         reports.push_back(std::move(report));
     }
@@ -1434,12 +1440,7 @@ void MagicPortalsLayer::buildEyes(entt::registry& registry) {
     // frame of the original's ever shows the eyes at the character's own point.
     const Effects::Spawn spawn =
         Effects::RedEyes(m_effectRules, atPx, m_playerZ, m_playerFrame, m_level.noGravity);
-    EffectSpawn add;
-    add.entity = spawn.entity;
-    add.atPx = spawn.atPx;
-    add.zUnits = spawn.z;
-    add.angleDeg = spawn.angleDeg;
-    add.scale = spawn.scale;
+    EffectSpawn add = effectAdd(spawn);
     // Carried by the player, which is what updateEyes' SetPosition every frame and
     // its Hide(true) together are: the port's player owner follows AND hides, and
     // effects.json's hide_with_player is refused unless it says so.
@@ -5324,17 +5325,49 @@ float MagicPortalsLayer::pitchFor(const Sounds::Hook& hook, double doorStrideMs)
     return static_cast<float>(speed);
 }
 
+// THE DEPTH A CALL GIVES ITS ENTITY, on the level's own axis (the visuals plan's
+// 7.3).
+//
+// The script writes a z two ways, and they are not the same number. Through
+// g_scale.scale it is already in the level's units, because the levels' own
+// eth_z are scaled by the same factor - a node at eth_z 2 stands at 2 - so
+// scale(32) is 32. A BARE LITERAL is in the engine's world units and does not
+// grow with the screen (00_order 8.12b), so it is divided by the scale factor,
+// exactly as the character's own AddScaledEntity z of 4 is: 4 / 2.8125 = 1.42
+// (art.json depth, step 76). appear_effect's z is the one such number the port
+// draws with - a bare 2, which is 0.71 on the level's axis and still in front of
+// the player - and fireball.ent's and small_explosion.ent's bare 0 is 0 either
+// way.
+//
+// A SYSTEM'S OWN <StartPoint> z IS THE SAME KIND OF RAW LITERAL and is NOT
+// divided here: SpawnEffect adds it to this as it stands, so the appear ring's
+// flash draws at 0.71 + 10. Steps 93 and 94 are committed against that sum (the
+// eyes' 2, the fireball's 4), and moving it would move their pixels for a reason
+// that is not this step's; it is handed to the between-slot table's owner
+// (00_order K13) with the numbers written down.
+MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn& spawn) const {
+    EffectSpawn add;
+    add.entity = spawn.entity;
+    add.atPx = spawn.atPx;
+    // The factor is art.json's and is refused below 0 when it is read, so the
+    // guard is for a level drawn with no art at all - which draws no effect.
+    add.zUnits = spawn.zScaled || !(m_artRules.scaleFactor > 0.0) ? spawn.z : m_artRules.LevelDepth(spawn.z);
+    add.angleDeg = spawn.angleDeg;
+    add.scale = spawn.scale;
+    return add;
+}
+
 // WHERE THE EFFECTS ARE TRIGGERED (system_7 7a-2), beside the sounds and for the
 // same reason: the tick says what happened, and the frame draws it.
 //
-// NOTHING IS WIRED YET. Each effect's rule arrives with the step that draws it -
-// the plan's 7.1 for the eyes, 7.3 for the teleport's three, 10.x for the
-// pickups' - and each reads the same kind of thing the sound watch reads: a
+// EACH EFFECT'S RULE ARRIVES WITH THE STEP THAT DRAWS IT - the fireballs and
+// their explosions (7.2) and the teleport's three (7.3) are here; the pickups'
+// are 10.x - and each reads the same kind of thing the sound watch reads: a
 // counter that went up, a flag that turned over, a record the tick left behind
-// (Portals::State's transits and refusals, Fire::State::blastsPx). What is built
-// here is the place they are queued from and the rule that queuing happens on the
-// TICK while adding and drawing happen on the FRAME, so that an effect cannot
-// reach Game::Level or the state hash by the back door.
+// (Portals::State's transits, Turrets::State::spentPx, Fire::State::blastsPx).
+// The rule is that queuing happens on the TICK while adding and drawing happen on
+// the FRAME, so that an effect cannot reach Game::Level or the state hash by the
+// back door.
 void MagicPortalsLayer::latchSimEffects() {
     if (!m_loaded) return;
 
@@ -5359,13 +5392,7 @@ void MagicPortalsLayer::latchSimEffects() {
         if (std::find(m_fireballEffects.begin(), m_fireballEffects.end(), ball.name) != m_fireballEffects.end()) {
             continue;
         }
-        const Effects::Spawn spawn = Effects::Fireball(m_effectRules, ball.atPx);
-        EffectSpawn add;
-        add.entity = spawn.entity;
-        add.atPx = spawn.atPx;
-        add.zUnits = spawn.z;
-        add.angleDeg = spawn.angleDeg;
-        add.scale = spawn.scale;
+        EffectSpawn add = effectAdd(Effects::Fireball(m_effectRules, ball.atPx));
         // ScaleParticleSystem(0, fireballScale), which only the dark dragon's fire
         // is given: 2 there and 1 everywhere else (darkdragon.json).
         add.firstSystemScale = ball.particleScale;
@@ -5388,28 +5415,36 @@ void MagicPortalsLayer::latchSimEffects() {
     // the original's point, because the original's callback moves the entity one
     // more frame before it reads the flag (130 px/s over a tick).
     for (const glm::dvec2& atPx : m_level.turrets.spentPx) {
-        const Effects::Spawn spawn = Effects::SmallExplosion(m_effectRules, atPx);
-        EffectSpawn add;
-        add.entity = spawn.entity;
-        add.atPx = spawn.atPx;
-        add.zUnits = spawn.z;
-        add.angleDeg = spawn.angleDeg;
-        add.scale = spawn.scale;
-        m_effectQueue.push_back(add);
+        m_effectQueue.push_back(effectAdd(Effects::SmallExplosion(m_effectRules, atPx)));
     }
     // AND WHERE A BOMB WENT OFF: explode()'s explosion_large.ent, at the bomb and
     // 32 units in front of it. Both are temporary - no sprite, and every system
     // repeating a set number of times - so the runtime frees each when its pools
     // are over, which is the engine's own rule and needs no owner.
     for (const glm::dvec2& atPx : m_level.fire.blastsPx) {
-        const Effects::Spawn spawn = Effects::LargeExplosion(m_effectRules, atPx);
-        EffectSpawn add;
-        add.entity = spawn.entity;
-        add.atPx = spawn.atPx;
-        add.zUnits = spawn.z;
-        add.angleDeg = spawn.angleDeg;
-        add.scale = spawn.scale;
-        m_effectQueue.push_back(add);
+        m_effectQueue.push_back(effectAdd(Effects::LargeExplosion(m_effectRules, atPx)));
+    }
+
+    // WHAT WENT THROUGH A PORTAL, and the three entities the original adds for
+    // each: the suck effect on the rim of the end it went in by, on the side it
+    // came from; the sparkles where it stood; and the flash at the end it comes
+    // out of (system_7 7c, effects.json's three rows). Whatever the traveller is
+    // - the player, a crate, a thrown stone - because vanishEffect is called for
+    // any entityToTeleport, and on the static route as well as the placed one:
+    // ETHCallback_portal_static #144/#165 calls the same pair that
+    // teleportToOther does, and the port's one Tick loop is both.
+    //
+    // IN THE ORIGINAL'S OWN ORDER, which is the order they are added in and so
+    // the order they draw in and draw their random from: vanishEffect's suck
+    // effect (#36-69) before its sparkles (#83-112), then appearEffect (#71-75).
+    // That a fireball's effect above is queued before a teleport's is the port's
+    // order and not a decoded one - the original's two callbacks run in whatever
+    // order its scene walk reaches them - and it shows only in the stream, never
+    // in a placement.
+    for (const Portals::Traversal& went : m_level.portals.transits) {
+        m_effectQueue.push_back(effectAdd(Effects::Suck(m_effectRules, went.travellerPx, went.entryPx)));
+        m_effectQueue.push_back(effectAdd(Effects::Sparkles(m_effectRules, went.travellerPx, went.entryPx)));
+        m_effectQueue.push_back(effectAdd(Effects::Appear(m_effectRules, went.exitPx)));
     }
 }
 

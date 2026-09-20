@@ -391,6 +391,10 @@ public:
         int id = 0;
         std::string entity;
         glm::dvec2 atPx{0.0};   // where it stands now: its owner's point, where it has one
+        // The depth the call gave it, on the LEVEL's axis: effectAdd's reading of
+        // Effects::Spawn (a scaled z as it stands, a bare literal over the scale
+        // factor), before any slot is counted.
+        double zUnits = 0.0;
         float z = 0.0f;         // its picture's slot (Slot::Effect)
         float haloZ = 0.0f;
         // Each of its emitters' z (Slot::EffectSystems), in the .ent's order: the
@@ -415,6 +419,11 @@ public:
         bool drawn = false;     // it has a picture quad
         bool hasLight = false;
         bool hasHalo = false;
+        // The registry entities its particles are drawn on, the live ones in
+        // emitter order: what a suite needs to ask the registry what became of
+        // THIS effect's specks rather than of every effect's at once. They are
+        // pooled, so a handle here outlives the frame that drew it.
+        std::vector<entt::entity> particleQuads;
         int systems = 0;        // its emitters
         int pool = 0;           // the particles they were made with, summed
         int active = 0;         // GetNumActiveParticles, summed over them
@@ -953,6 +962,10 @@ private:
     // What the TICK adds to the frame's queue. Nothing is wired yet: the rules
     // arrive with the steps that draw each effect.
     void latchSimEffects();
+    // One decoded call site turned into something to add: sim/Effects says which
+    // .ent, where, turned how and at what scale, and this says at what depth on
+    // the LEVEL's axis (Effects::Spawn::zScaled; the visuals plan's 7.3).
+    EffectSpawn effectAdd(const Effects::Spawn& spawn) const;
     // The player's red eyes (effects.json red_eyes; the visuals plan's 7.1).
     // MainCharacter's constructor adds the entity at the level's start, so
     // buildEyes runs at the end of buildDrawables - after the player quad, whose

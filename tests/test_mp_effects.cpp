@@ -16,6 +16,7 @@
 
 #include "sim/Effects.hpp"
 #include "sim/Loading.hpp"
+#include "sim/Particles.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -24,6 +25,7 @@
 #include <iterator>
 #include <string>
 #include <system_error>
+#include <vector>
 
 using namespace MagicPortals;
 
@@ -317,6 +319,109 @@ void TheLoadingScreenIsTheSameCall() {
     CHECK(Effects::Sparkles(rules, character, portal).atPx == Loading::SparklesAt(loading, view));
 }
 
+// ---- the ring the exit portal flashes -----------------------------------------
+
+// appear_effect.ent's one particle, which IS the flash: the entity carries no
+// <Sprite> at all, so what a player sees at the exit portal is a single ring of
+// onda.png shrinking from 133 units to 16 over half a second.
+//
+// The .ent states particles 1, allAtOnce 0, alphaMode 1, repeat 1, animationMode
+// 1, lifeTime 500 with no spread, size 133 with no spread, growth -6.4, minSize
+// 16, maxSize 991, its <StartPoint> at (0, 0, 10) and its colour (0.9, 0.7, 1) to
+// black. The numbers are written here rather than read, so that this suite stays
+// pure; the layer reads the file itself through Art::LoadEnt, and test_mp_layer
+// pins the same numbers against the real one.
+Particles::System TheAppearRing() {
+    Particles::System ring;
+    ring.bitmap = "onda.png";
+    ring.count = 1;
+    ring.allAtOnce = false;
+    ring.alphaMode = Particles::kAlphaAdd;
+    ring.additive = true;
+    ring.animationMode = 1;
+    ring.repeat = 1;
+    ring.lifeTimeMs = 500.0;
+    ring.size = 133.0;
+    ring.growth = -6.4;
+    ring.minSize = 16.0;
+    ring.maxSize = 991.0;
+    ring.startPointZ = 10.0;
+    ring.colour0 = glm::dvec4(0.9, 0.7, 1.0, 1.0);
+    ring.colour1 = glm::dvec4(0.0, 0.0, 0.0, 0.0);
+    return ring;
+}
+
+// Every spread of this system is zero, so the middle of each range is the range.
+double Midpoint(double from, double to) {
+    return (from + to) / 2.0;
+}
+
+// The size at +29, +62, +96, +131 and +166 ms - the five frames of the recording
+// rec11 that show the flash - which ETHParticleManager shrinks as
+// 133 + growth x elapsed x 60/1000, clamped at minSize (:200-262, Particles::Step).
+//
+// MEASURED off rec11 (30 fps, variable frame times): 122, 112, 98, 85 and 76
+// units, which system_7 G.4 gates at +/- 8. The recording confirms; the
+// arithmetic is what is pinned.
+void TheExitFlashShrinksAsTheEngineShrinksIt() {
+    const Particles::System ring = TheAppearRing();
+    const Particles::Owner owner{glm::dvec2(466.0, 150.0), 0.0};
+
+    struct Frame {
+        double atMs;
+        double want;     // 133 - 6.4 x t/16.67
+        double recorded; // rec11
+    };
+    const Frame frames[] = {{29.0, 121.9, 122.0}, {62.0, 109.2, 112.0}, {96.0, 96.1, 98.0},
+                            {131.0, 82.7, 85.0}, {166.0, 69.3, 76.0}};
+    for (const Frame& frame : frames) {
+        std::vector<Particles::Particle> pool = Particles::MakePool(ring, ring.count, owner, Midpoint);
+        CHECK_MSG(pool.size() == 1 && Near(pool.front().size, 133.0, 1e-9), "born at 133 units");
+        Particles::Step(ring, pool.front(), 0, 1, owner, frame.atMs, false, Midpoint);
+        const double size = pool.front().size;
+        const double sum = 133.0 - 6.4 * frame.atMs * 60.0 / 1000.0;
+        CHECK_MSG(Near(size, sum, 1e-9), "at +" + Num(frame.atMs) + " ms: " + Num(size) + ", not " + Num(sum));
+        CHECK_MSG(Near(size, frame.want, 0.05), "at +" + Num(frame.atMs) + " ms: " + Num(size));
+        CHECK_MSG(Near(size, frame.recorded, 8.0),
+                  "within 8 of rec11's " + Num(frame.recorded) + ": " + Num(size));
+        CHECK_MSG(Particles::Drawn(ring, pool.front(), false), "and drawn");
+    }
+
+    // The same shrink frame by frame: ten frames of a sixtieth take 6.4 off each,
+    // so a step of ten frames' worth and ten steps of one agree to the bit.
+    const double tick = 1000.0 / 60.0;
+    std::vector<Particles::Particle> walked = Particles::MakePool(ring, ring.count, owner, Midpoint);
+    for (int frame = 0; frame < 10; ++frame) {
+        Particles::Step(ring, walked.front(), 0, 1, owner, tick, false, Midpoint);
+    }
+    std::vector<Particles::Particle> once = Particles::MakePool(ring, ring.count, owner, Midpoint);
+    Particles::Step(ring, once.front(), 0, 1, owner, 10.0 * tick, false, Midpoint);
+    CHECK_MSG(Near(walked.front().size, 69.0, 1e-9), "ten frames in: " + Num(walked.front().size));
+    CHECK_MSG(Near(walked.front().size, once.front().size, 1e-9), "one step of ten frames says the same");
+
+    // It stops at 16 rather than shrinking away - 133 - 6.4 x 19 is 11.4, and
+    // minSize holds it - and it is over before the capture's +0.55 s: its one
+    // life is 500 ms, and the frame that spends it draws nothing (Drawn refuses a
+    // spent particle) and finishes the pool, so the runtime frees the entity. The
+    // engine renews the particle on that frame even though it was its last
+    // (:259), so its SIZE goes back to 133 there and the next frame's first test
+    // spends it; nothing of it is drawn either frame.
+    std::vector<Particles::Particle> life = Particles::MakePool(ring, ring.count, owner, Midpoint);
+    int lastDrawn = 0;
+    double clamped = 0.0;
+    for (int frame = 1; frame <= 33; ++frame) { // 33 frames = 550 ms
+        Particles::Step(ring, life.front(), 0, 1, owner, tick, false, Midpoint);
+        if (frame == 19) clamped = life.front().size;
+        if (Particles::Drawn(ring, life.front(), false)) lastDrawn = frame;
+    }
+    CHECK_MSG(Near(clamped, 16.0, 1e-9), "clamped at minSize 16 nineteen frames in: " + Num(clamped));
+    CHECK_MSG(lastDrawn > 0 && lastDrawn * tick <= 550.0,
+              "last drawn at frame " + std::to_string(lastDrawn) + ", " + Num(lastDrawn * tick) + " ms");
+    CHECK_MSG(Particles::Finished(ring, life), "and the pool is over by +0.55 s");
+    std::printf("  appear_effect: 133 u at birth, %.1f u ten frames in, last drawn at %.0f ms\n",
+                walked.front().size, lastDrawn * tick);
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
@@ -394,6 +499,7 @@ int main() {
     AVanishLandsWhereTheScriptPutsIt();
     TheTurnFollowsTheSideTheTravellerCameFrom();
     TheLoadingScreenIsTheSameCall();
+    TheExitFlashShrinksAsTheEngineShrinksIt();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

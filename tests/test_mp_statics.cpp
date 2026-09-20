@@ -142,6 +142,49 @@ void AStaticPortalSendsThePlayerToItsPartnerAndStays() {
     CHECK_EQ(run.level.portals.traversals, 1);
 }
 
+// The three points the original's teleport hands its two effect calls, written
+// down by the tick for the frame to draw (Portals::Traversal, the visuals plan's
+// step 7.3): where the traveller STOOD, the end it went in by and the end it came
+// out of. vanishEffect is called before the move (teleportToOther #61 before
+// #69), so the point it records is the one the sparkles are added at, not where
+// the player lands.
+void ATraversalWritesDownWhatTheEffectsNeed() {
+    Run run;
+    if (!Begin("level0", run)) return;
+    const Portals::Static* from = StaticWithIndex(run, 2);
+    const Portals::Static* to = StaticWithIndex(run, 3);
+    if (from == nullptr || to == nullptr) return;
+
+    // Nothing has gone through yet, and a tick that carries nothing leaves nothing.
+    Tick(run);
+    CHECK(run.level.portals.transits.empty());
+
+    // A step off the portal's own point, so that the direction the suck effect is
+    // placed along is not zero and the record cannot be confused with the portal.
+    const glm::dvec2 stood(from->atPx.x - 6.0, from->atPx.y);
+    PutPlayer(run, stood);
+    const glm::dvec2 before = PlayerPx(run);
+    Tick(run);
+    CHECK_EQ(run.level.portals.traversals, 1);
+    CHECK_EQ(run.level.portals.transits.size(), std::size_t(1));
+    if (run.level.portals.transits.size() != 1) return;
+    const Portals::Traversal& went = run.level.portals.transits.front();
+    // Within a unit of where it was put: the tick steps physics before the
+    // portals, so a third of a unit of falling is already in the point - which is
+    // the point the original's vanishEffect is given too, its callbacks running
+    // after the step.
+    CHECK_MSG(glm::distance(went.travellerPx, before) < 1.0,
+              "the traveller stood at " + Px(went.travellerPx) + ", not " + Px(before));
+    CHECK_MSG(glm::distance(went.travellerPx, PlayerPx(run)) > kArrivalPx,
+              "and that is where it STOOD, not where it landed: " + Px(PlayerPx(run)));
+    CHECK_MSG(went.entryPx == from->atPx, "in by " + Px(went.entryPx) + ", " + from->name);
+    CHECK_MSG(went.exitPx == to->atPx, "out of " + Px(went.exitPx) + ", " + to->name);
+
+    // And it is this tick's record: the next tick clears it.
+    Tick(run);
+    CHECK_MSG(run.level.portals.transits.empty(), "the record is one tick's");
+}
+
 void AStoneThroughAStaticPairGoesOnce() {
     // The original puts a traveller down at its exit itself, so a stone comes out
     // of a static portal inside it. Entries are edges, and the lockout covers the
@@ -273,6 +316,7 @@ void Level0FromTheSpawnHoldingRight() {
 void runTests() {
     Level0ShipsTwoPairs();
     AStaticPortalSendsThePlayerToItsPartnerAndStays();
+    ATraversalWritesDownWhatTheEffectsNeed();
     AStoneThroughAStaticPairGoesOnce();
     WithStaticPortalsSpentBothEndsGo();
     Level1sPortalLeadsToThePlacedOne();

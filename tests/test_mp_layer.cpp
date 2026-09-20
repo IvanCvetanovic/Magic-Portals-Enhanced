@@ -7276,6 +7276,130 @@ void AnExplosionIsTemporaryAndCarriesNoHalo() {
 }
 
 
+// THE TELEPORT'S THREE EFFECTS (the visuals plan's 7.3, system_7 7c): a traveller
+// going through a portal is sucked in at the rim of the end it went in by, leaves
+// sparkles where it stood, and the end it comes out of flashes a ring.
+//
+// The sim writes the tick's traversals down (Portals::Traversal) and the layer
+// turns each into the three AddEntity calls the original makes - vanishEffect's
+// two and appearEffect's one, in that order. The arithmetic is pinned in
+// test_mp_effects against the script's floats; what is pinned here is that the
+// layer feeds it the right points, and that the three entities are read from the
+// original's .ent files and placed at the depth their calls give them.
+//
+// Level 1-01's second pair is used, so the traveller is the player and both ends
+// are static portals: ETHCallback_portal_static #144/#165 calls the same pair
+// that PortalManager::teleportToOther does.
+void ATeleportAddsTheSuckTheSparklesAndTheFlash() {
+    if (!OriginalArtIsThere("ATeleportAddsTheSuckTheSparklesAndTheFlash")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const int before = layer.EffectsSpawned(); // the eyes, which every level adds
+
+    // portal_static_582 at (334, 200) and its partner portal_static_583 at
+    // (498, 200) (test_mp_statics). A few units to the left of the first, so the
+    // direction the suck effect is placed along is neither zero nor axis-doubtful.
+    const MagicPortals::Portals::Static* from = nullptr;
+    const MagicPortals::Portals::Static* to = nullptr;
+    for (const MagicPortals::Portals::Static& portal : layer.SimLevel()->portals.statics) {
+        if (portal.index == 2) from = &portal;
+        if (portal.index == 3) to = &portal;
+    }
+    CHECK(from != nullptr && to != nullptr);
+    if (from == nullptr || to == nullptr) return;
+    const glm::dvec2 exitPx = to->atPx;
+    {
+        auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+        const glm::vec3 at = MagicPortals::Units::ToWorld(from->atPx.x - 6.0, from->atPx.y);
+        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+        registry.get<RigidBodyComponent>(layer.SimLevel()->player).velocity = glm::vec3(0.0f);
+    }
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.SimLevel()->portals.transits.size() == 1,
+              "the player went through: " + std::to_string(layer.SimLevel()->portals.transits.size()) +
+                  " traversal(s)");
+    if (layer.SimLevel()->portals.transits.size() != 1) return;
+    const MagicPortals::Portals::Traversal went = layer.SimLevel()->portals.transits.front();
+
+    // The tick only queued them; THIS is the frame that adds them.
+    CHECK_MSG(layer.EffectsSpawned() == before, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.EffectsSpawned() == before + 3, "three added on the frame: " +
+                                                        std::to_string(layer.EffectsSpawned() - before));
+    const MagicPortalsLayer::EffectReport suck = ByIdIn(layer.EffectReports(), before + 1);
+    const MagicPortalsLayer::EffectReport sparkles = ByIdIn(layer.EffectReports(), before + 2);
+    const MagicPortalsLayer::EffectReport flash = ByIdIn(layer.EffectReports(), before + 3);
+    CHECK_MSG(suck.entity == "suck_effect.ent" && sparkles.entity == "sparkles.ent" &&
+                  flash.entity == "appear_effect.ent",
+              "in the script's order: " + suck.entity + ", " + sparkles.entity + ", " + flash.entity);
+    if (flash.id == 0) return;
+
+    // WHERE. The sums here are in doubles where the script's are in floats, so
+    // they agree to about a thousandth of a unit rather than to the bit.
+    const glm::dvec2 d = went.travellerPx - went.entryPx;
+    const double length = std::sqrt(d.x * d.x + d.y * d.y);
+    const glm::dvec2 rim = went.entryPx + d / length * 32.0;
+    CHECK_MSG(nearlyU(suck.atPx.x, rim.x, 1e-3) && nearlyU(suck.atPx.y, rim.y, 1e-3),
+              "the suck effect on the entry portal's rim, 32 u toward where the player stood: (" +
+                  std::to_string(suck.atPx.x) + ", " + std::to_string(suck.atPx.y) + ")");
+    CHECK_MSG(sparkles.atPx == went.travellerPx, "the sparkles where it stood, exactly");
+    CHECK_MSG(flash.atPx == exitPx, "the flash at the exit portal itself");
+
+    // WHAT THEY ARE, read from the original's own .ent files: none has a sprite
+    // or a light, each is temporary, and their systems are the ones the files
+    // state - one ring of 133 units at the exit, one 64-unit suck, twelve sparks.
+    CHECK_MSG(!suck.drawn && !sparkles.drawn && !flash.drawn, "no <Sprite> among the three");
+    CHECK_MSG(!suck.hasLight && !sparkles.hasLight && !flash.hasLight, "and no <Light>");
+    CHECK_MSG(suck.temporary && sparkles.temporary && flash.temporary,
+              "all three temporary: the engine frees each when its particles are over");
+    CHECK_MSG(flash.systems == 1 && !flash.systemSizePx.empty() && nearlyU(flash.systemSizePx.front(), 133.0),
+              "appear_effect.ent's ring is one particle of 133 u: " +
+                  std::to_string(flash.systemSizePx.empty() ? 0.0 : flash.systemSizePx.front()));
+    CHECK_MSG(flash.pool == 1, "one particle: " + std::to_string(flash.pool));
+    CHECK_MSG(suck.systems == 1 && !suck.systemSizePx.empty() && nearlyU(suck.systemSizePx.front(), 64.0),
+              "suck_effect.ent's is 64 u");
+    CHECK_MSG(sparkles.systems == 1 && sparkles.pool == 12, "sparkles.ent holds 12: " + std::to_string(sparkles.pool));
+
+    // DEPTH. The suck effect and the sparkles are added at g_scale.scale(32), 32
+    // units of the level's own axis; the flash at a BARE 2, which is 2 of the
+    // engine's world units and so 2 / 2.8125 = 0.711 of the level's - the same
+    // reading that puts the character's own z 4 at 1.42 (art.json depth).
+    CHECK_MSG(nearlyU(suck.zUnits, 32.0) && nearlyU(sparkles.zUnits, 32.0), "the vanish pair at 32 u");
+    CHECK_MSG(nearlyU(flash.zUnits, 2.0 / 2.8125, 1e-9),
+              "the flash at a bare 2 over the scale factor: " + std::to_string(flash.zUnits));
+    // And its ring still draws in front of the player, because its system's own
+    // <StartPoint> z 10 stands on top of that.
+    CHECK_MSG(!flash.systemZ.empty() && flash.systemZ.front() > layer.PlayerSlotZ(),
+              "and its ring in front of the player: " + std::to_string(flash.systemZ.empty() ? 0.0F : flash.systemZ.front()) +
+                  " against " + std::to_string(layer.PlayerSlotZ()));
+    std::printf("  teleport: suck at (%.1f, %.1f) z %.1f, sparkles at (%.1f, %.1f), flash at (%.1f, %.1f) z %.3f\n",
+                suck.atPx.x, suck.atPx.y, suck.zUnits, sparkles.atPx.x, sparkles.atPx.y, flash.atPx.x, flash.atPx.y,
+                flash.zUnits);
+
+    // AND THEY GO BY THEMSELVES: the ring's one life is 500 ms and the sparkles'
+    // longest is 1100, so two seconds of frames outlives all three.
+    for (int frame = 0; frame < 130; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    int left = 0;
+    for (int id = before + 1; id <= before + 3; ++id) {
+        if (ByIdIn(layer.EffectReports(), id).id != 0) ++left;
+    }
+    // BY ID rather than by counting what is left: the level runs on through those
+    // frames, and anything that goes through a portal again would add three more
+    // of its own. What is asserted is that THESE three are freed.
+    CHECK_MSG(left == 0, std::to_string(left) + " of the teleport's three effects are still there");
+    layer.OnDetach(registry);
+}
+
 void AnEffectsPictureHaloAndSystemsStandWhereTheTableSays() {
     if (!OriginalArtIsThere("AnEffectsPictureHaloAndSystemsStandWhereTheTableSays")) return;
     entt::registry registry;
@@ -7523,23 +7647,32 @@ void AnEffectFollowsItsOwnerAndNothingHappensOnATick() {
     // no particle: the effects runtime is the frame's, as the particles are.
     const int quadsBefore = Tagged(registry, "Magic Portals Effect Particle");
     const int activeBefore = carried.active;
+    const int spawnedBefore = layer.EffectsSpawned();
     for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
     const MagicPortalsLayer::EffectReport still = ByIdIn(layer.EffectReports(), id);
     CHECK_MSG(Tagged(registry, "Magic Portals Effect Particle") == quadsBefore,
               "no quad is made on a tick: " + std::to_string(quadsBefore) + " before, " +
                   std::to_string(Tagged(registry, "Magic Portals Effect Particle")) + " after 30 ticks");
     CHECK_MSG(still.id != 0 && still.active == activeBefore, "and no particle moves on one");
-    CHECK_MSG(layer.EffectsSpawned() == 2, "and latchSimEffects queues nothing until a rule is wired");
+    // A tick QUEUES - this run walks the player through level0's portals, and
+    // each traversal queues the teleport's three (step 7.3) - but it adds
+    // nothing: only a frame does.
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore,
+              "and a tick adds nothing, whatever it queued: " + std::to_string(layer.EffectsSpawned()) +
+                  " against " + std::to_string(spawnedBefore));
 
     // AND NOTHING OUTLIVES ITS LEVEL: a retry takes the level's effects with it,
     // as it takes its emitters. Read before the frame that follows draws: the
     // retry has already added the new level's own eyes, whose pool has no quad
     // until a frame asks for one.
+    const int live = static_cast<int>(layer.EffectReports().size());
+    const int freedBefore = layer.EffectsFreed();
+    const int spawnedAtRetry = layer.EffectsSpawned();
     press(layer, registry, MagicPortalsLayer::kRetry);
-    CHECK_MSG(ByIdIn(layer.EffectReports(), id).id == 0 && layer.EffectsFreed() == 2,
-              "a retry frees what the level added, the eyes with it: " + std::to_string(layer.EffectsFreed()) +
-                  " freed");
-    CHECK_MSG(layer.EffectReports().size() == 1 && layer.EffectsSpawned() == 3,
+    CHECK_MSG(ByIdIn(layer.EffectReports(), id).id == 0 && layer.EffectsFreed() == freedBefore + live,
+              "a retry frees every effect the level had, the eyes with it: " +
+                  std::to_string(layer.EffectsFreed() - freedBefore) + " of " + std::to_string(live));
+    CHECK_MSG(layer.EffectReports().size() == 1 && layer.EffectsSpawned() == spawnedAtRetry + 1,
               "and the level it loads adds its own eyes again");
     CHECK_MSG(Tagged(registry, "Magic Portals Effect") == 0 && Tagged(registry, "Magic Portals Effect Particle") == 0 &&
                   Tagged(registry, "Magic Portals Effect Light") == 0 &&
@@ -7627,11 +7760,18 @@ void ThePlayerWearsItsRedEyes() {
     // THE DOORWAY. The character is hidden and not deleted (ETHEntity::Hide), so
     // the eyes are hidden with it - and, not being always active, they are not
     // updated at all while it is: nothing more is released and nothing is drawn.
-    const auto shown = [&registry]() {
+    // ITS OWN quads and no other effect's: holding right walks the player through
+    // level0's portals on the way to the door, and each traversal leaves the
+    // teleport's three effects burning down behind it (step 7.3). They are
+    // somebody else's specks, and a count of every visible one would read them as
+    // the eyes'. The quads are pooled, so the handles taken at the door are the
+    // ones the frames after it draw on.
+    const auto shownOf = [&registry](const std::vector<entt::entity>& quads) {
         int count = 0;
-        for (auto [entity, tag, renderable] : registry.view<TagComponent, RenderableComponent>().each()) {
-            (void)entity;
-            if (tag.tag == "Magic Portals Effect Particle" && renderable.isVisible) ++count;
+        for (const entt::entity quad : quads) {
+            if (!registry.valid(quad)) continue;
+            const auto* renderable = registry.try_get<RenderableComponent>(quad);
+            if (renderable != nullptr && renderable->isVisible) ++count;
         }
         return count;
     };
@@ -7646,13 +7786,15 @@ void ThePlayerWearsItsRedEyes() {
     CHECK_MSG(atDoor.id == 1 && atDoor.hidden, "the eyes are hidden with the character, not freed");
     const int released = atDoor.released;
     const double ageSum = atDoor.ageSumMs;
+    const std::vector<entt::entity> eyeQuads = atDoor.particleQuads;
+    CHECK_MSG(!eyeQuads.empty(), "the eyes have specks of their own to hide");
     CHECK_MSG(released > 0 && ageSum > 0.0, "and they had been releasing until then: " + std::to_string(released));
     int drawnAfter = 0;
     int moved = 0;
     for (int tick = 0; tick < 60; ++tick) {
         tickWith(layer, registry, kRest, {}, {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-        drawnAfter += shown();
+        drawnAfter += shownOf(eyeQuads);
         const MagicPortalsLayer::EffectReport now = ByIdIn(layer.EffectReports(), 1);
         if (now.id != 1 || now.released != released || now.ageSumMs != ageSum) ++moved;
     }
@@ -7805,6 +7947,7 @@ void runTests() {
     AnExplosionIsTemporaryAndCarriesNoHalo();
     ADestroyedFireballLeavesASmallExplosion();
     ABombsBlastLeavesALargeExplosion();
+    ATeleportAddsTheSuckTheSparklesAndTheFlash();
     AnEffectMovesNoParticleOfTheLevels();
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();

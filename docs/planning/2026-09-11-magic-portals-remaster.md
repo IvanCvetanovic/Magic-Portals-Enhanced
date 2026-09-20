@@ -14515,3 +14515,172 @@ pass, and the gates that fail, fail in the record.
 - **Nothing is owed on `test_mp_boss` any more.** It was refused twice by Smart App Control while this step was
   built and is recorded that way above; the round-3 verifier ran it once on the unchanged binary and it passed
   126 / 0. The item is closed here so that the next role in this tree does not spend a launch on it.
+
+## Step 95 - the three effects a teleport leaves behind, and the depth a bare literal means (built)
+
+The visuals plan's step 7.3 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 7; its brief
+`system_7.md` 7c and G.4). Track B, on the `visuals-c` tree, after steps 90 (6.1), 91 (6.2), 92 (6.3), 93 (7.1)
+and 94 (7.2) - the merge renumbers. Game-only: the engine submodule stays at `4bfcf67` and no file under
+`engine/` is touched. Changed: `game/sim/Portals.{hpp,cpp}`, `game/MagicPortalsLayer.{hpp,cpp}` and
+`tests/test_mp_{effects,statics,layer}.cpp`. No data file changes: step 91 already decoded the three rows into
+`data/effects.json` and pinned their arithmetic; this step is what draws them. **Whatever goes through a portal -
+the player, a crate, a thrown stone - is now sucked into the rim of the end it went in by, leaves sparkles where it
+stood, and the end it comes out of flashes a 133-unit ring that shrinks to 16 over half a second.** And the flag
+step 94 recorded as a trap is consumed: a z the script writes as a bare literal is in the engine's world units, so
+`appear_effect`'s 2 is 0.711 of the level's axis and not 2.
+
+**BLOCKERS CHECKED.** 7.3's one blocker, **6.3**, is step 92 (`d36abef`), committed in this tree: the effects
+runtime, `m_effectRandom` and the between-slot table are all in place, and this step adds no class to that table -
+the three are effects and take `Slot::Effect`, `Slot::EffectHalo` and `Slot::EffectSystems` as step 92 left them.
+Section **8.13 does not amend 7.3**, so section 7's row stands as written. rec11 is 30 fps VFR and the row says so:
+it confirms, it does not measure. No ruling of R1-R25 names this step; two standing ones are used rather than
+decided - **R10**, which puts the player at the z 4 the decode gives it (1.42 on the level's axis, step 76), and
+**R12**, the 720 selection, whose 720 / 256 = 2.8125 is the factor a bare literal is divided by (`art.json`
+`depth.scale_factor`).
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; the entities under
+`reference/extracted/assets/entities/`).
+- **`vanishEffect`** (Portal.angelscript 356384..356958), called with the traveller's position BEFORE it is moved
+  and with the portal it went in by: #2-13 `direction = normalize(objectPos - portalPos)`; #14-26 the offset
+  `direction x g_scale.scale(32)`; #28-34 the angle `radianToDegree(getAngle(direction)) - 90`; #36-69
+  `AddEntity('suck_effect.ent', vector3(portalPos + offset, scale(32)), angle, ...)`; #83-112
+  `AddEntity('sparkles.ent', vector3(objectPos, scale(32)), the same angle, ...)`.
+- **`appearEffect`** (357060..357278) #12-26, called with the exit portal once the traveller stands there:
+  `AddEntity('appear_effect.ent', vector3(pos, 2), 0, ...)` - the angle 0 and **the z a bare `PshC4 2f`**, not
+  through `g_scale.scale`.
+- **Both are called on every route a traveller takes**: `PortalManager::teleportToOther` #61 and #71-75,
+  `teleportToFirstStaticPortal` #44 and #58, and `ETHCallback_portal_static` #144 and #165. The port's one `Tick`
+  loop is all three, so one record covers them.
+- **The three entities.** `suck_effect.ent`: no `<Sprite>`, no `<Light>`, one system of 1 `inverted_explosion.bmp`
+  cut 10 x 1, `a1 rep1`, life 500, size 64, no growth, colour (0.7, 0.6, 1). `sparkles.ent`: 12 `sparkles.bmp`,
+  `a1 rep1`, life 1050 +- 100, size 20 +- 22, growth -0.4, `randAngleStart` 360, `angleDir` 3,
+  `<RandStartPoint>` (20, 32), colour (0.8, 0.8, 1) to black. `appear_effect.ent`: 1 `onda.png`, `a1 rep1`, life
+  500, **size 133, growth -6.4, minSize 16**, `<StartPoint>` z 10, colour (0.9, 0.7, 1) to black. All three have a
+  set repeat and no sprite, so `ETHEntity::IsTemporary` holds for each and the engine frees it once its pool is
+  over - no owner, and no clock of the port's own.
+
+**WHAT CHANGED.**
+- **`sim/Portals`.** `Traversal` - the traveller's point, the end it went in by and the end it came out of - and
+  `State::transits`, cleared and refilled by every `Tick` exactly as `Fire::State::blastsPx` and
+  `Turrets::State::spentPx` are - and `Game::AfterStep` reaches `portals.Tick` unconditionally (its only
+  `return` between the two is inside a lambda), so a tick the latch reads on is always a tick that refilled
+  the record and it cannot go stale under a death or a finish. The traveller's point and the entry portal's
+  are read BEFORE `Teleport` moves the
+  body, which is the order `teleportToOther` has (#61 before #69); the exit is the PORTAL's own point and not where
+  the body lands, which `Portal::ExitPosition` may push off it. Nothing in the simulation reads the record.
+- **`MagicPortalsLayer::latchSimEffects`.** One block: for each traversal, `Effects::Suck`, `Effects::Sparkles`,
+  `Effects::Appear`, queued in that order - the order the script adds them in, and so the order they draw in and
+  draw their random in. That a fireball's effect is queued before a teleport's within one tick is the port's order
+  and not a decoded one; the original's two callbacks run in whatever order its scene walk reaches them, and it
+  shows only in the stream, never in a placement.
+- **`MagicPortalsLayer::effectAdd`**, the one place a decoded call site becomes something to add. It carries the
+  z rule below, and the four sites that each wrote the same five lines - the eyes, the fireball and the two
+  explosions - now go through it.
+- **`EffectReport`** grows `zUnits` (the depth the call gave it, before any slot is counted) and `particleQuads`
+  (the registry entities its particles are drawn on), both for the suites.
+
+**THE BARE LITERAL, which step 94 recorded as a trap for this step.** `Effects::Spawn::zScaled` was read and
+consumed by nothing: `latchSimEffects` assigned `add.zUnits = spawn.z` for every row, which is right for a z
+through `g_scale.scale` - the levels' own `eth_z` are scaled by the same factor, so `scale(32)` is 32 - and wrong
+for a literal. `effectAdd` now divides a literal by `art.json`'s `depth.scale_factor`, the same reading that puts
+the character's own AddScaledEntity z of 4 at 4 / 2.8125 = 1.42 (step 76, R10). **It moves exactly one number in
+the game**: `appear_effect`'s 2 becomes 0.711. `fireball` and `small_explosion` carry a bare 0, which is 0 either
+way, and `explosion_large`, the vanish pair and the eyes are all scaled. The 1-01 and 2-01 rows of the gate table
+are what measures that: both frames come out byte-identical to step 94's.
+
+**A SYSTEM'S OWN `<StartPoint>` z IS THE SAME KIND OF RAW LITERAL AND IS NOT CONVERTED HERE.** `SpawnEffect` adds
+it to the entity's z as the `.ent` states it, so the appear ring's flash draws at 0.711 + 10 = 10.71 rather than at
+0.711 + 3.56. Steps 93 and 94 are committed against that sum - the eyes' `<StartPoint>` z 2, the fireball's 4 - and
+moving it would move their pixels for a reason that is not this step's. It changes no gate here (the ring is in
+front of the player either way, 4.27 or 10.71 against 1.42), it is written into the code beside the rule it breaks,
+and it is handed to the between-slot table's owner (00_order K13) with both numbers.
+
+**THE GATES** (00_order section 7's 7.3 row and `system_7` G.4). "Today" is step 94's after captures in this tree
+(`out/parity/visuals/7.2/after/`), re-read rather than quoted from the brief. Captures, scripts and logs:
+`out/parity/visuals/7.3/`. **Frame times below are `(f - 36) / 60`**: the ring's birth frame is FITTED
+from its own sizes rather than assumed - `133 - 6.4 (f - B)` gives B = 36.06 from f42's 95.0 u and 36.00 from
+f46's 69.0 u - and that is the anchor the measuring scripts already use (`ring_box.py`, `onbody.py`, whose own
+`t_ms` column prints 0.0 at f36 and 500.0 at f66). The first round's prose read every moment a frame late, off
+the one script that anchored on f37 (`radial.py`); every time below is the f36 anchor.
+
+| Gate | Required | Today | Measured |
+|---|---|---|---|
+| `test_mp_effects`: the appear ring's size | 121.9 / 109.2 / 96.1 / 82.7 / 69.3 u at +29 / +62 / +96 / +131 / +166 ms | no such case | **121.864 / 109.192 / 96.136 / 82.696 / 69.256 u: passes**, each within 0.05 of the gate's own rounding and exact to 1e-9 against `133 - 6.4 x t x 60/1000`, driven through `Particles::Step` itself. Ten frames of a sixtieth give 69.0 u, and one step of ten frames' worth agrees |
+| the same, against rec11 | 122 / 112 / 98 / 85 / 76 u +- 8 | - | **passes**: -0.1, -2.8, -1.9, -2.3, -6.7 |
+| `test_mp_effects`: rec11 teleport 1's suck quad centre | (120.4, 86.1) u | pinned by step 91 | **(120.357, 86.054): re-measured, passes.** Not new work - step 91 wrote it - and it is run again because it is this step's gate |
+| capture: the appear ring in front of the player | in front | no effect to draw | **passes, measured on the player's own silhouette.** At +167 ms and +200 ms (f46 and f48) the ring's annulus crosses the character: its body pixels ON the annulus are **+18.9 and +21.2** grey levels brighter than its body pixels off it in the same frame, so the additive ring lights the character rather than being covered by it. The depth that happens at is pinned in `test_mp_layer`: the flash's system z is in front of `PlayerSlotZ()` |
+| capture: no ring at +0.55 s | none | - | **passes.** The ring's fitted size tracks the engine's -6.4 u a frame from f38 to f54 and then sits at the 16 u clamp through f66 (+500 ms); at f68 (+533 ms) the fit gives 14.0 u and at f70 (+567 ms) 11.5 u - both under a clamp a live ring cannot go below, which is the fit wandering off a ring that is no longer there. **The gate's own +550 ms falls between two captured frames** at a sixtieth, and the two that bracket it (f68, f70) both fit under the clamp, so the ring is gone on either side of the moment. **The eye does not settle this and is not asked to**: the exit portal's own art carries a ring-shaped bump at the very radius a clamped 16 u ring takes (+12.8 and +13.2 grey at r 18-19 px on f72 and f74, frames that hold no ring - `7.3/verify1/radial.txt`), and the ring's colour has lerped to black by then. Two readings settle it instead. **The fitted SIZE**: 14.0 and 11.5 u are under the `.ent`'s own 16 u minimum, which a drawn particle cannot be. **The score**, read over the 14-30 u sizes a live clamped ring must take: f70 scores 0.4136, inside the 0.33-0.46 band the same box gives on f30-f34 and f72-f80, frames with no ring at all (`7.3/verify1/control.txt`) - while f68's 0.5092 is NOT in that band, which is why the sub-clamp fit and not the score is what rules the ring out there. And the arithmetic agrees to the frame - one particle, life 500 ms from its release, last drawn at +500 ms - which `test_mp_effects` pins |
+| capture: the ring's size over +2..+10 frames (G.4) | 122 / 112 / 98 / 85 / 76 u +- 8 | - | **passes: 118.5 / 107.0 / 95.0 / 82.0 / 69.0 u**, so -3.5, -5.0, -3.0, -3.0, -7.0. Measured by template match of `particles/onda.png` in a 460 px box at the exit portal, over quad sizes 10-140 u in half-unit steps. Its centre holds to **+-1 px** over 15 frames, and a line through the measured sizes falls at **-6.28 u a frame** against the engine's -6.4 |
+| K8: byte-identical outside the new picture's box | 1-01 and 2-01 f420 | step 94's `e2da5131...` and `1babb1c0...` | **passes, both md5-identical.** 1-01 is the eyes' own level and 2-01 the fireball's, so the two cover every effect already drawn; neither teleports anything in 420 frames with no input, which is what makes them the pair the z change is measured on |
+| K8: the 128-level sweep | what changed is the teleport's own | step 94's `7.2/after/sweep` | **passes: 128 of 128 byte-identical** to step 94's own sweep (`7.3/compare_sweep.py`, `compare_sweep.txt`). Nothing goes through a portal on a 420-frame capture with no input, so this step's pixels are on none of the 128, and the z change moves no other effect on any of them. 128 launches, every one exit 0 |
+| Validation | exit 0, silent | - | **passes**: validation ACTIVE in all 132 launches (128 sweep, 1-01, 2-01, the hold and the rebuild check), and **0** `[Validation]` lines in any log beyond the two Steam overlay layer notices every launch on this machine prints |
+
+**THE BINARY THE CAPTURES WERE MEASURED ON.** Every capture above comes from `MagicPortals.exe` md5
+`6af143b7...`. The tree was then edited three times for COMMENTS AND THE RECORD ONLY - a test's comment; the
+rule about `<StartPoint>` z moved beside the function it belongs to; and, when the round's verification found
+two pieces of writing stale, the effects comment that still read `2 + 10 = 12` after the z change had replaced
+it and the gate rows' frame times, which were read off the one script anchored on f37. Each rebuild was
+launched once on 1-01 f420: `af2ec790...` and then `54925c01...` (the source committed here), and both give
+`e2da5131...` again, the same frame as step 94's, so the source left here is the source the numbers were read
+on.
+
+**THE SUITES.** `test_mp_effects` **249 checks, 0 failures**; `test_mp_statics` **83, 0**; `test_mp_layer`
+**1419, 0**. The full `ctest` was NOT run: 7.3's definition of done does not ask for it, and Smart App Control
+notifies the owner on every blocked launch. `test_mp_layer.exe` was refused once (exit 126) and ran on its first
+relink; `MagicPortals.exe` was refused once and ran on its first relink too, which is where every capture above
+comes from.
+
+- **`test_mp_effects`** gains the ring: `appear_effect.ent`'s system built from its stated numbers and stepped by
+  `Particles::Step`, the five sizes above, the frame-by-frame walk against one long step, the 16 u clamp nineteen
+  frames in, and the pool over before +0.55 s. The numbers are written into the case rather than read from the
+  `.ent`, because that suite is pure and never skips; the real file is pinned in `test_mp_layer`, which reads it
+  through `Art::LoadEnt` as the layer does.
+- **`test_mp_statics`** gains the record: a tick that carries nothing leaves nothing, a traversal writes the point
+  the traveller STOOD at (within a unit of where it was put, and further than the arrival distance from where it
+  landed), the end it went in by and the end it came out of, and the next tick clears it.
+- **`test_mp_layer`** gains a real teleport on 1-01's second pair: three effects added in the script's order on the
+  FRAME after the tick, the suck effect on the entry portal's rim 32 u toward where the player stood, the sparkles
+  exactly where it stood, the flash at the exit portal itself, the vanish pair at 32 u and the flash at
+  **2 / 2.8125**, its ring one particle of 133 u in front of the player, and all three freed by themselves.
+- **Two of its cases were re-written because this step makes them stale**, not because they broke:
+  `AnEffectFollowsItsOwnerAndNothingHappensOnATick` asserted "latchSimEffects queues nothing until a rule is
+  wired" - its run holds right across level0 and now teleports - and its two counted totals (2 spawned, 2 freed)
+  are now read as differences, which is what they meant. `ThePlayerWearsItsRedEyes` counted EVERY visible effect
+  particle in the frame to say the eyes draw nothing in the doorway; it now counts the eyes' own quads
+  (`EffectReport::particleQuads`), because the teleports on the way to the door leave other effects burning down
+  behind it. Both say more than they did.
+
+**RECORDED DEVIATIONS.**
+1. **The traveller's point is the port's body centre.** The original's `GetPositionXY` for the character is 18.1
+   units over its feet; the port's capsule centre is 22 (`player.json`, a guess), so the sparkles - and the
+   direction the suck effect is placed along - sit about 4 units high on a teleporting PLAYER. This is exactly the
+   carrier-point divergence 00_order 8.15 **R25** leaves with the player's owner, and it is recorded here rather
+   than fixed, because fixing it would move the player's own picture.
+2. **The teleport's three draw from the same `m_effectRandom` as the eyes**, so on a level where something
+   teleports, every later effect's spread moves against a run where nothing does. That is K8's gate wording, which
+   step 94 already records as a known deviation the eyes made unavoidable; nothing here makes it worse, and the two
+   byte-identity rows above are measured on levels that teleport nothing.
+3. **The suck effect's turn is the first non-zero `angleDeg` the effects runtime has ever drawn**, and no frame
+   measures it. `Effects::AngleDegrees` is pinned in `test_mp_effects` - 202.1286 degrees for rec11's teleport 1,
+   and 0 / -90 / 180 / 90 for the four compass sides - but the path from there through `Effect::angleDeg`,
+   `Particles::Owner` and `WorldRotation` onto a quad was carried by effects that all pass 0 until now. What the
+   capture confirms is the PLACEMENT: f58 of the hold shows the streak at the entry portal on the side the player
+   came from. The turn itself is unmeasured on a drawn frame, and it stays that way rather than spending a launch
+   on it.
+4. **The queue's order within one tick** - fireballs, then spent fireballs, then blasts, then teleports - is the
+   port's. The original's callbacks run in its scene walk's order, which is not decoded. It can only move the
+   stream, never a placement.
+
+**WHAT IS LEFT OPEN.**
+- **`<StartPoint>` z as a raw literal** (above), for the K13 owner.
+- **The 20,000 ms portal perish, and the placed portal's own systems, summon, kill fade and death**, are 7.4's.
+- **`red_cross` at the tap** still has no prediction (R15), and a refused tap still leaves no record: 10.1.
+- **The suck effect's quad is gated at its centre, not at its brightness.** `system_7` G.4 says why - rec11's
+  centroid sits nearer the portal than the quad's centre, which fits an arc drawn on the portal side of a 64 u
+  quad - so what is pinned is where the quad is put. Nothing here measures the arc itself, and no footage of it
+  exists at a scale that could.
+- **No "before" run of the 700-frame hold was captured.** The step's two byte-identity levels are the K8 row, and
+  a before/after of the hold would have differed on every frame after the first teleport anyway - the eyes share
+  the stream (deviation 2) - so the teleport frames were found by the ring's own template fit instead. What that
+  costs is an absolute no-ring baseline for the +0.55 s row: the exit portal's own art keeps a residual
+  correlation, so the discriminator there is the fitted SIZE leaving the -6.4 u line, not a score falling to zero.

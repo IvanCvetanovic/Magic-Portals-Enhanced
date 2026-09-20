@@ -272,6 +272,8 @@ const NoPortalZone* State::FindZone(const std::string& name) const {
 }
 
 void State::Tick(entt::registry& registry, float dt) {
+    // What went through last tick has been drawn; this tick starts with none.
+    transits.clear();
     lockoutS = std::max(0.0f, lockoutS - dt);
     // The cooldown clocks run UP, as the original's two Timers do.
     const double elapsedMs = static_cast<double>(dt) * 1000.0;
@@ -435,7 +437,17 @@ void State::Tick(entt::registry& registry, float dt) {
 
         const glm::dvec2 exitPx =
             exit->isStatic ? statics[static_cast<std::size_t>(exit->key)].atPx : placedWithId(exit->key)->atPx;
+        // The two points the original's vanishEffect is given, READ BEFORE the
+        // traveller is moved: the end it went in by, and where it stood. The exit
+        // is the PORTAL's own point and not where the body lands, which
+        // Portal::ExitPosition may push off it - appearEffect is called with the
+        // portal (teleportToOther #71-75).
+        const glm::dvec2 entryPx = entry.end.isStatic
+                                       ? statics[static_cast<std::size_t>(entry.end.key)].atPx
+                                       : placedWithId(entry.end.key)->atPx;
+        const glm::dvec2 travellerPx = Units::ToPixels(registry.get<TransformComponent>(entry.body).position);
         Teleport(registry, entry.body, exitPx, rules.transit, entry.body == shooter);
+        transits.push_back(Traversal{travellerPx, entryPx, exitPx});
         ++traversals;
         // A placed pair carried something, so neither end is refunded if it is
         // cleared later. Only the pair: teleportToOther is the one route that
