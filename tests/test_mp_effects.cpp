@@ -101,6 +101,53 @@ void TheRowsAreTheDecodedCalls() {
     CHECK_EQ(appear.angleDeg, 0.0);
     CHECK_EQ(appear.scale, 1.0);
 
+    // addFireball #12-26: AddEntity('fireball.ent', vector3(pos, 0f), 0, ...,
+    // getScale()) - the angle and the z both bare literals, the scale the
+    // script's own 1. The 1.2 it is drawn at is the .ent's <Scale> and is not
+    // here; nor is fireballScale, which scales its first particle system alone
+    // and travels with the fireball.
+    const Effects::Rule& fireball = rules.fireball;
+    CHECK_MSG(fireball.entity == "fireball.ent", "fireball: " + fireball.entity);
+    CHECK_EQ(fireball.offsetUnits, 0.0);
+    CHECK_MSG(fireball.z == 0.0 && !fireball.zScaled, "fireball: z a bare 0");
+    CHECK(fireball.turn == Effects::Turn::Fixed);
+    CHECK_EQ(fireball.angleDeg, 0.0);
+    CHECK_EQ(fireball.scale, 1.0);
+
+    // ETHCallback_fireball #66-83: AddScaledEntity('small_explosion.ent',
+    // thisEntity.GetPosition(), getScale()) - the fireball's own vector3, whose z
+    // is the 0 addFireball gave it.
+    const Effects::Rule& small = rules.smallExplosion;
+    CHECK_MSG(small.entity == "small_explosion.ent", "small explosion: " + small.entity);
+    CHECK_EQ(small.offsetUnits, 0.0);
+    CHECK_MSG(small.z == 0.0 && !small.zScaled, "small explosion: the fireball's own z");
+    CHECK(small.turn == Effects::Turn::Fixed);
+    CHECK_EQ(small.angleDeg, 0.0);
+    CHECK_EQ(small.scale, 1.0);
+
+    // explode #1-23: AddScaledEntity('explosion_large.ent', vector3(pos,
+    // scale(32)), scale(superScale)) - the z THROUGH g_scale.scale, unlike the
+    // two above, and a barrel's superScale of 1.
+    const Effects::Rule& large = rules.largeExplosion;
+    CHECK_MSG(large.entity == "explosion_large.ent", "large explosion: " + large.entity);
+    CHECK_EQ(large.offsetUnits, 0.0);
+    CHECK_MSG(large.z == 32.0 && large.zScaled, "large explosion: z scale(32)");
+    CHECK(large.turn == Effects::Turn::Fixed);
+    CHECK_EQ(large.angleDeg, 0.0);
+    CHECK_EQ(large.scale, 1.0);
+
+    // And each is added where it is given and nowhere else: no offset, no turn.
+    const glm::dvec2 at(123.5, -47.25);
+    for (const Effects::Spawn& spawn :
+         {Effects::Fireball(rules, at), Effects::SmallExplosion(rules, at), Effects::LargeExplosion(rules, at)}) {
+        CHECK_MSG(spawn.atPx == at, spawn.entity + " is added at the point it is given");
+        CHECK_EQ(static_cast<double>(spawn.angleDeg), 0.0);
+        CHECK_EQ(spawn.scale, 1.0);
+    }
+    CHECK_EQ(Effects::Fireball(rules, at).z, 0.0);
+    CHECK_EQ(Effects::SmallExplosion(rules, at).z, 0.0);
+    CHECK_EQ(Effects::LargeExplosion(rules, at).z, 32.0);
+
     // MainCharacter's own: the constructor's AddScaledEntity (#85-101) and
     // updateEyes' offset (#15-31), every number in level units because the
     // vector3 overload of g_scale.scale multiplies all three components.
@@ -312,6 +359,16 @@ void ARowMissingAFactIsRefused() {
     refused("appear_turned.json", "\"angle\": 0,", "\"angle\": \"toward_traveller_minus_90\",", "appear_effect");
     refused("appear_offset.json", "\"offset_units\": 0,\n    \"z\": {\"value\": 2,",
             "\"offset_units\": 3,\n    \"z\": {\"value\": 2,", "appear_effect");
+    refused("no_fireball.json", "\"fireball\": {", "\"fireball_gone\": {", "fireball");
+    refused("no_small.json", "\"small_explosion\": {", "\"small_gone\": {", "small_explosion");
+    refused("no_large.json", "\"explosion_large\": {", "\"large_gone\": {", "explosion_large");
+    // The three point-only rows, each refused for the same reason appear_effect
+    // is: a direction they are never given.
+    refused("fireball_turned.json", "\"angle\": 0,\n    \"scale\": 1,\n    \"_source\": [\n      \"addFireball",
+            "\"angle\": \"toward_traveller_minus_90\",\n    \"scale\": 1,\n    \"_source\": [\n      \"addFireball",
+            "fireball");
+    refused("large_offset.json", "\"entity\": \"explosion_large.ent\",\n    \"offset_units\": 0,",
+            "\"entity\": \"explosion_large.ent\",\n    \"offset_units\": 5,", "explosion_large");
     refused("no_eyes.json", "\"red_eyes\": {", "\"red_eyes_gone\": {", "red_eyes");
     refused("no_eye_x.json", "\"x_frame_gt_7\": 7,", "", "red_eyes.offset_units.x_frame_gt_7");
     refused("no_eye_zerog.json", "\"y_zero_g\": -15.65,", "", "red_eyes.offset_units.y_zero_g");

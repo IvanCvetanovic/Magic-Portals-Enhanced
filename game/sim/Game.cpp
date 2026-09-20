@@ -376,7 +376,12 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
                     struck = true;
                 }
             }
-            if (struck) spent.push_back(ball.name);
+            // `destroy`, as the contact callback sets it, so the layer can put
+            // small_explosion.ent where the fireball stood (Turrets::State::spentPx).
+            if (struck) {
+                spent.push_back(ball.name);
+                level.turrets.spentPx.push_back(ball.atPx);
+            }
         }
         if (!spent.empty()) {
             std::erase_if(level.turrets.fireballs, [&spent](const Turrets::Fireball& ball) {
@@ -642,6 +647,10 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             made.atPx = turn.firePx;
             made.velocityPx = turn.aimPx * level.turrets.rules.speedPx;
             made.killsPlayer = true;
+            // The one argument that is not the same for every addFireball caller:
+            // this dragon passes 2 and everything else 1, and it scales the
+            // entity's first particle system alone (darkdragon.json).
+            made.particleScale = level.darkDragon.rules.fireballParticleScale;
             level.turrets.fireballs.push_back(made);
         }
 

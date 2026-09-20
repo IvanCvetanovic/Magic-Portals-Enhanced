@@ -343,11 +343,13 @@ public:
     // optionally carried by something the level moves. sim/Effects holds the call
     // sites' arithmetic (effects.json, step 91); this is what becomes of one.
     //
-    // NOTHING IN THE GAME SPAWNS ONE YET. latchSimEffects is the place the TICK
-    // queues them from, and it queues nothing until the steps that draw each
-    // effect wire their rules (the visuals plan's 7.1 eyes, 7.3 teleport, 10.x
-    // pickups). The suites spawn them by hand, which is how the light cap and the
-    // free rules are measured before any rule exists.
+    // WHAT SPAWNS ONE TODAY. The level's start adds the player's red eyes
+    // (buildEyes, the visuals plan's 7.1), and latchSimEffects - the place the
+    // TICK queues from - adds every fireball in flight, a small_explosion where
+    // one was destroyed and an explosion_large where a bomb went off (7.2). The
+    // steps that draw the rest wire their own rules there (7.3 teleport, 10.x
+    // pickups). The suites also spawn them by hand, which is how the light cap
+    // and the free rules are measured without a level that asks for one.
     struct EffectOwner {
         enum class Kind {
             None,         // it stays where it was added
@@ -357,7 +359,8 @@ public:
             PlacedPortal, // a portal the player opened
         };
         Kind kind = Kind::None;
-        int index = -1;           // which one, for the kinds that have several
+        int index = -1;           // which one, for the kinds that key by place or id
+        std::string name;         // or by name: a fireball's, which is unique for a level
         glm::dvec2 offsetPx{0.0}; // where on it, in the level's pixels
     };
     struct EffectSpawn {
@@ -366,6 +369,12 @@ public:
         double zUnits = 0.0;   // the vector3's z, in the level's units
         double angleDeg = 0.0; // Ethanon's angle, counter-clockwise on the screen
         double scale = 1.0;    // the script's Scale(), which the .ent's <Scale> multiplies
+        // ETHEntity::ScaleParticleSystem(0, n): a further scale on the FIRST
+        // particle system alone, over the entity's own, touching neither the
+        // picture nor the light nor the halo. addFireball is the one caller in
+        // the game (effects.json fireball), and it passes 1 for everything but
+        // the dark dragon's fire.
+        double firstSystemScale = 1.0;
         EffectOwner follow;
     };
     // AddEntity, on the FRAME and never on the tick: the effect's id, or -1 when
@@ -390,8 +399,17 @@ public:
         // the particle quads are placed with, so the suite can hold the table's
         // three new rows to what is drawn.
         std::vector<float> systemZ;
+        // And each emitter's particle size as it was made, in the level's units:
+        // the .ent's own, times the entity's particle scale, times the first
+        // system's own extra scale where a caller gave one (ScaleParticleSystem).
+        std::vector<double> systemSizePx;
         double scriptScale = 1.0; // the Scale() it was added with
         glm::dvec2 scale{1.0};  // times its <Scale>: the one its light and picture take
+        // Its light and halo as the owner's scale leaves them (Lighting::OwnerScaled,
+        // K7): the range in the level's units, and the halo quad's size in them.
+        // Zero where it has neither.
+        double lightRange = 0.0;
+        glm::dvec2 haloPx{0.0};
         bool temporary = false; // ETHEntity::IsTemporary: the engine frees it when its pools are over
         bool hidden = false;    // its owner is hidden (the player in a door), so nothing of it draws
         bool drawn = false;     // it has a picture quad
@@ -989,7 +1007,8 @@ private:
     void matchMinions();
     // The carrancas' fireballs. Its own function rather than a block inside
     // syncBoss: they belong to a turret, not to the beholder, and every level
-    // of chapter 2 that has one has no boss at all.
+    // of chapter 2 that has one has no boss at all. Their PICTURES are effects
+    // (latchSimEffects); what this places is the placeholder box behind them.
     void syncTurrets(entt::registry& registry);
     // Every sprite of the level coloured for the ambient light now: after
     // everything above has made, unmade and placed this tick's quads.
@@ -1249,11 +1268,11 @@ private:
     float m_escortZ{0.5f};
     double m_escortLookZ{0.0};
 
-    // The carrancas' fireballs, one quad per fireball in flight (Turrets.hpp).
-    //
-    // Always boxes: fireball.ent carries no <Sprite> at all - what the original
-    // shows is its ParticleSystem and its Light - so there is no image to draw
-    // one with, and the box is the picture rather than a stand-in for one.
+    // The carrancas' fireballs, one PLACEHOLDER box per fireball in flight
+    // (Turrets.hpp). fireball.ent carries no <Sprite> at all - what the original
+    // shows is its ParticleSystem and its Light - so the entity itself is the
+    // picture, and latchSimEffects adds one per fireball. These are what a level
+    // with no art to draw shows instead, and what the boxes key turns on.
     std::vector<entt::entity> m_fireballs;
 
     // One <ParticleSystem> of one placement: the system as the .ent states it,
@@ -1354,6 +1373,11 @@ private:
     // only one the port moves every frame rather than leaving where it was added.
     // -1 while the level has none (no art, or the .ent could not be read).
     int m_eyes{-1};
+    // Every fireball in flight that has already been given its fireball.ent, by
+    // the name Turrets gives it. latchSimEffects walks the sim's list against
+    // this one, so a fireball spat on a tick that did not reach the latch - one
+    // under a pause, whose BeforeStep still runs - is picked up on the next.
+    std::vector<std::string> m_fireballEffects;
     // The cell the player was last drawn on, kept across the door: updateEyes
     // reads GetFrame every frame, and the quad it comes from is destroyed when the
     // character is hidden.

@@ -73,7 +73,16 @@ struct Rules {
     Rule suck;     // vanishEffect's suck_effect.ent, at the entry portal
     Rule sparkles; // vanishEffect's sparkles.ent, where the traveller stood
     Rule appear;   // appearEffect's appear_effect.ent, at the exit portal
-    EyeRule eyes;  // MainCharacter's red_eyes.ent, on the character's face
+    // addFireball's fireball.ent, which every fireball in the game is: what a
+    // carranca spits, what a fire diamond turns a portal shot into, and what both
+    // dragons breathe. It is added at the point it is fired from and then follows
+    // its own `dir` and `speed`, so its row is a point and nothing else.
+    Rule fireball;
+    // ETHCallback_fireball's small_explosion.ent, where a fireball was destroyed,
+    // and explode()'s explosion_large.ent, where a bomb went off.
+    Rule smallExplosion;
+    Rule largeExplosion;
+    EyeRule eyes; // MainCharacter's red_eyes.ent, on the character's face
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -110,6 +119,20 @@ Spawn Sparkles(const Rules& rules, const glm::dvec2& travellerPx, const glm::dve
 
 // appearEffect(exitPortalPx): at the exit portal.
 Spawn Appear(const Rules& rules, const glm::dvec2& exitPortalPx);
+
+// addFireball(pos, dir, killMainCharacter, fireballScale): the entity, at the
+// point it is fired from. The three arguments the row does not carry are not the
+// entity's placement - `dir` and `killMainCharacter` are custom data the sim
+// already holds (Turrets::Fireball), and `fireballScale` scales its first
+// particle system alone, which is the caller's number and rides with the
+// fireball (Turrets::Fireball::particleScale).
+Spawn Fireball(const Rules& rules, const glm::dvec2& atPx);
+
+// ETHCallback_fireball's AddScaledEntity, at the fireball's own vector3 - whose
+// z is the 0 addFireball gave it - and explode()'s, at the bomb with z
+// g_scale.scale(32). Neither is given a direction or an angle.
+Spawn SmallExplosion(const Rules& rules, const glm::dvec2& atPx);
+Spawn LargeExplosion(const Rules& rules, const glm::dvec2& atPx);
 
 // updateEyes' g_scale.scale(vector3(eyeX, eyeY, z)), in level units: what is
 // added to the CHARACTER's own position, its z included. `drawnFrame` is the

@@ -87,9 +87,11 @@ const glm::vec3 kStaticBlueColour(0.30f, 0.50f, 1.00f); // and blue
 const glm::vec3 kBeholderColour(0.55f, 0.20f, 0.60f);   // the beholder's reach
 const glm::vec3 kSpikeColour(0.85f, 0.85f, 0.70f);
 constexpr double kSpikeBoxPx = 6.0;
-// A carranca's fireball, in the colour of its own Light (r 1, g 0.5, b 0.2) and
-// at the size of its own Collision (16 x 16). Both are fireball.ent's, which is
-// as close to its picture as the port can get: the entity has no sprite.
+// A fireball's PLACEHOLDER box, in the colour of its own Light (r 1, g 0.5, b
+// 0.2) and at the size of its own Collision (16 x 16), both fireball.ent's. Not
+// its picture since step 94: what the original shows is the entity itself, which
+// the effects runtime now adds for every fireball in flight, and this is drawn
+// only where a level has no art or the boxes are turned on.
 const glm::vec3 kFireballColour(1.00f, 0.50f, 0.20f);
 constexpr double kFireballBoxPx = 16.0;
 // Where the original adds a spike: at z -4 (ETHCallback_beholder).
@@ -1070,12 +1072,18 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
         atPx = drawn.ownerPx + owner.offsetPx;
         return true;
     }
-    case EffectOwner::Kind::Fireball: {
-        const std::vector<Turrets::Fireball>& flying = m_level.turrets.fireballs;
-        if (owner.index < 0 || owner.index >= static_cast<int>(flying.size())) return false;
-        atPx = flying[static_cast<std::size_t>(owner.index)].atPx + owner.offsetPx;
-        return true;
-    }
+    case EffectOwner::Kind::Fireball:
+        // BY NAME and not by place in the list, for the same reason a portal is
+        // by id: one going takes every one after it along one place, and a
+        // fireball goes the moment it touches anything. Every producer names its
+        // own - "<carranca>#<n>", the dragons' and "fire_diamond#<n>" - and a
+        // level's counters never repeat one.
+        for (const Turrets::Fireball& ball : m_level.turrets.fireballs) {
+            if (ball.name != owner.name) continue;
+            atPx = ball.atPx + owner.offsetPx;
+            return true;
+        }
+        return false;
     case EffectOwner::Kind::PlacedPortal:
         // By the portal's id and not its place in the list: a pair going takes
         // the ones after it along one place.
@@ -1175,8 +1183,14 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     const Particles::Owner owner{effect.atPx, effect.angleDeg};
     const int systems = static_cast<int>(art.systems.size());
     for (int slot = 0; slot < systems; ++slot) {
-        const Particles::System system =
-            Particles::Scaled(art.systems[static_cast<std::size_t>(slot)], art.ParticleScale(spawn.scale));
+        // The entity's own scale, and on the FIRST system the caller's extra one
+        // where it gave one: ETHSpriteEntity::SetScale scales every system by the
+        // mean of the two axes (:586), and addFireball then calls
+        // ScaleParticleSystem(0, fireballScale) on top of that (#77-83), which is
+        // the same multiply again on system 0 alone.
+        const double made =
+            art.ParticleScale(spawn.scale) * (slot == 0 ? spawn.firstSystemScale : 1.0);
+        const Particles::System system = Particles::Scaled(art.systems[static_cast<std::size_t>(slot)], made);
         if (!Particles::Drawable(system)) {
             SUPERSONIC_LOG_WARN("Magic Portals") << "particle system not drawn: " << spawn.entity << " system " << slot
                                                  << " asks for alphaMode " << system.alphaMode
@@ -1243,6 +1257,7 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_effects.clear();
     m_effectQueue.clear();
     m_eyes = -1;
+    m_fireballEffects.clear();
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -1341,10 +1356,17 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         report.drawn = effect.quad != entt::null;
         report.hasLight = effect.light != entt::null;
         report.hasHalo = effect.halo != entt::null;
+        if (effect.art.light) {
+            const Lighting::Light lit = Lighting::OwnerScaled(*effect.art.light, effect.scale);
+            report.lightRange = lit.range;
+            report.haloPx = lit.haloSize;
+        }
         report.systems = static_cast<int>(effect.emitters.size());
         report.systemZ.reserve(effect.emitters.size());
+        report.systemSizePx.reserve(effect.emitters.size());
         for (const Emitter& emitter : effect.emitters) {
             report.systemZ.push_back(emitter.z);
+            report.systemSizePx.push_back(emitter.system.size);
             report.active += emitter.active;
             report.pool += static_cast<int>(emitter.particles.size());
             for (const Particles::Particle& particle : emitter.particles) {
@@ -3868,6 +3890,12 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     show(m_shot, !(artOnly && m_shotQuad != entt::null));
     show(m_player, !(artOnly && m_playerQuad != entt::null));
     show(m_beholderBox, !(artOnly && m_beholderQuad != entt::null));
+    // A fireball's box goes with the level's own boxes and not with the shot's:
+    // the fireball.ent that stands in for it is added on the FRAME, one frame
+    // after the tick that spat it, and a box that waited for it would flash tan
+    // for that frame on every fireball fired. Tested against the class and not
+    // the instance, as a crystal's is.
+    for (const entt::entity e : m_fireballs) show(e, !artOnly);
 
     // Last: every quad this tick made is there to colour.
     syncLighting(registry);
@@ -4297,10 +4325,12 @@ void MagicPortalsLayer::syncTurrets(entt::registry& registry) {
         e = entt::null;
     };
 
-    // One quad per fireball in flight, grown and shrunk to match, which is how
-    // the beholder's spikes are drawn. Always a BOX: fireball.ent has no
-    // <Sprite> at all - the original shows its ParticleSystem and its Light -
-    // so unlike a spike there is no image to fall back from.
+    // One quad per fireball in flight, at its own Collision. A PLACEHOLDER since
+    // step 94, not the picture: what the original shows is fireball.ent itself,
+    // which latchSimEffects now adds for every fireball - its particle system and
+    // its light's halo, since the .ent has no <Sprite> at all. The box is left
+    // for the two cases every other placeholder is left for, a level with no art
+    // to draw and the boxes turned on, and syncLighting hides it otherwise.
     while (m_fireballs.size() > turrets.fireballs.size()) {
         destroy(m_fireballs.back());
         m_fireballs.pop_back();
@@ -4310,9 +4340,6 @@ void MagicPortalsLayer::syncTurrets(entt::registry& registry) {
             makeBox(registry, "Magic Portals Fireball", glm::vec3(0.0f), glm::vec3(1.0f), kFireballColour));
     }
     for (std::size_t i = 0; i < m_fireballs.size(); ++i) {
-        // At the marker z, which is the port's choice and not the original's:
-        // the original states a spike's z (-4) and says nothing about a
-        // fireball's.
         placeBox(registry, m_fireballs[i], turrets.fireballs[i].atPx, glm::dvec2(kFireballBoxPx), kMarkerZ,
                  kMarkerDepth, 0.0f);
     }
@@ -5310,6 +5337,80 @@ float MagicPortalsLayer::pitchFor(const Sounds::Hook& hook, double doorStrideMs)
 // reach Game::Level or the state hash by the back door.
 void MagicPortalsLayer::latchSimEffects() {
     if (!m_loaded) return;
+
+    // THE FIREBALLS IN FLIGHT. Each one is an entity of the original's -
+    // addFireball's fireball.ent - and the entity is the whole of what is seen:
+    // it has no <Sprite> at all, so what a player meets is its particle system
+    // and its light's halo. The effect is given the fireball to FOLLOW, so it
+    // travels with it and goes when it goes; fireball.ent repeats forever and is
+    // therefore never temporary, which is exactly the original's rule that only
+    // its own script deletes it.
+    //
+    // A LIST WALK rather than an event, because a fireball can be spat on a tick
+    // this is not called on - BeforeStep runs under a pause that this returns
+    // before (OnFixedUpdate), and Turrets::Fire is in BeforeStep. Whatever is in
+    // the air and has no effect yet gets one; what is queued this tick is added
+    // on the next frame, and if the fireball is gone by then SpawnEffect refuses
+    // it, which is a fireball nobody ever saw.
+    std::vector<std::string> flying;
+    flying.reserve(m_level.turrets.fireballs.size());
+    for (const Turrets::Fireball& ball : m_level.turrets.fireballs) {
+        flying.push_back(ball.name);
+        if (std::find(m_fireballEffects.begin(), m_fireballEffects.end(), ball.name) != m_fireballEffects.end()) {
+            continue;
+        }
+        const Effects::Spawn spawn = Effects::Fireball(m_effectRules, ball.atPx);
+        EffectSpawn add;
+        add.entity = spawn.entity;
+        add.atPx = spawn.atPx;
+        add.zUnits = spawn.z;
+        add.angleDeg = spawn.angleDeg;
+        add.scale = spawn.scale;
+        // ScaleParticleSystem(0, fireballScale), which only the dark dragon's fire
+        // is given: 2 there and 1 everywhere else (darkdragon.json).
+        add.firstSystemScale = ball.particleScale;
+        add.follow.kind = EffectOwner::Kind::Fireball;
+        add.follow.name = ball.name;
+        m_effectQueue.push_back(add);
+        m_fireballEffects.push_back(ball.name);
+    }
+    // And the names of the ones that have gone, so a level that spits hundreds
+    // does not keep every name it ever used.
+    m_fireballEffects.erase(std::remove_if(m_fireballEffects.begin(), m_fireballEffects.end(),
+                                           [&flying](const std::string& name) {
+                                               return std::find(flying.begin(), flying.end(), name) == flying.end();
+                                           }),
+                            m_fireballEffects.end());
+
+    // WHERE ONE WAS DESTROYED: small_explosion.ent at the point it stood, which
+    // is what ETHCallback_fireball adds on the frame after the contact sets
+    // `destroy`. The port is that one frame early and about two units short of
+    // the original's point, because the original's callback moves the entity one
+    // more frame before it reads the flag (130 px/s over a tick).
+    for (const glm::dvec2& atPx : m_level.turrets.spentPx) {
+        const Effects::Spawn spawn = Effects::SmallExplosion(m_effectRules, atPx);
+        EffectSpawn add;
+        add.entity = spawn.entity;
+        add.atPx = spawn.atPx;
+        add.zUnits = spawn.z;
+        add.angleDeg = spawn.angleDeg;
+        add.scale = spawn.scale;
+        m_effectQueue.push_back(add);
+    }
+    // AND WHERE A BOMB WENT OFF: explode()'s explosion_large.ent, at the bomb and
+    // 32 units in front of it. Both are temporary - no sprite, and every system
+    // repeating a set number of times - so the runtime frees each when its pools
+    // are over, which is the engine's own rule and needs no owner.
+    for (const glm::dvec2& atPx : m_level.fire.blastsPx) {
+        const Effects::Spawn spawn = Effects::LargeExplosion(m_effectRules, atPx);
+        EffectSpawn add;
+        add.entity = spawn.entity;
+        add.atPx = spawn.atPx;
+        add.zUnits = spawn.z;
+        add.angleDeg = spawn.angleDeg;
+        add.scale = spawn.scale;
+        m_effectQueue.push_back(add);
+    }
 }
 
 void MagicPortalsLayer::latchSimSounds() {

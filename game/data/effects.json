@@ -98,6 +98,85 @@
     ]
   },
 
+  "fireball": {
+    "entity": "fireball.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "addFireball (ETHCallback_carranca.angelscript, bytes 417483..417923), the one function",
+      "that makes a fireball, whoever asks for it: #12-17 vector3(pos, 0f) - two bare literals,",
+      "the angle and the z, neither through g_scale.scale - and #19-26 AddEntity('fireball.ent',",
+      "that, 0, @entity, '', g_scale.getScale()), so the entity is added at its own size and the",
+      "1.2 it is drawn at is its .ent's own <Scale>. It then writes killMainCharacter (#40-53)",
+      "and dir (#57-65) on the entity, clears its gravity (#69-74) and plays the spit sound.",
+      "ITS FOUR CALLERS: carrancaCallback #108, at the gargoyle's GetPositionXY along its own",
+      "(dirX, dirY); burnProjectile #54, where a fire diamond turns a portal shot into one;",
+      "ETHCallback_dragon #754 (2-32); and ETHCallback_dark_dragon #978 and #1720 (4-32). The",
+      "first three pass fireballScale 1 and the dark dragon 2 (PshC4 2f at #972 and #1714),",
+      "which is the one argument that is not the same for all of them: #77-83 calls",
+      "ScaleParticleSystem(0, fireballScale) when it is not 1, so it scales system 0 ALONE and",
+      "on top of the entity's own <Scale>. The port carries it per fireball",
+      "(Turrets::Fireball::particle_scale) and darkdragon.json's fight.fireball_particle_scale",
+      "holds the 2.",
+      "IT IS NOT TEMPORARY. fireball.ent's one system repeats 0 - forever - so",
+      "ETHEntity::IsTemporary is false and the engine never deletes it: it goes when its script",
+      "deletes it (ETHCallback_fireball below), which the port models as the effect going when",
+      "the fireball it follows goes."
+    ]
+  },
+
+  "small_explosion": {
+    "entity": "small_explosion.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_fireball (ETHCallback_carranca.angelscript, bytes 418524..418930), the",
+      "fireball's own per-frame callback: #44-56 it reads its `destroy` flag, and when it is set",
+      "#57-65 DeleteEntity(thisEntity) and #66-83 AddScaledEntity('small_explosion.ent',",
+      "thisEntity.GetPosition(), g_scale.getScale()) - the fireball's own vector3, whose z is",
+      "the 0 addFireball gave it, at the script's own size. AddScaledEntity is AddEntity(file,",
+      "pos, 0f, 0, '', scale) (ETHScriptWrapper.Scene.cpp:176-178), so the angle is 0 and the",
+      "0.8 it is drawn at is the .ent's <Scale>. #84-87 also startEarthquake(5, 0), which the",
+      "port has no earthquake for.",
+      "WHAT SETS `destroy`: ETHBeginContactCallback_fireball (418930..419710) alone. A character",
+      "the fireball cannot kill returns at #10-31; a carranca or a sensor that is not a",
+      "shock_agent returns at #98-121; everything else reaches #146-152 destroy(thisEntity) -",
+      "so a shock agent, a burnable, a bomb, the player it kills, AND ANY SOLID IT TOUCHES.",
+      "The port's fireball is a bare point with no body, so it records the first four",
+      "(Turrets::State::spent_px) and flies through walls; Turrets.hpp says why a body is its",
+      "own step. Neither of the port's other two removals adds one: the cull at the level's edge",
+      "is the port's own, and a torch's switch goes through killProjectile (MiscCallbacks,",
+      "351788..351878), a bare DeleteEntity that sets no flag."
+    ]
+  },
+
+  "explosion_large": {
+    "entity": "explosion_large.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "explode (MiscCallbacks.angelscript, bytes 342023..342895) #1-23:",
+      "AddScaledEntity('explosion_large.ent', vector3(pos, g_scale.scale(32)),",
+      "g_scale.scale(superScale)) - the z through g_scale.scale, so 32 level units, and the",
+      "scale g_scale.scale of the caller's superScale, which is 1 of the port's units per",
+      "superScale of 1. Then #27-31 playExplosionSound and #33-47 an EntityGrabber of",
+      "g_scale.scale(80) over the real colliders, which Fire::Blast already models.",
+      "A BARREL passes superScale 1 (ETHCallback_barrel_bomb #56-60), which is every blast the",
+      "port makes: Fire::State::blasts_px is where they went off. Its other callers -",
+      "fire_agent #191, beholder #1274, dark_dragon #1931, the fireball's contact #188, ghost",
+      "#1352 and explode itself #137 for a chain - are not built as blasts here, and each",
+      "brings its own scale with the step that builds it.",
+      "explosion.ent is NEVER spawned (see _never_spawned above): the plan's 'explosion.ent /",
+      "explosion_large.ent' is one entity, this one."
+    ]
+  },
+
   "red_eyes": {
     "entity": "red_eyes.ent",
     "offset_units": {

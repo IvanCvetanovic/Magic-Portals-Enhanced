@@ -3297,11 +3297,17 @@ void NoSpriteOnScreenIsCulled(const char* levelName) {
 // missing feature, it is an invisible one, which is worse - it looks exactly
 // like a bug in the simulation.
 //
+// SINCE STEP 94 what is drawn is the entity itself. addFireball adds
+// fireball.ent, which has no <Sprite> at all: what a player sees is its one
+// particle system and its light's halo, and the placeholder box that used to
+// stand in for it is now shown only where a level has no art (syncLighting).
+//
 // The ORDER here is the point. tickWith runs the fixed update only, so what the
 // ticks latch piles up; OnUpdate is the frame, and it both draws and drains that
 // queue. Read the queue first and draw second, or the assertion lands on a queue
 // the frame has already emptied and passes for the wrong reason.
 void ACarrancasFireballIsSeenAndHeard() {
+    if (!OriginalArtIsThere("ACarrancasFireballIsSeenAndHeard")) return;
     entt::registry registry;
     publishViewport(registry);
     // level0a is chapter 2's first level: one carranca, a stride of 1500 ms and
@@ -3312,6 +3318,7 @@ void ACarrancasFireballIsSeenAndHeard() {
         CHECK_MSG(false, layer.LoadError());
         return;
     }
+    CloseTheLevelStartPopup(layer, registry);
 
     // Just past the first shot, and no further: the fireball flies right from
     // the gargoyle, and a run long enough for it to reach the player would
@@ -3325,14 +3332,169 @@ void ACarrancasFireballIsSeenAndHeard() {
     }
     CHECK_MSG(heard, "a carranca spitting is a sound, and sounds.json names it playFireballSound");
 
+    const MagicPortals::Game::Level* level = layer.SimLevel();
+    CHECK_MSG(level != nullptr && level->turrets.fireballs.size() == 1,
+              "one fireball is in the air to be drawn: " +
+                  std::to_string(level == nullptr ? 0 : level->turrets.fireballs.size()));
+    if (level == nullptr || level->turrets.fireballs.empty()) return;
+    const MagicPortals::Turrets::Fireball& ball = level->turrets.fireballs.front();
+
     // THEN the frame, which is what draws it.
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-    CHECK_MSG(Tagged(registry, "Magic Portals Fireball") > 0,
-              "and a fireball in flight is drawn, or it kills out of nowhere");
+    MagicPortalsLayer::EffectReport fire{};
+    int fires = 0;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity != "fireball.ent") continue;
+        fire = report;
+        ++fires;
+    }
+    CHECK_MSG(fires == 1, "and a fireball in flight IS an entity of the original's, added once: " +
+                              std::to_string(fires) + " fireball.ent effect(s)");
+    if (fires != 1) return;
+    CHECK_MSG(!fire.drawn && fire.hasLight && fire.hasHalo && fire.systems == 1,
+              "fireball.ent has no <Sprite>, one <ParticleSystem> and a <Light> with a <HaloBitmap>");
+    CHECK_MSG(fire.atPx == ball.atPx, "it is drawn where the fireball is");
+    CHECK_MSG(!fire.temporary, "and it repeats forever, so the engine never frees it: its script does");
+
+    // It FOLLOWS: a tick of flight moves the effect with it, without a respawn.
+    const int spawned = layer.EffectsSpawned();
+    for (int tick = 0; tick < 10; ++tick) tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const glm::dvec2 movedTo = layer.SimLevel()->turrets.fireballs.front().atPx;
+    MagicPortalsLayer::EffectReport moved{};
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity == "fireball.ent") moved = report;
+    }
+    CHECK_MSG(moved.id == fire.id && moved.atPx == movedTo && layer.EffectsSpawned() == spawned,
+              "and it travels with it rather than being made again: id " + std::to_string(moved.id) + " of " +
+                  std::to_string(fire.id) + ", " + std::to_string(layer.EffectsSpawned() - spawned) + " added since");
+    std::printf("  2-01's fireball: halo %.1f u, light range %.1f u, system size %.1f u\n", moved.haloPx.x,
+                moved.lightRange, moved.systemSizePx.empty() ? 0.0 : moved.systemSizePx.front());
 
     // And it goes with the level, as every other drawable does.
     layer.OnDetach(registry);
-    CHECK_MSG(Tagged(registry, "Magic Portals Fireball") == 0, "the fireballs go with the level");
+    CHECK_MSG(Tagged(registry, "Magic Portals Fireball") == 0 && Tagged(registry, "Magic Portals Effect Halo") == 0,
+              "the fireballs go with the level");
+}
+
+// And the rule that adds one: a fireball that is DESTROYED leaves a
+// small_explosion where it stood, and one that merely leaves the level does not.
+//
+// The player is held in the carranca's mouth, which is test_mp_turrets'
+// AFireballBurnsThePlayer: the contact callback sets flames and hp 0 on the
+// character and then destroys the fireball like any other contact
+// (ETHBeginContactCallback_fireball #123-152), so this is a real destroy and not
+// a corner. Before it, the same level's fireballs fly off the right edge with
+// nothing left behind, because the port's cull has no counterpart in a game
+// whose fireballs fly until they touch something.
+void ADestroyedFireballLeavesASmallExplosion() {
+    if (!OriginalArtIsThere("ADestroyedFireballLeavesASmallExplosion")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+
+    const auto explosions = [&layer]() {
+        int found = 0;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "small_explosion.ent") ++found;
+        }
+        return found;
+    };
+
+    // A whole stride and the flight that follows it, with the player where the
+    // level put it: a fireball is spat, crosses the level and is culled.
+    for (int tick = 0; tick < 240; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(explosions() == 0 && layer.SimLevel()->turrets.spentPx.empty(),
+              "a fireball that leaves the level is not destroyed, and leaves nothing");
+
+    // Then the player into the mouth, held there as the sim suite holds it.
+    const MagicPortals::Turrets::Turret& turret = layer.SimLevel()->turrets.turrets.front();
+    const glm::vec3 at = MagicPortals::Units::ToWorld(turret.atPx.x, turret.atPx.y);
+    glm::dvec2 wherePx(0.0);
+    bool killed = false;
+    for (int tick = 0; tick < 240 && !killed; ++tick) {
+        auto& held = registry.get<TransformComponent>(layer.SimLevel()->player);
+        held.position = glm::vec3(at.x, at.y, held.position.z);
+        tickWith(layer, registry, kRest, {}, {});
+        if (!layer.SimLevel()->turrets.spentPx.empty()) {
+            wherePx = layer.SimLevel()->turrets.spentPx.front();
+            killed = true;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(killed, "the fireball that kills is destroyed, and the tick says where");
+    if (!killed) return;
+    int found = 0;
+    glm::dvec2 atPx(0.0);
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity != "small_explosion.ent") continue;
+        atPx = report.atPx;
+        ++found;
+    }
+    CHECK_MSG(found == 1 && atPx == wherePx,
+              "and small_explosion.ent stands exactly there: " + std::to_string(found) + " at (" +
+                  std::to_string(atPx.x) + ", " + std::to_string(atPx.y) + ") against (" +
+                  std::to_string(wherePx.x) + ", " + std::to_string(wherePx.y) + ")");
+    // The fireball itself is gone, and so is its effect.
+    int fires = 0;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity == "fireball.ent") ++fires;
+    }
+    CHECK_MSG(fires == static_cast<int>(layer.SimLevel()->turrets.fireballs.size()),
+              "one fireball.ent per fireball still in the air: " + std::to_string(fires) + " of " +
+                  std::to_string(layer.SimLevel()->turrets.fireballs.size()));
+    std::printf("  2-01: the fireball that killed the player went off at (%.1f, %.1f)\n", wherePx.x, wherePx.y);
+    layer.OnDetach(registry);
+}
+
+// And a bomb's blast leaves explosion_large where it went off (explode()).
+//
+// Level 2-12 (level11a) places a carranca and a barrel bomb in its line of fire,
+// so the level detonates itself with no input at all: the fireball asks the bomb
+// to go off, the bomb's own tick blows it (Fire's flag-and-poll split) and
+// Fire::State::blastsPx says where.
+void ABombsBlastLeavesALargeExplosion() {
+    if (!OriginalArtIsThere("ABombsBlastLeavesALargeExplosion")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level11a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+
+    glm::dvec2 wherePx(0.0);
+    bool blown = false;
+    int tick = 0;
+    for (; tick < 900 && !blown; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (!layer.SimLevel()->fire.blastsPx.empty()) {
+            wherePx = layer.SimLevel()->fire.blastsPx.front();
+            blown = true;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(blown, "2-12's carranca sets its barrel off within 15 seconds");
+    if (!blown) return;
+    int found = 0;
+    glm::dvec2 atPx(0.0);
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity != "explosion_large.ent") continue;
+        atPx = report.atPx;
+        ++found;
+    }
+    CHECK_MSG(found >= 1 && atPx == wherePx,
+              "and explosion_large.ent stands where it went off: " + std::to_string(found) + " at (" +
+                  std::to_string(atPx.x) + ", " + std::to_string(atPx.y) + ")");
+    std::printf("  2-12: the barrel went off on tick %d at (%.1f, %.1f)\n", tick, wherePx.x, wherePx.y);
+    layer.OnDetach(registry);
 }
 
 void ALevelLatchesTheSoundsItEarns() {
@@ -6995,6 +7157,125 @@ MagicPortalsLayer::EffectReport ByIdIn(const std::vector<MagicPortalsLayer::Effe
     return MagicPortalsLayer::EffectReport{};
 }
 
+// Two numbers of the level's units, compared as the layer computes them.
+bool nearlyU(double a, double b, double eps = 1e-6) {
+    return std::fabs(a - b) <= eps;
+}
+
+// The numbers a fireball is drawn with, and the one argument that is not the
+// same for every caller.
+//
+// fireball.ent states <Scale> 1.2, a <Light> of range 50 with a 60 halo, and one
+// system of size 17 at <StartPoint> z 4. AddEntity gives the entity 1.2 (the
+// script's scale is 1), ETHSpriteEntity::SetScale scales its systems by the mean
+// of the two axes, and BuildChildLight takes the light's range and offset from
+// scale.y and the halo's size from both - so 72 u of halo, 60 u of range and a
+// system of 20.4. addFireball then calls ScaleParticleSystem(0, fireballScale),
+// which is 1 for a carranca, a converted shot and level31a's dragon and 2 for
+// the dark dragon: the FIRST system alone, and nothing else of the entity.
+void AFireballIsDrawnAtItsEntitysOwnScale() {
+    if (!OriginalArtIsThere("AFireballIsDrawnAtItsEntitysOwnScale")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    MagicPortalsLayer::EffectSpawn spawn;
+    spawn.entity = "fireball.ent";
+    spawn.atPx = glm::dvec2(200.0, 128.0);
+    spawn.zUnits = 0.0;
+    const int plain = layer.SpawnEffect(registry, spawn);
+    spawn.atPx = glm::dvec2(320.0, 128.0);
+    spawn.firstSystemScale = 2.0; // the dark dragon's
+    const int dark = layer.SpawnEffect(registry, spawn);
+    CHECK(plain > 0 && dark > 0);
+    const MagicPortalsLayer::EffectReport one = ByIdIn(layer.EffectReports(), plain);
+    const MagicPortalsLayer::EffectReport two = ByIdIn(layer.EffectReports(), dark);
+    if (one.id == 0 || two.id == 0) return;
+
+    CHECK_MSG(nearlyU(one.scale.x, 1.2) && nearlyU(one.scale.y, 1.2), "the entity at its <Scale> 1.2");
+    CHECK_MSG(!one.drawn, "no <Sprite>, so no picture");
+    CHECK_MSG(nearlyU(one.haloPx.x, 72.0) && nearlyU(one.haloPx.y, 72.0),
+              "a halo of 60 x 1.2 = 72 u: " + std::to_string(one.haloPx.x));
+    CHECK_MSG(nearlyU(one.lightRange, 60.0), "a light of range 50 x 1.2 = 60 u: " + std::to_string(one.lightRange));
+    CHECK_MSG(one.systems == 1 && nearlyU(one.systemSizePx.front(), 17.0 * 1.2),
+              "one system at size 17 x 1.2 = 20.4 u: " + std::to_string(one.systemSizePx.front()));
+    // The dark dragon's scales that system and NOTHING else.
+    CHECK_MSG(two.systems == 1 && nearlyU(two.systemSizePx.front(), 17.0 * 2.4),
+              "the dark dragon's at 17 x 2.4 = 40.8 u: " + std::to_string(two.systemSizePx.front()));
+    CHECK_MSG(nearlyU(two.haloPx.x, 72.0) && nearlyU(two.lightRange, 60.0) && nearlyU(two.scale.x, 1.2),
+              "with the same halo, light and entity scale as any other fireball");
+    // Its system's <StartPoint> z is scaled with it (Particles::Scale scales
+    // startPointZ as it scales the sizes), so the scaled fire stands at 4 x 2.4 =
+    // 9.6 where the other stands at 4 x 1.2 = 4.8 - never behind it, and a slot in
+    // front of it on any level with a picture between those two depths. Level 1-01
+    // has none, so here the two share a slot: what is pinned is the order.
+    CHECK_MSG(two.systemZ.front() >= one.systemZ.front(),
+              "and a <StartPoint> z scaled with it, 9.6 never behind 4.8: " + std::to_string(two.systemZ.front()) +
+                  " against " + std::to_string(one.systemZ.front()));
+    std::printf("  fireball.ent: halo %.1f u, range %.1f u, system %.1f u; the dark dragon's system %.1f u\n",
+                one.haloPx.x, one.lightRange, one.systemSizePx.front(), two.systemSizePx.front());
+    layer.OnDetach(registry);
+}
+
+// What an explosion is, and that the runtime frees it without being told to.
+//
+// small_explosion.ent and explosion_large.ent are both TEMPORARY - no sprite, and
+// every system with a set repeat - so ETHActiveEntityHandler deletes each once
+// its particles are over, and neither needs an owner. Their lights are the .ent's
+// (78 and 191) and NEITHER has a halo: both state a haloSize of 180 and no
+// <HaloBitmap>, and the engine draws a halo only for a light that names one
+// (ETHEntityRenderingManager.cpp:78).
+void AnExplosionIsTemporaryAndCarriesNoHalo() {
+    if (!OriginalArtIsThere("AnExplosionIsTemporaryAndCarriesNoHalo")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    struct Case {
+        const char* entity;
+        double scale;  // its .ent's <Scale>
+        double range;  // its <Light>, times that scale
+        int systems;
+    };
+    const Case cases[] = {{"small_explosion.ent", 0.8, 78.0 * 0.8, 1}, {"explosion_large.ent", 1.4, 191.0 * 1.4, 2}};
+    for (const Case& one : cases) {
+        MagicPortalsLayer::EffectSpawn spawn;
+        spawn.entity = one.entity;
+        spawn.atPx = glm::dvec2(200.0, 128.0);
+        const int id = layer.SpawnEffect(registry, spawn);
+        CHECK(id > 0);
+        const MagicPortalsLayer::EffectReport made = ByIdIn(layer.EffectReports(), id);
+        if (made.id == 0) continue;
+        CHECK_MSG(made.temporary, std::string(one.entity) + " is temporary: the engine frees it");
+        CHECK_MSG(!made.drawn && made.hasLight && !made.hasHalo,
+                  std::string(one.entity) + " has no sprite, a light and NO halo: its light names no <HaloBitmap>");
+        CHECK_MSG(nearlyU(made.scale.x, one.scale) && nearlyU(made.lightRange, one.range),
+                  std::string(one.entity) + " at <Scale> " + std::to_string(one.scale) + ", range " +
+                      std::to_string(made.lightRange));
+        CHECK_MSG(made.systems == one.systems,
+                  std::string(one.entity) + " has " + std::to_string(one.systems) + " system(s): " +
+                      std::to_string(made.systems));
+        // And it goes by itself. Its longest life is 450 + 355 ms, so two seconds
+        // of frames is past any of them.
+        const int freed = layer.EffectsFreed();
+        for (int frame = 0; frame < 130; ++frame) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CHECK_MSG(ByIdIn(layer.EffectReports(), id).id == 0 && layer.EffectsFreed() == freed + 1,
+                  std::string(one.entity) + " frees itself once its pools are over");
+    }
+    layer.OnDetach(registry);
+}
+
+
 void AnEffectsPictureHaloAndSystemsStandWhereTheTableSays() {
     if (!OriginalArtIsThere("AnEffectsPictureHaloAndSystemsStandWhereTheTableSays")) return;
     entt::registry registry;
@@ -7520,6 +7801,10 @@ void runTests() {
     AnEffectFollowsItsOwnerAndNothingHappensOnATick();
     ThePlayerWearsItsRedEyes();
     FiveBlastsFitUnderTheLightCap();
+    AFireballIsDrawnAtItsEntitysOwnScale();
+    AnExplosionIsTemporaryAndCarriesNoHalo();
+    ADestroyedFireballLeavesASmallExplosion();
+    ABombsBlastLeavesALargeExplosion();
     AnEffectMovesNoParticleOfTheLevels();
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();

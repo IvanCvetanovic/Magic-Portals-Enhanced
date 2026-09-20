@@ -148,15 +148,28 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     std::string why;
     if (!root.IsObject() || !ReadRule(root, "suck_effect", read.suck, why) ||
         !ReadRule(root, "sparkles", read.sparkles, why) || !ReadRule(root, "appear_effect", read.appear, why) ||
-        !ReadEyes(root, "red_eyes", read.eyes, why)) {
+        !ReadRule(root, "fireball", read.fireball, why) ||
+        !ReadRule(root, "small_explosion", read.smallExplosion, why) ||
+        !ReadRule(root, "explosion_large", read.largeExplosion, why) || !ReadEyes(root, "red_eyes", read.eyes, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
-    // appearEffect is given a point and nothing else: no direction to be offset
-    // along or turned by.
-    if (read.appear.turn != Turn::Fixed || read.appear.offsetUnits != 0.0) {
-        error = path + ": appear_effect has no direction: its angle is a number and its offset_units 0";
-        return false;
+    // The rows that are given a point and nothing else: no direction to be offset
+    // along or turned by. appearEffect, addFireball - whose `dir` is the entity's
+    // own custom data and not the angle it is added at - and both explosions,
+    // which AddScaledEntity adds at a flat 0f.
+    const struct {
+        const char* name;
+        const Rule* rule;
+    } pointOnly[] = {{"appear_effect", &read.appear},
+                     {"fireball", &read.fireball},
+                     {"small_explosion", &read.smallExplosion},
+                     {"explosion_large", &read.largeExplosion}};
+    for (const auto& row : pointOnly) {
+        if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
+            error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
+            return false;
+        }
     }
     // updateEyes both moves the eyes onto the character and hides them with it,
     // and the port has one owner that does both. A row that said otherwise would
@@ -201,6 +214,18 @@ Spawn Sparkles(const Rules& rules, const glm::dvec2& travellerPx, const glm::dve
 Spawn Appear(const Rules& rules, const glm::dvec2& exitPortalPx) {
     // appearEffect has no direction: its row's offset is 0 and its angle a literal.
     return SpawnOf(rules.appear, exitPortalPx, glm::dvec2(0.0));
+}
+
+Spawn Fireball(const Rules& rules, const glm::dvec2& atPx) {
+    return SpawnOf(rules.fireball, atPx, glm::dvec2(0.0));
+}
+
+Spawn SmallExplosion(const Rules& rules, const glm::dvec2& atPx) {
+    return SpawnOf(rules.smallExplosion, atPx, glm::dvec2(0.0));
+}
+
+Spawn LargeExplosion(const Rules& rules, const glm::dvec2& atPx) {
+    return SpawnOf(rules.largeExplosion, atPx, glm::dvec2(0.0));
 }
 
 glm::dvec3 EyeOffset(const EyeRule& rule, int drawnFrame, bool noGravity) {
