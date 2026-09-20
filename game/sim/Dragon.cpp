@@ -20,6 +20,7 @@ namespace {
 namespace Json = Supersonic::Json;
 
 constexpr std::size_t kWaypoints = 6;
+constexpr double kPi = 3.14159265358979323846;
 
 glm::dvec2 PxOf(const entt::registry& registry, entt::entity entity) {
     return Units::ToPixels(registry.get<Supersonic::TransformComponent>(entity).position);
@@ -80,6 +81,30 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return true;
     };
 
+    const auto pair = [&](const char* group, const char* key, glm::dvec2& into) -> bool {
+        const Json::Value& block = root[group];
+        if (!block.Has(key) || !block[key].IsArray() || block[key].AsArray().size() != 2 ||
+            !block[key].AsArray()[0].IsNumber() || !block[key].AsArray()[1].IsNumber()) {
+            error = path + ": " + std::string(group) + "." + key + " is missing or not a pair of numbers";
+            return false;
+        }
+        into = glm::dvec2(block[key].AsArray()[0].AsNumber(), block[key].AsArray()[1].AsNumber());
+        return true;
+    };
+    // A whole number at or above `least`: the counts and cells of the sheet, which
+    // a fractional value would silently truncate.
+    const auto whole = [&](const char* group, const char* key, int least, int& into) -> bool {
+        double value = 0.0;
+        if (!number(group, key, value)) return false;
+        if (value != std::floor(value) || value < static_cast<double>(least)) {
+            error = path + ": " + std::string(group) + "." + key + " is a whole number of at least " +
+                    std::to_string(least);
+            return false;
+        }
+        into = static_cast<int>(value);
+        return true;
+    };
+
     Rules read;
     if (!string("flight", "entity", read.entityName)) return false;
     if (!string("flight", "take_off", read.takeOffName)) return false;
@@ -92,6 +117,33 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!number("flight", "bob_frequency", read.bobFrequency)) return false;
     if (!number("fire", "interval_ms", read.fireIntervalMs)) return false;
     if (!number("fire", "muzzle_px", read.muzzlePx)) return false;
+    if (!number("fire", "muzzle_sub_deg", read.muzzleSubDeg)) return false;
+    if (!number("fire", "muzzle_add_deg", read.muzzleAddDeg)) return false;
+
+    // The lagged point (D7), and the angle it is read as.
+    if (!pair("follower", "start_offset_px", read.followerStartPx)) return false;
+    if (!pair("follower", "after_take_off_px", read.followerTakeOffPx)) return false;
+    {
+        int stride = 0;
+        int rate = 0;
+        if (!whole("follower", "stride_ms", 1, stride)) return false;
+        if (!whole("follower", "rate_ms", 0, rate)) return false;
+        read.followerStrideMs = static_cast<unsigned int>(stride);
+        read.followerRateMs = static_cast<unsigned int>(rate);
+    }
+    if (!number("angle", "fix_deg", read.angleFixDeg)) return false;
+    if (!number("angle", "sub_deg", read.angleSubDeg)) return false;
+    if (!number("angle", "min_deg", read.angleMinDeg)) return false;
+    if (!number("angle", "max_deg", read.angleMaxDeg)) return false;
+
+    // The picture its callback drives.
+    if (!whole("picture", "columns", 1, read.columns)) return false;
+    if (!whole("picture", "rows", 1, read.rows)) return false;
+    if (!whole("picture", "start_frame", 0, read.startFrame)) return false;
+    if (!whole("picture", "frames", 1, read.animFrames)) return false;
+    if (!number("picture", "open_from_ms", read.animOpenFromMs)) return false;
+    if (!number("picture", "close_from_ms", read.animCloseFromMs)) return false;
+    if (!number("picture", "span_ms", read.animSpanMs)) return false;
 
     if (!string("claw", "entity", read.clawName)) return false;
     if (!number("claw", "scan_ms", read.scanMs)) return false;
@@ -168,6 +220,20 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": camera.view_width_px is above zero";
         return false;
     }
+    // A band the wrong way round would clamp every angle to its own floor, and the
+    // head would never move; a span of 0 would divide by zero on every cell.
+    if (read.angleMinDeg > read.angleMaxDeg) {
+        error = path + ": angle.min_deg is at or below angle.max_deg";
+        return false;
+    }
+    if (read.animSpanMs <= 0.0) {
+        error = path + ": picture.span_ms is above zero";
+        return false;
+    }
+    if (read.startFrame >= read.columns * read.rows || read.animFrames > read.columns * read.rows) {
+        error = path + ": picture.start_frame and picture.frames are inside the sheet's cut";
+        return false;
+    }
     // The crush line must not sit outside the arm line, or the claw would destroy
     // a platform it never swung at.
     if (read.crushPx > read.armPx) {
@@ -177,6 +243,49 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 
     out = std::move(read);
     return true;
+}
+
+double AngleFor(const Rules& rules, const glm::dvec2& aim) {
+    // getAngle(v) is atan2f(v.x, v.y) - X FIRST - wrapped into [0, 2 PI).
+    double radians = static_cast<double>(
+        Supersonic::DetMath::atan2(static_cast<float>(aim.x), static_cast<float>(aim.y)));
+    if (radians < 0.0) radians += 2.0 * kPi;
+    const double degrees = radians / (2.0 * kPi) * 360.0;
+    return std::clamp(degrees + rules.angleFixDeg - rules.angleSubDeg, rules.angleMinDeg, rules.angleMaxDeg);
+}
+
+Look LookAt(const Rules& rules, double elapsedMs, bool tookOff, bool completed) {
+    Look look;
+    // ins 531-534: the whole animation block is inside `if (!tookOff)`.
+    if (tookOff) return look;
+    const int last = rules.animFrames - 1;
+    const auto cell = [&](double from, bool forward) {
+        // fTOi truncates toward zero, which matters only for the `completed` arm,
+        // where the elapsed time can sit before the window. The outer clamp
+        // saturates well inside the bound held here, which is only against a cast
+        // of an absurd elapsed time.
+        const double steps = std::clamp(
+            (elapsedMs - from) / rules.animSpanMs * static_cast<double>(rules.animFrames), -1000.0, 1000.0);
+        const int step = static_cast<int>(steps);
+        return std::clamp(forward ? step : last - step, 0, last);
+    };
+    // ins 536-574: the mouth opens over the open window, with its system playing.
+    if (elapsedMs > rules.animOpenFromMs && elapsedMs < rules.animOpenFromMs + rules.animSpanMs) {
+        look.plays = true;
+        look.setsFrame = true;
+        look.frame = cell(rules.animOpenFromMs, true);
+        return look;
+    }
+    // ins 575-625: and closes over the close window, or at once when the level is
+    // finished - the three-way `||`, whose third leg (tookOff) the guard above
+    // makes unreachable.
+    const bool closing = elapsedMs > rules.animCloseFromMs && elapsedMs < rules.animCloseFromMs + rules.animSpanMs;
+    if (closing || completed) {
+        look.kills = true;
+        look.setsFrame = true;
+        look.frame = cell(rules.animCloseFromMs, false);
+    }
+    return look;
 }
 
 bool Plays(const Rules& rules, const Tscn::Node& node) {
@@ -251,6 +360,35 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, bool comp
     const double seconds = static_cast<double>(dt);
     elapsedMs += ms;
 
+    // THE HEAD TURNS BEFORE THE BODY MOVES, which is the whole reason this arm is
+    // written out in the callback's order (ins 149-261 against ins 488-529). The
+    // aim reads GetPositionXY() while it still holds the position the LAST tick
+    // drew, bob included, and only ins 529 writes this tick's. A tidier order -
+    // move, then aim - would turn the head a frame early and change every angle by
+    // the 0.75 u a frame of flight is worth.
+    {
+        // The destination is the live player while it has not taken off, and a
+        // point off its own shoulder afterwards (ins 178-215).
+        glm::dvec2 destination = atPx + rules.followerTakeOffPx;
+        if (!tookOff && player != entt::null && registry.valid(player)) {
+            destination = PxOf(registry, player);
+        }
+        follower.SetDestination(destination);
+        // Not guarded by the pause: ins 217-218 call update() outright. The port's
+        // tick does not run under a pause at all, so the two agree.
+        follower.Update(Follower::FrameMs(seconds));
+        // normalize(GetPositionXY() - follower.getPos()): the DRAGON LESS the
+        // lagged point, which is the reading five independent lines of evidence
+        // rest on (D7 section 3.5) and which the fire code confirms by negating it
+        // before it shoots. gs2d's Normalize answers (0, 0) for a zero vector
+        // (GameMath.h:755-761), and getAngle((0,0)) is atan2f(0,0) = 0, so the
+        // angle then clamps to its floor rather than going NaN.
+        aim = atPx - follower.At();
+        const double length = std::sqrt(aim.x * aim.x + aim.y * aim.y);
+        aim = length > 0.0 ? aim / length : glm::dvec2(0.0);
+        angleDeg = AngleFor(rules, aim);
+    }
+
     // THE ONE-FRAME LAG IS THE ORIGINAL'S. Both branches below test virtualPos as
     // it was at the top of the tick while the adds write the live one, and the
     // drawn bob reads the same snapshot. dragon.json cites the instructions.
@@ -265,6 +403,25 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, bool comp
     const double wave =
         static_cast<double>(Supersonic::DetMath::sin(static_cast<float>(previous.x * rules.bobFrequency)));
     atPx = virtualPx + glm::dvec2(0.0, wave * rules.bobAmplitudePx);
+
+    // THE PICTURE, in the callback's place: after the move and before the shot, so
+    // the cell a frame shows is the one the elapsed time that fired it had. Drawn
+    // only - nothing below reads `frame` - but kept here because the same two
+    // windows also play and kill the mouth's particle system, and one rule for
+    // both is what stops the two drifting apart.
+    {
+        systemRestarted = false;
+        const Look look = LookAt(rules, elapsedMs, tookOff, completed);
+        if (look.setsFrame) frame = look.frame;
+        if (look.plays) {
+            // ETHSpriteEntity::PlayParticleSystem: Kill(false) and then Play,
+            // which resets every particle to the entity - every tick of the
+            // window, as the callback calls it.
+            systemKilled = false;
+            systemRestarted = true;
+        }
+        if (look.kills) systemKilled = true;
+    }
 
     // THE CLAW. Its sweep is on a 250 ms clock of its own, not the frame's.
     if (hasClaw) {
@@ -319,8 +476,29 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, bool comp
             const std::optional<Shot::Hit> blocked = Shot::FirstBody(registry, atPx, playerPx, entt::null);
             if (!blocked.has_value() || blocked->along >= 1.0) {
                 turn.fired = true;
-                turn.aimPx = along / length;
-                turn.firePx = atPx + turn.aimPx * rules.muzzlePx;
+                // IT SHOOTS AT THE LAGGED POINT, NOT AT THE PLAYER (the owner's
+                // standing ruling R19; decode D7 section 3.4, ins 708-714). The
+                // script hands addFireball `dragonToChar x (-1)`, and dragonToChar
+                // is the dragon LESS the follower - so the shot flies from the
+                // dragon toward the trailing point. That negation is itself the
+                // strongest evidence for the subtraction order: a vector already
+                // built as target - dragon would never be flipped to shoot at the
+                // target. Against a still player the point converges on it; against
+                // a moving one the shot goes about 1.2 s behind. The gate above is
+                // untouched, and is still asked of the LIVE player.
+                turn.aimPx = -aim;
+                // The muzzle (ins 697-749): a = rad(-GetAngle() - 110 + 29), then
+                // the dragon LESS scale(95) x (sin a, -cos a). At A = 360 that is
+                // (93.8, 14.9) from the entity, which is dragon.ent's own mouth
+                // StartPoint (96, 13); as A falls toward 340 the muzzle swings
+                // down with the head. The position it is measured from is THIS
+                // tick's, the one the move above just wrote.
+                const double muzzleRad =
+                    (-angleDeg - rules.muzzleSubDeg + rules.muzzleAddDeg) * kPi / 180.0;
+                const glm::dvec2 out(
+                    static_cast<double>(Supersonic::DetMath::sin(static_cast<float>(muzzleRad))),
+                    -static_cast<double>(Supersonic::DetMath::cos(static_cast<float>(muzzleRad))));
+                turn.firePx = atPx - out * rules.muzzlePx;
                 ++fired;
                 elapsedMs = 0.0;
             }
@@ -392,6 +570,23 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         one.atPx = glm::dvec2(position->numbers[0], position->numbers[1]);
         out.crushables.push_back(one);
     }
+    // THE FOLLOWER IS BUILT WHERE THE DRAGON STANDS, plus the raw (2, 0) of ins
+    // 44-45 (dragon.json `follower`). The callback builds it on its first tick,
+    // before that tick sets a destination, so a point made here and a point made
+    // on the first tick hold the same state: both sit at the start point with
+    // switchMs 0, and neither can retarget for a whole 200 ms period. The first
+    // frame therefore aims along (-2, 0) - straight behind the dragon - which
+    // getAngle reads as 270 degrees and the clamp draws at the 370 ceiling.
+    out.follower = Follower::Make(out.atPx + rules.followerStartPx, rules.followerStrideMs, rules.followerRateMs);
+    {
+        glm::dvec2 aim = out.atPx - out.follower.At();
+        const double length = std::sqrt(aim.x * aim.x + aim.y * aim.y);
+        out.aim = length > 0.0 ? aim / length : glm::dvec2(0.0);
+        out.angleDeg = AngleFor(rules, out.aim);
+    }
+    // The cell level31a gives its placement (spriteFrame="2"), which stands until
+    // the callback's first SetFrame - the close window at 500 ms.
+    out.frame = rules.startFrame;
     out.claw.Park(rules);
     return true;
 }

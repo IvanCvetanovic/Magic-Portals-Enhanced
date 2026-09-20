@@ -43,6 +43,7 @@
 #include "core/ViewportInfo.hpp"
 
 #include "sim/Art.hpp"
+#include "sim/Dragon.hpp"
 #include "sim/GravityWell.hpp"
 #include "sim/LevelEnd.hpp"
 #include "sim/Lighting.hpp"
@@ -3092,6 +3093,164 @@ void TheDragonsFireIsBuiltFromItsJpeg() {
     }
     std::printf("  2-32's dragon: %d explosion.JPG particle draws over 120 frames\n", fireDraws);
     CHECK_MSG(fireDraws > 0, "the dragon's fire is drawn");
+    layer.OnDetach(registry);
+}
+
+// 2-32'S DRAGON AND ITS CLAW, drawn from the sim rather than from their nodes
+// (the visuals plan's step 5.2; sim/Dragon.hpp, dragon.json `picture`).
+//
+// Before this both were static pictures of their whole sheets at the points
+// level31a placed them - the dragon off the left edge of the level at (-164, -84),
+// the claw at (-185, 184), neither of which is where either of them ever is. Here
+// the dragon is drawn a CELL at a time, at the position its flight integrates,
+// turned by the angle its Follower gives it; the claw rides the camera's left
+// edge; and the mouth's explosion.JPG system follows the head.
+void TheDragonAndItsClawAreDrawnWhereTheSimPutsThem() {
+    if (!OriginalArtIsThere("TheDragonAndItsClawAreDrawnWhereTheSimPutsThem")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+
+    const MagicPortals::Dragon::State& dragon = layer.SimLevel()->dragon;
+    {
+        const MagicPortalsLayer::DragonReport report = layer.DragonPicture();
+        CHECK_MSG(report.present && report.quad != entt::null && report.clawQuad != entt::null,
+                  "2-32 draws a dragon and a claw");
+        // ONE CELL OF THE SHEET, cut by Tiers::FrameCut: dragon_boss.png is
+        // 452 x 360 with no hd twin, so a frame is 226 x 180 units and samples a
+        // quarter of the texture.
+        CHECK_MSG(report.sizePx == glm::dvec2(226.0, 180.0), "its cell is " + Point(report.sizePx));
+        CHECK_MSG(std::fabs(report.uvScale.x - 0.5) < 1e-9 && std::fabs(report.uvScale.y - 0.5) < 1e-9,
+                  "and samples " + Point(report.uvScale) + " of the sheet");
+        // level31a's own spriteFrame, which stands until the callback's first
+        // SetFrame at 500 ms: cell 2, the bottom-left of the 2 x 2 cut.
+        CHECK_EQ(report.frame, 2);
+        CHECK_MSG(std::fabs(report.uvOffset.x) < 1e-9 && std::fabs(report.uvOffset.y - 0.5) < 1e-9,
+                  "at uv " + Point(report.uvOffset));
+    }
+
+    // The schedule test_mp_dragon measures on the same level: the mouth is shut by
+    // f48, the open window runs f180-f204, it fires at f240 and is shut again by
+    // f288, and the claw takes its first swing at f360.
+    int cellsSeen = 0;
+    int openingFrom = -1;
+    int shutAfterFiring = -1;
+    int offItsCell = 0;
+    std::string opening; // the cells the open window draws, in order
+    double screenXWorst = 0.0;
+    int lockedFrames = 0;
+    // Counted over the run and asserted once: a CHECK inside the loop would add
+    // two thousand assertions to this suite's count and drown its floor.
+    int offItsPivot = 0;
+    int offItsQuad = 0;
+    int offItsAngle = 0;
+    int emitterAdrift = 0;
+    int clawAdrift = 0;
+    // What its mouth draws in each of the three states the two windows leave it
+    // in: killed, free-running, and restarted every tick of the open window.
+    int drawnKilled = 0;
+    int drawnFree = 0;
+    int drawnInWindow = 0;
+    for (int frame = 1; frame <= 460; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::DragonReport report = layer.DragonPicture();
+
+        // WHERE ITS PICTURE HANGS: the entity's point plus its Sprite2D offset -
+        // which is -PivotAdjust - TURNED by the angle, because Ethanon rotates a
+        // sprite about its origin and the origin is the entity's own point.
+        const glm::dvec2 turned = MagicPortals::Particles::Turn(glm::dvec2(48.0, -7.0), report.angleDeg);
+        if (std::fabs(report.centrePx.x - (report.atPx.x + turned.x)) > 1e-9 ||
+            std::fabs(report.centrePx.y - (report.atPx.y + turned.y)) > 1e-9) {
+            ++offItsPivot;
+        }
+        // And the quad itself carries that centre and that angle: a positive
+        // Ethanon angle is counter-clockwise on the screen, which the engine's
+        // +z turn is too.
+        const auto& transform = registry.get<TransformComponent>(report.quad);
+        const glm::vec3 want = MagicPortals::Units::ToWorld(report.centrePx.x, report.centrePx.y);
+        if (std::fabs(transform.position.x - want.x) > 1e-4f || std::fabs(transform.position.y - want.y) > 1e-4f) {
+            ++offItsQuad;
+        }
+        if (std::fabs(transform.rotation.z -
+                      static_cast<float>(report.angleDeg * 3.14159265358979323846 / 180.0)) > 1e-4f) {
+            ++offItsAngle;
+        }
+        // THE CAMERA IS THIS DRAGON: once its x is inside the level, its entity
+        // point sits on the screen's left edge, which is what makes 2-32 a chase.
+        if (report.atPx.x >= 0.0) {
+            ++lockedFrames;
+            screenXWorst = std::max(screenXWorst, static_cast<double>(std::fabs(screenOf(registry, report.atPx).x)));
+        }
+        if (report.frame != 2) ++cellsSeen;
+        if (dragon.fired > 0 && shutAfterFiring < 0 && report.frame == 0) shutAfterFiring = frame;
+        // The cell reaches the texture as the original's rect for it: frame f is
+        // column f % 2, row f / 2 (gs2d Sprite.cpp:104-136).
+        const glm::dvec2 wantUv(0.5 * (report.frame % 2), 0.5 * (report.frame / 2));
+        if (std::fabs(report.uvOffset.x - wantUv.x) > 1e-9 || std::fabs(report.uvOffset.y - wantUv.y) > 1e-9) {
+            ++offItsCell;
+        }
+        // THE OPEN WINDOW, which is the one the original's own library frame
+        // caught: the mouth walks 0 -> 3 while its system is playing.
+        if (dragon.systemRestarted) {
+            if (openingFrom < 0) openingFrom = frame;
+            if (opening.empty() || opening.back() != static_cast<char>('0' + report.frame)) {
+                opening.push_back(static_cast<char>('0' + report.frame));
+            }
+        }
+
+        // ITS MOUTH'S SYSTEM RIDES THE HEAD (K16's explosion.JPG): the emitter
+        // takes its owner's point and angle every frame from the picture above.
+        if (const auto* fire = ReportOf(layer.EmitterReports(), "dragon_ent_1279", 0); fire != nullptr) {
+            if (fire->owner.atPx != report.atPx || fire->owner.angleDeg != report.angleDeg) ++emitterAdrift;
+            // KILLED between 900 and 3000 ms of its clock, which after the shot at
+            // f240 is f300 on; FREE-RUNNING from the end of one open window to the
+            // start of the next close window (f210-f265); and inside an open window
+            // the callback calls Play every tick, which resets every particle to
+            // the mouth - so only the first of the five is ever released, and the
+            // burst never leaves the head. That is the original's arithmetic, not a
+            // shortcut: ETHParticleManager::Play zeroes `released` and `elapsed` on
+            // all of them (ETHParticleManager.cpp:274-286, :473-491), and the
+            // release schedule then only ever clears particle 0's own 0 ms gate.
+            if (frame >= 300 && frame <= 400) drawnKilled = std::max(drawnKilled, fire->drawn);
+            if (frame >= 210 && frame <= 265) drawnFree = std::max(drawnFree, fire->drawn);
+            if (dragon.systemRestarted) drawnInWindow = std::max(drawnInWindow, fire->drawn);
+        }
+        // AND THE CLAW IS WHERE ITS WAYPOINTS PUT IT, measured from the camera's
+        // left edge and never from its node.
+        const glm::dvec2 claw = dragon.claw.AtPx(dragon.rules, dragon.CameraLeftPx());
+        if (std::fabs(report.clawCentrePx.x - claw.x) > 1e-9 || std::fabs(report.clawCentrePx.y - claw.y) > 1e-9) {
+            ++clawAdrift;
+        }
+    }
+    CHECK_MSG(offItsPivot == 0, std::to_string(offItsPivot) + " frames drew the dragon off its pivot");
+    CHECK_MSG(offItsQuad == 0, std::to_string(offItsQuad) + " frames put its quad somewhere else");
+    CHECK_MSG(offItsAngle == 0, std::to_string(offItsAngle) + " frames turned its quad by another angle");
+    CHECK_MSG(emitterAdrift == 0, std::to_string(emitterAdrift) + " frames left its fire behind");
+    CHECK_MSG(clawAdrift == 0, std::to_string(clawAdrift) + " frames drew the claw off its waypoints");
+    std::printf("  and its mouth draws %d particle(s) while killed, %d free-running, %d in the open window\n",
+                drawnKilled, drawnFree, drawnInWindow);
+    CHECK_MSG(drawnKilled == 0, "the killed system draws nothing");
+    CHECK_MSG(drawnFree > 1, "the free-running system draws its pool");
+    CHECK_MSG(drawnInWindow == 1, "and one particle at a time while the window restarts it every tick");
+    std::printf("  2-32: the dragon's picture moved through %d frames off its placed cell, opening \"%s\""
+                " from f%d, shut at f%d after firing; its point held within %.2f px of the screen's left"
+                " edge over %d locked frames\n",
+                cellsSeen, opening.c_str(), openingFrom, shutAfterFiring, screenXWorst, lockedFrames);
+    CHECK(cellsSeen > 0 && openingFrom > 0 && shutAfterFiring > openingFrom);
+    // Two open windows fall inside 460 frames: the level's own at 3000 ms, and the
+    // next one 3000 ms after the shot at f240 restarted the clock.
+    CHECK_MSG(opening == "01230123", "the mouth opens 0 -> 3 over each window, drawn \"" + opening + "\"");
+    CHECK_MSG(offItsCell == 0, std::to_string(offItsCell) + " frames sampled another cell than the one it set");
+    CHECK_MSG(screenXWorst < 3.0, "the camera's hard lock holds the dragon on the left edge");
+    // The claw has swung by now, and its picture is no longer parked off the
+    // level: it rides the camera, which by f400 is some 250 px into the level.
+    CHECK(dragon.claw.heightPx > 0.0);
+    CHECK(layer.DragonPicture().clawCentrePx.x > 0.0);
     layer.OnDetach(registry);
 }
 
@@ -6796,6 +6955,7 @@ void runTests() {
     AParticleOnANonSquareCellIsDrawnSquare();
     ATurnedOwnerTurnsItsParticles();
     TheDragonsFireIsBuiltFromItsJpeg();
+    TheDragonAndItsClawAreDrawnWhereTheSimPutsThem();
     FinishingALevelShowsTheMedal();
     TheMedalScreenIsTheOriginals();
     TheGridShowsTheMedalsEarned();

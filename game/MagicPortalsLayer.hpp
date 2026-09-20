@@ -365,6 +365,27 @@ public:
         glm::dvec2 uvOffset{0.0};  // and where
     };
     std::vector<MinionReport> MinionReports() const;
+
+    // 2-32's dragon and its claw (dragon.json), for the suites: as the last tick
+    // left them. `present` is false on the 127 levels that place neither.
+    struct DragonReport {
+        bool present = false;
+        entt::entity quad{entt::null};     // the dragon's picture
+        entt::entity clawQuad{entt::null}; // and the claw's
+        glm::dvec2 centrePx{0.0};          // where the dragon's picture is centred
+        glm::dvec2 sizePx{0.0};            // one cell of dragon_boss.png, in units
+        glm::dvec2 uvScale{0.0};           // the share of the sheet that cell samples
+        glm::dvec2 uvOffset{0.0};          // and where
+        int frame = 0;                     // the cell its callback last set
+        double angleDeg = 0.0;             // Ethanon's angle, counter-clockwise on the screen
+        glm::dvec2 atPx{0.0};              // the entity's own point: Dragon::State::atPx
+        glm::dvec2 clawCentrePx{0.0};      // and the claw's picture, where its waypoints put it
+        double clawAngleDeg = 0.0;
+        int clawWaypoint = 0;
+        bool systemKilled = false; // its mouth's particle system, as the windows left it
+    };
+    DragonReport DragonPicture() const;
+
     // The slot the player's picture is drawn in, and its depth in the level's units:
     // GameCharacter's 4 over the scale factor (art.json character.z, depth).
     float PlayerSlotZ() const;
@@ -667,6 +688,11 @@ private:
         int motion{-1};       // in m_motions: a crystal or key its script bobs
         bool antiportal{false}; // ETHCallback_antiportal blinks and turns it (art.json)
         int placed{-1};       // in m_placed: a picture its own callback sways, fades or turns
+        // 2-32's boss: its node stands off the left edge of the level and its
+        // callback flies it, turns it and cuts its sheet (sim/Dragon.hpp), and the
+        // claw's rides the camera. Both are drawn from the sim, not from the node.
+        bool dragon{false};
+        bool claw{false};
     };
     // A placed picture's callback (motions.json `placed`): its row, its
     // linearMotion when it has one, and its turn.
@@ -998,6 +1024,13 @@ private:
     std::vector<MinionQuad> m_minions;
     Tiers::Cut m_minionCut;    // minion.png's tier file, cut as SetupSpriteRects cuts it
     std::string m_minionSheet; // that file; empty when it cannot be read or cut
+
+    // 2-32's dragon: dragon_boss.png cut 2 x 2 as SetupSpriteRects cuts it
+    // (dragon.json picture), and the two sprites the sim drives. A sheet that
+    // cannot be cut leaves the cut empty and the picture whole, and says so once.
+    Tiers::Cut m_dragonCut;
+    int m_dragonSprite{-1}; // in m_sprites
+    int m_clawSprite{-1};
     // A marker's minion, at the 2 minion_spawn adds it at, and an escort the boss
     // calls, at its anchor's depth: each after the art at or below it, and both
     // behind the player.

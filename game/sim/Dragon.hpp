@@ -37,10 +37,19 @@
 // it does not bite until x > 2177, past take_off at 2160. It defaults from
 // dragon.json so the sim stands up with no window, and the layer overwrites it.
 //
-// NOT BUILT, and recorded in data/dragon.json: the sounds, the animation frames
-// and particles, the claw's easing curves (nothing reads the claw's position),
-// and the knight - which is a cutscene that runs only after the level is won.
+// WHERE IT LOOKS, and it is not at you. The angle comes from a Follower
+// (Follower.hpp): a point that LAGS the player by about 1.2 s, which the callback
+// re-samples every 200 ms and eases toward over 2000 ms. The head turns toward
+// that trailing point, clamped into a 30-degree band, and - the owner's standing
+// ruling R19 - THE FIREBALL FLIES ALONG THE SAME LAGGED DIRECTION. Against a
+// still player the two agree; against a moving one the shot goes where the player
+// was. The sight gate is unaffected: it is still a segment to the LIVE player.
+//
+// NOT BUILT, and recorded in data/dragon.json: the sounds, the claw's easing
+// curves (nothing reads the claw's position), and the knight - which is a
+// cutscene that runs only after the level is won.
 
+#include "sim/Follower.hpp"
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
@@ -67,9 +76,35 @@ struct Rules {
     double bobAmplitudePx = 0.0; // 13
     double bobFrequency = 0.0;   // 0.1
 
+    // The Follower that lags the angle's target (Follower.hpp; decode D7).
+    glm::dvec2 followerStartPx{0.0};     // the raw (2, 0) of ins 44-45, in level units
+    unsigned int followerStrideMs = 0;   // 2000
+    unsigned int followerRateMs = 0;     // 200
+    glm::dvec2 followerTakeOffPx{0.0};   // scale(128, 64), the destination after take-off
+
+    // The angle it draws itself at (ins 241-261): clamp(deg(getAngle(aim)) + fix -
+    // sub, min, max), where aim is the dragon LESS the lagged point.
+    double angleFixDeg = 0.0; // 110
+    double angleSubDeg = 0.0; // 10
+    double angleMinDeg = 0.0; // 340
+    double angleMaxDeg = 0.0; // 370
+
     // The fireballs.
     double fireIntervalMs = 0.0; // 4000
     double muzzlePx = 0.0;       // 95
+    double muzzleSubDeg = 0.0;   // 110: a = rad(-angle - 110 + 29)
+    double muzzleAddDeg = 0.0;   // 29
+
+    // The picture, which its own callback drives (ins 531-625). Drawn only: the
+    // layer reads the cell, and the two windows also play and kill the mouth's
+    // particle system.
+    int columns = 0;              // dragon.ent's SpriteCut x, 2
+    int rows = 0;                 // and y, 2
+    int startFrame = 0;           // level31a's spriteFrame for it, 2
+    double animOpenFromMs = 0.0;  // 3000: the mouth opens, 0 -> frames-1
+    double animCloseFromMs = 0.0; // 500: and closes, frames-1 -> 0
+    double animSpanMs = 0.0;      // 400, both ways
+    int animFrames = 0;           // 4
 
     // The claw (ETHCallback_dragon_claw).
     std::string clawName;   // dragon_claw.ent
@@ -128,6 +163,42 @@ struct Claw {
     double AngleDeg(const Rules& rules) const;
 };
 
+// The angle the callback draws itself at, given its aim - the UNIT vector from the
+// lagged point TO the dragon (ins 241-261):
+//
+//     A = clamp(radianToDegree(getAngle(aim)) + 110 - 10, 340, 370)
+//
+// with `getAngle(v) = atan2f(v.x, v.y)` wrapped into [0, 2 PI) (GameMath.h:711-715).
+// For a target to the right at a depression of phi below the horizontal in y-down
+// pixels that works out as A = clamp(370 - phi, 340, 370): level or above draws
+// +10 degrees, 10 degrees below draws 0, and 30 or more below - or anything behind
+// it - draws -20. A positive Ethanon angle turns the sprite counter-clockwise on
+// the screen (D7 section 5, VERIFIED down the GLES2 path).
+//
+// Taken out of Tick so that the map itself can be pinned: the argument order of
+// atan2 is the one mistake here that a capture cannot catch, because atan2(y, x)
+// would rotate every reading by 90 degrees and still land inside the clamp.
+double AngleFor(const Rules& rules, const glm::dvec2& aim);
+
+// What ETHCallback_dragon does to the PICTURE on one tick (ins 531-625), as a rule
+// of its own so that the cell and the mouth's particles cannot disagree: both the
+// frame the layer draws and the play/kill of the system come from this one call.
+//
+// The whole block sits inside `if (!tookOff)` (ins 531-534), so a dragon that has
+// climbed away keeps whatever cell it last had and its system stays as it was.
+//   3000 < e < 3400          PlayParticleSystem(0), frame = clamp(int((e-3000)/400 x 4), 0, 3)
+//   (500 < e < 900) || isFinished || tookOff
+//                            KillParticleSystem(0), frame = clamp(3 - int((e-500)/400 x 4), 0, 3)
+// The three-way `||` is read from ins 584-598; its `tookOff` leg can never be true
+// inside the block above it. `e` only ever returns to 0 when the dragon fires.
+struct Look {
+    bool setsFrame = false; // SetFrame ran this tick
+    int frame = 0;          // with this cell
+    bool plays = false;     // PlayParticleSystem(0) ran this tick
+    bool kills = false;     // KillParticleSystem(0) ran this tick
+};
+Look LookAt(const Rules& rules, double elapsedMs, bool tookOff, bool completed);
+
 struct State {
     Rules rules;
 
@@ -139,6 +210,23 @@ struct State {
     glm::dvec2 takeOffPx{0.0};
     bool tookOff = false;
     double elapsedMs = 0.0;
+
+    // The lagged point the head turns toward, and the fireball flies at (R19).
+    Follower::Point follower;
+    // Ethanon's angle, counter-clockwise on the screen: what SetAngle was last
+    // given, in [angleMinDeg, angleMaxDeg]. It is computed from the position this
+    // tick STARTED at, because the original writes the move after the angle.
+    double angleDeg = 0.0;
+    // normalize(dragonPos - followerPos) as that same line built it: the head's
+    // aim, and the fireball's flies along its negation.
+    glm::dvec2 aim{0.0};
+
+    // THE PICTURE, drawn only, as Claw::AtPx is: the cell its callback last set
+    // and whether its system is killed. `restarted` is true on the ticks
+    // PlayParticleSystem(0) ran, which resets every particle to the mouth.
+    int frame = 0;
+    bool systemKilled = false;
+    bool systemRestarted = false;
 
     bool hasClaw = false;
     Claw claw;

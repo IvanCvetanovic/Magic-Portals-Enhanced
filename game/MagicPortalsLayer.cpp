@@ -897,6 +897,23 @@ void MagicPortalsLayer::updateEmitters(entt::registry& registry, float deltaTime
                 continue;
             }
             emitter.owner = Particles::Owner{owner.ownerPx, owner.ownerAngleDeg};
+            // 2-32'S DRAGON PLAYS AND KILLS ITS OWN MOUTH (sim/Dragon.hpp Look, the
+            // same two windows that drive its cell). KillParticleSystem stops the
+            // renewals and lets what is alive live out; PlayParticleSystem is
+            // Kill(false) followed by Play, which resets EVERY particle to the
+            // entity (ETHSpriteEntity.cpp:795-811, ETHParticleManager.cpp:274-286) -
+            // and the callback calls it on every tick of the open window, so the
+            // burst sits at the mouth for its 400 ms rather than streaming away.
+            // Those resets draw from the layer's particle stream, which shifts the
+            // stream for level31a's other emitters and for no other level's; the
+            // visuals plan's 6.3 (00_order K8) may move it to its own generator.
+            if (owner.dragon && m_level.dragon.present) {
+                if (m_level.dragon.systemRestarted) {
+                    emitter.particles = Particles::MakePool(
+                        system, static_cast<int>(emitter.particles.size()), emitter.owner, random);
+                }
+                emitter.killed = m_level.dragon.systemKilled;
+            }
         }
 
         const int frames = std::max(1, system.Frames());
@@ -2340,6 +2357,9 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     m_artError.clear();
     m_sign = NoPortalSign{};
     m_sky = Sky::Controller{};
+    m_dragonSprite = -1;
+    m_clawSprite = -1;
+    m_dragonCut = Tiers::Cut{};
     if (!Sprites::Find(m_data.scene, m_paths.art, m_tierRules, sprites, m_artError)) {
         // Played anyway, as boxes: the art is the original's, and a machine
         // without it can still play the port.
@@ -2505,6 +2525,23 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             node != nullptr && BareEntityName(*node) == m_artRules.antiportal.entity) {
             drawn.antiportal = true;
         }
+        // 2-32'S BOSS AND ITS CLAW, matched by entity name as Dragon::Find matches
+        // them, and only where the sim actually found a dragon. Both pictures are
+        // drawn from Dragon::State from here on: the dragon's node sits off the
+        // left edge of the level at (-164, -84) and its callback flies it, and the
+        // claw's node at (-185, 184) is never where the claw is - its waypoints are
+        // measured from the camera's left edge, which on this one level IS the
+        // dragon (dragon.json camera).
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr && m_level.dragon.present) {
+            const std::string entity = Roles::EntityName(*node);
+            if (entity == m_data.dragon.entityName) {
+                drawn.dragon = true;
+                m_dragonSprite = static_cast<int>(m_sprites.size());
+            } else if (entity == m_data.dragon.clawName) {
+                drawn.claw = true;
+                m_clawSprite = static_cast<int>(m_sprites.size());
+            }
+        }
         // ETHCallback_crystal and ETHCallback_key each call linearMotion with their
         // row's arguments; the callback is named by the entity less its .ent, so both
         // spellings of a placement bob. A crystal or key under any other entity runs
@@ -2567,6 +2604,23 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         drawn.sprite = std::move(sprite);
         m_sprites.push_back(std::move(drawn));
     }
+    // 2-32'S DRAGON IS DRAWN A CELL AT A TIME (dragon.json picture): dragon.ent
+    // cuts dragon_boss.png 2 x 2, and the port cuts it through Tiers::FrameCut, the
+    // one cut rule (00_order K5). The file has no hd twin, so a frame is 226 x 180
+    // of its 452 x 360 units. A sheet that cannot be cut keeps the picture whole
+    // and says so once, as the minions' does.
+    if (m_dragonSprite >= 0) {
+        const Sprites::Sprite& sheet = m_sprites[static_cast<std::size_t>(m_dragonSprite)].sprite;
+        std::string why;
+        if (!Tiers::FrameCut(sheet.texels, sheet.density, m_data.dragon.columns, m_data.dragon.rows, m_dragonCut,
+                             why)) {
+            m_dragonCut = Tiers::Cut{};
+            SUPERSONIC_LOG_WARN("Magic Portals")
+                << "the dragon is drawn on its whole sheet: " << sheet.texture << " could not be cut " << why
+                << std::endl;
+        }
+    }
+
     // The beholder at its adder's z_index and a spike at -4: after the sprites
     // drawn at or below it and before the next - and after the player only where
     // it stands at the player's depth or in front of it. The original orders by
@@ -2806,6 +2860,38 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
                 rotation = Units::ToWorldRotation(sprite.rotation - turnedRad);
                 ownerAngleDeg += script.turn.turnedDeg;
             }
+        } else if (drawn.dragon) {
+            // 2-32'S BOSS, drawn where the sim flies it and turned the way its
+            // callback turns it (sim/Dragon.hpp). Its picture hangs off the entity
+            // by PivotAdjust, and Ethanon rotates a sprite about its ORIGIN - which
+            // is the entity's own point - so the offset turns with the angle.
+            // `gone` never: the original keeps drawing it after it has taken off.
+            const Dragon::State& dragon = m_level.dragon;
+            ownerPx = dragon.atPx;
+            ownerAngleDeg = dragon.angleDeg;
+            centrePx = ownerPx + Particles::Turn(sprite.offsetPx, ownerAngleDeg);
+            rotation = Units::ToWorldRotation(-ownerAngleDeg * 3.14159265358979323846 / 180.0);
+            if (m_dragonCut.frameUnits.x > 0 && m_dragonCut.frameUnits.y > 0) {
+                sizePx = glm::dvec2(m_dragonCut.frameUnits);
+                // The cell its callback last set, as the original's rect for it:
+                // frame f is column f % columns, row f / columns
+                // (gs2d Sprite.cpp:104-136), and the uv is written here rather than
+                // by a flipbook's even split, so one rule cuts every sheet.
+                const int columns = std::max(1, m_data.dragon.columns);
+                auto& material = registry.get<MaterialComponent>(drawn.quad);
+                material.uvScale = glm::vec2(m_dragonCut.uvScale);
+                material.uvOffset =
+                    glm::vec2(Tiers::UvOffset(m_dragonCut, dragon.frame % columns, dragon.frame / columns));
+            }
+        } else if (drawn.claw) {
+            // AND ITS CLAW, which is never where its node is: its waypoints are
+            // measured from the camera's left edge, and on this one level the
+            // camera is the dragon. dragon.json's `claw` has the six points.
+            const Dragon::State& dragon = m_level.dragon;
+            ownerPx = dragon.claw.AtPx(dragon.rules, dragon.CameraLeftPx());
+            ownerAngleDeg = dragon.claw.AngleDeg(dragon.rules);
+            centrePx = ownerPx + Particles::Turn(sprite.offsetPx, ownerAngleDeg);
+            rotation = Units::ToWorldRotation(-ownerAngleDeg * 3.14159265358979323846 / 180.0);
         } else if (drawn.body != entt::null) {
             // A body the level took away - a wall a stone broke - takes its picture.
             gone = !registry.valid(drawn.body);
@@ -3937,6 +4023,34 @@ void MagicPortalsLayer::syncMinions(entt::registry& registry) {
         material.uvScale = glm::vec2(m_minionCut.uvScale);
         material.uvOffset = glm::vec2(Tiers::UvOffset(m_minionCut, drawn.pose.column, drawn.pose.row));
     }
+}
+
+MagicPortalsLayer::DragonReport MagicPortalsLayer::DragonPicture() const {
+    DragonReport report;
+    const Dragon::State& dragon = m_level.dragon;
+    if (!dragon.present) return report;
+    report.present = true;
+    report.frame = dragon.frame;
+    report.angleDeg = dragon.angleDeg;
+    report.atPx = dragon.atPx;
+    report.systemKilled = dragon.systemKilled;
+    report.clawWaypoint = dragon.claw.waypoint;
+    report.clawAngleDeg = dragon.claw.AngleDeg(dragon.rules);
+    report.sizePx = glm::dvec2(m_dragonCut.frameUnits);
+    report.uvScale = m_dragonCut.uvScale;
+    const int columns = std::max(1, m_data.dragon.columns);
+    report.uvOffset = Tiers::UvOffset(m_dragonCut, dragon.frame % columns, dragon.frame / columns);
+    if (m_dragonSprite >= 0 && m_dragonSprite < static_cast<int>(m_sprites.size())) {
+        const DrawnSprite& drawn = m_sprites[static_cast<std::size_t>(m_dragonSprite)];
+        report.quad = drawn.quad;
+        report.centrePx = drawn.centrePx;
+    }
+    if (m_clawSprite >= 0 && m_clawSprite < static_cast<int>(m_sprites.size())) {
+        const DrawnSprite& drawn = m_sprites[static_cast<std::size_t>(m_clawSprite)];
+        report.clawQuad = drawn.quad;
+        report.clawCentrePx = drawn.centrePx;
+    }
+    return report;
 }
 
 void MagicPortalsLayer::buildHud(entt::registry& registry) {

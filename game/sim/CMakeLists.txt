@@ -19,6 +19,7 @@ add_library(MagicPortalsSim STATIC
     Diamonds.cpp
     Fields.cpp
     Fire.cpp
+    Follower.cpp
     Game.cpp
     Ghost.cpp
     Goals.cpp

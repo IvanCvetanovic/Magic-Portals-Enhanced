@@ -13082,3 +13082,160 @@ could not launch twice, ran first time on this round's binary.
 - **The blocked-way search arm** is in the rule and in its test, and reached by nothing until the sim casts its ray
   (minions.json `_destination_reachability_not_built`).
 - **The dragon knight** (after 2-32's win) is not drawn; its row rule is recorded.
+
+## Step 77 - the 2-32 dragon flying where its sim flies it, turned toward the point that trails the player, and the cell its own callback sets (built)
+
+The visuals plan's step 5.2 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, as section 8.13 amends
+it; its brief `system_5.md` 5c-2; decode `decode/D7.md` and its check, section 8.8). On MPR `main`, `build/`.
+Game-only: no file under `engine/`, and the engine pin is unchanged. Changed: `game/sim/Follower.{hpp,cpp}` (new),
+`game/sim/CMakeLists.txt`, `game/sim/Dragon.{hpp,cpp}`, `game/data/dragon.json`, `game/MagicPortalsLayer.{hpp,cpp}`,
+`tests/test_mp_dragon.cpp`, `tests/test_mp_layer.cpp` - 9 files.
+
+**Level 2-32's boss is drawn for the first time.** Before this it was two static pictures of two whole sheets at the
+points `level31a` places them: `dragon_boss.png`, all 452 x 360 units of it, at (-164, -84) off the left edge of the
+level, and `dragon_claw.png` at (-185, 184), neither of which is where either of them ever is. Now the dragon is drawn
+ONE CELL at a time - 226 x 180 units, `dragon.ent`'s 2 x 2 `<SpriteCut>` through `Tiers::FrameCut` - at the position
+its flight integrates, turned by the angle its callback gives it, with its mouth's `explosion.JPG` system riding its
+head; and the claw is drawn where its six waypoints put it, at the camera's left edge. **The angle, and with it the
+fireball, now come from the original's `Follower`** (decode D7): a point that lags the player by about 1.2 s, which
+the callback re-samples every 200 ms and eases toward over 2000 ms. The head turns toward that trailing point, and -
+the owner's standing ruling **R19** - THE SHOT FLIES ALONG THE SAME LAGGED DIRECTION, where the port had aimed along
+the segment its sight gate tests. The sight gate itself is untouched and is still asked of the live player.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`, re-checked this
+session; every number is in `data/dragon.json` with its instructions).
+- **`Follower`** (`ETHFramework/Follower.angelscript`, bytes 25263..26388). `update` ins 3-58: if the point differs
+  from the destination (exact `opEquals`) AND more than `updateRate` ms have passed, restart the ease from the point
+  to the destination; then add the frame to both clocks. The point is
+  `elapsed > time ? b : a + (b - a) x sin(elapsed / time x PI/2)`. `forcePosition` sets a = b only, and touches
+  neither clock nor destination - so a new or forced point holds still for one whole period.
+- **The clock is whole milliseconds.** `GetLastFrameElapsedTime` is a uint that `ETHEngine.cpp:141-147` truncates
+  from the frame's real length, so a 60 Hz device feeds the script 16 ms and the retarget period is 13 frames. The
+  port truncates at the call site for that reason and one more: at 16.667 the `switchMs > 200` test falls on a knife
+  edge (12 x 16.667 = 200.000008), so float representation, not the decode, would decide 12 or 13.
+- **`ETHCallback_dragon`, in the callback's own order.** ins 149-215 set the destination - the live player while
+  `!tookOff`, `GetPositionXY() + scale(128, 64)` after; ins 217-218 `update()`; ins 220-239
+  `normalize(GetPositionXY() - follower.getPos())`, **the dragon LESS the lagged point**; ins 241-261
+  `SetAngle(clamp(deg(getAngle(aim)) + 110 - 10, 340, 370))`; ins 488-529 the move; ins 531-625 the cell; ins 626-768
+  the shot. The angle is written BEFORE the move, so it reads the position the last tick drew, bob included.
+- **The cell (ins 531-625), read in full here.** The whole block is inside `if (!tookOff)` (ins 531-534).
+  `3000 < e < 3400`: `PlayParticleSystem(0)` and `SetFrame(clamp(int((e-3000)/400 x 4), 0, 3))` - the mouth opens.
+  `(500 < e < 900) || isFinished || tookOff`: `KillParticleSystem(0)` and
+  `SetFrame(clamp(3 - int((e-500)/400 x 4), 0, 3))` - it closes. **The three-way `||` is now read rather than
+  guessed** (ins 584-585 push true for the window, 588-591 fall through to `GameStateController::isFinished`, 593-596
+  to `tookOff`, which the outer guard makes unreachable); `dragon.json` said it was unresolved and no longer does.
+  `e` returns to 0 only when it fires, so a dragon with nothing in sight holds the mouth open at cell 3.
+  **The `isFinished` leg is live on this level, not decoration:** the exit is at x 2554 and the dragon does not take
+  off until x 2160, which it reaches at 51.6 s, so a player who finishes before then finishes in front of a dragon
+  that is still flying - and the layer goes on ticking the level while the door's effect runs. `test_mp_dragon` drives
+  it through `Tick` itself, and the mouth shuts.
+- **The shot (ins 697-754).** `a = rad(-GetAngle() - 110 + 29)`;
+  `fireballPos = GetPositionXY() - scale(95) x normalize(sin a, -cos a)` - at A = 360 that is (93.8, 14.9) from the
+  entity, and `dragon.ent`'s mouth `<StartPoint>` is (96, 13); `addFireball(pos, dragonToChar x (-1), true, 1)` -
+  **the negation is R19**, and a vector built as target - dragon would never need it (D7 section 3.5's five lines).
+- **Two spaces, one file.** ins 44-45 push `vector2(2, 0)` and ins 55 add it with NO `g_scale.scale`, so the
+  follower's start offset is 2 WORLD units = 2 / 2.8125 = 0.7111 level units; ins 189-201 push `vector2(128, 64)`
+  THROUGH `SGlobalScale::scale`, so the take-off destination is 128 x 64 level units as written (00_order 8.12a).
+  Only the start offset's direction can ever show: the point is replaced at the first retarget, and until then the
+  aim is (-1, 0) whatever its length, which `getAngle` reads as 270 degrees and the clamp draws at 370.
+- **The picture hangs on its pivot, TURNED.** `dragon.ent`'s `<PivotAdjust>` is (-48, 7), the converter writes its
+  negation as the Sprite2D offset, and Ethanon rotates a sprite about its ORIGIN, which is the entity's own point
+  (`ETHEntity.cpp:275-301`, `ETHSpriteEntity.cpp:369`). `level31a` places the entity with `spriteFrame="2"`, the live
+  field (`ETHEntity.cpp:221`), which stands until the callback's first `SetFrame` at 500 ms.
+- **Play restarts, it does not resume.** `ETHSpriteEntity::PlayParticleSystem` is `Kill(false)` then `Play`, and
+  `Play` zeroes `released` and `elapsed` on every particle (`ETHParticleManager.cpp:274-286`, `:473-491`). The
+  callback calls it on every tick of the open window, so only particle 0 - whose release gate is 0 ms - is ever
+  released, and the burst never leaves the mouth. Between the windows the system free-runs its pool of 5.
+
+**WHAT IS NOT BUILT** and is recorded in `dragon.json`: the sounds; `wall_destroy.ent`'s puff and
+`red_suck_effect.ent`; the knight cutscene; and the claw's `smoothEnd` / `smoothBeginning` easing, which the port
+still interpolates linearly between waypoints - nothing in the sim reads the claw's position, but the picture is
+drawn now, so that became visible with this step.
+
+**BASELINE.** The last after captures in this tree are step 76's `5.1/after/sweep`, and they predate its own third
+round: they were taken with `MagicPortals.exe` `8f7a75a7`, where the committed binary is `292fefdb` (R24 and R25 in).
+So a fresh before was taken on the committed build (`5.2/before/`): 1-01 f420 reproduces `81a39d45`, the same md5 as
+`5.1/after/sweep`, and `2-32 level31a` was captured f6-f300 every 6.
+
+**GATES.** 1280 x 720, `--fixed-step`, `--screenshot-every 6`. level31a is 256 u tall and the camera's y is pinned to
+0, so level = screen / 2.8125. The frames are read by `5.2/work/measure_52.py`, which places each of the four cells,
+rotated by each candidate Ethanon angle and scaled 2.8125, over the frame and scores a masked zero-mean normalised
+correlation on the part of it that is ON SCREEN - the dragon is wider than half the screen and cut by its top edge
+through the whole run, so a plain template match cannot be used - then moves the picture +-14 px and reports the
+offset that fits best. `5.2/work/claw_52.py` does the same for the claw and `muzzle_52.py` counts the burst.
+**The run's own schedule, measured** (`test_mp_dragon`'s frame table): the camera's hard lock engages at **f219**
+(the dragon's x reaches 0 at 164/45 = 3.64 s), the mouth shuts at f48, the open window runs **f180-f204**, it fires
+at **f240**, shuts again by **f288**, the claw takes its first swing at **f360**, and the second open window -
+3000 ms after the shot restarted the clock - runs **f420-f444**, with the camera locked. The capture was therefore
+taken to f480 rather than the brief's f300, which holds no claw swing and no locked open window.
+
+| Gate (00_order 5.2, as 8.13 amends it) | Required | Before | After |
+|---|---|---|---|
+| Dragon's screen x while the camera is locked | 0 +- 3 px | the picture is its whole 452 x 360 sheet at its node, off screen once the camera moves | **passes.** 0.00 px worst over 242 locked frames through the camera's own projection (`test_mp_layer`, `screenOf`); from the frames, the fitted entity point sits at +2.0 to +3.0 px on f240, f270, f276, f282, f288, f300, f432, f438 and f444 |
+| Cells 0 -> 3 over 3000-3400 ms | 0, 1, 2, 3 | one cell, never changing | **passes on BOTH windows.** The port draws 0, 1, 2, 3 at f180/f186/f192/f198 and again at f420/f426/f432/f438 (frame table), and the layer's uv follows the cell it sets on all 460 frames (`test_mp_layer`: the drawn sequence over both windows is `01230123`). From the FRAMES, at the fitted angle 340 with the burning muzzle MUTED, both windows read the port's own cells (the verification's `5.2/verify1/work/fit_v1.py`): f180 **0** (0.872), f186 **1** (0.858), f192 **2** (0.863), f198 **3** (0.859), each against runners-up <= 0.54, and f420 **0**, f426 **1**, f432 **2**, f438 **3**. This step's own first reading left the burst in and missed f186 (0, 0, 2, 3): unmuted, f186, f192, f420 and f426 score 0.37-0.56 and do not separate - the callback restarts the system every tick of the window, which is also why `system_5`'s fit of the original's own `2-32_h2.8` scores 0.49 (5c-2). The sheet's four cells run closed -> open in row-major order (`5.2/verify1/work/cells_0123.png`), which confirms the frame -> cell mapping independently |
+| Cells 3 -> 0 over 500-900 ms after a fire | 3, 2, 1, 0 | - | **passes, on the frames.** The shot is at f240; f270 cell **3** (0.710, runner-up 0.178), f276 **2** (0.912, 0.114), f282 **1** (0.904, 0.170), f288 **0** (0.915, 0.011), f300 still **0**. The port's own cells at those frames are 3, 2, 1, 0 |
+| Angle | within [-20, +10] degrees | - | **passes.** The port's angle is **340.00 (-20 deg)** at every gate frame and never leaves [340, 370] over 600 ticks; the first 13 frames sit at the 370 ceiling, where the start point is 0.71 u behind it. Fitted from the frames over a free search of 335..375: **340** at f240, f270, f276, f282, f288, f300, f432, f438 and f444. The library's `2-32_h2.8` is CONSISTENT with -20 and does not discriminate it: with its flame muted its four cells score 0.434-0.541 and a per-angle search gives 340 -> 0.462, 360 -> 0.510, 380 -> 0.581 (the verification, `5.2/verify1`), so the angle rests on the decode - as `dragon.json`'s own note already said |
+| The claw visible at the left edge during a swing | visible | never: its node is 185 u left of the level's origin and the camera never goes below 0 | **passes.** f390 (waypoint 0) **11,781 px** of the claw on screen, fitted within **(+3, +0)** of the point the port drew it at; f402 (wp 1) **15,035** at (+3, +1); f414 (wp 2) **8,701** at (+3, +1); f420 (wp 3) **4,917** at (+2, +1). By f438 the swing has taken it back off the left edge (0 px) |
+| Its `explosion.JPG` system rides the head | at the mouth | its system sat at the node, off screen | **passes.** Bright pixels (> 200 grey) in a 150 px box on the decoded muzzle: **1,978 at f210** rising to **2,381 at f228** and **1,548 at f270**, centroid within **(-2 to +8, -9 to 0) px** of the muzzle; **0** bright px from f276 (killed) through **f414**. The second open window f420-f444 draws the burst again, and a fixed > 200 grey threshold reads 0 there only because that part of the level is far darker (max grey 87 in the muzzle box against 250-255 at f192): on the verification's warm test (r - b > 25, r > 45) it is **612-1,505 px** at f420/f426/f432/f438/f444, centroid within (-1 to +5, -3 to +3) px of `dragon.ent`'s `<StartPoint>` (96, 13) turned by the angle (`5.2/verify1`). The before frames have **0** at that point on every frame. In the suite the emitter's owner equals the dragon's drawn point and angle on all 460 frames (0 adrift), and it draws **0** particles while killed, **5** free-running and **1** in the open window |
+| `test_mp_dragon` stays at 151 | 151 checks | 151 | **NOT MET as written, and it cannot be: 230 checks, 0 failures.** R19 changes the aim the suite pinned ("aimed at the player" became "aimed at the lagged point"), and the `Follower`'s unit-step table, the angle map, the two windows, the muzzle and two new refusals are all new. Both sides of the sight gate are kept - the shot taken with clear air, and the shot refused with a floor in the way |
+| Non-regression (not a 5.2 gate; this step's own) | no level but 2-32 moves | - | **passes, on the full sweep.** 1-01 f420 is **byte-identical** to the before (`81a39d45`). The verification captured all **128** levels at f420 on this step's build and compared them to `5.1/fix2/sweep`, the sweep of the COMMITTED binary (`292fefdb`, `5.1/fix2/capture.txt` line 1): **127 byte-identical, 1 differing, and the one is 2-32 `level31a`** (`5.2/verify1/sweep`). This step's own first reading spot-checked six levels against `5.1/fix1/sweep`, whose binary (`52da5004`) was never committed - those md5s agree, but the full sweep above is what the row rests on |
+
+**THE SUITES,** run directly, once each: **`test_mp_dragon` 230** (151 before the step), **`test_mp_layer` 1,257**
+(1,237), **`test_mp_start` 752** (752) - the last because every level's `Game::LoadData` now reads `dragon.json`'s
+three new blocks, and 128 of 128 levels still load and start. 0 failures each. **The full ctest was not run:** the
+step names its two suites, the sim library changed under all 44 binaries, and a full build would relink every one of
+them under Smart App Control. What stands for the other 41 is `test_mp_start`, which was NOT among the step's named
+suites and was run for exactly this reason: it loads and starts all 128 levels, so every level's `Game::LoadData`
+went through `dragon.json`'s three new blocks and every `Dragon::Find` seeded a follower. Beyond it, no suite reads
+the dragon's behaviour: `test_mp_sprites` pins its node's offset (48, -7) and z_index 4 from `Sprites::Find`, which
+this step does not touch, and `test_mp_boss`, `test_mp_ghost` and `test_mp_darkdragon` only assert that level31a is
+not their boss's level.
+New: `TheFollowerLagsAsTheScriptsDoes` (D7's own unit-step table on the 16 ms clock: 0 at 13 frames, 0.0126 at 14,
+0.1732 at 27, 0.4718 at 60, 0.8975 at 180, and a converged point that stops retargeting),
+`TheAngleFollowsTheLaggedPoint` (the whole map, which is what catches an `atan2` with its arguments swapped - a
+capture cannot), `TheMouthOpensAndClosesOnItsOwnClock`, `TheRunItPlaysOnItsOwn` (the schedule above, and the frame
+table this record quotes) in `test_mp_dragon`, and `TheDragonAndItsClawAreDrawnWhereTheSimPutsThem` in
+`test_mp_layer`.
+
+**BUILD: no warnings** (MSVC, Release, Ninja, /W4). **SMART APP CONTROL:** this step's `MagicPortals.exe`
+(`e5a82fa3`) ran all 9 of its launches and the committed binary its 2 before the change; `test_mp_dragon` was refused
+twice (126), each time on a fresh link, and ran after one delete and relink each time; `test_mp_layer` was refused
+once and ran after one delete and relink; `test_mp_start` was not refused.
+
+**RULINGS APPLIED** (each the owner's standing ruling, recorded here rather than re-argued):
+- **R19** - the fireball flies along the Follower's lagged direction. `test_mp_dragon` pins both halves: with the
+  point forced onto the player the shot goes straight down at it, and with the point 200 px behind the player the
+  shot flies (-125.2, 35.1) - away from a player standing directly below, where the port's old aim sent it straight
+  down. The decode is the source, as the step asks.
+- **R12** (the tier fixed at the 720 selection) and **K5** (one cut rule) are what `Tiers::FrameCut` applies to
+  `dragon_boss.png`: 452 x 360 texels with no hd twin, so 226 x 180 units a cell, where an even split happens to give
+  the same - the truncation only bites on a sheet whose axis is not a multiple of its column count.
+- **K3** - the cell is driven from `dragon.json` and plan 9b stays dropped: no `<SpriteCut>`, `hframes` or `frame`
+  key was added to `Tscn` or the converter.
+- **F7 does not exist**, so the pivot and the position are the decode's: `PivotAdjust` (-48, 7) turned by the angle
+  about the entity's point, and the flight's own arithmetic. Recorded, not measured against footage.
+
+**LEFT FOR LATER.**
+- **An open window's cells cannot be read from a capture with the burst LEFT IN.** Measured here as the fitted
+  score collapsing from 0.90 (closing) to 0.26-0.48 (opening), and by the verification as 0.37-0.56 on f186, f192,
+  f420 and f426. MUTING the muzzle box separates them - that is how the cell row above reads both windows - so this
+  is a rule for how to fit, not a hole in the gate: re-gate an open window with the muzzle muted, or read the
+  closing one. The same obstruction is why `system_5`'s fit of the original's `2-32_h2.8` scores 0.49.
+- **The restart draws from the layer's particle stream, and how often depends on the frame rate.** The open window
+  remakes the dragon's pool every tick, which shifts that stream for level31a's other emitters and for no other
+  level's. The flag is set on the TICK and consumed in the frame update, so under `--fixed-step` (every capture here)
+  it is remade once per tick exactly, while a machine drawing faster than it ticks would remake it twice for one tick
+  and draw twice where the original draws once. Nothing measured here moves with it. The visuals plan's 6.3
+  (00_order K8) may move the whole thing to `m_effectRandom`.
+- **Two clock bases where the original keeps one, and this record first justified the split wrongly.** The
+  `Follower` runs on the script's truncated clock (16 ms a tick) while `elapsedMs`, the claw's sweep and the flight
+  run on the tick's 16.667. The first draft of this step called that "the original's own arrangement"; it is not.
+  `elapsedTime` is advanced by `g_timeManager.getLastFrameElapsedTime` (ins 277-289, `AddToUInt`), and that function
+  (`all_functions.txt` bytes 7894..7961, ins 3-9) is `uint(GetLastFrameElapsedTime() x m_factor)` - the SAME
+  truncated millisecond the `Follower` gets, at factor 1. So the original runs the whole module on one script clock,
+  itself about 4% slow against the device's wall clock, where this port runs two bases about 4% apart: at the f240
+  shot the follower has counted 3,840 ms against `elapsedMs`'s 4,000. Nothing this step measures moves with it, and
+  it is deliberately NOT changed here - feeding `elapsedMs` the truncated frame shifts level31a's whole schedule
+  about 4% later and moves the f180 / f240 / f420 / f444 frames this record quotes. The owner's call; the row is in
+  `docs/parity-backlog.md`.
+- **The claw's easing** (above): `smoothBeginning` is decoded nowhere in this port.
