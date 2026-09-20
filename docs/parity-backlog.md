@@ -77,6 +77,8 @@ Open after the plan (design §8):
 main and pushed, and "Step" is the SE planning doc's number since the merge. The commits for 3.1-4.3 were made on
 `visuals-b` and their messages still say steps 80-85. "Recorded deviations" are the step's own RECORDED DEVIATIONS
 section. Where they have rows below, those rows stay open. Next: batches 5-13 (about 25 steps).
+**3.4 is out of batch order on purpose**: §7 had dropped it for "no data, no footage, no decode", and §8.13 proposed
+it back from decode D10 after batch 3 had closed, so it is built during batch 5's run and filed in its own place here.
 
 | Order | What | Outcome | Commit | Step |
 |---|---|---|---|---|
@@ -91,6 +93,7 @@ section. Where they have rows below, those rows stay open. Next: batches 5-13 (a
 | 3.1 | timer dial, no fade | committed | `0be2725` | 68 |
 | 3.2 | crystal and key bob, `sim/Motion` | committed | `5ba5b86` | 69 |
 | 3.3 | sway, alpha 0.55, dashed-circle spin | committed | `a32d356` | 70 |
+| 3.4 | the button sinks six units under what stands on it | committed with four recorded deviations, no gate row unmet (6.0 u wanted, 5.957 measured; 4.24 wanted at 150 ms, 4.285 measured): 6 `.esc` units are taken as 6 port units (the 0.976 ratio would make the original's own sink 5.86 u, and `movers.json` says not to tighten the gates on it); the >= 300 ms row rests on a box capture, because 1-31's floor picture buries the button at full press; the bucket-visibility clock is not built (D10 records it as mechanism only); the port's sensor is still the remake's 16 px fallback against the original's 26 x 16. §8.13's "a button branch in `syncSprites`" is **superseded by R21**, which moves the body the picture already hangs on. **Gate level substituted**: level2a's button cannot be stood on (walled spawn pocket, reached only with portals), so 1-31 `level30`'s `button_975` is measured instead - same node y 220 over a floor whose top is 224. **Sweep baseline**: `5.2/verify1/sweep` still stands, EXCEPT `3-15 level14b`, now `7a3553fa` - a knight of step 76 stands on `button_1666` and sinks it. The PORT-WIDE interpolation row below was found verifying this step | `0f0142a` | 78 |
 | 4.1 | antiportal drawn at 64×scale | committed with one recorded deviation (the 2-26 edge scan), closed by 4.2 | `bbb3c78` | 71 |
 | 4.2 | blink and spin | committed with five recorded deviations (the four "Step 72" rows and the PORT-WIDE clock row below) | `5ae1b6d`, `5a544ac` | 72 |
 | 4.3 | gravity-well green ring | committed with two recorded deviations, neither a failing gate row: the `test_mp_wells` gate is met across two suites, and the ring exists from the first frame | `6949cc3` | 73 |
@@ -298,6 +301,20 @@ repository rather than the engine's; 5.2 (planning step 77) follows it.
       flooring the one clock every scripted motion reads moves every committed step's captures. Next: the owner's call on
       whether the port floors its script-facing delta and at which frame rate the original is to be matched, then one
       re-capture of the committed baselines.
+- [ ] **PORT-WIDE, found verifying step 78 (order 3.4): the picture of any body is drawn one tick behind the sim.**
+      `buildSprites` gives every body-linked quad an `InterpolatedTransformComponent` (`game/MagicPortalsLayer.cpp:2590`)
+      and `InterpolationSystem::Apply` draws `previousPosition -> currentPosition` at the frame's alpha
+      (`engine/src/core/InterpolationSystem.cpp:140-149`), which is 0 under `--fixed-step` - so the picture shows where
+      the body stood a tick ago, while a debug box (`makeBox`, `:2134`) carries no such component and shows the tick's
+      own state. **The original draws the moved position in the SAME frame**: `SetPositionXY` is a `b2Body::SetTransform`
+      inside `Update` and the draw reads `GetPosition` at draw time (`ETHRenderEntity.cpp:106`; D10_check §4a).
+      MEASURED on step 78's two captures of one run schedule (the player's drawn left edge holds a constant -9..-11 px
+      offset between art and box mode, walking and at rest, so the two runs map ticks to frames identically): the
+      picture equals the box exactly one frame late in both directions - unchanged at f90 and 0.516 u at f91 against
+      the box's 0.527 u at f90 on the press, at rest at f180 against f178/179 on the rise. It is 16.7 ms on EVERY
+      body-linked picture in the port, not the button's alone, which is why step 78 recorded it rather than changing
+      it. Next: the owner's call on whether a body's picture is drawn at its tick's own position, then a re-capture of
+      the committed baselines - it moves any frame taken while a body is moving.
 - [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 71**; the red blink (0.2 → 0.4 → 0.2
       on 300 ms legs) and the 10°/s turn — **built, SE step 72** (order 4.2), with the five deviations above. What is
       left of the system: the refusal radius stays 16×scale in the port against the decoded **32×scale**
