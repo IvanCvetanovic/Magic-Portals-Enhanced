@@ -27,16 +27,18 @@ void Forget(Level& level, entt::entity body) {
 }
 
 // The beholder dead: the level's button goes to its button_dest, its box and
-// its body both, so what presses it and what draws it follow.
+// its body both, so what presses it and what draws it follow. The script then
+// calls computeButtonInterpolator again (ETHCallback_beholder #1315), which
+// rebases both of the button's stored points and leaves it at rest there -
+// without it, the next frame would put the button back at its old pressedPos.
+//
+// NOT reproduced (D10_check section 4, which says not to): the original's rebase
+// zeroes numTouchingEntities without clearing `active`, so a body still touching
+// the button at that moment can leave the count at -1 and the door open forever.
 void RaiseButton(entt::registry& registry, Level& level) {
     const glm::vec3 at = Units::ToWorld(level.boss.buttonDestPx.x, level.boss.buttonDestPx.y);
     for (Puzzle::Button& button : level.channels.buttons) {
-        if (button.name == level.boss.buttonNode) button.box.centre = glm::vec2(at.x, at.y);
-    }
-    const auto found = level.built.entities.find(level.boss.buttonNode);
-    if (found != level.built.entities.end() && registry.valid(found->second)) {
-        auto& transform = registry.get<Supersonic::TransformComponent>(found->second);
-        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+        if (button.name == level.boss.buttonNode) button.Rebase(registry, glm::vec2(at.x, at.y));
     }
 }
 
@@ -58,6 +60,9 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     // portal's own, and the quite separate one an antiportal refuses a tap in.
     if (!Portals::LoadPlacement(portDataDirectory + "/placement.json", read.portals, error)) return false;
     if (!Mover::LoadRules(portDataDirectory + "/movers.json", read.movers, error)) return false;
+    // The same file, its `button` block: a button's sink is not a mover's swing,
+    // and its numbers are decoded where the other two are the remake's guesses.
+    if (!Puzzle::LoadRules(portDataDirectory + "/movers.json", read.puzzle, error)) return false;
     if (!Demolish::LoadRules(portDataDirectory + "/demolish.json", read.demolish, error)) return false;
     if (!Launchers::LoadRules(portDataDirectory + "/launchers.json", read.launchers, error)) return false;
     if (!Shot::LoadRules(portDataDirectory + "/shot.json", read.shot, error)) return false;
@@ -148,7 +153,9 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     out.darkest = darkest;
     out.noGravity = noGravity;
     if (!LevelBuilder::Build(data.scene, registry, options, out.built, error)) return false;
-    if (withStatics && !Puzzle::Wire(data.scene, data.roles, out.built, out.channels, error)) return false;
+    if (withStatics && !Puzzle::Wire(data.scene, data.roles, out.built, data.puzzle, out.channels, error)) {
+        return false;
+    }
     if (withStatics && !Mover::Wire(data.scene, data.roles, out.built, data.movers, out.movers, error)) return false;
     // Guarded by withStatics for the reason Mover::Wire is: a bouncer's body is
     // a static node, so with the statics left out there is nothing to wire to

@@ -1,9 +1,10 @@
 {
   "_about": [
-    "The Magic Portals port's movers: two numbers the remake keeps in behaviours.gd",
+    "The Magic Portals port's movers: the two numbers the remake keeps in behaviours.gd",
     "rather than in its data, moved here so they can be retuned without touching code",
-    "(the remake's own CLAUDE.md rule 1). Both are the remake's guesses, carried.",
-    "See docs/planning/2026-09-11-magic-portals-remaster.md, step 4."
+    "(the remake's own CLAUDE.md rule 1). Both of those are the remake's guesses, carried.",
+    "`button` is not: it is decoded, and it is read by sim/Puzzle rather than sim/Mover.",
+    "See docs/planning/2026-09-11-magic-portals-remaster.md, steps 4 and 78."
   ],
 
   "oscillation": {
@@ -25,5 +26,42 @@
     ],
     "_guess": true,
     "speed_px_s": 120.0
+  },
+
+  "button": {
+    "_note": [
+      "A pressed button SINKS, and nothing else about it changes: no colour, scale, frame,",
+      "sprite, sound or particle (D10's negative result over all 437 instructions of the",
+      "four functions). Its `stride` is the node's - 300 in every one of the 46 placements,",
+      "and button.ent's own default - so it is not here.",
+      "",
+      "The 6 is in .esc units, and the port takes 1 .esc unit for 1 port unit. INFERRED:",
+      "00_order.md:152 measures scale(7) as +6.83 u, a ratio of 0.976, which would make the",
+      "original's own sink about 5.86 u. The visuals plan's gates (6.0 +- 0.25 u at 300 ms,",
+      "4.24 +- 0.3 u at 150 ms) are written to hold either way: do not tighten them without",
+      "re-measuring that ratio."
+    ],
+    "_source": [
+      "computeButtonInterpolator (android_game.bin 414627..415192) and ETHCallback_button,",
+      "ETHBeginContactCallback_button, ETHEndContactCallback_button (415192..416591), decoded",
+      "in out/parity/visuals/briefs/decode/D10.md and confirmed by D10_check.md:",
+      "  #39 @414745  PshC4 6.0f, then g_scale.scale(6.0) (SGlobalScale::scale 5809 #3-5)",
+      "  #44-47       vector2(0, scale(6)): the 6 is pushed first, so it is y",
+      "  #48-60       pressedPos = originalPos + multiply(that, rotateZ(GetAngle())); every",
+      "               one of the 46 placements has angle 0, so it is straight down",
+      "  #74-92       PositionInterpolator(originalPos, originalPos, GetUInt('stride'), false)",
+      "+y is down (DEFAULT_GRAVITY (0, 10), ETHPhysicsSimulator.cpp:26), so it is a sink.",
+      "Positions and scale() share m_scaleFactor (scaleEntity 6072 #38-53), so the offset is",
+      "6 .esc units at any resolution.",
+      "",
+      "ease_rad is PIb, the constant smoothEnd multiplies its bias by (smoothEnd 313899 #1-4,",
+      "sin(v * PIb)): gs2d::math::constant::PIb = 1.570796327f (GameMath.h:40), registered as",
+      "a script global at ETHScriptObjRegister.cpp:513-516 and present in the shipped",
+      "libApplication.so. Held here as that float in double, as motions.json holds wrap_rad.",
+      "The slide is therefore from + (to - from) * sin(ease_rad * min(t / stride, 1)), and it",
+      "is `to` once t > stride (getCurrentPos 20104 #7-17)."
+    ],
+    "sink_units": 6.0,
+    "ease_rad": 1.5707963705062866
   }
 }

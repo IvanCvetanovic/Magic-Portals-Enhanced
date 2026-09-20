@@ -13239,3 +13239,145 @@ once and ran after one delete and relink; `test_mp_start` was not refused.
   about 4% later and moves the f180 / f240 / f420 / f444 frames this record quotes. The owner's call; the row is in
   `docs/parity-backlog.md`.
 - **The claw's easing** (above): `smoothBeginning` is decoded nowhere in this port.
+
+## Step 78 - the button that sinks six units under whatever stands on it, its sensor with it (built)
+
+The visuals plan's step 3.4 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, PROPOSED by section 8.13
+from decode `decode/D10.md` and its check; plan_port's 10c "button pressed state", which 00_order had dropped for
+"no data, no footage, no decode" and D10 reinstated). On MPR `main`, `build/`. Game-only: no file under `engine/`,
+and the engine pin is unchanged. Changed: `game/sim/Puzzle.{hpp,cpp}`, `game/sim/Game.{hpp,cpp}`,
+`game/data/movers.json`, `tests/test_mp_play.cpp` - 6 files.
+
+**A pressed button now goes down.** Before this it did not move at all: `syncSprites` had no button branch and
+`sim/Puzzle` held a fixed `Trigger::Box`, so the plate under a crate or a knight sat exactly where the level put it.
+Now the first qualifying body sinks it **6 units over its node's `stride` of 300 ms, eased by sin(PIb x t / 300)**,
+and the last one to leave raises it the same way, each slide starting from its stored endpoint - so a reversal inside
+300 ms snaps rather than resuming (D10 section 4.1). **Nothing else about it changes**: no colour, scale, frame,
+sprite, sound or particle, which is D10's negative result over all 437 instructions of the four functions.
+
+**THE SENSOR MOVES WITH THE PICTURE - the owner's standing ruling R21.** The original has ONE point, not two:
+`ETHCallback_button` calls `SetPositionXY`, which is `b2Body::SetTransform` plus `SetAwake(true)`
+(`ETHEntity.cpp:370-375`, `ETHPhysicsEntityController.cpp:98-107`), and the draw reads `GetPosition` at draw time
+(`ETHRenderEntity.cpp:106`; D10_check section 4a settles the render order - the move shows in the same frame). So the
+sink is applied in the sim, to the button's `Trigger::Box` AND to its built body's transform, and the layer needs no
+branch at all: `buildSprites` already hangs a button's picture on that body, so the picture, its lightmap and its
+emissive follow for free. **Section 8.13's "a button branch in `syncSprites`" was written for the picture-only
+reading R21 overrode**, and is superseded by it.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; every number is in
+`data/movers.json` `button` with its instructions).
+- `computeButtonInterpolator` (414627..415192) stores `originalPos`, `pressedPos = originalPos + rotateZ(GetAngle())
+  x vector2(0, g_scale.scale(6.0))` (#39 @414745 `PshC4 6.0f`), an interpolator at rest over `GetUInt('stride')`, and
+  `numTouchingEntities = 0`. **+y is down** (`DEFAULT_GRAVITY (0, 10)`, `ETHPhysicsSimulator.cpp:26`), so it is a
+  sink, and every one of the 46 placements has angle 0, so it is straight down.
+- `ETHBeginContactCallback_button` ignores static and sensor bodies, counts up, and only on the FIRST contact resets
+  the interpolator `originalPos -> pressedPos`; `ETHEndContactCallback_button` counts down and resets
+  `pressedPos -> originalPos` only at 0. `ETHCallback_button` updates and `SetPositionXY(getCurrentPos())` every
+  frame. The port's own poll (`Trigger::DynamicBodiesIn(box) > 0`) is the same edge, since it recomputes the count
+  each tick and cannot hold a stale one.
+- The ease is `smoothEnd` = `sin(v x PIb)` with `PIb = 1.570796327f` (`GameMath.h:40`,
+  `ETHScriptObjRegister.cpp:513-516`), and `getCurrentPos` returns `m_b` once the clock is past the stride.
+- **The press is immediate within the frame**: the contact callback zeroes the clock inside the physics step
+  (`ETHScene.cpp:464`) and the entity's callback moves it later in the same `Update` (:488), so the first drawn
+  pressed frame already carries one frame's ease (00_order 8.0 rule 6), not 0. The port's `Channels::Tick` runs
+  before its step, in the same order.
+- **The beholder's rebase** (`ETHCallback_beholder` #1302-1315): the button is moved to `button_dest` and
+  `computeButtonInterpolator` is called again. `Game::RaiseButton` now does that through `Button::Rebase`, which
+  moves both stored points and leaves the slide at rest. **Deliberately NOT reproduced** (D10_check section 4 says
+  not to): the original's rebase zeroes the count without clearing `active`, which can leave a count of -1 and a door
+  open forever. **The mirror of that is a divergence of the port's own**: `Button::Rebase` clears `pressed`, so a body
+  already standing on `button_dest` gives the next `Channels::Tick` a fresh edge and a fresh 300 ms sink, where the
+  original's rebase leaves `active` set and neither re-triggers nor sinks again. Unreachable in the shipped 1-32:
+  `button_dest` is only occupied after the beholder dies (`test_mp_boss` 126, 0 failures). Recorded, not built.
+
+**NOT THE NAMED GATE LEVEL.** Section 8.13 asks for "a level2a stand-on capture". **level2a's button cannot be stood
+on**: the spawn at (334, 110) sits on a block in a pocket walled by `wall04`, and a capture holding left for 160
+ticks (`3.4/probe/p2_f*`) leaves the player where it started - that button is reached with portals, which a
+`--fixed-step` run cannot tap. **1-31 `level30`'s `button_975` is used instead**: the port's own suite already walks
+the player onto it, its placement geometry is identical (node y 220 over a floor whose top is 224), and unlike
+level2a's - the ONE placement of 46 with no `<EmissiveColor>` (D10 section 2) - it is lit.
+
+**HOW THE PICTURE WAS MEASURED.** Two captures of the same run, `--window 1280x720 --fixed-step --frames 140
+--hold left@60-95 --screenshot-every 1`:
+- **A, with art**: before (the committed build) against after, `3.4/measure_sink.py`. Every changed pixel over 140
+  frames lies in **x 217..311, y 605..631** - the button's own picture - and the shift that aligns the two is read
+  over exactly those pixels.
+- **C, as boxes** (`--art` an empty directory, which the port logs as "Drawing the level as boxes"),
+  `3.4/measure_boxes.py`. A button's debug box is drawn FROM ITS TRIGGER and in front of everything, where the art
+  capture buries the picture in the floor at full press. The box's vertical centroid is weighted by colour excess
+  over the other two channels, which is linear in how much of the pixel it covers whatever is behind, so a
+  part-covered edge row counts its fraction; `button_982`, across the level and never pressed, is measured in the
+  same frame and subtracted as the camera. The static baseline holds to +-0.03 px over 50 frames.
+
+| Gate (00_order 8.13's 3.4) | Required | Before | After |
+|---|---|---|---|
+| Stand-on capture, at >= 300 ms | **6.0 +- 0.25 u** | 0.000 u: nothing moved it | **passes: 5.957 u** (16.752 px), flat from tick 18 (f107) to the end of the run. The art capture agrees as far as it can see: the picture's red top edge ends on row 629 against 612-613 at rest, 16-17 px, and the floor's own edge at row 630 censors it there |
+| Stand-on capture, at 150 ms | **4.24 +- 0.3 u** (expect ~4.14) | 0.000 u | **passes: 4.285 u** (tick 9, f98). Closed form 4.243 |
+| A unit test | one | - | **`test_mp_play` 171 checks, 0 failures** (125 before; its floor is raised to 171). Four new: the data row, the sink, the rise, and the snap |
+| The first pressed frame is already eased (8.0 rule 6) | 0.523 u, not 0 | - | **0.527 u** at f90, the first frame the box is green - that is the SIM's state and the debug box drawn from the trigger, both of which the port draws unlagged. The level's PICTURE carries it one tick later (f91, +1.452 px = 0.516 u), which is the port-wide interpolation below and not this step's |
+| The whole slide against `6 x sin(PIb x t / 300)` | the closed form | - | **worst 0.062 u** over the 18 ticks of the sink, and **0.036 u** over the rise from its 4th tick (ticks 1-3 of the rise are unreadable: the box is red again and the player's own brown box carries red excess) |
+| The rise | back to 0 within stride + 1 frame | - | **0.000 u at tick 17** of the rise (283 ms) and after |
+| Box, body and state move together (R21) | one point | - | **passes, within 0.001 u every tick** of both slides (`test_mp_play`), and no sideways drift at all |
+| Nothing else changes in the frame | byte-identical outside the box | - | **passes: 0 pixels** outside x 217..311, y 605..631 over the 140 frames of A, and **0** over the 80 frames of the release capture B (`--hold right@150-210`, every 3rd frame to f240). **That says nothing about the door**: `button_975` drives `door_lift_976` at node x 592, and the static camera spans level x 0..455, so the door is never in frame. What pins the release edge is the pre-existing `ThePlayerPressesAButtonAndItLetsGo`, whose press window (x 109.0..112.01) and release window (111.99..115.0) - about 3 px against a walk of 2.6 px a tick - are both still green with the box sunk |
+| Flutter (R21's risk; "record any") | record it | - | **none, and it is geometry rather than luck.** 2 state changes in 180 frames: one press, one release. Across all 46 placements in 37 scenes the trigger's bottom reaches **4.0 px** into the static beneath it (5.0 at 2-12 `level11a`), so a flat-bottomed body resting on that static still overlaps the sunk box by 6-7 px of its 16; it would take a reach-in of 10 px to break contact. The player is further from the edge still: its capsule reaches 10 px past the end of its core segment. 1-32 `level31`'s button has no static under it at load, and `button_dest` (528, 220) sits over `platform_ent_524`, top 224 - the same 4 px |
+| Non-regression (this step's own) | no level moves but where a button is pressed | - | **passes.** 1-01 f420 **byte-identical** (`81a39d45`, the same md5 as `5.2/after` and line 1 of `5.2/verify1/sweep`). All **37** levels that place a button captured at f420 and compared with `5.2/verify1/sweep`, the sweep of the committed binary (`e5a82fa3`): **36 byte-identical, 1 differing** - **3-15 `level14b`**, where a knight of step 76 stands on `button_1666` (170, 124) and the button sinks under it, 988 px all inside its picture. The other 91 levels place no button and no code path here can reach them |
+
+**THE SUITES,** run directly, once each: **`test_mp_play` 171** (125), **`test_mp_movers` 53**, **`test_mp_boss`
+126**, **`test_mp_levels` 128**. 0 failures each. `movers.json` is read by the last three through `Game::LoadData`,
+`test_mp_boss` covers the beholder's rebase, and `test_mp_levels` reads all 128 level files - but it is a `.tscn`
+reader with no `Game::Start` and no `Puzzle::Wire` in it, so it does NOT exercise the new `stride` requirement.
+**What proves that requirement refuses no level** is the scan of all 128 files in `out/levels` - 46 button
+placements in 37 files, every one with `metadata/stride "300"`, no `trigger_size`, no `trigger_offset`, no rotation
+and parent `"."` - together with the f420 sweep below, which loaded and ran all 37 of those levels at rc 0.
+**The full ctest was not run:** this step's definition of done names a unit test, not the suite set, and the sim
+library changed under all 44 binaries, so a full build would relink every one of them under Smart App Control.
+New in `test_mp_play`: `Level30sButtonsCarryTheSinkTheDataGives`, `APressedButtonSinksSixUnitsOverItsStride`,
+`AReleasedButtonRisesTheSameWay`, and `ASlideReversedMidWaySnapsToItsStoredStart` - the last on a button and a body
+of its own, with no level, so it can drive the reversal exactly.
+
+**BUILD: no warnings** (MSVC, Release, Ninja, /W4). **SMART APP CONTROL:** the committed binary was refused twice
+(126) on two fresh links and ran after the second delete and relink (`4ae67829`, 6 launches); this step's
+`MagicPortals.exe` (`3ac7ac26`) was not refused and ran all **42** of its launches (1 anchor, 2 art, 2 box, 37
+sweep). No test binary was refused.
+
+**RULINGS APPLIED** (each the owner's standing ruling, recorded rather than re-argued):
+- **R21** - the sim's `Trigger::Box` moves with the picture, as the original moves its sensor body. The flutter it
+  was raised against is measured above and does not occur; the census that says why is in this record.
+- **R12, K5, K13 and K8 do not arise**: no sheet is cut, no picture is added, no depth is chosen and no random draw
+  is taken. The button's picture is the one `Sprites::Find` already built, in the slot it already had.
+
+**LEFT FOR LATER.**
+- **The picture cannot be gated at full press from a capture on this level.** 1-31's button stands 6.4 units proud of
+  the floor's PICTURE (its own top row 612, the floor's edge 630), so a 6-unit sink leaves about one row of it above
+  the floor. The art capture therefore reads the slide only to about 100 ms (within 0.19 u of the closed form there),
+  and the >= 300 ms row rests on the box capture and the suite. A placement that stands further proud - 1-31's own
+  `button_982` looks it - would be readable from the art alone.
+- **6 `.esc` units are taken as 6 port units.** 00_order.md:152 measures `scale(7)` at +6.83 u, a ratio of 0.976,
+  which would make the original's own sink about 5.86 u. `movers.json` carries the caveat and says not to tighten the
+  gates on it.
+- **The clock is a double here and whole milliseconds there.** `InterpolationTimer::update` adds an integer
+  `getLastFrameElapsedTime` (`ADDi`), so the original's 60 Hz device steps 16 or 17 ms where the port adds 16.667.
+  Sub-frame, and it can only move which frame first reads `elapsed > stride`.
+- **The bucket clock is not built.** `button.ent` is static with callbacks, so in the original the slide advances
+  only while the button is in a visible bucket (`ETHActiveEntityHandler.cpp:70-92`): a button pressed off screen
+  finishes its slide when it is scrolled into view. D10 records it as mechanism for 00_order section 5's row and does
+  not propose it, and this step does not build it.
+- **PORT-WIDE, found verifying this step: the picture of any body is drawn one tick behind the sim.**
+  `buildSprites` gives every body-linked quad an `InterpolatedTransformComponent`
+  (`game/MagicPortalsLayer.cpp:2590`), and `engine/src/core/InterpolationSystem.cpp` `Apply()` draws
+  `previousPosition -> currentPosition` at alpha 0 under `--fixed-step`, so the picture shows where the body was a
+  tick ago; a debug box (`makeBox`, `:2201`) is not interpolated and shows the tick's own state. MEASURED on the two
+  captures of this step's run, which share a schedule (the player's drawn left edge holds a constant -9..-11 px
+  offset between art and box mode, walking and at rest): the picture equals the box one frame late in both
+  directions - unchanged at f90 and 0.516 u at f91 against the box's 0.527 u at f90 on the press, at rest at f180
+  against f178/179 on the rise. **The original draws the moved position in the SAME frame** (`GetPosition` read at
+  draw time, `ETHRenderEntity.cpp:106`; D10_check section 4a). Pre-existing and general - it is every body-linked
+  picture in the port, not this step's button - so it is raised as a row in `docs/parity-backlog.md` rather than
+  changed here.
+- **The port's sensor is still the remake's 16 px fallback**, not the original's 26 x 16 (`Trigger.hpp` says so, and
+  no button placement carries a `trigger_size`). The sink moves whichever box the port has; the box itself is
+  another step's.
+- **The standing sweep baseline is `5.2/verify1/sweep` with one row superseded.** No 128-level sweep was taken here,
+  so the next step's before is still that one (binary `e5a82fa3`), EXCEPT `3-15 level14b`, which is now
+  `7a3553fa` (`3.4/after/sweep/3-15_level14b_f420.png`): a knight standing on `button_1666` presses it and the button
+  sinks under it. A reader diffing against the old row will find that one level differing on purpose.

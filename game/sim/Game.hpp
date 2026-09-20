@@ -66,6 +66,7 @@ struct Data {
     Goals::Rules goals;
     Portals::Rules portals;       // the remake's portals.json, with the port's transit.json
     Mover::Rules movers;          // the port's own movers.json
+    Puzzle::Rules puzzle;         // and its `button` block, which sim/Puzzle reads
     Demolish::Rules demolish;     // and demolish.json
     Launchers::Rules launchers;   // and launchers.json
     Shot::Rules shot;             // and shot.json

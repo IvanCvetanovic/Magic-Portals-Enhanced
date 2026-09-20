@@ -551,6 +551,183 @@ void ThePlayerPressesAButtonAndItLetsGo() {
               "and lets go as it walks off: counted at x " + std::to_string(releasedX));
 }
 
+// ---- The sink (D10; the owner's ruling R21) ---------------------------------
+
+// How far below its rest a button is this tick, read three ways: its own state,
+// its trigger box and its body. The last two must agree, because the original
+// has one point and not two (R21).
+struct Sink {
+    double statePx = 0.0;
+    double boxPx = 0.0;
+    double bodyPx = 0.0;
+    double acrossPx = 0.0; // and it moves only down: the x drift, which must be 0
+    bool pressed = false;
+    bool found = false;
+};
+
+Sink SinkOf(Play& play, const char* name) {
+    Sink sink;
+    const Puzzle::Button* button = play.channels.FindButton(name);
+    if (button == nullptr) return sink;
+    sink.found = true;
+    sink.pressed = button->pressed;
+    sink.statePx = button->sunkPx;
+    sink.boxPx = static_cast<double>(button->restCentre.y - button->box.centre.y) * Units::kPixelsPerMetre;
+    sink.acrossPx = static_cast<double>(button->box.centre.x - button->restCentre.x) * Units::kPixelsPerMetre;
+    if (button->entity != entt::null && play.registry.valid(button->entity)) {
+        const glm::vec3 at = play.registry.get<TransformComponent>(button->entity).position;
+        sink.bodyPx = static_cast<double>(button->restPosition.y - at.y) * Units::kPixelsPerMetre;
+        sink.acrossPx = std::max(sink.acrossPx,
+                                 static_cast<double>(at.x - button->restPosition.x) * Units::kPixelsPerMetre);
+    }
+    return sink;
+}
+
+// 6 x sin(PIb x t / 300) at t milliseconds, the slide D10 decoded.
+double WantSinkPx(double milliseconds) {
+    return 6.0 * std::sin(1.5707963705062866 * std::min(milliseconds / 300.0, 1.0));
+}
+
+void Level30sButtonsCarryTheSinkTheDataGives() {
+    // Off level30.tscn and movers.json: every placement carries stride "300"
+    // (button.ent's own default, and all 46 placements in 37 scenes), and the
+    // sink and its ease come from the port's data, not from the code.
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    for (const char* name : {"button_975", "button_980", "button_982"}) {
+        const Puzzle::Button* button = play.channels.FindButton(name);
+        CHECK_MSG(button != nullptr && button->strideMs == 300.0 && button->sinkPx == 6.0 &&
+                      std::fabs(button->easeRad - 1.5707963705062866) < 1e-12 && button->entity != entt::null &&
+                      button->sunkPx == 0.0,
+                  std::string(name) + ": stride 300 ms, sink 6 u, ease PIb, a body of its own, and up at the start");
+    }
+}
+
+void APressedButtonSinksSixUnitsOverItsStride() {
+    // The player walks onto button_975 and stands. From the tick it presses, the
+    // button must be drawn 6 x sin(PIb x t / 300) units below where the level put
+    // it - one frame's ease on the first pressed frame, not 0 (00_order 8.0 rule
+    // 6) - and the trigger box must go with it (R21).
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    for (int i = 0; i < 30; ++i) Tick(play, 0.0f);
+    for (int tick = 1; tick <= 90 && !play.channels.Pressed(0); ++tick) Tick(play, -1.0f);
+    CHECK_MSG(play.channels.Pressed(0), "the player reached button_975");
+
+    // The press tick itself: the contact callback zeroed the clock inside the
+    // step and the entity's own callback moved it later in the same Update.
+    const Sink first = SinkOf(play, "button_975");
+    CHECK_MSG(first.found && std::fabs(first.statePx - WantSinkPx(1000.0 / 60.0)) < 0.01,
+              "the first pressed frame is already " + std::to_string(first.statePx) + " u down, want " +
+                  std::to_string(WantSinkPx(1000.0 / 60.0)));
+
+    // The whole curve, measured against the closed form every tick, with the
+    // press tick counted as the first of them.
+    double worst = 0.0;
+    double at150 = -1.0;
+    double at300 = -1.0;
+    double apart = 0.0;
+    bool straight = true;
+    bool held = true;
+    for (int tick = 1; tick <= 60; ++tick) {
+        Tick(play, 0.0f);
+        const Sink sink = SinkOf(play, "button_975");
+        const double want = WantSinkPx((tick + 1) * 1000.0 / 60.0);
+        worst = std::max(worst, std::fabs(sink.statePx - want));
+        apart = std::max({apart, std::fabs(sink.boxPx - sink.statePx), std::fabs(sink.bodyPx - sink.statePx)});
+        straight = straight && std::fabs(sink.acrossPx) < 1e-9;
+        held = held && sink.pressed;
+        if (tick == 8) at150 = sink.statePx;  // 9 frames after the press: 150 ms
+        if (tick == 17) at300 = sink.statePx; // 18: 300 ms, the end of the slide
+    }
+    CHECK_MSG(worst < 0.01, "every tick within " + std::to_string(worst) + " u of 6 x sin(PIb x t / 300)");
+    CHECK_MSG(std::fabs(at150 - 4.2426) < 0.01, "at 150 ms it is " + std::to_string(at150) + " u down, want 4.2426");
+    CHECK_MSG(at300 == 6.0, "at 300 ms it is " + std::to_string(at300) + " u down, want exactly 6");
+    CHECK_MSG(apart < 0.001, "its box and its body sink together, every tick, within " + std::to_string(apart) +
+                                 " u of its own state (R21)");
+    CHECK_MSG(straight, "and straight down: no sideways drift");
+    CHECK_MSG(held, "and a standing player holds it pressed for the whole second: no flutter");
+    const Sink rest = SinkOf(play, "button_975");
+    CHECK_MSG(rest.statePx == 6.0, "it stays down while it is stood on");
+}
+
+void AReleasedButtonRisesTheSameWay() {
+    // The mirror slide: reset(pressedPos, originalPos, stride) when the count
+    // comes back to 0, so it rises by 6 - 6 x sin(PIb x t / 300).
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    for (int i = 0; i < 30; ++i) Tick(play, 0.0f);
+    for (int tick = 1; tick <= 90 && !play.channels.Pressed(0); ++tick) Tick(play, -1.0f);
+    for (int i = 0; i < 40; ++i) Tick(play, 0.0f);
+    CHECK_MSG(SinkOf(play, "button_975").statePx == 6.0, "it is fully down before the player leaves");
+
+    for (int tick = 1; tick <= 60 && play.channels.Pressed(0); ++tick) Tick(play, 1.0f);
+    CHECK_MSG(!play.channels.Pressed(0), "the player walked off it");
+    double worst = 0.0;
+    double apart = 0.0;
+    for (int tick = 1; tick <= 30; ++tick) {
+        Tick(play, 1.0f);
+        const Sink sink = SinkOf(play, "button_975");
+        worst = std::max(worst, std::fabs(sink.statePx - (6.0 - WantSinkPx((tick + 1) * 1000.0 / 60.0))));
+        apart = std::max({apart, std::fabs(sink.boxPx - sink.statePx), std::fabs(sink.bodyPx - sink.statePx)});
+    }
+    CHECK_MSG(worst < 0.01, "every tick of the rise within " + std::to_string(worst) + " u of the mirror slide");
+    CHECK_MSG(apart < 0.001, "box and body together on the way up too, within " + std::to_string(apart) + " u");
+    CHECK_MSG(SinkOf(play, "button_975").statePx == 0.0, "and it is back where the level put it");
+}
+
+void ASlideReversedMidWaySnapsToItsStoredStart() {
+    // D10 section 4.1, on a button and a body of the test's own: reset always
+    // takes the STORED endpoint, never where the slide is. So a press inside the
+    // 300 ms of a rise jumps back to originalPos and sinks from there, and a
+    // release inside a sink jumps to pressedPos and rises from there.
+    entt::registry registry;
+    const entt::entity body = registry.create();
+    auto& transform = registry.emplace<TransformComponent>(body);
+    transform.position = Units::ToWorld(0.0, 0.0);
+    auto& box = registry.emplace<BoxColliderComponent>(body);
+    box.size = glm::vec3(Units::ToMetres(16.0), Units::ToMetres(16.0), Units::ToMetres(16.0));
+    registry.emplace<RigidBodyComponent>(body); // dynamic: what presses a button
+
+    Puzzle::Channels channels;
+    Puzzle::Button button;
+    button.name = "button";
+    button.channel = 0;
+    button.box.centre = glm::vec2(Units::ToWorld(0.0, 0.0));
+    button.box.half = glm::vec2(Units::ToMetres(8.0));
+    button.restCentre = button.box.centre;
+    button.sinkPx = 6.0;
+    button.easeRad = 1.5707963705062866;
+    button.strideMs = 300.0;
+    channels.buttons.push_back(button);
+    const auto away = [&]() { transform.position = Units::ToWorld(1000.0, 1000.0); };
+    const auto onto = [&]() { transform.position = Units::ToWorld(0.0, 0.0); };
+    const auto depth = [&]() { return channels.buttons.front().sunkPx; };
+
+    for (int tick = 0; tick < 5; ++tick) channels.Tick(registry, kStep); // five ticks of the sink
+    const double sinking = depth();
+    CHECK_MSG(std::fabs(sinking - WantSinkPx(5000.0 / 60.0)) < 0.01,
+              "five ticks into the sink it is " + std::to_string(sinking) + " u down");
+    away();
+    channels.Tick(registry, kStep);
+    CHECK_MSG(std::fabs(depth() - (6.0 - WantSinkPx(1000.0 / 60.0))) < 0.01,
+              "let go mid-sink it snaps to pressedPos and rises: " + std::to_string(depth()) + " u down, want " +
+                  std::to_string(6.0 - WantSinkPx(1000.0 / 60.0)));
+    for (int tick = 0; tick < 4; ++tick) channels.Tick(registry, kStep);
+    onto();
+    channels.Tick(registry, kStep);
+    CHECK_MSG(std::fabs(depth() - WantSinkPx(1000.0 / 60.0)) < 0.01,
+              "pressed again mid-rise it snaps to originalPos and sinks: " + std::to_string(depth()) +
+                  " u down, want " + std::to_string(WantSinkPx(1000.0 / 60.0)));
+    for (int tick = 0; tick < 18; ++tick) channels.Tick(registry, kStep);
+    CHECK_MSG(depth() == 6.0, "and 300 ms later it is all the way down");
+}
+
 void ThePlayerPushesACrateOntoAButton() {
     // Acceptance item 3, with level30's own crate.ent, crate_ent_968 (58 px),
     // moved to the floor left of the spawn at x 140. The player walks left into it
@@ -992,6 +1169,10 @@ void runTests() {
     NothingStaticPressesAButton();
     ACrateOnAButtonOpensItsDoor();
     ThePlayerPressesAButtonAndItLetsGo();
+    Level30sButtonsCarryTheSinkTheDataGives();
+    APressedButtonSinksSixUnitsOverItsStride();
+    AReleasedButtonRisesTheSameWay();
+    ASlideReversedMidWaySnapsToItsStoredStart();
     ThePlayerPushesACrateOntoAButton();
     Level30sCrystalsAndExitAreWhereItPutsThem();
     OnlyThePlayerCollects();
@@ -1030,5 +1211,5 @@ int main() {
         return 1;
     }
     runTests();
-    return ::test::summary("test_mp_play", 125);
+    return ::test::summary("test_mp_play", 171);
 }
