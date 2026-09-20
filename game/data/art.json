@@ -631,6 +631,79 @@
     }
   },
 
+  "light_wall_ghost": {
+    "_source": [
+      "THE GHOST OF THE WALL A LIT TORCH TAKES AWAY: dashed_door.ent, named `light_wall_ghost`. The visuals",
+      "plan's step 13.4 (the remake's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.13, and",
+      "decode/D5.md section 3 with its check), planning step 80. From the remake's",
+      "out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
+      "  seekLightWallToDestroy, bytes 469393..469772, called by ETHCallback_light_off ins 147:",
+      "    ins 1-20   SeekEntity('light_wall.ent'); return when there is none",
+      "    ins 22-27  destroy(wall) - a FLAG, which is why a fire signal can still find a wall (sim/Torch)",
+      "    ins 30-67  AddEntity('dashed_door.ent', wall.GetPosition() + vector3(0, 0, -4), wall.GetAngle(),",
+      "               @out, 'light_wall_ghost', getScale()). The -4 is added to a position scaleEntities has",
+      "               ALREADY scaled, so it is 4 raw world pixels and not 4 of the level's units - the",
+      "               opposite of the glow's -22 above. ETHScene::AddEntity renames it before it assigns the",
+      "               callback (Scene/ETHScene.cpp:264-266, :283-286), so it runs ETHCallback_light_wall_ghost",
+      "               and not ETHCallback_dashed_door (Util/ETHASUtil.cpp:63-68)",
+      "  ETHCallback_light_wall_ghost, bytes 469772..470129, every frame its bucket is drawn:",
+      "    ins 1-12   the first run only (no `angle` datum yet)",
+      "    ins 14-25  SetFloat('angle', 0); ins 27-40 SetVector3('originalPos', GetPosition()), never read here",
+      "    ins 42-47  incrementAngleCustomData(this) (bytes 471942..472067 ins 1-14):",
+      "               AddToFloat('angle', unitsPerSecond(300)) - 300 degrees a second of frame time",
+      "    ins 49-62  angle = degreeToRadian(GetFloat('angle'))",
+      "    ins 64-71  SetAlpha(cos(angle) x 0.1f + 0.2f): MULIf 0.1f, ADDIf 0.2f",
+      "    ins 73-79  bounceLightEntity(this, 0.15f) (bytes 472846..473086): diff = 0.15 x 0.04 = 0.006,",
+      "               min = 1 - diff, max = 1 + diff, then bounce(this, vector2(1.006), vector2(0.994), 160)",
+      "  addLightWall, bytes 472067..472507, from ETHCallback_fire_signal ins 279 when the orbiting flame is",
+      "  shot: SeekEntity('light_wall_ghost'), add light_wall_create.ent and a new light_wall.ent at the",
+      "  ghost's position and angle, then DeleteEntity(ghost). So the ghost lives from the tick a torch is lit",
+      "  until the tick its fire signal is shot, and its position is the bookmark the wall comes back on.",
+      "  The six levels that place a light wall are 4-26, 4-27, 4-29, 4-30, 4-31 and 4-32 (torch.json",
+      "  _census); the wall stands at eth_z 2, 2, 2, -2, 0 and -4, and 4-32's is the one turned 90 degrees."
+    ],
+    "_not_built": [
+      "THE BUCKET CLOCK. dashed_door.ent is static=1 with a callback, so the original queues that callback",
+      "only from the visible-bucket loop of MapEntitiesToBeRendered (Scene/ETHScene.cpp:541-574,",
+      "Scene/ETHActiveEntityHandler.cpp:69-73): both clocks below stand still while the ghost is off screen,",
+      "and a ghost lit off camera is drawn at the phase it was left at when it is scrolled into view. The",
+      "port runs them from the tick the ghost is added, as it runs the antiportal's blink from the level's",
+      "first tick (00_order 8.12c, planning steps 72 and 78). A recorded divergence: it moves the phase of",
+      "the alpha and the pulse, nothing else.",
+      "",
+      "THE Z DRIFT. addLightWall rebuilds the wall at the GHOST's position, which is the old wall's z less 4",
+      "raw pixels, so in the original each light/put-out cycle moves the wall 4 px further back. The port's",
+      "Game rebuilds it from the level's node instead, so its wall returns to its own depth."
+    ],
+    "sprite": "dashed_door.png",
+    "_sprite": "dashed_door.png, 32 x 128 sd with hd/dashed_door.png 64 x 256 and no fullhd twin: at 720 px the hd file, the owner's standing ruling R12, drawn at the same 32 x 128 units - exactly the wall's own breakable_wall_sand.png, so the ghost outlines the wall it replaces",
+    "additive": false,
+    "_additive": "dashed_door.ent blendMode 0 (AM_PIXEL, gs2d/src/Video.h:62-63): the ordinary alpha blend, not the glow's add",
+    "emissive": [1.0, 1.0, 1.0],
+    "_emissive": "dashed_door.ent <EmissiveColor r=1 g=1 b=1>: min(1, ambient + 1) is 1 (Entity/ETHRenderEntity.cpp:113-117), so it is as bright on chapter 4's `darkest` levels as anywhere, scaled only by the alpha below",
+    "static": true,
+    "apply_light": false,
+    "_lighting": "dashed_door.ent <Entity static=1 applyLight=0>, no <Normal>, no <Light>, no <Particles>, PivotAdjust (0,0), Scale 1, SpriteCut 1x1, type 0 (ET_HORIZONTAL, so the origin is EO_CENTER). applyLight 0 also means no lightmap: ETHLightmapGen.cpp:42-45 returns before baking one",
+    "z_offset": -4.0,
+    "_z_offset": [
+      "seekLightWallToDestroy ins 44-48 push vector3(0, 0, -4) and ins 50-59 add it to the wall's already",
+      "scaled position. A RAW DEPTH, like the player's 4 and a minion's 2 and unlike the glow's -22, so the",
+      "port divides it by `depth`.scale_factor to order it among the level's art: 4 / 2.8125 = 1.422 of the",
+      "level's units behind the wall."
+    ],
+    "alpha_base": 0.2,
+    "alpha_amplitude": 0.1,
+    "_alpha": "ETHCallback_light_wall_ghost ins 64-71, SetAlpha(cos(angle) x 0.1 + 0.2): 0.1 to 0.3 and back over 360/300 = 1.2 s, starting at 0.3 - the entity alpha the sprite's own texels are weighted by (shader.frag:477-478), as a timed crystal's dial is",
+    "spin_deg_per_s": 300.0,
+    "_spin_deg_per_s": "incrementAngleCustomData ins 1-14, AddToFloat('angle', unitsPerSecond(300)). It turns no picture: this `angle` is a custom datum the cos above reads, not the entity's m_angle, which nothing here writes. Its step is unitsPerSecond's, capped at motions.json's frame_cap_ms",
+    "pulse": {
+      "from": [1.006, 1.006],
+      "to": [0.994, 0.994],
+      "stride_ms": 160.0
+    },
+    "_pulse": "bounceLightEntity(this, 0.15) ins 8-26 pushes 160, vector2(0.994) and vector2(1.006) into bounce (bytes 327057..327527), which is the dial's own pulse: blinkElapsedTime from 0, the leg count saying which way it runs, the remainder eased by smoothEnd = sin(bias x PIb). So the scale swings 1.006 -> 0.994 -> 1.006, 160 ms a leg, 320 ms a period, and starts at 1.006. bounce's clock is getLastFrameElapsedTime, which is not capped at 200 where unitsPerSecond is (art.json antiportal)"
+  },
+
   "depth": {
     "_source": [
       "What a depth the script writes as a raw number is, among the level's art (step 76). The original draws",

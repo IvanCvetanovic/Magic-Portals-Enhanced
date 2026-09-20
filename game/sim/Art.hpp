@@ -256,6 +256,26 @@ struct Door {
     double highlightZ = 0.0;
 };
 
+// The ghost of the wall a lit torch takes away: dashed_door.ent, added by
+// seekLightWallToDestroy at the wall's own point and angle and deleted by
+// addLightWall when the fire signal is shot (art.json's light_wall_ghost).
+// Its own callback does two things a frame and nothing else - an alpha that
+// breathes and a pulse that barely moves - so the picture holds still where the
+// wall stood, at the wall's size, outlining what is no longer there.
+struct LightWallGhost : Picture {
+    // seekLightWallToDestroy's vector3(0, 0, -4), added to a position the level's
+    // scaling pass has already been through: a RAW depth, so Rules::LevelDepth
+    // turns it into the level's units, unlike Door::highlightZ.
+    double zOffset = 0.0;
+    double alphaBase = 0.0;      // SetAlpha(cos(angle) x alphaAmplitude + alphaBase)
+    double alphaAmplitude = 0.0;
+    double spinDegPerSec = 0.0;  // AddToFloat('angle', unitsPerSecond(this)), the cos's argument
+    Pulse pulse;                 // bounceLightEntity's bounce(1.006, 0.994, 160)
+
+    // Its alpha at `angleDeg` of that datum, in Ethanon's degrees.
+    double AlphaAt(double angleDeg) const;
+};
+
 // A minion or a knight of worlds 3 and 4, as minion.ent draws it and
 // ETHCallback_minion frames it (art.json's minion). Its row is the way it last
 // walked; its column is the walk's FrameTimer while it walks and the hold column
@@ -318,6 +338,8 @@ struct Rules {
     Timer timer;         // timer.ent, the dial behind a timed crystal
     Minion minion;       // minion.ent, the minions and knights
     Door door;           // the exit door's second sheet, and door_highlight.ent behind it
+    // dashed_door.ent, which a lit torch leaves where its light wall stood
+    LightWallGhost lightWallGhost;
     // What a depth a script adds something at is in the level's units: that depth
     // over this (art.json depth). A level's nodes were multiplied by it at load and
     // what a script adds at a literal z was not.

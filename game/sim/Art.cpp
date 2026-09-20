@@ -180,6 +180,14 @@ glm::dvec2 Pulse::ScaleAt(double elapsedMs) const {
     return fromScale + (toScale - fromScale) * eased;
 }
 
+double LightWallGhost::AlphaAt(double angleDeg) const {
+    // SetAlpha(cos(degreeToRadian(angle)) x amplitude + base) (ETHCallback_light_wall_ghost
+    // ins 49-71). The script's angle and its cosine are floats, so the port's are:
+    // 0.1 to 0.3 over the 1.2 s the 300 degrees a second take.
+    const double radians = angleDeg * 3.14159265358979323846 / 180.0;
+    return static_cast<double>(Supersonic::DetMath::cos(static_cast<float>(radians))) * alphaAmplitude + alphaBase;
+}
+
 glm::dvec3 Antiportal::ColourAt(double elapsedMs) const {
     if (!(strideMs > 0.0)) return from;
     // blinkColor ins 55-75, in the order it runs them: which leg this is
@@ -621,6 +629,37 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     door.highlightZ = highlight["z"].AsNumber();
+
+    // The ghost of a taken wall: dashed_door.ent's picture and the two numbers its
+    // callback runs it by. None has a default either - an alpha or a pulse the port
+    // invented would be a breath nobody decoded, and a ghost with no depth of its
+    // own would be drawn in front of the wall it stands behind.
+    if (!root.Has("light_wall_ghost")) {
+        error = path + ": light_wall_ghost is an object";
+        return false;
+    }
+    const Json::Value& ghostEntry = root["light_wall_ghost"];
+    LightWallGhost& ghost = read.lightWallGhost;
+    if (!ReadPicture(ghostEntry, "light_wall_ghost", static_cast<Picture&>(ghost), why, false)) {
+        error = path + ": " + why;
+        return false;
+    }
+    const bool ghostOk = Finite(ghostEntry["z_offset"]) && Finite(ghostEntry["alpha_base"]) &&
+                         ghostEntry["alpha_base"].AsNumber() > 0.0 && ghostEntry["alpha_base"].AsNumber() <= 1.0 &&
+                         Finite(ghostEntry["alpha_amplitude"]) && ghostEntry["alpha_amplitude"].AsNumber() > 0.0 &&
+                         ghostEntry["alpha_amplitude"].AsNumber() <= ghostEntry["alpha_base"].AsNumber() &&
+                         Finite(ghostEntry["spin_deg_per_s"]) && ghostEntry["spin_deg_per_s"].AsNumber() != 0.0 &&
+                         ReadPulse(ghostEntry["pulse"], ghost.pulse);
+    if (!ghostOk) {
+        error = path + ": light_wall_ghost needs a finite z_offset, an alpha_base above 0 and at most 1, an "
+                       "alpha_amplitude above 0 and at most alpha_base, a spin_deg_per_s that is not 0, and a "
+                       "pulse with from, to and a stride_ms above 0";
+        return false;
+    }
+    ghost.zOffset = ghostEntry["z_offset"].AsNumber();
+    ghost.alphaBase = ghostEntry["alpha_base"].AsNumber();
+    ghost.alphaAmplitude = ghostEntry["alpha_amplitude"].AsNumber();
+    ghost.spinDegPerSec = ghostEntry["spin_deg_per_s"].AsNumber();
     out = std::move(read);
     return true;
 }

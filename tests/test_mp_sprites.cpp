@@ -763,6 +763,71 @@ void ATimerWithoutItsClockIsRefused() {
     refused("\"screen_px_per_unit\": 2.8125,", "\"screen_px_per_unit\": 0,", "no scale factor", "timer needs frames");
 }
 
+// The ghost of a taken light wall (art.json light_wall_ghost, step 80):
+// dashed_door.ent's facts and the two numbers ETHCallback_light_wall_ghost runs it
+// by, pinned. Where it stands and how long is the layer's and sim/Torch's.
+void TheLightWallGhostIsDashedDoorEnt() {
+    Art::Rules rules;
+    std::string error;
+    const bool ok = Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", rules, error);
+    CHECK_MSG(ok, error);
+    const Art::LightWallGhost& ghost = rules.lightWallGhost;
+    CHECK_MSG(ghost.sprite == "dashed_door.png" && !ghost.additive && ghost.Frames() == 1,
+              "dashed_door.ent: dashed_door.png, one frame, alpha-blended (blendMode 0)");
+    CHECK_MSG(ghost.emissive == glm::dvec3(1.0) && ghost.isStatic && !ghost.applyLight && ghost.normal.empty() &&
+                  !ghost.light,
+              "emissive 1, static, applies no light, no normal map, no light of its own");
+    CHECK_MSG(ghost.framesPerSecond == 0.0, "nothing plays: its callback writes an alpha and a scale");
+    // The -4 is added to an already scaled position, so it is raw, and 4 / 2.8125
+    // of the level's units is how far behind its wall it is drawn.
+    CHECK_MSG(ghost.zOffset == -4.0 && std::fabs(rules.LevelDepth(ghost.zOffset) + 1.4222222222) < 1e-9,
+              "seekLightWallToDestroy's raw -4: 1.42 of the level's units behind the wall");
+    CHECK_MSG(ghost.alphaBase == 0.2 && ghost.alphaAmplitude == 0.1 && ghost.spinDegPerSec == 300.0,
+              "SetAlpha(cos(angle) x 0.1 + 0.2), the angle 300 degrees a second");
+    CHECK_MSG(std::fabs(ghost.AlphaAt(0.0) - 0.3) < 1e-6 && std::fabs(ghost.AlphaAt(180.0) - 0.1) < 1e-6 &&
+                  std::fabs(ghost.AlphaAt(360.0) - 0.3) < 1e-6,
+              "0.3 at 0, 0.1 half a turn on, 0.3 again after 1.2 s");
+    CHECK_MSG(ghost.pulse.fromScale == glm::dvec2(1.006) && ghost.pulse.toScale == glm::dvec2(0.994) &&
+                  ghost.pulse.strideMs == 160.0,
+              "bounceLightEntity(0.15): 1 +- 0.15 x 0.04, 160 ms a leg");
+    CHECK_MSG(std::fabs(ghost.pulse.ScaleAt(0.0).x - 1.006) < 1e-9 &&
+                  std::fabs(ghost.pulse.ScaleAt(160.0).x - 0.994) < 1e-9 &&
+                  std::fabs(ghost.pulse.ScaleAt(320.0).x - 1.006) < 1e-9,
+              "there and back again, 320 ms a period");
+}
+
+// Without it the port would draw no ghost, or one breathing a rate nobody read.
+void AGhostWithoutItsCallbackIsRefused() {
+    std::ifstream file(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const auto refused = [&real](const std::string& from, const std::string& to, const std::string& name,
+                                 const std::string& says) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos && text.find(from, at + 1) == std::string::npos, "once: " + from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-ghost-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules rules;
+        std::string error;
+        const bool ok = Art::LoadRules(path.string(), rules, error);
+        CHECK_MSG(!ok, "refused: " + name);
+        CHECK_MSG(error.find(says) != std::string::npos, name + ": " + error);
+    };
+    refused("\"light_wall_ghost\": {", "\"light_wall_ghost_gone\": {", "absent", "light_wall_ghost is an object");
+    refused("\"sprite\": \"dashed_door.png\",", "", "no sprite", "light_wall_ghost needs sprite and additive");
+    refused("\"z_offset\": -4.0,", "", "no depth", "light_wall_ghost needs a finite z_offset");
+    refused("\"alpha_base\": 0.2,", "\"alpha_base\": 0,", "alpha 0", "light_wall_ghost needs a finite z_offset");
+    refused("\"alpha_amplitude\": 0.1,", "\"alpha_amplitude\": 0.3,", "a breath below 0",
+            "light_wall_ghost needs a finite z_offset");
+    refused("\"spin_deg_per_s\": 300.0,", "\"spin_deg_per_s\": 0,", "a still angle",
+            "light_wall_ghost needs a finite z_offset");
+    refused("\"stride_ms\": 160.0", "\"stride_ms\": 0", "a leg of 0", "light_wall_ghost needs a finite z_offset");
+}
+
 // The minions and knights (art.json minion, step 76): minion.ent's facts and the
 // numbers ETHCallback_minion frames it by, pinned; and the depth a script's raw z is
 // among the level's art (art.json depth), with the player's decoded 4 (R10).
@@ -2174,6 +2239,8 @@ int main() {
     AnAntiportalWithoutItsBlinkIsRefused();
     TheTimerIsTimerEnt();
     ATimerWithoutItsClockIsRefused();
+    TheLightWallGhostIsDashedDoorEnt();
+    AGhostWithoutItsCallbackIsRefused();
     TheMinionIsMinionEnt();
     AMinionWithoutItsFramingIsRefused();
     AMinionIsFramedAsItsScriptFramesIt();
@@ -2213,10 +2280,10 @@ int main() {
         std::printf("test_mp_sprites: the levels' part SKIPPED - needs the converted levels at %s.\n"
                     "  They live outside this repository; configure with -DSUPERSONIC_MAGICPORTALS_LEVELS=...\n",
                     kLevels.c_str());
-        return ::test::summary("test_mp_sprites", 40);
+        return ::test::summary("test_mp_sprites", 50);
     }
     Level8sArt();
     Level0sStaticPortalsAreAdded();
     AnOffsetAndATurn();
-    return ::test::summary("test_mp_sprites", 60);
+    return ::test::summary("test_mp_sprites", 70);
 }

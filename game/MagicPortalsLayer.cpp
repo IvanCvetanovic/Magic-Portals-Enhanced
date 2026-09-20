@@ -556,6 +556,8 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_antiportalTurn = Motion::Turn{};
     for (TimerDial& dial : m_timers) destroy(dial.quad);
     m_timers.clear();
+    destroy(m_wallGhost.quad);
+    m_wallGhost = WallGhost{};
     for (MinionQuad& minion : m_minions) destroy(minion.quad);
     m_minions.clear();
     // The walk arrows and the corner buttons go with the level they were built
@@ -2723,6 +2725,45 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         m_escortLookZ = eth != nullptr && eth->AsNumber(z) ? z : (index != nullptr && index->AsNumber(z) ? z : 0.0);
     }
     m_escortZ = slotAfter(m_escortLookZ);
+    // THE GHOST OF THE LEVEL'S LIGHT WALL (art.json light_wall_ghost), which
+    // seekLightWallToDestroy adds where the wall stands when a torch is lit:
+    // dashed_door.png at the wall's own point, size and angle, `zOffset` raw
+    // pixels behind it. Resolved here, with the wall's picture in hand and before
+    // any quad is made for it - the ghost is made when the wall is flagged, which
+    // may be never. Its depth is a RAW one, like the player's 4 and a minion's 2,
+    // so it goes through LevelDepth: 4 / 2.8125 = 1.42 of the level's units behind
+    // a wall the level file placed, which is a slot of its own behind the wall's
+    // and ahead of everything at or below it (00_order K13, for 6.3's table).
+    m_wallGhost = WallGhost{};
+    if (m_level.torch.wall.present) {
+        const Art::LightWallGhost& rules = m_artRules.lightWallGhost;
+        const Sprites::Image& image = drawnImage(originalImage(rules.sprite));
+        const DrawnSprite* wall = nullptr;
+        for (const DrawnSprite& drawn : m_sprites) {
+            if (drawn.sprite.node == m_level.torch.wall.name) {
+                wall = &drawn;
+                break;
+            }
+        }
+        if (image.units.x <= 0 || image.units.y <= 0) {
+            SUPERSONIC_LOG_WARN("Magic Portals")
+                << "no ghost where the light wall stood: " << image.path << " could not be read" << std::endl;
+        } else if (wall == nullptr) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "no ghost where the light wall stood: " << m_level.torch.wall.name
+                                                 << " has no picture to take a point from" << std::endl;
+        } else {
+            m_wallGhost.texture = image.path;
+            // AddEntity's position is the wall's ENTITY point and dashed_door.ent's
+            // PivotAdjust is (0, 0), so the ghost is centred on it, and its angle is
+            // the wall's - 90 degrees on 4-32, the one turned wall in the game.
+            m_wallGhost.atPx = wall->sprite.atPx;
+            m_wallGhost.rotation = Units::ToWorldRotation(wall->sprite.rotation);
+            m_wallGhost.sizePx = glm::dvec2(image.units);
+            m_wallGhost.lookZ = wall->lookZ + m_artRules.LevelDepth(rules.zOffset);
+            m_wallGhost.z = slotAfter(m_wallGhost.lookZ);
+            m_wallGhost.turn.degPerS = rules.spinDegPerSec;
+        }
+    }
     // A TIMED CRYSTAL'S DIAL (art.json timer), which addTimerToCrystal adds
     // `zOffset` behind its crystal: after the sprites at or below the crystal's
     // z_index + zOffset and before the next, so what stands between the two
@@ -3147,6 +3188,27 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
     // (Min(1000.0f, ComputeElapsedTimeF(video)), android/main.cpp:180-181; art.json
     // antiportal).
     Motion::Advance(m_motionRules, m_antiportalTurn, frameMs);
+    // AND ETHCallback_light_wall_ghost's two clocks, while the wall it replaces is
+    // flagged or gone (art.json light_wall_ghost). The tick the torch is lit only
+    // adds the entity - the original's callback cannot have run before the frame
+    // that maps it - so the first step is taken on the tick after, and that is the
+    // first tick its picture is drawn.
+    //
+    // The two clocks do not run at one rate. The angle is AddToFloat(
+    // unitsPerSecond(300)), which caps a long frame at motions.json's frame_cap_ms;
+    // bounce's blinkElapsedTime adds getLastFrameElapsedTime, which is not capped
+    // (art.json antiportal). At the port's fixed tick they are the same number.
+    const Torch::Wall& wall = m_level.torch.wall;
+    if (!wall.present || !(wall.going || wall.gone)) {
+        m_wallGhost.added = false;
+        m_wallGhost.drawn = false;
+    } else if (!m_wallGhost.added) {
+        m_wallGhost.added = true;
+    } else {
+        Motion::Advance(m_motionRules, m_wallGhost.turn, frameMs);
+        m_wallGhost.pulseMs += frameMs;
+        m_wallGhost.drawn = true;
+    }
 }
 
 std::vector<MagicPortalsLayer::PlacedReport> MagicPortalsLayer::PlacedReports() const {
@@ -3250,6 +3312,54 @@ void MagicPortalsLayer::syncTimers(entt::registry& registry) {
         animation.frame = 0;
         placeSprite(registry, dial.quad, dial.atPx, dial.cellPx * dial.scale, dial.z, 0.0f);
     }
+}
+
+// THE GHOST OF A TAKEN LIGHT WALL (art.json light_wall_ghost, sim/Torch). The
+// original's seekLightWallToDestroy adds a dashed_door.ent named
+// `light_wall_ghost` at the flagged wall's position and angle, and addLightWall
+// deletes it when the orbiting fire signal is shot and the wall comes back. So
+// the ghost stands for exactly as long as the wall is going or gone, and the
+// port makes and unmakes its quad on those two ticks rather than hiding it: a
+// torch put out and lit again gets a fresh entity in the original, with both its
+// clocks at zero, and the same here.
+//
+// IT IS NOT DRAWN ON THE TICK THE TORCH IS LIT. The entity is added inside the
+// torch's own callback, which the engine runs from UpdateCurrentFrameEntities -
+// AFTER MapEntitiesToBeRendered built the list that frame draws
+// (Scene/ETHScene.cpp:482-511, D5 section 3c). Its first drawn frame is the next
+// one, and by then its callback has run once: the alpha is one step of the angle
+// off 0.3 and the pulse one frame into its first leg (00_order 8.0 rule 6, the
+// rule step 78's button is drawn by). `added` is that first tick, `drawn` every
+// tick after it.
+void MagicPortalsLayer::syncWallGhost(entt::registry& registry) {
+    WallGhost& ghost = m_wallGhost;
+    const Torch::Wall& wall = m_level.torch.wall;
+    const bool flagged = wall.present && (wall.going || wall.gone);
+    if (!flagged || ghost.sizePx == glm::dvec2(0.0)) {
+        if (ghost.quad != entt::null) {
+            if (registry.valid(ghost.quad)) registry.destroy(ghost.quad);
+            ghost.quad = entt::null;
+            SUPERSONIC_LOG_INFO("Magic Portals")
+                << "the light wall is back, and its ghost gone on tick " << m_ticks << std::endl;
+        }
+        ghost.added = false;
+        ghost.drawn = false;
+        ghost.turn.turnedDeg = 0.0;
+        ghost.pulseMs = 0.0;
+        ghost.alpha = 0.0;
+        ghost.scale = glm::dvec2(1.0);
+        return;
+    }
+    if (!ghost.drawn) return; // the tick it was added: the original's frame cannot draw it
+    const Art::LightWallGhost& rules = m_artRules.lightWallGhost;
+    ghost.alpha = rules.AlphaAt(ghost.turn.turnedDeg);
+    ghost.scale = rules.pulse.ScaleAt(ghost.pulseMs);
+    if (ghost.quad == entt::null) {
+        ghost.quad = makeSprite(registry, "Magic Portals Wall Ghost", ghost.texture, rules.additive);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "the light wall is going, with " << ghost.texture
+                                             << " left where it stood on tick " << m_ticks << std::endl;
+    }
+    placeSprite(registry, ghost.quad, ghost.atPx, ghost.sizePx * ghost.scale, ghost.z, ghost.rotation);
 }
 
 void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
@@ -3547,6 +3657,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
 
     syncSprites(registry);
     syncTimers(registry);
+    syncWallGhost(registry);
 
     // The art in place of the boxes, unless B asks for them or there is no art.
     // What no level pictures - the player, the portals a shot opens, the shot -
@@ -3664,6 +3775,15 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
     for (const TimerDial& dial : m_timers) {
         tint(registry, dial.quad, glm::vec4(1.0f, 1.0f, 1.0f, static_cast<float>(dial.alpha)),
              m_artRules.timer.emissive, {}, receiverOf(m_artRules.timer, dial.lookZ));
+    }
+    // The ghost of a taken light wall at the alpha its callback wrote this tick,
+    // which the sprite path weights its texels by as it does the dial's.
+    // dashed_door.ent's emissive 1 makes min(1, ambient + 1) whole, so it is as
+    // bright on these `darkest` levels as the flame that took the wall away.
+    if (m_wallGhost.quad != entt::null) {
+        tint(registry, m_wallGhost.quad, glm::vec4(1.0f, 1.0f, 1.0f, static_cast<float>(m_wallGhost.alpha)),
+             m_artRules.lightWallGhost.emissive, {},
+             receiverOf(m_artRules.lightWallGhost, m_wallGhost.lookZ));
     }
     for (const entt::entity quad : m_portalQuads) {
         tint(registry, quad, white, m_artRules.portal.emissive, {}, receiverOf(m_artRules.portal, 0.0));
@@ -4208,6 +4328,25 @@ MagicPortalsLayer::DoorReport MagicPortalsLayer::DoorPicture() const {
         report.glowZ = glow->z;
         report.glowAdditive = glow->sprite.additive;
     }
+    return report;
+}
+
+MagicPortalsLayer::LightWallGhostReport MagicPortalsLayer::LightWallGhost() const {
+    LightWallGhostReport report;
+    report.possible = m_level.torch.wall.present && m_wallGhost.sizePx != glm::dvec2(0.0);
+    report.added = m_wallGhost.added;
+    report.drawn = m_wallGhost.drawn && m_wallGhost.quad != entt::null;
+    report.quad = m_wallGhost.quad;
+    report.texture = m_wallGhost.texture;
+    report.atPx = m_wallGhost.atPx;
+    report.sizePx = m_wallGhost.sizePx;
+    report.scale = m_wallGhost.scale;
+    report.alpha = m_wallGhost.alpha;
+    report.angleDeg = m_wallGhost.turn.turnedDeg;
+    report.pulseMs = m_wallGhost.pulseMs;
+    report.z = m_wallGhost.z;
+    report.rotation = m_wallGhost.rotation;
+    report.lookZ = m_wallGhost.lookZ;
     return report;
 }
 

@@ -131,9 +131,16 @@
   "_not_built": [
     "Every picture and every sound: light_from_projectile.ent, light_on_sparkles.ent,",
     "light_off_sparkles.ent, portal_death.ent, extinguish_fire.ent, light_wall_create.ent,",
-    "wall_destroy.ent, the dashed_door ghost's own sprite, playLightOnSound,",
+    "wall_destroy.ent, playLightOnSound,",
     "playLightOffSound, playLightSwitchSound, playDemolitionSound, the startEarthquake(20, 0)",
     "when a wall goes, the torch's 190-a-second spin, and the wall's alpha fade.",
+    "",
+    "THE DASHED_DOOR GHOST IS BUILT since step 80 (the visuals plan's 13.4): the picture, its alpha,",
+    "its pulse and its depth are art.json's `light_wall_ghost`, and this module's wall.going and",
+    "wall.gone are what say when it stands. seekLightWallToDestroy adds it and addLightWall deletes",
+    "it, so its life is exactly the flagged wall's, and the port needs no state of its own for it.",
+    "bounceLightEntity is built with it, for the ghost alone: the `bounce` flag",
+    "addFireSignalIfNecessary sets on an existing light_from_projectile.ent is not.",
     "",
     "The rest of the lighting: lightenAllBackgroundEntitities, darkenAllBackgroundEntitities and",
     "setBackgroundTilesEmissiveColor. GenerateLightmaps and the light_from_projectile.ent light ARE",
@@ -144,7 +151,7 @@
     "with it one frame early - on the tick the torch is shot, where the original waits for its",
     "`delete` branch on the next frame.",
     "",
-    "bounceLightEntity, and the `bounce` flag addFireSignalIfNecessary sets on an existing",
-    "light_from_projectile.ent. Presentation, and unreachable here besides."
+    "The `bounce` flag addFireSignalIfNecessary sets on an existing light_from_projectile.ent.",
+    "Presentation, and unreachable here besides."
   ]
 }

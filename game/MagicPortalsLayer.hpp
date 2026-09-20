@@ -409,6 +409,28 @@ public:
     };
     DoorReport DoorPicture() const;
 
+    // The ghost of the wall a lit torch takes away (art.json `light_wall_ghost`,
+    // sim/Torch): dashed_door.ent, added at the wall's own point and angle on the
+    // tick the torch is lit and deleted on the tick a fire signal puts the wall
+    // back. As the last tick left it.
+    struct LightWallGhostReport {
+        bool possible = false;             // the level has a wall and the picture resolved
+        bool added = false;                // the wall is flagged: the ghost is there
+        bool drawn = false;                // and a frame has stepped it, so its picture is there
+        entt::entity quad{entt::null};
+        std::string texture;               // the tier file the original draws
+        glm::dvec2 atPx{0.0};              // the wall's point, which the ghost never leaves
+        glm::dvec2 sizePx{0.0};            // dashed_door.png's units: 32 x 128
+        glm::dvec2 scale{1.0};             // the pulse this tick, 1.006 to 0.994
+        double alpha = 0.0;                // its SetAlpha this tick, 0.1 to 0.3
+        double angleDeg = 0.0;             // the `angle` datum the alpha's cos reads
+        double pulseMs = 0.0;              // bounce's blinkElapsedTime
+        float z = 0.0f;                    // the slot it is drawn in, behind the wall's
+        float rotation = 0.0f;             // the wall's angle, as the engine turns a quad
+        double lookZ = 0.0;                // its depth in the level's units
+    };
+    LightWallGhostReport LightWallGhost() const;
+
     // The slot the player's picture is drawn in, and its depth in the level's units:
     // GameCharacter's 4 over the scale factor (art.json character.z, depth).
     float PlayerSlotZ() const;
@@ -788,6 +810,9 @@ private:
     // The timed crystals' dials, after syncSprites has placed their crystals: on
     // the tick, as ETHCallback_timer runs a frame.
     void syncTimers(entt::registry& registry);
+    // The ghost of a flagged light wall, made and unmade as the original adds and
+    // deletes the entity, and placed at the pulse advanceMotions left it at.
+    void syncWallGhost(entt::registry& registry);
     // One linearMotion call for every crystal and key whose script makes one this
     // tick (sim/Motion), and one call of every placed picture's callback, BEFORE
     // syncSprites draws where they leave them.
@@ -1047,6 +1072,29 @@ private:
         bool shrinking{false};
     };
     std::vector<TimerDial> m_timers;
+
+    // THE GHOST OF A TAKEN LIGHT WALL (art.json light_wall_ghost): dashed_door.ent,
+    // which seekLightWallToDestroy adds at the wall's own point and angle on the
+    // tick a torch is lit and addLightWall deletes when the orbiting fire signal is
+    // shot. A picture with no node and, unlike the dial or the well's ring, one
+    // that comes and goes with the level's play, so its quad is made and unmade
+    // rather than hidden - which is what the original does to the entity.
+    struct WallGhost {
+        entt::entity quad{entt::null};
+        std::string texture;      // the tier file the original draws
+        glm::dvec2 atPx{0.0};     // the wall's own point: the ghost never moves off it
+        glm::dvec2 sizePx{0.0};   // dashed_door.png's units, 32 x 128; 0 when nothing resolved
+        glm::dvec2 scale{1.0};    // bounceLightEntity's pulse this tick
+        double alpha{0.0};        // its SetAlpha this tick
+        double pulseMs{0.0};      // bounce's blinkElapsedTime, from the tick it was added
+        Motion::Turn turn;        // the `angle` datum incrementAngleCustomData adds to
+        float z{0.0f};            // the slot behind the wall's
+        float rotation{0.0f};     // the wall's angle, as the engine turns a quad
+        double lookZ{0.0};        // its depth in the level's units
+        bool added{false};        // the wall is flagged, so the entity exists
+        bool drawn{false};        // and a frame has stepped it: the original's first mapped frame
+    };
+    WallGhost m_wallGhost;
 
     // The minions and knights (art.json minion), one per Minions::State::minions
     // entry and in its order: that list only grows, by an escort the boss calls, and

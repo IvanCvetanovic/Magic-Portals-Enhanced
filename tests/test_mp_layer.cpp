@@ -6571,6 +6571,237 @@ void TheTorchIsALightAndAHalo() {
 // light_from_projectile.ent's static light there, and the level bakes at run
 // time from then on - every sprite that applies light takes the static lights
 // live, and nothing draws a file lightmap.
+
+// Every level that places a light wall has a ghost ready for it, at the wall's
+// own point, size, angle and depth - and no level draws one before a torch is lit
+// (art.json light_wall_ghost, the visuals plan's 13.4).
+void EveryLightWallStandsReadyToLeaveItsGhost() {
+    if (!OriginalArtIsThere("EveryLightWallStandsReadyToLeaveItsGhost")) return;
+    // The six walls of torch.json's census, with the depth each stands at and the
+    // 90 degrees 4-32's is turned by. The port's angle is Ethanon's, which the
+    // engine's +z turn matches, and the converter wrote each node's negated.
+    struct Wall {
+        const char* level;
+        const char* name;
+        glm::dvec2 atPx;
+        double wallZ;
+        double angleRad;
+    };
+    const Wall walls[] = {
+        {"level25c", "4-26", {288.0, 64.0}, 2.0, 0.0},    {"level26c", "4-27", {368.0, 160.0}, 2.0, 0.0},
+        {"level28c", "4-29", {192.0, 96.0}, 2.0, 0.0},    {"level29c", "4-30", {208.0, 224.0}, -2.0, 0.0},
+        {"level30c", "4-31", {288.0, 128.0}, 0.0, 0.0},   {"level31c", "4-32", {64.0, 240.0}, -4.0, 1.5707963267948966},
+    };
+    const double levelDepth = -4.0 / 2.8125; // the raw -4 of seekLightWallToDestroy, in the level's units
+    for (const Wall& wall : walls) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), wall.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), std::string(wall.name) + ": " +
+                                                                              layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) continue;
+        tickWith(layer, registry, kRest, {}, {});
+        const MagicPortalsLayer::LightWallGhostReport ghost = layer.LightWallGhost();
+        CHECK_MSG(ghost.possible && !ghost.added && !ghost.drawn,
+                  std::string(wall.name) + " has a wall to leave a ghost of, and no ghost until a torch is lit");
+        CHECK_MSG(Tagged(registry, "Magic Portals Wall Ghost") == 0, std::string(wall.name) + " draws none yet");
+        // dashed_door.png at 720 px is the hd file, 64 x 256 at density 2 - the
+        // same 32 x 128 units as the wall's own breakable_wall_sand.png.
+        CHECK_MSG(EndsWith(ghost.texture, "hd/dashed_door.png"),
+                  std::string(wall.name) + " draws the tier file the original draws: " + ghost.texture);
+        CHECK_MSG(ghost.sizePx == glm::dvec2(32.0, 128.0), std::string(wall.name) + " ghost is 32 x 128 units");
+        CHECK_MSG(ghost.atPx == wall.atPx, std::string(wall.name) + " ghost stands at its wall's point " +
+                                               Point(ghost.atPx));
+        CHECK_MSG(std::fabs(static_cast<double>(ghost.rotation) - wall.angleRad) < 1e-4,
+                  std::string(wall.name) + " ghost takes its wall's angle: " + std::to_string(ghost.rotation));
+        CHECK_MSG(std::fabs(ghost.lookZ - (wall.wallZ + levelDepth)) < 1e-9,
+                  std::string(wall.name) + " ghost stands 4 raw pixels behind its wall: " +
+                      std::to_string(ghost.lookZ));
+        // And behind the wall's own picture, which is what that depth is for.
+        const entt::entity wallQuad = SpriteOf(registry, "Magic Portals Sprite", "breakable_wall_sand.png");
+        CHECK_MSG(wallQuad != entt::null, std::string(wall.name) + " draws its light wall");
+        if (wallQuad != entt::null) {
+            CHECK_MSG(ghost.z < registry.get<TransformComponent>(wallQuad).position.z,
+                      std::string(wall.name) + " ghost is drawn behind its wall");
+        }
+        layer.OnDetach(registry);
+    }
+    // A torch level with no wall has nothing to leave behind, and neither has a
+    // level with no torch at all.
+    for (const char* level : {"level21c", "level0"}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), level);
+        layer.OnAttach(registry);
+        if (layer.SimLevel() == nullptr) continue;
+        tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(!layer.LightWallGhost().possible && Tagged(registry, "Magic Portals Wall Ghost") == 0,
+                  std::string(level) + " places no light wall, so it has no ghost");
+        layer.OnDetach(registry);
+    }
+}
+
+// 4-29 (level28c): a shot lights the torch, the wall is flagged, and the ghost
+// stands where it stood - breathing its alpha and pulsing its scale - until the
+// orbiting fire signal is shot and the wall comes back (art.json
+// light_wall_ghost, D5 section 3, the visuals plan's 13.4).
+void ALitTorchLeavesAGhostWhereItsWallStood() {
+    if (!OriginalArtIsThere("ALitTorchLeavesAGhostWhereItsWallStood")) return;
+    MagicPortals::Art::Rules artRules;
+    std::string artError;
+    CHECK_MSG(MagicPortals::Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", artRules, artError),
+              artError);
+    const MagicPortals::Art::LightWallGhost rules = artRules.lightWallGhost;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty() && layer.LightingError().empty(),
+              layer.LoadError() + layer.ArtError() + layer.LightingError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    if (layer.SimLevel()->torch.lights.empty() || !layer.SimLevel()->torch.wall.present) {
+        CHECK_MSG(false, "4-29 places a torch and a light wall");
+        return;
+    }
+    const double tickMs = static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
+    const glm::dvec2 wallPx = layer.LightWallGhost().atPx;
+    waitForFirstTap(layer, registry);
+
+    // The shot that lights it. The tick it lands the wall is flagged and the
+    // entity is added - and that frame cannot draw it, because the original adds
+    // it after the list of what to draw was made.
+    const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
+    tap(layer, registry, screenOf(registry, torchPx));
+    int ticks = 0;
+    while (ticks < 240 && !layer.SimLevel()->torch.lights[0].lit) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++ticks;
+    }
+    CHECK_MSG(layer.SimLevel()->torch.lights[0].lit, "a shot at 4-29's torch lit it: " + lastFailure(layer));
+    if (!layer.SimLevel()->torch.lights[0].lit) return;
+    const MagicPortalsLayer::LightWallGhostReport lit = layer.LightWallGhost();
+    CHECK_MSG(lit.added && !lit.drawn && Tagged(registry, "Magic Portals Wall Ghost") == 0,
+              "the tick the torch is lit adds the ghost and draws nothing");
+
+    // Its first drawn frame already carries one step of both clocks.
+    tickWith(layer, registry, kRest, {}, {});
+    const MagicPortalsLayer::LightWallGhostReport first = layer.LightWallGhost();
+    const double firstAlpha = rules.AlphaAt(rules.spinDegPerSec * tickMs / 1000.0);
+    const glm::dvec2 firstScale = rules.pulse.ScaleAt(tickMs);
+    CHECK_MSG(first.drawn && Tagged(registry, "Magic Portals Wall Ghost") == 1, "and the next draws it");
+    CHECK_MSG(std::fabs(first.alpha - firstAlpha) < 1e-9 && std::fabs(first.alpha - 0.29962) < 1e-4,
+              "one step in, its alpha is 0.2996: " + std::to_string(first.alpha));
+    CHECK_MSG(std::fabs(first.scale.x - firstScale.x) < 1e-9 && std::fabs(first.scale.x - 1.00404) < 1e-4,
+              "and its pulse 1.00404: " + std::to_string(first.scale.x));
+
+    // A whole period of each: the alpha a cosine of 0.1 to 0.3 over 1.2 s, the
+    // pulse 1.006 to 0.994 and back over 320 ms, the picture where the wall was at
+    // the size the pulse gives it, and the wall's own picture going at 1500 ms.
+    double lowest = 1.0, highest = 0.0, widest = 0.0, narrowest = 2.0, worst = 0.0;
+    int placed = 0;
+    int tinted = 0;
+    int wallWentAt = -1;
+    for (int tick = 1; tick <= 120; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const MagicPortalsLayer::LightWallGhostReport now = layer.LightWallGhost();
+        if (!now.drawn) {
+            CHECK_MSG(false, "the ghost stands while the wall is going and once it is gone");
+            return;
+        }
+        const double ms = tickMs * static_cast<double>(tick + 1);
+        worst = std::max(worst, std::fabs(now.alpha - rules.AlphaAt(rules.spinDegPerSec * ms / 1000.0)));
+        worst = std::max(worst, std::fabs(now.scale.x - rules.pulse.ScaleAt(ms).x));
+        lowest = std::min(lowest, now.alpha);
+        highest = std::max(highest, now.alpha);
+        widest = std::max(widest, now.scale.x);
+        narrowest = std::min(narrowest, now.scale.x);
+        const auto& transform = registry.get<TransformComponent>(now.quad);
+        const float wide = MagicPortals::Units::ToMetres(32.0 * now.scale.x);
+        const float tall = MagicPortals::Units::ToMetres(128.0 * now.scale.y);
+        if (glm::distance(MagicPortals::Units::ToPixels(transform.position), wallPx) < 1e-3 &&
+            std::fabs(transform.scale.x - wide) < 1e-6f && std::fabs(transform.scale.y - tall) < 1e-6f &&
+            transform.position.z == now.z && transform.rotation.z == now.rotation) {
+            ++placed;
+        }
+        const float alpha = registry.get<MaterialComponent>(now.quad).albedoColor.a;
+        if (std::fabs(static_cast<double>(alpha) - now.alpha) < 1e-6) ++tinted;
+        if (wallWentAt < 0 && layer.SimLevel()->torch.wall.gone) wallWentAt = tick;
+    }
+    // The closed form is recomputed from the tick count; the port accumulates a
+    // frame at a time, so the two part company in the last bits of a double.
+    CHECK_MSG(worst < 1e-6, "every tick draws the alpha and the pulse its callback writes: worst " +
+                                std::to_string(worst));
+    CHECK_MSG(placed == 120, std::to_string(placed) + " of 120 ticks drew it where the wall stood, at its pulse");
+    CHECK_MSG(tinted == 120, std::to_string(tinted) + " of 120 ticks drew it at the alpha its callback wrote");
+    CHECK_MSG(std::fabs(lowest - 0.1) < 1e-3 && std::fabs(highest - 0.3) < 1e-3,
+              "its alpha breathes 0.1 to 0.3: " + std::to_string(lowest) + " to " + std::to_string(highest));
+    CHECK_MSG(std::fabs(narrowest - 0.994) < 1e-4 && std::fabs(widest - 1.006) < 1e-4,
+              "and its pulse 0.994 to 1.006: " + std::to_string(narrowest) + " to " + std::to_string(widest));
+    // 1500 ms after the flag - the 90th tick after it, which is the 89th of this
+    // loop - and the ghost outlives it: that is its whole point.
+    CHECK_MSG(wallWentAt == 89, "the wall goes 1500 ms after the torch is lit, on tick " +
+                                    std::to_string(wallWentAt) + " of the ghost's life");
+    CHECK_MSG(SpriteOf(registry, "Magic Portals Sprite", "breakable_wall_sand.png") == entt::null,
+              "the wall's own picture is gone, and the ghost is what is left");
+
+    // A PAUSE HOLDS BOTH CLOCKS (the original's m_factor 0 for the angle; the
+    // port's own convention for the pulse, which the original's bounce would go on
+    // taking - art.json light_wall_ghost). advanceMotions is the only thing that
+    // steps them and a paused tick does not reach it.
+    const MagicPortalsLayer::LightWallGhostReport held = layer.LightWallGhost();
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(layer.Paused(), "Escape pauses 4-29");
+    for (int tick = 0; tick < 40; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const MagicPortalsLayer::LightWallGhostReport paused = layer.LightWallGhost();
+    CHECK_MSG(paused.drawn && paused.quad == held.quad && paused.angleDeg == held.angleDeg &&
+                  paused.pulseMs == held.pulseMs && paused.alpha == held.alpha && paused.scale == held.scale,
+              "the ghost stands still under a pause, alpha and pulse and all");
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(!layer.Paused(), "and Escape again resumes it");
+    tickWith(layer, registry, kRest, {}, {});
+    // Where it left off, rather than jumping the pause's 40 ticks. Which of the
+    // resuming ticks steps the level is the pause's own bookkeeping (the same
+    // question the antiportal's blink leaves to LevelAgeMs), so this bounds it.
+    const double step = rules.spinDegPerSec * tickMs / 1000.0;
+    const double moved = layer.LightWallGhost().angleDeg - held.angleDeg;
+    CHECK_MSG(moved > 0.0 && moved <= 3.0 * step,
+              "and it takes up where it left off: " + std::to_string(moved / step) + " steps on, not 40");
+
+    // The fire signal shot: the wall comes back and the ghost goes with it, on the
+    // tick, and a torch lit again gets a fresh entity with both clocks at zero.
+    landShot(layer, registry);
+    CHECK_MSG(layer.SimLevel()->torch.signal.present, "a lit torch leaves an orbiting fire signal");
+    tap(layer, registry, screenOf(registry, layer.SimLevel()->torch.signal.atPx));
+    int back = 0;
+    while (back < 240 && layer.SimLevel()->torch.wallsBack == 0) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++back;
+    }
+    CHECK_MSG(layer.SimLevel()->torch.wallsBack == 1, "the signal shot puts the wall back: " + lastFailure(layer));
+    if (layer.SimLevel()->torch.wallsBack != 1) return;
+    const MagicPortalsLayer::LightWallGhostReport gone = layer.LightWallGhost();
+    CHECK_MSG(!gone.added && !gone.drawn && Tagged(registry, "Magic Portals Wall Ghost") == 0,
+              "and the ghost goes on the same tick, as addLightWall deletes it");
+    CHECK_MSG(gone.angleDeg == 0.0 && gone.pulseMs == 0.0, "with its clocks back at zero for the next one");
+
+    landShot(layer, registry);
+    tap(layer, registry, screenOf(registry, torchPx));
+    int again = 0;
+    while (again < 240 && layer.SimLevel()->torch.lit < 2) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++again;
+    }
+    CHECK_MSG(layer.SimLevel()->torch.lit == 2, "the torch lights again: " + lastFailure(layer));
+    if (layer.SimLevel()->torch.lit != 2) return;
+    tickWith(layer, registry, kRest, {}, {});
+    const MagicPortalsLayer::LightWallGhostReport second = layer.LightWallGhost();
+    CHECK_MSG(second.drawn && std::fabs(second.alpha - firstAlpha) < 1e-9 &&
+                  std::fabs(second.scale.x - firstScale.x) < 1e-9,
+              "and its second ghost starts where the first did: " + std::to_string(second.alpha));
+    layer.OnDetach(registry);
+}
+
 void ALitTorchBakesTheLevelAtRunTime() {
     namespace Lighting = MagicPortals::Lighting;
     using MagicPortals::Units::ToMetres;
@@ -7096,6 +7327,8 @@ void runTests() {
     TheTorchIsALightAndAHalo();
     AShotCarriesItsOwnLight();
     ALitTorchBakesTheLevelAtRunTime();
+    EveryLightWallStandsReadyToLeaveItsGhost();
+    ALitTorchLeavesAGhostWhereItsWallStood();
 }
 
 } // namespace
@@ -7114,5 +7347,5 @@ int main() {
         return 77;
     }
     runTests();
-    return ::test::summary("test_mp_layer", 50);
+    return ::test::summary("test_mp_layer", 60);
 }

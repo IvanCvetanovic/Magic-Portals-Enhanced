@@ -13534,3 +13534,161 @@ it: 1275 checks, 0 failures.
   which `door_highlight.ent` does not have - could have been held.
 - **The standing sweep baseline is now this step's** `13.2/after/sweep` (binary `90fcf51d`, reproduced by the final
   `a008be11`), which supersedes `5.2/verify1/sweep` and step 78's one-row exception.
+
+## Step 80 - the ghost a lit torch leaves where its light wall stood (built)
+
+The visuals plan's step 13.4 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, as section 8.13 amends
+it, from decode `decode/D5.md` section 3 and its check; plan_port's "in scope, owned by no brief" row
+`dashed_door.ent`). On MPR `main`, `build/`. Game-only: no file under `engine/`, and the engine pin is unchanged.
+Changed: `game/data/art.json`, `game/data/torch.json`, `game/sim/Art.{hpp,cpp}`, `game/MagicPortalsLayer.{hpp,cpp}`,
+`tests/test_mp_layer.cpp`, `tests/test_mp_sprites.cpp` - 8 files.
+
+**A torch lit in chapter 4 now leaves the outline of the wall it takes away.** `sim/Torch` has taken the wall away
+since step 30 and `torch.json` has recorded the ghost as not built since then: the original adds a `dashed_door.ent`
+named `light_wall_ghost` at the wall's own point the tick the torch is lit, and deletes it when the orbiting fire
+signal is shot and the wall comes back. It is not decoration - it is the bookmark `addLightWall` builds the wall back
+from - and it is the only thing on screen between the wall going and the wall returning. **32 x 128 units at the
+wall's point and angle, 4 raw pixels behind it, alpha-blended at full brightness, its alpha breathing 0.1 to 0.3 on a
+cosine every 1.2 s and its scale pulsing 1.006 to 0.994 and back every 320 ms.** On the six levels that place a light
+wall: 4-26, 4-27, 4-29, 4-30, 4-31 and 4-32, whose wall is the one turned 90 degrees.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; every number is in
+`data/art.json` `light_wall_ghost` with its instructions).
+- `seekLightWallToDestroy` (469393..469772), from `ETHCallback_light_off` #147: #1-20 `SeekEntity('light_wall.ent')`,
+  #22-27 `destroy(wall)` - a flag, not a delete - and #30-67 `AddEntity('dashed_door.ent', wall.GetPosition() +
+  vector3(0, 0, -4), wall.GetAngle(), @out, 'light_wall_ghost', getScale())`. `ETHScene::AddEntity` renames it before
+  it assigns the callback (`Scene/ETHScene.cpp:264-266`, `:283-286`), so it runs `ETHCallback_light_wall_ghost`
+  (`Util/ETHASUtil.cpp:63-68`).
+- **The -4 is added to a position `scaleEntities` has already been through**, so it is 4 RAW world pixels, like the
+  player's 4 and a minion's 2 and unlike the glow's -22 of step 79: 4 / 2.8125 = 1.422 of the level's units behind the
+  wall (`art.json` `depth`).
+- `ETHCallback_light_wall_ghost` (469772..470129), every frame its bucket is drawn: #14-25 `SetFloat('angle', 0)` on
+  the first run; #42-47 `incrementAngleCustomData` (471942..472067 #1-14), `AddToFloat('angle',
+  unitsPerSecond(300))`; #64-71 `SetAlpha(cos(degreeToRadian(angle)) x 0.1f + 0.2f)`; #73-79
+  `bounceLightEntity(this, 0.15f)` (472846..473086), whose diff is 0.15 x 0.04 = 0.006 and which calls
+  `bounce(this, vector2(1.006), vector2(0.994), 160)` - the dial's own pulse of step 68, eased by
+  `smoothEnd = sin(bias x PIb)`.
+- `addLightWall` (472067..472507), from `ETHCallback_fire_signal` #279: the new `light_wall.ent` at the ghost's
+  position and angle, then `DeleteEntity(ghost)`.
+- `dashed_door.ent`: type 0 (so `EO_CENTER`), static 1, applyLight 0, blendMode 0 (`AM_PIXEL`), EmissiveColor (1,1,1),
+  SpriteCut 1x1, Scale 1, PivotAdjust (0,0), no particles, no light. `min(1, ambient + 1)` is 1
+  (`Entity/ETHRenderEntity.cpp:113-117`), so on these `darkest` levels it is drawn at full brightness scaled by its
+  entity alpha alone; applyLight 0 also means no lightmap (`ETHLightmapGen.cpp:42-45`). `dashed_door.png` is 32 x 128
+  with an `hd/` twin of 64 x 256 and no `fullhd/`, which is exactly the wall's own `breakable_wall_sand.png`.
+- **It is never drawn on the frame it is added.** The entity is created inside the torch's own callback, which
+  `ETHScene::Update` runs from `UpdateCurrentFrameEntities` AFTER `MapEntitiesToBeRendered` built the list that frame
+  draws (`Scene/ETHScene.cpp:482-511`, D5 section 3c). Its first drawn frame is the next one, and its callback has
+  run once by then: 00_order 8.0 rule 6, the same rule step 78's button is drawn by.
+
+**WHERE IT IS BUILT.** `buildSprites` resolves it with the wall's picture in hand - the file, its 32 x 128 units, the
+wall's point and angle, and the slot `slotAfter(wall eth_z - 1.422)` - and makes no quad: the ghost is made the tick
+the wall is flagged, which on most runs is never. `advanceMotions` steps its two clocks, and `syncWallGhost` makes its
+quad on the first tick after the flag and destroys it on the tick `Torch::Tick` puts the wall back, which is what the
+original does to the entity. A torch put out and lit again therefore gets a fresh ghost with both clocks at zero.
+`syncLighting` tints it (1, 1, 1, alpha) with `dashed_door.ent`'s emissive, as the dial is tinted.
+
+The angle is a `Motion::Turn` - the same helper the dashed circle turns by - because `incrementAngleCustomData` is
+`unitsPerSecond`, capped at `motions.json`'s `frame_cap_ms`; the pulse's clock is `bounce`'s `blinkElapsedTime`, which
+takes `getLastFrameElapsedTime` uncapped. At the port's fixed tick the two are the same number; on a long frame they
+would not be. **This `angle` turns no picture:** it is a custom datum the cosine reads, and nothing writes the
+entity's own `m_angle`, which stays the wall's.
+
+**WHAT IS NOT BUILT, recorded here, in `art.json`'s `light_wall_ghost._not_built` and in `torch.json`'s** (the
+bucket clock and the z drift are `art.json`'s; the pause is pinned by `test_mp_layer`; the last bullet is
+`torch.json`'s)**.**
+- **The bucket clock.** `dashed_door.ent` is `static=1` with a callback, so the original queues it only from the
+  visible-bucket loop of `MapEntitiesToBeRendered` (`Scene/ETHScene.cpp:541-574`,
+  `Scene/ETHActiveEntityHandler.cpp:69-73`): a ghost left off camera stands still and is drawn at the phase it was
+  left at when it is scrolled into view. The port runs both clocks from the tick it is added, as step 72 runs every
+  antiportal's blink from the level's first tick and as step 78 leaves the button's slide running off screen
+  (00_order 8.12c). It moves the phase of the alpha and the pulse and nothing else. **Reachable in play:** on 4-32 the
+  wall stands 146 units left of its torch and 646 from the player's spawn, and the view is 455 wide, so a torch lit
+  from anywhere right of it leaves its ghost off camera.
+- **A pause stands both clocks still here**, where the original's `bounce` would go on pulsing (its
+  `blinkElapsedTime` takes the frame time raw, not through `m_factor`; only the angle's `unitsPerSecond` is held by
+  `m_factor` 0). That is the port-wide convention of step 72's blink and step 68's dial, not this step's choice, and
+  `advanceMotions` - the only thing that steps either clock - is not reached on a paused tick. Pinned by
+  `test_mp_layer` rather than left as an argument: the gate table's pause row.
+- **The z drift.** `addLightWall` rebuilds the wall at the GHOST's position, which is the old wall's z less 4 raw
+  pixels, so in the original every light/put-out cycle moves the wall 4 px further back. The port's `Game` rebuilds
+  it from the level's node, so its wall returns to its own depth. Invisible unless something sits within a few pixels
+  of that z; recorded rather than built.
+- `light_wall_create.ent`, the wall's own alpha fade, and the rest of `torch.json`'s `_not_built` list.
+
+**HOW IT WAS MEASURED, and the one thing that could not be.**
+
+**A capture cannot light a torch, so this step has no picture of its own to show.** Lighting one needs a portal shot,
+and a shot needs a tap that `Portals::Shoot` sees. `--tap` does not reach it, on two counts, both read this session
+and both confirmed by five runs of 4-26, 4-29 and 4-31 that tapped the torch's own screen point at ticks 27, 60 and
+100 and produced no `DEV tap down` line and no lit torch:
+- `readInput`'s shot reads `Input::MousePosition()` and `ViewportInfo::pointerOverGame`
+  (`MagicPortalsLayer.cpp:4996-4999`), which a scheduled tap does not set - it only fills this layer's own `Touch`;
+- and that `Touch` is not even built during play on a level with no help block: `helpBlockInput` returns before
+  `touchThisTick` when `m_helpBlocks` is empty (`:5831-5834`), so `--tap` is inert on the 115 levels of the 128 that
+  place no help block - all six with a light wall among them.
+This is step 78's "a `--fixed-step` run cannot tap", now with the mechanism. **Everything the ghost does is therefore
+gated by `test_mp_layer`, which drives the real input path** - `tap()` replays a press with a mouse position, and the
+shot lands - **and the capture side is the 128-level sweep, which proves the step draws nothing anywhere until a
+torch is lit.** The gap is raised in LEFT FOR LATER: it blocks the capture gates of 7.2, 7.4 and 10.1-10.4 too.
+
+| Gate (00_order 8.13's 13.4, and the run's own) | Required | Today, on the baseline | This step |
+|---|---|---|---|
+| The ghost is ready on exactly the levels that place a light wall | 4-26, 4-27, 4-29, 4-30, 4-31, 4-32 | **none**: no `dashed_door` anywhere in the port | **passes**: all six resolve it and 4-22 (a torch, no wall) and 1-01 do not (`test_mp_layer`) |
+| Its picture | `dashed_door.png` through the tier the original draws | - | **passes: `hd/dashed_door.png`**, 64 x 256 at density 2, the same 32 x 128 units as the 1x file and as the wall's own sheet |
+| Its size and place | 32 x 128 u centred on the wall's point | - | **passes**: 32 x 128 u at (288, 64), (368, 160), (192, 96), (208, 224), (288, 128) and (64, 240) - each level's wall node |
+| Its angle | the wall's, 90 degrees on 4-32 | - | **passes**: 0 on five, **1.5708 rad** on 4-32, the engine's +z as Ethanon's angle turns |
+| Its depth | 4 raw px behind the wall | - | **passes**: `lookZ` = wall eth_z **- 1.4222** on all six (0.578, 0.578, 0.578, -3.422, -1.422, -5.422), and its slot is behind the wall's own quad on each |
+| It is not drawn on the tick the torch is lit (8.0 rule 6) | added, nothing drawn | - | **passes**: on that tick `added` and no quad; the next tick draws it |
+| Its first drawn alpha | 0.2 + 0.1 cos(5 deg) = **0.299619** | - | **passes: 0.299619** (one step of 300 deg/s at the port's tick) |
+| Its first drawn pulse | 1.006 + (0.994 - 1.006) sin(0.10417 PIb) = **1.004045** | - | **passes: 1.004045** |
+| The alpha over a period | 0.1 to 0.3, 1.2 s (72 ticks), the closed form every tick | - | **passes**: low **0.100000** and high **0.300000** over 120 drawn ticks, which the 5 degrees a tick put at the 36th and the 72nd; worst departure from the closed form **between 1e-9 and 1e-6** (the port accumulates a frame at a time where the form multiplies the tick count), and the quad is tinted with it on 120 of 120 |
+| The pulse over a period | 0.994 to 1.006, 160 ms a leg | - | **passes**: **0.994** and **1.006**, and the quad is drawn at 32 x 128 times it on 120 of 120 ticks |
+| It outlives the wall | the wall goes 1500 ms after the flag; the ghost stands | - | **passes**: the wall's picture goes on the **90th** tick after the flag and the ghost is drawn on every one of the 120 |
+| It goes when the signal is shot | on the tick, with the wall back | - | **passes**: `wallsBack` 1 and no quad on that tick, both clocks back at 0 |
+| A relit torch starts again | a fresh entity | - | **passes**: the second ghost's first drawn frame is 0.299619 and 1.004045 again |
+| A pause holds both clocks (this step's own row) | nothing moves, and no jump on resume | - | **passes**: over 40 paused ticks the angle, the pulse clock, the alpha, the scale and the quad are all unchanged, and the first tick after takes up **within 3 steps** on, not 40 - the bound `test_mp_layer` pins, because which resuming tick steps the level is the pause's own bookkeeping and not this step's |
+| Non-regression | no level moves | - | **passes**: all 128 levels at f420 against the standing baseline `13.2/after/sweep`: **128 byte-identical, 0 differing** (`compare_sweep.py`), every log with validation active and silent and not one naming a ghost. 1-01 f420 is `81a39d45` on all three binaries this step ran: the committed `a008be11`, the sweep's `0949c6e5` and the final `0567eee4`. No untouched run lights a torch, so none draws a ghost, and every one of the 128 still loads the art.json this step made stricter |
+| A unit test | one | - | **`test_mp_layer` 1361** checks and **`test_mp_sprites` 762**, 0 failures. Four new cases |
+| The capture of a lit torch | a frame of the ghost | - | **NOT RUN: no capture can light a torch** (above). Not a gate 8.13 asks for; recorded so the next reader does not look for one |
+
+**THE SUITES,** run directly, once each: **`test_mp_layer` 1361** checks (1275), **`test_mp_sprites` 762** (732),
+**`test_mp_minions` 99**, **`test_mp_timed` 84**, **`test_mp_zerog` 88**, **`test_mp_torch` 123**. 0 failures each.
+`test_mp_minions`, `test_mp_timed` and `test_mp_zerog` are the other readers of `art.json`, which now requires its
+`light_wall_ghost` section; `test_mp_torch` reads the `torch.json` whose `_not_built` this step rewrote, and the
+wall state the ghost's life hangs on. `::test::summary`'s second argument is
+a FLOOR that catches a suite skipping its work, not the count, and this step raises `test_mp_layer`'s from 50 to 60
+and `test_mp_sprites`' from 60 to 70 (and its levels-less path from 40 to 50), each by the checks it adds. New:
+`EveryLightWallStandsReadyToLeaveItsGhost` and `ALitTorchLeavesAGhostWhereItsWallStood` in `test_mp_layer`,
+`TheLightWallGhostIsDashedDoorEnt` and `AGhostWithoutItsCallbackIsRefused` in `test_mp_sprites`. **The full ctest was
+not run:** this step's definition of done names its gates and a unit test, and the sim library changed under all 44
+binaries, so a full run would relink and launch every one of them under Smart App Control.
+
+**BUILD: no warnings** (MSVC, Release, Ninja, /W4). **SMART APP CONTROL:** no test binary was refused, and
+`MagicPortals.exe` was not refused and ran all **138** of its launches: 4 on the committed `a008be11` (the anchor and
+three probes), 131 on `0949c6e5` (three probes and the 128-level sweep) and 3 on the final `0567eee4`. **The final
+binary reproduces the sweep:** a comment in `MagicPortalsLayer.hpp` moved the timestamp after the sweep was taken, so
+it was relinked from that same source and 1-01, 4-29 and 4-32 captured again (`13.4/after/final/`) - `81a39d45`,
+`0666df13` and `f9bbdb0b`, byte-identical to the sweep's own rows. `test_mp_layer`, which that link also rebuilt,
+was run again on it, and once more after its last case was added: 1361 checks, 0 failures.
+
+**RULINGS APPLIED** (each the owner's standing ruling, recorded rather than re-argued):
+- **R12** - the 720 px selection, so `dashed_door.png` resolves to `hd/dashed_door.png`, 64 x 256 at density 2 and
+  the same 32 x 128 units as the 1x file.
+- **K13** - the ghost is a new between-slot user, `slotAfter(wall eth_z - 1.4222)`, which section 8.13's K13 row
+  already lists ("`dashed_door` wall z - 4 raw px") among the rows for step 6.3's table. 6.3 is landing in the other
+  tree, so this step uses the lambda in `buildSprites`, as 3.1, 4.3, 5.1 and 13.2 did, and 6.3 migrates it.
+- **K8** does not arise: nothing here draws a random number. **K5** does not arise: nothing is cut - the sheet is one
+  frame. **R21** is the button's and reaches no picture here: the ghost has no body, no trigger and no sensor.
+
+**LEFT FOR LATER.**
+- **`--tap` cannot fire a portal shot** (above), which is why this step has no capture of its own. It is not this
+  step's to fix - it changes `readInput`, the path every level's play goes through - but it blocks the capture gates
+  of the visuals plan's 7.2, 7.4 and 10.1 to 10.4 as surely as it blocked this one, and step 78 hit it before. What
+  it would take: the scheduled tap's own `Touch` carried into the shot, and `touchThisTick` called during play on a
+  level with no help block.
+- **The bucket clock, the pause, and the 4-px z drift**, each recorded above and in `art.json`.
+- **Nothing gates the ghost against the original.** There is no footage of a torch being put out on one of the six
+  wall levels - L1 (4-22) is a level with no wall - so what the port draws is the decode's and no frame of the
+  original's confirms it.
+- **The standing sweep baseline is now this step's** `13.4/after/sweep`, which reproduces `13.2/after/sweep` row for
+  row.
