@@ -74,6 +74,11 @@ struct Rules {
     double fireIntervalMs = 0.0;     // 4200
     double fireIntervalStepMs = 0.0; // 600 shorter for each wound taken
     double muzzlePx = 0.0;           // 95
+    // addFireball's fireballScale, 2 here and 1 for every other caller: it scales
+    // fireball.ent's FIRST particle system alone and nothing else of the entity
+    // (darkdragon.json's source note). It rides on the fireball it makes
+    // (Turrets::Fireball::particleScale), because the fireball outlives the call.
+    double fireballParticleScale = 1.0;
 
     std::vector<double> appearHoldMs; // seven, summing to 7400
     glm::dvec2 shoutMovePx{0.0};      // (8, -32)

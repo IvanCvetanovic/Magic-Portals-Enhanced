@@ -186,6 +186,18 @@ glm::dvec3 LightColour(const Light& light, double intensity, bool ownerStatic, d
 // ETHRenderEntity.cpp:354-388); then Rules::haloBrightnessScale.
 glm::dvec3 HaloColour(const Light& light, double ratio, double scale);
 
+// A light as its owner's scale draws it: the owner's m_properties.scale, which
+// <Scale> and every Scale() the script calls multiply. The light's position and
+// range are x scale.y (ETHEntityRenderingManager::BuildChildLight,
+// ETHEntityRenderingManager.cpp:109-115 and 174-183); the halo's size is x the
+// scale and its position is NOT (DrawHalo draws light->pos, unscaled, at
+// haloSize x m_properties.scale: ETHRenderEntity.cpp:376-386). THE OWNER-SCALE RULE
+// (00_order K7): a level placement passes 1, because the converter has already
+// written its <Scale> into eth_halo_size and the light's range and offset by this
+// same rule (tools/converter/src/ethanon2godot/tscn.py:313-333); what the script
+// adds passes its <Scale> x the script's own.
+Light OwnerScaled(const Light& light, const glm::dvec2& ownerScale);
+
 // The ambient light the original draws a level with now, from its events in
 // their order:
 //   - it starts at the level file's <Ambient> (Scene::ambient), or at

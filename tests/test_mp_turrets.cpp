@@ -179,6 +179,12 @@ void AFireballLeavesTheLevel() {
     CHECK_MSG(static_cast<int>(run.level.turrets.fireballs.size()) < fired,
               "and they do not all still be in the air: " + std::to_string(run.level.turrets.fireballs.size()) +
                   " live of " + std::to_string(fired) + " fired");
+    // Leaving the level is NOT a destroy: the cull is the port's own, and the
+    // original's fireballs fly until they touch something. Nothing is recorded
+    // for one, so nothing explodes off the edge of the screen.
+    CHECK_MSG(run.level.turrets.spentPx.empty(),
+              "and a culled fireball leaves nothing behind: " + std::to_string(run.level.turrets.spentPx.size()) +
+                  " recorded");
     std::printf("  %s after a minute: %d fired, %d live\n", kLevel, fired,
                 static_cast<int>(run.level.turrets.fireballs.size()));
 }
@@ -211,7 +217,82 @@ void AFireballBurnsThePlayer() {
     CHECK_MSG(run.level.hazards.playerDied, "and it dies as a hazard kills it");
     CHECK_MSG(run.level.hazards.killedBy == run.level.turrets.killedBy,
               "named by the fireball, got '" + run.level.hazards.killedBy + "'");
-    std::printf("  %s: the player was burned by %s\n", kLevel, run.level.hazards.killedBy.c_str());
+    // And the fireball is DESTROYED doing it, with the point recorded: the
+    // contact callback sets flames and hp 0 on a character and then falls
+    // through to destroy(thisEntity) like any other contact
+    // (ETHBeginContactCallback_fireball #123-152). The layer puts
+    // small_explosion.ent there.
+    CHECK_MSG(run.level.turrets.spentPx.size() == 1,
+              "and the fireball that did it is destroyed, once: " +
+                  std::to_string(run.level.turrets.spentPx.size()) + " recorded");
+    bool alive = false;
+    for (const Turrets::Fireball& ball : run.level.turrets.fireballs) {
+        if (ball.name == run.level.turrets.killedBy) alive = true;
+    }
+    CHECK_MSG(!alive, "so it is no longer in the air");
+    if (!run.level.turrets.spentPx.empty()) {
+        std::printf("  %s: the player was burned by %s, which went off at (%.1f, %.1f)\n", kLevel,
+                    run.level.hazards.killedBy.c_str(), run.level.turrets.spentPx.front().x,
+                    run.level.turrets.spentPx.front().y);
+    }
+}
+
+// A fireball that kills the player does not fly on.
+//
+// ETHBeginContactCallback_fireball takes a character it is allowed to kill down
+// the same path as anything else it touches: flames and hp 0 at #123-145, then
+// #146-152 destroy(thisEntity), which the fireball's own callback reads next
+// frame to delete it and add small_explosion.ent. The port used to leave it in
+// the air, where it went on to burn crates and set barrels off SECONDS after the
+// level was already lost - which is what the four levels named here do. They are
+// walked with no input at all, exactly as a capture walks them, so what is
+// measured is what the screen shows.
+void AKillingFireballDoesNotFlyOn() {
+    // The chapter-2 levels whose idle run kills the player with a fireball
+    // inside 900 ticks. Each is one the f420 sweep changed beyond the fireball's
+    // own reach when this rule landed.
+    const char* levels[] = {"level6a", "level7a", "level11a", "level14a", "level22a"};
+    int killed = 0;
+    for (const char* name : levels) {
+        Run run;
+        if (!Begin(name, run)) continue;
+        int tick = 0;
+        int destroys = 0;
+        int firstDestroy = -1;
+        std::string by;
+        for (; tick < 900; ++tick) {
+            Tick(run);
+            if (!run.level.turrets.spentPx.empty() && firstDestroy < 0) firstDestroy = tick;
+            destroys += static_cast<int>(run.level.turrets.spentPx.size());
+            if (run.level.turrets.playerKilled && by.empty()) {
+                by = run.level.turrets.killedBy;
+                // On the very tick of the kill the destroy is recorded, and the
+                // fireball is already out of the air.
+                CHECK_MSG(!run.level.turrets.spentPx.empty(),
+                          std::string(name) + ": the killing fireball is destroyed on the tick it kills");
+                bool alive = false;
+                for (const Turrets::Fireball& ball : run.level.turrets.fireballs) {
+                    if (ball.name == by) alive = true;
+                }
+                CHECK_MSG(!alive, std::string(name) + ": and is out of the air, so it burns nothing further");
+                ++killed;
+                break;
+            }
+        }
+        // What each level does to itself, unattended, printed rather than
+        // asserted: it is the sweep's own explanation. 2-08 and 2-23 destroy
+        // fireballs on burnables long before they reach the player; 2-12's one
+        // destroy IS the kill, and it is why its barrel is no longer set off
+        // seconds after the level was lost; 2-07 and 2-15 destroy none at all,
+        // and what their f420 frames gained is a fireball the placeholder census
+        // could not see, clipped by the edge of the screen.
+        std::printf("  %s: %d fireball(s) destroyed, first on tick %d; %s\n", name, destroys, firstDestroy,
+                    by.empty() ? "the player survives 900 ticks" : (by + " killed the player on tick " +
+                                                                    std::to_string(tick)).c_str());
+    }
+    // Three of the five: 2-08, 2-12 and 2-23 lose their player to a fireball,
+    // 2-07 and 2-15 only burn things with one.
+    CHECK_MSG(killed == 3, "three of the five lose their player to a fireball: " + std::to_string(killed));
 }
 
 void TheReaderRefusesWhatWouldBeSilent() {
@@ -257,6 +338,7 @@ void runTests() {
     AFireballFliesAtItsOwnSpeed();
     AFireballLeavesTheLevel();
     AFireballBurnsThePlayer();
+    AKillingFireballDoesNotFlyOn();
 }
 
 } // namespace

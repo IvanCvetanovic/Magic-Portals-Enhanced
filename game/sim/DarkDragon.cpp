@@ -125,6 +125,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!number("fight", "fire_interval_ms", read.fireIntervalMs)) return false;
     if (!number("fight", "fire_interval_step_ms", read.fireIntervalStepMs)) return false;
     if (!number("fight", "muzzle_px", read.muzzlePx)) return false;
+    if (!number("fight", "fireball_particle_scale", read.fireballParticleScale)) return false;
     if (!string("fight", "shout", read.shoutName)) return false;
     if (!string("fight", "fighting", read.fightingName)) return false;
 
@@ -193,6 +194,12 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (read.fireIntervalStepMs < 0.0 ||
         read.fireIntervalStepMs * (read.maxHp - 1) >= read.fireIntervalMs) {
         error = path + ": fight.fire_interval_step_ms leaves an interval above zero at 1 hp";
+        return false;
+    }
+    // A scale of 0 or less would draw no fire at all, which is the failure this
+    // reader exists to refuse: the number is a multiple of the .ent's own size.
+    if (read.fireballParticleScale <= 0.0) {
+        error = path + ": fight.fireball_particle_scale is above zero";
         return false;
     }
     if (read.armMs < 0.0 || read.summonMs < 0.0) {

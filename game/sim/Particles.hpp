@@ -80,6 +80,11 @@ struct System {
     glm::dvec2 direction{0.0};      // the velocity a particle starts with
     glm::dvec2 randomizeDir{0.0};   // spread on it, +/- half
     glm::dvec2 startPoint{0.0};     // from the entity's own position
+    // <StartPoint>'s z: Ethanon reads the start point as a vector3 (ETHParticleSystem.cpp:130)
+    // and the system's pieces draw at the entity's depth plus it. Read, and scaled with the
+    // rest (ETHParticleSystem.cpp:33), but not yet drawn with: a level placement's systems
+    // keep their owner's slot (step 59, plan 2d), and a script-spawned effect is step 6.3's.
+    double startPointZ = 0.0;
     glm::dvec2 randStartPoint{0.0}; // spread on it, +/- half
 
     glm::dvec4 colour0{1.0}; // at birth
@@ -102,6 +107,13 @@ struct System {
 // the UTF-16 the original writes, or states a system missing a field.
 bool Load(const std::string& path, std::vector<System>& out, std::string& error);
 
+// Load's two halves, for a reader that wants the rest of the file too
+// (Art::LoadEnt): the .ent's text, decoded from the UTF-16 LE every one of the
+// original's is written in (false, with `error`, for anything else), and the
+// systems out of that text, `path` naming the file in an error.
+bool ReadEnt(const std::string& path, std::string& text, std::string& error);
+bool Parse(const std::string& text, const std::string& path, std::vector<System>& out, std::string& error);
+
 // Whether the port can draw a system's blend: AM_ADD and AM_PIXEL, the two the
 // levels' 889 placed systems use (879 and 10). AM_MODULATE has no pipeline, and
 // the layer refuses a system that asks for it by name rather than mixing it.
@@ -122,6 +134,14 @@ bool Drawable(const System& system);
 // scales only portal_static's systems, whose start point, spreads and direction are
 // all 0, and for those the two are the same frame.
 void Scale(System& system, double scale);
+
+// The same, on a copy: what a spawned entity's system is made from. AddEntity's
+// entity carries <Scale> x the script's scale x the engine's global scale (1 in
+// this game, 00_order 8.0 rule 5; ETHScriptWrapper.Scene.cpp:146-148,
+// ETHSpriteEntity.cpp:56-65), and each of its systems is created at the mean of
+// that scale's two axes (ETHSpriteEntity.cpp:316-319, ETHParticleManager.cpp:
+// 70-90) - explosion_large.ent's 1.4 at a script scale of 1.
+System Scaled(const System& system, double scale);
 
 // ---- a particle, moved as ETHParticleManager moves it -------------------------
 
@@ -188,6 +208,28 @@ bool Step(const System& system, Particle& particle, int index, int poolSize, con
 // Whether DrawParticleSystem draws it (:371-378): not spent, released, bigger
 // than nothing, its colour's alpha above 0, and not past its life once killed.
 bool Drawn(const System& system, const Particle& particle, bool killed);
+
+// Whether a pool is over: ETHParticleManager's m_finished, what AreParticlesOver
+// asks of each of an entity's systems (ETHSpriteEntity.cpp:547-567). The update
+// loop skips a particle past its last life (:204-206) and marks the pool drawn for
+// any other (:215), so a pool is finished once EVERY particle is past its last
+// life - which a system of repeat 0 never is, killed or not: a killed particle is
+// only not renewed (:259), and "past its lives" asks repeat > 0. So a fireball's
+// or a pair of red eyes' pool never ends, and a placed portal's kill needs its own
+// clock (ETHCallback_portal's 400 ms), not this.
+//
+// When. m_finished is stored by an update, from what each particle was as that
+// update reached it, and a temporary entity is removed at the START of the frame
+// after (ETHActiveEntityHandler.cpp:123, 169-171): so the original deletes it on
+// the second frame after the one that spent its last particle. Asked of the pool
+// before a frame's Step, this answers true a frame earlier - a frame on which
+// neither draws anything, since Drawn refuses a spent particle by the same test.
+// An empty pool of a repeating system is over, as a loop over nothing marks
+// nothing drawn. The repeat test comes first, so an empty pool of repeat 0 reads
+// NOT over where the engine's !anythingDrawn would read over; no pool can be
+// empty, since Parse refuses a count below 1 and CreateParticleSystem one of
+// nParticles <= 0.
+bool Finished(const System& system, const std::vector<Particle>& pool);
 
 // The colour it is drawn in (:381-389). An alpha-blended particle is multiplied
 // by min(1, luminance + ambient); an added one is not. And AN ADDED ONE'S ALPHA

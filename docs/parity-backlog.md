@@ -485,6 +485,49 @@ repository rather than the engine's; 5.2 (planning step 77) follows it.
       `_portalColorA/B` globals this row named turn out to be the ANTIPORTAL's — vector3(0.2, 0, 0) and
       vector3(0.4, 0, 0), the blink's two ends (SE step 72).
 
+- [ ] **Order 7.2 deviation, the fireball light's tail** (step 85, committed on `visuals-c` as step 94 and renumbered by the merge). 00_order §7
+      and system_7 G.2 require the R excess to fall to 10 by **27.6 +- 6 u**; measured **40.0 u** on 2-01, 6.4 u past
+      the band, on the one sample of the pair whose rings no neighbour reaches. The method is not the difference: the
+      same scripts read the ORIGINAL's own pair at r_half 16.9 u and <= 10 by 27.6 u, the numbers the band is made of
+      (`out/parity/visuals/7.2/fix1/tail.json`, `7.2/fix2/tail2.json`). **The knob is the falloff's SHAPE, not the
+      decoded range 50**: range 50, the colour (1, 0.5, 0.2) and `<Scale>` 1.2 are all read from `fireball.ent`, the
+      step adds no light maths of its own (its light goes through `placeLight`, the rule every placement and torch
+      uses), and in the 28-45 u ring the excess is (14.1, 7.7, 3.4) = 1 : 0.55 : 0.24, the `<Light>` colour itself.
+      At 16.9 u the port reads R 112 against the original's 81 and 83, and at 27.6 u it still holds 30 % of that
+      against the original's 9-11 %, so brightness alone does not account for it. **Owner: 2.2 / G5**, which already
+      holds `lighting.json`'s `halo_brightness_scale 0.6 _guess`. Not tuned.
+- [ ] **Order 7.2 deviation, K8's byte-identity and the player's eyes** (step 85). K8 asks that a step's frames be
+      byte-identical outside the new picture's box. Measured over the 128-level f420 sweep: 107 frames identical, 21
+      changed, and **20 of the 21 redraw the player's eyes - 1,499 px, of which 1,448 lie beyond the fireball's own
+      60 u box** on 19 levels (14-92 px each), classified by overlap with the pixels step 84 itself moved, not by
+      eye (`7.2/fix1/eyes_all.json`, `7.2/fix2/identity2.json`). The cause is the single `m_effectRandom` that K8
+      adopted in 6.3: effects are built before the eyes' renewals are stepped, so the eyes take different draws.
+      Left as it is on purpose - the original re-seeds ONE shared MTRand per frame (00_order §3 K8, D6), and a
+      generator per effect would re-open 6.3's committed design and move 7.1's committed baseline. **THE OWNER'S to
+      rule, and the ruling is inherited**: from 7.2 onward every effect step's K8 row means "the placement stream is
+      untouched" (6.3's own K8 case - 1,200 emitter values across two levels, 0 different - still passes) rather
+      than "the frame is identical", so 7.3, 7.4 and 8.x do not each re-litigate it.
+- [ ] **Order 7.2 deviation, the comparison box is 60 u, not the brief's 40 u** (step 85). `system_7` G.2 gate (5)
+      reads "each fireball +- 40 u and its explosions"; 00_order §7's own 7.2 row sets no radius, so this replaces
+      the brief only. The 60 u is derived, not fitted: `fireball.ent`'s widest number is its `<Light>`, range 50 x
+      `<Scale>` 1.2, which is wider than the 72 u halo quad (36 u half) and than the particles (20.4 u). The frames
+      agree - on 2-01, 10,115 changed px sit in the 50-60 u ring about the nearer fireball and **1** in the next,
+      and 2-05 has zero changed px in every 5 u ring from 15 u to 80 u. **It is the substitution that turns 2-01
+      from a failure into a pass**: at 40 u that frame has 22,611 px outside the box. Recorded so the swap is not
+      read later as a quietly different number.
+- [ ] **Order 7.2 deviation, the fireball's core is met on its licensed sample and not as a population** (step 85).
+      G.2 gate (2) wants a core equivalent radius of **6.0-10.0 u** and an RGB within +-20 of (226, 196, 165) from
+      one run on a pair with "a fireball in neither frame's rings"; on that sample the port reads 8.94 u and (242.0,
+      201.6, 145.2), so the gate is MET as written. Read wider it is not: the core is read on the RAW frame, where
+      no neighbour can reach it (the nearest fireball in the same frame is 544-554 px away), and over a 210-frame
+      series of 2-01 on the same binary one fireball's core moves **4.47-8.82 u, mean 6.28, s.d. 0.95, 39 % under
+      the 6.0 floor**, with all 300 instance readings at 4.12-9.95, mean 6.39, 42.7 % under it, against the
+      original's 7.71 and 8.30 u by the same code; and only 54 % of those readings hold all three RGB channels in
+      band (blue 59.7 %). Not fragmentation - summing every bright piece within 45 px moves the mean 6.39 -> 6.50.
+      **No decoded number is the knob** (`n5 a1 rep0`, size 17, growth -1.8 are all the `.ent`'s): what differs is
+      how the port's particle runtime spreads five particles' phases and sizes, so this belongs with **System 2's
+      particle row** above and the next effects step. `7.2/fix2/core_series.json`. Not tuned.
+
 ## 3. UI
 
 - [x] HUD + level start (steps 38-40), pause / finished / game over / popups (steps 50-52).

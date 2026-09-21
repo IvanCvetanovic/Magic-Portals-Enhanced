@@ -418,6 +418,16 @@ glm::dvec3 HaloColour(const Light& light, double ratio, double scale) {
     return light.colour * light.haloBrightness * ratio * scale;
 }
 
+Light OwnerScaled(const Light& light, const glm::dvec2& ownerScale) {
+    Light scaled = light;
+    // BuildChildLight: the light's position and range take scale.y alone.
+    scaled.offset *= ownerScale.y;
+    scaled.range *= ownerScale.y;
+    // DrawHalo: the size takes both, and the halo stands at the UNSCALED position.
+    scaled.haloSize *= ownerScale;
+    return scaled;
+}
+
 glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darkest, const Torch::State& torch) {
     const bool litNow = std::any_of(torch.lights.begin(), torch.lights.end(),
                                     [](const Torch::Light& light) { return light.lit; });

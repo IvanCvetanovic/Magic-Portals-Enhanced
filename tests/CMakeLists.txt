@@ -139,6 +139,10 @@ add_mp_test(test_mp_tiers)
 # pure, and a census of the converted levels' crystals and keys, which is skipped
 # without them and never with 77.
 add_mp_test(test_mp_motion)
+# The effects the original's script adds: effects.json and sim/Effects - each call's
+# entity, offset, depth, turn and scale, and the arithmetic of where the teleport's
+# three land. Pure, reading only the port's own committed data, so it never skips.
+add_mp_test(test_mp_effects)
 # The sounds: the decoded AudioManager as data, and that every file it names is
 # really in the original's soundfx/. The reader runs anywhere; only the part
 # that opens the original's own files is skipped without them, never with 77.

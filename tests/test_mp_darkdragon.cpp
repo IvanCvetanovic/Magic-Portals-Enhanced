@@ -94,6 +94,7 @@ void TheRulesRead() {
     CHECK(::test::nearly(static_cast<float>(rules.fireIntervalMs), 4200.0f));
     CHECK(::test::nearly(static_cast<float>(rules.fireIntervalStepMs), 600.0f));
     CHECK(::test::nearly(static_cast<float>(rules.muzzlePx), 95.0f));
+    CHECK(::test::nearly(static_cast<float>(rules.fireballParticleScale), 2.0f));
 
     // Seven waypoints carrying it in from off the left edge, 7400 ms in all.
     CHECK_EQ(rules.appearHoldMs.size(), std::size_t{7});
@@ -384,6 +385,13 @@ void ItSpitsAtThePlayer() {
             mine = true;
             // A carranca's kills and a fire diamond's does not; this one kills.
             CHECK(ball.killsPlayer);
+            // And it is the ONE fireball in the game drawn at twice the size:
+            // addFireball's fireballScale, 2 at both of this callback's calls
+            // (PshC4 2f at #972 and #1714) and 1 at every other caller's. It
+            // scales fireball.ent's first particle system alone.
+            CHECK_MSG(::test::nearly(static_cast<float>(ball.particleScale), 2.0f),
+                      "the dark dragon's fire is ScaleParticleSystem(0, 2): " +
+                          std::to_string(ball.particleScale));
         }
         CHECK(mine);
         // And its clock restarted, so the next shot is a whole interval away.

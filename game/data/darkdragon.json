@@ -129,6 +129,17 @@
     "fire_interval_ms": 4200.0,
     "fire_interval_step_ms": 600.0,
     "muzzle_px": 95.0,
+    "_fireball_particle_scale_source": [
+      "addFireball's fourth argument, fireballScale. Every other caller passes 1 - the carranca",
+      "(#108 in carrancaCallback), burnProjectile (#54) and level31a's dragon (PshC4 1f at",
+      "ETHCallback_dragon #708) - and the dark dragon passes 2 at both of its calls (PshC4 2f",
+      "at #972 before #978, and at #1714 before #1720). addFireball #77-83 uses it only when it",
+      "is not 1, and then only as ScaleParticleSystem(0, fireballScale): it scales the FIRST",
+      "particle system of fireball.ent, on top of the entity's own <Scale> of 1.2, and touches",
+      "neither the light nor the halo nor the entity. So this dragon's fire is drawn at 2.4",
+      "times the .ent's particle size where every other fireball is drawn at 1.2."
+    ],
+    "fireball_particle_scale": 2.0,
     "shout": "shout",
     "fighting": "fighting"
   },

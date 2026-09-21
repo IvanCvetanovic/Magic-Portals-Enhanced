@@ -1,0 +1,320 @@
+{
+  "_about": [
+    "The effects the original's script ADDS - entities spawned by name with AddEntity - as each call",
+    "adds its one: which .ent, where from the point the call is given, at what depth, turned how and",
+    "at what scale. The call site's facts only: what the entity itself is (its sprite, its particle",
+    "systems, its light, its own <Scale>) is read from the original's .ent at run time by",
+    "Art::LoadEnt and never copied here, since hand copies of the fifty-odd files would drift.",
+    "Decoded from android_game.bin through the remake's asbc listing (out/parity/asbc/",
+    "all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0). Step 82 of",
+    "docs/planning/2026-09-11-magic-portals-remaster.md (the visuals plan's 6.2, system_7 7a-1).",
+    "",
+    "WHAT IS HERE. The rows of vanishEffect and appearEffect (Portal.angelscript), whose",
+    "arithmetic test_mp_effects pins: the teleport's three effects, drawn by the visuals plan's",
+    "step 7.3. The fireball and its two explosions (7.2). The two entities PortalManager::",
+    "insertPortal adds for every portal a shot opens, the burst ETHCallback_portal leaves where",
+    "one dies, and that callback's own colours and clocks in placed_portal (7.4). And red_eyes,",
+    "MainCharacter's own, drawn by step 7.1 - added once at a level's",
+    "start rather than at a call site, so it has a shape and a reader of its own. Every other",
+    "effect the script adds gets its row with the step that draws it, so a",
+    "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
+    "sim/Effects, strictly: every field below is required.",
+    "",
+    "UNITS. AddEntity(file, vector3(xy, z), angle, @out, altName, scale), its arguments pushed",
+    "last-first (00_order 8.0 rule 3; ETHScriptWrapper.Scene.cpp:131-158). The script's",
+    "g_scale.scale(n) is n x screenHeight / 256 (00_order 8.12a), which is n of the port's units,",
+    "so offset_units and a z whose `scaled` is true are those n. A z the call writes as a bare",
+    "literal is in the engine's own units and does not grow with the screen (00_order 8.12b):",
+    "`scaled` false says so; the port, whose unit is one level unit, reads the number as it is.",
+    "`scale` is a multiple of g_scale.getScale(), the script's scale for anything it adds at its",
+    "own size, which is 1 in the port's units; the entity is drawn at that times its .ent's",
+    "<Scale> (Art::Entity::ScaleAt). `angle` is Ethanon's, in degrees, counter-clockwise on the",
+    "screen: a number, or the named rule toward_traveller_minus_90, radianToDegree(getAngle(d)) -",
+    "90 with d = normalize(traveller - portal) and getAngle(v) = atan2f(v.x, v.y) wrapped into",
+    "[0, 2 pi) (GameMath.h:711-715), computed in floats as the script computes it."
+  ],
+
+  "_never_spawned": {
+    "entities": ["explosion.ent"],
+    "_source": [
+      "explosion.ent is an .ent of the original's that nothing adds: the listing holds no string",
+      "'explosion.ent' (its explosion names are 'explosion_large.ent', 'small_explosion.ent',",
+      "'small_explosion_no_light.ent' and 'antiportal_explosion.ent'), and no level places it -",
+      "no <EntityName> or custom-data value of any of the 133 .esc files names it. A barrel's",
+      "blast is explode()'s explosion_large.ent (MiscCallbacks, bytes 342023..342895, #23;",
+      "ETHCallback_barrel_bomb #56-60), which is what the plan's 7e row 'explosion.ent /",
+      "explosion_large.ent on barrel detonations' should read (system_7 S10)."
+    ]
+  },
+
+  "suck_effect": {
+    "entity": "suck_effect.ent",
+    "offset_units": 32,
+    "z": {"value": 32, "scaled": true},
+    "angle": "toward_traveller_minus_90",
+    "scale": 1,
+    "_source": [
+      "vanishEffect (Portal.angelscript, bytes 356384..356958), called with the traveller's",
+      "position before it moves and the entry portal's: #2-13 direction = normalize(objectPos -",
+      "portalPos) (normalize of a zero vector is zero, GameMath.h:755-761); #14-26 offset =",
+      "direction x g_scale.scale(32); #28-34 angle = radianToDegree(getAngle(direction)) - 90;",
+      "#36-69 AddEntity('suck_effect.ent', vector3(portalPos + offset, g_scale.scale(32)),",
+      "angle, @effect, '', g_scale.getScale()). Its callers: PortalManager::teleportToOther",
+      "(bytes 144944..145873) #61, before #69 moves the traveller;",
+      "PortalManager::teleportToFirstStaticPortal (145999..146550) #44;",
+      "ETHCallback_portal_static (360571..361404) #144; and LoadingScreen::loop",
+      "(178170..179373) #241 - the loading screen, which ui.json's loading.vanish reads with",
+      "the same 32 and -90 (test_mp_effects pins that the two agree)."
+    ]
+  },
+
+  "sparkles": {
+    "entity": "sparkles.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": "toward_traveller_minus_90",
+    "scale": 1,
+    "_source": [
+      "vanishEffect #83-112: AddEntity('sparkles.ent', vector3(objectPos, g_scale.scale(32)),",
+      "angle, @effect, '', g_scale.getScale()) - at the traveller where it stood, turned as the",
+      "suck effect is (#93 pushes the same local). #100-101: VAR objectPos then GETOBJREF 0,",
+      "which names the stack slot VAR just filled, not the portal (00_order 8.0 rule 1)."
+    ]
+  },
+
+  "appear_effect": {
+    "entity": "appear_effect.ent",
+    "offset_units": 0,
+    "z": {"value": 2, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "appearEffect (Portal.angelscript, bytes 357060..357278), called with the exit portal's",
+      "position once the traveller stands there (teleportToOther #71-75, after #69):",
+      "AddEntity('appear_effect.ent', vector3(pos, 2), 0, @effect, '', g_scale.getScale()) -",
+      "#12 the angle 0, #13 the z 2, a bare literal (PshC4 2f, not through g_scale.scale). The",
+      "same pair of calls ends teleportToFirstStaticPortal (#44, #58) and ETHCallback_portal_static",
+      "(#144, #165).",
+      "Beholder's spawnStone (bytes 373491..373647) adds the same .ent at a rock another way,",
+      "AddScaledEntity('appear_effect.ent', vector3(pos, 0), g_scale.scale(1.5)) (#5-22): z 0",
+      "and scale 1.5, a row of its own for the step that draws the rocks' effect."
+    ]
+  },
+
+  "fireball": {
+    "entity": "fireball.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "addFireball (ETHCallback_carranca.angelscript, bytes 417483..417923), the one function",
+      "that makes a fireball, whoever asks for it: #12-17 vector3(pos, 0f) - two bare literals,",
+      "the angle and the z, neither through g_scale.scale - and #19-26 AddEntity('fireball.ent',",
+      "that, 0, @entity, '', g_scale.getScale()), so the entity is added at its own size and the",
+      "1.2 it is drawn at is its .ent's own <Scale>. It then writes killMainCharacter (#40-53)",
+      "and dir (#57-65) on the entity, clears its gravity (#69-74) and plays the spit sound.",
+      "ITS FOUR CALLERS: carrancaCallback #108, at the gargoyle's GetPositionXY along its own",
+      "(dirX, dirY); burnProjectile #54, where a fire diamond turns a portal shot into one;",
+      "ETHCallback_dragon #754 (2-32); and ETHCallback_dark_dragon #978 and #1720 (4-32). The",
+      "first three pass fireballScale 1 and the dark dragon 2 (PshC4 2f at #972 and #1714),",
+      "which is the one argument that is not the same for all of them: #77-83 calls",
+      "ScaleParticleSystem(0, fireballScale) when it is not 1, so it scales system 0 ALONE and",
+      "on top of the entity's own <Scale>. The port carries it per fireball",
+      "(Turrets::Fireball::particle_scale) and darkdragon.json's fight.fireball_particle_scale",
+      "holds the 2.",
+      "IT IS NOT TEMPORARY. fireball.ent's one system repeats 0 - forever - so",
+      "ETHEntity::IsTemporary is false and the engine never deletes it: it goes when its script",
+      "deletes it (ETHCallback_fireball below), which the port models as the effect going when",
+      "the fireball it follows goes."
+    ]
+  },
+
+  "small_explosion": {
+    "entity": "small_explosion.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_fireball (ETHCallback_carranca.angelscript, bytes 418524..418930), the",
+      "fireball's own per-frame callback: #44-56 it reads its `destroy` flag, and when it is set",
+      "#57-65 DeleteEntity(thisEntity) and #66-83 AddScaledEntity('small_explosion.ent',",
+      "thisEntity.GetPosition(), g_scale.getScale()) - the fireball's own vector3, whose z is",
+      "the 0 addFireball gave it, at the script's own size. AddScaledEntity is AddEntity(file,",
+      "pos, 0f, 0, '', scale) (ETHScriptWrapper.Scene.cpp:176-178), so the angle is 0 and the",
+      "0.8 it is drawn at is the .ent's <Scale>. #84-87 also startEarthquake(5, 0), which the",
+      "port has no earthquake for.",
+      "WHAT SETS `destroy`: ETHBeginContactCallback_fireball (418930..419710) alone. A character",
+      "the fireball cannot kill returns at #10-31; a carranca or a sensor that is not a",
+      "shock_agent returns at #98-121; everything else reaches #146-152 destroy(thisEntity) -",
+      "so a shock agent, a burnable, a bomb, the player it kills, AND ANY SOLID IT TOUCHES.",
+      "The port's fireball is a bare point with no body, so it records the first four",
+      "(Turrets::State::spent_px) and flies through walls; Turrets.hpp says why a body is its",
+      "own step. Neither of the port's other two removals adds one: the cull at the level's edge",
+      "is the port's own, and a torch's switch goes through killProjectile (MiscCallbacks,",
+      "351788..351878), a bare DeleteEntity that sets no flag."
+    ]
+  },
+
+  "explosion_large": {
+    "entity": "explosion_large.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "explode (MiscCallbacks.angelscript, bytes 342023..342895) #1-23:",
+      "AddScaledEntity('explosion_large.ent', vector3(pos, g_scale.scale(32)),",
+      "g_scale.scale(superScale)) - the z through g_scale.scale, so 32 level units, and the",
+      "scale g_scale.scale of the caller's superScale, which is 1 of the port's units per",
+      "superScale of 1. Then #27-31 playExplosionSound and #33-47 an EntityGrabber of",
+      "g_scale.scale(80) over the real colliders, which Fire::Blast already models.",
+      "A BARREL passes superScale 1 (ETHCallback_barrel_bomb #56-60), which is every blast the",
+      "port makes: Fire::State::blasts_px is where they went off. Its other callers -",
+      "fire_agent #191, beholder #1274, dark_dragon #1931, the fireball's contact #188, ghost",
+      "#1352 and explode itself #137 for a chain - are not built as blasts here, and each",
+      "brings its own scale with the step that builds it.",
+      "explosion.ent is NEVER spawned (see _never_spawned above): the plan's 'explosion.ent /",
+      "explosion_large.ent' is one entity, this one."
+    ]
+  },
+
+  "portal_summon_effect": {
+    "entity": "portal_summon_effect.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "PortalManager::insertPortal (PortalManager.angelscript, bytes 142281..142841) #4-33, the first of",
+      "the two entities a placed portal is made of: #14-19 vector3(pos, g_scale.scale(32)) and #26-33",
+      "AddEntity('portal_summon_effect.ent', that, 0, @out, '', g_scale.getScale()). The bubble that",
+      "announces a new portal, added BEFORE portal.ent (#71), which is the order the two draw their",
+      "random in.",
+      "ITS .ent: no <Sprite>, one system of 1 onda.png, a1 rep1, life 500, size 33, growth +6.4, minSize",
+      "16, colour (0.9, 0.7, 1) to black - a ring that GROWS where the teleport's appear_effect shrinks.",
+      "The footage measures it at 382 u/s on the clearer of its two rings against the .ent's 384",
+      "(out/parity/footage/F2.md section 4.3). Temporary, so the engine frees it once its pool is over."
+    ]
+  },
+
+  "portal": {
+    "entity": "portal.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "insertPortal #47-71: AddEntity('portal.ent', vector3(pos, 0f), 0f, @portal, 'portal.ent',",
+      "g_scale.getScale()) - the PORTAL ITSELF, an entity like any other the script adds, with the",
+      "alternative name that makes SeekEntity find it. Both the angle and the z are bare literals",
+      "(PshC4 0f at #57 and #58), and 0 is 0 on either reading.",
+      "ITS .ent: <Sprite>portal_halo.png</Sprite> at blendMode 1 (added), applyLight 0, emissive",
+      "(1, 1, 1); sys0 4 x portal_spiral.png, a1 rep0, life 900 +- 450, size 70, growth -0.8, angleDir",
+      "1.3, <StartPoint> z 10; sys1 1 x portal.png, a0 rep0, life 100, size 64, <StartPoint> z 10; and",
+      "<CustomData> speed 1, stride 2, which are linearMotion's (placement.json portal.bob).",
+      "IT IS NOT TEMPORARY - both systems repeat 0 - so nothing but ETHCallback_portal deletes it,",
+      "which is what placed_portal below writes down."
+    ]
+  },
+
+  "portal_death": {
+    "entity": "portal_death.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_portal (Portal.angelscript, bytes 359141..359885) #159-176:",
+      "AddScaledEntity('portal_death.ent', thisEntity.GetPosition(), g_scale.getScale()), at the portal's",
+      "own vector3 - whose z is the 0 insertPortal gave it - on the frame its kill clock passes 400 ms,",
+      "immediately before #177-185 DeleteEntity(thisEntity). AddScaledEntity is AddEntity(file, pos, 0f,",
+      "0, '', scale), so the angle is 0.",
+      "ITS .ent: no <Sprite>, 4 x explosion.png cut 4 x 3, a1 rep1, all at once, life 300 +- 300, size",
+      "48, growth +0.6, maxSize 92, <StartPoint> z 4. Temporary.",
+      "ETHCallback_light_off #139 and ETHCallback_fire_signal #242 add the same .ent at a projectile;",
+      "those are the torch's steps, not this one."
+    ]
+  },
+
+  "placed_portal": {
+    "colour_first": [1.0, 0.3, 0.4],
+    "colour_second": [0.3, 0.4, 1.0],
+    "colour_alone": [0.0, 0.0, 0.0],
+    "kill_fade_per_frame": 0.9,
+    "kill_fade_frame_ms": 16.666666666666668,
+    "death_after_kill_ms": 400,
+    "_source": [
+      "WHAT ETHEntity::SetColor DOES TO A PLACED PORTAL, and what the kill fade then multiplies.",
+      "PortalManager::update (bytes 138545..139692) recolours its array every frame, AFTER popping any",
+      "portal whose systems have been killed (#165-180, #230-246):",
+      "  #185-188 size > 1: #192-207 portals[0] = PORTAL_RED, #212-227 portals[1] = PORTAL_BLUE.",
+      "  #248-259 size == 1 and maxPortals == 1: #264-279 portals[0] = PORTAL_RED.",
+      "  #282-300 size == 1 otherwise: portals[0] = V3_ZERO.",
+      "  Nothing colours index 2 or beyond, and nothing recolours a portal once it has been popped.",
+      "PORTAL_RED (1, 0.3, 0.4) and PORTAL_BLUE (0.3, 0.4, 1) are global initialisers (listing lines",
+      "60476 and 60485); V3_ZERO is (0, 0, 0). 00_order section 8.2 (decode D1) cites the same four",
+      "call sites while ruling the STATIC portal's own tint out of them.",
+      "BLACK IS NOT A BUG. portal.ent's sprite is additive, so colour (0, 0, 0) adds nothing and the",
+      "halo simply does not draw: a lone portal on a level that grants two is its spiral and its iris",
+      "and nothing else, which is what the original's still shows (out/parity/smoke/nav/01, 1-3) and",
+      "what F2 measures as 'no halo tint' until the second portal opens (section 4.4).",
+      "ONLY THE SPRITE TAKES IT. SetColor writes m_v4Color (ETHEntity.cpp:493-498), the sprite draws",
+      "min(1, ambient + emissive) x m_v4Color (ETHRenderEntity.cpp:112-117), and the particle pass",
+      "draws particle.color x ambient alone (ETHParticleManager.cpp:381-389). So the spiral and the",
+      "iris are never tinted and never fade with the halo.",
+      "THE KILL FADE. ETHCallback_portal #127-142: once its killTime is set, SetColor(GetColor() x 0.9)",
+      "EVERY FRAME; #144-158, once GetTime() - killTime passes 400 ms, portal_death and DeleteEntity.",
+      "The 0.9 is per rendered frame of a game that ran at the device's rate, so the port applies it",
+      "per 1/60 s of frame time (kill_fade_frame_ms): an INFERRED reading that makes a 120 Hz run match",
+      "a 60 Hz one, and the only one of these six numbers that is not read straight off an instruction.",
+      "killTime is READ BEFORE IT IS WRITTEN (#99-101 against #113-123), so the frame that sets it",
+      "neither fades nor counts; both start on the frame after."
+    ]
+  },
+
+  "red_eyes": {
+    "entity": "red_eyes.ent",
+    "offset_units": {
+      "x_frame_gt_7": 7,
+      "x_else": -7,
+      "y": -14.25,
+      "y_zero_g": -15.65,
+      "z": 1
+    },
+    "scale": 1,
+    "hide_with_player": true,
+    "_source": [
+      "MainCharacter's own effect, and the one effect every level shows. It is NOT a call site",
+      "of the shape above: AddScaledEntity takes no angle and no direction, and the entity is",
+      "added once and then moved every frame, so its row is read by its own reader.",
+      "MainCharacter::MainCharacter (bytes 126650..127790) #85-101 AddScaledEntity('red_eyes.ent',",
+      "entity.GetPosition(), g_scale.getScale()) and #105-119 SeekEntity('red_eyes.ent') into the",
+      "redEyes handle: at the level's start, on every level, at the character's own point and its",
+      "own depth. AddScaledEntity is AddEntity(file, pos, 0f, 0, '', scale) (Ethanon",
+      "ETHScriptWrapper.Scene.cpp:176-178), so the angle is 0.",
+      "MainCharacter::updateEyes (bytes 134329..134672), run first thing every frame by",
+      "MainCharacter::update #4, before its own pause test: #6 if the character is NOT hidden,",
+      "#15-22 eyeX = GetFrame() > 7 ? 7f : -7f; #24-31 eyeY = noGravity ? -15.65f : -14.25f;",
+      "#33-64 redEyes.SetPosition(entity.GetPosition() + g_scale.scale(vector3(eyeX, eyeY, 1f)));",
+      "#66-72 otherwise redEyes.Hide(true) (SetV1's second operand is an 8-bit immediate, so",
+      "#67 is the literal 1). GetFrame is the cell in dark_mage.ent's 4 x 4 sheet, and rows 2",
+      "and 3 - frames 8-15, walking right and pushing right - are the ones above 7 (art.json",
+      "rows_by_direction).",
+      "UNITS. The vector3 overload of g_scale.scale (bytes 5975..6072) is vector3::opMul_r of",
+      "the scale factor, which multiplies all three components, so 7, -14.25, -15.65 and the z 1",
+      "are all in level units. The z is added to the CHARACTER's depth (art.json character.z over",
+      "the level's scale factor), not to the level's zero.",
+      "THE ENTITY ITSELF is red_eyes.ent, read at run time by Art::LoadEnt: no <Sprite>, one",
+      "<ParticleSystem> of 12 hard_halo.png at alphaMode 1, repeat 0, life 120 +- 100 ms, size 4",
+      "growing -0.03, colour (1, 0.1, 0.1) to black, <StartPoint> z 2. Repeat 0 makes it NOT",
+      "temporary (Art::Entity::Temporary), so the engine never deletes it and it lives as long as",
+      "the character does.",
+      "HIDE_WITH_PLAYER IS A RECORDED FACT AND NOT A KNOB. It has exactly one legal value: Effects::LoadRules",
+      "refuses a row that says false, because the port's player owner both moves the eyes and hides them, and a",
+      "row that said otherwise would need an owner of its own. The field writes down #66-72 redEyes.Hide(true)",
+      "beside the arithmetic it belongs to; it is not a number a designer retunes."
+    ]
+  }
+}

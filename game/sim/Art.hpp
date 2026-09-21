@@ -9,7 +9,8 @@
 // its sheet is cut. Those are the .ent's facts, and test_mp_sprites pins them.
 // How fast a sheet plays is mostly not decoded, so it is carried as a _guess and
 // pinned by nothing - except the player's walk, whose stride and standing
-// frame are decoded from its script (Character).
+// frame are decoded from its script (Character), and the shot's cells, stepped
+// by the one timer its script keeps (Shot).
 //
 // Each also carries its .ent's <EmissiveColor>: the original draws every sprite
 // at min(1, ambient + emissive) of its colour (Lighting::AmbientTerm), what no
@@ -26,10 +27,12 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 #include "sim/Lighting.hpp"
+#include "sim/Particles.hpp"
 
 namespace MagicPortals::Art {
 
@@ -43,8 +46,10 @@ struct Picture {
     bool isStatic = false;        // the .ent's static; required
     bool applyLight = false;      // the .ent's applyLight; required
     std::string normal;           // its <Normal>, a file under the original's entities/normalmaps/; empty = none
-    // Its <Light>, with no scale to apply (none of these .ent files carries a
-    // <Scale> other than 1). `halo` is a file among the original's entities, not
+    // Its <Light>, as the .ent writes it: before any scale. None of these .ent
+    // files carries a <Scale> other than 1, but the script can scale what it adds
+    // - the shot's Scale(0.8) - and the layer applies that through
+    // Lighting::OwnerScaled. `halo` is a file among the original's entities, not
     // yet a path.
     std::optional<Lighting::Light> light;
     // The depth its light's height is measured from, read with a light; and for the
@@ -136,6 +141,31 @@ struct NoGravityPlayer {
 // the update before left. Then linearMotion turns the angle and sets the idle
 // column, set(0, 3, columnStrideMs, true).
 int UpdateNoGravity(const Character& mage, NoGravityPlayer& player, bool walking, double elapsedMs);
+
+// The shot, as projectile.ent draws it and addProjectile and ETHCallback_projectile
+// run it (art.json's shot). Added with Scale(0.8), which the engine applies to
+// its cell, its pivot, its halo and its light; turned every frame so the head of
+// the bolt leads along its flight; and its cell stepped by _projectileFrameTimer,
+// ONE FrameTimer for the whole game, set(0, last cell, strideMs, true) each frame
+// a shot is alive.
+struct Shot : Picture {
+    double scale = 1.0;         // <Scale> x the script's Scale(): m_properties.scale
+    double pivotXPx = 0.0;      // its PivotAdjust, in the .ent's units, before the scale
+    double pivotYPx = 0.0;
+    double strideMs = 0.0;      // _projectileFrameTimer's stride: a cell's time
+    bool turnsToFlight = false; // SetAngle(radianToDegree(getAngle(dir)) - 90), every frame
+
+    // The angle Ethanon is given for a shot flying along `directionPx` (level
+    // units, y down), counter-clockwise on the screen in degrees: getAngle is
+    // atan2(x, y) wrapped into [0, 2 PI) (GameMath.h:711-715), in floats as the
+    // script computes it. 0 when it does not turn.
+    float AngleDegrees(const glm::dvec2& directionPx) const;
+    // Where its picture's centre is drawn for the entity at `atPx` turned by
+    // `angleDegrees`: the pivot, times the scale, turned with the picture and
+    // taken off the entity's point (ETHSpriteEntity::ComputeInScreenSpriteCenter,
+    // ETHSpriteEntity.cpp:699-709).
+    glm::dvec2 CentrePx(const glm::dvec2& atPx, float angleDegrees) const;
+};
 
 // How a picture pulses: from one scale to the other and back, each way a
 // stride, eased by smoothEnd - the original's bounce().
@@ -326,7 +356,7 @@ void UpdateMinion(const Minion& art, MinionPose& pose, MinionArm arm, bool right
 
 struct Rules {
     Picture portal;      // portal.ent
-    Picture shot;        // projectile.ent
+    Shot shot;           // projectile.ent
     Picture torchLight;  // light_from_projectile.ent, added where a shot lights a torch
     Character character; // dark_mage.ent, the player
     Beholder beholder;   // beholder.ent, chapter 1's boss
@@ -350,5 +380,54 @@ struct Rules {
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
+
+// An entity the script ADDS - an effect, spawned by name with AddEntity - read
+// out of its .ent when it is needed, not copied into art.json (Effects.hpp says
+// where each call adds it). art.json pins the handful the port draws for good;
+// the script adds some fifty more, and hand copies of fifty files would drift.
+//
+// Read as ETHEntityProperties::ReadFromXMLFile reads it (ETHEntityProperties.cpp:
+// 226-413): the first element inside the file's root is the entity, and each of
+// its facts is the first child of that name, or the engine's own default where
+// the file does not state it - no <Scale> is (1, 1), no <Sprite> is none, no
+// <EmissiveColor> is black, no blendMode is AM_PIXEL (ETHEntityProperties.cpp:
+// 79-109, 166-180), and a <Light> takes ETHLight's (ETHLight.cpp:27-38). Those
+// defaults are the engine's reading of the same file, not a guess of the port's:
+// portal.ent states no <Scale> and fireball.ent no <Sprite>. What IS refused is
+// what the engine would misread in silence: a file that is not the original's
+// UTF-16, a stated number that is not one, a cut below one, a system missing a
+// field (Particles::Load), or a third system, which Ethanon would drop
+// (ETH_MAX_PARTICLE_SYS_PER_ENTITY is 2, ETHTypes.h:33).
+//
+// The Picture's rows mean what they mean in art.json - its framesPerSecond and
+// z are not the .ent's and stay 0: the call site gives the depth, and a sheet's
+// rate is the script's - and its light is kept only when the engine keeps it,
+// active with a range above 0 (ETHEntityProperties.cpp:343), with no halo when
+// it names no <HaloBitmap> (ETHEntityRenderingManager.cpp:78). The light, the
+// pivot and the systems are as the file states them, before any scale.
+struct Entity : Picture {
+    int blendMode = 0;            // Video::ALPHA_MODE; `additive` is blendMode 1
+    glm::dvec2 pivotPx{0.0};      // its <PivotAdjust>
+    glm::dvec2 scale{1.0};        // its <Scale>, per axis
+    std::vector<Particles::System> systems; // in the file's order, unscaled
+
+    // ETHEntity::IsTemporary (ETHEntity.cpp:697-716): no sprite, at least one
+    // system, and every system repeats a set number of times. Such an entity is
+    // deleted by the engine once its particles are over (Particles::Finished,
+    // ETHActiveEntityHandler.cpp:169-171); any other is its script's to delete.
+    bool Temporary() const;
+    // m_properties.scale once AddEntity has made it: <Scale> x the script's
+    // scale x the engine's global scale, which is 1 in this game
+    // (ETHScriptWrapper.Scene.cpp:146-148, ETHSpriteEntity.cpp:56-65). Its
+    // picture, pivot, halo and light take this (Lighting::OwnerScaled).
+    glm::dvec2 ScaleAt(double scriptScale) const { return scale * scriptScale; }
+    // And the one number each of its systems is made at: the mean of that
+    // scale's two axes (ETHSpriteEntity.cpp:316-319; Particles::Scaled).
+    double ParticleScale(double scriptScale) const;
+};
+
+// Reads the .ent at `path`. False, with `error`, for anything refused above;
+// `out` is then unchanged.
+bool LoadEnt(const std::string& path, Entity& out, std::string& error);
 
 } // namespace MagicPortals::Art

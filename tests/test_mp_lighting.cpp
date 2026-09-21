@@ -348,6 +348,41 @@ void EachLightReachesTheSpritesItShould() {
     CHECK_MSG(Near(Lighting::HaloColour(torch, 1.0, 0.5), 0.35, 0.175, 0.035), "x lighting.json's scale");
 }
 
+// THE OWNER-SCALE RULE (00_order K7; planning step 81). An owner's scale draws its
+// light at position and range x scale.y (ETHEntityRenderingManager::BuildChildLight)
+// and its halo at size x the scale, standing where the unscaled light is
+// (ETHRenderEntity::DrawHalo) - the converter's own rule for a level's <Scale>
+// (tscn.py:313-333), which is why a level placement passes 1. The shot is the one
+// owner the script scales today: projectile.ent's light under Scale(0.8).
+void AnOwnersScaleDrawsItsLightAndHalo() {
+    Lighting::Light shot;
+    shot.range = 70.0;
+    shot.offset = glm::dvec3(0.0, 0.0, -12.0);
+    shot.colour = glm::dvec3(0.6, 0.6, 1.0);
+    shot.halo = "halo.bmp";
+    shot.haloOffset = glm::dvec2(3.0, -5.0);
+    shot.haloSize = glm::dvec2(50.0);
+    shot.haloBrightness = 0.65;
+    const Lighting::Light drawn = Lighting::OwnerScaled(shot, glm::dvec2(0.8));
+    CHECK_MSG(std::fabs(drawn.range - 56.0) < 1e-12, "range 70 x 0.8: 56 units");
+    CHECK_MSG(std::fabs(drawn.offset.z + 9.6) < 1e-12 && drawn.offset.x == 0.0 && drawn.offset.y == 0.0,
+              "the light 12 x 0.8 = 9.6 below");
+    CHECK_MSG(std::fabs(drawn.haloSize.x - 40.0) < 1e-12 && std::fabs(drawn.haloSize.y - 40.0) < 1e-12,
+              "the halo 50 x 0.8: 40 units");
+    CHECK_MSG(drawn.haloOffset == shot.haloOffset, "where the unscaled light is: DrawHalo reads light->pos");
+    CHECK_MSG(drawn.colour == shot.colour && drawn.haloBrightness == shot.haloBrightness && drawn.halo == shot.halo,
+              "nothing else");
+    // A scale of 1, a level placement's: the light as it was read.
+    const Lighting::Light placed = Lighting::OwnerScaled(shot, glm::dvec2(1.0));
+    CHECK_MSG(placed.range == shot.range && placed.offset == shot.offset && placed.haloSize == shot.haloSize &&
+                  placed.haloOffset == shot.haloOffset,
+              "a level placement passes 1: its <Scale> is in its light already, and is not applied twice");
+    // Uneven: the light takes y alone, the halo both.
+    const Lighting::Light tall = Lighting::OwnerScaled(shot, glm::dvec2(2.0, 0.5));
+    CHECK_MSG(tall.range == 35.0 && tall.offset.z == -6.0 && tall.haloSize == glm::dvec2(100.0, 25.0),
+              "scale (2, 0.5): range and offset x 0.5, the halo 100 x 25");
+}
+
 // ---- the reader, on a scene this suite writes ------------------------------------
 
 void EveryKeyIsReadAndEveryAbsenceIsTheDefault() {
@@ -815,6 +850,7 @@ int main() {
     AnythingElseIsRefusedNamingTheLine();
     EachLightReachesTheSpritesItShould();
     ALightmapIsHalfItsSpritesUnits();
+    AnOwnersScaleDrawsItsLightAndHalo();
 
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec)) {

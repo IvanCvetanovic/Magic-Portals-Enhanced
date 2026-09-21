@@ -59,6 +59,13 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     // And over its guessed collision_radius_px, the two decoded radii: a
     // portal's own, and the quite separate one an antiportal refuses a tap in.
     if (!Portals::LoadPlacement(portDataDirectory + "/placement.json", read.portals, error)) return false;
+    // linearMotion's shared arithmetic - the frame its step is capped at and the
+    // turn it wraps at - which a placed portal's own hover is taken over
+    // (ETHCallback_portal #1-10). One reading of motions.json rather than a second
+    // copy of two decoded constants; the layer keeps its own for the pictures it
+    // moves, and both read the same file.
+    if (!Motion::LoadRules(portDataDirectory + "/motions.json", read.motion, error)) return false;
+    read.portals.motion = read.motion;
     if (!Mover::LoadRules(portDataDirectory + "/movers.json", read.movers, error)) return false;
     // The same file, its `button` block: a button's sink is not a mover's swing,
     // and its numbers are decoded where the other two are the remake's guesses.
@@ -386,7 +393,12 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
                     struck = true;
                 }
             }
-            if (struck) spent.push_back(ball.name);
+            // `destroy`, as the contact callback sets it, so the layer can put
+            // small_explosion.ent where the fireball stood (Turrets::State::spentPx).
+            if (struck) {
+                spent.push_back(ball.name);
+                level.turrets.spentPx.push_back(ball.atPx);
+            }
         }
         if (!spent.empty()) {
             std::erase_if(level.turrets.fireballs, [&spent](const Turrets::Fireball& ball) {
@@ -652,6 +664,10 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             made.atPx = turn.firePx;
             made.velocityPx = turn.aimPx * level.turrets.rules.speedPx;
             made.killsPlayer = true;
+            // The one argument that is not the same for every addFireball caller:
+            // this dragon passes 2 and everything else 1, and it scales the
+            // entity's first particle system alone (darkdragon.json).
+            made.particleScale = level.darkDragon.rules.fireballParticleScale;
             level.turrets.fireballs.push_back(made);
         }
 

@@ -75,6 +75,15 @@ struct Fireball {
     // one of these is lethal and the other cannot touch the player, from the same
     // fireball.ent. Diamonds.hpp has the decode.
     bool killsPlayer = true;
+
+    // addFireball's OTHER parameter, fireballScale, which is 1 for a carranca, a
+    // converted shot and level31a's dragon and 2 for the dark dragon. #77-83
+    // passes it to ScaleParticleSystem(0, fireballScale), so it scales the first
+    // particle system of fireball.ent alone, on top of the entity's own <Scale>;
+    // it moves nothing this file simulates. It rides here because the call is
+    // over long before the fireball is - effects.json's fireball row and
+    // darkdragon.json's fight.fireball_particle_scale carry the decode.
+    double particleScale = 1.0;
 };
 
 struct State {
@@ -85,6 +94,20 @@ struct State {
 
     bool playerKilled = false;
     std::string killedBy; // the fireball the player died in
+
+    // WHERE a fireball was DESTROYED this tick, cleared and refilled by every
+    // Tick, as Fire::State::blastsPx is. The original's `destroy` flag and
+    // nothing else: ETHBeginContactCallback_fireball sets it, and the fireball's
+    // own callback then deletes the entity and adds small_explosion.ent at the
+    // point it stood (effects.json's small_explosion row). So the two removals
+    // that are NOT a destroy leave nothing here - the cull at the level's edge,
+    // which is the port's own and has no counterpart in a game whose fireballs
+    // fly until they touch something, and a torch's switch, which goes through
+    // killProjectile, a bare DeleteEntity that sets no flag.
+    //
+    // The layer reads it on the tick that fills it (latchSimEffects) and draws
+    // the explosion on the next frame; nothing in this file acts on it.
+    std::vector<glm::dvec2> spentPx;
 
     // Portal shots a fire diamond turned into fireballs, which names them apart
     // from a carranca's. Not a carranca's doing at all - Game does the converting

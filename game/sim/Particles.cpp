@@ -179,6 +179,19 @@ bool ParseSystem(const std::string& chunk, System& out, std::string& missing) {
     vector2("Direction", read.direction);
     vector2("RandomizeDir", read.randomizeDir);
     vector2("StartPoint", read.startPoint);
+    // And its z: the start point is a vector3 (ETHParticleSystem.cpp:130), and all
+    // 102 systems state the z.
+    {
+        std::string element;
+        std::string z;
+        double pz = 0.0;
+        if (!Between(chunk, "<StartPoint", "/>", element) || !Attribute(element, "z", z) || !Number(z, pz)) {
+            if (ok) missing = "StartPoint z";
+            ok = false;
+        } else {
+            read.startPointZ = pz;
+        }
+    }
     vector2("RandStartPoint", read.randStartPoint);
     colour("Color0", read.colour0);
     colour("Color1", read.colour1);
@@ -218,11 +231,19 @@ bool ParseSystem(const std::string& chunk, System& out, std::string& missing) {
 
 } // namespace
 
+bool ReadEnt(const std::string& path, std::string& text, std::string& error) {
+    return ReadUtf16(path, text, error);
+}
+
 bool Load(const std::string& path, std::vector<System>& out, std::string& error) {
     out.clear();
     std::string text;
     if (!ReadUtf16(path, text, error)) return false;
+    return Parse(text, path, out, error);
+}
 
+bool Parse(const std::string& text, const std::string& path, std::vector<System>& out, std::string& error) {
+    out.clear();
     std::string particles;
     if (!Between(text, "<Particles>", "</Particles>", particles)) return true; // none: not an error
 
@@ -269,12 +290,19 @@ void Scale(System& system, double scale) {
     system.direction *= scale;
     system.randomizeDir *= scale;
     system.startPoint *= scale;
+    system.startPointZ *= scale; // startPoint is a vector3 there
     system.randStartPoint *= scale;
     system.size *= scale;
     system.randomizeSize *= scale;
     system.growth *= scale;
     system.minSize *= scale;
     system.maxSize *= scale;
+}
+
+System Scaled(const System& system, double scale) {
+    System scaled = system;
+    Scale(scaled, scale);
+    return scaled;
 }
 
 namespace {
@@ -398,6 +426,12 @@ bool Drawn(const System& system, const Particle& particle, bool killed) {
     if (particle.size <= 0.0 || !particle.released || particle.colour.a <= 0.0) return false;
     if (killed && particle.elapsedMs > particle.lifeMs) return false;
     return true;
+}
+
+bool Finished(const System& system, const std::vector<Particle>& pool) {
+    if (system.repeat <= 0) return false;
+    return std::all_of(pool.begin(), pool.end(),
+                       [&system](const Particle& particle) { return particle.repeats >= system.repeat; });
 }
 
 glm::dvec4 DrawColour(const System& system, const Particle& particle, const glm::dvec3& ambient) {

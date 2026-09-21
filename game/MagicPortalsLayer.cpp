@@ -13,6 +13,7 @@
 
 #include "core/Application.hpp"
 #include "core/Input.hpp"
+#include "core/Light2D.hpp"
 #include "core/Log.hpp"
 #include "core/Raycast.hpp"
 #include "core/RenderSettings.hpp"
@@ -86,9 +87,11 @@ const glm::vec3 kStaticBlueColour(0.30f, 0.50f, 1.00f); // and blue
 const glm::vec3 kBeholderColour(0.55f, 0.20f, 0.60f);   // the beholder's reach
 const glm::vec3 kSpikeColour(0.85f, 0.85f, 0.70f);
 constexpr double kSpikeBoxPx = 6.0;
-// A carranca's fireball, in the colour of its own Light (r 1, g 0.5, b 0.2) and
-// at the size of its own Collision (16 x 16). Both are fireball.ent's, which is
-// as close to its picture as the port can get: the entity has no sprite.
+// A fireball's PLACEHOLDER box, in the colour of its own Light (r 1, g 0.5, b
+// 0.2) and at the size of its own Collision (16 x 16), both fireball.ent's. Not
+// its picture since step 85: what the original shows is the entity itself, which
+// the effects runtime now adds for every fireball in flight, and this is drawn
+// only where a level has no art or the boxes are turned on.
 const glm::vec3 kFireballColour(1.00f, 0.50f, 0.20f);
 constexpr double kFireballBoxPx = 16.0;
 // Where the original adds a spike: at z -4 (ETHCallback_beholder).
@@ -240,6 +243,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Sky::LoadRules(m_paths.portData + "/sky.json", m_skyRules, error) &&
                       Tiers::LoadRules(m_paths.portData + "/tiers.json", m_tierRules, error) &&
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
+                      Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
                       Hud::LoadRules(m_paths.portData + "/ui.json", m_hudRules, error) &&
                       Pause::LoadRules(m_paths.portData + "/ui.json", m_pauseRules, error) &&
                       LevelEnd::LoadRules(m_paths.portData + "/ui.json", m_levelEndRules, error) &&
@@ -572,8 +576,9 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_helpTouch = HelpTouch{};
     // The particles the level's entities were emitting go with them; a retry
     // would otherwise pile a second pool on the first. So do its lights, and the
-    // shot's.
+    // shot's, and everything the script added while it ran.
     unloadEmitters(registry);
+    unloadEffects(registry);
     unloadLights(registry);
     // The next level starts its own comparison. Without this, the first tick
     // of a level would hear every counter fall back to zero as if it had
@@ -585,8 +590,7 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_onScreenLast.clear();
     m_reportedOnce = false;
     m_artReady = false;
-    for (auto& e : m_portalQuads) destroy(e);
-    m_portalQuads.clear();
+    m_portalDraws.clear();
     destroy(m_shotQuad);
     destroy(m_playerQuad);
     destroy(m_beholderBox);
@@ -777,10 +781,9 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
             emitter.system = system;
             emitter.owner = owner;
             // In its entity's own slot: after its picture and its halo, before the
-            // next entity, and each system after the one before it.
-            emitter.z = drawn.z + static_cast<float>(Particles::SlotFraction(static_cast<int>(slot),
-                                                                             static_cast<int>(systems.size()))) *
-                                      kSpriteSlotZ;
+            // next entity, and each system after the one before it (the table's
+            // Slot::Systems).
+            emitter.z = systemZ(drawn.z, Slot::Systems, static_cast<int>(slot), static_cast<int>(systems.size()));
             emitter.image = image.path;
             emitter.cellPx = ParticleCellUnits(image, system);
             // Which entity and which of its systems: a light's brightness follows
@@ -875,26 +878,83 @@ void MagicPortalsLayer::unloadEmitters(entt::registry& registry) {
     m_emitters.clear();
 }
 
-void MagicPortalsLayer::updateEmitters(entt::registry& registry, float deltaTime) {
+void MagicPortalsLayer::stepEmitter(entt::registry& registry, Emitter& emitter, double elapsedMs,
+                                   const Particles::Random& random, bool pooled) {
     using namespace Supersonic;
+    const Particles::System& system = emitter.system;
+    // What becomes of the quad of a particle this frame does not draw. A level's
+    // emitter destroys it, as step 59 built it and the suites count it; an
+    // effect's keeps it and turns it off, because a burst of sparkles would
+    // otherwise make and unmake entities every frame (system_7 7a-2).
+    const auto put_away = [&registry, pooled](entt::entity& quad) {
+        if (quad == entt::null || !registry.valid(quad)) {
+            quad = entt::null;
+            return;
+        }
+        if (pooled) {
+            registry.get<RenderableComponent>(quad).isVisible = false;
+            return;
+        }
+        registry.destroy(quad);
+        quad = entt::null;
+    };
+
+    const int frames = std::max(1, system.Frames());
+    const int pool = static_cast<int>(emitter.particles.size());
+    emitter.active = 0;
+    for (int i = 0; i < pool; ++i) {
+        Particles::Particle& particle = emitter.particles[static_cast<std::size_t>(i)];
+        entt::entity& quad = emitter.quads[static_cast<std::size_t>(i)];
+        if (Particles::Step(system, particle, i, pool, emitter.owner, elapsedMs, emitter.killed, random)) {
+            ++emitter.active;
+        }
+        if (!Particles::Drawn(system, particle, emitter.killed)) {
+            put_away(quad);
+            continue;
+        }
+
+        if (quad == entt::null) {
+            quad = makeSprite(registry, emitter.tag, emitter.image, system.additive);
+            if (frames > 1) {
+                auto& animation = registry.emplace<SpriteAnimationComponent>(quad);
+                animation.columns = static_cast<uint32_t>(system.columns);
+                animation.rows = static_cast<uint32_t>(system.rows);
+                animation.frameCount = 1;
+                animation.playing = false; // the frame is Step's, by age or at random
+            }
+        }
+        if (pooled) registry.get<RenderableComponent>(quad).isVisible = true;
+        if (frames > 1) {
+            registry.get<SpriteAnimationComponent>(quad).firstFrame = static_cast<uint32_t>(particle.frame);
+        }
+        const glm::dvec4 colour = Particles::DrawColour(system, particle, m_ambient);
+        registry.get<MaterialComponent>(quad).albedoColor =
+            glm::vec4(static_cast<float>(colour.r), static_cast<float>(colour.g), static_cast<float>(colour.b),
+                      static_cast<float>(colour.a));
+        placeSprite(registry, quad, particle.atPx, Particles::QuadPx(particle), emitter.z,
+                    Particles::WorldRotation(particle));
+    }
+}
+
+void MagicPortalsLayer::updateEmitters(entt::registry& registry, float deltaTime) {
     if (m_emitters.empty()) return;
     const double elapsedMs = static_cast<double>(deltaTime) * 1000.0;
     const Particles::Random random = [this](double from, double to) { return particleRandom(from, to); };
+    // And the effects' stream, for the one draw here that is not a placement:
+    // 2-32's dragon re-pooling its own mouth (00_order K8).
+    const Particles::Random effects = [this](double from, double to) { return effectRandom(from, to); };
 
     for (Emitter& emitter : m_emitters) {
-        const Particles::System& system = emitter.system;
-        const auto hide = [&registry](entt::entity& quad) {
-            if (quad != entt::null && registry.valid(quad)) registry.destroy(quad);
-            quad = entt::null;
-        };
-
         // Its owner, as the last tick left it. An entity the level took away - a
         // crystal taken, a static portal spent, a wall broken, a diamond spent -
         // takes its particles with it, as a deleted entity's go with it.
         if (emitter.sprite >= 0 && emitter.sprite < static_cast<int>(m_sprites.size())) {
             const DrawnSprite& owner = m_sprites[static_cast<std::size_t>(emitter.sprite)];
             if (owner.quad == entt::null) {
-                for (entt::entity& quad : emitter.quads) hide(quad);
+                for (entt::entity& quad : emitter.quads) {
+                    if (quad != entt::null && registry.valid(quad)) registry.destroy(quad);
+                    quad = entt::null;
+                }
                 emitter.active = 0;
                 continue;
             }
@@ -906,52 +966,32 @@ void MagicPortalsLayer::updateEmitters(entt::registry& registry, float deltaTime
             // entity (ETHSpriteEntity.cpp:795-811, ETHParticleManager.cpp:274-286) -
             // and the callback calls it on every tick of the open window, so the
             // burst sits at the mouth for its 400 ms rather than streaming away.
-            // Those resets draw from the layer's particle stream, which shifts the
-            // stream for level31a's other emitters and for no other level's; the
-            // visuals plan's 6.3 (00_order K8) may move it to its own generator.
+            //
+            // ON THE EFFECTS' STREAM, not the placement one (00_order K8). Step 77
+            // drew these resets from m_particleRandom and said so: a draw that
+            // happens because the dragon opened its mouth shifted every later
+            // placement draw on level31a, and on that level alone. Step 83's
+            // m_effectRandom is the generator K8 asks for, and the merge of the two
+            // tracks moved this consumer onto it: the placement stream is now
+            // untouched by anything the dragon does, so level31a's other emitters
+            // draw what every other level's do.
+            //
+            // WHAT IT COSTS is that the effects' stream now has two consumers whose
+            // ORDER matters, and the order is OnUpdate's: updateEmitters runs before
+            // updateEffects, so on level31a - and on no other level - a draw taken
+            // here moves the eyes' renewals (step 84) later in the same frame. That
+            // is the one difference the merge's own sweep found against either
+            // track's last capture.
             if (owner.dragon && m_level.dragon.present) {
                 if (m_level.dragon.systemRestarted) {
-                    emitter.particles = Particles::MakePool(
-                        system, static_cast<int>(emitter.particles.size()), emitter.owner, random);
+                    emitter.particles =
+                        Particles::MakePool(emitter.system, static_cast<int>(emitter.particles.size()),
+                                            emitter.owner, effects);
                 }
                 emitter.killed = m_level.dragon.systemKilled;
             }
         }
-
-        const int frames = std::max(1, system.Frames());
-        const int pool = static_cast<int>(emitter.particles.size());
-        emitter.active = 0;
-        for (int i = 0; i < pool; ++i) {
-            Particles::Particle& particle = emitter.particles[static_cast<std::size_t>(i)];
-            entt::entity& quad = emitter.quads[static_cast<std::size_t>(i)];
-            if (Particles::Step(system, particle, i, pool, emitter.owner, elapsedMs, emitter.killed, random)) {
-                ++emitter.active;
-            }
-            if (!Particles::Drawn(system, particle, emitter.killed)) {
-                hide(quad);
-                continue;
-            }
-
-            if (quad == entt::null) {
-                quad = makeSprite(registry, "Magic Portals Particle", emitter.image, system.additive);
-                if (frames > 1) {
-                    auto& animation = registry.emplace<SpriteAnimationComponent>(quad);
-                    animation.columns = static_cast<uint32_t>(system.columns);
-                    animation.rows = static_cast<uint32_t>(system.rows);
-                    animation.frameCount = 1;
-                    animation.playing = false; // the frame is Step's, by age or at random
-                }
-            }
-            if (frames > 1) {
-                registry.get<SpriteAnimationComponent>(quad).firstFrame = static_cast<uint32_t>(particle.frame);
-            }
-            const glm::dvec4 colour = Particles::DrawColour(system, particle, m_ambient);
-            registry.get<MaterialComponent>(quad).albedoColor =
-                glm::vec4(static_cast<float>(colour.r), static_cast<float>(colour.g), static_cast<float>(colour.b),
-                          static_cast<float>(colour.a));
-            placeSprite(registry, quad, particle.atPx, Particles::QuadPx(particle), emitter.z,
-                        Particles::WorldRotation(particle));
-        }
+        stepEmitter(registry, emitter, elapsedMs, random, false);
     }
 }
 
@@ -998,6 +1038,650 @@ std::vector<MagicPortalsLayer::EmitterReport> MagicPortalsLayer::EmitterReports(
     return reports;
 }
 
+// ---- THE EFFECTS THE SCRIPT ADDS ---------------------------------------------
+//
+// The original's script spawns entities by name: a burst where something
+// teleports, sparkles where a crystal is taken, a fireball's explosion, the
+// player's red eyes. Every one of them is an AddEntity call, and sim/Effects
+// holds the call sites' arithmetic (effects.json, step 82). This is what becomes
+// of one once it is added - the visuals plan's 6.3, system_7 7a-2.
+//
+// PER FRAME, like the particles and for the same reason: an effect is a picture.
+// The TICK only queues (latchSimEffects); nothing below reaches Game::Level, the
+// simulation's clock or the state hash. An effect is
+//   - a picture, when its .ent carries a <Sprite>, standing on its pivot;
+//   - a light, and a halo when that light names a <HaloBitmap>, both drawn at the
+//     owner's scale (Lighting::OwnerScaled, 00_order K7);
+//   - one emitter per <ParticleSystem>, made at the mean of that scale's axes
+//     (Particles::Scaled), drawing on m_effectRandom;
+// and it is freed when the engine would free it: a temporary one once its pools
+// are over (Particles::Finished), one bound to something the level took away when
+// that goes. The player is the exception: ETHEntity::Hide is not a delete, so an
+// effect the player carries is hidden with it and comes back with it.
+//
+// ITS DEPTH is the table's (00_order K13): the picture at Slot::Effect, the halo
+// a quarter in front of it, and its systems over the quarter after that - and a
+// system's own <StartPoint> z is added to the entity's before the slot is
+// counted. A z the script writes as a bare literal is divided by the art's scale
+// factor first (effectAdd, below), so appear_effect's flash draws at
+// 0.711 + 10 = 10.71 and not at the 0.711 its own picture takes: in front of
+// every node under 10.71 rather than only of those under 0.711.
+// (system_7 7a-2 says "in front of the player at 0"; since R10 the player is at
+// 1.42 in the level's units, so it is the ten that carries the flash past the
+// player and past the level's nearer decor.)
+//
+// ITS QUADS ARE POOLED. A particle this frame does not draw keeps its quad and is
+// turned off, where a level emitter's is destroyed: a burst of sparkles would
+// otherwise make and unmake entities every frame, and every one of them is walked
+// by the state hash.
+//
+// NOT BUILT HERE. The placed portal's kill - its halo fading by 0.9 a frame and
+// portal_death 400 ms later - belongs to the step that spawns portals as effects
+// (the plan's 7.4). This step builds the two free rules the engine itself has.
+
+double MagicPortalsLayer::effectRandom(double from, double to) {
+    // Randomizer::Float(min, max) takes the two either way round, as particleRandom does.
+    const double lo = std::min(from, to);
+    const double hi = std::max(from, to);
+    if (!(hi > lo)) return lo;
+    std::uniform_real_distribution<double> spread(lo, hi);
+    return spread(m_effectRandom);
+}
+
+bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const EffectOwner& owner, glm::dvec2& atPx,
+                                         bool& hidden) const {
+    using namespace Supersonic;
+    hidden = false;
+    switch (owner.kind) {
+    case EffectOwner::Kind::None:
+        return true; // where it was added, and it stays there
+    case EffectOwner::Kind::Player:
+        if (m_level.player == entt::null || !registry.valid(m_level.player)) return false;
+        atPx = Units::ToPixels(registry.get<TransformComponent>(m_level.player).position) + owner.offsetPx;
+        // Hide(), not a delete: the character in the doorway is hidden while the
+        // level runs on behind it (OnFixedUpdate), so what it carries waits.
+        hidden = m_playerQuad == entt::null || !registry.valid(m_playerQuad);
+        return true;
+    case EffectOwner::Kind::Sprite: {
+        if (owner.index < 0 || owner.index >= static_cast<int>(m_sprites.size())) return false;
+        const DrawnSprite& drawn = m_sprites[static_cast<std::size_t>(owner.index)];
+        if (drawn.quad == entt::null) return false; // its picture was taken away, and it with it
+        atPx = drawn.ownerPx + owner.offsetPx;
+        return true;
+    }
+    case EffectOwner::Kind::Fireball:
+        // BY NAME and not by place in the list, for the same reason a portal is
+        // by id: one going takes every one after it along one place, and a
+        // fireball goes the moment it touches anything. Every producer names its
+        // own - "<carranca>#<n>", the dragons' and "fire_diamond#<n>" - and a
+        // level's counters never repeat one.
+        for (const Turrets::Fireball& ball : m_level.turrets.fireballs) {
+            if (ball.name != owner.name) continue;
+            atPx = ball.atPx + owner.offsetPx;
+            return true;
+        }
+        return false;
+    case EffectOwner::Kind::PlacedPortal:
+        // By the portal's id and not its place in the list: a pair going takes
+        // the ones after it along one place. And against the LAYER's list rather
+        // than the simulation's, because the entity outlives the manager's array:
+        // killPortal takes the portal out of play, and its own callback then
+        // spends 400 ms fading it before it deletes it (syncPlacedPortals).
+        for (const DrawnPortal& portal : m_portalDraws) {
+            if (portal.id != owner.index) continue;
+            atPx = portal.atPx + owner.offsetPx;
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& spawn) {
+    using namespace Supersonic;
+    // With no art there is nothing to draw it with: such a level is drawn as
+    // boxes, and an effect has no box.
+    if (!m_artReady) return -1;
+    Art::Entity art;
+    std::string error;
+    if (!Art::LoadEnt(m_paths.original + "/entities/" + spawn.entity, art, error)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "effect not added: " << error << std::endl;
+        return -1;
+    }
+
+    Effect effect;
+    effect.entity = spawn.entity;
+    effect.art = art;
+    effect.atPx = spawn.atPx;
+    effect.angleDeg = spawn.angleDeg;
+    effect.scriptScale = spawn.scale;
+    effect.scale = art.ScaleAt(spawn.scale);
+    effect.zUnits = spawn.zUnits;
+    effect.follow = spawn.follow;
+    effect.colour = spawn.colour;
+    effect.temporary = art.Temporary();
+    // ShouldEntityBeAlwaysActive (ETHActiveEntityHandler.cpp:70-74): temporary, or
+    // dynamic with a callback or a simulated body. The port models the first arm
+    // only, because nothing it spawns has the second: red_eyes has no
+    // ETHCallback_/ETHConstructorCallback_ of its own in the listing and no shape,
+    // and it is the only effect anything can hide. The step that spawns an effect
+    // whose .ent names a callback is the step to widen this.
+    effect.alwaysActive = effect.temporary;
+    effect.z = slotAfter(std::round(spawn.zUnits), spawn.pictureSlot);
+    effect.haloZ = slotAfter(std::round(spawn.zUnits), Slot::EffectHalo);
+    // What it is to follow, before it is counted as added: an effect added to
+    // something that is already gone is no effect, and it takes no number.
+    if (!effectOwnerPoint(registry, effect.follow, effect.atPx, effect.hidden)) return -1;
+    effect.id = ++m_effectsSpawned;
+
+    // ITS PICTURE, on its pivot: a torch's hangs 16 below its node from a
+    // <PivotAdjust> of (0, -16), so a picture's centre is its entity's point less
+    // the pivot, at the entity's scale - the rule the player's picture is drawn
+    // by. Most effects carry none at all (fireball.ent, red_eyes.ent).
+    if (!art.sprite.empty()) {
+        const Sprites::Image& sheet = drawnImage(originalImage(art.sprite));
+        const glm::dvec2 cellPx = frameUnits(sheet, art.columns, art.rows);
+        if (cellPx == glm::dvec2(0.0)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "effect picture could not be read: " << sheet.path << std::endl;
+        } else {
+            effect.cellPx = cellPx * effect.scale;
+            effect.quad = makeSprite(registry, "Magic Portals Effect", sheet.path, art.additive);
+            if (art.Frames() > 1) {
+                auto& animation = registry.emplace<SpriteAnimationComponent>(effect.quad);
+                animation.columns = static_cast<uint32_t>(art.columns);
+                animation.rows = static_cast<uint32_t>(art.rows);
+                animation.frameCount = 1;
+                animation.playing = false; // its cell is the script's, as the shot's is
+            }
+        }
+    }
+
+    // ITS LIGHT, and its halo when the light names a <HaloBitmap>. Under the
+    // engine's own cap: one frame carries 64 lights, and a barrel chain adds one
+    // per blast.
+    if (art.light) {
+        const std::uint32_t lit = static_cast<std::uint32_t>(registry.view<Light2DComponent>().size());
+        if (lit >= kMaxLights2D) {
+            SUPERSONIC_LOG_WARN("Magic Portals")
+                << "effect added with no light: " << spawn.entity << " would be number " << (lit + 1) << ", past the "
+                << kMaxLights2D << " one frame carries" << std::endl;
+        } else {
+            effect.light = registry.create();
+            registry.emplace<TagComponent>(effect.light, "Magic Portals Effect Light");
+            registry.emplace<TransformComponent>(effect.light);
+            registry.emplace<Light2DComponent>(effect.light);
+            if (!art.light->halo.empty()) {
+                const Sprites::Image& halo = drawnImage(originalImage(art.light->halo));
+                if (halo.units != glm::ivec2(0)) {
+                    effect.halo = makeSprite(registry, "Magic Portals Effect Halo", halo.path, true);
+                }
+            }
+        }
+    }
+
+    // ITS PARTICLE SYSTEMS, each made at the mean of its scale's two axes, on the
+    // effects' own stream.
+    const Particles::Owner owner{effect.atPx, effect.angleDeg};
+    const int systems = static_cast<int>(art.systems.size());
+    for (int slot = 0; slot < systems; ++slot) {
+        // The entity's own scale, and on the FIRST system the caller's extra one
+        // where it gave one: ETHSpriteEntity::SetScale scales every system by the
+        // mean of the two axes (:586), and addFireball then calls
+        // ScaleParticleSystem(0, fireballScale) on top of that (#77-83), which is
+        // the same multiply again on system 0 alone.
+        const double made =
+            art.ParticleScale(spawn.scale) * (slot == 0 ? spawn.firstSystemScale : 1.0);
+        const Particles::System system = Particles::Scaled(art.systems[static_cast<std::size_t>(slot)], made);
+        if (!Particles::Drawable(system)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "particle system not drawn: " << spawn.entity << " system " << slot
+                                                 << " asks for alphaMode " << system.alphaMode
+                                                 << ", which the port has no blend for" << std::endl;
+            continue;
+        }
+        const Sprites::Image& image = drawnImage(m_paths.original + "/particles/" + system.bitmap);
+        if (image.units.x <= 0 || image.units.y <= 0) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "particle image could not be read: " << image.path << std::endl;
+            continue;
+        }
+        Emitter emitter;
+        emitter.system = system;
+        emitter.owner = owner;
+        // The system's own <StartPoint> z on top of the entity's, before the slot
+        // is counted: an .ent is a spawned effect's only source for it (plan 2d
+        // defers it for level placements, and that is where step 59 left it). So
+        // the slot is taken per system and not once for the effect.
+        //
+        // systemZ's base is THE SLOT'S OWN ZERO, not the effect's picture: the
+        // table's fraction is measured from there, and Slot::Picture is that zero
+        // (fraction 0), which is why the level's caller can pass its picture's z.
+        // Passing Slot::Effect here counted the -0.5 twice and put an effect's
+        // systems in (-0.75, -0.5) of the slot, BEHIND the picture and halo they
+        // belong in front of.
+        emitter.z = systemZ(slotAfter(std::round(spawn.zUnits + system.startPointZ), Slot::Picture),
+                            Slot::EffectSystems, slot, systems);
+        emitter.image = image.path;
+        emitter.cellPx = ParticleCellUnits(image, system);
+        emitter.sprite = -1; // no level sprite carries it: this effect does
+        emitter.slot = slot;
+        emitter.tag = "Magic Portals Effect Particle";
+        emitter.particles = Particles::MakePool(system, std::min(system.count, kMaxParticles), owner,
+                                                [this](double from, double to) { return effectRandom(from, to); });
+        emitter.quads.assign(emitter.particles.size(), entt::null);
+        effect.emitters.push_back(std::move(emitter));
+    }
+
+    const int id = effect.id;
+    m_effects.push_back(std::move(effect));
+    return id;
+}
+
+void MagicPortalsLayer::freeEffect(entt::registry& registry, Effect& effect) {
+    const auto destroy = [&registry](entt::entity& e) {
+        if (e != entt::null && registry.valid(e)) registry.destroy(e);
+        e = entt::null;
+    };
+    for (Emitter& emitter : effect.emitters) {
+        for (entt::entity& quad : emitter.quads) destroy(quad);
+    }
+    effect.emitters.clear();
+    destroy(effect.quad);
+    destroy(effect.light);
+    destroy(effect.halo);
+    ++m_effectsFreed;
+}
+
+void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
+    // What the level added goes with the level, as its emitters do: nothing it
+    // added may outlive it, and a retry would otherwise pile a second set on the
+    // first.
+    for (Effect& effect : m_effects) freeEffect(registry, effect);
+    m_effects.clear();
+    m_effectQueue.clear();
+    m_eyes = -1;
+    m_fireballEffects.clear();
+}
+
+void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
+    using namespace Supersonic;
+    // What the tick queued, added now: a frame adds and draws, a tick only says
+    // that something happened.
+    if (!m_effectQueue.empty()) {
+        std::vector<EffectSpawn> queued;
+        queued.swap(m_effectQueue);
+        for (const EffectSpawn& spawn : queued) SpawnEffect(registry, spawn);
+    }
+    if (m_effects.empty()) return;
+
+    const double elapsedMs = static_cast<double>(deltaTime) * 1000.0;
+    const Particles::Random random = [this](double from, double to) { return effectRandom(from, to); };
+    for (std::size_t i = 0; i < m_effects.size();) {
+        Effect& effect = m_effects[i];
+        glm::dvec2 atPx = effect.atPx;
+        bool hidden = false;
+        if (!effectOwnerPoint(registry, effect.follow, atPx, hidden)) {
+            freeEffect(registry, effect);
+            m_effects.erase(m_effects.begin() + static_cast<std::ptrdiff_t>(i));
+            continue;
+        }
+        effect.atPx = atPx;
+        effect.hidden = hidden;
+
+        if (effect.quad != entt::null) {
+            // Ethanon's angle turns counter-clockwise on the screen, which is the
+            // engine's rotation about +z, exactly as the shot's is.
+            placeSprite(registry, effect.quad, effect.atPx - effect.art.pivotPx * effect.scale, effect.cellPx,
+                        effect.z, static_cast<float>(effect.angleDeg * 3.14159265358979323846 / 180.0));
+            registry.get<RenderableComponent>(effect.quad).isVisible = !hidden;
+            // AT THE COLOUR SetColor LEFT ON IT, here and not in syncLighting: an
+            // effect is added and faded on the FRAME, and a tint that waited for
+            // the next tick would draw a dying portal at its old brightness for a
+            // frame and a new one white. Its particles take none of this
+            // (ETHParticleManager.cpp:381-389 reads the ambient alone).
+            tint(registry, effect.quad, glm::vec4(glm::vec3(effect.colour), 1.0f), effect.art.emissive, {},
+                 effectReceiver(effect));
+        }
+        if (effect.light != entt::null || effect.halo != entt::null) {
+            // At the live share of its FIRST system, as a level light follows its
+            // owner's first (syncLights).
+            const double ratio = effect.emitters.empty() ? Lighting::ParticleRatio(0, 0)
+                                                         : Lighting::ParticleRatio(effect.emitters.front().active,
+                                                                                   effect.emitters.front().system.count);
+            placeLight(registry, effect.light, effect.halo, *effect.art.light, effect.atPx, effect.zUnits,
+                       effect.art.isStatic, ratio, effect.haloZ, !hidden, effect.scale);
+        }
+
+        // A HIDDEN entity is not drawn (ETHScene.cpp:568, ETHRenderEntity.cpp:396),
+        // and only an ALWAYS-ACTIVE one is still stepped while it is: the handler
+        // walks its own list whatever each entry's state (:119-134), but anything
+        // else reaches the frame list from the bucket walk, which skips a hidden
+        // entity (ETHScene.cpp:568-572). So the player's eyes in a doorway freeze
+        // where they are and release nothing more, which is what 00_order's 7.1
+        // asks of them; a temporary effect the player carried would go on burning
+        // down unseen.
+        const bool steps = !hidden || effect.alwaysActive;
+        bool over = effect.temporary;
+        for (Emitter& emitter : effect.emitters) {
+            if (steps) {
+                emitter.owner = Particles::Owner{effect.atPx, effect.angleDeg};
+                stepEmitter(registry, emitter, elapsedMs, random, true);
+            }
+            if (hidden) {
+                for (entt::entity& quad : emitter.quads) {
+                    if (quad != entt::null && registry.valid(quad)) {
+                        registry.get<RenderableComponent>(quad).isVisible = false;
+                    }
+                }
+            }
+            if (!Particles::Finished(emitter.system, emitter.particles)) over = false;
+        }
+        // ETHActiveEntityHandler: only a temporary entity is the engine's to
+        // delete, and only once every one of its pools is over. Anything else is
+        // its script's, and goes when what it was added to goes.
+        if (over) {
+            freeEffect(registry, effect);
+            m_effects.erase(m_effects.begin() + static_cast<std::ptrdiff_t>(i));
+            continue;
+        }
+        ++i;
+    }
+}
+
+MagicPortalsLayer::Effect* MagicPortalsLayer::effectById(int id) {
+    if (id < 0) return nullptr;
+    for (Effect& effect : m_effects) {
+        if (effect.id == id) return &effect;
+    }
+    return nullptr;
+}
+
+MagicPortalsLayer::Receiver MagicPortalsLayer::effectReceiver(const Effect& effect) {
+    Receiver receiver;
+    receiver.applyLight = effect.art.applyLight;
+    receiver.isStatic = effect.art.isStatic;
+    if (!effect.art.normal.empty()) {
+        receiver.normal = drawnImage(originalImage("normalmaps/" + effect.art.normal)).path;
+    }
+    receiver.z = effect.zUnits;
+    receiver.runtimeBake = m_lit && Lighting::RuntimeBake(m_level.torch);
+    return receiver;
+}
+
+// ---- a portal the player opened (the visuals plan's 7.4) ---------------------
+//
+// PortalManager::insertPortal adds TWO entities for every portal a shot opens
+// (bytes 142281..142841): portal_summon_effect.ent at the point, and then
+// portal.ent - which IS the portal, its halo sprite and its spiral and its iris.
+// From there the portal runs its own callback, ETHCallback_portal
+// (359141..359885), and the manager recolours its array every frame
+// (138545..139692 #165-300). Four arms, and this is all four:
+//
+//   1. IT HOVERS. #1-10 linearMotion(thisEntity, vertical, 0, 0), with the .ent's
+//      own speed 1 and stride 2: two units up and down on a 6.28 s cosine from
+//      where the shot opened it. That arm is the SIMULATION's (Portals::Tick),
+//      because linearMotion ends in SetPosition and doTeleporting reads that same
+//      point - one point and not two - and this only follows it.
+//   2. IT PERISHES. #12-86: 20,000 ms after it opened, unless dontPerish, which
+//      nothing sets. Also the simulation's, and the owner's standing ruling R14.
+//   3. IT IS COLOURED, and the array it is coloured in is not the list of portals
+//      in play. update POPS A KILLED FRONT FIRST (#164-180, one conditional and
+//      no loop), THEN reads the size (#181-188), THEN colours - portals[0] red
+//      and portals[1] blue where it holds more than one (#189-228), a lone one
+//      red where the level grants exactly one and V3_ZERO where it grants more
+//      (#248-301) - and only then pops a killed portals[1] (#230-246). A lone
+//      killed portal is NOT popped there: #255 leaves that branch before the
+//      pops, so it is the next frame's front-pop that takes it, after this
+//      frame's colouring has already written V3_ZERO into it. That is what
+//      blacks out the surviving end of a pair a teleport consumed.
+//   4. IT DIES. Once its systems are killed (killPortal, 357278..357358, which
+//      KillParticleSystem(0) and (1) so the live particles live out their lives
+//      and no more are released), #87-185 store killTime, fade the colour by 0.9
+//      a frame, and after 400 ms add portal_death.ent and delete the entity.
+//      killTime is READ BEFORE IT IS WRITTEN (#99-101 against #113-123), so the
+//      frame that sets it neither fades nor counts.
+//
+// The port has one list of live portals, so "its systems were killed" is "its id
+// left Portals::State::placed" - whether it carried something through, was
+// recycled at the cap, was cleared by the button, or perished. The layer's own
+// list outlives the simulation's by exactly the kill sequence.
+void MagicPortalsLayer::syncPlacedPortals(entt::registry& registry, double frameMs) {
+    const std::vector<Portals::Placed>& placed = m_level.portals.placed;
+    const Effects::PlacedPortal& rules = m_effectRules.placedPortal;
+
+    // WHAT IS NEW: the summon bubble first and the portal itself second, which is
+    // the order insertPortal adds them in and so the order they draw their random
+    // in. Added straight rather than queued, because this is already the frame.
+    for (const Portals::Placed& portal : placed) {
+        // A DYING ENTRY IS NOT THIS PORTAL, whatever id it carries. Portals::State
+        // hands out an id once and never again, so this cannot fire today; saying
+        // it here keeps the layer's drawing right on its own rather than on an
+        // invariant kept in another file.
+        const bool known = std::any_of(m_portalDraws.begin(), m_portalDraws.end(), [&portal](const DrawnPortal& drawn) {
+            return drawn.id == portal.id && !drawn.killed;
+        });
+        if (known) continue;
+        DrawnPortal drawn;
+        drawn.id = portal.id;
+        drawn.atPx = portal.atPx;
+        // It has portal.ent's own white until the manager colours it, which is
+        // this same frame, below.
+        m_portalDraws.push_back(drawn);
+        SpawnEffect(registry, effectAdd(Effects::Summon(m_effectRules, portal.atPx)));
+        EffectSpawn add = effectAdd(Effects::Portal(m_effectRules, portal.atPx));
+        // The between-slot table names a portal the player opened in its own right
+        // (00_order K13), so its picture keeps that class rather than a plain
+        // effect's; its two systems take Slot::EffectSystems like any other's.
+        add.pictureSlot = Slot::PlacedPortal;
+        add.follow.kind = EffectOwner::Kind::PlacedPortal;
+        add.follow.index = portal.id;
+        m_portalDraws.back().effect = SpawnEffect(registry, add);
+    }
+
+    // AND WHAT HAS LEFT THE SIMULATION'S LIST, which is killPortal: its two
+    // systems release nothing more, and each particle already out lives the life
+    // it has. A portal still in play is moved to where the hover left it.
+    for (DrawnPortal& drawn : m_portalDraws) {
+        if (drawn.killed) continue;
+        const auto at = std::find_if(placed.begin(), placed.end(),
+                                     [&drawn](const Portals::Placed& portal) { return portal.id == drawn.id; });
+        if (at != placed.end()) {
+            drawn.atPx = at->atPx; // its hover, which the simulation moved
+            continue;
+        }
+        drawn.killed = true;
+        if (Effect* effect = effectById(drawn.effect); effect != nullptr) {
+            for (Emitter& emitter : effect->emitters) emitter.killed = true;
+        }
+    }
+
+    // THEN THE MANAGER'S OWN UPDATE, over the array it still holds and in its own
+    // order: pop a killed front, colour what is left, pop a killed portals[1].
+    // A portal it has popped keeps the colour it had and fades from there.
+    std::vector<DrawnPortal*> array;
+    array.reserve(m_portalDraws.size());
+    for (DrawnPortal& drawn : m_portalDraws) {
+        if (!drawn.popped) array.push_back(&drawn);
+    }
+    if (!array.empty() && array.front()->killed) {
+        array.front()->popped = true;
+        array.erase(array.begin());
+    }
+    const int held = static_cast<int>(array.size());
+    for (int i = 0; i < held; ++i) {
+        glm::dvec3 colour(1.0);
+        if (Effects::ManagerColour(rules, i, held, m_level.portals.budget, colour)) {
+            array[static_cast<std::size_t>(i)]->colour = colour;
+        }
+    }
+    // #230-246 tests portals[1] and calls popBack, which is that same entry
+    // wherever the port can reach: once a killed front has gone the array holds
+    // at most the level's budget, and no level grants more than two.
+    if (held > 1 && array[1]->killed) array[1]->popped = true;
+
+    // THEN EACH DRAWN PORTAL'S OWN CALLBACK.
+    for (std::size_t i = 0; i < m_portalDraws.size();) {
+        DrawnPortal& drawn = m_portalDraws[i];
+        // ParticlesKilled(0) is the flag Kill(true) set and not a spent pool
+        // (ETHSpriteEntity.cpp:812-828), so it is true from the kill on. The read
+        // of killTime comes FIRST: the frame that sets it does not fade.
+        const bool killTimeSet = drawn.killTimeSet;
+        if (drawn.killed && !drawn.killTimeSet) {
+            drawn.killTimeSet = true;
+            drawn.sinceKillMs = 0.0;
+        }
+        bool gone = false;
+        if (killTimeSet) {
+            drawn.colour = Effects::KillFade(rules, drawn.colour, frameMs);
+            drawn.sinceKillMs += frameMs;
+            gone = drawn.sinceKillMs > rules.deathAfterKillMs;
+        }
+        if (Effect* effect = effectById(drawn.effect); effect != nullptr) {
+            effect->colour = drawn.colour;
+        }
+        if (!gone) {
+            ++i;
+            continue;
+        }
+        // portal_death.ent where it stood, and the entity itself gone: #159-185,
+        // in that order. The entity is taken out of the list FIRST here, because
+        // adding one holds no reference into the other; the two draw the same
+        // random either way, since freeing an effect draws none.
+        const glm::dvec2 stood = drawn.atPx;
+        const int effectId = drawn.effect;
+        m_portalDraws.erase(m_portalDraws.begin() + static_cast<std::ptrdiff_t>(i));
+        for (std::size_t e = 0; e < m_effects.size(); ++e) {
+            if (m_effects[e].id != effectId) continue;
+            freeEffect(registry, m_effects[e]);
+            m_effects.erase(m_effects.begin() + static_cast<std::ptrdiff_t>(e));
+            break;
+        }
+        SpawnEffect(registry, effectAdd(Effects::Death(m_effectRules, stood)));
+    }
+}
+
+std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() const {
+    std::vector<EffectReport> reports;
+    reports.reserve(m_effects.size());
+    for (const Effect& effect : m_effects) {
+        EffectReport report;
+        report.id = effect.id;
+        report.entity = effect.entity;
+        report.atPx = effect.atPx;
+        report.zUnits = effect.zUnits;
+        report.z = effect.z;
+        report.haloZ = effect.haloZ;
+        report.scriptScale = effect.scriptScale;
+        report.colour = effect.colour;
+        report.scale = effect.scale;
+        report.temporary = effect.temporary;
+        report.alwaysActive = effect.alwaysActive;
+        report.hidden = effect.hidden;
+        report.drawn = effect.quad != entt::null;
+        report.hasLight = effect.light != entt::null;
+        report.hasHalo = effect.halo != entt::null;
+        if (effect.art.light) {
+            const Lighting::Light lit = Lighting::OwnerScaled(*effect.art.light, effect.scale);
+            report.lightRange = lit.range;
+            report.haloPx = lit.haloSize;
+        }
+        report.systems = static_cast<int>(effect.emitters.size());
+        report.systemZ.reserve(effect.emitters.size());
+        report.systemSizePx.reserve(effect.emitters.size());
+        for (const Emitter& emitter : effect.emitters) {
+            report.systemZ.push_back(emitter.z);
+            report.systemSizePx.push_back(emitter.system.size);
+            report.active += emitter.active;
+            report.pool += static_cast<int>(emitter.particles.size());
+            for (const Particles::Particle& particle : emitter.particles) {
+                if (!particle.released) continue;
+                ++report.released;
+                report.ageSumMs += particle.elapsedMs;
+            }
+            for (const entt::entity quad : emitter.quads) {
+                if (quad == entt::null) continue;
+                ++report.quads;
+                report.particleQuads.push_back(quad);
+            }
+        }
+        reports.push_back(std::move(report));
+    }
+    return reports;
+}
+
+// ---- the player's red eyes (effects.json red_eyes; the visuals plan's 7.1) ----
+//
+// The one effect every level shows, and the only one the original both adds at a
+// level's start and moves every frame. MainCharacter's constructor runs
+// AddScaledEntity("red_eyes.ent", entity.GetPosition(), getScale()) (#85-101) and
+// keeps the handle SeekEntity gives it (#105-119); MainCharacter::update then runs
+// updateEyes first thing, before its own pause test (#4), and updateEyes puts the
+// entity at GetPosition() + g_scale.scale(vector3(eyeX, eyeY, 1)) - eyeX the sheet
+// side the character faces, eyeY -14.25 or -15.65 where gravity is off - or hides
+// it while the character is hidden.
+//
+// It has no <Sprite> and one <ParticleSystem> of 12 red hard_halo.png at
+// alphaMode 1 and repeat 0, so what is drawn is a trail of added red specks that
+// live 120 +- 100 ms in WORLD space: the eyes glimmer, and a walk leaves a short
+// wake. Repeat 0 also makes it not temporary, so the engine never deletes it
+// (Art::Entity::Temporary); it goes when the level goes.
+//
+// DEPTH is the table's, as every effect's is: the entity's own z is the
+// CHARACTER's plus the offset's 1, and its system's <StartPoint> z 2 goes on top
+// of that before the slot is counted, so the specks stand in front of the player
+// and of everything the level puts between them.
+//
+// THE STREAM is m_effectRandom (00_order K8). This is the step the conflict was
+// written for: an emitter on all 128 levels drawing from the placement stream
+// would move every particle of every level.
+
+int MagicPortalsLayer::playerDrawnFrame(const entt::registry& registry) const {
+    // ETHEntity::GetFrame: the cell in the 4 x 4 sheet, which for the port's quad
+    // is the run's first cell plus how far into the run it has played. Kept from
+    // the last frame that had one, because the quad is destroyed when the
+    // character is hidden and updateEyes still reads a frame on that frame.
+    if (m_playerQuad == entt::null || !registry.valid(m_playerQuad)) return m_playerFrame;
+    const auto* animation = registry.try_get<Supersonic::SpriteAnimationComponent>(m_playerQuad);
+    if (animation == nullptr) return m_playerFrame;
+    return static_cast<int>(animation->firstFrame + animation->frame);
+}
+
+void MagicPortalsLayer::buildEyes(entt::registry& registry) {
+    using namespace Supersonic;
+    m_eyes = -1;
+    m_playerFrame = 0;
+    if (m_level.player == entt::null || !registry.valid(m_level.player)) return;
+    // The cell the level starts on: initial_direction's row on the idle column,
+    // which buildDrawables has already written onto the quad.
+    m_playerFrame = playerDrawnFrame(registry);
+    const glm::dvec2 atPx = Units::ToPixels(registry.get<TransformComponent>(m_level.player).position);
+    // Where the constructor's entity stands once the first updateEyes has moved
+    // it. The port adds it there rather than at the bare GetPosition() of the
+    // constructor: the original's first frame runs update before it draws, so no
+    // frame of the original's ever shows the eyes at the character's own point.
+    const Effects::Spawn spawn =
+        Effects::RedEyes(m_effectRules, atPx, m_playerZ, m_playerFrame, m_level.noGravity);
+    EffectSpawn add = effectAdd(spawn);
+    // Carried by the player, which is what updateEyes' SetPosition every frame and
+    // its Hide(true) together are: the port's player owner follows AND hides, and
+    // effects.json's hide_with_player is refused unless it says so.
+    add.follow.kind = EffectOwner::Kind::Player;
+    add.follow.offsetPx = spawn.atPx - atPx;
+    m_eyes = SpawnEffect(registry, add);
+}
+
+void MagicPortalsLayer::syncEyes(entt::registry& registry) {
+    if (m_eyes < 0) return;
+    m_playerFrame = playerDrawnFrame(registry);
+    const glm::dvec3 offset = Effects::EyeOffset(m_effectRules.eyes, m_playerFrame, m_level.noGravity);
+    for (Effect& effect : m_effects) {
+        if (effect.id != m_eyes) continue;
+        // Only the offset: the z is the same number every frame, and the point it
+        // is measured from is the owner's, which updateEffects reads.
+        effect.follow.offsetPx = glm::dvec2(offset);
+        return;
+    }
+    m_eyes = -1; // freed with its owner, so there is nothing left to move
+}
+
 std::vector<MagicPortalsLayer::MinionReport> MagicPortalsLayer::MinionReports() const {
     std::vector<MinionReport> reports;
     const std::vector<Minions::Minion>& minions = m_level.minions.minions;
@@ -1020,7 +1704,51 @@ std::vector<MagicPortalsLayer::MinionReport> MagicPortalsLayer::MinionReports() 
     return reports;
 }
 
-float MagicPortalsLayer::PlayerSlotZ() const { return SlotZ(m_playerSlot); }
+// ---- the between-slot table (00_order K13) ----------------------------------
+//
+// One rule and one table for everything the port adds between the level's own
+// slots. Until this step each caller carried its own fraction: the beholder, a
+// spike, a minion, an escort, a dial and a well ring each wrote "- 0.5 x a slot"
+// beside their own call, the placed portals "- 0.25", the halos "+ 0.25". The
+// fractions have not changed; where they are written has.
+
+float MagicPortalsLayer::slotAt(int slot, Slot klass) const {
+    return SlotZ(slot) + static_cast<float>(SlotFractionOf(klass)) * kSpriteSlotZ;
+}
+
+float MagicPortalsLayer::slotAfter(double levelZ, Slot klass) const {
+    // After the sprites at or below this depth - and after the player too, but
+    // only where the player stands at that depth or deeper. Before step 76 this
+    // asked `below < m_playerSlot`, which took the player's depth for 0; with the
+    // player at 1.42 the two agree for every depth passed below but the minions'.
+    const int below = static_cast<int>(std::count_if(
+        m_sprites.begin(), m_sprites.end(),
+        [levelZ](const DrawnSprite& d) { return static_cast<double>(d.sprite.zIndex) <= levelZ; }));
+    return slotAt(m_playerZ <= levelZ ? below + 1 : below, klass);
+}
+
+float MagicPortalsLayer::slotOver(float pictureZ, Slot klass) const {
+    // A picture is its slot (Slot::Picture is 0), so what hangs off it is that
+    // picture's z and the class's fraction.
+    return pictureZ + static_cast<float>(SlotFractionOf(klass)) * kSpriteSlotZ;
+}
+
+float MagicPortalsLayer::systemZ(float base, Slot klass, int slot, int systems) const {
+    // The quarter the class starts at, shared evenly by the entity's systems so
+    // that none of them ties with another or with what bounds the quarter
+    // (Particles::SlotFraction, which is in (1/4, 1/2) - hence the - 0.25, which
+    // makes the share start at the class's own fraction).
+    //
+    // `base` IS THE SLOT'S OWN ZERO, and nothing else: the table's fractions are
+    // measured from there. A level's picture is its slot's zero (Slot::Picture is
+    // fraction 0), so buildEmitters passes drawn.z; a spawned effect has no
+    // picture at the zero, so its caller passes slotAfter(..., Slot::Picture).
+    // Handing this the class's own z instead counts the fraction twice.
+    return base + static_cast<float>(SlotFractionOf(klass) - 0.25 + Particles::SlotFraction(slot, systems)) *
+                      kSpriteSlotZ;
+}
+
+float MagicPortalsLayer::PlayerSlotZ() const { return slotAt(m_playerSlot, Slot::Picture); }
 
 std::vector<MagicPortalsLayer::TimerReport> MagicPortalsLayer::TimerReports() const {
     std::vector<TimerReport> reports;
@@ -1247,6 +1975,8 @@ void MagicPortalsLayer::buildMenu(entt::registry& registry) {
         // portal.ent's particle systems, the spiral and portal.png, just in front of
         // its halo and in the order the .ent states them.
         unloadEmitters(registry);
+        // And nothing a level added is left standing over the loading screen.
+        unloadEffects(registry);
         m_loadingVanished = false;
         const glm::dvec2 portalAt = Loading::PortalAt(m_loadingRules, MenuBoxPx());
         addEntityEmitters(m_loadingRules.portalEntity, portalAt, 0.32f, 0.0);
@@ -2114,6 +2844,13 @@ void MagicPortalsLayer::placeCamera(entt::registry& registry) {
 bool MagicPortalsLayer::ScreenToLevelPx(const entt::registry& registry, const glm::vec2& screenPoint,
                                         glm::dvec2& outPx) const {
     const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    if (viewport == nullptr) return false;
+    return ViewportToLevelPx(registry, viewport->ToLocal(screenPoint), outPx);
+}
+
+bool MagicPortalsLayer::ViewportToLevelPx(const entt::registry& registry, const glm::vec2& localPoint,
+                                          glm::dvec2& outPx) const {
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
     // Not gated on a level being loaded: the menu is drawn in this same plane
     // and clicked through this same mapping.
     if (viewport == nullptr || m_camera == entt::null || !registry.valid(m_camera)) return false;
@@ -2122,7 +2859,7 @@ bool MagicPortalsLayer::ScreenToLevelPx(const entt::registry& registry, const gl
     // The camera as THIS viewport would draw it, whatever shape it last had.
     Supersonic::CameraComponent camera = registry.get<Supersonic::CameraComponent>(m_camera);
     camera.aspect = size.x / size.y;
-    const Supersonic::Ray ray = Supersonic::Raycast::ScreenPointToRay(viewport->ToLocal(screenPoint), size, camera);
+    const Supersonic::Ray ray = Supersonic::Raycast::ScreenPointToRay(localPoint, size, camera);
     // The level is the plane z = 0. The ray is met there, rather than trusting
     // its origin to lie on it.
     if (std::fabs(ray.direction.z) < 1e-6f) return false;
@@ -2266,6 +3003,11 @@ void MagicPortalsLayer::buildDrawables(entt::registry& registry) {
         animation.frameCount = 1;
         animation.playing = false;
     }
+
+    // AND THE ONE ENTITY THE CHARACTER'S OWN CONSTRUCTOR ADDS on every level, last
+    // of all: the eyes read the cell the player quad was just given, so they must
+    // be added after it and not with the level's own emitters.
+    buildEyes(registry);
 }
 
 // ---- the level's art ----------------------------------------------------------
@@ -2497,7 +3239,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         DrawnSprite drawn;
         drawn.quad = makeSprite(registry, "Magic Portals Sprite", sprite.texture, sprite.additive);
         // The player's slot is kept free.
-        drawn.z = SlotZ(sprite.order < m_playerSlot ? sprite.order : sprite.order + 1);
+        drawn.z = slotAt(sprite.order < m_playerSlot ? sprite.order : sprite.order + 1, Slot::Picture);
         // THE EXIT DOOR AND THE DOORWAY'S BLACK, each the first node of its entity,
         // as readProperties' two SeekEntity calls find them (art.json door). Both
         // bob on a `no_gravity` level, with the glow this function adds at its end.
@@ -2683,16 +3425,9 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     // it stands at the player's depth or in front of it. The original orders by
     // depth alone and keeps the order things were added in at equal depth
     // (ETHEntityRenderingManager.cpp:70-106), and the player is added after the
-    // level's nodes. `levelZ` in the level's units (art.json depth). Before step 76
-    // this asked `below < m_playerSlot`, which took the player's depth for 0; with
-    // it at 1.42 the two agree for every depth passed below but the minions' (the
-    // step's census).
-    const auto slotAfter = [this](double levelZ) {
-        const int below = static_cast<int>(std::count_if(m_sprites.begin(), m_sprites.end(), [levelZ](const DrawnSprite& d) {
-            return static_cast<double>(d.sprite.zIndex) <= levelZ;
-        }));
-        return SlotZ(m_playerZ <= levelZ ? below + 1 : below) - 0.5f * kSpriteSlotZ;
-    };
+    // level's nodes. The rule and the fraction each class stands at are the
+    // between-slot table's now (slotAfter, MagicPortalsLayer.hpp; 00_order K13);
+    // what each caller asks for is which class it is.
     int adderZ = 0;
     if (m_level.boss.beholder) {
         if (const Tscn::Node* adder = m_data.scene.FindNode(m_level.boss.beholder->name)) {
@@ -2702,8 +3437,8 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             }
         }
     }
-    m_beholderZ = slotAfter(adderZ);
-    m_spikeZ = slotAfter(kSpikeZIndex);
+    m_beholderZ = slotAfter(adderZ, Slot::Beholder);
+    m_spikeZ = slotAfter(kSpikeZIndex, Slot::Spike);
     // THE MINIONS (art.json minion z): minion_spawn adds each at a raw 2, which is
     // 2 / 2.8125 = 0.71 in the level's units - after every node at 0 or below and,
     // being behind the player at 1.42, before it. An escort the chapter-3 boss calls
@@ -2711,7 +3446,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     // placed node's and so already in the level's units. The two share a slot here
     // where the original draws the marker's minion in front (2 > 0): a tie the
     // between-slot table of the visuals plan's 6.3 (00_order K13) is to order.
-    m_minionZ = slotAfter(m_artRules.LevelDepth(m_artRules.minion.z));
+    m_minionZ = slotAfter(m_artRules.LevelDepth(m_artRules.minion.z), Slot::Minion);
     // The anchor as Ghost::Find takes it: by entity name, the last such node.
     m_escortLookZ = 0.0;
     for (const Tscn::Node& node : m_data.scene.nodes) {
@@ -2724,7 +3459,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         const Tscn::Value* index = node.Find("z_index");
         m_escortLookZ = eth != nullptr && eth->AsNumber(z) ? z : (index != nullptr && index->AsNumber(z) ? z : 0.0);
     }
-    m_escortZ = slotAfter(m_escortLookZ);
+    m_escortZ = slotAfter(m_escortLookZ, Slot::Escort);
     // THE GHOST OF THE LEVEL'S LIGHT WALL (art.json light_wall_ghost), which
     // seekLightWallToDestroy adds where the wall stands when a torch is lit:
     // dashed_door.png at the wall's own point, size and angle, `zOffset` raw
@@ -2733,7 +3468,10 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     // may be never. Its depth is a RAW one, like the player's 4 and a minion's 2,
     // so it goes through LevelDepth: 4 / 2.8125 = 1.42 of the level's units behind
     // a wall the level file placed, which is a slot of its own behind the wall's
-    // and ahead of everything at or below it (00_order K13, for 6.3's table).
+    // and ahead of everything at or below it. Slot::WallGhost in the between-slot
+    // table (00_order K13), which the merge of the two tracks moved it into: the
+    // lambda it was written against stood at the same -0.5, so the z is the one
+    // step 80 measured.
     m_wallGhost = WallGhost{};
     if (m_level.torch.wall.present) {
         const Art::LightWallGhost& rules = m_artRules.lightWallGhost;
@@ -2760,7 +3498,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             m_wallGhost.rotation = Units::ToWorldRotation(wall->sprite.rotation);
             m_wallGhost.sizePx = glm::dvec2(image.units);
             m_wallGhost.lookZ = wall->lookZ + m_artRules.LevelDepth(rules.zOffset);
-            m_wallGhost.z = slotAfter(m_wallGhost.lookZ);
+            m_wallGhost.z = slotAfter(m_wallGhost.lookZ, Slot::WallGhost);
             m_wallGhost.turn.degPerS = rules.spinDegPerSec;
         }
     }
@@ -2798,7 +3536,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         animation.frameCount = 1;
         animation.playing = false;
         dial.cellPx = timerCellPx;
-        dial.z = slotAfter(drawn.sprite.zIndex + timer.zOffset);
+        dial.z = slotAfter(drawn.sprite.zIndex + timer.zOffset, Slot::TimerDial);
         dial.lookZ = drawn.lookZ + static_cast<double>(timer.zOffset);
         dial.atPx = drawn.centrePx;
         dial.alpha = timer.alpha;
@@ -2830,7 +3568,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         SUPERSONIC_LOG_WARN("Magic Portals")
             << "no ring round the gravity wells: " << ringImage->path << " could not be read" << std::endl;
     } else if (ringImage != nullptr) {
-        const float ringZ = slotAfter(ringZIndex);
+        const float ringZ = slotAfter(ringZIndex, Slot::WellRing);
         for (const GravityWell::Well& well : m_level.wells.wells) {
             DrawnSprite made;
             made.sprite.node = well.name + "#ring";
@@ -2893,7 +3631,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             made.sprite.sizePx = glm::dvec2(glow.units);
             made.sprite.additive = doorRules.highlight.additive;
             made.sprite.zIndex = glowZIndex;
-            made.z = slotAfter(doorRules.highlightZ);
+            made.z = slotAfter(doorRules.highlightZ, Slot::DoorHighlight);
             made.emissive = doorRules.highlight.emissive;
             made.isStatic = doorRules.highlight.isStatic;
             made.applyLight = doorRules.highlight.applyLight;
@@ -3434,7 +4172,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
         if (drawn->quad != entt::null) {
             placeSprite(registry, drawn->quad, Units::ToPixels(body.position),
                         glm::dvec2(drawnImage(m_paths.art + "/assets/entities/" + thrown.sprite).units),
-                        SlotZ(m_playerSlot) - 0.5f * kSpriteSlotZ, body.rotation.z);
+                        slotAt(m_playerSlot, Slot::ThrownStone), body.rotation.z);
         }
     }
 
@@ -3472,7 +4210,8 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
         registry.valid(m_player)) {
         const glm::dvec2 at = Units::ToPixels(registry.get<TransformComponent>(m_level.player).position);
         placeBox(registry, m_player, at, glm::dvec2(m_data.tuning.widthPx, m_data.tuning.heightPx),
-                 artOnly ? SlotZ(m_playerSlot) : 0.1f, artOnly ? 0.5f * kSpriteSlotZ : 0.4f, 0.0f);
+                 artOnly ? slotAt(m_playerSlot, Slot::Picture) : 0.1f, artOnly ? 0.5f * kSpriteSlotZ : 0.4f,
+                 0.0f);
         if (m_playerQuad != entt::null) {
             const Art::Character& mage = m_artRules.character;
             // It turns as it walks, which is the owner's word; the row each way
@@ -3516,7 +4255,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
                 pivotYPx += mage.noGravity.HoverUnits(m_noGravityPlayer.angle, ViewPx().y);
             }
             placeSprite(registry, m_playerQuad, at - glm::dvec2(mage.pivotXPx, pivotYPx), cellPx,
-                        SlotZ(m_playerSlot), 0.0f);
+                        slotAt(m_playerSlot, Slot::Picture), 0.0f);
         }
     }
 
@@ -3572,48 +4311,42 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     for (std::size_t i = 0; i < placed.size(); ++i) {
         placeBox(registry, m_portals[i], placed[i].atPx, glm::dvec2(diameterPx), kMarkerZ, kMarkerDepth, 0.0f);
     }
-    // And one picture per placed portal, portal.ent's halo, when the original's
-    // image is there: just behind the player, which walks into it.
-    const Sprites::Image& halo = drawnImage(originalImage(m_artRules.portal.sprite));
-    const glm::dvec2 haloPx(halo.units);
-    const bool haloReady = m_artReady && haloPx != glm::dvec2(0.0);
-    while (m_portalQuads.size() > (haloReady ? placed.size() : 0)) {
-        if (registry.valid(m_portalQuads.back())) registry.destroy(m_portalQuads.back());
-        m_portalQuads.pop_back();
-    }
-    while (haloReady && m_portalQuads.size() < placed.size()) {
-        m_portalQuads.push_back(
-            makeSprite(registry, "Magic Portals Portal Sprite", halo.path, m_artRules.portal.additive));
-    }
-    for (std::size_t i = 0; i < m_portalQuads.size(); ++i) {
-        placeSprite(registry, m_portalQuads[i], placed[i].atPx, haloPx, SlotZ(m_playerSlot) - 0.25f * kSpriteSlotZ,
-                    0.0f);
-    }
+    // The PICTURE of a placed portal is portal.ent itself - its sprite and its
+    // two particle systems - which insertPortal adds like any other entity and
+    // syncPlacedPortals draws through the effects runtime, on the FRAME (the
+    // visuals plan's 7.4). Nothing of it is here any more.
 
     // The shot in flight, made when one is fired and unmade when it lands or fails:
-    // a box, and projectile.ent's sheet played round when the original's image is
-    // there, just in front of the player it leaves.
+    // a box, and projectile.ent's sheet when the original's image is there, just in
+    // front of the player it leaves - as addProjectile and ETHCallback_projectile
+    // draw it (art.json shot): Scale(0.8) on its cell and its pivot, turned so the
+    // head of the bolt leads along its flight, on the cell the one timer gives.
     if (m_level.portals.flight) {
         if (m_shot == entt::null) {
             m_shot = makeBox(registry, "Magic Portals Shot", glm::vec3(0.0f), glm::vec3(1.0f), kShotColour);
         }
         placeBox(registry, m_shot, m_level.portals.flight->atPx, glm::dvec2(kShotSizePx), kMarkerZ, kMarkerDepth,
                  0.0f);
-        const Art::Picture& bolt = m_artRules.shot;
+        const Art::Shot& bolt = m_artRules.shot;
         const Sprites::Image& sheet = drawnImage(originalImage(bolt.sprite));
         const glm::dvec2 cellPx = frameUnits(sheet, bolt.columns, bolt.rows);
         if (m_shotQuad == entt::null && m_artReady && cellPx != glm::dvec2(0.0)) {
             m_shotQuad = makeSprite(registry, "Magic Portals Shot Sprite", sheet.path, bolt.additive);
-            // Played on the tick by the engine's SpriteAnimationSystem.
+            // A still: the cell is chosen, not played (stepLevel steps the timer).
             auto& animation = registry.emplace<SpriteAnimationComponent>(m_shotQuad);
             animation.columns = static_cast<uint32_t>(bolt.columns);
             animation.rows = static_cast<uint32_t>(bolt.rows);
-            animation.framesPerSecond = static_cast<float>(bolt.framesPerSecond);
-            animation.loop = true;
+            animation.frameCount = 1;
+            animation.playing = false;
         }
         if (m_shotQuad != entt::null) {
-            placeSprite(registry, m_shotQuad, m_level.portals.flight->atPx, cellPx,
-                        SlotZ(m_playerSlot) + 0.25f * kSpriteSlotZ, 0.0f);
+            registry.get<SpriteAnimationComponent>(m_shotQuad).firstFrame = static_cast<uint32_t>(m_shotCell);
+            // Its 'direction': toward where it opens a portal, which a reflector
+            // mirrors (Portals::Flight).
+            const Portals::Flight& flight = *m_level.portals.flight;
+            const float angle = bolt.AngleDegrees(flight.toPx - flight.atPx);
+            placeSprite(registry, m_shotQuad, bolt.CentrePx(flight.atPx, angle), cellPx * bolt.scale,
+                        slotAt(m_playerSlot, Slot::ShotPicture), angle * (3.14159265f / 180.0f));
         }
     } else {
         if (m_shot != entt::null && registry.valid(m_shot)) registry.destroy(m_shot);
@@ -3675,10 +4408,23 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     show(m_exit, !artOnly);
     // A placed portal and the shot, behind the original's pictures once they
     // stand in for them.
-    for (const entt::entity e : m_portals) show(e, !(artOnly && haloReady));
+    // A placed portal stands behind portal.ent's own picture once there is one to
+    // draw, and is the picture itself where the original's art is not there.
+    // Tested against the CLASS - whether that image can be read at all - and not
+    // against the instance, as a fireball's below is: the picture is added on the
+    // FRAME, one frame after the tick that opened the portal, and a box that
+    // waited for the instance would flash for that frame on every portal opened.
+    const bool portalDrawn = m_artReady && drawnImage(originalImage(m_artRules.portal.sprite)).units != glm::ivec2(0);
+    for (const entt::entity e : m_portals) show(e, !(artOnly && portalDrawn));
     show(m_shot, !(artOnly && m_shotQuad != entt::null));
     show(m_player, !(artOnly && m_playerQuad != entt::null));
     show(m_beholderBox, !(artOnly && m_beholderQuad != entt::null));
+    // A fireball's box goes with the level's own boxes and not with the shot's:
+    // the fireball.ent that stands in for it is added on the FRAME, one frame
+    // after the tick that spat it, and a box that waited for it would flash tan
+    // for that frame on every fireball fired. Tested against the class and not
+    // the instance, as a crystal's is.
+    for (const entt::entity e : m_fireballs) show(e, !artOnly);
 
     // Last: every quad this tick made is there to colour.
     syncLighting(registry);
@@ -3784,9 +4530,6 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         tint(registry, m_wallGhost.quad, glm::vec4(1.0f, 1.0f, 1.0f, static_cast<float>(m_wallGhost.alpha)),
              m_artRules.lightWallGhost.emissive, {},
              receiverOf(m_artRules.lightWallGhost, m_wallGhost.lookZ));
-    }
-    for (const entt::entity quad : m_portalQuads) {
-        tint(registry, quad, white, m_artRules.portal.emissive, {}, receiverOf(m_artRules.portal, 0.0));
     }
     tint(registry, m_shotQuad, white, m_artRules.shot.emissive, {}, receiverOf(m_artRules.shot, m_artRules.shot.z));
     tint(registry, m_beholderQuad, m_beholderColour, m_artRules.beholder.emissive, {},
@@ -3923,19 +4666,23 @@ void MagicPortalsLayer::buildLights(entt::registry& registry) {
             }
         }
         if (placed.sprite >= 0) {
-            placed.haloZ = m_sprites[static_cast<std::size_t>(placed.sprite)].z + 0.25f * kSpriteSlotZ;
+            placed.haloZ = slotOver(m_sprites[static_cast<std::size_t>(placed.sprite)].z, Slot::Halo);
         } else {
             // No picture to stand in front of: after the sprites at or below its
-            // z_index, as the beholder is placed.
+            // z_index, as the beholder is placed (the table's Slot::HaloNoPicture).
+            //
+            // NO LEVEL REACHES THIS. Every one of the 128 levels' 72 lights hangs
+            // on a node that also draws a sprite, so this is the guard for a light
+            // whose picture the port could not read. The counting rule it used to
+            // write out by hand ("below < m_playerSlot") is the one step 76
+            // replaced for the minions; it takes the table's now, which orders it
+            // against the player by depth.
             int zIndex = 0;
             double z = 0.0;
             if (const Tscn::Value* value = node.Find("z_index"); value != nullptr && value->AsNumber(z)) {
                 zIndex = static_cast<int>(z);
             }
-            const int below = static_cast<int>(std::count_if(m_sprites.begin(), m_sprites.end(), [zIndex](const DrawnSprite& d) {
-                return d.sprite.zIndex <= zIndex;
-            }));
-            placed.haloZ = SlotZ(below < m_playerSlot ? below : below + 1) - 0.5f * kSpriteSlotZ;
+            placed.haloZ = slotAfter(zIndex, Slot::HaloNoPicture);
         }
         placed.entity = registry.create();
         registry.emplace<TagComponent>(placed.entity, "Magic Portals 2D Light");
@@ -3977,33 +4724,50 @@ double MagicPortalsLayer::particleRatioOf(int emitter) const {
     return Lighting::ParticleRatio(from.active, from.system.count);
 }
 
+// One light and its halo where they stand, in the colours `ratio` gives them.
+// `ownerScale` is the owner's m_properties.scale, which draws its light and halo
+// (Lighting::OwnerScaled): 1 for a level placement, whose <Scale> the converter
+// has already written into its light (00_order K7), and <Scale> x the script's
+// Scale() for what the script ADDS - the shot's 0.8, and every effect the
+// effects runtime spawns.
+void MagicPortalsLayer::placeLight(entt::registry& registry, entt::entity light, entt::entity halo,
+                                   const Lighting::Light& unscaled, const glm::dvec2& ownerPx, double ownerZ,
+                                   bool ownerStatic, double ratio, float haloZ, bool present,
+                                   const glm::dvec2& ownerScale) const {
+    using namespace Supersonic;
+    const double intensity = m_look.intensity;
+    const double haloScale = m_data.lighting.haloBrightnessScale;
+    const Lighting::Light from = Lighting::OwnerScaled(unscaled, ownerScale);
+    if (light != entt::null && registry.valid(light)) {
+        const glm::vec3 at = Units::ToWorld(ownerPx.x + from.offset.x, ownerPx.y + from.offset.y);
+        registry.get<TransformComponent>(light).position = glm::vec3(at.x, at.y, 0.0f);
+        auto& component = registry.get<Light2DComponent>(light);
+        component.color = glm::vec3(Lighting::LightColour(from, intensity, ownerStatic, ratio));
+        component.intensity = 1.0f;
+        component.range = Units::ToMetres(from.range);
+        component.height = Units::ToMetres(ownerZ + from.offset.z);
+        component.layers = Lighting::LightLayer(ownerStatic);
+        component.enabled = present;
+    }
+    if (halo != entt::null && registry.valid(halo)) {
+        placeSprite(registry, halo, ownerPx + from.haloOffset, from.haloSize, haloZ, 0.0f);
+        registry.get<RenderableComponent>(halo).isVisible = present;
+        const glm::vec4 colour(glm::vec3(Lighting::HaloColour(from, ratio, haloScale)), 1.0f);
+        auto& material = registry.get<MaterialComponent>(halo);
+        if (material.albedoColor != colour) material.albedoColor = colour;
+    }
+}
+
 void MagicPortalsLayer::syncLights(entt::registry& registry) {
     using namespace Supersonic;
     if (!m_loaded || !m_lit) return;
-    const double intensity = m_look.intensity;
-    const double haloScale = m_data.lighting.haloBrightnessScale;
 
-    // A light, its halo and where they stand, in the colours `ratio` gives them.
-    const auto place = [&](entt::entity light, entt::entity halo, const Lighting::Light& from, const glm::dvec2& ownerPx,
-                           double ownerZ, bool ownerStatic, double ratio, float haloZ, bool present) {
-        if (light != entt::null && registry.valid(light)) {
-            const glm::vec3 at = Units::ToWorld(ownerPx.x + from.offset.x, ownerPx.y + from.offset.y);
-            registry.get<TransformComponent>(light).position = glm::vec3(at.x, at.y, 0.0f);
-            auto& component = registry.get<Light2DComponent>(light);
-            component.color = glm::vec3(Lighting::LightColour(from, intensity, ownerStatic, ratio));
-            component.intensity = 1.0f;
-            component.range = Units::ToMetres(from.range);
-            component.height = Units::ToMetres(ownerZ + from.offset.z);
-            component.layers = Lighting::LightLayer(ownerStatic);
-            component.enabled = present;
-        }
-        if (halo != entt::null && registry.valid(halo)) {
-            placeSprite(registry, halo, ownerPx + from.haloOffset, from.haloSize, haloZ, 0.0f);
-            registry.get<RenderableComponent>(halo).isVisible = present;
-            const glm::vec4 colour(glm::vec3(Lighting::HaloColour(from, ratio, haloScale)), 1.0f);
-            auto& material = registry.get<MaterialComponent>(halo);
-            if (material.albedoColor != colour) material.albedoColor = colour;
-        }
+    // A light, its halo and where they stand, in the colours `ratio` gives them:
+    // placeLight, which the effects runtime calls with the same rule.
+    const auto place = [&](entt::entity light, entt::entity halo, const Lighting::Light& unscaled,
+                           const glm::dvec2& ownerPx, double ownerZ, bool ownerStatic, double ratio, float haloZ,
+                           bool present, const glm::dvec2& ownerScale) {
+        placeLight(registry, light, halo, unscaled, ownerPx, ownerZ, ownerStatic, ratio, haloZ, present, ownerScale);
     };
 
     for (const PlacedLight& placed : m_placedLights) {
@@ -4014,8 +4778,9 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
             present = owner.quad != entt::null && registry.valid(owner.quad);
             ownerPx = owner.ownerPx;
         }
+        // A level placement: its <Scale> is in its light already (K7).
         place(placed.entity, placed.halo, placed.light, ownerPx, placed.ownerZ, placed.ownerStatic,
-              particleRatioOf(placed.emitter), placed.haloZ, present);
+              particleRatioOf(placed.emitter), placed.haloZ, present, glm::dvec2(1.0));
     }
 
     // light_from_projectile.ent's, at each torch while it is lit (step 55, the
@@ -4035,11 +4800,11 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
             continue;
         }
         double ownerZ = torchLight.z;
-        float haloZ = SlotZ(m_playerSlot) - 0.5f * kSpriteSlotZ;
+        float haloZ = slotAt(m_playerSlot, Slot::HaloNoPicture);
         if (const auto look = m_look.nodes.find(torches[i].name); look != m_look.nodes.end()) ownerZ = look->second.z;
         for (const DrawnSprite& drawn : m_sprites) {
             if (drawn.sprite.node != torches[i].name) continue;
-            haloZ = drawn.z + 0.25f * kSpriteSlotZ;
+            haloZ = slotOver(drawn.z, Slot::Halo);
             break;
         }
         if (made.light == entt::null) {
@@ -4052,12 +4817,14 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
         if (made.halo == entt::null && m_artReady && torchHalo.units != glm::ivec2(0)) {
             made.halo = makeSprite(registry, "Magic Portals Torch Halo", torchHalo.path, true);
         }
+        // ETHCallback_light_off adds it with AddScaledEntity at g_scale.getScale(), one
+        // port unit (#71-83), and light_from_projectile.ent's <Scale> is 1: scale 1.
         place(made.light, made.halo, *torchLight.light, torches[i].atPx, ownerZ, torchLight.isStatic,
-              Lighting::ParticleRatio(0, 0), haloZ, true);
+              Lighting::ParticleRatio(0, 0), haloZ, true, glm::dvec2(1.0));
     }
 
     // The shot's, while it flies.
-    const Art::Picture& shot = m_artRules.shot;
+    const Art::Shot& shot = m_artRules.shot;
     if (!m_level.portals.flight || !shot.light) {
         auto destroy = [&registry](entt::entity& e) {
             if (e != entt::null && registry.valid(e)) registry.destroy(e);
@@ -4077,11 +4844,12 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
     if (m_shotHalo == entt::null && m_artReady && haloImage.units != glm::ivec2(0)) {
         m_shotHalo = makeSprite(registry, "Magic Portals Shot Halo", haloImage.path, true);
     }
-    // projectile.ent has no particle system, so nothing scales either. Its halo a
-    // quarter slot in front of its own picture, which is a quarter slot in front
-    // of the player's.
+    // projectile.ent has no particle system, so no ratio dims either. Scale(0.8)
+    // does draw them smaller: a range of 56, a height of -9.6, a halo of 40 (K7).
+    // Its halo a quarter slot in front of its own picture, which is a quarter slot
+    // in front of the player's; at the entity's point, which the pivot does not move.
     place(m_shotLight, m_shotHalo, *shot.light, m_level.portals.flight->atPx, shot.z, shot.isStatic,
-          Lighting::ParticleRatio(0, 0), SlotZ(m_playerSlot) + 0.5f * kSpriteSlotZ, true);
+          Lighting::ParticleRatio(0, 0), slotAt(m_playerSlot, Slot::ShotHalo), true, glm::dvec2(shot.scale));
 }
 
 void MagicPortalsLayer::syncTurrets(entt::registry& registry) {
@@ -4092,10 +4860,12 @@ void MagicPortalsLayer::syncTurrets(entt::registry& registry) {
         e = entt::null;
     };
 
-    // One quad per fireball in flight, grown and shrunk to match, which is how
-    // the beholder's spikes are drawn. Always a BOX: fireball.ent has no
-    // <Sprite> at all - the original shows its ParticleSystem and its Light -
-    // so unlike a spike there is no image to fall back from.
+    // One quad per fireball in flight, at its own Collision. A PLACEHOLDER since
+    // step 85, not the picture: what the original shows is fireball.ent itself,
+    // which latchSimEffects now adds for every fireball - its particle system and
+    // its light's halo, since the .ent has no <Sprite> at all. The box is left
+    // for the two cases every other placeholder is left for, a level with no art
+    // to draw and the boxes turned on, and syncLighting hides it otherwise.
     while (m_fireballs.size() > turrets.fireballs.size()) {
         destroy(m_fireballs.back());
         m_fireballs.pop_back();
@@ -4105,9 +4875,6 @@ void MagicPortalsLayer::syncTurrets(entt::registry& registry) {
             makeBox(registry, "Magic Portals Fireball", glm::vec3(0.0f), glm::vec3(1.0f), kFireballColour));
     }
     for (std::size_t i = 0; i < m_fireballs.size(); ++i) {
-        // At the marker z, which is the port's choice and not the original's:
-        // the original states a spike's z (-4) and says nothing about a
-        // fireball's.
         placeBox(registry, m_fireballs[i], turrets.fireballs[i].atPx, glm::dvec2(kFireballBoxPx), kMarkerZ,
                  kMarkerDepth, 0.0f);
     }
@@ -4954,7 +5721,11 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // and opens its popup when that touch comes up; the popup stops the level on
     // this tick, as the pause control does. The controls are asked first: they
     // are GameLayer's buttons, which the block's disabled touches do not reach.
-    if (under == nullptr && helpBlockInput(registry)) return direction;
+    // THE TICK'S TOUCH, read ONCE and handed to both the block and the tap below.
+    // A scheduled tap owns the pointer on its ticks, and reading it twice would
+    // press and release it inside one tick.
+    const Touch touch = touchThisTick(registry);
+    if (under == nullptr && helpBlockInput(registry, touch)) return direction;
 
     if (under != nullptr) {
         switch (under->kind) {
@@ -4991,11 +5762,12 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         return direction;
     }
 
-    // A pointer over a panel or another window is not the game's.
-    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
-    if (viewport != nullptr && viewport->pointerOverGame && pressed) {
+    // A pointer over a panel or another window is not the game's - and a tap a
+    // capture scheduled owns the pointer whatever the real cursor is doing, which
+    // is what lets a --tap open a portal (the same seam --hold walks by).
+    if (touch.over && touch.pressed) {
         glm::dvec2 atPx(0.0);
-        if (ScreenToLevelPx(registry, Input::MousePosition(), atPx)) m_level.portals.Shoot(registry, atPx);
+        if (ViewportToLevelPx(registry, glm::vec2(touch.atPx), atPx)) m_level.portals.Shoot(registry, atPx);
     }
     return direction;
 }
@@ -5168,6 +5940,129 @@ float MagicPortalsLayer::pitchFor(const Sounds::Hook& hook, double doorStrideMs)
     if (speed < 0.25) speed = 0.25;
     if (speed > 2.0) speed = 2.0;
     return static_cast<float>(speed);
+}
+
+// THE DEPTH A CALL GIVES ITS ENTITY, on the level's own axis (the visuals plan's
+// 7.3).
+//
+// The script writes a z two ways, and they are not the same number. Through
+// g_scale.scale it is already in the level's units, because the levels' own
+// eth_z are scaled by the same factor - a node at eth_z 2 stands at 2 - so
+// scale(32) is 32. A BARE LITERAL is in the engine's world units and does not
+// grow with the screen (00_order 8.12b), so it is divided by the scale factor,
+// exactly as the character's own AddScaledEntity z of 4 is: 4 / 2.8125 = 1.42
+// (art.json depth, step 76). appear_effect's z is the one such number the port
+// draws with - a bare 2, which is 0.71 on the level's axis and still in front of
+// the player - and fireball.ent's and small_explosion.ent's bare 0 is 0 either
+// way.
+//
+// A SYSTEM'S OWN <StartPoint> z IS THE SAME KIND OF RAW LITERAL and is NOT
+// divided here: SpawnEffect adds it to this as it stands, so the appear ring's
+// flash draws at 0.71 + 10. Steps 84 and 85 are committed against that sum (the
+// eyes' 2, the fireball's 4), and moving it would move their pixels for a reason
+// that is not this step's; it is handed to the between-slot table's owner
+// (00_order K13) with the numbers written down.
+MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn& spawn) const {
+    EffectSpawn add;
+    add.entity = spawn.entity;
+    add.atPx = spawn.atPx;
+    // The factor is art.json's and is refused below 0 when it is read, so the
+    // guard is for a level drawn with no art at all - which draws no effect.
+    add.zUnits = spawn.zScaled || !(m_artRules.scaleFactor > 0.0) ? spawn.z : m_artRules.LevelDepth(spawn.z);
+    add.angleDeg = spawn.angleDeg;
+    add.scale = spawn.scale;
+    return add;
+}
+
+// WHERE THE EFFECTS ARE TRIGGERED (system_7 7a-2), beside the sounds and for the
+// same reason: the tick says what happened, and the frame draws it.
+//
+// EACH EFFECT'S RULE ARRIVES WITH THE STEP THAT DRAWS IT - the fireballs and
+// their explosions (7.2) and the teleport's three (7.3) are here; the pickups'
+// are 10.x - and each reads the same kind of thing the sound watch reads: a
+// counter that went up, a flag that turned over, a record the tick left behind
+// (Portals::State's transits, Turrets::State::spentPx, Fire::State::blastsPx).
+// The rule is that queuing happens on the TICK while adding and drawing happen on
+// the FRAME, so that an effect cannot reach Game::Level or the state hash by the
+// back door.
+void MagicPortalsLayer::latchSimEffects() {
+    if (!m_loaded) return;
+
+    // THE FIREBALLS IN FLIGHT. Each one is an entity of the original's -
+    // addFireball's fireball.ent - and the entity is the whole of what is seen:
+    // it has no <Sprite> at all, so what a player meets is its particle system
+    // and its light's halo. The effect is given the fireball to FOLLOW, so it
+    // travels with it and goes when it goes; fireball.ent repeats forever and is
+    // therefore never temporary, which is exactly the original's rule that only
+    // its own script deletes it.
+    //
+    // A LIST WALK rather than an event, because a fireball can be spat on a tick
+    // this is not called on - BeforeStep runs under a pause that this returns
+    // before (OnFixedUpdate), and Turrets::Fire is in BeforeStep. Whatever is in
+    // the air and has no effect yet gets one; what is queued this tick is added
+    // on the next frame, and if the fireball is gone by then SpawnEffect refuses
+    // it, which is a fireball nobody ever saw.
+    std::vector<std::string> flying;
+    flying.reserve(m_level.turrets.fireballs.size());
+    for (const Turrets::Fireball& ball : m_level.turrets.fireballs) {
+        flying.push_back(ball.name);
+        if (std::find(m_fireballEffects.begin(), m_fireballEffects.end(), ball.name) != m_fireballEffects.end()) {
+            continue;
+        }
+        EffectSpawn add = effectAdd(Effects::Fireball(m_effectRules, ball.atPx));
+        // ScaleParticleSystem(0, fireballScale), which only the dark dragon's fire
+        // is given: 2 there and 1 everywhere else (darkdragon.json).
+        add.firstSystemScale = ball.particleScale;
+        add.follow.kind = EffectOwner::Kind::Fireball;
+        add.follow.name = ball.name;
+        m_effectQueue.push_back(add);
+        m_fireballEffects.push_back(ball.name);
+    }
+    // And the names of the ones that have gone, so a level that spits hundreds
+    // does not keep every name it ever used.
+    m_fireballEffects.erase(std::remove_if(m_fireballEffects.begin(), m_fireballEffects.end(),
+                                           [&flying](const std::string& name) {
+                                               return std::find(flying.begin(), flying.end(), name) == flying.end();
+                                           }),
+                            m_fireballEffects.end());
+
+    // WHERE ONE WAS DESTROYED: small_explosion.ent at the point it stood, which
+    // is what ETHCallback_fireball adds on the frame after the contact sets
+    // `destroy`. The port is that one frame early and about two units short of
+    // the original's point, because the original's callback moves the entity one
+    // more frame before it reads the flag (130 px/s over a tick).
+    for (const glm::dvec2& atPx : m_level.turrets.spentPx) {
+        m_effectQueue.push_back(effectAdd(Effects::SmallExplosion(m_effectRules, atPx)));
+    }
+    // AND WHERE A BOMB WENT OFF: explode()'s explosion_large.ent, at the bomb and
+    // 32 units in front of it. Both are temporary - no sprite, and every system
+    // repeating a set number of times - so the runtime frees each when its pools
+    // are over, which is the engine's own rule and needs no owner.
+    for (const glm::dvec2& atPx : m_level.fire.blastsPx) {
+        m_effectQueue.push_back(effectAdd(Effects::LargeExplosion(m_effectRules, atPx)));
+    }
+
+    // WHAT WENT THROUGH A PORTAL, and the three entities the original adds for
+    // each: the suck effect on the rim of the end it went in by, on the side it
+    // came from; the sparkles where it stood; and the flash at the end it comes
+    // out of (system_7 7c, effects.json's three rows). Whatever the traveller is
+    // - the player, a crate, a thrown stone - because vanishEffect is called for
+    // any entityToTeleport, and on the static route as well as the placed one:
+    // ETHCallback_portal_static #144/#165 calls the same pair that
+    // teleportToOther does, and the port's one Tick loop is both.
+    //
+    // IN THE ORIGINAL'S OWN ORDER, which is the order they are added in and so
+    // the order they draw in and draw their random from: vanishEffect's suck
+    // effect (#36-69) before its sparkles (#83-112), then appearEffect (#71-75).
+    // That a fireball's effect above is queued before a teleport's is the port's
+    // order and not a decoded one - the original's two callbacks run in whatever
+    // order its scene walk reaches them - and it shows only in the stream, never
+    // in a placement.
+    for (const Portals::Traversal& went : m_level.portals.transits) {
+        m_effectQueue.push_back(effectAdd(Effects::Suck(m_effectRules, went.travellerPx, went.entryPx)));
+        m_effectQueue.push_back(effectAdd(Effects::Sparkles(m_effectRules, went.travellerPx, went.entryPx)));
+        m_effectQueue.push_back(effectAdd(Effects::Appear(m_effectRules, went.exitPx)));
+    }
 }
 
 void MagicPortalsLayer::latchSimSounds() {
@@ -5437,6 +6332,7 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
         latchSimSounds();
+        latchSimEffects();
         // ...and the moment the exit reports, the beat before the medal; the
         // moment the player dies, the beat before the lost screen. Should both
         // come on one tick, reaching the exit wins: the remake's order of two
@@ -5597,6 +6493,14 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     if (m_level.noGravity && m_playerQuad != entt::null && !m_finishing && !m_dying) {
         m_noGravityColumn = Art::UpdateNoGravity(m_artRules.character, m_noGravityPlayer, m_direction != 0.0f,
                                                  static_cast<double>(fixedDelta) * 1000.0);
+    }
+    // ETHCallback_projectile's SetFrame(_projectileFrameTimer.set(0, 5, 30, true)),
+    // once a step while a shot flies: the one timer, so a shot starts on the cell
+    // the last one left. No step runs under a pause or popup, so the cell holds there,
+    // where the original's keeps cycling (a stated divergence, art.json shot.animation).
+    if (m_level.portals.flight) {
+        const Art::Shot& bolt = m_artRules.shot;
+        m_shotCell = m_shotFrames.Set(0, bolt.Frames() - 1, bolt.strideMs, true, static_cast<double>(fixedDelta) * 1000.0);
     }
     // linearMotion's calls BEFORE the pictures are placed: a call steps the angle and
     // writes the position in one, and the frame draws what it wrote (motions.json).
@@ -5823,7 +6727,7 @@ MagicPortalsLayer::Touch MagicPortalsLayer::touchThisTick(const entt::registry& 
     return touch;
 }
 
-bool MagicPortalsLayer::helpBlockInput(entt::registry& registry) {
+bool MagicPortalsLayer::helpBlockInput(entt::registry& registry, const Touch& touch) {
     // HelpBlockController::update (bytes 226317..228622): a touch down in a
     // block's rectangle disables the level's touches, so it fires no portal; the
     // move it makes is kept; its release, not having moved 12, opens the level's
@@ -5832,7 +6736,6 @@ bool MagicPortalsLayer::helpBlockInput(entt::registry& registry) {
         m_helpTouch = HelpTouch{};
         return false;
     }
-    const Touch touch = touchThisTick(registry);
     const std::vector<Hud::Rect> rects = HelpBlockRects();
     bool taken = false;
     if (touch.pressed && touch.over) {
@@ -6134,6 +7037,17 @@ void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
     // the simulation's clock or the state hash. Carried before the camera's
     // early return, so a level drawn without one does not freeze them.
     if (!GameTimeStopped()) updateEmitters(registry, deltaTime);
+    // And the effects the script added, which the tick queued and this frame
+    // adds: the same frame, for the same reason. The eyes move first, as
+    // MainCharacter::update runs updateEyes before anything else it does.
+    if (!GameTimeStopped()) {
+        syncEyes(registry);
+        // A portal the player opened is an entity the script added, like the rest
+        // of them: what is new gets its two, what has gone runs its death, and the
+        // manager's colour is written before the frame draws any of it.
+        syncPlacedPortals(registry, static_cast<double>(deltaTime) * 1000.0);
+        updateEffects(registry, deltaTime);
+    }
     // And the lights and halos those particles brighten and dim.
     syncLights(registry);
     // And the sounds the tick latched, played here for the same reason: a

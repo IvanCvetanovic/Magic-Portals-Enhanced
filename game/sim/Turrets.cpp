@@ -114,6 +114,10 @@ std::vector<Fireball> State::Fire(float dt) {
 }
 
 void State::Tick(entt::registry& registry, entt::entity player, float dt) {
+    // Taken first, as Fire::Tick takes its blasts: what this tick destroys is
+    // what the layer reads after it, and last tick's is gone.
+    spentPx.clear();
+
     const glm::dvec2 lowPx = -rules.cullMarginPx;
     const glm::dvec2 highPx = boundsPx + rules.cullMarginPx;
 
@@ -127,7 +131,8 @@ void State::Tick(entt::registry& registry, entt::entity player, float dt) {
     // Against the player's own collider rather than a box around its centre:
     // Trigger is exact in the plane, and a capsule is what the character has.
     const glm::vec2 half(Units::ToMetres(rules.hitPx.x * 0.5), Units::ToMetres(rules.hitPx.y * 0.5));
-    for (const Fireball& ball : fireballs) {
+    for (std::size_t i = 0; i < fireballs.size(); ++i) {
+        const Fireball& ball = fireballs[i];
         // addFireball's killMainCharacter. A fire diamond's conversion passes it
         // clear and the contact callback bails out on a character when it is, so
         // one of these kills and the other cannot. Turrets.hpp has the decode.
@@ -139,6 +144,14 @@ void State::Tick(entt::registry& registry, entt::entity player, float dt) {
         if (!Trigger::Overlaps(registry, player, box)) continue;
         playerKilled = true;
         killedBy = ball.name;
+        // And the fireball GOES, with a destroy recorded. The one that kills sets
+        // flames on the character and its hp to 0
+        // (ETHBeginContactCallback_fireball #123-145) and then falls through to
+        // #146-152 destroy(thisEntity) like any other contact - it is not a
+        // special case there, and the player is never the end of a fireball's
+        // flight in the original.
+        spentPx.push_back(ball.atPx);
+        fireballs.erase(fireballs.begin() + static_cast<std::ptrdiff_t>(i));
         return;
     }
 }

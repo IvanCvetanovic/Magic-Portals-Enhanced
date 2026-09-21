@@ -276,9 +276,15 @@ void AThrownStoneBreaksTheWall(const char* levelName, const char* wallName, cons
             const glm::dvec2 in = before + glm::dvec2(0.0, Units::kRemakeWorldGravityPx * kStep);
             const glm::dvec2 out = VelocityPx(run, body);
             const glm::dvec2 at = PxOf(run, body);
+            // The exit as THIS tick left it: a placed portal hovers two units up
+            // and down from where it was opened (ETHCallback_portal's
+            // linearMotion), and the tick's own record carries the point.
+            const glm::dvec2 exitPx = run.level.portals.transits.empty()
+                                          ? outPx
+                                          : run.level.portals.transits.front().exitPx;
             turnedBack = in.y > 0.0 && out.y < 0.0 && glm::length(out + in) < 0.01 * glm::length(in) + 1.0 &&
-                         glm::distance(at, outPx) < 0.01;
-            turned = "in " + Px(in) + ", out " + Px(out) + " at " + Px(at);
+                         glm::distance(at, exitPx) < 0.01 && glm::distance(exitPx, outPx) <= 2.0;
+            turned = "in " + Px(in) + ", out " + Px(out) + " at " + Px(at) + ", exit " + Px(exitPx);
         }
         if (!run.level.launchers.live.empty() && tick % 10 == 0) {
             trace += " " + std::to_string(tick) + ":" + Px(PxOf(run, run.level.launchers.live.front().body));
