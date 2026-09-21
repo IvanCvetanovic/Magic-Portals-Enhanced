@@ -2291,3 +2291,104 @@ deletion, 0 forced. Smart App Control: 10 refused launches. This commit: 3 files
 
 **Inferred mood:** guess — a long day of careful plumbing that closed cleanly: every output that was measured matched,
 and the cost was ten Smart App Control notifications and two suites it still will not run.
+
+### 2026-09-19 20:01 — Session 18b: visuals batches 5-7
+
+*Written 2026-09-21 at the close, from the twelve step records in
+`docs/planning/2026-09-11-magic-portals-remaster.md`, the role reports, and git — not from a transcript. I did not
+run the session: I checked the repository, wrote the backlog rows and this entry, and committed the two files. Every
+number below is one the step records or git state, and where a figure is assembled from several records rather than
+observed by me, it says so. Timed from the run's first commit (`e620810`, 20:01), not from the launch state
+(`27aac4a`, 18:31).*
+
+**Built:**
+- **Twelve steps of the visuals plan, planning steps 76-87, on two tracks at once.** Track A on `main`: 5.1 minions
+  and knights on the sheet the original cuts (76), 5.2 the 2-32 dragon and its claw on the sim (77), and then three
+  steps taken out of batch order because decode §8.13 said they were ready — 3.4 the button that sinks six units
+  under what stands on it (78), 13.2 the weightless room's shadowless door, its glow and its bob (79), 13.4 the ghost
+  a lit torch leaves where its light wall stood (80). Track B on branch `visuals-c` in the worktree
+  `Magic-Portals-Remake-vis3`: 6.1 the shot as its script adds it (81), 6.2 the effects entity reader (82), 6.3 the
+  effects runtime with its own random stream and one between-slot table (83), 7.1 the red eyes every level shows
+  (84), 7.2 the fireball and its two explosions (85), 7.3 the teleport's three effects (86), 7.4 the placed portal as
+  the two entities it is (87).
+- **The two tracks merged** — `a5c9e23`, planning step 88, pushed. Track B's 90-96 renumbered 81-87; three files
+  conflicted (`game/sim/Art.cpp` and `game/MagicPortalsLayer.cpp` twice) and each was resolved by keeping both
+  behaviours. K13: the merge migrated the door glow and the wall ghost into 6.3's between-slot table, both at -0.5,
+  exactly what the lambda they were written against returned, so neither moved a unit. K8: 2-32's dragon-mouth
+  re-pool moved off the placement stream onto `m_effectRandom`. The worktree and the branch are gone.
+- **Two runtimes that later batches stand on.** 6.3's effects runtime is the blocker 10.x, 12.1, 12.2 and 13.1 were
+  all waiting for; 6.1's `Lighting::OwnerScaled` is the rule a script's `Scale()` reaches a light by. Neither was
+  a pixel change on its own: both sweeps came back byte-identical.
+
+**Broke / dead ends:**
+- **7.2, the fireball, failed two independent checks and was committed on the third round with three gate rows NOT
+  MET.** Both failures were on the RECORD, not the build: the first writing called the 2-05 byte-identity row a pass
+  when 2,163 pixels had moved, and the second found the core gate read on one licensed sample and reported as if it
+  were a population. Round 3 re-measured everything and reproduced every number. What stands unmet: the light's
+  R-excess tail reaches 10 at 40.0 u against a 27.6 ± 6 u band; the core radius is 8.94 u on the brief's sample but
+  4.12-9.95 u over 300 readings with 42.7 % under the 6.0 floor; and K8's sweep identity is 107 of 128, because 20 of
+  the 21 that changed redraw the player's own eyes. None tuned.
+- **The eyes and the fireball share one random stream, and that is now a standing reading rather than a bug.** 6.3
+  gave every non-placement draw one `m_effectRandom`, which is what the original has (one `MTRand` re-seeded per
+  frame). So from 7.2 on, an effect step's K8 row means "the placement stream is untouched", not "the frame is
+  identical". Re-litigating it per step would have re-opened 6.3's committed design.
+- **Smart App Control: 25 refused launches across the run, so 25 notifications for Ivan.** Assembled from the step
+  records, not observed by me: step 76 five, 77 three, 78 two, 79 one, 83 seven (six while it was built, one more in
+  the second independent check), 84 one, 85 two, 86 two, 87 two. Steps 80, 81, 82 and the merge had none. No loop:
+  each refusal cost at most the one or two delete-and-relinks the rule allows, and one suite (`test_mp_boss`) was
+  reported NOT RUN twice before a later round's verifier got it to launch on the unchanged binary — 126 checks, 0
+  failures.
+- **The laptop slept through a ctest again.** The merge's inherited log showed 45 of 45 passed in **29,660 s**, of
+  which 29,618 were `test_mp_zerog`. The re-run puts that suite at 0.29 s and the whole run at 17.7 s. A sleep, not a
+  hang — the fourth power/sleep incident this project has recorded.
+- **A merge was already half-done when the closing run reached it.** An interrupted prior run had started
+  `git merge --no-ff visuals-c` on 2026-09-20 22:00 and died at 07:00 with three `UU` files whose conflict markers
+  had been removed but not staged. It was continued rather than aborted, because `--abort` would have been a reset
+  over uncommitted work. No NUL corruption, no truncation, no leftover markers.
+- **My own task text was stale on arrival.** It named `main` at `27aac4a` with track B on 6.1-6.2; the repository was
+  eight commits further on with all twelve steps committed. Read the repository first, not the brief.
+
+**Decision:**
+- **K14 recorded, not fixed.** Step 81 kept the port's draw order — the shot a quarter slot in FRONT of the player —
+  and left it to "whoever lands second", naming 6.3's table. Track A then landed R10 (the player at the decoded z 4,
+  where the shot is at z 0, so the original draws the shot behind it) and 6.3 built the table, and neither closed it;
+  step 88's merge note does not mention K14. The merged call site is still `slotAt(m_playerSlot, Slot::ShotPicture)`
+  at `MagicPortalsLayer.cpp:4349` with that class at +0.25. It is now an open row in `docs/parity-backlog.md`. I did
+  not touch the code: a layer edit would have relinked the binary the merge's 128-level sweep is measured on, for a
+  change no capture in this session could gate.
+- **Nothing rebuilt, nothing launched, nothing captured this session.** The close needed none of it, and every launch
+  risks a notification. The only commands run were git, grep and reads.
+- **Two rulings are still the owner's**, escalated by step 76 and unresolved: **R24** (a patrol arrives at the
+  entity's point, 18.1 u over the feet, where the levels put waypoints — not the body's centre) and **R25** (a
+  carrier has one point, the same one). Both change gameplay on the 35 minion levels, and 7.3's first deviation is
+  R25 again, 4 u high on a teleporting player. R22 and R23 were not built, by instruction.
+- The backlog's per-step Outcome cells are written from each step's own RECORDED DEVIATIONS section rather than
+  re-derived, and say so. Six gate rows across the run are NOT MET as written and recorded rather than tuned: two in
+  5.1, one in 5.2, three in 7.2.
+
+**Assets check:** yes — `git status --short`, run after appending this entry, lists exactly ` M DEVLOG.md` and
+` M docs/parity-backlog.md`, and nothing under `reference/` or `out/`. The forbidden-extension grep
+(`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, plus `^out/` and `^reference/`) over
+`git diff --cached --name-only` printed nothing before the commit. I also ran it over every one of the run's 20
+commits (`27aac4a..a5c9e23`): nothing.
+
+**[CLIP] —** None.
+**[BROLL]** — None.
+
+**Numbers:** 20 commits, `27aac4a..a5c9e23`, 62 files, +13,995 / −384. Twelve plan steps closed (76-87) plus the
+merge (88); the planning doc grew 12,720 → 15,817 lines. Full `ctest` on the merged build: **45 of 45 passed, 0
+failed, 17.7 s**. The 128-level f420 sweep: **128 of 128 rc=0**, Vulkan validation active in 128 logs with no
+validation message; merged frames match track B inside its pictures on all 128 and track A outside them on 126, the
+two exceptions being 2-32's 3,616 px dragon-mouth blob (the K8 move) and 15 single-RGB565-step pixels on 4-14 that
+neither track produces alone. Suite counts at the merge, each run once: `test_mp_layer` 1593, `test_mp_sprites` 912,
+`test_mp_lighting` 510, `test_mp_effects` 285, `test_mp_dragon` 230, `test_mp_play` 205, `test_mp_motion` 167,
+`test_mp_statics` 106, `test_mp_darkdragon` 99, `test_mp_launchers` 98, `test_mp_turrets` 40 — 0 failures each.
+Build 0 warnings throughout (MSVC /W4, Release, Ninja, validation on). Smart App Control: 25 refused launches. Engine
+submodule: unchanged at `4bfcf67`, which is the engine's own `origin/main` — no engine gap was hit in twelve steps.
+Of the visuals plan, batches 0-7 are closed plus 13.2 and 13.4; about 18 steps remain (8.1-8.4, 9.1-9.3, 10.1-10.4,
+11.1-11.4, 12.1, 12.2, 13.1, 13.3).
+
+**Inferred mood:** a guess from the facts — grinding but genuinely productive. Two tracks ran clean for twelve steps
+with no engine change and no lost work, which is the best this project has done; the cost was 25 Smart App Control
+notifications, one fireball step that took three verification rounds to get its own record straight, a laptop that
+slept through a test run again, and a merge someone had to pick up half-finished.
