@@ -371,8 +371,9 @@ public:
     // itself wrong: the original's escort is spawned by a dying minion and shares
     // its depth.
     //
-    // The rows below are in the order the layer ADDS their quads, which is the
-    // nearest thing the port has to the same rule: the dials, then the rings,
+    // The rows that share a fraction are in the order the layer ADDS their
+    // quads, which is the nearest thing the port has to the same rule: the
+    // dials, then the rings,
     // then a weightless room's door glow in buildSprites, the halos in
     // buildLights after it, then a tick's syncDrawables (a thrown stone),
     // syncBoss (the beholder, its spikes), syncMinions (a minion, then an
@@ -396,7 +397,26 @@ public:
     // the portal's systems, 0.6 and 0.61 for the vanish), because no level's
     // slots exist while it is up. And the black bars round the scene stand at
     // kLayerableTopZ, below: in front of everything, not between two slots.
+    //
+    // THE SHOT (00_order K14, the visuals plan's 10.1) stands at the FRONT of the
+    // gap after the level's pictures at or below its z of 0 and BEHIND everything
+    // else in it: addProjectile adds it at z 0 (#16-40), after the level, so it
+    // is drawn over every picture of the level at 0 or below; but the player R10
+    // puts at 4 (1.42), and a minion at its raw 2 (0.711), stand at larger z and
+    // are drawn over it, and they share its gap wherever no node stands between
+    // 0 and them - so the shot takes a fraction of its own below their -0.5, and
+    // its halo one after its picture (Ethanon draws an entity's sprite, then its
+    // halo, at the entity's own z: ETHEntityRenderingManager.cpp:74, 85). Both
+    // stay in front of the previous slot's own halo (-0.75) and particle systems
+    // (up to -0.5 - 0.25 / (n + 1) for n of them; the most any entity carries is
+    // 2, whose last stands at -0.583), which is pinned in test_mp_layer. It was a
+    // quarter IN FRONT of the player's slot until step 123: K14. The price of a
+    // table that orders by class and not by z: a -0.5 class whose own z is BELOW
+    // 0 - a dial, a ring, a door glow, a spike, a wall's ghost - is drawn over
+    // the shot where the two share a gap, where the original draws it under.
     enum class Slot {
+        ShotPicture,    // the portal shot, at the z 0 addProjectile gives it, behind the player
+        ShotHalo,       // the shot's halo, after its picture and still behind the -0.5 classes
         TimerDial,      // a timed crystal's dial, its crystal's z_index - 2 (art.json timer)
         WellRing,       // a gravity well's green ring, at the -5 its AddEntity gives it
         DoorHighlight,  // the glow behind a weightless room's shadowless door, at its own -22
@@ -413,9 +433,7 @@ public:
         EffectSystems,  // and its particle systems, spread over the quarter after that halo
         Picture,        // a level's own picture, and the player's: the slot itself
         Halo,           // a light's halo, a quarter in front of its owner's picture
-        ShotPicture,    // the portal shot, a quarter in front of the player
         Systems,        // an entity's particle systems, spread over the quarter after its halo
-        ShotHalo,       // the shot's halo, in front of the shot
         Count
     };
     struct SlotRow {
@@ -435,6 +453,8 @@ public:
         bool spreads;
     };
     static constexpr std::array<SlotRow, static_cast<std::size_t>(Slot::Count)> kSlotTable{{
+        {Slot::ShotPicture, "shot", -0.515625, false},
+        {Slot::ShotHalo, "shot halo", -0.5078125, false},
         {Slot::TimerDial, "timer dial", -0.5, false},
         {Slot::WellRing, "gravity well ring", -0.5, false},
         {Slot::DoorHighlight, "door highlight", -0.5, false},
@@ -451,9 +471,7 @@ public:
         {Slot::EffectSystems, "effect particle systems", -0.25, true},
         {Slot::Picture, "picture", 0.0, false},
         {Slot::Halo, "halo", 0.25, false},
-        {Slot::ShotPicture, "shot", 0.25, false},
         {Slot::Systems, "particle systems", 0.25, true},
-        {Slot::ShotHalo, "shot halo", 0.5, false},
     }};
     static constexpr double SlotFractionOf(Slot slot) {
         return kSlotTable[static_cast<std::size_t>(slot)].fraction;
@@ -1109,9 +1127,16 @@ private:
     // original hides its effects with rather than deleting them.
     bool effectOwnerPoint(const entt::registry& registry, const EffectOwner& owner, glm::dvec2& atPx,
                           bool& hidden) const;
-    // What the TICK adds to the frame's queue. Nothing is wired yet: the rules
-    // arrive with the steps that draw each effect.
+    // What the TICK adds to the frame's queue, each rule wired by the step that
+    // draws it.
     void latchSimEffects();
+    // What a tap the shot was offered leaves behind (the visuals plan's 10.1),
+    // queued the moment Portals::State::Shoot returns: the mark a fired shot
+    // leaves at the tap - red_cross or portal_mark by computePortalFinalPos's
+    // willDie (R15), and red_waves (A) where that adds them - the hourglass for a
+    // tap refused while a shot flies, and red_waves (B) with its shake for one
+    // refused for a budget of 0 on a level with the no-portal sign.
+    void queueTapEffects(entt::registry& registry);
     // Every placed portal, drawn as insertPortal adds it and killed as
     // ETHCallback_portal kills it: the summon bubble and the portal itself on a
     // new id, the manager's colour each frame, and on an id's disappearance the
@@ -1645,6 +1670,9 @@ private:
     // this one, so a fireball spat on a tick that did not reach the latch - one
     // under a pause, whose BeforeStep still runs - is picked up on the next.
     std::vector<std::string> m_fireballEffects;
+    // How many of the ghost's shots have had their portal_mark (addEnemyShoot),
+    // -1 until a level's first latch sets the mark, as the watches do.
+    int m_ghostShotsMarked{-1};
     // The cell the player was last drawn on, kept across the door: updateEyes
     // reads GetFrame every frame, and the quad it comes from is destroyed when the
     // character is hidden.

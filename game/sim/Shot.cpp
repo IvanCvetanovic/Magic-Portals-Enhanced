@@ -144,11 +144,47 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 
 namespace {
 
-// What the segment from `fromPx` to `toPx` meets first, other than `ignore`.
-// `sensors` lets a trigger be met; `fromInside` lets a body the segment starts
-// inside (or on) be met at once, at 0.
-std::optional<Hit> Meets(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx, entt::entity ignore,
-                         bool sensors, bool fromInside) {
+// Every body's shape in the plane, turned with its entity, handed to `visit`
+// with the body - a box's four corners, a hull's outline, or a sphere's centre
+// and radius - skipping the bodies in `ignore` and, unless `sensors`, every
+// trigger. One walk for the three questions below, in the registry's order:
+// boxes, then spheres, then hulls.
+template <class Polygon, class Circle>
+void EachShape(entt::registry& registry, std::span<const entt::entity> ignore, bool sensors, Polygon&& polygon,
+               Circle&& circle) {
+    const auto ignored = [ignore](entt::entity entity) {
+        return std::find(ignore.begin(), ignore.end(), entity) != ignore.end();
+    };
+    for (auto [entity, transform, box] : registry.view<TransformComponent, BoxColliderComponent>().each()) {
+        if (ignored(entity) || (box.isTrigger && !sensors)) continue;
+        const Frame frame(transform);
+        const dvec2 centre(box.center.x, box.center.y);
+        const dvec2 half(box.size.x * 0.5, box.size.y * 0.5);
+        const std::vector<dvec2> corners{frame(centre + dvec2(-half.x, -half.y)), frame(centre + dvec2(half.x, -half.y)),
+                                         frame(centre + dvec2(half.x, half.y)), frame(centre + dvec2(-half.x, half.y))};
+        polygon(entity, corners);
+    }
+    for (auto [entity, transform, sphere] : registry.view<TransformComponent, SphereColliderComponent>().each()) {
+        if (ignored(entity) || (sphere.isTrigger && !sensors)) continue;
+        const Frame frame(transform);
+        circle(entity, frame(dvec2(sphere.center.x, sphere.center.y)), static_cast<double>(sphere.radius));
+    }
+    for (auto [entity, transform, hull, outline] :
+         registry.view<TransformComponent, ConvexHullColliderComponent, LevelBuilder::PlanePolygon>().each()) {
+        if (ignored(entity) || (hull.isTrigger && !sensors)) continue;
+        const Frame frame(transform);
+        std::vector<dvec2> points;
+        points.reserve(outline.points.size());
+        for (const glm::vec2& point : outline.points) points.push_back(frame(dvec2(point)));
+        polygon(entity, points);
+    }
+}
+
+// What the segment from `fromPx` to `toPx` meets first, other than the bodies in
+// `ignore`. `sensors` lets a trigger be met; `fromInside` lets a body the segment
+// starts inside (or on) be met at once, at 0.
+std::optional<Hit> Meets(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
+                         std::span<const entt::entity> ignore, bool sensors, bool fromInside) {
     const dvec2 a = Metres(fromPx);
     const dvec2 b = Metres(toPx);
     std::optional<Hit> first;
@@ -156,30 +192,12 @@ std::optional<Hit> Meets(entt::registry& registry, const glm::dvec2& fromPx, con
         if (!along || (!fromInside && *along <= 0.0)) return;
         if (!first || *along < first->along) first = Hit{body, *along};
     };
-
-    for (auto [entity, transform, box] : registry.view<TransformComponent, BoxColliderComponent>().each()) {
-        if (entity == ignore || (box.isTrigger && !sensors)) continue;
-        const Frame frame(transform);
-        const dvec2 centre(box.center.x, box.center.y);
-        const dvec2 half(box.size.x * 0.5, box.size.y * 0.5);
-        const std::vector<dvec2> corners{frame(centre + dvec2(-half.x, -half.y)), frame(centre + dvec2(half.x, -half.y)),
-                                         frame(centre + dvec2(half.x, half.y)), frame(centre + dvec2(-half.x, half.y))};
-        consider(entity, IntoPolygon(a, b, corners));
-    }
-    for (auto [entity, transform, sphere] : registry.view<TransformComponent, SphereColliderComponent>().each()) {
-        if (entity == ignore || (sphere.isTrigger && !sensors)) continue;
-        const Frame frame(transform);
-        consider(entity, IntoCircle(a, b, frame(dvec2(sphere.center.x, sphere.center.y)), sphere.radius));
-    }
-    for (auto [entity, transform, hull, outline] :
-         registry.view<TransformComponent, ConvexHullColliderComponent, LevelBuilder::PlanePolygon>().each()) {
-        if (entity == ignore || (hull.isTrigger && !sensors)) continue;
-        const Frame frame(transform);
-        std::vector<dvec2> points;
-        points.reserve(outline.points.size());
-        for (const glm::vec2& point : outline.points) points.push_back(frame(dvec2(point)));
-        consider(entity, IntoPolygon(a, b, points));
-    }
+    EachShape(
+        registry, ignore, sensors,
+        [&](entt::entity body, const std::vector<dvec2>& points) { consider(body, IntoPolygon(a, b, points)); },
+        [&](entt::entity body, const dvec2& centre, double radius) {
+            consider(body, IntoCircle(a, b, centre, radius));
+        });
     return first;
 }
 
@@ -187,12 +205,35 @@ std::optional<Hit> Meets(entt::registry& registry, const glm::dvec2& fromPx, con
 
 std::optional<Hit> FirstBody(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
                              entt::entity ignore) {
-    return Meets(registry, fromPx, toPx, ignore, false, true);
+    return Meets(registry, fromPx, toPx, std::span<const entt::entity>(&ignore, 1), false, true);
 }
 
 std::optional<Hit> ClosestContact(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
                                   entt::entity ignore) {
+    return Meets(registry, fromPx, toPx, std::span<const entt::entity>(&ignore, 1), true, false);
+}
+
+std::optional<Hit> ClosestContact(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
+                                  std::span<const entt::entity> ignore) {
     return Meets(registry, fromPx, toPx, ignore, true, false);
+}
+
+std::vector<entt::entity> BodiesAt(entt::registry& registry, const glm::dvec2& atPx) {
+    // A segment of no length from the point, allowed to start inside: a shape
+    // that holds the point is met at 0, and one that does not is not met at all
+    // (IntoPolygon returns none as soon as the point is outside an edge;
+    // IntoCircle returns 0 inside and none outside, having no length to travel).
+    const dvec2 p = Metres(atPx);
+    std::vector<entt::entity> held;
+    EachShape(
+        registry, std::span<const entt::entity>(), true,
+        [&](entt::entity body, const std::vector<dvec2>& points) {
+            if (IntoPolygon(p, p, points)) held.push_back(body);
+        },
+        [&](entt::entity body, const dvec2& centre, double radius) {
+            if (IntoCircle(p, p, centre, radius)) held.push_back(body);
+        });
+    return held;
 }
 
 std::optional<double> Enters(const glm::dvec2& fromPx, const glm::dvec2& toPx, const Trigger::Box& box) {

@@ -16409,3 +16409,193 @@ launch. The committed binary `628400a9` was not launched: the before frames are 
 - For the merge's renumbering: "step 122" is written in 6 places outside this document - `game/data/art.json` (2),
   `tests/test_mp_sprites.cpp` (2), the heading of the bars' cases in `tests/test_mp_layer.cpp`, and
   `docs/ethanon-formats.md`.
+
+## Step 123 - the marks a tap and a shot leave where the original adds them, and the shot drawn behind the player (built)
+
+**TRACK B: the visuals plan's step 10.1** (the remake's `out/parity/visuals/briefs/00_order.md` section 7, as section
+8.13's 10.1 row amends it: D3 closed, R15 and F3 left), and **K14** (the backlog row "Order 6.1 deviation, K14").
+Sources: decode `decode/D3.md` with `D3_check.md`, which wins where they differ (00_order section 8.4); `system_7.md`
+7d-2; footage F3 (`out/parity/footage/F3.md`) as the visual check. Built in the worktree `Magic-Portals-Remake-vis4`
+(branch `visuals-d`, from `3003e04`, step 122), whose build reads the frozen level data in `out/snap_pre8`; numbered in
+track B's range, and the merge renumbers it. Changed: `game/sim/Portals.{hpp,cpp}`, `game/sim/Shot.{hpp,cpp}`,
+`game/sim/Effects.{hpp,cpp}`, `game/sim/Earthquake.{hpp,cpp}`, `game/MagicPortalsLayer.{hpp,cpp}`,
+`game/data/{placement,effects,earthquake,art}.json`, and `tests/test_mp_{shot,effects,camera,layer}.cpp`. No engine
+change (the pin stays `4bfcf67`), no converter change, no format finding (so no `docs/ethanon-formats.md` entry).
+**GAMEPLAY: NONE** - the argument and the measurements are below.
+
+**BLOCKERS, checked first.** 8.13's row removes D3 and leaves R15 and F3. R15 is the owner's standing ruling (R1-R23
+decided as the original does): the mark is chosen at the tap from a tap-time willDie at absTouchPos, a picture choice
+only. F3 exists (the main take `a2` and the bracket `a1`). The effects runtime is step 83's, the between-slot table
+step 83's with step 88's merge, the earthquake step 121's, and `--tap` fires a shot (steps 87 and 120). The listing is
+the md5 the decodes cite (`48fe65ce...`). Nothing unmet. **Decided up front for the R23 overlap** (the run's
+instruction, recorded as such): this step changes no gameplay; the hourglass is drawn on the port's own in-flight
+refusal WITHOUT restarting the 400 ms clock; red_waves (B) and its shake are feedback only; and
+portal_fail_in_antiportal is drawn only where the port's simulation already ends the shot.
+
+**WHAT THE ORIGINAL DOES** (the listing; `effects.json` and `placement.json` carry each call with its instructions).
+- **The tap.** `PortalManager::update` returns before either tap path while the level is younger than 300 ms; a
+  budget of 0 goes to `blockPortalEffects` (red_waves (B) at the tap and `startEarthquake(7, 40)` while the cached
+  `no_portal_sign.ent` exists - 1-15, 2-07, 2-28 - with no 400 ms gate); otherwise `managePortalInsertion` holds a tap
+  off for 400 ms in silence, restarts that clock, and adds `hourglass.ent` at the tap while a `projectile.ent` still
+  flies. A shot that fires calls `computePortalFinalPos` first (red_waves (A) at the aim when its ray meets nothing
+  and the aim is in a field) and `addProjectile` second: `red_cross.ent` at the tap when willDie, `portal_mark.ent`
+  otherwise, both at `scale(32)`.
+- **willDie** (`computePortalFinalPos`, the global 355236..356384 and the method 141090..142200): one
+  `GetClosestContact` from the caster + 8 along the aim, every body a sensor as well as a solid one but the nine names
+  of its ignore list; nothing met -> doomed only if the aim is in a field; met first a static or non-teleportable body
+  -> doomed (never for a reflected shot, which lands 10 short); a contact inside a field -> doomed; else it opens 10
+  past a body it may open on. Then the head-height retry, from 30 over the character and 6 back off the aim, when the
+  first ray failed or ended on such a body with nothing at the tap, and nothing but that body over the head; its
+  willDie overwrites the first's whatever it is (D3_check B). The retry's two tests are `EntityGrabber(point, 0,
+  grabAllObstacles)`, which this step read to its end (EntityGrabber::EntityGrabber 23924..24990 #66-212, D3's open
+  item: a circle body holds the point within half its box plus the radius, any other the turned box at its size;
+  `grabAllObstacles` 361404..361475 returns true for every entity). With a fire diamond carried the method casts no
+  ray and willDie is the low byte of `absTouchPos.x`'s float bits (#21-64, D3).
+- **The shot's end** (`ETHCallback_projectile`): on its first frame it jumps 24 along its direction and adds
+  `projectile_shoot.ent` there (#29-71); a doomed shot's arrival adds `portal_fail.ent` at (destiny, scale(32)) with
+  no shake outside a field, and `portal_fail_in_antiportal.ent` at (destiny, 0) with `startEarthquake(5, 0)` inside
+  one. `ETHCallback_anti_projectile_wall` kills a shot in flight with the same red end and shake. A reflection
+  (`ETHCallback_reflect_agent`) re-runs the global as a reflected shot, marks the new end and flashes where the old
+  shot was. An enemy's shot (`addEnemyShoot`) adds `portal_mark.ent` at its finalPos, the character's position as
+  `ETHCallback_ghost` passes it.
+
+**THE CHANGE.**
+1. **`Portals` (sim), pictures' records only.** `InField` is `TryPlace`'s zone loop, factored out unchanged.
+   `FinalPosFrom` is the global and `Predict` the method, run on the port's world: the port's colliders (triggers
+   included) less the shooter and the bodies the ignore list names (`rayIgnored`, filled by `Find` from each node's
+   entity name, spelled exactly); static = no dynamic rigid body; teleportable = one of `travellers`; the fields =
+   the zones the port plays (`InField`). `FireDiamondWillDie` is the leftover-byte rule. `Shoot` writes `lastTap`
+   (the reason, in the original's order: NoShooter, TooEarly, NoBudget, Cooldown, InFlight, Fired) on every call and
+   returns exactly what it returned; no clock moves on a refusal. `Tick` writes this tick's `launches` (a leg's first
+   tick), `reflected` (with the reflected `FinalPos`) and `failures` (Body, Blocker or Refused, and whether the point
+   is in a field), cleared at its start as `transits` is. `Find` also sets `noPortalSign`. 8.13's third reason,
+   field_clear_ray, is not a refusal in either game (the shot fires): it rides on the `FinalPos` a fired tap or a
+   reflection is given (`redWaves`), not on `TapReason`. Nothing in the simulation reads any of it.
+2. **`Shot`**: `ClosestContact` over a span of ignored bodies, and `BodiesAt` (the grabber). `FirstBody`, which the
+   flight uses, walks the same shapes in the same order through one shared helper.
+3. **`Effects` / `effects.json`**: eight rows (`projectile_shoot` with its 24 along the direction,
+   `projectile_shoot_reflected`, `portal_mark`, `red_cross`, `hourglass`, `red_waves`, `portal_fail`,
+   `portal_fail_in_antiportal`), strict; `Effects::At` and `Effects::ProjectileShoot`.
+4. **`placement.json`**: `final_pos` (8, the ignore list, 10, (0, -30), 6) and `no_budget` (`no_portal_sign.ent`),
+   strict. **`earthquake.json`**: rows 2, 6 and 14 wired (`no_portal_tap` 7 before the update, `shot_blocked` 5 after,
+   `shot_failed_in_field` 5 before); row 3 stays unwired (the port kills no shot on an anti_portal_agent).
+5. **The layer.** `queueTapEffects`, right after `Shoot` in `readInput`: red_waves (A) then the mark for a fired tap
+   (or the fire-diamond byte), the hourglass for InFlight, red_waves (B) and `QueueQuake(NoPortalTap)` for NoBudget
+   with the sign; silent otherwise. `latchSimEffects`: `projectile_shoot` per launch; per reflection red_waves (A),
+   the mark at the clipped end and the old shot's flash; per failure `portal_fail_in_antiportal` for a blocker or a
+   point in a field, else `portal_fail`; and the ghost's new shots' `portal_mark`. `latchSimQuakes`: rows 14 and 6.
+   One log line per tap, refusal and end, so a capture can be traced.
+6. **K14, the shot's depth.** `Slot::ShotPicture` -0.515625 and `Slot::ShotHalo` -0.5078125, now the table's first two
+   rows, drawn at `slotAfter(shot.z = 0)`: after every level picture at 0 or below, behind the player (R10's 1.42) and
+   behind a minion at its raw 2 (0.711) where they share the gap (the table's -0.5), in front of the previous slot's
+   halo (-0.75) and deepest particle system (-0.583 for the 2 systems any entity carries; pinned to 14). Were
+   +0.25/+0.5 at the player's slot. `art.json`'s note on the shot's z says so.
+
+**THE GATES.** Before = the committed build `fe2d2dd1` (step 122's): its 128-level sweep `13.3/after/sweep` (128 of
+128 pngs re-checked against their logged md5s) and this step's gate runs on it, taken before any edit
+(`10.1/before/gates`; its 1-01 f420 probe reproduces `e2da5131`). After = this step's build `52229f13`. Captures,
+scripts and measurements: `out/parity/visuals/10.1/` (`capture_gates.sh`, `capture_sweep.sh`, `compare_sweep.sh`,
+`measure_gates.py`, `measure_k14.py`, `measure_rest.py`, `census_disagree.py`, `sheets.py`; `after/gates_measured.json`,
+`after/k14/`, `after/rest.json`, `after/sheets/`). All `--window 1280x720 --fixed-step`, every frame; each gate run is
+the same deterministic run before and after, so what differs is this step's.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** on the final text of every source. The first build (`build1_game.log`) warned once, C4458 in `Portals.cpp` (a parameter named `reflected` hid the new member); renamed `hasBeenReflected` and rebuilt with 0 (`build2_all.log`, 33 objects; its only errors were a test's ambiguous `entt::null`, fixed in `build3_all.log`). Every later build was a relink or one test object, 0 warnings each (`build4`-`build8`; the last compiled `test_mp_layer.cpp` with the two cases the verification asked for) |
+| (1) `test_mp_layer`: a failed shot into a 1-7 wall gives `portal_fail` at z 32 with one light | the red end, z 32, one light | no effect | **passes** (`AShotIntoA17WallEndsInPortalFail`): F3's wall tap (160, 112) u; `red_cross` at the tap, z 32; `projectile_shoot` 24 out along the shot on its first tick, z 0; the port's shot stops on a body at (138.92, 128.00); exactly one `portal_fail` there, z 32, a light of range 58, NO halo (the .ent names no `<HaloBitmap>`), temporary; no `portal_fail_in_antiportal`; and no shake |
+| (2) `test_mp_layer`: a 1-7 antiportal tap gives `_in_antiportal` at z 0 | the red end, z 0 | no effect | **passes** (`AnAntiportalTapOn17EndsRedAtZeroAndShakes`): a tap at (259.911, 194.844) u, 28 u from `antiportal_687`, inside the 16 x 3 = 48 u the port plays; `red_waves` (A) and `red_cross` at the tap, z 32, the waves added first; the port refuses it where it arrives; one `portal_fail_in_antiportal` there, z 0 (its system's own StartPoint z 20 in front of the player), a light of range 66, no halo; `shot_failed_in_field`'s 5 lands before the update on the arrival's own tick |
+| (3) The rest of 8.13's contents, in `test_mp_layer` | each drawn where the decode puts it | none | **passes**: F3's long shot - `portal_mark` at the tap, the kill by `anti_projectile_wall_ent_743` at its box's edge x 281.00, `portal_fail_in_antiportal` there, z 0, and `shot_blocked`'s 5 after the update (a first shake on the next tick, 1.75 u); the hourglass on 1-04 on a tap 500 ms after the last one taken while the shot flies, at the tap, z 32, no second shot, and `sinceTapMs` running on through the tap (+16.667 ms, not reset); a tap 167 ms after the shot fired, silent; red_waves (B) on 1-15 on two taps 10 ticks apart, z 32, each with `no_portal_tap`'s 7 before the update, and 1-01 (budget 0, no sign) silent; the ghost's shot on 3-32 marked with `portal_mark` at the point it aims at, (400.00, 202.33); a shot turned by 1-12's `reflect_agent_761` at (166.17, 148.05) - the old shot's flash there, `portal_mark` at the new leg's end (233.50, 187.27) where the port then opens its portal, and the new leg's own flash on the next tick, 24 out along its way; and a tap on 3-32 with the fire diamond carried, whose mark is the leftover byte's (x 416 u = 1170 px, the byte clear: `portal_mark`), with no waves, and no flash as the port orders it (the shot a fireball before it flies; whether the original flashes is undecoded, deviation 10). `test_mp_layer` **1865 checks, 0 failures** (1765 at step 122) |
+| (4) The tap-time ray, unit-tested | computePortalFinalPos as decoded | - | **passes: `test_mp_shot` 181 checks, 0 failures** (90 at its last record; every earlier case passes as it did). The decoded constants and ignore list; on 1-07 F3's four taps (wall: doomed, the ray meeting the body the port's flight meets, within 1 u of the flight's contact; long shot: clear, the blocker invisible to the ray; in the field: doomed with red_waves (A); outside: clear) with one launch each on the shot's first tick and the end the port records; the retry clearing a low box from over the head (red_cross -> portal_mark) and dooming a shot a crate let through (D3_check B), a reflected shot at a wall landing 10 short, the grabber holding a sensor, the ignore list passing one, a ray never meeting what it starts inside; the fire-diamond byte (450.0 -> 0, 450.3 -> 0x66); the reasons in the original's order with no clock moved; and a reflection's record (one turn, a second launch on the next tick) |
+| (5) F3, the visual check, on the `--tap` captures of 1-07 (F3's sequence) | the original's picture at each event | no mark, no end, no shake (every frame to f39 identical to the after) | **matches F3 at every event it can play** (`after/gates_measured.json`, `after/sheets/`). The wall and long taps fall inside the level's fade-in (1-07's mean brightness 8 of 255 on f40, about 35 on f53, settled only by about f100), so up to about f100 the events are compared by place and time, not by colour. red_cross at the wall tap on the tap's own frame, box centre (449.5, 316.5) px against F3 #28's (450, 315); `portal_fail`'s burst centred (397.8, 361.5) px against F3 #37's about (390, 350), dimmed to grey by the fade (its core at most 92 of 255 on f53; F3's is white then violet), no shake on any frame (F3: none); `portal_mark` at the long shot's tap on its frame, centroid (1098.2, 448.5) against (1100, 450); the blocker's red dot at (790.2, 486.1) against F3 #102's about (820, 480) (deviation 3); red_waves and red_cross at the in-field tap from its frame, (732.0, 546.5) against the tap (731, 548), the waves reddening over it (F3 #152-157); on arrival the red end and a world shake of -4.76, +4.78, -2.06, +2.08, -0.86, +0.87 px (decode 4.92, 4.92, 2.46, 2.46, 1.23, 1.23; F3 #161-171: -5, +5, -2, +2, -1, +1); the blocker's shake one tick after its kill, the same sequence; `portal_mark` at the outside tap, (537.0, 540.1) against (537, 540). F3's in-field taps at 94.9 u are OUTSIDE the port's field (R1 not built), so the port's own in-field tap is 28 u in |
+| (5b) `projectile_shoot` and `portal_mark` against the footage's own measurements (F2 sections 4.2-4.3; F3 #28, #81, #150, #207) | the .ent's picture as F2 measured it | nothing | **matches, as the step's verification measured it** (its crops `verify1/crops/f3_launch_sheet.png` and `grid_*.png`; not re-measured for this record): `portal_mark` 11 dots turning +90.6 deg/s counter-clockwise, its ring's radius shrinking about 5.8 px/s (F2: 11 dots, +93 deg/s CCW, -6.16 px/s = -6.35 u/s of quad; the .ent's 90 deg/s and 6 u/s); `projectile_shoot`'s quad growing about 149 u/s (F2: 152.1 and 150.9; the .ent's 162), its centre 36.5 px below the eye against F3 #208's 35 px |
+| (6) The hourglass capture | at the tap, no shot | nothing | **passes** on 1-04 (1-07 cannot carry one: its longest clear flight reaches the blocker 240 u out in 24 ticks at the port's 600 u/s guess, inside the 400 ms): from the tap's frame f70, centroid (297.5, 298.9) px against the tap (300, 300); its box, measured the same way on both (the pixels that differ by more than 20 of 255, the verification's measure), 44 x 64 px on f70, 54 x 80 on f94 and 56 x 84 on f100 against F3's 45 x 63 on #93 and 56 x 82 on #100; gone by f109 (F3 #93-#105: gone in about 0.5 s) |
+| (7) red_waves (B) capture | waves and shake 7 on 1-15 | nothing | **passes as decoded; NOT RUN against the original** - no clip shows 1-15, 2-07 or 2-28 (8.13's F3 row). Waves at both taps; the world moved -6.90, +6.92 (first tap), -6.90, +6.92, -3.29, +3.35, -1.75, +1.78 px (the second tap's 7 re-armed on a forth; decode 6.89, 6.89, 3.45, 3.45, 1.72, 1.72) |
+| (8) K14: the shot behind the player, with a `--tap` capture of a shot leaving the player where they overlap | the shot and its halo behind the player | a quarter slot in front: the shot's white blob over the mage's body (1-07 f200 and f290) | **passes.** Registry: -0.515625 / -0.5078125 of a slot behind the player on level1, -1.515625 on level22a (its z-1 platform between), and behind it on the five frames the shot leaves 1-04's player (`TheShotLeavesFromBehindThePlayer`). Capture, 1-07 at full brightness, the taps of ticks 200 and 290, each frame with the shot at the player: **5,518 and 5,502 px differ inside the player's box (x 50-250, y 480-640 px), EVERY ONE darker in the after** - before, the shot's white blob is drawn over the mage's body; after, the body covers it and only its blue sparks show at his back, as F3 #27 and #206 show the original (sparks at the back, nothing over the body); `projectile_shoot`, at the shot's 0 plus its own 4, is still drawn over the mage, as in F3 #28-32 (the verification's `verify1/k14_crops.py`, re-counted for this record). Secondary, inside 1-04's fade-in (mean 8 of 255 on f40): f40 differs in 6,304 px, 5,085 of them inside the player's cell box, every one darker (mean 6.5 of 255 over them), the other 1,219 the tap's `portal_mark`, and 0 anywhere else (`after/k14/player_f40.png`) |
+| (9) The 128-level f420 sweep | changes explained | `13.3/after/sweep` | **passes: 128 of 128 byte-identical** (`10.1/after/compare_sweep.txt`), 0 differ, 0 missing; all 128 exit 0, `Vulkan validation layers: ACTIVE` in 128 logs and no validation message in any, every png matching its log line (`10.1/after/capture.txt`, binary `52229f13`). The sweep holds no input: no level's log names a tap, a refusal or a shot's end, and 3-32's has no earthquake line (no ghost shot ended before f420), so there is no change to explain; the shot's new depth shows only where a shot flies |
+| (10) The refused-tap record is new output, not gameplay: replays unchanged | `test_mp_play` as before | 205 | **passes: `test_mp_play` 205, 0 failures**, and the other eight suites whose sims take a tap or fly a shot give the counts they gave before: `test_mp_demolish` 133, `test_mp_diamonds` 126, `test_mp_wells` 98, `test_mp_zerog` 88, `test_mp_torch` 123, `test_mp_statics` 106, `test_mp_boss` 126, `test_mp_movers` 53, 0 failures each |
+| (11) K8 (the inherited reading: the placement stream untouched) | no level particle moved | - | **passes**: the new effects draw on `m_effectRandom` alone, and `AnEffectMovesNoParticleOfTheLevels` (6.3's check) passes in the 1865. On the gate runs the pixels that change away from the new pictures are the player's eyes (58-93 px on 1-07 f380-400) and a placed portal's spiral (13,750-15,076 px), both on the effects' stream, and a few near 1-07's torch and door (10-23 px a frame): outside the 12 shake frames every one of those is at most 10 of 255, mostly 4 and 8. That they are the display's quantisation steps, flipped by an entity's draw order, is a reading and NOT shown; the evidence that no particle moved is the K8 test above and the byte-identical sweep of (9) |
+| (12) The suites | the touched suites pass | see (3), (4), (10) | **pass, 0 failures each**: `test_mp_effects` **308** (285), `test_mp_camera` **103** (100), `test_mp_shot` 181, `test_mp_layer` 1865, and the nine of (10) |
+| No gameplay change | nothing the simulation reads moves | - | **passes**: `Shoot`'s results and clocks are exactly as before (`ATapSaysWhyItWasRefused` and the hourglass case pin that an in-flight refusal leaves `sinceTapMs` running), `TryPlace` refuses by the same loop, `Tick` flies and ends every shot as before and only records it, and the layer reads the records; (10)'s suites and the sweep say the same. The records stay in `Portals::State`, out of the registry; the only new registry entities are the effects' quads, made on the frame ("nothing is added on the tick" is pinned), and they follow step 83's convention: live entities that the engine's `StateHash` (`engine/src/core/StateHash.hpp`, which `SupersonicApp`'s replay checkpoints compute) would walk, as it would every effect since step 83; no replay is committed |
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **The hourglass does not restart the 400 ms (R23).** The original's `managePortalInsertion` resets its clock before
+   the hourglass test, so a tap within 400 ms of an hourglass tap draws nothing there; the port's in-flight refusal
+   leaves the clock alone, so a second hourglass can come sooner. The run decided it; R23 is the owner's.
+2. **The mark follows the original's ray; the port's shot follows the port's flight, and the two can disagree** (R15
+   says as much: a tap-time prediction matches the original for the mark only). Census over the 128 frozen levels
+   (`census_disagree.json`): a sensor on no ignore list - 46 buttons (37 levels), 4 `destroyier.ent` (3), 1 anchor -
+   dooms the shot at the tap (red_cross) where the port's flight passes through it and may open a portal; a
+   teleportable dynamic body - 116 placed (62 levels) and 60 minion spawns (35) - lets the ray through (portal_mark,
+   the original opening on it) where the port's flight stops on it (portal_fail); the head-height retry can clear a
+   low obstacle the port's flight still hits, or doom a shot it lets through (both pinned in `test_mp_shot`; seen in
+   the suite's own run, "red_cross ... after the head-height retry" then a body on level30); and a reflected shot
+   that meets a wall is never doomed in the original (it lands 10 short) where the port's stops on it. Each is the
+   port's flight, which is R23's, not this picture's. The ray also starts from the port's body centre, 22 over the
+   feet against the original's 18.1 (R25's divergence, left with the player's owner), and so does `projectile_shoot`.
+3. **The fields are the port's.** The prediction's field test is the zones the port plays, so the pictures tell the
+   truth about its own refusals: the antiportals at 16 x scale against the original's 32 (R1; 71 placements in 52
+   levels, so taps between the two radii show `portal_mark` and a portal where the original shows red_cross and
+   red_waves), the gravity wells (R2; 10 in 5 levels) and `anti_portal_agent`s (R17; 21 in 17) as fields where the
+   original's are not, and one `no_portal` (1-07's `no_portal_705`, a 16 u zone the original does not have). The
+   blocker's red dot sits at its box's edge, where the original's is wherever its shot was on the frame it found it
+   inside (up to one frame's travel; F3's is 30 px, 10.6 u, further in - a frame rate of about 20 at 200 u/s).
+4. **In-flight kills the port does not play** (R23, listed as the run asks): a shot reaching an `anti_portal_agent`
+   (`antiportal_explosion.ent`, earthquake row 3, 21 agents in 17 levels) and a shot fired through a `fire_agent`'s
+   flame (`burnProjectile`: `burn_projectile.ent` and a fireball). And the ends the port plays without drawing them
+   here: the torch's light_off and fire_signal (`portal_death.ent` at the shot; the torch steps') and the fire
+   diamond's conversion (`burn_projectile.ent`; 10.4's).
+5. **Not ported: vibration** (`vibrate 30` on a doomed tap, `vibrate 40` with red_waves (B)); the desktop port has no
+   motor, and the rows keep the figures.
+6. **The fire-diamond mark follows the decoded leftover byte** of `absTouchPos.x` in the original's world pixels (the
+   level's units times the scale factor). What that byte holds at run time is D3's unsettled item; the port's camera
+   does not reproduce the original's fractional bits, so the choice can differ from the original's on the same tap.
+7. **The ghost's mark** is at the port's aim point, the player's body centre when it fires (the original's character
+   point, R25 again); the ghost exists from the level's start in the port (R4 not built here).
+8. **Order.** A tap's pictures are queued the moment `Shoot` returns and drawn on that tick's frame, as the original
+   adds them in the frame it takes the tap; a leg's flash and a shot's end are queued by the tick that records them.
+   The original's `red_cross` looks UNDER its `red_waves` in F3 (#152-157) where the add order puts it over; the
+   port's two share one z and the renderer's tie is not pinned (step 83's table note). Not measured.
+9. **K14's price**: the table orders a gap by class, not by z, so a -0.5 class whose own z is below 0 (a dial, a ring,
+   a door glow, a spike, a wall's ghost) is drawn over the shot where both share a gap; the original draws it under.
+   The same holds in the shot's gap at an equal z 0 for a placed portal (-0.25) and an effect at z 0 (-0.5: a
+   fireball, a `small_explosion`), which the original orders by when each was added; those pieces are mostly additive
+   over additive, which does not depend on the order. None of the gate frames shows one.
+10. **The flash on a fire-diamond shot is undecoded.** The port turns the shot into a fireball before `Tick`'s first
+   leg (`game/sim/Game.cpp:467`), so it never adds `projectile_shoot` for it. In the original the flash depends on
+   whether `ETHCallback_projectile`'s first frame runs before `ETHCallback_fire_diamond`'s burn, which D3 lists as
+   INFERRED; gate (3)'s "no flash" is the port's conversion order, not a decode.
+
+**RULINGS APPLIED.** **R15** (the owner's standing ruling): the mark from a tap-time willDie at absTouchPos, a picture
+only. The standing direction that R1-R23 follow what the original does, for every picture here. **R23 is not built**
+(deviations 1, 2 and 4); **R1, R2 and R17** are not built, and deviation 3 says what that does to the pictures.
+**R12** for the fire-diamond byte's world pixels. **R24 and R25** are neither touched nor withdrawn. **K13**: the two
+shot rows move in the one table, pinned. **K8**: the inherited reading, gate 11.
+
+**GAMEPLAY: NONE.**
+
+**SUITES**, run directly, once each (logs `10.1/suites/`): `test_mp_effects` 308, `test_mp_camera` 103, `test_mp_shot`
+181, `test_mp_layer` 1865 (its first run read 1847 of 1848: the blocker-edge check wanted 281 within 1e-6 and the box,
+held in metres as a float, reads 281.00001; the tolerance went to 1e-3 and the relinked suite read 1848, 0 failures;
+then two cases were added - the reflection and the fire-diamond tap, which no layer case drove - and the relinked
+suite ran once more: 1865, 0 failures),
+`test_mp_play` 205, `test_mp_demolish` 133, `test_mp_diamonds` 126, `test_mp_wells` 98, `test_mp_zerog` 88,
+`test_mp_torch` 123, `test_mp_statics` 106, `test_mp_boss` 126, `test_mp_movers` 53; 0 failures each. The full ctest
+was not run.
+
+**SMART APP CONTROL: 5 refusals**, each followed by one delete and relink and one launch that ran:
+`test_mp_shot.exe`, `test_mp_play.exe`, `test_mp_diamonds.exe`, `test_mp_torch.exe` and `MagicPortals.exe` (its first
+build `6aab0a19`, refused on the gate script's probe; the relinked `52229f13` then ran the four gate runs and the 128
+sweep captures). The committed binary `fe2d2dd1` ran the four before runs.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **R23** (00_order 8.15), which this step's pictures now show wherever it bites: the hourglass clock, the budget-0
+  feedback, reflected shots, the in-flight kills of deviation 4, the gravity well, the recoil's aim; and deviation 2's
+  census of where the port's flight and the original's willDie disagree.
+- **R1**: a tap between 16 and 32 x scale of an antiportal (deviation 3).
+- **Footage**: red_waves (B) has none (1-15, 2-07 or 2-28). (`projectile_shoot` and `portal_mark` are checked against
+  F2's and F3's own measurements in gate (5b).)
+- For the backlog (the close agent): a 10.1 row; the "Order 6.1 deviation, K14" row is closed; D11's rows 2, 6 and 14
+  are wired (step 121's NOT WIRED list and `earthquake.json`'s `_not_wired` say so).
+- For the merge's renumbering: "step 123" is written in 14 places outside this document - `earthquake.json` (4),
+  `effects.json`, `placement.json`, `art.json`, `MagicPortalsLayer.hpp`, `test_mp_camera.cpp` and
+  `test_mp_layer.cpp` (5).

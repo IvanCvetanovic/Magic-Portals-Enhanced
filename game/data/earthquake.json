@@ -219,16 +219,31 @@
       "intensity": 20.0,
       "when": "after_update",
       "_source": "ETHCallback_light_wall (470129..470827) #148-150, startEarthquake(20, 0), with wall_destroy.ent and DeleteEntity, when the wall goes 1500 ms after the torch is lit (RAW [6, 1500] at #101). light_wall.ent static 1. MEASURED on L1 4-29 (D11 section 5): -20, +20, -10, +10, -5, +5, -2, +2, -1, +1 px, vertical, forth first."
+    },
+    "no_portal_tap": {
+      "intensity": 7.0,
+      "when": "before_update",
+      "_source": "D11 row 2. PortalManager::blockPortalEffects (137862..138545) #109-111, startEarthquake(7, 40) - the 40 a vibrate the desktop port has no motor for - with red_waves.ent at the tap (#113-133), on every tap of a level whose budget is 0 while its no_portal_sign exists (placement.json no_budget): 1-15, 2-07, 2-28. PortalManager::update is a controller that runs BEFORE the generator (D11_check C31), so it trembles on the tap's own frame when one is due. Wired in step 123 (the visuals plan's 10.1) on the port's own refusal of such a tap: a picture and a shake, not gameplay."
+    },
+    "shot_blocked": {
+      "intensity": 5.0,
+      "when": "after_update",
+      "_source": "D11 row 6. ETHCallback_anti_projectile_wall (344990..345591) #70-72, startEarthquake(5, 0), with portal_fail_in_antiportal.ent at the projectile (#74-96), for every projectile.ent inside the wall's rectangle. anti_projectile_wall.ent static 1: a static entity's callback, after the update. On 1-07, 2-15, 3-15 and 4-31. Wired in step 123 on the port's own blocker kill (Portals::State::failures, kind Blocker), which the port already played. MEASURED on F3 #102-110: a vertical shake, sampled +1, -2, +2, -1, +1 px on alternate frames."
+    },
+    "shot_failed_in_field": {
+      "intensity": 5.0,
+      "when": "before_update",
+      "_source": "D11 row 14. ETHCallback_projectile (358053..359141) #211-215, startEarthquake(5, 0), with portal_fail_in_antiportal.ent (#216-232), when a willDie shot arrives with its position inside an antiportal field; a plain portal_fail (#237-257) has none. projectile.ent static 0: a dynamic entity's callback, before the update. Wired in step 123 on the port's own failures that end inside a field it plays (Portals::State::failures): a shot refused where it arrives, or one a body stops inside a field. MEASURED on F3 #161-171: dy -5, +5, -2, +2, -1, +1 px, dx 0."
     }
   },
 
   "_not_wired": [
-    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 20 wired above",
-    "(24 rows: row 1 has two intensities, and row 5 - explode - four callers of its own):",
-    "rows 2, 3, 6 and 14 (the budget-0 red_waves, a shot killed by an antiportal agent or an",
-    "anti-projectile wall, a doomed shot in a field) wait on R23 / R15, gameplay no batch owns",
-    "in this run; their visuals are 10.1's for rows 2, 6 and 14, and row 3's is 00_order 8.13's",
-    "unowned row. Rows 4, 8, 10 and 25 (every player, stone and minion impact, 0.6 / 2 / 0.8 x",
+    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 23 wired above",
+    "(27 rows: row 1 has two intensities, and row 5 - explode - four callers of its own). Rows 2,",
+    "6 and 14 were wired by step 123 (the visuals plan's 10.1) on the refusal and the failures",
+    "the port ALREADY plays. Row 3 (a shot killed by an anti_portal_agent in flight, with",
+    "antiportal_explosion.ent) waits on R23: the port plays the agent as a no-portal zone and",
+    "kills no shot on it, and its picture is 00_order 8.13's unowned row. Rows 4, 8, 10 and 25 (every player, stone and minion impact, 0.6 / 2 / 0.8 x",
     "hitIntensity, and a stone crushing a minion) need a contact's approach speed, which the",
     "engine's PhysicsSystem::Contact does not report and the port can compute itself - the",
     "body's pre-step velocity dotted with the contact normal, with no engine change (D11_check",

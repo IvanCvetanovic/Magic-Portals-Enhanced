@@ -6,7 +6,9 @@
 #include "sim/Zerog.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -198,15 +200,51 @@ bool LoadPlacement(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
 
+    // computePortalFinalPos's constants, every one required: the ray and its
+    // retry decide the mark a tap leaves, and a default here would be a guess.
+    const Json::Value& finalPos = root["final_pos"];
+    if (!finalPos.IsObject() || !finalPos["ray_start_units"].IsNumber() || !finalPos["push_units"].IsNumber() ||
+        !finalPos["retry_back_units"].IsNumber() || !finalPos["ray_ignores"].IsArray() ||
+        !finalPos["retry_from_units"].IsArray() || finalPos["retry_from_units"].AsArray().size() != 2 ||
+        !finalPos["retry_from_units"].AsArray()[0].IsNumber() || !finalPos["retry_from_units"].AsArray()[1].IsNumber()) {
+        error = path + ": final_pos needs ray_start_units, ray_ignores, push_units, retry_from_units [x, y] and "
+                       "retry_back_units";
+        return false;
+    }
+    Rules::FinalPosRules readFinal;
+    readFinal.rayStartUnits = finalPos["ray_start_units"].AsNumber(-1.0);
+    readFinal.pushUnits = finalPos["push_units"].AsNumber(-1.0);
+    readFinal.retryBackUnits = finalPos["retry_back_units"].AsNumber(-1.0);
+    readFinal.retryFromUnits = glm::dvec2(finalPos["retry_from_units"].AsArray()[0].AsNumber(0.0),
+                                          finalPos["retry_from_units"].AsArray()[1].AsNumber(0.0));
+    if (!(readFinal.rayStartUnits > 0.0) || !(readFinal.pushUnits > 0.0) || !(readFinal.retryBackUnits > 0.0) ||
+        readFinal.retryFromUnits == glm::dvec2(0.0)) {
+        error = path + ": final_pos's distances are each above zero, and its retry starts somewhere else";
+        return false;
+    }
+    for (const Json::Value& name : finalPos["ray_ignores"].AsArray()) {
+        if (!name.IsString() || name.AsString().empty()) {
+            error = path + ": final_pos.ray_ignores holds entity names";
+            return false;
+        }
+        readFinal.rayIgnores.push_back(name.AsString());
+    }
+    const Json::Value& noBudget = root["no_budget"];
+    if (!noBudget.IsObject() || !noBudget["sign_entity"].IsString() || noBudget["sign_entity"].AsString().empty()) {
+        error = path + ": no_budget.sign_entity is the entity a budget-0 tap looks for";
+        return false;
+    }
+
     out.entryRadiusPx = entry;
     out.antiportalRadiusPx = field;
     out.antiportalEntity = managed;
     out.antiportalManagerScale = managerScale;
+    out.finalPos = readFinal;
+    out.noPortalSignEntity = noBudget["sign_entity"].AsString();
     return true;
 }
 
-bool State::TryPlace(const glm::dvec2& atPx) {
-    if (budget <= 0) return false;
+bool State::InField(const glm::dvec2& atPx) const {
     for (const NoPortalZone& zone : zones) {
         // The ANTIPORTAL's radius, which is half its own sprite times the node's
         // scale - not the portal's own 14. placement.json has the decode.
@@ -215,8 +253,14 @@ bool State::TryPlace(const glm::dvec2& atPx) {
         // antiportal is sized from the agent's radius rather than from
         // white_ring.png, so no constant here could express it.
         const double reachPx = zone.radiusPx > 0.0 ? zone.radiusPx : rules.antiportalRadiusPx * zone.scale;
-        if (glm::distance(atPx, zone.CentreNowPx()) <= reachPx) return false;
+        if (glm::distance(atPx, zone.CentreNowPx()) <= reachPx) return true;
     }
+    return false;
+}
+
+bool State::TryPlace(const glm::dvec2& atPx) {
+    if (budget <= 0) return false;
+    if (InField(atPx)) return false;
     if (static_cast<int>(placed.size()) >= budget) {
         if (!rules.recycleOldestAtCap) return false;
         placed.erase(placed.begin());
@@ -241,7 +285,24 @@ bool State::TryPlace(const glm::dvec2& atPx) {
 }
 
 bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx) {
-    if (budget <= 0 || flight || shooter == entt::null || !registry.valid(shooter)) return false;
+    // The two clocks' verdicts, asked first so that the record below can give
+    // the original's reason whichever of the port's tests refuses the tap. Only
+    // the record reads them before the port's own order does, and they change
+    // nothing.
+    const bool tooEarly = rules.firstPortalMinMs > 0.0 && sinceStartMs < rules.firstPortalMinMs;
+    const bool tooSoon = rules.nextPortalMinMs > 0.0 && sinceTapMs <= rules.nextPortalMinMs;
+    lastTap = Tap{};
+    lastTap.atPx = atPx;
+    if (budget <= 0 || flight || shooter == entt::null || !registry.valid(shooter)) {
+        // The original's order (Tap): update's first gate, then the budget, then
+        // the 400 ms, and the hourglass last.
+        if (shooter == entt::null || !registry.valid(shooter)) lastTap.reason = TapReason::NoShooter;
+        else if (tooEarly) lastTap.reason = TapReason::TooEarly;
+        else if (budget <= 0) lastTap.reason = TapReason::NoBudget;
+        else if (tooSoon) lastTap.reason = TapReason::Cooldown;
+        else lastTap.reason = TapReason::InFlight;
+        return false;
+    }
 
     // THE COOLDOWNS, and they gate the TAP rather than the placement.
     //
@@ -263,10 +324,13 @@ bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx) {
     // ZERO MEANS OFF, stated rather than implied. sinceTapMs starts at zero, so
     // a bare `sinceTapMs <= nextPortalMinMs` refuses the very first tap even
     // when the cooldown is nothing - which silently disarmed the suites that
-    // turn it off and cost a whole build to find.
-    const bool tooEarly = rules.firstPortalMinMs > 0.0 && sinceStartMs < rules.firstPortalMinMs;
-    const bool tooSoon = rules.nextPortalMinMs > 0.0 && sinceTapMs <= rules.nextPortalMinMs;
-    if (tooEarly || tooSoon) return false;
+    // turn it off and cost a whole build to find. (tooEarly and tooSoon are
+    // worked out at the top, for the record.)
+    if (tooEarly || tooSoon) {
+        lastTap.reason = tooEarly ? TapReason::TooEarly : TapReason::Cooldown;
+        return false;
+    }
+    lastTap.reason = TapReason::Fired;
 
     // Taken, so it is spent - even if the shot goes on to hit a wall and open
     // nothing. The original resets lastPortalTimer before it has any idea
@@ -297,6 +361,112 @@ bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx) {
     return true;
 }
 
+// ---- computePortalFinalPos, for the pictures (the visuals plan's 10.1) --------
+//
+// The original works out at the tap where its shot is to go and whether it is
+// already doomed, and never looks again: its projectile has no body and flies a
+// straight line to that point. The port's shot flies and ends by Tick, which
+// this does not touch. What this is read for is the mark the tap leaves -
+// red_cross for a doomed shot, portal_mark otherwise - and red_waves (A), both of
+// them pictures: the owner's standing ruling R15.
+//
+// It runs the original's ray over the PORT'S world. The bodies are the port's
+// colliders, a trigger as well as a solid one, less the shooter and the bodies
+// the ray's ignore list names (Find); "static" is a body with no dynamic rigid
+// body (a StaticBody2D, a sensor, or a static the port moves kinematically), and
+// "teleportable" is a body Tick carries through a portal (travellers). The
+// fields are the zones the port plays (InField), so a tap's picture tells the
+// truth about the port's own refusal - R1's radius and R2's wells not being
+// built, the original's fields are not the port's.
+
+FinalPos State::FinalPosFrom(entt::registry& registry, const glm::dvec2& destPx, const glm::dvec2& casterPx,
+                             bool hasBeenReflected) const {
+    FinalPos out;
+    // #5-28: normalize(destPos - casterPos) x scale(8), the ray's head start.
+    // normalize of a zero vector is zero (GameMath.h:755-761).
+    const glm::dvec2 towardPx = destPx - casterPx;
+    const double length = glm::length(towardPx);
+    const glm::dvec2 aim = length > 0.0 ? towardPx / length : glm::dvec2(0.0);
+    const glm::dvec2 startPx = casterPx + aim * rules.finalPos.rayStartUnits;
+
+    // #30-51: GetClosestContact(start, destPos, the ignore list). The shooter is
+    // char_feet.ent and dark_mage.ent in the original, both on the list.
+    std::vector<entt::entity> ignore = rayIgnored;
+    ignore.push_back(shooter);
+    const std::optional<Shot::Hit> hit = Shot::ClosestContact(registry, startPx, destPx, ignore);
+    if (!hit) {
+        // #73-134: nothing met. The aim point in a field dooms it and adds
+        // red_waves (A) there (#81-115); anywhere else it is a clear shot.
+        out.atPx = destPx;
+        out.willDie = InField(destPx);
+        out.redWaves = out.willDie;
+        return out;
+    }
+    const glm::dvec2 pointPx = startPx + (destPx - startPx) * hit->along;
+    out.closest = hit->body;
+    const auto* rigid = registry.try_get<RigidBodyComponent>(hit->body);
+    const bool isStatic = rigid == nullptr || rigid->isKinematic;
+    const bool teleportable = std::find(travellers.begin(), travellers.end(), hit->body) != travellers.end();
+    // #136-175: a static body, or one nothing carries through a portal, dooms an
+    // unreflected shot where the ray met it.
+    const bool blocking = isStatic ? true : !teleportable;
+    if (blocking && !hasBeenReflected) {
+        out.atPx = pointPx;
+        out.willDie = true;
+        return out;
+    }
+    out.preferred = true; // #249-253: preferedTeleportEntity = the body's id
+    // #177-191: a contact inside a field dooms it too, at the contact itself -
+    // the jump to #249 skips jumpForth, which is still zero.
+    if (InField(pointPx)) {
+        out.atPx = pointPx;
+        out.willDie = true;
+        return out;
+    }
+    // #194-248: past a body a portal may open on, short of one it may not.
+    const bool pushOut = (hasBeenReflected ? isStatic : false) ? true : !teleportable;
+    out.atPx = pointPx + aim * (pushOut ? -rules.finalPos.pushUnits : rules.finalPos.pushUnits);
+    out.willDie = false;
+    return out;
+}
+
+FinalPos State::Predict(entt::registry& registry, const glm::dvec2& casterPx, const glm::dvec2& destPx) const {
+    // #66-87: the global, unreflected, from the character.
+    const FinalPos first = FinalPosFrom(registry, destPx, casterPx, false);
+    // #89-101: an aim inside a field is returned as it stands - which is also why
+    // red_waves (A) can only come from that first call.
+    if (InField(destPx)) return first;
+    // #103-121: a retry when the first ray failed, or when it ended on a body a
+    // portal may open on and nothing stands at the tap
+    // (shouldTryToAvoidTeleportableEntity, 140931..141090 #3-24).
+    const bool avoid = first.preferred && Shot::BodiesAt(registry, destPx).empty();
+    if (!first.willDie && !avoid) return first;
+    // #123-189: from over the character's head, if nothing is there but what the
+    // first ray met - the grabber's first body is compared, in its own order.
+    const glm::dvec2 overPx = casterPx + rules.finalPos.retryFromUnits;
+    const std::vector<entt::entity> there = Shot::BodiesAt(registry, overPx);
+    if (!there.empty() && there.front() == first.closest) return first;
+    // #194-217: stepped back off its aim.
+    const glm::dvec2 back = destPx - overPx;
+    const double backLength = glm::length(back);
+    const glm::dvec2 retryPx =
+        overPx - (backLength > 0.0 ? back / backLength : glm::dvec2(0.0)) * rules.finalPos.retryBackUnits;
+    const FinalPos second = FinalPosFrom(registry, destPx, retryPx, false);
+    // #231-236 write the retry's hasFailed whatever it says; #242-251 keep its
+    // position only when it did not fail (D3_check B).
+    FinalPos out = second.willDie ? first : second;
+    out.willDie = second.willDie;
+    out.preferred = second.preferred;
+    out.redWaves = false;
+    out.retried = true;
+    return out;
+}
+
+bool State::FireDiamondWillDie(double touchXScreenPx) {
+    const auto bits = std::bit_cast<std::uint32_t>(static_cast<float>(touchXScreenPx));
+    return (bits & 0xFFu) != 0u;
+}
+
 const NoPortalZone* State::FindZone(const std::string& name) const {
     for (const NoPortalZone& zone : zones) {
         if (zone.name == name) return &zone;
@@ -310,8 +480,12 @@ void State::Centre(Placed& portal) {
 }
 
 void State::Tick(entt::registry& registry, float dt) {
-    // What went through last tick has been drawn; this tick starts with none.
+    // What went through last tick has been drawn; this tick starts with none -
+    // and nor has it launched, turned or lost a shot yet.
     transits.clear();
+    launches.clear();
+    reflected.clear();
+    failures.clear();
     lockoutS = std::max(0.0f, lockoutS - dt);
     // The cooldown clocks run UP, as the original's two Timers do.
     const double elapsedMs = static_cast<double>(dt) * 1000.0;
@@ -351,6 +525,13 @@ void State::Tick(entt::registry& registry, float dt) {
     // the rest of its way. Reaching the end of its way opens a portal there, or
     // fails where none may open.
     if (flight) {
+        // The leg's first tick, for the picture: ETHCallback_projectile's first
+        // frame flashes projectile_shoot before it moves the shot at all, so a
+        // leg that ends on this very tick has flashed too.
+        if (!flight->launched) {
+            flight->launched = true;
+            launches.push_back(Launch{flight->atPx, flight->toPx});
+        }
         const glm::dvec2 left = flight->toPx - flight->atPx;
         const double remaining = glm::length(left);
         const double reach = shot.speedPx * static_cast<double>(dt);
@@ -358,6 +539,7 @@ void State::Tick(entt::registry& registry, float dt) {
         const glm::dvec2 next = arrives ? flight->toPx : flight->atPx + left * (reach / remaining);
         double first = 2.0; // along the stretch, from 0 to 1: past its end until something is met
         std::string stoppedBy;
+        FailKind stopKind = FailKind::Body; // what stoppedBy is, for the picture
         if (const auto hit = Shot::FirstBody(registry, flight->atPx, next, shooter)) {
             const auto* tag = registry.try_get<Supersonic::TagComponent>(hit->body);
             stoppedBy = tag != nullptr ? tag->tag : std::string("a body");
@@ -367,6 +549,7 @@ void State::Tick(entt::registry& registry, float dt) {
             if (const auto along = Shot::Enters(flight->atPx, next, blocker.box); along && *along < first) {
                 stoppedBy = blocker.name;
                 first = *along;
+                stopKind = FailKind::Blocker;
             }
         }
         int turnedBy = -1;
@@ -396,11 +579,22 @@ void State::Tick(entt::registry& registry, float dt) {
             flight->lastReflector = turnedBy;
             ++flight->reflections;
             ++reflections;
+            // For the pictures: ETHCallback_reflect_agent works the new leg out as
+            // a reflected shot and marks its end, and the new leg is a new
+            // projectile, which flashes on its own first tick.
+            reflected.push_back(Reflection{at, flight->toPx, FinalPosFrom(registry, flight->toPx, at, true)});
+            flight->launched = false;
         } else {
+            bool refused = false;
             if (stoppedBy.empty() && arrives && !TryPlace(flight->toPx)) {
                 stoppedBy = "the tap, where no portal may open";
+                refused = true;
             }
             if (!stoppedBy.empty()) {
+                // Where it ended, for the picture: the point it met a body or a
+                // blocker's box at, or the tap it could open nothing at.
+                const glm::dvec2 endPx = refused ? flight->toPx : flight->atPx + (next - flight->atPx) * first;
+                failures.push_back(Failure{endPx, refused ? FailKind::Refused : stopKind, InField(endPx)});
                 ++shotsFailed;
                 lastFailure = stoppedBy;
                 flight.reset();
@@ -560,6 +754,17 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
 
     for (const Tscn::Node& node : scene.nodes) {
         if (node.parent != ".") continue;
+        // For the pictures a tap leaves (the visuals plan's 10.1): the bodies the
+        // tap-time ray passes through, named exactly as the original's list
+        // spells them, and the sign a budget-0 tap looks for, by its name.
+        const std::string entityName = Roles::EntityName(node);
+        if (std::find(rules.finalPos.rayIgnores.begin(), rules.finalPos.rayIgnores.end(), entityName) !=
+            rules.finalPos.rayIgnores.end()) {
+            if (const auto found = built.entities.find(node.name); found != built.entities.end()) {
+                out.rayIgnored.push_back(found->second);
+            }
+        }
+        if (!rules.noPortalSignEntity.empty() && entityName == rules.noPortalSignEntity) out.noPortalSign = true;
         const std::string role = Roles::RoleOf(roles, node);
         if (role == Roles::kStaticPortal) {
             // portal_system.gd:79-87. An inactive one is not a portal, and one with

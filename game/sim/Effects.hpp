@@ -107,6 +107,19 @@ struct Rules {
     Rule death;
     PlacedPortal placedPortal;
     EyeRule eyes; // MainCharacter's red_eyes.ent, on the character's face
+    // The shot and what its tap and its end leave behind (the visuals plan's
+    // 10.1): the flash on a projectile's first frame, 24 units out along its
+    // direction, and ETHCallback_reflect_agent's where the old one was; the mark
+    // at the tap, portal_mark or red_cross; the hourglass on a tap while a shot
+    // flies; red_waves; and the two ends a doomed shot has.
+    Rule projectileShoot;
+    Rule projectileShootReflected;
+    Rule portalMark;
+    Rule redCross;
+    Rule hourglass;
+    Rule redWaves;
+    Rule portalFail;
+    Rule portalFailInField;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -163,6 +176,16 @@ Spawn LargeExplosion(const Rules& rules, const glm::dvec2& atPx);
 Spawn Summon(const Rules& rules, const glm::dvec2& atPx);
 Spawn Portal(const Rules& rules, const glm::dvec2& atPx);
 Spawn Death(const Rules& rules, const glm::dvec2& atPx);
+
+// A row given a point and nothing else - no direction, no turn - at that point:
+// every shot-side row but projectile_shoot (the loader refuses one that says
+// otherwise).
+Spawn At(const Rule& rule, const glm::dvec2& atPx);
+
+// ETHCallback_projectile's first frame: projectile_shoot where the shot has
+// jumped to, `offsetUnits` out from `fromPx` along normalize(towardPx - fromPx),
+// in the script's floats; unturned.
+Spawn ProjectileShoot(const Rules& rules, const glm::dvec2& fromPx, const glm::dvec2& towardPx);
 
 // The colour PortalManager::update gives the portal at `index` of an array of
 // `placed` portals on a level whose maxPortals is `maxPortals`, or nothing when

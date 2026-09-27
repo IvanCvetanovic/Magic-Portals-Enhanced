@@ -1308,6 +1308,7 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_effectQueue.clear();
     m_eyes = -1;
     m_fireballEffects.clear();
+    m_ghostShotsMarked = -1;
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -4402,10 +4403,13 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     // visuals plan's 7.4). Nothing of it is here any more.
 
     // The shot in flight, made when one is fired and unmade when it lands or fails:
-    // a box, and projectile.ent's sheet when the original's image is there, just in
-    // front of the player it leaves - as addProjectile and ETHCallback_projectile
-    // draw it (art.json shot): Scale(0.8) on its cell and its pivot, turned so the
-    // head of the bolt leads along its flight, on the cell the one timer gives.
+    // a box, and projectile.ent's sheet when the original's image is there, at the
+    // z 0 addProjectile adds it at - over the level's pictures at 0 or below and
+    // BEHIND the player it leaves, who stands at R10's 4 (00_order K14, the
+    // between-slot table's Slot::ShotPicture) - as addProjectile and
+    // ETHCallback_projectile draw it (art.json shot): Scale(0.8) on its cell and
+    // its pivot, turned so the head of the bolt leads along its flight, on the
+    // cell the one timer gives.
     if (m_level.portals.flight) {
         if (m_shot == entt::null) {
             m_shot = makeBox(registry, "Magic Portals Shot", glm::vec3(0.0f), glm::vec3(1.0f), kShotColour);
@@ -4431,7 +4435,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
             const Portals::Flight& flight = *m_level.portals.flight;
             const float angle = bolt.AngleDegrees(flight.toPx - flight.atPx);
             placeSprite(registry, m_shotQuad, bolt.CentrePx(flight.atPx, angle), cellPx * bolt.scale,
-                        slotAt(m_playerSlot, Slot::ShotPicture), angle * (3.14159265f / 180.0f));
+                        slotAfter(bolt.z, Slot::ShotPicture), angle * (3.14159265f / 180.0f));
         }
     } else {
         if (m_shot != entt::null && registry.valid(m_shot)) registry.destroy(m_shot);
@@ -4937,10 +4941,10 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
     }
     // projectile.ent has no particle system, so no ratio dims either. Scale(0.8)
     // does draw them smaller: a range of 56, a height of -9.6, a halo of 40 (K7).
-    // Its halo a quarter slot in front of its own picture, which is a quarter slot
-    // in front of the player's; at the entity's point, which the pivot does not move.
+    // Its halo just after its own picture, both behind the player (00_order K14);
+    // at the entity's point, which the pivot does not move.
     place(m_shotLight, m_shotHalo, *shot.light, m_level.portals.flight->atPx, shot.z, shot.isStatic,
-          Lighting::ParticleRatio(0, 0), slotAt(m_playerSlot, Slot::ShotHalo), true, glm::dvec2(shot.scale));
+          Lighting::ParticleRatio(0, 0), slotAfter(shot.z, Slot::ShotHalo), true, glm::dvec2(shot.scale));
 }
 
 void MagicPortalsLayer::syncTurrets(entt::registry& registry) {
@@ -5860,7 +5864,12 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // is what lets a --tap open a portal (the same seam --hold walks by).
     if (touch.over && touch.pressed) {
         glm::dvec2 atPx(0.0);
-        if (ViewportToLevelPx(registry, glm::vec2(touch.atPx), atPx)) m_level.portals.Shoot(registry, atPx);
+        if (ViewportToLevelPx(registry, glm::vec2(touch.atPx), atPx)) {
+            m_level.portals.Shoot(registry, atPx);
+            // What the tap leaves behind, read off the record Shoot has just
+            // written - a picture, whatever the shot does next.
+            queueTapEffects(registry);
+        }
     }
     return direction;
 }
@@ -6156,6 +6165,124 @@ void MagicPortalsLayer::latchSimEffects() {
         m_effectQueue.push_back(effectAdd(Effects::Sparkles(m_effectRules, went.travellerPx, went.entryPx)));
         m_effectQueue.push_back(effectAdd(Effects::Appear(m_effectRules, went.exitPx)));
     }
+
+    // THE SHOT'S OWN, from what Portals::Tick recorded this tick (the visuals
+    // plan's 10.1, effects.json's shot-side rows), in the order the original's
+    // callbacks add them: a leg's first tick, a turn, an end.
+    //
+    // A LEG'S FIRST TICK: ETHCallback_projectile's first frame jumps the shot 24
+    // along its direction and flashes projectile_shoot there - before it moves
+    // on, so a leg that ends on this tick has flashed too.
+    for (const Portals::Launch& leg : m_level.portals.launches) {
+        m_effectQueue.push_back(effectAdd(Effects::ProjectileShoot(m_effectRules, leg.fromPx, leg.towardPx)));
+    }
+    // A TURN OFF A REFLECTOR: ETHCallback_reflect_agent runs computePortalFinalPos
+    // for the new leg as a reflected shot - red_waves (A) at the new destination
+    // where the ray meets nothing and that point is in a field (#198-215) - adds
+    // the new projectile with its mark at the clipped destination (#216-235), and
+    // flashes where the old one was (#246-260). The new leg flashes again on its
+    // own first tick, which the launches above give on the next.
+    for (const Portals::Reflection& turn : m_level.portals.reflected) {
+        if (turn.said.redWaves) m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.redWaves, turn.toPx)));
+        const Effects::Rule& mark = turn.said.willDie ? m_effectRules.redCross : m_effectRules.portalMark;
+        m_effectQueue.push_back(effectAdd(Effects::At(mark, turn.said.atPx)));
+        m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.projectileShootReflected, turn.atPx)));
+    }
+    // AN END WITH NO PORTAL, where the port's shot ended it: an anti_projectile_wall
+    // kills it with portal_fail_in_antiportal wherever it is
+    // (ETHCallback_anti_projectile_wall); anything else - a body, or the tap it
+    // could open nothing at - is ETHCallback_projectile's arrival of a doomed
+    // shot, which is portal_fail_in_antiportal inside a field and portal_fail
+    // outside one. Their shakes are latchSimQuakes'.
+    for (const Portals::Failure& ended : m_level.portals.failures) {
+        const bool field = ended.kind == Portals::FailKind::Blocker || ended.inField;
+        const Effects::Rule& rule = field ? m_effectRules.portalFailInField : m_effectRules.portalFail;
+        m_effectQueue.push_back(effectAdd(Effects::At(rule, ended.atPx)));
+        // Said with the tick, so a capture can find the end it measures.
+        SUPERSONIC_LOG_INFO("Magic Portals") << "shot ended on tick " << m_ticks << " at (" << ended.atPx.x << ", "
+                                             << ended.atPx.y << ") by "
+                                             << (ended.kind == Portals::FailKind::Blocker  ? "a blocker"
+                                                 : ended.kind == Portals::FailKind::Body ? "a body"
+                                                                                         : "a refusal")
+                                             << ": " << rule.entity << std::endl;
+    }
+
+    // AND THE GHOST'S SHOTS: addEnemyShoot adds portal_mark at an enemy shot's
+    // finalPos with the same arguments a player's shot has it (#127-156), and
+    // ETHCallback_ghost passes the character's position as that point (#585-592)
+    // - the point the port's ghost aims its new shot at: its muzzle plus its
+    // range along its way. The first latch of a level only sets the count.
+    const int ghostFired = m_level.ghost.shotsFired;
+    if (m_ghostShotsMarked < 0) m_ghostShotsMarked = ghostFired;
+    // The new ones are the last of the list: a shot is appended when it is fired
+    // and only ever leaves it on a later tick.
+    const std::vector<Ghost::Shot>& ghostShots = m_level.ghost.shots;
+    const int unmarked = std::min(ghostFired - m_ghostShotsMarked, static_cast<int>(ghostShots.size()));
+    for (int i = static_cast<int>(ghostShots.size()) - std::max(unmarked, 0);
+         i < static_cast<int>(ghostShots.size()); ++i) {
+        const Ghost::Shot& shot = ghostShots[static_cast<std::size_t>(i)];
+        const double speed = glm::length(shot.velocityPx);
+        if (!(speed > 0.0)) continue;
+        const glm::dvec2 aimPx = shot.atPx + shot.velocityPx / speed * (shot.rangePx - shot.flownPx);
+        m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.portalMark, aimPx)));
+    }
+    m_ghostShotsMarked = ghostFired;
+}
+
+void MagicPortalsLayer::queueTapEffects(entt::registry& registry) {
+    if (!m_loaded) return;
+    const Portals::State& portals = m_level.portals;
+    const Portals::Tap& tap = portals.lastTap;
+    switch (tap.reason) {
+    case Portals::TapReason::Fired: {
+        if (!portals.flight) return;
+        // computePortalFinalPos at the tap, as managePortalInsertion calls it
+        // (#127-145) from the character toward absTouchPos - or, with a fire
+        // diamond carried, the method's own branch (#21-64), which casts no ray
+        // and leaves willDie the leftover low byte of absTouchPos.x in the
+        // original's screen pixels.
+        Portals::FinalPos said;
+        if (m_level.diamonds.carrierHasFire) {
+            said.willDie = Portals::State::FireDiamondWillDie(tap.atPx.x * m_artRules.scaleFactor);
+        } else {
+            said = portals.Predict(registry, portals.flight->fromPx, tap.atPx);
+        }
+        // red_waves (A) is added inside computePortalFinalPos, so before the
+        // mark addProjectile adds after it (#167-243); both at absTouchPos, z
+        // scale(32).
+        if (said.redWaves) m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.redWaves, tap.atPx)));
+        const Effects::Rule& mark = said.willDie ? m_effectRules.redCross : m_effectRules.portalMark;
+        m_effectQueue.push_back(effectAdd(Effects::At(mark, tap.atPx)));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "shot fired on tick " << m_ticks << " toward (" << tap.atPx.x << ", "
+                                             << tap.atPx.y << "): " << mark.entity
+                                             << (said.redWaves ? " and red_waves (A)" : "")
+                                             << (said.retried ? ", after the head-height retry" : "")
+                                             << (m_level.diamonds.carrierHasFire ? ", a fire diamond's" : "")
+                                             << std::endl;
+        return;
+    }
+    case Portals::TapReason::InFlight:
+        // managePortalInsertion #181-210: past the 400 ms, a shot still flying.
+        // The original resets that clock here too; the port does not (R23).
+        m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.hourglass, tap.atPx)));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "tap refused on tick " << m_ticks << " at (" << tap.atPx.x << ", "
+                                             << tap.atPx.y << "): a shot still flies, hourglass" << std::endl;
+        return;
+    case Portals::TapReason::NoBudget:
+        // blockPortalEffects #80-133, only while the sign is there: the waves and
+        // startEarthquake(7, 40), whose vibration the desktop port has no motor for.
+        if (!portals.noPortalSign) return;
+        m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.redWaves, tap.atPx)));
+        QueueQuake(Earthquake::Call::NoPortalTap);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "tap refused on tick " << m_ticks << " at (" << tap.atPx.x << ", "
+                                             << tap.atPx.y << "): no portal here, red_waves (B)" << std::endl;
+        return;
+    case Portals::TapReason::NoShooter:
+    case Portals::TapReason::TooEarly:
+    case Portals::TapReason::Cooldown:
+        // Silent in the original: nothing added, nothing played.
+        return;
+    }
 }
 
 // ---- THE EARTHQUAKE -------------------------------------------------------------
@@ -6279,6 +6406,11 @@ void MagicPortalsLayer::latchSimQuakes() {
     }
     if (now.darkDragonGone && !was.darkDragonGone) QueueQuake(Call::DarkDragonDeath);
     for (int i = was.ghostShotsEnded; i < now.ghostShotsEnded; ++i) QueueQuake(Call::EnemyShotEnd);
+    // A doomed shot's arrival inside a field (ETHCallback_projectile #211-215; a
+    // dynamic entity's). Tick's own record, which is this tick's alone.
+    for (const Portals::Failure& ended : level.portals.failures) {
+        if (ended.kind != Portals::FailKind::Blocker && ended.inField) QueueQuake(Call::ShotFailedInField);
+    }
 
     // AFTER IT: the game-state controller, then the static entities' callbacks.
     if (now.fell && !was.fell) QueueQuake(level.noGravity ? Call::FallNoGravity : Call::Fall);
@@ -6291,6 +6423,10 @@ void MagicPortalsLayer::latchSimQuakes() {
     }
     for (int i = was.struck; i < now.struck; ++i) QueueQuake(Call::ShockStrike);
     for (int i = was.wallsGone; i < now.wallsGone; ++i) QueueQuake(Call::LightWallGone);
+    // A shot an anti_projectile_wall killed (its static callback, #70-72).
+    for (const Portals::Failure& ended : level.portals.failures) {
+        if (ended.kind == Portals::FailKind::Blocker) QueueQuake(Call::ShotBlocked);
+    }
     for (const Demolish::Breakable* wall : wallsBroken) {
         // destroyEffectScale, where the node sets it above 0 (#16-31); else 1.
         double scale = 1.0;

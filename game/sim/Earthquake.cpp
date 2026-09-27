@@ -40,6 +40,9 @@ constexpr const char* kKeys[] = {
     "fire_diamond_picked",
     "shock_strike",
     "light_wall_gone",
+    "no_portal_tap",
+    "shot_blocked",
+    "shot_failed_in_field",
 };
 static_assert(std::size(kKeys) == kCalls, "one earthquake.json key per Call");
 

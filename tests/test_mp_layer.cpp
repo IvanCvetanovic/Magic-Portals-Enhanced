@@ -8586,9 +8586,28 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::EffectSystems) == -0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Picture) == 0.0);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Halo) == 0.25);
-    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ShotPicture) == 0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Systems) == 0.25);
-    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ShotHalo) == 0.5);
+
+    // THE SHOT (00_order K14, step 123): at the z 0 addProjectile gives it, which
+    // is BEHIND the player (R10's 1.42) and a minion (its raw 2, 0.711) wherever
+    // they share its gap - so below their -0.5 - with its halo after its picture,
+    // and both in front of the previous slot's halo (-0.75) and of the deepest
+    // particle system that slot can hold: -1 + SlotFraction(n - 1, n), n being the
+    // most systems any entity of the original's carries (2, a grep of the 190
+    // .ent files) - and still for n up to 14.
+    const double shot = MagicPortalsLayer::SlotFractionOf(Slot::ShotPicture);
+    const double shotHalo = MagicPortalsLayer::SlotFractionOf(Slot::ShotHalo);
+    CHECK(shot == -0.515625);
+    CHECK(shotHalo == -0.5078125);
+    CHECK_MSG(shot < shotHalo && shotHalo < MagicPortalsLayer::SlotFractionOf(Slot::Minion) &&
+                  shotHalo < MagicPortalsLayer::SlotFractionOf(Slot::Picture),
+              "the shot, then its halo, then a minion, then the player");
+    CHECK(-0.75 < shot);
+    for (const int n : {1, 2, 14}) {
+        const double deepest = -1.0 + MagicPortals::Particles::SlotFraction(n - 1, n);
+        CHECK_MSG(deepest < shot, "the previous slot's last of " + std::to_string(n) + " systems, at " +
+                                      std::to_string(deepest) + ", stands behind the shot");
+    }
 
     // THE TIE THE TABLE STATES. The eleven between-slot classes share one
     // fraction, so two of them at one z_index land on exactly one z; what orders
@@ -8625,9 +8644,9 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
                 static_cast<int>(table.size()), tied, spreads);
 }
 
-// And the fractions the layer actually draws at, off the registry: the shot a
-// quarter of a slot in front of the player, its halo half a slot, and a portal
-// the player has placed a quarter behind it.
+// And the fractions the layer actually draws at, off the registry: the shot and
+// its halo just over half a slot BEHIND the player (00_order K14, step 123: it
+// was a quarter in front), and a portal the player has placed a quarter behind it.
 void TheTableIsTheFractionTheLayerDrawsAt() {
     if (!OriginalArtIsThere("TheTableIsTheFractionTheLayerDrawsAt")) return;
     entt::registry registry;
@@ -8657,10 +8676,13 @@ void TheTableIsTheFractionTheLayerDrawsAt() {
     if (const entt::entity halo = FirstTagged(registry, "Magic Portals Shot Halo"); halo != entt::null) {
         shotHaloZ = registry.get<TransformComponent>(halo).position.z;
     }
-    CHECK_MSG(std::fabs(shotZ - (playerZ + 0.25f * slotZ)) < 1e-7f,
-              "the shot a quarter of a slot in front of the player: " + std::to_string(shotZ - playerZ));
-    CHECK_MSG(std::fabs(shotHaloZ - (playerZ + 0.5f * slotZ)) < 1e-7f,
-              "and its halo half a slot: " + std::to_string(shotHaloZ - playerZ));
+    // level1 stands no node between 0 and the player's 1.42, so the gap after
+    // its pictures at 0 or below is the player's own.
+    CHECK_MSG(std::fabs(shotZ - (playerZ - 0.515625f * slotZ)) < 1e-7f,
+              "the shot 0.516 of a slot BEHIND the player: " + std::to_string((shotZ - playerZ) / slotZ));
+    CHECK_MSG(std::fabs(shotHaloZ - (playerZ - 0.5078125f * slotZ)) < 1e-7f,
+              "and its halo just after it, still behind: " + std::to_string((shotHaloZ - playerZ) / slotZ));
+    CHECK(shotZ < shotHaloZ && shotHaloZ < playerZ);
 
     // And the portal that tap opened, a quarter of a slot behind the player.
     landShot(layer, registry);
@@ -9280,9 +9302,11 @@ void APortalThePlayerOpenedIsTheEntityInsertPortalAdds() {
     // order (#33 before #71) and so the order the two draw their random in.
     std::vector<MagicPortalsLayer::EffectReport> summons = portalsOf("portal_summon_effect.ent");
     std::vector<MagicPortalsLayer::EffectReport> bodies = portalsOf("portal.ent");
-    CHECK_MSG(summons.size() == 1 && bodies.size() == 1 && layer.EffectsSpawned() == spawnedBefore + 2,
-              "one portal adds two entities: " + std::to_string(summons.size()) + " summon, " +
-                  std::to_string(bodies.size()) + " portal, " +
+    // Four added since the tap: the tap's portal_mark and the shot's first-tick
+    // projectile_shoot (the visuals plan's 10.1, step 123), then the portal's two.
+    CHECK_MSG(summons.size() == 1 && bodies.size() == 1 && layer.EffectsSpawned() == spawnedBefore + 4,
+              "one portal adds two entities, after the tap's mark and the shot's flash: " +
+                  std::to_string(summons.size()) + " summon, " + std::to_string(bodies.size()) + " portal, " +
                   std::to_string(layer.EffectsSpawned() - spawnedBefore) + " added");
     if (summons.size() != 1 || bodies.size() != 1) return;
     CHECK_MSG(summons.front().id < bodies.front().id, "the bubble is added before the portal");
@@ -9471,8 +9495,9 @@ void AClearedPairPopsInTheManagersOrder() {
     CHECK_MSG(portalIdC != portalIdA && portalIdC != portalIdB,
               "the new portal is named in its own right, not handed a refunded name: " + std::to_string(portalIdC) +
                   " against " + std::to_string(portalIdA) + " and " + std::to_string(portalIdB));
-    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 2,
-              "it added its own summon bubble and its own portal.ent: " +
+    // And the tap's portal_mark and the shot's projectile_shoot before them (step 123).
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 4,
+              "it added its own summon bubble and its own portal.ent, after the mark and the flash: " +
                   std::to_string(layer.EffectsSpawned() - spawnedBefore) + " added");
     bodies = portalsOf("portal.ent");
     CHECK_MSG(bodies.size() == 3, "three portal entities now: two dying and one new");
@@ -9759,6 +9784,515 @@ void AnEffectMovesNoParticleOfTheLevels() {
     b.OnDetach(withEffect);
 }
 
+// ---- The shot's marks and ends, and its depth (the visuals plan's 10.1, step 123) ----
+//
+// What a tap and a shot leave behind, as the original's script adds it, on the
+// port's own shots: the mark at the tap (red_cross or portal_mark, by the
+// tap-time ray, R15), red_waves (A) and (B), the hourglass, projectile_shoot on
+// a shot's first tick, and portal_fail or portal_fail_in_antiportal where the
+// port's shot ends - with their shakes. And K14: the shot drawn behind the
+// player. The gates are 00_order section 7's 10.1 rows on 1-07 (level6),
+// footage F3's level, with the camera at (0, 0).
+
+std::vector<MagicPortalsLayer::EffectReport> EffectsOf(const MagicPortalsLayer& layer, const std::string& entity) {
+    std::vector<MagicPortalsLayer::EffectReport> found;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity == entity) found.push_back(report);
+    }
+    return found;
+}
+
+// A level loaded, old enough for its first tap, its first latch behind it.
+bool ReadyToShoot(MagicPortalsLayer& layer, entt::registry& registry, int& ticks) {
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return false;
+    ticks = CloseTheLevelStartPopup(layer, registry);
+    for (int i = 0; i < 26; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        ++ticks;
+    }
+    return true;
+}
+
+// What one flight left: its first-tick launch and its end, as the ticks that
+// flew it recorded them; and the quake tick the end came on.
+struct Flown {
+    std::vector<MagicPortals::Portals::Launch> launches;
+    std::vector<MagicPortals::Portals::Failure> ends;
+    int endTick = -1;
+    QuakeTick endSeen;
+};
+
+Flown FlyWithFrames(MagicPortalsLayer& layer, entt::registry& registry, int& ticks) {
+    Flown flown;
+    for (int i = 0; i < 180 && layer.SimLevel() != nullptr && layer.SimLevel()->portals.flight; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        const MagicPortals::Portals::State& portals = layer.SimLevel()->portals;
+        for (const auto& launch : portals.launches) flown.launches.push_back(launch);
+        if (!portals.failures.empty()) {
+            for (const auto& end : portals.failures) flown.ends.push_back(end);
+            flown.endTick = ticks;
+            flown.endSeen = seen;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    return flown;
+}
+
+// Gate 1 of 00_order 10.1: "a failed shot into a 1-7 wall gives portal_fail at z
+// 32 with one light". Footage F3's wall tap, (450, 315) of its screen.
+void AShotIntoA17WallEndsInPortalFail() {
+    if (!OriginalArtIsThere("AShotIntoA17WallEndsInPortalFail")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level6");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const glm::dvec2 wall(160.0, 112.0);
+    CHECK(onScreen(registry, wall));
+    tap(layer, registry, screenOf(registry, wall));
+    ++ticks;
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    const glm::dvec2 from = layer.SimLevel()->portals.flight->fromPx;
+    const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    // The mark: the tap-time ray meets the block's underside, so red_cross -
+    // F3 #28 - at the tap, z scale(32); and no portal_mark, no waves.
+    const auto crosses = EffectsOf(layer, "red_cross.ent");
+    CHECK_MSG(crosses.size() == 1 && crosses[0].atPx == aim && crosses[0].zUnits == 32.0,
+              "red_cross at the tap, z 32: " + std::to_string(crosses.size()));
+    CHECK(EffectsOf(layer, "portal_mark.ent").empty() && EffectsOf(layer, "red_waves.ent").empty());
+
+    const Flown flown = FlyWithFrames(layer, registry, ticks);
+    // projectile_shoot on the shot's first tick, 24 out along its way, at the
+    // projectile's z 0.
+    CHECK_EQ(flown.launches.size(), std::size_t{1});
+    const glm::dvec2 dir = glm::normalize(aim - from);
+    const auto flashes = EffectsOf(layer, "projectile_shoot.ent");
+    CHECK_MSG(flashes.size() == 1 && glm::distance(flashes[0].atPx, from + dir * 24.0) < 1e-4 &&
+                  flashes[0].zUnits == 0.0,
+              "projectile_shoot 24 out from " + Point(from) + ": " + std::to_string(flashes.size()));
+    // The end: a body, outside every field.
+    CHECK_MSG(flown.ends.size() == 1 && flown.ends[0].kind == MagicPortals::Portals::FailKind::Body &&
+                  !flown.ends[0].inField,
+              "the shot ended on a body: " + lastFailure(layer));
+    if (flown.ends.size() != 1) return;
+    const glm::dvec2 endPx = flown.ends[0].atPx;
+    const auto fails = EffectsOf(layer, "portal_fail.ent");
+    CHECK_MSG(fails.size() == 1, "one portal_fail: " + std::to_string(fails.size()));
+    CHECK(EffectsOf(layer, "portal_fail_in_antiportal.ent").empty());
+    if (fails.size() == 1) {
+        const MagicPortalsLayer::EffectReport& fail = fails[0];
+        CHECK_MSG(fail.atPx == endPx && fail.zUnits == 32.0,
+                  "portal_fail where the shot ended, " + Point(endPx) + ", at z 32: " + Point(fail.atPx) + " z " +
+                      std::to_string(fail.zUnits));
+        // ONE LIGHT and no halo: portal_fail.ent's <Light> names no <HaloBitmap>.
+        CHECK_MSG(fail.hasLight && !fail.hasHalo && fail.lightRange == 58.0 && fail.temporary,
+                  "a light of range 58, no halo, temporary: range " + std::to_string(fail.lightRange));
+        std::printf("  1-07 wall: red_cross at %s, projectile_shoot at %s, portal_fail at %s (%s) on tick %d, "
+                    "light %.0f, z %.0f\n",
+                    Point(aim).c_str(), Point(flashes.empty() ? glm::dvec2(0.0) : flashes[0].atPx).c_str(),
+                    Point(endPx).c_str(), lastFailure(layer).c_str(), flown.endTick, fail.lightRange, fail.zUnits);
+    }
+    // A plain portal_fail shakes nothing (ETHCallback_projectile #237-257).
+    CHECK_MSG(flown.endSeen.now.amplitudePx == flown.endSeen.was.amplitudePx && layer.Quake().amplitudePx == 0.0,
+              "no shake for a shot a wall stops");
+    layer.OnDetach(registry);
+}
+
+// Gate 2: "a 1-7 antiportal tap gives _in_antiportal at z 0". A tap 28 units
+// from antiportal_687, inside the 16 x 3 = 48 units the port plays (R1 is not
+// built), with a clear ray: red_waves (A) and red_cross at the tap, and on the
+// shot's arrival the red end at z 0 and the shake of 5, before the update.
+void AnAntiportalTapOn17EndsRedAtZeroAndShakes() {
+    if (!OriginalArtIsThere("AnAntiportalTapOn17EndsRedAtZeroAndShakes")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level6");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const glm::dvec2 inField(259.911, 194.844);
+    tap(layer, registry, screenOf(registry, inField));
+    ++ticks;
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto waves = EffectsOf(layer, "red_waves.ent");
+    const auto crosses = EffectsOf(layer, "red_cross.ent");
+    CHECK_MSG(waves.size() == 1 && waves[0].atPx == aim && waves[0].zUnits == 32.0,
+              "red_waves (A) at the tap, z 32: " + std::to_string(waves.size()));
+    CHECK_MSG(crosses.size() == 1 && crosses[0].atPx == aim && crosses[0].zUnits == 32.0,
+              "and red_cross: " + std::to_string(crosses.size()));
+    // In the original's order: computePortalFinalPos adds the waves before
+    // addProjectile adds the mark.
+    if (waves.size() == 1 && crosses.size() == 1) CHECK(waves[0].id < crosses[0].id);
+
+    const Flown flown = FlyWithFrames(layer, registry, ticks);
+    CHECK_MSG(flown.ends.size() == 1 && flown.ends[0].kind == MagicPortals::Portals::FailKind::Refused &&
+                  flown.ends[0].inField && flown.ends[0].atPx == aim,
+              "refused where it arrived, in the field: " + lastFailure(layer));
+    const auto reds = EffectsOf(layer, "portal_fail_in_antiportal.ent");
+    CHECK_MSG(reds.size() == 1, "one portal_fail_in_antiportal: " + std::to_string(reds.size()));
+    CHECK(EffectsOf(layer, "portal_fail.ent").empty());
+    if (reds.size() == 1) {
+        const MagicPortalsLayer::EffectReport& red = reds[0];
+        CHECK_MSG(red.atPx == aim && red.zUnits == 0.0,
+                  "at the tap, z 0: " + Point(red.atPx) + " z " + std::to_string(red.zUnits));
+        CHECK_MSG(red.hasLight && !red.hasHalo && red.lightRange == 66.0,
+                  "a light of range 66, no halo: " + std::to_string(red.lightRange));
+        // Its one system's own <StartPoint> z of 20 carries its specks in front of
+        // the player, where the 0 alone would not.
+        CHECK(!red.systemZ.empty() && red.systemZ[0] > layer.PlayerSlotZ());
+    }
+    // ETHCallback_projectile's startEarthquake(5, 0), a dynamic entity's: before
+    // the update, on the arrival's own tick.
+    CHECK_MSG(flown.endTick > 0, "the shot ended");
+    if (flown.endTick > 0) {
+        const std::string landed = quakeLanded(flown.endSeen, 5.0, false);
+        CHECK_MSG(landed.empty(), "shot_failed_in_field on tick " + std::to_string(flown.endTick) + ": " + landed);
+    }
+    std::printf("  1-07 in the field: red_waves and red_cross at %s, portal_fail_in_antiportal there on tick %d\n",
+                Point(aim).c_str(), flown.endTick);
+    layer.OnDetach(registry);
+}
+
+// F3's long shot, (1100, 450) of its screen: past the field, so portal_mark at
+// the tap - the tap-time ray cannot see the anti_projectile_wall, a shape-0
+// entity - and killed in flight by it: the red end where the wall took it, and
+// the wall's own shake of 5, a static entity's, after the update.
+void TheBlockerKillsF3sLongShotRedAndShakesAfter() {
+    if (!OriginalArtIsThere("TheBlockerKillsF3sLongShotRedAndShakesAfter")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level6");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    tap(layer, registry, screenOf(registry, glm::dvec2(391.111, 160.0)));
+    ++ticks;
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto marks = EffectsOf(layer, "portal_mark.ent");
+    CHECK_MSG(marks.size() == 1 && marks[0].atPx == aim && marks[0].zUnits == 32.0,
+              "portal_mark at the tap: " + std::to_string(marks.size()));
+    CHECK(EffectsOf(layer, "red_cross.ent").empty());
+    const QuakeEdge killed = tickUntilUp(layer, registry, ticks, 120,
+                                         [](const PlayedLevel& played) { return played.portals.shotsFailed; });
+    CHECK_MSG(killed.tick > 0 && layer.SimLevel()->portals.lastFailure == "anti_projectile_wall_ent_743",
+              "killed by the blocker: " + lastFailure(layer));
+    const std::vector<MagicPortals::Portals::Failure> ends = layer.SimLevel()->portals.failures;
+    CHECK_MSG(ends.size() == 1 && ends[0].kind == MagicPortals::Portals::FailKind::Blocker,
+              "the end is the blocker's");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto reds = EffectsOf(layer, "portal_fail_in_antiportal.ent");
+    CHECK_MSG(reds.size() == 1 && !ends.empty() && reds[0].atPx == ends[0].atPx && reds[0].zUnits == 0.0,
+              "portal_fail_in_antiportal where the wall took it: " + std::to_string(reds.size()));
+    if (!ends.empty()) {
+        // The blocker's box is x 281 to 345: the shot is taken on entering it.
+        // (The box is held in metres, a float: its edge reads 281.00001.)
+        CHECK_MSG(std::fabs(ends[0].atPx.x - 281.0) < 1e-3, "taken at the box's edge: " + Point(ends[0].atPx));
+        std::printf("  1-07 long shot: portal_mark at %s, killed by the blocker at %s on tick %d\n",
+                    Point(aim).c_str(), Point(ends[0].atPx).c_str(), killed.tick);
+    }
+    checkQuakeRow(layer, registry, ticks, killed, "1-07 shot_blocked", 5.0, true);
+    layer.OnDetach(registry);
+}
+
+// F3's hourglass: a tap past the 400 ms while a shot still flies. On 1-04
+// (level3), whose open air lets a shot fly longer than 400 ms at the port's 600
+// units a second (1-07's longest clear flight is shorter: the blocker is 240
+// units out). The tap draws the hourglass and fires nothing, and - the port's
+// R23 difference - leaves the 400 ms clock where it was.
+void ATapWhileAShotFliesShowsTheHourglass() {
+    if (!OriginalArtIsThere("ATapWhileAShotFliesShowsTheHourglass")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level3");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    tap(layer, registry, screenOf(registry, glm::dvec2(440.889, 60.444)));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the long shot fired: " + lastFailure(layer));
+    // Ten ticks on - inside the 400 ms - a tap draws nothing at all.
+    for (int i = 0; i < 9; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const glm::dvec2 aside(106.667, 106.667);
+    tap(layer, registry, screenOf(registry, aside));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Cooldown &&
+                  EffectsOf(layer, "hourglass.ent").empty(),
+              "within 400 ms: silent");
+    // Twenty more: past it, the shot still flying.
+    for (int i = 0; i < 19; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK(layer.SimLevel()->portals.flight.has_value());
+    const double clockBefore = layer.SimLevel()->portals.sinceTapMs;
+    tap(layer, registry, screenOf(registry, aside));
+    const double clockAfter = layer.SimLevel()->portals.sinceTapMs;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::InFlight);
+    const auto glasses = EffectsOf(layer, "hourglass.ent");
+    CHECK_MSG(glasses.size() == 1 && glm::distance(glasses[0].atPx, aside) < 1e-3 && glasses[0].zUnits == 32.0,
+              "the hourglass at the tap, z 32: " + std::to_string(glasses.size()));
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == 1, "and no second shot");
+    CHECK_MSG(std::fabs(clockAfter - clockBefore - 1000.0 / 60.0) < 1e-6,
+              "the 400 ms clock ran on through the tap, not restarted: " + std::to_string(clockBefore) + " -> " +
+                  std::to_string(clockAfter));
+    layer.OnDetach(registry);
+}
+
+// red_waves (B): 1-15 (level14) grants no portal and places the no-portal sign.
+// Every tap after the first 300 ms draws the waves at the tap and shakes 7,
+// before the update - no 400 ms between them. 1-01 (level0) grants none either
+// and has no sign: its tap is silent.
+void ABudgetZeroTapByTheSignMakesRedWavesAndAShake() {
+    if (!OriginalArtIsThere("ABudgetZeroTapByTheSignMakesRedWavesAndAShake")) return;
+    for (const bool sign : {true, false}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), sign ? "level14" : "level0");
+        layer.OnAttach(registry);
+        int ticks = 0;
+        if (!ReadyToShoot(layer, registry, ticks)) return;
+        CHECK(layer.SimLevel()->portals.budget == 0 && layer.SimLevel()->portals.noPortalSign == sign);
+        for (int i = 0; i < 2; ++i) {
+            const glm::dvec2 at = layer.CameraCentrePx() + glm::dvec2(0.0, i == 0 ? -60.0 : -30.0);
+            QuakeTick seen;
+            seen.was = layer.Quake();
+            tap(layer, registry, screenOf(registry, at));
+            seen.now = layer.Quake();
+            seen.offsetUnits = layer.QuakeOffsetUnits();
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            CHECK(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::NoBudget);
+            if (sign) {
+                const std::string landed = quakeLanded(seen, 7.0, false);
+                CHECK_MSG(landed.empty(), "tap " + std::to_string(i + 1) + ": " + landed);
+            } else {
+                CHECK_MSG(seen.now.amplitudePx == seen.was.amplitudePx, "1-01: no shake");
+            }
+            // Ten ticks between the two taps: under 400 ms, which this path never asks.
+            for (int t = 0; t < 9; ++t) {
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+        }
+        const auto waves = EffectsOf(layer, "red_waves.ent");
+        CHECK_MSG(static_cast<int>(waves.size()) == (sign ? 2 : 0),
+                  std::string(sign ? "1-15" : "1-01") + ": " + std::to_string(waves.size()) + " red_waves");
+        for (const auto& wave : waves) CHECK(wave.zUnits == 32.0);
+        layer.OnDetach(registry);
+    }
+}
+
+// The ghost's shot marks its end (addEnemyShoot #127-156): portal_mark at the
+// point it is aimed at, the character's position as ETHCallback_ghost passes it.
+void TheGhostsShotMarksWhereItIsAimed() {
+    if (!OriginalArtIsThere("TheGhostsShotMarksWhereItIsAimed")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    PutPlayerAt(registry, layer, glm::dvec2(400.0, 190.0));
+    const QuakeEdge fired = tickUntilUp(layer, registry, ticks, 900,
+                                        [](const PlayedLevel& played) { return played.ghost.shotsFired; });
+    CHECK_MSG(fired.tick > 0, "the ghost shot");
+    if (fired.tick <= 0 || layer.SimLevel()->ghost.shots.empty()) return;
+    const MagicPortals::Ghost::Shot& shot = layer.SimLevel()->ghost.shots.back();
+    const glm::dvec2 aimed = shot.atPx + glm::normalize(shot.velocityPx) * (shot.rangePx - shot.flownPx);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto marks = EffectsOf(layer, "portal_mark.ent");
+    CHECK_MSG(marks.size() == 1 && glm::distance(marks[0].atPx, aimed) < 1e-6 && marks[0].zUnits == 32.0,
+              "portal_mark where the ghost aimed, " + Point(aimed) + ": " + std::to_string(marks.size()));
+    std::printf("  3-32: the ghost's shot on tick %d marks %s\n", fired.tick, Point(aimed).c_str());
+    layer.OnDetach(registry);
+}
+
+// K14 on the one level with a node between 0 and the player: level22a's platform
+// at eth_z 1 stands between the shot (z 0) and the player (1.42), a whole slot
+// more behind the player than on every other level.
+void OnLevel22aTheShotIsBehindThePlatformAtOne() {
+    if (!OriginalArtIsThere("OnLevel22aTheShotIsBehindThePlatformAtOne")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level22a");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const glm::dvec2 up = playerPx(registry, layer) + glm::dvec2(0.0, -40.0);
+    tap(layer, registry, screenOf(registry, up));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const entt::entity shot = FirstTagged(registry, "Magic Portals Shot Sprite");
+    CHECK(shot != entt::null);
+    if (shot == entt::null) return;
+    const float slotZ = 0.004f;
+    const float behind = (layer.PlayerSlotZ() - registry.get<TransformComponent>(shot).position.z) / slotZ;
+    CHECK_MSG(std::fabs(behind - 1.515625f) < 1e-3f,
+              "the shot 1.516 slots behind the player, the platform's slot between: " + std::to_string(behind));
+    layer.OnDetach(registry);
+}
+
+// And K14's picture: every quad of the shot, sprite and halo, stands behind the
+// player's, on the frames it leaves the player (the capture's frame pair).
+void TheShotLeavesFromBehindThePlayer() {
+    if (!OriginalArtIsThere("TheShotLeavesFromBehindThePlayer")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level3");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    tap(layer, registry, screenOf(registry, glm::dvec2(440.889, 60.444)));
+    int frames = 0;
+    for (int i = 0; i < 6 && layer.SimLevel()->portals.flight; ++i) {
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const entt::entity sprite = FirstTagged(registry, "Magic Portals Shot Sprite");
+        const entt::entity halo = FirstTagged(registry, "Magic Portals Shot Halo");
+        const float playerZ = layer.PlayerSlotZ();
+        if (sprite != entt::null && halo != entt::null) {
+            ++frames;
+            CHECK_MSG(registry.get<TransformComponent>(sprite).position.z < playerZ &&
+                          registry.get<TransformComponent>(halo).position.z < playerZ,
+                      "frame " + std::to_string(i) + ": the shot and its halo behind the player");
+        }
+        tickWith(layer, registry, kRest, {}, {});
+    }
+    CHECK_MSG(frames >= 5, "the shot was drawn on " + std::to_string(frames) + " frames");
+    layer.OnDetach(registry);
+}
+
+// A turn off a reflector, through the layer: 1-12 (level11)'s reflect_agent_761 at
+// (180, 140), horizontal. A tap on the line from the player through it is turned
+// at its catch circle, under the wall that hangs to y 128, and the new leg opens a
+// portal. ETHCallback_reflect_agent's pictures: the old shot's flash where it
+// turned, the new leg's mark at its end (a clear ray, so portal_mark), and the new
+// leg's own flash on its first tick, 24 out along its way.
+void AShotTurnedByAReflectorMarksItsNewEnd() {
+    if (!OriginalArtIsThere("AShotTurnedByAReflectorMarksItsNewEnd")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level11");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const glm::dvec2 mirror(180.0, 140.0);
+    const glm::dvec2 from = playerPx(registry, layer);
+    const glm::dvec2 aim = from + (mirror - from) * 1.5;
+    CHECK(onScreen(registry, aim));
+    tap(layer, registry, screenOf(registry, aim));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int turnTick = -1;
+    MagicPortals::Portals::Reflection turn;
+    for (int i = 0; i < 60 && layer.SimLevel()->portals.flight && turnTick < 0; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (!layer.SimLevel()->portals.reflected.empty()) {
+            turnTick = i;
+            turn = layer.SimLevel()->portals.reflected.front();
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(turnTick >= 0, "the shot was turned: " + lastFailure(layer));
+    if (turnTick < 0) return;
+    CHECK_MSG(!turn.said.willDie && !turn.said.redWaves && turn.said.atPx == turn.toPx,
+              "the new leg's ray is clear: " + Point(turn.said.atPx));
+    const auto marks = EffectsOf(layer, "portal_mark.ent");
+    CHECK_MSG(marks.size() == 1 && marks[0].atPx == turn.said.atPx && marks[0].zUnits == 32.0,
+              "portal_mark at the new leg's end, " + Point(turn.said.atPx) + ": " + std::to_string(marks.size()));
+    auto flashes = EffectsOf(layer, "projectile_shoot.ent");
+    bool atTurn = false;
+    for (const auto& flash : flashes) atTurn = atTurn || (flash.atPx == turn.atPx && flash.zUnits == 0.0);
+    CHECK_MSG(flashes.size() == 2 && atTurn, "the first leg's flash and the old shot's where it turned, " +
+                                                 Point(turn.atPx) + ": " + std::to_string(flashes.size()));
+    // The new leg's own first tick.
+    tickWith(layer, registry, kRest, {}, {});
+    const bool launched = layer.SimLevel()->portals.launches.size() == 1 &&
+                          layer.SimLevel()->portals.launches.front().fromPx == turn.atPx;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(launched, "the new leg launches on the tick after its turn, from where it turned");
+    flashes = EffectsOf(layer, "projectile_shoot.ent");
+    const glm::dvec2 way = glm::normalize(turn.toPx - turn.atPx);
+    bool out24 = false;
+    for (const auto& flash : flashes) out24 = out24 || glm::distance(flash.atPx, turn.atPx + way * 24.0) < 1e-4;
+    CHECK_MSG(flashes.size() == 3 && out24, "and flashes 24 out along its way: " + std::to_string(flashes.size()));
+    landShot(layer, registry);
+    std::printf("  1-12: a shot turned at %s by reflect_agent_761, portal_mark at %s, %zu portal(s) placed\n",
+                Point(turn.atPx).c_str(), Point(turn.said.atPx).c_str(), layer.SimLevel()->portals.placed.size());
+    layer.OnDetach(registry);
+}
+
+// A tap with a fire diamond carried (3-32, level31b), through the layer: the
+// method's own branch casts no ray, so the mark follows the leftover low byte of
+// absTouchPos.x in the original's world pixels (Portals::State::FireDiamondWillDie),
+// no red_waves; and the shot is converted before it ever flies, so no flash.
+void AFireDiamondTapsMarkIsTheLeftoverByte() {
+    if (!OriginalArtIsThere("AFireDiamondTapsMarkIsTheLeftoverByte")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const MagicPortals::Diamonds::Diamond* fire = nullptr;
+    for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+        if (diamond.fire && fire == nullptr) fire = &diamond;
+    }
+    CHECK_MSG(fire != nullptr, "3-32 places a fire diamond");
+    if (fire == nullptr) return;
+    PutPlayerAt(registry, layer, fire->atPx);
+    for (int i = 0; i < 5 && !layer.SimLevel()->diamonds.carrierHasFire; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(layer.SimLevel()->diamonds.carrierHasFire, "the fire diamond is carried");
+    glm::dvec2 aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
+    for (int i = 0; i < 60 && !onScreen(registry, aim); ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
+    }
+    CHECK(onScreen(registry, aim));
+    tap(layer, registry, screenOf(registry, aim));
+    CHECK_MSG(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Fired &&
+                  layer.SimLevel()->portals.flight.has_value(),
+              "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    const glm::dvec2 tapPx = layer.SimLevel()->portals.flight->toPx;
+    const bool dies = MagicPortals::Portals::State::FireDiamondWillDie(tapPx.x * (720.0 / 256.0));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto crosses = EffectsOf(layer, "red_cross.ent");
+    const auto marks = EffectsOf(layer, "portal_mark.ent");
+    CHECK_MSG(static_cast<int>(crosses.size()) == (dies ? 1 : 0) && static_cast<int>(marks.size()) == (dies ? 0 : 1),
+              std::string("the leftover byte says ") + (dies ? "red_cross" : "portal_mark") + " for x " +
+                  std::to_string(tapPx.x) + ": " + std::to_string(crosses.size()) + " cross, " +
+                  std::to_string(marks.size()) + " mark");
+    CHECK(EffectsOf(layer, "red_waves.ent").empty());
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(!layer.SimLevel()->portals.flight && layer.SimLevel()->portals.launches.empty(),
+              "the shot is a fireball before it ever flies: no leg, no flash");
+    std::printf("  3-32 with the fire diamond: a tap at x %.4f u = %.4f px, low byte %s: %s\n", tapPx.x,
+                tapPx.x * (720.0 / 256.0), dies ? "set" : "clear", dies ? "red_cross" : "portal_mark");
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
@@ -9882,6 +10416,16 @@ void runTests() {
     ALitTorchBakesTheLevelAtRunTime();
     EveryLightWallStandsReadyToLeaveItsGhost();
     ALitTorchLeavesAGhostWhereItsWallStood();
+    AShotIntoA17WallEndsInPortalFail();
+    AnAntiportalTapOn17EndsRedAtZeroAndShakes();
+    TheBlockerKillsF3sLongShotRedAndShakesAfter();
+    ATapWhileAShotFliesShowsTheHourglass();
+    ABudgetZeroTapByTheSignMakesRedWavesAndAShake();
+    TheGhostsShotMarksWhereItIsAimed();
+    OnLevel22aTheShotIsBehindThePlatformAtOne();
+    TheShotLeavesFromBehindThePlayer();
+    AShotTurnedByAReflectorMarksItsNewEnd();
+    AFireDiamondTapsMarkIsTheLeftoverByte();
 }
 
 } // namespace

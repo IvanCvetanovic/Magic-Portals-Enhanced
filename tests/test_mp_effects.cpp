@@ -490,6 +490,62 @@ void TheKillFadeIsNineTenthsAFrame() {
     CHECK(Effects::KillFade(rules, red, 0.0) == red);
 }
 
+// ---- the shot and what its tap and its end leave (the visuals plan's 10.1) -------
+
+void TheShotSideRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    struct Row {
+        const Effects::Rule* rule;
+        const char* entity;
+        double offset;
+        double z;
+        bool zScaled;
+    };
+    // Every one AddEntity or AddScaledEntity at the script's own size and angle
+    // 0. The marks, the hourglass, the waves and the violet end stand at
+    // g_scale.scale(32); the flash and the red end at the projectile's own bare 0.
+    const Row rows[] = {
+        {&rules.projectileShoot, "projectile_shoot.ent", 24.0, 0.0, false},
+        {&rules.projectileShootReflected, "projectile_shoot.ent", 0.0, 0.0, false},
+        {&rules.portalMark, "portal_mark.ent", 0.0, 32.0, true},
+        {&rules.redCross, "red_cross.ent", 0.0, 32.0, true},
+        {&rules.hourglass, "hourglass.ent", 0.0, 32.0, true},
+        {&rules.redWaves, "red_waves.ent", 0.0, 32.0, true},
+        {&rules.portalFail, "portal_fail.ent", 0.0, 32.0, true},
+        {&rules.portalFailInField, "portal_fail_in_antiportal.ent", 0.0, 0.0, false},
+    };
+    for (const Row& row : rows) {
+        const Effects::Rule& rule = *row.rule;
+        CHECK_MSG(rule.entity == row.entity && rule.offsetUnits == row.offset && rule.z == row.z &&
+                      rule.zScaled == row.zScaled && rule.turn == Effects::Turn::Fixed && rule.angleDeg == 0.0 &&
+                      rule.scale == 1.0,
+                  std::string(row.entity) + ": offset " + Num(rule.offsetUnits) + ", z " + Num(rule.z) +
+                      (rule.zScaled ? " scaled" : " bare"));
+    }
+    // The point rows are added where they are given.
+    const glm::dvec2 at(260.0, 194.8);
+    const Effects::Spawn mark = Effects::At(rules.portalMark, at);
+    CHECK_MSG(mark.entity == "portal_mark.ent" && mark.atPx == at && mark.z == 32.0 && mark.zScaled &&
+                  mark.angleDeg == 0.0f && mark.scale == 1.0,
+              "portal_mark at the tap, z scale(32): " + At(mark.atPx));
+    const Effects::Spawn failed = Effects::At(rules.portalFailInField, at);
+    CHECK_MSG(failed.atPx == at && failed.z == 0.0 && !failed.zScaled, "the red end at the point, z a bare 0");
+    // And the flash 24 units out along the shot's way, unturned: a shot from
+    // (41, 196) at a tap (160, 112) flashes at 24 x normalize(119, -84).
+    const glm::dvec2 from(41.0, 196.0);
+    const glm::dvec2 tap(160.0, 112.0);
+    const glm::dvec2 d = Direction(tap, from);
+    const Effects::Spawn flash = Effects::ProjectileShoot(rules, from, tap);
+    CHECK_MSG(Near(flash.atPx.x, from.x + 24.0 * d.x, 1e-5) && Near(flash.atPx.y, from.y + 24.0 * d.y, 1e-5),
+              "projectile_shoot 24 out along the shot: " + At(flash.atPx));
+    CHECK_MSG(Near(glm::distance(flash.atPx, from), 24.0, 1e-5), "24 from where it left");
+    CHECK(flash.angleDeg == 0.0f && flash.z == 0.0 && !flash.zScaled);
+    // A shot with nowhere to go flashes where it is (normalize of zero is zero).
+    CHECK(Effects::ProjectileShoot(rules, from, from).atPx == from);
+    std::printf("  the shot's flash: %s for a shot from %s to %s\n", At(flash.atPx).c_str(), At(from).c_str(),
+                At(tap).c_str());
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
@@ -560,6 +616,17 @@ void ARowMissingAFactIsRefused() {
     refused("no_eye_hide.json", "\"hide_with_player\": true,", "", "red_eyes.hide_with_player");
     refused("eye_shown.json", "\"hide_with_player\": true,", "\"hide_with_player\": false,",
             "red_eyes.hide_with_player");
+    // The shot's rows (10.1): each required, the point rows refused a direction,
+    // and the flash refused a turn it is never given.
+    refused("no_mark.json", "\"portal_mark\": {", "\"portal_mark_gone\": {", "portal_mark");
+    refused("no_fail_field.json", "\"portal_fail_in_antiportal\": {", "\"fail_field_gone\": {",
+            "portal_fail_in_antiportal");
+    refused("mark_offset.json", "\"entity\": \"portal_mark.ent\",\n    \"offset_units\": 0,",
+            "\"entity\": \"portal_mark.ent\",\n    \"offset_units\": 3,", "portal_mark");
+    refused("flash_turned.json", "\"offset_units\": 24,\n    \"z\": {\"value\": 0, \"scaled\": false},\n    \"angle\": 0,",
+            "\"offset_units\": 24,\n    \"z\": {\"value\": 0, \"scaled\": false},\n    \"angle\": "
+            "\"toward_traveller_minus_90\",",
+            "projectile_shoot");
 
     Effects::Rules rules;
     std::string why;
@@ -580,6 +647,7 @@ int main() {
     ThePortalsOwnThreeCallsArePointsAndNothingElse();
     TheManagerColoursTheFirstTwoAndBlanksALonePortal();
     TheKillFadeIsNineTenthsAFrame();
+    TheShotSideRowsAreTheDecodedCalls();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

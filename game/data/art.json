@@ -75,12 +75,13 @@
       "_source": [
         "addProjectile (Portal.angelscript, bytes 354113..355121) #26-31: AddEntity('projectile.ent',",
         "vector3(casterPos, 0), 0, ...) - the caster's x and y at z 0. The depth its light's height is",
-        "measured from (z + the light's -12, scaled). The port draws the shot a quarter slot in front of",
-        "the player, which is Ethanon's order at an equal z for what is added after the player; the",
-        "decoded player is at z 4 in the world's units, 4 / 2.8125 = 1.42 in the level's (character.z",
-        "and depth, 00_order K14, R10), which puts the shot behind the player now that step 5.1 has",
-        "moved it there. This 0 is the script's own z, not a guess: step 5.1's note that the",
-        "AddEntity was undecoded is superseded by step 81's decode of it."
+        "measured from (z + the light's -12, scaled). The decoded player is at z 4 in the world's",
+        "units, 4 / 2.8125 = 1.42 in the level's (character.z and depth, R10), so the original draws",
+        "the shot BEHIND the player. The port drew it a quarter slot in front of the player's slot until",
+        "step 123 (00_order K14, the visuals plan's 10.1), which draws it at this z through the",
+        "between-slot table: after every picture of the level at 0 or below, behind the player",
+        "(MagicPortalsLayer::Slot::ShotPicture). This 0 is the script's own z, not a guess: step 5.1's",
+        "note that the AddEntity was undecoded is superseded by step 81's decode of it."
       ],
       "value": 0.0
     },

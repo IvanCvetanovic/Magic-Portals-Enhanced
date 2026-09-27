@@ -205,7 +205,13 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "portal_summon_effect", read.summon, why) || !ReadRule(root, "portal", read.portal, why) ||
         !ReadRule(root, "portal_death", read.death, why) ||
         !ReadPlacedPortal(root, "placed_portal", read.placedPortal, why) ||
-        !ReadEyes(root, "red_eyes", read.eyes, why)) {
+        !ReadEyes(root, "red_eyes", read.eyes, why) ||
+        !ReadRule(root, "projectile_shoot", read.projectileShoot, why) ||
+        !ReadRule(root, "projectile_shoot_reflected", read.projectileShootReflected, why) ||
+        !ReadRule(root, "portal_mark", read.portalMark, why) || !ReadRule(root, "red_cross", read.redCross, why) ||
+        !ReadRule(root, "hourglass", read.hourglass, why) || !ReadRule(root, "red_waves", read.redWaves, why) ||
+        !ReadRule(root, "portal_fail", read.portalFail, why) ||
+        !ReadRule(root, "portal_fail_in_antiportal", read.portalFailInField, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -222,12 +228,25 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"explosion_large", &read.largeExplosion},
                      {"portal_summon_effect", &read.summon},
                      {"portal", &read.portal},
-                     {"portal_death", &read.death}};
+                     {"portal_death", &read.death},
+                     {"projectile_shoot_reflected", &read.projectileShootReflected},
+                     {"portal_mark", &read.portalMark},
+                     {"red_cross", &read.redCross},
+                     {"hourglass", &read.hourglass},
+                     {"red_waves", &read.redWaves},
+                     {"portal_fail", &read.portalFail},
+                     {"portal_fail_in_antiportal", &read.portalFailInField}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
             return false;
         }
+    }
+    // projectile_shoot is offset along the shot's direction but never turned by
+    // it: AddScaledEntity passes a flat 0f.
+    if (read.projectileShoot.turn != Turn::Fixed) {
+        error = path + ": projectile_shoot is added by AddScaledEntity, whose angle is 0: a number, not a rule";
+        return false;
     }
     // updateEyes both moves the eyes onto the character and hides them with it,
     // and the port has one owner that does both. A row that said otherwise would
@@ -291,6 +310,15 @@ Spawn Summon(const Rules& rules, const glm::dvec2& atPx) { return SpawnOf(rules.
 Spawn Portal(const Rules& rules, const glm::dvec2& atPx) { return SpawnOf(rules.portal, atPx, glm::dvec2(0.0)); }
 
 Spawn Death(const Rules& rules, const glm::dvec2& atPx) { return SpawnOf(rules.death, atPx, glm::dvec2(0.0)); }
+
+Spawn At(const Rule& rule, const glm::dvec2& atPx) { return SpawnOf(rule, atPx, glm::dvec2(0.0)); }
+
+Spawn ProjectileShoot(const Rules& rules, const glm::dvec2& fromPx, const glm::dvec2& towardPx) {
+    // The `direction` addProjectile stores: normalize(destiny - casterPos), in the
+    // script's floats - vanishEffect's normalize, with the two points the other
+    // way round.
+    return SpawnOf(rules.projectileShoot, fromPx, VanishDirection(towardPx, fromPx));
+}
 
 bool ManagerColour(const PlacedPortal& rules, int index, int placed, int maxPortals, glm::dvec3& out) {
     // #185-188: more than one portal in the array colours the first two and

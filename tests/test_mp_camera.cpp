@@ -192,7 +192,13 @@ void TheEarthquakeIsTheDecodedGenerator() {
                 {Call::ShockDiamondPicked, 15.0, When::AfterUpdate},
                 {Call::FireDiamondPicked, 15.0, When::AfterUpdate},
                 {Call::ShockStrike, 25.0, When::AfterUpdate},
-                {Call::LightWallGone, 20.0, When::AfterUpdate}};
+                {Call::LightWallGone, 20.0, When::AfterUpdate},
+                // The shot's three (step 123): blockPortalEffects is PortalManager::update's,
+                // a controller before the generator; anti_projectile_wall.ent is static;
+                // projectile.ent is not.
+                {Call::NoPortalTap, 7.0, When::BeforeUpdate},
+                {Call::ShotBlocked, 5.0, When::AfterUpdate},
+                {Call::ShotFailedInField, 5.0, When::BeforeUpdate}};
     CHECK(std::size(rows) == Earthquake::kCalls);
     for (const auto& row : rows) {
         const Earthquake::CallRule& rule = rules.Of(row.call);

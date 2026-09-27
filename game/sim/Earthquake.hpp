@@ -63,6 +63,12 @@ enum class Call : std::size_t {
     FireDiamondPicked,
     ShockStrike,
     LightWallGone,
+    // The shot's own three (the visuals plan's 10.1): a tap refused for a budget
+    // of 0 while the level's no-portal sign is there, a shot an anti-projectile
+    // wall kills, and one that ends inside a field.
+    NoPortalTap,
+    ShotBlocked,
+    ShotFailedInField,
     Count
 };
 

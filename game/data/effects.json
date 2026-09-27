@@ -316,5 +316,151 @@
       "row that said otherwise would need an owner of its own. The field writes down #66-72 redEyes.Hide(true)",
       "beside the arithmetic it belongs to; it is not a number a designer retunes."
     ]
+  },
+
+  "_shot_side": [
+    "THE SHOT AND WHAT ITS TAP AND ITS END LEAVE BEHIND - the visuals plan's 10.1 (00_order section 7 as",
+    "section 8.13 amends it; decode D3 and D3_check, section 8.4), drawn from planning step 123. Eight call",
+    "sites, all AddEntity or AddScaledEntity at the script's own size (g_scale.getScale(), 1 in the port's",
+    "units) and angle 0; AddScaledEntity is AddEntity(file, pos, 0f, 0, '', scale)",
+    "(ETHScriptWrapper.Scene.cpp:176-178). What each .ent draws is read from the .ent at run time",
+    "(Art::LoadEnt), as for every row above."
+  ],
+
+  "projectile_shoot": {
+    "entity": "projectile_shoot.ent",
+    "offset_units": 24,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_projectile (Portal.angelscript, bytes 358053..359141) on a projectile's FIRST frame (no",
+      "initialPos yet, #1-12): #14-27 initialPos = GetPositionXY; #29-55 AddToPositionXY(g_scale.scale(24 x",
+      "direction)); #57-71 AddScaledEntity('projectile_shoot.ent', thisEntity.GetPosition(), getScale()) - at",
+      "the projectile once it has jumped. The projectile was added at vector3(casterPos, 0) (global",
+      "addProjectile 354113..355121 #16-40), so the z is its 0. offset_units is that jump: the port's shot",
+      "does not jump, so the row puts the flash 24 units out from where it left along its direction",
+      "(normalize(destiny - casterPos), the `direction` addProjectile stores). A reflected shot is a new",
+      "projectile.ent and flashes the same on its own first frame. ITS .ent: no sprite, one onda.png, a1,",
+      "rep1, life 350, size 11, growth 2.7, minSize 16, StartPoint z 4, (0.9, 0.7, 1) to black. Temporary."
+    ]
+  },
+
+  "projectile_shoot_reflected": {
+    "entity": "projectile_shoot.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_reflect_agent (MiscCallbacks.angelscript, bytes 349003..350254) #246-260: the same .ent,",
+      "AddScaledEntity at the OLD projectile's own vector3 (its z the 0 it was added at), after #224-235 add",
+      "the reflected projectile and #237-243 delete the old one. A second call site of one .ent, so a row of",
+      "its own."
+    ]
+  },
+
+  "portal_mark": {
+    "entity": "portal_mark.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "Global addProjectile (354113..355121) #213-243, when willDie is 0: AddEntity('portal_mark.ent',",
+      "vector3(touchPos, g_scale.scale(32)), 0, @out, '', getScale()). For the player's tap touchPos is",
+      "absTouchPos, the release point plus the camera (D3_check correction 2: managePortalInsertion #169 ->",
+      "PortalManager::addProjectile v-3 -> #27 -> the global's v-2); for a reflected shot it is the new",
+      "destination (ETHCallback_reflect_agent #224-235). The SAME arguments in addEnemyShoot (ETHCallback_minion",
+      "434575..435266 #127-156) at an enemy shot's finalPos, which ETHCallback_ghost #585-592 passes as the",
+      "character's GetPositionXY. ITS .ent: one dashed_circle_particle.png, a0, rep1, life 1100, size 32,",
+      "growth -0.1, angleDir 1.5, alpha 0.6 to 0. Temporary."
+    ]
+  },
+
+  "red_cross": {
+    "entity": "red_cross.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "Global addProjectile #167-199, when willDie: AddEntity('red_cross.ent', vector3(touchPos,",
+      "g_scale.scale(32)), 0, @out, '', getScale()) - portal_mark's place, and the one of the two a shot the",
+      "tap-time ray already dooms is given (placement.json final_pos). ITS .ent: one",
+      "dont_do_sign_particle.png, a0, rep1, life 700, size 32, growth -0.3, alpha 1 to 0. Temporary."
+    ]
+  },
+
+  "hourglass": {
+    "entity": "hourglass.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "PortalManager::managePortalInsertion (143178..144166) #181-210: a tap past the 400 ms gate (#43-53),",
+      "on no pad and no button (#54-71), while SeekEntity('projectile.ent') finds one (#80-99) - a player's",
+      "or a reflected shot still flying, not an enemy's - AddEntity('hourglass.ent', vector3(absTouchPos,",
+      "g_scale.scale(32)), 0, @out, '', getScale()), and no shot. #75-78 reset lastPortalTimer BEFORE that",
+      "test, so the hourglass tap restarts the 400 ms: 00_order 8.15's R23, NOT played by the port, which",
+      "draws the hourglass on its own in-flight refusal and leaves the clock alone. No sound and no vibrate",
+      "on this branch. ITS .ent: one hourglass_icon_small.png, a0, rep1, life 650, size 24, growth 0.35,",
+      "alpha 0.6 to 0. Temporary."
+    ]
+  },
+
+  "red_waves": {
+    "entity": "red_waves.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "Two call sites with one set of arguments, AddScaledEntity('red_waves.ent', vector3(p,",
+      "g_scale.scale(32)), getScale()). (A) the global computePortalFinalPos #81-108, when the ray meets",
+      "nothing and destPos is in an antiportal field - p is destPos: the tap, or a reflected shot's new",
+      "destination (ETHCallback_reflect_agent #212). (B) PortalManager::blockPortalEffects #113-133 on a",
+      "budget of 0 with the no_portal_sign (placement.json no_budget) - p is absTouchPos, with",
+      "startEarthquake(7, 40) (earthquake.json no_portal_tap). ITS .ent: three onda.png released over the",
+      "life (allAtOnce 0), a1, rep1, life 1250, size 110, growth -1.7, black to (1, 0, 0). Temporary."
+    ]
+  },
+
+  "portal_fail": {
+    "entity": "portal_fail.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_projectile #237-257, a willDie shot arriving at its destiny outside every antiportal",
+      "field: AddScaledEntity('portal_fail.ent', vector3(destiny, g_scale.scale(32)), getScale()), then",
+      "#260-263 playPortalFailedSound and no earthquake. destiny is the first ray's contact for a shot a",
+      "static or non-teleportable body dooms. ITS .ent: no sprite; five explosion.png cut 4 x 3, all at once, a1,",
+      "rep1, life 600 +- 605, size 96, growth 4, maxSize 73, (0.5, 0.5, 1, 0.7) to black; a <Light> range",
+      "58, (0.6, 0.6, 1), z 6, and NO <HaloBitmap>, so a light and no halo. Temporary. Footage F3 #37:",
+      "white star burst at the block's underside, violet puffs to #45, no shake."
+    ]
+  },
+
+  "portal_fail_in_antiportal": {
+    "entity": "portal_fail_in_antiportal.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "Two call sites with one set of arguments. ETHCallback_projectile #202-232: a willDie shot arriving",
+      "with its position inside a field (#202-211) - startEarthquake(5, 0) (#213-215, earthquake.json",
+      "shot_failed_in_field) and AddScaledEntity('portal_fail_in_antiportal.ent', vector3(destiny, 0),",
+      "getScale()), the 0 a bare literal (PshC4 0 at #222). And ETHCallback_anti_projectile_wall (344990..345591)",
+      "#4-113 for every projectile.ent inside the wall's rectangle: startEarthquake(5, 0) (#70-72,",
+      "earthquake.json shot_blocked), the same AddScaledEntity at vector3(the projectile's XY, 0) (#74-96),",
+      "playPortalFailedSound and DeleteEntity. ITS .ent: no sprite; five explosion.png cut 4 x 3, all at",
+      "once, a1, rep1, life 350 +- 805, size 32, growth 4.4, maxSize 69, StartPoint z 20, (1, 0.4, 0.4) to",
+      "black; a <Light> range 66, (1.6, 0, 0), z 6, no halo. Temporary. Footage F3 #102 (the blocker) and",
+      "#162-168 (an arrival in the field): a red burst, and a vertical shake of at least 5 px."
+    ]
   }
 }
