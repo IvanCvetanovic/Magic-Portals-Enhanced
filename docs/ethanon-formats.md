@@ -1550,6 +1550,48 @@ values (the properties copy is never mutated — the mutating lines are commente
 pre-multiply itself. **Currently a no-op in every sample** — no shipped `.ent` that owns a particle system has
 a non-`(1,1)` `<Scale>` — but implement it anyway.
 
+### 7.4a (2026-09-27) `<StartPoint>` z is depth, on the entity's own axis — never a bare literal
+A system's particle **piece** is sorted at `particle->GetZPosition() + entity->GetPositionZ() + shift`
+(`Renderer/ETHEntityRenderingManager.cpp:98-102`), where `GetZPosition()` is `m_system.startPoint.z`
+(`Particles/ETHParticleManager.cpp:424-427`). So a system whose start point has a z draws at its owner's depth plus
+that z, not at its owner's.
+
+**The z scales with the entity, exactly as the start point's x and y do.** `ETHParticleSystem::Scale` multiplies the
+whole `startPoint` vector3 (`Particles/ETHParticleSystem.cpp:27-33`), at the scale the manager is made with
+(`ETHParticleManager.cpp:90`), which is the entity's mean scale (`Entity/ETHSpriteEntity.cpp:316-319`); a later
+`ETHEntity::Scale(float)` scales every system again (`Entity/ETHEntity.cpp:591-599` →
+`ETHSpriteEntity.cpp:512-518` → `ETHParticleManager.cpp:444-446`). For Magic Portals that puts it on the level's
+own axis both ways a system reaches the scene:
+- **a placement** — `LoadScene` scales by the engine's global factor (`Script/ETHScriptWrapper.Scene.cpp:603`),
+  which this game never sets (`Util/ETHGlobalScaleManager.cpp:27` defaults it to 1; the bytecode listing has no
+  `SetFixedHeight` or `SetScaleFactor` call), and the script then calls `SGlobalScale::scaleEntities` (listing
+  6838..7228), whose `scaleEntity` (6072..6337 #30-53) does `Scale(getScale() × individualScale)` followed by
+  `SetPosition(GetPosition() × getScale())` — the systems, start point z included, and the position z by the one
+  factor (skipped only for an entity whose custom data sets `scalable` 0, which no shipped scene or `.ent` does);
+- **a script's `AddEntity`** — the entity is made at `Scale() × globalScale` (`ETHScriptWrapper.Scene.cpp:131-158`,
+  `ETHSpriteEntity.cpp:56-65`), and every call site Magic Portals draws passes `g_scale.getScale()` or
+  `g_scale.scale(k)` (e.g. `appearEffect` 357060..357278 #2-6 and #26; `explode` 342023..342895 #1-23).
+
+A z written as a bare literal in the SCRIPT (a `vector3`'s third component) is in world units and shrinks as 1/f
+on the level's axis (00_order 8.12b); a `<StartPoint>` z is not such a literal.
+
+**The vertical shift.** An `ET_VERTICAL` (type 2) owner's pieces also take `_ETH_PARTICLE_DEPTH_SHIFT`
+(`Particles/ETHParticleManager.h:30`, 10.0, applied at `ETHParticleManager.cpp:332-335` through
+`ETHEntityProperties::ResolveDepthSortingMode`, `Entity/ETHEntityProperties.cpp:108-121`): a raw 10 world units,
+3.556 on Magic Portals' level axis at 720 p. Such an owner also sorts each particle on its own
+(`ComputeParticleDepth`, `ETHParticleManager.cpp:305-330`, adding `GetOffset()` = start y less current y).
+
+**Screen projection.** `DrawParticleSystem` draws each particle at `ToScreenPos(Vector3(pos, startPoint.z),
+zAxisDirection)` (`ETHParticleManager.cpp:392`), i.e. `pos + zAxisDirection × z` (`Util/ETHASUtil.cpp:123-126`).
+The default direction is (0, −1) (`Scene/ETHSceneProperties.cpp:92`), but **all 133 of Magic Portals' `.esc` files
+set `<ZAxisDirection x="0" y="0" />`**, so the z moves nothing on screen in this game (counted 2026-09-27).
+
+**Census of the 128 levels' placements** (`out/parity/visuals/8.4/census/types84.py`, over the `.esc` bodies):
+840 carriers, 897 systems; **15 carriers and 25 systems** have a start point z other than 0 — the five
+`blue_light` lamps (level4, 7, 18, 21, 27: one system at 24) and the ten `light_off` torches (level21c-26c,
+28c-31c: two systems at 4). The ten torches are also the **only** `ET_VERTICAL` carriers (830 are type 0). The
+converter does not write an entity's type, so the port cannot yet add the vertical shift (planning step 92).
+
 ### 7.5 `size` is absolute pixels on a square quad
 `DrawParticleSystem` sets `Sprite::EO_CENTER` (`:366`), selects `SetRect(currentFrame)` when the cut is
 > 1×1 (`:397-402`), and draws with `Vector2(particle.size, particle.size)` (`:413`), which backends pass

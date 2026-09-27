@@ -327,6 +327,12 @@ public:
         bool ownerGone = false; // its picture was taken away, and it with it
         float z = 0.0f;
         float ownerZ = 0.0f; // its owner's picture's
+        // The depth the original sorts it at, on the level's axis: its owner's
+        // eth_z plus its own <StartPoint> z at its entity's scale. `lifted` when
+        // that z is not 0, and it is drawn at the depth rather than in its
+        // owner's slot (Slot::LiftedSystems).
+        double depth = 0.0;
+        bool lifted = false;
         int count = 0;       // the pool
         int active = 0;      // GetNumActiveParticles
         int drawn = 0;       // particles with a quad this frame
@@ -335,6 +341,16 @@ public:
         double newestAgeMs = 0.0;     // and its age: 0 when it began this frame
     };
     std::vector<EmitterReport> EmitterReports() const;
+
+    // Each of the level's own pictures in its slot, in drawing order, for the
+    // suites: what a lifted system's depth is measured against (step 92).
+    struct PictureReport {
+        std::string node;
+        int zIndex = 0;     // its node's z_index, which orders the slots
+        double lookZ = 0.0; // its node's eth_z, unrounded
+        float z = 0.0f;     // its slot's z, where its quad is drawn
+    };
+    std::vector<PictureReport> PictureReports() const;
 
     // ---- WHAT STANDS BETWEEN TWO SLOTS, in one table (00_order K13) ---------
     //
@@ -375,6 +391,19 @@ public:
     // lambda's own -0.5, so joining the table moves neither of them a unit, and
     // the 128-level sweep measures that (step 88's gate table).
     //
+    // A PLACEMENT'S SYSTEMS ITS <StartPoint> z LIFTS (step 92, the visuals plan's
+    // 8.4) are the one row that is not added by a script: a level's own system
+    // whose start point stands off its entity's depth draws after every picture
+    // at or below the sum, not in its owner's slot (buildEmitters). They spread
+    // over (-1/2, -1/4) of the gap they land in - the one quarter no other row
+    // stands in or spreads over - so they tie with nothing: after every picture
+    // the table puts at -1/2 of that gap, before its placed portals, effect
+    // halos and effect systems. What that costs is the table's own limit: in a
+    // gap two classes share, the original orders them by DEPTH and the table by
+    // CLASS, so the picture of an effect deeper than a lifted system but in its
+    // gap still draws behind it, and the halo and systems of an effect shallower
+    // than it still draw in front of it.
+    //
     // NOT IN THE TABLE. The loading screen draws in a space of its own (0.32 for
     // the portal's systems, 0.6 and 0.61 for the vanish), because no level's
     // slots exist while it is up.
@@ -390,6 +419,7 @@ public:
         Escort,         // the escort the chapter-3 boss calls, at its anchor's depth
         WallGhost,      // the ghost a lit torch leaves where its light wall stood, the wall's depth - 1.42
         Effect,         // an entity the script ADDS (Effects::Spawn), at round(z)
+        LiftedSystems,  // a placement's systems whose <StartPoint> z is not 0, at its owner's z plus it
         PlacedPortal,   // a portal the player opened: portal.ent, at the z 0 insertPortal gives it
         EffectHalo,     // that entity's halo, a quarter in front of its own picture
         EffectSystems,  // and its particle systems, spread over the quarter after that halo
@@ -409,10 +439,11 @@ public:
         // that starts here, so an entity's systems never tie with each other.
         //
         // `spreads` is a statement of the row, for a reader and for the suite;
-        // no arithmetic branches on it, because the only two rows that carry it
-        // (Slot::Systems and Slot::EffectSystems) are the only two systemZ is
-        // ever called with, and systemZ spreads unconditionally. A class that
-        // needs the plain fraction goes through slotAt/slotAfter/slotOver.
+        // no arithmetic branches on it, because the only three rows that carry it
+        // (Slot::LiftedSystems, Slot::EffectSystems and Slot::Systems) are the
+        // only three systemZ is ever called with, and systemZ spreads
+        // unconditionally. A class that needs the plain fraction goes through
+        // slotAt/slotAfter/slotOver.
         double fraction;
         bool spreads;
     };
@@ -428,6 +459,7 @@ public:
         {Slot::Escort, "escort", -0.5, false},
         {Slot::WallGhost, "light wall ghost", -0.5, false},
         {Slot::Effect, "effect", -0.5, false},
+        {Slot::LiftedSystems, "lifted particle systems", -0.5, true},
         {Slot::PlacedPortal, "placed portal", -0.25, false},
         {Slot::EffectHalo, "effect halo", -0.25, false},
         {Slot::EffectSystems, "effect particle systems", -0.25, true},
@@ -1489,7 +1521,12 @@ private:
         // and angle again every frame from m_sprites (ownerPx, ownerAngleDeg), so it
         // follows what moves the picture; one with no sprite stays here.
         Particles::Owner owner;
-        float z = 0.0f; // in front of its owner's picture and its halo (Particles::SlotFraction)
+        // In front of its owner's picture and its halo (Particles::SlotFraction) -
+        // or, for a level's system whose <StartPoint> z is not 0, after every
+        // picture at or below `depth` (Slot::LiftedSystems).
+        float z = 0.0f;
+        double depth = 0.0; // its owner's z plus its <StartPoint> z, on the level's axis
+        bool lifted = false;
         glm::dvec2 cellPx{0.0};
         std::string image;
         int sprite = -1; // the sprite in m_sprites whose entity it belongs to: it goes when that goes

@@ -2718,6 +2718,12 @@ const MagicPortalsLayer::EmitterReport* ReportOf(const std::vector<MagicPortalsL
     }
     return nullptr;
 }
+// Not on a temporary: EmitterReports() returns by value, so a pointer into what
+// it returned dangles at the end of the statement that called it. Six reads did
+// that and passed only because the freed memory was not reused first (planning
+// step 91); this makes the seventh a compile error.
+const MagicPortalsLayer::EmitterReport* ReportOf(std::vector<MagicPortalsLayer::EmitterReport>&& reports,
+                                                 const std::string& node, int slot) = delete;
 
 void PutPlayerAt(entt::registry& registry, const MagicPortalsLayer& layer, const glm::dvec2& atPx) {
     auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
@@ -2998,7 +3004,8 @@ void AnEmitterFollowsItsOwner() {
         CHECK(!crystals.empty());
         if (!crystals.empty()) {
             const std::string crystal = crystals.front().name;
-            const auto* before = ReportOf(layer.EmitterReports(), crystal, 0);
+            const std::vector<MagicPortalsLayer::EmitterReport> built = layer.EmitterReports();
+            const auto* before = ReportOf(built, crystal, 0);
             CHECK(before != nullptr && !before->ownerGone);
             if (before != nullptr) {
                 PutPlayerAt(registry, layer, before->owner.atPx);
@@ -3007,7 +3014,8 @@ void AnEmitterFollowsItsOwner() {
                     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
                 }
                 layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-                const auto* after = ReportOf(layer.EmitterReports(), crystal, 0);
+                const std::vector<MagicPortalsLayer::EmitterReport> taken = layer.EmitterReports();
+                const auto* after = ReportOf(taken, crystal, 0);
                 CHECK_MSG(layer.SimLevel()->goals.crystals.front().collected, "the crystal is taken");
                 CHECK_MSG(after != nullptr && after->ownerGone && after->drawn == 0 && after->active == 0,
                           "and its sparkle went with it");
@@ -3049,7 +3057,8 @@ void AnEmitterFollowsItsOwner() {
             layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         }
         const auto* spent = layer.SimLevel()->diamonds.Find(name);
-        const auto* spark = ReportOf(layer.EmitterReports(), name, 0);
+        const std::vector<MagicPortalsLayer::EmitterReport> spentReports = layer.EmitterReports();
+        const auto* spark = ReportOf(spentReports, name, 0);
         CHECK_MSG(spent != nullptr && spent->gone, "the diamond struck the minion and spent itself");
         CHECK_MSG(pictures() == 1, "its picture went and its twin's stayed: " + std::to_string(pictures()));
         CHECK_MSG(spark != nullptr && spark->ownerGone && spark->drawn == 0, "and its spark went with it");
@@ -3137,7 +3146,8 @@ void ATurnedOwnerTurnsItsParticles() {
         if (std::fabs(d.x) > 64.0 + 1e-3 || std::fabs(d.y) > 16.0 + 1e-3) ++outside;
         if (std::fabs(d.x) > 16.0 + 1e-3) ++alongWall;
     }
-    const auto* last = ReportOf(layer.EmitterReports(), wall, 0);
+    const std::vector<MagicPortalsLayer::EmitterReport> lastReports = layer.EmitterReports();
+    const auto* last = ReportOf(lastReports, wall, 0);
     std::printf("  4-32's light wall: angle %.4f, %d births, %d along the wall past 16\n",
                 last != nullptr ? last->owner.angleDeg : -1.0, births, alongWall);
     CHECK_MSG(angleOff == 0, std::to_string(angleOff) + " frame(s) the wall's emitter was not at 90 degrees");
@@ -3267,6 +3277,170 @@ void APlacementWithoutItsSidecarDrawsNoSystem() {
     layer.OnDetach(registry);
 }
 
+// A PLACEMENT'S <StartPoint> z AS DEPTH (00_order 8.4, planning step 92).
+// Ethanon sorts an entity's particle piece at its system's start point z plus
+// the entity's z (ETHEntityRenderingManager.cpp:98-102), and both are on the
+// level's axis once SGlobalScale::scaleEntity has scaled the entity, its systems
+// and its position by one factor - the start point is no bare literal. The
+// levels place 25 systems whose z is not 0, on 15 carriers: the five blue lamps'
+// orbs at 24 and the ten unlit torches' two sparkle systems at 4. Each is drawn
+// after every picture at or below its owner's eth_z plus that z - the player too,
+// where the player stands at or below it - and before every picture above it, in
+// the (-1/2, -1/4) of the gap the table gives Slot::LiftedSystems. Every other
+// system on those levels keeps its owner's slot.
+void AStartPointLiftsAPlacementsSystems() {
+    if (!OriginalArtIsThere("AStartPointLiftsAPlacementsSystems")) return;
+    struct Carrier {
+        const char* level;
+        const char* node;
+        double ownerZ; // its node's eth_z
+        double startZ; // its systems' <StartPoint> z
+        int systems;
+    };
+    const std::array<Carrier, 15> carriers{{
+        {"level4", "blue_light_ent_641", 0.0, 24.0, 1},    {"level7", "blue_light_ent_930", -18.0, 24.0, 1},
+        {"level18", "blue_light_ent_859", -14.0, 24.0, 1}, {"level21", "blue_light_ent_931", -16.0, 24.0, 1},
+        {"level27", "blue_light_ent_641", 0.0, 24.0, 1},   {"level21c", "light_off_ent_1689", -10.0, 4.0, 2},
+        {"level22c", "light_off_ent_1689", -14.0, 4.0, 2}, {"level23c", "light_off_ent_1689", -10.0, 4.0, 2},
+        {"level24c", "light_off_ent_1689", -10.0, 4.0, 2}, {"level25c", "light_off_ent_1689", -10.0, 4.0, 2},
+        {"level26c", "light_off_ent_1689", -12.0, 4.0, 2}, {"level28c", "light_off_1689", -12.0, 4.0, 2},
+        {"level29c", "light_off_1689", -12.0, 4.0, 2},     {"level30c", "light_off_1689", -12.0, 4.0, 2},
+        {"level31c", "light_off_1689", -12.0, 4.0, 2},
+    }};
+
+    // THE CENSUS: over the 128 levels, the carriers whose sidecar holds a system
+    // with a start point z other than 0 are exactly these fifteen, with exactly
+    // these numbers.
+    MagicPortals::Tiers::Rules tiers;
+    std::string error;
+    CHECK_MSG(MagicPortals::Tiers::LoadRules(MagicPortalsLayer::Paths{}.portData + "/tiers.json", tiers, error), error);
+    std::set<std::string> found;
+    int liftedSystems = 0;
+    int allSystems = 0;
+    int wrongNumbers = 0;
+    for (const char* suffix : {"", "a", "b", "c"}) {
+        for (int i = 0; i < 32; ++i) {
+            const std::string level = "level" + std::to_string(i) + suffix;
+            MagicPortals::Tscn::Scene scene;
+            MagicPortals::Lighting::Scene look;
+            const bool read = MagicPortals::Tscn::Load(kLevels + "/" + level + ".tscn", scene, error) &&
+                              MagicPortals::Lighting::Read(scene, kLevels + "/..", tiers, look, error);
+            CHECK_MSG(read, level + ": " + error);
+            if (!read) continue;
+            for (const auto& entry : look.nodes) {
+                const std::string& node = entry.first;
+                const MagicPortals::Lighting::Look& l = entry.second;
+                if (l.particles.empty()) continue;
+                std::vector<MagicPortals::Particles::System> held;
+                if (!MagicPortals::Particles::Load(l.particles, held, error)) continue;
+                allSystems += static_cast<int>(held.size());
+                const int lifted = static_cast<int>(std::count_if(
+                    held.begin(), held.end(), [](const MagicPortals::Particles::System& s) { return s.startPointZ != 0.0; }));
+                if (lifted == 0) continue;
+                liftedSystems += lifted;
+                found.insert(level + "/" + node);
+                const auto it = std::find_if(carriers.begin(), carriers.end(), [&](const Carrier& c) {
+                    return level == c.level && node == c.node;
+                });
+                if (it == carriers.end() || l.z != it->ownerZ || lifted != it->systems ||
+                    std::any_of(held.begin(), held.end(),
+                                [&](const MagicPortals::Particles::System& s) { return s.startPointZ != it->startZ; })) {
+                    ++wrongNumbers;
+                }
+            }
+        }
+    }
+    std::printf("  a start point z other than 0: %zu carriers, %d of the levels' %d systems\n", found.size(),
+                liftedSystems, allSystems);
+    CHECK_EQ(found.size(), carriers.size());
+    CHECK_EQ(liftedSystems, 25);
+    CHECK_EQ(allSystems, 897);
+    CHECK_MSG(wrongNumbers == 0, std::to_string(wrongNumbers) + " carrier(s) not with the numbers listed here");
+
+    // THE DEPTH each of them is drawn at, on its level.
+    const float slotZ = 0.004f; // kSpriteSlotZ
+    const double playerZ = 4.0 / 2.8125; // R10: the character's AddScaledEntity z, on the level's axis
+    for (const Carrier& carrier : carriers) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), carrier.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) continue;
+        const std::vector<MagicPortalsLayer::PictureReport> pictures = layer.PictureReports();
+        const std::vector<MagicPortalsLayer::EmitterReport> emitters = layer.EmitterReports();
+        const double depth = carrier.ownerZ + carrier.startZ;
+        const float player = layer.PlayerSlotZ();
+
+        int systems = 0;
+        int behind = 0;  // pictures at or below its depth, drawn before it
+        int passed = 0;  // of those, the ones its owner's own slot drew it behind
+        int inFront = 0; // pictures above its depth, drawn after it
+        int wrongSide = 0;
+        int ownSlotWrong = 0;
+        for (const MagicPortalsLayer::EmitterReport& e : emitters) {
+            if (e.node.empty()) continue; // no level picture carries it
+            if (e.node != carrier.node) {
+                // Every other system on the level keeps its owner's slot.
+                if (e.lifted || e.z <= e.ownerZ + 0.25f * slotZ || e.z >= e.ownerZ + 0.5f * slotZ) ++ownSlotWrong;
+                continue;
+            }
+            ++systems;
+            CHECK_MSG(e.lifted && std::fabs(e.depth - depth) < 1e-9,
+                      std::string(carrier.level) + " " + carrier.node + " system " + std::to_string(e.slot) +
+                          ": lifted to " + std::to_string(e.depth));
+            CHECK_MSG(e.count == (carrier.startZ == 24.0 ? 4 : (e.slot == 0 ? 18 : 2)),
+                      "its pool as its sidecar states it: " + std::to_string(e.count));
+            float nearestInFront = 1e9f;
+            for (const MagicPortalsLayer::PictureReport& p : pictures) {
+                if (static_cast<double>(p.zIndex) <= depth) {
+                    if (e.slot == 0) ++behind;
+                    if (e.slot == 0 && p.z > e.ownerZ) ++passed;
+                    if (!(p.z < e.z)) ++wrongSide;
+                } else {
+                    if (e.slot == 0) ++inFront;
+                    if (!(e.z < p.z)) ++wrongSide;
+                    nearestInFront = std::min(nearestInFront, p.z);
+                }
+            }
+            if (playerZ <= depth ? !(player < e.z) : !(e.z < player)) ++wrongSide;
+            // The player takes a slot too: where it stands above the depth and no
+            // picture does below it, the next slot is the player's.
+            if (!(playerZ <= depth)) nearestInFront = std::min(nearestInFront, player);
+            // In (-1/2, -1/4) of the gap's slot: the table's Slot::LiftedSystems.
+            if (nearestInFront < 1e8f) {
+                const float gap = (nearestInFront - e.z) / slotZ;
+                CHECK_MSG(gap > 0.25f && gap < 0.5f, std::string(carrier.level) + " " + carrier.node +
+                                                         ": a quarter to a half of a slot before the next picture: " +
+                                                         std::to_string(gap));
+            }
+        }
+        CHECK_MSG(systems == carrier.systems,
+                  std::string(carrier.level) + " " + carrier.node + ": " + std::to_string(systems) + " system(s)");
+        CHECK_MSG(wrongSide == 0, std::string(carrier.level) + " " + carrier.node + ": " + std::to_string(wrongSide) +
+                                      " picture(s) or the player on the wrong side of its depth " +
+                                      std::to_string(depth));
+        CHECK_MSG(ownSlotWrong == 0, std::string(carrier.level) + ": " + std::to_string(ownSlotWrong) +
+                                         " other system(s) out of their owner's slot");
+        std::printf("  %s %s: depth %g, after %d picture(s) (%d its own slot had in front of it)%s, before %d\n",
+                    carrier.level, carrier.node, depth, behind, passed, playerZ <= depth ? " and the player" : "",
+                    inFront);
+        // 00_order 8.4's own words, where the owner stands at 0: 1-05's orb is
+        // after every picture with a z_index of 24 or less.
+        if (std::string(carrier.level) == "level4") {
+            CHECK_MSG(behind == static_cast<int>(std::count_if(pictures.begin(), pictures.end(),
+                                                               [](const auto& p) { return p.zIndex <= 24; })),
+                      "1-05's orb after the sprites with z <= 24");
+        }
+        // A picture at exactly the depth stays behind it: 4-22's torch at -10 + 4.
+        if (std::string(carrier.level) == "level21c") {
+            CHECK_MSG(std::any_of(pictures.begin(), pictures.end(), [](const auto& p) { return p.zIndex == -6; }),
+                      "4-22 has a picture at -6, the sparkles' depth");
+        }
+        layer.OnDetach(registry);
+    }
+}
+
 // 2-32'S DRAGON AND ITS CLAW, drawn from the sim rather than from their nodes
 // (the visuals plan's step 5.2; sim/Dragon.hpp, dragon.json `picture`).
 //
@@ -3376,7 +3550,8 @@ void TheDragonAndItsClawAreDrawnWhereTheSimPutsThem() {
 
         // ITS MOUTH'S SYSTEM RIDES THE HEAD (K16's explosion.JPG): the emitter
         // takes its owner's point and angle every frame from the picture above.
-        if (const auto* fire = ReportOf(layer.EmitterReports(), "dragon_ent_1279", 0); fire != nullptr) {
+        const std::vector<MagicPortalsLayer::EmitterReport> mouth = layer.EmitterReports();
+        if (const auto* fire = ReportOf(mouth, "dragon_ent_1279", 0); fire != nullptr) {
             if (fire->owner.atPx != report.atPx || fire->owner.angleDeg != report.angleDeg) ++emitterAdrift;
             // KILLED between 900 and 3000 ms of its clock, which after the shot at
             // f240 is f300 on; FREE-RUNNING from the end of one open window to the
@@ -6075,7 +6250,8 @@ void ALyingKeyBobsAndACarriedOneDoesNot() {
         tickWith(layer, registry, kRest, {}, {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         const std::optional<MagicPortalsLayer::MotionReport> report = MotionOf(layer, name);
-        const auto* sparkle = ReportOf(layer.EmitterReports(), name, 0);
+        const std::vector<MagicPortalsLayer::EmitterReport> emitters = layer.EmitterReports();
+        const auto* sparkle = ReportOf(emitters, name, 0);
         const glm::dvec2 offset = report ? Motion::OffsetPx(report->motion) : glm::dvec2(0.0);
         if (!report || !report->moving || !report->motion.started || report->offsetPx != offset ||
             glm::distance(report->ownerPx, lyingAt + offset) > 1e-9 ||
@@ -7620,6 +7796,7 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ThrownStone) == -0.5);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::HaloNoPicture) == -0.5);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Effect) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::LiftedSystems) == -0.5);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::PlacedPortal) == -0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::EffectHalo) == -0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::EffectSystems) == -0.25);
@@ -7634,10 +7811,12 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     // them there is the order the port adds their quads, which is the order of
     // the rows - the minions before the escort a boss summons, as the original's
     // escort is spawned by a minion and shares its depth. The table pins the
-    // ORDER, not uniqueness (00_order K13).
+    // ORDER, not uniqueness (00_order K13). The twelfth row at -1/2, a
+    // placement's lifted systems (step 92), spreads over the quarter after it,
+    // so it stands on no z the eleven do.
     int tied = 0;
     for (const auto& row : table) {
-        if (row.fraction == -0.5) ++tied;
+        if (row.fraction == -0.5 && !row.spreads) ++tied;
     }
     CHECK_MSG(tied == 11, "eleven classes stand between the slots: " + std::to_string(tied));
     CHECK(static_cast<int>(Slot::Minion) < static_cast<int>(Slot::Escort));
@@ -7650,16 +7829,23 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     CHECK(static_cast<int>(Slot::DoorHighlight) < static_cast<int>(Slot::HaloNoPicture));
     CHECK(static_cast<int>(Slot::Escort) < static_cast<int>(Slot::WallGhost));
     CHECK(static_cast<int>(Slot::WallGhost) < static_cast<int>(Slot::Effect));
+    // A placement's lifted systems: after every picture of the gap they land in,
+    // before its placed portals, effect halos and effect systems.
+    CHECK(static_cast<int>(Slot::Effect) < static_cast<int>(Slot::LiftedSystems));
+    CHECK(static_cast<int>(Slot::LiftedSystems) < static_cast<int>(Slot::PlacedPortal));
 
-    // And the two classes whose systems share the quarter that follows them,
+    // And the three classes whose systems share the quarter that follows them,
     // evenly, so no system of an entity ties with another (Particles::SlotFraction).
+    // Each quarter is open at both ends, so none of the three touches a z any
+    // other row stands on: (-1/2, -1/4), (-1/4, 0) and (1/4, 1/2).
     int spreads = 0;
     for (const auto& row : table) {
         if (row.spreads) ++spreads;
     }
-    CHECK_MSG(spreads == 2, "the two kinds of particle system spread: " + std::to_string(spreads));
+    CHECK_MSG(spreads == 3, "the three kinds of particle system spread: " + std::to_string(spreads));
     CHECK(table[static_cast<std::size_t>(Slot::Systems)].spreads);
     CHECK(table[static_cast<std::size_t>(Slot::EffectSystems)].spreads);
+    CHECK(table[static_cast<std::size_t>(Slot::LiftedSystems)].spreads);
     std::printf("  the between-slot table: %d classes, %d of them between two slots, %d spreading\n",
                 static_cast<int>(table.size()), tied, spreads);
 }
@@ -8864,6 +9050,7 @@ void runTests() {
     TheDragonsFireIsBuiltFromItsJpeg();
     TheBlueLampDrawsTheOrbItsLevelPlaces();
     APlacementWithoutItsSidecarDrawsNoSystem();
+    AStartPointLiftsAPlacementsSystems();
     TheDragonAndItsClawAreDrawnWhereTheSimPutsThem();
     FinishingALevelShowsTheMedal();
     TheMedalScreenIsTheOriginals();

@@ -725,7 +725,8 @@ int MedalFor(const MagicPortalsLayer::Cleared& cleared) {
 //     picture, and follows whatever moves the picture: a body, a patrolling zone, a
 //     carried key or diamond. It goes when the picture goes.
 //   - it draws in its entity's own slot, after the picture and the halo and before
-//     the next entity (Particles::SlotFraction).
+//     the next entity (Particles::SlotFraction) - unless its <StartPoint> z lifts
+//     it past other pictures, which 25 of them do (step 92, buildEmitters).
 //   - its quad is square, turned counter-clockwise by a positive angle, and an
 //     added one's alpha is 1 (Particles::DrawColour).
 
@@ -808,10 +809,35 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
             Emitter emitter;
             emitter.system = system;
             emitter.owner = owner;
-            // In its entity's own slot: after its picture and its halo, before the
-            // next entity, and each system after the one before it (the table's
-            // Slot::Systems).
-            emitter.z = systemZ(drawn.z, Slot::Systems, static_cast<int>(slot), static_cast<int>(systems.size()));
+            // ITS DEPTH (step 92; the visuals plan's 8.4, the half of plan_port 2d
+            // step 59 deferred). Ethanon sorts an entity's particle piece at its
+            // system's start point z plus the entity's z
+            // (ETHEntityRenderingManager.cpp:98-102; GetZPosition is
+            // startPoint.z, ETHParticleManager.cpp:424-427). That z is NOT a bare
+            // literal: Scale multiplies the whole start point with the rest of the
+            // system (ETHParticleSystem.cpp:27-33), and SGlobalScale::scaleEntity
+            // scales a placement's systems and its position by the one getScale
+            // (the listing, 6072..6337 #30-53), so on the level's axis it is the
+            // file's number at the entity's own scale - which Particles::Scale has
+            // applied above. So:
+            //   - at 0, which is 872 of the levels' 897 systems, in its entity's own
+            //     slot: after its picture and its halo, before the next entity, and
+            //     each system after the one before it (Slot::Systems);
+            //   - otherwise after every picture at or below its owner's eth_z plus
+            //     that z, and after the player where the player stands at or below
+            //     it (Slot::LiftedSystems): the five blue lamps' orbs, 24 in front
+            //     of their bowls, and the ten unlit torches' sparkles, 4 in front.
+            // An ET_VERTICAL owner's piece also takes the engine's own +10
+            // (_ETH_PARTICLE_DEPTH_SHIFT, ETHParticleManager.h:30, .cpp:332-335),
+            // a raw number, 3.56 on the level's axis. It is NOT added here: the
+            // port is not told a placement's type (the converter writes none), and
+            // the ten torches are the only vertical carriers (step 92's census).
+            emitter.depth = drawn.lookZ + system.startPointZ;
+            emitter.lifted = system.startPointZ != 0.0;
+            emitter.z = emitter.lifted ? systemZ(slotAfter(emitter.depth, Slot::Picture), Slot::LiftedSystems,
+                                                 static_cast<int>(slot), static_cast<int>(systems.size()))
+                                       : systemZ(drawn.z, Slot::Systems, static_cast<int>(slot),
+                                                 static_cast<int>(systems.size()));
             emitter.image = image.path;
             emitter.cellPx = ParticleCellUnits(image, system);
             // Which entity and which of its systems: a light's brightness follows
@@ -1029,6 +1055,20 @@ void MagicPortalsLayer::updateEmitters(entt::registry& registry, float deltaTime
     }
 }
 
+std::vector<MagicPortalsLayer::PictureReport> MagicPortalsLayer::PictureReports() const {
+    std::vector<PictureReport> reports;
+    reports.reserve(m_sprites.size());
+    for (const DrawnSprite& drawn : m_sprites) {
+        PictureReport report;
+        report.node = drawn.sprite.node;
+        report.zIndex = drawn.sprite.zIndex;
+        report.lookZ = drawn.lookZ;
+        report.z = drawn.z;
+        reports.push_back(std::move(report));
+    }
+    return reports;
+}
+
 std::vector<MagicPortalsLayer::EmitterReport> MagicPortalsLayer::EmitterReports() const {
     std::vector<EmitterReport> reports;
     reports.reserve(m_emitters.size());
@@ -1042,6 +1082,8 @@ std::vector<MagicPortalsLayer::EmitterReport> MagicPortalsLayer::EmitterReports(
         report.additive = emitter.system.additive;
         report.owner = emitter.owner;
         report.z = emitter.z;
+        report.depth = emitter.depth;
+        report.lifted = emitter.lifted;
         report.count = static_cast<int>(emitter.particles.size());
         report.active = emitter.active;
         report.drawn = static_cast<int>(
@@ -1096,9 +1138,13 @@ std::vector<MagicPortalsLayer::EmitterReport> MagicPortalsLayer::EmitterReports(
 // ITS DEPTH is the table's (00_order K13): the picture at Slot::Effect, the halo
 // a quarter in front of it, and its systems over the quarter after that - and a
 // system's own <StartPoint> z is added to the entity's before the slot is
-// counted. A z the script writes as a bare literal is divided by the art's scale
-// factor first (effectAdd, below), so appear_effect's flash draws at
-// 0.711 + 10 = 10.71 and not at the 0.711 its own picture takes: in front of
+// counted, at the entity's scale as its sizes are (Particles::Scaled). A z the
+// script writes as a bare literal is divided by the art's scale factor first
+// (effectAdd, below); the start point is not such a literal (step 92), because
+// AddEntity scales the entity's systems by the Scale() it is given, which every
+// call site here gives as g_scale.getScale() or a multiple of it. So
+// appear_effect's flash draws at 0.711 + 10 = 10.71 and not at the 0.711 its
+// own picture takes: in front of
 // every node under 10.71 rather than only of those under 0.711.
 // (system_7 7a-2 says "in front of the player at 0"; since R10 the player is at
 // 1.42 in the level's units, so it is the ten that carries the flash past the
@@ -1281,9 +1327,10 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
         emitter.system = system;
         emitter.owner = owner;
         // The system's own <StartPoint> z on top of the entity's, before the slot
-        // is counted: an .ent is a spawned effect's only source for it (plan 2d
-        // defers it for level placements, and that is where step 59 left it). So
-        // the slot is taken per system and not once for the effect.
+        // is counted, at the scale `made` gave it with its sizes: an .ent is a
+        // spawned effect's only source for it, and a level placement's is its
+        // sidecar (buildEmitters, which lifts it by the same rule since step 92).
+        // So the slot is taken per system and not once for the effect.
         //
         // systemZ's base is THE SLOT'S OWN ZERO, not the effect's picture: the
         // table's fraction is measured from there, and Slot::Picture is that zero
@@ -5993,12 +6040,19 @@ float MagicPortalsLayer::pitchFor(const Sounds::Hook& hook, double doorStrideMs)
 // the player - and fireball.ent's and small_explosion.ent's bare 0 is 0 either
 // way.
 //
-// A SYSTEM'S OWN <StartPoint> z IS THE SAME KIND OF RAW LITERAL and is NOT
-// divided here: SpawnEffect adds it to this as it stands, so the appear ring's
-// flash draws at 0.71 + 10. Steps 84 and 85 are committed against that sum (the
-// eyes' 2, the fireball's 4), and moving it would move their pixels for a reason
-// that is not this step's; it is handed to the between-slot table's owner
-// (00_order K13) with the numbers written down.
+// A SYSTEM'S OWN <StartPoint> z IS NOT A RAW LITERAL, and is not divided here
+// (step 92, correcting what step 86 handed on). ETHParticleSystem::Scale
+// multiplies the whole start point, z included (ETHParticleSystem.cpp:27-33), by
+// the scale the particle manager is made at (ETHParticleManager.cpp:90), which is
+// the entity's own (ETHSpriteEntity.cpp:316-319) - and AddEntity makes it
+// Scale() x the engine's global scale (ETHScriptWrapper.Scene.cpp:146-148), a
+// global scale this game never sets, so 1. Every call site the port draws passes
+// g_scale.getScale() or g_scale.scale(k) as that Scale() (appearEffect #2-6 and
+// #26, vanishEffect, insertPortal, addFireball, explode #1-23, the character's
+// constructor), so the start point is on the level's axis at the effect's own
+// scale, which Particles::Scaled gives it in SpawnEffect: the appear ring's flash
+// at 0.71 + 10, the eyes' 2 and the fireball's 4 x its scale, as steps 84-86 drew
+// them.
 MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn& spawn) const {
     EffectSpawn add;
     add.entity = spawn.entity;

@@ -16342,3 +16342,227 @@ confirmed current by a ninja dry run on a copy of `build/build.ninja`: "no work 
   original (9c (6), footage F17).
 - **9.2** must still pass `--copy-particles`, or every carrier's key names no file and every level with one draws
   unlit - and now also without its particles.
+
+## Step 92 - the depth a placement's own start point gives its particle systems: the blue lamps' orbs and the unlit torches' sparkles (built)
+
+The visuals plan's step 8.4 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 8; its brief
+`systems_9_10.md` 9c (4) "Then depth", the half of plan_port 2d that step 59 deferred to "the particles owner").
+Track A, on MPR `main` in `build/`, after step 91 (`e71b697`). Game-only: the engine submodule stays at `4bfcf67`
+and no file under `engine/` is touched; the converter and the converted levels are untouched. Changed:
+`game/MagicPortalsLayer.{hpp,cpp}`, `tests/test_mp_layer.cpp`, `docs/ethanon-formats.md` (a new 7.4a) and the
+backlog. **A level placement's particle system whose `<StartPoint>` z is not 0 is now drawn at its owner's `eth_z`
+plus that z - after every picture at or below that depth, and after the player where the player stands there -
+instead of in its owner's slot; every other system keeps its owner's slot. That is 25 of the levels' 897 systems,
+on 15 carriers: the five blue lamps' orbs (z 24) and the ten unlit torches' two sparkle systems each (z 4), through
+one new row of the between-slot table, `Slot::LiftedSystems`. The 128-level f420 sweep is 128 of 128
+byte-identical to step 91's - at f420 nothing but added light lies between a lifted system and the pictures it now
+passes - so the lift was measured on the running game with probes (below), and `test_mp_layer` pins it: 1,872
+checks, 0 failures, in the step's independent check. Gameplay: none - a particle is carried on the frame and never
+reaches `Game::Level`, the fixed tick or the state hash.**
+
+**BLOCKERS CHECKED.** 8.4's one blocker is 8.3, which is step 91 (`e71b697`), committed. Section 8.13 has no row
+for 8.4, so section 7's row stands: "`test_mp_layer`: `blue_light`'s system after sprites with z <= 24; sweep
+changes only the 5 `blue_light` levels" - widened by two backlog rows that name this step: step 91's check asked
+that the gate compare the lamp bowl's rim and the orb with the original's crop, and step 91 left the fix of six
+dangling `test_mp_layer` reads to "the next step that rebuilds `test_mp_layer`", which is this one. The baseline
+is step 91's after, `8.3/after/sweep`: its 128 PNGs match their log lines (128 of 128, rc 0, checked for
+power-loss damage before use), and `build/` still held `75fc5b42`, the binary that sweep was captured on, so no
+fresh "before" was needed.
+
+**THE OWNER'S STANDING RULINGS.** None of R1-R25 names this step. Two are used rather than decided, each as the
+owner's standing ruling: **R10**, the player at the z 4 its constructor gives it, 4 / 2.8125 = 1.42 on the level's
+axis (step 76), which is where `slotAfter` puts the player against a lifted system; and **R12**, the 720 selection,
+whose 720 / 256 = 2.8125 is the factor behind that 1.42 and behind the 3.556 the vertical shift below would be.
+**R24 and R25 (step 76) remain the owner's to rule**; this step neither applies nor withdraws them.
+
+**THE RUN'S PREMISE, CORRECTED: A `<StartPoint>` z IS NOT A BARE LITERAL.** This run's instruction for 8.4, and
+step 86's hand-off to "the K13 owner", read a system's `<StartPoint>` z as the same kind of raw literal as a z the
+script writes into a `vector3`, to be divided by R12's 2.8125. The engine source says otherwise, and where the two
+disagree the engine source is the spec (CLAUDE.md):
+- `ETHParticleSystem::Scale` multiplies the whole `startPoint` vector3, z included, with the sizes
+  (`Particles/ETHParticleSystem.cpp:27-33`); the manager applies it when it is made (`ETHParticleManager.cpp:90`) at
+  the entity's own mean scale (`Entity/ETHSpriteEntity.cpp:316-319`), and a later `ETHEntity::Scale(float)` scales
+  every system again (`Entity/ETHEntity.cpp:591-599` -> `ETHSpriteEntity.cpp:512-518` ->
+  `ETHParticleManager.cpp:444-446`).
+- **A placement.** `LoadScene` scales by the engine's global factor (`Script/ETHScriptWrapper.Scene.cpp:603`), which
+  this game never sets: it defaults to 1 (`Util/ETHGlobalScaleManager.cpp:27`), and the listing has no
+  `SetFixedHeight` or `SetScaleFactor` call. The script's `SGlobalScale::scaleEntities` (6838..7228) then calls
+  `scaleEntity` (6072..6337) on every entity: #30-36 `Scale(getScale() x individualScale)`, #38-53
+  `SetPosition(GetPosition() x getScale())`. The start point's z and the position's z are scaled by the same factor,
+  so on the level's axis the start point's z is the file's number (times a `scale` custom datum, which none of the 15
+  carriers has; `scalable` 0 would skip an entity, and no scene or `.ent` sets it).
+- **A script's `AddEntity`.** The entity is made at `Scale() x globalScale` (`ETHScriptWrapper.Scene.cpp:131-158`,
+  `ETHSpriteEntity.cpp:56-65`), and every call site the port draws passes `g_scale.getScale()` or `g_scale.scale(k)`:
+  `appearEffect` 357060..357278 #2-6 and #26, `vanishEffect`, `insertPortal`, `addFireball`, `explode`
+  342023..342895 #1-23, the character's constructor, `ETHCallback_portal`, `ETHCallback_fireball`. So an effect's
+  start point z is on the level's axis at the effect's own scale, which `Particles::Scaled` already gives it in
+  `SpawnEffect`. **The effects runtime needs no change**: the appear ring's flash at 0.711 + 10, the eyes' 2 and the
+  fireball's 4 x its scale stand as steps 84-86 drew them. Only its two comments, which called the z a raw literal,
+  are corrected (`effectAdd`'s and `SpawnEffect`'s). None of the eleven effect `.ent`s the port spawns is
+  `ET_VERTICAL`, so the shift below never reaches them.
+- Screen projection is no concern either: `DrawParticleSystem` draws each particle at `pos + zAxisDirection x
+  startPoint.z` (`ETHParticleManager.cpp:392`, `Util/ETHASUtil.cpp:123-126`), but all 133 of the game's `.esc` files
+  set `<ZAxisDirection x="0" y="0" />`, so the z moves nothing on the screen.
+- Written into `docs/ethanon-formats.md` as 7.4a, with the citations.
+
+**THE CENSUS** (`8.4/census/types84.py` -> `types84.json`, read-only over the 128 levels' `.esc` bodies): **840
+carriers and 897 systems** (step 91's numbers again); **15 carriers and 25 systems have a start point z other than
+0**, all positive:
+- the five `blue_light` lamps, one `hard_halo.png` system at z 24: level4 #641 and level27 #641 at `eth_z` 0
+  (depth 24), level7 #930 at -18 (depth 6), level18 #859 at -14 (depth 10), level21 #931 at -16 (depth 8);
+- **the ten unlit torches**, `light_off` #1689 on level21c-26c and level28c-31c (4-22 to 4-27, 4-29 to 4-32), two
+  `sparkles.bmp` systems each at z 4: depths -6 (21c, 23c, 24c, 25c), -10 (22c) and -8 (26c, 28c-31c).
+  `systems_9_10` 9c (4) had "the only non-zero z among level placements is blue_light's 24"; the torches' z 4 is the
+  same inline and in `light_off.ent`, so 9c's inline-vs-`.ent` table never listed them. The plan's "the sweep
+  changes only the 5 `blue_light` levels" inherits the miss (deviation 1).
+- **The ten torches are also the only `ET_VERTICAL` (type 2) carriers**; the other 830 are type 0.
+- What each lift passes, from the level files (`8.4/census/lift84.py`, written before the suite had run; the suite's
+  lines, read from the layer, equal it carrier by carrier in the independent check): the orbs pass 6 / 18 / 12 / 19 / 2 pictures their owner's
+  slot drew in front of them (level4 / 7 / 18 / 21 / 27) and the player, and stand after every picture of their
+  level (no picture stands above any orb's depth); the torches' sparkles pass one picture each on 4-22, 4-25, 4-29
+  and 4-31 - on three of them a picture AT the depth (`button_1723`, `keyhole_ent_1784`, `antiportal_2085`) - and
+  none on the other six. 61 pictures in all. `slotAfter` orders by each picture's `z_index` where Ethanon sorts by
+  its `eth_z`; on the 15 levels no picture's two fall on different sides of its carrier's depth, and no `eth_z` there
+  is fractional (`8.4/census/sides84.py`: 0), so the two orders agree.
+
+**WHAT WAS BUILT.**
+- **`buildEmitters`** (`game/MagicPortalsLayer.cpp:812-840`): each emitter now carries `depth` = its owner's `eth_z`
+  (`DrawnSprite::lookZ`) + its system's `startPointZ` (at the entity's scale, `Particles::Scale`) and `lifted` = that
+  z is not 0. A system at 0 - 872 of the 897 - is placed exactly as before, `systemZ(drawn.z, Slot::Systems, ...)`,
+  in its owner's slot. A lifted one is placed at `systemZ(slotAfter(depth, Slot::Picture), Slot::LiftedSystems,
+  ...)`: after every picture whose `z_index` is at or below the depth, after the player where 1.42 is at or below
+  it (`slotAfter`'s own rule), before every picture above it. The depth is not rounded: `slotAfter` compares it with
+  each picture's `z_index` as it already compares the wall ghost's unrounded depth, and on the 15 carriers it is a
+  whole number anyway. **The pools, their order and their stream are untouched**: the emitters are made in the same
+  order from the same systems on `m_particleRandom`, and only a z moves (K8 as step 85 reads it).
+- **One new row, `Slot::LiftedSystems`** ("lifted particle systems", fraction -1/2, spreading;
+  `game/MagicPortalsLayer.hpp`), between `Slot::Effect` and `Slot::PlacedPortal`, so the table stays in drawing
+  order. Spreading from -1/2 puts a lifted system in (-1/2, -1/4) of the slot of the first thing drawn above its
+  depth - the one quarter of a gap no other row stands on or spreads over (the eleven other -1/2 rows stand exactly
+  at -1/2, the three -1/4 rows at -1/4, and `EffectSystems` spreads over (-1/4, 0)) - so it ties with nothing. **K13
+  is met**: a new between-slot depth is a row of the table, no lambda, and the order is pinned in `test_mp_layer`.
+  The row's cost is the table's own limit, now written beside it: in a gap two classes share, the original orders
+  them by depth and the table by class, so the picture of an effect deeper than a lifted system but in its gap
+  still draws behind it, and the halo and systems of an effect shallower than it still draw in front of it.
+- **`EmitterReport`** gains `depth` and `lifted`; **`PictureReports()`** is new - each level picture's node,
+  `z_index`, `eth_z` and slot z, in drawing order - for the suite to measure a lifted system against.
+- **`test_mp_layer`**:
+  - `AStartPointLiftsAPlacementsSystems` (new, `tests/test_mp_layer.cpp:3291`): over the 128 levels, the carriers
+    whose sidecar holds a start point z other than 0 are exactly the 15 listed, with their `eth_z`, their z and
+    their system count, 25 of 897 systems; then on each of the 15 levels, each of the carrier's systems is `lifted`
+    at its depth, in front of every picture at or below it and of the player where 1.42 is at or below it, behind
+    every picture above it, a quarter to a half of a slot before the next thing drawn (picture or player), with its
+    pool as its sidecar states it (4; 18 and 2); every other system on the level keeps its owner's slot; and the
+    plan's own words on level4 (1-05's orb after every picture with `z_index` <= 24) and a picture at exactly the
+    depth staying behind (level21c's `button_1723` at -6).
+  - `TheBetweenSlotTableSaysWhereEachClassStands`: the new row's fraction and place (after `Effect`, before
+    `PlacedPortal`), eleven NON-spreading rows at -1/2 (the tie the table states is unchanged) and three spreading
+    rows, not two.
+  - **The six dangling reads, fixed as this suite's first change** (backlog, step 91): each
+    `ReportOf(layer.EmitterReports(), ...)` now holds the reports in a local, and a **deleted** overload of
+    `ReportOf` for a temporary vector (`:2721-2726`) makes a seventh a compile error. The suite compiled with it, so
+    none is left.
+- **Comments corrected** where they said the start point was a raw literal or not drawn with: `effectAdd`,
+  `SpawnEffect` and the particles section's header. `sim/Particles.hpp`'s `startPointZ` comment still says "not yet
+  drawn with" for placements; it is left for 9.1, which rebuilds the sim library anyway (SMART APP CONTROL below).
+- No data file changes: the rule has no tunable number. The vertical shift's 10, when it is built, is the engine's
+  constant and belongs in `game/data` with its citation.
+
+**NOT BUILT: THE VERTICAL SHIFT.** Ethanon adds `_ETH_PARTICLE_DEPTH_SHIFT` (`Particles/ETHParticleManager.h:30`,
+10.0 raw world units, 10 / 2.8125 = 3.556 on the level's axis) to the depth of an `ET_VERTICAL` owner's pieces
+(`ETHParticleManager.cpp:332-335`, through `ETHEntityProperties::ResolveDepthSortingMode`,
+`Entity/ETHEntityProperties.cpp:108-121`), and sorts each such particle on its own (`ComputeParticleDepth`,
+`:305-330`). The ten torches are type 2, so their sparkles' true depth is `eth_z` + 4 + 3.556. **The port is not
+told a placement's type** - the converter writes none - and adding it is a K10 pair (the reader accepts a key, then
+the converter writes it and the levels are regenerated), which track A does at 9.2, not here. No substitute keyed
+on the entity's name is built. What it costs (`lift84.py`, `types84.py`): on 6 of the 10 torch levels a picture
+stands in (`eth_z` + 4, `eth_z` + 7.556] - at -4 on 4-22, 4-24 and 4-25, at -6 on 4-29, 4-30 and 4-31 - which the
+original draws the sparkles over and the port does not. The lift built here moves the sparkles toward the
+original's depth and never past it (deviation 2).
+
+| Gate (00_order 7, 8.4; and the backlog's two rows) | Required | Today (step 91's after) | Measured |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings in all four builds** - the step's build (62 steps; SMART APP CONTROL says why every suite relinked), `test_mp_layer` relinked after its refusal (1 step), the final build after a test guard and three comment edits (8 steps: the layer, `main.cpp`, `LevelVisit.cpp`, the suite), and the independent check's, with the layer's and the suite's objects deleted to force a recompile of the same source (6 steps: `MagicPortals.exe` `d2504b6d`, `test_mp_layer.exe` `4a5748bd`) |
+| `test_mp_layer`: `blue_light`'s system after sprites with z <= 24 | pinned, 0 failures | no such case | **passes: 1,872 checks, 0 failures** (the independent check, `8.4/verify1/test_mp_layer_run1.txt`, on `test_mp_layer.exe` `4a5748bd`, rebuilt from this step's source and accepted on its first launch; the build's own binary was refused twice, SMART APP CONTROL). It prints "a start point z other than 0: 15 carriers, 25 of the levels' 897 systems" and one line per carrier, each lifted at its own depth: the orbs of level4 / 7 / 18 / 21 / 27 at 24 / 6 / 10 / 8 / 24, after 18 / 24 / 20 / 24 / 21 pictures and the player, before none; the ten torches' sparkles (4-22 to 4-27, 4-29 to 4-32) after 8 / 5 / 5 / 10 / 5 / 6 / 9 / 7 / 9 / 10 pictures and before 11 / 13 / 15 / 15 / 12 / 10 / 20 / 17 / 24 / 11. The pictures each passes (its owner's slot had them in front of it) are 6 / 18 / 12 / 19 / 2 for the orbs and one each on 4-22, 4-25, 4-29 and 4-31, 61 in all, exactly the level files' census (`lift84.py`) |
+| (beside the suite) the lift, on the running game | a lifted system over a picture at or below its depth, under one above it | INFERRED, not measured (step 91's binary was overwritten before the probe ran): step 91's rule puts the picture over the system in both | **passes, both pairs** (`8.4/probe/`, `probe_84.json`, `probe_84.png`). **1-05**: `crystal_ent_757` (z 0, after the lamp in file order) moved onto the orb - at `z_index` 0 the orb is drawn OVER it, at 25 (its `eth_z`, the lighting height, left at 0) under it: **2,628 px differ, all 2,628 brighter where the orb is on top**, mean BGR +9.0 / +26.9 / +55.8, max 247. **4-22**: `button_1723` (z -6, exactly the sparkles' depth) moved onto them - at -6 the sparkles are OVER it, at -5 under it: **1,307 px differ, all brighter**, mean +76.8 / +58.2 / +45.4, max 255. Under step 91's rule the picture would be over the system in both variants of each pair (INFERRED, as the Today cell). **The independent check's probe, owners NOT at z 0** (`8.4/verify1/probe/`, `probe_v.json`, `probe_v.png`, on `d2504b6d`): a static block moved onto 1-08's orb (owner at -18, depth 6), at `z_index` 5 against 7 - **4,429 px differ, all brighter at 5**, mean BGR +116 / +105 / +83 - and onto 4-22's sparkles (owner at -10, depth -6), at -7 against -5 - **2,741 px differ, all brighter at -7**, mean +79 / +58 / +51. Together they rule out four readings that would leave both windows of a pair identical: the orb at 24 alone (over both), the z divided by 2.8125 (the orb at -9.47, under both), step 91's owner slot (under both) and a +3.556 shift applied (the sparkles at -2.44, over both) |
+| Sweep changes only the 5 `blue_light` levels (re-counted) | changes on the lifted levels only, each explained | `8.3/after/sweep`, 128 PNGs matching their log | **passes as written, not as predicted: 128 of 128 byte-identical** (`8.4/compare_sweep.json`), 1-01 `e2da5131`. 15 levels carry a lifted system (deviation 1), and **0 of them change at f420**: the lamps' orbs and the torches' sparkles are added light, and none of the 61 pictures (or the player) they now pass covers them there with anything but added light - the probe says what a covering picture does |
+| (backlog, step 91's check) the bowl's rim and the orb against the original's crop | the rim / orb order compared on the five lamp levels | the rim crosses the port's orb (`8.3/verify1/orb_context.png`) | **compared: the depth is not the cause** (`8.4/orb_84.py`, `orb_84.json`, `orb_84.png`). The orb windows of 1-05, 1-08 and 1-22 are byte-identical before and after (0 px in bluelight.py's 60 x 60 window and in a 160 x 160 crop), and 1-19 (orb at the frame's top edge) and 1-28 (off it) are identical frames. The orb already drew after its own bowl, and the lift changes no pixel of it: the rim is the bowl's dark edge showing THROUGH an added orb too dim there to wash it out. The original's orb is larger and whiter - its rings reach the bowl's lip - window mean R 204.0 / 199.3 / 188.7 against 216.1 / 212.6 / 194.9 on its t8.0 frames, pixels over 230 2,442 / 2,299 / 1,877 against 2,826 / 2,672 / 2,084. Left to the orb's draw (backlog row), not its depth |
+| K8: the placement stream untouched | no particle of a level's own systems moves | - | **passes**: 128 of 128 frames byte-identical, the 15 lifted levels among them - every particle of every level where it was |
+| (widened) every level still runs | 128 rc=0, validation active and silent | 128 | **passes: 128 of 128 rc=0**, Vulkan validation ACTIVE in 128 logs, 0 messages; "N placement(s) drew the particle systems their eth_particles names" totals **840**; 0 "particles not drawn", 0 "drawn unlit". The four probe launches rc=0, nothing logged beyond the two Steam overlay layer notices every launch on this machine prints |
+| (backlog) the six dangling `test_mp_layer` reads | fixed, first | six reads of a temporary | **fixed and compile-guarded** (compiled, 0 warnings), and **run**: `test_mp_layer` 1,872 checks, 0 failures, in the independent check |
+
+**THE BINARIES.** The sweep and the probe ran on `MagicPortals.exe` `739db7e6` (the step's first build; its first
+launch was accepted), 132 launches, all rc 0. The tree was then edited for a test guard (the "next thing drawn" may
+be the player, `tests/test_mp_layer.cpp:3407-3409`), for two comments in `game/` (a citation,
+`ETHEntityRenderingManager.cpp:98-102` for `:91-100`, in `buildEmitters`; the table comment's example of its
+class-vs-depth limit) and for the same citation in the new test's comment (`tests/test_mp_layer.cpp:3282`) - nothing
+else - and rebuilt with 0 warnings: `MagicPortals.exe` `783b8423` and `test_mp_layer.exe` `fb466790`, neither
+launched (the game's source differs from the measured binary's by comments only). The independent check then
+deleted the layer's and the suite's objects and rebuilt the same source: **`MagicPortals.exe` `d2504b6d`** ran its
+128-level sweep and its 4-launch probe, and **`test_mp_layer.exe` `4a5748bd`** ran the suite, both accepted on
+their first launch. Those two are what `build/` holds at commit.
+
+**THE SUITES.** **`test_mp_layer`: 1,872 checks, 0 failures**, run once, in the independent check (the build's own
+binary was refused twice, below). No other suite's source changed, so no other suite is this step's to run; the
+full `ctest` was not run.
+
+**SMART APP CONTROL: 2 refusals**, both `test_mp_layer.exe` in the build (its launch after the build, and its launch
+after the one relink the rule allows). `MagicPortals.exe` `739db7e6` was accepted on its first launch and ran all
+132 captures: 134 launches in the build, 2 refused, 132 ran. **0 in the independent check** (133 launches: the
+suite, the 128-level sweep and the 4 probe captures) and none at commit, which launched nothing. **Every suite was relinked with no source change of its own**: a
+comment edit to `game/sim/Particles.hpp`, reverted with `git checkout` before the build, left the header newer than
+its objects, so the build recompiled `Particles.cpp`, `Art.cpp` and the six suites' sources that include the header
+(effects, lighting, zerog, timed, minions, sprites) and relinked `MagicPortalsSim`, all 45 `test_mp_*` executables
+and `MagicPortalsSpike.exe`. None but `test_mp_layer` was launched here, but each is now a freshly linked binary
+whose first launch may be refused (backlog row).
+
+**THE INDEPENDENT CHECK** (`8.4/verify1/`, passed every gate): the premise re-derived from the engine source and the
+listing before the code was read - the start point scaled as a vector3 with the entity (`ETHParticleSystem.cpp:27-33`
+through `ETHParticleManager.cpp:90`, and `ETHEntity.cpp:591-599` -> `ETHSpriteEntity.cpp:512-518` ->
+`ETHParticleManager.cpp:444-446`), `scaleEntity` run on every entity through `Game::preLoop`'s `scaleEntities`, no
+`scalable` in any of the 133 `.esc` files, no `SetScaleFactor` / `SetFixedHeight` / `SetFixedWidth` in the listing
+and `app.enml`'s `fixedHeight` under `ios` only, every effect call site at `getScale()` or `scale(k)` - so nothing
+is divided; its own census (`census_v.py`, `types_v.py`): 840 carriers and 897 systems, the same 15 and 25, 830
+type 0 and 10 type 2, none of the 13 effect `.ent`s type 2, no carrier with a `<Scale>` or a `scale` datum, 0
+pictures whose `z_index` and `eth_z` fall on different sides of a depth, 61 pictures passed; the layer and the suite
+recompiled (6 steps, 0 warnings); `test_mp_layer` **1,872 checks, 0 failures**, every carrier's line equal to that
+census; its own probe with owners not at z 0 (the probe row); a sweep on `d2504b6d` **128 of 128 byte-identical to
+`8.3/after/sweep` and `8.4/after/sweep`**, 128 rc 0, validation active in 128 logs and silent, 840 placements
+drawn, 128 of 128 PNGs of both sweeps matching their log md5s; the orb windows re-read at the same 2,442 / 2,299 /
+1,877 and R 204.0 / 199.3 / 188.7. 133 launches, 0 refused. Its two findings went in at commit as TEXT, no
+behaviour changed: this step's record and the backlog still said the suite had not run and named two binaries never
+launched (corrected above); and a thin vertical line above the orb on 1-08 and 1-22 in the port, absent from the
+original's crops (`verify1/orb_v.png`, `8.4/orb_84.png`, rows 2 and 3, the port's tiles), older than this step -
+its frames equal step 91's - is filed in the backlog for the owner of the lamp's and the background's pictures. At
+commit the build was confirmed current by a ninja dry run on a copy of `build/build.ninja`: "no work to do" (a dry
+run through `port_build.bat` stops at CMake's glob re-check).
+
+**RECORDED DEVIATIONS.**
+1. **Fifteen carriers, not five.** The plan's gate names "the 5 `blue_light` levels"; the ten unlit torches carry a
+   start point z too (census), and the rule lifts all 15. The sweep is read against the 15.
+2. **The vertical shift is not built** (above): the ten torches' sparkles stand 3.556 short of the original's depth,
+   which on 6 of the 10 levels leaves one picture over them that the original draws under them. For 9.2, as a K10
+   pair.
+3. **The gate's "z <= 24" holds where the owner stands at 0** (level4, level27). The rule is the owner's `eth_z` plus
+   24: the orbs of level7, 18 and 21 stand at 6, 10 and 8, and the suite pins each at its own depth.
+4. **The suite gate was measured in the independent check, not in the build**: Smart App Control refused the build's
+   `test_mp_layer.exe` twice, and the check's rebuild of the same source ran it (1,872 checks, 0 failures). What
+   step 91's rule would have drawn in the build's probe is INFERRED, not captured: its binary `75fc5b42` was
+   overwritten by this step's build before the probe was written; the check's probe, with owners not at z 0, rules
+   step 91's owner slot out on the running game.
+5. **The sweep moves no pixel.** The plan expects the lamp levels to change; at f420 nothing but added light lies
+   between any lifted system and what it passes, so the order is invisible there. `8.4/after/sweep` equals
+   `8.3/after/sweep` and is the next step's before.
+6. **The run's premise is not applied**: the start point's z is not divided by 2.8125 (above). Dividing it would have
+   put the orbs at `eth_z` + 8.53 and the sparkles at `eth_z` + 1.42 on the level's axis, which is not where the
+   engine sorts them.
+
+**LEFT FOR LATER.**
+- **The vertical shift** (deviation 2), with 9.2's regeneration: a type key the reader accepts first, then the
+  converter writes it; `buildEmitters` adds 10 / 2.8125 from `game/data` for a type-2 owner.
+- **The blue lamp's orb is smaller and dimmer than the original's** (the rim row): its draw, not its depth.
+- **`sim/Particles.hpp`'s stale `startPointZ` comment**, for 9.1.
+- **A thin vertical line above the blue lamp's orb on 1-08 and 1-22** (the independent check): older than this step,
+  its cause not found (backlog row).
+- **The table orders a shared gap by class, not by depth** (written beside `kSlotTable`): no shipped frame shows a
+  lifted system sharing a gap with an effect today; a step that finds one gives the two classes a depth-ordered rule.
