@@ -7,7 +7,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from . import __version__, lighting, manifest, tiers, tscn, uiassets
+from . import __version__, lighting, manifest, particles, tiers, tscn, uiassets
 from .scene import lightmap_directory, parse_file
 
 # Defaults are repo-relative. Both are gitignored — see the repo .gitignore.
@@ -98,6 +98,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--copy-particles",
+        action="store_true",
+        help=(
+            "also write each placement's own <Particles> block that the eth_particles keys "
+            "name, as a UTF-16 .ent sidecar in <output>/assets/"
+            f"{particles.SIDECAR_DIR}/<sha1-12>.ent, one file per distinct block. Output stays "
+            "gitignored."
+        ),
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="parse and report what would be converted, writing nothing",
@@ -141,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     all_lightmaps: list[tuple[Path, str]] = []
     all_normals: set[str] = set()
     all_halos: set[str] = set()
+    all_particles = particles.ParticleBlocks()
+    particle_systems_dropped = 0
 
     for name in names:
         src = scenes_dir / f"{name}.esc"
@@ -168,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
         all_lightmaps += report.lightmaps
         all_normals |= report.normals
         all_halos |= report.halos
+        all_particles.update(report.particle_blocks)
+        particle_systems_dropped += report.particle_systems_dropped
 
         if not args.dry_run:
             (out_dir / f"{name}.tscn").write_text(text, encoding="utf-8")
@@ -254,6 +268,13 @@ def main(argv: list[str] | None = None) -> int:
         for line in lit.skipped:
             print(f"SKIPPED {line}", file=sys.stderr)
 
+    if args.copy_particles and not args.dry_run:
+        side = particles.write_sidecars(args.output, all_particles)
+        print(
+            f"particle sidecars: written {side.written}, unchanged {side.unchanged} "
+            f"(to {args.output / 'assets' / particles.SIDECAR_DIR})"
+        )
+
     # Every lighting key, so a downstream pin can be set from this output rather than
     # from an inventory. "all instances" ignores the sprite-or-light gate (see tscn.py).
     print("lighting keys (emitted / over all instances):")
@@ -265,6 +286,10 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"  metadata strings added: {sum(lighting_keys.values())}; distinct normal maps "
         f"{len(all_normals)}, halo bitmaps {len(all_halos)}"
+    )
+    print(
+        f"  particle blocks named: {len(all_particles.blocks)} distinct; systems the engine "
+        f"drops (particles <= 0, or past the second): {particle_systems_dropped}"
     )
 
     verb = "would convert" if args.dry_run else "converted"

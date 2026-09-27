@@ -15949,3 +15949,216 @@ match the md5s in their own log, and the after sweep equals them 128 of 128, whi
   the reader asks only for `res://` and a file. None of the 899 inline systems in the 133 `.esc` files states
   `particles` <= 0 (counted this step), so the engine's skip of such a system (`ETHSpriteEntity.cpp:306`, per 9c)
   has nothing to act on in a sidecar.
+
+## Step 90 - the particle systems each placement states, written beside its level and named on its node (built)
+
+The visuals plan's step 8.2 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 8; its brief
+`systems_9_10.md` 9c (4) and section 6's "MPR"). Track A, on MPR `main` in `build/`, after step 89. A CONVERTER step
+with a regeneration: changed are `tools/converter` (`entity.py`, `tscn.py`, `__main__.py`, the new `particles.py` and
+`tests/test_particles.py`), `tests/test_mp_levels.cpp` (one pin), `docs/ethanon-formats.md`, both READMEs and the
+backlog. No file under `game/` or `engine/` is touched (submodule at `4bfcf67`), and `MagicPortals.exe` is the
+same binary as step 89's, `9de1dd95`. **The converter now writes each placement's own inline `<Particles>` block
+to a UTF-16 `.ent`-shaped sidecar - one file per distinct block, 24 for the 128 levels - and names it on the
+node with `metadata/eth_particles`; `out/levels` and `out/assets` were regenerated with it, so step 89's reader
+now draws the systems each level states, not its entity's `.ent`, on all 840 carriers. 14 of 128 f420 frames
+change, each explained below; 1-01 does not. Gameplay: none - a particle is carried on the frame and never
+reaches `Game::Level`, the fixed tick or the state hash, and the one line a node gains is read only by
+`Lighting::Read` and `buildEmitters`.**
+
+**BLOCKERS CHECKED.** 8.2's one blocker is 8.1 committed (K10): it is step 89, `25b0f89`. Section 8.13 amends no
+row of 8.2, so section 7's row stands: "`pytest` (two identical blocks -> 1 file); `ruff`; `census9.py`: 840
+carriers keyed; formats doc; DEVLOG", widened by this run's instruction to re-derive the plan's counts, prove
+the staging diff, re-pin `test_mp_levels`, run every suite that reads levels and explain the 128-level sweep.
+
+**THE OWNER'S STANDING RULINGS.** None of R1-R25 names this step or the particles it writes. **R24 and R25 (step
+76) remain the owner's to rule**; this step neither applies nor withdraws them.
+
+**THE PLAN'S COUNTS, RE-DERIVED ON TODAY'S DATA** (`8.2/census/census_blocks.py` and `census9_keyed.py`, the
+latter `briefs/s9_10/census9.py` unchanged plus a keyed check). Plan: 24 blocks, 840 carriers, 897 systems (887
+add, 10 pixel). Today: **840 carriers, 897 systems, 887 `alphaMode 1` and 10 `alphaMode 0`**; 783 carriers hold
+one system and 57 two, none three; every `particles` is a plain integer from 1 to 24, so the engine's two-system
+cap and its `particles <= 0` drop remove nothing; every carrier draws a sprite; all ASCII; census9's 795
+carriers identical to their `.ent` and 45 differing, as the brief listed them. **24 distinct blocks**, the same 24
+by raw text, by `xml.etree` text, with whitespace dropped, with attributes sorted and by parsed value. Their nine
+bitmaps (`sparkles.bmp`, one block of it alone on 470 carriers, `fire.png`, `onda.png`,
+`tesla_shock_black_bg.png`, `portal_particle.png`, `portal.png`, `hard_halo.png`, `water.png`, and
+`explosion.JPG` on 2-32's dragon) are all in the original's `particles/`.
+
+**WHAT WAS BUILT** (the format note is `docs/ethanon-formats.md`, "2026-09-27 (particles)", with citations).
+- **`entity.py` reads `<Particles>` as the engine does**: from the first `<ParticleSystem>` child, at most
+  `ETH_MAX_PARTICLE_SYS_PER_ENTITY` = 2 siblings (`ETHEntityProperties.cpp:304-333`, `ETHTypes.h:33`), each kept
+  only with `particles > 0` read as `sscanf("%d")` reads it (`:323-325`; `ETHParticleSystem.cpp:70, 91`;
+  `tinyxml.cpp:1186-1191`). `Entity.particles_xml` is a bare `<Particles>` holding exactly the kept systems,
+  attributes and children in the file's order, whitespace-only text dropped, on one line; the systems it drops are
+  counted and printed, not reported as skips (0 today).
+- **`particles.py`**: the sidecar is `<?xml version="1.0" ?>` + `<Ethanon><Entity>` + that block, as `FF FE` +
+  UTF-16LE - the form step 89's fixture and probe read - named `<first 12 hex of the block's SHA-1>.ent` under
+  `assets/entities/inline_particles/`. Two different blocks under one name within one run, or a block outside
+  ASCII (which `Particles::ReadUtf16` refuses), fail the conversion by name. A file already holding the right
+  bytes is not rewritten, so four `--world` runs share the blocks; a file of the same name holding OTHER bytes,
+  left by an earlier run (each `--world` run is its own process), is overwritten, not refused - the clash check
+  holds within one run only (at 48 bits and 24 blocks, recorded rather than guarded).
+- **`tscn.py`**: `eth_particles` is appended to `ETH_ENTITY_KEYS` and written after every lighting line, so a
+  regenerated node is the one before plus one line. **Only on a node the converter writes a `Sprite2D` for** - the
+  answer step 89's latent row asked of 8.2 (`buildEmitters` walks the drawn sprites); a carrier without a sprite is
+  reported ("draws no sprite; not carried"). That is the port's limit, not the engine's: the original draws a
+  spriteless entity's particles (`ETHSpriteEntity.cpp:106` calls `LoadParticleSystem()` whatever `m_pSprite` is,
+  and `:293-322` needs no sprite), so the report marks a port gap. None ships.
+- **`__main__.py`**: `--copy-particles` writes the files; the key is written with or without it, like the
+  lighting keys, and the report prints it with them plus the distinct blocks and the dropped systems. The root
+  README's step 3 now passes it to all four worlds, and says why: a key naming no file is refused, and a refused
+  lighting read draws the level unlit.
+- **pytest, `tests/test_particles.py`, 14 tests on a hand-written scene**: two placements stating the same block,
+  and a third stating it at another indentation, name ONE file with three identical keys, and the CLI writes that
+  one file; a third system and a `particles="0"` one are dropped; `"3.000000"` is 3; a spriteless carrier is
+  reported and not keyed; empty and absent `<Particles>` give no key; the sidecar's bytes and wrapper; a hash
+  clash and a non-ASCII block refused; a re-run rewrites nothing; and **the scene converted with every
+  `<Particles>` removed equals the scene converted with them, less exactly the `eth_particles` lines**.
+
+**THE REGENERATION, PROVED BEFORE IT REPLACED ANYTHING.**
+- `out/levels`, `out/assets` and `out/data` were checked against `out/snap_pre8/MANIFEST_orig.md5` first: 1,232 of
+  1,232 files match.
+- The UNCHANGED converter (`HEAD`), run into `out/staging_8_2/head` (four worlds, `--copy-textures
+  --copy-lighting`), reproduces `out/levels` (128 of 128), `out/data/chapters.json` and every file it writes under
+  `out/assets` byte for byte. (`out/assets` also holds `fonts/`, `soundfx/` and `sprites/` from an earlier
+  `--copy-ui`, and `out/data` `achievements.json` from `tools/asbc`; these runs write neither.)
+- The new converter into `out/staging_8_2/new` (plus `--copy-particles`), against `out/`
+  (`8.2/tools/prove_diff.py` -> `8.2/census/prove_diff.json`): **every one of the 128 `.tscn` is the file before
+  plus inserted lines only - 840 of them, each exactly `metadata/eth_particles =
+  "res://assets/entities/inline_particles/<12 hex>.ent"` and each the last line of its node, 0 lines removed or
+  changed**; the keyed nodes are exactly the 840 carriers of the `.esc` files, one key each (194, 177, 251, 218 by
+  world); `out/assets` gains the 24 files and nothing else in it differs; `chapters.json` is identical. The
+  converter's "metadata strings added" goes from 11,234 to 12,074.
+- Replaced SELECTIVELY: the 128 `.tscn` copied over `out/levels`, the 24 sidecars added under
+  `out/assets/entities/inline_particles/`. `8.2/census/out_before.md5` (1,232 files) and `out_after.md5` (1,256)
+  differ in the 128 levels and the 24 new files only. `out/snap_pre8` was never written: 1,232 of 1,232 still
+  match after the probe's read of it. The final converter (after a docstring edit), run once more into
+  `out/staging_8_2/final`, reproduces the replaced `out/` exactly.
+
+| Gate (00_order 7, 8.2) | Required | Before | After |
+|---|---|---|---|
+| `pytest` | 0 failures; a fixture where two identical blocks give 1 file | 85 passed | **passes: 99 passed** (14 new). `test_two_identical_blocks_name_one_file`, `test_cli_writes_one_file_for_two_identical_blocks`: three placements, one block, one file, three identical keys |
+| `ruff check` | clean | clean | **passes: clean** |
+| `census9.py`: 840 carriers keyed | 840 | 0 (no key) | **passes: 840 of 840** (`census9_keyed.py`); the sidecar each names holds that carrier's inline systems value for value, **840 of 840**; 840 keys in all 128 files, so **0 on any other node** |
+| The plan's counts re-derived | re-derived and recorded | plan: 24 blocks, 840 carriers | **24 blocks; 840 carriers, 897 systems (887 / 10)** - the plan's numbers, every one |
+| Staging diffed before replacing | only the key lines and the new sidecars differ | - | **passes**: 840 inserted key lines, 0 other line; 24 new files, 0 changed; `chapters.json` identical |
+| Formats doc | a note with citations | - | **passes**: "2026-09-27 (particles)" |
+| DEVLOG | an entry | - | **by instruction, the run's close agent writes the session's single entry**, which names this step; none is appended here |
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**; two build steps, the compile and link of `test_mp_levels.exe`, the only relink; `MagicPortals.exe` still `9de1dd95` |
+| `test_mp_levels` re-pinned from the converted files | `metaStrings` = 16,934 + 840 | 16,934 | **passes: 17,774**; 128 checks, 0 failures; nothing else in its inventory moved |
+| Every suite that reads levels, once each | 0 failures | - | **passes: 31 suites, 6,867 checks, 0 failures** (below) |
+| `test_mp_lighting` reads every sidecar | 0 unreadable | "0 nodes name an eth_particles sidecar" | **passes: "840 nodes name an eth_particles sidecar, 0 of them unreadable"**; 533 checks |
+| 128-level f420 sweep, every changed level explained | explained against step 89's after | `8.1/after/sweep`, 128 md5s re-checked against their log lines | **passes: 114 identical, 14 changed, all 14 among the 18 levels whose carriers state something their `.ent` does not besides `StartPoint.z`**, each explained below. 1-01 `e2da5131` unchanged |
+| Every level still runs | 128 rc=0, validation active and silent | 128 | **passes: 128 of 128 rc=0**, validation ACTIVE in 128 logs, 0 messages; each level's "N placement(s) drew the particle systems their eth_particles names" equals its key count, **840 in all**; 0 "particles not drawn", 0 "drawn unlit", no warning or error line in any log |
+
+**THE SWEEP, LEVEL BY LEVEL** (`8.2/after/sweep`, each png's md5 matching its log line; `8.2/compare_sweep.py`
+-> `compare_sweep.json`; channel deltas `channel_deltas.json`; crops in `8.2/crops/`). THE DISCRIMINATING HALF:
+the 110 levels whose carriers state exactly their `.ent`'s systems, or differ from it only in `StartPoint.z`
+(which the port reads but draws nothing with until 8.4) - 1-01 and 1-15 with their static portals, and every
+shock and fire diamond level - are **110 of 110 byte-identical**, so on every carrier of those levels the sidecar
+loads what the `.ent` loaded. What decides how far a change reaches: every placed emitter draws from the one
+placement stream, `m_particleRandom`, when its pool is made and whenever a particle is reborn (`Particles::Step`),
+in `m_sprites`' order every frame, and a system with no spread draws nothing (`particleRandom` returns the bound
+without a draw). A carrier whose new systems have spreads moves every emitter that draws after it, in that frame
+and every later one; a carrier whose change draws the same numbers moves only itself. **This is not K8's case**:
+K8 keeps the draws that are NOT placements (effects, eyes, aura) off this stream, and this is no effect step -
+what moved is the level's own placed systems, whose draws are the placement stream by design.
+- **1-05, 1-08, 1-22 (`blue_light` #641, #930, #931): the orb.** 4,415 / 4,404 / 4,417 px, each ONE box of about
+  75 x 75 px on the lamp's head, every changed pixel brighter. The lamp's one system (4 `hard_halo.png`, life
+  1000, no spread at all) draws nothing from the stream, so nothing else moves; no channel of any changed pixel
+  goes down. **1-08's frame is `bb93d5ca`,
+  byte-identical to step 89's probe**, whose sidecar was cut from `level7.esc` by hand. Not a gate here (8.3 owns
+  `bluelight.py`'s): the orb window's pixels over 230 go **0 -> 2,442, 2,299 and 1,877** against the original's
+  2,826, 1,340-2,672 and 2,084-2,305 (`8.2/orb_measure.json`).
+- **1-19 (#859): 469 px in [536, 0, 589, 11]**, the orb's lowest rim at the frame's top edge. By eye (no crystal is
+  in this frame to fit the camera from): the lamp's picture shows at the top edge, about x 520-605 px, y 0-40,
+  and the orb, 24 u above its node, falls above the frame but for that rim.
+- **3-08, 3-09, 3-10, 3-11, 3-12, 3-19, 3-20: the warmer sparkle** (`Color0.b` 0.7, not the `.ent`'s 1.0, on the
+  keys and keyholes). 582 / 592 / 593 / 1,240 / 620 / 425 / 279 px in one to three boxes on the key and keyhole,
+  and **every changed pixel is a BLUE-ONLY decrease** (mean -11.4 to -18.2; green and red unchanged on all
+  4,331). 3-20's other differing carrier, `shock_diamond` #1633, differs in z only.
+- **3-14 (keyholes #1230 and #1197, `RandStartPoint` 20, not 22): 1,016 px** in three pieces inside 68 x 71 px on
+  them, all channels both ways: the same sparkles landing at other offsets.
+- **4-01 (`door.ent` #2079, the rocket, 2 systems its `.ent` lacks): 17,245 px in four pieces, none of them the
+  rocket**: the door stands at x 757 u, outside the view (0 to 455 u). Its 24 sparkles and 12 flames have spreads
+  and draw from the placement stream at every rebirth, so the other emitters draw other numbers: `door_bg`'s fire
+  (13,299 px; pooled BEFORE the door, z -16 against -12, and moved all the same, since the stream runs on across
+  frames), the keyhole (1,906), crystals #2114 (1,291) and #2113 (749) - each piece within a few px of its node's
+  place on screen.
+- **4-19 (`door.ent` #2514, one system its `.ent` lacks): 185,361 px**, by the same mechanism: the door at x 590 u
+  is outside the view (about 11 to 466 u, from the wells' positions), and every piece lies on another emitter -
+  the large `onda.png` rings of the gravity wells #2439, #2516 and #2691 at another phase (82,508, 71,692 and
+  29,236 px; signed mean under 1 on every channel), crystals #2518 and #2693, and key #2701.
+- **The four the prediction allowed that did not change.** 1-02: its tutorial popup rises as the level loads and
+  stops game time while it is up (`GameTimeStopped`, `MagicPortalsLayer.hpp:830`), and `updateEmitters` does not
+  run then (`MagicPortalsLayer.cpp:7072`), so at f420 no particle of the level has been released, #582's (4 ring
+  particles here against the `.ent`'s 3, random life 100 not 300, a 1 ms iris) included - the probe below shows
+  the change once the popup is closed. 1-28: lamp #641 at
+  x 484 u is outside the view (0 to 455 u, from crystal #878 at (304, 208) drawn at (855, 582) px), and its pool
+  draws nothing. 3-21: key #1335 at x 600 u and keyhole #1338 at x 602 u, outside the view (about 100 to 555 u,
+  from three crystals); the keyhole the frame shows is another node. 4-20: keyhole #1338 at x 178 u, outside the
+  view (about 389 to 844 u, from three crystals); key #1335 starts on the player's own start point (707, 140
+  against 710, 144), and none of its sparkles reaches the f420 frame - INFERRED: carried at the player's point,
+  behind the player's picture.
+
+**PROBE, NOT A GATE: 1-02 with its popup closed** (`8.2/probe/run_probe.sh`: `--tap 1178,358@300-305` as step 64's
+`popups/`, f420; before = the frozen levels of `out/snap_pre8` through `--levels`/`--art`, after = `out/levels`; the
+same binary; 2 launches). 149,958 px change: the portal #582, its rings visibly fuller
+(`probe/crop_portal_582_before_after.png`), and, pooled after it, the torch's flame and `door_bg`'s fire - the
+three pieces with deltas over 40, 9,514 px - and the walls under the torch's light, whose brightness follows its
+flame's live share (`syncLights`): 98,450 px at a delta of 8 or less. The before's log has no sidecar line; the
+after's says 3.
+
+**THE SUITES,** run directly, once each, 0 failures (`8.2/logs/`): `test_mp_levels` 128, `test_mp_lighting` 533,
+`test_mp_start` 752, `test_mp_torch` 123, `test_mp_layer` 1593, `test_mp_sprites` 912, `test_mp_boss` 126,
+`test_mp_bounce` 189, `test_mp_chapters` 39, `test_mp_darkdragon` 99, `test_mp_demolish` 133, `test_mp_diamonds`
+126, `test_mp_dragon` 230, `test_mp_fields` 63, `test_mp_fire` 43, `test_mp_ghost` 75, `test_mp_hazards` 43,
+`test_mp_hinge` 28, `test_mp_keys` 124, `test_mp_launchers` 98, `test_mp_minions` 99, `test_mp_motion` 167,
+`test_mp_movers` 53, `test_mp_play` 205, `test_mp_shot` 90, `test_mp_sky` 380, `test_mp_statics` 106,
+`test_mp_timed` 84, `test_mp_turrets` 40, `test_mp_wells` 98, `test_mp_zerog` 88 - the 31 suites whose source
+reads the converted levels. The full ctest was not run: the other 14 of the 45 suites read no level, and nothing they
+build changed.
+
+**SMART APP CONTROL: nothing was refused.** One executable was relinked (`test_mp_levels.exe`), and it ran on its
+first launch. 161 launches all ran - the 31 suites, the 128 captures of the sweep and the 2 of the probe - on the
+binaries step 89 left and that one: 26 of the suites on their first launch since step 89's build relinked them
+(it launched 4), `MagicPortals.exe` `9de1dd95` on the 130 captures.
+
+**THE INDEPENDENT CHECK** (`8.2/verify1/`, passed every gate): its own census (840 carriers, 897 systems, 24 blocks,
+0 spriteless), its own staging reruns (HEAD reproduces `snap_pre8`'s levels 128 of 128; HEAD to new is 840 inserted
+key lines and 24 files, nothing else), the 31 suites again (6,867 checks, 0 failures) and a sweep **128 of 128
+byte-identical to `8.2/after/sweep`**, plus the 1-02 probe reproduced (`bccdc8c0`); 160 launches, 0 refused. Its
+two low findings were applied at commit as TEXT, no behaviour changed: the clash refusal is stated as holding
+within one run (above, and in `particles.py`'s comments and the formats doc), and the spriteless-carrier report is
+stated as a port gap with its engine citation (above, and in the formats doc).
+
+**RECORDED DEVIATIONS.**
+- **`metaStrings` is re-pinned here, not in 8.3.** Section 7 lists "`test_mp_levels` `metaStrings` 17,774
+  (recompute per K10)" among 8.3's gates, but the count comes from the converted files, which this step changes;
+  left alone, the suite would fail from this step on. K10's "whichever lands second recomputes" is met here; 8.3
+  re-confirms it.
+- **The sidecar holds the systems the engine KEEPS, not the inline element as written.** 9c (4) says "keep the
+  inline `<Particles>` element"; the port's `Parse` reads every `<ParticleSystem>` and refuses one with no
+  particles, while the engine reads two at most and skips those. Writing what the engine keeps makes the two
+  agree; on the shipped levels nothing is dropped, so the 897 systems are the same either way.
+- **`--copy-particles` is a flag of its own** (9c (4) offers it or `--copy-lighting`): particles are not lighting.
+  The cost is that a run for the port must pass it, which both READMEs now say, and which 9.2's regeneration
+  must do.
+- **The file is named by the SHA-1 of the block, not of the whole file**, the block canonical as above (one line,
+  whitespace dropped, attributes in the file's order); 9c (4) names the scheme (`<sha1-12>.ent`) but not what it
+  hashes.
+
+**LEFT FOR LATER.**
+- **8.3** drops the `.ent` fallback for placements, and with it rules on step 89's unlit-level question; pins 840
+  carriers and 897 systems (887 / 10) and the spot values in `test_mp_sprites`; runs `bluelight.py` (previewed
+  above) and the G5 halo gates. It may also have the reader refuse `eth_particles` on a light-only node, the other
+  half of step 89's latent row, which no converted level reaches. Measured for it here
+  (`8.2/census/fallback_left.py`): of the 2,043 sprite nodes that name no sidecar, none has an `.ent` holding a
+  system, so on the shipped levels the fallback it drops now draws nothing. And two comments in `game/` still
+  count what the FALLBACK loads, not what the levels place: `sim/Particles.hpp:118` ("the levels' 889 placed
+  systems ... (879 and 10)") and `MagicPortalsLayer.cpp:4505` ("879 of the levels' 889 systems"); the levels place
+  897 (887 / 10), and 8.3, which owns `game/` here, corrects them.
+- **9.2** regenerates the levels again: it must pass `--copy-particles`, or every carrier's key names no file and
+  every level with one draws unlit.
+- 1-02's static portal and its 1 ms iris, and the 4-01 / 4-19 rocket exhausts, are still not compared with the
+  original: 9c (6)'s footage needs stand.

@@ -160,10 +160,10 @@ takes one world, so it is one run per world, and all four must write to the same
 because each run adds its world to `out/data/chapters.json` and keeps the others.
 
 ```bat
-tools\converter\.venv\Scripts\python -m ethanon2godot --world 0 --copy-textures --copy-lighting
-tools\converter\.venv\Scripts\python -m ethanon2godot --world 1 --copy-textures --copy-lighting
-tools\converter\.venv\Scripts\python -m ethanon2godot --world 2 --copy-textures --copy-lighting
-tools\converter\.venv\Scripts\python -m ethanon2godot --world 3 --copy-textures --copy-lighting
+tools\converter\.venv\Scripts\python -m ethanon2godot --world 0 --copy-textures --copy-lighting --copy-particles
+tools\converter\.venv\Scripts\python -m ethanon2godot --world 1 --copy-textures --copy-lighting --copy-particles
+tools\converter\.venv\Scripts\python -m ethanon2godot --world 2 --copy-textures --copy-lighting --copy-particles
+tools\converter\.venv\Scripts\python -m ethanon2godot --world 3 --copy-textures --copy-lighting --copy-particles
 ```
 
 World N is chapter N+1, and its levels are `level0`…`level31` with the suffix `''`, `a`,
@@ -176,11 +176,15 @@ World N is chapter N+1, and its levels are `level0`…`level31` with the suffix 
   tier file the original draws at 720 px in `entities/hd/` or `entities/fullhd/`, recorded in
   `out/assets/entity_tiers.json` (the port picks the tier file itself; the `.tscn` names the 1× path);
 - `out/assets/lightmaps/`, the normal maps, the halo bitmaps and
-  `out/assets/lighting_files.json` (`--copy-lighting`).
+  `out/assets/lighting_files.json` (`--copy-lighting`);
+- `out/assets/entities/inline_particles/` — each placement's own particle systems, one UTF-16
+  `.ent`-shaped file per distinct `<Particles>` block the levels carry (`--copy-particles`).
 
 `--copy-lighting` copies each level's baked lightmaps (`add<id>.png`), the normal maps and halo
 bitmaps the emitted `metadata/eth_*` keys point at. The keys are written with or without it, so a
 run for the Supersonic port must include it or the port's reader finds paths with no file behind them.
+The same holds for `--copy-particles` and the `metadata/eth_particles` key: without the files the
+port refuses the key, and a level whose lighting is refused is drawn unlit.
 
 `--copy-ui` (UI sprites with their `hd/` tier, bitmap fonts and sound effects, into
 `out/assets/`) is not needed by the port: it reads UI art, fonts and sounds straight from

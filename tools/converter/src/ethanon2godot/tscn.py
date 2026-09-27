@@ -44,6 +44,10 @@ light (``eth_z`` and ``eth_emissive`` on every node), only when the value differ
 the engine default, and are appended LAST in the node block so every pre-existing line
 keeps its place. The mapping and its citations are
 the 2026-09-14 "lighting keys" subsection of ``docs/ethanon-formats.md``.
+
+*Particles.* A placement's own ``<Particles>`` goes to a sidecar ``.ent`` (``particles.py``)
+that ``metadata/eth_particles`` names, the last ``eth_*`` line of a node that draws a sprite.
+The 2026-09-27 "particle sidecars" subsection of ``docs/ethanon-formats.md``.
 """
 
 from __future__ import annotations
@@ -55,6 +59,7 @@ from pathlib import Path
 
 from .entity import BS_BOX, BS_CIRCLE, BS_COMPOUND, BS_POLYGON, Entity
 from .imagesize import read_size
+from .particles import SIDECAR_PREFIX, ParticleBlocks
 from .scene import Instance, Scene
 
 # Godot 4 text scene format version. `format=3` is what Godot 4.x writes.
@@ -87,6 +92,9 @@ ETH_ENTITY_KEYS = (
     "eth_halo_offset",
     "eth_halo_size",
     "eth_halo_brightness",
+    # Not a lighting input: the node's own <Particles>, as the sidecar file that holds them
+    # (particles.py). Last, and only on a node that draws a sprite (write_scene).
+    "eth_particles",
 )
 # Written on EVERY node whose value is non-default, not only on nodes that draw a sprite
 # or own a light. eth_z: spriteless nodes are where the port's own actors take their
@@ -171,6 +179,10 @@ class ConversionReport:
     lightmaps: list[tuple[Path, str]] = field(default_factory=list)
     normals: set[str] = field(default_factory=set)
     halos: set[str] = field(default_factory=set)
+    # The distinct <Particles> blocks the eth_particles keys name, for --copy-particles.
+    particle_blocks: ParticleBlocks = field(default_factory=ParticleBlocks)
+    # Systems the engine would drop (particles <= 0, or past the second), over all instances.
+    particle_systems_dropped: int = 0
 
 
 def _collider_lines(inst: Instance, parent: str, sub_ids: list[str]) -> tuple[list[str], str]:
@@ -344,6 +356,7 @@ def write_scene(
     sprite_dir: Path | None = None,
     lightmap_dir: Path | None = None,
     lightmap_prefix: str = LIGHTMAP_PREFIX,
+    particles_prefix: str = SIDECAR_PREFIX,
 ) -> tuple[str, ConversionReport]:
     """Render a parsed :class:`Scene` to ``.tscn`` source.
 
@@ -357,6 +370,8 @@ def write_scene(
 
     ``lightmap_dir`` is the scene's ``<scene>-esc/`` directory
     (:func:`scene.lightmap_directory`); ``None`` emits no lightmap key at all.
+    ``particles_prefix`` is where the particle sidecars live, like ``lightmap_prefix``; the
+    blocks themselves are collected in ``report.particle_blocks`` for ``--copy-particles``.
     """
     report = ConversionReport()
     zdir = scene.properties.z_axis_direction
@@ -465,6 +480,23 @@ def write_scene(
         for key, value in emitted:
             body.append(f"metadata/{key} = {quote(value)}")
         report.lighting.update(k for k, _ in emitted)
+        report.particle_systems_dropped += ent.particle_systems_dropped
+        if ent.particles_xml:
+            # After every lighting line, so the diff against a level converted without it
+            # is one inserted line per carrier. Only where a Sprite2D is written: the port
+            # draws a placement's systems from its sprite (buildEmitters walks the drawn
+            # sprites), and every one of the 840 shipped carriers draws one. A carrier
+            # without a sprite is reported, never keyed where nothing would read it.
+            report.lighting_ungated["eth_particles"] += 1
+            if ent.sprite:
+                sidecar = report.particle_blocks.add(ent.particles_xml)
+                body.append(f"metadata/eth_particles = {quote(f'{particles_prefix}/{sidecar}')}")
+                report.lighting["eth_particles"] += 1
+            else:
+                report.skipped.append(
+                    f"{inst.entity_name}#{inst.id}: {ent.particle_systems} particle system(s) on "
+                    "a node that draws no sprite; not carried"
+                )
         if draws:
             if ent.normal:
                 report.normals.add(ent.normal)

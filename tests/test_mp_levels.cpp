@@ -293,7 +293,15 @@ void AllLevels() {
     //   cat *.tscn | grep -cE '^metadata/[^ ]+ = "'
     // counts before and after. sim/Lighting reads them; test_mp_lighting pins
     // what they say.
-    CHECK_EQ(total.metaStrings, 16934);
+    //
+    // Then 17,774: the levels were regenerated on 27 September 2026 (planning
+    // step 90, the visuals order's 8.2) with the converter that writes each
+    // placement's own <Particles> to a sidecar file and names it in one more
+    // line, metadata/eth_particles, on each of the 840 nodes that carry one and
+    // draw a sprite. Every file came out as the one before plus those lines:
+    // 16,934 + 840, the converter's own count, and nothing else in this
+    // inventory moved. The layer draws the systems of the file a node names.
+    CHECK_EQ(total.metaStrings, 17774);
     CHECK_EQ(total.metaVectors, 837);
     CHECK_EQ(total.metaNumbers, 80);
     CHECK_EQ(total.metaNumbersOutsideJoints, 0);

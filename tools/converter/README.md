@@ -3,7 +3,7 @@
 Converts the original game's Ethanon Engine data (scenes, entities, `goldenScores.enml`)
 into the files the Magic Portals port on the Supersonic Engine reads: one `.tscn` text
 scene per level, the chapter manifest, and copies of the art and lighting files the levels
-name. The port parses the `.tscn` with its own reader (`game/sim/Tscn.cpp` in this
+name, and the particle systems each placement carries. The port parses the `.tscn` with its own reader (`game/sim/Tscn.cpp` in this
 repository); the package keeps its name from when the target was Godot 4, whose text
 scene format it still writes.
 
@@ -46,6 +46,7 @@ src/ethanon2godot/
   imagesize.py  image dimensions from file headers
   tiers.py      --copy-textures: sprites plus the density tier file the original draws
   lighting.py   --copy-lighting: lightmaps, normal maps, halo bitmaps
+  particles.py  --copy-particles: each placement's <Particles> as a UTF-16 .ent sidecar
   uiassets.py   --copy-ui: UI sprites, fonts, sound effects
 tests/          pytest; fixtures must be hand-authored, never copied from the APK
 ```

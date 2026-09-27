@@ -463,6 +463,74 @@ a tier sibling). **Orphan tier files** that no name reaches: `particles/hd/excla
 original never picks them; the same holds for `sprites/hd/game_main_title_.png` and
 `sprites/hd/world_icon3_.png`. `entities/hd/` has no orphan: all 53 files have a 1× name.
 
+### 2026-09-27 (particles) — the particle sidecars (`eth_particles`, `--copy-particles`, `particles.py`)
+
+Source citations are `toolkit/Source/src/engine/…` in `reference/ethanon/` unless a path says otherwise. The
+research is local and gitignored: `out/parity/visuals/briefs/systems_9_10.md` 9c and `00_order.md` step 8.2;
+the counts below are `out/parity/visuals/8.2/census/`. Planning step 90 is the record.
+
+**What the engine reads.** A placement's particle systems are its INLINE body's `<Particles>` (§7.1 (b)),
+not its `.ent`'s: `ETHEntityProperties::ReadFromXMLFile` takes `FirstChild("Particles")`, then its
+`FirstChild("ParticleSystem")` and that element's next siblings (`NextSiblingElement`, any element name), at
+most `ETH_MAX_PARTICLE_SYS_PER_ENTITY` = 2 of them (`Entity/ETHEntityProperties.cpp:304-333`, the loop
+`:317`; `ETHTypes.h:33`). Each is read by `ETHParticleSystem::ReadFromXMLFile`
+(`Particles/ETHParticleSystem.cpp:89-136`) over its `Reset()` values (`:67-87`) and kept only if
+`nParticles > 0` (`ETHEntityProperties.cpp:323-325`); `nParticles` resets to 0 (`ETHParticleSystem.cpp:70`)
+and is read with `QueryIntAttribute` (`:91`), i.e. `sscanf("%d")` (`vendors/tinyxml_ansi/tinyxml.cpp:1186-1191`,
+§3.2). `ETHSpriteEntity::LoadParticleSystem` skips the same systems again when it builds a manager for each
+(`Entity/ETHSpriteEntity.cpp:293-322`, the test `:306`), and the writer never writes one
+(`ETHEntityProperties.cpp:468-475`).
+
+**What the converter writes** (`entity.py` `_parse_particles`, `particles.py`, `tscn.py`):
+- `Entity.particles_xml`: a bare `<Particles>` holding exactly the kept systems, each with its attributes and
+  children in the file's own order and every whitespace-only text dropped (so the indentation a block sits
+  at does not matter), serialised by `xml.etree` on one line: `<Gravity x="…" y="…" />`, as the port's
+  reader expects. A sibling in the read window that is not a `<ParticleSystem>` is never kept (none ships).
+  Dropped systems are counted and printed ("systems the engine drops"), not reported as skips.
+- The sidecar: that block inside `<?xml version="1.0" ?>` + `<Ethanon><Entity>…</Entity></Ethanon>`, written
+  as `FF FE` + UTF-16LE, the encoding of every `.ent` of the original's (§3.1). It is named
+  `<first 12 hex digits of the SHA-1 of the block>.ent` and written with `--copy-particles` to
+  `<output>/assets/entities/inline_particles/`. Placements that state the same block share one file; two
+  different blocks under one name within one run, or a block outside ASCII, fail the conversion. A clash with
+  a file an earlier run left (each `--world` run is its own process) is not checked: that file is overwritten.
+- The key: `metadata/eth_particles = "res://assets/entities/inline_particles/<hash>.ent"`, the LAST `eth_*`
+  line of the node (appended to `ETH_ENTITY_KEYS`), so a regenerated level is the one before plus one line
+  per carrier. **Only on a node that draws a sprite**: the port builds a placement's emitters from its drawn
+  sprite (`game/MagicPortalsLayer.cpp` `buildEmitters`), so a carrier without a `<Sprite>` is reported
+  ("draws no sprite; not carried") rather than keyed where nothing would read it. This is the PORT's limit,
+  not the engine's: the original draws a spriteless entity's particles (`Entity/ETHSpriteEntity.cpp:106` calls
+  `LoadParticleSystem()` whatever `m_pSprite` is, and `:293-322` needs no sprite), so the report marks a port
+  gap. None ships.
+- The key is written with or without `--copy-particles`, like the lighting keys. The port's reader
+  (`game/sim/Lighting.cpp:87`, `Path` `:178-190`) refuses a key naming no file, and a refusal draws the whole
+  level UNLIT, so **a run for the port must pass the flag.**
+
+**The port's reader** (`game/sim/Particles.cpp`): `ReadUtf16` (`:22`) takes `FF FE` and ASCII only; `Parse`
+(`:245`) finds `<Particles>…</Particles>` and parses every `<ParticleSystem>` in it; `ParseSystem` (`:93`)
+demands all sixteen numeric attributes and `Gravity`, `Direction`, `RandomizeDir`, `StartPoint` (with its
+z), `RandStartPoint`, `Color0`, `Color1`, `Luminance`, `SpriteCut` and `Bitmap`, and refuses a system with
+no particles. So the sidecar holds only what the engine keeps, and every one of the 24 carries every field.
+
+**Measured over the 128 levels** (2026-09-27; the census over the `.esc` files and the regenerated output):
+- **840 carriers, 897 systems** (887 `alphaMode 1` AM_ADD, 10 `alphaMode 0` AM_PIXEL); 783 carriers hold one
+  system and 57 two, none three; every `particles` is a plain positive integer (1 to 24), so the engine's
+  two-system cap and its `particles <= 0` drop remove nothing; every carrier draws a sprite; all ASCII.
+- **24 distinct blocks**, the same 24 by raw text, by `xml.etree` text, with whitespace dropped, with
+  attributes sorted and by parsed value; the most used is one `sparkles.bmp` system on 470 carriers. Their
+  nine bitmaps (`sparkles.bmp`, `fire.png`, `onda.png`, `tesla_shock_black_bg.png`, `portal_particle.png`,
+  `portal.png`, `hard_halo.png`, `water.png`, `explosion.JPG`) are all in `particles/`.
+- **840 keys** (194, 177, 251, 218 by world), one per carrier and none elsewhere; the file each names holds
+  that carrier's own inline systems, value for value, on 840 of 840. The `metadata` strings the converter
+  adds rise from 11,234 to **12,074**, and the port's `metaStrings` from 16,934 to 17,774.
+- Against the output before, every `.tscn` differs only by inserted `eth_particles` lines (840, each the
+  last line of its node), and `out/assets` only by the 24 new files; `chapters.json`, `entity_tiers.json`,
+  `lighting_files.json` and every other file are byte-identical.
+- 45 carriers state systems their same-named `.ent` does not (`census9.json`): 5 `blue_light` with a system
+  the `.ent` lacks, 2 `door.ent` rockets likewise, 1-2's `portal_static` #582 (4 particles and a 1 ms iris),
+  16 keys and keyholes with `Color0.b` 0.7, 2 keyholes with `RandStartPoint` 20, and 19 whose only
+  difference is `StartPoint.z` (0 inline against the `.ent`'s 10 or 100). These are what reading the
+  sidecar instead of the `.ent` changes.
+
 ---
 
 ## 1. Orientation: where to look in the engine source

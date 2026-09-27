@@ -22,6 +22,8 @@ Reference: ``engine/Entity/ETHEntityProperties.cpp`` (the deserializer) and
 
 from __future__ import annotations
 
+import copy
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,6 +54,12 @@ _DEFAULT_SCALE = (1.0, 1.0)
 _DEFAULT_LIGHT_RANGE = 256.0
 _DEFAULT_HALO_SIZE = 64.0
 _DEFAULT_HALO_BRIGHTNESS = 1.0
+
+# ETHTypes.h:33. ETHEntityProperties.cpp:317 reads at most this many systems off <Particles>.
+ETH_MAX_PARTICLE_SYS_PER_ENTITY = 2
+# The leading integer `sscanf("%d")` takes (TiXmlAttribute::QueryIntValue,
+# vendors/tinyxml_ansi/tinyxml.cpp:1186-1191): "4.000000" is 4, "1e3" is 1.
+_SCANF_INT = re.compile(r"\s*[+-]?\d+")
 
 
 def _f(element: ET.Element | None, attr: str, default: float = 0.0) -> float:
@@ -213,6 +221,15 @@ class Entity:
     # <Normal> basename under entities/normalmaps/ (:284-292, ETHSpriteEntity.cpp:97-101).
     normal: str = ""
     light: Light | None = None
+    # --- particles (docs/ethanon-formats.md, 2026-09-27 "particle sidecars" subsection) ---
+    # The <Particles> element holding exactly the systems the engine keeps, serialised
+    # canonically (see _parse_particles); "" when it keeps none. The port reads it back from
+    # a sidecar file, so this text IS the data, not a summary of it.
+    particles_xml: str = ""
+    particle_systems: int = 0
+    # Systems present in the file that the engine never builds: `particles` <= 0, or past
+    # the second. Not an error (the engine drops them silently), but counted so it shows.
+    particle_systems_dropped: int = 0
 
     @property
     def is_collidable(self) -> bool:
@@ -347,6 +364,62 @@ def _parse_joint(collision_el: ET.Element, box: tuple[float, float]) -> dict[str
     return {}
 
 
+def _scanf_int(element: ET.Element, attr: str, default: int) -> int:
+    """An int attribute read as ``QueryIntAttribute`` reads it: ``sscanf("%d")``.
+
+    Unlike :func:`_i`, ``"4.000000"`` is 4 here and not the default, because the engine takes
+    the leading integer and reports success (docs §3.2). No match keeps ``default``.
+    """
+    match = _SCANF_INT.match(element.get(attr, ""))
+    return int(match.group(0)) if match else default
+
+
+def _canonical(element: ET.Element) -> ET.Element:
+    """A copy with every whitespace-only text and tail dropped, so the serialisation depends
+    on what the file states and not on how deeply it was indented."""
+    out = copy.deepcopy(element)
+    for node in out.iter():
+        if node.text is not None and not node.text.strip():
+            node.text = None
+        if node.tail is not None and not node.tail.strip():
+            node.tail = None
+    return out
+
+
+def _parse_particles(element: ET.Element) -> tuple[str, int, int]:
+    """Read ``<Particles>`` as ``ETHEntityProperties.cpp:304-333`` does.
+
+    From the first ``<ParticleSystem>`` child, the engine reads at most
+    ``ETH_MAX_PARTICLE_SYS_PER_ENTITY`` sibling elements and keeps each whose ``particles``
+    is above 0 (``:323``; ``nParticles`` resets to 0, ``ETHParticleSystem.cpp:70``, and is
+    read with ``QueryIntAttribute``, ``:91``). ``ETHSpriteEntity.cpp:306`` skips the same
+    systems again at load. The kept systems are serialised, attributes and children in the
+    file's own order, inside a bare ``<Particles>``: that string is what the sidecar holds
+    and what its name hashes.
+
+    Returns ``(xml, kept, dropped)``; ``xml`` is ``""`` when nothing is kept.
+    """
+    node = element.find("Particles")
+    if node is None:
+        return "", 0, 0
+    children = list(node)
+    systems = [c for c in children if c.tag == "ParticleSystem"]
+    if not systems:
+        return "", 0, 0
+    start = children.index(systems[0])
+    read = children[start : start + ETH_MAX_PARTICLE_SYS_PER_ENTITY]
+    # A sibling that is not a <ParticleSystem> is read by the engine as one with every field
+    # at its Reset() value; none ships, and the port's reader would not see it, so it is
+    # never kept here.
+    kept = [c for c in read if c.tag == "ParticleSystem" and _scanf_int(c, "particles", 0) > 0]
+    dropped = len(systems) - len(kept)
+    if not kept:
+        return "", 0, dropped
+    block = ET.Element("Particles")
+    block.extend(_canonical(c) for c in kept)
+    return ET.tostring(block, encoding="unicode"), len(kept), dropped
+
+
 def parse_element(element: ET.Element, *, name: str = "") -> Entity:
     """Parse an ``<Entity>`` XML element into an :class:`Entity`.
 
@@ -391,6 +464,9 @@ def parse_element(element: ET.Element, *, name: str = "") -> Entity:
         ent.scale = (_f(scale, "x", 1.0), _f(scale, "y", 1.0))
     ent.normal = _text(element, "Normal")
     ent.light = _parse_light(element)
+    ent.particles_xml, ent.particle_systems, ent.particle_systems_dropped = _parse_particles(
+        element
+    )
 
     collision_el = element.find("Collision")
     if collision_el is not None:
