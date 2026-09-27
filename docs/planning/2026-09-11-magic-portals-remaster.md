@@ -16162,3 +16162,183 @@ stated as a port gap with its engine citation (above, and in the formats doc).
   every level with one draws unlit.
 - 1-02's static portal and its 1 ms iris, and the 4-01 / 4-19 rocket exhausts, are still not compared with the
   original: 9c (6)'s footage needs stand.
+
+## Step 91 - a placement draws the particle systems its level states and no others: the entity's .ent is no longer read in their place (built)
+
+The visuals plan's step 8.3 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 8; its brief
+`systems_9_10.md` 9c (4) "SE-b" and 9c (5)). Track A, on MPR `main` in `build/`, after step 90 (`db14d3a`).
+Game-only: the engine submodule stays at `4bfcf67` and no file under `engine/` is touched; the converter and the
+converted levels are untouched too. Changed: `game/MagicPortalsLayer.{cpp,hpp}`, `game/sim/Lighting.{hpp,cpp}`,
+`game/sim/Particles.hpp` (a comment), `tests/test_mp_sprites.cpp`, `tests/test_mp_lighting.cpp`,
+`tests/test_mp_layer.cpp`, the backlog and `docs/ethanon-formats.md` (the `<FileName>` count below). **`buildEmitters` no longer reads a node's entity `.ent` when the node
+names no sidecar: a placement draws the systems its own `<Particles>` block states, through `eth_particles`, and
+nothing else. `Lighting::Read` refuses `eth_particles` on a node that draws no sprite. The plan's pins are in
+`test_mp_sprites`. No frame changes: the 128-level f420 sweep is 128 of 128 byte-identical to step 90's, because
+step 90's regeneration already moved every pixel this batch moves, and no sprite node without a key has an `.ent`
+that holds a system. Gameplay: none - a particle is carried on the frame and never reaches `Game::Level`, the fixed
+tick or the state hash; the new refusal reaches no shipped level.**
+
+**BLOCKERS CHECKED.** 8.3's one blocker is 8.2, which is step 90 (`db14d3a`), committed. Section 8.13 amends no
+row of 8.3, so section 7's row stands as written. **K10** is met: the reader (step 89) and the converter (step 90)
+are both committed, and `metaStrings` was recomputed by the second of them (step 90) and is re-confirmed here. The
+gate numbers date from 2026-09-16 and were re-derived on today's tree before anything changed (below). The
+baseline is step 90's after, `8.2/after/sweep`: its 128 PNGs match the md5s in their own log (128 of 128, rc 0),
+and the committed binary `9de1dd95` reproduced its 1-01 f420 `e2da5131` in this step's before series.
+
+**THE OWNER'S STANDING RULINGS.** None of R1-R25 names this step or the particles it draws. **R24 and R25 (step 76)
+remain the owner's to rule**; this step neither applies nor withdraws them.
+
+**THE PLAN'S NUMBERS, RE-DERIVED ON TODAY'S DATA** (`8.3/census/census83.py` -> `census83.json`, read-only over
+`out/levels`, its sidecars and the original's `.esc` and `.ent` files).
+- **840 carriers, 897 systems, 887 `alphaMode 1` and 10 `alphaMode 0`** - the plan's numbers. 783 carriers hold one
+  system and 57 two; 24 distinct sidecar files; every level has at least one carrier; every carrier draws a sprite.
+  The 10 mixed systems are `portal.png` (level0 x4, level1, level14 x2, luminance 1) and `water.png` (level29b,
+  level30b, level31b, luminance 0.45), the ten the port's comments name.
+- **Each carrier's sidecar holds its own inline `<Particles>`, value for value: 840 of 840**, 0 differing, 0 unmatched.
+- **What the fallback still reached: nothing.** Of the 2,043 sprite nodes that name no sidecar, **0** have an `.ent`
+  (the name `buildEmitters` stripped) that holds a system - step 90's `fallback_left.py` finding, re-derived.
+- **The four spot carriers**, read out of their sidecars: level7 `blue_light_ent_930` 1 system, 4 `hard_halo.png`,
+  added, life 1000, size 30, `StartPoint` (0, -24, z 24), colour (0.3, 0.5, 1, 1); level1 `portal_static_582`
+  sys0 4 `portal_particle.png`, life 900 +- 100, sys1 1 `portal.png`, `alphaMode 0`, life 1; level7b `key_ent_1335`
+  **two** `sparkles.bmp` systems, each `Color0` (1, 1, 0.7, 1); level0c `door_ent_2079` sys0 24 `sparkles.bmp` size
+  99 at `StartPoint` y 118, sys1 12 `fire.png` on a 4 x 1 cut at y 22.
+- **Why the engine never reads the `.ent` for a placement** (VERIFIED, the reason the fallback goes rather than a
+  guess that it is unused): a scene entity is built from its own `<Entity>` body (`Scene/ETHScene.cpp:226` ->
+  `Entity/ETHEntity.cpp:192-207` -> `Entity/ETHEntityProperties.cpp:202-224`), which takes the `.ent`'s properties
+  from the entity cache only when the body names a `<FileName>`, and reads its own `<Particles>` otherwise
+  (`:304-333`). **None of the 4,072 placements in the 133 `.esc` files names a `<FileName>`** (4,065 of them in the
+  128 levels, the other 7 in the four level-select scenes and the loading screen; counted this step, and written
+  into `docs/ethanon-formats.md`'s particles note; the file records the discriminator in its "Reference-vs-inline
+  discriminator" row and had the zero for chapter 1 only).
+
+**WHAT WAS BUILT.**
+- **The fallback is gone** (`game/MagicPortalsLayer.cpp:766`). A drawn sprite with an empty `particles` is skipped;
+  one with a path draws that sidecar's systems exactly as step 89 built it (the same `Load`, `Scale`, `MakePool`
+  on `m_particleRandom`, in `m_sprites`' order), and a sidecar that will not load, or holds none, is still logged
+  and skipped. The node -> entity-name map that only the fallback used is removed: `particles` comes only from the
+  lighting read's `Look`, which holds only the level's entity nodes, so the map's filter kept exactly the sprites
+  that can carry a path. The "particle system not drawn" warning now names the node and its sidecar. What the
+  script adds is untouched and still reads `original/entities/<name>`: `addEntityEmitters` and the effects
+  runtime's `Art::LoadEnt`.
+- **Step 89's unlit-level question, ruled: such a level draws no placed particle system.** The key has one reader,
+  `Lighting::Read`, and a level whose lighting read is refused has no `Look`, so it now loses its placements'
+  particles with its lighting - a fault state, not a play mode, and none ships (`test_mp_lighting`: 128 of 128
+  read). The warning says what it costs: "`<level>` drawn unlit, and without its placements' particle systems:
+  ..." (`:443`). The alternative - a second reader of `eth_particles` for the unlit case - is the two-parser
+  arrangement step 89 declined.
+- **The reader refuses `eth_particles` on a node that draws no sprite** (`game/sim/Lighting.cpp:307`): "eth_particles
+  on a node that draws no sprite, whose particles the port does not draw". The other half of step 89's latent row,
+  which step 90 answered on the converter's side only. `buildEmitters` walks the level's sprites, so on a
+  light-only node the key would be read and never drawn - a skip, against the reader's own "refused, never
+  skipped". A PORT limit, not the engine's (`ETHSpriteEntity.cpp:106` loads a spriteless entity's systems); none
+  ships. `Lighting.hpp`'s vocabulary now says "(only on a node that draws a sprite)".
+- **Comments that counted the fallback, corrected**: `Particles.hpp` (`Drawable`) and `syncLighting`'s header said
+  the levels place 889 systems (879 added, 10 mixed) - what the `.ent` files held; the levels place 897 (887 / 10).
+  The `Look::particles`, `DrawnSprite::particles`, `buildEmitters` and vocabulary comments no longer say the `.ent`
+  is read when the key is absent.
+- **The pins** (`tests/test_mp_sprites.cpp:1641`, `ThePlacementsCarryTheSystemsTheirLevelsState`): over the 128
+  levels, each node's `eth_particles` taken from `Lighting::Read` and its sidecar through `Particles::Load`, as
+  the layer does: 128 levels read, 0 unreadable, **840 carriers, 897 systems, 887 added, 10 mixed**, 57 with two
+  systems, 24 sidecar files; and the four spot carriers above, value for value.
+- **`test_mp_lighting`**: the new refusal on the fixture's light-only `flare_8` (35 refusals, 34 before), and its
+  comments; the carrier count it prints is pinned in `test_mp_sprites`.
+- **`test_mp_layer`**, two layer tests: `TheBlueLampDrawsTheOrbItsLevelPlaces` (`:3195`) is 9c (5)'s check -
+  level7's `EmitterReports` hold a `hard_halo.png` emitter, a pool of 4, added, the one system its owner
+  `blue_light_ent_930` has; and `APlacementWithoutItsSidecarDrawsNoSystem` (`:3219`) proves the fallback gone
+  on a level that would show it: `level0.tscn` copied to a temporary directory with `portal_static_604`'s key line
+  cut out, `portal_static.ent` checked to hold two systems, and the layer, reading that copy, builds no emitter for
+  604 while 603, 582 and 583 each still build the rings and the iris their level states. Before this step the
+  fallback would have given 604 the `.ent`'s two.
+
+| Gate (00_order 7, 8.3) | Required | Plan's "today" (2026-09-16) / this tree before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (85 build steps, 47 executables relinked); then two more builds, 0 warnings each: `test_mp_start` and `test_mp_torch` relinked after Smart App Control refused them and `test_mp_layer` recompiled for its test fix, then `MagicPortals.exe` relinked after its refusal (below). `MagicPortals.exe` `75fc5b42` |
+| `test_mp_sprites` 840 / 897 (887 add / 10 pixel) | pinned, 0 failures | plan: 840 / 897 (887 / 10), from the `.esc` census; this tree: **840 / 897 (887 / 10)** in the converted levels (`census83.py`), not pinned (step 89 printed the count, 0 pinned) | **passes**: "128 levels, 840 carriers naming 24 sidecars, 897 systems (887 added, 10 mixed), 57 carriers with two"; 1,060 checks, 0 failures |
+| level7 #930 `hard_halo` x4 | pinned | plan: 1 system, count 4; this tree: the same, plus life 1000, size 30, start (0, -24, 24), colour (0.3, 0.5, 1, 1) | **passes**, every value named pinned; and 9c (5)'s layer gate: the emitter is built and owned by `blue_light_ent_930` (`test_mp_layer`) |
+| level1 #582 sys0 4 and sys1 life 1 | pinned | plan: the same; this tree: the same | **passes** (sys0 4 `portal_particle.png` life 900 +- 100; sys1 1 `portal.png`, mixed, life 1) |
+| level7b #1335 `Color0.b` 0.7 | pinned | plan: `Color0.b` 0.7; this tree: **2 systems**, each (1, 1, 0.7, 1) | **passes**, both systems |
+| level0c #2079 has 2 systems | pinned | plan: 2 systems; this tree: 24 sparkles size 99 at y 118, 12 flames on a 4 x 1 cut at y 22 | **passes**, the file's values (deviation 3) |
+| `test_mp_levels` `metaStrings` 17,774 (recompute per K10) | 17,774 | plan: 17,774 predicted; this tree: pinned at 17,774 by step 90 | **passes: 17,774**, 128 checks, 0 failures |
+| `bluelight.py` orb window, pixels > 230 on levels 4, 7, 21 (1-05, 1-08, 1-22) | >= 1,000 each (original 1,340-2,826) | plan: **0 / 0 / 0**; this tree (`8.2/after/sweep`): **2,442 / 2,299 / 1,877** | **passes: 2,442 / 2,299 / 1,877** (`8.3/orb_gate.json`), unchanged from the before; the original's frames read 2,826 / 1,340-2,672 / 2,084-2,305 |
+| G5 halo JSONs unchanged within tolerance | `gate_1-01_engine.json`, `gate_1-09_engine.json` (and the `engine_tier1x` twins) within their tolerances | this tree: `lightgate.py` on `8.2/after/sweep`, e.g. 1-01 `LM_E<1_halo` bMAE 3.28 (n 153), `LM_E=1_halo` 1.16 (n 46); 1-09 `LM_E<1_halo` 2.95 (n 71), `noLM_E=1_halo` 3.50 (n 249) | **passes: all four JSONs byte-identical** before to after (`8.3/g5/`); and `halo_g5.py` over 1-01 f270-f420, `halo.json` byte-identical (ring 60 R-B -17.4 against the original) |
+| (widened) 128-level f420 sweep, every changed level explained | explained against step 90's after | `8.2/after/sweep`, 128 of 128 md5s matching their log | **128 of 128 byte-identical** (`8.3/compare_sweep.json`); 1-01 `e2da5131`. No level changed, so there is none to explain |
+| (widened) every level still runs | 128 rc=0, validation active and silent | 128 | **passes: 128 of 128 rc=0**, validation ACTIVE in 128 logs, 0 messages; "N placement(s) drew the particle systems their eth_particles names" totals **840**; 0 "particles not drawn", 0 "drawn unlit"; each log equal to its before line for line but for timings and its own path |
+
+**THE SWEEP** (`8.3/after/sweep`, `MagicPortals.exe` `75fc5b42`, each png matching its log line): **128 of 128
+byte-identical to `8.2/after/sweep`**, and the 1-01 series f30-f420 every 30 frames (`8.3/after/series`) is 15 of 15
+byte-identical to the same series captured on the committed `9de1dd95` before the build (`8.3/before/series`). As
+the census predicts: the dropped branch loaded no system on any shipped level, so it made no pool and drew no number
+from the placement stream, and nothing downstream of it moved. **This sweep is the next step's before.** Its
+`capture.txt` also logs the series' final png, which lies in `series/`: a sweep check such as
+`8.2/tools/check_sweep.py` reads 128 of 128 `sweep/` entries matching and that one extra entry "missing" there, not
+a damaged baseline. The series' own md5s are in `after/series/capture.txt`.
+
+**THE SUITES,** run directly, once each, 0 failures (`8.3/logs/`): **`test_mp_sprites` 1,060** (912 at step 90);
+**`test_mp_lighting` 539** (533; 35 refusals, 34 before; "840 nodes name an eth_particles sidecar, 0 of them
+unreadable"); **`test_mp_levels` 128**; **`test_mp_start` 752** and **`test_mp_torch` 123**, which call
+`Lighting::Read` too; **`test_mp_layer` 1,603** (1,593), the one suite that links the layer. Its first run
+read 1,603 checks and **1 failure, in this step's own new test**: `TheBlueLampDrawsTheOrbItsLevelPlaces` took
+`ReportOf(layer.EmitterReports(), ...)`, a pointer into a temporary vector, and read a destroyed string
+(`8.3/logs/test_mp_layer_run1_dangling.txt`). Fixed by holding the reports in a local; recompiled and relinked
+once, and the second run passed. The full ctest was not run: every other suite links only `MagicPortalsSim`, whose
+one behavioural change is `Lighting::Read`'s refusal, and the four suites that call it (lighting, start, torch,
+sprites) are above.
+
+**SMART APP CONTROL: 3 refusals.** `test_mp_start.exe` and `test_mp_torch.exe` were refused on their first launch
+after the build (exit 126, "Permission denied"); each was deleted and relinked once and ran on the next launch.
+The fresh `MagicPortals.exe` `e09e8c33` was refused on its first launch (the sweep script stopped there); it was
+deleted and relinked once (`75fc5b42`, 0 warnings) and ran all 129 captures. The committed `9de1dd95` ran the
+before series (1 launch) before the build replaced it. 140 launches in all: 3 refused, 137 ran (7 suite runs, 130
+captures: the before series, the 128 of the sweep and the after series).
+
+**THE INDEPENDENT CHECK** (`8.3/verify1/`, passed every gate): the rule re-derived from the engine before the code
+was read (`ETHEntityProperties.cpp:202-224`, `:304-333`); its own census (`esc_census.py`): `<FileName>` in 0 of the
+4,065 placements of the 128 levels and 0 of the 4,072 of the 133 `.esc` files, instance or body, and no placement
+without inline systems whose `.ent` holds one; `sidecar_check.py`: 840 of 840 sidecars equal to their carrier's
+inline block attribute by attribute, keys and carriers one to one, 24 files, no key on a non-root node; zero
+warnings from the five changed translation units compiled with `build.ninja`'s own command lines into
+`verify1/warncheck`, nothing relinked; the six suites again (1,060 / 539 / 128 / 752 / 123 / 1,603, 0 failures);
+`bluelight.py` on its own frames 2,442 / 2,299 / 1,877, the original re-read at 2,826 / 1,340-2,672 / 2,084-2,305,
+bright-pixel BGR (255, 255, 227-231) against the original's (255, 255, 222-236); the four G5 JSONs and `halo.json`
+byte-identical; and a sweep on `75fc5b42` **128 of 128 byte-identical to `8.2/after/sweep` and `8.3/after/sweep`**,
+exactly step 90's 14 levels differing from `merge_c`, its 1-01 series f30-f420 identical to both of this step's.
+135 launches, 0 refused. Of its six low findings, four went in at commit as TEXT, no behaviour changed: one of the
+six dangling reads (`:3379`) is in an `if` initialiser, not two; four suites call `Lighting::Read`, not three; the
+formats doc's discriminator is cited by its row, not a line number; the formats note splits the 4,072 into 4,065
+level placements and 7 in the other five scenes. The fifth is recorded for 8.4 (LEFT FOR LATER). The sixth, folding
+the six-read fix into this commit, was not made: a commit round changes text only, and the fix costs a
+`test_mp_layer` relink and a launch under Smart App Control; the backlog row stands. At commit the build was
+confirmed current by a ninja dry run on a copy of `build/build.ninja`: "no work to do" (a dry run through
+`port_build.bat` stops at CMake's glob re-check and shows nothing past it).
+
+**RECORDED DEVIATIONS.**
+1. **"This step moves pixels on many levels" (section 7's baseline rule) does not hold, and is superseded, not
+   missed.** The plan had 8.3 land the change 8.2's regeneration made: once step 90 keyed all 840 carriers, the
+   pixels moved there (14 of 128 frames, step 90's table). What was left for 8.3 was a branch that reached no
+   shipped level, so its after sweep equals its before. It is still the next step's before.
+2. **`bluelight.py`'s gate was first crossed at step 90**, where its numbers were recorded as a preview; it is
+   measured and gated here, on the same numbers.
+3. **The brief's rocket (9c (3)): "sparkles x24 size 99 + fire x12 at StartPoint y 118".** In the file the 118 is
+   the sparkles' start; the flames start at y 22. Pinned as the file says.
+4. **level7b #1335 carries two systems**, both `Color0.b` 0.7; section 7 names only the colour. Both are pinned.
+
+**LEFT FOR LATER.**
+- **8.4** (`StartPoint.z` as depth) is next; its gate "sweep changes only the 5 `blue_light` levels" takes this
+  step's sweep as its before. **Found by the independent check, for 8.4:** on 1-05, 1-08 and 1-22 the lamp bowl's
+  front rim crosses the port's orb, where the original draws the orb whole in front of it
+  (`8.3/verify1/orb_context.png`), and the port's orb reads a little smaller and bluer - window mean R 204.0
+  against 216.1 on 1-05, 199.3 against 212.6 on 1-08's t8.0 frame (its original frames read 181.5-212.6). That is
+  the `StartPoint.z` 24 depth 8.4 owns; its gate should compare the rim/orb draw order with the original's crop on
+  the five `blue_light` levels, not only which levels the sweep changes.
+- **Found here, not fixed: the same dangling pointer in six existing `test_mp_layer` reads**,
+  `ReportOf(layer.EmitterReports(), ...)` at `tests/test_mp_layer.cpp:3001, 3010, 3052, 3140, 3379, 6078` (the one
+  at `:3379` inside an `if` initialiser). Each points into a vector destroyed at the end of its statement and reads it
+  afterwards; they pass because the freed memory is not reused before the read, which is what failed in this
+  step's own test. A test-only fix (hold the reports in a local) for a later step that rebuilds the suite, as its
+  first change; not made here, where it would widen the diff and cost another relink (the independent check
+  preferred it folded in; the commit round changes text only).
+- The spriteless-carrier port gap (the original draws such an entity's systems) is unchanged, and no level has one.
+- 1-02's static portal with its 1 ms iris and the 4-01 / 4-19 rocket exhausts are still not compared with the
+  original (9c (6), footage F17).
+- **9.2** must still pass `--copy-particles`, or every carrier's key names no file and every level with one draws
+  unlit - and now also without its particles.

@@ -944,7 +944,8 @@ private:
         std::string normal;
         double lookZ{0.0};
         // Its node's eth_particles: the sidecar its own <Particles> were written to,
-        // on disk; empty = none, and buildEmitters reads its entity's .ent.
+        // on disk; empty = none, and it carries no particle system (planning step
+        // 91: its entity's .ent is not read in its place).
         std::string particles;
         // Where its entity stands now, in the level's pixels: its node's position,
         // or its body's, or its patrolling zone's. What a light it owns follows.

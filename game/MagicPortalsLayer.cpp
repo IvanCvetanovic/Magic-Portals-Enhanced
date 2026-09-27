@@ -431,12 +431,17 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
         m_dataIndex = index;
         // Its lighting, read once with it. A level whose lighting will not read
         // is still played, its sprites in their own colours - as a level whose
-        // art will not read is still played as boxes - and says why.
+        // art will not read is still played as boxes - and says why. The same
+        // read carries each node's eth_particles, so such a level draws none of
+        // its placements' particle systems either (planning step 91): one reader
+        // of the key, and a refused read says what it cost. No shipped level is
+        // refused (test_mp_lighting: 128 of 128 read).
         m_lit = Lighting::Read(m_data.scene, m_paths.art, m_tierRules, m_look, m_lightingError);
         if (m_lit) {
             m_lightingError.clear();
         } else {
-            SUPERSONIC_LOG_WARN("Magic Portals") << entry.name << " drawn unlit: " << m_lightingError << std::endl;
+            SUPERSONIC_LOG_WARN("Magic Portals") << entry.name << " drawn unlit, and without its placements' particle "
+                                                 << "systems: " << m_lightingError << std::endl;
         }
     }
     if (!Game::Start(m_data, registry, m_level, error)) {
@@ -704,8 +709,8 @@ int MedalFor(const MagicPortalsLayer::Cleared& cleared) {
 // What makes the original's scenery move: each entity's own <ParticleSystem>
 // (sim/Particles.hpp). A crystal sparkles, a torch burns, a static portal turns.
 // Read from the sidecar its node's eth_particles names - the block the level file
-// carries inline for it - and from its entity's .ent where the node names none
-// (planning step 89).
+// carries inline for it (planning steps 89, 90) - and from nothing else: a
+// placement whose node names none carries no system (step 91).
 //
 // Drawn the way everything else in this port is: one textured quad per live
 // particle, added or mixed as its system's alphaMode says. Carried on the FRAME,
@@ -739,43 +744,40 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
     // as boxes and says so.
     if (!m_artReady) return;
 
-    std::map<std::string, std::string> entities; // node -> its entity's name
-    for (const Tscn::Node& node : m_data.scene.nodes) {
-        if (node.parent != ".") continue;
-        entities[node.name] = BareEntityName(node);
-    }
-
     int fromSidecars = 0;
     for (std::size_t index = 0; index < m_sprites.size(); ++index) {
         const DrawnSprite& drawn = m_sprites[index];
-        const auto found = entities.find(drawn.sprite.node);
-        if (found == entities.end()) continue;
-        const std::string& entity = found->second;
+        // THE LEVEL'S OWN SYSTEMS, and only those (planning step 91): the
+        // <Particles> block the level file carries inline for this placement,
+        // which on 45 of the 840 carriers is not what its entity's .ent holds
+        // (systems_9_10 9c). A node that names no sidecar states no system, so
+        // it draws none: its entity's .ent is not read for it. The engine does
+        // not read it for a placement either - a scene entity takes its
+        // properties from its own <Entity> body (ETHScene.cpp:226 ->
+        // ETHEntity.cpp:192-207 -> ETHEntityProperties.cpp:202-224, particles
+        // :304-333), and from the .ent only when that body names a <FileName>,
+        // which none of the 4,072 in the 133 .esc files does. On the shipped
+        // levels no node without a key has an .ent that holds a system either
+        // (step 91's census), so dropping it moves nothing.
+        //
+        // drawn.particles comes only from the lighting read (Lighting::Look), so
+        // a level whose lighting is refused draws none of its placements'
+        // systems either, and loadLevel says so beside "drawn unlit".
+        if (drawn.particles.empty()) continue;
+        // THE SPLIT: the sidecar is the converter's, read under m_paths.art like
+        // the rest of what it writes, while the bitmaps it names are still the
+        // original's, read from m_paths.original's particles/ below - the
+        // converter copies none. A sidecar that will not load, or holds no
+        // system, is said: the node's own data said what it carries.
         std::vector<Particles::System> systems;
         std::string error;
-        if (!drawn.particles.empty()) {
-            // THE LEVEL'S OWN SYSTEMS, where its node names them (planning step 89):
-            // the <Particles> block the level file carries inline for this placement,
-            // which on 45 of the 840 carriers is not what its entity's .ent holds
-            // (systems_9_10 9c). THE SPLIT: the sidecar is the converter's, read
-            // under m_paths.art like the rest of what it writes, while the bitmaps
-            // it names are still the original's, read from m_paths.original's
-            // particles/ below - the converter copies none. A sidecar that will not
-            // load, or holds no system, is said, and is NOT replaced by the .ent: the
-            // node's own data said what it carries.
-            if (!Particles::Load(drawn.particles, systems, error) || systems.empty()) {
-                SUPERSONIC_LOG_WARN("Magic Portals")
-                    << "particles not drawn: " << drawn.sprite.node << "'s eth_particles " << drawn.particles
-                    << (error.empty() ? std::string(" holds no particle system") : ": " + error) << std::endl;
-                continue;
-            }
-            ++fromSidecars;
-        } else {
-            // No key: the systems of its entity's .ent, the guess every level made
-            // until the converter carried the level's own.
-            if (entity.empty()) continue;
-            if (!Particles::Load(m_paths.original + "/entities/" + entity + ".ent", systems, error)) continue;
+        if (!Particles::Load(drawn.particles, systems, error) || systems.empty()) {
+            SUPERSONIC_LOG_WARN("Magic Portals")
+                << "particles not drawn: " << drawn.sprite.node << "'s eth_particles " << drawn.particles
+                << (error.empty() ? std::string(" holds no particle system") : ": " + error) << std::endl;
+            continue;
         }
+        ++fromSidecars;
         // Scaled as its entity is, before its pools are made (Particles::Scale):
         // a static portal's script shrinks its rings and its iris with its halo.
         if (drawn.scale != 1.0) {
@@ -791,7 +793,7 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
                 // No level places one (step 59's census); refused by name rather
                 // than drawn as a mix it is not.
                 SUPERSONIC_LOG_WARN("Magic Portals")
-                    << "particle system not drawn: " << (drawn.particles.empty() ? entity + ".ent" : drawn.particles)
+                    << "particle system not drawn: " << drawn.sprite.node << "'s " << drawn.particles
                     << " system " << slot << " asks for alphaMode " << system.alphaMode
                     << ", which the port has no blend for" << std::endl;
                 continue;
@@ -822,8 +824,8 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
             m_emitters.push_back(std::move(emitter));
         }
     }
-    // Said only once a level names a sidecar, so a level that names none logs
-    // exactly what it did before the key was read.
+    // Said only once a level names a sidecar: a level that names none draws no
+    // placement's system, and says nothing about it.
     if (fromSidecars > 0) {
         SUPERSONIC_LOG_INFO("Magic Portals")
             << fromSidecars << " placement(s) drew the particle systems their eth_particles names" << std::endl;
@@ -3286,9 +3288,10 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             }
         }
         // Its instance colour and emissive, as its node gives them. A node the
-        // look does not hold keeps the engine's defaults, colour 1 and emissive 0;
-        // Lighting::Read holds every entity node, so that is only ever a level
-        // whose lighting did not read, which is drawn unlit anyway.
+        // look does not hold keeps the engine's defaults, colour 1 and emissive 0,
+        // and carries no particle system; Lighting::Read holds every entity node,
+        // so that is only ever a level whose lighting did not read, which is drawn
+        // unlit anyway.
         if (const auto look = m_look.nodes.find(sprite.node); m_lit && look != m_look.nodes.end()) {
             drawn.colour = glm::vec4(look->second.colour);
             drawn.emissive = look->second.emissive;
@@ -4502,10 +4505,11 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
 // What is NOT coloured, and why:
 //   - the particles. Ethanon multiplies a particle system by
 //     min(1, luminance + ambient) only when it is alpha-blended
-//     (ETHParticleManager.cpp:381-389). 879 of the levels' 889 systems are added
-//     and take nothing; the other ten (portal_static's portal.png, luminance 1, and
-//     gutter_mouth's water.png, 0.45) take that factor in Particles::DrawColour,
-//     from this ambient, and no light: a particle never applies one.
+//     (ETHParticleManager.cpp:381-389). 887 of the levels' 897 placed systems
+//     (their own <Particles>, planning step 91) are added and take nothing; the
+//     other ten (portal_static's portal.png, luminance 1, and gutter_mouth's
+//     water.png, 0.45) take that factor in Particles::DrawColour, from this
+//     ambient, and no light: a particle never applies one.
 //   - the boxes: placeholders the PBR path draws, which stand for things rather
 //     than being them. At a dark level's 0.01 they would vanish.
 //   - the menu, the medal screens and the HUD, none of which is in a level.

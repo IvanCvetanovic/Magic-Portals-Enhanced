@@ -59,8 +59,8 @@ struct Key {
 };
 
 // The whole vocabulary, as the converter wrote it on 14 September 2026 (the
-// remake's b572fec), and eth_particles, which it does not write yet (planning
-// step 89). A key not listed here is refused, never skipped: a lighting input the
+// remake's b572fec), and eth_particles, which it writes since planning step 90.
+// A key not listed here is refused, never skipped: a lighting input the
 // port silently ignored would be a level drawn wrong with nothing saying why.
 constexpr Key kKeys[] = {
     {"eth_ambient", Id::Ambient, Place::Root},
@@ -80,10 +80,11 @@ constexpr Key kKeys[] = {
     {"eth_halo_size", Id::HaloSize, Place::Drawn},
     {"eth_halo_brightness", Id::HaloBrightness, Place::Drawn},
     // Not a lighting input: the node's own <Particles>, as the sidecar file the
-    // converter is to write for it (00_order 8.2). Read here because this is where
+    // converter writes for it (planning step 90). Read here because this is where
     // an eth_ key is known or refused - an unknown one draws the whole level
     // unlit - and read into the Look, rather than only let through, so the layer
-    // loads exactly the path this reader found to be a file.
+    // loads exactly the path this reader found to be a file. Refused on a node
+    // that draws no sprite, below (step 91).
     {"eth_particles", Id::Particles, Place::Drawn},
 };
 
@@ -297,6 +298,14 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
             if (key.place == Place::Drawn && present(key.id) && !drawsSprite && !ownsLight)
                 return fail(node, std::string(key.name) + " on a node that neither draws a sprite nor owns a light");
         }
+        // The layer draws particle systems for the level's sprites only
+        // (buildEmitters walks them), so on a node that owns a light and draws
+        // no sprite the key would be read and never drawn - a skip. The converter
+        // writes it only where it writes a Sprite2D (planning step 90). A PORT
+        // limit, not the engine's: the original draws a spriteless entity's
+        // particles (ETHSpriteEntity.cpp:106), and no shipped level has one.
+        if (present(Id::Particles) && !drawsSprite)
+            return fail(node, "eth_particles on a node that draws no sprite, whose particles the port does not draw");
 
         if (present(Id::Lightmap)) {
             // Only a static, lit entity with a picture is baked

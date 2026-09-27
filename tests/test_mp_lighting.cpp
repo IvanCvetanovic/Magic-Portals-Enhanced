@@ -25,8 +25,9 @@
 // light and its halo are drawn in: arithmetic, which runs anywhere.
 //
 // And, since step 89, eth_particles: not a lighting input, but an eth_ key, so
-// read here - the sidecar holding a node's own <Particles>, which the layer draws
-// in place of its entity's .ent.
+// read here - the sidecar holding a node's own <Particles>, the only systems the
+// layer draws for a placement since step 91, and only on a node that draws a
+// sprite.
 
 #include "TestHarness.hpp"
 
@@ -140,8 +141,8 @@ std::string WriteImages() {
     return dir.string();
 }
 
-// Five entities: one with every key the converter writes (and eth_particles,
-// which it is to write), a light with no picture and every default, a spriteless
+// Five entities: one with every key the converter writes (eth_particles among
+// them since step 90), a light with no picture and every default, a spriteless
 // marker, a lit wall with no lightmap, and a node with no key at all. The values
 // are invented.
 const std::string kRoom = R"([gd_scene load_steps=4 format=3]
@@ -459,8 +460,8 @@ void EveryKeyIsReadAndEveryAbsenceIsTheDefault() {
             CHECK(l.light->haloBrightness == 0.35);
         }
         // Its particle sidecar, resolved as every res:// path is (step 89), and the
-        // file the layer loads: in the form the converter is to write, it reads as
-        // the original's .ent does.
+        // file the layer loads: in the form the converter writes (step 90), it
+        // reads as the original's .ent does.
         CHECK_MSG(l.particles == res + "/assets/sidecars/lamp_particles.ent", l.particles);
         std::vector<Particles::System> systems;
         std::string why;
@@ -503,7 +504,7 @@ void EveryKeyIsReadAndEveryAbsenceIsTheDefault() {
         CHECK(l.z == 2.0);
         CHECK(!l.isStatic && !l.applyLight && !l.light.has_value());
         CHECK(Is(l.emissive, 0.0, 0.0, 0.0) && l.colour == glm::dvec4(1.0));
-        CHECK_MSG(l.particles.empty(), "no eth_particles: none, and the layer reads its entity's .ent");
+        CHECK_MSG(l.particles.empty(), "no eth_particles: none, and the layer draws no system for it");
     }
 
     // Lit and static with no lightmap: ambient only, which is the case of 841
@@ -628,6 +629,12 @@ void AnythingElseIsRefusedNamingTheLine() {
         {"particles on a node that draws nothing",
          Replace(kRoom, markerZ, markerZ + "metadata/eth_particles = \"res://assets/sidecars/lamp_particles.ent\"\n"),
          "eth_particles on a node that neither draws a sprite nor owns a light", marker.c_str()},
+        // Step 91: nor on a light with no picture, which the layer never draws a
+        // system for - read and never drawn would be a skip.
+        {"particles on a light that draws no sprite",
+         Replace(kRoom, "metadata/eth_light_range = \"256\"\n",
+                 "metadata/eth_light_range = \"256\"\nmetadata/eth_particles = \"res://assets/sidecars/lamp_particles.ent\"\n"),
+         "eth_particles on a node that draws no sprite", flare.c_str()},
     };
 
     int refused = 0;
@@ -773,7 +780,8 @@ void LevelsCarryWhatTheConverterReported() {
             if (l.z != 0.0) ++t.deep;
             // Whatever the converter names, the layer can read: at least one
             // system, every field the reader requires (a missing one fails the
-            // whole file). How many nodes name one is 00_order 8.3's to pin.
+            // whole file). How many nodes name one, and the systems they hold, is
+            // pinned in test_mp_sprites (step 91): 840 nodes, 897 systems.
             if (!l.particles.empty()) {
                 ++t.particleSidecars;
                 std::vector<Particles::System> systems;

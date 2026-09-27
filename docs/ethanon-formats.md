@@ -530,6 +530,12 @@ no particles. So the sidecar holds only what the engine keeps, and every one of 
   16 keys and keyholes with `Color0.b` 0.7, 2 keyholes with `RandStartPoint` 20, and 19 whose only
   difference is `StartPoint.z` (0 inline against the `.ent`'s 10 or 100). These are what reading the
   sidecar instead of the `.ent` changes.
+- **No placement of any world reads its `.ent`** (counted 2026-09-27, planning step 91): `<FileName>`, the
+  discriminator that sends a body to the entity cache (`Entity/ETHEntityProperties.cpp:202-224`, reached from
+  `Scene/ETHScene.cpp:226` through `Entity/ETHEntity.cpp:192-207`), occurs in **0 of the 4,072** inline
+  `<Entity>` bodies of the 133 `.esc` files (4,065 in the 128 levels; the other 7 in the four level-select scenes
+  and the loading screen) - the chapter-1 finding of the orientation notes, for all four worlds. So a placement's particle systems are its own `<Particles>` or none, and the port reads no `.ent` for a
+  node that names no sidecar. Of the 2,043 sprite nodes that name none, 0 have an `.ent` that holds a system.
 
 ---
 

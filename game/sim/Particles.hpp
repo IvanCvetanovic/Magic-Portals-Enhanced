@@ -115,7 +115,8 @@ bool ReadEnt(const std::string& path, std::string& text, std::string& error);
 bool Parse(const std::string& text, const std::string& path, std::vector<System>& out, std::string& error);
 
 // Whether the port can draw a system's blend: AM_ADD and AM_PIXEL, the two the
-// levels' 889 placed systems use (879 and 10). AM_MODULATE has no pipeline, and
+// levels' 897 placed systems use (887 and 10, their own <Particles>: planning
+// step 91, pinned in test_mp_sprites). AM_MODULATE has no pipeline, and
 // the layer refuses a system that asks for it by name rather than mixing it.
 bool Drawable(const System& system);
 

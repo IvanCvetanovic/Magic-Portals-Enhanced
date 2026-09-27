@@ -52,6 +52,7 @@
 #include "sim/Lighting.hpp"
 #include "sim/Loading.hpp"
 #include "sim/MainMenu.hpp"
+#include "sim/Particles.hpp"
 #include "sim/MenuState.hpp"
 #include "sim/Pause.hpp"
 #include "sim/Popup.hpp"
@@ -3185,6 +3186,84 @@ void TheDragonsFireIsBuiltFromItsJpeg() {
     }
     std::printf("  2-32's dragon: %d explosion.JPG particle draws over 120 frames\n", fireDraws);
     CHECK_MSG(fireDraws > 0, "the dragon's fire is drawn");
+    layer.OnDetach(registry);
+}
+
+// 1-08'S BLUE LAMP HAS ITS ORB (00_order 8.3, systems_9_10 9c (5)): the one system
+// its level places on it - 4 hard_halo.png, which blue_light.ent does not hold -
+// built as an emitter its node owns.
+void TheBlueLampDrawsTheOrbItsLevelPlaces() {
+    if (!OriginalArtIsThere("TheBlueLampDrawsTheOrbItsLevelPlaces")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level7");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    // Held here: ReportOf points into the vector it is given.
+    const std::vector<MagicPortalsLayer::EmitterReport> reports = layer.EmitterReports();
+    const auto* orb = ReportOf(reports, "blue_light_ent_930", 0);
+    CHECK_MSG(orb != nullptr, "1-08's blue_light_ent_930 owns an emitter");
+    if (orb != nullptr) {
+        CHECK_MSG(orb->bitmap == "hard_halo.png" && orb->count == 4 && orb->systems == 1 && orb->additive,
+                  "its one system: 4 hard_halo.png, added - " + orb->bitmap);
+    }
+    layer.OnDetach(registry);
+}
+
+// A PLACEMENT DRAWS ONLY THE SYSTEMS ITS NODE NAMES (00_order 8.3, planning step
+// 91). level0's four static portals, in a copy of the level where one of them,
+// portal_static_604, names no sidecar: portal_static.ent holds two systems, which
+// the layer read for a node with no key until step 91, and now nothing is read
+// for it - the other three still draw the two their level states.
+void APlacementWithoutItsSidecarDrawsNoSystem() {
+    if (!OriginalArtIsThere("APlacementWithoutItsSidecarDrawsNoSystem")) return;
+    // What the fallback would have drawn there.
+    std::vector<MagicPortals::Particles::System> inEnt;
+    std::string error;
+    CHECK_MSG(MagicPortals::Particles::Load(std::string(MAGICPORTALS_ORIGINAL_DIR) + "/entities/portal_static.ent",
+                                            inEnt, error) &&
+                  inEnt.size() == 2,
+              "portal_static.ent holds two systems: " + error);
+
+    std::ifstream in(kLevels + "/level0.tscn", std::ios::binary);
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    std::string text = buffer.str();
+    const std::string header = "[node name=\"portal_static_604\" type=\"Node2D\" parent=\".\"]";
+    const std::size_t node = text.find(header);
+    const std::size_t key = node == std::string::npos ? node : text.find("metadata/eth_particles = ", node);
+    const std::size_t next = node == std::string::npos ? node : text.find("\n[node", node + header.size());
+    CHECK_MSG(key != std::string::npos && key < next, "level0's portal_static_604 names a sidecar");
+    if (key == std::string::npos || key >= next) return;
+    text.erase(key, text.find('\n', key) + 1 - key);
+
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-no-sidecar";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream out(dir / "level0.tscn", std::ios::binary | std::ios::trunc);
+        out << text;
+    }
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.levels = dir.string(); // the art stays the converted levels' own (Paths::art)
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty() && layer.LightingError().empty(),
+              layer.LoadError() + layer.ArtError() + layer.LightingError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    const std::vector<MagicPortalsLayer::EmitterReport> reports = layer.EmitterReports();
+    CHECK_MSG(ReportOf(reports, "portal_static_604", 0) == nullptr && ReportOf(reports, "portal_static_604", 1) == nullptr,
+              "the portal that names no sidecar draws no system, and not its .ent's two");
+    for (const char* other : {"portal_static_603", "portal_static_582", "portal_static_583"}) {
+        const auto* rings = ReportOf(reports, other, 0);
+        const auto* iris = ReportOf(reports, other, 1);
+        CHECK_MSG(rings != nullptr && iris != nullptr && rings->bitmap == "portal_particle.png" &&
+                      iris->bitmap == "portal.png",
+                  std::string(other) + " still draws the rings and the iris its level states");
+    }
     layer.OnDetach(registry);
 }
 
@@ -8783,6 +8862,8 @@ void runTests() {
     AParticleOnANonSquareCellIsDrawnSquare();
     ATurnedOwnerTurnsItsParticles();
     TheDragonsFireIsBuiltFromItsJpeg();
+    TheBlueLampDrawsTheOrbItsLevelPlaces();
+    APlacementWithoutItsSidecarDrawsNoSystem();
     TheDragonAndItsClawAreDrawnWhereTheSimPutsThem();
     FinishingALevelShowsTheMedal();
     TheMedalScreenIsTheOriginals();

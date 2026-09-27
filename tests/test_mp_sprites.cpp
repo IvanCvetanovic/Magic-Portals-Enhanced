@@ -33,6 +33,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -1629,6 +1631,111 @@ void AnOffsetAndATurn() {
     }
 }
 
+// THE PARTICLE SYSTEMS THE LEVELS PLACE (00_order 8.3, planning step 91): what
+// each placement's own <Particles> block holds, read as the layer reads it -
+// the eth_particles path out of Lighting::Read, the sidecar through
+// Particles::Load - and nothing else, since a node that names no sidecar draws no
+// system. Counted over the 128 levels the converter wrote (step 90), and four
+// carriers pinned value for value where the level states what its entity's .ent
+// does not (systems_9_10 9c (3)).
+void ThePlacementsCarryTheSystemsTheirLevelsState() {
+    const Tiers::Rules tiers = TheTiers();
+    int levels = 0;
+    int carriers = 0;
+    int systems = 0;
+    int added = 0;
+    int mixed = 0; // AM_PIXEL
+    int twoSystems = 0;
+    int unreadable = 0;
+    std::set<std::string> files;
+    std::map<std::string, std::vector<Particles::System>> spots; // "level/node" -> its systems
+    const std::set<std::string> spotNodes = {"level7/blue_light_ent_930", "level1/portal_static_582",
+                                             "level7b/key_ent_1335", "level0c/door_ent_2079"};
+    for (const char* suffix : {"", "a", "b", "c"}) {
+        for (int i = 0; i < 32; ++i) {
+            const std::string level = "level" + std::to_string(i) + suffix;
+            Tscn::Scene scene;
+            Lighting::Scene look;
+            std::string error;
+            const bool read = Tscn::Load(kLevels + "/" + level + ".tscn", scene, error) &&
+                              Lighting::Read(scene, kLevels + "/..", tiers, look, error);
+            CHECK_MSG(read, level + ": " + error);
+            if (!read) continue;
+            ++levels;
+            for (const auto& [node, l] : look.nodes) {
+                if (l.particles.empty()) continue;
+                ++carriers;
+                files.insert(l.particles);
+                std::vector<Particles::System> held;
+                std::string why;
+                if (!Particles::Load(l.particles, held, why) || held.empty()) {
+                    ++unreadable;
+                    CHECK_MSG(false, level + "/" + node + ": " + l.particles + " " + why);
+                    continue;
+                }
+                systems += static_cast<int>(held.size());
+                if (held.size() == 2) ++twoSystems;
+                for (const Particles::System& s : held) {
+                    if (s.alphaMode == Particles::kAlphaAdd) ++added;
+                    if (s.alphaMode == Particles::kAlphaPixel) ++mixed;
+                }
+                if (spotNodes.count(level + "/" + node) != 0) spots[level + "/" + node] = held;
+            }
+        }
+    }
+    std::printf("  placed particles: %d levels, %d carriers naming %zu sidecars, %d systems (%d added, %d mixed), "
+                "%d carriers with two\n",
+                levels, carriers, files.size(), systems, added, mixed, twoSystems);
+    CHECK_EQ(levels, 128);
+    CHECK_EQ(unreadable, 0);
+    CHECK_EQ(carriers, 840);
+    CHECK_EQ(systems, 897);
+    CHECK_EQ(added, 887);
+    CHECK_EQ(mixed, 10);
+    CHECK_EQ(twoSystems, 57);
+    CHECK_EQ(files.size(), std::size_t{24});
+
+    // 1-08's blue lamp: an orb its .ent lacks (blue_light.ent holds no system).
+    const std::vector<Particles::System>& lamp = spots["level7/blue_light_ent_930"];
+    CHECK_EQ(lamp.size(), std::size_t{1});
+    if (lamp.size() == 1) {
+        const Particles::System& orb = lamp[0];
+        CHECK_MSG(orb.bitmap == "hard_halo.png" && orb.count == 4 && orb.additive && orb.lifeTimeMs == 1000.0 &&
+                      orb.randomLifeTimeMs == 0.0 && orb.size == 30.0 && orb.startPoint == glm::dvec2(0.0, -24.0) &&
+                      orb.startPointZ == 24.0 && orb.colour0 == glm::dvec4(0.3, 0.5, 1.0, 1.0),
+                  "level7 #930: 4 hard_halo.png, added, life 1000, size 30, 24 above its node at z 24, (0.3, 0.5, 1)");
+    }
+    // 1-02's static portal: 4 rings (its .ent's 3) and an iris that lives 1 ms (100).
+    const std::vector<Particles::System>& portal = spots["level1/portal_static_582"];
+    CHECK_EQ(portal.size(), std::size_t{2});
+    if (portal.size() == 2) {
+        CHECK_MSG(portal[0].bitmap == "portal_particle.png" && portal[0].count == 4 && portal[0].additive &&
+                      portal[0].lifeTimeMs == 900.0 && portal[0].randomLifeTimeMs == 100.0,
+                  "level1 #582 sys0: 4 rings, life 900 +- 100");
+        CHECK_MSG(portal[1].bitmap == "portal.png" && portal[1].count == 1 &&
+                      portal[1].alphaMode == Particles::kAlphaPixel && portal[1].lifeTimeMs == 1.0,
+                  "level1 #582 sys1: the iris, mixed, life 1");
+    }
+    // A key of chapter 3: two warmer sparkles, blue 0.7 where key.ent has 1.
+    const std::vector<Particles::System>& key = spots["level7b/key_ent_1335"];
+    CHECK_EQ(key.size(), std::size_t{2});
+    for (const Particles::System& s : key) {
+        CHECK_MSG(s.bitmap == "sparkles.bmp" && s.colour0 == glm::dvec4(1.0, 1.0, 0.7, 1.0),
+                  "level7b #1335: sparkles.bmp born (1, 1, 0.7)");
+    }
+    // 4-01's door, the rocket: two systems door.ent does not have.
+    const std::vector<Particles::System>& rocket = spots["level0c/door_ent_2079"];
+    CHECK_EQ(rocket.size(), std::size_t{2});
+    if (rocket.size() == 2) {
+        CHECK_MSG(rocket[0].bitmap == "sparkles.bmp" && rocket[0].count == 24 && rocket[0].size == 99.0 &&
+                      rocket[0].startPoint == glm::dvec2(0.0, 118.0),
+                  "level0c #2079 sys0: 24 sparkles, size 99, 118 below its node");
+        CHECK_MSG(rocket[1].bitmap == "fire.png" && rocket[1].count == 12 && rocket[1].columns == 4 &&
+                      rocket[1].startPoint == glm::dvec2(0.0, 22.0),
+                  "level0c #2079 sys1: 12 flames on a 4-frame cut, 22 below its node");
+    }
+}
+
 } // namespace
 
 // ---- the original's sounds, decoded -------------------------------------------
@@ -2793,5 +2900,6 @@ int main() {
     Level8sArt();
     Level0sStaticPortalsAreAdded();
     AnOffsetAndATurn();
+    ThePlacementsCarryTheSystemsTheirLevelsState();
     return ::test::summary("test_mp_sprites", 70);
 }
