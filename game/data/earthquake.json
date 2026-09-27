@@ -128,7 +128,7 @@
     "wall_struck": {
       "intensity": 30.0,
       "when": "before_update",
-      "_source": "ETHBeginContactCallback_breakable_wall (345591..345993) #62-64, startEarthquake(30, 200), when a `demolisher` (only rolling_stone carries it) touches the wall faster than scale(1.5): it calls destroy(), which only sets the wall's `destroy` datum (347560..347658). A begin-contact callback, run inside the physics step (Physics/ETHContactListener.cpp:86-105). The stone's own callback runs after it in the same contact and overwrites the 30 with 2 x hitIntensity above hitIntensity 2 (D11_check C40, C59): that row needs the contact's approach speed and is not wired."
+      "_source": "ETHBeginContactCallback_breakable_wall (345591..345993) #62-64, startEarthquake(30, 200), when a `demolisher` (only rolling_stone carries it) touches the wall faster than scale(1.5): it calls destroy(), which only sets the wall's `destroy` datum (347560..347658). A begin-contact callback, run inside the physics step (Physics/ETHContactListener.cpp:86-105). The stone's own callback runs after it in the same contact and overwrites the 30 with 2 x hitIntensity above hitIntensity 2 (D11_check C40, C59): stone_impact, which the layer calls after this row on the tick the port's Demolish breaks the wall (step 124)."
     },
     "wall_destroyed": {
       "intensity": 20.0,
@@ -234,22 +234,76 @@
       "intensity": 5.0,
       "when": "before_update",
       "_source": "D11 row 14. ETHCallback_projectile (358053..359141) #211-215, startEarthquake(5, 0), with portal_fail_in_antiportal.ent (#216-232), when a willDie shot arrives with its position inside an antiportal field; a plain portal_fail (#237-257) has none. projectile.ent static 0: a dynamic entity's callback, before the update. Wired in step 123 on the port's own failures that end inside a field it plays (Portals::State::failures): a shot refused where it arrives, or one a body stops inside a field. MEASURED on F3 #161-171: dy -5, +5, -2, +2, -1, +1 px, dx 0."
+    },
+    "player_impact": {
+      "intensity": 0.6,
+      "when": "before_update",
+      "hit_above": 0.0,
+      "entity": "dark_mage",
+      "spares": ["crate", "crate.ent", "crate_no_emissive", "crate_no_emissive.ent", "crate_low_emissive", "crate_low_emissive.ent"],
+      "_source": "D11 row 4. ETHBeginContactCallback_dark_mage (339123..339677): nothing for a sensor (#1-11); hitIntensity = dp2(GetLinearVelocity(), normal) / getScale() (#42-61); where hitIntensity > 0 (#63-64 CMPIf 0f) and the other is not a crate (#66-75 isCrate), startEarthquake(0.6 x hitIntensity, 0) (#77-80 MULIf 0.6f) - `intensity` is the factor, `hit_above` the gate. A begin-contact callback, inside the physics step: before the update. `spares` is isCrate (422055..422414): exactly these six names (#13-87), and not crate_small or crate_small_no_emissive. MEASURED on F14 (D11 section 5): both landings open a forth-first shake of about 5 px, 3 pairs, on the landing frame. Wired in step 124.",
+      "_normal": "#27-36 read the other's GetShape(): a circle (2) falls through to #29, which sets the flag false, a compound (4) makes #31-34's CMPIi/TNZ false, and #36 JLowZ skips the negation on false - so #37-40 negate the contact normal for every OTHER shape, a box or a polygon, and not for a circle or a compound (D11 section 4 row 4 has it the other way round; read from the listing, not RAW-checked). Against a polygon, Box2D's fixture A (D11_check C59), the manifold normal runs from it to the player, so the negation points it from the player into the polygon: the approach component, which is the reading the measured landings fit and the one the port takes. Against a circle or a compound other - a stone, a minion - the normal is left as Box2D's fixture order makes it, which is not traced (D11_check C56); the port takes the approach component there too.",
+      "_sound": "#82-90 playFallSound(hitIntensity / 18) where hitIntensity > 3.5: a sound, not this file's."
+    },
+    "stone_impact": {
+      "intensity": 2.0,
+      "when": "before_update",
+      "hit_above": 2.0,
+      "entity": "rolling_stone",
+      "spares": [],
+      "_source": "D11 row 8. ETHBeginContactCallback_rolling_stone (346486..347456): the normal it is handed is overwritten with normalize(other.GetPositionXY() - this.GetPositionXY()) (#6-26; D11_check C55), and where the velocity has any length (#28-35), hitIntensity = dp2(GetLinearVelocity(), that) / getScale() (#37-56); where it is above 2 (#58-59 CMPIf 2f), startEarthquake(2 x hitIntensity, 0) (#61-64 MULIf 2f). No sensor test: the port's contacts are its solid bodies' alone. A begin-contact callback, before the update. `entity`: only rolling_stone has this callback (the listing has no ETHBeginContactCallback_rolling_stone_no_emissive, and 2-30's one rolling_stone_no_emissive.ent never calls it). Its other rows are their own: 9 (a destroyier, 6, after this one in the same callback, #73-105), 10 (a minion crushed, 25: not built, the port's minions are not breakable) and 11 (the beholder's rock, 5, #170-208); #107-129 (a character's hp set to 0 above hitIntensity 2.5) is gameplay and not here. Wired in step 124.",
+      "_sound": "#65-71 playStoneHitSound(hitIntensity / 3): a sound, not this file's."
+    },
+    "minion_impact": {
+      "intensity": 0.8,
+      "when": "before_update",
+      "hit_above": 0.0,
+      "entity": "minion",
+      "spares": ["enemy_killer"],
+      "_source": "D11 row 25. ETHBeginContactCallback_minion (437083..437789): nothing for a sensor (#1-11); where the other's GetEntityName() is not exactly 'enemy_killer' (#57-74; all 58 placements use that bare name), the normal is overwritten with normalize(other - this) (#81-101), hitIntensity = dp2(GetLinearVelocity(), that) / getScale() (#103-122), and where it is above 0 (#124-125) startEarthquake(0.8 x hitIntensity, 0) (#127-130 MULIf 0.8f). A begin-contact callback, before the update. `entity`: minion.ent's callback; ghost_minion.ent (3-32's one) has none. Wired in step 124.",
+      "_sound": "#132-140 playFallSound(hitIntensity / 18) where hitIntensity > 3.5: a sound, not this file's.",
+      "_spawn": "Where a minion is made (read in step 124's Q.2 fix; no number of this file's). ETHCallback_minion_spawn (426511..426876) #12-19 takes vector3(GetPositionXY(), 2) of the marker and spawnMinion (426876..427194) #25-39 AddEntity's minion.ent there, so the original's ENTITY POINT is the marker and its feet circle's bottom minions.json body.entity_above_feet_px (18.1) under it; SOURCE: the body is made at the entity's point with Box2D's default velocity 0 (engine/Scene/ETHScene.cpp:261-292, 713-723; engine/Physics/ETHPhysicsSimulator.cpp:65-114), its fixtures set e_newFixture (box2d/Box2D/Dynamics/b2Body.cpp:185), and the next b2World::Step finds the new pairs and runs Collide before it solves anything (box2d/Box2D/Dynamics/b2World.cpp:884-888, 912), so a knight made with its feet in a floor begins it at rest: hitIntensity 0, which #124-125 never calls on. DATA (out/parity/visuals/Q.2/fix2/spawn_census.txt): 51 of the 62 markers put the original's feet into the floor under them, 44 of them by 2.1 (a marker 16 over its floor). The port centres its 7-unit circle on the marker (Minions::State::Spawn), EntityAboveCentrePx = 18.1 - 7 = 11.1 higher, and it falls onto that floor; so the watch looks at a minion it has never seen where the original's stands, 11.1 lower, until its own circle reaches a pair that holds (Impacts::Watched::spawnDropPx)."
     }
   },
 
+  "impacts": {
+    "hit_px_per_unit": 50.0,
+    "touch_px": 0.5,
+    "_source": [
+      "What the three impact rows read a contact by (D11 section 4 notes, D11_check C47). hit_px_per_unit:",
+      "hitIntensity is the approach speed in level units a second over 50 - GetLinearVelocity is",
+      "Box2D's metres a second (Physics/ETHPhysicsController.cpp:117-123, the engine's global scale 1),",
+      "a Box2D metre is DEFAULT_SCALE = 50 screen px (Physics/ETHPhysicsSimulator.cpp:27, 170-178), and",
+      "the callbacks divide by getScale(), the screen's px per unit: (v x s / 50) / s = v / 50.",
+      "",
+      "touch_px: when a pair has begun to touch. Box2D calls BeginContact on the first step a",
+      "contact's manifold has a point (box2d/Box2D/Dynamics/Contacts/b2Contact.cpp:161-226), which a",
+      "circle against a polygon has while its separation is within the polygon's skin",
+      "(box2d/Box2D/Collision/b2CollideCircle.cpp:65-74), b2_polygonRadius = 2 x b2_linearSlop =",
+      "0.01 m (box2d/Box2D/Common/b2Settings.h:67, 76): 0.5 screen px at DEFAULT_SCALE. A bare",
+      "pixel amount like cap_px, so the port takes it at R12's 720 px screen: 0.178 level units.",
+      "Touching is judged after the step, between the surfaces' nearest points, and a pair is new",
+      "when it was not touching after the last step; a body looked at for the first time only has",
+      "its pairs marked (sim/Impacts.hpp). The velocity is the one the tick left the body to take",
+      "into the step, as the callback reads the one the last frame left it; a body a portal has",
+      "moved since the last step keeps none it carried before (the teleport sets its velocity, as",
+      "the original's does: step 124)."
+    ]
+  },
+
   "_not_wired": [
-    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 23 wired above",
-    "(27 rows: row 1 has two intensities, and row 5 - explode - four callers of its own). Rows 2,",
+    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 26 wired above",
+    "(30 rows: row 1 has two intensities, and row 5 - explode - four callers of its own). Rows 2,",
     "6 and 14 were wired by step 123 (the visuals plan's 10.1) on the refusal and the failures",
-    "the port ALREADY plays. Row 3 (a shot killed by an anti_portal_agent in flight, with",
-    "antiportal_explosion.ent) waits on R23: the port plays the agent as a no-portal zone and",
-    "kills no shot on it, and its picture is 00_order 8.13's unowned row. Rows 4, 8, 10 and 25 (every player, stone and minion impact, 0.6 / 2 / 0.8 x",
-    "hitIntensity, and a stone crushing a minion) need a contact's approach speed, which the",
-    "engine's PhysicsSystem::Contact does not report and the port can compute itself - the",
-    "body's pre-step velocity dotted with the contact normal, with no engine change (D11_check",
-    "C48); candidate owner 11.1, which owns the stone rows' pictures. Row 21 (a burned",
-    "carranca) and row 30 (4-01's rocket) need systems the port does not have; row 13 (shaker)",
-    "is placed by no level. Row 9 is wired for THROWN stones only: the port's Launchers never",
-    "culls 3-20's placed stone on its destroyier (Launchers.hpp), so that one never shakes."
+    "the port ALREADY plays, and rows 4, 8 and 25 (every player, stone and minion impact) by",
+    "step 124, on contacts the port finds itself (sim/Impacts.hpp, D11_check C48). Row 3 (a",
+    "shot killed by an anti_portal_agent in flight, with antiportal_explosion.ent) waits on R23:",
+    "the port plays the agent as a no-portal zone and kills no shot on it, and its picture is",
+    "00_order 8.13's unowned row. Row 10 (a stone crushing a minion, 25) needs a minion a stone",
+    "can kill, which the port does not have (Minions.hpp: not breakable), and that is gameplay.",
+    "Row 21 (a burned carranca) and row 30 (4-01's rocket) need systems the port does not have;",
+    "row 13 (shaker) is placed by no level. Row 9 is wired for THROWN stones only: the port's",
+    "Launchers never culls 3-20's placed stone on its destroyier (Launchers.hpp), so that one",
+    "never shakes."
   ]
 }

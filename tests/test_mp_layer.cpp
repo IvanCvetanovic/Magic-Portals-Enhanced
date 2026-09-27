@@ -68,6 +68,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -4691,46 +4692,6 @@ void AShakeDrawnOutsideTheEngineLoopDoesNotPileUp() {
     layer.OnDetach(registry);
 }
 
-// 4-29's torch lit by a scheduled tap (T.1's), the wall going 1500 ms later, and
-// with it the light wall's 20 (earthquake.json light_wall_gone): L1's -20, +20,
-// -10, +10, -5, +5, -2, +2, -1, +1 px - 7 u, 3.5, 1.75, 0.875, 0.4375 - on the
-// tick after the wall goes, a static callback's call landing after the update.
-void TheLightWallGoingShakesTheView() {
-    entt::registry registry;
-    publishViewport(registry);
-    MagicPortalsLayer layer(TestPaths(), "level28c");
-    layer.OnAttach(registry);
-    if (!layer.LoadError().empty()) {
-        CHECK_MSG(false, layer.LoadError());
-        return;
-    }
-    layer.ScheduleDevTap(60, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
-    int goneOn = -1;
-    std::vector<double> offsets;
-    for (int tick = 1; tick <= 320; ++tick) {
-        tickWith(layer, registry, kRest, {}, {});
-        offsets.push_back(layer.QuakeOffsetUnits());
-        if (goneOn < 0 && layer.SimLevel() != nullptr && layer.SimLevel()->torch.wallsGone > 0) goneOn = tick;
-    }
-    CHECK_MSG(goneOn > 0, "the torch was lit and its wall went");
-    if (goneOn < 0) return;
-    std::string seen;
-    std::vector<int> at;
-    for (std::size_t i = 0; i < offsets.size(); ++i) {
-        if (offsets[i] == 0.0) continue;
-        at.push_back(static_cast<int>(i) + 1);
-        seen += " " + std::to_string(i + 1) + ":" + std::to_string(offsets[i]);
-    }
-    const double want[] = {7.0, -7.0, 3.5, -3.5, 1.75, -1.75, 0.875, -0.875, 0.4375, -0.4375};
-    bool sequence = at.size() == std::size(want);
-    for (std::size_t i = 0; sequence && i < at.size(); ++i) {
-        const double got = offsets[static_cast<std::size_t>(at[i] - 1)];
-        sequence = at[i] == goneOn + 1 + static_cast<int>(i) * 5 && std::fabs(got - want[i]) < 1e-12;
-    }
-    CHECK_MSG(sequence, "the wall went on tick " + std::to_string(goneOn) + "; trembles:" + seen);
-    layer.OnDetach(registry);
-}
-
 // ---- every wired call, from its own event ----------------------------------------
 //
 // Each case below makes a simulation event happen on a real level - the level left
@@ -4782,16 +4743,19 @@ std::string quakeLanded(const QuakeTick& seen, double intensity, bool afterUpdat
     const double px = quakeRowPx(intensity);
     const double shownPx = seen.offsetUnits * kQuakePxPerUnit;
     const auto same = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
+    // The update's stop test, on every update: what a call before it leaves under
+    // 1 px is 0 by the tick's end (an impact's soft call is).
+    const auto kept = [](double amplitudePx) { return amplitudePx < 1.0 ? 0.0 : amplitudePx; };
     bool landed = false;
     if (afterUpdate) {
         landed = same(seen.now.amplitudePx, px);
     } else if (seen.offsetUnits == 0.0) {
-        landed = same(seen.now.amplitudePx, px) && seen.now.forth == seen.was.forth;
+        landed = same(seen.now.amplitudePx, kept(px)) && seen.now.forth == seen.was.forth;
     } else if (seen.offsetUnits > 0.0) {
-        landed = seen.was.forth && !seen.now.forth && same(shownPx, px) && same(seen.now.amplitudePx, px);
+        landed = seen.was.forth && !seen.now.forth && same(shownPx, px) && same(seen.now.amplitudePx, kept(px));
     } else {
         landed = !seen.was.forth && seen.now.forth && same(shownPx, -seen.was.backPx) &&
-                 same(seen.now.amplitudePx, px * 0.5);
+                 same(seen.now.amplitudePx, kept(px * 0.5));
     }
     if (landed) return {};
     char text[320];
@@ -4800,6 +4764,130 @@ std::string quakeLanded(const QuakeTick& seen, double intensity, bool afterUpdat
                   intensity, px, afterUpdate ? "after" : "before", seen.was.amplitudePx, seen.now.amplitudePx,
                   seen.was.forth ? "forth" : "back", seen.now.forth ? "forth" : "back", shownPx);
     return text;
+}
+
+MagicPortals::Earthquake::Rules quakeRules() {
+    MagicPortals::Earthquake::Rules rules;
+    std::string error;
+    CHECK_MSG(MagicPortals::Earthquake::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/earthquake.json", rules,
+                                                  error),
+              error);
+    return rules;
+}
+
+// What one begin makes, worked out here from the listing's rules rather than asked
+// of the layer: its row, the contact's hitIntensity along the line that row reads
+// (the pair's normal for the player; the line between the entity points for a
+// stone or a minion, D11_check C55), whether the row calls, and with what.
+struct ImpactRead {
+    MagicPortals::Earthquake::Call call = MagicPortals::Earthquake::Call::PlayerImpact;
+    double hit = 0.0;
+    bool calls = false;
+    double intensity = 0.0;
+    std::string other;
+    glm::dvec2 along{0.0}; // the line the row reads
+};
+
+ImpactRead readImpact(const MagicPortals::Earthquake::Rules& rules, const MagicPortalsLayer& layer,
+                      const MagicPortals::Impacts::Begin& begin) {
+    using MagicPortals::Earthquake::Call;
+    ImpactRead read;
+    glm::dvec2 along = begin.normal;
+    if (begin.kind != MagicPortals::Impacts::Kind::Player) {
+        read.call = begin.kind == MagicPortals::Impacts::Kind::Stone ? Call::StoneImpact : Call::MinionImpact;
+        const glm::dvec2 apart = begin.otherAtPx - begin.atPx;
+        along = glm::length(apart) > 0.0 ? apart / glm::length(apart) : glm::dvec2(0.0);
+    }
+    // At the velocity of the last few steps that came along that line fastest.
+    read.along = along;
+    read.hit = glm::dot(begin.Approaching(along), along) / 50.0;
+    read.other = layer.EntityNameOf(begin.other);
+    read.calls = MagicPortals::Earthquake::ImpactCalls(rules, read.call, read.hit, read.other);
+    read.intensity = rules.Of(read.call).intensity * read.hit;
+    return read;
+}
+
+std::string describe(const MagicPortals::Impacts::Begin& begin, const ImpactRead& read) {
+    const glm::dvec2 came = begin.Approaching(read.along);
+    char text[400];
+    std::snprintf(text, sizeof text,
+                  "%s on %s at (%.1f, %.1f) from (%.1f, %.1f): v (%.1f, %.1f) px/s, came at (%.1f, %.1f) over %zu "
+                  "steps, normal (%.3f, %.3f), gap %.3f, hit %.3f, %s %.4f",
+                  MagicPortals::Earthquake::KeyOf(read.call), read.other.empty() ? "a body" : read.other.c_str(),
+                  begin.otherAtPx.x, begin.otherAtPx.y, begin.atPx.x, begin.atPx.y, begin.velocityPx.x,
+                  begin.velocityPx.y, came.x, came.y, begin.recentPx.size(), begin.normal.x, begin.normal.y,
+                  begin.gapPx, read.hit, read.calls ? "calls" : "no call", read.intensity);
+    return text;
+}
+
+// The last call a tick's begins make, in the layer's order - the one the generator
+// keeps - or -1 where none calls.
+double lastImpactCall(const MagicPortals::Earthquake::Rules& rules, const MagicPortalsLayer& layer) {
+    double last = -1.0;
+    for (const auto& begin : layer.ImpactBegins()) {
+        const ImpactRead read = readImpact(rules, layer, begin);
+        if (read.calls) last = read.intensity;
+    }
+    return last;
+}
+
+// 4-29's torch lit by a scheduled tap (T.1's), the wall going 1500 ms later, and
+// with it the light wall's 20 (earthquake.json light_wall_gone): L1's -20, +20,
+// -10, +10, -5, +5, -2, +2, -1, +1 px - 7 u, 3.5, 1.75, 0.875, 0.4375 - on the
+// tick after the wall goes, a static callback's call landing after the update.
+void TheLightWallGoingShakesTheView() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    layer.ScheduleDevTap(60, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
+    // The impact rows watch the level's two knights, which the port makes 11.1 px
+    // over where the original's stand and lets fall 9 px onto their tiles: the
+    // original's are made with their feet in those tiles, at rest, and call
+    // nothing (sim/Impacts spawnDropPx, step 124). So nothing calls before the wall
+    // goes, the phase is still the generator's first, and the wall's 20 opens
+    // forth at full size as L1's does. (L1's phase came in from 4-22, played before
+    // it in the clip; a capture that starts on 4-29 starts it fresh.)
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    int goneOn = -1;
+    std::vector<double> offsets;
+    std::string calledBefore;
+    int beganBefore = 0;
+    for (int tick = 1; tick <= 320; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        offsets.push_back(layer.QuakeOffsetUnits());
+        if (goneOn < 0) {
+            for (const auto& begin : layer.ImpactBegins()) {
+                const ImpactRead read = readImpact(rules, layer, begin);
+                ++beganBefore;
+                if (read.calls) calledBefore += " tick " + std::to_string(tick) + ": " + describe(begin, read) + ";";
+            }
+        }
+        if (goneOn < 0 && layer.SimLevel() != nullptr && layer.SimLevel()->torch.wallsGone > 0) goneOn = tick;
+    }
+    CHECK_MSG(goneOn > 0, "the torch was lit and its wall went");
+    if (goneOn < 0) return;
+    CHECK_MSG(calledBefore.empty(), "4-29: an impact called before the wall went:" + calledBefore);
+    std::printf("  4-29: %d begins before the wall went on tick %d, none calling\n", beganBefore, goneOn);
+    std::string seen;
+    std::vector<int> at;
+    for (std::size_t i = 0; i < offsets.size(); ++i) {
+        if (offsets[i] == 0.0) continue;
+        at.push_back(static_cast<int>(i) + 1);
+        seen += " " + std::to_string(i + 1) + ":" + std::to_string(offsets[i]);
+    }
+    const double want[] = {7.0, -7.0, 3.5, -3.5, 1.75, -1.75, 0.875, -0.875, 0.4375, -0.4375};
+    bool sequence = at.size() == std::size(want);
+    for (std::size_t i = 0; sequence && i < at.size(); ++i) {
+        const double got = offsets[static_cast<std::size_t>(at[i] - 1)];
+        sequence = at[i] == goneOn + 1 + static_cast<int>(i) * 5 && std::fabs(got - want[i]) < 1e-12;
+    }
+    CHECK_MSG(sequence, "the wall went on tick " + std::to_string(goneOn) + "; trembles:" + seen);
+    layer.OnDetach(registry);
 }
 
 struct QuakeEdge {
@@ -4840,24 +4928,35 @@ void checkQuakeRow(MagicPortalsLayer& layer, entt::registry& registry, int& tick
     if (edge.tick <= 0) return;
     const std::string landed = quakeLanded(edge.seen, intensity, afterUpdate);
     CHECK_MSG(landed.empty(), row + " on tick " + std::to_string(edge.tick) + ": " + landed);
-    const bool first = std::isinf(edge.seen.was.lastTrembleMs);
+    // The level's first shake: nothing had trembled before the event's tick, nor on
+    // it ahead of an after-update call - an impact's own call on the same tick can.
+    const bool first =
+        std::isinf(edge.seen.was.lastTrembleMs) && (!afterUpdate || std::isinf(edge.seen.now.lastTrembleMs));
     double shown = 0.0;
     int shownOn = -1;
+    bool overwritten = false; // an impact's call came before the next tremble, and overwrote what was owed
     if (!afterUpdate && edge.seen.offsetUnits != 0.0) {
         shown = edge.seen.offsetUnits;
         shownOn = edge.tick;
     } else {
+        static const MagicPortals::Earthquake::Rules rules = quakeRules();
         const MagicPortals::Earthquake::Generator left = layer.Quake();
         const double owed = left.forth ? left.amplitudePx / kQuakePxPerUnit : -left.backPx / kQuakePxPerUnit;
         // Within the 70 ms beat: five ticks at the port's 60 Hz.
         for (int i = 0; i < 6 && shown == 0.0; ++i) {
             shown = quakeTickWith(layer, registry, ticks).offsetUnits;
             shownOn = ticks;
+            if (lastImpactCall(rules, layer) >= 0.0) overwritten = true;
         }
-        CHECK_MSG(std::fabs(shown - owed) < 1e-9,
-                  row + ": the next tremble " + std::to_string(shown) + " u, where it owed " + std::to_string(owed));
+        if (overwritten) {
+            std::printf("  %s: an impact called on tick %d, before the %s u owed was shown\n", row.c_str(), shownOn,
+                        std::to_string(owed).c_str());
+        } else {
+            CHECK_MSG(std::fabs(shown - owed) < 1e-9, row + ": the next tremble " + std::to_string(shown) +
+                                                          " u, where it owed " + std::to_string(owed));
+        }
     }
-    if (first) {
+    if (first && !overwritten) {
         const int due = edge.tick + (afterUpdate ? 1 : 0);
         CHECK_MSG(shownOn == due && std::fabs(shown - quakeRowUnits(intensity)) < 1e-9,
                   row + ": the level's first shake, " + std::to_string(quakeRowUnits(intensity)) + " u due on tick " +
@@ -5071,53 +5170,624 @@ void EventsALevelMakesOnItsOwnShakeTheView() {
     }
 }
 
-// Rows 7 and 12 on one tick: a stone breaking a wall calls 30 from the wall's
-// contact callback, before the update, and 20 from its static callback, after it.
-// So the 30 is shown at once and the 20 is halved at the back before it is ever
-// seen: D11_check C40's +-29.53, then +-9.84, +-4.92, +-2.46, +-1.23 px. 1-9's stone
-// thrown at its wall as ABrokenWallTakesItsBoxWithIt throws it.
-void AStoneThroughAWallShakesThirtyThenTwenty() {
+// ---- step 124: every tremble drawn, and the bodies' own impacts ---------------------
+
+// (a) The engine runs up to five ticks between two frames (SupersonicApp.cpp:74,
+// 1389). A tremble is held until a frame has drawn it, so each one is drawn on the
+// frame that ran its tick, whether that was the frame's first tick or its last, and
+// a frame whose ticks made none draws at rest. The light wall's 20 in frames of two
+// ticks, as the app runs at 30 fps, then in frames of five: the 70 ms beat is five
+// ticks, so no frame holds two. The tick's camera and every tap stay at rest, and
+// the sky goes with the drawn camera, as in the one-tick case above.
+void ATrembleIsDrawnWhateverTicksAFrameRuns() {
     entt::registry registry;
     publishViewport(registry);
-    MagicPortalsLayer layer(TestPaths(), "level8");
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    entt::entity sky = entt::null;
+    for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+        if (tag.tag == "Magic Portals Sprite" && material.albedoTexturePath.find("icy_sky.png") != std::string::npos) {
+            sky = entity;
+        }
+    }
+    CHECK(sky != entt::null);
+    if (sky == entt::null) return;
+    const entt::entity camera = primaryCamera(registry);
+    const glm::dvec2 point(300.0, 120.0);
+    struct Seen {
+        int made = 0;    // trembles the ticks made
+        int drawn = 0;   // of those, drawn exactly by the frame that ran them
+        int onFirst = 0; // made on a frame's first tick, of several
+        int onLast = 0;  // on its last
+        int wrong = 0;   // frames that drew anything but their ticks' tremble, or rest
+        std::string firstWrong;
+        bool tickAtRest = true;
+        bool skyHeld = true;
+        bool tapsAtRest = true;
+    } seen;
+    const auto frame = [&](int ticks) {
+        double made = 0.0;
+        int madeOn = -1;
+        for (int t = 0; t < ticks; ++t) {
+            InterpolationSystem::BeginTick(registry);
+            tickWith(layer, registry, kRest, {}, {});
+            InterpolationSystem::EndTick(registry);
+            const glm::dvec2 centre = layer.CameraCentrePx();
+            seen.tickAtRest = seen.tickAtRest && registry.get<CameraComponent>(camera).position.y ==
+                                                     MagicPortals::Units::ToWorld(centre.x, centre.y).y;
+            if (layer.QuakeOffsetUnits() == 0.0) continue;
+            if (made != 0.0) seen.firstWrong = "two trembles in one frame";
+            made = layer.QuakeOffsetUnits();
+            madeOn = t;
+            ++seen.made;
+        }
+        InterpolationSystem::Apply(registry, 0.5f);
+        const float drawnY = registry.get<CameraComponent>(camera).position.y;
+        const float skyY = registry.get<TransformComponent>(sky).position.y;
+        const glm::vec2 pixel = screenOf(registry, point);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick * static_cast<float>(ticks));
+        const float move = MagicPortals::Units::ToMetres(-made);
+        const bool exact = registry.get<CameraComponent>(camera).position.y == drawnY + move;
+        if (exact && made != 0.0) {
+            ++seen.drawn;
+            if (ticks > 1 && madeOn == 0) ++seen.onFirst;
+            if (ticks > 1 && madeOn == ticks - 1) ++seen.onLast;
+        }
+        if (!exact && seen.wrong++ == 0) {
+            seen.firstWrong = "a frame of " + std::to_string(ticks) + " ticks drew " +
+                              std::to_string(registry.get<CameraComponent>(camera).position.y - drawnY) +
+                              " m where its ticks made " + std::to_string(made) + " u";
+        }
+        seen.skyHeld = seen.skyHeld && registry.get<TransformComponent>(sky).position.y == skyY + move;
+        glm::dvec2 at(0.0);
+        seen.tapsAtRest = seen.tapsAtRest && layer.ScreenToLevelPx(registry, pixel, at) && glm::length(at - point) < 1e-3;
+    };
+    frame(1);
+    for (const int ticksPerFrame : {2, 5}) {
+        seen = Seen{};
+        // After the update: nothing on the call's tick, a forth on the next, and
+        // then one every 5th tick, ten in all.
+        layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
+        for (int f = 0; f < 60 / ticksPerFrame; ++f) frame(ticksPerFrame);
+        const std::string at = std::to_string(ticksPerFrame) + " ticks a frame: ";
+        CHECK_MSG(seen.made == 10 && seen.drawn == 10 && seen.wrong == 0,
+                  at + std::to_string(seen.made) + " made, " + std::to_string(seen.drawn) + " drawn; " + seen.firstWrong);
+        if (ticksPerFrame == 2) {
+            CHECK_MSG(seen.onFirst == 5 && seen.onLast == 5, at + std::to_string(seen.onFirst) +
+                                                                 " on a frame's first tick, " +
+                                                                 std::to_string(seen.onLast) + " on its last");
+        }
+        CHECK_MSG(seen.tickAtRest, at + "the tick's camera is the follow's, never shaken");
+        CHECK_MSG(seen.skyHeld, at + "the sky goes with the drawn camera");
+        CHECK_MSG(seen.tapsAtRest, at + "a tap on a shaken frame maps as at rest");
+        std::printf("  %d ticks a frame: %d trembles made, %d drawn (%d on a first tick, %d on a last)\n",
+                    ticksPerFrame, seen.made, seen.drawn, seen.onFirst, seen.onLast);
+    }
+    layer.OnDetach(registry);
+}
+
+// A before-update call's shake after the tick it landed on, where that tick showed
+// its forth: the back, then the halving pairs to the stop (earthquake.json
+// generator), in level units.
+std::vector<double> quakeRestOfShake(double intensity) {
+    std::vector<double> want;
+    double amplitude = quakeRowPx(intensity);
+    want.push_back(-amplitude / kQuakePxPerUnit);
+    amplitude *= 0.5;
+    while (amplitude >= 1.0) {
+        want.push_back(amplitude / kQuakePxPerUnit);
+        want.push_back(-amplitude / kQuakePxPerUnit);
+        amplitude *= 0.5;
+    }
+    return want;
+}
+
+// Row 4 (earthquake.json player_impact): the player dropped 100 px onto 3-16's floor,
+// left of the diamonds' block. On the tick it lands there is one begin - the player
+// against the floor, the line between them straight down - carrying the fall into
+// the step, and the call is 0.6 x hitIntensity before the update: a forth on the
+// landing tick, as F14 shows on its landing frames, then the halving to the stop.
+void APlayerLandingShakesTheView() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level15b");
     layer.OnAttach(registry);
     CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
-    if (layer.SimLevel() == nullptr || layer.SimLevel()->demolish.stones.size() != 1) return;
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    for (int i = 0; i < 30; ++i) quakeTickWith(layer, registry, ticks);
+    const glm::dvec2 rest = playerPx(registry, layer);
+    PutPlayerAt(registry, layer, rest - glm::dvec2(0.0, 100.0));
+    registry.get<RigidBodyComponent>(layer.SimLevel()->player).velocity = glm::vec3(0.0f);
+    QuakeTick landed;
+    int landedOn = -1;
+    std::vector<MagicPortals::Impacts::Begin> begins;
+    std::string fall;
+    for (int i = 0; i < 90 && landedOn < 0; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        const glm::dvec2 at = playerPx(registry, layer);
+        char step[64];
+        std::snprintf(step, sizeof step, " %d:%.2f/%.0f", ticks, at.y,
+                      -registry.get<RigidBodyComponent>(layer.SimLevel()->player).velocity.y *
+                          MagicPortals::Units::kPixelsPerMetre);
+        fall += step;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind == MagicPortals::Impacts::Kind::Player) begins.push_back(begin);
+        }
+        if (begins.empty()) continue;
+        landedOn = ticks;
+        landed = seen;
+    }
+    std::printf("  3-16 drop, tick:y/vy after the step:%s\n", fall.c_str());
+    CHECK_MSG(landedOn > 0 && begins.size() == 1, "3-16: one landing begin, " + std::to_string(begins.size()));
+    if (landedOn <= 0 || begins.size() != 1) return;
+    const ImpactRead read = readImpact(rules, layer, begins.front());
+    std::printf("  3-16: the player dropped from %s lands on tick %d: %s\n",
+                Point(rest - glm::dvec2(0.0, 100.0)).c_str(), landedOn, describe(begins.front(), read).c_str());
+    CHECK_MSG(std::fabs(begins.front().normal.x) < 1e-6 && std::fabs(begins.front().normal.y - 1.0) < 1e-6,
+              "straight down onto the floor: " + Point(begins.front().normal));
+    // What it came in at: 100 px at player.json's 1200 px/s^2 is about 490 px/s, a
+    // little less by the ticks; the solver braked it before it touched.
+    const glm::dvec2 came = begins.front().Approaching(begins.front().normal);
+    CHECK_MSG(came.y > 400.0 && came.y < 520.0, "the fall it came in at: " + Point(came) + ", where the landing step carried " +
+                                                    Point(begins.front().velocityPx));
+    CHECK_MSG(read.calls && lastImpactCall(rules, layer) == read.intensity, "the landing calls");
+    const std::string landedRow = quakeLanded(landed, read.intensity, false);
+    CHECK_MSG(landedRow.empty(), "player_impact on tick " + std::to_string(landedOn) + ": " + landedRow);
+    // D11 section 1c: its pixels and the pairs they run to before the stop.
+    std::size_t pairs = 0;
+    for (double amplitude = quakeRowPx(read.intensity); amplitude >= 1.0; amplitude *= 0.5) ++pairs;
+    // Then what the machine owes from the landing tick, on the layer's clock, up to
+    // any later call: forth first where the phase was on a forth, and where a
+    // knight's soft call had left it on a back (C23), that call's saved forth undone
+    // first and the landing's halved before it is seen.
+    std::vector<double> want;
+    if (landed.offsetUnits != 0.0) {
+        MagicPortals::Earthquake::Generator machine = landed.now;
+        double clockMs = machine.lastTrembleMs;
+        for (int i = 0; i < 60; ++i) {
+            clockMs += static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
+            const double px = machine.Update(rules, clockMs);
+            if (px != 0.0) want.push_back(px / kQuakePxPerUnit);
+        }
+    }
+    std::vector<double> shown;
+    std::string trembles;
+    bool overwritten = false;
+    for (int i = 0; i < 60 && !overwritten; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        if (lastImpactCall(rules, layer) >= 0.0) overwritten = true;
+        if (seen.offsetUnits == 0.0 || overwritten) continue;
+        shown.push_back(seen.offsetUnits);
+        trembles += " " + std::to_string(ticks) + ":" + std::to_string(seen.offsetUnits * kQuakePxPerUnit);
+    }
+    bool same = landed.offsetUnits != 0.0 && (overwritten ? shown.size() <= want.size() : shown.size() == want.size());
+    for (std::size_t i = 0; same && i < shown.size(); ++i) same = std::fabs(shown[i] - want[i]) < 1e-9;
+    CHECK_MSG(same, "the machine's own sequence from the landing:" + trembles);
+    std::printf("  3-16: the landing calls %.4f px, %zu pairs; the phase on a %s; %.4f px on the landing tick, then "
+                "(px)%s%s\n",
+                quakeRowPx(read.intensity), pairs, landed.was.forth ? "forth" : "back",
+                landed.offsetUnits * kQuakePxPerUnit, trembles.c_str(), overwritten ? ", until another call" : "");
+    layer.OnDetach(registry);
+}
+
+// The self-checks the watch owes (sim/Impacts), on 1-31 (level30): a player standing
+// still once it has landed begins nothing for 300 ticks - no pair flickers in and
+// out under the solver - and every begin it makes walking right across the seam at
+// x 256 (platform_ent_895 against platform_ent_785, a 3.2 px notch whose chamfers
+// slope 26.6 degrees, test_mp_play) is printed with what it calls.
+void AStandingPlayerBeginsNothing() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    std::string settling;
+    for (int i = 0; i < 60; ++i) {
+        quakeTickWith(layer, registry, ticks);
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind == MagicPortals::Impacts::Kind::Player) {
+                settling += " tick " + std::to_string(ticks) + ": " + describe(begin, readImpact(rules, layer, begin));
+            }
+        }
+    }
+    std::printf("  1-31: from the spawn:%s\n", settling.empty() ? " no begin" : settling.c_str());
+    int standing = 0;
+    std::string stood;
+    for (int i = 0; i < 300; ++i) {
+        quakeTickWith(layer, registry, ticks);
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Player) continue;
+            if (standing++ == 0) stood = describe(begin, readImpact(rules, layer, begin));
+        }
+    }
+    CHECK_MSG(standing == 0, "standing still, " + std::to_string(standing) + " begins; the first: " + stood);
+    int calls = 0;
+    double largestPx = 0.0;
+    for (int i = 0; i < 120 && playerPx(registry, layer).x < 300.0; ++i) {
+        std::vector<std::string> pressed;
+        if (i == 0) pressed.push_back(MagicPortalsLayer::kRight);
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, std::move(pressed));
+        ++ticks;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Player) continue;
+            const ImpactRead read = readImpact(rules, layer, begin);
+            if (read.calls) {
+                ++calls;
+                largestPx = std::max(largestPx, quakeRowPx(read.intensity));
+            }
+            std::printf("  1-31 walking, tick %d at x %.1f: %s (%.4f px)\n", ticks, playerPx(registry, layer).x,
+                        describe(begin, read).c_str(), read.calls ? quakeRowPx(read.intensity) : 0.0);
+        }
+    }
+    std::printf("  1-31: across the seam, %d calls, the largest %.4f px\n", calls, largestPx);
+    CHECK_MSG(playerPx(registry, layer).x >= 300.0, "the player walked across the seam");
+    layer.OnDetach(registry);
+}
+
+// Rows 8 and 25 by the watch, each body dropped onto the player standing on its
+// floor, so that the line between the two entity points - the one those callbacks
+// read (D11_check C55) - runs down along the fall: 1-9's stone put 20 px over the
+// player's head and given 600 px/s down, and a knight of 3-09 let fall 20 px onto
+// it. What each comes down at is the engine's (it prints: the stone is braked to
+// about 100 px/s, hitIntensity just over 2). The stone calls 2 x hitIntensity
+// above 2, the knight 0.8 x above 0, both before the update, and each is the
+// tick's last word (the player's own begin with it is read first).
+void ABodyFallingOnThePlayerShakesTheView() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    struct Case {
+        const char* level;
+        const char* row;
+        MagicPortals::Impacts::Kind kind;
+    };
+    for (const Case& run : {Case{"level8", "1-09 stone_impact", MagicPortals::Impacts::Kind::Stone},
+                            Case{"level8b", "3-09 minion_impact", MagicPortals::Impacts::Kind::Minion}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), run.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) continue;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        for (int i = 0; i < 30; ++i) quakeTickWith(layer, registry, ticks);
+        const PlayedLevel& played = *layer.SimLevel();
+        entt::entity body = entt::null;
+        double radius = 0.0;
+        glm::vec3 velocity(0.0f);
+        if (run.kind == MagicPortals::Impacts::Kind::Stone) {
+            CHECK_MSG(!played.demolish.stones.empty(), std::string(run.row) + ": a stone");
+            if (played.demolish.stones.empty()) continue;
+            body = played.demolish.stones.front().body;
+            radius = 30.0;
+            velocity = glm::vec3(0.0f, -MagicPortals::Units::ToMetres(600.0), 0.0f);
+        } else {
+            CHECK_MSG(!played.minions.minions.empty(), std::string(run.row) + ": a minion");
+            if (played.minions.minions.empty()) continue;
+            body = played.minions.minions.front().body;
+            radius = played.minions.rules.bodyRadiusPx;
+        }
+        const glm::dvec2 head = playerPx(registry, layer) - glm::dvec2(0.0, 22.0);
+        const glm::vec3 above = MagicPortals::Units::ToWorld(head.x, head.y - radius - 20.0);
+        auto& bodyAt = registry.get<TransformComponent>(body);
+        bodyAt.position = glm::vec3(above.x, above.y, bodyAt.position.z);
+        registry.get<RigidBodyComponent>(body).velocity = velocity;
+        int hitOn = -1;
+        QuakeTick hitSeen;
+        std::string seenBegins;
+        for (int i = 0; i < 60 && hitOn < 0; ++i) {
+            const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+            for (const auto& begin : layer.ImpactBegins()) {
+                seenBegins += " tick " + std::to_string(ticks) + ": " + describe(begin, readImpact(rules, layer, begin)) + ";";
+                if (begin.body == body && begin.other == played.player) {
+                    hitOn = ticks;
+                    hitSeen = seen;
+                }
+            }
+        }
+        std::printf("  %s:%s\n", run.row, seenBegins.c_str());
+        CHECK_MSG(hitOn > 0, std::string(run.row) + ": the body came down on the player");
+        if (hitOn <= 0) continue;
+        const MagicPortals::Impacts::Begin* onPlayer = nullptr;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.body == body && begin.other == played.player) onPlayer = &begin;
+        }
+        const ImpactRead read = readImpact(rules, layer, *onPlayer);
+        const double gate = run.kind == MagicPortals::Impacts::Kind::Stone ? 2.0 : 0.0;
+        CHECK_MSG(read.calls && read.hit > gate, std::string(run.row) + ": " + describe(*onPlayer, read));
+        const double last = lastImpactCall(rules, layer);
+        CHECK_MSG(last == read.intensity, std::string(run.row) + ": the body's own call is the tick's last");
+        const std::string landedRow = quakeLanded(hitSeen, last, false);
+        CHECK_MSG(landedRow.empty(), std::string(run.row) + " on tick " + std::to_string(hitOn) + ": " + landedRow);
+        layer.OnDetach(registry);
+    }
+}
+
+// The minions' spawn drop end to end (sim/Impacts Watched::spawnDropPx), on 3-09
+// (level8b), whose three markers are the two kinds the census finds (Q.2
+// spawn_census): minion_spawn_1255 and minion_spawn_913 stand 16 px over their
+// floors, so the original's knights are made with their feet 2 px into them and
+// begin them at rest; minion_spawn_908 stands 176 px over the floor under it, and
+// the original's falls 157.9 px onto it. Played from the level's first tick: the
+// two standing knights' 9 px falls onto those floors begin nothing, and the high
+// one begins its floor once - on the step the original's feet reach it, its entity
+// point 18.1 px over the floor's top within that step's travel - and not again when
+// the port's own circle arrives 11.1 px lower. (A standing knight walking across a
+// seam onto the next tile begins that tile, as the original's does: printed.)
+void AKnightIsLookedAtWhereTheOriginalsStands() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level8b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    const auto knight = [&layer](const char* name) {
+        for (const auto& minion : layer.SimLevel()->minions.minions) {
+            if (minion.name == name) return minion.body;
+        }
+        return entt::entity{entt::null};
+    };
+    const entt::entity standingA = knight("minion_spawn_1255");
+    const entt::entity standingB = knight("minion_spawn_913");
+    const entt::entity high = knight("minion_spawn_908");
+    CHECK_MSG(standingA != entt::null && standingB != entt::null && high != entt::null, "3-09's three knights");
+    if (standingA == entt::null || standingB == entt::null || high == entt::null) return;
+    // The floor a knight's marker stands over: the solid the original's feet are in
+    // when it is made, a px above their lowest point.
+    const double feetBelow = layer.SimLevel()->minions.rules.entityAboveFeetPx;
+    const auto floorUnder = [&registry, &layer, feetBelow](entt::entity body) {
+        glm::dvec2 marker(0.0);
+        for (const auto& minion : layer.SimLevel()->minions.minions) {
+            if (minion.body == body) marker = minion.spawnPx;
+        }
+        const MagicPortals::Impacts::Shape feet{{marker + glm::dvec2(0.0, feetBelow - 1.0)}, 0.5};
+        for (const entt::entity entity : registry.view<TransformComponent>()) {
+            MagicPortals::Impacts::Shape shape;
+            if (entity == body || !MagicPortals::Impacts::ShapeOf(registry, entity, shape)) continue;
+            if (MagicPortals::Impacts::Between(feet, shape).px <= 0.0) return entity;
+        }
+        return entt::entity{entt::null};
+    };
+    const entt::entity floorA = floorUnder(standingA);
+    const entt::entity floorB = floorUnder(standingB);
+    CHECK_MSG(floorA != entt::null && floorB != entt::null, "3-09: the standing knights' floors");
+    int standingBegins = 0;
+    std::string standingSeen;
+    std::string seamSeen;
+    std::vector<std::pair<int, MagicPortals::Impacts::Begin>> highBegins;
+    std::string highSeen;
+    for (int tick = 1; tick <= 150; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Minion) continue;
+            const std::string said = " tick " + std::to_string(tick) + ": " + describe(begin, readImpact(rules, layer, begin)) +
+                                     ";";
+            if (begin.body == high) {
+                highBegins.emplace_back(tick, begin);
+                highSeen += said;
+            } else if ((begin.body == standingA && begin.other == floorA) ||
+                       (begin.body == standingB && begin.other == floorB)) {
+                ++standingBegins;
+                standingSeen += said;
+            } else if (begin.body == standingA || begin.body == standingB) {
+                seamSeen += said;
+            }
+        }
+    }
+    std::printf("  3-09 knights: minion_spawn_908's begins:%s\n", highSeen.empty() ? " none" : highSeen.c_str());
+    std::printf("  3-09 knights: the standing knights' other begins:%s\n", seamSeen.empty() ? " none" : seamSeen.c_str());
+    CHECK_MSG(standingBegins == 0, "3-09: the knights made on their floors began them" + standingSeen);
+    CHECK_MSG(!highBegins.empty(), "3-09: minion_spawn_908 came down");
+    if (highBegins.empty()) return;
+    const auto& [landedOn, landed] = highBegins.front();
+    MagicPortals::Impacts::Shape floor;
+    CHECK(MagicPortals::Impacts::ShapeOf(registry, landed.other, floor) && !floor.core.empty());
+    double top = std::numeric_limits<double>::infinity();
+    for (const glm::dvec2& point : floor.core) top = std::min(top, point.y);
+    const ImpactRead read = readImpact(rules, layer, landed);
+    const double travel = std::fabs(landed.Approaching(read.along).y) / 60.0;
+    const double feet = landed.atPx.y + layer.SimLevel()->minions.rules.entityAboveFeetPx;
+    CHECK_MSG(feet <= top + 0.5 && feet >= top - travel - 0.5,
+              "3-09: minion_spawn_908 began its floor (top " + std::to_string(top) + ") with the original's feet at " +
+                  std::to_string(feet) + " going into the step, " + std::to_string(travel) + " px a step");
+    int again = 0;
+    for (std::size_t i = 1; i < highBegins.size(); ++i) {
+        if (highBegins[i].second.other == landed.other) ++again;
+    }
+    CHECK_MSG(again == 0, "3-09: minion_spawn_908 began its floor again when the port's circle landed");
+    std::printf("  3-09: minion_spawn_908 began its floor on tick %d, the original's feet at %.2f over a top of %.2f; %s\n",
+                landedOn, feet, top, read.calls ? ("calls " + std::to_string(read.intensity)).c_str() : "no call");
+    layer.OnDetach(registry);
+}
+
+// Row 15 (earthquake.json beholder_hurt): 1-32's beholder left to throw a rock, and
+// that rock put inside its radius, rising - a rolling stone rising through it takes
+// an hp. 24, before the update: the beholder's own callback, a dynamic entity's.
+// Winning a fight is not driven, so beholder_death, ghost_death and
+// dark_dragon_death stay read from the code.
+void TheBeholderHurtShakesTheView() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr || !layer.SimLevel()->boss.beholder.has_value()) return;
     int ticks = CloseTheLevelStartPopup(layer, registry);
     quakeTickWith(layer, registry, ticks);
     quakeTickWith(layer, registry, ticks);
-    const entt::entity stone = layer.SimLevel()->demolish.stones.front().body;
-    auto& transform = registry.get<TransformComponent>(stone);
-    const glm::vec3 at = MagicPortals::Units::ToWorld(305.0 - 30.0 - 6.0, 95.0);
-    transform.position = glm::vec3(at.x, at.y, transform.position.z);
-    registry.get<RigidBodyComponent>(stone).velocity = glm::vec3(MagicPortals::Units::ToMetres(300.0), 0.0f, 0.0f);
-    const QuakeEdge broke =
-        tickUntilUp(layer, registry, ticks, 30, [](const PlayedLevel& played) { return played.demolish.Broken(); });
-    CHECK_MSG(broke.tick > 0, "the stone broke the wall");
-    if (broke.tick <= 0) return;
-    const std::string landed = quakeLanded(broke.seen, 20.0, true);
-    CHECK_MSG(landed.empty(), "1-9 wall_destroyed lands last: " + landed);
-    CHECK_MSG(std::fabs(broke.seen.offsetUnits - quakeRowUnits(30.0)) < 1e-9,
-              "1-9 wall_struck shown at once: " + std::to_string(broke.seen.offsetUnits) + " u");
-    std::vector<int> on;
-    std::vector<double> shown;
-    std::string trembles;
-    for (int i = 0; i < 70; ++i) {
-        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
-        if (seen.offsetUnits == 0.0) continue;
-        on.push_back(ticks);
-        shown.push_back(seen.offsetUnits);
-        trembles += " " + std::to_string(ticks) + ":" + std::to_string(seen.offsetUnits);
-    }
-    const double want[] = {-10.5, 3.5, -3.5, 1.75, -1.75, 0.875, -0.875, 0.4375, -0.4375};
-    bool sequence = shown.size() == std::size(want);
-    for (std::size_t i = 0; sequence && i < shown.size(); ++i) {
-        sequence = on[i] == broke.tick + 5 * static_cast<int>(i + 1) && std::fabs(shown[i] - want[i]) < 1e-9;
-    }
-    CHECK_MSG(sequence, "broken on tick " + std::to_string(broke.tick) + " (+10.5 u); then" + trembles);
-    std::printf("  1-9: the wall broken on tick %d, %.4f u at once, then%s\n", broke.tick, broke.seen.offsetUnits,
-                trembles.c_str());
+    const QuakeEdge thrown = tickUntilUp(layer, registry, ticks, 2400, [](const PlayedLevel& played) {
+        return played.boss.beholder.has_value() ? played.boss.beholder->rocksThrown : 0;
+    });
+    CHECK_MSG(thrown.tick > 0 && !layer.SimLevel()->boss.rocks.empty(), "the beholder threw a rock");
+    if (thrown.tick <= 0 || layer.SimLevel()->boss.rocks.empty()) return;
+    const entt::entity rock = layer.SimLevel()->boss.rocks.back().body;
+    const glm::dvec2 eye = layer.SimLevel()->boss.beholder->atPx;
+    const glm::vec3 inside = MagicPortals::Units::ToWorld(eye.x, eye.y + 10.0);
+    auto& rockAt = registry.get<TransformComponent>(rock);
+    rockAt.position = glm::vec3(inside.x, inside.y, rockAt.position.z);
+    registry.get<RigidBodyComponent>(rock).velocity = glm::vec3(0.0f, MagicPortals::Units::ToMetres(200.0), 0.0f);
+    const QuakeEdge hurt = tickUntilUp(layer, registry, ticks, 5, [](const PlayedLevel& played) {
+        return played.boss.beholder.has_value() ? played.boss.beholder->hits : 0;
+    });
+    checkQuakeRow(layer, registry, ticks, hurt, "1-32 beholder_hurt", 24.0, false);
     layer.OnDetach(registry);
+}
+
+// The capture gate's scout: 3-16 (level15b) played as F14's take r1 plays it (F14.md
+// section 1) - a shot to mid-air at (394, 112) of the 1280 x 720 view, then one on
+// the player at (205, 578), which takes him through to the first portal and drops
+// him onto the diamonds' block: F14's #55, a forth-first shake of about 5 px, 3
+// pairs. The taps on the layer's ticks the capture gives them (40 and 130), and
+// what the port makes of them printed for the planning doc.
+void TheF14RouteLandsOnTheBlock() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level15b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    std::printf("  3-16 route: popup open at load %d\n", layer.PopupOpen() ? 1 : 0);
+    layer.ScheduleDevTap(40, glm::dvec2(394.0 / 1280.0, 112.0 / 720.0));
+    layer.ScheduleDevTap(130, glm::dvec2(205.0 / 1280.0, 578.0 / 720.0));
+    int ticks = 0;
+    double hardest = 0.0;
+    int hardestOn = -1;
+    std::string after;
+    for (int i = 0; i < 300; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        if (layer.SimLevel() == nullptr) break;
+        if (ticks % 20 == 0 || ticks == 41 || ticks == 131) {
+            std::printf("  3-16 route, tick %d: player %s, %zu portals placed, shots %d, last '%s'\n", ticks,
+                        Point(playerPx(registry, layer)).c_str(), layer.SimLevel()->portals.placed.size(),
+                        layer.SimLevel()->portals.shotsFired, lastFailure(layer).c_str());
+        }
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Player) continue;
+            const ImpactRead read = readImpact(rules, layer, begin);
+            std::printf("  3-16 route, tick %d at %s: %s (%.4f px)\n", ticks, Point(playerPx(registry, layer)).c_str(),
+                        describe(begin, read).c_str(), read.calls ? quakeRowPx(read.intensity) : 0.0);
+            if (ticks > 130 && read.calls && read.intensity > hardest) {
+                hardest = read.intensity;
+                hardestOn = ticks;
+            }
+        }
+        if (seen.offsetUnits != 0.0) {
+            after += " " + std::to_string(ticks) + ":" + std::to_string(seen.offsetUnits * kQuakePxPerUnit);
+        }
+    }
+    std::printf("  3-16 route: trembles (px)%s\n", after.c_str());
+    CHECK_MSG(hardestOn > 0 && quakeRowPx(hardest) > 3.0,
+              "a hard landing after the second tap: " + std::to_string(quakeRowPx(hardest)) + " px on tick " +
+                  std::to_string(hardestOn));
+    layer.OnDetach(registry);
+}
+
+// Rows 7, 8 and 12 on one tick: a stone breaking a wall calls 30 from the wall's
+// contact callback and then its own 2 x hitIntensity from the stone's - the wall is
+// Box2D's fixture A, so the stone's runs second and has the last word (D11_check
+// C40, C59) - both before the update, and 20 from the wall's static callback, after
+// it. So E, the last of the two, is shown at once, and the 20 is halved at the back
+// before it is ever seen: +-E, then +-9.84, +-4.92, +-2.46, +-1.23 px. The stone's
+// call is read from what it carried into the step and the wall's node, on the tick
+// the port's Demolish takes the wall (step 124). 1-9's stone thrown at its wall as
+// ABrokenWallTakesItsBoxWithIt throws it, from 20 px short rather than 6, so that
+// the steps before the break carry the throw: a body put somewhere is looked at
+// afresh on the step after, and the solver closes the last few px a step early.
+// Twice:
+//  - at 300 px/s, whose approach along the line to the wall's node is well above
+//    hitIntensity 2: the stone's own 2 x hitIntensity is E (C40's 2 x hi x 0.984);
+//  - at 85 px/s level with the wall's node, faster than the wall's 75 u/s gate but
+//    closing along that line at under 100 u/s: the stone's callback calls nothing,
+//    and E is wall_struck's own 30, 10.5 u - the one case that shows row 7 (C40).
+void AStoneThroughAWallShakesItsImpactThenTwenty() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    struct Throw {
+        double speedPx;
+        double yPx;
+        bool stoneCalls;
+    };
+    for (const Throw& thrown : {Throw{300.0, 95.0, true}, Throw{85.0, 124.0, false}}) {
+        const std::string row = "1-9 at " + std::to_string(static_cast<int>(thrown.speedPx)) + " px/s";
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level8");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr || layer.SimLevel()->demolish.stones.size() != 1) return;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        quakeTickWith(layer, registry, ticks);
+        quakeTickWith(layer, registry, ticks);
+        const entt::entity stone = layer.SimLevel()->demolish.stones.front().body;
+        auto& transform = registry.get<TransformComponent>(stone);
+        const glm::vec3 at = MagicPortals::Units::ToWorld(305.0 - 30.0 - 20.0, thrown.yPx);
+        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+        registry.get<RigidBodyComponent>(stone).velocity =
+            glm::vec3(MagicPortals::Units::ToMetres(thrown.speedPx), 0.0f, 0.0f);
+        const QuakeEdge broke =
+            tickUntilUp(layer, registry, ticks, 40, [](const PlayedLevel& played) { return played.demolish.Broken(); });
+        CHECK_MSG(broke.tick > 0, row + ": the stone broke the wall");
+        if (broke.tick <= 0) continue;
+        const MagicPortals::Demolish::Breakable* wall = nullptr;
+        for (const auto& breakable : layer.SimLevel()->demolish.breakables) {
+            if (breakable.broken) wall = &breakable;
+        }
+        const MagicPortals::Impacts::Begin* struck = nullptr;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (wall != nullptr && begin.body == stone && begin.other == wall->body) struck = &begin;
+        }
+        CHECK_MSG(struck != nullptr, row + ": the stone's own begin with the wall, on the tick it broke");
+        if (struck == nullptr) continue;
+        const ImpactRead read = readImpact(rules, layer, *struck);
+        std::printf("  %s: the stone into its wall: %s\n", row.c_str(), describe(*struck, read).c_str());
+        CHECK_MSG(read.calls == thrown.stoneCalls, row + (thrown.stoneCalls ? ": above" : ": not above") +
+                                                       " hitIntensity 2 along the line to the wall's node, " +
+                                                       std::to_string(read.hit));
+        // What the before side left: the stone's own call where it made one, the
+        // wall's 30 where it did not. Without wall_struck's call the 85 px/s throw
+        // would show nothing here: the 20 lands after the update.
+        const double shownIntensity = read.calls ? read.intensity : 30.0;
+        const std::string landed = quakeLanded(broke.seen, 20.0, true);
+        CHECK_MSG(landed.empty(), row + " wall_destroyed lands last: " + landed);
+        CHECK_MSG(std::fabs(broke.seen.offsetUnits - quakeRowUnits(shownIntensity)) < 1e-9,
+                  row + (read.calls ? ": the stone's own call" : ": wall_struck's 30") + " shown at once: " +
+                      std::to_string(broke.seen.offsetUnits) + " u, where " +
+                      std::to_string(quakeRowUnits(shownIntensity)) + " u is owed");
+        // Then the back and the 20 halved - up to the stone's next impact, rolling
+        // on through where the wall stood, whose call is its own.
+        std::vector<int> on;
+        std::vector<double> shown;
+        std::string trembles;
+        int nextImpact = -1;
+        for (int i = 0; i < 70; ++i) {
+            const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+            if (nextImpact < 0 && lastImpactCall(rules, layer) >= 0.0) nextImpact = ticks;
+            if (seen.offsetUnits == 0.0) continue;
+            trembles += " " + std::to_string(ticks) + ":" + std::to_string(seen.offsetUnits);
+            if (nextImpact >= 0) continue;
+            on.push_back(ticks);
+            shown.push_back(seen.offsetUnits);
+        }
+        const double want[] = {-quakeRowUnits(shownIntensity), 3.5, -3.5, 1.75, -1.75, 0.875, -0.875, 0.4375, -0.4375};
+        bool sequence =
+            !shown.empty() && shown.size() <= std::size(want) && (nextImpact >= 0 || shown.size() == std::size(want));
+        for (std::size_t i = 0; sequence && i < shown.size(); ++i) {
+            sequence = on[i] == broke.tick + 5 * static_cast<int>(i + 1) && std::fabs(shown[i] - want[i]) < 1e-9;
+        }
+        CHECK_MSG(sequence, row + ": broken on tick " + std::to_string(broke.tick) + "; then" + trembles +
+                                (nextImpact >= 0 ? "; the stone's next impact on tick " + std::to_string(nextImpact) : ""));
+        std::printf("  %s: the wall broken on tick %d, %.4f u at once, then%s (the stone's next impact on tick %d)\n",
+                    row.c_str(), broke.tick, broke.seen.offsetUnits, trembles.c_str(), nextImpact);
+        layer.OnDetach(registry);
+    }
 }
 
 // Row 26: a locked door going once its keyhole has faded, 20: the keyhole's static
@@ -10303,9 +10973,16 @@ void runTests() {
     TheGhostsShotEndingShakesTheView();
     ASwitchedDoorShakesTheViewAsItGoes();
     EventsALevelMakesOnItsOwnShakeTheView();
-    AStoneThroughAWallShakesThirtyThenTwenty();
+    AStoneThroughAWallShakesItsImpactThenTwenty();
     AnUnlockedDoorShakesTheView();
     TheDarkDragonsLevelShakesTheView();
+    ATrembleIsDrawnWhateverTicksAFrameRuns();
+    APlayerLandingShakesTheView();
+    AStandingPlayerBeginsNothing();
+    ABodyFallingOnThePlayerShakesTheView();
+    AKnightIsLookedAtWhereTheOriginalsStands();
+    TheBeholderHurtShakesTheView();
+    TheF14RouteLandsOnTheBlock();
     TheSceneHasFourBlackBarsInFrontOfEverything();
     TheBlackBarsStopAt768OnAWideScene();
     TheBetweenSlotTableSaysWhereEachClassStands();

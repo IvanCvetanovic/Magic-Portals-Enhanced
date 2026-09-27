@@ -16599,3 +16599,318 @@ sweep captures). The committed binary `fe2d2dd1` ran the four before runs.
 - For the merge's renumbering: "step 123" is written in 14 places outside this document - `earthquake.json` (4),
   `effects.json`, `placement.json`, `art.json`, `MagicPortalsLayer.hpp`, `test_mp_camera.cpp` and
   `test_mp_layer.cpp` (5).
+
+## Step 124 - every tremble a frame's ticks make drawn, and the impacts of the player, a stone and a minion (built)
+
+**TRACK B, and a step this run adds (Q.2; not in 00_order section 7).** The earthquake's follow-ups that step 121
+(Q.1, `b822a14`) left: (a) its deviation 1, a frame that runs two ticks or more drawing only its last tick's move; (b)
+D11's impact rows 4, 8, 10 and 25, which need a contact's approach speed; (c) a case for every wired row a case can drive
+without winning a boss fight. Built in the worktree `Magic-Portals-Remake-vis4` (branch `visuals-d`, from `7ac69b1`,
+step 123), whose build reads the frozen level data in `out/snap_pre8`; numbered in track B's range, and the merge
+renumbers it. Changed: new `game/sim/Impacts.{hpp,cpp}` (and its line in `game/sim/CMakeLists.txt`),
+`game/sim/Earthquake.{hpp,cpp}`, `game/MagicPortalsLayer.{hpp,cpp}`, `game/data/earthquake.json`,
+`tests/test_mp_camera.cpp` and `tests/test_mp_layer.cpp`. No engine change (the pin stays `4bfcf67`), no converter
+change, no format finding. **GAMEPLAY: NONE** - the watch reads the registry and writes nothing; the argument and the
+measurements are below. Spec: decode D11 and its check D11_check (which wins where they differ), footage F14.
+
+**VERIFIED, FAILED, AND FIXED (fix 2).** The step's verification (`Q.2/verify1`) failed the first build (`45f3157c`) on
+three counts: 4-29's light wall opened at +-9.8 px - F16's opening - where L1 and step 121's met gate show +-19.7, and
+this record had marked it NOT REPRODUCED and left it to the owner; `TheLightWallGoingShakesTheView` had been loosened to
+accept either opening, which this record did not say; and row 7 (`wall_struck`) was driven but pinned by no check. It
+also found, by reading the code, that the watch kept a body's velocities across a portal, and one count and one
+sentence wrong. This revision (`Q.2/fix2/`, build `b1f43812`):
+- **4-29 was not an ordering question: the original makes neither call.** The two calls on tick 10 were the level's
+  knights landing from their spawners. The original makes each knight where its marker is - its ENTITY POINT on the
+  marker (`ETHCallback_minion_spawn` 426511..426876 #12-19, `spawnMinion` 426876..427194 #25-39), the bottom of its
+  feet circle `minions.json` `entity_above_feet_px` (18.1) under it - so on 4-29, whose markers stand 16 over their
+  tiles, its feet are 2.1 into them. SOURCE: `AddEntity` makes the body at the entity's point with Box2D's default
+  velocity 0 (`engine/Scene/ETHScene.cpp:261-292, 713-723`; `engine/Physics/ETHPhysicsSimulator.cpp:65-114`); its
+  fixtures set `e_newFixture` (`box2d/Box2D/Dynamics/b2Body.cpp:185`), and the next `b2World::Step` finds the new pairs
+  and runs `Collide` before it solves anything (`Dynamics/b2World.cpp:884-888, 912`), so the knight begins its tile at
+  rest: hitIntensity 0, and `ETHBeginContactCallback_minion` calls only above 0 (#124-125 `CMPIf`, `JNP`). The port
+  centres its 7-unit circle on the marker (`Minions::State::Spawn`), 11.1 higher, and lets it fall 9 onto the tile:
+  that fall was the port's own. DATA (`fix2/spawn_census.py`, `spawn_census.txt`): 51 of the game's 62 markers put
+  the original's feet into the floor under them (44 of them by 2.1); the other 11 stand 0.6 to 157.9 over it. So the
+  verification's proposed route - ordering two same-tick begins as Box2D's contact list would - was not taken: there is
+  no such pair of begins in the original here. The watch now looks at a new minion where the original's stands (the
+  spawn drop, below). 4-29 makes no impact begin before its wall goes, and its capture is byte-identical on all 220
+  frames to the committed build's, which step 121 measured against L1.
+- **The loosened case is undone.** `TheLightWallGoingShakesTheView` is step 121's committed form again - every non-zero
+  offset is the wall's, +7 u on the tick after it goes, then L1's halving - with one check added: no impact calls
+  before the wall goes (it counts 0 begins there). Its first build's comment blamed "the player's own landing from the
+  spawn"; the calls were the knights'.
+- **Row 7 is pinned** (the 85 px/s throw below): deleting `QueueQuake(Call::WallStruck)` would leave 0 u shown on the
+  break tick, where the case requires 10.5.
+- **A teleport starts a body's velocities afresh**, and the record's two slips are corrected: the first build's sweep
+  had 35 levels, not 36, with a call of 1 px or more by tick 420 (fix 2's has 14, counted from its logs), and deviation 3
+  now says how far the landing shake can trail the visible stop.
+
+**VERIFIED AGAIN, FAILED ON THE RECORD, AND FIXED IN TEXT (fix 3).** The second verification (`Q.2/verify2`) passed
+every measured gate on fix 2's build - the binaries the current sources make (a dry run on a copy of `build.ninja`), 0
+warnings, the multi-tick case, the impact rows, the F14 landing, 27 of 30 rows, 4-29's L1, the sweep 128 of 128, the
+suites 212 and 1924 with 0 failures, no gameplay change - and failed one: this record said `APlayerLandingShakesTheView`
+shows the landing's call "5.43 px, 3 pairs, landing on its tick", where its own print reads `the phase on a back;
+-0.6618 px on the landing tick, then (px) 67:2.716875, until another call`. The case lands on a back, sees one of the
+landing's four later moves before a knight's seam call overwrites the shake, and passes through a tolerance for that
+which the record did not state; and deviation 8 said no case meets such an overwrite. Fix 3 is text in this step only:
+gate (c)'s row and deviation 8 now say what the case shows and the tolerance it (and the 300 px/s throw) passes through,
+and the owner has a line on it. Fix 3 changed no source, data or test (the md5 of each of the step's changed and new
+files, taken before and after the edit, did not move) and built and launched nothing, so every measured gate stands as
+measured on `b1f43812`, `f2feaead` and `2db73b12`, which the second verification's dry run on a copy of `build.ninja`
+found are what the current sources make. The verification's low finding, `Impacts::kRecentSteps` (60) a number in code
+without JSON provenance, is left for later (below).
+
+**VERIFIED A THIRD TIME, PASSED (`Q.2/verify3`)** on the same binaries, relinking nothing and with 0 refusals, with three
+low findings. One is text and is corrected at commit: gate (b2) and deviation 3 said the F14 landing's shake came one
+frame after the player was seen to stop, where the physics stops it on tick 152 and it touches on tick 153, and at
+`--fixed-step` f153 shows both. The other two, `Impacts::kRecentSteps` and `APlayerLandingShakesTheView`'s stale header
+comment, stay left for later (below): either edit makes the build stale for a relink no gate turns on. The commit
+touched no source, data or test; a dry run on a copy of `build.ninja` found no work.
+
+**BLOCKERS, checked first.** (a) Step 121's deviation 1 is in the code as it says: `quakeTick` overwrote the tick's move
+and `shakeView` drew it once a frame, and the engine runs up to five ticks a frame (`engine/src/core/SupersonicApp.cpp:74`,
+`:1389`). (b) D11 section 4 rows 4, 8, 10 and 25 and D11_check C47, C48, C55, C56 and C59 are the decode; the engine
+reports no contact to a layer's tick - `SupersonicApp` updates its `ContactTracker` after the layers' `FixedUpdate`
+(`SupersonicApp.cpp:1462` against `:1493`) and a suite steps `PhysicsSystem::Update` with no contact list - so C48's
+port-side reading is the route, with no engine change; F14's landing is measured (`decode/D11_work/F14_landing_shake.txt`).
+(c) Step 121's fix drove 20 of its 24 rows and step 123 drove the three it wired (rows 2, 6, 14): 23 of 27, leaving
+`beholder_hurt` and the three deaths. The listing is the md5 the decodes cite (`48fe65ce...`). No ruling blocks.
+Nothing unmet.
+
+**(a) EVERY TREMBLE DRAWN.** The generator stays on the tick clock (step 121's deviation 1: the same run shakes the
+same way at any frame rate, and a capture and a replay agree). What a frame draws is now held apart from what a tick
+made: a tick with a tremble sets the frame's move and marks it undrawn; a tick with none clears only a move a frame has
+drawn; `shakeView` draws the held move and marks it drawn. So every tremble is drawn, on the frame that ran its tick,
+whichever of the frame's ticks it was - one rendered frame each at 60 fps or below, as the original's are (D11 section
+1d). Stepping the generator once per rendered frame instead, as the original does on its wall clock, was not taken: it
+would make the shake a function of the frame pacing, which step 121 kept it out of. What stays different is recorded
+(deviation 1). The 70 ms beat is five ticks, so no frame the engine runs (five ticks at most) can hold two trembles; in a
+suite that ticks without drawing, the later wins. `QuakeOffsetUnits()` keeps meaning the tick's own move (every existing
+case reads it), and `QuakeFrameUnits()` is the frame's. Under `--fixed-step` a frame runs one tick, so nothing a capture
+draws changes (the sweep and the gate captures below).
+
+**(b) THE IMPACT ROWS, as decoded** (`earthquake.json` `player_impact`, `stone_impact`, `minion_impact` and `impacts`;
+every number with its listing or source citation there). All three are begin-contact callbacks, so before the update.
+- **Row 4, the player** (`ETHBeginContactCallback_dark_mage` 339123..339677): nothing for a sensor (#1-11); hitIntensity
+  = dp2(velocity, contact normal) / getScale() (#42-61); where it is above 0 and the other is not a crate (`isCrate`
+  422055..422414: `crate`, `crate_no_emissive`, `crate_low_emissive`, each bare and `.ent` - not `crate_small`),
+  startEarthquake(0.6 x hitIntensity) (#63-80).
+- **Row 8, a rolling stone** (`ETHBeginContactCallback_rolling_stone` 346486..347456): the normal overwritten with
+  normalize(other - this) between the two entity points (#6-26, C55); where the velocity has length and hitIntensity is
+  above 2, startEarthquake(2 x hitIntensity) (#28-64). Only `rolling_stone` has the callback (the listing has none for
+  `rolling_stone_no_emissive`, 2-30's one stone).
+- **Row 25, a minion** (`ETHBeginContactCallback_minion` 437083..437789): nothing for a sensor, nor against an entity
+  named exactly `enemy_killer` (all 58 placements); the same line between the entity points; above 0,
+  startEarthquake(0.8 x hitIntensity) (#57-130). `ghost_minion.ent` has no callback.
+- **hitIntensity** is the approach speed in level px a second over 50 (C47: Box2D's metres, DEFAULT_SCALE 50, over
+  getScale), `hit_px_per_unit`.
+- **Row 10** (a stone crushing a minion, 25) is not wired: the port's minions are not breakable (`Minions.hpp`), and
+  that is gameplay. Nor is row 8's other half, a character's hp set to 0 above hitIntensity 2.5 (#107-129).
+- **A correction to D11 section 4 row 4**, which says the normal is negated "for other shapes 2 and 4": it is the other
+  way round. #27-36: a circle (2) falls through to #29 (`SetV4 v2, 0`), a compound (4) makes #31-34's `CMPIi` / `TNZ`
+  false, and #36 `JLowZ` skips the negation on false - so #37-40 negate the normal against every other shape, a box or a
+  polygon, and never against a circle or a compound. Read from the listing, not RAW-checked. Against a polygon, Box2D's
+  fixture A (C59), the manifold normal runs from it to the player, and negated it points from the player into the
+  polygon: the approach component the port takes (deviation 4).
+
+**(b) HOW THE PORT FINDS THEM** (`sim/Impacts`, read only).
+- **Who is watched**: the player's body, every `rolling_stone` in `Demolish::State::stones` (placed, thrown, the
+  beholder's rocks) and every `minion.ent` minion, a minion aimed from its entity point above its circle
+  (`minions.json` `entity_above_feet_px`). Their velocity and point are kept at the end of `stepLevel`, as the tick has
+  steered them into the step.
+- **Touching**: after the step and before `Game::AfterStep` (Box2D calls a begin callback inside the step, before
+  anything after it moves or breaks a body), every solid collider - a turned box, a sphere, a capsule, a hull by its
+  `PlanePolygon` - whose surface is within `touch_px` of a watched body's, the solver's layer masks both ways. `touch_px`
+  is 0.5 screen px: Box2D's circle-against-polygon skin, `b2_polygonRadius` = 2 x `b2_linearSlop` = 0.01 m
+  (`box2d/Box2D/Common/b2Settings.h:67, 76`; `Collision/b2CollideCircle.cpp:65-74`; a contact touches while its manifold
+  has a point, `Dynamics/Contacts/b2Contact.cpp:161-226`), at DEFAULT_SCALE, taken at R12's 720 px screen: 0.178 u. A
+  pair touching now and not after the last step is a begin; the normal is the line between the two surfaces' nearest
+  points.
+- **Marked, not begun**: a body's first look (a level's first tick, a stone just thrown) and a body put somewhere
+  farther than the step could carry it (its travel plus its radius) between the steer and the step - staging, never a
+  portal, which moves a body after the step and before the next is steered.
+- **A minion is looked at where the original's stands** (fix 2; `Impacts::Watched::spawnDropPx`, the layer's
+  `impactBodies`). The port makes its circle `EntityAboveCentrePx` (11.1) higher than the original makes its knight
+  (above), so the watch looks at a minion it has never seen with that circle 11.1 lower: the pairs it touches there at
+  its first look are marked, as the original's are begun at rest; where it touches nothing there, it falls with the
+  port's body and begins what the original's would land on, on the step it would, aimed from the original's entity
+  point, carrying the fall the port's body has made by then (the same distance from rest). Once that circle stands on
+  something (a pair under its centre), it stays where it stood while the port's comes down to it, and the velocities
+  kept for it meanwhile have no fall in them (the original's has none). The drop ends on the step the port's own circle
+  reaches a pair the dropped one holds - that pair goes on touching, no begin - or when the body is put somewhere or
+  teleported. `test_mp_camera` `ASpawnedMinionIsLookedAtWhereTheOriginalsStands` pins each part on shapes of its own;
+  `test_mp_layer` `AKnightIsLookedAtWhereTheOriginalsStands` plays 3-09 (below).
+- **A teleport starts a body's velocities afresh** (fix 2). A portal is the one thing that writes a watched body's
+  transform between the step and the next steer (`Portals.cpp` `Teleport`; the other writers - `Mover`, `Puzzle`'s
+  buttons, `Fields` - move kinematic bodies and sensors the watch does not watch), so a body the tick has moved since the
+  step left it keeps nothing it carried toward the entry: it comes out at the velocity the exit gives it, as the
+  original's does. `test_mp_camera` `ATeleportedBodyKeepsNothingItCarriedIn`: a stone falling at 600 px/s into a floor
+  portal, out of a wall portal at 300 sideways, landing at 60 down, reads 60 (the first build would have read 600); the
+  same fall without a portal still reads its 600.
+- **The speed it came in at.** The engine's solver moves every body first and then brakes a pair that is apart but
+  inside the step's reach (a speculative contact, `PhysicsSystem.cpp:1142-1164`, `:1580-1582`), so a landing's approach
+  is taken out before the surfaces meet - and, measured in `APlayerLandingShakesTheView`'s trace, in stages: a 460 px/s
+  fall on 3-16 stopped dead 7.7 px over the floor on tick 54, fell again for five ticks to 120 px/s, was stopped again
+  0.7 px over it, and touched on tick 62 carrying 20 px/s. So a begin keeps every velocity its body carried into a step
+  since it last met or left anything (at most 60 steps, a second: `Impacts::kRecentSteps`), and a row reads the one
+  that came along its line fastest - 460 there, where the landing step's own velocity reads 20. Box2D's callback reads
+  the velocity of the step it touches on, before its solve; for a free approach the two are the same (deviation 3).
+- **A stone Demolish breaks something with** (at its own 1 px margin, `demolish.json`) is gone before the watch can see
+  it touch; the stone's own call for that contact is read from what the watch kept for the stone and the breakable's
+  node, and added after the watch's begins - unless the watch saw the same pair begin.
+- **The order on the before side**, whose last word is what the generator keeps: `wall_struck` (row 7), then the impact
+  rows (the player, the stones, the minions, then Demolish's stones), then rows 9, 11 and 24 - the wall's callback before
+  the stone's (the polygon is Box2D's fixture A: C59) and a stone's own before what its callback calls after it.
+- **The log** names each begin's body since fix 2: `impact <row> of <the player | a stone's or a minion's node> on
+  <the other's entity> hit <h>[, no call] on tick <t>`. The first round's `Q.2/explain_sweep.py` reads the old form and
+  would find no impact in these logs; `Q.2/fix2/explain_sweep.py` reads this one.
+
+**THE GATES.** Before = the committed build `52229f13` (step 123's): its sweep `10.1/after/sweep` (128 pngs checked
+against their log's md5: 0 bad) and two gate runs on it (`Q.2/before/gates`). After = fix 2's build `b1f43812`
+(`Q.2/fix2/binaries_md5_final.txt`); the first build `45f3157c`, which the verification measured, is named where it
+differs. Scripts and measurements: `out/parity/visuals/Q.2/` (the first build's: `capture_gates.sh`, `capture_sweep.sh`,
+`measure_shake.py`, `check_capture_log.py`) and `Q.2/fix2/` (`spawn_census.py`, `capture_gates.sh`, `capture_sweep.sh`,
+`explain_sweep.py`; results `after/gates/`, `gates_compare.txt`, `after/compare_sweep.txt`, `after/explain_sweep.txt`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in every build of the first round (`Q.2/build1..8.log`) and of fix 2 (`Q.2/fix2/build1.log`, `build2_layer.log`, `build3.log`, `build4.log`; the last full one relinked 49 targets) and in the relinks a refusal asked for (`build2b_relink_layer.log`, `build4b_relink_layer.log`) |
+| (a) The multi-tick case | a `test_mp_layer` case with two ticks in one frame: every tremble the rule makes drawn; `--fixed-step` captures byte-identical | a frame of two ticks drew only its last tick's move (code read: step 121's deviation 1): at 30 fps half the trembles never drawn | **passes: `ATrembleIsDrawnWhateverTicksAFrameRuns`** runs the light wall's 20 on level30 as the app does (BeginTick, the tick, EndTick per tick, then one Apply and OnUpdate a frame): frames of two ticks - 10 trembles made, **10 drawn**, 5 on a frame's first tick and 5 on its last; frames of five - 10 made, 10 drawn; every frame's camera exactly the engine's plus its ticks' tremble or at rest, the sky with it, the tick's camera and a tap at rest. `--fixed-step`: the gate runs' frames outside a shake's are byte-identical to the committed build's, and the sweep (gate d) |
+| (b1) The impact rows against D11, unit | amplitude 0.35 x factor x hitIntensity x 2.8125 px and the pairs D11 section 1c runs it to; the sub-pixel edges 84.7 (player) and 63.5 u/s (minion), C23; the stone silent to 100 u/s | not wired | **passes: `test_mp_camera` `AnImpactShakesByItsApproachSpeed`**, through the generator: the player at 300 u/s 3.54 px, 2 pairs (D11 section 4's worked example); at 417 u/s 4.93 px, 3 pairs (F14's "about 5 px, 3 pairs"); at 84 u/s 0.99 px, one forth and stopped; at 86 u/s 1.02 px, one pair; a minion at 63 u/s 0.99 px, at 200 u/s 3.15 px, 2 pairs; a stone at 100 u/s nothing, at 150 u/s 5.91 px, 3 pairs, at 300 u/s 11.81 px, 4 pairs, at 2000 u/s capped at 50 px, 6 pairs; the edges 84.656 and 63.492 u/s. `TheImpactRowsAreTheDecodedCallbacks`: the three factors and gates, the six crate names and not `crate_small`, `enemy_killer` bare and not `.ent`, hitIntensity 6 for 300 u/s straight in |
+| (b2) One capture of a hard landing against F14 | F14 #55 (6.631 s, the landing on the diamonds' block after P1): world dy -5, then +5 (#57), -2 (#58), +2 (#60), -1 (#62), +1 (#63) px - forth first on the landing frame, 3 pairs (`D11_work/F14_landing_shake.txt`; D11 section 5 reads #58 as -3) | the same route on `52229f13`: the player lands on frame 153 and nothing shakes | **passes.** `--level level15b --tap 394,112@40 --tap 205,578@130` (F14 take r1's P1 in mid-air and P2 on the player, F14.md section 1): the player drops from the first portal (140, 40.5) onto the block and lands on **frame 153** - `player_impact` 5.04 (420 px/s straight down, hitIntensity 8.4, `double_block_plat_low_emissive.ent`). Fix 2's capture is **byte-identical to the first build's on all 320 frames** (`fix2/gates_compare.txt`; the teleport before the fall carried nothing faster down, and the knights' calls fix 2 removed fell on ticks 10 and 15, inside the level's black fade-in), so the measurements stand: world dy against the before run's same frame **-4.96 (f153, the landing frame), +4.98 (f158), -2.44 (f163), +2.45 (f168), -1.15 (f173), +1.16 (f178)** (`Q.2/after/gates/3-16_shake.json`), and the verification's own row-profile reading -4.97, +4.97, -2.46, +2.50, -1.19, +1.23: forth first on the landing frame, 3 pairs, each within 0.6 px of F14's and within 0.1 of the decode's 4.96 / 2.48 / 1.24. 312 of the 320 frames are byte-identical to the before run's; the 8 that differ are the shake's six and two sub-pixel trembles of the knights crossing seams (f29, f69). The fall speed is player.json's guessed gravity (1200 px/s^2, `_guess`) over the 77 px from the portal: not tuned to F14. The phase is on a forth at the landing because the two seam calls before it flip it twice (deviation 8). The physics stops the player on tick 152 (0.83 u over the block) and it touches on tick 153; at `--fixed-step` alpha is 0 (`engine/src/core/SupersonicApp.cpp:1552-1558`), so frame N draws tick N-1's positions and tick N's tremble, and **f153 shows both the stop and the forth**: the third verification's sprite match from rest, -40 (f151), -22 (f152), -2 (f153), -1 (f154), 0 (f155) screen px - the player still falling on f152 (corrected at commit: this cell said the shake came one frame after the player was seen to stop on f152); deviation 3 |
+| (c) Every wired row's test | a case for every wired row a case can drive without winning a boss fight; the rest named | 23 of 27 wired rows driven (step 121's fix, step 123) | **passes: 27 of the 30 wired rows pinned.** New in the first round: `beholder_hurt` (`TheBeholderHurtShakesTheView`: 1-32 left to run until the beholder throws a rock, the rock put inside its radius rising - hurt on tick 962, 24 before the update, 8.4 u shown at once, the level's first shake); `player_impact` (`APlayerLandingShakesTheView`: 3-16's player dropped 100 px lands on tick 62 - one begin, straight down, 460 px/s, hitIntensity 9.2, the call 5.52 = 5.43 px and the tick's last word, and the landing tick's move the machine's. **It does not show the landing's 3 pairs** (fix 3, the second verification's finding): the phase is on a back, left by `minion_spawn_913` walking onto the next tile on tick 29 (hitIntensity 0.84, a 0.672 call, one +0.66 px forth, then stopped under 1 px), so the landing tick shows **-0.66 px** (that forth undone, and the 5.43 halved), tick 67 **+2.72 px**, and on tick 69 `minion_spawn_1759`'s seam call (0.672) overwrites the shake - the case's own print, `the phase on a back; -0.6618 px on the landing tick, then (px) 67:2.716875, until another call` (`fix2/test_mp_layer_final.txt:568`, `verify2/test_mp_layer.txt:568`). The case stops looking at that call; by the code (`Earthquake.cpp:264`, `stop_px` 1.0, and the 70 ms beat not yet due) the 0.66 px it leaves is stopped on tick 69's own update, so the landing's other moves are never drawn. Of the four the machine owed after the landing tick (+2.72, -2.72, +1.36, -1.36 px) the case sees one, matches it exactly, and **passes through its tolerance for a later call: a sequence cut short there is accepted** (`tests/test_mp_layer.cpp:5369`, `overwritten ? shown.size() <= want.size()`). Its printed "3 pairs" is D11 section 1c's count for 5.43 px, not what it shows. So in `test_mp_layer` row 4 is pinned by the begin, its tick, its line, the speed it came in at, the call and the moves up to the next call; its full sequence, forth first and 3 pairs, is pinned by `test_mp_camera` `AnImpactShakesByItsApproachSpeed` (gate b1) and measured on the F14 route's capture (gate b2). The route's scout, `TheF14RouteLandsOnTheBlock`, prints that route's trembles (after the knights' `29:0.66 69:-0.66`, `153:4.96 158:-4.96 163:2.48 168:-2.48 173:1.24 178:-1.24` px) but checks only a landing over 3 px after the second tap); `stone_impact` by the watch (`ABodyFallingOnThePlayerShakesTheView`: 1-9's stone dropped on the player, 100 px/s along the line between them, 4.02) and by Demolish's touch (`AStoneThroughAWallShakesItsImpactThenTwenty`, 300 px/s: 5.73 along the line to the wall's node, 11.47 over `wall_struck`'s 30 and shown at once, 4.01 u = 11.29 px - D11_check C40's "2 x hi x 0.984"; then -4.01, +3.5, -3.5 u as the 20 halves, up to the stone's next impact on tick 23 (7.18, on `ramp_left.ent`), after which it pins nothing: this case too accepts a sequence cut short by a later call (`tests/test_mp_layer.cpp:5780-5781`), 3 of its 9 moves here, where the 85 px/s throw below meets no later call and pins all nine); `minion_impact` (the same case on 3-09: a knight let fall on the player, 1.49). **New in fix 2: `wall_struck` pinned** - the same case throws 1-9's stone a second time, at 85 px/s level with the wall's node (faster than the original's 75 u/s wall gate, closing at under 100 u/s along the stone's line): the stone's begin reads hitIntensity 1.81 and does not call, **10.5 u (`wall_struck`'s 30) is shown on the break tick (16)**, then -10.5, +3.5, -3.5, +1.75, -1.75, +0.875, -0.875, +0.4375, -0.4375 u, the 20 halved. **Read from the code only: `beholder_death`, `ghost_death`, `dark_dragon_death`** (a boss beaten). Every earlier row's case still passes; `checkQuakeRow` reads an impact's call between the event and the next tremble as the machine's and prints it where it happens (no row's case of the final build prints one: 0 such lines in `fix2/test_mp_layer_final.txt` and in `verify2/test_mp_layer.txt`); the two cases cut short by a later call are the landing and the 300 px/s throw above, each through its own stated tolerance. `TheLightWallGoingShakesTheView` is step 121's strict form again (fix 2) |
+| Self-checks on the watch | a player standing still begins nothing; walking a floor seam makes no call of 1 px or more; a minion made on its floor begins nothing there; a teleport carries nothing through | - | **pass.** `AStandingPlayerBeginsNothing` (1-31): landed from its spawn with no begin, then **0 begins in 300 ticks** standing; walked right across the x 256 notch (platform_ent_895 to platform_ent_785, 26.6-degree chamfers) - **one call, 0.36 px**, sub-pixel. **Fix 2:** `AKnightIsLookedAtWhereTheOriginalsStands` (3-09 from its first tick): `minion_spawn_1255` and `minion_spawn_913`, made on their floors, **begin neither floor**; `minion_spawn_908`, 157.9 over its floor, **begins it once, on tick 34** - the original's feet 5.2 over the floor's top going into a step of 9.0 - at 539 px/s down (hitIntensity 5.34, calls 4.27), and not again when the port's circle lands; it later falls to the `enemy_killer` floor (10.63, spared). `minion_spawn_1255` walks onto the next tile on tick 8 (0.60, the walk and no fall: the original's has none) and again on tick 12 (0.63): printed, sub-pixel. `test_mp_camera`: `ASpawnedMinionIsLookedAtWhereTheOriginalsStands` (a marker 16 over a floor: 0 begins through the port's 9 px fall; a marker 44 over it, the original's feet 25.9 over: one begin where the original's lands, aimed from the original's point, none when the port's lands; standing, a step walked into carries (60, 0) where the port's body carried (60, 120); a minion put somewhere is not dropped) and `ATeleportedBodyKeepsNothingItCarriedIn` (above) |
+| (d) The 128-level f420 sweep | changes ONLY where a newly wired row fires before f420, each explained | `10.1/after/sweep` (`52229f13`) | **passes: 128 of 128 byte-identical** to `10.1/after/sweep` and to the first build's sweep (`fix2/after/compare_sweep.txt`), 0 missing; all 128 exit 0, every png matching its log line (`check_capture_log.py`: 128 checked, 0 bad), `Vulkan validation layers: ACTIVE` in 128 logs and no validation message in any. By tick 420 (`fix2/after/explain_sweep.txt`): **35 levels begin something (69 begins) and 25 make an impact call (43 calls), 14 of them a call of 1 px or more** (the largest 1-26's thrown stone, 24.15 px; the most, 3-09's, 4 calls). The first build made 120 begins and 90 calls in 41 levels, 35 of them with a call of 1 px or more (its record said 36: 4-30's largest, 1.012, is 0.996 px); the difference is the knights' landings from their spawners, which the original makes standing (fix 2). **None changes its f420, because no tremble falls on tick 420 in either run** - a spike is one tick, and frame N draws tick N's move - the nearest being 1-24's on 419, 3-12's sub-pixel on 418 and 2-08's on 416 (227 trembles up to tick 420 in all). **No tick of the 128 runs has two impact calls.** Of the 62 minion markers, the 51 made on their floors begin no floor at their making; 10 of the 11 over their floors begin it where the original's lands - 3-04's `minion_spawn_908` (1.9 over) on tick 4 at hitIntensity 1.22; 3-01's `_1811`, 3-06's and 3-12's `_913` (3.9) on tick 5 at 1.51, 1.13, 1.43; 3-07's `_908` (7.9) on tick 8 at 1.94; 3-07's `_1255` and 3-19's `_913` (11.9) on tick 9 at 2.45 and 1.53 (an anchor); 3-04's `_913` (17.9) on tick 11 at 2.84; 3-03's `_913` (29.9) on tick 15 at 2.38; 3-09's `_908` (157.9) on tick 34 at 5.34 - and 3-23's `_1959` (0.6 over, its circle already on the chamfers of the two tiles it stands between) none. Six made on their floors walk onto the next tile within 60 ticks (3-06, 3-08, 3-09, 3-16, 3-23, 4-27: hitIntensity 0.48 to 0.84, each call sub-pixel), as a knight crossing a seam does - the log names the other's entity, not its node, so for the two whose begin is with their floor's own entity type the tile is told from the geometry: 3-23's `_1944` stands 3 px from the block `_2006`, which overlaps its floor `_2007`, and begins on tick 12; 3-08's `_908` begins a single block on tick 42, walking, 30 ticks after it landed. The player's and the stones' begins in the sweep (22 levels) are the first build's to the tick and the hit (`fix2/impact_diff.py`, `after/impact_diff.txt`): the teleport reset changed no reading there |
+| Step 121's gate 3, re-measured: L1 on 4-29, which that step passed | L1 4-29: -20, +20, -10, +10, -5, +5, -2, +2, -1, +1 px | the committed build: step 121's L1 sequence | **MET again (fix 2; the first build's NOT REPRODUCED withdrawn).** The first build opened at +-9.8 (F16's sequence), from the knights' two landing calls on tick 10. Fix 2's 4-29 capture (`--level level28c --tap 247,141@60`) makes **no impact begin before the wall goes** and is **byte-identical to the committed build's on all 220 frames** (`fix2/gates_compare.txt`); each tremble frame against the one before it (`fix2/after/gates/4-29_shake_prev.json`): **-19.77 (f161), +19.79 (f166), -9.90, +9.91, -4.96, +4.96, -2.43, +2.42, -1.15, +1.14 px** - L1's, forth first on the tick after the wall goes, the sky held (`sky_max` 0). The phase at the wall is the generator's first: no same-tick order is involved |
+| Suites | `test_mp_camera` and `test_mp_layer` pass | `test_mp_camera` 103, `test_mp_layer` 1865 (step 123) | **pass: `test_mp_camera` 212, `test_mp_layer` 1924, 0 failures each**, the final binaries `f2feaead` and `2db73b12` (fix 2) |
+| No gameplay change | nothing the simulation reads moves | - | **passes**: the watch writes nothing and draws no random number; the only calls it leads to are `QueueQuake`'s (fix 2 adds only reads: where a minion is looked at, and a teleport found by a changed transform). 312 of 320 3-16 frames and all 220 4-29 frames are byte-identical to the committed build's, the rest being shake frames; and the sweep's 128 frames are byte-identical, 25 of those levels calling on impacts before them |
+
+**RECORDED DEVIATIONS AND DECISIONS.** Nothing is NOT REPRODUCED after fix 2: the first build's L1 regression on 4-29 is
+gone, for the reason fix 2 found (above).
+1. **The beat stays on the tick clock.** With the hold, every tremble is drawn for one rendered frame at 60 fps or below,
+   as the original's is; but the trembles still fall every five ticks (83.3 ms) whatever the frame rate, where the
+   original's fall every 5th frame at 60 fps (83 ms) and every 3rd at 30 fps (100 ms) - at 30 fps the port's are drawn
+   two and three frames apart in turn. Above 60 Hz a tremble lasts one tick of time, several frames, where the
+   original's lasts one of its frames.
+2. **The port's contacts are its own bodies'.** The player is one capsule (20 x 44) where `dark_mage.ent` is two circles
+   (`<Compound>`), a minion one circle of 7 px where `minion.ent` is two of 9.1: a pair Box2D begins twice (each fixture)
+   begins once here, and where the shapes differ, so do the begins - a knight crossing a seam begins the next tile where
+   its narrower circle meets it, not where the original's feet do. The touching distance is Box2D's circle skin at 720 px.
+3. **The speed an impact came in at** is the fastest along the row's line since its body last met or left anything, at
+   most a second back, because the engine brakes a closing pair early and in stages; Box2D's callback reads the step
+   it touches on. They agree on a free approach; a body slowed by something else since it last met or left anything
+   would be read at a speed it no longer had. A teleport is no longer such a case (fix 2: the body's velocities start
+   afresh at the exit). And the call comes on the step the surfaces touch, which under the engine's staged braking can be
+   after the physics stops the body: one tick on the F14 route (stopped on tick 152, 0.83 u over the block, touching on
+   tick 153; at `--fixed-step`, alpha 0, frame N draws tick N-1's positions and tick N's tremble, so f153 shows the stop
+   and the forth together - the third verification's reading, corrected at commit), 8 ticks (133 ms) in
+   `APlayerLandingShakesTheView`'s 460 px/s drop (stopped at y 194.33 on tick 54, touching on tick 62).
+4. **Row 4's sign against a round other** (C56): the port takes the approach component for every contact - the
+   velocity along the line from the player's nearest point to the other's, positive toward it. Against a box or a
+   polygon that is the listing's own (its negation of a polygon-to-player normal, above), which F14's landings measure.
+   Against a circle or a compound other (a stone, a minion, a crate of circles) the listing leaves Box2D's normal as the
+   fixture order makes it, which is not traced: there the original may call where the port does not, or the reverse.
+5. **No sensor in row 8**: the stone's callback has no sensor test; the port's watch sees solid bodies only.
+6. **Marked, not begun**: a body first looked at, or put somewhere between the steer and the step, begins nothing where
+   it lands; Box2D would call with the velocity it carries (a stone thrown into contact, and the suites' staging).
+7. **Rows 10 and row 8's kill** are gameplay, not wired.
+8. **The phase is in play (C23, C52).** The impact rows make soft calls - a knight or the player crossing a tile's
+   seam - and a due sub-pixel call trembles forth once and leaves the phase on a back, so the next shake opens with
+   that forth undone and at half its size. The port does what C52's reading (a) says the original does. A soft call
+   also OVERWRITES a running shake (C7): one landing between a call and its first tremble replaces it, and a sub-pixel
+   one is then stopped at once (the machine does it; `checkQuakeRow` prints it where it happens and no row's case
+   meets it there, but `APlayerLandingShakesTheView` does: its landing, 5.43 px on tick 62, is overwritten on tick 69
+   by `minion_spawn_1759`'s 0.672 seam call after one back and one forth, and stopped - fix 3, gate c). On 3-16 the
+   knights' two seam calls (ticks 29, 69) flip the phase twice, so F14's landing opens forth first. On 4-29 nothing
+   calls before the wall (fix 2), so the wall opens at +-19.7 as L1 does - from the generator's first phase in a
+   capture that starts on 4-29, where L1's came in from 4-22, played before it in the clip (C3): both were on a forth.
+   The first build's 4-29 opening at +-9.8 came from its knights' landing calls, which the original does not make (fix
+   2).
+9. **Order within one tick** is the port's: the watch's (the player, then stones, then minions in the level's order, then
+   Demolish's stones). Box2D's, SOURCE: a begin comes either from `Collide`, which walks the world's contact list from
+   its head (`box2d/Box2D/Dynamics/b2ContactManager.cpp:105-108, 167-168`; `Contacts/b2Contact.cpp:228`), where
+   `AddPair` puts every new contact (`b2ContactManager.cpp:255-260`) in the order the broadphase sorts its new pairs by
+   proxy id (`Collision/b2BroadPhase.h:207, 217`) - so of the pairs touching after the last step, the newest is called
+   first and the oldest last - or from `SolveTOI`, which handles the earliest impact of the step first
+   (`Dynamics/b2World.cpp:585-697`, `Update` at `:717` and `:797`). Neither order is built: which contact is newest
+   turns on proxy ids and on the step each pair's fattened boxes first met, neither traced. After fix 2 no tick of the 128-level sweep (to tick 420) or of the two gate runs has two impact calls; the first build's one tick where the order showed, 4-29's tick 10, was two calls the original does not make.
+10. **The spawn drop reads around the port's minion, and does not move it** (fix 2). Where the port makes a minion - its
+    circle's centre on the marker, 11.1 higher than the original's, falling 9 onto a floor the original's is made in - is
+    gameplay, the minions' owner's, and unchanged. The watch looks at the port's circle (radius 7) where the original's
+    feet would be, not at the original's feet circle (9.1); it holds that place once it stands on something, where the
+    original's is pushed up out of the 2.1 it is made into (Box2D's solver) - under 2.1 of difference in where a seam is
+    met; and for the 11 markers over their floors it reads the fall the port's body has made over the original's
+    distance, under the port's gravity.
+
+**TEXT AFTER THE RUNS.** In the first round, after its last build, suites and captures, `earthquake.json`'s
+`player_impact._normal` note was rewritten for the correction above (its first wording said "shape 4 only", which the
+verification's re-read of #27-36 showed was wrong too). `Earthquake::LoadRules` reads no `_`-key and the file still
+parses; the port reads `game/data` at run time, so no binary changed and every gate stands as measured. Fix 2 adds
+`minion_impact._spawn` and a sentence to `impacts._source` before its builds.
+
+**RULINGS APPLIED.** **R12** by analogy for `touch_px`, a bare pixel amount at the 720 selection (as step 121 took the
+cap and the stop). The standing direction that R1-R23 follow what the original does: the three impact rows as the
+listing has them, the phase's leak where they make it, and (fix 2) a minion's first contact as the original's is made.
+**R24 and R25** are neither touched nor withdrawn. **K8 does not arise** (no random draw) and **K13 does not arise** (no
+new depth).
+
+**GAMEPLAY: NONE.** The watch reads bodies and writes nothing; what it finds is only ever a `QueueQuake` call.
+
+**SUITES**, run directly: the final binaries once each - **`test_mp_camera` 212, 0 failures** (`f2feaead`,
+`Q.2/fix2/test_mp_camera_final.txt`), **`test_mp_layer` 1924, 0 failures** (`2db73b12`,
+`Q.2/fix2/test_mp_layer_final.txt`). On the way, each run once on a changed build: the first round's `test_mp_camera`
+read 1 failure on its first run and 1 when the watch's kept velocities changed shape, then 0; its `test_mp_layer` read
+14, 8, 4, 4 and 6 failures as the watch's velocity went from the step's own to the kept history, then 0 (177 and 1905 at
+its end). Fix 2: `test_mp_camera` 208, 208 and 212, 0 failures each (`528eb02c`, `9158b9f7`, `f2feaead`);
+`test_mp_layer` 1923 with 1 failure (`ca1f3ea3`: the new 3-09 case had counted a standing knight's walk onto the next
+tile as a begin of its own floor; the case now tells the floor under the marker from the tiles beside it), then 1924, 0
+failures, three times (`9caa8531`; `ecba2f8c`, once the dropped circle stays where it stands; `2db73b12`, once what it
+carries while standing has no fall in it). No other suite includes the changed headers (`grep` of `tests/`); the full
+ctest was not run.
+
+**SMART APP CONTROL: 4 refusals in all**, each followed by one delete and relink and a launch that ran. The first round's
+2: `test_mp_layer.exe` `04bd62e7` (the relinked `db6f69e3` ran) and `MagicPortals.exe` `43accd2f` (the relinked
+`45f3157c` ran the two gate captures and the 128 sweep captures). Fix 2's 2, both `test_mp_layer.exe`: `b34f4694`
+(the relinked `9caa8531` ran: 1924, 0 failures) and `e1dc2315` (the relinked `2db73b12` ran: 1924, 0 failures)
+(`Q.2/sac.txt`, `Q.2/fix2/sac.txt`). Fix 2 launched: `test_mp_camera` `528eb02c`, `f2feaead`, and between them `9158b9f7`
+once each; `test_mp_layer` `ca1f3ea3`, `9caa8531`, `ecba2f8c`, `2db73b12` once each and the two refused; `MagicPortals.exe`
+`b1f43812` 130 times (2 gate captures, 128 sweep captures), none refused. Each rebuild was a change of source,
+not a retry. The second verification launched `b1f43812` 130 times and `f2feaead` and `2db73b12` once each,
+relinking nothing: 0 refusals. Fix 3 built and launched nothing: 0 refusals.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Where the port makes a minion** (deviation 10): its circle centred on the marker, 11.1 higher than the original's
+  knight, so every knight falls 9 or so at the start of its level where the original's is made standing - a gameplay
+  and picture difference for the minions' owner, which the watch now reads around.
+- **The engine brakes a landing in stages** (the 3-16 trace: the player stopped dead 7.7 px over the floor, then
+  falling again): a physics behaviour of the engine's speculative contacts, which this step reads around and does not
+  change. Visible as a hover of a few frames on a hard landing - and the landing's shake comes when the body touches,
+  up to that hover's length after it is seen to stop (deviation 3); gameplay, and the engine's.
+- **The order of two impact calls on one tick** (deviation 9): the port's, not Box2D's, which is not traced. After fix 2
+  no tick of the sweep or of the gate runs has two, so no gate turns on it; it wants a ruling only where a capture meets one.
+- **A knight's seam call can erase a running landing shake** (fix 3; deviation 8, C7). In `APlayerLandingShakesTheView`
+  a 0.672 seam call on tick 69 overwrites the landing's 5.43 px shake after its first back and forth, and the sub-pixel
+  amplitude it leaves stops at once. The original's callback overwrites the same way (C7), but the port's seam begins
+  come from its own shapes (deviation 2: a 7 px circle meeting the next tile where `minion.ent`'s feet circles would
+  not), so in play this may happen where the original's does not, and not where it does.
+- **F16's 4-32 opening at +-10** (step 121's gate 4, NOT MET) is the same machine with the phase on a back: the port can
+  now open a light wall at +-10 where soft calls come before it; a 4-32 capture is still not run (its torch needs the
+  player walked to it).
+- Rows 10 (a stone crushing a minion) and 8's character kill: gameplay, for their owners. Rows 3, 13, 21 and 30 as
+  step 121 left them.
+- **`Impacts::kRecentSteps` (60, `game/sim/Impacts.hpp:83`)**, the one-second cap on how far back a begin's approach
+  velocity is read (deviation 3), is a port-chosen number in code with its reason in a comment, not in `earthquake.json`
+  with provenance (the second verification's low finding). Deferred: `MagicPortalsLayer.hpp:33` includes `Impacts.hpp`,
+  so the move relinks every suite that includes the layer and `MagicPortals.exe`, and would take both gate captures and
+  the 128-level sweep again, each fresh exe a Smart App Control risk, for a number no gate turns on (the history is
+  cleared at every contact change, and a fall's speed only grows). For the next step that touches `sim/Impacts`:
+  `impacts.recent_steps` with its source (or `_guess`), read by `Earthquake::LoadRules`, passed to the watch and pinned
+  in `TheImpactRowsAreTheDecodedCallbacks`.
+- `APlayerLandingShakesTheView`'s header comment (`tests/test_mp_layer.cpp:5289-5293`) still says the landing is "a
+  forth on the landing tick"; on 3-16 it lands on a back (gate c), as the comment in its body (5345-5348) has it. Fix 3
+  touched no source; for the next step that edits that suite.
+- For the backlog (the close agent): a Q.2 row; step 121's deviation 1 closed; D11 rows 4, 8 and 25 wired; the D11
+  row-4 correction (the normal is negated against a box or polygon, never against a circle or a compound: the reverse
+  of D11's "2 and 4"); the minion's spawn position against the original's (deviation 10); and that 4-29's L1 gate holds.
+- For the merge's renumbering: "step 124" is written in 13 places outside this document - `earthquake.json` (7),
+  `test_mp_camera.cpp` (3) and `test_mp_layer.cpp` (3).

@@ -43,6 +43,9 @@ constexpr const char* kKeys[] = {
     "no_portal_tap",
     "shot_blocked",
     "shot_failed_in_field",
+    "player_impact",
+    "stone_impact",
+    "minion_impact",
 };
 static_assert(std::size(kKeys) == kCalls, "one earthquake.json key per Call");
 
@@ -155,6 +158,48 @@ bool ReadCalls(const Json::Value& root, Rules& read, std::string& error) {
     return true;
 }
 
+// The impact rows' own numbers, and the two every contact is read by.
+bool ReadImpacts(const Json::Value& root, Rules& read, std::string& error) {
+    const Json::Value& impacts = root["impacts"];
+    if (!impacts.IsObject()) {
+        error = "no \"impacts\" object";
+        return false;
+    }
+    if (!Number(impacts, "impacts", "hit_px_per_unit", read.hitPxPerUnit, error) ||
+        !Number(impacts, "impacts", "touch_px", read.touchPx, error)) {
+        return false;
+    }
+    if (!(read.hitPxPerUnit > 0.0) || read.touchPx < 0.0) {
+        error = "impacts.hit_px_per_unit must be above 0, and impacts.touch_px not below it";
+        return false;
+    }
+    const Json::Value& calls = root["calls"];
+    for (const Call call : {Call::PlayerImpact, Call::StoneImpact, Call::MinionImpact}) {
+        const auto i = static_cast<std::size_t>(call);
+        const std::string where = std::string("calls.") + kKeys[i];
+        const Json::Value& row = calls[kKeys[i]];
+        if (!Number(row, where, "hit_above", read.hitAbove[i], error)) return false;
+        read.entity[i] = row["entity"].AsString();
+        if (read.entity[i].empty()) {
+            error = where + ".entity is missing: the entity whose begin-contact callback the row is";
+            return false;
+        }
+        const Json::Value& spares = row["spares"];
+        if (!spares.IsArray()) {
+            error = where + ".spares is missing: the entity names its callback passes over, or []";
+            return false;
+        }
+        for (const Json::Value& name : spares.AsArray()) {
+            if (!name.IsString() || name.AsString().empty()) {
+                error = where + ".spares holds something that is not an entity name";
+                return false;
+            }
+            read.spares[i].push_back(name.AsString());
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 const char* KeyOf(Call call) {
@@ -180,7 +225,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     Rules read;
     std::string why;
-    if (!root.IsObject() || !ReadGenerator(root, read, why) || !ReadCalls(root, read, why)) {
+    if (!root.IsObject() || !ReadGenerator(root, read, why) || !ReadCalls(root, read, why) ||
+        !ReadImpacts(root, read, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -225,6 +271,18 @@ bool IsEntity(const std::string& nodeEntityName, const std::string& entity) {
 
 double ToUnits(const Rules& rules, double px) {
     return rules.screenPxPerUnit > 0.0 ? px / rules.screenPxPerUnit : 0.0;
+}
+
+double HitIntensity(const Rules& rules, const glm::dvec2& velocityPx, const glm::dvec2& direction) {
+    return rules.hitPxPerUnit > 0.0 ? glm::dot(velocityPx, direction) / rules.hitPxPerUnit : 0.0;
+}
+
+bool ImpactCalls(const Rules& rules, Call call, double hit, const std::string& otherEntity) {
+    const auto i = static_cast<std::size_t>(call);
+    // Only the impact rows name the entity whose contact callback they are.
+    if (i >= kCalls || rules.entity[i].empty() || !(hit > rules.hitAbove[i])) return false;
+    const std::vector<std::string>& spared = rules.spares[i];
+    return std::find(spared.begin(), spared.end(), otherEntity) == spared.end();
 }
 
 bool InMouthLeg(const Rules& rules, const std::vector<double>& legHoldsMs, double phaseMs) {

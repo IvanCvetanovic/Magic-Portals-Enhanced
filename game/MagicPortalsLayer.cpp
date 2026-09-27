@@ -593,6 +593,10 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     // NOT reset: the original's is one for the game (m_quake).
     m_quakeWatch = QuakeWatch{};
     m_doorWatch = DoorWatch{};
+    // And the contacts: the next level's bodies are looked at afresh, and only
+    // what begins to touch after that first look is an impact.
+    m_impacts.Reset();
+    m_impactBegins.clear();
     // The next level is compared against itself, not against this one. Without
     // this, its first frame reports every sprite of the level just unloaded as
     // having changed - the same stale-baseline fault the sound watch above has.
@@ -6365,13 +6369,15 @@ void MagicPortalsLayer::latchSimQuakes() {
     }
     const QuakeWatch& was = m_quakeWatch;
 
-    // Which breakables this tick took that are breakable_walls: the one entity
-    // both wall rows are callbacks of.
+    // Which breakables this tick took, and of those the breakable_walls: the one
+    // entity both wall rows are callbacks of.
     std::vector<const Demolish::Breakable*> wallsBroken;
+    std::vector<const Demolish::Breakable*> struck; // by a stone's touch
     if (now.breakablesBroken.size() == was.breakablesBroken.size()) {
         for (std::size_t i = 0; i < now.breakablesBroken.size(); ++i) {
             if (now.breakablesBroken[i] == 0 || was.breakablesBroken[i] != 0) continue;
             const Demolish::Breakable& breakable = level.demolish.breakables[i];
+            if (level.demolish.FindStone(breakable.brokenBy) != nullptr) struck.push_back(&breakable);
             const Tscn::Node* node = m_data.scene.FindNode(breakable.name);
             if (node != nullptr && Earthquake::IsEntity(Roles::EntityName(*node), m_quakeRules.wallEntity)) {
                 wallsBroken.push_back(&breakable);
@@ -6380,12 +6386,16 @@ void MagicPortalsLayer::latchSimQuakes() {
     }
 
     // BEFORE THE UPDATE, in the frame's order: the begin-contact callbacks inside
-    // the physics step first...
+    // the physics step first. The wall's before the stone's own in one contact
+    // (Box2D makes the polygon fixture A, and A's callback runs first: D11_check
+    // C59), and a stone's own before what the same callback calls after it - a
+    // destroyier's 6, a beholder rock's 5 - so the last word is the original's.
     for (const Demolish::Breakable* wall : wallsBroken) {
         // By a stone's touch, which is the wall's contact callback; a script's
         // destroy() (the dark dragon's summon) sets the same datum with no contact.
         if (level.demolish.FindStone(wall->brokenBy) != nullptr) QueueQuake(Call::WallStruck);
     }
+    latchImpacts(struck);
     for (int i = was.despawned; i < now.despawned; ++i) QueueQuake(Call::StoneDespawned);
     for (int i = was.rocksBroken; i < now.rocksBroken; ++i) QueueQuake(Call::BossRockBroken);
     for (int i = was.minionsKilled; i < now.minionsKilled; ++i) QueueQuake(Call::MinionKilled);
@@ -6463,12 +6473,125 @@ void MagicPortalsLayer::latchDoorQuakes() {
     m_doorWatch = std::move(now);
 }
 
+std::string MagicPortalsLayer::EntityNameOf(entt::entity body) const {
+    for (const auto& [name, entity] : m_level.built.entities) {
+        if (entity != body) continue;
+        const Tscn::Node* node = m_data.scene.FindNode(name);
+        return node != nullptr ? Roles::EntityName(*node) : std::string();
+    }
+    return {};
+}
+
+std::vector<Impacts::Watched> MagicPortalsLayer::impactBodies() const {
+    using Earthquake::Call;
+    std::vector<Impacts::Watched> bodies;
+    if (!m_loaded) return bodies;
+    const auto entityOf = [this](Call call) -> const std::string& {
+        return m_quakeRules.entity[static_cast<std::size_t>(call)];
+    };
+    // ETHBeginContactCallback_dark_mage: the player's body.
+    if (m_level.player != entt::null) bodies.push_back(Impacts::Watched{m_level.player, Impacts::Kind::Player, {}});
+    // ETHBeginContactCallback_rolling_stone: every rolling stone - placed, or
+    // thrown, or the beholder's rock (both rolling_stone.ent, launchers.json and
+    // boss.json). A placed stone of another entity has no such callback.
+    for (const Demolish::Stone& stone : m_level.demolish.stones) {
+        const Tscn::Node* node = m_data.scene.FindNode(stone.name);
+        if (node != nullptr && !Earthquake::IsEntity(Roles::EntityName(*node), entityOf(Call::StoneImpact))) continue;
+        bodies.push_back(Impacts::Watched{stone.body, Impacts::Kind::Stone, {}});
+    }
+    // ETHBeginContactCallback_minion: minion.ent's, which is every minion but a
+    // ghost_minion.ent. Aimed from its entity point, which stands above its circle.
+    //
+    // And made where the original's is not. spawnMinion adds minion.ent with its
+    // ENTITY POINT on the marker (ETHCallback_minion_spawn #12-19, #51; spawnMinion
+    // #25-39), its feet circle's bottom entity_above_feet_px under it; the port
+    // centres its one circle on the marker (Minions::State::Spawn), so its body
+    // stands EntityAboveCentrePx higher. 51 of the 62 markers put the original's
+    // feet into the floor under them (Q.2 spawn_census): a new body at rest, its
+    // pair begun on its first step (b2World::Step's FindNewContacts, then Collide)
+    // with hitIntensity 0, which the callback's `> 0` (#124-125) never calls on -
+    // where the port's knight falls onto that floor. So the watch looks at a new
+    // minion where the original's stands until its own circle comes down.
+    const glm::dvec2 minionPoint(0.0, -m_level.minions.rules.EntityAboveCentrePx());
+    const glm::dvec2 minionDrop(0.0, m_level.minions.rules.EntityAboveCentrePx());
+    for (const Minions::Minion& minion : m_level.minions.minions) {
+        if (minion.gone) continue;
+        if (!minion.entityName.empty() && !Earthquake::IsEntity(minion.entityName, entityOf(Call::MinionImpact))) continue;
+        bodies.push_back(Impacts::Watched{minion.body, Impacts::Kind::Minion, minionPoint, minionDrop});
+    }
+    return bodies;
+}
+
+void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable*>& struck) {
+    using Earthquake::Call;
+    // A stone Demolish found touching a breakable, which it then took away with
+    // its body before the watch could look: the stone's own callback in that
+    // same contact, read from what the stone carried into the step and the
+    // breakable's node - kept with the watch's begins, after them.
+    for (const Demolish::Breakable* breakable : struck) {
+        const Demolish::Stone* stone = m_level.demolish.FindStone(breakable->brokenBy);
+        if (stone == nullptr) continue;
+        const bool seen = std::any_of(m_impactBegins.begin(), m_impactBegins.end(), [&](const Impacts::Begin& b) {
+            return b.body == stone->body && b.other == breakable->body;
+        });
+        const Tscn::Node* node = m_data.scene.FindNode(breakable->name);
+        const Tscn::Value* position = node != nullptr ? node->Find("position") : nullptr;
+        Impacts::Begin begin;
+        // Only a stone the watch keeps - a rolling_stone - has the callback.
+        if (seen || !m_impacts.Carried(stone->body, begin) || position == nullptr ||
+            position->kind != Tscn::Value::Kind::Vector2) {
+            continue;
+        }
+        begin.other = breakable->body;
+        begin.normal = glm::dvec2(0.0);
+        begin.otherAtPx = glm::dvec2(position->numbers[0], position->numbers[1]);
+        m_impactBegins.push_back(begin);
+    }
+    // Whose begin it is, for the log: the player, or the stone's or the minion's
+    // own node name (a minion answers to its marker's).
+    const auto nameOf = [this](const Impacts::Begin& begin) -> std::string {
+        if (begin.kind == Impacts::Kind::Player) return "the player";
+        for (const Demolish::Stone& stone : m_level.demolish.stones) {
+            if (stone.body == begin.body) return stone.name;
+        }
+        for (const Minions::Minion& minion : m_level.minions.minions) {
+            if (minion.body == begin.body) return minion.name;
+        }
+        return "a body";
+    };
+    // Each begin, turned into its row's call where the row calls on it.
+    for (const Impacts::Begin& begin : m_impactBegins) {
+        Call call = Call::PlayerImpact;
+        glm::dvec2 along = begin.normal;
+        if (begin.kind != Impacts::Kind::Player) {
+            // The stone's and the minion's callbacks overwrite the normal with the
+            // line between the two entity points (D11_check C55).
+            call = begin.kind == Impacts::Kind::Stone ? Call::StoneImpact : Call::MinionImpact;
+            const glm::dvec2 apart = begin.otherAtPx - begin.atPx;
+            const double length = glm::length(apart);
+            along = length > 0.0 ? apart / length : glm::dvec2(0.0);
+        }
+        const std::string other = EntityNameOf(begin.other);
+        // At what it came along that line fastest since it last met or left
+        // anything: the engine's solver brakes a closing pair before it meets
+        // (Impacts::kRecentSteps).
+        const double hit = Earthquake::HitIntensity(m_quakeRules, begin.Approaching(along), along);
+        const bool calls = Earthquake::ImpactCalls(m_quakeRules, call, hit, other);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "impact " << Earthquake::KeyOf(call) << " of " << nameOf(begin)
+                                             << " on " << (other.empty() ? std::string("a body") : other) << " hit " << hit
+                                             << (calls ? "" : ", no call") << " on tick " << m_ticks << std::endl;
+        if (calls) QueueQuake(call, hit);
+    }
+}
+
 void MagicPortalsLayer::quakeTick() {
     if (!levelShown()) {
         // A menu is another state: the generator waits for the next level, and
         // nothing is drawn.
         m_quakeCalls.clear();
         m_quakeOffsetUnits = 0.0;
+        m_quakeFrameUnits = 0.0;
+        m_quakeFramePending = false;
         return;
     }
     latchDoorQuakes();
@@ -6480,6 +6603,16 @@ void MagicPortalsLayer::quakeTick() {
     // clock does (earthquake.json generator._clock).
     const double movePx = m_quake.Update(m_quakeRules, m_layerClockMs);
     m_quakeOffsetUnits = Earthquake::ToUnits(m_quakeRules, movePx);
+    // The original trembles once per frame it draws, so every tremble is drawn.
+    // The port trembles on its tick, and a frame may run several: a tremble is
+    // kept for the next frame until one has drawn it, and a tick with none
+    // clears only what a frame has already drawn.
+    if (m_quakeOffsetUnits != 0.0) {
+        m_quakeFrameUnits = m_quakeOffsetUnits;
+        m_quakeFramePending = true;
+    } else if (!m_quakeFramePending) {
+        m_quakeFrameUnits = 0.0;
+    }
     for (const QuakeCall& made : m_quakeCalls) {
         const Earthquake::CallRule& rule = m_quakeRules.Of(made.call);
         if (rule.when == Earthquake::When::AfterUpdate) m_quake.Start(m_quakeRules, rule.intensity * made.scale);
@@ -6519,13 +6652,16 @@ void MagicPortalsLayer::liftQuake(entt::registry& registry) {
 void MagicPortalsLayer::shakeView(entt::registry& registry) {
     using namespace Supersonic;
     liftQuake(registry);
-    if (m_quakeOffsetUnits == 0.0 || !levelShown()) return;
+    // This frame draws the held tremble, and that is it drawn: the next tick
+    // with none may clear it.
+    m_quakeFramePending = false;
+    if (m_quakeFrameUnits == 0.0 || !levelShown()) return;
     if (m_camera == entt::null || !registry.valid(m_camera)) return;
-    const float dy = quakeWorldDy(m_quakeOffsetUnits);
+    const float dy = quakeWorldDy(m_quakeFrameUnits);
     auto& camera = registry.get<CameraComponent>(m_camera);
     m_quakeDrawn.cameraRestY = camera.position.y;
     camera.position.y += dy;
-    m_quakeDrawn.units = m_quakeOffsetUnits;
+    m_quakeDrawn.units = m_quakeFrameUnits;
     m_quakeDrawn.onCamera = true;
     // StaticSky places every sky and the satellite from GetCameraPos() AFTER the
     // generator has moved it (Game::preLoop #281-287 against #272-279), so they
@@ -6812,7 +6948,12 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
 
     const double dtMs = static_cast<double>(fixedDelta) * 1000.0;
     if (m_loaded) {
-        // The app has just stepped physics. So first what follows a step...
+        // The app has just stepped physics. The pairs it has just brought
+        // together first, read before anything after the step moves or breaks a
+        // body - Box2D calls a begin-contact callback inside the step itself.
+        m_impactBegins = m_impacts.AfterStep(registry, Earthquake::ToUnits(m_quakeRules, m_quakeRules.touchPx),
+                                             static_cast<double>(fixedDelta));
+        // So first what follows a step...
         Game::AfterStep(m_data, registry, m_level, fixedDelta);
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
@@ -6999,6 +7140,10 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     // StaticSky::update's order: every sky placed (syncSprites, just now), and
     // only then its scroll moved on, so the next tick draws what this one left.
     if (m_sky.running) Sky::Advance(m_skyRules, m_sky, static_cast<double>(fixedDelta));
+    // Last: what each body the impact rows watch carries into the step, as the
+    // tick has steered it (the original's callbacks read the velocity the last
+    // frame left). Read only.
+    m_impacts.BeforeStep(registry, impactBodies());
 }
 
 // ---- the pause ----------------------------------------------------------------

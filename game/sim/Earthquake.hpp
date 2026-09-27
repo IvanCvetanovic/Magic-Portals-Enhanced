@@ -29,6 +29,8 @@
 #include <string>
 #include <vector>
 
+#include <glm/glm.hpp>
+
 namespace MagicPortals::Earthquake {
 
 // Where a call stands in the original's frame against the generator's update:
@@ -69,6 +71,12 @@ enum class Call : std::size_t {
     NoPortalTap,
     ShotBlocked,
     ShotFailedInField,
+    // The bodies' own impacts (D11 rows 4, 8 and 25): the player's, a rolling
+    // stone's and a minion's begin contacts, each called with its row's factor
+    // times the contact's hitIntensity (Impacts.hpp finds the contacts).
+    PlayerImpact,
+    StoneImpact,
+    MinionImpact,
     Count
 };
 
@@ -101,6 +109,15 @@ struct Rules {
     // past this bias.
     int mouthLeg = 0;
     double mouthBiasAbove = 0.0;
+    // The impact rows. A contact's hitIntensity is its approach speed, in level
+    // px a second, over hitPxPerUnit; a row calls where that is above its
+    // `hit_above`, with its `intensity` as the factor. touchPx is how near two
+    // surfaces are touching, a bare literal in screen px as capPx is.
+    double hitPxPerUnit = 0.0;
+    double touchPx = 0.0;
+    std::array<double, kCalls> hitAbove{};
+    std::array<std::vector<std::string>, kCalls> spares{}; // entity names a row's callback passes over, exactly
+    std::array<std::string, kCalls> entity{};              // the entity whose callback a row is
 
     const CallRule& Of(Call call) const { return calls[static_cast<std::size_t>(call)]; }
 };
@@ -138,6 +155,15 @@ bool IsEntity(const std::string& nodeEntityName, const std::string& entity);
 
 // Screen px to the level's units, by the screen the port takes (R12).
 double ToUnits(const Rules& rules, double px);
+
+// A contact's hitIntensity: `velocityPx` (level px a second) along `direction`, a
+// unit vector, over hit_px_per_unit - dp2(GetLinearVelocity, normal) /
+// getScale() as the three callbacks compute it (D11_check C47).
+double HitIntensity(const Rules& rules, const glm::dvec2& velocityPx, const glm::dvec2& direction);
+
+// Whether an impact row calls on a contact of `hit` with an entity named
+// `otherEntity`: above its hit_above, and the other not one it passes over.
+bool ImpactCalls(const Rules& rules, Call call, double hit, const std::string& otherEntity);
 
 // Whether a dark dragon `phaseMs` into its APPEARING path, whose legs hold
 // `legHoldsMs` each, is on dark_dragon_mouth's leg past its bias: the frames the

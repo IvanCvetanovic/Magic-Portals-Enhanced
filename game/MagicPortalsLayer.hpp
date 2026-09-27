@@ -30,6 +30,7 @@
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
 #include "sim/Hud.hpp"
+#include "sim/Impacts.hpp"
 #include "sim/LevelEnd.hpp"
 #include "sim/Lighting.hpp"
 #include "sim/Loading.hpp"
@@ -322,6 +323,16 @@ public:
     // reads, and every tap mapped through it, stays at rest (D11 section 3).
     const Earthquake::Generator& Quake() const { return m_quake; }
     double QuakeOffsetUnits() const { return m_quakeOffsetUnits; }
+    // The move the next frame draws: the last tremble until one frame has drawn
+    // it, however many ticks came after it without one; then the last tick's.
+    double QuakeFrameUnits() const { return m_quakeFrameUnits; }
+    // The pairs that began to touch in the last step, as the impact rows read
+    // them (sim/Impacts.hpp): every begin of the player, a stone and a minion,
+    // whether or not it called.
+    const std::vector<Impacts::Begin>& ImpactBegins() const { return m_impactBegins; }
+    // The entity name of the node a body was built from; empty for a body no
+    // node places (the player, a thrown stone, a rock, a minion).
+    std::string EntityNameOf(entt::entity body) const;
     // A startEarthquake call, landed on its row's side of this tick's update
     // (Earthquake::When). Every wired event reaches the generator through here
     // (latchSimQuakes, latchDoorQuakes); public so that a suite can shake a level
@@ -2178,12 +2189,13 @@ private:
     //
     // The generator is TICK state and the shake is FRAME state. Each tick the
     // calls its events made land on their sides of one update (quakeTick), which
-    // gives the camera's move for that tick; each frame adds that move to the
+    // gives the camera's move for that tick; each frame adds the move to the
     // camera the engine has just drawn between ticks, and to the sky and the
-    // satellite pinned to it (shakeView). So a tremble is one tick long whatever
-    // the frame rate, as the original's is one frame at 60 fps, and it is never
-    // smeared by the interpolation. Nothing here reaches Game::Level, the tick's
-    // camera or the state hash.
+    // satellite pinned to it (shakeView). A tremble is held until a frame has
+    // drawn it, so every one is drawn however many ticks a frame runs - for one
+    // frame at 60 fps or below, as the original's is - and it is never smeared by
+    // the interpolation. Nothing here reaches Game::Level, the tick's camera or
+    // the state hash.
     //
     // The level's tick itself: what OnFixedUpdate ran before the earthquake,
     // which now wraps it.
@@ -2194,6 +2206,12 @@ private:
     // And the switched doors, which Puzzle moves in BeforeStep: read at the
     // tick's end, so a door's call lands on the tick it starts or lands.
     void latchDoorQuakes();
+    // The bodies' own impacts (rows 4, 8 and 25): the begins the step made, and
+    // a stone's touch of a breakable that Demolish took this tick (`struck`),
+    // which the watch cannot see once the breakable is gone.
+    void latchImpacts(const std::vector<const Demolish::Breakable*>& struck);
+    // Who the impact rows watch, as the step is about to be taken.
+    std::vector<Impacts::Watched> impactBodies() const;
     // The update, between the tick's two sides of calls; on a tick with no level
     // shown, nothing (the generator waits, and nothing is drawn).
     void quakeTick();
@@ -2211,6 +2229,16 @@ private:
     // (earthquake.json generator._state; LEFT FOR THE OWNER).
     Earthquake::Generator m_quake;
     double m_quakeOffsetUnits{0.0}; // the move this tick gave the drawn camera
+    // What the next frame draws. A tremble is kept until a frame has drawn it,
+    // so a frame that runs two ticks or more draws the one its ticks made; the
+    // 70 ms beat is five ticks, so no frame the engine runs (five at most) holds
+    // two.
+    double m_quakeFrameUnits{0.0};
+    bool m_quakeFramePending{false};
+    // The impact rows' contacts: who carried what into the step, and the pairs
+    // that began to touch in it.
+    Impacts::Watch m_impacts;
+    std::vector<Impacts::Begin> m_impactBegins;
     struct QuakeCall {
         Earthquake::Call call{Earthquake::Call::Fall};
         double scale{1.0};
