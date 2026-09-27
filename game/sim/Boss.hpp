@@ -28,9 +28,10 @@
 //   Box2D's BeginContact, which the original's callback runs on, would still
 //   have reported it. A rock a portal holds is taken by it rather than landing.
 //
-// Not ported: the sounds, the earthquake, the smoke and the explosions'
-// pictures, the final blast's line of sight, and the blast's effect on anything
-// but the player.
+// Not ported: the sounds, the smoke and the explosions' pictures, the final
+// blast's line of sight, and the blast's effect on anything but the player. The
+// earthquakes are the layer's, read from `hits`, `gone` and `rocksBroken`
+// (earthquake.json).
 
 #include "sim/Launchers.hpp"
 #include "sim/Portals.hpp"

@@ -80,6 +80,11 @@ struct State {
     std::vector<Despawner> despawners;
     std::vector<Thrown> live; // thrown and not yet removed, oldest first
     int removed = 0;
+    // Of those, the ones a despawner took rather than the box: what
+    // ETHBeginContactCallback_rolling_stone destroys a stone for touching
+    // destroyier.ent, and shakes the screen for (earthquake.json
+    // stone_despawned). Counted for the picture; nothing here reads it.
+    int despawned = 0;
 
     // Before the step: each launcher whose time has come throws. Returns what
     // was thrown this tick, which is also in `live`.

@@ -44,8 +44,8 @@
 // NOT built, and recorded in data/keys.json: the fly-in animation the key plays
 // once it is spent (a WaypointManager of timed waypoints with smoothEnd filters -
 // presentation, in a renderer-free port), fixKeyAngle, the idle linearMotion bob,
-// the three vanish entities, the earthquake, the pick and unlock sounds, and the
-// red key's achievement.
+// the three vanish entities, the pick and unlock sounds, and the red key's
+// achievement. The earthquake is the layer's, read from `opened` (earthquake.json).
 
 #include "sim/Carry.hpp"
 #include "sim/LevelBuilder.hpp"

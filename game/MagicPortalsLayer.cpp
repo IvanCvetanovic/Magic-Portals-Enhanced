@@ -244,6 +244,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Tiers::LoadRules(m_paths.portData + "/tiers.json", m_tierRules, error) &&
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
                       Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
+                      Earthquake::LoadRules(m_paths.portData + "/earthquake.json", m_quakeRules, error) &&
                       Hud::LoadRules(m_paths.portData + "/ui.json", m_hudRules, error) &&
                       Pause::LoadRules(m_paths.portData + "/ui.json", m_pauseRules, error) &&
                       LevelEnd::LoadRules(m_paths.portData + "/ui.json", m_levelEndRules, error) &&
@@ -257,6 +258,8 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     // ui.json is the port's own and committed, so a HUD that will not read is a
     // fault in this repository and stops the start as loudly as a missing level.
     m_hudReady = read;
+    // As EarthquakeGenerator's constructor leaves it, once for the whole run.
+    m_quake.Reset(m_quakeRules);
     if (!read) {
         m_loadError = error;
         m_hudError = error;
@@ -584,6 +587,10 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     // of a level would hear every counter fall back to zero as if it had
     // happened - a retry would play the whole level's sounds at once.
     m_watch = Watch{};
+    // And the earthquake's two, for the same reason. The generator itself is
+    // NOT reset: the original's is one for the game (m_quake).
+    m_quakeWatch = QuakeWatch{};
+    m_doorWatch = DoorWatch{};
     // The next level is compared against itself, not against this one. Without
     // this, its first frame reports every sprite of the level just unloaded as
     // having changed - the same stale-baseline fault the sound watch above has.
@@ -2839,6 +2846,8 @@ void MagicPortalsLayer::placeCamera(entt::registry& registry) {
     camera.aspect = m_aspect;
     camera.orthoHeight = Units::ToMetres(m_viewHeightPx);
     registry.get<Supersonic::TransformComponent>(m_camera).position = camera.position;
+    // Written whole, so whatever shake a frame left on it is gone with it.
+    m_quakeDrawn.onCamera = false;
 }
 
 bool MagicPortalsLayer::ScreenToLevelPx(const entt::registry& registry, const glm::vec2& screenPoint,
@@ -2856,8 +2865,11 @@ bool MagicPortalsLayer::ViewportToLevelPx(const entt::registry& registry, const 
     if (viewport == nullptr || m_camera == entt::null || !registry.valid(m_camera)) return false;
     const glm::vec2 size = viewport->Size();
     if (size.x <= 0.0f || size.y <= 0.0f) return false;
-    // The camera as THIS viewport would draw it, whatever shape it last had.
+    // The camera as THIS viewport would draw it, whatever shape it last had -
+    // and AT REST: a frame's shake is the picture's, and the original maps every
+    // portal tap before its generator moves the camera (earthquake.json _about).
     Supersonic::CameraComponent camera = registry.get<Supersonic::CameraComponent>(m_camera);
+    if (m_quakeDrawn.onCamera) camera.position.y = m_quakeDrawn.cameraRestY;
     camera.aspect = size.x / size.y;
     const Supersonic::Ray ray = Supersonic::Raycast::ScreenPointToRay(localPoint, size, camera);
     // The level is the plane z = 0. The ray is met there, rather than trusting
@@ -5475,7 +5487,13 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     // 1. The no-portal sign: a level entity, so drawn with the scene, under all
     //    of the UI and both blacks. At full opacity - its see-through look is
     //    the PNG's own alpha.
-    if (m_sign.present && !m_sign.image.empty()) add(m_sign.onView, m_sign.image, white(1.0));
+    if (m_sign.present && !m_sign.image.empty()) {
+        // An entity in the original's world, so a frame's shake moves it with
+        // the world: up the view on a forth, as the camera goes down.
+        Hud::Rect sign = m_sign.onView;
+        sign.min.y -= m_quakeDrawn.units;
+        add(sign, m_sign.image, white(1.0));
+    }
 
     // 2. The tutorial's rings, which ScreenPad draws from its UPDATE and so
     //    ahead of every draw; centred on the pads' corners, sliding with them.
@@ -6061,6 +6079,251 @@ void MagicPortalsLayer::latchSimEffects() {
     }
 }
 
+// ---- THE EARTHQUAKE -------------------------------------------------------------
+//
+// EarthquakeGenerator (sim/Earthquake.hpp): every startEarthquake call whose event
+// the simulation has, landed on its side of one update a tick, and the camera the
+// frame draws moved by what that update gave. earthquake.json has the decode of
+// the generator and of every row; D11 and its check are where it came from.
+//
+// WHERE A CALL LANDS. The original's frame runs the physics step and its contact
+// callbacks, then the dynamic entities' callbacks, then the controllers - the
+// camera, the portal manager, THE GENERATOR, the sky, the game state - and last
+// the static entities' callbacks. So a call from before the generator trembles
+// the frame it is made (when one is due), and one from after it the next frame at
+// the earliest; and a call between a forth and its back is halved before it is
+// shown. The port's tick is that frame: its events are read after the step, each
+// is queued with its row's side, and quakeTick runs the update between the sides.
+//
+// WHAT MOVES. The camera the frame is drawn from, after the engine has drawn it
+// between ticks - so the move is the whole tick's and never smeared - and the sky
+// and satellite, which StaticSky places from the camera the generator has moved,
+// and so hold still on the screen while the level moves under them. The HUD is
+// the screen's and never moves. The camera the TICK reads stays at rest, so a tap
+// lands where it would without the shake, as the original's portal taps do.
+
+bool MagicPortalsLayer::levelShown() const {
+    // Where the original's game state runs its controllers: a level, under its
+    // pause and its popups, and under the finished and lost screens it keeps
+    // running behind. Not a menu: that is another state, which has no generator.
+    return m_loaded && (m_screen == Screen::None || m_screen == Screen::Finished || m_screen == Screen::Dead);
+}
+
+void MagicPortalsLayer::QueueQuake(Earthquake::Call call, double scale) {
+    m_quakeCalls.push_back(QuakeCall{call, scale});
+    // Said with the tick, so a capture's shake can be traced to its event.
+    SUPERSONIC_LOG_INFO("Magic Portals") << "earthquake " << Earthquake::KeyOf(call) << " at "
+                                         << m_quakeRules.Of(call).intensity * scale << " on tick " << m_ticks
+                                         << std::endl;
+}
+
+void MagicPortalsLayer::latchSimQuakes() {
+    if (!m_loaded) return;
+    using Earthquake::Call;
+    const Game::Level& level = m_level;
+
+    QuakeWatch now;
+    now.valid = true;
+    now.fell = level.hazards.playerDied && level.hazards.diedByFalling;
+    now.blasts = level.fire.blasts;
+    if (level.boss.beholder.has_value()) {
+        now.beholderGone = level.boss.beholder->gone;
+        now.beholderHits = level.boss.beholder->hits;
+    }
+    now.rocksBroken = level.boss.rocksBroken;
+    now.darkDragonGone = level.darkDragon.gone;
+    now.darkDragonFired = level.darkDragon.fired;
+    now.darkDragonPhase = level.darkDragon.phase;
+    now.ghostGone = level.ghost.gone;
+    // A ghost's shot ends by striking or by reaching its range, and either way
+    // leaves the list it was fired into.
+    now.ghostShotsEnded = level.ghost.shotsFired - static_cast<int>(level.ghost.shots.size());
+    now.breakablesBroken.reserve(level.demolish.breakables.size());
+    for (const Demolish::Breakable& breakable : level.demolish.breakables) {
+        now.breakablesBroken.push_back(breakable.broken ? char{1} : char{0});
+    }
+    now.despawned = level.launchers.despawned;
+    now.minionsKilled = level.minions.killed;
+    now.doorsUnlocked = level.keys.opened;
+    now.diamondsHeld.reserve(level.diamonds.diamonds.size());
+    for (const Diamonds::Diamond& diamond : level.diamonds.diamonds) {
+        now.diamondsHeld.push_back(!diamond.gone && diamond.owner != entt::null ? char{1} : char{0});
+    }
+    now.struck = level.diamonds.struck;
+    now.wallsGone = level.torch.wallsGone;
+
+    // The first latch of a level sets the mark, as the sound watch's does.
+    if (!m_quakeWatch.valid) {
+        m_quakeWatch = std::move(now);
+        return;
+    }
+    const QuakeWatch& was = m_quakeWatch;
+
+    // Which breakables this tick took that are breakable_walls: the one entity
+    // both wall rows are callbacks of.
+    std::vector<const Demolish::Breakable*> wallsBroken;
+    if (now.breakablesBroken.size() == was.breakablesBroken.size()) {
+        for (std::size_t i = 0; i < now.breakablesBroken.size(); ++i) {
+            if (now.breakablesBroken[i] == 0 || was.breakablesBroken[i] != 0) continue;
+            const Demolish::Breakable& breakable = level.demolish.breakables[i];
+            const Tscn::Node* node = m_data.scene.FindNode(breakable.name);
+            if (node != nullptr && Earthquake::IsEntity(Roles::EntityName(*node), m_quakeRules.wallEntity)) {
+                wallsBroken.push_back(&breakable);
+            }
+        }
+    }
+
+    // BEFORE THE UPDATE, in the frame's order: the begin-contact callbacks inside
+    // the physics step first...
+    for (const Demolish::Breakable* wall : wallsBroken) {
+        // By a stone's touch, which is the wall's contact callback; a script's
+        // destroy() (the dark dragon's summon) sets the same datum with no contact.
+        if (level.demolish.FindStone(wall->brokenBy) != nullptr) QueueQuake(Call::WallStruck);
+    }
+    for (int i = was.despawned; i < now.despawned; ++i) QueueQuake(Call::StoneDespawned);
+    for (int i = was.rocksBroken; i < now.rocksBroken; ++i) QueueQuake(Call::BossRockBroken);
+    for (int i = was.minionsKilled; i < now.minionsKilled; ++i) QueueQuake(Call::MinionKilled);
+    // ...then the dynamic entities' own callbacks.
+    for (std::size_t i = 0; i < level.turrets.spentPx.size(); ++i) QueueQuake(Call::FireballEnd);
+    for (int i = was.blasts; i < now.blasts; ++i) QueueQuake(Call::BarrelBlast);
+    for (int i = was.beholderHits; i < now.beholderHits; ++i) QueueQuake(Call::BeholderHurt);
+    if (now.beholderGone && !was.beholderGone) QueueQuake(Call::BeholderDeath);
+    if (level.darkDragon.Alive() && level.darkDragon.phase == DarkDragon::Phase::Appearing &&
+        Earthquake::InMouthLeg(m_quakeRules, level.darkDragon.rules.appearHoldMs, level.darkDragon.phaseMs)) {
+        // Every tick of the leg, re-armed whole each time.
+        QueueQuake(Call::DarkDragonMouth);
+    }
+    // A shot while it was FIGHTING is one at the player. The DAMAGE arm's last
+    // waypoint shoots the torch as it goes back to fighting, and that has none.
+    if (now.darkDragonFired > was.darkDragonFired && was.darkDragonPhase == DarkDragon::Phase::Fighting) {
+        QueueQuake(Call::DarkDragonShot);
+    }
+    if (now.darkDragonGone && !was.darkDragonGone) QueueQuake(Call::DarkDragonDeath);
+    for (int i = was.ghostShotsEnded; i < now.ghostShotsEnded; ++i) QueueQuake(Call::EnemyShotEnd);
+
+    // AFTER IT: the game-state controller, then the static entities' callbacks.
+    if (now.fell && !was.fell) QueueQuake(level.noGravity ? Call::FallNoGravity : Call::Fall);
+    for (int i = was.doorsUnlocked; i < now.doorsUnlocked; ++i) QueueQuake(Call::DoorUnlocked);
+    if (now.diamondsHeld.size() == was.diamondsHeld.size()) {
+        for (std::size_t i = 0; i < now.diamondsHeld.size(); ++i) {
+            if (now.diamondsHeld[i] == 0 || was.diamondsHeld[i] != 0) continue;
+            QueueQuake(level.diamonds.diamonds[i].fire ? Call::FireDiamondPicked : Call::ShockDiamondPicked);
+        }
+    }
+    for (int i = was.struck; i < now.struck; ++i) QueueQuake(Call::ShockStrike);
+    for (int i = was.wallsGone; i < now.wallsGone; ++i) QueueQuake(Call::LightWallGone);
+    for (const Demolish::Breakable* wall : wallsBroken) {
+        // destroyEffectScale, where the node sets it above 0 (#16-31); else 1.
+        double scale = 1.0;
+        if (const Tscn::Node* node = m_data.scene.FindNode(wall->name)) {
+            double datum = 0.0;
+            const Tscn::Value* value = node->Meta(m_quakeRules.wallScaleKey);
+            if (value != nullptr && value->AsNumber(datum) && datum > 0.0) scale = datum;
+        }
+        QueueQuake(Call::WallDestroyed, scale);
+    }
+    if (now.ghostGone && !was.ghostGone) QueueQuake(Call::GhostDeath);
+
+    m_quakeWatch = std::move(now);
+}
+
+void MagicPortalsLayer::latchDoorQuakes() {
+    if (!m_loaded) return;
+    DoorWatch now;
+    now.valid = true;
+    for (const Puzzle::SwitchedDoor& door : m_level.channels.doors) {
+        now.opening.push_back(door.motion.opening ? char{1} : char{0});
+        now.progress.push_back(door.motion.progress);
+    }
+    if (m_doorWatch.valid && now.opening.size() == m_doorWatch.opening.size()) {
+        for (std::size_t i = 0; i < now.opening.size(); ++i) {
+            if (now.opening[i] != m_doorWatch.opening[i]) {
+                QueueQuake(now.opening[i] != 0 ? Earthquake::Call::DoorOpening : Earthquake::Call::DoorClosing);
+            } else if (now.opening[i] == 0 && m_doorWatch.progress[i] > 0.0f && now.progress[i] <= 0.0f) {
+                // Back where the level put it: it lands shut.
+                QueueQuake(Earthquake::Call::DoorLanded);
+            }
+        }
+    }
+    m_doorWatch = std::move(now);
+}
+
+void MagicPortalsLayer::quakeTick() {
+    if (!levelShown()) {
+        // A menu is another state: the generator waits for the next level, and
+        // nothing is drawn.
+        m_quakeCalls.clear();
+        m_quakeOffsetUnits = 0.0;
+        return;
+    }
+    latchDoorQuakes();
+    for (const QuakeCall& made : m_quakeCalls) {
+        const Earthquake::CallRule& rule = m_quakeRules.Of(made.call);
+        if (rule.when == Earthquake::When::BeforeUpdate) m_quake.Start(m_quakeRules, rule.intensity * made.scale);
+    }
+    // On the layer's clock, which runs on under a pause as the original's wall
+    // clock does (earthquake.json generator._clock).
+    const double movePx = m_quake.Update(m_quakeRules, m_layerClockMs);
+    m_quakeOffsetUnits = Earthquake::ToUnits(m_quakeRules, movePx);
+    for (const QuakeCall& made : m_quakeCalls) {
+        const Earthquake::CallRule& rule = m_quakeRules.Of(made.call);
+        if (rule.when == Earthquake::When::AfterUpdate) m_quake.Start(m_quakeRules, rule.intensity * made.scale);
+    }
+    m_quakeCalls.clear();
+    if (movePx != 0.0) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << "earthquake tremble " << movePx << " px (" << m_quakeOffsetUnits
+                                             << " units) on tick " << m_ticks << std::endl;
+    }
+}
+
+float MagicPortalsLayer::quakeWorldDy(double units) {
+    // The level's y runs down the screen and the world's up it (Units::ToWorld).
+    return Units::ToMetres(-units);
+}
+
+void MagicPortalsLayer::liftQuake(entt::registry& registry) {
+    using namespace Supersonic;
+    // The engine puts back what it interpolates - the tick's pose at the tick's
+    // start, the drawn pose at every frame - so only what it does not is put
+    // back by hand: everything, when a suite runs the layer alone.
+    if (m_quakeDrawn.onCamera && m_camera != entt::null && registry.valid(m_camera)) {
+        const auto* interpolated = registry.try_get<InterpolatedCameraComponent>(m_camera);
+        if (interpolated == nullptr || !interpolated->captured) {
+            registry.get<CameraComponent>(m_camera).position.y = m_quakeDrawn.cameraRestY;
+        }
+    }
+    for (const auto& [quad, restY] : m_quakeDrawn.quads) {
+        if (!registry.valid(quad)) continue;
+        const auto* interpolated = registry.try_get<InterpolatedTransformComponent>(quad);
+        if (interpolated != nullptr && interpolated->captured) continue;
+        if (auto* transform = registry.try_get<TransformComponent>(quad)) transform->position.y = restY;
+    }
+    m_quakeDrawn = QuakeDrawn{};
+}
+
+void MagicPortalsLayer::shakeView(entt::registry& registry) {
+    using namespace Supersonic;
+    liftQuake(registry);
+    if (m_quakeOffsetUnits == 0.0 || !levelShown()) return;
+    if (m_camera == entt::null || !registry.valid(m_camera)) return;
+    const float dy = quakeWorldDy(m_quakeOffsetUnits);
+    auto& camera = registry.get<CameraComponent>(m_camera);
+    m_quakeDrawn.cameraRestY = camera.position.y;
+    camera.position.y += dy;
+    m_quakeDrawn.units = m_quakeOffsetUnits;
+    m_quakeDrawn.onCamera = true;
+    // StaticSky places every sky and the satellite from GetCameraPos() AFTER the
+    // generator has moved it (Game::preLoop #281-287 against #272-279), so they
+    // go with the camera and stay where they were on the screen.
+    for (const DrawnSprite& drawn : m_sprites) {
+        if ((drawn.sky < 0 && !drawn.satellite) || drawn.quad == entt::null || !registry.valid(drawn.quad)) continue;
+        if (auto* transform = registry.try_get<TransformComponent>(drawn.quad)) {
+            m_quakeDrawn.quads.emplace_back(drawn.quad, transform->position.y);
+            transform->position.y += dy;
+        }
+    }
+}
+
 void MagicPortalsLayer::latchSimSounds() {
     if (!m_loaded) return;
 
@@ -6245,6 +6508,17 @@ void MagicPortalsLayer::stopMusic(entt::registry& registry) {
 }
 
 void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta) {
+    // What the last frame shook off the camera first, so the tick reads it at
+    // rest: a tap is mapped before the generator moves anything, as the original's
+    // portal manager maps one before g_earthquakeGen runs.
+    liftQuake(registry);
+    fixedTick(registry, fixedDelta);
+    // Then the generator's update, between what this tick's events called it
+    // with from before it and what they called it with from after.
+    quakeTick();
+}
+
+void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
     using Supersonic::Input;
     ++m_ticks;
     // The layer's own clock: what the original's absolute GetTimeF reads give.
@@ -6329,6 +6603,7 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
         // branches below, which may put a screen up.
         latchSimSounds();
         latchSimEffects();
+        latchSimQuakes();
         // ...and the moment the exit reports, the beat before the medal; the
         // moment the player dies, the beat before the lost screen. Should both
         // come on one tick, reaching the exit wins: the remake's order of two
@@ -7062,6 +7337,10 @@ void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
     // And what this frame believes it is drawing. Before the camera's early
     // return, like the rest of it.
     reportSprites(registry);
+    // And the earthquake: this tick's move added to the camera the engine has
+    // just drawn, and to the sky pinned to it. After everything above, which
+    // places the world and never the camera; before the HUD, whose sign it moves.
+    shakeView(registry);
     // And the HUD, once a FRAME: the screen overlay is drawn and cleared every
     // frame, so a HUD emitted on the tick would vanish from a frame with no tick
     // and double on one with two. It reads the last tick's state and changes

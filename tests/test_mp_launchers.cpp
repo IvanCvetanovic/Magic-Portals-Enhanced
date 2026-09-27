@@ -224,6 +224,9 @@ void ADestroyierTakesAStoneBack() {
         CHECK_MSG(run.registry.valid(stone) != withDespawners,
                   std::string(withDespawners ? "with" : "without") + " the despawners, the stone " +
                       (run.registry.valid(stone) ? "stays" : "goes"));
+        // And counted as the destroyier's, which is what the earthquake's
+        // stone_despawned row is fired from.
+        CHECK_EQ(run.level.launchers.despawned, withDespawners ? 1 : 0);
     }
 }
 
@@ -247,6 +250,9 @@ void OutOfTheCullBoxIsTakenBack() {
     // stone only while it is there.
     const bool gone = !run.registry.valid(stone);
     CHECK_MSG(gone, gone ? std::string() : "past the box the stone is at " + Px(PxOf(run, stone)));
+    // Taken back by the box, which the original has no counterpart for: not a
+    // destroyier's, so no stone_despawned shake.
+    CHECK_EQ(run.level.launchers.despawned, 0);
 }
 
 // ---- Through a portal pair, onto a wall -------------------------------------

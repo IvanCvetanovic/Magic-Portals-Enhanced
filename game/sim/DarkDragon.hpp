@@ -34,8 +34,9 @@
 // by hand: Fire::Blast matches what it grabs by body, and this boss has none.
 //
 // NOT BUILT, and recorded in data/darkdragon.json: every sound, the animation and
-// its particles, the emissive flash, the scattered explosions, the earthquakes,
-// the neck bob, and the ghost_utility_spawn.ent dropped beside the key.
+// its particles, the emissive flash, the scattered explosions, the neck bob, and
+// the ghost_utility_spawn.ent dropped beside the key. The earthquakes are the
+// layer's, read from `phase`, `phaseMs`, `fired` and `gone` (earthquake.json).
 
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"

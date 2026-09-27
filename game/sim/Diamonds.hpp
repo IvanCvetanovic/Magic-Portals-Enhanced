@@ -67,8 +67,10 @@
 // places none at all, which makes picking that one up a one-way choice.
 //
 // Not built, and recorded in data/diamonds.json: the alpha, the idle pulse, the
-// effect entities, the sounds, the earthquakes, the remake's 28 x 24 trigger box
-// that the original does not use, and the drop the original does on shallLeave.
+// effect entities, the sounds, the remake's 28 x 24 trigger box that the
+// original does not use, and the drop the original does on shallLeave. The
+// earthquakes are the layer's, read from each diamond's owner and `struck`
+// (earthquake.json).
 
 #include "sim/Carry.hpp"
 #include "sim/Roles.hpp"

@@ -15929,3 +15929,347 @@ depth) and **K8** does not arise (no random draw).
   them: the pause's have `ScheduleDevPress`, and the end screens' have nothing. They are not on the shot's path.
 - **When the original fires, on touch-down or touch-up**, is not resolved by L1 (section 2: "not resolved"). The
   port fires on the touch's down edge, for a real press and a scheduled tap alike, as it did before this step.
+
+## Step 121 - the earthquake the original shakes its camera with, and every call of it whose event the port already has (built)
+
+**TRACK B, and a step this run adds (Q.1; not in 00_order section 7).** Built in the worktree
+`Magic-Portals-Remake-vis4` (branch `visuals-d`, from `87aa67f`, step 120), whose build reads the frozen level data
+in `out/snap_pre8`. Numbered in track B's range so it cannot collide with track A's steps; the merge renumbers it.
+Game, tests and data only: new `game/sim/Earthquake.{hpp,cpp}` and `game/data/earthquake.json`;
+`game/MagicPortalsLayer.{hpp,cpp}`; a counter in `game/sim/Launchers.{hpp,cpp}`; `tests/test_mp_camera.cpp`,
+`tests/test_mp_layer.cpp`, `tests/test_mp_launchers.cpp`; notes only in `darkdragon.json`, `diamonds.json`,
+`effects.json`, `keys.json`, `torch.json` and five sim headers. No engine change (the pin stays `4bfcf67`), no
+converter change. **No gameplay change**: the shake moves only the camera a frame is drawn from, and the argument and
+the measurements are below. Spec: decode D11 and its check D11_check (which wins where they differ), and the gates
+this run's task gave the step.
+
+**BLOCKERS, checked first.** D11 and D11_check are both in `briefs/decode/`; the listing is the md5 they cite. The
+footage gate needs a `--tap` capture to light 4-29's torch, which step 120 (T.1, committed `87aa67f`) made possible.
+00_order's 13.3 (`black_bar`) is not a blocker: 8.13's 13.3 row says there is "nothing to draw while the port has
+no earthquake", so 13.3 waits on this step and not the other way round. No ruling blocks it. Nothing unmet.
+
+**THE DECODE, as built** (earthquake.json's `generator`, every number with its citation):
+- One generator for the game, `g_earthquakeGen`. A call OVERWRITES its amplitude with
+  `clamp(0.35 x intensity x s, 0, 50)` screen px and touches nothing else (`startEarthquake` 110309..110425).
+- Each update that is due - 70 ms or more since the last tremble - trembles once: FORTH, the camera down by the
+  amplitude, which is saved; or BACK, the camera up by the SAVED value, and only then the amplitude halves. Below
+  1 px it stops, tested on every update. y only; no random source anywhere in the class (`update` 109902..110265;
+  D11_check C8, C9). Built literally in `sim/Earthquake`, so a call between a forth and its back is halved before it
+  is shown (F6's -5, +5, -10, +10 ...) and a sub-pixel call leaves the next shake opening on a back (C23) without
+  any code of their own.
+- **Where it applies**: after the camera's clamp and the portal manager's tap mapping, before the sky; the next
+  frame's controller writes the camera whole again, so a tremble is a one-frame spike and nothing accumulates.
+
+**THE CHANGE.**
+- `sim/Earthquake` is the generator, renderer-free: `Start` and `Update` on a clock the caller keeps, `ToUnits` by
+  the screen R12 takes, `InMouthLeg` for the dark dragon's re-armed row, and `LoadRules`, strict: every row and every
+  number required.
+- **The generator is tick state; the shake is frame state.** `OnFixedUpdate` is now `liftQuake`, the old body
+  (`fixedTick`), then `quakeTick`, which lands the tick's calls on their two sides of one update on the layer's
+  clock and keeps the move. `OnUpdate` adds that move to the camera the engine has just drawn between ticks
+  (`shakeView`, after `InterpolationSystem::Apply`), and to every sky and satellite quad pinned to it. So a spike
+  lasts one tick of time - the original's one frame at 60 fps - and the interpolation never smears it (D11 section
+  3's hand-off 3). A frame draws the move of the LAST tick it ran: a frame that runs no tick draws the last move
+  again, and a frame that runs two or more loses the moves of its earlier ticks, so below 60 fps some trembles are
+  never drawn (deviation 1). The camera a TICK reads is never moved: the engine puts the tick's
+  pose back at `BeginTick` and rewrites the drawn one at every `Apply`; outside the engine's loop (a suite calling
+  `OnUpdate` 120 times in a row) `liftQuake` puts back the exact values it overwrote, so nothing drifts. `placeCamera`
+  writes the camera whole and forgets the frame's move.
+- **Taps stay at rest.** `ViewportToLevelPx` maps through the camera with the frame's move taken off, so every
+  portal shot is aimed from the rest camera, as the original's portal manager aims it; the help blocks' rects are
+  built from the rest follow and the controls from the viewport, as before.
+- **The HUD does not move** (it is the screen overlay); the no-portal sign, which is a level entity in the original,
+  moves with the world on a shaken frame (`EmitHud`).
+- **Where it runs**: on every tick a level is shown - under the pause, a popup and the finished and lost screens
+  (the original's clock is the wall clock and its controllers ignore the pause) - and not on a menu, where the
+  generator waits. That a shake plays out under a pause follows from the code (`quakeTick` runs on the pause's
+  ticks, and the layer clock advances on them); no capture pauses one.
+- **The calls** (`latchSimQuakes` after `AfterStep`, beside `latchSimEffects`; `latchDoorQuakes` at the tick's end,
+  because Puzzle moves its doors in `BeforeStep`). Each reads a counter or a flag the sims already keep, against the
+  last tick's, and its first tick of a level only sets the mark, as the sound watch does. A call lands BEFORE the
+  update when its caller runs before the generator in the original's frame (a begin-contact callback, a dynamic
+  entity's callback) and AFTER it when it runs after (the game-state controller, a static entity's callback; each
+  caller's `.ent` `static` read): earthquake.json `calls._when`.
+
+| D11 row | earthquake.json | intensity | side | read from |
+|---|---|---|---|---|
+| 1 | `fall`, `fall_no_gravity` | 20; 5 on `no_gravity` | after | `hazards.playerDied` with `diedByFalling`, the tick it turns |
+| 5 | `barrel_blast` | 50 | before | `fire.blasts` |
+| 5 | `beholder_death` | 50 | before | the beholder's `gone` |
+| 5 | `dark_dragon_death` | 50 | before | `darkDragon.gone` |
+| 5 | `ghost_death` | 50 | after | `ghost.gone` |
+| 7 | `wall_struck` | 30 | before | a `breakable_wall` broken by a stone (`brokenBy` names one) |
+| 9 | `stone_despawned` | 6 | before | `launchers.despawned`, new: the culls a destroyier made |
+| 11 | `boss_rock_broken` | 5 | before | `boss.rocksBroken` |
+| 12 | `wall_destroyed` | 20 x `destroyEffectScale` | after | every `breakable_wall` broken (a stone's, or the dark dragon's summon: 4-32's wall 2217, 40) |
+| 15 | `beholder_hurt` | 24 | before | the beholder's `hits` |
+| 16 | `dark_dragon_mouth` | 10, every tick | before | APPEARING, on leg 3 past bias 0.2 of `appearing.hold_ms` (3700..4500 ms) |
+| 17 | `dark_dragon_shot` | 15 | before | `darkDragon.fired` up while it was FIGHTING (the DAMAGE arm's shot at the torch has none) |
+| 18 | `door_landed` | 4 | after | a closing door's `progress` reaching 0 |
+| 19, 20 | `door_opening`, `door_closing` | 4 | after | a door's `motion.opening` turning over |
+| 22 | `fireball_end` | 5 | before | each `turrets.spentPx`, where step 85 adds `small_explosion` |
+| 23 | `enemy_shot_end` | 10 | before | the ghost's `shotsFired - shots.size()` |
+| 24 | `minion_killed` | 20 | before | `minions.killed` |
+| 26 | `door_unlocked` | 20 | after | `keys.opened` |
+| 27, 29 | `shock_diamond_picked`, `fire_diamond_picked` | 15 | after | a diamond's owner set, by its kind |
+| 28 | `shock_strike` | 25 | after | `diamonds.struck` |
+| 31 | `light_wall_gone` | 20 | after | `torch.wallsGone` |
+
+  The wall rows fire only for `breakable_wall` in either spelling (`breakable_wall.ent` on 7 nodes): the torch's
+  `light_wall.ent` has its own row, and the carrancas and markers a `breakable` flag lets a stone break in the port
+  call neither.
+
+**NOT WIRED, with their owners** (earthquake.json `_not_wired`): rows 2, 3, 6 and 14 (the budget-0 `red_waves`, a
+shot an antiportal agent or an anti-projectile wall kills in flight, a doomed shot in a field) wait on R23 and R15,
+gameplay no batch owns in this run; their pictures are 10.1's for rows 2, 6 and 14, and row 3's
+(`antiportal_explosion`) is 00_order 8.13's unowned row. Rows 4, 8, 10 and 25 (every player, stone and minion impact,
+and a stone crushing a minion) need a contact's approach speed, which the engine's `PhysicsSystem::Contact` does not
+report; it can be computed port-side - the body's pre-step velocity dotted with the contact normal, as the port's
+own contact tests already work (`game/sim/Boss.cpp:199-230`, `OverlapSphere`) - with no engine change (D11_check
+C48; the normal's sign for contacts other than landings is D11's open item). Candidate owner for all four: 11.1,
+which owns the stone rows' pictures (D11 section 4); D11's table names none for rows 4 and 25. Row 21 (a burned carranca,
+`Turrets.hpp:14-15`) and row 30 (4-01's rocket) need systems the port does not have; row 13 (`shaker`) is placed by
+no level. **Row 9 is wired only in part**: the port's `Launchers` culls thrown stones alone, so 3-20's placed stone,
+which the original destroys on its `destroyier` with the same 6, is never culled here and never shakes
+(`Launchers.hpp:19-21`).
+
+**THE GATES.** Before = the committed build `55cf0ec8` (step 120's, the binary of `T.1/after/sweep`). After = this
+step's build `628400a9`. Captures and measurements: `out/parity/visuals/Q.1/` (`capture_gates.sh`,
+`capture_sweep.sh`, `compare_sweep.sh`, `explain_sweep.sh`, `measure_shake.py`; `after/gates/4-29_shake.json`, `4-29_spikes.json`).
+The verification's fix (below, gate 2b) changed `tests/test_mp_layer.cpp` alone, so its build linked only
+`test_mp_layer.exe`: `MagicPortals.exe` is still `628400a9`, the binary gates 3 and 5 were measured on
+(`Q.1/fix1/`). The second verification's fix changed this record alone (`Q.1/fix2/`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**, 93 steps, exit 0 (`Q.1/build.log`); a new source in `MagicPortalsSim` relinked every suite and `MagicPortals.exe` (`628400a9`) |
+| (1) The shake curve, unit-tested against D11's numbers: amplitude, duration, decay, axis | the decoded generator, and D11 section 1c's table (D11_check C11) | `test_mp_camera` 15, no earthquake | **passes: `test_mp_camera` 100, 0 failures.** earthquake.json's numbers pinned (0.35, 50, 1, 70, 0.5, forth first, 2.8125) and all 24 rows' intensity and side. A 20: 19.6875 px (7 u) forth, then -19.6875, +9.84, -9.84, +4.92, -4.92, +2.46, -2.46, +1.23, -1.23, on ticks 0, 5, ... 45 (750 ms), then stopped with the phase back on forth. The table's pairs for 3, 4, 5, 6, 7, 10, 15, 20, 24, 25, 30, 40, 50 (2, 2, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6) and 60 capped at 50 px. F6's overwrite (5, then 50 and 20 before the back: +4.92, -4.92, +9.84, ...); a sub-pixel call leaving the next shake opening on a back (C23); a call every tick holding 9.84 whole (row 16); due at exactly 70 ms, every 5th frame at 60 fps and every 3rd at 30; the mouth leg 3700 < t < 4500 ms. The AXIS is y by construction: the generator returns one number, a y move, and the layer adds it to y alone |
+| (2) The shake moves only what the original's moves | the drawn camera and the sky pinned to it move; the tick's camera, the taps and the HUD do not; nothing piles up | - | **passes: `test_mp_layer` 1719, 0 failures** (1606 + 13, + 100 in gate 2b). `TheShakeMovesTheDrawnCameraAndTheSkyWithIt` runs level30 as the app does (BeginTick, the tick, EndTick, 4 x Apply and OnUpdate): the 20's ten trembles on the 5-tick beat; on every frame of the 60 ticks after the call the camera drawn is exactly the one the engine drew plus the tick's move, the sky quad moves by the same, the tick's camera is the follow's, and a tap on a shaken frame maps to the point it maps to at rest (worst under 1e-3 u); a before_update row (a fireball's 5) trembles 1.75 u on its own tick. `AShakeDrawnOutsideTheEngineLoopDoesNotPileUp`: 120 `OnUpdate`s of one 50's forth leave the camera exactly one forth (17.5 u) from rest, a tap maps as at rest, and the next tick reads the camera at rest. `TheLightWallGoingShakesTheView`: 4-29's torch lit by a scheduled tap, the wall gone on tick 160, trembles 7, -7, 3.5, -3.5, 1.75, -1.75, 0.875, -0.875, 0.4375, -0.4375 u on ticks 161 to 206. C40's sequence for a stone through a wall (`wall_struck` then `wall_destroyed` on one tick) is pinned in gate 2b; before the fix it was only in the suite's log |
+| (2b) Every wired call, from its own event, through the layer (added by the fix for verification 1, which found that 14 of the 24 rows never fired, and that of the 10 that did only `light_wall_gone` was checked at its site) | each row whose event the port has: on the tick the simulation event happens, its call lands on its row's side of the update with its intensity - an AFTER row leaves the amplitude at exactly its pixels; a BEFORE row shows a forth of exactly its pixels when one is due, undoes the saved value and halves its pixels on a back, waits whole otherwise - and the next tremble is what the machine then owes | 1 row pinned at its site by a check (`light_wall_gone`, on 4-29); 9 only in a log (`barrel_blast`, `door_unlocked`, `fireball_end`, `minion_killed`, `shock_strike`, `wall_struck`, `wall_destroyed`, and `door_opening` and `stone_despawned` in the sweep); the hand-queued 20, 5 and 50 of gate 2 test the generator, not a call site | **passes for 20 of the 24 rows: 100 checks in 8 new `test_mp_layer` cases**, each failing if its event never comes. After rows: `fall` (1-31, the player put under the level: event tick 3, +7 u on 4), `fall_no_gravity` (4-02: +1.75 u), `shock_diamond_picked` (3-16, +5.25 u next tick) then `shock_strike` (25 lands on tick 5; the next tremble undoes the pickup's forth, -5.25 u on 9), `fire_diamond_picked` (3-32, +5.25 u), `door_opening`, `door_closing`, `door_landed` (3-15 left to run: ticks 290, 443, 563, +1.4 u on the next tick each), `door_unlocked` (3-08's key carried to its keyhole: tick 93, +7 u on 94), `light_wall_gone` on 4-32 (tick 169, +7 u on 170) and wall 2217's `wall_destroyed` x 2 (tick 498, +14 u on 499, and nothing on 498 itself: no `wall_struck`, no stone broke it). Before rows, shown on their own tick: `enemy_shot_end` (3-32, the player put past the red line: tick 271, +3.5 u), `minion_killed` (3-09: tick 90, +7 u), `stone_despawned` (1-24: tick 144, +2.1 u), `boss_rock_broken` (1-32 left to run: tick 1714, +1.75 u), `fireball_end` (2-12: tick 180, +1.75 u), `barrel_blast` (2-12: tick 459, one tick after a fireball's forth, so nothing due; the next tremble -1.75 u on 463, that forth undone), `dark_dragon_mouth` (4-32: on all 48 ticks of the leg, 720 to 767, the call lands every tick and every tremble is a whole +-3.5 u, the first +3.5 on 720; no call before the leg) and `dark_dragon_shot` (4-32: tick 1194, +5.25 u). Rows 7 and 12 on one tick (1-9's stone thrown at its wall, broken on tick 18): +10.5 u at once, then -10.5, +3.5, -3.5, +1.75, -1.75, +0.875, -0.875, +0.4375, -0.4375 u every 5th tick - C40's +-29.53 then +-9.84 ... px. Every event tick matches the layer's own `earthquake <row> at <n> on tick <t>` log line (`Q.1/fix1/test_mp_layer_run1.txt`). **Not driven: `beholder_hurt`, `beholder_death`, `ghost_death`, `dark_dragon_death`** - a boss wounded or beaten through the layer, which no case scripts: wired and compiled, exercised by nothing |
+| (3) Footage L1 `L1_out_4-29`: the light wall's shake, reproduced by a `--tap` capture on 4-29 | **D11 section 5 / D11_check C27, C49, re-measured: -20, +20, -10, +10, -5, +5, -2, +2, -1, +1 px, vertical, forth first, the sky at 0, black bands 20/20/10/10/5/5/2 at the bottom on a forth and the top on a back.** The spec's "dx +5, -4, +2, -1" is INDEX / L1.md section 4.3's reading, which D11 section 5 and C51 show was wrong (a dx search on patches the vertical shake had moved) and is not the gate. Tolerance: +-1 px a spike; the spikes 70-122 ms apart (L1's 9 intervals run 61-122, mean 87) | **no shake**: on the committed build frames 150-215 hold still against each other (no world shift over 0.5 px), and the wall goes on frame 160 | **passes.** `--level level28c --tap 247,141@60`, every frame to 220, each after frame against the before frame of the same number (the runs are the same deterministic run): **10 frames differ, 161, 166, ... 206, every 5th (83.3 ms), and no other** (f161 `4afe0be7`, the first forth; f220 `370d5db0` in both runs). World dy (SAD search of the brick room, parabola-refined): **-19.78, +19.79, -9.90, +9.91, -4.96, +4.96, -2.43, +2.43, -1.14, +1.14 px** - against the decode's 19.69 / 9.84 / 4.92 / 2.46 / 1.23 within 0.104 px, against L1's whole pixels within 0.43. The sky box (x 800-1080, y 20-360) is **byte-identical on all 10**; the restart button's 574 dark icon pixels are **unchanged on all 10**. The only pixels that do change inside the HUD buttons' box are at x 1170-1179, where 4-29's red moon shows through the translucent button (max channel diff 54, verification 2): the moon is none of the sky or satellite quads the port pins, and it **moves with the world on the spike frames in the port and in the original alike**, measured by its left edge (`Q.1/fix2/moon_edge.txt`, verification 2's `moon_edge.py`): port f160 -> f161 -20, f165 -> f166 +20, f170 -> f171 -10 px; L1 #74 -> #75 +22, #77 -> #78 -10 px (fit error 1.1 and 0.8 px), and #72 -> #73, the first spike, -16 px at a poor fit (6.4 px mean edge error, on the wall's dust frame). So it is right, and not a pinning fault. The strip the shake uncovers: **20, 10, 5, 3, 1 rows at the bottom on the forths and 20, 10, 5, 2, 1 at the top on the backs** - the original's band heights - but it shows the PINNED SKY where the original draws its black bars (deviation 4; 13.3's). **One frame late against the wall**: the wall vanishes on frame 160 and the first spike is frame 161, where L1 shows both on #73 (deviation 5) |
+| (4) Footage F16: the 4-32 light wall's "+-10 then halving" | the same event's sequence, within the same tolerance | no shake | **NOT MET** (deviation 15; LEFT FOR THE OWNER). F16's light wall reads -10, +10, -5, +5, -3/-2, +2, -2/-1, +1 (C50), where the decode and L1 give 20 first. The port opens with a +-19.8 pair on 4-29 (-19.78, +19.79) and with +7 u (19.69 px) on 4-32 (gate 2b, tick 170); FROM ITS SECOND PAIR on it is -9.90, +9.91, -4.96, +4.96, -2.43, +2.43, -1.14, +1.14: F16's whole sequence within 0.6 px. What F16 does not show is that first pair, which is D11_check C52, UNSETTLED: either the phase leak of a sub-pixel call made earlier (the generator reproduces it - gate 1 - but nothing in the port calls under 1 px, rows 4 and 25 being unwired) or two dropped capture frames. Not faked by seeding the phase. **Recording deviation 15 does not make the port reproduce F16**: this gate closes only if the owner accepts the deviation, or if C52 is settled as dropped frames (reading (b), under which the port already shows what F16 would have). F16's frame times lean to (a) without settling it (deviation 15, `Q.1/fix2/f16_timing.txt`). **A 4-32 capture was NOT RUN**: its torch at (210, 34) is off the view from the spawn at (710, 48), so lighting it needs the player walked left across the level, which no capture script here does. No frame shows a 4-32 shake. Four of the five rows its light wall, summoned wall and dragon call - the light wall's 20, wall 2217's 40, the mouth leg's 10 and the first shot's 15 - are pinned through the layer by gate 2b's `TheDarkDragonsLevelShakesTheView` (the player put under the torch and the torch shot by a tap); `dark_dragon_death` is exercised by nothing. That case's light wall also opens at +7 u (19.69 px), so F16's +-10 opening is not reproduced on 4-32 either (verification 1 had found that this row's first wording claimed sweep and suite logs that do not exist: the sweep's 4-32 log has no earthquake line) |
+| (5) The 128-level f420 sweep | changes ONLY where a wired event fires before f420, each explained | `T.1/after/sweep` (`55cf0ec8`), 128 pngs checked against their log's md5 | **passes: 128 of 128 byte-identical** (`Q.1/after/compare_sweep.txt`), 0 differ, 0 missing; all 128 exit 0, `Vulkan validation layers: ACTIVE` in 128 logs and no validation message in any. **12 levels do fire wired calls before f420** (`explain_sweep.txt`, `tremble_ticks.txt`): 1-24 and 1-25 `stone_despawned` (4 and 3 thrown stones into a destroyier), 2-05, 2-08, 2-09, 2-12, 2-14, 2-22, 2-23 and 2-32 `fireball_end` (1 to 5 each), 3-09 `minion_killed` (a knight onto its killer floor, tick 90) and 3-15 `door_opening` (step 76's knight on `button_1666`, tick 290, trembling from 291 as an after_update call should). **None changes its f420 because no tremble falls on tick 420** - a spike is one tick, and frame N draws tick N's move (gate 3) - the nearest being 1-24's back on 419 (its forth on 414) and 2-08's forth on 416 (its back due on 421). The other 116 levels make no call at all before f420 |
+| (6) The suites | `test_mp_camera` and every touched sim's suite pass | `test_mp_camera` 15, `test_mp_launchers` 98, `test_mp_layer` 1606 | **pass: `test_mp_camera` 100, `test_mp_launchers` 101 (+3: the destroyier's cull counted, the box's not), `test_mp_layer` 1719 after the fix (1619 before it); 0 failures each** |
+| No gameplay change | nothing the simulation reads moves | - | **passes**: the generator reaches no `Game::Level`, body, timer or test; `ViewportToLevelPx` maps at rest (gate 2); the only sim edit is a counter nothing in the simulation reads (the layer reads it for the shake). The 128 sweep frames that did not change, and the 210 of 220 4-29 frames that are byte-identical to the committed build's, say the same |
+
+**RECORDED DEVIATIONS.** Four, and **this step is COMMITTED WITH THEM under the owner's delegated decision.** One
+is a gate that is not met (gate 4); the other three are not gate failures. Each points to the numbered item below
+that carries its detail; those items keep their numbers, which the gate rows cite.
+- **(4) F16 4-32 light wall - NOT MET.** Required: the shake opens at +-10 px, then halves, each within +-1 px.
+  Measured: the first pair -19.78 / +19.79 px on 4-29 (gate 3's capture; verification 3's re-read of the
+  byte-identical frames gives -19.78 / +19.78) and +7.0 u = 19.69 px at tick 170 on 4-32 (`test_mp_layer`); from
+  the second pair on, -9.90, +9.91, -4.96, +4.96, -2.43, +2.43, -1.14, +1.14 px, within 0.6 px of F16. Cause:
+  D11_check C52 is unsettled - either (a) the phase leak of an earlier sub-pixel call, which only rows 4 and 25 can
+  make and both are unwired, or (b) two dropped capture frames. The phase is deliberately not seeded. Follow-up: the
+  owner's ruling on deviation 15, or a light-wall clip with a visible frame cadence to settle C52. Row 4 (the
+  player's impact, about 5 px, 3 pairs, on every hard landing per F14) can be wired port-side from the player's
+  pre-step velocity dotted with the contact normal, with no engine change (C48); candidate owner 11.1 (LEFT FOR THE
+  OWNER). Detail: deviation 15.
+- **Deviation 1 - a frame that runs two or more ticks draws only its last tick's shake move** (not a gate failure;
+  no `--fixed-step` gate sees it). `quakeTick` overwrites `m_quakeOffsetUnits` every tick and `shakeView` reads it
+  once per `OnUpdate`, and the engine runs up to 5 ticks in one frame (`engine/src/core/SupersonicApp.cpp:74`,
+  `:1389`), so at a steady 30 fps every other tremble is never drawn in real play. Owning follow-up: this step's
+  LEFT FOR LATER item - keep a nonzero move pending until one `OnUpdate` has drawn it, with a `test_mp_layer` case
+  of two ticks in one frame. Detail: deviation 1.
+- **Deviation 4 - the strip a shake uncovers shows the pinned sky where the original draws black bars** (not a gate
+  failure): 20/10/5/3/1 rows on 4-29's forths (20/10/5/2/1 on its backs). Owner: 13.3's black bars, which build on
+  this step. Detail: deviation 4.
+- **The unwired D11 rows** (not gate failures, recorded): rows 2, 6 and 14 wait on R23 / R15 and on 10.1; row 3 is
+  00_order 8.13's unowned row; rows 4, 8, 10 and 25 need the contact's impact speed, which can be computed
+  port-side with no engine change (C48; candidate owner 11.1); rows 21 and 30 need systems the port lacks; row 13 is
+  placed by no level; row 9 on 3-20 never fires, because the port never culls the placed stone. `beholder_hurt`,
+  `beholder_death`, `ghost_death` and `dark_dragon_death` are wired, but no case drives them (12.1 / 12.2; the
+  beholder's two rows have no owning step in 00_order). Detail: NOT WIRED above, and LEFT FOR THE OWNER.
+
+**THE NUMBERED DEVIATIONS AND DECISIONS**, the detail behind the four above (this step cites each as "deviation N").
+1. **The clock is the layer's tick clock, not the wall clock.** The original's `GetTime` is wall-clock ms; the port's
+   generator reads `m_layerClockMs`, which advances by the fixed tick on every tick a level is shown, so a replay
+   and a capture shake the same twice. It runs on under a pause, a popup and the end screens, as the original's
+   does; its 70 ms falls on every 5th tick (83.3 ms), the original's every 5th frame at 60 fps. A spike lasts one tick
+   (16.7 ms) whatever the display rate, where the original's lasts one of ITS frames.
+   **Below 60 fps the port loses trembles the original draws** (verification 2; code read, not measured). A frame
+   draws only the move of the last tick it ran (`quakeTick` overwrites the move every tick, `shakeView` draws it once
+   a frame), and the engine runs up to `kMaxPhysicsStepsPerFrame` = 5 ticks in one frame
+   (`engine/src/core/SupersonicApp.cpp:74`, `:1389`). So at a steady 30 fps (2 ticks a frame) the trembles on the
+   5-tick beat alternate between a frame's first tick and its last, and every other one - all the forths, or all the
+   backs - is never drawn; at 60 Hz with jitter a spike is lost now and then; a frame of 0 or 1 ticks loses nothing,
+   and under `--fixed-step` (one tick a frame) no capture or gate of this step is affected. The original updates
+   once a frame, so at 30 fps it draws every tremble, for 33 ms. Not fixed in this step (LEFT FOR LATER): the fix is
+   to keep a nonzero move pending until one `OnUpdate` has drawn it, with a `test_mp_layer` case of two ticks in one
+   frame.
+2. **The screen is R12's 720 px.** The 50 px cap and the 1 px stop are bare pixel literals, so their size in level
+   units depends on the screen; the port takes 720 / 256 = 2.8125 (R12, and step 86's reading of a bare literal,
+   extended by analogy from depths to pixel amounts, as D11 section 7 asks the step to state): cap 17.78 u, stop
+   0.356 u. On a 1080 px phone the original's cap is 11.85 u and some shakes run a pair longer (C13); no footage is
+   1080p.
+3. **The generator is kept across a restart and into the next level**, as the original's is (its script module is
+   never rebuilt: C3). A shake running when a level ends plays out over the next one's first frames; a menu freezes
+   it. Resetting it at a load is the owner's call (LEFT FOR THE OWNER).
+4. **The strip a shake uncovers shows the pinned sky, not black.** On a level 256 u tall (94 of 128) a forth uncovers
+   the amplitude's rows at the bottom and a back at the top (gate 3: 20/10/5/3/1 and 20/10/5/2/1). The original draws
+   `black_bar.ent` there, over the sky and under the HUD (D11 section 2, measured). The bars are 13.3's, which this
+   step now unblocks; they also need 6.2's dropped `type` / `layerDepth` (the backlog's 6.2 row).
+5. **One frame against the wall.** The light wall's call lands after the update (a static callback), so its first
+   tremble is the tick after the wall goes, exactly as the original's is the frame after its callback runs. But the
+   original's callback deletes the wall after the frame is mapped, so its wall and its first spike leave and arrive
+   on the same frame (#73); the port takes the wall away on its own tick. Frame 160 has no wall, frame 161 the spike.
+   The shake is on the decode's frame; the wall is the port's one frame early, as a static callback's deletion has
+   always been here, and it is not moved in this step.
+6. **The original's other readers of the shaken camera stay at rest in the port**, each a difference of at most one
+   frame by at most the spike (D11_check section 2, C36): the help-block tap rects (this frame's camera in the
+   original), the lift's and `hand_tap`'s and the arrows' hit tests (not built as tap targets here), the beholder's
+   appear test and its spikes' screen cull, `no_portal_sign`'s 100 ms re-aim, 2-32's `dragon_claw` y echo and 4-19's
+   `rocket_landing`. The no-portal SIGN itself moves with the world on a shaken frame, as the original's entity does.
+7. **Row 8 is not wired**, so where a stone breaks a wall the first pair is always row 7's +-29.5 px; the original's
+   stone overwrites it with 2 x hitIntensity above 100 u/s of approach (C40, C59). Decode-only: no clip shows a stone
+   breaking a wall.
+8. **The order of two calls on one side of one tick is the port's**: contacts, then the dynamic callbacks (fireball,
+   barrel, beholder, dark dragon, ghost's shots); then the fall, then the static callbacks. The original's is its scene
+   walk's. It shows only when two different intensities land on one side of one tick.
+9. **The fireball's 5 inherits step 85's timing**: it is read from `turrets.spentPx`, which the port fills on the
+   contact's tick where the original's callback acts a frame later (`latchSimEffects`' note on `small_explosion`, step
+   85): the explosion and its shake stay together, both a frame early.
+10. **SpaceSky is not ported** (sky.json), so on the 19 `space_bg` levels nothing is pinned and the whole background
+    shakes with the level, where the original's space sky would hold still.
+11. **Vibration**: eight sites also vibrate (C46); the desktop port has no vibrator, and each row's `_source` keeps
+    the figure.
+12. **F6's barrel is not reproduced on 2-12**, and not for this step's reason. F6's -5, +5, -10, +10, ... is the
+    fireball's 5, then the barrel's 50 and the wall's 20 before the back (gate 1 reproduces it from those calls). The
+    port's blast takes no wall away (`Fire.hpp`: left out, a gameplay follow-up for the nine chapter-2 levels that
+    place both), so the wall's 20 is never called there, and by the machine the port shows the fireball's pair and
+    then the 50 halved: +-24.6, +-12.3, ... (gate 2b pins its start on 2-12 left to run: the fireball's 5 shown on
+    tick 458, the barrel's 50 landing on 459 with nothing due, and -1.75 u on 463, the fireball's forth undone as the
+    50 halves). The shake is right for the calls it gets; the missing call is the blast's.
+13. **One sim change, and it is not gameplay**: `Launchers::State::despawned` counts the culls a destroyier made
+    (row 9); nothing in the simulation reads it (the layer reads it for the shake), and `test_mp_launchers` pins it
+    both ways.
+14. **A static callback's call is not bucket-limited here.** The original runs a static entity's callback only while
+    its bucket is mapped for drawing: `ETHScene::Update` maps the visible buckets (`ETHScene.cpp:482`, and
+    `MapEntitiesToBeRendered` queues each static entity with a callback there, `ETHScene.cpp:541-574`), then runs
+    exactly those (`ETHScene.cpp:488`, `ETHActiveEntityHandler.cpp:145-165`); a static entity is never always-active
+    (`ETHActiveEntityHandler.cpp:70-92`; 00_order 8.12c). The buckets mapped are those the view overlaps, grown by
+    the scene's clearance factor (0 unless a script sets it, `ETHScene.cpp:98`, `517-524`) and by one bucket on each
+    side when border-bucket drawing is on (`ETHBucketManager.cpp:52-80`); which of the two the original's script
+    sets is not read here. So the original's static-callback rows - every after-update row but the fall's, which is
+    the game-state controller's: `door_lift`, `keyhole`, `shock_diamond`/`fire_diamond`, `light_wall`,
+    `breakable_wall` and `ghost` - come only while that entity's bucket is mapped. The port queues each on the tick
+    its simulation event happens, wherever the entity stands. Display only, and it follows the port's own event
+    timing, which the step does not move; no clip shows an unmapped static entity's event, so no gate measures the
+    difference.
+15. **F16's light wall opens at +-10 px; the port's opens at +-19.7 (gate 4, NOT MET).** F16 (4-32) reads -10, +10,
+    -5, +5, -3/-2, +2, -2/-1, +1: four pairs from 9.84 (D11_check C50). The decode and L1 (4-29) open at 19.69, and
+    so does the port on both levels (gate 3's -19.78, +19.79; gate 2b's +7 u on 4-32's tick 170). From its second pair
+    on, the port is F16's whole sequence within 0.6 px. Why F16 has no first pair is D11_check C52, UNSETTLED:
+    (a) **the phase leak** - an earlier sub-pixel call left the generator on a back, so the wall's 20 opens with an
+    invisible back of the old sub-pixel value and shows its halved 9.84 first (C23); or (b) **two dropped capture
+    frames** that hid the +-19.7 pair. Under (a) the only calls that can be sub-pixel are the impact rows **4** (the
+    player, 0.6 x hitIntensity: under 1 px below 84.7 u/s of approach) and **25** (a minion, 0.8 x: below 63.5 u/s)
+    (C23; row 8's least call is 2 x 2 = 4, which is 1.4 px, and row 10's is 25, which is 8.75 px). Both are unwired: they need a contact's approach
+    speed, which the engine's `PhysicsSystem::Contact` does not report but the port can compute from the body's
+    pre-step velocity and the contact normal, with no engine change (C48); D11 section 4's table names no owner for
+    either, and 11.1 is the candidate. Even wired, the phase would follow the run's own contacts ("effectively uncontrolled in
+    play", C52), so a capture would open at +-10 only if its contacts had left a back. **The port does not seed the
+    phase to fake it**: a seed would pass this one gate while hiding the missing calls, and a seed on every level
+    would break L1's opening at 20 (gate 3), which the same machine gives with the phase on forth. The frame times, as evidence and
+    not a ruling (`Q.1/fix2/f16_timing.txt`, from `F16_dragon_4-32_pts.json`; F16.md's shake row puts the dust at
+    #84, 4.05 s, and C50's re-measure at #79, which is followed here as the check wins): (a) fits - #79, the dust's
+    first frame, carries the invisible back, and #82 (-10) is the first frame 70 ms after it (97 ms; #81, at 62 ms,
+    is not yet due); (b) needs the -20 inside the 58 ms gap before #79 and the +20 inside the 28 ms gap after it,
+    each within a window of about 15 ms, with both intervals at the 70 ms floor, where F16's later intervals run 66
+    to 117 ms. The clip is VFR (one of those intervals reads 66 ms, under the floor), so the timing leans to (a) and
+    does not settle C52. Recording this deviation does not make the port reproduce F16: gate 4 stays NOT MET until
+    the owner accepts it or C52 is settled (LEFT FOR THE OWNER).
+
+**RULINGS APPLIED.** **R12** (the fixed 720 selection) by analogy for the two pixel literals (deviation 2). The
+standing direction that R1-R23 follow what the original does is applied to the two behaviours D11 leaves to the step
+where the original's is decoded - the shake running on under a pause, and the state kept across a restart (both
+recorded, 1 and 3). **R24 and R25** are neither touched nor withdrawn. **K8 does not arise**: the generator draws no
+random number (D11_check C9), so the placement stream and `m_effectRandom` are untouched. **K13 does not arise**: no
+new depth.
+
+**GAMEPLAY: NONE.** The earthquake moves only the camera a frame is drawn from.
+
+**THE VERIFICATION'S FIX.** Verification 1 failed the step on its record: gate 4 claimed that sweep and suite logs
+cover the 4-32 calls, and they do not (the sweep's `4-32_level31c.log` has no earthquake line, and no case fired a
+dark dragon row); and 14 of the 24 wired rows had never fired anywhere, while of the 10 that had, only `light_wall_gone` was
+checked at its site. The fix is test-only:
+eight `test_mp_layer` cases (gate 2b) drive each row's event on a real level through the layer - the level left to
+run, a body put where the event happens, or a tap - and pin the call by what it leaves in the generator on the
+event's tick, so 20 of the 24 rows are now checked at their call sites; the four a boss's wound or death calls
+(`beholder_hurt`, `beholder_death`, `ghost_death`, `dark_dragon_death`) are not driven, and are listed below. Before
+the cases were written, three captures on the unchanged `628400a9` scouted which rows a level fires when only
+waited on (`Q.1/fix1/scout/`: 3-15's doors on 290, 443 and 563; 1-32's rock on 1714; 3-32 nothing). Gate 4's row now
+says what is true, gate 2's C40 sentence points to its check, deviations 12 and 13 are reworded (13: the simulation
+does not read the counter; the layer does), and deviation 14 records the original's bucket-limited static
+callbacks. No game source, data file or other suite changed, and no pixel moved: `MagicPortals.exe` is still
+`628400a9`, so the 4-29 capture and the 128-level sweep stand as measured. The fix's build (`--target
+test_mp_layer`: 3 steps, exit 0, **0 warnings**, `Q.1/fix1/build_layer.log`) relinked `test_mp_layer.exe` alone.
+
+**THE SECOND VERIFICATION'S FIX.** Verification 2 (`Q.1/verify2/`) re-ran the build check, the three suites, the
+4-29 capture and the 128-level sweep (128 of 128 identical, 221 of 221 4-29 pngs identical to the after run), and
+failed the step on gate 4's record: F16's missing opening pair was "PARTLY MET" in the gate row and in neither the
+deviations nor LEFT FOR THE OWNER, so a backlog row built from them would have dropped it. The fix is to the record
+alone: gate 4 now reads **NOT MET**, deviation 15 and an owner item carry it with C52's two readings and F16's frame
+times, and the row says plainly that recording it does not make the port reproduce F16. Its two low findings are
+answered in the record too: THE CHANGE and deviation 1 now say that a frame running two or more ticks draws only the
+last one's move (below 60 fps some trembles are never drawn; fix left for later, because it relinks
+`MagicPortals.exe` and `test_mp_layer.exe` for a case no gate of this step runs, every capture being one tick a
+frame), and gate 3 names the moon that moves inside the HUD buttons' box. **No source, data file or test changed;
+nothing was built or launched**: `MagicPortals.exe` `628400a9`, `test_mp_layer.exe` `c628c6eb`, `test_mp_camera.exe`
+`9a96a0f6` and `test_mp_launchers.exe` `542a6abf` before and after (`Q.1/fix2/binaries_md5_before.txt`,
+`binaries_md5_after.txt`), so every gate stands as measured. The only runs were two python measurements on frames
+already on disk: the moon's edge (gate 3) and F16's frame times (deviation 15).
+
+**SUITES**, run directly, once each: **`test_mp_camera` 100, 0 failures**; **`test_mp_launchers` 101, 0 failures**;
+**`test_mp_layer` 1619, 0 failures** before the fix, and **1719, 0 failures** after it (`Q.1/fix1/test_mp_layer_run1.txt`,
+one run, exe `c628c6eb`). The fix left `test_mp_camera.exe` (`9a96a0f6`) and `test_mp_launchers.exe` (`542a6abf`)
+byte-identical to the binaries the verification ran (`Q.1/verify1/suite_md5.txt`), so their 100 and 101 stand
+and they were not run again. The step touches no other sim's code (Boss, DarkDragon, Diamonds, Keys and Torch changed comments only),
+so no other suite was run; the full ctest was not run, which the step does not need. One text edit came after the
+first suites and captures: earthquake.json's `_not_wired` note (its owners and row 9), which no loader reads.
+
+**SMART APP CONTROL: nothing was refused**, and nothing was deleted or relinked to get past a refusal. One build
+linked every binary. The committed binary `55cf0ec8` ran once (the before capture); the new `MagicPortals.exe`
+`628400a9` ran 129 times (1 gate capture and 128 sweep captures); the three suites once each. The verification
+then launched `628400a9` 129 times more and the three suites once each, and the fix launched `628400a9` 3 times
+(the scouts) and its relinked `test_mp_layer.exe` once. Verification 2 launched `628400a9` 129 times and the three
+suites once each, and its fix launched no Supersonic binary at all: 0 refusals in all.
+
+**THE COMMIT** (text only). The commit added the RECORDED DEVIATIONS list above (the owner's delegated decision to
+commit with gate 4 NOT MET), retitled the numbered list, and replaced the record's "engine gap" / "no owner" wording
+for rows 4, 8, 10 and 25 with D11_check C48's reading - the port can compute a contact's approach speed itself - and
+the candidate owner 11.1, here and in earthquake.json's `_not_wired` note (a note string `Earthquake::LoadRules` does
+not read; the file still parses). No source or test changed and nothing was built or launched: a dry run on a copy
+of `build.ninja` reports no work to do, and `MagicPortals.exe` `628400a9`, `test_mp_layer.exe` `c628c6eb`,
+`test_mp_camera.exe` `9a96a0f6` and `test_mp_launchers.exe` `542a6abf` are the binaries every gate was measured on.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- Whether the generator should be reset when a level loads (deviation 3).
+- **13.3**, the black bars, which the shake now uncovers (deviation 4).
+- The unwired rows and their owners (above); rows 4, 8, 10 and 25 need a contact's approach speed, which can be
+  computed port-side from the body's pre-step velocity and the contact normal, with no engine change (C48); candidate
+  owner 11.1.
+- **Row 4, the player's impact, is visible on every hard landing** (F14: about 5 px, 3 pairs, forth first on the
+  landing frame; D11 section 5) and is gate 4's likely dependency under reading (a) of C52. It can be built port-side
+  from the player's pre-step velocity dotted with the contact normal, with no engine change (D11_check C48).
+  Follow-up owner: 11.1 (candidate).
+- **Gate 4, NOT MET (deviation 15): F16's light wall opens at +-10 and the port's at +-19.7.** The owner's to rule:
+  accept the deviation, or settle D11_check C52 - for instance with a light-wall clip whose frame cadence shows
+  whether frames were dropped. Under (b), dropped frames, the port already matches and the gate closes; under (a),
+  the phase leak, it can match only once rows 4 and 25 are wired, which needs a contact's approach speed - buildable
+  port-side with no engine change (C48), candidate owner 11.1 - and even then only where a run's own contacts leave
+  the phase on a back. The phase is not seeded to fake it.
+- For later: a frame that runs two or more ticks draws only its last tick's move (deviation 1); keep a nonzero
+  move pending until a frame has drawn it, with a `test_mp_layer` case of two ticks in one frame.
+- **Four wired rows exercised by nothing**: `beholder_hurt` (1-32, a stone rising through the beholder),
+  `beholder_death`, `ghost_death` and `dark_dragon_death` (each boss beaten). Their latches compile and follow the
+  pattern gate 2b checks for the other 20, but no suite and no capture wins a boss fight through the layer. A case
+  for `dark_dragon_death` belongs with 12.1 (the dark dragon's picture) and one for `ghost_death` with 12.2; the
+  beholder's two have no owning step in 00_order.
+- For their owners, as D11 section 7 lists them and not edited here: INDEX and L1.md section 4.3's "horizontal" shake;
+  D5_check section 2's bar flash, now measured; INDEX's "first spike negative", which holds only while the phase is
+  on forth. `darkdragon.json`'s "at waypoint 0" note is corrected in this step.
+- For the backlog (the close agent): a Q.1 row in the visuals table, and the deviations above.
+- For the merge's renumbering: "step 121" is written in 9 places outside this document - notes in `darkdragon.json`
+  (2), `diamonds.json` (2), `earthquake.json`, `effects.json`, `keys.json` and `torch.json`, and the comment heading
+  the earthquake cases in `tests/test_mp_layer.cpp`.

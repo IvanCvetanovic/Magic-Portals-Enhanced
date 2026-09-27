@@ -109,11 +109,13 @@ std::vector<entt::entity> State::Cull(entt::registry& registry) {
         const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(thrown.body).position);
         bool out = at.x < launcher.minPx.x || at.x > launcher.maxPx.x || at.y < launcher.minPx.y ||
                    at.y > launcher.maxPx.y;
+        const bool leftTheBox = out;
         for (const Despawner& despawner : despawners) {
             if (out) break;
             out = Trigger::Overlaps(registry, thrown.body, despawner.box);
         }
         if (!out) continue;
+        if (!leftTheBox) ++despawned;
         registry.destroy(thrown.body);
         gone.push_back(thrown.body);
     }

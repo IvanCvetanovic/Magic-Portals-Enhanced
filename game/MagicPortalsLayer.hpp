@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <entt/entt.hpp>
@@ -24,6 +25,7 @@
 #include "sim/Chapters.hpp"
 #include "sim/Credits.hpp"
 #include "sim/Dashboard.hpp"
+#include "sim/Earthquake.hpp"
 #include "sim/Effects.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
@@ -311,6 +313,21 @@ public:
     // The level's camera-pinned sky (sim/Sky.hpp), as the level's art built it:
     // not running on a space level, or where the art was not read.
     const Sky::Controller& SkyController() const { return m_sky; }
+
+    // THE EARTHQUAKE (sim/Earthquake.hpp, earthquake.json): the original's one
+    // camera shake. The generator as the last tick left it, and the move it gave
+    // the DRAWN camera on that tick, in the level's units along y, down positive:
+    // 0 on a tick with no tremble. Only the drawn camera moves - OnUpdate adds it
+    // after the engine has drawn the camera between ticks - so the camera a tick
+    // reads, and every tap mapped through it, stays at rest (D11 section 3).
+    const Earthquake::Generator& Quake() const { return m_quake; }
+    double QuakeOffsetUnits() const { return m_quakeOffsetUnits; }
+    // A startEarthquake call, landed on its row's side of this tick's update
+    // (Earthquake::When). Every wired event reaches the generator through here
+    // (latchSimQuakes, latchDoorQuakes); public so that a suite can shake a level
+    // with no event to hand. `scale` multiplies the row's intensity: a wall's
+    // destroyEffectScale.
+    void QueueQuake(Earthquake::Call call, double scale = 1.0);
 
     // What each particle system is doing, for the suites, in the order they were
     // built: whom it follows, where it draws, and the place its newest life began.
@@ -2082,6 +2099,90 @@ private:
     const ControlButton* controlUnderPointer(const Touch& touch) const;
     // Whether the level being played is the one whose pads pulse long and ring.
     bool tutorialPads() const;
+
+    // ---- the earthquake --------------------------------------------------------
+    //
+    // The generator is TICK state and the shake is FRAME state. Each tick the
+    // calls its events made land on their sides of one update (quakeTick), which
+    // gives the camera's move for that tick; each frame adds that move to the
+    // camera the engine has just drawn between ticks, and to the sky and the
+    // satellite pinned to it (shakeView). So a tremble is one tick long whatever
+    // the frame rate, as the original's is one frame at 60 fps, and it is never
+    // smeared by the interpolation. Nothing here reaches Game::Level, the tick's
+    // camera or the state hash.
+    //
+    // The level's tick itself: what OnFixedUpdate ran before the earthquake,
+    // which now wraps it.
+    void fixedTick(entt::registry& registry, float fixedDelta);
+    // What the tick after the physics step did, against what it looked like
+    // before: every call site whose event is AfterStep's. Beside latchSimEffects.
+    void latchSimQuakes();
+    // And the switched doors, which Puzzle moves in BeforeStep: read at the
+    // tick's end, so a door's call lands on the tick it starts or lands.
+    void latchDoorQuakes();
+    // The update, between the tick's two sides of calls; on a tick with no level
+    // shown, nothing (the generator waits, and nothing is drawn).
+    void quakeTick();
+    // Take off what the last frame added, where the engine has not already put
+    // the tick's pose back; then add this tick's move (shakeView).
+    void liftQuake(entt::registry& registry);
+    void shakeView(entt::registry& registry);
+    // The drawn camera's move as the world's y, which runs up.
+    static float quakeWorldDy(double units);
+    bool levelShown() const;
+
+    Earthquake::Rules m_quakeRules; // the port's earthquake.json
+    // g_earthquakeGen: one for the game, and kept across a restart and into the
+    // next level, as the script module the original keeps it in is never rebuilt
+    // (earthquake.json generator._state; LEFT FOR THE OWNER).
+    Earthquake::Generator m_quake;
+    double m_quakeOffsetUnits{0.0}; // the move this tick gave the drawn camera
+    struct QuakeCall {
+        Earthquake::Call call{Earthquake::Call::Fall};
+        double scale{1.0};
+    };
+    std::vector<QuakeCall> m_quakeCalls; // this tick's, in the order they were made
+    // What the simulation looked like at the last latch, for the calls that are
+    // an edge or a count going up. Counters and one-way flags only; reset with
+    // the level, and its first latch sets the mark rather than firing.
+    struct QuakeWatch {
+        bool valid = false;
+        bool fell = false;
+        int blasts = 0;
+        bool beholderGone = false;
+        int beholderHits = 0;
+        int rocksBroken = 0;
+        bool darkDragonGone = false;
+        int darkDragonFired = 0;
+        DarkDragon::Phase darkDragonPhase = DarkDragon::Phase::Appearing;
+        bool ghostGone = false;
+        int ghostShotsEnded = 0;
+        std::vector<char> breakablesBroken; // char, not bool: see Watch
+        int despawned = 0;
+        int minionsKilled = 0;
+        int doorsUnlocked = 0;
+        std::vector<char> diamondsHeld;
+        int struck = 0;
+        int wallsGone = 0;
+    };
+    QuakeWatch m_quakeWatch;
+    struct DoorWatch {
+        bool valid = false;
+        std::vector<char> opening;
+        std::vector<float> progress;
+    };
+    DoorWatch m_doorWatch;
+    // What the last frame moved and where each thing stood before it, so the
+    // next can put it back where the engine does not: outside its loop, as a
+    // suite runs the layer. Put back, not moved back, so nothing drifts by a
+    // float's rounding however many frames one tick draws.
+    struct QuakeDrawn {
+        double units = 0.0;
+        bool onCamera = false;
+        float cameraRestY = 0.0f;
+        std::vector<std::pair<entt::entity, float>> quads;
+    };
+    QuakeDrawn m_quakeDrawn;
 };
 
 } // namespace MagicPortals

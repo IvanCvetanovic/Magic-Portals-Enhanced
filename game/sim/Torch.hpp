@@ -40,10 +40,11 @@
 // list that is still walking it.
 //
 // Not built, and recorded in data/torch.json: every effect entity and sound, the
-// earthquake, the torch's spin, the wall's alpha fade, and the lighting entire -
+// torch's spin, the wall's alpha fade, and the lighting entire -
 // SetAmbientLight, the background lighten/darken and GenerateLightmaps. This port
 // has no ambient light, which is the same reason art.json's `darkest` block is
-// carried rather than applied.
+// carried rather than applied. The earthquake when the wall goes is the layer's,
+// read from `wallsGone` (earthquake.json).
 
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
