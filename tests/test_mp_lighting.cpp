@@ -23,10 +23,15 @@
 //
 // And, since step 49 (G5), which light reaches which sprite, and the colours a
 // light and its halo are drawn in: arithmetic, which runs anywhere.
+//
+// And, since step 89, eth_particles: not a lighting input, but an eth_ key, so
+// read here - the sidecar holding a node's own <Particles>, which the layer draws
+// in place of its entity's .ent.
 
 #include "TestHarness.hpp"
 
 #include "sim/Lighting.hpp"
+#include "sim/Particles.hpp"
 #include "sim/Tiers.hpp"
 #include "sim/Tscn.hpp"
 
@@ -63,6 +68,7 @@ std::filesystem::path Scratch() {
     std::error_code ec;
     std::filesystem::create_directories(dir / "assets" / "entities" / "normalmaps", ec);
     std::filesystem::create_directories(dir / "assets" / "lightmaps" / "room", ec);
+    std::filesystem::create_directories(dir / "assets" / "sidecars", ec);
     return dir;
 }
 
@@ -93,7 +99,33 @@ std::vector<unsigned char> BmpHeader(int32_t width, int32_t height) {
     return bytes;
 }
 
-// The images the scene below names. Only their headers are read.
+// ASCII as the UTF-16 LE, with a byte-order mark, every .ent of the original's is
+// written in, and the sidecar too.
+std::vector<unsigned char> Utf16(const std::string& text) {
+    std::vector<unsigned char> bytes = {0xFF, 0xFE};
+    for (const char c : text) {
+        bytes.push_back(static_cast<unsigned char>(c));
+        bytes.push_back(0);
+    }
+    return bytes;
+}
+
+// A sidecar in the form 00_order 8.2 has the converter write: one inline
+// <Particles> block wrapped as an .ent, which Particles::Load reads as it reads the
+// original's. One system, every field stated, the values invented.
+const std::string kSidecar =
+    "<?xml version=\"1.0\" ?><Ethanon><Entity><Particles>"
+    "<ParticleSystem particles=\"4\" allAtOnce=\"0\" alphaMode=\"1\" repeat=\"0\" animationMode=\"1\" "
+    "boundingSphere=\"8\" lifeTime=\"1000\" randomLifeTime=\"0\" angleDir=\"0\" randAngle=\"0\" size=\"30\" "
+    "randomizeSize=\"0\" growth=\"0\" minSize=\"0\" maxSize=\"100\" angleStart=\"0\" randAngleStart=\"0\">"
+    "<Bitmap>spark.png</Bitmap><Gravity x=\"0\" y=\"0\" /><Direction x=\"0\" y=\"0\" />"
+    "<RandomizeDir x=\"0\" y=\"0\" /><SpriteCut x=\"1\" y=\"1\" /><StartPoint x=\"0\" y=\"-24\" z=\"24\" />"
+    "<RandStartPoint x=\"0\" y=\"0\" /><Color0 r=\"0.3\" g=\"0.5\" b=\"1\" a=\"1\" />"
+    "<Color1 r=\"0.3\" g=\"0.5\" b=\"1\" a=\"1\" /><Luminance r=\"1\" g=\"1\" b=\"1\" /></ParticleSystem>"
+    "</Particles></Entity></Ethanon>";
+
+// The images the scene below names. Only their headers are read. And the lamp's
+// particle sidecar, which is read whole.
 std::string WriteImages() {
     const std::filesystem::path dir = Scratch();
     Write(dir / "assets" / "entities" / "lamp.png", PngHeader(32, 64));
@@ -104,12 +136,14 @@ std::string WriteImages() {
     Write(dir / "assets" / "entities" / "normalmaps" / "wall_n.png", PngHeader(64, 16));
     Write(dir / "assets" / "lightmaps" / "room" / "add7.png", PngHeader(16, 32));
     Write(dir / "assets" / "lightmaps" / "room" / "big7.png", PngHeader(32, 64));
+    Write(dir / "assets" / "sidecars" / "lamp_particles.ent", Utf16(kSidecar));
     return dir.string();
 }
 
-// Five entities: one with every key the converter writes, a light with no
-// picture and every default, a spriteless marker, a lit wall with no lightmap,
-// and a node with no key at all. The values are invented.
+// Five entities: one with every key the converter writes (and eth_particles,
+// which it is to write), a light with no picture and every default, a spriteless
+// marker, a lit wall with no lightmap, and a node with no key at all. The values
+// are invented.
 const std::string kRoom = R"([gd_scene load_steps=4 format=3]
 
 [ext_resource type="Texture2D" path="res://assets/entities/lamp.png" id="tex_0"]
@@ -138,6 +172,7 @@ metadata/eth_halo = "res://assets/entities/glow.bmp"
 metadata/eth_halo_offset = "1 -15"
 metadata/eth_halo_size = "180 270"
 metadata/eth_halo_brightness = "0.35"
+metadata/eth_particles = "res://assets/sidecars/lamp_particles.ent"
 
 [node name="Sprite" type="Sprite2D" parent="lamp_7"]
 texture = ExtResource("tex_0")
@@ -423,6 +458,20 @@ void EveryKeyIsReadAndEveryAbsenceIsTheDefault() {
             CHECK(Is(l.light->haloSize, 180.0, 270.0));
             CHECK(l.light->haloBrightness == 0.35);
         }
+        // Its particle sidecar, resolved as every res:// path is (step 89), and the
+        // file the layer loads: in the form the converter is to write, it reads as
+        // the original's .ent does.
+        CHECK_MSG(l.particles == res + "/assets/sidecars/lamp_particles.ent", l.particles);
+        std::vector<Particles::System> systems;
+        std::string why;
+        CHECK_MSG(Particles::Load(l.particles, systems, why) && systems.size() == 1,
+                  "the sidecar holds its one system: " + why);
+        if (systems.size() == 1) {
+            const Particles::System& s = systems[0];
+            CHECK_MSG(s.count == 4 && s.bitmap == "spark.png" && s.additive && s.lifeTimeMs == 1000.0 &&
+                          s.startPointZ == 24.0 && s.colour0 == glm::dvec4(0.3, 0.5, 1.0, 1.0),
+                      "and it is the system the sidecar states");
+        }
     }
 
     // A light with no picture, and every halo number at the engine's default.
@@ -432,7 +481,7 @@ void EveryKeyIsReadAndEveryAbsenceIsTheDefault() {
         const Lighting::Look& l = flare->second;
         CHECK(l.z == 0.0 && !l.isStatic && !l.applyLight);
         CHECK(Is(l.emissive, 1.0, 1.0, 1.0));
-        CHECK(l.normal.empty() && l.lightmap.empty());
+        CHECK(l.normal.empty() && l.lightmap.empty() && l.particles.empty());
         CHECK(l.light.has_value());
         if (l.light) {
             CHECK_MSG(Is(l.light->offset, 0.0, 0.0, 0.0) && Is(l.light->colour, 1.0, 1.0, 1.0),
@@ -454,6 +503,7 @@ void EveryKeyIsReadAndEveryAbsenceIsTheDefault() {
         CHECK(l.z == 2.0);
         CHECK(!l.isStatic && !l.applyLight && !l.light.has_value());
         CHECK(Is(l.emissive, 0.0, 0.0, 0.0) && l.colour == glm::dvec4(1.0));
+        CHECK_MSG(l.particles.empty(), "no eth_particles: none, and the layer reads its entity's .ent");
     }
 
     // Lit and static with no lightmap: ambient only, which is the case of 841
@@ -463,7 +513,7 @@ void EveryKeyIsReadAndEveryAbsenceIsTheDefault() {
     if (wall != look.nodes.end()) {
         CHECK(wall->second.isStatic && wall->second.applyLight);
         CHECK_MSG(wall->second.normal == res + "/assets/entities/normalmaps/wall_n.png", wall->second.normal);
-        CHECK(wall->second.lightmap.empty() && !wall->second.light.has_value());
+        CHECK(wall->second.lightmap.empty() && !wall->second.light.has_value() && wall->second.particles.empty());
     }
 
     // No key at all: every default.
@@ -473,7 +523,7 @@ void EveryKeyIsReadAndEveryAbsenceIsTheDefault() {
         const Lighting::Look& l = ring->second;
         CHECK(l.z == 0.0 && !l.isStatic && !l.applyLight && !l.light.has_value());
         CHECK(Is(l.emissive, 0.0, 0.0, 0.0) && l.colour == glm::dvec4(1.0));
-        CHECK(l.normal.empty() && l.lightmap.empty());
+        CHECK(l.normal.empty() && l.lightmap.empty() && l.particles.empty());
     }
 }
 
@@ -568,6 +618,16 @@ void AnythingElseIsRefusedNamingTheLine() {
          "eth_normal on a node that neither draws a sprite nor owns a light", marker.c_str()},
         {"a static flag on a node that draws nothing", Replace(kRoom, markerZ, markerZ + "metadata/eth_static = \"1\"\n"),
          "eth_static on a node that neither draws a sprite nor owns a light", marker.c_str()},
+        // Step 89: a particle sidecar is a path like the others, and stands where
+        // they do.
+        {"a particle sidecar with no file", Replace(kRoom, "sidecars/lamp_particles.ent", "sidecars/gone.ent"),
+         "/assets/sidecars/gone.ent is not a file", lamp.c_str()},
+        {"a particle sidecar that is not res://",
+         Replace(kRoom, "\"res://assets/sidecars/lamp_particles.ent\"", "\"assets/sidecars/lamp_particles.ent\""),
+         "eth_particles: \"assets/sidecars/lamp_particles.ent\" is not a res:// path", lamp.c_str()},
+        {"particles on a node that draws nothing",
+         Replace(kRoom, markerZ, markerZ + "metadata/eth_particles = \"res://assets/sidecars/lamp_particles.ent\"\n"),
+         "eth_particles on a node that neither draws a sprite nor owns a light", marker.c_str()},
     };
 
     int refused = 0;
@@ -645,6 +705,8 @@ struct Totals {
     std::map<std::string, int> lightmapsByLevel;
     std::set<std::string> lightmapFiles; // "<level>/add<id>.png", as referenced
     int lightmapsMisfiled = 0;
+    int particleSidecars = 0;       // nodes naming one (step 89)
+    int particleSidecarsUnread = 0; // of those, the ones Particles::Load will not read
 };
 
 const std::string kLightmapDir = "/assets/lightmaps/";
@@ -709,6 +771,18 @@ void LevelsCarryWhatTheConverterReported() {
             }
             if (l.emissive != glm::dvec3(0.0)) ++t.emissive;
             if (l.z != 0.0) ++t.deep;
+            // Whatever the converter names, the layer can read: at least one
+            // system, every field the reader requires (a missing one fails the
+            // whole file). How many nodes name one is 00_order 8.3's to pin.
+            if (!l.particles.empty()) {
+                ++t.particleSidecars;
+                std::vector<Particles::System> systems;
+                std::string why;
+                if (!Particles::Load(l.particles, systems, why) || systems.empty()) {
+                    ++t.particleSidecarsUnread;
+                    CHECK_MSG(false, level + "/" + node + ": " + l.particles + " reads no system " + why);
+                }
+            }
             if (l.colour != glm::dvec4(1.0)) ++t.coloured;
         }
         if (keep.count(level) != 0) kept.emplace(level, std::move(look));
@@ -734,6 +808,9 @@ void LevelsCarryWhatTheConverterReported() {
     CHECK_EQ(t.deep, 1533);
     CHECK_MSG(t.coloured == 0, "no level instance carries a <Color>");
     CHECK_MSG(t.playersAboveZero == 1, "level8a's main_char is the one player marker off z 0");
+    std::printf("  particles: %d nodes name an eth_particles sidecar, %d of them unreadable\n", t.particleSidecars,
+                t.particleSidecarsUnread);
+    CHECK_EQ(t.particleSidecarsUnread, 0);
 
     // And none elsewhere: every lightmap the converter copied is one a node names,
     // once, so no file sits there that a level does not use.

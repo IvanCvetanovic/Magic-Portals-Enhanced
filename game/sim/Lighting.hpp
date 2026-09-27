@@ -22,7 +22,15 @@
 //                  eth_light_range "units" (the light itself),       a light
 //                  eth_light_offset "x y z", eth_light_color "r g b",
 //                  eth_halo "res://...", eth_halo_offset "x y",
-//                  eth_halo_size "w h", eth_halo_brightness "b"
+//                  eth_halo_size "w h", eth_halo_brightness "b",
+//                  eth_particles "res://..."
+//
+// eth_particles is the one key that is not a lighting input: the node's own
+// <Particles> block, which the converter is to write as an .ent-shaped sidecar
+// (00_order 8.2) so the layer stops reading the systems of the entity's .ent, which
+// differ from what the level places on 45 carriers (systems_9_10 9c). It is read
+// here because an eth_ key the port does not know draws the level unlit, and the
+// layer takes the path from the Look (planning step 89).
 //
 // An absent key is the ENGINE'S default, which is decoded rather than guessed
 // (the defaults below, each cited in the remake's docs). The one exception is
@@ -91,6 +99,9 @@ struct Look {
     std::string normal;          // the normal map on disk; empty = none
     std::string lightmap;        // the baked lightmap on disk; empty = none
     std::optional<Light> light;
+    // The sidecar holding the node's own <Particles>, on disk; empty = the node
+    // names none, and the layer reads its entity's .ent instead (planning step 89).
+    std::string particles;
 };
 
 struct Scene {

@@ -43,6 +43,7 @@ enum class Id : std::size_t {
     HaloOffset,
     HaloSize,
     HaloBrightness,
+    Particles,
     Count,
 };
 
@@ -58,9 +59,9 @@ struct Key {
 };
 
 // The whole vocabulary, as the converter wrote it on 14 September 2026 (the
-// remake's b572fec). A key not listed here is refused, never skipped: a lighting
-// input the port silently ignored would be a level drawn wrong with nothing
-// saying why.
+// remake's b572fec), and eth_particles, which it does not write yet (planning
+// step 89). A key not listed here is refused, never skipped: a lighting input the
+// port silently ignored would be a level drawn wrong with nothing saying why.
 constexpr Key kKeys[] = {
     {"eth_ambient", Id::Ambient, Place::Root},
     {"eth_light_intensity", Id::Intensity, Place::Root},
@@ -78,6 +79,12 @@ constexpr Key kKeys[] = {
     {"eth_halo_offset", Id::HaloOffset, Place::Drawn},
     {"eth_halo_size", Id::HaloSize, Place::Drawn},
     {"eth_halo_brightness", Id::HaloBrightness, Place::Drawn},
+    // Not a lighting input: the node's own <Particles>, as the sidecar file the
+    // converter is to write for it (00_order 8.2). Read here because this is where
+    // an eth_ key is known or refused - an unknown one draws the whole level
+    // unlit - and read into the Look, rather than only let through, so the layer
+    // loads exactly the path this reader found to be a file.
+    {"eth_particles", Id::Particles, Place::Drawn},
 };
 
 constexpr std::size_t kIdCount = static_cast<std::size_t>(Id::Count);
@@ -264,6 +271,7 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
             case Id::HaloOffset: ok = Vector(text, light.haloOffset, why); break;
             case Id::HaloSize: ok = Vector(text, light.haloSize, why); break;
             case Id::HaloBrightness: ok = Scalar(text, light.haloBrightness, why); break;
+            case Id::Particles: ok = Path(text, resRoot, look.particles, why); break;
             case Id::Count: break;
             }
             if (!ok) return fail(node, name + ": " + why);

@@ -15815,3 +15815,137 @@ neither applies nor withdraws them.
 - **The 15 pixels on 4-14** are recorded, not chased. They are one RGB565 step, the smallest difference the 16-bit
   surface can express, and no decoded number is behind them.
 - **The standing sweep baseline is now this step's** `merge_c/sweep`, for both what were the two tracks.
+
+## Step 89 - the particle systems a level places, read from the file its node names, and the entity's .ent only where it names none (built)
+
+The visuals plan's step 8.1 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 8, "reader
+first"; its brief `systems_9_10.md` 9c (4) and section 6's "SE-a"). Track A, on MPR `main` in `build/`, after step
+88. Game-only: the engine submodule stays at `4bfcf67` and no file under `engine/` is touched. Changed:
+`game/sim/Lighting.{hpp,cpp}`, `game/MagicPortalsLayer.{hpp,cpp}` and `tests/test_mp_lighting.cpp`. **The port now
+reads `metadata/eth_particles = "res://..."` on an entity node - the sidecar file the converter is to write each
+placement's own inline `<Particles>` block to (8.2) - and `buildEmitters` draws the systems of that file where a node
+names one, and its entity's `.ent`, exactly as before, where it names none. No converted level carries the key yet,
+so nothing is drawn differently: the 128-level f420 sweep is byte-identical to step 88's. Gameplay: none - a particle
+is carried on the frame and never reaches `Game::Level`, the fixed tick or the state hash.**
+
+**BLOCKERS CHECKED.** 8.1's one blocker, 7.4, is step 87 (`5a60733`), committed and merged by step 88. Section 8.13
+amends no row of 8.1, so section 7's row stands as written: "`test_mp_lighting` accepts the key and refuses a missing
+file; 1-01 f420 byte-identical", widened by this run's instruction to the whole 128-level sweep, since no level
+carries the key. **K10** is the conflict this step is the first half of: the reader must accept the key, and be
+COMMITTED, before 8.2 lets the converter emit it. This step writes no converter code and regenerates nothing:
+`out/levels`, `out/assets`, `out/data` and `out/snap_pre8` are untouched.
+
+**THE OWNER'S STANDING RULINGS.** None of R1-R25 names this step or the particles it reads. **R24 and R25 (step 76)
+remain the owner's to rule**; this step neither applies nor withdraws them.
+
+**WHAT WAS BUILT.**
+- **The key, in the one vocabulary of `eth_` keys.** `{"eth_particles", Id::Particles, Place::Drawn}`
+  (`game/sim/Lighting.cpp:87`), read by the same `Path` as `eth_normal` (`:274`): a quoted `res://` path, resolved
+  against the art root, that names a file, or the level's lighting is refused naming the node's line. `Place::Drawn`:
+  only on an entity node that draws a sprite or owns a light - the brief has the converter write it only on a node
+  that draws. `Lighting.hpp`'s vocabulary comment names it, and says it is the one key that is not a lighting input.
+- **RECORDED DEVIATION: read into the Look, where the brief says "knows and does not use".** 9c (4) has the
+  lighting reader let the key through and `buildEmitters` resolve it a second time against `m_paths.art`. Built
+  instead: `Lighting::Look::particles` holds the resolved path (`Lighting.hpp:104`), `buildSprites` copies it beside
+  `normal` and `lightmap` into `DrawnSprite::particles` (`MagicPortalsLayer.cpp:3306`, `.hpp:948`), and the layer
+  loads exactly the file the reader checked. One parser of the key rather than two that could resolve it
+  differently; the art root is the same `m_paths.art` either way.
+- **`buildEmitters` prefers it** (`MagicPortalsLayer.cpp:736-831`).
+  - A node naming a sidecar: its systems come from that file ONLY. One that will not load, or holds no system, is
+    logged by node and path (`WARN "particles not drawn: ..."`) and is **not** replaced by the `.ent` - the node's
+    own data said what it carries, and a silent fallback would hide a converter fault in 8.2.
+  - A node naming none: its entity's `.ent`, the branch as it was - the same `Load`, the same `Scale`, the same
+    `MakePool` on `m_particleRandom` in the same order - which is what keeps the placement stream and the sweep
+    unmoved.
+  - **The split the brief asks to be commented:** the sidecar is the converter's and is read under `m_paths.art`, while
+    the bitmaps it names are still the original's, read from `m_paths.original`'s `particles/` (the converter copies
+    no particle bitmap: `out/assets` has no `particles/`).
+  - One INFO line, "N placement(s) drew the particle systems their eth_particles names", written only when N > 0, so a
+    level with no key logs exactly what it did before.
+  - What the script adds is untouched and still reads `original/entities/<name>`: `addEntityEmitters` (the loading
+    screen's portal and its vanish, `:2014`, `:2344-2346`) and the effects runtime's `Art::LoadEnt` (`:1179`).
+
+**A CORRECTION TO K10's WORDING (VERIFIED, not built on).** K10 says an unknown key "fails the whole level:
+`Tscn.cpp:413-415` -> `Game.cpp:45-49`, and `Lighting.cpp:65-80` for `eth_` keys". For a `metadata/` key the first
+half does not hold: `Tscn::Parse` takes any `metadata/*` key (`game/sim/Tscn.cpp:411-414`), and a refusal from
+`Lighting::Read` does not refuse the level - `loadLevel` plays it with its lighting off and says so
+(`MagicPortalsLayer.cpp:435-440`, "drawn unlit"). So before this step a level carrying `eth_particles` would have
+played UNLIT, every sprite in its own colours, with its particles still from the `.ent`. That is as wrong as K10
+feared, only quieter; K10's order stands. `scale` (9.1) is a node key, not metadata, and does fail the level as K10
+says.
+
+| Gate (00_order 7, 8.1) | Required | Before (`merge_c/sweep`, step 88) | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (83 build steps, 47 executables relinked). `MagicPortals.exe` `9de1dd95` |
+| `test_mp_lighting` accepts the key | a node carrying `eth_particles` reads, the path resolved | refused: no such key in `kKeys` (`Lighting.cpp:64-81` at `f1769ed`), "eth_particles is not a lighting key the port reads", the level drawn unlit | **passes.** The fixture's lamp carries every key the converter writes plus `eth_particles`, and reads: `Look::particles` is the resolved path, and the file there - in 8.2's form - `Particles::Load`s to its one system as stated (count 4, `spark.png`, added, life 1000, start z 24, colour (0.3, 0.5, 1, 1)); the other four nodes read it empty |
+| `test_mp_lighting` refuses a missing file | refused, naming the node's line | - | **passes: `.../assets/sidecars/gone.ent is not a file`**, at the lamp's line. With it, "not a `res://` path" and "on a node that neither draws a sprite nor owns a light" (the marker): **34 refusals, each naming its line** (31 before) |
+| 1-01 f420 byte-identical | md5 = step 88's | `e2da5131` | **passes: `e2da5131`** |
+| The whole 128-level f420 sweep byte-identical (no level carries the key) | 128 of 128 = `merge_c/sweep` | 128 frames, md5s re-checked against their log lines before use: 128 of 128 match | **passes: 128 of 128 byte-identical** (`8.1/after/sweep`, each md5 matching its log line; `compare_sweep.py`). No level changed, so there is none to explain |
+| Every level still runs | 128 rc=0, validation active and silent | 128 rc=0 | **passes: 128 of 128 rc=0**, `Vulkan validation layers: ACTIVE` in 128 logs, no validation message in any, no stall |
+
+**PROBE, NOT A GATE: the preferred path, on a level where it shows.** Every gate above sees only the fallback,
+since no level carries the key. So one real carrier was given it, outside the converted tree. All 128 `.tscn` were
+copied from `out/levels` to `out/parity/visuals/8.1/probe/levels/` (the 127 others checked byte-identical), and in
+`level7.tscn` (1-08) one line was added to `blue_light_ent_930`:
+`metadata/eth_particles = "res://parity/visuals/8.1/probe/sidecars/blue_light_930.ent"`. That file is entity 930's
+inline `<Particles>` block cut from `level7.esc` and written in 9c (4)'s form, UTF-16 LE with a byte-order mark inside
+the `<Ethanon><Entity>` wrapper (md5 `6a191ab0`). One launch, with `--levels` at the copy and `--art` at `out/`
+(`main.cpp` otherwise takes the art from `levels/..`). `blue_light.ent` itself carries no system, so whatever draws
+there came from the sidecar. The implementer kept no generator beside `probe/`; the independent check rebuilt it as
+`8.1/verify1/probe/make_probe.py` (cut, copy, patch) and `run_probe.sh` (the one launch), and got the same sidecar
+bytes (`6a191ab0`) and the same frame (`bb93d5ca`) - those two are what 8.3 re-runs.
+- rc 0, validation active and silent, the level read LIT (no "drawn unlit"), and the log's one new line: "1
+  placement(s) drew the particle systems their eth_particles names".
+- Against the same frame without the key (`8.1/after/sweep/1-08_level7_f420.png`, equal to `merge_c`'s): **4,404 px
+  changed, all inside one box 74 x 75 px** (x 215-288, y 96-170) on the lamp's head, and nothing else in the frame.
+  The halo, whose brightness now follows the orb's live share instead of the 1 an owner with no system gets
+  (`Lighting::ParticleRatio(0, 0)`), is back at 1 by f420, as 9c predicted: its 4 particles live 1000 ms and repeat.
+- `bluelight.py`'s orb window (60 x 60 px, 77 px above the node): pixels over 230 **0 -> 2,299**, p95 204 -> 255,
+  mean 155.5 -> 231.5. The original's six library frames of 1-08 read **1,340 to 2,672**. 8.3's gate is >= 1,000 on
+  levels 4, 7 and 21; this previews it on one level and measures nothing for it - 8.3 measures the converter's own
+  sidecars (`probe/measure.json`).
+- The crop (`probe/crop_before_probe_original.png`, before | probe | the original's h6.3) shows the lamp's chain drawn
+  OVER the orb in the port and not in the original - where, in that crop, no chain line shows above the orb at all.
+  The orb stands in its owner's slot, and its `StartPoint` z 24, in front, is 8.4's; that 8.4's depth is what
+  removes the chain is EXPECTED, not established. 8.4 checks first whether the original draws the chain there at all.
+
+**THE SUITES,** run directly, once each, 0 failures:
+- **`test_mp_lighting` 533** (510 at step 88). The 23 new checks: the key read and resolved on the fixture's lamp; the
+  sidecar it names loaded to its one system; the four other nodes empty; three new refusals (no file, not `res://`, on
+  a node that draws nothing). The levels' part prints "0 nodes name an eth_particles sidecar, 0 of them unreadable" and
+  checks the second number only.
+- **`test_mp_start` 752** and **`test_mp_torch` 123**, the two other suites that call `Lighting::Read`.
+- **`test_mp_layer` 1593**, step 88's count, since the layer changed.
+
+The full ctest was not run; the step touches no suite beyond these four.
+
+**SMART APP CONTROL: nothing was refused.** The build relinked 47 executables, and none was deleted or relinked a
+second time. 133 launches all ran: the 4 suites, the 128 captures of the sweep (the fresh `MagicPortals.exe`
+`9de1dd95` ran on its first launch) and the probe. The committed binary `75d590fc`, reported refused on its first
+launch earlier today, was not launched by this step. Its baseline needed no launch either: `merge_c/sweep`'s 128 PNGs
+match the md5s in their own log, and the after sweep equals them 128 of 128, which settles the baseline as well.
+
+**LEFT FOR LATER** (8.2 and 8.3, whose steps these are).
+- **The key reaches the layer only through a level whose lighting reads.** `m_look` is empty when `Lighting::Read`
+  refuses a level, so an unlit level takes the `.ent` for every node today. Once 8.3 drops the fallback, an unlit
+  level would lose its particles as well as its lighting. No shipped level is unlit (`test_mp_lighting`: 128 of 128
+  read); 8.3 should say which it wants.
+- **LATENT, found by the independent check: the key is accepted on a node `buildEmitters` never visits.**
+  `Place::Drawn` (`Lighting.cpp:87`) lets it stand on a node that draws a sprite OR owns a light, while
+  `buildEmitters` walks `m_sprites` only (`MagicPortalsLayer.cpp:749`). A light-only node carrying it would read and
+  never be drawn - skipped, against the reader's own "refused, never skipped" (`Lighting.cpp:62-63`). Nothing hits
+  it today: all 840 inline-particle placements in the level `.esc` files have a `<Sprite>`. Not changed at commit
+  (text-only fixes only): either the reader refuses `eth_particles` on a node that draws no sprite, with its refusal
+  in `test_mp_lighting`, or 8.2's converter writes the key only on a node with a `Sprite2D`. 8.2 says which.
+- **The count of carriers is printed, not pinned** (`test_mp_lighting`: "0 nodes name an eth_particles sidecar").
+  A pin of 0 would fail at exactly the moment 8.2 runs this suite to show its regenerated levels are accepted. What
+  the levels part does check holds at 0 and at 840 alike: every sidecar a node names reads at least one system.
+  8.3 pins 840 carriers and 897 systems (887 add, 10 pixel) in `test_mp_sprites`, as section 7 says, and
+  `test_mp_levels`' `metaStrings` 16,934 + 840 = 17,774 (K10: whichever lands second recomputes).
+- **For 8.2: the form is pinned, the place is not.** The fixture's sidecar is 9c (4)'s form - UTF-16 LE with a
+  byte-order mark, `<?xml version="1.0" ?><Ethanon><Entity><Particles>...</Particles></Entity></Ethanon>` - and
+  `Particles::Load` reads it; the probe above cut a real block that way and it drew. Where under `res://` the
+  converter puts its files (9c suggests `assets/entities/inline_particles/<sha1-12>.ent`) is the converter's choice:
+  the reader asks only for `res://` and a file. None of the 899 inline systems in the 133 `.esc` files states
+  `particles` <= 0 (counted this step), so the engine's skip of such a system (`ETHSpriteEntity.cpp:306`, per 9c)
+  has nothing to act on in a sidecar.

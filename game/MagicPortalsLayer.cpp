@@ -702,8 +702,10 @@ int MedalFor(const MagicPortalsLayer::Cleared& cleared) {
 // ---- the entities' particles --------------------------------------------------
 //
 // What makes the original's scenery move: each entity's own <ParticleSystem>
-// (sim/Particles.hpp), which the converter drops. A crystal sparkles, a torch
-// burns, a static portal turns - none of it is in the level file.
+// (sim/Particles.hpp). A crystal sparkles, a torch burns, a static portal turns.
+// Read from the sidecar its node's eth_particles names - the block the level file
+// carries inline for it - and from its entity's .ent where the node names none
+// (planning step 89).
 //
 // Drawn the way everything else in this port is: one textured quad per live
 // particle, added or mixed as its system's alphaMode says. Carried on the FRAME,
@@ -743,14 +745,37 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
         entities[node.name] = BareEntityName(node);
     }
 
+    int fromSidecars = 0;
     for (std::size_t index = 0; index < m_sprites.size(); ++index) {
         const DrawnSprite& drawn = m_sprites[index];
         const auto found = entities.find(drawn.sprite.node);
-        if (found == entities.end() || found->second.empty()) continue;
+        if (found == entities.end()) continue;
         const std::string& entity = found->second;
         std::vector<Particles::System> systems;
         std::string error;
-        if (!Particles::Load(m_paths.original + "/entities/" + entity + ".ent", systems, error)) continue;
+        if (!drawn.particles.empty()) {
+            // THE LEVEL'S OWN SYSTEMS, where its node names them (planning step 89):
+            // the <Particles> block the level file carries inline for this placement,
+            // which on 45 of the 840 carriers is not what its entity's .ent holds
+            // (systems_9_10 9c). THE SPLIT: the sidecar is the converter's, read
+            // under m_paths.art like the rest of what it writes, while the bitmaps
+            // it names are still the original's, read from m_paths.original's
+            // particles/ below - the converter copies none. A sidecar that will not
+            // load, or holds no system, is said, and is NOT replaced by the .ent: the
+            // node's own data said what it carries.
+            if (!Particles::Load(drawn.particles, systems, error) || systems.empty()) {
+                SUPERSONIC_LOG_WARN("Magic Portals")
+                    << "particles not drawn: " << drawn.sprite.node << "'s eth_particles " << drawn.particles
+                    << (error.empty() ? std::string(" holds no particle system") : ": " + error) << std::endl;
+                continue;
+            }
+            ++fromSidecars;
+        } else {
+            // No key: the systems of its entity's .ent, the guess every level made
+            // until the converter carried the level's own.
+            if (entity.empty()) continue;
+            if (!Particles::Load(m_paths.original + "/entities/" + entity + ".ent", systems, error)) continue;
+        }
         // Scaled as its entity is, before its pools are made (Particles::Scale):
         // a static portal's script shrinks its rings and its iris with its halo.
         if (drawn.scale != 1.0) {
@@ -765,9 +790,10 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
             if (!Particles::Drawable(system)) {
                 // No level places one (step 59's census); refused by name rather
                 // than drawn as a mix it is not.
-                SUPERSONIC_LOG_WARN("Magic Portals") << "particle system not drawn: " << entity << ".ent system "
-                                                     << slot << " asks for alphaMode " << system.alphaMode
-                                                     << ", which the port has no blend for" << std::endl;
+                SUPERSONIC_LOG_WARN("Magic Portals")
+                    << "particle system not drawn: " << (drawn.particles.empty() ? entity + ".ent" : drawn.particles)
+                    << " system " << slot << " asks for alphaMode " << system.alphaMode
+                    << ", which the port has no blend for" << std::endl;
                 continue;
             }
             // The bitmap's tier file where one exists (ETHParticleManager.cpp:107 loads
@@ -795,6 +821,12 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
             emitter.quads.assign(emitter.particles.size(), entt::null);
             m_emitters.push_back(std::move(emitter));
         }
+    }
+    // Said only once a level names a sidecar, so a level that names none logs
+    // exactly what it did before the key was read.
+    if (fromSidecars > 0) {
+        SUPERSONIC_LOG_INFO("Magic Portals")
+            << fromSidecars << " placement(s) drew the particle systems their eth_particles names" << std::endl;
     }
 }
 
@@ -3271,6 +3303,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             drawn.applyLight = look->second.applyLight;
             drawn.normal = look->second.normal;
             drawn.lookZ = look->second.z;
+            drawn.particles = look->second.particles;
         }
         // A STATIC PORTAL IS DRAWN AS ITS SCRIPT REDRAWS IT (art.json static_portal):
         // once, ETHCallback_portal_static scales the entity by 0.8 - its picture here,

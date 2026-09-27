@@ -943,6 +943,9 @@ private:
         bool applyLight{false};
         std::string normal;
         double lookZ{0.0};
+        // Its node's eth_particles: the sidecar its own <Particles> were written to,
+        // on disk; empty = none, and buildEmitters reads its entity's .ent.
+        std::string particles;
         // Where its entity stands now, in the level's pixels: its node's position,
         // or its body's, or its patrolling zone's. What a light it owns follows.
         glm::dvec2 ownerPx{0.0};
