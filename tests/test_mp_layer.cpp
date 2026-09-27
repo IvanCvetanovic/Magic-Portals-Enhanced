@@ -92,12 +92,12 @@ MagicPortalsLayer::Paths TestPaths() {
     return paths;
 }
 
-// The viewport a frame would publish: the whole 1280x720 window, with the
-// pointer over the game.
-void publishViewport(entt::registry& registry) {
+// The viewport a frame would publish: the whole window, 1280x720 unless a case
+// says otherwise, with the pointer over the game.
+void publishViewport(entt::registry& registry, const glm::vec2& window = glm::vec2(1280.0f, 720.0f)) {
     ViewportInfo viewport;
     viewport.rect.min = glm::vec2(0.0f, 0.0f);
-    viewport.rect.max = glm::vec2(1280.0f, 720.0f);
+    viewport.rect.max = window;
     viewport.pointerOverGame = true;
     registry.ctx().insert_or_assign(viewport);
 }
@@ -401,6 +401,133 @@ void ATapLandsWhereItPoints() {
     CHECK_MSG(placed.size() == 2u && glm::length(placed[0].atPx - placed[0].basePx) <= 2.0,
               "and hovers within its stride of it");
     layer.OnDetach(registry);
+}
+
+// A TAP A CAPTURE SCHEDULES IS A PRESS AT THAT POINT (planning step 120).
+//
+// level30 places no help block, which is the case the backlog found inert: a
+// scheduled --tap there once fired nothing, because the shot read the mouse and
+// only a help block read the tick's touch. Four runs of it, ticked alike: in a
+// 1280x720 window and in a 960x540 one, one run pressed at a pixel as a player
+// presses, through Input's replay path, and one handed the same pixel as
+// ScheduleDevTap's fraction of the view, with the pointer at rest and nothing
+// pressed. All four fire from the player toward the point ATapLandsWhereItPoints
+// aims at, and open a portal there. The 960x540 pair pins the tap's pixels: a
+// scheduled tap reached the shot in 1280x720's pixels whatever the window, which
+// in a 960x540 one aimed it a third further from the view's corner.
+void AScheduledTapFiresTheShotARealPressFires() {
+    struct Fired {
+        bool loaded{false};
+        bool noHelpBlock{false};
+        int shots{0};
+        glm::dvec2 fromPx{0.0};
+        glm::dvec2 toPx{0.0};
+        std::vector<glm::dvec2> placed;
+    };
+    const glm::dvec2 aim(250.0, 150.0);
+    const auto run = [&aim](const glm::vec2& window, bool scheduled) {
+        Fired fired;
+        entt::registry registry;
+        publishViewport(registry, window);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) return fired;
+        fired.loaded = true;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        fired.noHelpBlock = layer.HelpBlockRects().empty();
+        waitForFirstTap(layer, registry);
+        // screenOf is 1280x720's, and the view is the same 16:9 in either window.
+        const glm::vec2 pixel = screenOf(registry, aim) * (window / glm::vec2(1280.0f, 720.0f));
+        if (scheduled) {
+            // Due at once: a scheduled tap is taken on the first tick at or after its own.
+            layer.ScheduleDevTap(1, glm::dvec2(pixel) / glm::dvec2(window));
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            tap(layer, registry, pixel);
+        }
+        const auto& portals = layer.SimLevel()->portals;
+        fired.shots = portals.shotsFired;
+        if (portals.flight) {
+            fired.fromPx = portals.flight->fromPx;
+            fired.toPx = portals.flight->toPx;
+        }
+        landShot(layer, registry);
+        for (const auto& portal : layer.SimLevel()->portals.placed) fired.placed.push_back(portal.basePx);
+        layer.OnDetach(registry);
+        return fired;
+    };
+    for (const glm::vec2& window : {glm::vec2(1280.0f, 720.0f), glm::vec2(960.0f, 540.0f)}) {
+        const std::string in = " in a " + std::to_string(static_cast<int>(window.x)) + "x" +
+                               std::to_string(static_cast<int>(window.y)) + " window";
+        const Fired pressed = run(window, false);
+        const Fired scheduled = run(window, true);
+        if (!pressed.loaded || !scheduled.loaded) {
+            CHECK_MSG(false, "level30 loads" + in);
+            return;
+        }
+        CHECK_MSG(pressed.noHelpBlock && scheduled.noHelpBlock, "level30 places no help block");
+        CHECK_MSG(pressed.shots == 1 && glm::length(pressed.toPx - aim) < 0.5,
+                  "a real press fires the shot at " + Point(aim) + in + ": " + std::to_string(pressed.shots) +
+                      " fired, toward " + Point(pressed.toPx));
+        CHECK_MSG(scheduled.shots == 1,
+                  "a scheduled tap fires it too, on a level with no help block" + in + ": " +
+                      std::to_string(scheduled.shots) + " fired");
+        CHECK_MSG(glm::length(scheduled.fromPx - pressed.fromPx) < 1e-9 &&
+                      glm::length(scheduled.toPx - pressed.toPx) < 1e-3,
+                  "from the same point toward the same point as the press" + in + ": " + Point(scheduled.toPx) +
+                      " against " + Point(pressed.toPx));
+        CHECK_MSG(pressed.placed.size() == 1u && scheduled.placed.size() == 1u &&
+                      glm::length(pressed.placed[0] - aim) < 0.5 && glm::length(scheduled.placed[0] - aim) < 0.5,
+                  "and both open their portal where they point" + in);
+    }
+}
+
+// A SCHEDULED TAP ON A CONTROL IS SPENT ON IT, as a press there is (planning step
+// 120). The controls read the tick's touch as the shot does, so a scheduled tap on
+// restart restarts the level and fires nothing, where it used to pass the
+// controls by and fire a shot into the corner under the button.
+void AScheduledTapOnAControlIsSpentOnIt() {
+    if (!OriginalArtIsThere("AScheduledTapOnAControlIsSpentOnIt")) return;
+    struct Spent {
+        bool ran{false};
+        double ageBefore{0.0};
+        double ageAfter{-1.0};
+        int shots{-1};
+    };
+    const auto run = [](bool scheduled) {
+        Spent spent;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) return spent;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        waitForFirstTap(layer, registry);
+        Hud::Rect rect;
+        if (!layer.ControlRect(MagicPortalsLayer::Control::Reset, rect)) return spent;
+        spent.ran = true;
+        const glm::vec2 pixel = ScreenOfView(layer, rect.Centre());
+        spent.ageBefore = layer.LevelAgeMs();
+        if (scheduled) {
+            layer.ScheduleDevTap(1, glm::dvec2(pixel) / glm::dvec2(1280.0, 720.0));
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            tap(layer, registry, pixel);
+        }
+        spent.ageAfter = layer.LevelAgeMs();
+        spent.shots = layer.SimLevel() != nullptr ? layer.SimLevel()->portals.shotsFired : -1;
+        layer.OnDetach(registry);
+        return spent;
+    };
+    const Spent pressed = run(false);
+    const Spent scheduled = run(true);
+    CHECK_MSG(pressed.ran && scheduled.ran, "level30 loads, with restart shown half a second in");
+    CHECK_MSG(pressed.ageBefore > 0.0 && pressed.ageAfter == 0.0 && pressed.shots == 0,
+              "a real press on restart restarts the level and fires nothing: age " +
+                  std::to_string(pressed.ageAfter) + ", " + std::to_string(pressed.shots) + " fired");
+    CHECK_MSG(scheduled.ageBefore == pressed.ageBefore && scheduled.ageAfter == 0.0 && scheduled.shots == 0,
+              "and so does a scheduled tap there: age " + std::to_string(scheduled.ageAfter) + ", " +
+                  std::to_string(scheduled.shots) + " fired");
 }
 
 void Level8FromTheSpawnWithTapsAndWalking() {
@@ -8741,6 +8868,8 @@ void runTests() {
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();
     ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack();
     ATapLandsWhereItPoints();
+    AScheduledTapFiresTheShotARealPressFires();
+    AScheduledTapOnAControlIsSpentOnIt();
     Level8FromTheSpawnWithTapsAndWalking();
     LevelsFollowInOrderAndRetryIsInstant();
     NSkipsToTheNextLevel();

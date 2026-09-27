@@ -15815,3 +15815,117 @@ neither applies nor withdraws them.
 - **The 15 pixels on 4-14** are recorded, not chased. They are one RGB565 step, the smallest difference the 16-bit
   surface can express, and no decoded number is behind them.
 - **The standing sweep baseline is now this step's** `merge_c/sweep`, for both what were the two tracks.
+
+## Step 120 - a scheduled tap is a press at that point: the controls read the tick's touch, and its pixels are the viewport's (built)
+
+**TRACK B, and a step this run adds (T.1; not in 00_order section 7).** Built in the worktree
+`Magic-Portals-Remake-vis4` (branch `visuals-d`, from `f1769ed`), whose build reads the frozen level data in
+`out/snap_pre8`. Numbered from 120 up so that it cannot collide with track A's steps; the merge renumbers it. Game
+only: `game/MagicPortalsLayer.{hpp,cpp}`, `game/main.cpp` (comment and `--help` text only) and
+`tests/test_mp_layer.cpp`. No engine change, and the pin stays `4bfcf67`. No converter change and no data change.
+**No gameplay change**: what a real press does is unchanged, and the argument and the measurements for that are
+below. Spec: the backlog row "Found building step 80 (order 13.4): `--tap` cannot fire a portal shot, so no capture
+can light a torch", and CLAUDE.md's rule that input goes through the port's one pointer path.
+
+**THE ROW'S MECHANISM WAS ALREADY GONE WHEN THIS STEP BEGAN, and that is the first thing measured here.** The row was
+written at `2bf4755` (2026-09-20 16:50), from step 80's tree. There `readInput` fired the shot from
+`Input::MousePosition()`, and `helpBlockInput` returned before `touchThisTick` on a level with no help block. Step
+87 (`5a60733`, the same day at 21:52, on the other track) had already changed `readInput`: it reads the tick's
+`Touch` once, before `helpBlockInput`, and fires the shot from it (step 87's "The capture harness learns the tap it
+always meant"). The merge `a5c9e23` carried that into `main`, and the row was never closed. On this tree's committed
+build (`MagicPortals.exe` `3ad54ba2`, the binary that took the baseline sweep), before anything was changed:
+`--level level28c --tap 247,141@60` logs `DEV tap down on tick 60 at (87.8222, 50.1333) units`, and then `the light
+wall is going ... on tick 71`. Its f240 (`cab33202`) shows 4-29's torch lit, and the dashed ghost standing where the
+wall was. **So gate 2 already held on the baseline. This step did not build it; this step keeps it.**
+
+**WHAT WAS LEFT: two places where a scheduled tap and a real press still reached the shot by different roads.** Both
+were measured on the same baseline build.
+1. **The controls.** `readInput` asked `controlUnderPointer(registry)`, which read `Input` directly, and it skipped
+   the question outright while any scheduled tap was due (`under = devTap ? nullptr : ...`). A real press on a HUD
+   control is spent on the control. A scheduled tap at the same pixel went past the controls and fired a shot into
+   the level under the button. Step 87's own record names this gap ("a scheduled `--tap` still cannot [press a
+   control]"). Measured: `--level level3 --tap 1143,45@60` taps 1-04's restart button. It fired a shot into the
+   top-right corner, the clear-portals button came up, and the level was loaded once (f120 `7cb7e456`).
+2. **The tap's pixels.** `touchThisTick` put a scheduled tap's `atPx` at `at / view * (1280, 720)` whatever the
+   window. The shot maps `atPx` as the VIEWPORT's pixels (`ViewportToLevelPx`), so in any window other than
+   1280x720 the tap aimed somewhere else. `main.cpp` has always promised the opposite: "taps that pixel of a
+   1280x720 window ... whatever the window's size". Measured: the 4-29 tap above in a 960x540 window opened a portal
+   at (247, 141) of the 960x540 frame, a third further from the corner, and lit nothing (f240 `30ddcad3`).
+
+**THE CHANGE.**
+- `readInput` reads the tick's touch FIRST, after the back key's pause, and hands that one `Touch` to all three
+  consumers: the controls, a help block and the shot. `controlUnderPointer` takes the `Touch` and tests
+  `touch.atView`. The walk pads (held) and restart, pause and clear (edges) read `touch.held` and `touch.pressed`.
+  The `devTap` flag is gone. The order is unchanged: controls first, then a help block, then the shot.
+- `touchThisTick` puts a scheduled tap's `atPx` in the viewport's pixels, `at / view * viewport size`, and keeps
+  1280x720 only where no viewport is published (where nothing can map it anyway).
+- **For a REAL press nothing changes, expression for expression:**
+  - `touch.over` is false in exactly the three cases where `controlUnderPointer` used to return early (no
+    viewport, no `pointerOverGame`, or an empty viewport).
+  - `touch.atView` is the same `glm::dvec2(local / size) * view` it computed, from the same `ViewPx()` and after the
+    same `layOutControls()`.
+  - Wherever `under` is not null, `touch.held` and `touch.pressed` ARE `Input::IsDown(kTap)` and
+  `Input::TickWasPressed(kTap)`.
+  - In a 1280x720 viewport a scheduled tap's `atPx` is also unchanged to the bit: `glm::dvec2(viewport->Size())` is
+  exactly (1280.0, 720.0).
+- **What changes for a capture, and it is the harness's alone:** a scheduled `--tap` on a HUD control now works the
+  control, as a finger would, and no longer fires a shot beneath it. That is MEASURED for restart (gate 5 and
+  `AScheduledTapOnAControlIsSpentOnIt`). Pause, clear and the walk pads take the same `touch.pressed` and
+  `touch.held` in the same switch, so for them it follows from the code and was not captured. No capture script
+  under `out/parity/` taps a control's rectangle during play:
+  - 7.4's four taps are at (640, 360), (537, 308), (420, 330) and (620, 280);
+  - the popup close that 1.1 and `ui2` use, at (1178, 358), is 376 px from the right pad's corner, against the
+    pad's 180 px reach (`ui.json` `hud.pads.hit.radius_units` 64), and below restart and pause;
+  - `ui3`'s taps land on the front door's menus, which `readInput` never reads.
+
+  The captures below confirm all of this byte for byte. The pixels change reaches only the two readers of
+  `touch.atPx`: the shot, and a help block's move length (`helpBlockInput`, against its 12 px). The menus, the
+  credits and the dashboard read `touch.atView`, which did not change. Both readers change only off 1280x720, where
+  they now measure what a real finger would. Of the 210 `--window` arguments in the capture scripts under
+  `out/parity/`, 209 are 1280x720, and the one that is not is this step's own gate 2c.
+- Comments: `ScheduleDevTap`, `Touch`, `controlUnderPointer`, and `main.cpp`'s `--tap` block and `--help` text now
+  say where a scheduled tap goes during play. The pause's buttons and the end screens' buttons still read the mouse
+  alone (`pauseTick`, `endScreenTick`); only the pause's buttons have `ScheduleDevPress`. They are not on the shot's
+  path, and are left.
+
+**THE GATES.** Before = the committed build `3ad54ba2` (the binary of `base_8-13/B/sweep`, the step's "before"
+under the baseline rule). After = this step's build `55cf0ec8`. Captures: `out/parity/visuals/T.1/{before,after}/`
+(`capture_gates.sh`, `capture_sweep.sh`, `capture_help.sh`). All are `--window 1280x720 --fixed-step` unless a row
+says otherwise.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**, 7 steps (`[1/8]` to `[7/8]` in `build.log`). It relinked `MagicPortals.exe` (`55cf0ec8`) and `test_mp_layer.exe` (`7289ed89`) only |
+| (1) The 128-level f420 sweep | byte-identical to track B's baseline `base_8-13/B/sweep` (no tap is scheduled in it) | `base_8-13/B/sweep` (equal to `merge_c/sweep` on 128 of 128) | **passes: 128 of 128 byte-identical**, 0 differ and 0 missing (`T.1/after/sweep`, on `55cf0ec8`). All 128 exit 0, `Vulkan validation layers: ACTIVE` in 128 logs, and no validation message in any. No level changed, so there is none to explain |
+| (2a) A `--tap` on a level with no help block: the shot leaves the player and a portal is placed | a shot and a placed portal, on a stated level | the same, already (step 87) | **passes on 1-04 (`level3`, no help block)**, `--tap 520,200@40`, every 3rd frame to f150. `DEV tap down on tick 40 at (184.889, 71.1111) units`. The shot is at the player's hand at f42 and flies right at f45 and f48. The portal's bubble is at f54 and has grown by f63, and the spiral stands from f90 to f150. **All 51 frames are byte-identical to the before** (f150 `5fcd25e7`) |
+| (2b) A `--tap` on 4-29's torch lights it | the torch lit (the proof step 80 lacked) | lit already, `cab33202` | **passes**, `--tap 247,141@60`. L1.md section 2's host tap (247, 141) is a pixel of the original's 1280x720 screen, and `--tap` takes pixels of 1280x720, so it is used as it stands. `DEV tap down ... at (87.8222, 50.1333)` view units is 247 / 2.8125 and 141 / 2.8125: the torch's own (88, 50) u, because the view starts at the level's corner on 4-29, as L1.md section 1 says the original's does. The shot has left the hand at f63, is at the torch at f69, and the room is lit from f72 (`light wall is going` on tick 71). At f240 the wall is gone, its ghost stands, and the fire signal orbits. **All 81 frames are byte-identical to the before** |
+| (2c) The same tap in a 960x540 window | lands on the same point of the view | **fails**: a portal at (247, 141) of the 960x540 frame and the torch dark (`30ddcad3`) | **passes**: the same `(87.8222, 50.1333)` units, the wall going on tick 71, and the torch lit at f240 (`9768d7ad`), the 1280x720 frame at three quarters by eye |
+| (3) Replays unchanged, and a test that a scheduled tap reaches the shot on a level with no help block | `test_mp_play` and `test_mp_layer` pass, with a new case | `test_mp_layer` 1593 (step 88), `test_mp_play` 205 | **passes: `test_mp_layer` 1606, 0 failures** (1593 + 13), **`test_mp_play` 205, 0 failures**. New: `AScheduledTapFiresTheShotARealPressFires` (10 checks) runs level30, which places no help block, four ways: pressed at a pixel through Input's replay path, or handed that pixel as `ScheduleDevTap`'s fraction with the pointer at rest and nothing pressed, each in a 1280x720 and a 960x540 viewport. All four fire one shot from the same point toward (250, 150): the scheduled tap's `toPx` within 1e-3 px of the press's, and its `fromPx` within 1e-9. Each opens its portal within 0.5 px of the aim. `AScheduledTapOnAControlIsSpentOnIt` (3) taps level30's restart both ways, and both restart the level (age 0) and fire nothing. The 960x540 case and the control case test exactly what the before build got wrong, as rows 2c and 5 measure in the frame. The new cases were not run on the before binary: that would have meant a revert and a relink that Smart App Control could refuse. `test_mp_play` drives the simulation, not the layer, and its binary was not relinked. It is run because the spec names it |
+| (4) The help-block levels' existing `--tap` unchanged | one capture that used it before, byte-identical | the before's own captures | **passes on four runs, every frame byte-identical**: 7.4's pair run on 1-03 (`level2`, a help-block level; its four taps are verbatim), 161 of 161 frames (f960 `9e5098b0`); 1.1's popup close `--tap 1178,358@300-305` on 1-02 (`2866ea9f`) and on 1-03 (`678f92a8`); and 1-13 (`level12`)'s help block tapped by name, `--tap help@300 --tap 640,200@601`, whose popup opens and closes (f700 `f1e33139`). And on this step's own build (no before exists for it), every level that places a help block, its block tapped by name (`T.1/after/help`). The controls are now asked before a help block for a scheduled tap too, so a block whose centre sat under a control would stop opening its popup. **8 of the 13 opened their popup on the release**: level1 (tick 151, after its level-start popup was closed at 30), level9, level10, level12, level18, level24, level2a and level5a (tick 61). The other five (level0c, level1c, level2 at 150, level31, level8b) had no block on the view on the tick tried. There `touchThisTick` drops the tap before any consumer sees it, which this step does not touch |
+| (5) A scheduled tap on a control is spent on it | the control works and no shot is fired, as for a real press | **fails**: a shot into the corner under restart, the clear button up, the level loaded once (`7cb7e456`) | **passes**: the level is loaded twice (restarted on tick 60), and at f120 it is 60 ticks old, under a whole "Part 4" caption, with no portal and no clear button (`1e0aa361`) |
+| No gameplay change | a real press does what it did | - | **passes**: by the argument above, and measured. Every one of `test_mp_layer`'s 1593 existing checks passes, including every real press on a control (restart, pause, clear), a help block and the shot. The sweep holds no input at all |
+
+**SUITES**, run directly, once each: **`test_mp_layer` 1606, 0 failures** and **`test_mp_play` 205, 0 failures**.
+No other suite links the layer (`tests/CMakeLists.txt`: only `test_mp_layer` links `MagicPortalsGame`), so no other
+suite's binary changed or was run. The full ctest was not run; the step does not need it.
+
+**SMART APP CONTROL: nothing was refused, and nothing was deleted or relinked to get past a refusal.** There was
+one build, and it linked two binaries. The new `MagicPortals.exe` ran 149 times (8 gate captures, 128 sweep
+captures, 13 help-block captures), the new `test_mp_layer.exe` once, and the unchanged `test_mp_play.exe` once. The
+before captures (1 probe and 8 gate runs) ran on the committed binary `3ad54ba2` before the build replaced it.
+
+**RULINGS APPLIED:** none of R1 to R25 bears on this step. It moves no picture and no gameplay. R24 and R25 stay
+applied and remain the owner's to rule; this step neither touches nor withdraws them. **K13** does not arise (no new
+depth) and **K8** does not arise (no random draw).
+
+**LEFT FOR LATER.**
+- **The backlog row** "Found building step 80 (order 13.4): `--tap` cannot fire a portal shot" is closed by step 87
+  (the shot) together with this step (the controls and the pixels). Closing it in `docs/parity-backlog.md` is left
+  to the close agent. So is the row's consequence: 7.2's, 7.4's and 10.1 to 10.4's capture gates no longer have to
+  rest on the suites, and step 80's deviation 4 ("no capture can light a torch") now has its capture - gate 2b
+  lights 4-29's torch and shows the ghost where its wall stood. Measuring that ghost against footage of the
+  original (L1's 4-29 clip lights and puts out a torch on a wall level) is 13.4's open item, not this step's.
+- **The pause's buttons and the end screens' buttons** still read the mouse alone. A scheduled `--tap` cannot press
+  them: the pause's have `ScheduleDevPress`, and the end screens' have nothing. They are not on the shot's path.
+- **When the original fires, on touch-down or touch-up**, is not resolved by L1 (section 2: "not resolved"). The
+  port fires on the touch's down edge, for a real press and a scheduled tap alike, as it did before this step.

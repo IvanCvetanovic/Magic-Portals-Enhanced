@@ -855,7 +855,11 @@ public:
     // capture. With no point it lands on the centre of the level's first help
     // block, wherever the camera has it on that tick. The popups and the menu
     // states read it: it opens a help block's popup, closes one that is up, and
-    // presses a menu's buttons as a touch does.
+    // presses a menu's buttons as a touch does. During play it is the tick's touch
+    // readInput hands on, so it works a HUD control, presses a help block or fires
+    // the shot exactly as a real press at that point of the view would. The pause
+    // and the end screens still read the mouse alone; the pause's buttons have
+    // ScheduleDevPress.
     void ScheduleDevTap(int tick, std::optional<glm::dvec2> viewFraction, int releaseTick = 0);
     // DEV ONLY: a drag - a touch down at `from` on tick `tick`, moved at an even pace
     // to reach `to` on `releaseTick`, and released there. Both are fractions of the
@@ -1982,14 +1986,15 @@ private:
     // written when its layer is updated, so under a stop it holds, and under a
     // popup raised as the level loads it is still the nothing it was built with.
     double m_plaqueAlpha{0.0};
-    // The pointer this tick as the popups read it - a real touch or a DEV one.
+    // The pointer this tick as the popups, the controls, a help block and the shot
+    // read it - a real touch or a DEV one, the port's one pointer path.
     struct Touch {
         bool pressed{false};
         bool released{false};
         bool held{false};
         bool over{false};         // on the game at all
         glm::dvec2 atView{0.0};   // design units on the view
-        glm::dvec2 atPx{0.0};     // the window's pixels, for the move a touch makes
+        glm::dvec2 atPx{0.0};     // the viewport's pixels: the move a touch makes, and where the shot goes
     };
     Touch touchThisTick(const entt::registry& registry);
     // A popup of `cls` over the level, game time stopped.
@@ -2071,10 +2076,10 @@ private:
     void layOutControls();
     // The no-portal sign a tick on, against the camera as this tick left it.
     void tickNoPortalSign(double dtMs);
-    // Which control the pointer is on, or nullptr. Asked once a tick, before a
-    // shot is fired, because a tap that works a control must not also open a
-    // portal under it.
-    const ControlButton* controlUnderPointer(const entt::registry& registry) const;
+    // Which control the tick's touch is on, or nullptr. Asked once a tick, before
+    // a shot is fired, because a tap that works a control must not also open a
+    // portal under it - a scheduled tap's as much as a real press's.
+    const ControlButton* controlUnderPointer(const Touch& touch) const;
     // Whether the level being played is the one whose pads pulse long and ring.
     bool tutorialPads() const;
 };

@@ -5649,16 +5649,14 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     }
 }
 
-const MagicPortalsLayer::ControlButton* MagicPortalsLayer::controlUnderPointer(const entt::registry& registry) const {
-    using Supersonic::Input;
-    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
-    if (viewport == nullptr || !viewport->pointerOverGame) return nullptr;
-    const glm::vec2 size = viewport->Size();
-    if (size.x <= 0.0f || size.y <= 0.0f) return nullptr;
+const MagicPortalsLayer::ControlButton* MagicPortalsLayer::controlUnderPointer(const Touch& touch) const {
+    // Off the game - a panel, another window, no viewport - there is no control
+    // under it: touchThisTick leaves `over` false on exactly those.
+    if (!touch.over) return nullptr;
     // The pointer as a place on the VIEW: the viewport is the view, stretched
     // to it, so no camera is needed to say which control a tap is on.
     const glm::dvec2 view = ViewPx();
-    const glm::dvec2 at = glm::dvec2(viewport->ToLocal(Input::MousePosition()) / size) * view;
+    const glm::dvec2 at = touch.atView;
     for (const ControlButton& button : m_controls) {
         if (!button.shown) continue;
         bool on = false;
@@ -5708,23 +5706,21 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         openPause(registry);
         return direction;
     }
-    // DEV ONLY: a scheduled tap owns the pointer on its ticks, wherever the real
-    // cursor happens to rest over the window.
-    const bool devTap = std::any_of(m_devTaps.begin(), m_devTaps.end(), [this](const DevTap& tap) {
-        return tap.tick <= m_ticks;
-    });
-    const ControlButton* under = devTap ? nullptr : controlUnderPointer(registry);
-    const bool held = Input::IsDown(kTap);
-    const bool pressed = Input::TickWasPressed(kTap);
+    // THE TICK'S TOUCH, read ONCE and handed to everything below: the controls, a
+    // help block and the shot. It is the ONE pointer path - a real press, or a
+    // tap a capture scheduled, which owns the pointer on its ticks wherever the
+    // real cursor rests - so a scheduled tap reaches each of the three exactly
+    // as a real press at the same point does. Reading it twice would press and
+    // release a scheduled tap inside one tick.
+    const Touch touch = touchThisTick(registry);
+    const ControlButton* under = controlUnderPointer(touch);
+    const bool held = touch.held;
+    const bool pressed = touch.pressed;
 
     // A HELP BLOCK takes a touch that goes down on it - no portal, no control -
     // and opens its popup when that touch comes up; the popup stops the level on
     // this tick, as the pause control does. The controls are asked first: they
     // are GameLayer's buttons, which the block's disabled touches do not reach.
-    // THE TICK'S TOUCH, read ONCE and handed to both the block and the tap below.
-    // A scheduled tap owns the pointer on its ticks, and reading it twice would
-    // press and release it inside one tick.
-    const Touch touch = touchThisTick(registry);
     if (under == nullptr && helpBlockInput(registry, touch)) return direction;
 
     if (under != nullptr) {
@@ -6660,6 +6656,15 @@ MagicPortalsLayer::Touch MagicPortalsLayer::touchThisTick(const entt::registry& 
     using Supersonic::Input;
     Touch touch;
     const glm::dvec2 view = ViewPx();
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    // A scheduled tap's place in the VIEWPORT's pixels, which is what a real
+    // press carries and what the shot maps into the level: the tap is given as a
+    // fraction of the view, so it lands on the same point of it in a window of
+    // any size. With no viewport nothing maps it, and it keeps the 1280x720 its
+    // pixels were given in (main.cpp's --tap).
+    const glm::dvec2 viewportPx = viewport != nullptr && viewport->Size().x > 0.0f && viewport->Size().y > 0.0f
+                                      ? glm::dvec2(viewport->Size())
+                                      : glm::dvec2(1280.0, 720.0);
     // DEV ONLY first: a scheduled tap is pressed on its tick and released on the
     // next, where it stood.
     for (auto it = m_devTaps.begin(); it != m_devTaps.end();) {
@@ -6689,7 +6694,7 @@ MagicPortalsLayer::Touch MagicPortalsLayer::touchThisTick(const entt::registry& 
         }
         touch.over = true;
         touch.atView = at;
-        touch.atPx = at / view * glm::dvec2(1280.0, 720.0);
+        touch.atPx = at / view * viewportPx;
         if (!it->pressed) {
             it->pressed = true;
             it->viewFraction = at / view;
@@ -6713,7 +6718,6 @@ MagicPortalsLayer::Touch MagicPortalsLayer::touchThisTick(const entt::registry& 
         }
         return touch;
     }
-    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
     if (viewport == nullptr || !viewport->pointerOverGame) return touch;
     const glm::vec2 size = viewport->Size();
     if (size.x <= 0.0f || size.y <= 0.0f) return touch;
