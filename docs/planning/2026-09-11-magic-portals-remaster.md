@@ -16735,3 +16735,230 @@ commit)", and now names `bd44717`. At commit the build was confirmed current by 
 - **The unlit torches' vertical shift** (step 92's deviation 2), with the finding above: it needs a decision on how
   much of `ET_VERTICAL` the port draws before a type key can enter the reader.
 - A sky with a scale would be drawn at its scaled size by `Sky::Build` (it reads `sizePx`); none has one.
+
+## Step 94 - the scale each placement states, written on its sprite and baked into its body: 31 barrels at 1.3 and 2-22's stone at 0.8, as the original's (built)
+
+The visuals plan's step 9.2 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 9; its brief
+`systems_9_10.md` 9a (4) "MPR converter" and 9a (5)). Track A, on MPR `main` in `build/`, after step 93 (`aa68d17`).
+A CONVERTER step with a regeneration: changed are `tools/converter` (`tscn.py`, `__main__.py`, the new
+`tests/test_scale.py`), `tests/test_mp_levels.cpp` (two pins), `tests/test_mp_start.cpp` (the tier checks read units),
+`docs/ethanon-formats.md` and the backlog. No file under `game/` or `engine/` is touched (submodule at `4bfcf67`),
+and `MagicPortals.exe` is step 93's binary, `865c2d4b`. **The converter now writes each entity's `<Scale>` on its
+Sprite2D as `scale = Vector2(sx, sy)` and bakes it into every collider it writes, as the engine builds the body;
+`out/levels` was regenerated with it. 33 placements carry the line - 31 barrels at 1.3, 2-22's stone at 0.8, 4-19's
+eclipse at 2 - and the 31 barrel boxes go from 22 x 29 to 28.6 x 37.7 u and the stone's circle from radius 30 to 24.
+THIS CHANGES GAMEPLAY (the owner's standing ruling R9, as the original): 31 barrel bodies are 1.3 times larger on
+each axis, one stone 0.8 times; in the f420 frames 2-24's player now stands on top of a barrel, as the original's
+h6.3 shows it, and 2-19's dropped crate (the port drops it, the original does not: filed) lands upright, with the
+player 18.7 u further right, at the x where the original's player stands. 17 of 128 f420 frames change, every one
+a level that holds a scaled placement, each explained below; 1-01 does not.**
+
+**BLOCKERS CHECKED.** 9.2's blockers are met: **9.1 committed** is step 93 (`aa68d17`), whose reader accepts the key
+(K10: before it, a Sprite2D `scale` failed `Tscn::Parse` and the level with it); **R13** is the owner's standing ruling.
+Section 8.13 has no row for 9.2, so section 7's row stands: "fixture: a 1.3 barrel -> `scale 1.3`, box 28.6 x 37.7; the
+diff is 33 Sprite2D lines, 31 boxes and 1 circle; `census9.py` 33 of 33; DEVLOG and formats doc", widened by this
+run's instruction (pass `--copy-particles` and the lighting and tier copies; prove the staging diff; re-count;
+explain the sweep) and by step 93's hand-off (this step re-pins `test_mp_levels`' key counts). The baseline is step
+93's after, `9.1/after/sweep` (itself 128 of 128 byte-identical to `8.4/after/sweep`): its 128 PNGs match the md5s
+its `capture.txt` logged, and `build/` held `865c2d4b`, the binary it was captured on, so no fresh "before" was needed.
+
+**THE OWNER'S STANDING RULINGS.** **R9** (the `<Scale>` bodies, as the original), applied: this is the step that
+changes the bodies. **R13** (route B: the level names the 1x file and the port resolves the tier), applied: the scale
+is written on its own and never composed with a tier's 0.5, and the offset stays in level units (E9, K9). **R24 and
+R25 (step 76) remain the owner's to rule**; this step neither applies nor withdraws them.
+
+**THE RULE, FROM THE ENGINE** (the formats doc's new "2026-09-27 (scale)" subsection has every citation). The picture
+is the frame times the scale (`ETHSpriteEntity.cpp:682`) about the pivot times the scale (`ETHEntity.cpp:296`), which
+is a Godot Sprite2D's `scale` over its `offset`; the body is built from the collision box after `box.Scale(scale)`
+(`ETHPhysicsSimulator.cpp:72-73`, `ETHCollisionBox.cpp:105-111`), which every shape builder then reads - box, polygon
+(`:47`), circle `(size.x + size.y) / 4` (`:59`), compound (`:92`, `ETHCompoundShape.cpp:51-77`, a circle fixture's
+radius on x alone, `:69`) - and a revolute joint's anchor is normalised against the scaled box
+(`ETHRevoluteJoint.cpp:62`). A script's `GetCollisionBox()` returns the box unscaled (`ETHEntity.cpp:314-320`).
+
+**WHAT WAS BUILT.**
+- **`tscn.py` `write_scene`**: `scale = Vector2(sx, sy)` on the Sprite2D, after its `offset`, only where `<Scale>` is
+  not (1, 1); the offset stays `-pivotAdjust` (and `_vertical_offset`'s half height) unscaled, as step 93's reader
+  expects. A `<Scale>` with a component not above 0 skips the instance with a report line (the port's reader refuses
+  it, and the whole level with it); none ships. A joint's `joint_anchor_x/y` take `sx`/`sy`; its angles and motor
+  do not. `trigger_size`/`trigger_offset` stay unscaled (the script's view). The `eth_*` lighting keys and the particle
+  sidecars are written exactly as before: the converter already scales the light and halo per consumer and the port
+  does not scale them again (K7); the port makes a placement's systems at the mean of the scale (step 93).
+- **`tscn.py` `_collider_lines`**: the collision box's size and position times the scale per axis before any branch,
+  so the box, the shape's `position`, the polygon and the circle's `(sx * w + sy * h) / 4` all come out scaled; a
+  compound's fixtures (resolved by `entity._parse_compound` against the unscaled box) are multiplied through - offsets
+  and box extents per axis, a circle's radius by `sx`. The body node never carries a scale.
+- **`__main__.py`**: the report adds "scaled sprites: N; colliders with the scale baked in: M".
+- **`tests/test_scale.py`, 11 tests on a hand-written scene**: the plan's fixture (a 1.3 barrel on a 22 x 29 box ->
+  `scale = Vector2(1.3, 1.3)` and `size = Vector2(28.6, 37.7)`, no scale on its node or body); a 0.8 circle on 60 x 60
+  -> radius 24 and a (2, 0.5) one on 40 x 20 -> 22.5; a box offset per axis; a polygon and a compound on the scaled
+  box (the compound's circle by `sx`, 20 not 30); a joint's anchor scaled and its angle not; the offset (0, -15) and a
+  trigger box unscaled beside a scale of 2; a scale of 1 writing nothing (the scene equals the one with no `<Scale>`);
+  the scene less its `<Scale>`s differs by exactly the 8 inserted `scale` lines and changed collider values; a scale of
+  0 or -0.5 refused; the CLI's report line.
+
+**THE REGENERATION, PROVED BEFORE IT REPLACED ANYTHING.**
+- `out/levels`, `out/assets` and `out/data` were first checked: 1,256 files, their md5 list identical to step 90's
+  `out_after.md5`; `out/snap_pre8` 1,232 of 1,232 against `MANIFEST_orig.md5`.
+- The UNCHANGED converter (`HEAD`, run before any edit) into `out/staging_9_2/head`, four worlds, `--copy-textures
+  --copy-lighting --copy-particles`: **all 1,042 files it writes byte-identical to `out/`** (128 levels, `chapters.json`,
+  the tier, lighting and particle files).
+- The new converter into `out/staging_9_2/new`, the same flags, against `out/` (`9.2/tools/prove_diff.py` ->
+  `9.2/census/prove_diff.json`, which maps every changed line back to its instance and the `.esc` body's `<Scale>`):
+  **18 levels change, and only by 33 inserted lines** `scale = Vector2(1.3, 1.3)` x 31, `(0.8, 0.8)` x 1, `(2, 2)` x 1,
+  each in the Sprite2D block of a placement whose body states that scale (0 / 27 / 1 / 5 by world); **31 changed
+  lines** `size = Vector2(22, 29)` -> `size = Vector2(28.6, 37.7)`, each the only line of `RectangleShape2D_<id>` of
+  a scaled barrel (0 / 26 / 1 / 4); **1 changed line** `radius = 30` -> `radius = 24` in `CircleShape2D_1135`
+  (level21a); **0 other lines**; the 33 placements the `.esc` files scale are exactly the 33 touched; `out/assets` and
+  `out/data`, 914 files, identical. The same against the HEAD staging. The converter's logs are the HEAD run's line
+  for line plus the new report line (0/0, 27/27, 1/1, 5/4 by world); "metadata strings added" unchanged.
+- Replaced SELECTIVELY: the 18 changed `.tscn` copied over `out/levels` (`9.2/census/replaced.txt`); `out_before.md5`
+  and `out_after.md5` (1,256 files each) differ in those 18 files only; the staging's 1,042 files equal `out/`; `out/snap_pre8`
+  1,232 of 1,232 still match.
+
+| Gate (00_order 7, 9.2; this run) | Required | Before | After |
+|---|---|---|---|
+| `pytest` | 0 failures; the fixture: a 1.3 barrel -> `scale 1.3`, box 28.6 x 37.7 | 99 passed | **passes: 110 passed** (11 new); `test_a_barrel_at_1_3_gets_a_sprite_scale_and_a_box_28_6_by_37_7` |
+| `ruff check` | clean | clean | **passes: clean** |
+| The diff: Sprite2D lines, boxes, circle (re-counted) | 33 / 31 / 1 (plan) | - | **passes: 33 inserted `scale` lines, 31 boxes, 1 circle, 0 other lines** in 18 levels; `out/assets` and `out/data` unchanged |
+| `census9.py` 33 of 33 | `tscn_has_scale` true for all 33 | **0 of 33** (the same script on the HEAD staging, byte-identical to the levels before) | **passes: 33 of 33** (`9.2/census/census9_scaled.py`, `briefs/s9_10/census9.py` with only its output and levels folder repointed), on the staging and again on the replaced `out/levels`; its particle totals unchanged (840 carriers, 897 systems) |
+| Regeneration flags | `--copy-particles`, `--copy-lighting`, the tier copy (`--copy-textures`) | - | **passes**: all three on all four worlds; 840 placements drew their sidecars in the sweep, 0 levels "drawn unlit" |
+| Formats doc | a note with citations | - | **passes**: "2026-09-27 (scale)" |
+| DEVLOG | an entry | - | **by instruction, the run's close agent writes the session's single entry**, which names this step; none is appended here |
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in three builds: `test_mp_levels` compiled and linked (`37ced60a`), relinked once after Smart App Control refused it (`7a75b0af`), then `test_mp_start` compiled and linked (`4023b3b2`); nothing else rebuilt, `MagicPortals.exe` still `865c2d4b`. The independent check compiled the two changed test sources with the build's own `cl` commands (0 warnings) and relinked `test_mp_levels` once more (0 warnings): `build/` now holds `56084a70` |
+| `test_mp_levels` re-pinned from the converted files | `keys["scale"]` 33, `keys.size()` 12 | 11 keys, no `scale` | **passes: 129 checks, 0 failures, in the independent check** (`9.2/verify1/logs/test_mp_levels.txt`, on `test_mp_levels.exe` `56084a70`, relinked from this step's source and accepted on its first launch). The build's own binaries were refused, SMART APP CONTROL: `37ced60a` on its first launch and `7a75b0af` after its one delete-and-relink (exit 126); the counts were first taken from the files (grep over the 128 levels): `scale` 33, every other key (position 4,095 ... radius 60) and `metaStrings` 17,774 unchanged against the HEAD staging, and the check's Python copy of `Tally` read every pin off the files before its launch |
+| 128-level f420 sweep, every changed level explained | explained against step 93's after | `9.1/after/sweep`, 128 PNGs matching their log lines | **passes: 111 identical, 17 changed, all 17 among the 18 levels that hold a scaled placement** (4-19, whose eclipse stands below the view, is identical); 1-01 `e2da5131` unchanged; each explained below |
+| Every level still runs | 128 rc=0, validation active and silent | 128 | **passes: 128 of 128 rc=0**, validation ACTIVE in 128 logs, 0 messages; 840 placements drawn from their sidecars; no warning or error line |
+| (widened) the suites that read a changed level, once each | 0 failures | - | **passes after one fix: 14 suites, 5,672 checks, 0 failures** (below). `test_mp_start` first read **3 failures** (its tier checks compared `sizePx` with the 1x file and the converter's units); it now reads the units from the texels and the density, and pins the 33 scaled placements |
+
+**THE SUITES,** run directly, once each, on the regenerated levels (`9.2/logs/`): `test_mp_lighting` 548, `test_mp_sprites`
+1,080, `test_mp_layer` 1,890, `test_mp_sky` 380, `test_mp_motion` 167, `test_mp_zerog` 88, `test_mp_torch` 123,
+`test_mp_darkdragon` 99, `test_mp_dragon` 230, `test_mp_demolish` 133, `test_mp_fire` 43, `test_mp_turrets` 40,
+`test_mp_wells` 98, 0 failures each, and `test_mp_start`: **752 checks, 3 failures** on its first run, then, after the
+fix below, **753 checks, 0 failures** - "128 of 128 levels start, 128 play", "28 placements drawn at another size than
+their 1x file", "scale: 33 placements", "the converter's entity_tiers.json: 2883 placements agree". These are the 14
+suites whose source reads one of the 18 changed levels, by name (layer, demolish, fire, turrets, wells, torch,
+darkdragon, dragon) or by walking all of them (start, lighting, sprites, sky, motion, zerog). `test_mp_levels`,
+refused here (Smart App Control, below), ran in the independent check: **129 checks, 0 failures**. **Not run**:
+the 16 level-reading suites whose levels are all byte-identical to step 93's (the independent check's grep: none
+of them reads one of the 18 changed levels) and whose binaries this step did not change - not run here or in step 93, whose build relinked them, so their
+state on the current code is unmeasured (`play` - which reads `level30.tscn` alone, so R9's "`test_mp_play` must
+stay green" is not a barrel test; `launchers`, `boss`, `bounce`, `chapters`, `diamonds`, `fields`, `ghost`, `hazards`,
+`hinge`, `keys`, `minions`, `movers`, `shot`, `statics`, `timed`). The full ctest was not run.
+
+**`test_mp_start`'s tier checks** (found here): `EveryLevelsArtReads` measured a placement's tier by `sizePx`, which
+step 93 made the units times the scale. With no level carrying a scale that was the same number; with the 33, it
+counted 60 placements "drawn at another size than their 1x file" against the 28 skies and found the converter's
+`entity_tiers.json` units disagreeing on 33. The tier is about units, so both checks now read
+`Tiers::Units(texels, density)`, and a new pin counts the scaled placements (33). No behaviour changed.
+
+**THE SWEEP, LEVEL BY LEVEL** (`9.2/after/sweep`, each png's md5 matching its log line; `9.2/compare_sweep.py` ->
+`compare_sweep.json`; `before | after | diff` crops in `9.2/crops/`, before / after / original in `9.2/triplets/`). The
+picture a barrel draws goes from 32 to **41.6 u** (the capture logs' `size (0.832 x 0.832)` m, 50 u to the metre;
+`9.2/scaled_pictures.json`), the stone's from 64 to **51.2 u**. The changed pixels, each in pieces of one barrel
+(about 94 x 122 px with the dilation) unless named:
+- **One barrel, larger: 2-12** (8,904 px), **2-14** (8,894), **2-21** (8,888), **3-19** (9,759), **4-10** (10,376),
+  **4-32** (8,915); **two: 2-17** (9,549 and 9,418), **2-23** (9,032 and 8,444), **4-16** (10,390 and 10,380, a stack);
+  **three: 2-15** (9,036, 8,917, 8,874); **2-16** (a stack of two at the bottom edge, 14,677, and one, 9,478);
+  **2-13** (19,095 px at the right edge, two barrels touching, one tipped - as before - and the upright one resting
+  further left; INFERRED: pushed by the other's larger body).
+- **2-18: 671 px along the top edge** (x 335-424, y 0-13 px): barrel #1151 stands on the carranca just above the
+  view, and only its bottom rim shows - wider now.
+- **2-22: the stone** (#1135) drawn 51.2 u and resting lower on its 24 u body: 25,033 px, 16,212 of them brighter
+  (sky where the larger disc was); and the crate beside it settles **0.19 px** (0.07 u) to the left (phase correlation),
+  its edges resampled: three thin pieces of 55, 45 and 2 px.
+- **2-24 (7 barrels): 74,916 px in four pieces - and the player now stands ON a barrel.** Its eyes (the red blob's
+  centroid) move from (324.7, 258.5) to (331.8, 154.9) px: **103.6 px (36.8 u) higher**, on top of barrel #1135
+  instead of on the floor beside it - **as the original's `2-24_h6.3` shows it** (its eyes at (339.9, 161.6) px); the
+  stack at the right is taller, as the original's. From the level file: the player starts at (114, 74), 20 x 44 u,
+  its feet at 96, above #1135 at (123, 110); the old box's top is at 95.5 and its left edge at 112 (the player's
+  centre 2 u inside it), the new box's at 91.15 and 108.7 (5.3 u inside). INFERRED from those numbers: before, the
+  player came off the edge to the floor; now it stays on top.
+- **2-19: 75,487 px in one piece - the falling crate lands upright.** The crate the port drops at the start (it stands
+  on the ledge in the original's `2-19_h6.3`: older than this step, filed) came to rest tilted on the barrel; against
+  the larger barrel it lands upright to its left, and the player's eyes move from (375.3, 528.5) to (428.0, 528.5) px,
+  **52.7 px (18.7 u) further right** at the same height - where the original's stand, (430.0, 538.3) px in its h6.3.
+- **2-29: 24,046 px** - the barrel larger, and the unscaled `rolling_stone` beside it resting **9.5 px (3.4 u)** further
+  right (phase correlation), pushed by the barrel's half-width, which grows 3.3 u; plus a 5 px speck.
+
+**PROBES, NOT GATES** (9.3 owns them; `9.2/probe/`, the brief's scripts copied and repointed, run on both sweeps):
+- `barrel_width.py`, 2-15's pair: **24.2 / 24.5 u -> 31.3 / 31.6 u**, the dark runs at x 1049-1136 and 1144-1232 px - the
+  original's h0.3 / h2.8 / h6.3 widths (31.3 / 31.6 u) and spans to the pixel; centres 1092.5 / 1188 px. 9.3's gate is
+  31.4 +- 1.0 u, centres +-3 px.
+- `stone.py`, 2-22: **28.68 -> 30.16 u**, against 9.3's 25.3 +- 1.5 u. Not a reading of the stone: the disc is clipped by
+  the frame's right edge and touches the dark crate and blocks, and the same script reads the ORIGINAL's frames at
+  31.6, 36.9 and 37.1 u, not the 25.2-25.6 u the brief quotes. The drawn size is 51.2 u by the log and the body's
+  radius 24 u by the file; 9.3 needs a frame with the whole arc in view, as the brief allows.
+- `compare.py` mean_abs against each level's `_h6.3`: **15 of the 17 changed levels fall** (2-15 3.05 -> 2.43, 2-22
+  7.44 -> 6.92, 2-24 6.90 -> 5.10, 2-16 4.54 -> 3.90, 2-17 6.36 -> 5.80, 2-23 6.79 -> 6.26, 4-16 23.86 -> 23.19, ...;
+  `probe/compare_mean_abs.txt`); **2 rise**: 2-13 6.50 -> 6.88 (the port's barrels stand left of where the original's
+  stands, in both frames) and 2-19 7.49 -> 7.58 (the dropped crate, in both).
+
+**GAMEPLAY - CHANGED, BY THE OWNER'S RULING R9.** The bodies the port builds are the converted colliders
+(`game/sim/LevelBuilder.cpp:124-132`): the 31 barrels' `RigidBody2D` boxes are 28.6 x 37.7 u (1.69 times the area),
+the 2-22 stone's circle 24 u (0.64 times), as the engine builds them. What reads a body reads the new size: the
+`Fire` blast against colliders, contacts, stacking and rolling; at f420, 2-24's player starts on a barrel, 2-19's
+crate and player settle elsewhere (18.7 u), 2-29's stone rests 3.4 u further right. `test_mp_start` still reads 128 of 128
+levels start and play; no suite walks a chapter-2 level to its end.
+
+**SMART APP CONTROL: 2 refusals**, both `test_mp_levels.exe`: its first launch after the build linked it (`37ced60a`), and
+its first launch after the one delete-and-relink (`7a75b0af`), exit 126 "Permission denied" both times; the suite
+ran in the independent check instead. Every other launch ran: the 14 suites (all on binaries step 93's build linked, 11 of them on their
+first launch since), `test_mp_start` again after its relink (`4023b3b2`, first launch), and the 128 captures on
+`865c2d4b`. In all 145 launches, 2 refused. **0 in the independent check** (143 launches: the 14 suites, the
+relinked `test_mp_levels` and the 128-level sweep) and none at commit, which launched nothing.
+
+**THE INDEPENDENT CHECK** (`9.2/verify1/`, passed every gate): the rule re-derived from the engine source before the
+code was read - the box scaled per axis before every shape builder (`ETHPhysicsSimulator.cpp:72-73`,
+`ETHCollisionBox.cpp:105-111`), the circle `(sx * w + sy * h) / 4` (`:59`), the polygon `(size * 0.5) * v + pos`
+(`:47`), the compound against the scaled `box.size` with a circle's radius on x alone (`:92`,
+`ETHCompoundShape.cpp:69`), the joint anchor against `size * scale * 0.5` (`ETHRevoluteJoint.cpp:62`), the picture
+the frame times the scale (`ETHSpriteEntity.cpp:682`) about the pivot times it (`ETHEntity.cpp:296`), a script's
+`GetCollisionBox` unscaled (`ETHEntity.cpp:314-320`) - and the `tscn.py` diff checked against it, every formats-doc
+citation line by line; pytest **110 passed** and ruff clean; the HEAD source (`git archive`) run on all four worlds
+with the three copy flags, **1,042 files, their md5 list identical** to the step's `out_before.md5` (itself 8.2's
+`out_after.md5`), and the new converter's staging **1,042 of 1,042 byte-identical to `out/`**; its own diff
+(`diff_verify.py`): 33 inserted `scale` lines, each in a Sprite2D block (1.3 x31, 0.8 x1, 2 x1), 31 box sizes, 1
+radius, 0 other lines, in 18 levels, and a regex census of the `.esc` bodies, without the converter, finding the
+same 33; `census9.py` 33 of 33, its particle totals unchanged; `test_mp_levels` **run: 129 checks, 0 failures**
+(one delete-and-relink, `56084a70`, 0 warnings, accepted on its first launch), after a Python copy of `Tally` had
+read every pin off the files; the two changed test sources compiled with the build's own `cl` commands at /W4,
+**0 warnings**; the 14 suites once each at the step's counts, 0 failures; its own sweep on `865c2d4b`, **128 of 128
+byte-identical to `9.2/after/sweep`**, 128 rc 0, validation active and silent, 1-01 `e2da5131`, 111 identical to
+the before and the 17 changed exactly the 18 scaled levels less 4-19; the frames checked by eye against the
+original's h6.3 on 2-24, 2-19, 2-13, 2-22, 2-15, 2-29 and 4-16; `snap_pre8` 1,232 of 1,232; 0 refusals in 143
+launches. Its four low findings went in at commit as TEXT, no behaviour changed: `test_mp_levels` recorded as not
+run (corrected above: its gate row, the suites, deviation 5 and LEFT FOR LATER, and the backlog); 2-19 described
+as matching the original's h6.3 where only the player's x does - the original's upper crate never leaves its
+ledge (`verify1/trip/2-19_level18a.png`) - so the headline and the backlog row are reworded; the formats doc
+citing `ETHSpriteEntity.cpp:315-318` for the particle scale, now `:316-319` as `tscn.py` and step 93 have it; and
+2-29's barrel and scale-1 stone standing right of where the original's stand, in the before and after frames alike
+(`verify1/trip/2-29_level28a.png`), older than this step and now filed in the backlog beside 2-19's crate. At
+commit the build was confirmed current by a ninja dry run on a copy of `build/build.ninja`: "no work to do" (a
+dry run through `port_build.bat` stops at CMake's glob re-check).
+
+**RECORDED DEVIATIONS.**
+1. **Joint anchors are scaled too.** 9a (4) lists size, offset, polygon, compound and radius; the engine also
+   normalises a revolute joint's anchor against the scaled box (`ETHRevoluteJoint.cpp:62`), so the converter scales
+   `joint_anchor_x/y`. No scaled placement has a joint, so the levels are unchanged by it; `test_scale.py` pins it.
+2. **`trigger_size` stays unscaled for a stated reason**, not as "untested": a script's `GetCollisionBox()` returns the
+   box as read (`ETHEntity.cpp:314-320`). No scaled placement has one.
+3. **A non-positive `<Scale>` is refused, not written** (9a (4) does not say): the port's reader would refuse the
+   level. None ships.
+4. **`test_mp_start` changed** (a test, not the port): its two tier checks read units rather than `sizePx`, and a new
+   pin counts the scaled placements - step 93 changed `sizePx`, and the suite was not run there.
+5. **The `test_mp_levels` gate was measured in the independent check, not in the build**: Smart App Control refused
+   the build's `test_mp_levels.exe` twice (launch and its one relink), and the counts it pins were read off the
+   files; the check's relink of the same source (`56084a70`) ran it: 129 checks, 0 failures.
+
+**LEFT FOR LATER.**
+- **9.3** gates the pictures and the bodies: `test_mp_levels` `keys["scale"]` 33 (pinned here, and run: 129 checks), the three
+  `test_mp_sprites` level pins (41.6 x 41.6; 512 x 64 with offset (0, -30); 51.2 x 51.2), `barrel_width.py` (previewed:
+  on the gate) and `stone.py` (previewed: the script needs an unclipped frame), and the suites R9 names. `test_mp_play`
+  reads `level30` alone; `test_mp_start`'s "128 play" is the suite that loads every barrel level.
+- **The compound path ignores the box's position in the engine** (`ETHPhysicsSimulator.cpp:92` passes `box.size`
+  alone) while the converter adds it to each fixture: moot, 0 of the 10 compound placements has one; recorded in the
+  formats doc, not changed.
+- **2-19's upper crate falls at the start in the port** and stands on its ledge in the original's h6.3 (before and after
+  this step alike); filed.
+- **The unlit torches' vertical shift** (step 92's deviation 2, step 93's finding): not taken here either - no type key
+  enters the converter until the owner says how much of `ET_VERTICAL` the port draws.

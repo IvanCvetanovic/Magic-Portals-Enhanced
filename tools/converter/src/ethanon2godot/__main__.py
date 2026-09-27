@@ -153,6 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     all_halos: set[str] = set()
     all_particles = particles.ParticleBlocks()
     particle_systems_dropped = 0
+    scaled_sprites = scaled_colliders = 0
 
     for name in names:
         src = scenes_dir / f"{name}.esc"
@@ -182,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
         all_halos |= report.halos
         all_particles.update(report.particle_blocks)
         particle_systems_dropped += report.particle_systems_dropped
+        scaled_sprites += report.scaled_sprites
+        scaled_colliders += report.scaled_colliders
 
         if not args.dry_run:
             (out_dir / f"{name}.tscn").write_text(text, encoding="utf-8")
@@ -290,6 +293,11 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"  particle blocks named: {len(all_particles.blocks)} distinct; systems the engine "
         f"drops (particles <= 0, or past the second): {particle_systems_dropped}"
+    )
+    # A <Scale> other than 1: a `scale` line on the Sprite2D, and the collider written scaled.
+    print(
+        f"scaled sprites: {scaled_sprites}; colliders with the scale baked in: "
+        f"{scaled_colliders}"
     )
 
     verb = "would convert" if args.dry_run else "converted"

@@ -280,7 +280,15 @@ void AllLevels() {
     CHECK_EQ(total.keys["offset"], 88);
     CHECK_EQ(total.keys["blend_mode"], 64);
     CHECK_EQ(total.keys["radius"], 60);
-    CHECK_EQ(total.keys.size(), std::size_t{11});
+    // The 33 placements whose entity states a <Scale> other than 1 - 31 barrels
+    // at 1.3, 2-22's stone at 0.8 and 4-19's eclipse at 2 - each carry it on their
+    // Sprite2D since the levels were regenerated on 27 September 2026 (planning
+    // step 94, the visuals order's 9.2). Every file came out as the one before
+    // plus those 33 lines, with 31 box sizes and one circle's radius changed in
+    // value to the scaled body the engine builds (22 x 29 -> 28.6 x 37.7, and
+    // 30 -> 24); no count below or above moved but this one and the total.
+    CHECK_EQ(total.keys["scale"], 33);
+    CHECK_EQ(total.keys.size(), std::size_t{12});
 
     // Metadata by spelling. The 80 bare numbers are the ten hinges' eight
     // joint_* keys, and nothing else is written bare.

@@ -15,12 +15,21 @@ Ethanon is origin-top-left, +x right, **+y down** — the same convention as God
 
 *Origin.* ``absoluteOrigin = typeAnchor(size) + pivotAdjust * scale``, and the quad is
 drawn at ``screenPos - absoluteOrigin`` (``ETHEntity.cpp:270-297``). Every chapter-1
-entity is ``type=0`` ⇒ ``EO_CENTER`` ⇒ ``typeAnchor = size/2``, and no scene carries a
-``<Scale>``, so ``scale = 1``. Godot's ``Sprite2D`` is centred by default, which means
-the type anchor cancels exactly and all that survives is ``offset = -pivotAdjust``.
-**That is why no texture dimensions are needed.** A ``type=2`` (``ET_VERTICAL``,
-anchor at ``size.y``) entity would need the sprite height and is rejected rather than
-silently misplaced — none occur in chapter 1.
+entity is ``type=0`` ⇒ ``EO_CENTER`` ⇒ ``typeAnchor = size/2``. Godot's ``Sprite2D`` is
+centred by default, which means the type anchor cancels exactly and all that survives is
+``offset = -pivotAdjust``. **That is why no texture dimensions are needed.** A ``type=2``
+(``ET_VERTICAL``, anchor at ``size.y``) entity needs the sprite height, and is rejected
+rather than silently misplaced when it cannot be measured.
+
+*Scale.* ``<Scale>`` (an entity-block property) multiplies the drawn frame
+(``ETHSpriteEntity.cpp:682``) and the pivot (``ETHEntity.cpp:296``) alike, which is what a
+Godot ``Sprite2D`` does with its ``scale`` and its ``offset``: so the Sprite2D gets
+``scale = Vector2(sx, sy)`` and the offset stays ``-pivotAdjust``, unscaled. The engine also
+bakes it into the body (``box.Scale``, ``ETHPhysicsSimulator.cpp:73``), so every collider
+here is written already scaled and the body node never is. The lighting keys are written
+already scaled, their own way (``_entity_lighting``), and the port does not scale them
+again; a particle sidecar is written as the level states it, and the port makes its systems
+at the mean of the scale (``ETHSpriteEntity.cpp:316-319``).
 
 *Rotation.* The Android/GLES2 path rotates by ``-angle``
 (``GLES2Sprite.cpp:207,270``: ``RotateZ(DegreeToRadian(-angle))``), matching
@@ -57,7 +66,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .entity import BS_BOX, BS_CIRCLE, BS_COMPOUND, BS_POLYGON, Entity
+from .entity import BS_BOX, BS_CIRCLE, BS_COMPOUND, BS_POLYGON, Collision, Entity
 from .imagesize import read_size
 from .particles import SIDECAR_PREFIX, ParticleBlocks
 from .scene import Instance, Scene
@@ -108,6 +117,9 @@ _UNGATED_ENTITY_KEYS = frozenset({"eth_z", "eth_emissive"})
 # A halo's size default is the unscaled haloSize (ETHLight.cpp:33), which is what a reader
 # assumes when the key is absent.
 _HALO_SIZE_DEFAULT = (64.0, 64.0)
+# The joint keys entity._parse_joint resolves against the collision box, and the <Scale> axis
+# each takes; the angles and the motor are not lengths.
+_JOINT_ANCHOR_AXIS = {"anchor_x": 0, "anchor_y": 1}
 
 
 def quote(value: str) -> str:
@@ -183,18 +195,43 @@ class ConversionReport:
     particle_blocks: ParticleBlocks = field(default_factory=ParticleBlocks)
     # Systems the engine would drop (particles <= 0, or past the second), over all instances.
     particle_systems_dropped: int = 0
+    # Sprite2D nodes given a `scale` line, and colliders written with a <Scale> baked in.
+    scaled_sprites: int = 0
+    scaled_colliders: int = 0
 
 
 def _collider_lines(inst: Instance, parent: str, sub_ids: list[str]) -> tuple[list[str], str]:
     """Emit the physics body + shape for one instance.
 
     Returns ``(lines, kind)``. ``kind`` is ``""`` when the instance has no collision.
+
+    The entity's ``<Scale>`` is baked in, as ``CreateBody`` does before it builds any
+    shape: ``box.Scale(entity->GetScale())`` (``ETHPhysicsSimulator.cpp:72-73``) multiplies
+    the box's position and size per axis (``ETHCollisionBox.cpp:105-111``), and every
+    builder reads that box - the box, the polygon's ``(size * 0.5) * v + pos`` (``:47``), the
+    circle's ``(size.x + size.y) / 4`` (``:59``) and a compound's fixtures, normalised against
+    the scaled size (``:92``; ``ETHCompoundShape.cpp:51-77``). The body node itself is never
+    scaled: the engine scales no body, only the box it builds one from.
     """
     ent = inst.entity
     if ent is None or not ent.is_collidable or ent.collision is None:
         return [], ""
 
-    col = ent.collision
+    src = ent.collision
+    sx, sy = ent.scale
+    # entity._parse_compound resolved each fixture against the UNSCALED box; the engine
+    # resolves it against the scaled one, and every term is linear in it: offsets and box
+    # extents per axis, a circle's radius on x alone (ETHCompoundShape.cpp:69).
+    compound = []
+    for kind, offset, extent in src.compound:
+        ey = sx if kind == "circle" else sy
+        compound.append((kind, (offset[0] * sx, offset[1] * sy), (extent[0] * sx, extent[1] * ey)))
+    col = Collision(
+        offset=(src.offset[0] * sx, src.offset[1] * sy),
+        size=(src.size[0] * sx, src.size[1] * sy),
+        polygon=src.polygon,
+        compound=compound,
+    )
     # A sensor participates in overlap tests but not in collision response — Area2D is
     # Godot's equivalent. Otherwise static bodies are the overwhelming majority in
     # chapter 1 (level geometry); anything non-static becomes a RigidBody2D so its
@@ -284,6 +321,10 @@ def _vertical_offset(ent, sprite_dir: Path | None) -> tuple[float, float] | None
         quadCenter = screenPos - absoluteOrigin + displaySize/2
                    = screenPos - (w/2, h) - pivot + (w/2, h/2)
                    = screenPos - (0, h/2) - pivot
+
+    Unscaled, like every offset written here: with a ``<Scale>`` s the anchor is taken on
+    the scaled size and the pivot is scaled (``ETHEntity.cpp:296``), so the centre is
+    ``screenPos + s * (-(0, h/2) - pivot)``, which is this offset under the Sprite2D's scale.
     """
     if sprite_dir is None or not ent.sprite:
         return None
@@ -410,6 +451,16 @@ def write_scene(
                 )
                 continue
             sprite_offset = vertical
+        scale_x, scale_y = ent.scale
+        if not (scale_x > 0.0 and scale_y > 0.0):
+            # The port's reader refuses a Sprite2D scale that is not two numbers above 0, and
+            # the whole level with it (game/sim/Tscn.cpp); the engine would draw the picture
+            # mirrored and build the body from a negative box. None ships.
+            report.skipped.append(
+                f"{inst.entity_name}#{inst.id}: <Scale> {_num(scale_x)}, {_num(scale_y)} "
+                "is not above 0"
+            )
+            continue
         if ent.shape == BS_COMPOUND and (ent.collision is None or not ent.collision.compound):
             report.skipped.append(
                 f"{inst.entity_name}#{inst.id}: shape=4 (BS_COMPOUND) with no <Compound> data"
@@ -432,9 +483,18 @@ def write_scene(
         if ent.collision is not None and ent.collision.joint:
             # A revolute joint. Emitted as metadata rather than as a Godot joint node
             # because the pivot has to be attached at runtime, once the body exists.
+            # Its anchor is normalised against the SCALED box (``boxSize = size * scale * 0.5``,
+            # ETHRevoluteJoint.cpp:62), so it takes the <Scale> like the collider does.
             for key in sorted(ent.collision.joint):
-                body.append(f"metadata/joint_{key} = {_num(ent.collision.joint[key])}")
+                value = ent.collision.joint[key]
+                axis = _JOINT_ANCHOR_AXIS.get(key)
+                if axis is not None:
+                    value *= ent.scale[axis]
+                body.append(f"metadata/joint_{key} = {_num(value)}")
         if ent.collision is not None and not ent.is_collidable:
+            # UNSCALED, unlike a body: this box is for the scripts' own overlap tests, and a
+            # script's GetCollisionBox() returns the box as read, never times the <Scale>
+            # (ETHEntity.cpp:314-320). No shipped trigger has a <Scale> other than 1.
             body.append(f"metadata/trigger_size = {_vec2(*ent.collision.size)}")
             if ent.collision.offset != (0.0, 0.0):
                 body.append(f"metadata/trigger_offset = {_vec2(*ent.collision.offset)}")
@@ -519,6 +579,11 @@ def write_scene(
                 # and only the pivot survives (negated — Ethanon SUBTRACTS the origin).
                 # ET_VERTICAL additionally carries half the sprite height.
                 body.append(f"offset = {_vec2(*sprite_offset)}")
+            if ent.scale != (1.0, 1.0):
+                # After the offset it multiplies: Godot draws the texture AND its offset times
+                # the scale, as the engine draws the frame and the pivot (module docstring).
+                body.append(f"scale = {_vec2(scale_x, scale_y)}")
+                report.scaled_sprites += 1
             godot_blend = _ETH_BLEND_TO_GODOT.get(ent.blend_mode)
             if godot_blend is not None:
                 mat = f"CanvasItemMaterial_blend{godot_blend}"
@@ -536,6 +601,8 @@ def write_scene(
         if kind:
             body.extend(lines)
             report.colliders += 1
+            if ent.scale != (1.0, 1.0):
+                report.scaled_colliders += 1
 
     # load_steps = ext_resources + sub_resources + 1 (the scene itself).
     header = [f"[gd_scene load_steps={len(ext) + len(subs) + 1} format={TSCN_FORMAT}]", ""]

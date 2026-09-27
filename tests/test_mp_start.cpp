@@ -281,6 +281,13 @@ Tiers::Rules TheTiers() {
 // hd and fullhd files beside the 1x ones (the remake's entity_tiers.json), and a
 // missing copy draws its images at 1x with no other sign, so the split is pinned
 // here - 2,248 hd, 146 fullhd, 489 1x placements of 66 textures, 38 / 7 / 21.
+//
+// The tier is about a file's UNITS, before the entity's <Scale> multiplies them
+// (Sprites::Find, 00_order K9): since the levels carry the scale (planning step
+// 94, the visuals order's 9.2), sizePx is the units times it, so the units are
+// taken from the texels and the density here, and the scaled placements are
+// counted on their own - 33, the entities whose body states a <Scale> other
+// than 1.
 void EveryLevelsArtReads() {
     const Tiers::Rules tiers = TheTiers();
     int sprites = 0;
@@ -290,6 +297,7 @@ void EveryLevelsArtReads() {
     std::map<std::string, std::set<std::string>> textures;
     int resized = 0;  // placements whose units are not their 1x file's size
     int unsized = 0;  // tier placements whose 1x file cannot be sized
+    int scaled = 0;   // placements drawn at a scale other than 1
     // The converter's record of the same choice (the remake's out/assets/entity_tiers.json,
     // step 65), made from app.enml rather than tiers.json: the two sets of numbers are
     // checked against each other here, placement by placement.
@@ -318,6 +326,8 @@ void EveryLevelsArtReads() {
             sprites += static_cast<int>(found.size());
             for (const Sprites::Sprite& sprite : found) {
                 if (sprite.additive) ++added;
+                if (sprite.scale != glm::dvec2(1.0)) ++scaled;
+                const glm::dvec2 units(Tiers::Units(sprite.texels, sprite.density));
                 const std::filesystem::path drawn(sprite.texture);
                 ++placements[sprite.tier];
                 textures[sprite.tier].insert(drawn.filename().string());
@@ -326,8 +336,8 @@ void EveryLevelsArtReads() {
                     const std::string tier = row["tier"].AsString() == "1x" ? std::string() : row["tier"].AsString();
                     const bool same = row.IsObject() && tier == sprite.tier && row["units"].IsArray() &&
                                       row["units"].AsArray().size() == 2 &&
-                                      row["units"].AsArray()[0].AsNumber() == sprite.sizePx.x &&
-                                      row["units"].AsArray()[1].AsNumber() == sprite.sizePx.y &&
+                                      row["units"].AsArray()[0].AsNumber() == units.x &&
+                                      row["units"].AsArray()[1].AsNumber() == units.y &&
                                       row["density"].AsNumber() == static_cast<double>(sprite.density);
                     if (same) {
                         ++agreed;
@@ -343,7 +353,7 @@ void EveryLevelsArtReads() {
                 std::string why;
                 if (!Sprites::ImageSize(oneX.string(), w, h, why)) {
                     ++unsized;
-                } else if (sprite.sizePx != glm::dvec2(w, h)) {
+                } else if (units != glm::dvec2(w, h)) {
                     ++resized;
                 }
             }
@@ -370,6 +380,8 @@ void EveryLevelsArtReads() {
     // (system_6.md section 0). Every other tier file is exactly twice its 1x file.
     CHECK_EQ(resized, 28);
     CHECK_EQ(unsized, 0);
+    std::printf("  scale: %d placements drawn at a scale other than 1\n", scaled);
+    CHECK_EQ(scaled, 33);
     if (haveManifest) {
         std::printf("  the converter's entity_tiers.json: %d placements agree on tier, density and units, %d do not\n",
                     agreed, disagreed);

@@ -545,6 +545,61 @@ no particles. So the sidecar holds only what the engine keeps, and every one of 
   and the loading screen) - the chapter-1 finding of the orientation notes, for all four worlds. So a placement's particle systems are its own `<Particles>` or none, and the port reads no `.ent` for a
   node that names no sidecar. Of the 2,043 sprite nodes that name none, 0 have an `.ent` that holds a system.
 
+### 2026-09-27 (scale) — the Sprite2D `scale` and the colliders it is baked into (`tscn.py`)
+
+Source citations are `toolkit/Source/src/engine/…` in `reference/ethanon/` unless a path says otherwise. The
+research is local and gitignored: `out/parity/visuals/briefs/systems_9_10.md` 9a and `00_order.md` step 9.2; the
+counts below are `out/parity/visuals/9.2/census/`. Planning step 94 is the record; step 93 is the port's reader.
+
+**What the engine does with `<Scale x y>`**, an entity-block property (`Entity/ETHEntityProperties.cpp:268`, §5.6):
+- **The picture** is the frame times the scale (`ETHSpriteEntity::GetCurrentSize`, `Entity/ETHSpriteEntity.cpp:652-683`,
+  the product `:682`), drawn about the type anchor on that scaled size plus the pivot times the scale
+  (`ETHEntity::ComputeAbsoluteOrigin`, `Entity/ETHEntity.cpp:270-297`, `:296`).
+- **The body** is built from the collision box after `box.Scale(entity->GetScale())` (`CreateBody`,
+  `Physics/ETHPhysicsSimulator.cpp:72-73`), which multiplies its position and size per axis and leaves z alone
+  (`Physics/ETHCollisionBox.cpp:105-111`). Every shape builder reads that box: the box itself (`GetBoxShape`, `:31-38`),
+  the polygon's `(size * 0.5) * v + pos` (`:47`), the circle's `(size.x + size.y) / 4` at `pos` (`:59-60`) and a
+  compound's fixtures, `GetShapes(box.size)` (`:92`) → `ETHCompoundShape::GetShape` (`Physics/ETHCompoundShape.cpp:51-77`):
+  positions and box sizes per axis, a circle's radius `radius * scale.x * 0.5`, x alone (`:69`). A revolute joint's
+  anchor is normalised against the scaled half box, `GetCollisionBox().size * GetScale() * 0.5`
+  (`ETHRevoluteJoint::ComputeAnchorPosition`, `Physics/ETHRevoluteJoint.cpp:60-64`).
+- **A script** sees the box unscaled: `ETHEntity::GetCollisionBox` returns it as read (`Entity/ETHEntity.cpp:314-320`).
+- **The particles** are made at `(scale.x + scale.y) / 2` (`Entity/ETHSpriteEntity.cpp:316-319`); the light and the
+  halo take it per consumer (the lighting subsection above); a lightmap never (the lighting subsection, step 93).
+- Found on the way, not changed: the compound path passes `box.size` alone (`:92`), so the engine ignores a compound
+  entity's collision `<Position>`, which the converter adds to each fixture's offset. Moot on the shipped data: **0 of
+  the 10** compound placements has a position other than (0, 0).
+
+**What the converter writes** (`tscn.py`, 2026-09-27):
+- `scale = Vector2(sx, sy)` on the `Sprite2D`, after its `offset`, only where `<Scale>` is not (1, 1). A Godot
+  Sprite2D draws its texture times `scale` about its `offset` times `scale` - the engine's own rule - so the offset
+  stays `-pivotAdjust` as before, unscaled, and so does `_vertical_offset`'s half height (the anchor is taken on the
+  scaled size). The entity node and its body node never carry a scale.
+- **Every collider with the scale baked in**, as `CreateBody` does: a `RectangleShape2D`'s `size` and its shape's
+  `position` per axis; a polygon on the scaled box; a circle's `radius` `(sx * w + sy * h) / 4`; a compound's fixture
+  offsets and box extents per axis and its circles' radius by `sx`; a joint's `joint_anchor_x/y` by `sx`/`sy`, its
+  angles and motor untouched.
+- **Not scaled**: `trigger_size` / `trigger_offset` (the box a script reads, above); the `eth_*` lighting keys, which
+  the converter writes already scaled per consumer and the port does not scale again (00_order K7); the particle
+  sidecars, which the port makes at the mean of the scale (`buildEmitters`).
+- A `<Scale>` with a component not above 0 skips the instance with a report line: the port's reader refuses such a
+  scale and the whole level with it, and the engine would draw it mirrored from a negative box. None ships.
+- The report prints `scaled sprites: N; colliders with the scale baked in: M`.
+
+**The port's reader** (`game/sim/Tscn.cpp`, planning step 93) takes `scale` on a Sprite2D only, as two numbers above
+0; `Sprites::Find` draws the whole units times it with the offset times it; the body is built from the collider as
+written (`game/sim/LevelBuilder.cpp:124-132`).
+
+**Measured over the 128 levels** (2026-09-27; the census over the `.esc` bodies and the regenerated output):
+- **33 placements** state a `<Scale>` other than 1: `barrel_bomb.ent` / `barrel_bomb` 1.3 ×31 (26 in chapter 2, 1 in
+  chapter 3, 4 in chapter 4), `rolling_stone` 0.8 ×1 (level21a #1135, whose `.ent` says 1), `eclipse.ent` 2.0 ×1
+  (level18c #2583). All are type 0; none carries a light, halo, particle system, lightmap, trigger box, polygon,
+  compound or joint; the eclipse has no collision box at all (shape 0).
+- Against the output before, **18 levels change and only by**: 33 inserted `scale` lines, one in each of those
+  placements' Sprite2D (0 / 27 / 1 / 5 by world); **31** `RectangleShape2D` sizes `22 x 29` → `28.6 x 37.7`
+  (0 / 26 / 1 / 4); **1** `CircleShape2D` radius `30` → `24` (the stone). The eclipse keeps `offset = Vector2(0, -15)`.
+  No line removed, no other line changed, no other key count moved; `out/assets` and `out/data` byte-identical.
+
 ---
 
 ## 1. Orientation: where to look in the engine source
