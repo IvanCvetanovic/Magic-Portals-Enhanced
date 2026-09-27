@@ -231,6 +231,33 @@ void WithTheFlagAloneTheStoneStops() {
     CHECK_MSG(PxOf(run, stone).x < 305.0 - 30.0 + 2.0, "the stone is at " + Px(PxOf(run, stone)));
 }
 
+// THE STONE'S BODY AT ITS <Scale> (00_order 9.3, planning step 95; the owner's
+// standing ruling R9). 2-22's rolling_stone states <Scale 0.8> inline where
+// rolling_stone.ent says 1, over the same 60 x 60 box; the engine makes a circle
+// of (size.x + size.y) / 4 (ETHPhysicsSimulator.cpp:59) from the box after
+// box.Scale (:72-73, ETHCollisionBox.cpp:105-111): 24, where every other stone is
+// 30. What it rolls, rests and breaks with is that circle.
+void TwoTwentyTwosStoneIsItsScaledCircle() {
+    const auto radiusPx = [](const Run& run, const std::string& name) {
+        const auto found = run.level.built.entities.find(name);
+        if (found == run.level.built.entities.end()) return -1.0;
+        const auto* circle = run.registry.try_get<SphereColliderComponent>(found->second);
+        return circle != nullptr ? circle->radius * Units::kPixelsPerMetre : -1.0;
+    };
+    Run scaled;
+    if (Begin("level21a", scaled)) {
+        CHECK_MSG(scaled.level.demolish.FindStone("rolling_stone_1135") != nullptr, "2-22's stone is a stone");
+        const double r = radiusPx(scaled, "rolling_stone_1135");
+        CHECK_MSG(std::fabs(r - 24.0) < 1e-4, "its body a circle of 24, got " + std::to_string(r));
+        std::printf("  level21a's stone at 0.8: a circle of %.2f\n", r);
+    }
+    Run plain;
+    if (Begin("level8", plain)) {
+        const double r = radiusPx(plain, "rolling_stone_ent_597");
+        CHECK_MSG(std::fabs(r - 30.0) < 1e-4, "and level8's, at 1, of 30, got " + std::to_string(r));
+    }
+}
+
 void AStoneWhereTheLevelPutsItBreaksNothing() {
     // level 1-9 spawns the player 58 px from its stone: standing beside one is safe,
     // and the stone left alone stays where it is.
@@ -349,6 +376,7 @@ void runTests() {
     TheRemakesReadingBreaksOnlyWhatIsFlagged();
     AStoneThrownAtAWallBreaksIt();
     WithTheFlagAloneTheStoneStops();
+    TwoTwentyTwosStoneIsItsScaledCircle();
     AStoneWhereTheLevelPutsItBreaksNothing();
     ThePlayerBreaksNothing();
     TheMarginIsTheEdge();

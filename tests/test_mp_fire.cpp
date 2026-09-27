@@ -29,6 +29,8 @@
 #include "sim/Game.hpp"
 #include "sim/Units.hpp"
 
+#include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -176,6 +178,27 @@ void WhatTheLevelsCarry() {
     std::printf("  %s: %d bomb(s)\n", kBombLevel, static_cast<int>(bombs.level.fire.bombs.size()));
 }
 
+// THE BODY A BLAST GRABS, AT THE BARREL'S <Scale> (00_order 9.3, planning step
+// 95; the owner's standing ruling R9). barrel_bomb.ent states <Scale 1.3> over a
+// 22 x 29 collision box, and the engine builds the body from the box after
+// box.Scale (ETHPhysicsSimulator.cpp:72-73, ETHCollisionBox.cpp:105-111): 28.6 x
+// 37.7, which the converter writes since step 94. The blast's 80 reaches
+// colliders, so this is the size a chain and a push are judged on.
+void ABarrelsBodyIsItsScaledBox() {
+    Run run;
+    if (!Begin(kBombLevel, run)) return;
+    CHECK_EQ(run.level.fire.bombs.size(), std::size_t{3});
+    int scaled = 0;
+    for (const Fire::Bomb& bomb : run.level.fire.bombs) {
+        const auto* box = run.registry.try_get<Supersonic::BoxColliderComponent>(bomb.body);
+        const bool ok = box != nullptr && std::fabs(box->size.x * Units::kPixelsPerMetre - 28.6) < 1e-4 &&
+                        std::fabs(box->size.y * Units::kPixelsPerMetre - 37.7) < 1e-4;
+        CHECK_MSG(ok, bomb.name + "'s body is 28.6 x 37.7, the 22 x 29 box at 1.3");
+        if (ok) ++scaled;
+    }
+    std::printf("  %s: %d barrel bodies at 28.6 x 37.7\n", kBombLevel, scaled);
+}
+
 // THE test that separates the decode from the remake's reading: 28 px is inside
 // the original's 32 and outside the remake's 24.
 void AFireAgentReachesItsSpritesWidth() {
@@ -290,6 +313,7 @@ void runTests() {
     TheDecodedNumbersAreNotTheRemakesGuesses();
     TheReaderRefusesWhatWouldBeSilent();
     WhatTheLevelsCarry();
+    ABarrelsBodyIsItsScaledBox();
     AFireAgentReachesItsSpritesWidth();
     ABurningCrateGoesAfterItsSecond();
     FireKillsThePlayerAndABlastDoesNot();

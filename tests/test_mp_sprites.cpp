@@ -541,9 +541,9 @@ void ASpriteIsDrawnAtItsScale() {
     CHECK_MSG(sprite.texels == glm::ivec2(21, 21) && Near(sprite.sizePx.x, 13.0) && Near(sprite.sizePx.y, 13.0),
               "whole units, truncated, then scaled: " + std::to_string(sprite.sizePx.x));
 
-    // The three placements' sizes 9.3 pins on the converted levels, here on files
-    // of their units: a barrel's 32 at 1.3, the eclipse's 256 x 32 at 2 with its
-    // pivot (0, -15), the stone's 64 at 0.8.
+    // The three placements' sizes, here on files of their units: a barrel's 32 at
+    // 1.3, the eclipse's 256 x 32 at 2 with its pivot (0, -15), the stone's 64 at
+    // 0.8. TheScaledPlacementsAreDrawnAtTheirScale pins them on the converted levels.
     Write(dir / "assets" / "barrel.png", PngHeader(32, 32));
     Write(dir / "assets" / "eclipse.png", PngHeader(256, 32));
     Write(dir / "assets" / "stone.png", PngHeader(64, 64));
@@ -1703,6 +1703,89 @@ void AnOffsetAndATurn() {
         const Sprites::Sprite* block = Of(tutorial, "block00_ent_598");
         CHECK_MSG(block != nullptr && Near(block->rotation, 0.7854), "an eighth of a turn, as its node has");
     }
+}
+
+// THE <Scale> EACH PLACEMENT STATES (00_order 9.3, planning step 95), on the
+// levels the converter wrote with it (step 94): the entity's <Scale> on its
+// Sprite2D, the units of its tier file times it, the offset times it. 33 of the
+// .esc files' 4,065 placements state one - barrel_bomb 1.3 (31), rolling_stone 0.8
+// (2-22's, whose .ent says 1), eclipse.ent 2 (4-19's) - and the three the plan
+// names are pinned value for value: 2-15's barrel, drawn 41.6 u where the
+// original is measured at 31.3 / 31.6 u of opaque width (24 of its 32 texels'
+// worth, times 1.3); 4-19's eclipse, 512 x 64 about a pivot twice its level's
+// (0, -15); 2-22's stone, 51.2 u.
+void TheScaledPlacementsAreDrawnAtTheirScale() {
+    std::vector<Sprites::Sprite> sprites;
+    if (LoadLevel("level14a", sprites)) {
+        const Sprites::Sprite* barrel = Of(sprites, "barrel_bomb_ent_1078");
+        CHECK_MSG(barrel != nullptr && FileOf(barrel) == "barrel32_with_sign.png" && barrel->tier == "hd" &&
+                      barrel->texels == glm::ivec2(64, 64) && barrel->scale == glm::dvec2(1.3, 1.3) &&
+                      Near(barrel->sizePx.x, 41.6) && Near(barrel->sizePx.y, 41.6) &&
+                      barrel->offsetPx == glm::dvec2(0.0) && barrel->atPx == glm::dvec2(422.5, 168.5),
+                  "2-15's barrel: hd, 32 units at 1.3, 41.6 x 41.6 about its node");
+    }
+    if (LoadLevel("level18c", sprites)) {
+        const Sprites::Sprite* eclipse = Of(sprites, "eclipse_ent_2583");
+        CHECK_MSG(eclipse != nullptr && FileOf(eclipse) == "eclipse.png" && eclipse->tier.empty() &&
+                      eclipse->texels == glm::ivec2(256, 32) && eclipse->scale == glm::dvec2(2.0, 2.0) &&
+                      eclipse->sizePx == glm::dvec2(512.0, 64.0) && eclipse->offsetPx == glm::dvec2(0.0, -30.0) &&
+                      eclipse->atPx == glm::dvec2(256.0, 320.0) && eclipse->zIndex == -80,
+                  "4-19's eclipse: its 1x file at 2, 512 x 64, the level's offset (0, -15) drawn at (0, -30)");
+    }
+    if (LoadLevel("level21a", sprites)) {
+        const Sprites::Sprite* stone = Of(sprites, "rolling_stone_1135");
+        CHECK_MSG(stone != nullptr && FileOf(stone) == "rolling_stone.png" && stone->tier == "hd" &&
+                      stone->texels == glm::ivec2(128, 128) && stone->scale == glm::dvec2(0.8, 0.8) &&
+                      Near(stone->sizePx.x, 51.2) && Near(stone->sizePx.y, 51.2) &&
+                      stone->offsetPx == glm::dvec2(0.0) && stone->atPx == glm::dvec2(443.0, 119.0),
+                  "2-22's stone: hd, 64 units at 0.8, 51.2 x 51.2");
+    }
+
+    // And every one of the 33, over the 128 levels: no other sprite is scaled, and
+    // each is its units times its scale.
+    const Tiers::Rules tiers = TheTiers();
+    int levels = 0;
+    int scaled = 0;
+    int barrels = 0;
+    int stones = 0;
+    int eclipses = 0;
+    int offRule = 0;
+    for (const char* suffix : {"", "a", "b", "c"}) {
+        for (int i = 0; i < 32; ++i) {
+            const std::string level = "level" + std::to_string(i) + suffix;
+            Tscn::Scene scene;
+            std::vector<Sprites::Sprite> all;
+            std::string error;
+            const bool read = Tscn::Load(kLevels + "/" + level + ".tscn", scene, error) &&
+                              Sprites::Find(scene, kLevels + "/..", tiers, all, error);
+            CHECK_MSG(read, level + ": " + error);
+            if (!read) continue;
+            ++levels;
+            for (const Sprites::Sprite& sprite : all) {
+                if (sprite.scale == glm::dvec2(1.0)) continue;
+                ++scaled;
+                const glm::dvec2 units(Tiers::Units(sprite.texels, sprite.density));
+                const glm::dvec2 expected = units * sprite.scale;
+                if (!Near(sprite.sizePx.x, expected.x) || !Near(sprite.sizePx.y, expected.y)) {
+                    ++offRule;
+                    CHECK_MSG(false, level + "/" + sprite.node + " is not its units times its scale");
+                }
+                const std::string file = FileOf(&sprite);
+                if (sprite.scale == glm::dvec2(1.3, 1.3) && file == "barrel32_with_sign.png") ++barrels;
+                if (sprite.scale == glm::dvec2(0.8, 0.8) && file == "rolling_stone.png") ++stones;
+                if (sprite.scale == glm::dvec2(2.0, 2.0) && file == "eclipse.png") ++eclipses;
+            }
+        }
+    }
+    std::printf("  scaled sprites: %d levels, %d scaled (%d barrels at 1.3, %d stone at 0.8, %d eclipse at 2), "
+                "%d off the rule\n",
+                levels, scaled, barrels, stones, eclipses, offRule);
+    CHECK_EQ(levels, 128);
+    CHECK_EQ(scaled, 33);
+    CHECK_EQ(barrels, 31);
+    CHECK_EQ(stones, 1);
+    CHECK_EQ(eclipses, 1);
+    CHECK_EQ(offRule, 0);
 }
 
 // THE PARTICLE SYSTEMS THE LEVELS PLACE (00_order 8.3, planning step 91): what
@@ -2975,6 +3058,7 @@ int main() {
     Level8sArt();
     Level0sStaticPortalsAreAdded();
     AnOffsetAndATurn();
+    TheScaledPlacementsAreDrawnAtTheirScale();
     ThePlacementsCarryTheSystemsTheirLevelsState();
     return ::test::summary("test_mp_sprites", 70);
 }

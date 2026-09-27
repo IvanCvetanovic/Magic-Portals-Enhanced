@@ -16962,3 +16962,170 @@ dry run through `port_build.bat` stops at CMake's glob re-check).
   this step alike); filed.
 - **The unlit torches' vertical shift** (step 92's deviation 2, step 93's finding): not taken here either - no type key
   enters the converter until the owner says how much of `ET_VERTICAL` the port draws.
+
+## Step 95 - the scale each placement states, pinned where the levels carry it: the three sprites the plan names, and the barrels' and the stone's bodies as the engine builds them (built)
+
+The visuals plan's step 9.3 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 9, "SE-b: pins and
+gates"; its brief `systems_9_10.md` 9a (5)). Track A, on MPR `main` in `build/`, after step 94 (`916d0b5`). TESTS
+ONLY: changed are `tests/test_mp_sprites.cpp`, `tests/test_mp_fire.cpp`, `tests/test_mp_demolish.cpp` and the
+backlog. No file under `game/`, `engine/` or `tools/` is touched (submodule at `4bfcf67`); `out/levels`, `out/assets`
+and `out/data` are untouched (1,256 files, every md5 as step 94's `out_after.md5` lists it; `out/snap_pre8` not
+written); the build relinked the three suites alone, so `MagicPortals.exe` is still step 93's `865c2d4b`. **What batch
+9 changed is now pinned on the converted levels: the three placements the plan names drawn at their scale - 2-15's
+barrel 41.6 x 41.6, 4-19's eclipse 512 x 64 about (0, -30), 2-22's stone 51.2 x 51.2 - and every one of the 33 scaled
+sprites at its units times its scale; and the bodies R9 changed, as built: level12a's three barrels 28.6 x 37.7 u,
+2-22's stone a circle of 24 u (level8's, at 1, of 30). On screen the port draws the original's sizes: 2-15's barrels
+31.3 / 31.6 u wide at centres 1092.5 / 1188 px, the original's widths to the pixel, and 2-22's stone r 24.65 u against
+the original's 24.62-24.64 u by one instrument - rebuilt here, because the brief's `stone.py` reads the ORIGINAL at
+31.6-37.1 u. 4-19's eclipse, which the port never shows, matches footage F17 at its scale: the original's rim curves
+at r 707.2 px, the file at 2 at 713.7 (at 1 it would be 356.9). The 128-level f420 sweep is 128 of 128 byte-identical to step 94's. Gameplay: none changed by this
+step - it pins the change step 94 made under R9 - and every suite R9 names is green: `test_mp_play` 205 and
+`test_mp_launchers` 98 print, line for line, what they printed at step 90; `test_mp_fire` 48 and `test_mp_demolish`
+138 carry the new body pins. Batch 9 is closed.**
+
+**BLOCKERS CHECKED.** 9.3's blockers are met: **9.2** is step 94 (`916d0b5`), committed, which regenerated the levels
+with the scale on 33 sprites and in 32 bodies; **R9** is the owner's standing ruling. Section 8.13 has no row for
+9.3, so section 7's row stands: "`test_mp_levels` `keys["scale"] == 33`; `test_mp_sprites`: level14a barrel (41.6,
+41.6); level18c eclipse (512, 64) with offset (0, -30); level21a stone (51.2, 51.2); `barrel_width.py` on 2-15: 31.4
++- 1.0 u, centres +-3 px; `stone.py` on 2-22: r 25.3 +- 1.5 u; `test_mp_play`, `test_mp_fire`, `test_mp_demolish`,
+`test_mp_launchers` green", with the backlog's two rows for 9.3 (which suite carries R9, since `test_mp_play` reads
+`level30` alone; and `stone.py`, which step 94's probe could not use). The baseline is step 94's after,
+`9.2/after/sweep`: its 128 PNGs match the md5s its `capture.txt` logged (128 of 128, checked for power-loss damage
+before use), and `build/` held `865c2d4b`, the binary it was captured on, so no fresh "before" was needed.
+
+**THE OWNER'S STANDING RULINGS.** **R9** (the `<Scale>` bodies, as the original): applied in step 94, and gated here -
+this step is R9's gate row. **R13** (route B): the pins read the file the port resolves - `hd` for the barrel and the
+stone, the 1x file for the eclipse, which has no tier - and multiply its whole units. **R24 and R25 (step 76) remain
+the owner's to rule**; this step neither applies nor withdraws them.
+
+**WHAT WAS BUILT** (tests only).
+- **`test_mp_sprites` `TheScaledPlacementsAreDrawnAtTheirScale`** (the levels part): through `Sprites::Find` on the
+  converted files, value for value - level14a `barrel_bomb_ent_1078`: `hd/barrel32_with_sign.png`, 64 texels, scale
+  (1.3, 1.3), **41.6 x 41.6**, offset (0, 0), at (422.5, 168.5); level18c `eclipse_ent_2583`: the 1x `eclipse.png`,
+  256 x 32 texels, scale (2, 2), **512 x 64 with offset (0, -30)** from the level's (0, -15), at (256, 320), z -80;
+  level21a `rolling_stone_1135`: `hd/rolling_stone.png`, 128 texels, scale (0.8, 0.8), **51.2 x 51.2**, at (443,
+  119). Then over the 128 levels: **33 sprites with a scale other than 1 - 31 barrels at 1.3, 1 stone at 0.8, 1
+  eclipse at 2 - each exactly `Tiers::Units(texels, density) x scale`, 0 off the rule**. The fixture comment in
+  `ASpriteIsDrawnAtItsScale` ("the three placements' sizes 9.3 pins on the converted levels") now names the new test.
+- **`test_mp_fire` `ABarrelsBodyIsItsScaledBox`**: level12a's three bombs (the chain level the suite already plays),
+  each body's `BoxColliderComponent` **28.6 x 37.7 u** (within 1e-4 u; 0.572 x 0.754 m) - the 22 x 29 box after
+  `box.Scale(1.3)` (`ETHPhysicsSimulator.cpp:72-73`, `ETHCollisionBox.cpp:105-111`). The entity read is the one the
+  collider is on: `Fire::Find` takes `bomb.body` from `built.entities[node.name]` (`Fire.cpp:253-259`), the entity
+  `LevelBuilder` emplaces the collider on and files under that name (`LevelBuilder.cpp:126`, `:164`).
+- **`test_mp_demolish` `TwoTwentyTwosStoneIsItsScaledCircle`**: level21a's `rolling_stone_1135` is one of Demolish's
+  stones, and its body a `SphereColliderComponent` of **24 u** - `(size.x + size.y) / 4` (`ETHPhysicsSimulator.cpp:59`)
+  of the 60 x 60 box at 0.8; level8's `rolling_stone_ent_597`, at 1, **30 u**. The other 26 stones the levels place are
+  all 30 (a tally of the converted files' `CircleShape2D` by entity).
+
+**THE STONE, RE-INSTRUMENTED** (`9.3/tools/stone93.py`; the brief's script kept as `9.3/tools/stone_brief.py`).
+`briefs/s9_10/stone.py` takes each column's sky level from rows 100-130, which the stone's own top (y ~105 px) sits
+in, so its threshold moves with the disc: its saved `stone.json` reads the ORIGINAL's h0.3 / h2.8 / h6.3 at **31.61 /
+36.93 / 37.06 u from 10-13 points**, not the 25.2-25.6 u `systems_9_10` 9a (5) quotes, and step 94's probe read the
+port's scaled stone at 30.16 u. At f420 the scaled disc is whole in the frame (below the HUD buttons, left of the
+edge), so no other frame was captured. The new instrument fixes every parameter before any port frame is read: grey,
+Gaussian 1.0; a first circle from `cv2.HoughCircles` in x 1040-1280, y 90-300 px (radius 50-110 px); rays every 2 deg
+over [-20, 160] deg (the right side, the top and the upper left - the arcs that border sky), each kept only where its
+outer window [1.25, 1.5] r0 is at least 20 grey levels above its inner [0.5, 0.75] r0 and stays below the HUD band
+(y 90); the edge the first crossing of their mean going outward; an algebraic circle fit, three rounds dropping
+points more than 2 px off. **Validated first, in this order**: (a) the original's three frames read **24.62 / 24.63 /
+24.64 u** (69.24-69.29 px, 42-48 points over -20..132 deg, rms 0.08-0.11 px), the fitted circle tracing the whole
+rim by eye (`9.3/stone/stone93_h6.3.png`); (b) the prediction from the drawn file alone, `hd/rolling_stone.png`'s
+alpha >= 128 disc (area-equivalent radius 61.39 texels, 30.69 units at 1) at 0.8: **24.55 u** (69.06 px); its
+half-extent gives 24.40 u; the quad is 51.2 u (half 25.6). Then the port. The brief's 25.2-25.6 u for the original is
+reproduced by neither script; the gate band 25.3 +- 1.5 u holds the original's own 24.6 u.
+
+| Gate (00_order 7, 9.3; the backlog's rows for 9.3) | Required | Today (step 94's after) | Measured |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (6 steps: the three suites compiled and linked - `test_mp_sprites` `9ce4c75c`, `test_mp_fire` `fef75684`, `test_mp_demolish` `ac765982`; nothing else rebuilt, `MagicPortals.exe` still `865c2d4b`) |
+| `test_mp_levels` `keys["scale"] == 33`, re-counted | 33, and `keys.size()` 12 | pinned in step 94 (129 checks, in its independent check) | **passes: 129 checks, 0 failures** (`56084a70`, first launch); re-counted with grep over `out/levels`: **33 `^scale = ` lines, 31 `(1.3, 1.3)`, 1 `(0.8, 0.8)`, 1 `(2, 2)`**, the md5 list of all 1,256 `out/` files unchanged since step 94 |
+| `test_mp_sprites` level14a barrel | `sizePx` (41.6, 41.6) | pinned only on files the suite writes (step 93) | **passes: 1,224 checks, 0 failures** (1,080 before; 144 added): 41.6 x 41.6 from hd 64 texels at 1.3, offset 0, at (422.5, 168.5) |
+| `test_mp_sprites` level18c eclipse | (512, 64), offset (0, -30) | as above | **passes**: 512 x 64 from the 1x 256 x 32 at 2, offset (0, -30), at (256, 320), z -80 |
+| `test_mp_sprites` level21a stone | (51.2, 51.2) | as above | **passes**: 51.2 x 51.2 from hd 128 texels at 0.8, at (443, 119); and over 128 levels **33 scaled (31 / 1 / 1), 0 off the rule** |
+| `barrel_width.py` on 2-15 | 31.4 +- 1.0 u, centres +-3 px (1092.5 / 1188 px) | 31.3 / 31.6 u (step 94's probe) | **passes: 31.3 / 31.6 u** (88 / 89 px, dark runs 1049-1136 and 1144-1232 px on row 476), **centres 1092.5 / 1188 px (0 px off)**; the original's h0.3 / h2.8 / h6.3 by the same script 31.3 / 31.6 u (`9.3/barrel/barrel_width.json`) |
+| `stone.py` on 2-22 | r 25.3 +- 1.5 u | 30.16 u as written (step 94's probe) | **as written: NOT MET, 30.16 u** (111 points) - the script's own reading of the original is 31.6-37.1 u (above). **Re-instrumented (`stone93.py`, validated on the original first): passes, 24.65 u** (69.32 px, 43 points over -20..130 deg, rms 0.05 px); the original **24.62-24.64 u** by the same code, **port - original +0.02 u**; the prediction 24.55 u (`9.3/stone/`) |
+| `test_mp_play`, `test_mp_fire`, `test_mp_demolish`, `test_mp_launchers` green | 0 failures; a golden replay that moves is a gameplay change to report | `play` and `launchers` last run at step 90 (205, 98) | **passes: `play` 205, `fire` 48, `demolish` 138, `launchers` 98, 0 failures**; `play`'s and `launchers`' output line for line step 90's (`8.2/logs`), `fire`'s and `demolish`'s step 94's plus the new lines, and step 94's were step 90's line for line (`8.2/logs`, `9.2/logs`): R9's larger barrels moved no number either prints, level12a's chain of 3 included - no replay moved |
+| (widened) R9's bodies, as built | the engine's sizes | pinned only in the files (`test_mp_levels`' counts, the converter's pytest) | **passes**: level12a's 3 barrels **28.6 x 37.7 u**; 2-22's stone **24 u**; level8's stone 30 u |
+| (widened) 128-level f420 sweep, every change explained | against step 94's after | `9.2/after/sweep`, 128 PNGs matching their log lines | **passes: 128 of 128 byte-identical** (`9.3/compare_sweep.py` -> `compare_sweep.json`; both sweeps' 128 PNGs match the md5s their own `capture.txt` logged), 1-01 `e2da5131`: the same binary on the same levels, so there is no level to explain |
+| (widened) every level still runs | 128 rc=0, validation active and silent | 128 | **passes: 128 of 128 rc=0**, validation ACTIVE in 128 logs, 0 messages |
+| (widened; 00_order section 5, F17 names 9.3) 4-19's eclipse at its scale, against footage | the drawn file at 2 matches the original's picture | no picture: below the start view (9a (6)), and the port has no `rocket_landing` to raise it | **matches at 2, not at 1**: the rim's curvature in F17 r5 at rest (frames #620-#649, the black disc's top edge over x 150-1130 px, a trimmed circle fit per frame) is **r 707.2 px** (706.2-708.0 over 30 frames); `eclipse.png`'s alpha-128 edge fitted the same way is r 126.88 texels, **713.7 px at 2** (5.625 px a texel) - ratio **0.991** - and 356.9 px at 1 (ratio 1.98). Its top sits at 610.1 px, F17's own 610 (`9.3/eclipse/eclipse_f17.json`) |
+| (9a (5)) mean_abs against h6.3 | not up by more than 0.3 where nothing is scaled; down on 2-15 and 2-22 | step 94's probe: 2-15 3.05 -> 2.43, 2-22 7.44 -> 6.92 | **unchanged by this step** (every frame byte-identical to step 94's after): 2-15 2.43, 2-22 6.92. Batch 9 left every level without a scaled placement byte-identical (steps 93 and 95: 128 of 128; step 94: all 110), so it moved no unscaled level's mean_abs; any drift from step 55's values is other batches' |
+| (9a (5)) the sprite count | stays 2,883 | 2,883 (`test_mp_start` at step 94) | **passes, in the independent check**: `test_mp_start` (`4023b3b2`, step 94's binary, the same levels) **753 checks, 0 failures**, 128 levels start and play, **2,883 sprites**, 33 scaled placements |
+
+**THE SUITES,** run directly, once each, 0 failures (`9.3/logs/`): **`test_mp_sprites` 1,224**, **`test_mp_fire` 48**,
+**`test_mp_demolish` 138** (the three changed), **`test_mp_levels` 129** (the re-count gate), **`test_mp_play` 205** and
+**`test_mp_launchers` 98** (R9's list; neither reads a scaled level - `level30`, and levels 23-25 - so they are
+non-regression, not barrel tests). **`test_mp_start` ran in the independent check** (`4023b3b2`, the binary step 94
+ran, on the same levels): **753 checks, 0 failures** - 128 levels start and play, 2,883 sprites, 33 scaled
+placements, as at step 94 - which also meets 9a (5)'s "the sprite count stays 2,883". **Not run**: the other
+level-reading suites, whose binaries and levels this step did not change. The full `ctest` was not run.
+
+**SMART APP CONTROL: 0 refusals** in 134 launches: the six suites, each on its first launch (three freshly linked
+here; `test_mp_play` `91acf2d5` and `test_mp_launchers` `437ea84a` on their first launch since step 93's build linked
+them), and the 128 captures on `865c2d4b`. **0 in the independent check** (135 launches: the 7 suites, `test_mp_start`
+among them, and the 128-level sweep) and none at commit, which launched nothing.
+
+**THE INDEPENDENT CHECK** (`9.3/verify1/`, passed every gate): the rule re-derived from the engine source before the
+code was read - the frame times the scale (`ETHSpriteEntity.cpp:682`), the pivot times it (`ETHEntity.cpp:296`), the
+body from the box after `box.Scale` (`ETHPhysicsSimulator.cpp:73`), per axis (`ETHCollisionBox.cpp:105-111`), a
+circle `(size.x + size.y) / 4` (`ETHPhysicsSimulator.cpp:59`) - giving 41.6, 51.2, 512 x 64 about (0, -30), 28.6 x
+37.7 and 24 before a pin was read, and `Sprites.cpp:224-238` and the converted nodes checked against it; the three
+changed suites recompiled out of tree with the build's own `cl` commands (/W4): **0 warnings**
+(`verify1/logs/compile_check.txt`), `build/` left as it was; seven suites once each on the build's binaries -
+**`test_mp_sprites` 1,224, `test_mp_fire` 48, `test_mp_demolish` 138, `test_mp_levels` 129, `test_mp_play` 205,
+`test_mp_launchers` 98, `test_mp_start` 753**, 0 failures, `play` and `launchers` line for line step 90's; its own
+census of the 128 level `.esc` bodies, without the converter: the same 33 non-unit `<Scale>` in the same 18 levels
+(31 at 1.3, 1 at 0.8, 1 at 2); its own sweep on `865c2d4b`, **128 of 128 byte-identical to `9.2/after/sweep` and to
+`9.3/after/sweep`** (1-01 `e2da5131`; `verify1/check_sweep_v1.json`), all three sets' PNGs matching their logged
+md5s, 128 rc 0, validation active and silent; `out/levels`, `out/assets` and `out/data` 1,256 of 1,256 against step
+94's md5 list and `snap_pre8` 1,232 of 1,232 against its manifest; the barrels by an independent gradient-edge
+reading, **31.29 / 31.29 u on the port and on the original's three frames, to the pixel** (23.8 / 24.2 u on step
+93's unscaled frame); the stone by its own instrument (`verify1/tools/stone_v1.py`, the whole rim: 229 points, rms
+0.15 px), **port 24.57 u, original 24.58 / 24.58 / 24.58 u**, and step 93's unscaled stone 30.71 u against the
+30.69 u the file predicts at 1, so it tracks the scale - revised once after its first version found no points on the
+port frame, its seed (70 px) set from its reading of the original, and not anchored to it: the unscaled stone reads
+86.4 px from the same seed; `stone93.py` re-run on its frame, 24.65 u; the brief's `stone.py` swept over thresholds
+0.55-0.75 reads the original at **27.9-68.5 u from 9-14 points** (`verify1/stone_brief_thr.json`), never the
+brief's 25.2-25.6 u; the F17 measurement reproduced exactly (707.2 against 713.7 px, 0.991); mean_abs against h6.3
+by `compare.py`, 2-15 3.05 -> 2.43 and 2-22 7.44 -> 6.92 from step 93's unscaled frames; the before, after and
+original crops checked by eye (`verify1/crops/`); 0 refusals in 135 launches. Its two findings went in at commit as
+TEXT, no behaviour changed: the stone gate's substitute instrument corroborated and handed to the owner (deviation 1,
+LEFT FOR THE OWNER), and `test_mp_start` recorded as not run where it ran there (the suites, a gate row for 9a (5)'s
+sprite count, deviation 4 and the backlog). At commit the build was confirmed current by a ninja dry run on a copy
+of `build/build.ninja`: "no work to do".
+
+**RECORDED DEVIATIONS.**
+1. **The stone gate is measured by a rebuilt instrument, not the brief's `stone.py`.** The script as written reads
+   30.16 u on the port and 31.6-37.1 u on the original, so it measures its own threshold, not the stone (above); its
+   row keeps that reading as NOT MET. `stone93.py`'s parameters were fixed before any port frame was read and it was
+   validated on the original and on the drawn file first. The brief's 25.2-25.6 u for the original is not reproduced
+   by either script; by the new one the original reads 24.62-24.64 u, inside the same band. The independent check's
+   own instrument agrees: port 24.57 u, original 24.58 u; and the brief's script, swept over thresholds 0.55-0.75,
+   reads the original anywhere from 27.9 to 68.5 u. Accepting the substitution is the owner's (below).
+2. **Body pins added** (widened). Section 7 names the suites that must stay green; R9's change was pinned only in the
+   converted files (`test_mp_levels`' counts, the converter's `test_scale.py`). `test_mp_fire` and `test_mp_demolish`
+   now pin the bodies as `LevelBuilder` builds them.
+3. **The eclipse checked against footage** (widened): section 5 names F17 for "9.3 the eclipse", and section 7 lists
+   no gate for it. Measured on the original's own frames against the file at the scale the port pins, since the port
+   never draws it risen.
+4. **`test_mp_play` carries none of R9** (the backlog's row, answered): it reads `level30` alone, which no scale
+   touches. R9's gate is carried by `test_mp_fire` (level12a's barrels: their bodies, and the chain it plays), by
+   `test_mp_demolish` (2-22's stone) and by `test_mp_start` (every level, the 18 scaled ones among them, starts and
+   plays: 753 checks, 0 failures, run in the independent check on step 94's binary and the same levels).
+   `test_mp_play` stays in the gate as non-regression.
+
+**LEFT FOR THE OWNER.**
+- **The stone gate's instrument.** The brief's `stone.py` as written does not measure the stone, so its row stays NOT
+  MET as written; two calibrated instruments put the port inside 25.3 +- 1.5 u (`stone93.py` 24.65 u, the independent
+  check's 24.57 u; the original 24.62-24.64 u and 24.58 u). Accepting the substitution is the owner's call. 00_order
+  section 7 (9.3) and `systems_9_10` 9a (5) should name a calibrated instrument and strike the 25.2-25.6 u baseline,
+  which neither script reproduces; the plan lives under `out/` and is not edited here.
+
+**LEFT FOR LATER.**
+- **No suite plays a barrel level to its end.** 2-24's player now starts on a barrel, as the original's (step 94); a
+  walkthrough of a chapter-2 level is the owner's of the play tests, not a pin.
+- **4-19's eclipse is never on screen in the port**: it stands below the start view, and the port has no
+  `rocket_landing` (the win slides it up to the bottom centre in the original, F17). Its size is pinned in data and
+  checked against F17's picture (above); drawing it rise is the level-end owner's.
+- **The brief's 25.2-25.6 u for the original's stone** is not reproduced (above); the band holds either way.
+- Batch 9 is closed. Carried, unchanged: the pictures the layer re-cuts do not take a node's scale (step 93; none of
+  the 33 is one), and the unlit torches' vertical shift (step 92's deviation 2).
