@@ -52,6 +52,7 @@ metadata/trigger_size = Vector2(8, 24)
 texture = ExtResource("tex_0")
 offset = Vector2(0, 16)
 material = SubResource("Mat_1")
+scale = Vector2(1.3, 0.8)
 
 [node name="Body" type="StaticBody2D" parent="thing"]
 
@@ -117,6 +118,7 @@ void ReadsEveryForm() {
     CHECK(Is(thing->Find("position"), Kind::Vector2, {-12.5, 300}));
     CHECK(Is(thing->Find("rotation"), Kind::Number, {1.5708}));
     CHECK(Is(thing->Find("z_index"), Kind::Number, {-3}));
+    // A scale is the Sprite2D's (00_order 9.1): the entity node above it has none.
     CHECK(thing->Find("scale") == nullptr);
 
     const Tscn::Node* body = scene.Child(*thing, "Body");
@@ -131,6 +133,8 @@ void ReadsEveryForm() {
     CHECK(sprite && Ref(sprite->Find("texture"), Kind::ExtResource, "tex_0"));
     CHECK(sprite && Ref(sprite->Find("material"), Kind::SubResource, "Mat_1"));
     CHECK(sprite && Is(sprite->Find("offset"), Kind::Vector2, {0, 16}));
+    CHECK_MSG(sprite && Is(sprite->Find("scale"), Kind::Vector2, {1.3, 0.8}),
+              "a Sprite2D's scale is read, as the file writes it");
 
     // Same-named children of different parents are different nodes.
     const Tscn::Node* ball = scene.FindNode("ball/Body");
@@ -223,7 +227,7 @@ void RefusesWhatTheConverterDoesNotWrite() {
     // reader that skipped one of these would drop a hinge without a word.
     Rejects(kHead + "[node name=\"j\" type=\"PinJoint2D\" parent=\".\"]\n", "line 4", "PinJoint2D");
     Rejects(kHead + "[connection signal=\"a\" from=\".\" to=\".\" method=\"m\"]\n", "line 4", "[connection]");
-    Rejects(kHead + "scale = Vector2(2, 2)\n", "line 4", "'scale'");
+    Rejects(kHead + "scale = Vector2(2, 2)\n", "line 4", "only a Sprite2D's");
     Rejects(kHead + "position = Color(1, 0, 0, 1)\n", "line 4", "Color");
     Rejects(kHead + "position = Vector2i(1, 2)\n", "line 4", "Vector2i");
     Rejects(kHead + "[ext_resource type=\"AudioStream\" path=\"res://a.ogg\" id=\"a\"]\n", "line 4", "AudioStream");
@@ -234,6 +238,40 @@ void RefusesWhatTheConverterDoesNotWrite() {
             "line 3", "'custom_solver_bias'");
     Rejects(kHead + "metadata/ = 1\n", "line 4", "'metadata/'");
     Rejects(kHead + "metadata/name = \"a\\\"b\"\n", "line 4", "escape");
+}
+
+// A SCALE (00_order 9.1): the entity's <Scale>, which the converter writes on
+// the Sprite2D alone and bakes into the colliders instead (9.2). On any other
+// node the port would draw or build nothing with it, and Godot would draw a
+// negative one mirrored: so on a Sprite2D, as two numbers above 0, or not at all.
+void RefusesAScaleThePortDoesNotDraw() {
+    const std::string entity = "[node name=\"thing\" type=\"Node2D\" parent=\".\"]\n";
+    const std::string sprite = kHead + entity + "[node name=\"Sprite\" type=\"Sprite2D\" parent=\"thing\"]\n";
+    Tscn::Scene scene;
+    std::string error;
+    CHECK_MSG(Tscn::Parse(sprite + "scale = Vector2(1, 1)\n", scene, error), "a scale of 1 is still a scale: " + error);
+    const bool uneven = Tscn::Parse(sprite + "scale = Vector2(2, 0.5)\n", scene, error);
+    CHECK_MSG(uneven && Is(scene.FindNode("thing/Sprite")->Find("scale"), Kind::Vector2, {2, 0.5}),
+              "and an uneven one: " + error);
+
+    // On the sprite, its scale is line 6.
+    Rejects(sprite + "scale = Vector2(0, 1)\n", "line 6", "two numbers above 0");
+    Rejects(sprite + "scale = Vector2(1.3, 0)\n", "line 6", "two numbers above 0");
+    Rejects(sprite + "scale = Vector2(-1, 1)\n", "line 6", "two numbers above 0");
+    Rejects(sprite + "scale = Vector2(1, -0.8)\n", "line 6", "two numbers above 0");
+    Rejects(sprite + "scale = 1.3\n", "line 6", "two numbers above 0");
+    Rejects(sprite + "scale = \"1.3 1.3\"\n", "line 6", "two numbers above 0");
+    Rejects(sprite + "scale = Vector2(1, 1)\nscale = Vector2(2, 2)\n", "line 7", "set twice");
+
+    // Anywhere else, whatever it says.
+    Rejects(kHead + entity + "scale = Vector2(1.3, 1.3)\n", "line 5", "on a Node2D");
+    Rejects(kHead + entity + "[node name=\"Body\" type=\"RigidBody2D\" parent=\"thing\"]\nscale = Vector2(1.3, 1.3)\n",
+            "line 6", "on a RigidBody2D");
+    Rejects(kHead + entity + "[node name=\"Body\" type=\"StaticBody2D\" parent=\"thing\"]\n"
+                             "[node name=\"Shape\" type=\"CollisionShape2D\" parent=\"thing/Body\"]\nscale = Vector2(2, 2)\n",
+            "line 7", "on a CollisionShape2D");
+    Rejects("[gd_scene format=3]\n[sub_resource type=\"RectangleShape2D\" id=\"r\"]\nscale = Vector2(2, 2)\n", "line 3",
+            "'scale' is not in the subset");
 }
 
 // Broken files, and references that point nowhere.
@@ -289,6 +327,7 @@ void runTests() {
     CrlfReadsTheSame();
     ParseReplacesTheScene();
     RefusesWhatTheConverterDoesNotWrite();
+    RefusesAScaleThePortDoesNotDraw();
     RefusesMalformed();
     LoadNamesTheFile();
 }

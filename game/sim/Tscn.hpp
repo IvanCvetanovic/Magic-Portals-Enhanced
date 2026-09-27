@@ -23,7 +23,10 @@
 //   resources    Texture2D (external); RectangleShape2D, CircleShape2D,
 //                CanvasItemMaterial (embedded)
 //   properties   nodes: position, rotation, z_index, texture, offset, material,
-//                shape, polygon, metadata/*; resources: size, radius, blend_mode
+//                shape, polygon, scale, metadata/*; resources: size, radius,
+//                blend_mode. `scale` on a Sprite2D alone, a Vector2 of two
+//                numbers above 0: the entity's <Scale>, read before the
+//                converter writes it (00_order 9.1, K10)
 //   values       "string", number, Vector2(x, y), PackedVector2Array(...),
 //                ExtResource("id"), SubResource("id")
 //

@@ -217,14 +217,25 @@ bool Find(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
             return false;
         }
         sprite.texels = drawn.texels;
-        sprite.sizePx = glm::dvec2(drawn.units);
+
+        // Its entity's <Scale>, on the whole units and on the offset as the level
+        // wrote it (00_order K9). Tscn::Parse has refused any other form; this
+        // says so again for a scene built some other way.
+        if (const Tscn::Value* scale = node.Find("scale"); scale != nullptr) {
+            if (scale->kind != Tscn::Value::Kind::Vector2 || !(scale->numbers[0] > 0.0) || !(scale->numbers[1] > 0.0)) {
+                error = At(node) + owner->name + "'s sprite scale is not a Vector2 of two numbers above 0";
+                return false;
+            }
+            sprite.scale = glm::dvec2(scale->numbers[0], scale->numbers[1]);
+        }
+        sprite.sizePx = glm::dvec2(drawn.units) * sprite.scale;
 
         if (const Tscn::Value* offset = node.Find("offset"); offset != nullptr) {
             if (offset->kind != Tscn::Value::Kind::Vector2) {
                 error = At(node) + owner->name + "'s sprite offset is not a Vector2";
                 return false;
             }
-            sprite.offsetPx = glm::dvec2(offset->numbers[0], offset->numbers[1]);
+            sprite.offsetPx = glm::dvec2(offset->numbers[0], offset->numbers[1]) * sprite.scale;
         }
 
         if (const Tscn::Value* material = node.Find("material"); material != nullptr) {

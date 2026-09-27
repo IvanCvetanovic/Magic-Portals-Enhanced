@@ -33,6 +33,7 @@
 
 #include "sim/Lighting.hpp"
 #include "sim/Particles.hpp"
+#include "sim/Sprites.hpp"
 #include "sim/Tiers.hpp"
 #include "sim/Tscn.hpp"
 
@@ -692,6 +693,37 @@ void ALightmapIsHalfItsSpritesUnits() {
     std::filesystem::remove(hd / "lamp.png", ec);
 }
 
+// AND BEFORE ITS SCALE (00_order 9.1, K9; planning step 93). The engine bakes a
+// lightmap at its sprite's bitmap size with the entity's scale set to 1
+// (ETHLightmapGen.cpp:57, :117-118) and draws it over the scaled picture. The
+// lamp at scale 2 is drawn 64 x 128 units and keeps its 16 x 32 lightmap, half
+// its 32 x 64 units; a lightmap half the DRAWN size is refused against the units.
+void ALightmapIsHalfItsSpritesUnitsBeforeItsScale() {
+    const std::string res = WriteImages();
+    const std::string scaled =
+        Replace(kRoom, "texture = ExtResource(\"tex_0\")\n", "texture = ExtResource(\"tex_0\")\nscale = Vector2(2, 2)\n");
+    Tscn::Scene scene;
+    std::string error;
+    CHECK_MSG(Tscn::Parse(scaled, scene, error), error);
+    std::vector<Sprites::Sprite> sprites;
+    CHECK_MSG(Sprites::Find(scene, res, Tiers::Rules{}, sprites, error), error);
+    const auto lamp = std::find_if(sprites.begin(), sprites.end(), [](const Sprites::Sprite& s) { return s.node == "lamp_7"; });
+    CHECK_MSG(lamp != sprites.end() && lamp->sizePx == glm::dvec2(64.0, 128.0) && lamp->texels == glm::ivec2(32, 64),
+              "the lamp is drawn at twice its 32 x 64 units");
+
+    Lighting::Scene look;
+    CHECK_MSG(Lighting::Read(scene, res, Tiers::Rules{}, look, error),
+              "the scaled lamp keeps its 16 x 32 lightmap: " + error);
+    CHECK_MSG(look.nodes.count("lamp_7") == 1 && !look.nodes["lamp_7"].lightmap.empty(), "and it is read");
+
+    Tscn::Scene drawnHalf;
+    CHECK_MSG(Tscn::Parse(Replace(scaled, "room/add7.png", "room/big7.png"), drawnHalf, error), error);
+    error.clear();
+    const bool read = Lighting::Read(drawnHalf, res, Tiers::Rules{}, look, error);
+    CHECK_MSG(!read && error.find("is 32x64, and twice that is not its sprite's 32x64 units") != std::string::npos,
+              "a lightmap half the scaled picture is refused against the units: " + error);
+}
+
 // ---- the converted levels ---------------------------------------------------------
 
 struct Totals {
@@ -935,6 +967,7 @@ int main() {
     AnythingElseIsRefusedNamingTheLine();
     EachLightReachesTheSpritesItShould();
     ALightmapIsHalfItsSpritesUnits();
+    ALightmapIsHalfItsSpritesUnitsBeforeItsScale();
     AnOwnersScaleDrawsItsLightAndHalo();
 
     std::error_code ec;

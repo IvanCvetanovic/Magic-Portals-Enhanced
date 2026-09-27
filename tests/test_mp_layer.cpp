@@ -7076,6 +7076,142 @@ void TheTorchIsALightAndAHalo() {
     dark.OnDetach(second);
 }
 
+// A PLACEMENT WITH A <Scale> THAT OWNS A LIGHT (00_order K7 and 9.1; the fixture
+// planning step 81 left to the step that reads `scale`, step 93). No shipped
+// placement is both - the 33 that state a <Scale> are barrels, the eclipse and a
+// stone - so 1-1's torch is given one: a copy of level0 whose light_ent_696
+// Sprite2D says `scale = Vector2(2, 2)`. On purpose the copy does NOT scale its
+// eth_* values as the converter would (tscn.py writes <Scale> into the light's
+// range and offset and the halo's size); what it pins is that the layer does not
+// scale them a second time. So:
+//  - the level still reads lit: its lightmap, 16 x 32, is checked against the
+//    torch's 32 x 64 units, not the 64 x 128 it is drawn at (K9);
+//  - its picture is drawn at twice its units, hanging twice its offset below the
+//    node - centred at (288, 96) where it was at (288, 80);
+//  - its light and its halo stand as eth_* says, owner scale 1: range 300, the
+//    halo 300 units square at (288, 52), 6 units high - not 600, not at (288, 40);
+//  - its flame, which the converter leaves as the level states it, is scaled as
+//    the engine makes it (ETHSpriteEntity.cpp:316-319): twice the size, born twice
+//    as far above the node, at (288, 40).
+void AScaledPlacementsLightIsNotScaledAgain() {
+    using MagicPortals::Units::ToMetres;
+    if (!OriginalArtIsThere("AScaledPlacementsLightIsNotScaledAgain")) return;
+
+    // The flame as the level states it, for the scaled one to be measured against.
+    double stockSize = 0.0;
+    int stockCount = 0;
+    glm::dvec2 stockCell(0.0);
+    {
+        entt::registry stockRegistry;
+        publishViewport(stockRegistry);
+        MagicPortalsLayer stock(TestPaths(), "level0");
+        stock.OnAttach(stockRegistry);
+        const std::vector<MagicPortalsLayer::EmitterReport> reports = stock.EmitterReports();
+        if (const auto* flame = ReportOf(reports, "light_ent_696", 0); flame != nullptr) {
+            stockSize = flame->systemSize;
+            stockCount = flame->count;
+            stockCell = flame->cellPx;
+        }
+        stock.OnDetach(stockRegistry);
+    }
+    CHECK_MSG(stockSize > 0.0 && stockCount > 0, "1-1's torch has its flame");
+
+    std::ifstream in(kLevels + "/level0.tscn", std::ios::binary);
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    std::string text = buffer.str();
+    const std::string header = "[node name=\"Sprite\" type=\"Sprite2D\" parent=\"light_ent_696\"]";
+    const std::size_t node = text.find(header);
+    CHECK_MSG(node != std::string::npos && text.find(header, node + 1) == std::string::npos,
+              "level0 holds light_ent_696's sprite once");
+    if (node == std::string::npos) return;
+    const std::size_t end = text.find('\n', node);
+    CHECK_MSG(end != std::string::npos, "and a line after it");
+    if (end == std::string::npos) return;
+    // The converted levels are written with CRLF; the line goes in the same way.
+    const std::string eol = end > 0 && text[end - 1] == '\r' ? "\r\n" : "\n";
+    text.insert(end + 1, "scale = Vector2(2, 2)" + eol);
+
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-scaled-torch";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream out(dir / "level0.tscn", std::ios::binary | std::ios::trunc);
+        out << text;
+    }
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.levels = dir.string(); // the art stays the converted levels' own (Paths::art)
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty() && layer.LightingError().empty(),
+              "the scaled torch's level reads, lit - its lightmap checked against its units: " + layer.LoadError() +
+                  layer.ArtError() + layer.LightingError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || !layer.LightingError().empty()) return;
+
+    const entt::entity torch = SpriteOf(registry, "Magic Portals Sprite", "/torch_small.png");
+    CHECK(torch != entt::null);
+    if (torch != entt::null) {
+        const TransformComponent& transform = registry.get<TransformComponent>(torch);
+        CHECK_MSG(NearV(glm::vec3(transform.scale.x, transform.scale.y, 0.0f), glm::vec3(ToMetres(64.0), ToMetres(128.0), 0.0f)),
+                  "the torch drawn at twice its 32 x 64 units: " + ShowV(transform.scale));
+        CHECK_MSG(glm::distance(MagicPortals::Units::ToPixels(transform.position), glm::dvec2(288.0, 96.0)) < 1e-3,
+                  "centred twice its (0, 16) below the node: " + Point(MagicPortals::Units::ToPixels(transform.position)));
+    }
+
+    const std::vector<entt::entity> lights = LightsOf(registry);
+    CHECK_EQ(lights.size(), std::size_t{1});
+    if (lights.size() == 1) {
+        const Light2DComponent& light = registry.get<Light2DComponent>(lights[0]);
+        CHECK_MSG(::test::nearly(light.range, ToMetres(300.0), 1e-5f), "range 300 as eth_light_range says: " +
+                                                                           std::to_string(light.range));
+        CHECK_MSG(::test::nearly(light.height, ToMetres(6.0), 1e-6f), "6 units high: " + std::to_string(light.height));
+        const glm::vec3 at = registry.get<TransformComponent>(lights[0]).position;
+        const glm::vec3 want = MagicPortals::Units::ToWorld(288.0, 52.0);
+        CHECK_MSG(std::fabs(at.x - want.x) < 1e-5f && std::fabs(at.y - want.y) < 1e-5f,
+                  "at the node plus eth_light_offset, (288, 52): " + ShowV(at));
+    }
+    CHECK_EQ(Tagged(registry, "Magic Portals Halo"), 1);
+    const entt::entity halo = FirstTagged(registry, "Magic Portals Halo");
+    if (halo != entt::null) {
+        const TransformComponent& transform = registry.get<TransformComponent>(halo);
+        CHECK_MSG(std::fabs(transform.scale.x - ToMetres(300.0)) < 1e-5f &&
+                      std::fabs(transform.scale.y - ToMetres(300.0)) < 1e-5f,
+                  "the halo 300 units square, eth_halo_size, not scaled again (K7): " + ShowV(transform.scale));
+        CHECK_MSG(glm::distance(MagicPortals::Units::ToPixels(transform.position), glm::dvec2(288.0, 52.0)) < 1e-3,
+                  "at the node plus eth_halo_offset: " + Point(MagicPortals::Units::ToPixels(transform.position)));
+    }
+
+    const std::vector<MagicPortalsLayer::EmitterReport> scaledReports = layer.EmitterReports();
+    const auto* flame = ReportOf(scaledReports, "light_ent_696", 0);
+    CHECK(flame != nullptr);
+    if (flame != nullptr) {
+        CHECK_MSG(flame->systemSize == 2.0 * stockSize,
+                  "the flame at twice its size: " + std::to_string(flame->systemSize) + " against " +
+                      std::to_string(stockSize));
+        CHECK_MSG(flame->count == stockCount && flame->cellPx == stockCell, "the same pool, cut from the same bitmap");
+    }
+
+    CloseTheLevelStartPopup(layer, registry);
+    int births = 0;
+    int birthsOff = 0;
+    for (int frame = 0; frame < 120; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::vector<MagicPortalsLayer::EmitterReport> reports = layer.EmitterReports();
+        if (const auto* born = ReportOf(reports, "light_ent_696", 0);
+            born != nullptr && born->anyReleased && born->newestAgeMs == 0.0) {
+            ++births;
+            if (glm::distance(born->newestBornPx, glm::dvec2(288.0, 40.0)) > 1e-9) ++birthsOff;
+        }
+    }
+    CHECK_MSG(births > 10 && birthsOff == 0, "the flame born at twice its (0, -12) above the node, (288, 40): " +
+                                                 std::to_string(birthsOff) + " of " + std::to_string(births) +
+                                                 " births elsewhere");
+    layer.OnDetach(registry);
+}
+
 // Step 55 (the lighting design's G6): the shot that lights a torch adds
 // light_from_projectile.ent's static light there, and the level bakes at run
 // time from then on - every sprite that applies light takes the static lights
@@ -9091,6 +9227,7 @@ void runTests() {
     ADashedCircleBobsAndTurns();
     LightmapsAreDrawnOverTheirSprites();
     TheTorchIsALightAndAHalo();
+    AScaledPlacementsLightIsNotScaledAgain();
     AShotCarriesItsOwnLight();
     ALitTorchBakesTheLevelAtRunTime();
     EveryLightWallStandsReadyToLeaveItsGhost();

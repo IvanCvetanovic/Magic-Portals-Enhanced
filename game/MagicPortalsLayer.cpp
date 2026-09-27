@@ -779,10 +779,16 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
             continue;
         }
         ++fromSidecars;
-        // Scaled as its entity is, before its pools are made (Particles::Scale):
-        // a static portal's script shrinks its rings and its iris with its halo.
-        if (drawn.scale != 1.0) {
-            for (Particles::System& system : systems) Particles::Scale(system, drawn.scale);
+        // Scaled as its entity is, before its pools are made (Particles::Scale), in
+        // one call: by the mean of its <Scale>, which the engine makes the entity's
+        // managers at (ETHSpriteEntity.cpp:316-319, ETHParticleManager.cpp:90) and
+        // no carrier of the 840 states (step 93), and by what its script scales it
+        // by after that - a static portal's script shrinks its rings and its iris
+        // with its halo. Its light and halo are not: the converter has scaled them
+        // already (00_order K7, syncLights).
+        const double scale = drawn.scale * (drawn.sprite.scale.x + drawn.sprite.scale.y) / 2.0;
+        if (scale != 1.0) {
+            for (Particles::System& system : systems) Particles::Scale(system, scale);
         }
         // Its entity's position and angle (ETHSpriteEntity.cpp:576): the node, not
         // Sprites::CentrePx. A torch's picture hangs 16 below its node (PivotAdjust

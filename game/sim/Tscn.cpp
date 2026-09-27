@@ -26,8 +26,17 @@ constexpr std::string_view kNodeTypes[] = {
 constexpr std::string_view kExternalTypes[] = {"Texture2D"};
 constexpr std::string_view kEmbeddedTypes[] = {"RectangleShape2D", "CircleShape2D", "CanvasItemMaterial"};
 constexpr std::string_view kNodeKeys[] = {
-    "position", "rotation", "z_index", "texture", "offset", "material", "shape", "polygon",
+    "position", "rotation", "z_index", "texture", "offset", "material", "shape", "polygon", "scale",
 };
+// A Sprite2D's `scale`: the entity's <Scale>, which the converter writes there
+// and on no other node (the visuals plan's 9.2), baking it into the colliders
+// instead. It is read here before the converter writes it (00_order K10, 9.1).
+// On any other node it would scale what LevelBuilder builds unscaled, so it is
+// refused there, as is anything but two numbers above 0: Godot would draw a
+// negative one mirrored, and the 33 placements that state a <Scale> state 0.8
+// to 2.
+constexpr std::string_view kScaleKey = "scale";
+constexpr std::string_view kScaledType = "Sprite2D";
 constexpr std::string_view kEmbeddedKeys[] = {"size", "radius", "blend_mode"};
 constexpr std::string_view kMetaPrefix = "metadata/";
 
@@ -415,8 +424,15 @@ bool Parse(std::string_view text, Scene& out, std::string& error) {
         if (!known) return fail("property '" + key + "' is not in the subset");
         if (!keysHere.insert(key).second) return fail("property '" + key + "' set twice");
 
+        // Only a node section knows the key, so the node it is on is the last one read.
+        const bool scale = section == Section::Node && key == kScaleKey;
+        if (scale && out.nodes.back().type != kScaledType)
+            return fail("property 'scale' on a " + out.nodes.back().type + ": only a Sprite2D's is in the subset");
+
         Value value;
         if (!ParseValue(line.substr(eq + 3), value, why)) return fail(key + ": " + why);
+        if (scale && (value.kind != Value::Kind::Vector2 || !(value.numbers[0] > 0.0) || !(value.numbers[1] > 0.0)))
+            return fail("scale: a Sprite2D's scale is a Vector2 of two numbers above 0");
         if (value.kind == Value::Kind::ExtResource && externalIds.count(value.text) == 0)
             return fail(key + ": no ext_resource with id \"" + value.text + "\" above it");
         if (value.kind == Value::Kind::SubResource && embeddedIds.count(value.text) == 0)

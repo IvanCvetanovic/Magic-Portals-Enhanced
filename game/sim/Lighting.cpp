@@ -197,12 +197,14 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
     out = Scene{};
 
     // The sprites' own sizes, for the lightmap's. Sprites::Find is the reader the
-    // layer draws with, so a lightmap is checked against the size the layer will
-    // stretch it over rather than against a second reading of the same file.
+    // layer draws with, so a lightmap is checked against the file the layer will
+    // stretch it over rather than against a second reading of the same scene - in
+    // whole units, BEFORE the sprite's scale (00_order K9): the tier file's texels
+    // over its density, which is what the original baked the lightmap at half of.
     std::vector<Sprites::Sprite> sprites;
     if (!Sprites::Find(scene, resRoot, tiers, sprites, error)) return false;
-    std::unordered_map<std::string, glm::dvec2> spriteSizePx;
-    for (const Sprites::Sprite& sprite : sprites) spriteSizePx.emplace(sprite.node, sprite.sizePx);
+    std::unordered_map<std::string, glm::ivec2> spriteUnits;
+    for (const Sprites::Sprite& sprite : sprites) spriteUnits.emplace(sprite.node, Tiers::Units(sprite.texels, sprite.density));
 
     Scene read;
     const Tscn::Node* root = nullptr;
@@ -281,7 +283,7 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
         if (!isEntity) continue;
 
         const auto present = [&](Id id) { return has[static_cast<std::size_t>(id)]; };
-        const bool drawsSprite = spriteSizePx.count(node.name) != 0;
+        const bool drawsSprite = spriteUnits.count(node.name) != 0;
         const bool ownsLight = present(Id::LightRange);
 
         // A light is identified by its range, which the converter always writes;
@@ -320,16 +322,18 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
             // Half its size in units, the tier file's texels over its density,
             // not in texels: an hd sprite's file is four times its lightmap on
             // each axis, and the 730 hold only against units (planning doc step
-            // 61, decision 2).
+            // 61, decision 2). And not in its drawn size: the engine bakes a
+            // lightmap at its sprite's bitmap size with the entity's scale set to
+            // 1 (ETHLightmapGen.cpp:57, :117-118), so a <Scale> stretches the
+            // picture and the lightmap over it alike (planning step 93).
             int width = 0;
             int height = 0;
             if (!Sprites::ImageSize(look.lightmap, width, height, why)) return fail(node, "eth_lightmap: " + why);
-            const glm::dvec2 sizePx = spriteSizePx.at(node.name);
-            if (2.0 * width != sizePx.x || 2.0 * height != sizePx.y) {
+            const glm::ivec2 units = spriteUnits.at(node.name);
+            if (2 * width != units.x || 2 * height != units.y) {
                 return fail(node, "eth_lightmap is " + std::to_string(width) + "x" + std::to_string(height) +
-                                      ", and twice that is not its sprite's " +
-                                      std::to_string(static_cast<int>(sizePx.x)) + "x" +
-                                      std::to_string(static_cast<int>(sizePx.y)));
+                                      ", and twice that is not its sprite's " + std::to_string(units.x) + "x" +
+                                      std::to_string(units.y) + " units");
             }
         }
 

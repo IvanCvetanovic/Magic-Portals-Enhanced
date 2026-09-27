@@ -484,6 +484,80 @@ void ASpriteIsDrawnFromItsTier() {
               "unreadable refused by the file tried, with no size: " + error);
 }
 
+// THE SCALE A SPRITE IS DRAWN AT (00_order 9.1, K9; planning step 93). The
+// entity's <Scale>, on its Sprite2D: Ethanon draws the frame times the scale
+// (ETHSpriteEntity.cpp:682) about the pivot times the scale (ETHEntity.cpp:296).
+// It multiplies the whole units - truncated first, from the tier file's texels
+// over its density - and the offset as the level wrote it, and touches neither
+// the texels nor the density.
+void ASpriteIsDrawnAtItsScale() {
+    const std::filesystem::path dir = Scratch() / "scale";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    for (const char* folder : {"assets", "assets/hd"}) {
+        std::filesystem::create_directories(dir / folder, ec);
+    }
+    Write(dir / "assets" / "crystal.png", PngHeader(32, 32));
+    Write(dir / "assets" / "hd" / "crystal.png", PngHeader(64, 64));
+    Write(dir / "assets" / "odd.png", PngHeader(10, 10));
+    Write(dir / "assets" / "hd" / "odd.png", PngHeader(21, 21)); // 10 units, not 10.5
+    const Tiers::Rules tiers = TheTiers();
+    const auto drawn = [&dir, &tiers](const std::string& texture, const std::string& lines, Sprites::Sprite& out,
+                                      std::string& error) {
+        Tscn::Scene parsed;
+        const std::string text =
+            OneSprite("[ext_resource type=\"Texture2D\" path=\"res://assets/" + texture + "\" id=\"tex_0\"]\n", "",
+                      "[node name=\"Sprite\" type=\"Sprite2D\" parent=\"wall_1\"]\ntexture = ExtResource(\"tex_0\")\n" +
+                          lines);
+        if (!ParseScene(text.c_str(), parsed)) return false;
+        std::vector<Sprites::Sprite> sprites;
+        const bool found = Sprites::Find(parsed, dir.string(), tiers, sprites, error);
+        if (found && sprites.size() == 1) out = sprites[0];
+        return found && sprites.size() == 1;
+    };
+
+    Sprites::Sprite sprite;
+    std::string error;
+    CHECK_MSG(drawn("crystal.png", "offset = Vector2(4, 16)\n", sprite, error), error);
+    CHECK_MSG(sprite.scale == glm::dvec2(1.0) && sprite.sizePx == glm::dvec2(32.0, 32.0) &&
+                  sprite.offsetPx == glm::dvec2(4.0, 16.0),
+              "a sprite with no scale is drawn at 1");
+
+    CHECK_MSG(drawn("crystal.png", "offset = Vector2(4, 16)\nscale = Vector2(1.3, 0.8)\n", sprite, error), error);
+    CHECK_MSG(sprite.scale == glm::dvec2(1.3, 0.8), "its scale, as the file writes it");
+    CHECK_MSG(sprite.tier == "hd" && sprite.density == 2.0f && sprite.texels == glm::ivec2(64, 64),
+              "from the same tier file, at the same density: the scale is not a tier");
+    CHECK_MSG(Near(sprite.sizePx.x, 32.0 * 1.3) && Near(sprite.sizePx.y, 32.0 * 0.8),
+              "at its units times its scale, each axis its own: " + std::to_string(sprite.sizePx.x) + " x " +
+                  std::to_string(sprite.sizePx.y));
+    CHECK_MSG(Near(sprite.offsetPx.x, 4.0 * 1.3) && Near(sprite.offsetPx.y, 16.0 * 0.8),
+              "and its offset times its scale, so its pivot stays on its node");
+    const glm::dvec2 centre = Sprites::CentrePx(sprite);
+    CHECK_MSG(Near(centre.x, 5.2) && Near(centre.y, 12.8), "which is where its centre stands");
+
+    // The truncation comes first: 21 hd texels are 10 units, and 10 x 1.3 is 13,
+    // where 10.5 x 1.3 would be 13.65.
+    CHECK_MSG(drawn("odd.png", "scale = Vector2(1.3, 1.3)\n", sprite, error), error);
+    CHECK_MSG(sprite.texels == glm::ivec2(21, 21) && Near(sprite.sizePx.x, 13.0) && Near(sprite.sizePx.y, 13.0),
+              "whole units, truncated, then scaled: " + std::to_string(sprite.sizePx.x));
+
+    // The three placements' sizes 9.3 pins on the converted levels, here on files
+    // of their units: a barrel's 32 at 1.3, the eclipse's 256 x 32 at 2 with its
+    // pivot (0, -15), the stone's 64 at 0.8.
+    Write(dir / "assets" / "barrel.png", PngHeader(32, 32));
+    Write(dir / "assets" / "eclipse.png", PngHeader(256, 32));
+    Write(dir / "assets" / "stone.png", PngHeader(64, 64));
+    CHECK_MSG(drawn("barrel.png", "scale = Vector2(1.3, 1.3)\n", sprite, error) && Near(sprite.sizePx.x, 41.6) &&
+                  Near(sprite.sizePx.y, 41.6),
+              "a barrel at 1.3: 41.6 units " + error);
+    CHECK_MSG(drawn("eclipse.png", "offset = Vector2(0, -15)\nscale = Vector2(2, 2)\n", sprite, error) &&
+                  sprite.sizePx == glm::dvec2(512.0, 64.0) && sprite.offsetPx == glm::dvec2(0.0, -30.0),
+              "the eclipse at 2: 512 x 64, its offset (0, -30) " + error);
+    CHECK_MSG(drawn("stone.png", "scale = Vector2(0.8, 0.8)\n", sprite, error) && Near(sprite.sizePx.x, 51.2) &&
+                  Near(sprite.sizePx.y, 51.2),
+              "the stone at 0.8: 51.2 units " + error);
+}
+
 // ---- art.json: what no level pictures ------------------------------------------
 
 void ThePortalAndTheShotAreTheirEnts() {
@@ -2842,6 +2916,7 @@ int main() {
     TheCanvasOrderIsZThenTheFile();
     WhatTheReaderDoesNotDrawIsNamed();
     ASpriteIsDrawnFromItsTier();
+    ASpriteIsDrawnAtItsScale();
     ThePortalAndTheShotAreTheirEnts();
     TheShotTurnsItsHeadOntoItsFlight();
     AStaticPortalWithoutItsScriptIsRefused();

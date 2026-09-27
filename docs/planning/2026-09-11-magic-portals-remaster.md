@@ -16566,3 +16566,172 @@ run through `port_build.bat` stops at CMake's glob re-check).
   its cause not found (backlog row).
 - **The table orders a shared gap by class, not by depth** (written beside `kSlotTable`): no shipped frame shows a
   lifted system sharing a gap with an effect today; a step that finds one gives the two classes a depth-ordered rule.
+
+## Step 93 - the scale a level's sprite is drawn at, read before the converter writes it: its units and its offset times it, its lightmap checked before it (built)
+
+The visuals plan's step 9.1 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 9, "reader
+first"; its brief `systems_9_10.md` 9a (4) "SE-game" and 9a (5); conflicts K9 and K10). Track A, on MPR `main` in
+`build/`, after step 92 (`bd44717`). Game-only: the engine submodule stays at `4bfcf67` and no file under `engine/`
+is touched; the converter and the converted levels are untouched (`out/levels`, `out/assets`, `out/data` and
+`out/snap_pre8` are not written). Changed: `game/sim/Tscn.{hpp,cpp}`, `game/sim/Sprites.{hpp,cpp}`,
+`game/sim/Lighting.{hpp,cpp}`, `game/sim/Particles.hpp` (comments), `game/MagicPortalsLayer.cpp` (one rule in
+`buildEmitters`), `tests/test_mp_tscn.cpp`, `tests/test_mp_sprites.cpp`, `tests/test_mp_lighting.cpp`,
+`tests/test_mp_layer.cpp`, `docs/ethanon-formats.md` (the lightmap's bake size) and the backlog. **The level reader
+now takes `scale = Vector2(sx, sy)` on a Sprite2D - the entity's `<Scale>`, which 9.2's converter is to write on the
+33 placements that state one - and refuses it anywhere else and in any form but two numbers above 0.
+`Sprites::Find` draws the sprite at its whole units times that scale, with its offset times it (K9's combined
+rule: the tier's density on the texels, then the truncation, then the scale; never the density on the offset);
+`Lighting::Read` still checks a lightmap against the units before the scale; and a placement's own particle
+systems are made at the mean of its scale, as the engine makes them. No converted level carries the key yet, so
+every sprite's scale is 1 and every product is exact: the 128-level f420 sweep is 128 of 128 byte-identical to
+step 92's. Gameplay: none - no body, collider or sensor reads the sprite's scale; the 31 barrel bodies and the 2-22
+stone change only when 9.2 bakes the scale into their colliders (R9).**
+
+**BLOCKERS CHECKED.** 9.1's two blockers are met: **2.2 (K9)** is step 66 (`c404615`), which made `Find` resolve
+the tier and size a sprite in whole units, and **8.3 (K10 pins)** is step 91 (`e71b697`), which pinned the counts
+batch 8 moves; both are committed. Section 8.13 has no row for 9.1, so section 7's row stands: "`test_mp_tscn`
+(`:120` replaced: scale accepted, zero or negative refused); 128 levels byte-identical", with the step's title
+("`Find` applies K9's rule; the lightmap check stays on units") and the backlog's owed item - step 81's **latent K7
+fixture**, "a placement with a scale other than 1 that owns a light, its halo pinned at `eth_halo_size`, not
+scaled" - measured as gates too. **K10** is this step's half: the reader must accept the key, and be COMMITTED,
+before 9.2's converter writes it. Step 89 found K10's "an unknown key fails the whole level" true for a node key
+like this one (not for a `metadata/` key): before this step a Sprite2D `scale` failed `Tscn::Parse`, and with it
+`Game::LoadData`. The baseline is step 92's after, `8.4/after/sweep`: its 128 PNGs match the md5s its
+`capture.txt` logged (128 of 128, checked for power-loss damage before use), and `build/` held `d2504b6d`, the
+binary 8.4's independent check captured it on, so no fresh "before" was needed and that binary was not launched.
+
+**THE OWNER'S STANDING RULINGS.** **R13** (route B: the port resolves the tier, the level names the 1x file), as
+the owner's standing ruling: it is why the scale arrives on its own and multiplies the resolved units, never
+composed with a tier's 0.5 as plan_port's route A would have had it. **R9** (the `<Scale>` bodies, as the
+original) is 9.2's and 9.3's to apply: this step changes no body. **R12** is not used: no depth moves. **R24 and
+R25 (step 76) remain the owner's to rule**; this step neither applies nor withdraws them.
+
+**WHAT WAS BUILT.**
+- **`Tscn::Parse`** (`game/sim/Tscn.cpp:28-39`, `:427-435`): `scale` joins the node keys. On a node that is not a
+  Sprite2D it is refused naming the line ("property 'scale' on a Node2D: only a Sprite2D's is in the subset") -
+  the converter writes it on the Sprite2D alone and bakes it into the colliders instead (9a (4)), and on any other
+  node it would scale something `LevelBuilder` builds unscaled. On a Sprite2D it must be a Vector2 of two numbers
+  above 0 ("scale: a Sprite2D's scale is a Vector2 of two numbers above 0"): Godot would draw a negative one
+  mirrored, and the 33 placements that state a `<Scale>` state 0.8 to 2 (`9.1/census/types91.py`, below). A
+  scale of exactly 1 is accepted. `Tscn.hpp`'s subset list names it, "read before the converter writes it".
+- **`Sprites::Find`** (`game/sim/Sprites.cpp:219-238`): `Sprite::scale` (new, `Sprites.hpp:61`) is the Sprite2D's
+  scale, 1 where it states none; `sizePx = Tiers::Units(texels, density) x scale` and `offsetPx = offset x
+  scale`, so `CentrePx`, the body branch of `syncSprites` and every picture placed from them take it. `texels`,
+  `density` and the tier are untouched. It says so again, naming the line, for a scene built some other way than
+  `Parse`. That is Ethanon's own rule: the frame times the scale (`ETHSpriteEntity::GetCurrentSize`,
+  `ETHSpriteEntity.cpp:652-683`) about the pivot times the scale (`ETHEntity::ComputeAbsoluteOrigin`,
+  `ETHEntity.cpp:296`), which is also Godot's for a Sprite2D's `scale` and `offset` - so the converter keeps writing
+  `offset = -pivot` unscaled (9a (4)). `Sprites.hpp`'s header, which said "no scale is ever written", is corrected.
+- **`Lighting::Read`** (`game/sim/Lighting.cpp:199-207`, `:319-336`): the lightmap is checked against
+  `Tiers::Units(texels, density)` - the units BEFORE the scale - rather than against `sizePx`; the refusal now says
+  "units". K9 required it and the engine confirms it: `ETHLightmapGen` bakes a lightmap on a render target of the
+  sprite's bitmap size (`ETHLightmapGen.cpp:57`) with the entity's scale set to 1, each light's position and
+  range divided by it (`:117-120`), and draws it over the scaled picture. Written into `docs/ethanon-formats.md`
+  beside the lightmap copy rules. No shipped placement has both a `<Scale>` and a lightmap (census).
+- **`buildEmitters`** (`game/MagicPortalsLayer.cpp:782-792`): a placement's own systems are scaled, in ONE
+  `Particles::Scale` call, by `drawn.scale x (sx + sy) / 2` - the mean of its `<Scale>`, which the engine makes the
+  entity's particle managers at (`ETHSpriteEntity.cpp:316-319`, `ETHParticleManager.cpp:90`), times what its script
+  scales it by after (a static portal's 0.8, as before). One call, not two, so a static portal's systems are scaled
+  by exactly the number they were (x 1.0 is exact). Its light and halo are NOT scaled: the converter writes
+  `<Scale>` into them already, and a level placement passes owner scale 1 (K7, `syncLights`), unchanged. None of
+  the 840 carriers states a `<Scale>` (census), so this moves nothing on a shipped level; it makes step 92's
+  comment "the file's number at the entity's own scale - which Particles::Scale has applied above" true for a
+  scaled carrier.
+- **Carry-in from step 92: `sim/Particles.hpp`'s stale `startPointZ` comment** ("not yet drawn with") now says what
+  steps 83-86 and 92 built; the `Scale` comment says how a placement's `<Scale>` enters.
+
+**THE CENSUS** (`9.1/census/types91.py` -> `types91.json`, read-only over the 128 levels' `.esc` bodies): 4,065
+placements; **33 with a `<Scale>` other than 1** - `barrel_bomb.ent` 1.3 x 29 and `barrel_bomb` 1.3 x 2, `eclipse.ent`
+2.0 x 1, `rolling_stone` 0.8 x 1 - all type 0, **none with a light, a halo, a particle system or a lightmap**
+(systems_9_10's census again); and by entity type, **4,055 of type 0 and 10 of type 2** (the ten `light_off`
+torches), no other.
+
+**NOT TAKEN: THE ENTITY-TYPE PAIR (step 92's carry-in).** Step 92 left the unlit torches' vertical particle shift
+(`_ETH_PARTICLE_DEPTH_SHIFT` 10, 3.556 on the level's axis) for a reader-then-converter pair carrying the entity's
+type, to be taken here and in 9.2 if it fitted cleanly. It does not. `ET_VERTICAL` is not one depth rule but six
+(`docs/ethanon-formats.md` 5.3 and its lighting block): the particle shift (`ETHEntityRenderingManager.cpp:98-102`),
+the draw hash's y term (`:132-134`), the halo drawn a sprite's height deeper (`:80`), no rotation
+(`ETHRenderEntity.cpp:105`, `ETHEntity.cpp:621-624`), the centre-bottom origin (`ETHEntity.cpp:38-39`, already
+written into the offset by the converter's `_vertical_offset`) and the vertical light and ambient shaders
+(`ETHShaderManager.cpp:110`, `ETHPixelLightDiffuseSpecular.cpp:62`, `ETHVertexLightDiffuse.cpp:57`). All ten torches
+apply light (`eth_apply_light "1"` and `eth_normal` on all ten nodes in `out/levels`). A key the lighting reader accepted for the
+shift alone would be a lighting input it knowingly skips - the vertical shaders on all ten - against its own
+"refused, never skipped"; refusing it on a lit node would refuse every torch level. Nothing was built for it; the
+backlog row stays open with this finding.
+
+| Gate (00_order 7, 9.1; its title; the backlog's K7 row) | Required | Today (step 92's after) | Measured |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (122 steps; `MagicPortalsSim`, `MagicPortalsGame`, `MagicPortals.exe` `865c2d4b`, `MagicPortalsSpike.exe` and all 45 suites relinked, as every change to the sim library relinks them), and 0 in the one relink of the three refused suites (3 links, SMART APP CONTROL) |
+| `test_mp_tscn`: `:120` replaced, scale accepted | a Sprite2D's `scale` read as written | `:120` pins `thing->Find("scale") == nullptr`; any `scale` refused, "'scale' is not in the subset" | **passes: 204 checks, 0 failures** (168 before, derived from the 36 checks added). The fixture's Sprite2D carries `scale = Vector2(1.3, 0.8)` and reads it exactly; its Node2D has none (`:120` kept, now saying why); (1, 1) and (2, 0.5) accepted |
+| `test_mp_tscn`: zero or negative refused | refused, naming the line | - | **passes**: (0, 1), (1.3, 0), (-1, 1), (1, -0.8), a bare 1.3 and a quoted "1.3 1.3" each refused at line 6, "two numbers above 0"; on a Node2D, a RigidBody2D and a CollisionShape2D, "only a Sprite2D's"; in a sub_resource, "not in the subset"; given twice, "set twice" (11 refusals, 3 checks each) |
+| (title) `Find` applies K9's rule | size = whole units x scale; offset x scale; texels, density and tier untouched | no scale read | **passes: `test_mp_sprites` 1,080 checks, 0 failures** (1,060 before; the new `ASpriteIsDrawnAtItsScale`, on files it writes): an hd crystal, 64 texels at density 2 = 32 units, at (1.3, 0.8) -> **41.6 x 25.6**, its offset (4, 16) -> (5.2, 12.8), centred there, texels 64 and density 2 unchanged; an odd hd file, 21 texels -> 10 units -> **13.0** at 1.3 (13.65 were the scale taken before the truncation); on files of the placements' own units (checked in `out/assets`: `barrel32_with_sign.png` 32, `eclipse.png` 256 x 32, `rolling_stone.png` 64), 9.3's three pins ahead of it: **41.6 x 41.6**, **(512, 64) with offset (0, -30)** from the level's (0, -15), **51.2 x 51.2** |
+| (title) the lightmap check stays on units | a scaled, lightmapped sprite keeps its lightmap; one half its DRAWN size refused | the check compares `2 x lightmap` with `sizePx` | **passes: `test_mp_lighting` 548 checks, 0 failures** (539 before): the fixture's lamp (32 x 64 units) at scale 2 is found at 64 x 128 and keeps its 16 x 32 lightmap; a 32 x 64 lightmap - half the drawn size - is refused, "eth_lightmap is 32x64, and twice that is not its sprite's 32x64 units". The levels' part unchanged: 128 of 128 read, 730 lightmaps, 840 sidecars |
+| (backlog) step 81's latent K7 fixture | a placement with a scale other than 1 that owns a light: its halo at `eth_halo_size`, not scaled | latent: 1-01's torch at scale 1 would pass under either rule | **passes: `test_mp_layer` 1,890 checks, 0 failures** (1,872 before; the new `AScaledPlacementsLightIsNotScaledAgain`). A copy of level0 whose `light_ent_696` Sprite2D says `scale = Vector2(2, 2)`, its `eth_*` values left as written on purpose: the level **reads lit** (its 16 x 32 lightmap against the torch's 32 x 64 units, where the drawn 64 x 128 would have refused it and drawn the level unlit); the torch drawn **64 x 128 u, centred at (288, 96)** (twice its (0, 16) below the node); its light **range 300 u, 6 u high, at (288, 52)**; its halo **300 u square at (288, 52)** - `eth_halo_size`, not 600, and `eth_halo_offset`, not (0, -24), which is also where the engine puts a scaled entity's halo (`ETHRenderEntity.cpp:378`: the unscaled light position); its flame **twice the stock level's `systemSize`**, the same pool and cell, and **every birth over 120 frames at (288, 40)**, twice its (0, -12) above the node, as the engine makes a scaled entity's managers |
+| 128 levels byte-identical | 128 of 128 = `8.4/after/sweep` | 128 PNGs, each matching its logged md5 | **passes: 128 of 128 byte-identical** (`9.1/compare_sweep.py` -> `compare_sweep.json`; both sweeps' 128 PNGs match the md5s their own `capture.txt` logged), 1-01 `e2da5131`. No level changed, so there is none to explain: no converted level carries a Sprite2D `scale`, every sprite's scale is 1, and x 1.0 on its units, its offset and its systems' scale is exact |
+| (widened) every level still runs | 128 rc=0, validation active and silent | 128 rc=0 | **passes: 128 of 128 rc=0**, Vulkan validation ACTIVE in 128 logs and no message in any, no stall; "N placement(s) drew the particle systems their eth_particles names" totals **840**; no "drawn unlit", no "particles not drawn" |
+| (read-back) `test_mp_levels` | every converted level still parses; its key pins unchanged | 128 | **passes: 128 checks, 0 failures**; `keys.size() == 11` stands - no level carries `scale` until 9.2 |
+
+**THE SUITES,** run directly, once each, 0 failures: **`test_mp_tscn` 204**, **`test_mp_sprites` 1,080**,
+**`test_mp_lighting` 548**, **`test_mp_layer` 1,890**, **`test_mp_levels` 128**. The other suites whose code path
+the change reaches (`test_mp_start`, `test_mp_sky` and `test_mp_torch` call `Sprites::Find` or `Lighting::Read`)
+were not run: their sources did not change, and the sweep loads all 128 levels through the same `Tscn::Parse`,
+`Sprites::Find` and `Lighting::Read`. The full `ctest` was not run.
+
+**SMART APP CONTROL: 3 refusals**, all at the first launch of a suite freshly linked by the build: `test_mp_tscn`,
+`test_mp_levels` and `test_mp_layer` (exit 126, "Permission denied"). Each was deleted and relinked once (one
+invocation, 3 links, 0 warnings: `f3b33579`, `4161f1c1`, `9c4a18b1`) and each then ran on its first launch.
+`test_mp_sprites` (`28cfa66d`) and `test_mp_lighting` (`9e34cb19`) ran on theirs, and `MagicPortals.exe`
+`865c2d4b` was accepted on its first launch and ran all 128 captures of the sweep. In all: 136 launches, 3 refused.
+**0 in the independent check** (133 launches: the 5 suites and the 128-level sweep) and none at commit, which
+launched nothing.
+
+**THE INDEPENDENT CHECK** (`9.1/verify1/`, passed every gate): the rule re-derived from the engine source before the
+code was read - the frame times the scale (`ETHSpriteEntity.cpp:682`), the pivot times the scale
+(`ETHEntity.cpp:296`), a placement's particle managers at `(sx + sy) / 2` (`ETHSpriteEntity.cpp:316-319`) with the
+start point scaled with them (`ETHParticleSystem.cpp:27-33`), the lightmap baked at the bitmap size with the scale
+set to 1 (`ETHLightmapGen.cpp:57`, `:117-120`), the halo at the UNSCALED light position and `haloSize x scale`
+(`ETHRenderEntity.cpp:378-386`) - and the code checked against it (`Sprites.cpp:219-238`, `Tscn.cpp:427-435`,
+`Lighting.cpp:205-207`, `:330-336`, `MagicPortalsLayer.cpp:789`); the 8 changed sources recompiled into a scratch
+folder with the build's own `cl` commands (/W4): **0 warnings, 0 errors** (`verify1/compile_check.txt`), `build/`'s
+binaries left as they were; the five suites run once each on the build's binaries - **`test_mp_tscn` 204,
+`test_mp_sprites` 1,080, `test_mp_lighting` 548, `test_mp_layer` 1,890, `test_mp_levels` 128**, 0 failures, the K7
+case not skipped; its own sweep on `865c2d4b`, **128 of 128 byte-identical to `8.4/after/sweep` and to
+`9.1/after/sweep`** (1-01 `e2da5131`; `verify1/compare_v1.json`), all three sets' PNGs opening and matching their
+logged md5s, 128 rc 0, validation active and silent, 840 placements drawn, 0 of 128 `out/levels` files carrying a
+`scale` line; its own recount of the `.esc` bodies, 33 scaled placements (31 at 1.3, 1 at 0.8, 1 at 2.0), none with
+a `<Light>` or a `<ParticleSystem>`; "Gameplay: none" confirmed (`game/sim` never calls `Sprites::Find`, and the
+layer uses `sizePx` / `offsetPx` for pictures, the HUD sign and debug boxes only, never a body, trigger or blast).
+Its one low finding went in at commit as TEXT, no behaviour changed: the backlog's 8.4 row still read "(this
+commit)", and now names `bd44717`. At commit the build was confirmed current by a ninja dry run on a copy of
+`build/build.ninja`: "no work to do" (a dry run through `port_build.bat` stops at CMake's glob re-check).
+
+**RECORDED DEVIATIONS.**
+1. **Validated in the reader, and again in `Find`.** 9a (4) puts the check in `Find` alone; the plan's gate puts
+   "zero or negative refused" in `test_mp_tscn`, which has no images. The scale's form and its node are refused by
+   `Tscn::Parse`, naming the line, and `Find` repeats the form check for a scene built by hand.
+2. **A placement's particle systems take the mean of its scale** - not in 9a (4), which left particle owner scale
+   to the effects ("no carrier among the 33"). It is the engine's rule for a placement and costs nothing on the
+   shipped levels; the fixture pins it.
+3. **The lightmap is checked against `Tiers::Units(texels, density)`**, derived from the sprite's own fields, rather
+   than a new `imageSizePx` field as 9a (4) proposed: `Find` fills both, the value is the same, and a picture the
+   layer makes itself (the ring, the glow) needs no new field.
+4. **The entity-type pair is not taken** (above): step 92's deviation 2 stays open.
+
+**LEFT FOR LATER.**
+- **For 9.2 (the converter), the contract this reader holds it to:** `scale = Vector2(sx, sy)` on the Sprite2D
+  only, only where `<Scale>` is not (1, 1), both components above 0; `offset = -pivot` stays unscaled (the port
+  multiplies it); the `eth_*` light and halo values stay as `tscn.py:_entity_lighting` writes them today - the
+  light's offset and range times scale.y, the halo's size times the scale per axis, the halo's offset UNSCALED,
+  since the engine centres a halo on the unscaled light position and sizes it `haloSize x scale`
+  (`ETHRenderEntity.cpp:378-386`) - and the port does not scale them again (K7); the particle sidecars stay as the
+  level states them (the port scales them); colliders baked (9a (4)).
+  **This step must be committed before 9.2 regenerates** (K10): a Sprite2D `scale` fails `Tscn::Parse` and the
+  level with it on every build before this one.
+- **`test_mp_levels` will fail from 9.2's regeneration until re-pinned:** `keys.size()` 11 -> 12 and
+  `keys["scale"]` 33 are 9.3's gate in section 7, but the counts are read from the converted files, so - as 8.2
+  re-pinned `metaStrings` - the step that regenerates re-pins them (K10's "whichever lands second recomputes").
+- **Pictures the layer re-cuts do not take the node's scale**: 2-32's dragon (`sizePx` from `m_dragonCut`, and its
+  report) and the minions and knights (drawn from their own state). No scaled placement is one of them (census).
+- **The unlit torches' vertical shift** (step 92's deviation 2), with the finding above: it needs a decision on how
+  much of `ET_VERTICAL` the port draws before a type key can enter the reader.
+- A sky with a scale would be drawn at its scaled size by `Sky::Build` (it reads `sizePx`); none has one.

@@ -81,9 +81,10 @@ struct System {
     glm::dvec2 randomizeDir{0.0};   // spread on it, +/- half
     glm::dvec2 startPoint{0.0};     // from the entity's own position
     // <StartPoint>'s z: Ethanon reads the start point as a vector3 (ETHParticleSystem.cpp:130)
-    // and the system's pieces draw at the entity's depth plus it. Read, and scaled with the
-    // rest (ETHParticleSystem.cpp:33), but not yet drawn with: a level placement's systems
-    // keep their owner's slot (step 59, plan 2d), and a script-spawned effect is step 6.3's.
+    // and the system's pieces draw at the entity's depth plus it. Scaled with the rest
+    // (ETHParticleSystem.cpp:33), so it is on the level's axis at the entity's scale, not a
+    // bare literal. The layer draws a level placement's system at its owner's eth_z plus
+    // it (planning step 92) and a spawned effect's from its Scaled copy (steps 83-86).
     double startPointZ = 0.0;
     glm::dvec2 randStartPoint{0.0}; // spread on it, +/- half
 
@@ -131,9 +132,11 @@ bool Drawable(const System& system);
 // A pool MADE from the scaled system is that pool: Reset's spreads are drawn over
 // ranges the scale multiplied, from the same stream, and a first release only
 // positions. What the original's order adds is its first frame, moved at the old
-// scale before the callback runs (ETHActiveEntityHandler.cpp:157-162): the layer
-// scales only portal_static's systems, whose start point, spreads and direction are
-// all 0, and for those the two are the same frame.
+// scale before the callback runs (ETHActiveEntityHandler.cpp:157-162): the only
+// placement a script scales is portal_static, whose start point, spreads and direction
+// are all 0, and for those the two are the same frame. A placement's own <Scale> is no
+// such case: the engine MAKES its managers at the mean of it (ETHSpriteEntity.cpp:316-319,
+// ETHParticleManager.cpp:90), and the layer folds it into the same one call (step 93).
 void Scale(System& system, double scale);
 
 // The same, on a copy: what a spawned entity's system is made from. AddEntity's

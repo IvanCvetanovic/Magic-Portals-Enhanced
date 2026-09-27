@@ -117,8 +117,9 @@ struct Scene {
 
 // Replaces `out`. `resRoot` is the directory res:// stands for, and `tiers` the
 // search a sprite's image goes through, as for Sprites::Find: pass the rules the
-// layer draws with, so a lightmap is checked against the units its sprite is
-// drawn at (planning doc step 61, decision 2). False, with `error` reading
+// layer draws with, so a lightmap is checked against the units of the file its
+// sprite is drawn from, before the sprite's scale (planning doc step 61,
+// decision 2; step 93). False, with `error` reading
 // "line N: <node>: why", for anything the reader refuses; `out` is then empty.
 bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rules& tiers, Scene& out,
           std::string& error);

@@ -372,6 +372,14 @@ assuming it (a tier sibling makes the file SKIPPED and reported) and records `"t
 file in `<output>/assets/lighting_files.json`. (`ld/`/`xld/` apply only below the density thresholds and do
 not exist in the APK.)
 
+**A lightmap is baked at its sprite's bitmap size, not its drawn size** (2026-09-27, planning step 93).
+`ETHLightmapGen` makes the render target `sprite->GetBitmapSizeF()` (or the cut's rect) (`ETHLightmapGen.cpp:57`)
+and sets the entity's scale to 1 for the bake, dividing each light's position and range by it (`:117-120`); the
+engine then draws the lightmap over the scaled picture. So an entity's `<Scale>` never changes its lightmap's
+size, and the port checks `eth_lightmap` against its sprite's whole units BEFORE the Sprite2D's `scale`
+(`game/sim/Lighting.cpp`, 00_order K9). No shipped placement has both (the 33 with a `<Scale>` carry no
+lightmap); a hand-made one is pinned in the port's `test_mp_lighting` and `test_mp_layer`.
+
 **Counts over all 128 levels** (converter report, 2026-09-14, re-run after the gate fix above and
 recounted from the emitted `.tscn` files; "all instances" ignores the sprite-or-light gate; "design" is
 `design_port.md` §3.2, measured by an independent parser):
