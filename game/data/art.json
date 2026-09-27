@@ -879,5 +879,67 @@
       "findCharacterDirection(getAngle(GetLinearVelocity()), true) BEFORE this update's SetLinearVelocity:",
       "the previous update's velocity x < 0 is row 1, anything else row 2"
     ]
+  },
+
+  "black_bar": {
+    "_source": [
+      "THE FOUR BLACK BARS ROUND THE SCENE: black_bar.ent, added four times by Game::manageSceneBounds. The",
+      "visuals plan's step 13.3 (the remake's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.13, and",
+      "decode/D5.md section 2 with D5_check.md, which wins where they differ; decode/D11.md section 2 for what",
+      "the earthquake shows of them), planning step 122. From the remake's out/parity/asbc/all_functions.txt,",
+      "md5 48fe65ce8baea16b94ed84d8d7be84b0:",
+      "  Game::manageSceneBounds, bytes 118788..119489, 176 instructions and NO jump, called unconditionally by",
+      "  Game::preLoop ins 40 - after g_scale.scaleEntities() at ins 37 and before the camera controller",
+      "  (ins 117 / 137), whose findCamMax (bytes 106773..107045 ins 32-39) deletes the `max` it reads here:",
+      "    ins 3-24     sceneMax = SeekEntity('max').GetPositionXY(), already scaled by ins 37",
+      "    ins 26-32    sceneMin = V2_ZERO, read by nothing below",
+      "    ins 34-49    blackBarSize = g_scale.scale(vector2(512, 32)) (ins 35 PshC4 32 and ins 36 PshC4 512,",
+      "                 pushed last-first; SGlobalScale::scale(vector2), bytes 5878..5975 ins 3-11, factor x v)",
+      "    ins 51-57    halfBlackBarSize = blackBarSize x 0.5",
+      "    ins 59-80    AddScaledEntity('black_bar.ent', vector3(half.x, -half.y, 0), getScale())      A",
+      "    ins 84-106   the same at x = half.x x 2 (ins 96 MULIf 2f)                                  B",
+      "    ins 110-137  the same at y = sceneMax.y + half.y (ins 116-124)                              C",
+      "    ins 141-169  x = half.x x 2 (ins 159), y = sceneMax.y + half.y (ins 147-155)               D",
+      "  AddScaledEntity(string, vector3, float) (Script/ETHScriptWrapper.generic.cpp:328) adds at angle 0, no",
+      "  name, at that scale (Script/ETHScriptWrapper.Scene.cpp:176-179); added after scaleEntities, each is",
+      "  scaled once. g_scale.scale()'d, so every length here is already in the level's units (the port's",
+      "  scale 1), unlike a bare literal (step 86).",
+      "THE ENTITY, read at run time by Art::LoadEnt and not copied here: black_bar.ent type 5 (ET_LAYERABLE,",
+      "Entity/ETHEntityProperties.h:82-89, origin EO_CENTER, Entity/ETHEntity.cpp:27-44), layerDepth 1.0,",
+      "static 1, applyLight 0, blendMode 0 (AM_PIXEL), EmissiveColor 0, Scale 1, PivotAdjust (0, 0), SpriteCut",
+      "1 x 1, no <Particles>, no <Light>. Sprite black_bar.png, 512 x 32 sd only (no hd or fullhd twin), RGB",
+      "(0, 0) and alpha (255, 255) over the whole image (D5_check datachecks.py): opaque black. A layerable",
+      "entity's depth is Max(0.001, layerDepth) = 1.0 whatever its z (Entity/ETHSpriteEntity.cpp:34,",
+      ":626-628), the top of the normalised range, so the bars are drawn over every piece of the scene,",
+      "particles included (Renderer/ETHEntityRenderingManager.cpp:37, 70-71), and under the HUD, which is",
+      "drawn after the scene (ETHEngine.cpp:193-205)."
+    ],
+    "_seen": [
+      "At rest the camera is held inside (0, 0) to max (clampCameraPos, bytes 109260..109449 ins 3-28) and",
+      "the view is 256 u tall against levels at least 256 u tall, so no bar is ever on screen. The earthquake",
+      "moves the drawn camera AFTER that clamp and the camera controller writes it whole again the next frame",
+      "(D5_check section 2, D11 section 1d), so a forth tremble shows its pixels of C/D at the bottom and a",
+      "back tremble overshoots upward and shows A/B at the top, one frame each. MEASURED on the footage",
+      "(D11 section 2): on 4-29 (L1) and 4-32 (F16) the band is opaque black over the sky, its height the",
+      "world's move to the pixel, under the HUD; on 4-01 (F17) it stops mid-screen, consistent with a bar",
+      "ending at x 768 to about 15 u."
+    ],
+    "_coverage": [
+      "Together the bars cover x 0 to 768 u: A and C from 0 to 512, B and D from 256 to 768 (they overlap",
+      "on 256 to 512), and there is no third. Re-counted over the 128 max markers of the frozen levels",
+      "(out/snap_pre8/levels, planning step 122): 10 levels are wider than 768 u - 2-32 (2632), 3-01 (1052),",
+      "3-03, 3-06, 3-15, 3-16 (1024), 3-05 (1054), 4-01 (998), 4-19 (968) and 4-20 (844) - and where their",
+      "view is past 768 a shake uncovers the pinned sky, as the original's does. 94 of the 128 are exactly",
+      "256 u tall and none is shorter (view.json's note says 73; not reconciled here)."
+    ],
+    "entity": "black_bar.ent",
+    "size": [512.0, 32.0],
+    "_size": "manageSceneBounds ins 34-49: the script's vector2(512, 32), g_scale.scale()'d. It places the bars and is not their picture's size, which is black_bar.png's 512 x 32 units at the entity's Scale 1 (the two agree)",
+    "bars": [
+      {"x_half_widths": 1, "side": "above_top", "_source": "A, ins 59-80: vector3(half.x, -half.y, 0) - (256, -16)"},
+      {"x_half_widths": 2, "side": "above_top", "_source": "B, ins 84-106: half.x x 2 (ins 96) - (512, -16)"},
+      {"x_half_widths": 1, "side": "below_bottom", "_source": "C, ins 110-137: sceneMax.y + half.y - (256, max.y + 16)"},
+      {"x_half_widths": 2, "side": "below_bottom", "_source": "D, ins 141-169: half.x x 2, sceneMax.y + half.y - (512, max.y + 16)"}
+    ]
   }
 }

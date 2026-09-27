@@ -21,6 +21,10 @@ namespace {
 
 namespace Json = Supersonic::Json;
 
+// art.json black_bar's two sides (BarSide), as the file names them.
+constexpr const char* kBarAboveTop = "above_top";
+constexpr const char* kBarBelowBottom = "below_bottom";
+
 bool WholeBelow(const Json::Value& value, int below, int& out) {
     if (!value.IsNumber()) return false;
     const double n = value.AsNumber();
@@ -223,6 +227,20 @@ double LightWallGhost::AlphaAt(double angleDeg) const {
     // 0.1 to 0.3 over the 1.2 s the 300 degrees a second take.
     const double radians = angleDeg * 3.14159265358979323846 / 180.0;
     return static_cast<double>(Supersonic::DetMath::cos(static_cast<float>(radians))) * alphaAmplitude + alphaBase;
+}
+
+std::vector<glm::dvec2> BlackBars::Centres(const glm::dvec2& sceneMax) const {
+    // halfBlackBarSize = blackBarSize x 0.5 (manageSceneBounds ins 51-57); x is
+    // half.x or half.x x 2 (ins 96, 159 MULIf 2f), y is -half.y above the scene
+    // (ins 59-80, 84-106) or sceneMax.y + half.y below it (ins 116-124, 147-155).
+    const glm::dvec2 half = sizeUnits * 0.5;
+    std::vector<glm::dvec2> centres;
+    centres.reserve(bars.size());
+    for (const BlackBar& bar : bars) {
+        const double y = bar.side == BarSide::AboveTop ? -half.y : sceneMax.y + half.y;
+        centres.emplace_back(half.x * static_cast<double>(bar.xHalfWidths), y);
+    }
+    return centres;
 }
 
 float Shot::AngleDegrees(const glm::dvec2& directionPx) const {
@@ -719,6 +737,38 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     ghost.alphaBase = ghostEntry["alpha_base"].AsNumber();
     ghost.alphaAmplitude = ghostEntry["alpha_amplitude"].AsNumber();
     ghost.spinDegPerSec = ghostEntry["spin_deg_per_s"].AsNumber();
+
+    // The black bars round the scene: the entity manageSceneBounds adds, the bar it
+    // measures their centres in, and the four it adds. None has a default: a bar
+    // the port placed by its own guess would hide what the original shows, or show
+    // what it hides.
+    BlackBars& blackBars = read.blackBars;
+    const Json::Value& barsEntry = root["black_bar"];
+    bool barsOk = root.Has("black_bar") && barsEntry.IsObject() && barsEntry["entity"].IsString() &&
+                  !barsEntry["entity"].AsString("").empty() && Pair(barsEntry["size"], blackBars.sizeUnits) &&
+                  std::isfinite(blackBars.sizeUnits.x) && std::isfinite(blackBars.sizeUnits.y) &&
+                  blackBars.sizeUnits.x > 0.0 && blackBars.sizeUnits.y > 0.0 && barsEntry["bars"].IsArray() &&
+                  !barsEntry["bars"].AsArray().empty();
+    if (barsOk) {
+        for (const Json::Value& entry : barsEntry["bars"].AsArray()) {
+            BlackBar bar;
+            const std::string side = entry["side"].AsString("");
+            if (!entry.IsObject() || !WholeAtLeastOne(entry["x_half_widths"], bar.xHalfWidths) ||
+                (side != kBarAboveTop && side != kBarBelowBottom)) {
+                barsOk = false;
+                break;
+            }
+            bar.side = side == kBarAboveTop ? BarSide::AboveTop : BarSide::BelowBottom;
+            blackBars.bars.push_back(bar);
+        }
+    }
+    if (!barsOk) {
+        error = path + ": black_bar needs an entity, a size of two numbers above 0, and bars, each with "
+                       "x_half_widths a whole number from 1 and a side of '" +
+                std::string(kBarAboveTop) + "' or '" + kBarBelowBottom + "'";
+        return false;
+    }
+    blackBars.entity = barsEntry["entity"].AsString("");
     out = std::move(read);
     return true;
 }
@@ -1000,6 +1050,13 @@ bool Entity::Temporary() const {
                        [](const Particles::System& system) { return system.repeat > 0; });
 }
 
+double Entity::LayerableDepth() const {
+    // ETHSpriteEntity::m_layrableMinimumDepth (ETHSpriteEntity.cpp:34): 0.001, so a
+    // layerable entity is never at the very back of the range.
+    constexpr double kLayerableMinimumDepth = 0.001;
+    return std::max(kLayerableMinimumDepth, layerDepth);
+}
+
 double Entity::ParticleScale(double scriptScale) const {
     const glm::dvec2 made = ScaleAt(scriptScale);
     return (made.x + made.y) / 2.0;
@@ -1024,6 +1081,7 @@ bool LoadEnt(const std::string& path, Entity& out, std::string& error) {
     const Element& entity = root.children.front();
 
     Entity read;
+    int type = static_cast<int>(EntityType::Horizontal);
     int isStatic = 0;
     int applyLight = 0;
     double emissive[4] = {0.0, 0.0, 0.0, 0.0};
@@ -1032,7 +1090,8 @@ bool LoadEnt(const std::string& path, Entity& out, std::string& error) {
     double pivot[2] = {0.0, 0.0};
     static const char* const kRgba[] = {"r", "g", "b", "a"};
     static const char* const kXy[] = {"x", "y"};
-    if (!IntAttribute(entity, "static", isStatic, why) || !IntAttribute(entity, "applyLight", applyLight, why) ||
+    if (!IntAttribute(entity, "type", type, why) || !FloatAttribute(entity, "layerDepth", read.layerDepth, why) ||
+        !IntAttribute(entity, "static", isStatic, why) || !IntAttribute(entity, "applyLight", applyLight, why) ||
         !IntAttribute(entity, "blendMode", read.blendMode, why) ||
         !ChildFloats(entity, "EmissiveColor", kRgba, emissive, 4, why) ||
         !ChildFloats(entity, "SpriteCut", kXy, cut, 2, why) || !ChildFloats(entity, "Scale", kXy, scale, 2, why) ||
@@ -1040,6 +1099,16 @@ bool LoadEnt(const std::string& path, Entity& out, std::string& error) {
         error = path + ": " + why;
         return false;
     }
+    // QueryIntAttribute stores any whole number as the type (:228), and nothing the
+    // engine does with one outside ENTITY_TYPE is what the file meant: ComputeDepth
+    // has no case for it and gives depth 0 (ETHSpriteEntity.cpp:611-632), and
+    // ConvertToGSSO gives it EO_DEFAULT where every named type has a centre
+    // (ETHEntity.cpp:27-44).
+    if (type < static_cast<int>(EntityType::Horizontal) || type > static_cast<int>(EntityType::Layerable)) {
+        error = path + ": its type " + std::to_string(type) + " is not an ENTITY_TYPE (ETHEntityProperties.h:82-89)";
+        return false;
+    }
+    read.type = static_cast<EntityType>(type);
     // A cut is read as ints (ReadVector2iPropertyFromXmlElement, :623-638).
     read.columns = static_cast<int>(cut[0]);
     read.rows = static_cast<int>(cut[1]);

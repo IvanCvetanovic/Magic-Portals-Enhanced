@@ -2410,6 +2410,24 @@ void AnEntReadsAsTheEngineReadsIt() {
     CHECK_MSG(bare.emissive == glm::dvec3(0.0) && !bare.isStatic && !bare.applyLight,
               "EmissiveColor black, not static, applies no light");
     CHECK_MSG(!bare.Temporary(), "no system: never temporary, as IsTemporary's existent count says");
+    // Its type and layerDepth: Reset's ET_HORIZONTAL and 0 where the file states
+    // neither (ETHEntityProperties.cpp:176-177); a layerable depth is never under
+    // m_layrableMinimumDepth's 0.001 (ETHSpriteEntity.cpp:34, :626-628).
+    CHECK_MSG(bare.type == Art::EntityType::Horizontal && bare.layerDepth == 0.0,
+              "type ET_HORIZONTAL and layerDepth 0 where nothing is stated");
+    CHECK_MSG(NearD(bare.LayerableDepth(), 0.001), "a layerable depth of 0 is drawn at 0.001");
+    Art::Entity layered;
+    CHECK_MSG(ReadEnt("layered.ent", EntFile(" type=\"5\" layerDepth=\"0.500000\"", ""), layered, error), error);
+    CHECK_MSG(layered.type == Art::EntityType::Layerable && layered.layerDepth == 0.5 &&
+                  layered.LayerableDepth() == 0.5,
+              "type 5 is ET_LAYERABLE, at the layerDepth the file states");
+    Art::Entity standing;
+    CHECK_MSG(ReadEnt("standing.ent", EntFile(" type=\"2\" layerDepth=\"0.000000\"", ""), standing, error), error);
+    CHECK_MSG(standing.type == Art::EntityType::Vertical && standing.layerDepth == 0.0, "type 2 is ET_VERTICAL");
+    // QueryIntAttribute's %d takes the whole part, as for every int the engine reads.
+    Art::Entity whole;
+    CHECK_MSG(ReadEnt("whole.ent", EntFile(" type=\"5.000000\"", ""), whole, error), error);
+    CHECK_MSG(whole.type == Art::EntityType::Layerable, "type 5.000000 is read as 5");
 
     // A light with nothing stated but a halo: ETHLight(true)'s range 256, halo 64,
     // brightness 1, white, at the entity.
@@ -2482,6 +2500,12 @@ void AnEntReadsAsTheEngineReadsIt() {
     };
     refused("scale.ent", EntFile("", "<Scale x=\"big\" y=\"1\" />"), "Scale");
     refused("blend.ent", EntFile(" blendMode=\"add\"", ""), "blendMode");
+    // A type past ET_LAYERABLE, or below ET_HORIZONTAL, is a number the engine
+    // would store and then draw at depth 0 with no origin of its own.
+    refused("sixth.ent", EntFile(" type=\"6\"", ""), "ENTITY_TYPE");
+    refused("minus.ent", EntFile(" type=\"-1\"", ""), "ENTITY_TYPE");
+    refused("named.ent", EntFile(" type=\"layerable\"", ""), "type");
+    refused("depth.ent", EntFile(" layerDepth=\"front\"", ""), "layerDepth");
     refused("cut.ent", EntFile("", "<SpriteCut x=\"0\" y=\"1\" />"), "SpriteCut");
     refused("range.ent", EntFile("", "<Light range=\"far\" />"), "range");
     refused("root.ent", "<?xml version=\"1.0\" ?>\n<Entity></Entity>\n", "<Ethanon><Entity>");
@@ -2630,6 +2654,14 @@ constexpr int kLitEnts = 19;
 constexpr int kHaloedEnts = 9;
 constexpr int kPicturedEnts = 121;
 constexpr int kScaledEnts = 9;
+// And their type and layerDepth, counted by a grep of the 190 decoded files (step
+// 122): all 190 state a type - 0 on 188, 2 on light_off.ent alone, 5 on
+// black_bar.ent alone; 169 state a layerDepth, 1.0 on black_bar.ent and 0 on the
+// other 168, and the 21 that state none read Reset's 0.
+constexpr int kHorizontalEnts = 188;
+constexpr int kVerticalEnts = 1;
+constexpr int kLayerableEnts = 1;
+constexpr int kLayeredEnts = 1; // a layerDepth other than 0
 
 // Every .ent of the original's reads as an entity, its systems exactly as
 // Particles::Load reads them; and the pictures art.json copies out of seven of them
@@ -2642,6 +2674,10 @@ void EveryEntReadsAsAnEntity() {
     int pictured = 0;
     int scaled = 0;
     int mismatched = 0;
+    int horizontal = 0;
+    int vertical = 0;
+    int layerable = 0;
+    int layered = 0;
     std::string firstError;
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(kOriginal + "/entities", ec)) {
@@ -2661,6 +2697,10 @@ void EveryEntReadsAsAnEntity() {
         if (entity.light && !entity.light->halo.empty()) ++haloed;
         if (!entity.sprite.empty()) ++pictured;
         if (entity.scale != glm::dvec2(1.0)) ++scaled;
+        if (entity.type == Art::EntityType::Horizontal) ++horizontal;
+        if (entity.type == Art::EntityType::Vertical) ++vertical;
+        if (entity.type == Art::EntityType::Layerable) ++layerable;
+        if (entity.layerDepth != 0.0) ++layered;
     }
     CHECK_MSG(firstError.empty(), "an .ent would not read as an entity: " + firstError);
     CHECK_EQ(files, 190);
@@ -2673,6 +2713,12 @@ void EveryEntReadsAsAnEntity() {
     CHECK_EQ(haloed, kHaloedEnts);
     CHECK_EQ(pictured, kPicturedEnts);
     CHECK_EQ(scaled, kScaledEnts);
+    std::printf("  LoadEnt: type 0 on %d, 2 on %d, 5 on %d; a layerDepth other than 0 on %d\n", horizontal,
+                vertical, layerable, layered);
+    CHECK_EQ(horizontal, kHorizontalEnts);
+    CHECK_EQ(vertical, kVerticalEnts);
+    CHECK_EQ(layerable, kLayerableEnts);
+    CHECK_EQ(layered, kLayeredEnts);
 
     Art::Rules rules;
     std::string error;
@@ -2727,6 +2773,125 @@ void EveryEntReadsAsAnEntity() {
           read.pivotPx == glm::dvec2(rules.spike.pivotXPx, rules.spike.pivotYPx));
 }
 
+// The type and layerDepth the reader used to drop (step 82), read out of the
+// original's own files (step 122): black_bar.ent, the one layerable entity, at the
+// front of the range; light_off.ent, the one vertical; and portal.ent, which states
+// no layerDepth at all.
+void TheTypeAndLayerDepthAreTheFilesOwn() {
+    const auto load = [](const char* name) {
+        Art::Entity entity;
+        std::string error;
+        CHECK_MSG(Art::LoadEnt(kOriginal + "/entities/" + name, entity, error), error);
+        return entity;
+    };
+    const Art::Entity bar = load("black_bar.ent");
+    CHECK_MSG(bar.type == Art::EntityType::Layerable && bar.layerDepth == 1.0 && bar.LayerableDepth() == 1.0,
+              "black_bar.ent: type 5, ET_LAYERABLE, at layerDepth 1.0 - the front of the range");
+    CHECK_MSG(bar.sprite == "black_bar.png" && bar.blendMode == Particles::kAlphaPixel && !bar.additive &&
+                  bar.isStatic && !bar.applyLight && bar.emissive == glm::dvec3(0.0),
+              "black_bar.png, AM_PIXEL, static, applies no light, emissive 0");
+    CHECK_MSG(bar.scale == glm::dvec2(1.0) && bar.pivotPx == glm::dvec2(0.0) && bar.columns == 1 && bar.rows == 1 &&
+                  bar.systems.empty() && !bar.light,
+              "Scale 1, PivotAdjust (0, 0), one frame, no systems and no light");
+    const Art::Entity lightOff = load("light_off.ent");
+    CHECK_MSG(lightOff.type == Art::EntityType::Vertical && lightOff.layerDepth == 0.0,
+              "light_off.ent: type 2, ET_VERTICAL, layerDepth 0");
+    const Art::Entity portal = load("portal.ent");
+    CHECK_MSG(portal.type == Art::EntityType::Horizontal && portal.layerDepth == 0.0,
+              "portal.ent: type 0 and no layerDepth stated, so Reset's 0");
+    // And black_bar.png is the 512 x 32 the script places its bars by, whole and
+    // opaque black, with no tier twin: drawn at its own units.
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    unsigned char* pixels =
+        stbi_load((kOriginal + "/entities/black_bar.png").c_str(), &width, &height, &channels, 4);
+    CHECK_MSG(pixels != nullptr && width == 512 && height == 32, "black_bar.png is 512 x 32");
+    if (pixels != nullptr) {
+        bool black = true;
+        for (int i = 0; i < width * height; ++i) {
+            const unsigned char* p = pixels + static_cast<std::ptrdiff_t>(i) * 4;
+            black = black && p[0] == 0 && p[1] == 0 && p[2] == 0 && p[3] == 255;
+        }
+        CHECK_MSG(black, "every texel of black_bar.png is (0, 0, 0, 255)");
+        stbi_image_free(pixels);
+    }
+    std::error_code ec;
+    CHECK_MSG(!std::filesystem::exists(kOriginal + "/entities/hd/black_bar.png", ec) &&
+                  !std::filesystem::exists(kOriginal + "/entities/fullhd/black_bar.png", ec),
+              "no hd or fullhd twin: the sd file is the one the original draws");
+}
+
+// Where Game::manageSceneBounds puts its four bars (art.json black_bar), from the
+// max marker: A and B above the scene, C and D below it, the second of each pair a
+// half-width further right, all measured in the script's own 512 x 32.
+void TheBlackBarsAreWhereManageSceneBoundsPutsThem() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    const Art::BlackBars& bars = rules.blackBars;
+    CHECK_MSG(bars.entity == "black_bar.ent", "AddScaledEntity('black_bar.ent', ...)");
+    CHECK_MSG(bars.sizeUnits == glm::dvec2(512.0, 32.0), "g_scale.scale(vector2(512, 32))");
+    CHECK_EQ(bars.bars.size(), static_cast<std::size_t>(4));
+    if (bars.bars.size() != 4) return;
+    CHECK_MSG(bars.bars[0].xHalfWidths == 1 && bars.bars[0].side == Art::BarSide::AboveTop &&
+                  bars.bars[1].xHalfWidths == 2 && bars.bars[1].side == Art::BarSide::AboveTop &&
+                  bars.bars[2].xHalfWidths == 1 && bars.bars[2].side == Art::BarSide::BelowBottom &&
+                  bars.bars[3].xHalfWidths == 2 && bars.bars[3].side == Art::BarSide::BelowBottom,
+              "A and B above, C and D below, each pair at half.x and half.x x 2");
+    const auto at = [&bars](const glm::dvec2& sceneMax) { return bars.Centres(sceneMax); };
+    // 4-29's max (768, 256): the view's own height, so the bars sit flush against it.
+    const std::vector<glm::dvec2> level28c = at(glm::dvec2(768.0, 256.0));
+    CHECK_MSG(level28c.size() == 4 && level28c[0] == glm::dvec2(256.0, -16.0) &&
+                  level28c[1] == glm::dvec2(512.0, -16.0) && level28c[2] == glm::dvec2(256.0, 272.0) &&
+                  level28c[3] == glm::dvec2(512.0, 272.0),
+              "(256, -16), (512, -16), (256, 272), (512, 272)");
+    // A taller scene moves C and D down with its max, and a wider one moves nothing:
+    // the bars end at x 768 whatever the scene's width (2-32's max is 2632).
+    const std::vector<glm::dvec2> level23 = at(glm::dvec2(512.0, 370.0));
+    CHECK_MSG(level23.size() == 4 && level23[2] == glm::dvec2(256.0, 386.0) && level23[3] == glm::dvec2(512.0, 386.0) &&
+                  level23[0] == glm::dvec2(256.0, -16.0),
+              "1-24's max y 370: C and D at 386, A and B where they always are");
+    const std::vector<glm::dvec2> level31a = at(glm::dvec2(2632.0, 256.0));
+    double left = 1e9;
+    double right = -1e9;
+    for (const glm::dvec2& centre : level31a) {
+        left = std::min(left, centre.x - bars.sizeUnits.x * 0.5);
+        right = std::max(right, centre.x + bars.sizeUnits.x * 0.5);
+    }
+    CHECK_MSG(left == 0.0 && right == 768.0, "together x 0 to 768 on a scene 2632 wide: " + std::to_string(right));
+}
+
+// Without them the port would place no bar, or bars the script never adds.
+void BlackBarsWithoutTheirPlacesAreRefused() {
+    std::ifstream file(kPortData + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const auto refused = [&real](const std::string& from, const std::string& to, const std::string& name) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos && text.find(from, at + 1) == std::string::npos, "once: " + from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-black-bar-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules rules;
+        std::string error;
+        const bool ok = Art::LoadRules(path.string(), rules, error);
+        CHECK_MSG(!ok, "refused: " + name);
+        CHECK_MSG(error.find("black_bar needs") != std::string::npos, name + ": " + error);
+    };
+    refused("\"black_bar\": {", "\"black_bar_gone\": {", "absent");
+    refused("\"entity\": \"black_bar.ent\",", "\"entity\": \"\",", "no entity");
+    refused("\"size\": [512.0, 32.0],", "\"size\": [512.0, 0],", "a bar 0 tall");
+    refused("\"size\": [512.0, 32.0],", "\"size\": [512.0],", "one number");
+    refused("{\"x_half_widths\": 2, \"side\": \"above_top\"", "{\"x_half_widths\": 0, \"side\": \"above_top\"",
+            "no half-widths");
+    refused("{\"x_half_widths\": 1, \"side\": \"below_bottom\"", "{\"x_half_widths\": 1, \"side\": \"below\"",
+            "a side it does not name");
+}
+
 int main() {
     AnImageSaysItsSizeInItsHeader();
     AnythingElseIsRefusedByName();
@@ -2765,6 +2930,8 @@ int main() {
     APoolIsOverWhenEveryParticleIsSpent();
     AScaledCopyLeavesItsSystemAsItWas();
     AnEntReadsAsTheEngineReadsIt();
+    TheBlackBarsAreWhereManageSceneBoundsPutsThem();
+    BlackBarsWithoutTheirPlacesAreRefused();
 
     std::error_code original;
     if (std::filesystem::is_directory(kOriginal + "/entities", original)) {
@@ -2776,6 +2943,7 @@ int main() {
         AnEntityWithoutParticlesSaysSoWithoutFailing();
         TheEffectsAreTheirEnts();
         EveryEntReadsAsAnEntity();
+        TheTypeAndLayerDepthAreTheFilesOwn();
         EveryAddedBitmapIsWithoutAlpha();
         TheOriginalsMp3sDecode();
     } else {

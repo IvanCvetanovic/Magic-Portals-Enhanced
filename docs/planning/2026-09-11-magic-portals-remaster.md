@@ -16273,3 +16273,139 @@ of `build.ninja` reports no work to do, and `MagicPortals.exe` `628400a9`, `test
 - For the merge's renumbering: "step 121" is written in 9 places outside this document - notes in `darkdragon.json`
   (2), `diamonds.json` (2), `earthquake.json`, `effects.json`, `keys.json` and `torch.json`, and the comment heading
   the earthquake cases in `tests/test_mp_layer.cpp`.
+
+## Step 122 - the four black bars round the scene, and the type and layerDepth the entity reader dropped (built)
+
+**TRACK B: the visuals plan's step 13.3** (the remake's `out/parity/visuals/briefs/00_order.md` section 7, as section
+8.13's 13.3 row amends it; decode `decode/D5.md` section 2 with `D5_check.md`, which wins where they differ, and
+`decode/D11.md` section 2 for what the earthquake shows of them). Built in the worktree `Magic-Portals-Remake-vis4`
+(branch `visuals-d`, from `b822a14`, step 121), whose build reads the frozen level data in `out/snap_pre8`; numbered
+in track B's range, and the merge renumbers it. Changed: `game/sim/Art.{hpp,cpp}`, `game/data/art.json`,
+`game/MagicPortalsLayer.{hpp,cpp}`, `tests/test_mp_sprites.cpp`, `tests/test_mp_layer.cpp` and
+`docs/ethanon-formats.md`. No engine change (the pin stays `4bfcf67`), no converter change. **No gameplay change**:
+four pictures and a reader's two numbers; the simulation reads neither.
+
+**BLOCKERS, checked first.** 8.13's row for 13.3 says "nothing to draw while the port has no earthquake. If
+`startEarthquake` is built: all four bars (not only C/D), with the order clamp -> quake offset -> reset next frame;
+record that 10 levels are wider than the 768 u the bars cover". Step 121 (Q.1, committed `b822a14`) built the
+earthquake with exactly that order, and its deviation 4 hands the bars to this step. D5 is decoded and checked, and
+8.13 removes it as a blocker. The other prerequisite - `Art::LoadEnt` keeping each `.ent`'s `type` and `layerDepth`,
+which step 82 dropped (the backlog's 6.2 row) - is this step's own first part. No ruling blocks it. Nothing unmet.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; every number is in
+`game/data/art.json` `black_bar` with its instructions).
+- `Game::manageSceneBounds` (118788..119489) runs 176 instructions with no jump, called unconditionally from
+  `Game::preLoop` #40 - after `scaleEntities` (#37), before the camera controller whose `findCamMax` deletes `max`.
+  #3-24 `sceneMax = SeekEntity('max').GetPositionXY()`; #34-49 `blackBarSize = g_scale.scale(vector2(512, 32))`;
+  #51-57 `half = size x 0.5`; then four `AddScaledEntity('black_bar.ent', pos, getScale())`: **A (256, -16)** #59-80,
+  **B (512, -16)** #84-106 (`MULIf 2f` #96), **C (256, maxY + 16)** #110-137, **D (512, maxY + 16)** #141-169 (#159),
+  in the level's units. Each 512 x 32; together x 0 to 768, A and B flush above y 0 and C and D flush below `max`.
+- `black_bar.ent`: **type 5 (`ET_LAYERABLE`), layerDepth 1.0**, static, `applyLight 0`, `blendMode 0`, emissive 0;
+  `black_bar.png` 512 x 32, sd only, opaque black on every texel. A layerable entity is drawn at
+  `Max(0.001, layerDepth)` whatever its z (`Entity/ETHSpriteEntity.cpp:34`, `:626-628`): 1.0 is the front of the
+  range every other piece is normalised into, so the bars are over everything the scene draws, particles included,
+  and under the HUD (save a vertical or decal piece at the very top of the range, whose draw hash adds a shift a
+  layerable's does not, `Renderer/ETHEntityRenderingManager.cpp:119-144`; the game's one vertical entity is
+  `light_off.ent`, and no file uses a decal type).
+- When they show (D5_check section 2, D11 section 1d and 2): the camera controller writes the camera whole and
+  clamps it; the earthquake then moves it and nothing re-clamps; the next frame starts again from the clamp. So a
+  forth shows its pixels of C/D at the bottom, a back overshoots upward and shows A/B at the top, one frame each;
+  **measured on the footage**: 4-29 (L1) and 4-32 (F16) band heights equal to the world's move, opaque black over the
+  sky, under the HUD; 4-01 (F17) stops mid-screen, consistent with a bar ending at x 768 to about 15 u.
+
+**THE CHANGE.**
+1. **`Art::LoadEnt` reads `type` and `layerDepth`** (`ETHEntityProperties.cpp:228`, `:237`), each `Reset`'s value
+   where the file states none (`ET_HORIZONTAL`, 0; `:176-177`). New `Art::EntityType` names all six of
+   `ENTITY_TYPE` (`ETHEntityProperties.h:82-89`); a type outside it is REFUSED by name, because the engine stores
+   any integer and then draws it at depth 0 with `EO_DEFAULT` (`ETHSpriteEntity.cpp:611-632`, `ETHEntity.cpp:27-44`),
+   the reader's existing rule for what the engine would misread in silence. `Entity::LayerableDepth()` is
+   `Max(0.001, layerDepth)`. Over the 190 files: type 0 on 188, 2 on `light_off.ent`, 5 on `black_bar.ent`;
+   layerDepth 1.0 on `black_bar.ent` alone (a grep of the decoded files, pinned in `test_mp_sprites`).
+2. **`art.json` `black_bar`** (strict: `Art::LoadRules` refuses it missing or malformed): the entity, the script's
+   `size` [512, 32] - which PLACES the bars and is not their picture's size - and the four `bars` in the script's
+   order, each an `x_half_widths` (1 or 2) and a `side` (`above_top` / `below_bottom`, `Art::BarSide`).
+   `Art::BlackBars::Centres(sceneMax)` is the arithmetic of #51-169.
+3. **The layer** (`buildBlackBars`, at the end of `buildSprites`): reads `black_bar.ent` through `LoadEnt` with the
+   level, and draws the bars only if it is layerable at the front (else it logs why and draws none); resolves
+   `black_bar.png` through the one loader (sd: there is no tier twin); makes four quads (`Magic Portals Black Bar`)
+   of the image's units at the entity's `<Scale>` (512 x 32), centred on `Centres(m_boundsPx)` - `m_boundsPx` is the
+   `level_bounds` role, which is the `max` node - placed ONCE and never moved. They are tinted in `syncLighting`
+   with the entity's own facts (emissive 0, static, no light) and destroyed with the level. A log line per level
+   ("black bars: 4 of ... round a scene to max (...)") lets a sweep count them.
+4. **K13, the depth: an explicit topmost slot, `MagicPortalsLayer::kLayerableTopZ` = 1.0**, beside the between-slot
+   table and named in its NOT IN THE TABLE note. The bars are not between two slots: layerable at 1.0 is in front
+   of every z the layer gives anything else - the level's slots from -1.5, what the table puts between them, the
+   debug boxes at the markers' 0.5 - and behind the camera's near plane (20 - 0.1). The HUD is the screen overlay,
+   drawn after the scene, so it stays over the bars as the original's top layer does. Pinned in `test_mp_layer`:
+   the value, and a registry scan on 4-29 (torch lit, effects and ghost live, every tick to 230, then again with
+   the boxes on) finding nothing else at or past it.
+5. **The order clamp -> quake offset -> reset next frame is step 121's, unchanged**: the tick's camera is clamped,
+   `shakeView` adds the tick's move to the drawn camera after the engine's interpolation, and `liftQuake` takes it
+   off before the next. The bars stand still in the level, so what a tremble uncovers past the clamp is exactly
+   what they cover.
+6. `docs/ethanon-formats.md`: a dated block with the reads, the layerable depth rule, the out-of-range fall-through
+   and the game's census.
+
+**THE GATES.** Before = the committed build `628400a9` (step 121's binary): its 128-level sweep `Q.1/after/sweep` and
+its 4-29 frames `Q.1/after/gates/4-29`, both re-checked against their logged md5s (128 of 128, 220 of 220) and not
+re-captured. After = this step's build `fe2d2dd1`. Captures, scripts and measurements: `out/parity/visuals/13.3/`
+(`capture_gates.sh`, `capture_sweep.sh`, `compare_sweep.sh`, `capture_probe_2-32.sh`, `measure_bars.py`,
+`edge_coverage.py`, `clear_rect_check.py`; `after/gates/4-29_bars.{json,txt}`, `4-29_edge_coverage.txt`, `4-29_clear_rect_check.txt`,
+`strips_before_after_f166top_f161bottom.png`; `after/probe_2-32/bands.txt`). All `--window 1280x720 --fixed-step`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**, 59 steps, exit 0 (`13.3/build.log`). `MagicPortalsSim.lib` changed, so every suite and both game executables relinked (`MagicPortals.exe` `fe2d2dd1`); `test_mp_zerog.exe` was deleted and relinked once more after Smart App Control refused it (2 steps, 0 warnings, `build_zerog_relink.log`). **After the build, two edits were made to `game/sim/Art.cpp`** (a check moved ahead of a lookup, and a comment reworded) **and both were reverted to the built text by exact replacement**; the file's mtime was then set back to before the build's object, so that the build would not relink every executable and invite another Smart App Control refusal. A dry run on a copy of `build.ninja` then reports no work to do - a consequence of that restore, not independent proof of it; the source measured is the source built, by the exact reversal. The reverted comment ("every named type has a centre", where `ET_VERTICAL` is `EO_CENTER_BOTTOM`) stays until a later change rebuilds anyway. The step's verifier then gave the independent check: the four changed files recompiled with their own flags and not linked, 0 warnings, and each object's code and data identical to the built object's but for its object-path record and checksum (`13.3/verify1/objcheck`) |
+| (1) `LoadEnt` reads `type` and `layerDepth`, pinned for `black_bar.ent` and one other file | `black_bar.ent` type 5, layerDepth 1.0; another file pinned | both dropped (step 82; the backlog's 6.2 row) | **passes: `test_mp_sprites` 965, 0 failures** (912 at step 88). `black_bar.ent`: `Layerable`, 1.0, `LayerableDepth()` 1.0, `black_bar.png`, AM_PIXEL, static, no light, emissive 0, Scale 1, no systems; its 512 x 32 texels all (0, 0, 0, 255), no hd or fullhd twin. `light_off.ent`: `Vertical`, 0. `portal.ent` (no `layerDepth` stated): `Horizontal`, 0. A bare fixture reads Reset's values (and 0.001 as a layerable depth); `type="5.000000"` reads 5; refused by name: type 6, type -1, type "layerable", layerDepth "front". The census over the 190 files: type 0 on 188, 2 on 1, 5 on 1; a layerDepth other than 0 on 1. `art.json` `black_bar`: the entity, [512, 32], A/B above and C/D below at 1 and 2 half-widths; `Centres` gives (256, -16), (512, -16), (256, 272), (512, 272) for 4-29's max, C/D at y 386 for 1-24's 370, and x 0 to 768 on 2-32's 2632; refused when absent, with no entity, a bar 0 tall, one number, 0 half-widths, or a side it does not name |
+| (2) K13: the bar in front of everything - a table row or an explicit topmost slot - pinned | pinned in `test_mp_layer` | no bar | **passes, as an explicit topmost slot: `kLayerableTopZ` 1.0.** `TheSceneHasFourBlackBarsInFrontOfEverything` pins the value, and scans every mesh in the registry on each of 230 ticks of 4-29 with the torch tapped at tick 60 (the shot, its light and halo, the lighting effects, the wall's going and its ghost, the eyes, the shake), then again with the boxes turned on (`kBoxes`): nothing but the bars reaches z 1.0 |
+| (3) All four bars (not only C/D), with the order clamp -> quake offset -> reset next frame | the four at D5's points, uncovered by both signs of a tremble | none; the strip shows the pinned sky (step 121 deviation 4) | **passes.** On 4-29: A (256, -16), B (512, -16), C (256, 272), D (512, 272), each 512 x 32 of `entities/black_bar.png`, unturned, tagged, mixed and not added. In all 128 sweep logs: "black bars: 4 of ...black_bar.png (512 x 32)". The order is step 121's, unchanged. In `test_mp_layer`, on each of the 10 shaken frames of the light wall's 20, the band the view shows past the scene is the move x 2.8125 px within 0.01 px - on the `max` side on the 5 forths, above y 0 on the 5 backs - and the two bars of that side cover it from x 0 to 1280; on the 220 frames at rest the scene fills the view and no band shows. On 2-32 the four span x 0 to 768 of its 2632 (`TheBlackBarsStopAt768OnAWideScene`). **`test_mp_layer` 1765, 0 failures** (1719 + 46) |
+| (4) A capture where a quake fires on a level whose view reaches its bounds shows the bars exactly where D5 puts them | 4-29 (768 x 256, the view flush with both edges), step 121's `--tap 247,141@60` capture | **today, re-read on `628400a9`'s frames**: the band shows the pinned sky - bottom mean RGB (69.4, 83.6, 91.6) on f161, 0 of 17,480 non-HUD pixels black; top (68.2, 67.3, 70.8) on f166, 319 of 19,190 black (INFERRED, not traced: the outlines of level art that stands above y 0) | **passes.** Every frame to 220 against the before of the same number: **210 of 220 byte-identical**. The 10 that differ are the spikes f161, 166, ... 206, and in each the change is ONE run of rows from the edge the tremble uncovers, with 0 pixels changed outside it: the bottom on the 5 forths, the top on the 5 backs. In that run **every pixel outside the HUD's rectangles is exactly (0, 0, 0)** (17,480 of 17,480 on f161; on the backs re-read with the clear-portals rectangle x 0-90 NOT masked, since the tap lights the torch and opens no portal, so no clear button is drawn: 20,900 of 20,900 on f166, 9,900, 5,500, 2,200 and 1,100 of as many on f176 to f206, the corner's own 1,710 of 1,710 black on f166 - `4-29_clear_rect_check.txt`). Whole black rows: 19, 9, 5, 2, 1 on the forths and 19, 9, 5, 2, 1 on the backs, plus, on every frame but f181/f186, the row the bar's edge crosses, resolved by 4x MSAA: **c = 0.745, 0.753, 0.745, 0.752 where 3 of its 4 samples lie past the edge, 0.503 and 0.514 where 2 do, 0.265 and 0.236 where 1 does** (`edge_coverage.py`: c = (before - after) / sky, in bytes), each within 0.015 of the samples' share. So the bars' edge is the scene's edge moved by 19.6875, 9.84375, 4.921875, 2.4609375 and 1.23046875 px, inside the quarter pixel the decode puts it; by the pixel-centre rule that is 20, 10, 5, 2, 1 rows each way, the footage's L1 bands (D11 section 5). The HUD's buttons and pads are drawn over the bar (inside their rectangles 1,228 of 6,840 band pixels are black on f161, where the pads are transparent). **And a second level**, 2-32 (one probe launch, every frame to 315): its fireball's 5 trembles on ticks 285 to 310 while its view is inside x 0 to 768, and every non-HUD pixel of 5, 5, 2, 2, 1, 1 whole rows from the edge is black, as predicted (`probe_2-32/bands.txt`) |
+| (5) Record that 10 levels are wider than the 768 u the bars cover (re-count) | the re-count | D5: 10 | **recorded, re-counted: 10**, over the 128 `max` markers of `out/snap_pre8/levels` and again from the sweep's own log lines: 2-32 (2632), 3-01 (1052), 3-03, 3-06, 3-15, 3-16 (1024), 3-05 (1054), 4-01 (998), 4-19 (968), 4-20 (844). 94 of the 128 are exactly 256 u tall, none shorter. Where such a level's view is past 768 u, a shake uncovers the pinned sky there, as the original's does (D11 section 2, F17). **No capture shows the band stopping at 768**: of the 12 levels whose quakes fire before f420 only 2-32 and 3-15 are wider than 768 u; 2-32's view was MEASURED inside x 0 to 768 on its trembles (the probe), and 3-15's is INFERRED inside (its player spawns at x 222 and the camera follows it; its door's trembles, ticks 291-306, were not captured frame by frame). So the geometry rests on `TheBlackBarsStopAt768OnAWideScene` and the original's F17 measurement |
+| (6) The 128-level f420 sweep changes only where a quake fires before f420 | each change explained | `Q.1/after/sweep` (`628400a9`), 128 pngs checked against their log md5s | **passes: 128 of 128 byte-identical** (`13.3/after/compare_sweep.txt`), 0 differ, 0 missing; all 128 exit 0, `Vulkan validation layers: ACTIVE` in 128 logs and no validation message in any; every png matches its log line. 12 levels fire quakes before f420 (step 121's `tremble_ticks.txt`) and none trembles on tick 420, so no f420 frame has a band to uncover, and at rest no bar is on any view. Nothing to explain |
+| (7) The suites | the touched suites pass | `test_mp_sprites` 912, `test_mp_layer` 1719, `test_mp_timed` 84, `test_mp_zerog` 88, `test_mp_minions` 99 | **pass, 0 failures each: 965, 1765, 84, 88, 99** |
+| No gameplay change | nothing the simulation reads moves | - | **passes**: the reader's two numbers feed only the layer, and the bars are pictures with no body; `Game::Level`, the tick's camera and the state hash never see them. The 128 sweep frames and the 210 non-spike 4-29 frames are byte-identical to the committed build's |
+
+**RECORDED, NOT DEVIATIONS OF THIS STEP.**
+1. **The band's edge row is a 4x MSAA blend** (gate 4): the one row the bar's edge crosses shows the bar's share of
+   its four samples. Every quad edge in the port resolves so (the engine's 4x MSAA,
+   `engine/src/renderer/VulkanDevice.cpp:214-216`, `:259-264`); the footage reads its bands in whole rows. Whether
+   the original's GL surface is multisampled is not read here.
+2. **The no-portal sign is drawn over the bars** where the original's `no_portal_sign.ent` (type 0, ordered by its
+   z) is under them: the port draws the sign in the screen overlay (`EmitHud`, step 121's deviation 6). It shows only
+   where a tremble uncovers a band at the sign's point on the three levels that place it (1-15, 2-07, 2-28). Not
+   measured; no capture shows it.
+3. **Step 121's deviation 4 is closed**: the strip a tremble uncovers is the bars', not the pinned sky, wherever the
+   view is inside x 0 to 768.
+
+**RULINGS APPLIED.** The owner's standing direction that R1-R23 follow what the original does: all four bars, over
+the sky and under the HUD, exactly as `manageSceneBounds` adds them. **R12** (the 720 selection): `black_bar.png` has
+no tier twin, so the selection draws the sd file. **K13**: an explicit topmost slot, `kLayerableTopZ`, pinned, not a
+row of the table (the bars stand between no two slots). **K8 does not arise** (no random draw). The bars' sizes and
+offsets are `g_scale.scale()`'d, so step 86's bare-literal division does not apply. **R24 and R25** are neither
+touched nor withdrawn.
+
+**GAMEPLAY: NONE.**
+
+**SUITES**, run directly, once each: **`test_mp_sprites` 965**, **`test_mp_layer` 1765**, **`test_mp_timed` 84**,
+**`test_mp_minions` 99** and **`test_mp_zerog` 88** (after its refusal and one relink), 0 failures each. These are the
+suites that load `art.json` (whose new block is required) or read the layer; `sim/Art.hpp` is included by no other
+suite. The full ctest was not run; the step does not need it.
+
+**SMART APP CONTROL: 1 refusal.** `test_mp_zerog.exe` was refused on its first launch (exit 126, "Permission
+denied"); it was deleted and relinked once, and the relinked binary ran. `MagicPortals.exe` `fe2d2dd1` ran 130
+times (1 gate capture, 128 sweep captures, 1 probe) and was never refused; the other four suites ran on their first
+launch. The committed binary `628400a9` was not launched: the before frames are step 121's, md5-checked.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **`view.json`'s note** says 73 of the 128 levels are exactly 256 px tall; the `max` markers give **94** (re-counted
+  here, and in the sweep's own log lines). Not edited: its owner's (00_order 8.14).
+- **`light_off.ent`'s type 2 is now read** and used by nothing: `ET_VERTICAL`'s unturned drawing and its particles'
+  `INDIVIDUAL_OFFSET` sorting stay with their owners (the backlog's 6.2 row).
+- **A capture of the band stopping at x 768** needs a quake while a wide level's view is past 768; none of this run's
+  early quakes gives one. The unit test and F17 carry it until one does.
+- **The no-portal sign over the bars** (recorded item 2).
+- For the backlog (the close agent): a 13.3 row in the visuals table; the 6.2 row's "LoadEnt drops each file's type
+  and layerDepth" is closed; step 121's deviation 4 is closed.
+- For the merge's renumbering: "step 122" is written in 6 places outside this document - `game/data/art.json` (2),
+  `tests/test_mp_sprites.cpp` (2), the heading of the bars' cases in `tests/test_mp_layer.cpp`, and
+  `docs/ethanon-formats.md`.

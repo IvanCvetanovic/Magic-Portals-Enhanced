@@ -394,7 +394,8 @@ public:
     //
     // NOT IN THE TABLE. The loading screen draws in a space of its own (0.32 for
     // the portal's systems, 0.6 and 0.61 for the vanish), because no level's
-    // slots exist while it is up.
+    // slots exist while it is up. And the black bars round the scene stand at
+    // kLayerableTopZ, below: in front of everything, not between two slots.
     enum class Slot {
         TimerDial,      // a timed crystal's dial, its crystal's z_index - 2 (art.json timer)
         WellRing,       // a gravity well's green ring, at the -5 its AddEntity gives it
@@ -457,6 +458,19 @@ public:
     static constexpr double SlotFractionOf(Slot slot) {
         return kSlotTable[static_cast<std::size_t>(slot)].fraction;
     }
+
+    // THE TOP OF THE SCENE (00_order K13's row for black_bar, 8.13): where a
+    // layerable entity at depth 1.0 is drawn. Ethanon draws a layerable entity at
+    // Max(0.001, layerDepth) whatever its z (ETHSpriteEntity.cpp:34, :626-628), and
+    // 1.0 is the front of the range every other piece of the scene is normalised
+    // into, particles included (ETHEntityRenderingManager.cpp:37, 70-71). So it is
+    // not between two slots and not a row of the table: it is one z in front of every
+    // z the layer gives anything else - the level's slots from kSpriteBackZ, what
+    // stands between them, and the boxes a player turns on over the art at the
+    // markers' 0.5 - and behind the camera's near plane at 20 - 0.1. The screen
+    // overlay (the HUD) is drawn after the scene and stays over it, as the original's
+    // top layer is. test_mp_layer pins the value and that nothing else reaches it.
+    static constexpr float kLayerableTopZ = 1.0f;
 
     // ---- the effects the script ADDS (system_7 7a-2) ------------------------
     //
@@ -672,6 +686,19 @@ public:
         double lookZ = 0.0;                // its depth in the level's units
     };
     LightWallGhostReport LightWallGhost() const;
+
+    // The four black bars round the scene (art.json black_bar): black_bar.ent as
+    // Game::manageSceneBounds adds it, placed once with the level at its max
+    // marker and never moved. Empty where the art did not read. In the order the
+    // script adds them: A and B above the scene, C and D below it.
+    struct BlackBarReport {
+        entt::entity quad{entt::null};
+        std::string texture;       // the tier file the original draws: black_bar.png, sd only
+        glm::dvec2 centrePx{0.0};  // its centre, in the level's units
+        glm::dvec2 sizePx{0.0};    // black_bar.png's units at the entity's scale: 512 x 32
+        float z{0.0f};             // kLayerableTopZ
+    };
+    std::vector<BlackBarReport> BlackBars() const;
 
     // The slot the player's picture is drawn in, and its depth in the level's units:
     // GameCharacter's 4 over the scale factor (art.json character.z, depth).
@@ -1004,6 +1031,8 @@ private:
     void buildCamera(entt::registry& registry);
     void buildDrawables(entt::registry& registry);
     void buildSprites(entt::registry& registry);
+    // The four black bars round the scene (m_blackBars), with the level's art.
+    void buildBlackBars(entt::registry& registry);
     void buildHud(entt::registry& registry);
 
     // The menu: opened onto a screen, drawn from its buttons, and taken down
@@ -1453,6 +1482,23 @@ private:
         bool drawn{false};        // and a frame has stepped it: the original's first mapped frame
     };
     WallGhost m_wallGhost;
+
+    // THE BLACK BARS ROUND THE SCENE (art.json black_bar): black_bar.ent, four
+    // times, as Game::manageSceneBounds adds it on every level. Pictures with no
+    // node, placed once in the level's space and never moved, at kLayerableTopZ;
+    // off the view at rest, and uncovered only by a tremble, which moves the drawn
+    // camera past the clamp and the level with it. Their own quads, not m_sprites',
+    // whose indices are the drawing slots the between-slot table counts.
+    struct BlackBarQuad {
+        entt::entity quad{entt::null};
+        std::string texture;      // the tier file the original draws
+        glm::dvec2 centrePx{0.0}; // BlackBars::Centres, in the level's units
+        glm::dvec2 sizePx{0.0};   // black_bar.png's units at the entity's scale
+    };
+    std::vector<BlackBarQuad> m_blackBars;
+    // black_bar.ent as LoadEnt read it with the level: its emissive and lighting
+    // facts, which syncLighting tints the bars with.
+    Art::Entity m_blackBarEntity;
 
     // The minions and knights (art.json minion), one per Minions::State::minions
     // entry and in its order: that list only grows, by an escort the boss calls, and

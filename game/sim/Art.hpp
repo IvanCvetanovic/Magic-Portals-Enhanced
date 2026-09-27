@@ -354,6 +354,39 @@ struct MinionPose {
 void UpdateMinion(const Minion& art, MinionPose& pose, MinionArm arm, bool right, double elapsedMs,
                   double sinceArrivalMs);
 
+// ---- the four black bars round the scene (art.json black_bar) -------------------
+//
+// Game::manageSceneBounds (bytes 118788..119489, 00_order 8.6, decode D5 section 2
+// and its check) adds black_bar.ent four times, unconditionally, once the level's
+// scaling pass has run: two bars just above the scene's top edge and two just below
+// its `max` marker's y, the second of each pair half a bar further right, so that
+// together they cover x 0 to 768 of the level's units. The entity is layerable at
+// depth 1.0, in front of everything the scene draws. The camera never shows past
+// the scene at rest, so the bars are seen only while the earthquake has moved the
+// drawn camera past its clamp (decode D11 section 2, measured on the footage).
+enum class BarSide {
+    AboveTop,    // y = -half the bar's height: the band above y 0
+    BelowBottom, // y = the max marker's y + half the bar's height: the band below it
+};
+
+struct BlackBar {
+    int xHalfWidths = 0;        // its centre's x in half-widths of the script's bar: 1 or 2
+    BarSide side = BarSide::AboveTop;
+};
+
+struct BlackBars {
+    std::string entity;         // black_bar.ent, read at run time by LoadEnt
+    // The script's own vector2(512, 32), which g_scale.scale takes to the level's
+    // units and every centre is measured in: not the picture's size, which is the
+    // image's (the two agree, and each is pinned where it is read).
+    glm::dvec2 sizeUnits{0.0};
+    std::vector<BlackBar> bars; // in the order manageSceneBounds adds them: A, B, C, D
+
+    // Each bar's centre, in the level's units, for a scene whose max marker stands
+    // at `sceneMax` (manageSceneBounds' sceneMax; sceneMin is V2_ZERO and never read).
+    std::vector<glm::dvec2> Centres(const glm::dvec2& sceneMax) const;
+};
+
 struct Rules {
     Picture portal;      // portal.ent
     Shot shot;           // projectile.ent
@@ -370,6 +403,8 @@ struct Rules {
     Door door;           // the exit door's second sheet, and door_highlight.ent behind it
     // dashed_door.ent, which a lit torch leaves where its light wall stood
     LightWallGhost lightWallGhost;
+    // black_bar.ent, four times round the scene
+    BlackBars blackBars;
     // What a depth a script adds something at is in the level's units: that depth
     // over this (art.json depth). A level's nodes were multiplied by it at load and
     // what a script adds at a literal z was not.
@@ -380,6 +415,18 @@ struct Rules {
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
+
+// ETHEntityProperties::ENTITY_TYPE (ETHEntityProperties.h:82-89), the entity's
+// `type`: how the engine orders and turns it. Every value the engine names, the
+// three deprecated ones too, so a file is read for what it says.
+enum class EntityType {
+    Horizontal = 0,  // ET_HORIZONTAL: ordered by its z (ComputeDepth)
+    GroundDecal = 1, // ET_GROUND_DECAL, deprecated: its z and a hair
+    Vertical = 2,    // ET_VERTICAL: its z, never turned, its particles INDIVIDUAL_OFFSET
+    Overall = 3,     // ET_OVERALL, deprecated: always depth 1
+    OpaqueDecal = 4, // ET_OPAQUE_DECAL, deprecated: its z and a hair
+    Layerable = 5,   // ET_LAYERABLE: its layerDepth, whatever its z
+};
 
 // An entity the script ADDS - an effect, spawned by name with AddEntity - read
 // out of its .ent when it is needed, not copied into art.json (Effects.hpp says
@@ -410,6 +457,18 @@ struct Entity : Picture {
     glm::dvec2 pivotPx{0.0};      // its <PivotAdjust>
     glm::dvec2 scale{1.0};        // its <Scale>, per axis
     std::vector<Particles::System> systems; // in the file's order, unscaled
+    // Its `type` and `layerDepth` (ETHEntityProperties.cpp:228, :237), each the
+    // engine's Reset value where the file states none: ET_HORIZONTAL and 0
+    // (:176-177). The engine stores any whole number as the type and switches on it
+    // with no default (ETHSpriteEntity.cpp:611-632), so one outside the enum is
+    // refused rather than misread in silence.
+    EntityType type = EntityType::Horizontal;
+    double layerDepth = 0.0;
+
+    // A layerable entity's depth among the scene's, 0 the back and 1 the front of
+    // the normalised range: Max(m_layrableMinimumDepth, layerDepth), the minimum
+    // 0.001 (ETHSpriteEntity.cpp:34, :626-628). Its z plays no part in it.
+    double LayerableDepth() const;
 
     // ETHEntity::IsTemporary (ETHEntity.cpp:697-716): no sprite, at least one
     // system, and every system repeats a set number of times. Such an entity is

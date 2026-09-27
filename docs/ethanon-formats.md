@@ -463,6 +463,40 @@ a tier sibling). **Orphan tier files** that no name reaches: `particles/hd/excla
 original never picks them; the same holds for `sprites/hd/game_main_title_.png` and
 `sprites/hd/world_icon3_.png`. `entities/hd/` has no orphan: all 53 files have a 1× name.
 
+### 2026-09-27 (entity type) — `type` and `layerDepth` over the game's 190 `.ent` files
+
+Source citations are `toolkit/Source/src/engine/…` in `reference/ethanon/`. This block replaces the
+2026-08-04 table's row 5 ("`type=5` present") with the game's own count; §5.2 and §5.3 stand.
+
+**How they are read.** `ETHEntityProperties::ReadFromXMLFile` reads `type` with `QueryIntAttribute`
+(`Entity/ETHEntityProperties.cpp:228`) and `layerDepth` with `QueryFloatAttribute` (`:237`), each left at
+`Reset`'s value when absent: `ET_HORIZONTAL` and `0.0` (`:176-177`). Nothing checks the type's range: an
+integer outside `ENTITY_TYPE` (`Entity/ETHEntityProperties.h:82-89`) falls through `ComputeDepth`'s switch,
+which has no default, to depth 0 (`Entity/ETHSpriteEntity.cpp:611-632`), and through `ConvertToGSSO` to
+`EO_DEFAULT` (`Entity/ETHEntity.cpp:27-44`).
+
+**What `ET_LAYERABLE` means for depth.** `ComputeDepth` returns `Max(m_layrableMinimumDepth, layerDepth)`
+with the minimum `0.001` (`Entity/ETHSpriteEntity.cpp:34`, `:626-628`), whatever the entity's z. Every other
+piece's depth is normalised between the scene's lowest and highest heights, so a layerable entity at 1.0
+sits at the front of that range, in front of every sprite, halo and particle system the scene maps
+(`Renderer/ETHEntityRenderingManager.cpp:37`, `:70-71`), except a vertical or decal piece at the very top of
+the range: `ComputeDrawHash` adds a shift to those types' hash and not to a layerable's (`:119-144`), so one
+at depth 1.0 can sort past a layerable 1.0. The game's one vertical entity is `light_off.ent`, and no file
+uses a decal type (1 or 4).
+
+**The census** (a grep of all 190 decoded `.ent` files, 2026-09-27, planning step 122; pinned in the
+port's `tests/test_mp_sprites.cpp`):
+- `type` is stated on all 190: **0 on 188, 2 on `light_off.ent` alone, 5 on `black_bar.ent` alone**. No
+  file uses 1, 3 or 4.
+- `layerDepth` is stated on 169: **1.0 on `black_bar.ent`**, `0.000000` on the other 168. The 21 that omit
+  it (`portal.ent`, `projectile.ent`, `fireball.ent`, `minion.ent`, the skies and others) read `Reset`'s 0.
+- So the one layerable entity is `black_bar.ent` (512×32 `black_bar.png`, sd only, opaque black), which
+  `Game::manageSceneBounds` adds four times round the scene, and the one vertical entity is `light_off.ent`,
+  whose particle systems sort `INDIVIDUAL_OFFSET` (`ETHEntityProperties::ResolveDepthSortingMode`,
+  `Entity/ETHEntityProperties.cpp:108-122`). The bars are added by the script and placed by no level;
+  `light_off` is placed by levels (its 10 instances, the 2026-09-14 lighting block above, which leaves its
+  vertical variant out deliberately). This block changes nothing the converter emits.
+
 ---
 
 ## 1. Orientation: where to look in the engine source

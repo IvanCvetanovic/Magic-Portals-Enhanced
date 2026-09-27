@@ -5246,6 +5246,228 @@ void TheDarkDragonsLevelShakesTheView() {
     layer.OnDetach(registry);
 }
 
+// ---- the black bars round the scene (art.json black_bar, step 122) ----------------
+//
+// black_bar.ent four times, as Game::manageSceneBounds adds it: placed once from the
+// max marker, in front of everything the scene draws (kLayerableTopZ, 00_order K13's
+// row), and off the view until a tremble moves the drawn camera past its clamp -
+// when the band that tremble uncovers is exactly what the bars cover: C and D below
+// the scene on a forth, A and B above it on the back that overshoots (D5_check
+// section 2, D11 section 2).
+
+// Where a point of the world shows on the 1280x720 viewport, by the camera's own
+// matrices (screenOf, for a point already in the world's units).
+glm::vec2 screenOfWorld(entt::registry& registry, const glm::vec3& world) {
+    const auto& camera = registry.get<CameraComponent>(primaryCamera(registry));
+    const glm::vec4 clip = camera.getProjectionMatrix() * camera.getViewMatrix() * glm::vec4(world, 1.0f);
+    const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+    return glm::vec2((ndc.x + 1.0f) * 0.5f * 1280.0f, (ndc.y + 1.0f) * 0.5f * 720.0f);
+}
+
+// A span of the viewport, lo to hi.
+struct Span {
+    double lo = 0.0;
+    double hi = 0.0;
+    bool Covers(const Span& other, double eps) const { return lo <= other.lo + eps && hi >= other.hi - eps; }
+};
+
+// A quad's rectangle on the viewport, from its transform as the renderer takes it:
+// the unit quad scaled and placed, not turned (the bars never are).
+std::pair<Span, Span> screenRectOf(entt::registry& registry, entt::entity quad) {
+    const auto& transform = registry.get<TransformComponent>(quad);
+    const glm::vec3 half(transform.scale.x * 0.5f, transform.scale.y * 0.5f, 0.0f);
+    const glm::vec2 a = screenOfWorld(registry, transform.position - half);
+    const glm::vec2 b = screenOfWorld(registry, transform.position + half);
+    return {Span{std::min(a.x, b.x), std::max(a.x, b.x)}, Span{std::min(a.y, b.y), std::max(a.y, b.y)}};
+}
+
+// How far in front a mesh reaches along the view: a quad is flat at its z, and
+// anything else (the boxes) half its depth in front of it.
+float meshFront(entt::registry& registry, entt::entity e) {
+    const auto& transform = registry.get<TransformComponent>(e);
+    const auto& mesh = registry.get<MeshComponent>(e);
+    return mesh.primitiveType == "Quad" ? transform.position.z
+                                        : transform.position.z + 0.5f * std::fabs(transform.scale.z);
+}
+
+// The frontmost mesh that is not a black bar, and its tag.
+std::pair<float, std::string> frontmostOther(entt::registry& registry) {
+    std::pair<float, std::string> front{-1e9f, ""};
+    for (auto [entity, tag, transform, mesh] : registry.view<TagComponent, TransformComponent, MeshComponent>().each()) {
+        (void)transform;
+        (void)mesh;
+        if (tag.tag == "Magic Portals Black Bar") continue;
+        const float z = meshFront(registry, entity);
+        if (z > front.first) front = {z, tag.tag};
+    }
+    return front;
+}
+
+void TheSceneHasFourBlackBarsInFrontOfEverything() {
+    if (!OriginalArtIsThere("TheSceneHasFourBlackBarsInFrontOfEverything")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    CHECK_MSG(MagicPortalsLayer::kLayerableTopZ == 1.0f, "the top of the scene is z 1");
+    const glm::dvec2 bounds = layer.BoundsPx();
+    CHECK_MSG(bounds == glm::dvec2(768.0, 256.0), "4-29's max marker: (768, 256)");
+    const std::vector<MagicPortalsLayer::BlackBarReport> bars = layer.BlackBars();
+    CHECK_EQ(bars.size(), static_cast<std::size_t>(4));
+    if (bars.size() != 4) {
+        layer.OnDetach(registry);
+        return;
+    }
+    // A (256, -16), B (512, -16), C (256, 272), D (512, 272), each 512 x 32 of
+    // black_bar.png - the sd file, which has no tier twin - at the top of the scene.
+    const glm::dvec2 want[] = {{256.0, -16.0}, {512.0, -16.0}, {256.0, 272.0}, {512.0, 272.0}};
+    for (std::size_t i = 0; i < 4; ++i) {
+        const MagicPortalsLayer::BlackBarReport& bar = bars[i];
+        const std::string name(1, static_cast<char>('A' + i));
+        CHECK_MSG(bar.centrePx == want[i], name + " at " + Point(bar.centrePx));
+        CHECK_MSG(bar.sizePx == glm::dvec2(512.0, 32.0), name + " is 512 x 32: " + Point(bar.sizePx));
+        CHECK_MSG(EndsWith(bar.texture, "/entities/black_bar.png"), name + " draws " + bar.texture);
+        CHECK_MSG(bar.z == MagicPortalsLayer::kLayerableTopZ, name + " at the top of the scene");
+        CHECK_MSG(bar.quad != entt::null && registry.valid(bar.quad), name + " has its quad");
+        if (bar.quad == entt::null || !registry.valid(bar.quad)) continue;
+        const auto& transform = registry.get<TransformComponent>(bar.quad);
+        const glm::vec3 centre = MagicPortals::Units::ToWorld(want[i].x, want[i].y);
+        CHECK_MSG(transform.position == glm::vec3(centre.x, centre.y, MagicPortalsLayer::kLayerableTopZ) &&
+                      transform.scale == glm::vec3(MagicPortals::Units::ToMetres(512.0),
+                                                   MagicPortals::Units::ToMetres(32.0), 1.0f) &&
+                      transform.rotation == glm::vec3(0.0f),
+                  name + "'s quad is placed where the report says, unturned");
+        CHECK_MSG(registry.get<TagComponent>(bar.quad).tag == "Magic Portals Black Bar", name + "'s tag");
+        const auto& material = registry.get<MaterialComponent>(bar.quad);
+        CHECK_MSG(material.transparent && material.blend != MaterialComponent::BlendMode::Additive,
+                  name + " is mixed, not added: black_bar.ent's blendMode 0");
+    }
+
+    // 4-29's torch lit by a scheduled tap, its wall gone on tick 160 or so, and with
+    // it the light wall's 20: ten trembles, the effects of the lighting and the going
+    // all live, the wall's ghost standing. On every tick, and every frame drawn from
+    // it, nothing else reaches the bars' z; at rest the view shows no band past the
+    // scene, and on a shaken frame the one band it shows is covered by the bars of its
+    // own side, across the whole width (4-29 is 768 wide: the bars reach all of it).
+    layer.ScheduleDevTap(60, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
+    std::pair<float, std::string> frontmost{-1e9f, ""};
+    int rest = 0;
+    int restClear = 0;
+    int forths = 0;
+    int backs = 0;
+    int covered = 0;
+    std::string bands;
+    const auto frame = [&](int tick) {
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::pair<float, std::string> front = frontmostOther(registry);
+        if (front.first > frontmost.first) frontmost = front;
+        const double offset = layer.QuakeOffsetUnits();
+        // The scene's two edges on the viewport, at x 384 (any x of the level will do).
+        const double top = screenOfWorld(registry, MagicPortals::Units::ToWorld(384.0, 0.0)).y;
+        const double bottom = screenOfWorld(registry, MagicPortals::Units::ToWorld(384.0, bounds.y)).y;
+        const Span scene{std::min(top, bottom), std::max(top, bottom)};
+        // Float metres through the camera's matrices: a hundredth of a pixel.
+        const double eps = 1e-2;
+        if (offset == 0.0) {
+            ++rest;
+            if (scene.lo <= eps && scene.hi >= 720.0 - eps) ++restClear;
+            return;
+        }
+        // A forth moves the camera down the level: the band past max (C and D). A
+        // back overshoots up it: the band above y 0 (A and B).
+        const bool forth = offset > 0.0;
+        if (forth) {
+            ++forths;
+        } else {
+            ++backs;
+        }
+        const double edge = forth ? bottom : top;
+        const bool edgeIsLow = edge == scene.lo;
+        const Span band = edgeIsLow ? Span{0.0, edge} : Span{edge, 720.0};
+        const double heightPx = band.hi - band.lo;
+        Span barsX{1e9, -1e9};
+        bool barsY = true;
+        for (std::size_t i = forth ? 2 : 0; i < (forth ? 4u : 2u); ++i) {
+            const auto [x, y] = screenRectOf(registry, bars[i].quad);
+            barsX.lo = std::min(barsX.lo, x.lo);
+            barsX.hi = std::max(barsX.hi, x.hi);
+            barsY = barsY && y.Covers(band, eps);
+        }
+        const bool ok = std::fabs(heightPx - std::fabs(offset) * 720.0 / 256.0) < eps && barsY &&
+                        barsX.Covers(Span{0.0, 1280.0}, eps);
+        if (ok) ++covered;
+        char line[160];
+        std::snprintf(line, sizeof line, " %d:%s%.4f", tick, forth ? "+" : "-", heightPx);
+        bands += line;
+    };
+    for (int tick = 1; tick <= 230; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        frame(tick);
+    }
+    CHECK_MSG(forths == 5 && backs == 5, "the light wall's ten trembles, five each way:" + bands);
+    CHECK_MSG(covered == forths + backs,
+              "each shaken frame's band is its tremble's pixels, and the bars of its side cover it edge to edge:" +
+                  bands);
+    CHECK_MSG(restClear == rest, "at rest the scene fills the view: no bar is on it (" + std::to_string(restClear) +
+                                     " of " + std::to_string(rest) + ")");
+    CHECK_MSG(frontmost.first < MagicPortalsLayer::kLayerableTopZ,
+              "nothing else reaches the bars' z: the frontmost is " + frontmost.second + " at " +
+                  std::to_string(frontmost.first));
+
+    // And with the boxes a player turns on over the art: the markers' boxes stand
+    // in front of the art, and still behind the bars.
+    press(layer, registry, MagicPortalsLayer::kBoxes);
+    CHECK(layer.ShowingBoxes());
+    for (int tick = 0; tick < 3; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::pair<float, std::string> boxed = frontmostOther(registry);
+    CHECK_MSG(boxed.first < MagicPortalsLayer::kLayerableTopZ,
+              "with the boxes on, the frontmost is " + boxed.second + " at " + std::to_string(boxed.first));
+    CHECK_MSG(layer.BlackBars().size() == 4, "the boxes change nothing of the bars");
+    layer.OnDetach(registry);
+    int left = 0;
+    for (auto [entity, tag] : registry.view<TagComponent>().each()) {
+        (void)entity;
+        if (tag.tag == "Magic Portals Black Bar") ++left;
+    }
+    CHECK_MSG(left == 0, "the bars go with the level");
+}
+
+// On a scene wider than the bars reach they stop at x 768 (00_order 8.13; D11
+// section 2 measured the band stopping mid-screen on 4-01): 2-32 is 2632 wide.
+void TheBlackBarsStopAt768OnAWideScene() {
+    if (!OriginalArtIsThere("TheBlackBarsStopAt768OnAWideScene")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31a");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    CHECK_MSG(layer.BoundsPx() == glm::dvec2(2632.0, 256.0), "2-32's max: " + Point(layer.BoundsPx()));
+    const std::vector<MagicPortalsLayer::BlackBarReport> bars = layer.BlackBars();
+    CHECK_EQ(bars.size(), static_cast<std::size_t>(4));
+    double left = 1e9;
+    double right = -1e9;
+    for (const MagicPortalsLayer::BlackBarReport& bar : bars) {
+        const auto& transform = registry.get<TransformComponent>(bar.quad);
+        const glm::dvec2 at = MagicPortals::Units::ToPixels(transform.position);
+        const double half = MagicPortals::Units::ToPixels(transform.scale).x * 0.5;
+        left = std::min(left, at.x - half);
+        right = std::max(right, at.x + half);
+    }
+    CHECK_MSG(std::fabs(left) < 1e-3 && std::fabs(right - 768.0) < 1e-3,
+              "the bars span x " + std::to_string(left) + " to " + std::to_string(right) + " of 2632");
+    layer.OnDetach(registry);
+}
+
 void AClearPortalsButtonComesWithAPortal() {
     if (!OriginalArtIsThere("AClearPortalsButtonComesWithAPortal")) return;
     entt::registry registry;
@@ -9550,6 +9772,8 @@ void runTests() {
     AStoneThroughAWallShakesThirtyThenTwenty();
     AnUnlockedDoorShakesTheView();
     TheDarkDragonsLevelShakesTheView();
+    TheSceneHasFourBlackBarsInFrontOfEverything();
+    TheBlackBarsStopAt768OnAWideScene();
     TheBetweenSlotTableSaysWhereEachClassStands();
     TheTableIsTheFractionTheLayerDrawsAt();
     AnEffectsPictureHaloAndSystemsStandWhereTheTableSays();

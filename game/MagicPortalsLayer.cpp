@@ -565,6 +565,8 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_timers.clear();
     destroy(m_wallGhost.quad);
     m_wallGhost = WallGhost{};
+    for (BlackBarQuad& bar : m_blackBars) destroy(bar.quad);
+    m_blackBars.clear();
     for (MinionQuad& minion : m_minions) destroy(minion.quad);
     m_minions.clear();
     // The walk arrows and the corner buttons go with the level they were built
@@ -3666,11 +3668,82 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         SUPERSONIC_LOG_INFO("Magic Portals")
             << "the door is drawn shadowless, with no glow: the level does not set no_gravity" << std::endl;
     }
+    buildBlackBars(registry);
     m_artReady = true;
     // And what the level's own art does not show: the entities' particles.
     buildEmitters(registry);
     // Then its lights, whose brightness their owners' particles set.
     buildLights(registry);
+}
+
+// THE FOUR BLACK BARS ROUND THE SCENE (art.json black_bar): Game::manageSceneBounds
+// adds black_bar.ent at four points measured from the `max` marker, on every level
+// and with no condition, after the scaling pass. The port adds them with the level's
+// art, from the same marker (m_boundsPx, the level_bounds role, which is `max`).
+//
+// Their DEPTH is the entity's own: black_bar.ent is layerable at depth 1.0, which
+// Ethanon draws in front of every piece of the scene whatever its z - so the bars
+// stand at kLayerableTopZ, which nothing else reaches, and not in a slot. An .ent
+// that said anything else would not be the one the decode read, and the bars are
+// then left out and the log says why, rather than drawn somewhere the port chose.
+//
+// They are placed ONCE and never moved: the earthquake moves the drawn camera and
+// not the level (shakeView), so what a tremble uncovers past the clamp is exactly
+// the band these hide - C and D below the scene on a forth, A and B above it on the
+// back that overshoots - and at rest none of them is on the view.
+void MagicPortalsLayer::buildBlackBars(entt::registry& registry) {
+    m_blackBars.clear();
+    m_blackBarEntity = Art::Entity{};
+    const Art::BlackBars& rules = m_artRules.blackBars;
+    std::string error;
+    if (!Art::LoadEnt(m_paths.original + "/entities/" + rules.entity, m_blackBarEntity, error)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "no black bars round the scene: " << error << std::endl;
+        return;
+    }
+    const Art::Entity& entity = m_blackBarEntity;
+    if (entity.type != Art::EntityType::Layerable || entity.LayerableDepth() < 1.0) {
+        SUPERSONIC_LOG_WARN("Magic Portals")
+            << "no black bars round the scene: " << rules.entity << " is not layerable at the front (type "
+            << static_cast<int>(entity.type) << ", layerDepth " << entity.layerDepth << ")" << std::endl;
+        return;
+    }
+    const Sprites::Image& image = drawnImage(originalImage(entity.sprite));
+    if (image.units.x <= 0 || image.units.y <= 0) {
+        SUPERSONIC_LOG_WARN("Magic Portals")
+            << "no black bars round the scene: " << image.path << " could not be read" << std::endl;
+        return;
+    }
+    // AddScaledEntity at getScale(), which is 1 in the level's units: the picture
+    // is its image's units at the entity's own <Scale>, centred on its point
+    // (layerable, so EO_CENTER, and PivotAdjust (0, 0)).
+    const glm::dvec2 sizePx = glm::dvec2(image.units) * entity.ScaleAt(1.0);
+    for (const glm::dvec2& centrePx : rules.Centres(m_boundsPx)) {
+        BlackBarQuad bar;
+        bar.texture = image.path;
+        bar.centrePx = centrePx;
+        bar.sizePx = sizePx;
+        bar.quad = makeSprite(registry, "Magic Portals Black Bar", image.path, entity.additive);
+        placeSprite(registry, bar.quad, bar.centrePx, bar.sizePx, kLayerableTopZ, 0.0f);
+        m_blackBars.push_back(std::move(bar));
+    }
+    SUPERSONIC_LOG_INFO("Magic Portals") << "black bars: " << m_blackBars.size() << " of " << image.path << " ("
+                                         << sizePx.x << " x " << sizePx.y << ") round a scene to max ("
+                                         << m_boundsPx.x << ", " << m_boundsPx.y << ")" << std::endl;
+}
+
+std::vector<MagicPortalsLayer::BlackBarReport> MagicPortalsLayer::BlackBars() const {
+    std::vector<BlackBarReport> reports;
+    reports.reserve(m_blackBars.size());
+    for (const BlackBarQuad& bar : m_blackBars) {
+        BlackBarReport report;
+        report.quad = bar.quad;
+        report.texture = bar.texture;
+        report.centrePx = bar.centrePx;
+        report.sizePx = bar.sizePx;
+        report.z = kLayerableTopZ;
+        reports.push_back(std::move(report));
+    }
+    return reports;
 }
 
 void MagicPortalsLayer::syncSprites(entt::registry& registry) {
@@ -4542,6 +4615,12 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         tint(registry, m_wallGhost.quad, glm::vec4(1.0f, 1.0f, 1.0f, static_cast<float>(m_wallGhost.alpha)),
              m_artRules.lightWallGhost.emissive, {},
              receiverOf(m_artRules.lightWallGhost, m_wallGhost.lookZ));
+    }
+    // The black bars, with black_bar.ent's own facts: emissive 0, static, no light.
+    // Their texels are black, so any ambient leaves them black; what this keeps is
+    // the one lit path every picture of the scene is drawn on.
+    for (const BlackBarQuad& bar : m_blackBars) {
+        tint(registry, bar.quad, white, m_blackBarEntity.emissive, {}, receiverOf(m_blackBarEntity, 0.0));
     }
     tint(registry, m_shotQuad, white, m_artRules.shot.emissive, {}, receiverOf(m_artRules.shot, m_artRules.shot.z));
     tint(registry, m_beholderQuad, m_beholderColour, m_artRules.beholder.emissive, {},
