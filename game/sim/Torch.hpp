@@ -39,11 +39,12 @@
 // struck minion go through Minions::Take rather than being destroyed behind the
 // list that is still walking it.
 //
-// Not built, and recorded in data/torch.json: every effect entity and sound, the
-// earthquake, the torch's spin, the wall's alpha fade, and the lighting entire -
-// SetAmbientLight, the background lighten/darken and GenerateLightmaps. This port
-// has no ambient light, which is the same reason art.json's `darkest` block is
-// carried rather than applied.
+// WHAT IS SEEN is the layer's, read from this state: the entities lighting a
+// torch, putting it out and the wall going and coming back add (effects.json
+// _torches, the visuals plan's 11.2), the lit torch's light and the ambient
+// (Lighting), and the earthquake when the wall goes (earthquake.json, from
+// `wallsGone`). Not built, and recorded in data/torch.json: the sounds but the
+// wall's demolition, the unlit torch's spin, and the background lighten/darken.
 
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
@@ -87,7 +88,9 @@ struct Wall {
     bool gone = false;
 };
 
-// The orbiting flame a lit torch leaves behind, and the way back.
+// The orbiting flame a lit torch leaves behind, and the way back. It is added
+// on the torch's point and circles it clockwise on the screen from above,
+// scale(18) out (ETHCallback_fire_signal, Tick).
 struct Signal {
     bool present = false;
     glm::dvec2 originPx{0.0}; // the torch it came from
@@ -106,6 +109,14 @@ struct State {
     int putOut = 0;   // and put back out by a signal
     int wallsGone = 0;
     int wallsBack = 0;
+
+    // WHERE THE SHOT A SWITCH SPENT WAS, on the tick it was spent and on no other
+    // (Tick empties it first): the player's flight or a fireball, at the point it
+    // was handed in at. Write-only, as Fire::State::blastsPx is - nothing in the
+    // simulation reads it. The layer adds portal_death.ent there, which both
+    // ETHCallback_light_off (#125-139) and ETHCallback_fire_signal (#228-242) add at
+    // the projectile's GetPosition() once killProjectile has taken it.
+    std::optional<glm::dvec2> spentAtPx;
 
     // What a tick asks Game to do on its behalf. The shot indices refer to what
     // was passed in, because this module cannot see a flight or a fireball.

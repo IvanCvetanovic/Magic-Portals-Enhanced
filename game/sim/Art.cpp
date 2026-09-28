@@ -21,6 +21,10 @@ namespace {
 
 namespace Json = Supersonic::Json;
 
+// art.json black_bar's two sides (BarSide), as the file names them.
+constexpr const char* kBarAboveTop = "above_top";
+constexpr const char* kBarBelowBottom = "below_bottom";
+
 bool WholeBelow(const Json::Value& value, int below, int& out) {
     if (!value.IsNumber()) return false;
     const double n = value.AsNumber();
@@ -225,6 +229,20 @@ double LightWallGhost::AlphaAt(double angleDeg) const {
     return static_cast<double>(Supersonic::DetMath::cos(static_cast<float>(radians))) * alphaAmplitude + alphaBase;
 }
 
+std::vector<glm::dvec2> BlackBars::Centres(const glm::dvec2& sceneMax) const {
+    // halfBlackBarSize = blackBarSize x 0.5 (manageSceneBounds ins 51-57); x is
+    // half.x or half.x x 2 (ins 96, 159 MULIf 2f), y is -half.y above the scene
+    // (ins 59-80, 84-106) or sceneMax.y + half.y below it (ins 116-124, 147-155).
+    const glm::dvec2 half = sizeUnits * 0.5;
+    std::vector<glm::dvec2> centres;
+    centres.reserve(bars.size());
+    for (const BlackBar& bar : bars) {
+        const double y = bar.side == BarSide::AboveTop ? -half.y : sceneMax.y + half.y;
+        centres.emplace_back(half.x * static_cast<double>(bar.xHalfWidths), y);
+    }
+    return centres;
+}
+
 float Shot::AngleDegrees(const glm::dvec2& directionPx) const {
     if (!turnsToFlight) return 0.0f;
     // ETHCallback_projectile #102-111: getAngle(dir), radianToDegree, SUBIf 90f,
@@ -401,16 +419,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": " + parser.Error();
         return false;
     }
-    if (!root.IsObject() || !root.Has("portal") || !root.Has("shot") || !root.Has("torch_light") ||
-        !root.Has("character")) {
-        error = path + ": portal, shot, torch_light and character are each an object";
+    if (!root.IsObject() || !root.Has("portal") || !root.Has("shot") || !root.Has("character")) {
+        error = path + ": portal, shot and character are each an object";
         return false;
     }
     Rules read;
     std::string why;
     if (!ReadPicture(root["portal"], "portal", read.portal, why) ||
         !ReadShot(root["shot"], read.shot, why) ||
-        !ReadPicture(root["torch_light"], "torch_light", read.torchLight, why, false) ||
         // The player's rate is its stride, read with the rest of its walk below.
         !ReadPicture(root["character"], "character", static_cast<Picture&>(read.character), why, false)) {
         error = path + ": " + why;
@@ -738,6 +754,66 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     read.ghost.pivotXPx = bossPivot.x;
     read.ghost.pivotYPx = bossPivot.y;
+
+    // The black bars round the scene: the entity manageSceneBounds adds, the bar it
+    // measures their centres in, and the four it adds. None has a default: a bar
+    // the port placed by its own guess would hide what the original shows, or show
+    // what it hides.
+    BlackBars& blackBars = read.blackBars;
+    const Json::Value& barsEntry = root["black_bar"];
+    bool barsOk = root.Has("black_bar") && barsEntry.IsObject() && barsEntry["entity"].IsString() &&
+                  !barsEntry["entity"].AsString("").empty() && Pair(barsEntry["size"], blackBars.sizeUnits) &&
+                  std::isfinite(blackBars.sizeUnits.x) && std::isfinite(blackBars.sizeUnits.y) &&
+                  blackBars.sizeUnits.x > 0.0 && blackBars.sizeUnits.y > 0.0 && barsEntry["bars"].IsArray() &&
+                  !barsEntry["bars"].AsArray().empty();
+    if (barsOk) {
+        for (const Json::Value& entry : barsEntry["bars"].AsArray()) {
+            BlackBar bar;
+            const std::string side = entry["side"].AsString("");
+            if (!entry.IsObject() || !WholeAtLeastOne(entry["x_half_widths"], bar.xHalfWidths) ||
+                (side != kBarAboveTop && side != kBarBelowBottom)) {
+                barsOk = false;
+                break;
+            }
+            bar.side = side == kBarAboveTop ? BarSide::AboveTop : BarSide::BelowBottom;
+            blackBars.bars.push_back(bar);
+        }
+    }
+    if (!barsOk) {
+        error = path + ": black_bar needs an entity, a size of two numbers above 0, and bars, each with "
+                       "x_half_widths a whole number from 1 and a side of '" +
+                std::string(kBarAboveTop) + "' or '" + kBarBelowBottom + "'";
+        return false;
+    }
+    blackBars.entity = barsEntry["entity"].AsString("");
+
+    // The ring a shock agent adds round itself: the entity, and what its two
+    // callbacks do to it. None has a default - a colour, a depth, a turn or a
+    // jitter the port chose would be a ring nobody decoded - and a jitter whose
+    // factor could reach zero or below would draw no ring or a mirrored one.
+    ShockRing& ring = read.shockRing;
+    const Json::Value& ringEntry = root["shock_ring"];
+    double ringColour[3] = {0.0, 0.0, 0.0};
+    const Json::Value& ringZ = ringEntry["z"];
+    const Json::Value& ringJitter = ringEntry["jitter"];
+    const bool ringOk = root.Has("shock_ring") && ringEntry.IsObject() && ringEntry["entity"].IsString() &&
+                        !ringEntry["entity"].AsString("").empty() && Numbers(ringEntry["colour"], 3, ringColour) &&
+                        ringColour[0] >= 0.0 && ringColour[1] >= 0.0 && ringColour[2] >= 0.0 && ringZ.IsObject() &&
+                        Finite(ringZ["value"]) && ringZ["scaled"].IsBool() && Finite(ringEntry["spin_deg_per_s"]) &&
+                        ringJitter.IsObject() && Finite(ringJitter["from"]) && ringJitter["from"].AsNumber() > 0.0 &&
+                        Finite(ringJitter["span"]) && ringJitter["span"].AsNumber() >= 0.0;
+    if (!ringOk) {
+        error = path + ": shock_ring needs an entity, a colour of three numbers none below 0, a z with a value "
+                       "and scaled, a spin_deg_per_s, and a jitter with a from above 0 and a span from 0";
+        return false;
+    }
+    ring.entity = ringEntry["entity"].AsString("");
+    ring.colour = glm::dvec3(ringColour[0], ringColour[1], ringColour[2]);
+    ring.z = ringZ["value"].AsNumber();
+    ring.zScaled = ringZ["scaled"].AsBool();
+    ring.spinDegPerS = ringEntry["spin_deg_per_s"].AsNumber();
+    ring.jitterFrom = ringJitter["from"].AsNumber();
+    ring.jitterSpan = ringJitter["span"].AsNumber();
     out = std::move(read);
     return true;
 }
@@ -1019,6 +1095,13 @@ bool Entity::Temporary() const {
                        [](const Particles::System& system) { return system.repeat > 0; });
 }
 
+double Entity::LayerableDepth() const {
+    // ETHSpriteEntity::m_layrableMinimumDepth (ETHSpriteEntity.cpp:34): 0.001, so a
+    // layerable entity is never at the very back of the range.
+    constexpr double kLayerableMinimumDepth = 0.001;
+    return std::max(kLayerableMinimumDepth, layerDepth);
+}
+
 double Entity::ParticleScale(double scriptScale) const {
     const glm::dvec2 made = ScaleAt(scriptScale);
     return (made.x + made.y) / 2.0;
@@ -1043,6 +1126,7 @@ bool LoadEnt(const std::string& path, Entity& out, std::string& error) {
     const Element& entity = root.children.front();
 
     Entity read;
+    int type = static_cast<int>(EntityType::Horizontal);
     int isStatic = 0;
     int applyLight = 0;
     double emissive[4] = {0.0, 0.0, 0.0, 0.0};
@@ -1051,7 +1135,8 @@ bool LoadEnt(const std::string& path, Entity& out, std::string& error) {
     double pivot[2] = {0.0, 0.0};
     static const char* const kRgba[] = {"r", "g", "b", "a"};
     static const char* const kXy[] = {"x", "y"};
-    if (!IntAttribute(entity, "static", isStatic, why) || !IntAttribute(entity, "applyLight", applyLight, why) ||
+    if (!IntAttribute(entity, "type", type, why) || !FloatAttribute(entity, "layerDepth", read.layerDepth, why) ||
+        !IntAttribute(entity, "static", isStatic, why) || !IntAttribute(entity, "applyLight", applyLight, why) ||
         !IntAttribute(entity, "blendMode", read.blendMode, why) ||
         !ChildFloats(entity, "EmissiveColor", kRgba, emissive, 4, why) ||
         !ChildFloats(entity, "SpriteCut", kXy, cut, 2, why) || !ChildFloats(entity, "Scale", kXy, scale, 2, why) ||
@@ -1059,6 +1144,16 @@ bool LoadEnt(const std::string& path, Entity& out, std::string& error) {
         error = path + ": " + why;
         return false;
     }
+    // QueryIntAttribute stores any whole number as the type (:228), and nothing the
+    // engine does with one outside ENTITY_TYPE is what the file meant: ComputeDepth
+    // has no case for it and gives depth 0 (ETHSpriteEntity.cpp:611-632), and
+    // ConvertToGSSO gives it EO_DEFAULT where every named type has a centre
+    // (ETHEntity.cpp:27-44).
+    if (type < static_cast<int>(EntityType::Horizontal) || type > static_cast<int>(EntityType::Layerable)) {
+        error = path + ": its type " + std::to_string(type) + " is not an ENTITY_TYPE (ETHEntityProperties.h:82-89)";
+        return false;
+    }
+    read.type = static_cast<EntityType>(type);
     // A cut is read as ints (ReadVector2iPropertyFromXmlElement, :623-638).
     read.columns = static_cast<int>(cut[0]);
     read.rows = static_cast<int>(cut[1]);

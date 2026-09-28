@@ -224,6 +224,23 @@ void ADestroyierTakesAStoneBack() {
         CHECK_MSG(run.registry.valid(stone) != withDespawners,
                   std::string(withDespawners ? "with" : "without") + " the despawners, the stone " +
                       (run.registry.valid(stone) ? "stays" : "goes"));
+        // And counted as the destroyier's, which is what the earthquake's
+        // stone_despawned row is fired from.
+        CHECK_EQ(run.level.launchers.despawned, withDespawners ? 1 : 0);
+        // And recorded for the picture on that tick alone, by name and where the
+        // step left it: rolling_stone_destroy's point (the visuals plan's 11.1).
+        const std::vector<Launchers::StoneGone>& now = run.level.launchers.despawnedNow;
+        if (withDespawners) {
+            const bool one = now.size() == 1u;
+            CHECK_MSG(one && now.front().name == run.level.launchers.launchers.front().name + "#1" &&
+                          glm::distance(now.front().atPx, glm::dvec2(64.0, 380.0)) < 2.0,
+                      one ? "recorded as " + now.front().name + " at " + Px(now.front().atPx)
+                          : std::to_string(now.size()) + " recorded");
+            Tick(run);
+            CHECK_MSG(run.level.launchers.despawnedNow.empty(), "and gone from the record on the next tick");
+        } else {
+            CHECK(now.empty());
+        }
     }
 }
 
@@ -247,6 +264,11 @@ void OutOfTheCullBoxIsTakenBack() {
     // stone only while it is there.
     const bool gone = !run.registry.valid(stone);
     CHECK_MSG(gone, gone ? std::string() : "past the box the stone is at " + Px(PxOf(run, stone)));
+    // Taken back by the box, which the original has no counterpart for: not a
+    // destroyier's, so no stone_despawned shake, and no rolling_stone_destroy
+    // (deleteIfGoesOut adds nothing).
+    CHECK_EQ(run.level.launchers.despawned, 0);
+    CHECK(run.level.launchers.despawnedNow.empty());
 }
 
 // ---- Through a portal pair, onto a wall -------------------------------------

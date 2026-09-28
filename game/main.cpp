@@ -71,6 +71,8 @@ int main(int argc, char** argv) {
     // 1280x720 window (the spec's own coordinates), whatever the window's size.
     // `--tap 640,475@300-315` holds it from tick 300 and releases it on 315: the
     // menus' captures need a button held, to see its press tint, then released.
+    // In play it goes where a real press goes (MagicPortalsLayer::readInput): a
+    // HUD control, a help block, or the portal shot - a torch lit by a capture.
     struct Tap {
         int tick = 0;
         int releaseTick = 0;
@@ -315,7 +317,9 @@ int main(int argc, char** argv) {
                   << "                    DEV: a touch down on the game's tick <tick> and up on the next\n"
                   << "                    (or held there until <release>), on the level's first help block\n"
                   << "                    or at pixel x,y of 1280x720, for a capture that opens or closes a\n"
-                  << "                    popup or presses a menu's button; repeatable\n"
+                  << "                    popup, presses a menu's button or, in play, does what a press\n"
+                  << "                    there does: a HUD control, a help block or a portal shot;\n"
+                  << "                    repeatable\n"
                   << "  --drag <x,y>:<x,y>@<tick>-<release>\n"
                   << "                    DEV: a touch down at the first pixel of 1280x720 on <tick>,\n"
                   << "                    moved evenly to the second and let go there on <release>, for a\n"

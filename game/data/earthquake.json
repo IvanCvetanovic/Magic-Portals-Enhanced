@@ -1,0 +1,309 @@
+{
+  "_about": [
+    "The original's earthquake: EarthquakeGenerator, the one camera shake that every",
+    "startEarthquake call in the script feeds, and every call site whose event the port's",
+    "simulation already has. Decoded from android_game.bin through the remake's asbc listing",
+    "(out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0) by the visuals",
+    "run's decode D11 and its independent check D11_check (which wins where they differ), and",
+    "measured on the original's footage (L1 4-29, F14 3-16, F16 4-32). Step 101 of",
+    "docs/planning/2026-09-11-magic-portals-remaster.md.",
+    "",
+    "PRESENTATION ONLY. The class calls AddToCameraPos and nothing else: it moves the drawn",
+    "camera for one frame and no body, timer or test the port simulates. The portal manager",
+    "maps a tap BEFORE the generator runs (PortalManager::update 138545..139692 #3-4 and #59,",
+    "then g_earthquakeGen at Game::preLoop #272-279), so a portal tap lands where it would at",
+    "rest, and the port's pointer mapping keeps the rest camera for the same reason."
+  ],
+
+  "generator": {
+    "force_scale": 0.35,
+    "cap_px": 50.0,
+    "stop_px": 1.0,
+    "tremble_interval_ms": 70.0,
+    "back_scale": 0.5,
+    "forth_first": true,
+    "screen_px_per_unit": 2.8125,
+    "_source": [
+      "ONE INSTANCE: g_earthquakeGen, made by a global initialiser (Game.angelscript, bytes",
+      "306697..306756, #1-5) and updated as a controller after the camera's and the portal",
+      "manager's and before the sky's (Game::preLoop 112536..114414, #272-279).",
+      "",
+      "THE CONSTRUCTOR (109623..109772): earthquake 0 (#1-3), lastTremble 0 (#5-7),",
+      "trembleInterval 70 (#9-11, RAW SetV4 70, an integer), eqForth TRUE (#13-15, RAW SetV1 1)",
+      "- forth_first - and backValue 0 (#17-19).",
+      "",
+      "startEarthquake(float force) (110309..110425): #3-8 g_scale.scale(force) x 0.35 (MULIf",
+      "0.35f) - force_scale; #10-16 min(that, 50f) then max(0f, ...) - cap_px; #18-19",
+      "earthquake = that. It OVERWRITES the amplitude: it does not take the larger of the old",
+      "and new, and it touches neither eqForth, backValue nor lastTremble.",
+      "",
+      "update() (109902..110265): due when GetTime() - lastTremble >= trembleInterval (#9-19,",
+      "TNS) and the amplitude is not 0 (#3-8). FORTH (#28-40): AddToCameraPos(vector2(0,",
+      "earthquake)) - y only, the camera DOWN, so the scene moves up on the screen - and",
+      "backValue = earthquake. BACK (#49-62): AddToCameraPos(vector2(0, -backValue)), then",
+      "earthquake *= 0.5 (MULIf 0.5f) - back_scale, applied on the back alone. Either way",
+      "eqForth flips (#42-47, #64-68) and lastTremble = GetTime() (#70-73). Then EVERY frame",
+      "(#75-85): abs(earthquake) < 1 (CMPIf 1f) sets it to 0 - stop_px. No x term and no",
+      "random draw anywhere in the class (D11_check C8, C9).",
+      "",
+      "THE WRAPPER startEarthquake(float intensity, uint vibrateTime) (337087..337256): #1-4",
+      "the call above; #6-21 ForwardCommand('vibrate ' + vibrateTime) when it is above 0,",
+      "which is Android's vibrator and draws nothing. The desktop port has none, so each row's",
+      "vibrate figure below is recorded in its _source and played by nothing."
+    ],
+    "_screen_px_per_unit": [
+      "cap_px and stop_px are BARE literals in raw screen pixels, and force x 0.35 goes through",
+      "g_scale.scale, whose m_scaleFactor is GetScreenSize().y / 256 (00_order 8.12a). So the",
+      "amplitude is 0.35 x intensity LEVEL units on any screen, and the cap and the stop are",
+      "50 / s and 1 / s units, s being the screen's pixels per unit. The port takes the 720 px",
+      "screen of the owner's standing ruling R12, 720 / 256 = 2.8125 (art.json depth.scale_factor,",
+      "and step 86's reading of a bare literal), extended here from depths to pixel amounts as",
+      "D11 section 7 asks the step to say: the cap is 17.78 u and the stop 0.356 u. On a 1080 px",
+      "screen the original's would be 11.85 u and 0.237 u, and some shakes would run a pair",
+      "longer (D11_check C13); the footage is all 720p."
+    ],
+    "_clock": [
+      "The original's GetTime() is Video::GetElapsedTime (ETHScriptWrapper.System.cpp:90-93),",
+      "WALL-CLOCK milliseconds, and nothing on the controllers' path tests the pause, so a",
+      "running shake plays out under a pause (D11_check C10). The port's clock is its layer",
+      "clock, which advances by the fixed tick on every tick a level is shown - a pause, a",
+      "popup and the end screens included - so it plays out under a pause too, and a tremble",
+      "is due on every 5th tick at 60 Hz (83.3 ms), as the original's is on every 5th frame at",
+      "60 fps. The original's lastTremble starts at 0 on a clock that is seconds old by the",
+      "first level, so its first call is always due at once; the port's starts due."
+    ],
+    "_state": [
+      "One generator for the whole game: LoadScene builds a new scene on the same script",
+      "module and never rebuilds it (ETHScriptWrapper.Scene.cpp:570-613; D11_check C3), so a",
+      "running shake, its saved back value and its phase carry across a restart and into the",
+      "next level. The port keeps it the same way. Whether it should be reset at a load is LEFT",
+      "FOR THE OWNER (D11 section 7)."
+    ]
+  },
+
+  "calls": {
+    "_when": [
+      "Where each call lands against the generator's update in the original's frame",
+      "(ETHScene::Update, Scene/ETHScene.cpp:458-497; D11 section 1d): the physics step with",
+      "its begin-contact callbacks first, then the callbacks of DYNAMIC entities, then the",
+      "script loop's controllers in the order Game::preLoop added them, then the callbacks of",
+      "STATIC entities. So a contact callback, a dynamic entity's callback and a controller",
+      "added before g_earthquakeGen call BEFORE its update (before_update), and trembles the",
+      "same frame when it is due; the game-state controller (added after it, #289-297) and a",
+      "static entity's callback call AFTER it (after_update), and tremble the next frame at",
+      "the earliest. static is read from each caller's .ent (<Entity static=...>).",
+      "Within one side the port calls in its own order, the original's being its scene",
+      "walk's; it matters only when two different intensities land on one tick."
+    ],
+    "fall": {
+      "intensity": 20.0,
+      "when": "after_update",
+      "_source": "GameStateController::checkGameLost (123759..125310) #363-365, startEarthquake(20, 0), when the player leaves the level's bounds: the fall death, with skull.ent (#367-382). The game-state controller is added after g_earthquakeGen (Game::preLoop #289-297 against #272-279)."
+    },
+    "fall_no_gravity": {
+      "intensity": 5.0,
+      "when": "after_update",
+      "_source": "The same call with 5 when m_noGravity (#271, #338): Game.noGravity, the 18 no_gravity levels 4-02 to 4-19."
+    },
+    "barrel_blast": {
+      "intensity": 50.0,
+      "when": "before_update",
+      "_source": "explode(vector2 pos, float, bool) (342023..342895) #49-51, startEarthquake(50, 100), with explosion_large.ent; called by ETHCallback_barrel_bomb #60 on its explode flag. barrel_bomb.ent static 0."
+    },
+    "beholder_death": {
+      "intensity": 50.0,
+      "when": "before_update",
+      "_source": "ETHCallback_beholder (374987..380209) #1274 explode(...), once: #1317-1322 then deletes the beholder (D11_check C54). beholder.ent static 0."
+    },
+    "dark_dragon_death": {
+      "intensity": 50.0,
+      "when": "before_update",
+      "_source": "ETHCallback_dark_dragon (389418..397662) #1931 explode(...), once: #1933-1938 then deletes the dragon. dark_dragon.ent static 0."
+    },
+    "ghost_death": {
+      "intensity": 50.0,
+      "when": "after_update",
+      "_source": "ETHCallback_ghost #1352 explode(...) past deadTime 3550, once: #1372-1377 then deletes the ghost. ghost.ent static 1."
+    },
+    "wall_struck": {
+      "intensity": 30.0,
+      "when": "before_update",
+      "_source": "ETHBeginContactCallback_breakable_wall (345591..345993) #62-64, startEarthquake(30, 200), when a `demolisher` (only rolling_stone carries it) touches the wall faster than scale(1.5): it calls destroy(), which only sets the wall's `destroy` datum (347560..347658). A begin-contact callback, run inside the physics step (Physics/ETHContactListener.cpp:86-105). The stone's own callback runs after it in the same contact and overwrites the 30 with 2 x hitIntensity above hitIntensity 2 (D11_check C40, C59): stone_impact, which the layer calls after this row on the tick the port's Demolish breaks the wall (step 104)."
+    },
+    "wall_destroyed": {
+      "intensity": 20.0,
+      "when": "after_update",
+      "entity": "breakable_wall",
+      "scale_key": "destroyEffectScale",
+      "_entity": "The entity whose two callbacks these are, wall_struck's and this row's, in either spelling a level uses (breakable_wall and breakable_wall.ent, 00_order 8.0 rule 4). A level's other breakables - the torch's light_wall.ent, which has its own row, and the carrancas and markers a `breakable` flag lets a stone break in the port - call neither.",
+      "_source": "ETHCallback_breakable_wall (347658..348349) #73-76, startEarthquake(20 x effectScale, 0), with wall_destroy.ent, when the wall's `destroy` datum is set - by a stone (wall_struck) or by a script's destroy(), the dark dragon's summon among them. #16-31 effectScale = GetFloat('destroyEffectScale') where it is above 0, else 1 (D11_check C41): scale_key. Only 4-32's wall 2217 sets it, to 2, so its shake is 40. breakable_wall.ent static 1."
+    },
+    "stone_despawned": {
+      "intensity": 6.0,
+      "when": "before_update",
+      "_source": "ETHBeginContactCallback_rolling_stone (346486..347456) #91-98, startEarthquake(6, 0), when a stone touches destroyier.ent and is destroyed. A begin-contact callback."
+    },
+    "boss_rock_broken": {
+      "intensity": 5.0,
+      "when": "before_update",
+      "_source": "The same callback #170-201, startEarthquake(5, 60), when a stone flagged destroyOnStaticHit hits a static body and is destroyed; only the beholder's dropped rolling_stone.ent runs it (overTimeEntityAdder 372886..373491 #86-95; ETHCallback_beholder #891-903)."
+    },
+    "beholder_hurt": {
+      "intensity": 24.0,
+      "when": "before_update",
+      "_source": "ETHCallback_beholder (374987..380209) #567-569, startEarthquake(24, 90), when a rising body hits the beholder: destroyed, hp - 1, state 2 (#420-565). beholder.ent static 0."
+    },
+    "dark_dragon_mouth": {
+      "intensity": 10.0,
+      "when": "before_update",
+      "leg": 3,
+      "bias_above": 0.2,
+      "_source": "ETHCallback_dark_dragon (389418..397662) #573-578, startEarthquake(10, 0) on EVERY frame the dragon is APPEARING (#539, RAW [29, 0]) on waypoint leg 3 (the getFrame of #548-551 compared at #570, RAW [37, 3]) past bias 0.2 (#573 CMPIf 0.2f): re-armed each frame, so it holds at full size for the leg's last 800 ms and only then decays (D11 section 4 row 16, and F16's -10, +10 x 4 pairs). darkdragon.json's appearing.waypoints give leg 3 as 3500..4500 ms; since the merge of planning step 112 the layer reads the leg and its raw bias from the sim's own path (DarkDragon::Path, planning step 99), which is the callback's WaypointManager. dark_dragon.ent static 0."
+    },
+    "dark_dragon_shot": {
+      "intensity": 15.0,
+      "when": "before_update",
+      "_source": "ETHCallback_dark_dragon #980-982, startEarthquake(15, 0), right after each shot's addFireball (#978). The DAMAGE arm's shot at the torch (addFireball at #1720) has none."
+    },
+    "door_landed": {
+      "intensity": 4.0,
+      "when": "after_update",
+      "_source": "ETHCallback_door_lift (411544..414041) #313-315, startEarthquake(4, 0), when a switched door is back at originalPos with status not 0: it lands shut (#282-311). door_lift.ent static 1."
+    },
+    "door_opening": {
+      "intensity": 4.0,
+      "when": "after_update",
+      "_source": "The same callback #438-440, startEarthquake(4, 0), when a door starts to open, with door_lift_particles."
+    },
+    "door_closing": {
+      "intensity": 4.0,
+      "when": "after_update",
+      "_source": "The same callback #584-586, startEarthquake(4, 0), when a door starts to close, with door_lift_particles."
+    },
+    "fireball_end": {
+      "intensity": 5.0,
+      "when": "before_update",
+      "_source": "ETHCallback_fireball (418524..418930) #84-87, startEarthquake(5, 0), with small_explosion.ent, when the fireball's `destroy` datum is set (effects.json small_explosion). fireball.ent static 0."
+    },
+    "enemy_shot_end": {
+      "intensity": 10.0,
+      "when": "before_update",
+      "_source": "ETHCallback_enemy_shoot (435266..436701) #331-333, startEarthquake(10, 0), when an enemy shot ends (#240-314). The port's enemy shots are the ghost's alone (Ghost::shots). enemy_shoot.ent static 0."
+    },
+    "minion_killed": {
+      "intensity": 20.0,
+      "when": "before_update",
+      "_source": "ETHBeginContactCallback_enemy_killer (436701..437083) #16-18, startEarthquake(20, 0), when a minion falls onto the killer floor, with skull.ent. A begin-contact callback."
+    },
+    "door_unlocked": {
+      "intensity": 20.0,
+      "when": "after_update",
+      "_source": "ETHCallback_keyhole (443376..444400) #237-239, startEarthquake(20, 100), when the locked door vanishes (D4). keyhole.ent static 1."
+    },
+    "shock_diamond_picked": {
+      "intensity": 15.0,
+      "when": "after_update",
+      "_source": "ETHCallback_shock_diamond (444545..446781) #182-184, startEarthquake(15, 0), on the pickup (shock_diamond_pick). shock_diamond.ent static 1."
+    },
+    "fire_diamond_picked": {
+      "intensity": 15.0,
+      "when": "after_update",
+      "_source": "ETHCallback_fire_diamond (448931..450911) #194-196, startEarthquake(15, 0), on the pickup. fire_diamond.ent static 1."
+    },
+    "shock_strike": {
+      "intensity": 25.0,
+      "when": "after_update",
+      "_source": "ETHCallback_shock_diamond #538-540, startEarthquake(25, 100), on the strike (D4). shock_diamond.ent static 1."
+    },
+    "light_wall_gone": {
+      "intensity": 20.0,
+      "when": "after_update",
+      "_source": "ETHCallback_light_wall (470129..470827) #148-150, startEarthquake(20, 0), with wall_destroy.ent and DeleteEntity, when the wall goes 1500 ms after the torch is lit (RAW [6, 1500] at #101). light_wall.ent static 1. MEASURED on L1 4-29 (D11 section 5): -20, +20, -10, +10, -5, +5, -2, +2, -1, +1 px, vertical, forth first."
+    },
+    "no_portal_tap": {
+      "intensity": 7.0,
+      "when": "before_update",
+      "_source": "D11 row 2. PortalManager::blockPortalEffects (137862..138545) #109-111, startEarthquake(7, 40) - the 40 a vibrate the desktop port has no motor for - with red_waves.ent at the tap (#113-133), on every tap of a level whose budget is 0 while its no_portal_sign exists (placement.json no_budget): 1-15, 2-07, 2-28. PortalManager::update is a controller that runs BEFORE the generator (D11_check C31), so it trembles on the tap's own frame when one is due. Wired in step 103 (the visuals plan's 10.1) on the port's own refusal of such a tap: a picture and a shake, not gameplay."
+    },
+    "shot_blocked": {
+      "intensity": 5.0,
+      "when": "after_update",
+      "_source": "D11 row 6. ETHCallback_anti_projectile_wall (344990..345591) #70-72, startEarthquake(5, 0), with portal_fail_in_antiportal.ent at the projectile (#74-96), for every projectile.ent inside the wall's rectangle. anti_projectile_wall.ent static 1: a static entity's callback, after the update. On 1-07, 2-15, 3-15 and 4-31. Wired in step 103 on the port's own blocker kill (Portals::State::failures, kind Blocker), which the port already played. MEASURED on F3 #102-110: a vertical shake, sampled +1, -2, +2, -1, +1 px on alternate frames."
+    },
+    "shot_failed_in_field": {
+      "intensity": 5.0,
+      "when": "before_update",
+      "_source": "D11 row 14. ETHCallback_projectile (358053..359141) #211-215, startEarthquake(5, 0), with portal_fail_in_antiportal.ent (#216-232), when a willDie shot arrives with its position inside an antiportal field; a plain portal_fail (#237-257) has none. projectile.ent static 0: a dynamic entity's callback, before the update. Wired in step 103 on the port's own failures that end inside a field it plays (Portals::State::failures): a shot refused where it arrives, or one a body stops inside a field. MEASURED on F3 #161-171: dy -5, +5, -2, +2, -1, +1 px, dx 0."
+    },
+    "player_impact": {
+      "intensity": 0.6,
+      "when": "before_update",
+      "hit_above": 0.0,
+      "entity": "dark_mage",
+      "spares": ["crate", "crate.ent", "crate_no_emissive", "crate_no_emissive.ent", "crate_low_emissive", "crate_low_emissive.ent"],
+      "_source": "D11 row 4. ETHBeginContactCallback_dark_mage (339123..339677): nothing for a sensor (#1-11); hitIntensity = dp2(GetLinearVelocity(), normal) / getScale() (#42-61); where hitIntensity > 0 (#63-64 CMPIf 0f) and the other is not a crate (#66-75 isCrate), startEarthquake(0.6 x hitIntensity, 0) (#77-80 MULIf 0.6f) - `intensity` is the factor, `hit_above` the gate. A begin-contact callback, inside the physics step: before the update. `spares` is isCrate (422055..422414): exactly these six names (#13-87), and not crate_small or crate_small_no_emissive. MEASURED on F14 (D11 section 5): both landings open a forth-first shake of about 5 px, 3 pairs, on the landing frame. Wired in step 104.",
+      "_normal": "#27-36 read the other's GetShape(): a circle (2) falls through to #29, which sets the flag false, a compound (4) makes #31-34's CMPIi/TNZ false, and #36 JLowZ skips the negation on false - so #37-40 negate the contact normal for every OTHER shape, a box or a polygon, and not for a circle or a compound (D11 section 4 row 4 has it the other way round; read from the listing, not RAW-checked). Against a polygon, Box2D's fixture A (D11_check C59), the manifold normal runs from it to the player, so the negation points it from the player into the polygon: the approach component, which is the reading the measured landings fit and the one the port takes. Against a circle or a compound other - a stone, a minion - the normal is left as Box2D's fixture order makes it, which is not traced (D11_check C56); the port takes the approach component there too.",
+      "_sound": "#82-90 playFallSound(hitIntensity / 18) where hitIntensity > 3.5: a sound, not this file's."
+    },
+    "stone_impact": {
+      "intensity": 2.0,
+      "when": "before_update",
+      "hit_above": 2.0,
+      "entity": "rolling_stone",
+      "spares": [],
+      "_source": "D11 row 8. ETHBeginContactCallback_rolling_stone (346486..347456): the normal it is handed is overwritten with normalize(other.GetPositionXY() - this.GetPositionXY()) (#6-26; D11_check C55), and where the velocity has any length (#28-35), hitIntensity = dp2(GetLinearVelocity(), that) / getScale() (#37-56); where it is above 2 (#58-59 CMPIf 2f), startEarthquake(2 x hitIntensity, 0) (#61-64 MULIf 2f). No sensor test: the port's contacts are its solid bodies' alone. A begin-contact callback, before the update. `entity`: only rolling_stone has this callback (the listing has no ETHBeginContactCallback_rolling_stone_no_emissive, and 2-30's one rolling_stone_no_emissive.ent never calls it). Its other rows are their own: 9 (a destroyier, 6, after this one in the same callback, #73-105), 10 (a minion crushed, 25: not built, the port's minions are not breakable) and 11 (the beholder's rock, 5, #170-208); #107-129 (a character's hp set to 0 above hitIntensity 2.5) is gameplay and not here. Wired in step 104.",
+      "_sound": "#65-71 playStoneHitSound(hitIntensity / 3): a sound, not this file's."
+    },
+    "minion_impact": {
+      "intensity": 0.8,
+      "when": "before_update",
+      "hit_above": 0.0,
+      "entity": "minion",
+      "spares": ["enemy_killer"],
+      "_source": "D11 row 25. ETHBeginContactCallback_minion (437083..437789): nothing for a sensor (#1-11); where the other's GetEntityName() is not exactly 'enemy_killer' (#57-74; all 58 placements use that bare name), the normal is overwritten with normalize(other - this) (#81-101), hitIntensity = dp2(GetLinearVelocity(), that) / getScale() (#103-122), and where it is above 0 (#124-125) startEarthquake(0.8 x hitIntensity, 0) (#127-130 MULIf 0.8f). A begin-contact callback, before the update. `entity`: minion.ent's callback; ghost_minion.ent (3-32's one) has none. Wired in step 104.",
+      "_sound": "#132-140 playFallSound(hitIntensity / 18) where hitIntensity > 3.5: a sound, not this file's.",
+      "_spawn": "Where a minion is made (read in step 104's Q.2 fix; no number of this file's). ETHCallback_minion_spawn (426511..426876) #12-19 takes vector3(GetPositionXY(), 2) of the marker and spawnMinion (426876..427194) #25-39 AddEntity's minion.ent there, so the original's ENTITY POINT is the marker and its feet circle's bottom minions.json body.entity_above_feet_px (18.1) under it; SOURCE: the body is made at the entity's point with Box2D's default velocity 0 (engine/Scene/ETHScene.cpp:261-292, 713-723; engine/Physics/ETHPhysicsSimulator.cpp:65-114), its fixtures set e_newFixture (box2d/Box2D/Dynamics/b2Body.cpp:185), and the next b2World::Step finds the new pairs and runs Collide before it solves anything (box2d/Box2D/Dynamics/b2World.cpp:884-888, 912), so a knight made with its feet in a floor begins it at rest: hitIntensity 0, which #124-125 never calls on. DATA (out/parity/visuals/Q.2/fix2/spawn_census.txt): 51 of the 62 markers put the original's feet into the floor under them, 44 of them by 2.1 (a marker 16 over its floor). The port centres its 7-unit circle on the marker (Minions::State::Spawn), EntityAboveCentrePx = 18.1 - 7 = 11.1 higher, and it falls onto that floor; so the watch looks at a minion it has never seen where the original's stands, 11.1 lower, until its own circle reaches a pair that holds (Impacts::Watched::spawnDropPx)."
+    }
+  },
+
+  "impacts": {
+    "hit_px_per_unit": 50.0,
+    "touch_px": 0.5,
+    "_source": [
+      "What the three impact rows read a contact by (D11 section 4 notes, D11_check C47). hit_px_per_unit:",
+      "hitIntensity is the approach speed in level units a second over 50 - GetLinearVelocity is",
+      "Box2D's metres a second (Physics/ETHPhysicsController.cpp:117-123, the engine's global scale 1),",
+      "a Box2D metre is DEFAULT_SCALE = 50 screen px (Physics/ETHPhysicsSimulator.cpp:27, 170-178), and",
+      "the callbacks divide by getScale(), the screen's px per unit: (v x s / 50) / s = v / 50.",
+      "",
+      "touch_px: when a pair has begun to touch. Box2D calls BeginContact on the first step a",
+      "contact's manifold has a point (box2d/Box2D/Dynamics/Contacts/b2Contact.cpp:161-226), which a",
+      "circle against a polygon has while its separation is within the polygon's skin",
+      "(box2d/Box2D/Collision/b2CollideCircle.cpp:65-74), b2_polygonRadius = 2 x b2_linearSlop =",
+      "0.01 m (box2d/Box2D/Common/b2Settings.h:67, 76): 0.5 screen px at DEFAULT_SCALE. A bare",
+      "pixel amount like cap_px, so the port takes it at R12's 720 px screen: 0.178 level units.",
+      "Touching is judged after the step, between the surfaces' nearest points, and a pair is new",
+      "when it was not touching after the last step; a body looked at for the first time only has",
+      "its pairs marked (sim/Impacts.hpp). The velocity is the one the tick left the body to take",
+      "into the step, as the callback reads the one the last frame left it; a body a portal has",
+      "moved since the last step keeps none it carried before (the teleport sets its velocity, as",
+      "the original's does: step 104)."
+    ]
+  },
+
+  "_not_wired": [
+    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 26 wired above",
+    "(30 rows: row 1 has two intensities, and row 5 - explode - four callers of its own). Rows 2,",
+    "6 and 14 were wired by step 103 (the visuals plan's 10.1) on the refusal and the failures",
+    "the port ALREADY plays, and rows 4, 8 and 25 (every player, stone and minion impact) by",
+    "step 104, on contacts the port finds itself (sim/Impacts.hpp, D11_check C48). Row 3 (a",
+    "shot killed by an anti_portal_agent in flight, with antiportal_explosion.ent) waits on R23:",
+    "the port plays the agent as a no-portal zone and kills no shot on it, and its picture is",
+    "00_order 8.13's unowned row. Row 10 (a stone crushing a minion, 25) needs a minion a stone",
+    "can kill, which the port does not have (Minions.hpp: not breakable), and that is gameplay.",
+    "Row 21 (a burned carranca) and row 30 (4-01's rocket) need systems the port does not have;",
+    "row 13 (shaker) is placed by no level. Row 9 is wired for THROWN stones only: the port's",
+    "Launchers never culls 3-20's placed stone on its destroyier (Launchers.hpp), so that one",
+    "never shakes."
+  ]
+}

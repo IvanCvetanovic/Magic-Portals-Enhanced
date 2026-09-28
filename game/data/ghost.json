@@ -203,9 +203,10 @@
       "adds its frame's time to it. enemy_shoot.ent: projectile_transparent.png, SpriteCut 6 x 1."
     ],
     "_pictures": [
-      "What the calls add around it (effects.json, planning step 98): addEnemyShoot #127-168 portal_mark.ent",
+      "What the calls add around it (effects.json, planning step 98): addEnemyShoot #127-168 portal_mark.ent (the",
+      "player's shot's portal_mark row since the merge, planning step 112)",
       "at vector3(finalPos, scale(32)); #62-71 projectile_shoot.ent at the nudged shot's own vector3; and",
-      "once destroyed, #324-363 startEarthquake(10) (not built on this track), portal_fail_in_antiportal.ent",
+      "once destroyed, #324-363 startEarthquake(10) (earthquake.json enemy_shot_end), portal_fail_in_antiportal.ent",
       "at vector3(the shot's own point, 0) and playEnemyShootExplodeSound (not built)."
     ]
   },

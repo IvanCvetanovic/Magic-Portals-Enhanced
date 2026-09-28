@@ -100,6 +100,7 @@ std::vector<Thrown> State::Throw(entt::registry& registry, float dt) {
 
 std::vector<entt::entity> State::Cull(entt::registry& registry) {
     std::vector<entt::entity> gone;
+    despawnedNow.clear();
     for (const Thrown& thrown : live) {
         if (!registry.valid(thrown.body)) {
             gone.push_back(thrown.body);
@@ -109,11 +110,19 @@ std::vector<entt::entity> State::Cull(entt::registry& registry) {
         const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(thrown.body).position);
         bool out = at.x < launcher.minPx.x || at.x > launcher.maxPx.x || at.y < launcher.minPx.y ||
                    at.y > launcher.maxPx.y;
+        const bool leftTheBox = out;
         for (const Despawner& despawner : despawners) {
             if (out) break;
             out = Trigger::Overlaps(registry, thrown.body, despawner.box);
         }
         if (!out) continue;
+        if (!leftTheBox) {
+            // The destroyier's: `destroy` set, so the stone's own callback adds its
+            // puff where it stands. Out of the box is deleteIfGoesOut's, which adds
+            // nothing.
+            ++despawned;
+            despawnedNow.push_back(StoneGone{thrown.name, at});
+        }
         registry.destroy(thrown.body);
         gone.push_back(thrown.body);
     }

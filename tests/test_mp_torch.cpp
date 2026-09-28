@@ -192,6 +192,10 @@ void shootingTheSignalPutsTheWallBack() {
     PutShotAt(run, torchPx);
     Tick(run);
     if (!run.level.torch.signal.present) return;
+    // addFireSignalIfNecessary adds it at the torch's own point, and there it
+    // stands until its callback first runs, on the next frame.
+    CHECK_MSG(run.level.torch.signal.atPx == torchPx, "added on its torch");
+    Tick(run);
 
     // It circles its torch at scale(18) rather than standing on it.
     const double gap = std::sqrt((run.level.torch.signal.atPx.x - torchPx.x) *
@@ -320,8 +324,62 @@ void everyTorchLevelFindsThem() {
     std::printf("  %zu torch(es) across 10 levels, and %d light wall(s)\n", torches, walls);
 }
 
+// ITS WAY ROUND, which the port had backwards until the visuals plan's 11.2.
+// ETHCallback_fire_signal #78-108 put it at originalPos + scale(18) x
+// vector2(sin(angle), -cos(angle)) - -cos pushed first, and arguments go last-first
+// (00_order 8.0 rule 3) - with `angle` 300 degrees a second from 0, one step taken
+// before the first move: straight up from the torch, then to its right a quarter
+// turn on, +y being down. Clockwise on the screen, as footage L1 measured on 4-29.
+// And where a switch spent a shot, for the burst the layer adds there.
+void theSignalGoesClockwiseFromAbove() {
+    Run run;
+    if (!Begin(kWalled, run)) return;
+    if (run.level.torch.lights.empty() || !run.level.torch.wall.present) return;
+    const glm::dvec2 torchPx = run.level.torch.lights[0].atPx;
+    const Torch::Rules& rules = run.level.torch.rules;
+
+    CHECK_MSG(!run.level.torch.spentAtPx.has_value(), "nothing spent before a shot comes");
+    PutShotAt(run, torchPx + glm::dvec2(3.0, -4.0));
+    Tick(run);
+    CHECK_MSG(run.level.torch.signal.present, "lit, and the signal added");
+    CHECK_MSG(run.level.torch.spentAtPx.has_value() && *run.level.torch.spentAtPx == torchPx + glm::dvec2(3.0, -4.0),
+              "the spent shot's point recorded on the tick it went");
+    if (!run.level.torch.signal.present) return;
+    Tick(run);
+    CHECK_MSG(!run.level.torch.spentAtPx.has_value(), "and on that tick only");
+
+    // One step: 300 x 1/60 = 5 degrees past the top.
+    const double step = rules.spinDegPerSec * static_cast<double>(kStep);
+    const double firstRad = step * 3.14159265358979323846 / 180.0;
+    const glm::dvec2 want = torchPx + glm::dvec2(std::sin(firstRad), -std::cos(firstRad)) * rules.orbitPx;
+    const glm::dvec2 at = run.level.torch.signal.atPx;
+    CHECK_MSG(std::fabs(at.x - want.x) < 1e-6 && std::fabs(at.y - want.y) < 1e-6,
+              "one step past the top: (" + std::to_string(at.x - torchPx.x) + ", " + std::to_string(at.y - torchPx.y) +
+                  ")");
+    CHECK_MSG(at.y < torchPx.y - 17.0 && at.x > torchPx.x, "above the torch and just to its right");
+
+    // A quarter turn is 0.3 s, 18 ticks: to the right of the torch; another 18,
+    // below it; another, to its left.
+    const auto after = [&run](int ticks) {
+        for (int tick = 0; tick < ticks; ++tick) Tick(run);
+        return run.level.torch.signal.atPx;
+    };
+    const glm::dvec2 right = after(17);
+    // (Within a thousandth: 1/60 s is a float, so a step is 5.0000005 degrees.)
+    CHECK_MSG(std::fabs(right.x - (torchPx.x + rules.orbitPx)) < 1e-3 && std::fabs(right.y - torchPx.y) < 1e-3,
+              "a quarter turn on: at its right, (" + std::to_string(right.x - torchPx.x) + ", " +
+                  std::to_string(right.y - torchPx.y) + ")");
+    const glm::dvec2 below = after(18);
+    CHECK_MSG(std::fabs(below.x - torchPx.x) < 1e-3 && std::fabs(below.y - (torchPx.y + rules.orbitPx)) < 1e-3,
+              "a half: below it - down the screen, so clockwise");
+    const glm::dvec2 left = after(18);
+    CHECK_MSG(std::fabs(left.x - (torchPx.x - rules.orbitPx)) < 1e-3 && std::fabs(left.y - torchPx.y) < 1e-3,
+              "three quarters: at its left");
+}
+
 void runTests() {
     theRulesAndWhatTheLevelsHold();
+    theSignalGoesClockwiseFromAbove();
     aShotLightsATorchAndIsSpent();
     theWallStandsForASecondAndAHalf();
     shootingTheSignalPutsTheWallBack();
@@ -341,5 +399,5 @@ int main() {
         return 77;
     }
     runTests();
-    return ::test::summary("test_mp_torch", 40);
+    return ::test::summary("test_mp_torch", 50);
 }

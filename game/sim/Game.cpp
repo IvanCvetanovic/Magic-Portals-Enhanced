@@ -484,6 +484,10 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // and there is nothing to scale. Diamonds.hpp carries that decode.
     if (level.diamonds.carrierHasFire && level.portals.flight) {
         const Portals::Flight& shot = *level.portals.flight;
+        // burnProjectile's burn_projectile.ent, at the shot as it is deleted
+        // (effects.json burn_projectile): a record for the layer, whether or not
+        // a fireball can be made of it below.
+        level.diamonds.burnedPx.push_back(shot.atPx);
         const glm::dvec2 along = shot.toPx - shot.atPx;
         const double length = std::sqrt(along.x * along.x + along.y * along.y);
         if (length > 0.0) {
@@ -756,6 +760,15 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     stones.reserve(level.demolish.stones.size());
     for (const Demolish::Stone& stone : level.demolish.stones) stones.push_back(stone.body);
     const Boss::State::Turn turn = level.boss.Tick(registry, level.player, stones, dt);
+    // A stone it broke on itself, named for the picture while Demolish still
+    // knows it (Boss::State::brokenNow): its rolling_stone_destroy.
+    for (std::size_t i = 0; i < turn.broken.size() && i < turn.brokenPx.size(); ++i) {
+        for (const Demolish::Stone& stone : level.demolish.stones) {
+            if (stone.body != turn.broken[i]) continue;
+            level.boss.brokenNow.push_back(Launchers::StoneGone{stone.name, turn.brokenPx[i]});
+            break;
+        }
+    }
     for (const entt::entity gone : turn.broken) Forget(level, gone);
     for (const Boss::Rock& rock : turn.dropped) {
         if (level.boss.rock.teleportable) level.portals.travellers.push_back(rock.body);

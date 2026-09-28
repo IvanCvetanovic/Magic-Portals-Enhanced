@@ -100,6 +100,23 @@ struct Rules {
     // linearMotion's shared arithmetic (motions.json), which Game::LoadData hands
     // over: the frame cap its step is taken over and the turn it wraps at.
     Motion::Rules motion;
+
+    // WHAT THE ORIGINAL WORKS OUT AT THE TAP (placement.json final_pos, decoded):
+    // computePortalFinalPos's ray and its head-height retry, which decide the
+    // mark a tap leaves - red_cross or portal_mark - and red_waves (A). Read for
+    // the PICTURE only (the owner's standing ruling R15): where a shot goes and
+    // how it ends is still Tick's.
+    struct FinalPosRules {
+        double rayStartUnits = 0.0;          // the ray starts this far out along the aim
+        std::vector<std::string> rayIgnores; // the entity names it passes through, exactly as spelled
+        double pushUnits = 0.0;              // jumpForth: past a body it may open on, short of one it may not
+        glm::dvec2 retryFromUnits{0.0};      // the retry's origin, from the caster's
+        double retryBackUnits = 0.0;         // and how far back off its aim it starts
+    };
+    FinalPosRules finalPos;
+    // The entity whose presence turns a budget-0 tap into red_waves and a shake
+    // (placement.json no_budget, blockPortalEffects' cached SeekEntity).
+    std::string noPortalSignEntity;
 };
 
 // The remake's portals.json: its placement, consumption and transit objects.
@@ -242,6 +259,77 @@ struct Flight {
     glm::dvec2 atPx{0.0};   // where it is now
     int reflections = 0;    // how many reflectors it has come off
     int lastReflector = -1; // the last of them, which cannot turn it again at once
+    // Whether this leg has had its first tick - ETHCallback_projectile's first
+    // frame, which flashes projectile_shoot - since it was fired or last turned.
+    // Read for the picture alone (State::launches).
+    bool launched = false;
+};
+
+// WHAT computePortalFinalPos ANSWERS: the global (bytes 355236..356384) and
+// PortalManager's method with its head-height retry over it (141090..142200),
+// run on the port's own bodies and fields (placement.json final_pos). What it
+// gives is PortalPosition's pos and closestEntity, *hasFailed - the shot's
+// willDie, so red_cross or portal_mark - and whether it added red_waves (A).
+// READ FOR THE PICTURES ONLY, by the owner's standing ruling R15: where the
+// port's shot flies and how it ends is still Tick's, and the two can disagree
+// where the port's flight is not the original's (R23, not built).
+struct FinalPos {
+    glm::dvec2 atPx{0.0};              // PortalPosition.pos: where the original would send its shot
+    bool willDie = false;              // *hasFailed
+    bool redWaves = false;             // the ray met nothing and the aim is in a field: red_waves (A) there
+    bool preferred = false;            // *preferedTeleportEntity was set: it ended on a body a portal may open on
+    entt::entity closest = entt::null; // PortalPosition.closestEntity: what the ray met first
+    bool retried = false;              // the method's head-height retry ran
+};
+
+// WHY A TAP DID WHAT IT DID - the refused-tap record (00_order 8.13's 10.1 row).
+// Written by every Shoot call, whatever it decides, and read by the layer the
+// moment the call returns. The reasons are the original's, in its own order:
+// PortalManager::update returns before either tap path while the level is
+// younger than first_ms (TooEarly); a budget of 0 goes to blockPortalEffects
+// (NoBudget: red_waves (B) where the sign is); managePortalInsertion then holds
+// a tap off for next_ms, drawing nothing (Cooldown), and shows the hourglass for
+// one that passes while a shot still flies (InFlight). The port's own refusals
+// and their results are unchanged - Shoot returns what it returned, and neither
+// clock moves on a refusal: the original's hourglass tap restarts the 400 ms,
+// which is 00_order 8.15's R23 and not played here.
+//
+// field_clear_ray, 8.13's third reason, is not a refusal in either game: the
+// shot fires, and computePortalFinalPos adds red_waves (A) for it - and for a
+// reflected shot too. So it rides on the FinalPos a fired tap (and a
+// reflection) is given, not on this.
+enum class TapReason { Fired, NoShooter, TooEarly, NoBudget, Cooldown, InFlight };
+struct Tap {
+    glm::dvec2 atPx{0.0};
+    TapReason reason = TapReason::Fired;
+};
+
+// What a tick's shot did, for the frame to draw: cleared and refilled by every
+// Tick, as `transits` is, and read by nothing in the simulation.
+//
+// A leg's first tick: ETHCallback_projectile's first frame, projectile_shoot.
+struct Launch {
+    glm::dvec2 fromPx{0.0};   // where the leg starts: the shooter's centre, or where it was turned
+    glm::dvec2 towardPx{0.0}; // where it is going
+};
+// A turn off a reflector: ETHCallback_reflect_agent, which runs
+// computePortalFinalPos for the new leg as a reflected shot (so a wall does not
+// doom it), marks its end and flashes where the old one was.
+struct Reflection {
+    glm::dvec2 atPx{0.0}; // where it turned
+    glm::dvec2 toPx{0.0}; // the new destination, before the original would clip it
+    FinalPos said;
+};
+// How a shot ended without a portal, and where.
+enum class FailKind {
+    Body,    // the first solid body on its way
+    Blocker, // an anti_projectile_wall's box (ETHCallback_anti_projectile_wall)
+    Refused, // it arrived where TryPlace opens nothing: a no-portal zone
+};
+struct Failure {
+    glm::dvec2 atPx{0.0};
+    FailKind kind = FailKind::Body;
+    bool inField = false; // the point is inside a zone the port plays (InField)
 };
 
 struct State {
@@ -300,9 +388,47 @@ struct State {
     bool noGravity = false;
     double recoilMps = 0.0;
 
+    // THE PICTURES' RECORDS (the visuals plan's 10.1), none of which the
+    // simulation reads. The bodies the tap-time ray passes through by name
+    // (Find, from rules.finalPos.rayIgnores); whether the level places the
+    // no-portal sign (Find, rules.noPortalSignEntity); what the last Shoot call
+    // did with its tap; and what this tick's shot did (Tick).
+    std::vector<entt::entity> rayIgnored;
+    bool noPortalSign = false;
+    Tap lastTap;
+    std::vector<Launch> launches;
+    std::vector<Reflection> reflected;
+    std::vector<Failure> failures;
+
     // A tap at a point in the level: a shot fired toward it. False when none
     // goes, because the level allows no portal or a shot is already flying.
+    // Either way it writes lastTap, and nothing else it writes on a refusal.
     bool Shoot(entt::registry& registry, const glm::dvec2& atPx);
+
+    // Whether a point is inside a zone the port plays - the test TryPlace
+    // refuses by, exactly: an antiportal's radius times its scale, or a zone's
+    // own radius. It stands in for isPointInAntiPortalField in computePortalFinalPos,
+    // so the pictures follow the fields the port plays (R1 and R2 are not built).
+    bool InField(const glm::dvec2& atPx) const;
+
+    // The global computePortalFinalPos (355236..356384) from `casterPx` toward
+    // `destPx`, with its hasBeenReflected. Reads the registry and
+    // changes nothing.
+    FinalPos FinalPosFrom(entt::registry& registry, const glm::dvec2& destPx, const glm::dvec2& casterPx,
+                          bool hasBeenReflected) const;
+
+    // PortalManager::computePortalFinalPos (141090..142200) for a tap at `destPx`
+    // from a shooter at `casterPx`: the global, then the head-height retry when
+    // the aim is outside every field. Not for a tap with a fire diamond carried,
+    // whose method never casts a ray (FireDiamondWillDie).
+    FinalPos Predict(entt::registry& registry, const glm::dvec2& casterPx, const glm::dvec2& destPx) const;
+
+    // The fire diamond's tap (the method's #21-64): no ray, and *hasFailed never
+    // written, so willDie is the caller's leftover - the low byte of absTouchPos.x
+    // as a float (managePortalInsertion #108-109 RDR4, read back by CpyVtoR4 and
+    // JLowZ, as_context.cpp:3770-3775). `touchXScreenPx` is that x in the
+    // original's world pixels: the level's units times its scale factor.
+    static bool FireDiamondWillDie(double touchXScreenPx);
 
     // A portal opened at a point at once, as an arriving shot opens one. The
     // suites use it to put portals where a test needs them. False when refused.

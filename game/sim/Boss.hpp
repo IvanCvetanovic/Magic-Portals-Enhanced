@@ -28,9 +28,10 @@
 //   Box2D's BeginContact, which the original's callback runs on, would still
 //   have reported it. A rock a portal holds is taken by it rather than landing.
 //
-// Not ported: the sounds, the earthquake, the smoke and the explosions'
-// pictures, the final blast's line of sight, and the blast's effect on anything
-// but the player.
+// Not ported: the sounds, the smoke and the explosions' pictures, the final
+// blast's line of sight, and the blast's effect on anything but the player. The
+// earthquakes are the layer's, read from `hits`, `gone` and `rocksBroken`
+// (earthquake.json).
 
 #include "sim/Launchers.hpp"
 #include "sim/Portals.hpp"
@@ -159,6 +160,12 @@ struct State {
     bool playerKilled = false;
     std::string killedBy;
     int rocksBroken = 0; // on what they ran into
+    // Every stone it broke this tick, by name and where it stood: its rocks on
+    // what they ran into (Contacts, which empties it first) and a stone that rose
+    // into it (Tick's, which the caller names from the stones it handed over).
+    // Where ETHCallback_rolling_stone adds rolling_stone_destroy.ent; written for
+    // the picture, and nothing in the simulation reads it.
+    std::vector<Launchers::StoneGone> brokenNow;
 
     // Before the step: where each rock is and how fast it goes, which its
     // contacts are judged by.
@@ -175,6 +182,7 @@ struct State {
     struct Turn {
         std::vector<Rock> dropped;        // new rocks, for the caller to hand to the portals and stones
         std::vector<entt::entity> broken; // stones it broke on itself, for the caller to forget
+        std::vector<glm::dvec2> brokenPx; // and where each stood, in `broken`'s order
         bool buttonRaised = false;        // on this tick
     };
     Turn Tick(entt::registry& registry, entt::entity player, const std::vector<entt::entity>& stones, float dt);

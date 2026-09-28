@@ -283,6 +283,11 @@ void ARisingStoneHurtsIt() {
     CHECK(!rig.registry.valid(rising));
     CHECK(rig.registry.valid(wide));
     CHECK(turn.broken.size() == 1u && turn.broken.front() == rising);
+    // And where it stood as it broke, for the caller to name for the picture
+    // (rolling_stone_destroy, the visuals plan's 11.1): no step ran, so where it
+    // was put.
+    CHECK_MSG(turn.brokenPx.size() == 1u && glm::distance(turn.brokenPx.front(), glm::dvec2(400.0, 120.0)) < 1e-3,
+              std::to_string(turn.brokenPx.size()) + " points recorded");
     CHECK(b.phase == Boss::Phase::GotDamage);
     // The next turn goes red by half: its colour is (1, hp/2, hp/2).
     CHECK_EQ(b.hp * 2, rig.boss.rules.maxHp);
@@ -427,6 +432,12 @@ void ItsRocksBreakOnTheWorldAndCrush() {
     std::vector<entt::entity> broken = rig.boss.Contacts(rig.registry, rig.player, portals, kStep);
     CHECK_MSG(broken.size() == 1u && broken.front() == landing, std::to_string(broken.size()) + " broken");
     CHECK(!rig.registry.valid(landing));
+    // Recorded for the picture on that call alone, by name and where it stood
+    // (rolling_stone_destroy, the visuals plan's 11.1): no step ran, so where it
+    // was put.
+    CHECK_MSG(rig.boss.brokenNow.size() == 1u && rig.boss.brokenNow.front().name == "landing" &&
+                  glm::distance(rig.boss.brokenNow.front().atPx, glm::dvec2(300.0, 194.0)) < 1e-3,
+              std::to_string(rig.boss.brokenNow.size()) + " recorded");
     const bool stayed = rig.registry.valid(leaving) && rig.registry.valid(clear) && rig.registry.valid(gentle);
     CHECK_MSG(stayed, "the rock leaving the floor, the one clear of it and the one on the player stay");
     CHECK_MSG(!rig.boss.playerKilled, "100 px/s on it is 2 in the original's units, under 2.5");
@@ -435,6 +446,7 @@ void ItsRocksBreakOnTheWorldAndCrush() {
     rig.registry.get<RigidBodyComponent>(gentle).velocity.y = -Units::ToMetres(200.0);
     rig.boss.BeforeStep(rig.registry);
     rig.boss.Contacts(rig.registry, rig.player, portals, kStep);
+    CHECK_MSG(rig.boss.brokenNow.empty(), "the next call's record holds only its own: none broke");
     CHECK_MSG(rig.boss.playerKilled && rig.boss.killedBy == "gentle", "killed by '" + rig.boss.killedBy + "'");
     // One held by a portal goes through it instead of landing.
     portals.budget = 2;
@@ -552,6 +564,12 @@ void Level31ARockBreaksOnTheFloorOrCrushes() {
             CHECK_MSG(gone && run.level.boss.rocksBroken == 1 && !run.level.hazards.playerDied,
                       "dodged: the rock " + std::string(gone ? "broke" : "stayed") + ", the player " +
                           (run.level.hazards.playerDied ? "died to " + run.level.hazards.killedBy : "lived") + trace);
+            // Through the game's tick, recorded on the tick it broke, for its
+            // rolling_stone_destroy (the visuals plan's 11.1).
+            const std::vector<Launchers::StoneGone>& now = run.level.boss.brokenNow;
+            CHECK_MSG(now.size() == 1u && now.front().name == "adder_715#1",
+                      std::to_string(now.size()) + " recorded" + (now.empty() ? "" : ": " + now.front().name));
+            if (!now.empty()) std::printf("  level31: adder_715#1 broke at %s\n", Px(now.front().atPx).c_str());
         } else {
             CHECK_MSG(run.level.hazards.playerDied && run.level.hazards.killedBy == "adder_715#1",
                       "stood under it: killed by '" + run.level.hazards.killedBy + "'" + trace);
@@ -592,11 +610,26 @@ void Level31IsWonAsTheOwnerWonIt() {
             run.level.portals.TryPlace(glm::dvec2(rockPx.x, 100.0)) && run.level.portals.TryPlace(under);
         trace += " rock at " + Px(rockPx) + ", portals " + Px(glm::dvec2(rockPx.x, 100.0)) + " and " + Px(under) +
                  (placed ? "" : " REFUSED");
+        std::string rockName;
+        for (const Boss::Rock& made : boss.rocks) {
+            if (made.body == rock) rockName = made.name;
+        }
         const int hits = boss.beholder->hits;
         for (int wait = 0; wait < 300 && !died() && boss.beholder->hits == hits; ++wait) {
             Tick(run, Toward(run, standX));
         }
         trace += " hit " + std::string(boss.beholder->hits > hits ? "yes" : "NO");
+        // The rock that hit it, named by the game's tick while Demolish still knew
+        // it and recorded where it broke, for its rolling_stone_destroy (the
+        // visuals plan's 11.1).
+        if (boss.beholder->hits > hits) {
+            const std::vector<Launchers::StoneGone>& now = boss.brokenNow;
+            CHECK_MSG(now.size() == 1u && !rockName.empty() && now.front().name == rockName &&
+                          glm::distance(now.front().atPx, boss.beholder->atPx) < 60.0,
+                      "round " + std::to_string(round) + ": " + std::to_string(now.size()) + " recorded" +
+                          (now.empty() ? "" : ", " + now.front().name + " at " + Px(now.front().atPx)) +
+                          ", the rock " + rockName);
+        }
         // Where it stands, until the spikes are done.
         for (int wait = 0; wait < 600 && !died() && boss.beholder->phase == Boss::Phase::GotDamage; ++wait) {
             Tick(run, Toward(run, standX));

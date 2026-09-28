@@ -116,6 +116,54 @@
     "next_ms": 400.0
   },
 
+  "final_pos": {
+    "_source": [
+      "WHAT THE ORIGINAL WORKS OUT AT THE TAP: computePortalFinalPos, the global (PortalManager.angelscript,",
+      "bytes 355236..356384) and PortalManager's method over it (141090..142200), read in 00_order section 8.4",
+      "(decode D3 with D3_check, which wins) and re-read for the visuals plan's 10.1 (planning step 103).",
+      "It decides `willDie` - so red_cross or portal_mark at the tap - and whether red_waves (A) is added.",
+      "The port reads it for those PICTURES ONLY (the owner's standing ruling R15): the shot it fires still",
+      "flies and ends by the port's own Portals::Tick, which this block does not touch.",
+      "  ray_start_units: global #5-28, origin = normalize(destPos - casterPos) x g_scale.scale(8): the ray",
+      "    starts 8 units out from the caster, along the aim.",
+      "  ray_ignores: global #30-51, the string GetClosestContact is given, one name per entry, matched",
+      "    exactly against an entity's name (ETHEntityChooser.cpp:43-61), so a level's bare `death_area` is",
+      "    NOT ignored where `death_area.ent` is. Every other body counts, a sensor as well as a solid one",
+      "    (ETHRayCastCallback.cpp:40-50 asks only the chooser).",
+      "  push_units: global #194-248, jumpForth = normalize(destPos - casterPos) x g_scale.scale(10), +10",
+      "    past a teleportable body's contact and -10 short of a static one a reflected shot meets; the",
+      "    position a reflected shot's mark is added at (ETHCallback_reflect_agent #216-235).",
+      "  retry_from_units, retry_back_units: the method's head-height retry, #123-146 nextTry = origin +",
+      "    g_scale.scale(vector2(0, -30)) and #194-217 nextTry -= normalize(destPos - nextTry) x",
+      "    g_scale.scale(6), run when the first ray failed or ended on a body with nothing at the tap",
+      "    (shouldTryToAvoidTeleportableEntity 140931..141090 #3-24) and nothing but that body at nextTry",
+      "    (#148-189). Both tests are EntityGrabber(point, 0, grabAllObstacles) (EntityGrabber::EntityGrabber",
+      "    23924..24990 #66-212, grabAllObstacles 361404..361475 returns true for any entity): every body",
+      "    whose shape holds the point, sensors included. #231-236 write the retry's hasFailed whatever it",
+      "    is, and #242-251 keep the retry's position only when it did not fail (D3_check B)."
+    ],
+    "ray_start_units": 8,
+    "ray_ignores": ["char_feet.ent", "dark_mage.ent", "death_area.ent", "anti_sight_wall.ent", "shock_agent",
+                    "shock_agent.ent", "fireball.ent", "gravity_agent", "gravity_agent.ent"],
+    "push_units": 10,
+    "retry_from_units": [0, -30],
+    "retry_back_units": 6
+  },
+
+  "no_budget": {
+    "_source": [
+      "PortalManager::blockPortalEffects (137862..138545), which PortalManager::update calls instead of",
+      "managePortalInsertion when maxPortals is 0 (#48-56): on a tap, and only while the no_portal_sign",
+      "handle the constructor cached is not null (#80-92; ctor 135924..136705 #118-132",
+      "SeekEntity('no_portal_sign.ent'), by the NAME, one spelling), red_waves.ent at the tap and",
+      "startEarthquake(7, 40) - earthquake.json's no_portal_tap row. It returns at once on",
+      "scenes/level0.esc (#3-20), which places no sign anyway: max_portals is 0 on level0, level6a, level14",
+      "and level27a, and the last three are the three that place the sign (1-15, 2-07, 2-28). There is no",
+      "400 ms gate on this path, and at most one wave a frame (#137-138 return)."
+    ],
+    "sign_entity": "no_portal_sign.ent"
+  },
+
   "antiportal": {
     "_source": [
       "isPointInAntiPortalField (AntiPortalManager.angelscript, bytes 334800..335020):",

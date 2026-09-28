@@ -17,6 +17,7 @@ add_library(MagicPortalsSim STATIC
     Dashboard.cpp
     Demolish.cpp
     Diamonds.cpp
+    Earthquake.cpp
     Ease.cpp
     Effects.cpp
     Fields.cpp
@@ -29,6 +30,7 @@ add_library(MagicPortalsSim STATIC
     Hazards.cpp
     Hinge.cpp
     Hud.cpp
+    Impacts.cpp
     Keys.cpp
     Launchers.cpp
     LevelBuilder.cpp

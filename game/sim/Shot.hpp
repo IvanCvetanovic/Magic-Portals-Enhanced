@@ -21,7 +21,9 @@
 #include "sim/Trigger.hpp"
 
 #include <optional>
+#include <span>
 #include <string>
+#include <vector>
 
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
@@ -57,6 +59,19 @@ std::optional<Hit> FirstBody(entt::registry& registry, const glm::dvec2& fromPx,
 // b2CircleShape.cpp:47-82).
 std::optional<Hit> ClosestContact(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
                                   entt::entity ignore);
+
+// The same, passing through every body in `ignore`: the list GetClosestContact
+// is given by name (the tap-time ray of computePortalFinalPos, placement.json
+// final_pos), which the caller has already turned into the bodies it names.
+std::optional<Hit> ClosestContact(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
+                                  std::span<const entt::entity> ignore);
+
+// Every body whose shape holds the point, a trigger as well as a solid one, in
+// the registry's order - boxes, then spheres, then hulls: the original's
+// EntityGrabber(point, 0, grabAllObstacles) (EntityGrabber::EntityGrabber,
+// bytes 23924..24990 #66-212), which the tap-time ray's head-height retry asks
+// twice. A point on an edge is held. The capsule is not read, as above.
+std::vector<entt::entity> BodiesAt(entt::registry& registry, const glm::dvec2& atPx);
 
 // How far along the segment it first enters the box, or none.
 std::optional<double> Enters(const glm::dvec2& fromPx, const glm::dvec2& toPx, const Trigger::Box& box);

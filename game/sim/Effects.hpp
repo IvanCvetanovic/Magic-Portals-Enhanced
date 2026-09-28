@@ -19,11 +19,31 @@
 // sparkles where it stood, and the exit portal flashes. Their drawing is step
 // 7.3's; each later effect brings its own row with the step that draws it. And
 // red_eyes (MainCharacter), the one effect every level shows: added once at the
-// level's start and moved onto the character's face every frame. And the level's
-// end and a death (11.3): the door's red suck and sparkles, blood where the
-// character or a minion was killed, and a skull where either fell. And chapter
-// 3's ghost (12.2): the shots it fires, what each adds, and the dark puffs that
-// follow it in.
+// level's start and moved onto the character's face every frame. The shot's
+// marks and ends (the visuals plan's 10.1). And what a crystal leaves where it
+// was (10.2): crystal_pick where one is taken, crystal_vanish where a timed one
+// runs out - both added to the CRYSTAL's own point, its depth included. And what a
+// key and its keyhole leave (10.3): key_pick where a key is taken, the unlock halo
+// at the keyhole a spent key flies into, and the three the keyhole adds when it
+// goes - the dust at its door, the door's sparkles and its own burst. And what a
+// diamond, a shock ring and a fire signal leave (10.4): shock_diamond_pick where a
+// shock diamond is taken, shock_death at what its strike or a ring kills (and 10
+// in front of a shock agent a fireball destroys), shock_strike between the diamond
+// and its minion, burn_projectile where a fire diamond is taken and where each
+// shot it turns is, and extinguish_fire where it goes down a drain and where a
+// fire signal is put out. And what a wall, a stone and a lift door leave (11.1):
+// wall_destroy where a breakable wall goes, turned by the wall and at its
+// destroyEffectScale; rolling_stone_destroy where a stone is destroyed; and
+// door_lift_particles at the edge of a switched door as it starts to open or to
+// close. And what a torch, its light wall, a weightless player and a gravity
+// well add (11.2): the lit torch itself, light_from_projectile, with the sparkles
+// and the burst its lighting adds and the signal that orbits it; the torch put
+// back, its sparkles and its burst when the signal is shot; the light wall's dust
+// as it goes and its smoke and itself as it comes back; the trail a weightless
+// player leaves; and the flash where it laps a well. And the level's end and a
+// death (11.3): the door's red suck and sparkles, blood where the character or a
+// minion was killed, and a skull where either fell. And chapter 3's ghost (12.2):
+// the shots it fires, what each adds, and the dark puffs that follow it in.
 
 #include <string>
 
@@ -39,6 +59,24 @@ enum class Turn {
     // sets every frame: the chapter-3 ghost's shot (ETHCallback_enemy_shoot
     // #139-148), whose direction never changes.
     AlongFlightMinus90,
+    // getAngle(normalize(enemy - diamond)) handed over UNCONVERTED: radians in
+    // [0, 2 pi), which the engine reads as degrees (D4 section 5), so the entity is
+    // turned by at most 6.28 degrees. ETHCallback_shock_diamond #496-498 alone.
+    RadiansAsDegrees,
+    // The angle of the entity it is added at, in degrees as the engine keeps it:
+    // ETHCallback_breakable_wall #45-47 hands AddEntity its wall's GetAngle(). It
+    // is along no direction, so AngleDegrees gives 0 and the caller the angle
+    // (WallDestroy).
+    EntityAngle,
+};
+
+// bounce(entity, from, to, strideMs) as bounceLightEntity calls it: the entity's
+// scale from `from` to `to` and back, one leg a stride, eased by smoothEnd
+// (Art::Pulse is the same curve).
+struct Bounce {
+    double from = 1.0;
+    double to = 1.0;
+    double strideMs = 0.0;
 };
 
 // One call site: effects.json's row.
@@ -160,20 +198,116 @@ struct Rules {
     Rule skull;
     double skullInsetUnits = 0.0; // g_scale.scale(12)
     // CHAPTER 3'S GHOST AND ITS SHOTS (the visuals plan's 12.2, planning step 98).
-    // addEnemyShoot's enemy_shoot.ent, the shot itself, and the portal_mark.ent it
-    // adds where the shot is going - named for this call site, for track B's
-    // portal_mark of the player's shot is another call with its own row;
+    // addEnemyShoot's enemy_shoot.ent, the shot itself (the portal_mark.ent it
+    // adds where the shot is going is portalMark below, the player's shot's own
+    // row: the same arguments, one row for both callers since planning step 112);
     // ETHCallback_enemy_shoot's projectile_shoot.ent on its first call and
     // portal_fail_in_antiportal.ent where it is destroyed; and
     // ETHCallback_ghost's ghost_appear_effect.ent, with the followUp and the
     // Scale(1.005) its own callback runs every frame.
     Rule enemyShoot;
-    Rule enemyShootMark;
     Rule enemyShootFlash;
     Rule enemyShootBurst;
     Rule ghostAppear;
     FollowUpRule ghostAppearFollow;
     double ghostAppearScalePerFrame = 1.0;
+    // The shot and what its tap and its end leave behind (the visuals plan's
+    // 10.1): the flash on a projectile's first frame, 24 units out along its
+    // direction, and ETHCallback_reflect_agent's where the old one was; the mark
+    // at the tap, portal_mark or red_cross; the hourglass on a tap while a shot
+    // flies; red_waves; and the two ends a doomed shot has.
+    Rule projectileShoot;
+    Rule projectileShootReflected;
+    Rule portalMark;
+    Rule redCross;
+    Rule hourglass;
+    Rule redWaves;
+    Rule portalFail;
+    Rule portalFailInField;
+    // What a crystal leaves where it was (the visuals plan's 10.2):
+    // pickCrystalEffect's crystal_pick where the character takes one, and
+    // ETHCallback_timer's crystal_vanish, 1.3 times the size, where a timed one's
+    // time runs out while it is still there. Each `z` is added to the crystal's
+    // own (OnEntity).
+    Rule crystalPick;
+    Rule crystalVanish;
+    // What a key and its keyhole leave (the visuals plan's 10.3; effects.json
+    // _keys). ETHCallback_key's key_pick where a carrier takes a key, on the KEY's
+    // own depth; its key_unlock_halo at the keyhole, at a depth of its own, once
+    // the spent key's fly-in clock reaches `keyUnlockHaloAfterMs`; and
+    // ETHCallback_keyhole's three when the keyhole goes, in its order: wall_destroy
+    // at the door, door_locked_vanish on the door's depth - its z the one BARE
+    // literal of the five (OnEntityBare) - and keyhole_vanish on the keyhole's.
+    Rule keyPick;
+    Rule keyUnlockHalo;
+    double keyUnlockHaloAfterMs = 0.0; // the fly-in's w0: its time before frame 1
+    Rule keyholeVanish;
+    Rule doorLockedVanish;
+    Rule wallDestroyAtDoor;
+    // What a diamond, a shock ring and a fire signal leave (the visuals plan's
+    // 10.4; effects.json _shock_burn_extinguish). Every one AddScaledEntity's, so
+    // unturned, but the strike: ETHCallback_shock_diamond's shock_diamond_pick at
+    // the diamond it takes, on the diamond's own depth; shock_death at the minion
+    // its strike kills and ETHCallback_shock_area's at the character a ring kills,
+    // each on the victim's depth, and ETHCallback_shock_agent's a BARE 10 in front
+    // of an agent a fireball destroys (OnEntityBare); the strike between the two
+    // (Strike); ETHCallback_fire_diamond's burn_projectile a bare 10 in front of
+    // the diamond it takes, and burnProjectile's at each shot it turns, at a bare
+    // 10 of its own; extinguish_fire at a diamond a drain takes, on its depth, and
+    // ETHCallback_fire_signal's at a bare 10 of its own where its torch stands.
+    Rule shockDiamondPick;
+    Rule shockDeath;
+    Rule shockDeathAtAgent;
+    Rule shockStrike;
+    Rule burnAtPickup;
+    Rule burnAtShot;
+    Rule extinguishAtDiamond;
+    Rule extinguishAtSignal;
+    // What a wall, a stone and a lift door leave (the visuals plan's 11.1;
+    // effects.json _walls_stones_doors). ETHCallback_breakable_wall's
+    // wall_destroy at the wall's own point and depth, turned by the wall and
+    // scaled by its float `wallDestroyScaleKey` where that is above 0;
+    // ETHCallback_rolling_stone's rolling_stone_destroy at 1.3 where a stone is
+    // destroyed, at a depth of its own; and ETHCallback_door_lift's two
+    // door_lift_particles, at the door's point plus its own height times
+    // `doorLift...SizeY` down the screen, on its depth - a bare 0 there.
+    Rule wallDestroy;
+    std::string wallDestroyScaleKey;
+    Rule stoneDestroy;
+    Rule doorLiftOpen;
+    Rule doorLiftClose;
+    double doorLiftOpenSizeY = 0.0;  // x GetSize().y: -0.5, the shut door's top edge
+    double doorLiftCloseSizeY = 0.0; // +0.5, the raised door's bottom edge
+    // What a torch, its light wall, a weightless player and a gravity well add
+    // (the visuals plan's 11.2; effects.json _torches_trail_roundabout).
+    // ETHCallback_light_off's three, in its order, when a shot lights a torch:
+    // the lit torch itself on the torch's own point and depth, its sparkles
+    // there, and portal_death at the spent shot; addFireSignalIfNecessary's
+    // signal at the torch, where the level has a light wall - and the lit torch
+    // then bounces (litTorchBounce). ETHCallback_fire_signal's when the signal is
+    // shot: the torch put back and its sparkles at vector3(originalPos, 10), a
+    // bare 10 (At), and portal_death at the shot. addLightWall's smoke and the new
+    // wall at the ghost, turned by it, the wall fading in from lightWallAlphaFrom
+    // at lightWallAlphaPerSecond; ETHCallback_light_wall's dust at the wall as it
+    // goes, turned by it. addTrail's movement_trail on the character, and
+    // computeRoundabout's flash at the well's area, vector3(xy, -5) bare.
+    Rule lightFromProjectile;
+    Bounce litTorchBounce;
+    Rule lightOnSparkles;
+    Rule portalDeathAtLitTorch;
+    Rule fireSignal;
+    Rule lightOffAtSignal;
+    Rule lightOffSparkles;
+    Rule portalDeathAtSignal;
+    Rule lightWallCreate;
+    Rule lightWallAtGhost;
+    double lightWallAlphaFrom = 0.0;
+    double lightWallAlphaPerSecond = 0.0;
+    Rule wallDestroyLightWall;
+    Rule movementTrail;
+    double trailMinSpeed = 0.0; // |GetLinearVelocity()| / getScale(), the port's metres a second, strictly above
+    double trailEveryMs = 0.0;  // trailElapsedTime strictly above
+    Rule roundabout;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -203,7 +337,8 @@ glm::dvec2 VanishDirection(const glm::dvec2& travellerPx, const glm::dvec2& port
 // Ethanon's angle for `rule` along `direction`: the literal, or
 // radianToDegree(getAngle(direction)) - 90, getAngle(v) being atan2f(v.x, v.y)
 // wrapped into [0, 2 pi) (GameMath.h:711-715) - in floats, through DetMath, as
-// Art::Shot::AngleDegrees computes the shot's.
+// Art::Shot::AngleDegrees computes the shot's - or that getAngle itself, the
+// radians given back as the number of degrees (Turn::RadiansAsDegrees).
 float AngleDegrees(const Rule& rule, const glm::dvec2& direction);
 
 // vanishEffect(travellerPx, portalPx), called with where the traveller stands
@@ -235,6 +370,92 @@ Spawn LargeExplosion(const Rules& rules, const glm::dvec2& atPx);
 Spawn Summon(const Rules& rules, const glm::dvec2& atPx);
 Spawn Portal(const Rules& rules, const glm::dvec2& atPx);
 Spawn Death(const Rules& rules, const glm::dvec2& atPx);
+
+// A row given a point and nothing else - no direction, no turn - at that point:
+// every shot-side row but projectile_shoot (the loader refuses one that says
+// otherwise).
+Spawn At(const Rule& rule, const glm::dvec2& atPx);
+
+// AddScaledEntity at an ENTITY's own GetPosition() plus vector3(0, 0, z): the
+// row's z added to the entity's own depth rather than standing for one of the
+// level's (vector3::opAdd), and no direction. `entityZ` is that entity's depth on
+// the level's axis (a node's eth_z), so the sum is as scaled as the row's z is:
+// crystal_pick and crystal_vanish, whose scale(20) goes on the crystal's own z;
+// key_pick and keyhole_vanish, whose scale(32) goes on the key's and the
+// keyhole's; and the door's wall_destroy, at the door's own depth.
+Spawn OnEntity(const Rule& rule, const glm::dvec2& entityPx, double entityZ);
+
+// OnEntity for a row whose z is a BARE literal: door_locked_vanish's 2, which is
+// in the engine's world units and does not grow with the screen (00_order 8.12b).
+// Only the literal is divided by `scaleFactor` (art.json's 720 / 256) before it
+// goes on the entity's depth - the entity's own is already on the level's axis -
+// so the sum comes back as a level depth (zScaled true). A factor not above 0
+// adds the literal as it stands, as the layer does for a level with no art.
+Spawn OnEntityBare(const Rule& rule, const glm::dvec2& entityPx, double entityZ, double scaleFactor);
+
+// ETHCallback_shock_diamond #466-524: AddEntity(shock_strike, (diamond.GetPosition()
+// + enemy.GetPosition()) x 0.5, getAngle(normalize(enemy - diamond)), ...). The
+// point is the midpoint of the two entities' points and of their depths - both on
+// the level's axis, so the sum is too - plus the row's z; the angle is the rule's
+// along normalize(enemy - diamond), in the script's floats, which for this row is
+// the radians unconverted (Turn::RadiansAsDegrees).
+Spawn Strike(const Rule& rule, const glm::dvec2& diamondPx, double diamondZ, const glm::dvec2& enemyPx, double enemyZ);
+
+// ETHCallback_breakable_wall #14-31: effectScale, the wall's float where it is
+// above 0 - a missing one reads 0 (ETHEntity.cpp:851-856) - and 1 otherwise. The
+// same number multiplies the wall's earthquake (#73-76).
+double EffectScale(double datum);
+
+// ETHCallback_breakable_wall #33-59: AddEntity('wall_destroy.ent',
+// wall.GetPosition(), wall.GetAngle(), @e, '', g_scale.scale(effectScale)) - at
+// the wall's own point and depth (its z plus the row's 0), turned by the wall's
+// Ethanon angle as it is, and at effectScale times the row's scale.
+Spawn WallDestroy(const Rules& rules, const glm::dvec2& wallPx, double wallZ, double wallAngleDeg, double effectScale);
+
+// AddEntity at an entity's own GetPosition() - its z plus the row's - and
+// turned by its GetAngle() as it is: a row of Turn::EntityAngle, which is
+// light_wall_create and light_wall at the ghost addLightWall seeks, and the light
+// wall's own dust (ETHCallback_light_wall #109-134). WallDestroy is this with a
+// breakable wall's effectScale on top.
+Spawn OnEntityTurned(const Rule& rule, const glm::dvec2& entityPx, double entityZ, double entityAngleDeg);
+
+// MainCharacter::addTrail's clock, one frame of it: `tickMs` added whatever the
+// speed (#8-24), and true - the clock back at 0 - where `speed` (the body's, in
+// the port's metres a second) is above trailMinSpeed and the clock above
+// trailEveryMs, both strictly (#44-60, #82-95).
+bool TrailDue(const Rules& rules, double& clockMs, double speed, double tickMs);
+
+// ETHCallback_door_lift #402-434 (`opening`) and #548-580: AddScaledEntity(
+// 'door_lift_particles.ent', door.GetPosition() -/+ vector3(0, 0.5 x GetSize().y,
+// 0), getScale()) - at the door's point moved down the screen by the row's share
+// of `doorHeightUnits`, the door's own drawn height, and never turned; its z the
+// door's plus the row's bare 0 (OnEntityBare).
+Spawn DoorLiftDust(const Rules& rules, bool opening, const glm::dvec2& doorPx, double doorZ, double doorHeightUnits,
+                   double scaleFactor);
+
+// A spent key's fly-in, as far as the port draws it: the clock of the
+// WaypointManager ETHCallback_key builds for it, which says when key_unlock_halo
+// is added. The flight itself - the key swung to the keyhole, slid in and faded -
+// is not built (keys.json _not_built); nor is the key deleted at its last frame.
+struct FlyIn {
+    bool found = false;     // the key found its keyhole (Keys::Key::spent turned over)
+    bool built = false;     // the next frame: the manager built and its clock at 0
+    double ms = 0.0;        // the manager's m_time since
+    bool haloAdded = false; // frame 1 reached, and the halo added: once
+};
+
+// One tick of it, given the key's state after the tick and the tick's length:
+// true on the one tick key_unlock_halo is added. The tick `spent` first reads
+// true is the frame foundKeyhole is set on; the next builds the manager with its
+// clock at 0; every later one adds its ms, and the first to reach
+// keyUnlockHaloAfterMs steps the manager to frame 1 - the 41st tick after the
+// unlock at 60 Hz.
+bool AdvanceFlyIn(const Rules& rules, FlyIn& clock, bool spent, double tickMs);
+
+// ETHCallback_projectile's first frame: projectile_shoot where the shot has
+// jumped to, `offsetUnits` out from `fromPx` along normalize(towardPx - fromPx),
+// in the script's floats; unturned.
+Spawn ProjectileShoot(const Rules& rules, const glm::dvec2& fromPx, const glm::dvec2& towardPx);
 
 // The colour PortalManager::update gives the portal at `index` of an array of
 // `placed` portals on a level whose maxPortals is `maxPortals`, or nothing when
@@ -298,9 +519,10 @@ Spawn Skull(const Rules& rules, const glm::dvec2& atPx);
 // 0, ...) - drawn at the shot's own point from its first call, turned along its
 // direction by that call (#139-148).
 Spawn EnemyShoot(const Rules& rules, const glm::dvec2& shotPx, const glm::dvec2& direction);
-// addEnemyShoot #127-156: AddEntity('portal_mark.ent', vector3(finalPos, scale(32)),
-// 0, ..., getScale()).
-Spawn EnemyShootMark(const Rules& rules, const glm::dvec2& finalPx);
+// addEnemyShoot #127-156's AddEntity('portal_mark.ent', vector3(finalPos, scale(32)),
+// 0, ..., getScale()) is the player's shot's call with the same arguments: the
+// layer adds it as At(rules.portalMark, finalPos), one row for both callers
+// (planning step 112).
 // ETHCallback_enemy_shoot #57-71, its first call, after the nudge:
 // AddScaledEntity('projectile_shoot.ent', GetPosition(), getScale()) - the shot's
 // own vector3, its depth `shotZUnits` included.

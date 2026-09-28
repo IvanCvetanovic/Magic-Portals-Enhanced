@@ -199,6 +199,7 @@ void State::BeforeStep(entt::registry& registry) {
 std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity player,
                                           const Portals::State& portals, float dt) {
     std::vector<entt::entity> broken;
+    brokenNow.clear();
     const bool hasPlayer = player != entt::null && registry.valid(player);
     const double reachPx = rock.radiusPx + contactMarginPx;
     for (const Rock& made : rocks) {
@@ -234,6 +235,7 @@ std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity
         registry.destroy(made.body);
         broken.push_back(made.body);
         ++rocksBroken;
+        brokenNow.push_back(Launchers::StoneGone{made.name, at});
     }
     std::erase_if(rocks, [&broken](const Rock& r) {
         return std::find(broken.begin(), broken.end(), r.body) != broken.end();
@@ -271,6 +273,7 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, const std
         if (Squared(PxOf(registry, stone) - currentPx) >= reach2) continue;
         // Its velocity against (0, -1), up on screen, is above 0.
         if (-VelocityPx(registry, stone).y <= 0.0) continue;
+        turn.brokenPx.push_back(PxOf(registry, stone));
         registry.destroy(stone);
         turn.broken.push_back(stone);
         std::erase_if(rocks, [stone](const Rock& r) { return r.body == stone; });

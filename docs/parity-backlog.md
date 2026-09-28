@@ -895,9 +895,11 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       lands.
 - [ ] **Order 11.3 deviation, the character's point is its capsule centre** (step 96): the door's sparkles and a
       character's blood sit about 3.9 u high (22 u over the feet against the original's 18.1). R25's player half.
-- [ ] **Order 11.3 deviation, no `startEarthquake`** (step 96): the fall's shake (20, or 5 weightless) and the killer
-      floor's (20) are not wired on `main`; F13 shows the fall's from the skull's first frame. Next: the merge with
-      track B's earthquake (step 121 on `visuals-d`), or after it.
+- [x] **Order 11.3 deviation, no `startEarthquake`** (step 96): the fall's shake (20, or 5 weightless) and the killer
+      floor's (20) were not wired on `main`. **Closed by the merge of the two tracks (step 112):** both are
+      `earthquake.json`'s `fall` / `fall_no_gravity` and `minion_killed`, track B's step 101 (written as 121 on
+      `visuals-d`), live on `main` since the merge and checked through the layer there by `AFallShakesTheView` and
+      `EventsALevelMakesOnItsOwnShakeTheView` (`test_mp_layer` 2901 checks, 0 failures).
 - [ ] **Order 11.3 deviation, `fire32.ent` has no step** (step 96): 00_order section 5 names F13 for "11.3 `skull`,
       `blood`, `fire32`", section 7's 11.3 and `system_7` 7f do not. F13's fire death shows flames the port does not
       draw. Next: the owner assigns it.
@@ -967,7 +969,10 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       -1.432 < knight -1.430 < player -1.428). Not fixed at the commit: a test edit relinks the suite and needs a launch
       under Smart App Control. Next: at both call sites `const auto minionReports = layer.MinionReports();` then
       `MinionOf(minionReports, ...)`; relink `test_mp_layer` once, launch it once, record the count in step 97.
-- [ ] **Order 11.4 merge note, Q.2's `minion_impact` must still leave the black knight out** (step 97). On `visuals-d`,
+- [x] **Order 11.4 merge note, Q.2's `minion_impact` must still leave the black knight out** (step 97). **Closed by the
+      merge (step 112):** `impactBodies` reads `Minion::entity` (`!Earthquake::IsEntity(minion.entity, ...)`), and the
+      new `TheBlackKnightsLandingMakesNoTremble` drops level31b's knight 30 units onto its floor and pins 0 begins of
+      its own (`test_mp_layer`). The fall sound, the `holdTime` cap and `ScoreDashboard` counts below stay open. On `visuals-d`,
       Q.2 (`7465279`) skips the knight with `!minion.entityName.empty() && !Earthquake::IsEntity(minion.entityName, ...)`;
       step 97 renames the field `Minion::entity` and it is never empty (`minion.ent` by default). When `visuals-d`
       merges, re-point that test at `minion.entity` so `ghost_minion.ent` stays out of `minion_impact`, as the
@@ -1012,8 +1017,8 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       original is silent at load on level0c, level18c, level31b and level31c, and plays the boss's music from load on
       2-32. The port plays "game" on all of them (and "boss" on 1-32); step 98 switches 3-32 to the boss's music from the
       ghost's init and to silence from its DEATH. Audio only. Next: the sound's owner.
-- [ ] **Order 12.2, not built** (step 98, deviation 6): the ghost's and its shot's sounds; the shot's
-      `startEarthquake(10)` (#331-333, waits on Q.1); RAGE_MODE's own fire-diamond restock every frame while the player
+- [ ] **Order 12.2, not built** (step 98, deviation 6): the ghost's and its shot's sounds (the shot's
+      `startEarthquake(10)`, #331-333, is `earthquake.json`'s `enemy_shot_end` since the merge, step 112); RAGE_MODE's own fire-diamond restock every frame while the player
       lives (#1034-1071); the DAMAGE and DEATH explosions and the death blast's 2.0; `ghost.ent`'s static box, which fails a
       portal ray across it (F15 finding 2, `computePortalFinalPos` #30, #136-175); the static bucket clock (a ghost off the
       view does not advance in the original; a knight killed on the floor at y 768 adds it far below the view); an
@@ -1049,11 +1054,15 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       `game/MagicPortalsLayer.hpp`: the `GhostQuad` block now sits between 2-32's dragon comment ("dragon_boss.png cut
       2 x 2 ...") and `m_dragonCut`, which it describes. Next: move the block above that comment in a step that relinks
       anyway - a header edit relinks every suite under Smart App Control.
-- [ ] **Order 12.2 merge notes (`visuals-d`)** (step 98): the effects runtime now cuts a picture of more than one cell with
+- [x] **Order 12.2 merge notes (`visuals-d`)** (step 98): the effects runtime now cuts a picture of more than one cell with
       `Tiers::FrameCut` and turns its pivot with its angle - any track-B effect with more cells, or a pivot and an angle,
       moves; `effects.json` `enemy_shoot_mark` and track B's 10.1 `portal_mark` row for the player's shot are two call
       sites, keep both; `Slot::Ghost` joins the between-slot table; `Minions::Death::byFire` is new; the enemy shot's
-      `startEarthquake(10)` is Q.1's to wire. Next: the merge agent.
+      `startEarthquake(10)` is Q.1's to wire. **Done by the merge (step 112)**, with one note not followed: the run's
+      instruction for the merge was ONE spawn rule for `portal_mark`, so `enemy_shoot_mark` is folded into
+      `portal_mark` (the same numbers) and the ghost's shot adds it at `Ghost::Shot::destinyPx` once, where both tracks
+      would otherwise have added one each. The pivot and the cut apply to every effect; `Slot::Ghost` is row 13 of 22;
+      `enemy_shot_end` reads the ghost's shots as track B wired it. Step 112 has each.
 - [ ] **Order 12.1 deviation, the dark dragon at z 0 where the plan said 8** (step 99, deviation 1): `originalPos` is
       written as `vector3(waypoint.pos, 0)` (`ETHCallback_dark_dragon` ins 529-537) and the hover's `SetPosition` on
       this physics entity writes z (`linearMotion` ins 180-208, `ETHPhysicsEntityController.cpp:92-96`), so from its
@@ -1069,8 +1078,9 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       callback orders them. Gameplay: a blast on the update it fires lets that shot leave; a wound below half the interval
       enters DAMAGE with its mouth killed (the first round's DEV burns kept it burning through the second wound and the
       death); a burn after the level is finished is not read.
-- [ ] **Order 12.1, not built** (step 99, deviation 5): the dark dragon's sounds; its earthquakes (every update of the
-      jaw's waypoint past bias 0.2 at 10, ins 573-578, and 15 per shot, ins 980-982 - Q.1's to wire); the scattered
+- [ ] **Order 12.1, not built** (step 99, deviation 5): the dark dragon's sounds (its earthquakes - every update of the
+      jaw's waypoint past bias 0.2 at 10, ins 573-578, and 15 per shot, ins 980-982 - are wired since the merge, step
+      112: `dark_dragon_mouth` reads this path's waypoint and bias); the scattered
       `small_explosion_no_light.ent` of DAMAGE and DYING (`darkDragonOvertimeSmallExplosionAdder`, ins 1558-1563,
       1813-1818) and the death's `explode`; `ghost_utility_spawn.ent`; the barrel bomb's restock after each shot
       (`addEntityIfItCantBeFound`, ins 997-1064) - gameplay, the level's only weapon comes back only through it: level31c
@@ -1120,7 +1130,10 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       the port not ticking a paused level, as step 77's. Next: those rows.
 - [ ] **Order 12.1 tidy, two WaypointManagers** (step 99): `Ghost::Appear` and `DarkDragon::Path` are the same
       `FrameTimer` arithmetic twice. Next: one `sim` WaypointManager both use, in a step that touches the ghost anyway.
-- [ ] **Order 12.1 merge notes (`visuals-d`)** (step 99): Q.1's earthquake - the dark dragon asks for
+- [x] **Order 12.1 merge notes (`visuals-d`)** (step 99), **done by the merge (step 112)**: the mouth's shake reads
+      `DarkDragon::State::path` (its `frame` and `Bias()`) and the shot's reads `fired` in FIGHTING, from the layer as
+      every other call is, so neither `Look` nor `Turn` grew a field; the emissive, the owner kind and the DEV entries
+      merged as they were. The note: Q.1's earthquake - the dark dragon asks for
       `startEarthquake(10)` on every update of the jaw's waypoint past bias 0.2 (ins 573-578) and `startEarthquake(15)`
       per shot (ins 980-982), carried by neither `DarkDragon::Look` nor `Turn` yet; `EffectOwner::Kind::DarkDragon` and
       the effect's own `emissive` are new in the runtime, and `tint` now reads it (the `.ent`'s unless a script writes

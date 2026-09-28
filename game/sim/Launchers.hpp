@@ -75,11 +75,28 @@ struct Despawner {
     Trigger::Box box;
 };
 
+// A stone something destroyed - its `destroy` datum set - by name, and where it
+// stood as the step left it: where ETHCallback_rolling_stone adds
+// rolling_stone_destroy.ent (the layer's picture, the visuals plan's 11.1).
+// Written for the picture; nothing in the simulation reads one. The beholder's
+// rocks are recorded in this shape too (Boss::State::brokenNow).
+struct StoneGone {
+    std::string name;
+    glm::dvec2 atPx{0.0};
+};
+
 struct State {
     std::vector<Launcher> launchers;
     std::vector<Despawner> despawners;
     std::vector<Thrown> live; // thrown and not yet removed, oldest first
     int removed = 0;
+    // Of those, the ones a despawner took rather than the box: what
+    // ETHBeginContactCallback_rolling_stone destroys a stone for touching
+    // destroyier.ent, and shakes the screen for (earthquake.json
+    // stone_despawned). Counted for the picture; nothing here reads it.
+    int despawned = 0;
+    // And each of them this tick, where it stood (Cull empties it first).
+    std::vector<StoneGone> despawnedNow;
 
     // Before the step: each launcher whose time has come throws. Returns what
     // was thrown this tick, which is also in `live`.

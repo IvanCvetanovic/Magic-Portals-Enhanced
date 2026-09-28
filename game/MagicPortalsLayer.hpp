@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <entt/entt.hpp>
@@ -24,10 +25,12 @@
 #include "sim/Chapters.hpp"
 #include "sim/Credits.hpp"
 #include "sim/Dashboard.hpp"
+#include "sim/Earthquake.hpp"
 #include "sim/Effects.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
 #include "sim/Hud.hpp"
+#include "sim/Impacts.hpp"
 #include "sim/LevelEnd.hpp"
 #include "sim/Lighting.hpp"
 #include "sim/Loading.hpp"
@@ -312,6 +315,31 @@ public:
     // not running on a space level, or where the art was not read.
     const Sky::Controller& SkyController() const { return m_sky; }
 
+    // THE EARTHQUAKE (sim/Earthquake.hpp, earthquake.json): the original's one
+    // camera shake. The generator as the last tick left it, and the move it gave
+    // the DRAWN camera on that tick, in the level's units along y, down positive:
+    // 0 on a tick with no tremble. Only the drawn camera moves - OnUpdate adds it
+    // after the engine has drawn the camera between ticks - so the camera a tick
+    // reads, and every tap mapped through it, stays at rest (D11 section 3).
+    const Earthquake::Generator& Quake() const { return m_quake; }
+    double QuakeOffsetUnits() const { return m_quakeOffsetUnits; }
+    // The move the next frame draws: the last tremble until one frame has drawn
+    // it, however many ticks came after it without one; then the last tick's.
+    double QuakeFrameUnits() const { return m_quakeFrameUnits; }
+    // The pairs that began to touch in the last step, as the impact rows read
+    // them (sim/Impacts.hpp): every begin of the player, a stone and a minion,
+    // whether or not it called.
+    const std::vector<Impacts::Begin>& ImpactBegins() const { return m_impactBegins; }
+    // The entity name of the node a body was built from; empty for a body no
+    // node places (the player, a thrown stone, a rock, a minion).
+    std::string EntityNameOf(entt::entity body) const;
+    // A startEarthquake call, landed on its row's side of this tick's update
+    // (Earthquake::When). Every wired event reaches the generator through here
+    // (latchSimQuakes, latchDoors); public so that a suite can shake a level
+    // with no event to hand. `scale` multiplies the row's intensity: a wall's
+    // destroyEffectScale.
+    void QueueQuake(Earthquake::Call call, double scale = 1.0);
+
     // What each particle system is doing, for the suites, in the order they were
     // built: whom it follows, where it draws, and the place its newest life began.
     struct EmitterReport {
@@ -319,7 +347,10 @@ public:
         std::string bitmap; // Particles::System::bitmap
         std::string image;  // the file drawn for it: its tier file where one exists (drawnImage)
         double systemSize = 0.0; // Particles::System::size as built: its entity's scale applied
-        glm::dvec2 cellPx{0.0};  // one cell of its bitmap in units, split evenly, which a quad stretches square
+        // One cell of its bitmap in units as its quads sample it, which a quad
+        // stretches square: split evenly, or where the units do not divide by the
+        // cut, the whole-unit frame SetupSpriteRects cuts (Emitter::wholeUnitCut).
+        glm::dvec2 cellPx{0.0};
         int slot = 0;       // which of its entity's systems
         int systems = 0;    // of how many
         bool additive = false;
@@ -370,8 +401,9 @@ public:
     // itself wrong: the original's escort is spawned by a dying minion and shares
     // its depth.
     //
-    // The rows below are in the order the layer ADDS their quads, which is the
-    // nearest thing the port has to the same rule: the dials, then the rings,
+    // The rows that share a fraction are in the order the layer ADDS their
+    // quads, which is the nearest thing the port has to the same rule: the
+    // dials, then the rings,
     // then a weightless room's door glow in buildSprites, the halos in
     // buildLights after it, then a tick's syncDrawables (a thrown stone),
     // syncBoss (the beholder, its spikes), syncMinions (a minion, then an
@@ -406,8 +438,40 @@ public:
     //
     // NOT IN THE TABLE. The loading screen draws in a space of its own (0.32 for
     // the portal's systems, 0.6 and 0.61 for the vanish), because no level's
-    // slots exist while it is up.
+    // slots exist while it is up. And the black bars round the scene stand at
+    // kLayerableTopZ, below: in front of everything, not between two slots.
+    //
+    // THE SHOT (00_order K14, the visuals plan's 10.1) stands at the FRONT of the
+    // gap after the level's pictures at or below its z of 0 and BEHIND everything
+    // else in it: addProjectile adds it at z 0 (#16-40), after the level, so it
+    // is drawn over every picture of the level at 0 or below; but the player R10
+    // puts at 4 (1.42), and a minion at its raw 2 (0.711), stand at larger z and
+    // are drawn over it, and they share its gap wherever no node stands between
+    // 0 and them - so the shot takes a fraction of its own below their -0.5, and
+    // its halo one after its picture (Ethanon draws an entity's sprite, then its
+    // halo, at the entity's own z: ETHEntityRenderingManager.cpp:74, 85). Both
+    // stay in front of the previous slot's own halo (-0.75) and particle systems
+    // (up to -0.5 - 0.25 / (n + 1) for n of them; the most any entity carries is
+    // 2, whose last stands at -0.583), which is pinned in test_mp_layer. It was a
+    // quarter IN FRONT of the player's slot until step 103: K14. The price of a
+    // table that orders by class and not by z: a -0.5 class whose own z is BELOW
+    // 0 - a dial, a ring, a door glow, a spike, a wall's ghost - is drawn over
+    // the shot where the two share a gap, where the original draws it under.
+    //
+    // THE SHOCK RING (the visuals plan's 13.1, 00_order 8.13's K13 row) is the one
+    // class that pays none of that price: it stands at the absolute -10 its agent
+    // gives it, deeper than every other class the table holds but the door glow's
+    // -22, so it takes a fraction of its own BEHIND all of them - behind the shot,
+    // a minion and an effect wherever it shares their gap, as the original draws
+    // it - and still in front of the previous slot's halo and of its deepest
+    // system for up to 6 of them (the most any .ent carries is 2). Where it shares
+    // a gap with a door glow (4-04 to 4-08, 4-12, 4-14 and 4-15 place both) the two
+    // are drawn the other way round from the original's -22 behind -10; both are
+    // added (AM_ADD, GL_ONE, GL_ONE), and an add commutes, so no pixel shows it.
     enum class Slot {
+        ShockRing,      // a shock agent's ring, at the absolute -10 its AddEntity gives it
+        ShotPicture,    // the portal shot, at the z 0 addProjectile gives it, behind the player
+        ShotHalo,       // the shot's halo, after its picture and still behind the -0.5 classes
         TimerDial,      // a timed crystal's dial, its crystal's z_index - 2 (art.json timer)
         WellRing,       // a gravity well's green ring, at the -5 its AddEntity gives it
         DoorHighlight,  // the glow behind a weightless room's shadowless door, at its own -22
@@ -426,9 +490,7 @@ public:
         EffectSystems,  // and its particle systems, spread over the quarter after that halo
         Picture,        // a level's own picture, and the player's: the slot itself
         Halo,           // a light's halo, a quarter in front of its owner's picture
-        ShotPicture,    // the portal shot, a quarter in front of the player
         Systems,        // an entity's particle systems, spread over the quarter after its halo
-        ShotHalo,       // the shot's halo, in front of the shot
         Count
     };
     struct SlotRow {
@@ -449,6 +511,9 @@ public:
         bool spreads;
     };
     static constexpr std::array<SlotRow, static_cast<std::size_t>(Slot::Count)> kSlotTable{{
+        {Slot::ShockRing, "shock ring", -0.53125, false},
+        {Slot::ShotPicture, "shot", -0.515625, false},
+        {Slot::ShotHalo, "shot halo", -0.5078125, false},
         {Slot::TimerDial, "timer dial", -0.5, false},
         {Slot::WellRing, "gravity well ring", -0.5, false},
         {Slot::DoorHighlight, "door highlight", -0.5, false},
@@ -467,13 +532,24 @@ public:
         {Slot::EffectSystems, "effect particle systems", -0.25, true},
         {Slot::Picture, "picture", 0.0, false},
         {Slot::Halo, "halo", 0.25, false},
-        {Slot::ShotPicture, "shot", 0.25, false},
         {Slot::Systems, "particle systems", 0.25, true},
-        {Slot::ShotHalo, "shot halo", 0.5, false},
     }};
     static constexpr double SlotFractionOf(Slot slot) {
         return kSlotTable[static_cast<std::size_t>(slot)].fraction;
     }
+
+    // THE TOP OF THE SCENE (00_order K13's row for black_bar, 8.13): where a
+    // layerable entity at depth 1.0 is drawn. Ethanon draws a layerable entity at
+    // Max(0.001, layerDepth) whatever its z (ETHSpriteEntity.cpp:34, :626-628), and
+    // 1.0 is the front of the range every other piece of the scene is normalised
+    // into, particles included (ETHEntityRenderingManager.cpp:37, 70-71). So it is
+    // not between two slots and not a row of the table: it is one z in front of every
+    // z the layer gives anything else - the level's slots from kSpriteBackZ, what
+    // stands between them, and the boxes a player turns on over the art at the
+    // markers' 0.5 - and behind the camera's near plane at 20 - 0.1. The screen
+    // overlay (the HUD) is drawn after the scene and stays over it, as the original's
+    // top layer is. test_mp_layer pins the value and that nothing else reaches it.
+    static constexpr float kLayerableTopZ = 1.0f;
 
     // ---- the effects the script ADDS (system_7 7a-2) ------------------------
     //
@@ -486,15 +562,16 @@ public:
     // (buildEyes, the visuals plan's 7.1), and latchSimEffects - the place the
     // TICK queues from - adds every fireball in flight, a small_explosion where
     // one was destroyed and an explosion_large where a bomb went off (7.2). The
-    // steps that draw the rest wire their own rules there (7.3 teleport, 10.x
-    // pickups, and 11.3's blood and skull for a minion that dies); the level's
-    // end and the player's death queue theirs from the tick that decides them
-    // (latchFinishEffects, latchDeathEffects). And a minion whose entity carries
-    // particle systems - the ghost_minion's aura, 3-32's black knight - has them
-    // added once, carried by its picture, with no picture of the runtime's own
-    // (latchSimEffects, planning step 97). The suites also spawn them by hand,
-    // which is how the light cap and the free rules are measured without a level
-    // that asks for one.
+    // steps that draw the rest wire their own rules there (7.3 teleport, 10.1 the
+    // shot's marks, 10.2 a crystal's pick and vanish, 10.3 to 11.2 what a key, a
+    // diamond, a wall and a torch leave, and 11.3's blood and skull for a minion
+    // that dies); the level's end and the player's death queue theirs from the
+    // tick that decides them (latchFinishEffects, latchDeathEffects). And a minion
+    // whose entity carries particle systems - the ghost_minion's aura, 3-32's
+    // black knight - has them added once, carried by its picture, with no picture
+    // of the runtime's own (latchSimEffects, planning step 97). The suites also
+    // spawn them by hand, which is how the light cap and the free rules are
+    // measured without a level that asks for one.
     struct EffectOwner {
         enum class Kind {
             None,         // it stays where it was added
@@ -519,6 +596,17 @@ public:
             // dark_dragon.ent the summon adds, whose cell, angle, emissive and mouth
             // the runtime takes from the sim's Look every frame (planning step 99).
             DarkDragon,
+            // Chapter 4's torch and wall (the visuals plan's 11.2), each by what the
+            // original deletes it with. The orbiting fire signal, while Torch has
+            // one (its callback moves it every frame and it is deleted when shot);
+            // the lit torch `index`, while Torch says it is lit
+            // (deleteLightFromProjectile); the torch `index` put back unlit, until
+            // the tick after it is lit again (its `delete` branch); and the light
+            // wall addLightWall built, until the wall is gone again.
+            FireSignal,
+            LitTorch,
+            UnlitTorch,
+            LightWall,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -567,6 +655,18 @@ public:
         // And its ETHEntity::Scale(n) every frame: its systems' lengths and every
         // live particle's size and speed times this. 1 for everything else.
         double scalePerFrame = 1.0;
+        // ETHEntity::SetAlpha, which only its sprite reads either, and what its own
+        // callback adds to it each second of frame time up to 1: the light wall
+        // addLightWall builds is added at 0 and fades in (effects.json
+        // light_wall_at_ghost). 1 and 0 for everything else.
+        double alpha = 1.0;
+        double alphaPerSecond = 0.0;
+        // bounce(), where its callback runs one (effects.json light_from_projectile's
+        // `bounce`, on a level with a light wall): the entity's SetScale swung over
+        // its own, which moves its picture and its halo and never its particles
+        // (ETHEntity.cpp:601-608). Its clock starts at the entity's first frame.
+        bool bounces = false;
+        Art::Pulse bounce;
     };
     // AddEntity, on the FRAME and never on the tick: the effect's id, or -1 when
     // the level has no art, the .ent cannot be read, or what it is to follow has
@@ -602,7 +702,11 @@ public:
         // or for an AM_MODULATE system the multiply made from it.
         std::vector<std::string> systemImage;
         double scriptScale = 1.0; // the Scale() it was added with
-        double angleDeg = 0.0;    // Ethanon's angle, counter-clockwise on the screen
+        // The angle its AddEntity was given, or its script last set, in Ethanon's
+        // degrees (counter-clockwise on the screen): what its particles are turned
+        // by (Particles::Owner). A radian number on shock_strike, which the script
+        // hands over unconverted (Effects::Turn::RadiansAsDegrees).
+        double angleDeg = 0.0;
         int cell = 0;             // the cell of its picture's sheet it is drawn on
         glm::dvec2 centrePx{0.0}; // where its picture is centred: its point less its turned pivot
         glm::dvec2 cellPx{0.0};   // and its size there
@@ -612,7 +716,14 @@ public:
         // ETHEntity::SetEmissiveColor as it stands: the .ent's own, or what its
         // script last wrote (the dark dragon's flash).
         glm::dvec3 emissive{0.0};
+        double alpha = 1.0;     // ETHEntity::SetAlpha, on its sprite alone
         glm::dvec2 scale{1.0};  // times its <Scale>: the one its light and picture take
+        // What bounce() has its SetScale at this frame, over `scale`: 1 but for a lit
+        // torch on a level with a light wall. Its picture and halo take it.
+        glm::dvec2 bounceScale{1.0};
+        entt::entity quad{entt::null};  // its picture, where it has one
+        entt::entity light{entt::null}; // its light and its halo, where it has them
+        entt::entity halo{entt::null};
         // Its light and halo as the owner's scale leaves them (Lighting::OwnerScaled,
         // K7): the range in the level's units, and the halo quad's size in them.
         // Zero where it has neither.
@@ -620,8 +731,7 @@ public:
         glm::dvec2 haloPx{0.0};
         bool temporary = false; // ETHEntity::IsTemporary: the engine frees it when its pools are over
         bool hidden = false;    // its owner is hidden (the player in a door), so nothing of it draws
-        bool drawn = false;     // it has a picture quad
-        entt::entity quad{entt::null}; // and that quad
+        bool drawn = false;     // it has a picture quad (`quad` above)
         // Whether its first system is killed (KillParticleSystem): it releases no more.
         bool firstSystemKilled = false;
         bool hasLight = false;
@@ -780,6 +890,52 @@ public:
         double lookZ = 0.0;                // its depth in the level's units
     };
     LightWallGhostReport LightWallGhost() const;
+
+    // Chapter 4's torches as the layer draws them (the visuals plan's 11.2), per
+    // torch of Torch's: whether the level's own unlit picture still stands, and the
+    // depth the torch entity is at now.
+    struct TorchReport {
+        bool levelPicture = false; // its node's quad is there
+        bool unlitGone = false;    // the `delete` branch has run since it was last lit
+        double z = 0.0;
+    };
+    std::vector<TorchReport> TorchReports() const;
+    // A gravity well agent's turn, in Ethanon's degrees, as its callback sets it
+    // this tick (gravitywell.json roundabout): a whole turn at rest.
+    double WellSpinDegrees(int well) const;
+
+    // The four black bars round the scene (art.json black_bar): black_bar.ent as
+    // Game::manageSceneBounds adds it, placed once with the level at its max
+    // marker and never moved. Empty where the art did not read. In the order the
+    // script adds them: A and B above the scene, C and D below it.
+    struct BlackBarReport {
+        entt::entity quad{entt::null};
+        std::string texture;       // the tier file the original draws: black_bar.png, sd only
+        glm::dvec2 centrePx{0.0};  // its centre, in the level's units
+        glm::dvec2 sizePx{0.0};    // black_bar.png's units at the entity's scale: 512 x 32
+        float z{0.0f};             // kLayerableTopZ
+    };
+    std::vector<BlackBarReport> BlackBars() const;
+
+    // The ring each shock agent adds round itself (art.json shock_ring, the visuals
+    // plan's 13.1): shock_area.ent at the field's point, the lethal diameter across,
+    // turned by game time on the tick and scaled by a fresh factor every frame, pause
+    // or not. One per Fields::State::fields entry and in its order; empty where the
+    // art or the .ent did not read. As the last frame left it.
+    struct ShockRingReport {
+        std::string field;             // the agent's node, Fields::Field::name
+        entt::entity quad{entt::null}; // null once its agent is gone
+        std::string texture;           // the tier file the original draws: hd/white_ring.png
+        bool additive = false;
+        glm::dvec2 atPx{0.0};          // the field's point, where the tick left it
+        double baseUnits = 0.0;        // scaleToSize's size: 2 x areaRadius
+        double jitter = 1.0;           // this frame's factor, in [from, from + span]
+        int jitters = 0;               // the factors drawn so far: one a frame
+        double turnedDeg = 0.0;        // AddToAngle's, counter-clockwise
+        float z{0.0f};                 // Slot::ShockRing after the art at or below -10
+        double lookZ = 0.0;            // its depth in the level's units: -10
+    };
+    std::vector<ShockRingReport> ShockRings() const;
 
     // The slot the player's picture is drawn in, and its depth in the level's units:
     // GameCharacter's 4 over the scale factor (art.json character.z, depth).
@@ -980,7 +1136,11 @@ public:
     // capture. With no point it lands on the centre of the level's first help
     // block, wherever the camera has it on that tick. The popups and the menu
     // states read it: it opens a help block's popup, closes one that is up, and
-    // presses a menu's buttons as a touch does.
+    // presses a menu's buttons as a touch does. During play it is the tick's touch
+    // readInput hands on, so it works a HUD control, presses a help block or fires
+    // the shot exactly as a real press at that point of the view would. The pause
+    // and the end screens still read the mouse alone; the pause's buttons have
+    // ScheduleDevPress.
     void ScheduleDevTap(int tick, std::optional<glm::dvec2> viewFraction, int releaseTick = 0);
     // DEV ONLY: a drag - a touch down at `from` on tick `tick`, moved at an even pace
     // to reach `to` on `releaseTick`, and released there. Both are fractions of the
@@ -1101,6 +1261,11 @@ private:
         int motion{-1};       // in m_motions: a crystal or key its script bobs
         bool antiportal{false}; // ETHCallback_antiportal blinks and turns it (art.json)
         int placed{-1};       // in m_placed: a picture its own callback sways, fades or turns
+        // Chapter 4's torch, in torch.lights: its picture goes on the tick after the
+        // torch is lit, as the original's entity deletes itself (m_torchWatch).
+        int torch{-1};
+        // A gravity well's agent, in wells.wells: a lap turns it (m_wellSpins).
+        int well{-1};
         // 2-32's boss: its node stands off the left edge of the level and its
         // callback flies it, turns it and cuts its sheet (sim/Dragon.hpp), and the
         // claw's rides the camera. Both are drawn from the sim, not from the node.
@@ -1123,6 +1288,8 @@ private:
     void buildCamera(entt::registry& registry);
     void buildDrawables(entt::registry& registry);
     void buildSprites(entt::registry& registry);
+    // The four black bars round the scene (m_blackBars), with the level's art.
+    void buildBlackBars(entt::registry& registry);
     void buildHud(entt::registry& registry);
 
     // The menu: opened onto a screen, drawn from its buttons, and taken down
@@ -1199,9 +1366,22 @@ private:
     // original hides its effects with rather than deleting them.
     bool effectOwnerPoint(const entt::registry& registry, const EffectOwner& owner, glm::dvec2& atPx,
                           bool& hidden) const;
-    // What the TICK adds to the frame's queue: each effect's rule arrives with the
-    // step that draws it.
-    void latchSimEffects();
+    // What the TICK adds to the frame's queue, each rule wired by the step that
+    // draws it. `fixedDelta` is the tick's length, which a spent key's fly-in
+    // clock counts (Effects::AdvanceFlyIn); `registry` is read for the player's
+    // point, where a shock ring's kill adds shock_death.
+    void latchSimEffects(const entt::registry& registry, float fixedDelta);
+    // Chapter 4's torches, their signal and their wall (the visuals plan's 11.2),
+    // from latchSimEffects: what lighting a torch, putting it out and the wall
+    // going add, each on the tick its state turns over.
+    void latchTorches();
+    // What a tap the shot was offered leaves behind (the visuals plan's 10.1),
+    // queued the moment Portals::State::Shoot returns: the mark a fired shot
+    // leaves at the tap - red_cross or portal_mark by computePortalFinalPos's
+    // willDie (R15), and red_waves (A) where that adds them - the hourglass for a
+    // tap refused while a shot flies, and red_waves (B) with its shake for one
+    // refused for a budget of 0 on a level with the no-portal sign.
+    void queueTapEffects(entt::registry& registry);
     // THE LEVEL'S END AND A DEATH (the visuals plan's 11.3), queued by the tick
     // that ends the level: levelFinishedEffect's suck at the door and sparkles at
     // the character, or checkGameLost's blood (killed) or skull (fallen). Called
@@ -1265,6 +1445,19 @@ private:
     // The ghost of a flagged light wall, made and unmade as the original adds and
     // deletes the entity, and placed at the pulse advanceMotions left it at.
     void syncWallGhost(entt::registry& registry);
+    // The shock rings (m_shockRings): made with the level's art, after every
+    // slotAfter the pictures in m_sprites take and before the door glow is pushed.
+    // ShockRingQuad is defined with the member that holds them, further down.
+    struct ShockRingQuad;
+    void buildShockRings(entt::registry& registry);
+    // On the tick: each ring to its field's point at the turn advanceMotions left,
+    // and gone with its agent.
+    void syncShockRings(entt::registry& registry);
+    // On the frame, pause or not: each standing ring's scale drawn afresh about its
+    // base, from m_effectRandom (ETHCallback_shock_area #51-66).
+    void jitterShockRings(entt::registry& registry);
+    // One ring's quad where its field, its turn and this frame's factor put it.
+    void placeShockRing(entt::registry& registry, const ShockRingQuad& ring);
     // One linearMotion call for every crystal and key whose script makes one this
     // tick (sim/Motion), and one call of every placed picture's callback, BEFORE
     // syncSprites draws where they leave them.
@@ -1514,13 +1707,9 @@ private:
     entt::entity m_shotLight{entt::null}; // the shot's own light while it flies
     entt::entity m_shotHalo{entt::null};  // and its halo, when its image is there
     bool m_lightMasksOff{false};          // ForceLightMasksOff
-    // light_from_projectile.ent's light and halo at each lit torch, in the order of
-    // Torch::State::lights; null while that torch is not lit (step 55).
-    struct TorchLight {
-        entt::entity light{entt::null};
-        entt::entity halo{entt::null};
-    };
-    std::vector<TorchLight> m_torchLights;
+    // (light_from_projectile.ent's light and halo, which step 55 built here, are the
+    // effects runtime's since the visuals plan's 11.2: the whole entity is added
+    // where a shot lights a torch, its light and its halo with it.)
     float m_direction{0.0f};                // this tick's walk: -1 left, 1 right, 0 standing
     bool m_facingRight{false};              // which way the player last walked
     // SideScrollerCharacter.pushing: whether the last step's ray met something
@@ -1586,6 +1775,49 @@ private:
         bool drawn{false};        // and a frame has stepped it: the original's first mapped frame
     };
     WallGhost m_wallGhost;
+
+    // THE BLACK BARS ROUND THE SCENE (art.json black_bar): black_bar.ent, four
+    // times, as Game::manageSceneBounds adds it on every level. Pictures with no
+    // node, placed once in the level's space and never moved, at kLayerableTopZ;
+    // off the view at rest, and uncovered only by a tremble, which moves the drawn
+    // camera past the clamp and the level with it. Their own quads, not m_sprites',
+    // whose indices are the drawing slots the between-slot table counts.
+    struct BlackBarQuad {
+        entt::entity quad{entt::null};
+        std::string texture;      // the tier file the original draws
+        glm::dvec2 centrePx{0.0}; // BlackBars::Centres, in the level's units
+        glm::dvec2 sizePx{0.0};   // black_bar.png's units at the entity's scale
+    };
+    std::vector<BlackBarQuad> m_blackBars;
+    // black_bar.ent as LoadEnt read it with the level: its emissive and lighting
+    // facts, which syncLighting tints the bars with.
+    Art::Entity m_blackBarEntity;
+
+    // THE SHOCK RINGS (art.json shock_ring): shock_area.ent, which each shock agent
+    // adds round itself on its first frame. Pictures with no node, one per field in
+    // Fields' order, their own quads and not m_sprites' - whose indices are the
+    // drawing slots slotAfter counts - made with the level's art and taken away with
+    // the agent. Picture-side only, never Game::Level or the state hash.
+    //
+    // TWO CLOCKS, as the original's one callback has them: the TURN is game time,
+    // stepped in advanceMotions, so a pause holds it; the JITTER is drawn every
+    // FRAME in OnUpdate, from m_effectRandom, and a pause does not stop it.
+    struct ShockRingQuad {
+        int field{-1};             // in fields.fields
+        entt::entity quad{entt::null};
+        std::string texture;       // the tier file the original draws
+        glm::dvec2 atPx{0.0};      // the field's point, as the last tick left it
+        double baseUnits{0.0};     // scaleToSize's size: the diameter
+        double jitter{1.0};        // this frame's factor
+        int jitters{0};            // the factors drawn so far
+        Motion::Turn turn;         // AddToAngle(unitsPerSecond(spin))
+        float z{0.0f};
+        double lookZ{0.0};
+    };
+    std::vector<ShockRingQuad> m_shockRings;
+    // shock_area.ent as LoadEnt read it with the level: its picture, blend,
+    // emissive and lighting facts.
+    Art::Entity m_shockRingEntity;
 
     // The minions and knights (art.json minion), one per Minions::State::minions
     // entry and in its order: that list only grows, by an escort the boss calls, and
@@ -1687,6 +1919,16 @@ private:
         bool lifted = false;
         glm::dvec2 cellPx{0.0};
         std::string image;
+        // A cut sheet whose units do not divide by its cut, cut as SetupSpriteRects
+        // cuts it - its stride in WHOLE units (gs2d Sprite.cpp:119-130) - where a
+        // flipbook's even split would sample past it: its quads take their uv from
+        // `cut` rather than from a SpriteAnimationComponent. Two sheets the game
+        // draws are such: an effect's shock_strike.png (512 over 5 is 102, not
+        // 102.4), and tesla_shock_black_bg.png (256 over 5 is 51, not 51.2), which a
+        // level's shock agents and shock diamonds carry (the visuals plan's 13.1,
+        // step 67's recorded deviation). One rule for every emitter: WholeUnitCut.
+        bool wholeUnitCut = false;
+        Tiers::Cut cut;
         int sprite = -1; // the sprite in m_sprites whose entity it belongs to: it goes when that goes
         int slot = 0;    // which of that entity's <ParticleSystem>s it is, from 0
         // ETHEntity::KillParticleSystem: no particle is renewed, and each lives out
@@ -1723,6 +1965,16 @@ private:
         // ETHEntity::SetEmissiveColor: the .ent's <EmissiveColor> when it is added,
         // and what its script writes after (the dark dragon's DAMAGE and DYING).
         glm::dvec3 emissive{0.0};
+        // ETHEntity::SetAlpha, which only its sprite reads, and what its callback
+        // adds to it a second up to 1 (EffectSpawn::alphaPerSecond).
+        double alpha = 1.0;
+        double alphaPerSecond = 0.0;
+        // bounce() on its SetScale, over `scale` (EffectSpawn::bounces): its clock
+        // in ms and what it gives this frame.
+        bool bounces = false;
+        Art::Pulse bounce;
+        double bounceMs = 0.0;
+        glm::dvec2 bounceScale{1.0};
         glm::dvec2 scale{1.0};    // times its <Scale>: what its picture, halo and light take
         double zUnits = 0.0;
         bool temporary = false; // the engine frees it once its pools are over
@@ -1798,6 +2050,91 @@ private:
     // this one, so a fireball spat on a tick that did not reach the latch - one
     // under a pause, whose BeforeStep still runs - is picked up on the next.
     std::vector<std::string> m_fireballEffects;
+    // Per crystal of Goals', in its order: whether what it leaves where it was -
+    // crystal_pick when taken, crystal_vanish when its time ran out - has been
+    // queued. A state walk rather than a count, so the one queued is the one
+    // that went, at its own point; sized by the first latch of a level.
+    std::vector<char> m_crystalEffects;
+    // Per key of Keys', in its order (the visuals plan's 10.3): the carrier it
+    // had at the last latch - key_pick is queued when that CHANGES to one; a
+    // drop and re-take by one carrier between latches is no change - and its
+    // fly-in clock once spent, which queues key_unlock_halo. Grown, never
+    // snapshotted: a key the level starts with is unowned until a carrier takes
+    // it, so a pick on the very first tick (3-18's knight) is a pick; and a key a
+    // boss drops joins the end of Keys' list.
+    struct KeyWatch {
+        entt::entity owner{entt::null};
+        Effects::FlyIn flyIn;
+    };
+    std::vector<KeyWatch> m_keyEffects;
+    // Per keyhole of Keys': whether the three it adds as it goes - wall_destroy at
+    // its door, door_locked_vanish and keyhole_vanish - have been queued.
+    std::vector<char> m_keyholeEffects;
+    // What a diamond, a shock ring and a fire signal leave (the visuals plan's
+    // 10.4). Per diamond of Diamonds', in its order: whether it was held and
+    // whether it was gone at the last latch - a pick is queued where `held` turns
+    // on, and a fire diamond's water where `gone` does. Edges and not one-shot
+    // flags, because 3-32's boss puts a drained fire diamond back. Grown, never
+    // snapshotted: a diamond starts lying and standing.
+    struct DiamondWatch {
+        bool held = false;
+        bool gone = false;
+    };
+    std::vector<DiamondWatch> m_diamondEffects;
+    // Per shock agent of Fields', in its order: gone at the last latch (a
+    // fireball destroyed it: shock_death 10 in front of it).
+    std::vector<char> m_fieldEffects;
+    // Per breakable of Demolish', in its order (the visuals plan's 11.1): whether
+    // its breaking has been seen - a breakable_wall's wall_destroy is queued then.
+    // One-way, as a wall does not come back; sized by the first latch of a level.
+    std::vector<char> m_wallEffects;
+    // Whether a shock ring had claimed the player, and the player was dead, at
+    // the last latch: the ring's shock_death goes where it is the kill.
+    bool m_ringKillSeen{false};
+    bool m_playerDeadSeen{false};
+    // The torch's fire signal as the last latch saw it, and how many were put
+    // out: extinguish_fire goes at its originalPos - its torch's point - when the
+    // count goes up, by which time Torch has cleared the signal.
+    int m_signalsPutOut{0};
+    bool m_signalSeen{false};
+    glm::dvec2 m_signalOriginPx{0.0};
+    // Per torch of Torch's, in its order (the visuals plan's 11.2): lit at the last
+    // latch; whether the unlit torch is deleted - on the tick AFTER it is lit,
+    // which is when its `delete` branch deletes the entity, and back with the
+    // fresh light_off.ent a put-out adds; and the depth the torch entity stands at
+    // now - its node's eth_z, and after a put-out the bare 10
+    // ETHCallback_fire_signal adds the new one at, which the next lighting's
+    // entities are added on.
+    //
+    // ONE FRAME OF BOTH. The latch that sets unlitGone runs before the tick's
+    // syncSprites, so the level's own picture is last drawn on the frame after the
+    // lighting tick - the frame its lit torch is first drawn on - and the one a
+    // put-out added (EffectOwner::Kind::UnlitTorch) is let go on the same latch.
+    // The original's delete branch runs on the frame the lit torch is first drawn,
+    // after that frame's list of what to draw was made (Scene/ETHScene.cpp:482-511;
+    // 00_order 8.0 rule 6), so it too draws the two together once.
+    struct TorchWatch {
+        bool lit = false;
+        bool unlitGone = false;
+        double z = 0.0;
+    };
+    std::vector<TorchWatch> m_torchWatch;
+    // The light wall's going as the last latch saw it (Torch::State::wallsGone),
+    // and whether the wall standing now is one addLightWall built at the ghost -
+    // its point the ghost's, its depth the ghost's - rather than the level's.
+    int m_wallsGoneSeen{0};
+    bool m_lightWallRebuilt{false};
+    // MainCharacter::addTrail's trailElapsedTime (effects.json movement_trail).
+    double m_trailMs{0.0};
+    // ETHCallback_gravity_agent's effectAngleTime and effectAngleSign, per well of
+    // GravityWell's in its order: a whole turn at rest, from spin_ms; a lap by the
+    // visible player zeroes the clock and sets the sign (gravitywell.json
+    // roundabout).
+    struct WellSpin {
+        double ms = 0.0;
+        double sign = 1.0;
+    };
+    std::vector<WellSpin> m_wellSpins;
     // The cell the player was last drawn on, kept across the door: updateEyes
     // reads GetFrame every frame, and the quad it comes from is destroyed when the
     // character is hidden.
@@ -2205,14 +2542,15 @@ private:
     // written when its layer is updated, so under a stop it holds, and under a
     // popup raised as the level loads it is still the nothing it was built with.
     double m_plaqueAlpha{0.0};
-    // The pointer this tick as the popups read it - a real touch or a DEV one.
+    // The pointer this tick as the popups, the controls, a help block and the shot
+    // read it - a real touch or a DEV one, the port's one pointer path.
     struct Touch {
         bool pressed{false};
         bool released{false};
         bool held{false};
         bool over{false};         // on the game at all
         glm::dvec2 atView{0.0};   // design units on the view
-        glm::dvec2 atPx{0.0};     // the window's pixels, for the move a touch makes
+        glm::dvec2 atPx{0.0};     // the viewport's pixels: the move a touch makes, and where the shot goes
     };
     Touch touchThisTick(const entt::registry& registry);
     // A popup of `cls` over the level, game time stopped.
@@ -2295,12 +2633,119 @@ private:
     void layOutControls();
     // The no-portal sign a tick on, against the camera as this tick left it.
     void tickNoPortalSign(double dtMs);
-    // Which control the pointer is on, or nullptr. Asked once a tick, before a
-    // shot is fired, because a tap that works a control must not also open a
-    // portal under it.
-    const ControlButton* controlUnderPointer(const entt::registry& registry) const;
+    // Which control the tick's touch is on, or nullptr. Asked once a tick, before
+    // a shot is fired, because a tap that works a control must not also open a
+    // portal under it - a scheduled tap's as much as a real press's.
+    const ControlButton* controlUnderPointer(const Touch& touch) const;
     // Whether the level being played is the one whose pads pulse long and ring.
     bool tutorialPads() const;
+
+    // ---- the earthquake --------------------------------------------------------
+    //
+    // The generator is TICK state and the shake is FRAME state. Each tick the
+    // calls its events made land on their sides of one update (quakeTick), which
+    // gives the camera's move for that tick; each frame adds the move to the
+    // camera the engine has just drawn between ticks, and to the sky and the
+    // satellite pinned to it (shakeView). A tremble is held until a frame has
+    // drawn it, so every one is drawn however many ticks a frame runs - for one
+    // frame at 60 fps or below, as the original's is - and it is never smeared by
+    // the interpolation. Nothing here reaches Game::Level, the tick's camera or
+    // the state hash.
+    //
+    // The level's tick itself: what OnFixedUpdate ran before the earthquake,
+    // which now wraps it.
+    void fixedTick(entt::registry& registry, float fixedDelta);
+    // What the tick after the physics step did, against what it looked like
+    // before: every call site whose event is AfterStep's. Beside latchSimEffects.
+    void latchSimQuakes();
+    // And the switched doors, which Puzzle moves in BeforeStep: read at the
+    // tick's end, so a door's call lands on the tick it starts or lands, and the
+    // dust ETHCallback_door_lift adds with the call as it starts is queued there
+    // too (the visuals plan's 11.1).
+    void latchDoors();
+    // Whether a node is one of the entity both wall rows are callbacks of
+    // (earthquake.json wall_destroyed.entity, in either spelling): the walls a
+    // break shakes the view for and leaves wall_destroy at.
+    bool isBreakableWall(const std::string& node) const;
+    // The bodies' own impacts (rows 4, 8 and 25): the begins the step made, and
+    // a stone's touch of a breakable that Demolish took this tick (`struck`),
+    // which the watch cannot see once the breakable is gone.
+    void latchImpacts(const std::vector<const Demolish::Breakable*>& struck);
+    // Who the impact rows watch, as the step is about to be taken.
+    std::vector<Impacts::Watched> impactBodies() const;
+    // The update, between the tick's two sides of calls; on a tick with no level
+    // shown, nothing (the generator waits, and nothing is drawn).
+    void quakeTick();
+    // Take off what the last frame added, where the engine has not already put
+    // the tick's pose back; then add this tick's move (shakeView).
+    void liftQuake(entt::registry& registry);
+    void shakeView(entt::registry& registry);
+    // The drawn camera's move as the world's y, which runs up.
+    static float quakeWorldDy(double units);
+    bool levelShown() const;
+
+    Earthquake::Rules m_quakeRules; // the port's earthquake.json
+    // g_earthquakeGen: one for the game, and kept across a restart and into the
+    // next level, as the script module the original keeps it in is never rebuilt
+    // (earthquake.json generator._state; LEFT FOR THE OWNER).
+    Earthquake::Generator m_quake;
+    double m_quakeOffsetUnits{0.0}; // the move this tick gave the drawn camera
+    // What the next frame draws. A tremble is kept until a frame has drawn it,
+    // so a frame that runs two ticks or more draws the one its ticks made; the
+    // 70 ms beat is five ticks, so no frame the engine runs (five at most) holds
+    // two.
+    double m_quakeFrameUnits{0.0};
+    bool m_quakeFramePending{false};
+    // The impact rows' contacts: who carried what into the step, and the pairs
+    // that began to touch in it.
+    Impacts::Watch m_impacts;
+    std::vector<Impacts::Begin> m_impactBegins;
+    struct QuakeCall {
+        Earthquake::Call call{Earthquake::Call::Fall};
+        double scale{1.0};
+    };
+    std::vector<QuakeCall> m_quakeCalls; // this tick's, in the order they were made
+    // What the simulation looked like at the last latch, for the calls that are
+    // an edge or a count going up. Counters and one-way flags only; reset with
+    // the level, and its first latch sets the mark rather than firing.
+    struct QuakeWatch {
+        bool valid = false;
+        bool fell = false;
+        int blasts = 0;
+        bool beholderGone = false;
+        int beholderHits = 0;
+        int rocksBroken = 0;
+        bool darkDragonGone = false;
+        int darkDragonFired = 0;
+        DarkDragon::Phase darkDragonPhase = DarkDragon::Phase::Appearing;
+        bool ghostGone = false;
+        int ghostShotsEnded = 0;
+        std::vector<char> breakablesBroken; // char, not bool: see Watch
+        int despawned = 0;
+        int minionsKilled = 0;
+        int doorsUnlocked = 0;
+        std::vector<char> diamondsHeld;
+        int struck = 0;
+        int wallsGone = 0;
+    };
+    QuakeWatch m_quakeWatch;
+    struct DoorWatch {
+        bool valid = false;
+        std::vector<char> opening;
+        std::vector<float> progress;
+    };
+    DoorWatch m_doorWatch;
+    // What the last frame moved and where each thing stood before it, so the
+    // next can put it back where the engine does not: outside its loop, as a
+    // suite runs the layer. Put back, not moved back, so nothing drifts by a
+    // float's rounding however many frames one tick draws.
+    struct QuakeDrawn {
+        double units = 0.0;
+        bool onCamera = false;
+        float cameraRestY = 0.0f;
+        std::vector<std::pair<entt::entity, float>> quads;
+    };
+    QuakeDrawn m_quakeDrawn;
 };
 
 } // namespace MagicPortals

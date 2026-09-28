@@ -48,6 +48,7 @@
 #include "sim/Art.hpp"
 #include "sim/DarkDragon.hpp"
 #include "sim/Dragon.hpp"
+#include "sim/Earthquake.hpp"
 #include "sim/GravityWell.hpp"
 #include "sim/LevelEnd.hpp"
 #include "sim/Lighting.hpp"
@@ -71,6 +72,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <limits>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -97,12 +100,12 @@ MagicPortalsLayer::Paths TestPaths() {
     return paths;
 }
 
-// The viewport a frame would publish: the whole 1280x720 window, with the
-// pointer over the game.
-void publishViewport(entt::registry& registry) {
+// The viewport a frame would publish: the whole window, 1280x720 unless a case
+// says otherwise, with the pointer over the game.
+void publishViewport(entt::registry& registry, const glm::vec2& window = glm::vec2(1280.0f, 720.0f)) {
     ViewportInfo viewport;
     viewport.rect.min = glm::vec2(0.0f, 0.0f);
-    viewport.rect.max = glm::vec2(1280.0f, 720.0f);
+    viewport.rect.max = window;
     viewport.pointerOverGame = true;
     registry.ctx().insert_or_assign(viewport);
 }
@@ -262,6 +265,9 @@ entt::entity FirstTagged(entt::registry& registry, const char* tag) {
 
 // Defined further down, beside the checks that first needed it.
 bool EndsWith(const std::string& path, const std::string& file);
+// A field's ring among the layer's shock rings, or null (the visuals plan's 13.1).
+const MagicPortalsLayer::ShockRingReport* RingOf(const std::vector<MagicPortalsLayer::ShockRingReport>& rings,
+                                                 const std::string& field);
 
 // The original's extracted images - what no level pictures is drawn with - are
 // outside this repository like the levels, but a machine can have the levels and
@@ -406,6 +412,133 @@ void ATapLandsWhereItPoints() {
     CHECK_MSG(placed.size() == 2u && glm::length(placed[0].atPx - placed[0].basePx) <= 2.0,
               "and hovers within its stride of it");
     layer.OnDetach(registry);
+}
+
+// A TAP A CAPTURE SCHEDULES IS A PRESS AT THAT POINT (planning step 100).
+//
+// level30 places no help block, which is the case the backlog found inert: a
+// scheduled --tap there once fired nothing, because the shot read the mouse and
+// only a help block read the tick's touch. Four runs of it, ticked alike: in a
+// 1280x720 window and in a 960x540 one, one run pressed at a pixel as a player
+// presses, through Input's replay path, and one handed the same pixel as
+// ScheduleDevTap's fraction of the view, with the pointer at rest and nothing
+// pressed. All four fire from the player toward the point ATapLandsWhereItPoints
+// aims at, and open a portal there. The 960x540 pair pins the tap's pixels: a
+// scheduled tap reached the shot in 1280x720's pixels whatever the window, which
+// in a 960x540 one aimed it a third further from the view's corner.
+void AScheduledTapFiresTheShotARealPressFires() {
+    struct Fired {
+        bool loaded{false};
+        bool noHelpBlock{false};
+        int shots{0};
+        glm::dvec2 fromPx{0.0};
+        glm::dvec2 toPx{0.0};
+        std::vector<glm::dvec2> placed;
+    };
+    const glm::dvec2 aim(250.0, 150.0);
+    const auto run = [&aim](const glm::vec2& window, bool scheduled) {
+        Fired fired;
+        entt::registry registry;
+        publishViewport(registry, window);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) return fired;
+        fired.loaded = true;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        fired.noHelpBlock = layer.HelpBlockRects().empty();
+        waitForFirstTap(layer, registry);
+        // screenOf is 1280x720's, and the view is the same 16:9 in either window.
+        const glm::vec2 pixel = screenOf(registry, aim) * (window / glm::vec2(1280.0f, 720.0f));
+        if (scheduled) {
+            // Due at once: a scheduled tap is taken on the first tick at or after its own.
+            layer.ScheduleDevTap(1, glm::dvec2(pixel) / glm::dvec2(window));
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            tap(layer, registry, pixel);
+        }
+        const auto& portals = layer.SimLevel()->portals;
+        fired.shots = portals.shotsFired;
+        if (portals.flight) {
+            fired.fromPx = portals.flight->fromPx;
+            fired.toPx = portals.flight->toPx;
+        }
+        landShot(layer, registry);
+        for (const auto& portal : layer.SimLevel()->portals.placed) fired.placed.push_back(portal.basePx);
+        layer.OnDetach(registry);
+        return fired;
+    };
+    for (const glm::vec2& window : {glm::vec2(1280.0f, 720.0f), glm::vec2(960.0f, 540.0f)}) {
+        const std::string in = " in a " + std::to_string(static_cast<int>(window.x)) + "x" +
+                               std::to_string(static_cast<int>(window.y)) + " window";
+        const Fired pressed = run(window, false);
+        const Fired scheduled = run(window, true);
+        if (!pressed.loaded || !scheduled.loaded) {
+            CHECK_MSG(false, "level30 loads" + in);
+            return;
+        }
+        CHECK_MSG(pressed.noHelpBlock && scheduled.noHelpBlock, "level30 places no help block");
+        CHECK_MSG(pressed.shots == 1 && glm::length(pressed.toPx - aim) < 0.5,
+                  "a real press fires the shot at " + Point(aim) + in + ": " + std::to_string(pressed.shots) +
+                      " fired, toward " + Point(pressed.toPx));
+        CHECK_MSG(scheduled.shots == 1,
+                  "a scheduled tap fires it too, on a level with no help block" + in + ": " +
+                      std::to_string(scheduled.shots) + " fired");
+        CHECK_MSG(glm::length(scheduled.fromPx - pressed.fromPx) < 1e-9 &&
+                      glm::length(scheduled.toPx - pressed.toPx) < 1e-3,
+                  "from the same point toward the same point as the press" + in + ": " + Point(scheduled.toPx) +
+                      " against " + Point(pressed.toPx));
+        CHECK_MSG(pressed.placed.size() == 1u && scheduled.placed.size() == 1u &&
+                      glm::length(pressed.placed[0] - aim) < 0.5 && glm::length(scheduled.placed[0] - aim) < 0.5,
+                  "and both open their portal where they point" + in);
+    }
+}
+
+// A SCHEDULED TAP ON A CONTROL IS SPENT ON IT, as a press there is (planning step
+// 100). The controls read the tick's touch as the shot does, so a scheduled tap on
+// restart restarts the level and fires nothing, where it used to pass the
+// controls by and fire a shot into the corner under the button.
+void AScheduledTapOnAControlIsSpentOnIt() {
+    if (!OriginalArtIsThere("AScheduledTapOnAControlIsSpentOnIt")) return;
+    struct Spent {
+        bool ran{false};
+        double ageBefore{0.0};
+        double ageAfter{-1.0};
+        int shots{-1};
+    };
+    const auto run = [](bool scheduled) {
+        Spent spent;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) return spent;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        waitForFirstTap(layer, registry);
+        Hud::Rect rect;
+        if (!layer.ControlRect(MagicPortalsLayer::Control::Reset, rect)) return spent;
+        spent.ran = true;
+        const glm::vec2 pixel = ScreenOfView(layer, rect.Centre());
+        spent.ageBefore = layer.LevelAgeMs();
+        if (scheduled) {
+            layer.ScheduleDevTap(1, glm::dvec2(pixel) / glm::dvec2(1280.0, 720.0));
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            tap(layer, registry, pixel);
+        }
+        spent.ageAfter = layer.LevelAgeMs();
+        spent.shots = layer.SimLevel() != nullptr ? layer.SimLevel()->portals.shotsFired : -1;
+        layer.OnDetach(registry);
+        return spent;
+    };
+    const Spent pressed = run(false);
+    const Spent scheduled = run(true);
+    CHECK_MSG(pressed.ran && scheduled.ran, "level30 loads, with restart shown half a second in");
+    CHECK_MSG(pressed.ageBefore > 0.0 && pressed.ageAfter == 0.0 && pressed.shots == 0,
+              "a real press on restart restarts the level and fires nothing: age " +
+                  std::to_string(pressed.ageAfter) + ", " + std::to_string(pressed.shots) + " fired");
+    CHECK_MSG(scheduled.ageBefore == pressed.ageBefore && scheduled.ageAfter == 0.0 && scheduled.shots == 0,
+              "and so does a scheduled tap there: age " + std::to_string(scheduled.ageAfter) + ", " +
+                  std::to_string(scheduled.shots) + " fired");
 }
 
 void Level8FromTheSpawnWithTapsAndWalking() {
@@ -3071,9 +3204,13 @@ void AnEmitterFollowsItsOwner() {
 }
 
 // 2e on a cell that is NOT square: 3-24's shock agents draw tesla_shock_black_bg.png,
-// cut 5 x 2 from 256 x 64, cells of 51.2 x 32 - and every quad is still size by size
+// cut 5 x 2 from 256 x 64 - and every quad is still size by size
 // (ETHParticleManager.cpp:413). 1-1's cells are all square, so this is where a quad
-// taking its cell's shape would show.
+// taking its cell's shape would show. AND THE CELL IS THE ORIGINAL'S (the visuals
+// plan's 13.1, step 67's recorded deviation): SetupSpriteRects strides the sheet in
+// whole units, 51 x 32 (gs2d Sprite.cpp:119-130), so each quad samples 51 / 256 of
+// the texture across at a whole stride, where an even split's fifth, 51.2, sampled
+// 1.6 units past the last column's own.
 void AParticleOnANonSquareCellIsDrawnSquare() {
     if (!OriginalArtIsThere("AParticleOnANonSquareCellIsDrawnSquare")) return;
     entt::registry registry;
@@ -3088,8 +3225,8 @@ void AParticleOnANonSquareCellIsDrawnSquare() {
     for (const MagicPortalsLayer::EmitterReport& report : layer.EmitterReports()) {
         if (report.bitmap != "tesla_shock_black_bg.png") continue;
         ++shocks;
-        CHECK_MSG(std::fabs(report.cellPx.x - 51.2) < 1e-9 && std::fabs(report.cellPx.y - 32.0) < 1e-9,
-                  report.node + ": a 51.2 x 32 cell, " + std::to_string(report.cellPx.x) + " x " +
+        CHECK_MSG(report.cellPx == glm::dvec2(51.0, 32.0),
+                  report.node + ": a 51 x 32 cell, " + std::to_string(report.cellPx.x) + " x " +
                       std::to_string(report.cellPx.y));
         // No tier file: drawn from the bitmap named (00_order 2.3).
         CHECK_MSG(EndsWith(report.image, "/particles/tesla_shock_black_bg.png"), report.image);
@@ -3098,20 +3235,36 @@ void AParticleOnANonSquareCellIsDrawnSquare() {
 
     int shockDraws = 0;
     int notSquare = 0;
+    int notTheCut = 0;
+    std::set<int> columns;
     for (int frame = 0; frame < 120; ++frame) {
         tickWith(layer, registry, kRest, {}, {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         for (auto [entity, tag, material, transform] :
              registry.view<TagComponent, MaterialComponent, TransformComponent>().each()) {
-            (void)entity;
             if (tag.tag != "Magic Portals Particle") continue;
             if (transform.scale.x != transform.scale.y) ++notSquare;
-            if (EndsWith(material.albedoTexturePath, "/tesla_shock_black_bg.png")) ++shockDraws;
+            if (!EndsWith(material.albedoTexturePath, "/tesla_shock_black_bg.png")) continue;
+            ++shockDraws;
+            const float column = material.uvOffset.x / 0.19921875f;
+            const float row = material.uvOffset.y / 0.5f;
+            const bool whole = std::fabs(column - std::round(column)) < 1e-5f && column >= 0.0f && column <= 4.0f &&
+                               std::fabs(row - std::round(row)) < 1e-5f && row >= 0.0f && row <= 1.0f;
+            if (material.uvScale != glm::vec2(0.19921875f, 0.5f) || !whole ||
+                registry.all_of<SpriteAnimationComponent>(entity)) {
+                ++notTheCut;
+            }
+            columns.insert(static_cast<int>(std::lround(column)));
         }
     }
-    std::printf("  3-24: %d shock-cell particle draws over 120 frames, %d not square\n", shockDraws, notSquare);
+    std::printf("  3-24: %d shock-cell particle draws over 120 frames, %d not square, %d off the whole-unit cut, "
+                "%d columns seen\n",
+                shockDraws, notSquare, notTheCut, static_cast<int>(columns.size()));
     CHECK_MSG(shockDraws > 0, "a shock particle was drawn");
     CHECK_MSG(notSquare == 0, std::to_string(notSquare) + " particle draw(s) not square");
+    CHECK_MSG(notTheCut == 0, std::to_string(notTheCut) + " tesla_shock_black_bg.png draw(s) not at 51 / 256 x "
+                                                           "32 / 64 on a whole stride");
+    CHECK_MSG(columns.size() > 1, "and more than one column is drawn");
     layer.OnDetach(registry);
 }
 
@@ -4683,6 +4836,1609 @@ void TheSkyStaysOnTheViewAsTheCameraMoves() {
     CHECK_MSG(layer.CameraCentrePx().x > startX + 20.0, "the camera panned");
     CHECK_EQ(ticksOff, 0);
     CHECK_EQ(framesOff, 0);
+    layer.OnDetach(registry);
+}
+
+// ---- THE EARTHQUAKE (planning step 101) ------------------------------------------
+//
+// The original's shake moves only the camera a frame is drawn from, for one frame
+// at a time: the sky pinned to it goes with it, the camera a tick reads - and so
+// every tap - stays at rest, and nothing piles up however many frames are drawn
+// (D11 section 1d and 3; earthquake.json).
+
+// The light wall's 20, queued by hand: an after_update row, so it trembles on the
+// NEXT tick, forth by 7 units, and then every 5th tick, halving on each back.
+void TheShakeMovesTheDrawnCameraAndTheSkyWithIt() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    entt::entity sky = entt::null;
+    for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+        if (tag.tag == "Magic Portals Sprite" && material.albedoTexturePath.find("icy_sky.png") != std::string::npos) {
+            sky = entity;
+        }
+    }
+    CHECK(sky != entt::null);
+    if (sky == entt::null) return;
+    const entt::entity camera = primaryCamera(registry);
+    // A point of the level, and whether a tap at the pixel it is drawn at on a
+    // frame at rest still lands on it once the frame is shaken.
+    const glm::dvec2 point(300.0, 120.0);
+
+    struct Seen {
+        bool tickAtRest = true; // the tick's camera is the follow's, unshaken
+        bool moved = true;      // each frame moved by exactly this tick's move
+        bool skyHeld = true;    // and the sky with it
+        bool tapsAtRest = true;
+        double worstTap = 0.0;
+    } seen;
+    // As the app runs it: the tick between BeginTick and EndTick, then the frames
+    // drawn between ticks, each an Apply and the layer's own frame.
+    const auto tickAndDraw = [&](int frames) {
+        InterpolationSystem::BeginTick(registry);
+        tickWith(layer, registry, kRest, {}, {});
+        InterpolationSystem::EndTick(registry);
+        const glm::dvec2 centre = layer.CameraCentrePx();
+        const float tickY = registry.get<CameraComponent>(camera).position.y;
+        seen.tickAtRest = seen.tickAtRest && tickY == MagicPortals::Units::ToWorld(centre.x, centre.y).y;
+        const float move = MagicPortals::Units::ToMetres(-layer.QuakeOffsetUnits());
+        for (int f = 1; f <= frames; ++f) {
+            InterpolationSystem::Apply(registry, static_cast<float>(f) / static_cast<float>(frames));
+            const float drawnY = registry.get<CameraComponent>(camera).position.y;
+            const float skyY = registry.get<TransformComponent>(sky).position.y;
+            const glm::vec2 pixel = screenOf(registry, point);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick / static_cast<float>(frames));
+            seen.moved = seen.moved && registry.get<CameraComponent>(camera).position.y == drawnY + move;
+            seen.skyHeld = seen.skyHeld && registry.get<TransformComponent>(sky).position.y == skyY + move;
+            glm::dvec2 at(0.0);
+            const bool mapped = layer.ScreenToLevelPx(registry, pixel, at);
+            seen.worstTap = std::max(seen.worstTap, glm::length(at - point));
+            seen.tapsAtRest = seen.tapsAtRest && mapped && glm::length(at - point) < 1e-3;
+        }
+    };
+    tickAndDraw(1);
+
+    layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
+    std::vector<double> offsets;
+    for (int tick = 0; tick < 60; ++tick) {
+        tickAndDraw(4);
+        offsets.push_back(layer.QuakeOffsetUnits());
+    }
+    // Tick 0 of the loop took the call after its update; tick 1 is the forth.
+    const double want[] = {7.0, -7.0, 3.5, -3.5, 1.75, -1.75, 0.875, -0.875, 0.4375, -0.4375};
+    std::vector<int> at;
+    std::string trembles;
+    for (std::size_t i = 0; i < offsets.size(); ++i) {
+        if (offsets[i] == 0.0) continue;
+        at.push_back(static_cast<int>(i));
+        trembles += " " + std::to_string(i) + ":" + std::to_string(offsets[i]);
+    }
+    bool sequence = at.size() == std::size(want);
+    for (std::size_t i = 0; sequence && i < at.size(); ++i) {
+        const double got = offsets[static_cast<std::size_t>(at[i])];
+        sequence = at[i] == 1 + static_cast<int>(i) * 5 && std::fabs(got - want[i]) < 1e-12;
+    }
+    CHECK_MSG(sequence, "7 u forth on the next tick, then every 5th, halving on the back:" + trembles);
+    CHECK_MSG(seen.tickAtRest, "the tick's camera is the follow's, never shaken");
+    CHECK_MSG(seen.moved, "every frame draws the camera the engine drew, moved by this tick's move and no more");
+    CHECK_MSG(seen.skyHeld, "the sky goes with it, and keeps its place on the screen");
+    CHECK_MSG(seen.tapsAtRest, "a tap on a shaken frame maps as at rest; worst " + std::to_string(seen.worstTap) + " u");
+
+    // A BEFORE_update row trembles on the tick it is called on: a fireball's end.
+    layer.QueueQuake(MagicPortals::Earthquake::Call::FireballEnd);
+    tickAndDraw(1);
+    CHECK_MSG(layer.QuakeOffsetUnits() == 1.75, "5 trembles 1.75 u at once: " + std::to_string(layer.QuakeOffsetUnits()));
+    layer.OnDetach(registry);
+}
+
+// Outside the engine's loop - a suite calling OnUpdate over and over with no
+// Apply between - the frame's move is still taken off before it is put back, so
+// 120 frames of one tick's forth leave the camera ONE forth from rest.
+void AShakeDrawnOutsideTheEngineLoopDoesNotPileUp() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    const entt::entity camera = primaryCamera(registry);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    layer.QueueQuake(MagicPortals::Earthquake::Call::BarrelBlast); // before_update: 50 -> 49.2 px, 17.5 u
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK(std::fabs(layer.QuakeOffsetUnits() - 17.5) < 1e-12);
+    // The camera as the tick left it, and a point's pixel on it.
+    const float restY = registry.get<CameraComponent>(camera).position.y;
+    const glm::dvec2 point(300.0, 120.0);
+    const glm::vec2 pixel = screenOf(registry, point);
+    for (int frame = 0; frame < 120; ++frame) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const float shaken = registry.get<CameraComponent>(camera).position.y;
+    CHECK_MSG(shaken == restY + MagicPortals::Units::ToMetres(-17.5),
+              "one forth from rest after 120 frames: " + std::to_string(shaken) + " against " + std::to_string(restY));
+    glm::dvec2 at(0.0);
+    CHECK_MSG(layer.ScreenToLevelPx(registry, pixel, at) && glm::length(at - point) < 1e-3,
+              "a tap on the shaken frame maps as at rest: " + Point(at));
+    // The next tick takes it off before it reads anything, and places its own.
+    tickWith(layer, registry, kRest, {}, {});
+    const glm::dvec2 centre = layer.CameraCentrePx();
+    CHECK_MSG(registry.get<CameraComponent>(camera).position.y == MagicPortals::Units::ToWorld(centre.x, centre.y).y,
+              "the tick is at rest");
+    layer.OnDetach(registry);
+}
+
+// ---- every wired call, from its own event ----------------------------------------
+//
+// Each case below makes a simulation event happen on a real level - the level left
+// to run, or a body put where the event happens - and pins the call the layer makes
+// of it by what that call leaves in the generator on the tick the event is seen:
+//  - a row that lands AFTER the update is the tick's last word, so the tick ends
+//    with the amplitude at exactly the row's pixels, and the next due tremble is a
+//    forth of them (or, on a back, the last forth undone first);
+//  - a row that lands BEFORE it is seen on its own tick: a forth of exactly its
+//    pixels when a forth is due, the saved value undone and its pixels halved when
+//    a back is, its pixels waiting whole when nothing is due.
+// A row's pixels are 0.35 x intensity x 720/256, capped at 50 (earthquake.json;
+// test_mp_camera pins the generator itself). Every counter these cases watch moves
+// in Game::AfterStep, where latchSimQuakes reads it; the doors move in BeforeStep
+// and are read at the tick's end, where these cases read them too. Each case ticks
+// its level twice before the event, because a level's first latch only sets the
+// mark.
+
+using PlayedLevel = MagicPortals::Game::Level;
+using QuakeCount = std::function<int(const PlayedLevel&)>;
+
+constexpr double kQuakePxPerUnit = 720.0 / 256.0;
+
+double quakeRowPx(double intensity) { return std::min(0.35 * intensity * kQuakePxPerUnit, 50.0); }
+double quakeRowUnits(double intensity) { return quakeRowPx(intensity) / kQuakePxPerUnit; }
+
+// What one tick did to the generator.
+struct QuakeTick {
+    MagicPortals::Earthquake::Generator was;
+    MagicPortals::Earthquake::Generator now;
+    double offsetUnits = 0.0;
+};
+
+// One tick at rest, and what it did to the generator. `ticks` counts the level's
+// ticks, which is the layer's own count the log names.
+QuakeTick quakeTickWith(MagicPortalsLayer& layer, entt::registry& registry, int& ticks) {
+    QuakeTick seen;
+    seen.was = layer.Quake();
+    tickWith(layer, registry, kRest, {}, {});
+    ++ticks;
+    seen.now = layer.Quake();
+    seen.offsetUnits = layer.QuakeOffsetUnits();
+    return seen;
+}
+
+// Empty when the tick `seen` landed a call of `intensity` on the side its row says;
+// otherwise what the tick did instead.
+std::string quakeLanded(const QuakeTick& seen, double intensity, bool afterUpdate) {
+    const double px = quakeRowPx(intensity);
+    const double shownPx = seen.offsetUnits * kQuakePxPerUnit;
+    const auto same = [](double a, double b) { return std::fabs(a - b) < 1e-9; };
+    // The update's stop test, on every update: what a call before it leaves under
+    // 1 px is 0 by the tick's end (an impact's soft call is).
+    const auto kept = [](double amplitudePx) { return amplitudePx < 1.0 ? 0.0 : amplitudePx; };
+    bool landed = false;
+    if (afterUpdate) {
+        landed = same(seen.now.amplitudePx, px);
+    } else if (seen.offsetUnits == 0.0) {
+        landed = same(seen.now.amplitudePx, kept(px)) && seen.now.forth == seen.was.forth;
+    } else if (seen.offsetUnits > 0.0) {
+        landed = seen.was.forth && !seen.now.forth && same(shownPx, px) && same(seen.now.amplitudePx, kept(px));
+    } else {
+        landed = !seen.was.forth && seen.now.forth && same(shownPx, -seen.was.backPx) &&
+                 same(seen.now.amplitudePx, kept(px * 0.5));
+    }
+    if (landed) return {};
+    char text[320];
+    std::snprintf(text, sizeof text,
+                  "%g (%.6f px) %s the update, but the tick went %.6f -> %.6f px, %s -> %s, showing %.6f px",
+                  intensity, px, afterUpdate ? "after" : "before", seen.was.amplitudePx, seen.now.amplitudePx,
+                  seen.was.forth ? "forth" : "back", seen.now.forth ? "forth" : "back", shownPx);
+    return text;
+}
+
+MagicPortals::Earthquake::Rules quakeRules() {
+    MagicPortals::Earthquake::Rules rules;
+    std::string error;
+    CHECK_MSG(MagicPortals::Earthquake::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/earthquake.json", rules,
+                                                  error),
+              error);
+    return rules;
+}
+
+// What one begin makes, worked out here from the listing's rules rather than asked
+// of the layer: its row, the contact's hitIntensity along the line that row reads
+// (the pair's normal for the player; the line between the entity points for a
+// stone or a minion, D11_check C55), whether the row calls, and with what.
+struct ImpactRead {
+    MagicPortals::Earthquake::Call call = MagicPortals::Earthquake::Call::PlayerImpact;
+    double hit = 0.0;
+    bool calls = false;
+    double intensity = 0.0;
+    std::string other;
+    glm::dvec2 along{0.0}; // the line the row reads
+};
+
+ImpactRead readImpact(const MagicPortals::Earthquake::Rules& rules, const MagicPortalsLayer& layer,
+                      const MagicPortals::Impacts::Begin& begin) {
+    using MagicPortals::Earthquake::Call;
+    ImpactRead read;
+    glm::dvec2 along = begin.normal;
+    if (begin.kind != MagicPortals::Impacts::Kind::Player) {
+        read.call = begin.kind == MagicPortals::Impacts::Kind::Stone ? Call::StoneImpact : Call::MinionImpact;
+        const glm::dvec2 apart = begin.otherAtPx - begin.atPx;
+        along = glm::length(apart) > 0.0 ? apart / glm::length(apart) : glm::dvec2(0.0);
+    }
+    // At the velocity of the last few steps that came along that line fastest.
+    read.along = along;
+    read.hit = glm::dot(begin.Approaching(along), along) / 50.0;
+    read.other = layer.EntityNameOf(begin.other);
+    read.calls = MagicPortals::Earthquake::ImpactCalls(rules, read.call, read.hit, read.other);
+    read.intensity = rules.Of(read.call).intensity * read.hit;
+    return read;
+}
+
+std::string describe(const MagicPortals::Impacts::Begin& begin, const ImpactRead& read) {
+    const glm::dvec2 came = begin.Approaching(read.along);
+    char text[400];
+    std::snprintf(text, sizeof text,
+                  "%s on %s at (%.1f, %.1f) from (%.1f, %.1f): v (%.1f, %.1f) px/s, came at (%.1f, %.1f) over %zu "
+                  "steps, normal (%.3f, %.3f), gap %.3f, hit %.3f, %s %.4f",
+                  MagicPortals::Earthquake::KeyOf(read.call), read.other.empty() ? "a body" : read.other.c_str(),
+                  begin.otherAtPx.x, begin.otherAtPx.y, begin.atPx.x, begin.atPx.y, begin.velocityPx.x,
+                  begin.velocityPx.y, came.x, came.y, begin.recentPx.size(), begin.normal.x, begin.normal.y,
+                  begin.gapPx, read.hit, read.calls ? "calls" : "no call", read.intensity);
+    return text;
+}
+
+// The last call a tick's begins make, in the layer's order - the one the generator
+// keeps - or -1 where none calls.
+double lastImpactCall(const MagicPortals::Earthquake::Rules& rules, const MagicPortalsLayer& layer) {
+    double last = -1.0;
+    for (const auto& begin : layer.ImpactBegins()) {
+        const ImpactRead read = readImpact(rules, layer, begin);
+        if (read.calls) last = read.intensity;
+    }
+    return last;
+}
+
+// 4-29's torch lit by a scheduled tap (T.1's), the wall going 1500 ms later, and
+// with it the light wall's 20 (earthquake.json light_wall_gone): L1's -20, +20,
+// -10, +10, -5, +5, -2, +2, -1, +1 px - 7 u, 3.5, 1.75, 0.875, 0.4375 - on the
+// tick after the wall goes, a static callback's call landing after the update.
+void TheLightWallGoingShakesTheView() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    layer.ScheduleDevTap(60, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
+    // The impact rows watch the level's two knights, which the port makes 11.1 px
+    // over where the original's stand and lets fall 9 px onto their tiles: the
+    // original's are made with their feet in those tiles, at rest, and call
+    // nothing (sim/Impacts spawnDropPx, step 104). So nothing calls before the wall
+    // goes, the phase is still the generator's first, and the wall's 20 opens
+    // forth at full size as L1's does. (L1's phase came in from 4-22, played before
+    // it in the clip; a capture that starts on 4-29 starts it fresh.)
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    int goneOn = -1;
+    std::vector<double> offsets;
+    std::string calledBefore;
+    int beganBefore = 0;
+    for (int tick = 1; tick <= 320; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        offsets.push_back(layer.QuakeOffsetUnits());
+        if (goneOn < 0) {
+            for (const auto& begin : layer.ImpactBegins()) {
+                const ImpactRead read = readImpact(rules, layer, begin);
+                ++beganBefore;
+                if (read.calls) calledBefore += " tick " + std::to_string(tick) + ": " + describe(begin, read) + ";";
+            }
+        }
+        if (goneOn < 0 && layer.SimLevel() != nullptr && layer.SimLevel()->torch.wallsGone > 0) goneOn = tick;
+    }
+    CHECK_MSG(goneOn > 0, "the torch was lit and its wall went");
+    if (goneOn < 0) return;
+    CHECK_MSG(calledBefore.empty(), "4-29: an impact called before the wall went:" + calledBefore);
+    std::printf("  4-29: %d begins before the wall went on tick %d, none calling\n", beganBefore, goneOn);
+    std::string seen;
+    std::vector<int> at;
+    for (std::size_t i = 0; i < offsets.size(); ++i) {
+        if (offsets[i] == 0.0) continue;
+        at.push_back(static_cast<int>(i) + 1);
+        seen += " " + std::to_string(i + 1) + ":" + std::to_string(offsets[i]);
+    }
+    const double want[] = {7.0, -7.0, 3.5, -3.5, 1.75, -1.75, 0.875, -0.875, 0.4375, -0.4375};
+    bool sequence = at.size() == std::size(want);
+    for (std::size_t i = 0; sequence && i < at.size(); ++i) {
+        const double got = offsets[static_cast<std::size_t>(at[i] - 1)];
+        sequence = at[i] == goneOn + 1 + static_cast<int>(i) * 5 && std::fabs(got - want[i]) < 1e-12;
+    }
+    CHECK_MSG(sequence, "the wall went on tick " + std::to_string(goneOn) + "; trembles:" + seen);
+    layer.OnDetach(registry);
+}
+
+struct QuakeEdge {
+    int tick = -1; // the level's tick the count went up on; -1 if it never did
+    QuakeTick seen;
+};
+
+// Ticks at rest until `count` goes up, for at most `maxTicks`; `hold`, where a case
+// gives one, runs before each tick.
+QuakeEdge tickUntilUp(MagicPortalsLayer& layer, entt::registry& registry, int& ticks, int maxTicks,
+                      const QuakeCount& count, const std::function<void()>& hold = {}) {
+    QuakeEdge edge;
+    if (layer.SimLevel() == nullptr) return edge;
+    int was = count(*layer.SimLevel());
+    for (int i = 0; i < maxTicks; ++i) {
+        if (hold) hold();
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        if (layer.SimLevel() == nullptr) break;
+        const int now = count(*layer.SimLevel());
+        if (now > was) {
+            edge.tick = ticks;
+            edge.seen = seen;
+            break;
+        }
+        was = now;
+    }
+    return edge;
+}
+
+// A row's call on its event's tick, then the tremble it leads to. Where the
+// generator had never trembled before the event, that tremble is a forth of the
+// row's pixels: on the event's own tick for a BEFORE row, on the next for an AFTER
+// one. Otherwise it is whatever the machine owes: a forth of the amplitude the
+// call left, or on a back the last forth undone.
+void checkQuakeRow(MagicPortalsLayer& layer, entt::registry& registry, int& ticks, const QuakeEdge& edge,
+                   const std::string& row, double intensity, bool afterUpdate) {
+    CHECK_MSG(edge.tick > 0, row + ": its event never came");
+    if (edge.tick <= 0) return;
+    const std::string landed = quakeLanded(edge.seen, intensity, afterUpdate);
+    CHECK_MSG(landed.empty(), row + " on tick " + std::to_string(edge.tick) + ": " + landed);
+    // The level's first shake: nothing had trembled before the event's tick, nor on
+    // it ahead of an after-update call - an impact's own call on the same tick can.
+    const bool first =
+        std::isinf(edge.seen.was.lastTrembleMs) && (!afterUpdate || std::isinf(edge.seen.now.lastTrembleMs));
+    double shown = 0.0;
+    int shownOn = -1;
+    bool overwritten = false; // an impact's call came before the next tremble, and overwrote what was owed
+    if (!afterUpdate && edge.seen.offsetUnits != 0.0) {
+        shown = edge.seen.offsetUnits;
+        shownOn = edge.tick;
+    } else {
+        static const MagicPortals::Earthquake::Rules rules = quakeRules();
+        const MagicPortals::Earthquake::Generator left = layer.Quake();
+        const double owed = left.forth ? left.amplitudePx / kQuakePxPerUnit : -left.backPx / kQuakePxPerUnit;
+        // Within the 70 ms beat: five ticks at the port's 60 Hz.
+        for (int i = 0; i < 6 && shown == 0.0; ++i) {
+            shown = quakeTickWith(layer, registry, ticks).offsetUnits;
+            shownOn = ticks;
+            if (lastImpactCall(rules, layer) >= 0.0) overwritten = true;
+        }
+        if (overwritten) {
+            std::printf("  %s: an impact called on tick %d, before the %s u owed was shown\n", row.c_str(), shownOn,
+                        std::to_string(owed).c_str());
+        } else {
+            CHECK_MSG(std::fabs(shown - owed) < 1e-9, row + ": the next tremble " + std::to_string(shown) +
+                                                          " u, where it owed " + std::to_string(owed));
+        }
+    }
+    if (first && !overwritten) {
+        const int due = edge.tick + (afterUpdate ? 1 : 0);
+        CHECK_MSG(shownOn == due && std::fabs(shown - quakeRowUnits(intensity)) < 1e-9,
+                  row + ": the level's first shake, " + std::to_string(quakeRowUnits(intensity)) + " u due on tick " +
+                      std::to_string(due) + ", shown " + std::to_string(shown) + " u on tick " +
+                      std::to_string(shownOn));
+    }
+    std::printf("  %s: its event on tick %d, %.4f u shown on tick %d (%s the update%s)\n", row.c_str(), edge.tick,
+                shown, shownOn, afterUpdate ? "after" : "before", first ? ", the level's first shake" : "");
+}
+
+// Row 1: the fall, 20, and 5 on a weightless level: the game-state controller's
+// call, after the update. The player put under the level, past its bounds' margin.
+void AFallShakesTheView() {
+    struct Case {
+        const char* level;
+        const char* row;
+        bool weightless;
+        double intensity;
+    };
+    for (const Case& fall : {Case{"level30", "1-31 fall", false, 20.0}, Case{"level1c", "4-02 fall_no_gravity", true, 5.0}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), fall.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) continue;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        CHECK_MSG(layer.SimLevel()->noGravity == fall.weightless, std::string(fall.row) + ": the level's gravity");
+        quakeTickWith(layer, registry, ticks);
+        quakeTickWith(layer, registry, ticks);
+        const glm::dvec2 under(layer.BoundsPx().x * 0.5, layer.BoundsPx().y + layer.SimLevel()->hazards.marginPx.y + 64.0);
+        PutPlayerAt(registry, layer, under);
+        const QuakeEdge edge = tickUntilUp(layer, registry, ticks, 2, [](const PlayedLevel& played) {
+            return played.hazards.playerDied && played.hazards.diedByFalling ? 1 : 0;
+        });
+        CHECK_MSG(edge.tick > 0, std::string(fall.row) + ": the player fell out, killed by " +
+                                     layer.SimLevel()->hazards.killedBy);
+        checkQuakeRow(layer, registry, ticks, edge, fall.row, fall.intensity, true);
+        layer.OnDetach(registry);
+    }
+}
+
+int diamondsHeld(const PlayedLevel& played) {
+    int held = 0;
+    for (const auto& diamond : played.diamonds.diamonds) held += !diamond.gone && diamond.owner != entt::null ? 1 : 0;
+    return held;
+}
+
+// Rows 27, 28 and 29: a diamond taken up, 15 whichever it is, and a shock diamond
+// striking a minion, 25: static callbacks, after the update. 3-16's shock diamond
+// and minion moved as the particle case above moves them, and 3-32's fire diamond.
+void ADiamondTakenAndStruckShakesTheView() {
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level15b");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        quakeTickWith(layer, registry, ticks);
+        quakeTickWith(layer, registry, ticks);
+        const auto* diamond = layer.SimLevel()->diamonds.Find("shock_diamond_ent_1741");
+        CHECK(diamond != nullptr && !layer.SimLevel()->minions.minions.empty());
+        if (diamond == nullptr || layer.SimLevel()->minions.minions.empty()) return;
+        const glm::dvec2 lyingAt = diamond->atPx;
+        const int struck = layer.SimLevel()->diamonds.struck;
+        PutPlayerAt(registry, layer, lyingAt);
+        const QuakeEdge picked = tickUntilUp(layer, registry, ticks, 5, diamondsHeld);
+        CHECK_MSG(layer.SimLevel()->diamonds.struck == struck, "nothing struck as it was taken");
+        checkQuakeRow(layer, registry, ticks, picked, "3-16 shock_diamond_picked", 15.0, true);
+
+        const entt::entity minion = layer.SimLevel()->minions.minions[0].body;
+        const QuakeEdge strike = tickUntilUp(
+            layer, registry, ticks, 5, [](const PlayedLevel& played) { return played.diamonds.struck; },
+            [&registry, &layer, minion, lyingAt]() {
+                if (!registry.valid(minion)) return;
+                PutPlayerAt(registry, layer, lyingAt);
+                auto& at = registry.get<TransformComponent>(minion);
+                const glm::vec3 world = MagicPortals::Units::ToWorld(lyingAt.x + 8.0, lyingAt.y);
+                at.position = glm::vec3(world.x, world.y, at.position.z);
+            });
+        checkQuakeRow(layer, registry, ticks, strike, "3-16 shock_strike", 25.0, true);
+        layer.OnDetach(registry);
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level31b");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        quakeTickWith(layer, registry, ticks);
+        quakeTickWith(layer, registry, ticks);
+        const MagicPortals::Diamonds::Diamond* fire = nullptr;
+        for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+            if (diamond.fire && fire == nullptr) fire = &diamond;
+        }
+        CHECK_MSG(fire != nullptr, "3-32 places a fire diamond");
+        if (fire == nullptr) return;
+        PutPlayerAt(registry, layer, fire->atPx);
+        checkQuakeRow(layer, registry, ticks, tickUntilUp(layer, registry, ticks, 5, diamondsHeld),
+                      "3-32 fire_diamond_picked", 15.0, true);
+        layer.OnDetach(registry);
+    }
+}
+
+// Row 23: the ghost's shot ending, 10: the shot's own callback, before the update.
+// 3-32's player put past the red line (x 262), on the floor under the ghost, which
+// shoots at it once its appearance is over.
+// R4, THE OWNER'S STANDING RULING (planning step 98): level31b's ghost is added by
+// its black knight's death, so a case written before R4 was built (the other
+// track's) ends the knight first - onto the level's killer floor, as step 98's own
+// case does, one `tick` at a time until the body is gone. Added by the merge of the
+// two tracks (planning step 112).
+bool EndTheBlackKnight(MagicPortalsLayer& layer, entt::registry& registry, const std::function<void()>& tick) {
+    const MagicPortals::Game::Level* level = layer.SimLevel();
+    if (level == nullptr) return false;
+    const MagicPortals::Minions::Minion* knight = level->minions.FindMinion("minion_spawn_908");
+    if (knight == nullptr || knight->body == entt::null || level->minions.killers.empty()) return false;
+    const entt::entity body = knight->body;
+    const glm::vec2 centre = level->minions.killers.front().box.centre;
+    for (int i = 0; i < 5 && registry.valid(body); ++i) {
+        auto& transform = registry.get<TransformComponent>(body);
+        transform.position = glm::vec3(centre.x, centre.y, transform.position.z);
+        if (registry.all_of<RigidBodyComponent>(body)) registry.get<RigidBodyComponent>(body).velocity = glm::vec3(0.0f);
+        tick();
+    }
+    return !registry.valid(body) && level->ghost.spawned;
+}
+
+void TheGhostsShotEndingShakesTheView() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    CHECK(layer.SimLevel()->ghost.present);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    CHECK_MSG(EndTheBlackKnight(layer, registry, [&]() { quakeTickWith(layer, registry, ticks); }),
+              "3-32: the black knight's death adds the ghost (R4)");
+    PutPlayerAt(registry, layer, glm::dvec2(400.0, 190.0));
+    const QuakeEdge ended = tickUntilUp(layer, registry, ticks, 900, [](const PlayedLevel& played) {
+        return played.ghost.shotsFired - static_cast<int>(played.ghost.shots.size());
+    });
+    CHECK_MSG(layer.SimLevel()->ghost.shotsFired >= 1,
+              "the ghost shot " + std::to_string(layer.SimLevel()->ghost.shotsFired) + " time(s)");
+    checkQuakeRow(layer, registry, ticks, ended, "3-32 enemy_shot_end", 10.0, false);
+    layer.OnDetach(registry);
+}
+
+// Rows 18, 19 and 20: a switched door starting up, starting down and landing shut,
+// 4 each: door_lift's static callback, after the update. 3-15 left to run, where
+// step 76's knight rides onto its button and off it again.
+void ASwitchedDoorShakesTheViewAsItGoes() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level14b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    CHECK(!layer.SimLevel()->channels.doors.empty());
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    const QuakeCount opening = [](const PlayedLevel& played) {
+        int n = 0;
+        for (const auto& door : played.channels.doors) n += door.motion.opening ? 1 : 0;
+        return n;
+    };
+    const QuakeCount closing = [](const PlayedLevel& played) {
+        int n = 0;
+        for (const auto& door : played.channels.doors) n += door.motion.opening ? 0 : 1;
+        return n;
+    };
+    const QuakeCount shut = [](const PlayedLevel& played) {
+        int n = 0;
+        for (const auto& door : played.channels.doors) n += !door.motion.opening && door.motion.progress <= 0.0f ? 1 : 0;
+        return n;
+    };
+    checkQuakeRow(layer, registry, ticks, tickUntilUp(layer, registry, ticks, 600, opening), "3-15 door_opening", 4.0, true);
+    checkQuakeRow(layer, registry, ticks, tickUntilUp(layer, registry, ticks, 600, closing), "3-15 door_closing", 4.0, true);
+    checkQuakeRow(layer, registry, ticks, tickUntilUp(layer, registry, ticks, 600, shut), "3-15 door_landed", 4.0, true);
+    layer.OnDetach(registry);
+}
+
+// Rows 24, 9, 11, 22 and 5, each from a level left to run: a knight onto its killer
+// floor (3-09), a thrown stone into a destroyier (1-24), a rock the beholder threw
+// breaking (1-32), a carranca's fireball ending and then the barrel a later one sets
+// off (2-12). Contact callbacks and dynamic entities' own: all before the update.
+// The barrel's 50 comes one tick after a fireball's 5 was shown, so it lands with
+// nothing due and waits, and the next tremble is that forth undone (F6's shape).
+void EventsALevelMakesOnItsOwnShakeTheView() {
+    struct Run {
+        const char* level;
+        const char* row;
+        double intensity;
+        int maxTicks;
+        QuakeCount count;
+    };
+    const Run runs[] = {
+        {"level8b", "3-09 minion_killed", 20.0, 400, [](const PlayedLevel& played) { return played.minions.killed; }},
+        {"level23", "1-24 stone_despawned", 6.0, 400,
+         [](const PlayedLevel& played) { return played.launchers.despawned; }},
+        {"level31", "1-32 boss_rock_broken", 5.0, 2400,
+         [](const PlayedLevel& played) { return played.boss.rocksBroken; }},
+        {"level11a", "2-12 fireball_end", 5.0, 400,
+         [](const PlayedLevel& played) { return static_cast<int>(played.turrets.spentPx.size()); }},
+    };
+    for (const Run& run : runs) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), run.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) continue;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        quakeTickWith(layer, registry, ticks);
+        quakeTickWith(layer, registry, ticks);
+        checkQuakeRow(layer, registry, ticks, tickUntilUp(layer, registry, ticks, run.maxTicks, run.count), run.row,
+                      run.intensity, false);
+        if (std::string(run.level) == "level11a") {
+            const QuakeEdge blast = tickUntilUp(layer, registry, ticks, 600,
+                                                [](const PlayedLevel& played) { return played.fire.blasts; });
+            CHECK_MSG(blast.tick > 0 && blast.seen.offsetUnits == 0.0 && !blast.seen.was.forth,
+                      "2-12's barrel on the tick after a forth: nothing due");
+            checkQuakeRow(layer, registry, ticks, blast, "2-12 barrel_blast", 50.0, false);
+        }
+        layer.OnDetach(registry);
+    }
+}
+
+// ---- step 104: every tremble drawn, and the bodies' own impacts ---------------------
+
+// (a) The engine runs up to five ticks between two frames (SupersonicApp.cpp:74,
+// 1389). A tremble is held until a frame has drawn it, so each one is drawn on the
+// frame that ran its tick, whether that was the frame's first tick or its last, and
+// a frame whose ticks made none draws at rest. The light wall's 20 in frames of two
+// ticks, as the app runs at 30 fps, then in frames of five: the 70 ms beat is five
+// ticks, so no frame holds two. The tick's camera and every tap stay at rest, and
+// the sky goes with the drawn camera, as in the one-tick case above.
+void ATrembleIsDrawnWhateverTicksAFrameRuns() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    entt::entity sky = entt::null;
+    for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+        if (tag.tag == "Magic Portals Sprite" && material.albedoTexturePath.find("icy_sky.png") != std::string::npos) {
+            sky = entity;
+        }
+    }
+    CHECK(sky != entt::null);
+    if (sky == entt::null) return;
+    const entt::entity camera = primaryCamera(registry);
+    const glm::dvec2 point(300.0, 120.0);
+    struct Seen {
+        int made = 0;    // trembles the ticks made
+        int drawn = 0;   // of those, drawn exactly by the frame that ran them
+        int onFirst = 0; // made on a frame's first tick, of several
+        int onLast = 0;  // on its last
+        int wrong = 0;   // frames that drew anything but their ticks' tremble, or rest
+        std::string firstWrong;
+        bool tickAtRest = true;
+        bool skyHeld = true;
+        bool tapsAtRest = true;
+    } seen;
+    const auto frame = [&](int ticks) {
+        double made = 0.0;
+        int madeOn = -1;
+        for (int t = 0; t < ticks; ++t) {
+            InterpolationSystem::BeginTick(registry);
+            tickWith(layer, registry, kRest, {}, {});
+            InterpolationSystem::EndTick(registry);
+            const glm::dvec2 centre = layer.CameraCentrePx();
+            seen.tickAtRest = seen.tickAtRest && registry.get<CameraComponent>(camera).position.y ==
+                                                     MagicPortals::Units::ToWorld(centre.x, centre.y).y;
+            if (layer.QuakeOffsetUnits() == 0.0) continue;
+            if (made != 0.0) seen.firstWrong = "two trembles in one frame";
+            made = layer.QuakeOffsetUnits();
+            madeOn = t;
+            ++seen.made;
+        }
+        InterpolationSystem::Apply(registry, 0.5f);
+        const float drawnY = registry.get<CameraComponent>(camera).position.y;
+        const float skyY = registry.get<TransformComponent>(sky).position.y;
+        const glm::vec2 pixel = screenOf(registry, point);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick * static_cast<float>(ticks));
+        const float move = MagicPortals::Units::ToMetres(-made);
+        const bool exact = registry.get<CameraComponent>(camera).position.y == drawnY + move;
+        if (exact && made != 0.0) {
+            ++seen.drawn;
+            if (ticks > 1 && madeOn == 0) ++seen.onFirst;
+            if (ticks > 1 && madeOn == ticks - 1) ++seen.onLast;
+        }
+        if (!exact && seen.wrong++ == 0) {
+            seen.firstWrong = "a frame of " + std::to_string(ticks) + " ticks drew " +
+                              std::to_string(registry.get<CameraComponent>(camera).position.y - drawnY) +
+                              " m where its ticks made " + std::to_string(made) + " u";
+        }
+        seen.skyHeld = seen.skyHeld && registry.get<TransformComponent>(sky).position.y == skyY + move;
+        glm::dvec2 at(0.0);
+        seen.tapsAtRest = seen.tapsAtRest && layer.ScreenToLevelPx(registry, pixel, at) && glm::length(at - point) < 1e-3;
+    };
+    frame(1);
+    for (const int ticksPerFrame : {2, 5}) {
+        seen = Seen{};
+        // After the update: nothing on the call's tick, a forth on the next, and
+        // then one every 5th tick, ten in all.
+        layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
+        for (int f = 0; f < 60 / ticksPerFrame; ++f) frame(ticksPerFrame);
+        const std::string at = std::to_string(ticksPerFrame) + " ticks a frame: ";
+        CHECK_MSG(seen.made == 10 && seen.drawn == 10 && seen.wrong == 0,
+                  at + std::to_string(seen.made) + " made, " + std::to_string(seen.drawn) + " drawn; " + seen.firstWrong);
+        if (ticksPerFrame == 2) {
+            CHECK_MSG(seen.onFirst == 5 && seen.onLast == 5, at + std::to_string(seen.onFirst) +
+                                                                 " on a frame's first tick, " +
+                                                                 std::to_string(seen.onLast) + " on its last");
+        }
+        CHECK_MSG(seen.tickAtRest, at + "the tick's camera is the follow's, never shaken");
+        CHECK_MSG(seen.skyHeld, at + "the sky goes with the drawn camera");
+        CHECK_MSG(seen.tapsAtRest, at + "a tap on a shaken frame maps as at rest");
+        std::printf("  %d ticks a frame: %d trembles made, %d drawn (%d on a first tick, %d on a last)\n",
+                    ticksPerFrame, seen.made, seen.drawn, seen.onFirst, seen.onLast);
+    }
+    layer.OnDetach(registry);
+}
+
+// A before-update call's shake after the tick it landed on, where that tick showed
+// its forth: the back, then the halving pairs to the stop (earthquake.json
+// generator), in level units.
+std::vector<double> quakeRestOfShake(double intensity) {
+    std::vector<double> want;
+    double amplitude = quakeRowPx(intensity);
+    want.push_back(-amplitude / kQuakePxPerUnit);
+    amplitude *= 0.5;
+    while (amplitude >= 1.0) {
+        want.push_back(amplitude / kQuakePxPerUnit);
+        want.push_back(-amplitude / kQuakePxPerUnit);
+        amplitude *= 0.5;
+    }
+    return want;
+}
+
+// Row 4 (earthquake.json player_impact): the player dropped 100 px onto 3-16's floor,
+// left of the diamonds' block. On the tick it lands there is one begin - the player
+// against the floor, the line between them straight down - carrying the fall into
+// the step, and the call is 0.6 x hitIntensity before the update: a forth on the
+// landing tick, as F14 shows on its landing frames, then the halving to the stop.
+void APlayerLandingShakesTheView() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level15b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    for (int i = 0; i < 30; ++i) quakeTickWith(layer, registry, ticks);
+    const glm::dvec2 rest = playerPx(registry, layer);
+    PutPlayerAt(registry, layer, rest - glm::dvec2(0.0, 100.0));
+    registry.get<RigidBodyComponent>(layer.SimLevel()->player).velocity = glm::vec3(0.0f);
+    QuakeTick landed;
+    int landedOn = -1;
+    std::vector<MagicPortals::Impacts::Begin> begins;
+    std::string fall;
+    for (int i = 0; i < 90 && landedOn < 0; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        const glm::dvec2 at = playerPx(registry, layer);
+        char step[64];
+        std::snprintf(step, sizeof step, " %d:%.2f/%.0f", ticks, at.y,
+                      -registry.get<RigidBodyComponent>(layer.SimLevel()->player).velocity.y *
+                          MagicPortals::Units::kPixelsPerMetre);
+        fall += step;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind == MagicPortals::Impacts::Kind::Player) begins.push_back(begin);
+        }
+        if (begins.empty()) continue;
+        landedOn = ticks;
+        landed = seen;
+    }
+    std::printf("  3-16 drop, tick:y/vy after the step:%s\n", fall.c_str());
+    CHECK_MSG(landedOn > 0 && begins.size() == 1, "3-16: one landing begin, " + std::to_string(begins.size()));
+    if (landedOn <= 0 || begins.size() != 1) return;
+    const ImpactRead read = readImpact(rules, layer, begins.front());
+    std::printf("  3-16: the player dropped from %s lands on tick %d: %s\n",
+                Point(rest - glm::dvec2(0.0, 100.0)).c_str(), landedOn, describe(begins.front(), read).c_str());
+    CHECK_MSG(std::fabs(begins.front().normal.x) < 1e-6 && std::fabs(begins.front().normal.y - 1.0) < 1e-6,
+              "straight down onto the floor: " + Point(begins.front().normal));
+    // What it came in at: 100 px at player.json's 1200 px/s^2 is about 490 px/s, a
+    // little less by the ticks; the solver braked it before it touched.
+    const glm::dvec2 came = begins.front().Approaching(begins.front().normal);
+    CHECK_MSG(came.y > 400.0 && came.y < 520.0, "the fall it came in at: " + Point(came) + ", where the landing step carried " +
+                                                    Point(begins.front().velocityPx));
+    CHECK_MSG(read.calls && lastImpactCall(rules, layer) == read.intensity, "the landing calls");
+    const std::string landedRow = quakeLanded(landed, read.intensity, false);
+    CHECK_MSG(landedRow.empty(), "player_impact on tick " + std::to_string(landedOn) + ": " + landedRow);
+    // D11 section 1c: its pixels and the pairs they run to before the stop.
+    std::size_t pairs = 0;
+    for (double amplitude = quakeRowPx(read.intensity); amplitude >= 1.0; amplitude *= 0.5) ++pairs;
+    // Then what the machine owes from the landing tick, on the layer's clock, up to
+    // any later call: forth first where the phase was on a forth, and where a
+    // knight's soft call had left it on a back (C23), that call's saved forth undone
+    // first and the landing's halved before it is seen.
+    std::vector<double> want;
+    if (landed.offsetUnits != 0.0) {
+        MagicPortals::Earthquake::Generator machine = landed.now;
+        double clockMs = machine.lastTrembleMs;
+        for (int i = 0; i < 60; ++i) {
+            clockMs += static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
+            const double px = machine.Update(rules, clockMs);
+            if (px != 0.0) want.push_back(px / kQuakePxPerUnit);
+        }
+    }
+    std::vector<double> shown;
+    std::string trembles;
+    bool overwritten = false;
+    for (int i = 0; i < 60 && !overwritten; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        if (lastImpactCall(rules, layer) >= 0.0) overwritten = true;
+        if (seen.offsetUnits == 0.0 || overwritten) continue;
+        shown.push_back(seen.offsetUnits);
+        trembles += " " + std::to_string(ticks) + ":" + std::to_string(seen.offsetUnits * kQuakePxPerUnit);
+    }
+    bool same = landed.offsetUnits != 0.0 && (overwritten ? shown.size() <= want.size() : shown.size() == want.size());
+    for (std::size_t i = 0; same && i < shown.size(); ++i) same = std::fabs(shown[i] - want[i]) < 1e-9;
+    CHECK_MSG(same, "the machine's own sequence from the landing:" + trembles);
+    std::printf("  3-16: the landing calls %.4f px, %zu pairs; the phase on a %s; %.4f px on the landing tick, then "
+                "(px)%s%s\n",
+                quakeRowPx(read.intensity), pairs, landed.was.forth ? "forth" : "back",
+                landed.offsetUnits * kQuakePxPerUnit, trembles.c_str(), overwritten ? ", until another call" : "");
+    layer.OnDetach(registry);
+}
+
+// The self-checks the watch owes (sim/Impacts), on 1-31 (level30): a player standing
+// still once it has landed begins nothing for 300 ticks - no pair flickers in and
+// out under the solver - and every begin it makes walking right across the seam at
+// x 256 (platform_ent_895 against platform_ent_785, a 3.2 px notch whose chamfers
+// slope 26.6 degrees, test_mp_play) is printed with what it calls.
+void AStandingPlayerBeginsNothing() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    std::string settling;
+    for (int i = 0; i < 60; ++i) {
+        quakeTickWith(layer, registry, ticks);
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind == MagicPortals::Impacts::Kind::Player) {
+                settling += " tick " + std::to_string(ticks) + ": " + describe(begin, readImpact(rules, layer, begin));
+            }
+        }
+    }
+    std::printf("  1-31: from the spawn:%s\n", settling.empty() ? " no begin" : settling.c_str());
+    int standing = 0;
+    std::string stood;
+    for (int i = 0; i < 300; ++i) {
+        quakeTickWith(layer, registry, ticks);
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Player) continue;
+            if (standing++ == 0) stood = describe(begin, readImpact(rules, layer, begin));
+        }
+    }
+    CHECK_MSG(standing == 0, "standing still, " + std::to_string(standing) + " begins; the first: " + stood);
+    int calls = 0;
+    double largestPx = 0.0;
+    for (int i = 0; i < 120 && playerPx(registry, layer).x < 300.0; ++i) {
+        std::vector<std::string> pressed;
+        if (i == 0) pressed.push_back(MagicPortalsLayer::kRight);
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, std::move(pressed));
+        ++ticks;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Player) continue;
+            const ImpactRead read = readImpact(rules, layer, begin);
+            if (read.calls) {
+                ++calls;
+                largestPx = std::max(largestPx, quakeRowPx(read.intensity));
+            }
+            std::printf("  1-31 walking, tick %d at x %.1f: %s (%.4f px)\n", ticks, playerPx(registry, layer).x,
+                        describe(begin, read).c_str(), read.calls ? quakeRowPx(read.intensity) : 0.0);
+        }
+    }
+    std::printf("  1-31: across the seam, %d calls, the largest %.4f px\n", calls, largestPx);
+    CHECK_MSG(playerPx(registry, layer).x >= 300.0, "the player walked across the seam");
+    layer.OnDetach(registry);
+}
+
+// Rows 8 and 25 by the watch, each body dropped onto the player standing on its
+// floor, so that the line between the two entity points - the one those callbacks
+// read (D11_check C55) - runs down along the fall: 1-9's stone put 20 px over the
+// player's head and given 600 px/s down, and a knight of 3-09 let fall 20 px onto
+// it. What each comes down at is the engine's (it prints: the stone is braked to
+// about 100 px/s, hitIntensity just over 2). The stone calls 2 x hitIntensity
+// above 2, the knight 0.8 x above 0, both before the update, and each is the
+// tick's last word (the player's own begin with it is read first).
+void ABodyFallingOnThePlayerShakesTheView() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    struct Case {
+        const char* level;
+        const char* row;
+        MagicPortals::Impacts::Kind kind;
+    };
+    for (const Case& run : {Case{"level8", "1-09 stone_impact", MagicPortals::Impacts::Kind::Stone},
+                            Case{"level8b", "3-09 minion_impact", MagicPortals::Impacts::Kind::Minion}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), run.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) continue;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        for (int i = 0; i < 30; ++i) quakeTickWith(layer, registry, ticks);
+        const PlayedLevel& played = *layer.SimLevel();
+        entt::entity body = entt::null;
+        double radius = 0.0;
+        glm::vec3 velocity(0.0f);
+        if (run.kind == MagicPortals::Impacts::Kind::Stone) {
+            CHECK_MSG(!played.demolish.stones.empty(), std::string(run.row) + ": a stone");
+            if (played.demolish.stones.empty()) continue;
+            body = played.demolish.stones.front().body;
+            radius = 30.0;
+            velocity = glm::vec3(0.0f, -MagicPortals::Units::ToMetres(600.0), 0.0f);
+        } else {
+            CHECK_MSG(!played.minions.minions.empty(), std::string(run.row) + ": a minion");
+            if (played.minions.minions.empty()) continue;
+            body = played.minions.minions.front().body;
+            radius = played.minions.rules.bodyRadiusPx;
+        }
+        const glm::dvec2 head = playerPx(registry, layer) - glm::dvec2(0.0, 22.0);
+        const glm::vec3 above = MagicPortals::Units::ToWorld(head.x, head.y - radius - 20.0);
+        auto& bodyAt = registry.get<TransformComponent>(body);
+        bodyAt.position = glm::vec3(above.x, above.y, bodyAt.position.z);
+        registry.get<RigidBodyComponent>(body).velocity = velocity;
+        int hitOn = -1;
+        QuakeTick hitSeen;
+        std::string seenBegins;
+        for (int i = 0; i < 60 && hitOn < 0; ++i) {
+            const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+            for (const auto& begin : layer.ImpactBegins()) {
+                seenBegins += " tick " + std::to_string(ticks) + ": " + describe(begin, readImpact(rules, layer, begin)) + ";";
+                if (begin.body == body && begin.other == played.player) {
+                    hitOn = ticks;
+                    hitSeen = seen;
+                }
+            }
+        }
+        std::printf("  %s:%s\n", run.row, seenBegins.c_str());
+        CHECK_MSG(hitOn > 0, std::string(run.row) + ": the body came down on the player");
+        if (hitOn <= 0) continue;
+        const MagicPortals::Impacts::Begin* onPlayer = nullptr;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.body == body && begin.other == played.player) onPlayer = &begin;
+        }
+        const ImpactRead read = readImpact(rules, layer, *onPlayer);
+        const double gate = run.kind == MagicPortals::Impacts::Kind::Stone ? 2.0 : 0.0;
+        CHECK_MSG(read.calls && read.hit > gate, std::string(run.row) + ": " + describe(*onPlayer, read));
+        const double last = lastImpactCall(rules, layer);
+        CHECK_MSG(last == read.intensity, std::string(run.row) + ": the body's own call is the tick's last");
+        const std::string landedRow = quakeLanded(hitSeen, last, false);
+        CHECK_MSG(landedRow.empty(), std::string(run.row) + " on tick " + std::to_string(hitOn) + ": " + landedRow);
+        layer.OnDetach(registry);
+    }
+}
+
+// The minions' spawn drop end to end (sim/Impacts Watched::spawnDropPx), on 3-09
+// (level8b), whose three markers are the two kinds the census finds (Q.2
+// spawn_census): minion_spawn_1255 and minion_spawn_913 stand 16 px over their
+// floors, so the original's knights are made with their feet 2 px into them and
+// begin them at rest; minion_spawn_908 stands 176 px over the floor under it, and
+// the original's falls 157.9 px onto it. Played from the level's first tick: the
+// two standing knights' 9 px falls onto those floors begin nothing, and the high
+// one begins its floor once - on the step the original's feet reach it, its entity
+// point 18.1 px over the floor's top within that step's travel - and not again when
+// the port's own circle arrives 11.1 px lower. (A standing knight walking across a
+// seam onto the next tile begins that tile, as the original's does: printed.)
+void AKnightIsLookedAtWhereTheOriginalsStands() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level8b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    const auto knight = [&layer](const char* name) {
+        for (const auto& minion : layer.SimLevel()->minions.minions) {
+            if (minion.name == name) return minion.body;
+        }
+        return entt::entity{entt::null};
+    };
+    const entt::entity standingA = knight("minion_spawn_1255");
+    const entt::entity standingB = knight("minion_spawn_913");
+    const entt::entity high = knight("minion_spawn_908");
+    CHECK_MSG(standingA != entt::null && standingB != entt::null && high != entt::null, "3-09's three knights");
+    if (standingA == entt::null || standingB == entt::null || high == entt::null) return;
+    // The floor a knight's marker stands over: the solid the original's feet are in
+    // when it is made, a px above their lowest point.
+    const double feetBelow = layer.SimLevel()->minions.rules.entityAboveFeetPx;
+    const auto floorUnder = [&registry, &layer, feetBelow](entt::entity body) {
+        glm::dvec2 marker(0.0);
+        for (const auto& minion : layer.SimLevel()->minions.minions) {
+            if (minion.body == body) marker = minion.spawnPx;
+        }
+        const MagicPortals::Impacts::Shape feet{{marker + glm::dvec2(0.0, feetBelow - 1.0)}, 0.5};
+        for (const entt::entity entity : registry.view<TransformComponent>()) {
+            MagicPortals::Impacts::Shape shape;
+            if (entity == body || !MagicPortals::Impacts::ShapeOf(registry, entity, shape)) continue;
+            if (MagicPortals::Impacts::Between(feet, shape).px <= 0.0) return entity;
+        }
+        return entt::entity{entt::null};
+    };
+    const entt::entity floorA = floorUnder(standingA);
+    const entt::entity floorB = floorUnder(standingB);
+    CHECK_MSG(floorA != entt::null && floorB != entt::null, "3-09: the standing knights' floors");
+    int standingBegins = 0;
+    std::string standingSeen;
+    std::string seamSeen;
+    std::vector<std::pair<int, MagicPortals::Impacts::Begin>> highBegins;
+    std::string highSeen;
+    for (int tick = 1; tick <= 150; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Minion) continue;
+            const std::string said = " tick " + std::to_string(tick) + ": " + describe(begin, readImpact(rules, layer, begin)) +
+                                     ";";
+            if (begin.body == high) {
+                highBegins.emplace_back(tick, begin);
+                highSeen += said;
+            } else if ((begin.body == standingA && begin.other == floorA) ||
+                       (begin.body == standingB && begin.other == floorB)) {
+                ++standingBegins;
+                standingSeen += said;
+            } else if (begin.body == standingA || begin.body == standingB) {
+                seamSeen += said;
+            }
+        }
+    }
+    std::printf("  3-09 knights: minion_spawn_908's begins:%s\n", highSeen.empty() ? " none" : highSeen.c_str());
+    std::printf("  3-09 knights: the standing knights' other begins:%s\n", seamSeen.empty() ? " none" : seamSeen.c_str());
+    CHECK_MSG(standingBegins == 0, "3-09: the knights made on their floors began them" + standingSeen);
+    CHECK_MSG(!highBegins.empty(), "3-09: minion_spawn_908 came down");
+    if (highBegins.empty()) return;
+    const auto& [landedOn, landed] = highBegins.front();
+    MagicPortals::Impacts::Shape floor;
+    CHECK(MagicPortals::Impacts::ShapeOf(registry, landed.other, floor) && !floor.core.empty());
+    double top = std::numeric_limits<double>::infinity();
+    for (const glm::dvec2& point : floor.core) top = std::min(top, point.y);
+    const ImpactRead read = readImpact(rules, layer, landed);
+    const double travel = std::fabs(landed.Approaching(read.along).y) / 60.0;
+    const double feet = landed.atPx.y + layer.SimLevel()->minions.rules.entityAboveFeetPx;
+    CHECK_MSG(feet <= top + 0.5 && feet >= top - travel - 0.5,
+              "3-09: minion_spawn_908 began its floor (top " + std::to_string(top) + ") with the original's feet at " +
+                  std::to_string(feet) + " going into the step, " + std::to_string(travel) + " px a step");
+    int again = 0;
+    for (std::size_t i = 1; i < highBegins.size(); ++i) {
+        if (highBegins[i].second.other == landed.other) ++again;
+    }
+    CHECK_MSG(again == 0, "3-09: minion_spawn_908 began its floor again when the port's circle landed");
+    std::printf("  3-09: minion_spawn_908 began its floor on tick %d, the original's feet at %.2f over a top of %.2f; %s\n",
+                landedOn, feet, top, read.calls ? ("calls " + std::to_string(read.intensity)).c_str() : "no call");
+    layer.OnDetach(registry);
+}
+
+// Row 15 (earthquake.json beholder_hurt): 1-32's beholder left to throw a rock, and
+// that rock put inside its radius, rising - a rolling stone rising through it takes
+// an hp. 24, before the update: the beholder's own callback, a dynamic entity's.
+// Winning a fight is not driven, so beholder_death, ghost_death and
+// dark_dragon_death stay read from the code.
+void TheBeholderHurtShakesTheView() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr || !layer.SimLevel()->boss.beholder.has_value()) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    const QuakeEdge thrown = tickUntilUp(layer, registry, ticks, 2400, [](const PlayedLevel& played) {
+        return played.boss.beholder.has_value() ? played.boss.beholder->rocksThrown : 0;
+    });
+    CHECK_MSG(thrown.tick > 0 && !layer.SimLevel()->boss.rocks.empty(), "the beholder threw a rock");
+    if (thrown.tick <= 0 || layer.SimLevel()->boss.rocks.empty()) return;
+    const entt::entity rock = layer.SimLevel()->boss.rocks.back().body;
+    const glm::dvec2 eye = layer.SimLevel()->boss.beholder->atPx;
+    const glm::vec3 inside = MagicPortals::Units::ToWorld(eye.x, eye.y + 10.0);
+    auto& rockAt = registry.get<TransformComponent>(rock);
+    rockAt.position = glm::vec3(inside.x, inside.y, rockAt.position.z);
+    registry.get<RigidBodyComponent>(rock).velocity = glm::vec3(0.0f, MagicPortals::Units::ToMetres(200.0), 0.0f);
+    const QuakeEdge hurt = tickUntilUp(layer, registry, ticks, 5, [](const PlayedLevel& played) {
+        return played.boss.beholder.has_value() ? played.boss.beholder->hits : 0;
+    });
+    checkQuakeRow(layer, registry, ticks, hurt, "1-32 beholder_hurt", 24.0, false);
+    layer.OnDetach(registry);
+}
+
+// The capture gate's scout: 3-16 (level15b) played as F14's take r1 plays it (F14.md
+// section 1) - a shot to mid-air at (394, 112) of the 1280 x 720 view, then one on
+// the player at (205, 578), which takes him through to the first portal and drops
+// him onto the diamonds' block: F14's #55, a forth-first shake of about 5 px, 3
+// pairs. The taps on the layer's ticks the capture gives them (40 and 130), and
+// what the port makes of them printed for the planning doc.
+void TheF14RouteLandsOnTheBlock() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level15b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    std::printf("  3-16 route: popup open at load %d\n", layer.PopupOpen() ? 1 : 0);
+    layer.ScheduleDevTap(40, glm::dvec2(394.0 / 1280.0, 112.0 / 720.0));
+    layer.ScheduleDevTap(130, glm::dvec2(205.0 / 1280.0, 578.0 / 720.0));
+    int ticks = 0;
+    double hardest = 0.0;
+    int hardestOn = -1;
+    std::string after;
+    for (int i = 0; i < 300; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        if (layer.SimLevel() == nullptr) break;
+        if (ticks % 20 == 0 || ticks == 41 || ticks == 131) {
+            std::printf("  3-16 route, tick %d: player %s, %zu portals placed, shots %d, last '%s'\n", ticks,
+                        Point(playerPx(registry, layer)).c_str(), layer.SimLevel()->portals.placed.size(),
+                        layer.SimLevel()->portals.shotsFired, lastFailure(layer).c_str());
+        }
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Player) continue;
+            const ImpactRead read = readImpact(rules, layer, begin);
+            std::printf("  3-16 route, tick %d at %s: %s (%.4f px)\n", ticks, Point(playerPx(registry, layer)).c_str(),
+                        describe(begin, read).c_str(), read.calls ? quakeRowPx(read.intensity) : 0.0);
+            if (ticks > 130 && read.calls && read.intensity > hardest) {
+                hardest = read.intensity;
+                hardestOn = ticks;
+            }
+        }
+        if (seen.offsetUnits != 0.0) {
+            after += " " + std::to_string(ticks) + ":" + std::to_string(seen.offsetUnits * kQuakePxPerUnit);
+        }
+    }
+    std::printf("  3-16 route: trembles (px)%s\n", after.c_str());
+    CHECK_MSG(hardestOn > 0 && quakeRowPx(hardest) > 3.0,
+              "a hard landing after the second tap: " + std::to_string(quakeRowPx(hardest)) + " px on tick " +
+                  std::to_string(hardestOn));
+    layer.OnDetach(registry);
+}
+
+// Rows 7, 8 and 12 on one tick: a stone breaking a wall calls 30 from the wall's
+// contact callback and then its own 2 x hitIntensity from the stone's - the wall is
+// Box2D's fixture A, so the stone's runs second and has the last word (D11_check
+// C40, C59) - both before the update, and 20 from the wall's static callback, after
+// it. So E, the last of the two, is shown at once, and the 20 is halved at the back
+// before it is ever seen: +-E, then +-9.84, +-4.92, +-2.46, +-1.23 px. The stone's
+// call is read from what it carried into the step and the wall's node, on the tick
+// the port's Demolish takes the wall (step 104). 1-9's stone thrown at its wall as
+// ABrokenWallTakesItsBoxWithIt throws it, from 20 px short rather than 6, so that
+// the steps before the break carry the throw: a body put somewhere is looked at
+// afresh on the step after, and the solver closes the last few px a step early.
+// Twice:
+//  - at 300 px/s, whose approach along the line to the wall's node is well above
+//    hitIntensity 2: the stone's own 2 x hitIntensity is E (C40's 2 x hi x 0.984);
+//  - at 85 px/s level with the wall's node, faster than the wall's 75 u/s gate but
+//    closing along that line at under 100 u/s: the stone's callback calls nothing,
+//    and E is wall_struck's own 30, 10.5 u - the one case that shows row 7 (C40).
+void AStoneThroughAWallShakesItsImpactThenTwenty() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    struct Throw {
+        double speedPx;
+        double yPx;
+        bool stoneCalls;
+    };
+    for (const Throw& thrown : {Throw{300.0, 95.0, true}, Throw{85.0, 124.0, false}}) {
+        const std::string row = "1-9 at " + std::to_string(static_cast<int>(thrown.speedPx)) + " px/s";
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level8");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr || layer.SimLevel()->demolish.stones.size() != 1) return;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        quakeTickWith(layer, registry, ticks);
+        quakeTickWith(layer, registry, ticks);
+        const entt::entity stone = layer.SimLevel()->demolish.stones.front().body;
+        auto& transform = registry.get<TransformComponent>(stone);
+        const glm::vec3 at = MagicPortals::Units::ToWorld(305.0 - 30.0 - 20.0, thrown.yPx);
+        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+        registry.get<RigidBodyComponent>(stone).velocity =
+            glm::vec3(MagicPortals::Units::ToMetres(thrown.speedPx), 0.0f, 0.0f);
+        const QuakeEdge broke =
+            tickUntilUp(layer, registry, ticks, 40, [](const PlayedLevel& played) { return played.demolish.Broken(); });
+        CHECK_MSG(broke.tick > 0, row + ": the stone broke the wall");
+        if (broke.tick <= 0) continue;
+        const MagicPortals::Demolish::Breakable* wall = nullptr;
+        for (const auto& breakable : layer.SimLevel()->demolish.breakables) {
+            if (breakable.broken) wall = &breakable;
+        }
+        const MagicPortals::Impacts::Begin* struck = nullptr;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (wall != nullptr && begin.body == stone && begin.other == wall->body) struck = &begin;
+        }
+        CHECK_MSG(struck != nullptr, row + ": the stone's own begin with the wall, on the tick it broke");
+        if (struck == nullptr) continue;
+        const ImpactRead read = readImpact(rules, layer, *struck);
+        std::printf("  %s: the stone into its wall: %s\n", row.c_str(), describe(*struck, read).c_str());
+        CHECK_MSG(read.calls == thrown.stoneCalls, row + (thrown.stoneCalls ? ": above" : ": not above") +
+                                                       " hitIntensity 2 along the line to the wall's node, " +
+                                                       std::to_string(read.hit));
+        // What the before side left: the stone's own call where it made one, the
+        // wall's 30 where it did not. Without wall_struck's call the 85 px/s throw
+        // would show nothing here: the 20 lands after the update.
+        const double shownIntensity = read.calls ? read.intensity : 30.0;
+        const std::string landed = quakeLanded(broke.seen, 20.0, true);
+        CHECK_MSG(landed.empty(), row + " wall_destroyed lands last: " + landed);
+        CHECK_MSG(std::fabs(broke.seen.offsetUnits - quakeRowUnits(shownIntensity)) < 1e-9,
+                  row + (read.calls ? ": the stone's own call" : ": wall_struck's 30") + " shown at once: " +
+                      std::to_string(broke.seen.offsetUnits) + " u, where " +
+                      std::to_string(quakeRowUnits(shownIntensity)) + " u is owed");
+        // Then the back and the 20 halved - up to the stone's next impact, rolling
+        // on through where the wall stood, whose call is its own.
+        std::vector<int> on;
+        std::vector<double> shown;
+        std::string trembles;
+        int nextImpact = -1;
+        for (int i = 0; i < 70; ++i) {
+            const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+            if (nextImpact < 0 && lastImpactCall(rules, layer) >= 0.0) nextImpact = ticks;
+            if (seen.offsetUnits == 0.0) continue;
+            trembles += " " + std::to_string(ticks) + ":" + std::to_string(seen.offsetUnits);
+            if (nextImpact >= 0) continue;
+            on.push_back(ticks);
+            shown.push_back(seen.offsetUnits);
+        }
+        const double want[] = {-quakeRowUnits(shownIntensity), 3.5, -3.5, 1.75, -1.75, 0.875, -0.875, 0.4375, -0.4375};
+        bool sequence =
+            !shown.empty() && shown.size() <= std::size(want) && (nextImpact >= 0 || shown.size() == std::size(want));
+        for (std::size_t i = 0; sequence && i < shown.size(); ++i) {
+            sequence = on[i] == broke.tick + 5 * static_cast<int>(i + 1) && std::fabs(shown[i] - want[i]) < 1e-9;
+        }
+        CHECK_MSG(sequence, row + ": broken on tick " + std::to_string(broke.tick) + "; then" + trembles +
+                                (nextImpact >= 0 ? "; the stone's next impact on tick " + std::to_string(nextImpact) : ""));
+        std::printf("  %s: the wall broken on tick %d, %.4f u at once, then%s (the stone's next impact on tick %d)\n",
+                    row.c_str(), broke.tick, broke.seen.offsetUnits, trembles.c_str(), nextImpact);
+        layer.OnDetach(registry);
+    }
+}
+
+// Row 26: a locked door going once its keyhole has faded, 20: the keyhole's static
+// callback, after the update. 3-08's key carried to its keyhole, as the particle
+// case above carries it.
+void AnUnlockedDoorShakesTheView() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level7b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    const auto* key = layer.SimLevel()->keys.FindKey("key_ent_1335");
+    const auto* keyhole = layer.SimLevel()->keys.FindKeyhole("keyhole_1338");
+    CHECK(key != nullptr && keyhole != nullptr);
+    if (key == nullptr || keyhole == nullptr) return;
+    const glm::dvec2 holeAt = keyhole->atPx;
+    PutPlayerAt(registry, layer, key->atPx);
+    quakeTickWith(layer, registry, ticks);
+    const QuakeEdge unlocked = tickUntilUp(
+        layer, registry, ticks, 300, [](const PlayedLevel& played) { return played.keys.unlocked; },
+        [&registry, &layer, holeAt]() { PutPlayerAt(registry, layer, holeAt); });
+    CHECK_MSG(unlocked.tick > 0, "the key reached its keyhole");
+    const QuakeEdge opened =
+        tickUntilUp(layer, registry, ticks, 300, [](const PlayedLevel& played) { return played.keys.opened; });
+    checkQuakeRow(layer, registry, ticks, opened, "3-08 door_unlocked", 20.0, true);
+    layer.OnDetach(registry);
+}
+
+// 4-32, the one level whose light wall, summoned wall and dark dragon all shake the
+// view (rows 31, 12 x destroyEffectScale, 16 and 17). The player put on the floor
+// under the torch - where the level's portals take a player - and the torch shot as
+// T.1's tap shoots 4-29's; then:
+//  - the light wall going, 20, after the update;
+//  - seven seconds after the light, the dragon arriving and breakable_wall_2217
+//    coming down with it: 40 (its destroyEffectScale 2), after the update, and no
+//    wall_struck, because no stone broke it;
+//  - on its APPEARING path's mouth leg, 10 before the update on every tick, so every
+//    tremble there is a whole +-9.84 px (3.5 u);
+//  - FIGHTING, its first shot at the player, 15, before the update.
+void TheDarkDragonsLevelShakesTheView() {
+    namespace Earthquake = MagicPortals::Earthquake;
+    using MagicPortals::DarkDragon::Phase;
+    Earthquake::Rules rules;
+    std::string error;
+    CHECK_MSG(Earthquake::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/earthquake.json", rules, error), error);
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr || layer.SimLevel()->torch.lights.empty()) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    const glm::dvec2 torchPx = layer.SimLevel()->torch.lights.front().atPx;
+    PutPlayerAt(registry, layer, glm::dvec2(240.0, 190.0));
+    for (int waited = 0; waited < 600 && (waited < 60 || !onScreen(registry, torchPx)); ++waited) {
+        quakeTickWith(layer, registry, ticks);
+    }
+    CHECK_MSG(onScreen(registry, torchPx), "4-32's torch comes into view from " + Point(playerPx(registry, layer)));
+    tap(layer, registry, screenOf(registry, torchPx));
+    ++ticks;
+    tickUntilUp(layer, registry, ticks, 400, [](const PlayedLevel& played) { return played.torch.lit; });
+    CHECK_MSG(layer.SimLevel()->torch.lit > 0, "the shot lit the torch; the last shot: " + lastFailure(layer));
+    if (layer.SimLevel()->torch.lit == 0) return;
+    checkQuakeRow(layer, registry, ticks,
+                  tickUntilUp(layer, registry, ticks, 400,
+                              [](const PlayedLevel& played) { return played.torch.wallsGone; }),
+                  "4-32 light_wall_gone", 20.0, true);
+
+    const QuakeEdge arrived = tickUntilUp(layer, registry, ticks, 600, [](const PlayedLevel& played) {
+        for (const auto& breakable : played.demolish.breakables) {
+            if (breakable.name == played.darkDragon.wallNode && breakable.broken) return 1;
+        }
+        return 0;
+    });
+    CHECK_MSG(arrived.tick > 0 && layer.SimLevel()->darkDragon.Alive(), "the dragon came, and its wall went");
+    if (arrived.tick <= 0) return;
+    CHECK_MSG(arrived.seen.was.amplitudePx == 0.0 && arrived.seen.offsetUnits == 0.0,
+              "no wall_struck: nothing shown on the tick, from rest");
+    checkQuakeRow(layer, registry, ticks, arrived, "4-32 wall_destroyed x destroyEffectScale 2", 40.0, true);
+
+    int inLeg = 0;
+    int legWrong = 0;
+    int strays = 0;
+    int firstLegTick = -1;
+    double firstLegShown = 0.0;
+    std::string legSeen;
+    for (int i = 0; i < 700 && layer.SimLevel()->darkDragon.phase == Phase::Appearing; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        const auto& dragon = layer.SimLevel()->darkDragon;
+        const bool leg = dragon.Alive() && dragon.phase == Phase::Appearing &&
+                         Earthquake::InMouthLeg(rules, dragon.path.frame, dragon.path.Bias());
+        if (leg) {
+            ++inLeg;
+            if (firstLegTick < 0) {
+                firstLegTick = ticks;
+                firstLegShown = seen.offsetUnits;
+            }
+            std::string landed = quakeLanded(seen, 10.0, false);
+            if (landed.empty() && seen.offsetUnits != 0.0 && std::fabs(std::fabs(seen.offsetUnits) - 3.5) > 1e-9) {
+                landed = "a tremble of " + std::to_string(seen.offsetUnits) + " u";
+            }
+            if (!landed.empty() && legWrong++ == 0) legSeen = " (first, tick " + std::to_string(ticks) + ": " + landed + ")";
+        } else if (firstLegTick < 0 && seen.was.amplitudePx == 0.0 && seen.now.amplitudePx != 0.0) {
+            ++strays;
+        }
+    }
+    std::printf("  4-32: the mouth leg %d ticks from tick %d, first tremble %.4f u\n", inLeg, firstLegTick,
+                firstLegShown);
+    CHECK_MSG(inLeg >= 40 && legWrong == 0,
+              std::to_string(inLeg) + " ticks on the mouth leg, " + std::to_string(legWrong) + " wrong" + legSeen);
+    CHECK_MSG(std::fabs(firstLegShown - 3.5) < 1e-9, "the leg's first tick trembles 3.5 u from rest: " +
+                                                         std::to_string(firstLegShown));
+    CHECK_MSG(strays == 0, std::to_string(strays) + " call(s) before the leg, after the wall's shake");
+    CHECK_MSG(layer.SimLevel()->darkDragon.phase == Phase::Fighting, "the dragon is fighting");
+
+    const QuakeEdge shot =
+        tickUntilUp(layer, registry, ticks, 600, [](const PlayedLevel& played) { return played.darkDragon.fired; });
+    CHECK_MSG(layer.SimLevel()->darkDragon.phase == Phase::Fighting, "a shot at the player, from FIGHTING");
+    checkQuakeRow(layer, registry, ticks, shot, "4-32 dark_dragon_shot", 15.0, false);
+    layer.OnDetach(registry);
+}
+
+// ---- the black bars round the scene (art.json black_bar, step 102) ----------------
+//
+// black_bar.ent four times, as Game::manageSceneBounds adds it: placed once from the
+// max marker, in front of everything the scene draws (kLayerableTopZ, 00_order K13's
+// row), and off the view until a tremble moves the drawn camera past its clamp -
+// when the band that tremble uncovers is exactly what the bars cover: C and D below
+// the scene on a forth, A and B above it on the back that overshoots (D5_check
+// section 2, D11 section 2).
+
+// Where a point of the world shows on the 1280x720 viewport, by the camera's own
+// matrices (screenOf, for a point already in the world's units).
+glm::vec2 screenOfWorld(entt::registry& registry, const glm::vec3& world) {
+    const auto& camera = registry.get<CameraComponent>(primaryCamera(registry));
+    const glm::vec4 clip = camera.getProjectionMatrix() * camera.getViewMatrix() * glm::vec4(world, 1.0f);
+    const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+    return glm::vec2((ndc.x + 1.0f) * 0.5f * 1280.0f, (ndc.y + 1.0f) * 0.5f * 720.0f);
+}
+
+// A span of the viewport, lo to hi.
+struct Span {
+    double lo = 0.0;
+    double hi = 0.0;
+    bool Covers(const Span& other, double eps) const { return lo <= other.lo + eps && hi >= other.hi - eps; }
+};
+
+// A quad's rectangle on the viewport, from its transform as the renderer takes it:
+// the unit quad scaled and placed, not turned (the bars never are).
+std::pair<Span, Span> screenRectOf(entt::registry& registry, entt::entity quad) {
+    const auto& transform = registry.get<TransformComponent>(quad);
+    const glm::vec3 half(transform.scale.x * 0.5f, transform.scale.y * 0.5f, 0.0f);
+    const glm::vec2 a = screenOfWorld(registry, transform.position - half);
+    const glm::vec2 b = screenOfWorld(registry, transform.position + half);
+    return {Span{std::min(a.x, b.x), std::max(a.x, b.x)}, Span{std::min(a.y, b.y), std::max(a.y, b.y)}};
+}
+
+// How far in front a mesh reaches along the view: a quad is flat at its z, and
+// anything else (the boxes) half its depth in front of it.
+float meshFront(entt::registry& registry, entt::entity e) {
+    const auto& transform = registry.get<TransformComponent>(e);
+    const auto& mesh = registry.get<MeshComponent>(e);
+    return mesh.primitiveType == "Quad" ? transform.position.z
+                                        : transform.position.z + 0.5f * std::fabs(transform.scale.z);
+}
+
+// The frontmost mesh that is not a black bar, and its tag.
+std::pair<float, std::string> frontmostOther(entt::registry& registry) {
+    std::pair<float, std::string> front{-1e9f, ""};
+    for (auto [entity, tag, transform, mesh] : registry.view<TagComponent, TransformComponent, MeshComponent>().each()) {
+        (void)transform;
+        (void)mesh;
+        if (tag.tag == "Magic Portals Black Bar") continue;
+        const float z = meshFront(registry, entity);
+        if (z > front.first) front = {z, tag.tag};
+    }
+    return front;
+}
+
+void TheSceneHasFourBlackBarsInFrontOfEverything() {
+    if (!OriginalArtIsThere("TheSceneHasFourBlackBarsInFrontOfEverything")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    CHECK_MSG(MagicPortalsLayer::kLayerableTopZ == 1.0f, "the top of the scene is z 1");
+    const glm::dvec2 bounds = layer.BoundsPx();
+    CHECK_MSG(bounds == glm::dvec2(768.0, 256.0), "4-29's max marker: (768, 256)");
+    const std::vector<MagicPortalsLayer::BlackBarReport> bars = layer.BlackBars();
+    CHECK_EQ(bars.size(), static_cast<std::size_t>(4));
+    if (bars.size() != 4) {
+        layer.OnDetach(registry);
+        return;
+    }
+    // A (256, -16), B (512, -16), C (256, 272), D (512, 272), each 512 x 32 of
+    // black_bar.png - the sd file, which has no tier twin - at the top of the scene.
+    const glm::dvec2 want[] = {{256.0, -16.0}, {512.0, -16.0}, {256.0, 272.0}, {512.0, 272.0}};
+    for (std::size_t i = 0; i < 4; ++i) {
+        const MagicPortalsLayer::BlackBarReport& bar = bars[i];
+        const std::string name(1, static_cast<char>('A' + i));
+        CHECK_MSG(bar.centrePx == want[i], name + " at " + Point(bar.centrePx));
+        CHECK_MSG(bar.sizePx == glm::dvec2(512.0, 32.0), name + " is 512 x 32: " + Point(bar.sizePx));
+        CHECK_MSG(EndsWith(bar.texture, "/entities/black_bar.png"), name + " draws " + bar.texture);
+        CHECK_MSG(bar.z == MagicPortalsLayer::kLayerableTopZ, name + " at the top of the scene");
+        CHECK_MSG(bar.quad != entt::null && registry.valid(bar.quad), name + " has its quad");
+        if (bar.quad == entt::null || !registry.valid(bar.quad)) continue;
+        const auto& transform = registry.get<TransformComponent>(bar.quad);
+        const glm::vec3 centre = MagicPortals::Units::ToWorld(want[i].x, want[i].y);
+        CHECK_MSG(transform.position == glm::vec3(centre.x, centre.y, MagicPortalsLayer::kLayerableTopZ) &&
+                      transform.scale == glm::vec3(MagicPortals::Units::ToMetres(512.0),
+                                                   MagicPortals::Units::ToMetres(32.0), 1.0f) &&
+                      transform.rotation == glm::vec3(0.0f),
+                  name + "'s quad is placed where the report says, unturned");
+        CHECK_MSG(registry.get<TagComponent>(bar.quad).tag == "Magic Portals Black Bar", name + "'s tag");
+        const auto& material = registry.get<MaterialComponent>(bar.quad);
+        CHECK_MSG(material.transparent && material.blend != MaterialComponent::BlendMode::Additive,
+                  name + " is mixed, not added: black_bar.ent's blendMode 0");
+    }
+
+    // 4-29's torch lit by a scheduled tap, its wall gone on tick 160 or so, and with
+    // it the light wall's 20: ten trembles, the effects of the lighting and the going
+    // all live, the wall's ghost standing. On every tick, and every frame drawn from
+    // it, nothing else reaches the bars' z; at rest the view shows no band past the
+    // scene, and on a shaken frame the one band it shows is covered by the bars of its
+    // own side, across the whole width (4-29 is 768 wide: the bars reach all of it).
+    layer.ScheduleDevTap(60, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
+    std::pair<float, std::string> frontmost{-1e9f, ""};
+    int rest = 0;
+    int restClear = 0;
+    int forths = 0;
+    int backs = 0;
+    int covered = 0;
+    std::string bands;
+    const auto frame = [&](int tick) {
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::pair<float, std::string> front = frontmostOther(registry);
+        if (front.first > frontmost.first) frontmost = front;
+        const double offset = layer.QuakeOffsetUnits();
+        // The scene's two edges on the viewport, at x 384 (any x of the level will do).
+        const double top = screenOfWorld(registry, MagicPortals::Units::ToWorld(384.0, 0.0)).y;
+        const double bottom = screenOfWorld(registry, MagicPortals::Units::ToWorld(384.0, bounds.y)).y;
+        const Span scene{std::min(top, bottom), std::max(top, bottom)};
+        // Float metres through the camera's matrices: a hundredth of a pixel.
+        const double eps = 1e-2;
+        if (offset == 0.0) {
+            ++rest;
+            if (scene.lo <= eps && scene.hi >= 720.0 - eps) ++restClear;
+            return;
+        }
+        // A forth moves the camera down the level: the band past max (C and D). A
+        // back overshoots up it: the band above y 0 (A and B).
+        const bool forth = offset > 0.0;
+        if (forth) {
+            ++forths;
+        } else {
+            ++backs;
+        }
+        const double edge = forth ? bottom : top;
+        const bool edgeIsLow = edge == scene.lo;
+        const Span band = edgeIsLow ? Span{0.0, edge} : Span{edge, 720.0};
+        const double heightPx = band.hi - band.lo;
+        Span barsX{1e9, -1e9};
+        bool barsY = true;
+        for (std::size_t i = forth ? 2 : 0; i < (forth ? 4u : 2u); ++i) {
+            const auto [x, y] = screenRectOf(registry, bars[i].quad);
+            barsX.lo = std::min(barsX.lo, x.lo);
+            barsX.hi = std::max(barsX.hi, x.hi);
+            barsY = barsY && y.Covers(band, eps);
+        }
+        const bool ok = std::fabs(heightPx - std::fabs(offset) * 720.0 / 256.0) < eps && barsY &&
+                        barsX.Covers(Span{0.0, 1280.0}, eps);
+        if (ok) ++covered;
+        char line[160];
+        std::snprintf(line, sizeof line, " %d:%s%.4f", tick, forth ? "+" : "-", heightPx);
+        bands += line;
+    };
+    for (int tick = 1; tick <= 230; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        frame(tick);
+    }
+    CHECK_MSG(forths == 5 && backs == 5, "the light wall's ten trembles, five each way:" + bands);
+    CHECK_MSG(covered == forths + backs,
+              "each shaken frame's band is its tremble's pixels, and the bars of its side cover it edge to edge:" +
+                  bands);
+    CHECK_MSG(restClear == rest, "at rest the scene fills the view: no bar is on it (" + std::to_string(restClear) +
+                                     " of " + std::to_string(rest) + ")");
+    CHECK_MSG(frontmost.first < MagicPortalsLayer::kLayerableTopZ,
+              "nothing else reaches the bars' z: the frontmost is " + frontmost.second + " at " +
+                  std::to_string(frontmost.first));
+
+    // And with the boxes a player turns on over the art: the markers' boxes stand
+    // in front of the art, and still behind the bars.
+    press(layer, registry, MagicPortalsLayer::kBoxes);
+    CHECK(layer.ShowingBoxes());
+    for (int tick = 0; tick < 3; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::pair<float, std::string> boxed = frontmostOther(registry);
+    CHECK_MSG(boxed.first < MagicPortalsLayer::kLayerableTopZ,
+              "with the boxes on, the frontmost is " + boxed.second + " at " + std::to_string(boxed.first));
+    CHECK_MSG(layer.BlackBars().size() == 4, "the boxes change nothing of the bars");
+    layer.OnDetach(registry);
+    int left = 0;
+    for (auto [entity, tag] : registry.view<TagComponent>().each()) {
+        (void)entity;
+        if (tag.tag == "Magic Portals Black Bar") ++left;
+    }
+    CHECK_MSG(left == 0, "the bars go with the level");
+}
+
+// On a scene wider than the bars reach they stop at x 768 (00_order 8.13; D11
+// section 2 measured the band stopping mid-screen on 4-01): 2-32 is 2632 wide.
+void TheBlackBarsStopAt768OnAWideScene() {
+    if (!OriginalArtIsThere("TheBlackBarsStopAt768OnAWideScene")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31a");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    CHECK_MSG(layer.BoundsPx() == glm::dvec2(2632.0, 256.0), "2-32's max: " + Point(layer.BoundsPx()));
+    const std::vector<MagicPortalsLayer::BlackBarReport> bars = layer.BlackBars();
+    CHECK_EQ(bars.size(), static_cast<std::size_t>(4));
+    double left = 1e9;
+    double right = -1e9;
+    for (const MagicPortalsLayer::BlackBarReport& bar : bars) {
+        const auto& transform = registry.get<TransformComponent>(bar.quad);
+        const glm::dvec2 at = MagicPortals::Units::ToPixels(transform.position);
+        const double half = MagicPortals::Units::ToPixels(transform.scale).x * 0.5;
+        left = std::min(left, at.x - half);
+        right = std::max(right, at.x + half);
+    }
+    CHECK_MSG(std::fabs(left) < 1e-3 && std::fabs(right - 768.0) < 1e-3,
+              "the bars span x " + std::to_string(left) + " to " + std::to_string(right) + " of 2632");
     layer.OnDetach(registry);
 }
 
@@ -7478,7 +9234,14 @@ void ALitTorchBakesTheLevelAtRunTime() {
     const std::vector<std::uint8_t> before = masks();
     CHECK_MSG(std::count(before.begin(), before.end(), Lighting::kLiveLights) > 0,
               "unlit: its static walls take only the live lights");
-    CHECK_EQ(Tagged(registry, "Magic Portals Torch Light"), 0);
+    const auto litTorches = [&layer]() {
+        std::vector<MagicPortalsLayer::EffectReport> found;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "light_from_projectile.ent") found.push_back(report);
+        }
+        return found;
+    };
+    CHECK(litTorches().empty());
 
     const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
     tap(layer, registry, screenOf(registry, torchPx));
@@ -7488,9 +9251,14 @@ void ALitTorchBakesTheLevelAtRunTime() {
     CHECK_MSG(layer.SimLevel()->torch.lights[0].lit, "a shot at the torch lit it: " + lastFailure(layer));
     if (!layer.SimLevel()->torch.lights[0].lit) return;
     tickWith(layer, registry, kRest, {}, {});
+    // THE LIT TORCH IS AN ENTITY THE SHOT ADDS (the visuals plan's 11.2): its light
+    // and halo come with light_from_projectile.ent, which the frame adds.
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
 
-    CHECK_EQ(Tagged(registry, "Magic Portals Torch Light"), 1);
-    const entt::entity lamp = FirstTagged(registry, "Magic Portals Torch Light");
+    const std::vector<MagicPortalsLayer::EffectReport> lamps = litTorches();
+    CHECK_EQ(lamps.size(), std::size_t{1});
+    const entt::entity lamp = lamps.size() == 1 ? lamps[0].light : entt::null;
+    CHECK(lamp != entt::null);
     if (lamp != entt::null) {
         const Light2DComponent& light = registry.get<Light2DComponent>(lamp);
         const glm::vec3 colour = light.color * light.intensity;
@@ -7502,6 +9270,17 @@ void ALitTorchBakesTheLevelAtRunTime() {
         const glm::vec3 at = registry.get<TransformComponent>(lamp).position;
         const glm::vec3 want = MagicPortals::Units::ToWorld(torchPx.x, torchPx.y - 12.0);
         CHECK_MSG(std::fabs(at.x - want.x) < 1e-5f && std::fabs(at.y - want.y) < 1e-5f, "12 above the torch");
+        // And its HALO at the light's own (x, y) too - DrawHalo's point
+        // (ETHRenderEntity.cpp:376-386) - where step 55 drew it 12 units low.
+        const entt::entity halo = lamps[0].halo;
+        CHECK(halo != entt::null);
+        if (halo != entt::null) {
+            const glm::vec3 haloAt = registry.get<TransformComponent>(halo).position;
+            CHECK_MSG(std::fabs(haloAt.x - want.x) < 1e-5f && std::fabs(haloAt.y - want.y) < 1e-5f,
+                      "the halo 12 above the torch as well: " + ShowV(haloAt));
+            CHECK_MSG(std::fabs(lamps[0].haloPx.x - 300.0) < 1e-9 && std::fabs(lamps[0].haloPx.y - 300.0) < 1e-9,
+                      "halo.bmp 300 across (no bounce on a level with no wall)");
+        }
     }
     const std::vector<std::uint8_t> after = masks();
     CHECK_MSG(!after.empty() && std::all_of(after.begin(), after.end(), [](std::uint8_t mask) {
@@ -7943,9 +9722,43 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::EffectSystems) == -0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Picture) == 0.0);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Halo) == 0.25);
-    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ShotPicture) == 0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Systems) == 0.25);
-    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ShotHalo) == 0.5);
+
+    // THE SHOT (00_order K14, step 103): at the z 0 addProjectile gives it, which
+    // is BEHIND the player (R10's 1.42) and a minion (its raw 2, 0.711) wherever
+    // they share its gap - so below their -0.5 - with its halo after its picture,
+    // and both in front of the previous slot's halo (-0.75) and of the deepest
+    // particle system that slot can hold: -1 + SlotFraction(n - 1, n), n being the
+    // most systems any entity of the original's carries (2, a grep of the 190
+    // .ent files) - and still for n up to 14.
+    const double shot = MagicPortalsLayer::SlotFractionOf(Slot::ShotPicture);
+    const double shotHalo = MagicPortalsLayer::SlotFractionOf(Slot::ShotHalo);
+    CHECK(shot == -0.515625);
+    CHECK(shotHalo == -0.5078125);
+    CHECK_MSG(shot < shotHalo && shotHalo < MagicPortalsLayer::SlotFractionOf(Slot::Minion) &&
+                  shotHalo < MagicPortalsLayer::SlotFractionOf(Slot::Picture),
+              "the shot, then its halo, then a minion, then the player");
+    CHECK(-0.75 < shot);
+    for (const int n : {1, 2, 14}) {
+        const double deepest = -1.0 + MagicPortals::Particles::SlotFraction(n - 1, n);
+        CHECK_MSG(deepest < shot, "the previous slot's last of " + std::to_string(n) + " systems, at " +
+                                      std::to_string(deepest) + ", stands behind the shot");
+    }
+
+    // THE SHOCK RING (the visuals plan's 13.1, step 111): at the absolute -10, deeper
+    // than every other class but the door glow, so BEHIND all of them where it shares
+    // their gap - the shot, a minion, an effect - and so the first row; still in front
+    // of the previous slot's halo and of its deepest system for up to 6 of them (the
+    // most any .ent carries is 2).
+    const double shockRing = MagicPortalsLayer::SlotFractionOf(Slot::ShockRing);
+    CHECK(shockRing == -0.53125);
+    CHECK(static_cast<int>(Slot::ShockRing) == 0);
+    CHECK_MSG(shockRing < shot && -0.75 < shockRing, "the shock ring behind the shot, in front of the last halo");
+    for (const int n : {1, 2, 6}) {
+        const double deepest = -1.0 + MagicPortals::Particles::SlotFraction(n - 1, n);
+        CHECK_MSG(deepest < shockRing, "the previous slot's last of " + std::to_string(n) + " systems, at " +
+                                           std::to_string(deepest) + ", stands behind the shock ring");
+    }
 
     // THE TIE THE TABLE STATES. The twelve between-slot classes share one
     // fraction, so two of them at one z_index land on exactly one z; what orders
@@ -7995,9 +9808,9 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
                 static_cast<int>(table.size()), tied, spreads);
 }
 
-// And the fractions the layer actually draws at, off the registry: the shot a
-// quarter of a slot in front of the player, its halo half a slot, and a portal
-// the player has placed a quarter behind it.
+// And the fractions the layer actually draws at, off the registry: the shot and
+// its halo just over half a slot BEHIND the player (00_order K14, step 103: it
+// was a quarter in front), and a portal the player has placed a quarter behind it.
 void TheTableIsTheFractionTheLayerDrawsAt() {
     if (!OriginalArtIsThere("TheTableIsTheFractionTheLayerDrawsAt")) return;
     entt::registry registry;
@@ -8027,10 +9840,13 @@ void TheTableIsTheFractionTheLayerDrawsAt() {
     if (const entt::entity halo = FirstTagged(registry, "Magic Portals Shot Halo"); halo != entt::null) {
         shotHaloZ = registry.get<TransformComponent>(halo).position.z;
     }
-    CHECK_MSG(std::fabs(shotZ - (playerZ + 0.25f * slotZ)) < 1e-7f,
-              "the shot a quarter of a slot in front of the player: " + std::to_string(shotZ - playerZ));
-    CHECK_MSG(std::fabs(shotHaloZ - (playerZ + 0.5f * slotZ)) < 1e-7f,
-              "and its halo half a slot: " + std::to_string(shotHaloZ - playerZ));
+    // level1 stands no node between 0 and the player's 1.42, so the gap after
+    // its pictures at 0 or below is the player's own.
+    CHECK_MSG(std::fabs(shotZ - (playerZ - 0.515625f * slotZ)) < 1e-7f,
+              "the shot 0.516 of a slot BEHIND the player: " + std::to_string((shotZ - playerZ) / slotZ));
+    CHECK_MSG(std::fabs(shotHaloZ - (playerZ - 0.5078125f * slotZ)) < 1e-7f,
+              "and its halo just after it, still behind: " + std::to_string((shotHaloZ - playerZ) / slotZ));
+    CHECK(shotZ < shotHaloZ && shotHaloZ < playerZ);
 
     // And the portal that tap opened, a quarter of a slot behind the player.
     landShot(layer, registry);
@@ -8650,9 +10466,11 @@ void APortalThePlayerOpenedIsTheEntityInsertPortalAdds() {
     // order (#33 before #71) and so the order the two draw their random in.
     std::vector<MagicPortalsLayer::EffectReport> summons = portalsOf("portal_summon_effect.ent");
     std::vector<MagicPortalsLayer::EffectReport> bodies = portalsOf("portal.ent");
-    CHECK_MSG(summons.size() == 1 && bodies.size() == 1 && layer.EffectsSpawned() == spawnedBefore + 2,
-              "one portal adds two entities: " + std::to_string(summons.size()) + " summon, " +
-                  std::to_string(bodies.size()) + " portal, " +
+    // Four added since the tap: the tap's portal_mark and the shot's first-tick
+    // projectile_shoot (the visuals plan's 10.1, step 103), then the portal's two.
+    CHECK_MSG(summons.size() == 1 && bodies.size() == 1 && layer.EffectsSpawned() == spawnedBefore + 4,
+              "one portal adds two entities, after the tap's mark and the shot's flash: " +
+                  std::to_string(summons.size()) + " summon, " + std::to_string(bodies.size()) + " portal, " +
                   std::to_string(layer.EffectsSpawned() - spawnedBefore) + " added");
     if (summons.size() != 1 || bodies.size() != 1) return;
     CHECK_MSG(summons.front().id < bodies.front().id, "the bubble is added before the portal");
@@ -8841,8 +10659,9 @@ void AClearedPairPopsInTheManagersOrder() {
     CHECK_MSG(portalIdC != portalIdA && portalIdC != portalIdB,
               "the new portal is named in its own right, not handed a refunded name: " + std::to_string(portalIdC) +
                   " against " + std::to_string(portalIdA) + " and " + std::to_string(portalIdB));
-    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 2,
-              "it added its own summon bubble and its own portal.ent: " +
+    // And the tap's portal_mark and the shot's projectile_shoot before them (step 103).
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 4,
+              "it added its own summon bubble and its own portal.ent, after the mark and the flash: " +
                   std::to_string(layer.EffectsSpawned() - spawnedBefore) + " added");
     bodies = portalsOf("portal.ent");
     CHECK_MSG(bodies.size() == 3, "three portal entities now: two dying and one new");
@@ -9736,6 +11555,53 @@ void TheBlackKnightCarriesItsAuraAsAMultiply() {
     layer.OnDetach(registry);
 }
 
+// THE BLACK KNIGHT MAKES NO TREMBLE (the merge of the two tracks, planning step 112,
+// as step 97's merge note asks). level31b's marker adds ghost_minion.ent (R16), and
+// the listing has no ETHBeginContactCallback_ghost_minion - the one a minion has is
+// ETHBeginContactCallback_minion's (437083..437789 #124-130), which only minion.ent
+// runs - so where the knight lands, minion_impact calls nothing. Since step 97 the
+// sim's Minion::entity is never empty, so the watch reads it and not the marker's
+// raw name. Pinned by a landing: the knight lifted 30 over where it rests and let
+// fall, which a minion.ent would begin its floor on (AKnightIsLookedAtWhereTheOriginalsStands).
+void TheBlackKnightsLandingMakesNoTremble() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    const MagicPortals::Minions::Minion* knight = layer.SimLevel()->minions.FindMinion("minion_spawn_908");
+    CHECK_MSG(knight != nullptr && knight->body != entt::null && knight->entity == "ghost_minion.ent",
+              "level31b's black knight is the ghost_minion.ent its marker adds");
+    if (knight == nullptr || knight->body == entt::null) return;
+    const entt::entity body = knight->body;
+    const auto bodyPx = [&registry, body]() {
+        return MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position);
+    };
+    int begins = 0;
+    int minionBegins = 0;
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const glm::dvec2 rest = bodyPx();
+    PutBodyAt(registry, body, rest - glm::dvec2(0.0, 30.0));
+    double lowest = rest.y - 30.0;
+    for (int tick = 0; tick < 90 && registry.valid(body); ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind == MagicPortals::Impacts::Kind::Minion) ++minionBegins;
+            if (begin.body == body) ++begins;
+        }
+        if (registry.valid(body)) lowest = std::max(lowest, bodyPx().y);
+    }
+    CHECK_MSG(registry.valid(body) && lowest > rest.y - 1.0,
+              "the knight came back down onto its floor: rest y " + std::to_string(rest.y) + ", lowest " +
+                  std::to_string(lowest));
+    CHECK_MSG(begins == 0, "and began nothing the earthquake watches: " + std::to_string(begins));
+    std::printf("  level31b: the black knight dropped 30 onto its floor (rest y %.2f, lowest %.2f): %d begins of its "
+                "own, %d of any minion\n",
+                rest.y, lowest, begins, minionBegins);
+    layer.OnDetach(registry);
+}
+
 // CHAPTER 3'S BOSS (the visuals plan's 12.2, planning step 98; the owner's standing
 // ruling R4). level31b plays for a while with no ghost at all and the level's own
 // music; the black knight dies and ghost.ent is added where it went, drawn at the
@@ -10276,8 +12142,2590 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
     layer.OnDetach(registry);
 }
 
+
+// ---- The shot's marks and ends, and its depth (the visuals plan's 10.1, step 103) ----
+//
+// What a tap and a shot leave behind, as the original's script adds it, on the
+// port's own shots: the mark at the tap (red_cross or portal_mark, by the
+// tap-time ray, R15), red_waves (A) and (B), the hourglass, projectile_shoot on
+// a shot's first tick, and portal_fail or portal_fail_in_antiportal where the
+// port's shot ends - with their shakes. And K14: the shot drawn behind the
+// player. The gates are 00_order section 7's 10.1 rows on 1-07 (level6),
+// footage F3's level, with the camera at (0, 0).
+
+std::vector<MagicPortalsLayer::EffectReport> EffectsOf(const MagicPortalsLayer& layer, const std::string& entity) {
+    std::vector<MagicPortalsLayer::EffectReport> found;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity == entity) found.push_back(report);
+    }
+    return found;
+}
+
+// A level loaded, old enough for its first tap, its first latch behind it.
+bool ReadyToShoot(MagicPortalsLayer& layer, entt::registry& registry, int& ticks) {
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return false;
+    ticks = CloseTheLevelStartPopup(layer, registry);
+    for (int i = 0; i < 26; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        ++ticks;
+    }
+    return true;
+}
+
+// What one flight left: its first-tick launch and its end, as the ticks that
+// flew it recorded them; and the quake tick the end came on.
+struct Flown {
+    std::vector<MagicPortals::Portals::Launch> launches;
+    std::vector<MagicPortals::Portals::Failure> ends;
+    int endTick = -1;
+    QuakeTick endSeen;
+};
+
+Flown FlyWithFrames(MagicPortalsLayer& layer, entt::registry& registry, int& ticks) {
+    Flown flown;
+    for (int i = 0; i < 180 && layer.SimLevel() != nullptr && layer.SimLevel()->portals.flight; ++i) {
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        const MagicPortals::Portals::State& portals = layer.SimLevel()->portals;
+        for (const auto& launch : portals.launches) flown.launches.push_back(launch);
+        if (!portals.failures.empty()) {
+            for (const auto& end : portals.failures) flown.ends.push_back(end);
+            flown.endTick = ticks;
+            flown.endSeen = seen;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    return flown;
+}
+
+// Gate 1 of 00_order 10.1: "a failed shot into a 1-7 wall gives portal_fail at z
+// 32 with one light". Footage F3's wall tap, (450, 315) of its screen.
+void AShotIntoA17WallEndsInPortalFail() {
+    if (!OriginalArtIsThere("AShotIntoA17WallEndsInPortalFail")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level6");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const glm::dvec2 wall(160.0, 112.0);
+    CHECK(onScreen(registry, wall));
+    tap(layer, registry, screenOf(registry, wall));
+    ++ticks;
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    const glm::dvec2 from = layer.SimLevel()->portals.flight->fromPx;
+    const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    // The mark: the tap-time ray meets the block's underside, so red_cross -
+    // F3 #28 - at the tap, z scale(32); and no portal_mark, no waves.
+    const auto crosses = EffectsOf(layer, "red_cross.ent");
+    CHECK_MSG(crosses.size() == 1 && crosses[0].atPx == aim && crosses[0].zUnits == 32.0,
+              "red_cross at the tap, z 32: " + std::to_string(crosses.size()));
+    CHECK(EffectsOf(layer, "portal_mark.ent").empty() && EffectsOf(layer, "red_waves.ent").empty());
+
+    const Flown flown = FlyWithFrames(layer, registry, ticks);
+    // projectile_shoot on the shot's first tick, 24 out along its way, at the
+    // projectile's z 0.
+    CHECK_EQ(flown.launches.size(), std::size_t{1});
+    const glm::dvec2 dir = glm::normalize(aim - from);
+    const auto flashes = EffectsOf(layer, "projectile_shoot.ent");
+    CHECK_MSG(flashes.size() == 1 && glm::distance(flashes[0].atPx, from + dir * 24.0) < 1e-4 &&
+                  flashes[0].zUnits == 0.0,
+              "projectile_shoot 24 out from " + Point(from) + ": " + std::to_string(flashes.size()));
+    // The end: a body, outside every field.
+    CHECK_MSG(flown.ends.size() == 1 && flown.ends[0].kind == MagicPortals::Portals::FailKind::Body &&
+                  !flown.ends[0].inField,
+              "the shot ended on a body: " + lastFailure(layer));
+    if (flown.ends.size() != 1) return;
+    const glm::dvec2 endPx = flown.ends[0].atPx;
+    const auto fails = EffectsOf(layer, "portal_fail.ent");
+    CHECK_MSG(fails.size() == 1, "one portal_fail: " + std::to_string(fails.size()));
+    CHECK(EffectsOf(layer, "portal_fail_in_antiportal.ent").empty());
+    if (fails.size() == 1) {
+        const MagicPortalsLayer::EffectReport& fail = fails[0];
+        CHECK_MSG(fail.atPx == endPx && fail.zUnits == 32.0,
+                  "portal_fail where the shot ended, " + Point(endPx) + ", at z 32: " + Point(fail.atPx) + " z " +
+                      std::to_string(fail.zUnits));
+        // ONE LIGHT and no halo: portal_fail.ent's <Light> names no <HaloBitmap>.
+        CHECK_MSG(fail.hasLight && !fail.hasHalo && fail.lightRange == 58.0 && fail.temporary,
+                  "a light of range 58, no halo, temporary: range " + std::to_string(fail.lightRange));
+        std::printf("  1-07 wall: red_cross at %s, projectile_shoot at %s, portal_fail at %s (%s) on tick %d, "
+                    "light %.0f, z %.0f\n",
+                    Point(aim).c_str(), Point(flashes.empty() ? glm::dvec2(0.0) : flashes[0].atPx).c_str(),
+                    Point(endPx).c_str(), lastFailure(layer).c_str(), flown.endTick, fail.lightRange, fail.zUnits);
+    }
+    // A plain portal_fail shakes nothing (ETHCallback_projectile #237-257).
+    CHECK_MSG(flown.endSeen.now.amplitudePx == flown.endSeen.was.amplitudePx && layer.Quake().amplitudePx == 0.0,
+              "no shake for a shot a wall stops");
+    layer.OnDetach(registry);
+}
+
+// Gate 2: "a 1-7 antiportal tap gives _in_antiportal at z 0". A tap 28 units
+// from antiportal_687, inside the 16 x 3 = 48 units the port plays (R1 is not
+// built), with a clear ray: red_waves (A) and red_cross at the tap, and on the
+// shot's arrival the red end at z 0 and the shake of 5, before the update.
+void AnAntiportalTapOn17EndsRedAtZeroAndShakes() {
+    if (!OriginalArtIsThere("AnAntiportalTapOn17EndsRedAtZeroAndShakes")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level6");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const glm::dvec2 inField(259.911, 194.844);
+    tap(layer, registry, screenOf(registry, inField));
+    ++ticks;
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto waves = EffectsOf(layer, "red_waves.ent");
+    const auto crosses = EffectsOf(layer, "red_cross.ent");
+    CHECK_MSG(waves.size() == 1 && waves[0].atPx == aim && waves[0].zUnits == 32.0,
+              "red_waves (A) at the tap, z 32: " + std::to_string(waves.size()));
+    CHECK_MSG(crosses.size() == 1 && crosses[0].atPx == aim && crosses[0].zUnits == 32.0,
+              "and red_cross: " + std::to_string(crosses.size()));
+    // In the original's order: computePortalFinalPos adds the waves before
+    // addProjectile adds the mark.
+    if (waves.size() == 1 && crosses.size() == 1) CHECK(waves[0].id < crosses[0].id);
+
+    const Flown flown = FlyWithFrames(layer, registry, ticks);
+    CHECK_MSG(flown.ends.size() == 1 && flown.ends[0].kind == MagicPortals::Portals::FailKind::Refused &&
+                  flown.ends[0].inField && flown.ends[0].atPx == aim,
+              "refused where it arrived, in the field: " + lastFailure(layer));
+    const auto reds = EffectsOf(layer, "portal_fail_in_antiportal.ent");
+    CHECK_MSG(reds.size() == 1, "one portal_fail_in_antiportal: " + std::to_string(reds.size()));
+    CHECK(EffectsOf(layer, "portal_fail.ent").empty());
+    if (reds.size() == 1) {
+        const MagicPortalsLayer::EffectReport& red = reds[0];
+        CHECK_MSG(red.atPx == aim && red.zUnits == 0.0,
+                  "at the tap, z 0: " + Point(red.atPx) + " z " + std::to_string(red.zUnits));
+        CHECK_MSG(red.hasLight && !red.hasHalo && red.lightRange == 66.0,
+                  "a light of range 66, no halo: " + std::to_string(red.lightRange));
+        // Its one system's own <StartPoint> z of 20 carries its specks in front of
+        // the player, where the 0 alone would not.
+        CHECK(!red.systemZ.empty() && red.systemZ[0] > layer.PlayerSlotZ());
+    }
+    // ETHCallback_projectile's startEarthquake(5, 0), a dynamic entity's: before
+    // the update, on the arrival's own tick.
+    CHECK_MSG(flown.endTick > 0, "the shot ended");
+    if (flown.endTick > 0) {
+        const std::string landed = quakeLanded(flown.endSeen, 5.0, false);
+        CHECK_MSG(landed.empty(), "shot_failed_in_field on tick " + std::to_string(flown.endTick) + ": " + landed);
+    }
+    std::printf("  1-07 in the field: red_waves and red_cross at %s, portal_fail_in_antiportal there on tick %d\n",
+                Point(aim).c_str(), flown.endTick);
+    layer.OnDetach(registry);
+}
+
+// F3's long shot, (1100, 450) of its screen: past the field, so portal_mark at
+// the tap - the tap-time ray cannot see the anti_projectile_wall, a shape-0
+// entity - and killed in flight by it: the red end where the wall took it, and
+// the wall's own shake of 5, a static entity's, after the update.
+void TheBlockerKillsF3sLongShotRedAndShakesAfter() {
+    if (!OriginalArtIsThere("TheBlockerKillsF3sLongShotRedAndShakesAfter")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level6");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    tap(layer, registry, screenOf(registry, glm::dvec2(391.111, 160.0)));
+    ++ticks;
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto marks = EffectsOf(layer, "portal_mark.ent");
+    CHECK_MSG(marks.size() == 1 && marks[0].atPx == aim && marks[0].zUnits == 32.0,
+              "portal_mark at the tap: " + std::to_string(marks.size()));
+    CHECK(EffectsOf(layer, "red_cross.ent").empty());
+    const QuakeEdge killed = tickUntilUp(layer, registry, ticks, 120,
+                                         [](const PlayedLevel& played) { return played.portals.shotsFailed; });
+    CHECK_MSG(killed.tick > 0 && layer.SimLevel()->portals.lastFailure == "anti_projectile_wall_ent_743",
+              "killed by the blocker: " + lastFailure(layer));
+    const std::vector<MagicPortals::Portals::Failure> ends = layer.SimLevel()->portals.failures;
+    CHECK_MSG(ends.size() == 1 && ends[0].kind == MagicPortals::Portals::FailKind::Blocker,
+              "the end is the blocker's");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto reds = EffectsOf(layer, "portal_fail_in_antiportal.ent");
+    CHECK_MSG(reds.size() == 1 && !ends.empty() && reds[0].atPx == ends[0].atPx && reds[0].zUnits == 0.0,
+              "portal_fail_in_antiportal where the wall took it: " + std::to_string(reds.size()));
+    if (!ends.empty()) {
+        // The blocker's box is x 281 to 345: the shot is taken on entering it.
+        // (The box is held in metres, a float: its edge reads 281.00001.)
+        CHECK_MSG(std::fabs(ends[0].atPx.x - 281.0) < 1e-3, "taken at the box's edge: " + Point(ends[0].atPx));
+        std::printf("  1-07 long shot: portal_mark at %s, killed by the blocker at %s on tick %d\n",
+                    Point(aim).c_str(), Point(ends[0].atPx).c_str(), killed.tick);
+    }
+    checkQuakeRow(layer, registry, ticks, killed, "1-07 shot_blocked", 5.0, true);
+    layer.OnDetach(registry);
+}
+
+// F3's hourglass: a tap past the 400 ms while a shot still flies. On 1-04
+// (level3), whose open air lets a shot fly longer than 400 ms at the port's 600
+// units a second (1-07's longest clear flight is shorter: the blocker is 240
+// units out). The tap draws the hourglass and fires nothing, and - the port's
+// R23 difference - leaves the 400 ms clock where it was.
+void ATapWhileAShotFliesShowsTheHourglass() {
+    if (!OriginalArtIsThere("ATapWhileAShotFliesShowsTheHourglass")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level3");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    tap(layer, registry, screenOf(registry, glm::dvec2(440.889, 60.444)));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the long shot fired: " + lastFailure(layer));
+    // Ten ticks on - inside the 400 ms - a tap draws nothing at all.
+    for (int i = 0; i < 9; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const glm::dvec2 aside(106.667, 106.667);
+    tap(layer, registry, screenOf(registry, aside));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Cooldown &&
+                  EffectsOf(layer, "hourglass.ent").empty(),
+              "within 400 ms: silent");
+    // Twenty more: past it, the shot still flying.
+    for (int i = 0; i < 19; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK(layer.SimLevel()->portals.flight.has_value());
+    const double clockBefore = layer.SimLevel()->portals.sinceTapMs;
+    tap(layer, registry, screenOf(registry, aside));
+    const double clockAfter = layer.SimLevel()->portals.sinceTapMs;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::InFlight);
+    const auto glasses = EffectsOf(layer, "hourglass.ent");
+    CHECK_MSG(glasses.size() == 1 && glm::distance(glasses[0].atPx, aside) < 1e-3 && glasses[0].zUnits == 32.0,
+              "the hourglass at the tap, z 32: " + std::to_string(glasses.size()));
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == 1, "and no second shot");
+    CHECK_MSG(std::fabs(clockAfter - clockBefore - 1000.0 / 60.0) < 1e-6,
+              "the 400 ms clock ran on through the tap, not restarted: " + std::to_string(clockBefore) + " -> " +
+                  std::to_string(clockAfter));
+    layer.OnDetach(registry);
+}
+
+// red_waves (B): 1-15 (level14) grants no portal and places the no-portal sign.
+// Every tap after the first 300 ms draws the waves at the tap and shakes 7,
+// before the update - no 400 ms between them. 1-01 (level0) grants none either
+// and has no sign: its tap is silent.
+void ABudgetZeroTapByTheSignMakesRedWavesAndAShake() {
+    if (!OriginalArtIsThere("ABudgetZeroTapByTheSignMakesRedWavesAndAShake")) return;
+    for (const bool sign : {true, false}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), sign ? "level14" : "level0");
+        layer.OnAttach(registry);
+        int ticks = 0;
+        if (!ReadyToShoot(layer, registry, ticks)) return;
+        CHECK(layer.SimLevel()->portals.budget == 0 && layer.SimLevel()->portals.noPortalSign == sign);
+        for (int i = 0; i < 2; ++i) {
+            const glm::dvec2 at = layer.CameraCentrePx() + glm::dvec2(0.0, i == 0 ? -60.0 : -30.0);
+            QuakeTick seen;
+            seen.was = layer.Quake();
+            tap(layer, registry, screenOf(registry, at));
+            seen.now = layer.Quake();
+            seen.offsetUnits = layer.QuakeOffsetUnits();
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            CHECK(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::NoBudget);
+            if (sign) {
+                const std::string landed = quakeLanded(seen, 7.0, false);
+                CHECK_MSG(landed.empty(), "tap " + std::to_string(i + 1) + ": " + landed);
+            } else {
+                CHECK_MSG(seen.now.amplitudePx == seen.was.amplitudePx, "1-01: no shake");
+            }
+            // Ten ticks between the two taps: under 400 ms, which this path never asks.
+            for (int t = 0; t < 9; ++t) {
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+        }
+        const auto waves = EffectsOf(layer, "red_waves.ent");
+        CHECK_MSG(static_cast<int>(waves.size()) == (sign ? 2 : 0),
+                  std::string(sign ? "1-15" : "1-01") + ": " + std::to_string(waves.size()) + " red_waves");
+        for (const auto& wave : waves) CHECK(wave.zUnits == 32.0);
+        layer.OnDetach(registry);
+    }
+}
+
+// The ghost's shot marks its end (addEnemyShoot #127-156): portal_mark at the
+// point it is aimed at, the character's position as ETHCallback_ghost passes it.
+void TheGhostsShotMarksWhereItIsAimed() {
+    if (!OriginalArtIsThere("TheGhostsShotMarksWhereItIsAimed")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(EndTheBlackKnight(layer, registry,
+                                [&]() {
+                                    quakeTickWith(layer, registry, ticks);
+                                    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+                                }),
+              "3-32: the black knight's death adds the ghost (R4)");
+    const std::size_t marksBefore = EffectsOf(layer, "portal_mark.ent").size();
+    PutPlayerAt(registry, layer, glm::dvec2(400.0, 190.0));
+    const QuakeEdge fired = tickUntilUp(layer, registry, ticks, 900,
+                                        [](const PlayedLevel& played) { return played.ghost.shotsFired; });
+    CHECK_MSG(fired.tick > 0, "the ghost shot");
+    if (fired.tick <= 0 || layer.SimLevel()->ghost.shots.empty()) return;
+    const MagicPortals::Ghost::Shot& shot = layer.SimLevel()->ghost.shots.back();
+    const glm::dvec2 aimed = shot.atPx + glm::normalize(shot.velocityPx) * (shot.rangePx - shot.flownPx);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto marks = EffectsOf(layer, "portal_mark.ent");
+    // ONE MARK A SHOT, by the one rule both callers share since the merge (planning
+    // step 112): effects.json portal_mark at the shot's finalPos (Ghost::Shot::
+    // destinyPx), which is where its muzzle, its way and its range put it.
+    CHECK_MSG(marks.size() == marksBefore + 1 && !marks.empty() && marks.back().atPx == shot.destinyPx &&
+                  glm::distance(marks.back().atPx, aimed) < 1e-6 && marks.back().zUnits == 32.0,
+              "portal_mark where the ghost aimed, " + Point(aimed) + ": " + std::to_string(marks.size() - marksBefore));
+    std::printf("  3-32: the ghost's shot on tick %d marks %s\n", fired.tick, Point(aimed).c_str());
+    layer.OnDetach(registry);
+}
+
+// K14 on the one level with a node between 0 and the player: level22a's platform
+// at eth_z 1 stands between the shot (z 0) and the player (1.42), a whole slot
+// more behind the player than on every other level.
+void OnLevel22aTheShotIsBehindThePlatformAtOne() {
+    if (!OriginalArtIsThere("OnLevel22aTheShotIsBehindThePlatformAtOne")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level22a");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const glm::dvec2 up = playerPx(registry, layer) + glm::dvec2(0.0, -40.0);
+    tap(layer, registry, screenOf(registry, up));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const entt::entity shot = FirstTagged(registry, "Magic Portals Shot Sprite");
+    CHECK(shot != entt::null);
+    if (shot == entt::null) return;
+    const float slotZ = 0.004f;
+    const float behind = (layer.PlayerSlotZ() - registry.get<TransformComponent>(shot).position.z) / slotZ;
+    CHECK_MSG(std::fabs(behind - 1.515625f) < 1e-3f,
+              "the shot 1.516 slots behind the player, the platform's slot between: " + std::to_string(behind));
+    layer.OnDetach(registry);
+}
+
+// And K14's picture: every quad of the shot, sprite and halo, stands behind the
+// player's, on the frames it leaves the player (the capture's frame pair).
+void TheShotLeavesFromBehindThePlayer() {
+    if (!OriginalArtIsThere("TheShotLeavesFromBehindThePlayer")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level3");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    tap(layer, registry, screenOf(registry, glm::dvec2(440.889, 60.444)));
+    int frames = 0;
+    for (int i = 0; i < 6 && layer.SimLevel()->portals.flight; ++i) {
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const entt::entity sprite = FirstTagged(registry, "Magic Portals Shot Sprite");
+        const entt::entity halo = FirstTagged(registry, "Magic Portals Shot Halo");
+        const float playerZ = layer.PlayerSlotZ();
+        if (sprite != entt::null && halo != entt::null) {
+            ++frames;
+            CHECK_MSG(registry.get<TransformComponent>(sprite).position.z < playerZ &&
+                          registry.get<TransformComponent>(halo).position.z < playerZ,
+                      "frame " + std::to_string(i) + ": the shot and its halo behind the player");
+        }
+        tickWith(layer, registry, kRest, {}, {});
+    }
+    CHECK_MSG(frames >= 5, "the shot was drawn on " + std::to_string(frames) + " frames");
+    layer.OnDetach(registry);
+}
+
+// A turn off a reflector, through the layer: 1-12 (level11)'s reflect_agent_761 at
+// (180, 140), horizontal. A tap on the line from the player through it is turned
+// at its catch circle, under the wall that hangs to y 128, and the new leg opens a
+// portal. ETHCallback_reflect_agent's pictures: the old shot's flash where it
+// turned, the new leg's mark at its end (a clear ray, so portal_mark), and the new
+// leg's own flash on its first tick, 24 out along its way.
+void AShotTurnedByAReflectorMarksItsNewEnd() {
+    if (!OriginalArtIsThere("AShotTurnedByAReflectorMarksItsNewEnd")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level11");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const glm::dvec2 mirror(180.0, 140.0);
+    const glm::dvec2 from = playerPx(registry, layer);
+    const glm::dvec2 aim = from + (mirror - from) * 1.5;
+    CHECK(onScreen(registry, aim));
+    tap(layer, registry, screenOf(registry, aim));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int turnTick = -1;
+    MagicPortals::Portals::Reflection turn;
+    for (int i = 0; i < 60 && layer.SimLevel()->portals.flight && turnTick < 0; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (!layer.SimLevel()->portals.reflected.empty()) {
+            turnTick = i;
+            turn = layer.SimLevel()->portals.reflected.front();
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(turnTick >= 0, "the shot was turned: " + lastFailure(layer));
+    if (turnTick < 0) return;
+    CHECK_MSG(!turn.said.willDie && !turn.said.redWaves && turn.said.atPx == turn.toPx,
+              "the new leg's ray is clear: " + Point(turn.said.atPx));
+    const auto marks = EffectsOf(layer, "portal_mark.ent");
+    CHECK_MSG(marks.size() == 1 && marks[0].atPx == turn.said.atPx && marks[0].zUnits == 32.0,
+              "portal_mark at the new leg's end, " + Point(turn.said.atPx) + ": " + std::to_string(marks.size()));
+    auto flashes = EffectsOf(layer, "projectile_shoot.ent");
+    bool atTurn = false;
+    for (const auto& flash : flashes) atTurn = atTurn || (flash.atPx == turn.atPx && flash.zUnits == 0.0);
+    CHECK_MSG(flashes.size() == 2 && atTurn, "the first leg's flash and the old shot's where it turned, " +
+                                                 Point(turn.atPx) + ": " + std::to_string(flashes.size()));
+    // The new leg's own first tick.
+    tickWith(layer, registry, kRest, {}, {});
+    const bool launched = layer.SimLevel()->portals.launches.size() == 1 &&
+                          layer.SimLevel()->portals.launches.front().fromPx == turn.atPx;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(launched, "the new leg launches on the tick after its turn, from where it turned");
+    flashes = EffectsOf(layer, "projectile_shoot.ent");
+    const glm::dvec2 way = glm::normalize(turn.toPx - turn.atPx);
+    bool out24 = false;
+    for (const auto& flash : flashes) out24 = out24 || glm::distance(flash.atPx, turn.atPx + way * 24.0) < 1e-4;
+    CHECK_MSG(flashes.size() == 3 && out24, "and flashes 24 out along its way: " + std::to_string(flashes.size()));
+    landShot(layer, registry);
+    std::printf("  1-12: a shot turned at %s by reflect_agent_761, portal_mark at %s, %zu portal(s) placed\n",
+                Point(turn.atPx).c_str(), Point(turn.said.atPx).c_str(), layer.SimLevel()->portals.placed.size());
+    layer.OnDetach(registry);
+}
+
+// A tap with a fire diamond carried (3-32, level31b), through the layer: the
+// method's own branch casts no ray, so the mark follows the leftover low byte of
+// absTouchPos.x in the original's world pixels (Portals::State::FireDiamondWillDie),
+// no red_waves; and the shot is converted before it ever flies, so no flash.
+void AFireDiamondTapsMarkIsTheLeftoverByte() {
+    if (!OriginalArtIsThere("AFireDiamondTapsMarkIsTheLeftoverByte")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const MagicPortals::Diamonds::Diamond* fire = nullptr;
+    for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+        if (diamond.fire && fire == nullptr) fire = &diamond;
+    }
+    CHECK_MSG(fire != nullptr, "3-32 places a fire diamond");
+    if (fire == nullptr) return;
+    PutPlayerAt(registry, layer, fire->atPx);
+    for (int i = 0; i < 5 && !layer.SimLevel()->diamonds.carrierHasFire; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(layer.SimLevel()->diamonds.carrierHasFire, "the fire diamond is carried");
+    glm::dvec2 aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
+    for (int i = 0; i < 60 && !onScreen(registry, aim); ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
+    }
+    CHECK(onScreen(registry, aim));
+    tap(layer, registry, screenOf(registry, aim));
+    CHECK_MSG(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Fired &&
+                  layer.SimLevel()->portals.flight.has_value(),
+              "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    const glm::dvec2 tapPx = layer.SimLevel()->portals.flight->toPx;
+    const bool dies = MagicPortals::Portals::State::FireDiamondWillDie(tapPx.x * (720.0 / 256.0));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto crosses = EffectsOf(layer, "red_cross.ent");
+    const auto marks = EffectsOf(layer, "portal_mark.ent");
+    CHECK_MSG(static_cast<int>(crosses.size()) == (dies ? 1 : 0) && static_cast<int>(marks.size()) == (dies ? 0 : 1),
+              std::string("the leftover byte says ") + (dies ? "red_cross" : "portal_mark") + " for x " +
+                  std::to_string(tapPx.x) + ": " + std::to_string(crosses.size()) + " cross, " +
+                  std::to_string(marks.size()) + " mark");
+    CHECK(EffectsOf(layer, "red_waves.ent").empty());
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(!layer.SimLevel()->portals.flight && layer.SimLevel()->portals.launches.empty(),
+              "the shot is a fireball before it ever flies: no leg, no flash");
+    std::printf("  3-32 with the fire diamond: a tap at x %.4f u = %.4f px, low byte %s: %s\n", tapPx.x,
+                tapPx.x * (720.0 / 256.0), dies ? "set" : "clear", dies ? "red_cross" : "portal_mark");
+    layer.OnDetach(registry);
+}
+
+// ---- What a crystal leaves where it was (the visuals plan's 10.2, step 106) ----------
+//
+// pickCrystalEffect adds crystal_pick.ent where the character takes a crystal, and
+// ETHCallback_timer adds crystal_vanish.ent, at 1.3, where a timed crystal's time
+// runs out while it is still there: each at the crystal's GetPosition() plus
+// vector3(0, 0, scale(20)), so on top of the crystal's own depth, and with no
+// owner. 00_order 10.2's gate: "a taken crystal spawns exactly 5 + 2 particles at
+// z + 20, freed at Finished". 1-27 (level26) carries both kinds: crystal_ent_1269
+// at (80, 140), eth_z -4, in open air, and the timed crystal_1264 at (400, 208),
+// eth_z 0, 10 s.
+
+// The first live effect of that .ent, or an empty report; `count` says how many.
+MagicPortalsLayer::EffectReport FirstEffect(const MagicPortalsLayer& layer, const std::string& entity, int& count) {
+    MagicPortalsLayer::EffectReport found;
+    count = 0;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity != entity) continue;
+        if (count++ == 0) found = report;
+    }
+    return found;
+}
+
+// Frames (no ticks) until the effect `id` is freed: on which frame it went, the
+// most of its particles ever released, and how many effects went on the way.
+struct Burnt {
+    int freedOn = -1;
+    int mostReleased = 0;
+    int freed = 0;
+};
+
+Burnt BurnDown(MagicPortalsLayer& layer, entt::registry& registry, int id, int frames) {
+    Burnt burnt;
+    const int freedBefore = layer.EffectsFreed();
+    for (int frame = 1; frame <= frames; ++frame) {
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::EffectReport mine = ByIdIn(layer.EffectReports(), id);
+        if (mine.id == 0) {
+            burnt.freedOn = frame;
+            break;
+        }
+        burnt.mostReleased = std::max(burnt.mostReleased, mine.released);
+    }
+    burnt.freed = layer.EffectsFreed() - freedBefore;
+    return burnt;
+}
+
+void ATakenCrystalLeavesItsPickWhereItStood() {
+    if (!OriginalArtIsThere("ATakenCrystalLeavesItsPickWhereItStood")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level26");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    // Long enough for the bob to have moved it off its node.
+    for (int tick = 0; tick < 40; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::string name = "crystal_ent_1269";
+    const glm::dvec2 node(80.0, 140.0);
+    const std::optional<MagicPortalsLayer::MotionReport> before = MotionOf(layer, name);
+    CHECK(before.has_value() && before->crystal && before->moving);
+    if (!before) return;
+    CHECK_MSG(glm::distance(before->ownerPx, node) > 0.01,
+              "the bob has moved it off its node: " + Point(before->ownerPx));
+    const int spawnedBefore = layer.EffectsSpawned();
+
+    PutPlayerAt(registry, layer, before->ownerPx);
+    const MagicPortals::Goals::Crystal* crystal = nullptr;
+    glm::dvec2 lastDrawn = before->ownerPx;
+    for (int ticks = 0; ticks < 5; ++ticks) {
+        const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, name);
+        if (now) lastDrawn = now->ownerPx;
+        tickWith(layer, registry, kRest, {}, {});
+        crystal = layer.SimLevel()->goals.FindCrystal(name);
+        if (crystal != nullptr && crystal->collected) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(crystal != nullptr && crystal->collected, "the player takes " + name);
+    if (crystal == nullptr || !crystal->collected) return;
+    // THE TICK ONLY QUEUES IT: the frame adds it.
+    int picks = 0;
+    FirstEffect(layer, "crystal_pick.ent", picks);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && picks == 0, "nothing is added on the tick");
+    const std::optional<MagicPortalsLayer::MotionReport> after = MotionOf(layer, name);
+    CHECK_MSG(after && after->ownerPx == lastDrawn,
+              "the crystal's entity point is where the last tick drew it: " + Point(lastDrawn));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 1,
+              "one added on the frame: " + std::to_string(layer.EffectsSpawned() - spawnedBefore));
+    const MagicPortalsLayer::EffectReport pick = FirstEffect(layer, "crystal_pick.ent", picks);
+    int vanishes = 0;
+    FirstEffect(layer, "crystal_vanish.ent", vanishes);
+    CHECK_MSG(picks == 1 && vanishes == 0, "one crystal_pick and no crystal_vanish: " + std::to_string(picks) +
+                                               " / " + std::to_string(vanishes));
+    if (pick.id == 0) return;
+
+    // WHERE: the crystal's own point, bob and all - not its node - and 20 in front
+    // of ITS depth: -4 + 20 = 16, where a flat scale(20) would have said 20.
+    CHECK_MSG(pick.atPx == lastDrawn && glm::distance(pick.atPx, node) > 0.01,
+              "at the crystal's drawn entity point " + Point(lastDrawn) + ", not its node: " + Point(pick.atPx));
+    CHECK_MSG(nearlyU(pick.zUnits, 16.0), "z -4 + 20 = 16: " + std::to_string(pick.zUnits));
+    // WHAT: crystal_pick.ent as read - no sprite, no light, temporary; 5 sparkles and 2
+    // crystals, at the script's own size.
+    CHECK_MSG(!pick.drawn && !pick.hasLight && pick.temporary && pick.scriptScale == 1.0,
+              "no picture, no light, temporary, at getScale()");
+    CHECK_MSG(pick.systems == 2 && pick.pool == 5 + 2,
+              "5 + 2 particles in 2 systems: " + std::to_string(pick.systems) + " systems, " +
+                  std::to_string(pick.pool));
+    CHECK_MSG(pick.systemSizePx.size() == 2 && nearlyU(pick.systemSizePx[0], 20.0) &&
+                  nearlyU(pick.systemSizePx[1], 28.0),
+              "sparkles at 20, the crystal at 28");
+    // IN FRONT OF THE PLAYER, as F14 r1 #54-#57 show the original's crystal drawn over
+    // the mage: 16 against the player's 4 / 2.8125.
+    CHECK_MSG(pick.systemZ.size() == 2 && pick.systemZ[0] > layer.PlayerSlotZ() &&
+                  pick.systemZ[1] > layer.PlayerSlotZ(),
+              "both systems in front of the player");
+
+    // FREED AT FINISHED, by its pools and nothing else: the fifth sparkle is released
+    // past 4/5 of 350 + 150 ms (24 frames) and lives 200 to 500 ms (12 to 30 more),
+    // the two crystals 400 ms from the first frame - so the pools are over no sooner
+    // than frame 35 and no later than 54.
+    const Burnt burnt = BurnDown(layer, registry, pick.id, 120);
+    std::printf("  crystal_pick at %s z %.1f: %d of %d particles released, freed on frame %d\n",
+                Point(pick.atPx).c_str(), pick.zUnits, burnt.mostReleased, pick.pool, burnt.freedOn);
+    CHECK_MSG(burnt.mostReleased == 7, "all 7 released before it went: " + std::to_string(burnt.mostReleased));
+    CHECK_MSG(burnt.freedOn >= 35 && burnt.freedOn <= 54,
+              "freed when its pools are over, frame " + std::to_string(burnt.freedOn) + " (35..54)");
+    CHECK_MSG(burnt.freed == 1, "exactly it freed: " + std::to_string(burnt.freed));
+
+    // A TIMED CRYSTAL TAKEN BEFORE ITS TIME: crystal_pick, its dial shrinking away,
+    // and no crystal_vanish - ETHCallback_timer finds it deleted and adds nothing -
+    // even once its 10 s are long past.
+    const std::string timed = "crystal_1264";
+    const std::optional<MagicPortalsLayer::MotionReport> timedAt = MotionOf(layer, timed);
+    CHECK(timedAt.has_value());
+    if (!timedAt) return;
+    PutPlayerAt(registry, layer, timedAt->ownerPx);
+    int ticks = 0;
+    int pickedTimed = 0;
+    int vanished = 0;
+    while (ticks < 660) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        ++ticks;
+        int count = 0;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "crystal_pick.ent" && glm::distance(report.atPx, timedAt->ownerPx) < 1.0) ++count;
+        }
+        pickedTimed = std::max(pickedTimed, count);
+        FirstEffect(layer, "crystal_vanish.ent", count);
+        vanished += count;
+    }
+    const MagicPortals::Goals::Crystal* taken = layer.SimLevel()->goals.FindCrystal(timed);
+    const std::optional<MagicPortalsLayer::TimerReport> dial = DialOf(layer, timed);
+    std::printf("  %s taken early: %d crystal_pick at it, %d crystal_vanish in %d ticks\n", timed.c_str(),
+                pickedTimed, vanished, ticks);
+    CHECK_MSG(taken != nullptr && taken->collected && !taken->expired, timed + " taken early");
+    CHECK_MSG(pickedTimed == 1 && vanished == 0,
+              "one crystal_pick at it, and no crystal_vanish over " + std::to_string(ticks) + " ticks: " +
+                  std::to_string(pickedTimed) + " / " + std::to_string(vanished));
+    CHECK_MSG(dial && !dial->drawn, "its dial shrank away");
+    layer.OnDetach(registry);
+}
+
+void ATimedCrystalGoesWithItsVanishAtItsTime() {
+    if (!OriginalArtIsThere("ATimedCrystalGoesWithItsVanishAtItsTime")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level26");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    const std::string name = "crystal_1264";
+    glm::dvec2 lastDrawn(0.0);
+    int tick = 0;
+    int early = 0;
+    const MagicPortals::Goals::Crystal* crystal = nullptr;
+    int spawnedBefore = 0;
+    while (tick < 700) {
+        const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, name);
+        if (now) lastDrawn = now->ownerPx;
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        crystal = layer.SimLevel()->goals.FindCrystal(name);
+        if (crystal == nullptr || crystal->expired || crystal->collected) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        int count = 0;
+        FirstEffect(layer, "crystal_vanish.ent", count);
+        early += count;
+    }
+    CHECK_MSG(crystal != nullptr && crystal->expired && tick == 600,
+              name + " goes at its time on tick " + std::to_string(tick) + ", the 600th");
+    CHECK_MSG(early == 0, "no burst before its time: " + std::to_string(early));
+    if (crystal == nullptr || !crystal->expired) return;
+    int vanishes = 0;
+    FirstEffect(layer, "crystal_vanish.ent", vanishes);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && vanishes == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport gone = FirstEffect(layer, "crystal_vanish.ent", vanishes);
+    int picks = 0;
+    FirstEffect(layer, "crystal_pick.ent", picks);
+    CHECK_MSG(vanishes == 1 && picks == 0 && layer.EffectsSpawned() == spawnedBefore + 1,
+              "one crystal_vanish and no crystal_pick on the frame: " + std::to_string(vanishes) + " / " +
+                  std::to_string(picks));
+    if (gone.id == 0) return;
+    CHECK_MSG(gone.atPx == lastDrawn && glm::distance(gone.atPx, glm::dvec2(400.0, 208.0)) > 0.01,
+              "at the crystal's last drawn entity point " + Point(lastDrawn) + ", bob and all: " + Point(gone.atPx));
+    CHECK_MSG(nearlyU(gone.zUnits, 20.0), "its eth_z 0 + 20: " + std::to_string(gone.zUnits));
+    // AT scale(1.3): the script's Scale, which the .ent's <Scale> 1 leaves as it is and
+    // every particle takes - the explosion's 22 and the crystal's 28 drawn at 28.6 and
+    // 36.4. One explosion cell and two crystals, all at once.
+    CHECK_MSG(gone.scriptScale == 1.3 && nearlyU(gone.scale.x, 1.3), "at 1.3: " + std::to_string(gone.scale.x));
+    CHECK_MSG(gone.systems == 2 && gone.pool == 1 + 2, "1 + 2 particles: " + std::to_string(gone.pool));
+    CHECK_MSG(gone.systemSizePx.size() == 2 && nearlyU(gone.systemSizePx[0], 22.0 * 1.3) &&
+                  nearlyU(gone.systemSizePx[1], 28.0 * 1.3),
+              "28.6 and 36.4");
+    CHECK_MSG(!gone.drawn && !gone.hasLight && gone.temporary, "no picture, no light, temporary");
+    CHECK_MSG(gone.systemZ.size() == 2 && gone.systemZ[0] > layer.PlayerSlotZ() &&
+                  gone.systemZ[1] > layer.PlayerSlotZ(),
+              "in front of the player");
+    // Both systems all at once, 350 and 400 ms from the frame it was added: the
+    // crystals' 400 are over on the 25th frame after it, give or take a rounding.
+    const Burnt burnt = BurnDown(layer, registry, gone.id, 120);
+    std::printf("  crystal_vanish at %s z %.1f x %.1f: freed on frame %d\n", Point(gone.atPx).c_str(), gone.zUnits,
+                gone.scriptScale, burnt.freedOn);
+    CHECK_MSG(burnt.mostReleased == 3 && burnt.freedOn >= 24 && burnt.freedOn <= 27 && burnt.freed == 1,
+              "all 3 released, freed on frame " + std::to_string(burnt.freedOn) + " (24..27)");
+    layer.OnDetach(registry);
+}
+
+// ---- what a key and its keyhole leave (the visuals plan's 10.3) ---------------------
+
+// THE STEP'S GATE: a key taken on 3-18 (level17b) leaves key_pick at the key, 32 in
+// front of it. minion_spawn A stands on the level's one key, so a MINION takes it as
+// the level starts - ETHCallback_key's free branch admits isMinion as it admits the
+// character, and adds key_pick either way.
+void AKeyTakenOn318LeavesItsPickAtTheKey() {
+    if (!OriginalArtIsThere("AKeyTakenOn318LeavesItsPickAtTheKey")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level17b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const std::string name = "key_ent_2103";
+    const glm::dvec2 node(224.0, 368.0);
+    const MagicPortals::Keys::Key* key = layer.SimLevel()->keys.FindKey(name);
+    CHECK_MSG(key != nullptr && key->owner == entt::null, name + " lies unowned before the first tick");
+    if (key == nullptr) return;
+    const int spawnedBefore = layer.EffectsSpawned();
+    glm::dvec2 lastDrawn(0.0);
+    int tick = 0;
+    while (tick < 60) {
+        if (const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, name)) lastDrawn = now->ownerPx;
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        key = layer.SimLevel()->keys.FindKey(name);
+        if (key != nullptr && key->owner != entt::null) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(key != nullptr && key->owner != entt::null && key->owner != layer.SimLevel()->player,
+              "a minion takes it, on tick " + std::to_string(tick));
+    if (key == nullptr || key->owner == entt::null) return;
+    int picks = 0;
+    FirstEffect(layer, "key_pick.ent", picks);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && picks == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport pick = FirstEffect(layer, "key_pick.ent", picks);
+    CHECK_MSG(picks == 1 && layer.EffectsSpawned() == spawnedBefore + 1,
+              "one key_pick on the frame: " + std::to_string(picks));
+    if (pick.id == 0) return;
+    // AT THE KEY: its entity point as the last tick drew it, and 32 in front of its
+    // eth_z of 0.
+    CHECK_MSG(pick.atPx == lastDrawn && glm::distance(pick.atPx, node) < 2.0,
+              "at the key's drawn point " + Point(lastDrawn) + ", by its node: " + Point(pick.atPx));
+    CHECK_MSG(nearlyU(pick.zUnits, 32.0), "the key's 0 + 32: " + std::to_string(pick.zUnits));
+    // key_pick.ent as read: no sprite or light, temporary; 8 sparkles over a life and
+    // one growing from 3, at the script's own size.
+    CHECK_MSG(!pick.drawn && !pick.hasLight && pick.temporary && pick.scriptScale == 1.0,
+              "no picture, no light, temporary, at getScale()");
+    CHECK_MSG(pick.systems == 2 && pick.pool == 8 + 1 && pick.systemSizePx.size() == 2 &&
+                  nearlyU(pick.systemSizePx[0], 12.0) && nearlyU(pick.systemSizePx[1], 3.0),
+              "8 + 1 sparkles at 12 and 3: " + std::to_string(pick.pool));
+    CHECK_MSG(pick.systemZ.size() == 2 && pick.systemZ[0] > layer.PlayerSlotZ() &&
+                  pick.systemZ[1] > layer.PlayerSlotZ(),
+              "both systems in front of the player");
+    // FREED BY ITS POOLS: the eighth sparkle released at 7/8 of 300 + 100 ms and living
+    // 200 to 400 more, the growing one 500 ms from the first frame.
+    const Burnt burnt = BurnDown(layer, registry, pick.id, 120);
+    std::printf("  3-18: %s taken on tick %d by a minion: key_pick at %s z %.1f, %d of %d released, freed on frame "
+                "%d\n",
+                name.c_str(), tick, Point(pick.atPx).c_str(), pick.zUnits, burnt.mostReleased, pick.pool,
+                burnt.freedOn);
+    CHECK_MSG(burnt.mostReleased == 9 && burnt.freedOn >= 30 && burnt.freedOn <= 50 && burnt.freed == 1,
+              "all 9 released, freed on frame " + std::to_string(burnt.freedOn) + " (30..50)");
+    layer.OnDetach(registry);
+}
+
+// The whole of it on 3-09 (level8b), whose five depths all differ: the player takes
+// key_ent_1335 (eth_z -6) and carries it to keyhole_1338 (-14), whose door is
+// door_locked_ent_1343 (-8). key_pick at the key, 26; the halo at the keyhole on the
+// fly-in's frame 1, 41 ticks after the unlock, at a z of its own, 32; and on the tick
+// the keyhole goes, with the door's shake, the three the keyhole adds in its order:
+// wall_destroy at the door (-8), door_locked_vanish 2 raw units in front of it
+// (-8 + 0.711) and keyhole_vanish 32 in front of the keyhole (18).
+void AKeyAndItsKeyholeLeaveWhatTheScriptAdds() {
+    if (!OriginalArtIsThere("AKeyAndItsKeyholeLeaveWhatTheScriptAdds")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level8b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 10; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::string keyName = "key_ent_1335";
+    const std::string holeName = "keyhole_1338";
+    const glm::dvec2 holeAt(582.0, 198.0);
+    const glm::dvec2 doorAt(624.0, 160.0);
+    constexpr double kBare = 2.0 / (720.0 / 256.0);
+    const MagicPortals::Keys::Key* key = layer.SimLevel()->keys.FindKey(keyName);
+    const MagicPortals::Keys::Keyhole* hole = layer.SimLevel()->keys.FindKeyhole(holeName);
+    CHECK(key != nullptr && hole != nullptr);
+    if (key == nullptr || hole == nullptr) return;
+    CHECK_MSG(key->owner == entt::null && hole->doorName == "door_locked_ent_1343" && hole->atPx == holeAt,
+              "the key lies unowned, and the keyhole opens door_locked_ent_1343");
+    int count = 0;
+    FirstEffect(layer, "key_pick.ent", count);
+    CHECK_MSG(count == 0, "no key_pick while the key lies");
+
+    // TAKEN, by the player, at the key's drawn point.
+    const std::optional<MagicPortalsLayer::MotionReport> lying = MotionOf(layer, keyName);
+    CHECK(lying.has_value() && !lying->crystal);
+    if (!lying) return;
+    PutPlayerAt(registry, layer, lying->ownerPx);
+    glm::dvec2 lastDrawn = lying->ownerPx;
+    int spawnedBefore = layer.EffectsSpawned();
+    for (int tick = 0; tick < 5; ++tick) {
+        if (const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, keyName)) {
+            lastDrawn = now->ownerPx;
+        }
+        tickWith(layer, registry, kRest, {}, {});
+        key = layer.SimLevel()->keys.FindKey(keyName);
+        if (key != nullptr && key->owner != entt::null) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(key != nullptr && key->owner == layer.SimLevel()->player, "the player takes " + keyName);
+    if (key == nullptr || key->owner == entt::null) return;
+    FirstEffect(layer, "key_pick.ent", count);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the pick's tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport pick = FirstEffect(layer, "key_pick.ent", count);
+    CHECK_MSG(count == 1 && pick.atPx == lastDrawn && nearlyU(pick.zUnits, 26.0),
+              "one key_pick at the key's drawn point " + Point(lastDrawn) + ", -6 + 32 = 26: " + Point(pick.atPx) +
+                  " z " + std::to_string(pick.zUnits));
+
+    // THE UNLOCK: carried onto the keyhole. No second pick while it is carried.
+    int strayPicks = 0;
+    int carried = 0;
+    while (carried < 300) {
+        PutPlayerAt(registry, layer, holeAt);
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        ++carried;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "key_pick.ent" && report.id != pick.id) ++strayPicks;
+        }
+        key = layer.SimLevel()->keys.FindKey(keyName);
+        if (key != nullptr && key->spent) break;
+    }
+    CHECK_MSG(key != nullptr && key->spent && key->opened >= 0 &&
+                  layer.SimLevel()->keys.keyholes[static_cast<std::size_t>(key->opened)].name == holeName,
+              "the key opens " + holeName + " after " + std::to_string(carried) + " ticks");
+    CHECK_MSG(strayPicks == 0, "no second key_pick while carried: " + std::to_string(strayPicks));
+    if (key == nullptr || !key->spent) return;
+
+    // THE HALO, on the fly-in's frame 1: the 41st tick after the unlock at 60 Hz.
+    int haloAfter = -1;
+    MagicPortalsLayer::EffectReport halo;
+    for (int n = 1; n <= 80 && haloAfter < 0; ++n) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        halo = FirstEffect(layer, "key_unlock_halo.ent", count);
+        if (count > 0) haloAfter = n;
+    }
+    CHECK_MSG(haloAfter == 41 && count == 1, "one halo, on the 41st tick after the unlock: " + std::to_string(haloAfter));
+    CHECK_MSG(halo.atPx == holeAt && nearlyU(halo.zUnits, 32.0),
+              "at the keyhole, z 32 of its own (not -14 + 32): " + Point(halo.atPx) + " z " +
+                  std::to_string(halo.zUnits));
+    CHECK_MSG(!halo.drawn && !halo.hasLight && halo.temporary && halo.systems == 1 && halo.pool == 1 &&
+                  halo.systemSizePx.size() == 1 && nearlyU(halo.systemSizePx[0], 3.0) &&
+                  halo.systemZ[0] > layer.PlayerSlotZ(),
+              "one sparkle growing from 3, temporary, in front of the player");
+
+    // THE KEYHOLE GOES: on that tick nothing is added and the door's 20 shakes; on
+    // the frame the three come, in the script's order.
+    int goneAfter = -1;
+    for (int n = 1; n <= 200; ++n) {
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        hole = layer.SimLevel()->keys.FindKeyhole(holeName);
+        if (hole != nullptr && hole->gone) {
+            goneAfter = haloAfter + n;
+            break;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(goneAfter > 0, "the keyhole goes");
+    if (goneAfter < 0) return;
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore, "nothing is added on the keyhole's tick");
+    CHECK_MSG(std::fabs(layer.Quake().amplitudePx - quakeRowPx(20.0)) < 1e-9,
+              "door_unlocked's 20 on the same tick: " + std::to_string(layer.Quake().amplitudePx) + " px");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 3,
+              "three on the frame: " + std::to_string(layer.EffectsSpawned() - spawnedBefore));
+    int dusts = 0;
+    int sparkleSets = 0;
+    int bursts = 0;
+    const MagicPortalsLayer::EffectReport dust = FirstEffect(layer, "wall_destroy.ent", dusts);
+    const MagicPortalsLayer::EffectReport sparkles = FirstEffect(layer, "door_locked_vanish.ent", sparkleSets);
+    const MagicPortalsLayer::EffectReport burst = FirstEffect(layer, "keyhole_vanish.ent", bursts);
+    CHECK_MSG(dusts == 1 && sparkleSets == 1 && bursts == 1, "one of each");
+    if (dust.id == 0 || sparkles.id == 0 || burst.id == 0) return;
+    CHECK_MSG(dust.id < sparkles.id && sparkles.id < burst.id,
+              "added in ETHCallback_keyhole's order: wall_destroy, door_locked_vanish, keyhole_vanish");
+    // wall_destroy: at the door's own point and depth, dirt and smoke, both systems
+    // at their StartPoint's 32 in front of it.
+    CHECK_MSG(dust.atPx == doorAt && nearlyU(dust.zUnits, -8.0) && !dust.drawn && !dust.hasLight &&
+                  dust.temporary && dust.systems == 2 && dust.pool == 22 + 10 && dust.systemSizePx.size() == 2 &&
+                  nearlyU(dust.systemSizePx[0], 19.0) && nearlyU(dust.systemSizePx[1], 60.0),
+              "wall_destroy at the door " + Point(dust.atPx) + " z " + std::to_string(dust.zUnits) + ", 22 + 10");
+    CHECK_MSG(dust.systemZ.size() == 2 && dust.systemZ[0] > layer.PlayerSlotZ() &&
+                  dust.systemZ[1] > layer.PlayerSlotZ(),
+              "its dirt and smoke in front of the player (-8 + 32)");
+    // door_locked_vanish: at the door, 0.711 in front of its -8 - behind the player.
+    CHECK_MSG(sparkles.atPx == doorAt && nearlyU(sparkles.zUnits, -8.0 + kBare) && sparkles.systems == 1 &&
+                  sparkles.pool == 30 && sparkles.systemSizePx.size() == 1 &&
+                  nearlyU(sparkles.systemSizePx[0], 9.0) && sparkles.systemZ[0] < layer.PlayerSlotZ(),
+              "door_locked_vanish at the door, z " + std::to_string(sparkles.zUnits) + ", 30 sparkles");
+    // keyhole_vanish: at the keyhole, -14 + 32 = 18, in front of the player.
+    CHECK_MSG(burst.atPx == holeAt && nearlyU(burst.zUnits, 18.0) && burst.systems == 1 && burst.pool == 1 &&
+                  burst.systemSizePx.size() == 1 && nearlyU(burst.systemSizePx[0], 74.0) &&
+                  burst.systemZ[0] > layer.PlayerSlotZ(),
+              "keyhole_vanish at the keyhole, z " + std::to_string(burst.zUnits));
+
+    // EACH FREED BY ITS POOLS, frames only.
+    int dustFreed = -1;
+    int sparklesFreed = -1;
+    int burstFreed = -1;
+    for (int frame = 1; frame <= 150 && (dustFreed < 0 || sparklesFreed < 0 || burstFreed < 0); ++frame) {
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
+        if (dustFreed < 0 && ByIdIn(reports, dust.id).id == 0) dustFreed = frame;
+        if (sparklesFreed < 0 && ByIdIn(reports, sparkles.id).id == 0) sparklesFreed = frame;
+        if (burstFreed < 0 && ByIdIn(reports, burst.id).id == 0) burstFreed = frame;
+    }
+    std::printf("  3-09: key_pick z %.3f; unlocked after %d carried ticks, the halo %d ticks later at z %.3f; the "
+                "keyhole gone %d ticks after the unlock: wall_destroy z %.3f (freed frame %d), door_locked_vanish z "
+                "%.4f (%d), keyhole_vanish z %.3f (%d)\n",
+                pick.zUnits, carried, haloAfter, halo.zUnits, goneAfter, dust.zUnits, dustFreed, sparkles.zUnits,
+                sparklesFreed, burst.zUnits, burstFreed);
+    CHECK_MSG(goneAfter >= 89 && goneAfter <= 90, "the keyhole's 1500 ms: " + std::to_string(goneAfter));
+    CHECK_MSG(dustFreed >= 66 && dustFreed <= 110, "wall_destroy's 1100-1800 ms: " + std::to_string(dustFreed));
+    CHECK_MSG(sparklesFreed >= 50 && sparklesFreed <= 68,
+              "door_locked_vanish's last sparkle out by 531 + 350-550 ms: " + std::to_string(sparklesFreed));
+    CHECK_MSG(burstFreed >= 41 && burstFreed <= 45, "keyhole_vanish's 700 ms: " + std::to_string(burstFreed));
+    layer.OnDetach(registry);
+}
+
+// ---- what a diamond, a shock ring and a fire signal leave (the visuals plan's 10.4) --
+
+// A bare 10, as the engine's world units are to the level's at the 720 px screen of R12.
+constexpr double kBareTen = 10.0 / (720.0 / 256.0);
+
+// shock_strike.png, 512 x 128 texels at density 1, cut 5 x 2 AS THE ORIGINAL CUTS IT:
+// SetupSpriteRects strides it in whole units, 102 x 64 (Sprite.cpp:119-130), so each
+// of its quads samples 102 / 512 of the texture across, not a flipbook's fifth, and
+// starts at a whole number of those strides. Counts the quads it read.
+int CheckShockCut(entt::registry& registry, const MagicPortalsLayer::EffectReport& effect, const std::string& what) {
+    int read = 0;
+    for (const entt::entity quad : effect.particleQuads) {
+        if (!registry.valid(quad)) continue;
+        const auto& material = registry.get<MaterialComponent>(quad);
+        if (!EndsWith(material.albedoTexturePath, "/shock_strike.png")) continue;
+        ++read;
+        const float column = material.uvOffset.x / 0.19921875f;
+        const float row = material.uvOffset.y / 0.5f;
+        const bool whole = std::fabs(column - std::round(column)) < 1e-5f && column >= 0.0f && column <= 4.0f &&
+                           std::fabs(row - std::round(row)) < 1e-5f && row >= 0.0f && row <= 1.0f;
+        CHECK_MSG(material.uvScale == glm::vec2(0.19921875f, 0.5f) && whole &&
+                      !registry.all_of<SpriteAnimationComponent>(quad),
+                  what + ": a shock_strike cell of 102 / 512 x 64 / 128 at a whole stride, not a flipbook's: scale (" +
+                      std::to_string(material.uvScale.x) + ", " + std::to_string(material.uvScale.y) + ") offset (" +
+                      std::to_string(material.uvOffset.x) + ", " + std::to_string(material.uvOffset.y) + ")");
+    }
+    return read;
+}
+
+// THE SHOCK DIAMOND, on 3-16 (level15b): shock_diamond_ent_1741 at (204, 124), eth_z 0,
+// taken by the player - shock_diamond_pick at the diamond, on its own depth - and on a
+// later tick, carried, striking the level's first minion put 8 px from it:
+// shock_death at the MINION's entity point (its body's centre less
+// EntityAboveCentrePx) on its depth of 2 / 2.8125, then shock_strike at the midpoint of
+// the two, z and all, turned by getAngle(normalize(enemy - diamond)) - radians,
+// handed over as degrees.
+void AShockDiamondLeavesItsPickItsDeathAndItsStrike() {
+    if (!OriginalArtIsThere("AShockDiamondLeavesItsPickItsDeathAndItsStrike")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level15b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 2; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::string name = "shock_diamond_ent_1741";
+    const MagicPortals::Diamonds::Diamond* diamond = layer.SimLevel()->diamonds.Find(name);
+    CHECK(diamond != nullptr && !layer.SimLevel()->minions.minions.empty());
+    if (diamond == nullptr || layer.SimLevel()->minions.minions.empty()) return;
+    const glm::dvec2 lyingAt = diamond->atPx;
+    CHECK_MSG(lyingAt == glm::dvec2(204.0, 124.0), "it lies at its node: " + Point(lyingAt));
+
+    // TAKEN.
+    int spawnedBefore = layer.EffectsSpawned();
+    for (int tick = 0; tick < 5; ++tick) {
+        PutPlayerAt(registry, layer, lyingAt);
+        tickWith(layer, registry, kRest, {}, {});
+        diamond = layer.SimLevel()->diamonds.Find(name);
+        if (diamond != nullptr && diamond->owner != entt::null) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(diamond != nullptr && diamond->owner == layer.SimLevel()->player, "the player takes it");
+    int count = 0;
+    FirstEffect(layer, "shock_diamond_pick.ent", count);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport pick = FirstEffect(layer, "shock_diamond_pick.ent", count);
+    CHECK_MSG(count == 1 && layer.EffectsSpawned() == spawnedBefore + 1,
+              "one shock_diamond_pick on the frame: " + std::to_string(count));
+    if (pick.id == 0) return;
+    CHECK_MSG(pick.atPx == lyingAt && nearlyU(pick.zUnits, 0.0) && pick.angleDeg == 0.0f,
+              "at the diamond, on its own depth, unturned: " + Point(pick.atPx) + " z " + std::to_string(pick.zUnits));
+    CHECK_MSG(!pick.drawn && !pick.hasLight && pick.temporary && pick.scriptScale == 1.0 && pick.systems == 2 &&
+                  pick.pool == 4 + 1 && pick.systemSizePx.size() == 2 && nearlyU(pick.systemSizePx[0], 30.0) &&
+                  nearlyU(pick.systemSizePx[1], 3.0),
+              "4 shock cells at 30 all at once and a sparkle from 3: " + std::to_string(pick.pool));
+    const int pickCells = CheckShockCut(registry, pick, "shock_diamond_pick");
+    CHECK_MSG(pickCells == 4, "its four cells drawn on the frame it is added: " + std::to_string(pickCells));
+    const Burnt pickBurnt = BurnDown(layer, registry, pick.id, 120);
+    CHECK_MSG(pickBurnt.mostReleased == 5 && pickBurnt.freedOn >= 20 && pickBurnt.freedOn <= 50,
+              "all 5 released, freed on frame " + std::to_string(pickBurnt.freedOn) + " (550 +- 250 ms)");
+
+    // STRUCK, on a later tick, carried.
+    const entt::entity minion = layer.SimLevel()->minions.minions[0].body;
+    const double above = layer.SimLevel()->minions.rules.EntityAboveCentrePx();
+    spawnedBefore = layer.EffectsSpawned();
+    int struck = 0;
+    for (int tick = 0; tick < 5 && registry.valid(minion); ++tick) {
+        PutPlayerAt(registry, layer, lyingAt);
+        auto& at = registry.get<TransformComponent>(minion);
+        const glm::vec3 world = MagicPortals::Units::ToWorld(lyingAt.x + 8.0, lyingAt.y);
+        at.position = glm::vec3(world.x, world.y, at.position.z);
+        tickWith(layer, registry, kRest, {}, {});
+        struck = layer.SimLevel()->diamonds.struck;
+        if (struck > 0) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(struck == 1 && layer.SimLevel()->diamonds.strikes.size() == static_cast<std::size_t>(1),
+              "the minion is struck, and the tick records it");
+    if (layer.SimLevel()->diamonds.strikes.empty()) return;
+    const MagicPortals::Diamonds::Strike strike = layer.SimLevel()->diamonds.strikes[0];
+    CHECK_MSG(EffectsOf(layer, "shock_death.ent").empty() && EffectsOf(layer, "shock_strike.ent").empty(),
+              "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int deaths = 0;
+    int bolts = 0;
+    const MagicPortalsLayer::EffectReport death = FirstEffect(layer, "shock_death.ent", deaths);
+    const MagicPortalsLayer::EffectReport bolt = FirstEffect(layer, "shock_strike.ent", bolts);
+    // And the minion's own callback, finding itself destroyed, adds blood.ent at its
+    // point (ETHCallback_minion #1478-1504; the level's end and a death, step 96): three
+    // on the frame since the merge of the two tracks (planning step 112), the blood last.
+    int bloods = 0;
+    const MagicPortalsLayer::EffectReport blood = FirstEffect(layer, "blood.ent", bloods);
+    CHECK_MSG(deaths == 1 && bolts == 1 && bloods == 1 && layer.EffectsSpawned() == spawnedBefore + 3,
+              "one shock_death, one shock_strike and the minion's blood on the frame: " + std::to_string(deaths) +
+                  " / " + std::to_string(bolts) + " / " + std::to_string(bloods));
+    if (death.id == 0 || bolt.id == 0) return;
+    CHECK_MSG(death.id < bolt.id && bolt.id < blood.id,
+              "in the script's order: the death, the strike, then the minion's blood");
+    // AT THE MINION: its entity point, 11.1 over its body's centre, on its 0.711.
+    const glm::dvec2 enemyPx = strike.preyCentrePx - glm::dvec2(0.0, above);
+    constexpr double kMinionZ = 2.0 / (720.0 / 256.0);
+    CHECK_MSG(death.atPx == enemyPx && nearlyU(death.zUnits, kMinionZ) && death.angleDeg == 0.0f,
+              "shock_death at the minion's entity point " + Point(enemyPx) + ": " + Point(death.atPx) + " z " +
+                  std::to_string(death.zUnits));
+    // Put 8 px from the player, whom the diamond sits on: the step pushes the two
+    // bodies apart before the strike reads it (about 4 px, the first run's 4.04).
+    CHECK_MSG(glm::distance(strike.preyCentrePx, glm::dvec2(lyingAt.x + 8.0, lyingAt.y)) < 8.0,
+              "the minion where it was put, less the step's push: " + Point(strike.preyCentrePx));
+    CHECK_MSG(death.systems == 2 && death.pool == 8 + 1 && death.systemSizePx.size() == 2 &&
+                  nearlyU(death.systemSizePx[0], 22.0) && nearlyU(death.systemSizePx[1], 3.0) && death.temporary &&
+                  !death.drawn,
+              "8 shock cells at 22 and a sparkle: " + std::to_string(death.pool));
+    // THE STRIKE: halfway between the diamond's point and the minion's, z halfway
+    // between 0 and 0.711, turned by the radians of atan2f(d.x, d.y), d = normalize(
+    // minion - diamond), wrapped into [0, 2 pi) - a number of degrees under 6.3.
+    const glm::dvec2 mid = (strike.diamondPx + enemyPx) * 0.5;
+    const glm::dvec2 d = glm::normalize(enemyPx - strike.diamondPx);
+    double radians = std::atan2(d.x, d.y);
+    if (radians < 0.0) radians += 2.0 * 3.14159265358979323846;
+    CHECK_MSG(glm::distance(bolt.atPx, mid) < 1e-9 && nearlyU(bolt.zUnits, kMinionZ * 0.5) &&
+                  std::fabs(bolt.angleDeg - radians) < 1e-5 && bolt.angleDeg >= 0.0f && bolt.angleDeg < 6.2832f,
+              "shock_strike at the midpoint " + Point(mid) + " z " + std::to_string(bolt.zUnits) + ", turned " +
+                  std::to_string(bolt.angleDeg) + " (want " + std::to_string(radians) + ")");
+    CHECK_MSG(bolt.systems == 2 && bolt.pool == 2 + 1 && bolt.systemSizePx.size() == 2 &&
+                  nearlyU(bolt.systemSizePx[0], 32.0) && nearlyU(bolt.systemSizePx[1], 3.0) && bolt.temporary,
+              "2 shock cells at 32 all at once and a sparkle: " + std::to_string(bolt.pool));
+    const int boltCells = CheckShockCut(registry, bolt, "shock_strike");
+    CHECK_MSG(boltCells == 2, "its two cells drawn on the frame it is added: " + std::to_string(boltCells));
+    std::printf("  3-16: shock_diamond_pick at %s z %.3f (freed frame %d); struck: shock_death at %s z %.4f, "
+                "shock_strike at %s z %.4f turned %.6f 'degrees'\n",
+                Point(pick.atPx).c_str(), pick.zUnits, pickBurnt.freedOn, Point(death.atPx).c_str(), death.zUnits,
+                Point(bolt.atPx).c_str(), bolt.zUnits, bolt.angleDeg);
+    // Both freed by their pools: the death's last cell released at 7/8 of 600 +- 200
+    // and living as long again, the strike's 700 ms.
+    const Burnt boltBurnt = BurnDown(layer, registry, bolt.id, 150);
+    CHECK_MSG(boltBurnt.freedOn >= 40 && boltBurnt.freedOn <= 45 && boltBurnt.mostReleased == 3,
+              "shock_strike's 700 ms: freed on frame " + std::to_string(boltBurnt.freedOn));
+    layer.OnDetach(registry);
+}
+
+// THE FIRE DIAMOND. On 3-32 (level31b): fire_diamond_ent_1256 at (356, 128), eth_z -10,
+// taken - burn_projectile a BARE 10 in front of the diamond, -10 + 3.5556 - and a tap
+// with it carried, whose shot is burned where it stands: burn_projectile at the shot, at
+// a bare 10 of its own, 3.5556, the point the fireball is made at.
+void AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs() {
+    if (!OriginalArtIsThere("AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const MagicPortals::Diamonds::Diamond* fire = nullptr;
+    for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+        if (diamond.fire && fire == nullptr) fire = &diamond;
+    }
+    CHECK_MSG(fire != nullptr, "3-32 places a fire diamond");
+    if (fire == nullptr) return;
+    const glm::dvec2 lyingAt = fire->atPx;
+    // TAKEN is the tick the free arm writes ownerID; hasFireDiamond is the carried
+    // arm's, a tick later (the first run of this case waited for that and found the
+    // burn already added, as it should be).
+    const auto owned = [&layer]() {
+        for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+            if (diamond.fire && diamond.owner != entt::null) return true;
+        }
+        return false;
+    };
+    int spawnedBefore = layer.EffectsSpawned();
+    for (int i = 0; i < 5 && !owned(); ++i) {
+        PutPlayerAt(registry, layer, lyingAt);
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        if (owned()) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(owned(), "the player takes the fire diamond");
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && EffectsOf(layer, "burn_projectile.ent").empty(),
+              "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int count = 0;
+    const MagicPortalsLayer::EffectReport taken = FirstEffect(layer, "burn_projectile.ent", count);
+    CHECK_MSG(count == 1, "one burn_projectile where it is taken: " + std::to_string(count));
+    if (taken.id == 0) return;
+    CHECK_MSG(taken.atPx == lyingAt && nearlyU(taken.zUnits, -10.0 + kBareTen) && taken.angleDeg == 0.0f,
+              "at the diamond " + Point(lyingAt) + ", -10 + 3.5556: " + Point(taken.atPx) + " z " +
+                  std::to_string(taken.zUnits));
+    CHECK_MSG(taken.systems == 1 && taken.pool == 10 && taken.systemSizePx.size() == 1 &&
+                  nearlyU(taken.systemSizePx[0], 48.0) && taken.temporary && !taken.drawn && !taken.hasLight,
+              "ten explosion.JPG at 48, all at once: " + std::to_string(taken.pool));
+
+    // A TAP, carried: the shot is burned before it ever flies.
+    PutPlayerAt(registry, layer, lyingAt);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.SimLevel()->diamonds.carrierHasFire, "the fire diamond is carried");
+    glm::dvec2 aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
+    for (int i = 0; i < 60 && !onScreen(registry, aim); ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
+    }
+    tap(layer, registry, screenOf(registry, aim));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const int converted = layer.SimLevel()->turrets.converted;
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.SimLevel()->turrets.converted == converted + 1 &&
+                  layer.SimLevel()->diamonds.burnedPx.size() == static_cast<std::size_t>(1),
+              "the shot is burned on the next tick, and the tick records where");
+    if (layer.SimLevel()->diamonds.burnedPx.empty()) return;
+    const glm::dvec2 burnedAt = layer.SimLevel()->diamonds.burnedPx[0];
+    const std::string made = "fire_diamond#" + std::to_string(converted + 1);
+    bool madeThere = false;
+    for (const auto& ball : layer.SimLevel()->turrets.fireballs) {
+        if (ball.name == made) madeThere = ball.atPx == burnedAt;
+    }
+    CHECK_MSG(madeThere, "the fireball is made where the shot was burned: " + Point(burnedAt));
+    const int before = layer.EffectsSpawned();
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    MagicPortalsLayer::EffectReport shot;
+    for (const MagicPortalsLayer::EffectReport& report : EffectsOf(layer, "burn_projectile.ent")) {
+        if (report.id > before) shot = report;
+    }
+    CHECK_MSG(shot.id != 0 && shot.atPx == burnedAt && nearlyU(shot.zUnits, kBareTen) && shot.pool == 10,
+              "burn_projectile at the shot " + Point(burnedAt) + ", a bare 10 of its own: " + Point(shot.atPx) +
+                  " z " + std::to_string(shot.zUnits));
+    std::printf("  3-32: fire diamond taken at %s: burn_projectile z %.4f; its shot burned at %s: z %.4f\n",
+                Point(taken.atPx).c_str(), taken.zUnits, Point(shot.atPx).c_str(), shot.zUnits);
+    layer.OnDetach(registry);
+}
+
+// On 3-31 (level30b): its fire diamond (384, 134), eth_z 0, taken, then its shot turned
+// at the level's one shock agent (224, 384): the fireball destroys the agent, whose
+// destroy arm adds shock_death a bare 10 in front of it. Then the diamond carried into
+// the gutter mouth below its block, which destroys it: extinguish_fire at the diamond,
+// on its own depth.
+void AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds() {
+    if (!OriginalArtIsThere("AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30b");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const MagicPortals::Diamonds::Diamond* fire = nullptr;
+    for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+        if (diamond.fire && fire == nullptr) fire = &diamond;
+    }
+    const MagicPortals::Fields::Field* agent = layer.SimLevel()->fields.FindField("shock_agent_ent_2441");
+    CHECK_MSG(fire != nullptr && agent != nullptr, "3-31 places a fire diamond and shock_agent_ent_2441");
+    if (fire == nullptr || agent == nullptr) return;
+    const glm::dvec2 lyingAt = fire->atPx;
+    const glm::dvec2 agentAt = agent->atPx;
+    for (int i = 0; i < 5 && !layer.SimLevel()->diamonds.carrierHasFire; ++i) {
+        PutPlayerAt(registry, layer, lyingAt);
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(layer.SimLevel()->diamonds.carrierHasFire, "the fire diamond is carried");
+
+    // THE AGENT: the player held 120 to its right in open air, outside its ring's 94,
+    // and a tap between the two; the fireball flies on along it into the agent.
+    const glm::dvec2 standAt = agentAt + glm::dvec2(120.0, 0.0);
+    for (int i = 0; i < 30; ++i) {
+        PutPlayerAt(registry, layer, standAt);
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(!layer.SimLevel()->hazards.playerDied, "the player stands clear of the ring");
+    // Its ring (art.json shock_ring, step 111) stands until the agent goes.
+    const int ringsBefore = Tagged(registry, "Magic Portals Shock Ring");
+    {
+        const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, "shock_agent_ent_2441");
+        CHECK_MSG(ring != nullptr && ring->quad != entt::null && ringsBefore >= 1,
+                  "shock_agent_ent_2441 wears its ring before the fireball");
+    }
+    const glm::dvec2 aim = agentAt + glm::dvec2(60.0, 0.0);
+    CHECK_MSG(onScreen(registry, aim), "the tap is on screen");
+    PutPlayerAt(registry, layer, standAt);
+    tap(layer, registry, screenOf(registry, aim));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    bool gone = false;
+    for (int i = 0; i < 180 && !gone; ++i) {
+        PutPlayerAt(registry, layer, standAt);
+        tickWith(layer, registry, kRest, {}, {});
+        agent = layer.SimLevel()->fields.FindField("shock_agent_ent_2441");
+        gone = agent != nullptr && agent->gone;
+        if (!gone) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(gone, "the fireball destroyed the agent");
+    if (!gone) return;
+    // deleteEntity(childID) takes the ring with the agent, on the tick Fields marks it.
+    {
+        const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, "shock_agent_ent_2441");
+        CHECK_MSG(ring != nullptr && ring->quad == entt::null &&
+                      Tagged(registry, "Magic Portals Shock Ring") == ringsBefore - 1,
+                  "and its ring goes with it on that tick: " +
+                      std::to_string(Tagged(registry, "Magic Portals Shock Ring")) + " of " +
+                      std::to_string(ringsBefore) + " left");
+    }
+    int deaths = 0;
+    FirstEffect(layer, "shock_death.ent", deaths);
+    CHECK_MSG(deaths == 0, "nothing is added on the tick");
+    const int beforeAgent = layer.EffectsSpawned();
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    MagicPortalsLayer::EffectReport death;
+    for (const MagicPortalsLayer::EffectReport& report : EffectsOf(layer, "shock_death.ent")) {
+        if (report.id > beforeAgent) death = report;
+    }
+    CHECK_MSG(death.id != 0 && death.atPx == agent->atPx && nearlyU(death.zUnits, kBareTen) && death.pool == 8 + 1,
+              "shock_death at the agent " + Point(agent->atPx) + ", a bare 10 in front of it: " + Point(death.atPx) +
+                  " z " + std::to_string(death.zUnits));
+    std::printf("  3-31: shock_agent_ent_2441 destroyed by a fireball: shock_death at %s z %.4f\n",
+                Point(death.atPx).c_str(), death.zUnits);
+
+    // THE DRAIN: 10 x 51 hung 46 below the gutter mouth's node at (384, 182).
+    const glm::dvec2 inTheMouth(384.0, 182.0 + 46.0);
+    const MagicPortals::Diamonds::Diamond* held = nullptr;
+    glm::dvec2 drainedAt(0.0);
+    bool drained = false;
+    for (int i = 0; i < 120 && !drained; ++i) {
+        PutPlayerAt(registry, layer, inTheMouth);
+        tickWith(layer, registry, kRest, {}, {});
+        for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+            if (diamond.fire) held = &diamond;
+        }
+        drained = held != nullptr && held->gone;
+        if (drained) drainedAt = held->atPx;
+        else layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(drained, "the drain took the diamond");
+    if (!drained) return;
+    CHECK(EffectsOf(layer, "extinguish_fire.ent").empty());
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int waters = 0;
+    const MagicPortalsLayer::EffectReport water = FirstEffect(layer, "extinguish_fire.ent", waters);
+    CHECK_MSG(waters == 1 && water.atPx == drainedAt && nearlyU(water.zUnits, 0.0) && water.angleDeg == 0.0f,
+              "extinguish_fire at the diamond " + Point(drainedAt) + ", on its own depth: " + Point(water.atPx) +
+                  " z " + std::to_string(water.zUnits));
+    CHECK_MSG(water.systems == 1 && water.pool == 14 && water.systemSizePx.size() == 1 &&
+                  nearlyU(water.systemSizePx[0], 24.0) && water.temporary && !water.drawn,
+              "fourteen water.png at 24 over a life: " + std::to_string(water.pool));
+    const Burnt burnt = BurnDown(layer, registry, water.id, 150);
+    CHECK_MSG(burnt.mostReleased == 14 && burnt.freedOn >= 70 && burnt.freedOn <= 100,
+              "all 14 released, freed on frame " + std::to_string(burnt.freedOn) + " (700 + 700 +- 100 ms)");
+    std::printf("  3-31: the diamond drained at %s: extinguish_fire z %.4f, freed on frame %d\n",
+                Point(water.atPx).c_str(), water.zUnits, burnt.freedOn);
+    layer.OnDetach(registry);
+}
+
+// THE FIRE SIGNAL, on 4-29 (level28c): the torch lit by Q.1's tap on tick 60 (L1's
+// point) and its signal put out by the same tap on tick 250. extinguish_fire goes at
+// vector3(originalPos, 10): the torch's point, at a bare 10 of its own.
+void AFireSignalPutOutLeavesItsWaterAtItsTorch() {
+    if (!OriginalArtIsThere("AFireSignalPutOutLeavesItsWaterAtItsTorch")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    layer.ScheduleDevTap(60, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
+    layer.ScheduleDevTap(250, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
+    bool lit = false;
+    glm::dvec2 torchAt(0.0);
+    int putOutOn = -1;
+    for (int tick = 1; tick <= 400 && putOutOn < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const auto& torch = layer.SimLevel()->torch;
+        if (torch.signal.present) {
+            lit = true;
+            torchAt = torch.signal.originPx;
+        }
+        if (torch.putOut > 0) {
+            putOutOn = tick;
+            break;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(lit && putOutOn > 0, "the torch was lit and its signal put out, on tick " + std::to_string(putOutOn));
+    if (putOutOn < 0) return;
+    CHECK_MSG(!layer.SimLevel()->torch.signal.present, "and the signal is gone");
+    CHECK(EffectsOf(layer, "extinguish_fire.ent").empty());
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int count = 0;
+    const MagicPortalsLayer::EffectReport water = FirstEffect(layer, "extinguish_fire.ent", count);
+    const MagicPortals::Torch::Light* light =
+        layer.SimLevel()->torch.lights.empty() ? nullptr : &layer.SimLevel()->torch.lights[0];
+    CHECK_MSG(count == 1 && light != nullptr && water.atPx == torchAt && torchAt == light->atPx &&
+                  nearlyU(water.zUnits, kBareTen) && water.pool == 14,
+              "one extinguish_fire at the torch " + Point(torchAt) + ", a bare 10 of its own: " + Point(water.atPx) +
+                  " z " + std::to_string(water.zUnits));
+    std::printf("  4-29: the signal put out on tick %d: extinguish_fire at %s z %.4f\n", putOutOn,
+                Point(water.atPx).c_str(), water.zUnits);
+    layer.OnDetach(registry);
+}
+
+// THE LIT TORCH IS THE ENTITY ITS SHOT ADDS (the visuals plan's 11.2; effects.json
+// light_from_projectile, light_on_sparkles, portal_death_at_lit_torch), on 4-22
+// (level21c): L1's tap at the torch, which has no wall and so no signal and no
+// bounce. On the tick it lights, the frame adds the three - the lit torch on the
+// torch's own point and depth (eth_z -10), its picture on its pivot 16 below it,
+// where the unlit one stood; its sparkles there; and portal_death where the shot
+// was. The level's own unlit picture goes on the NEXT tick (the `delete` branch).
+void AShotLightsTheTorchAsTheEntityItAdds() {
+    if (!OriginalArtIsThere("AShotLightsTheTorchAsTheEntityItAdds")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level21c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || layer.SimLevel()->torch.lights.empty()) return;
+    const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
+    layer.ScheduleDevTap(60, glm::dvec2(692.0 / 1280.0, 113.0 / 720.0));
+    int litOn = -1;
+    for (int tick = 1; tick <= 200 && litOn < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (layer.SimLevel()->torch.lights[0].lit) {
+            litOn = tick;
+            break;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(litOn > 0, "L1's tap lit 4-22's torch, on tick " + std::to_string(litOn));
+    if (litOn < 0) return;
+    // The tick it is lit: queued, not added; the unlit picture still stands.
+    CHECK(EffectsOf(layer, "light_from_projectile.ent").empty() && EffectsOf(layer, "light_on_sparkles.ent").empty());
+    std::vector<MagicPortalsLayer::TorchReport> torches = layer.TorchReports();
+    CHECK_MSG(torches.size() == 1 && torches[0].levelPicture && !torches[0].unlitGone && nearlyU(torches[0].z, -10.0),
+              "the unlit picture still stands on the tick it is lit, at eth_z -10");
+    const std::optional<glm::dvec2> spent = layer.SimLevel()->torch.spentAtPx;
+    CHECK_MSG(spent.has_value() && glm::distance(*spent, torchPx) < 24.0, "the shot spent within 24 of the torch");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    int count = 0;
+    const MagicPortalsLayer::EffectReport lit = FirstEffect(layer, "light_from_projectile.ent", count);
+    CHECK_MSG(count == 1 && lit.atPx == torchPx && nearlyU(lit.zUnits, -10.0) && lit.angleDeg == 0.0f &&
+                  !lit.temporary && lit.drawn && lit.hasLight && lit.hasHalo,
+              "the lit torch on the torch " + Point(torchPx) + ", z -10, a picture, a light and a halo, not temporary: " +
+                  Point(lit.atPx) + " z " + std::to_string(lit.zUnits));
+    CHECK_MSG(lit.systems == 1 && lit.pool == 12 && lit.bounceScale == glm::dvec2(1.0),
+              "its flame, 12 fire.png, and no bounce where there is no wall");
+    if (lit.quad != entt::null) {
+        const TransformComponent& placed = registry.get<TransformComponent>(lit.quad);
+        const glm::dvec2 centre = MagicPortals::Units::ToPixels(placed.position);
+        const glm::dvec2 size = glm::dvec2(placed.scale.x, placed.scale.y) * MagicPortals::Units::kPixelsPerMetre;
+        CHECK_MSG(glm::distance(centre, torchPx + glm::dvec2(0.0, 16.0)) < 1e-3 && nearlyU(size.x, 32.0, 1e-3) &&
+                      nearlyU(size.y, 64.0, 1e-3) && placed.rotation.z == 0.0f,
+                  "torch_small.png, 32 x 64, centred 16 below the torch on its PivotAdjust (0, -16): " + Point(centre) +
+                      " " + Point(size));
+    }
+    const MagicPortalsLayer::EffectReport sparkles = FirstEffect(layer, "light_on_sparkles.ent", count);
+    CHECK_MSG(count == 1 && sparkles.atPx == torchPx && nearlyU(sparkles.zUnits, -10.0) && sparkles.temporary &&
+                  sparkles.systems == 2 && !sparkles.drawn,
+              "light_on_sparkles on the torch, z -10: onda and 28 sparkles, temporary");
+    const MagicPortalsLayer::EffectReport burst = FirstEffect(layer, "portal_death.ent", count);
+    CHECK_MSG(count == 1 && spent.has_value() && burst.atPx == *spent && nearlyU(burst.zUnits, 0.0),
+              "portal_death where the shot was spent, its bare 0: " + Point(burst.atPx));
+
+    // The next tick runs the `delete` branch: the level's unlit torch and its spark
+    // go, drawn once with the lit torch on the frame before.
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    torches = layer.TorchReports();
+    CHECK_MSG(torches.size() == 1 && !torches[0].levelPicture && torches[0].unlitGone,
+              "the level's unlit picture gone on the tick after");
+    CHECK_EQ(EffectsOf(layer, "light_from_projectile.ent").size(), std::size_t{1});
+    // And it stays: a lit torch on a level with no wall burns for good.
+    for (int frame = 0; frame < 180; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(EffectsOf(layer, "light_from_projectile.ent").size() == 1 && EffectsOf(layer, "light_on_sparkles.ent").empty(),
+              "three seconds on, the lit torch burns on and its sparkles are over");
+    std::printf("  4-22: the torch lit on tick %d: light_from_projectile at %s z %.1f, its sparkles, the burst at %s\n",
+                litOn, Point(lit.atPx).c_str(), lit.zUnits, Point(burst.atPx).c_str());
+    layer.OnDetach(registry);
+}
+
+// PUT OUT AND BROUGHT BACK, on 4-29 (level28c), by L1's two taps and a third: the
+// lit torch bounces (the level has a wall) and its signal rides the orbit; the wall
+// goes with its dust, turned by it; the signal shot takes the lit torch and the
+// signal and adds the torch back - light_off.ent at vector3(originalPos, 10), a
+// vertical entity bottom-centred on its pivot - its sparkles, the burst at the shot,
+// and the wall back at the ghost with its smoke, fading in over a second. Lit again,
+// the torch put back goes on the tick after, and the wall that comes back is the
+// one that goes, where the ghost put it.
+void ATorchPutOutComesBackAndItsWallFadesIn() {
+    if (!OriginalArtIsThere("ATorchPutOutComesBackAndItsWallFadesIn")) return;
+    namespace Torch = MagicPortals::Torch;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || layer.SimLevel()->torch.lights.empty() ||
+        !layer.SimLevel()->torch.wall.present) {
+        return;
+    }
+    const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
+    const glm::dvec2 wallPx(192.0, 96.0);
+    constexpr double kGhostZ = 2.0 - 4.0 / (720.0 / 256.0);
+    const glm::dvec2 point(247.0 / 1280.0, 141.0 / 720.0);
+    layer.ScheduleDevTap(60, point);
+    layer.ScheduleDevTap(250, point);
+    layer.ScheduleDevTap(430, point);
+    int litOn = -1;
+    int wallGoneOn = -1;
+    int outOn = -1;
+    int relitOn = -1;
+    int wallGoneAgainOn = -1;
+    const Torch::State* torch = &layer.SimLevel()->torch;
+    for (int tick = 1; tick <= 640; ++tick) {
+        const int wasLit = torch->lit;
+        const int wasGone = torch->wallsGone;
+        const int wasOut = torch->putOut;
+        tickWith(layer, registry, kRest, {}, {});
+        torch = &layer.SimLevel()->torch;
+        const bool lightingNow = torch->lit > wasLit;
+        const bool goneNow = torch->wallsGone > wasGone;
+        const bool outNow = torch->putOut > wasOut;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        int count = 0;
+        if (lightingNow && litOn < 0) {
+            litOn = tick;
+            const MagicPortalsLayer::EffectReport lit = FirstEffect(layer, "light_from_projectile.ent", count);
+            const MagicPortals::Art::Pulse pulse{glm::dvec2(1.04), glm::dvec2(0.96), 160.0};
+            const glm::dvec2 first = pulse.ScaleAt(static_cast<double>(MagicPortalsLayer::kTick) * 1000.0);
+            CHECK_MSG(count == 1 && nearlyU(lit.zUnits, -12.0) && nearlyU(lit.bounceScale.x, first.x, 1e-9) &&
+                          lit.bounceScale.x > 1.02 && lit.bounceScale.x < 1.04,
+                      "4-29's lit torch, z -12, bouncing from 1.04 - one frame in: " + std::to_string(lit.bounceScale.x));
+            const MagicPortalsLayer::EffectReport signal = FirstEffect(layer, "fire_signal.ent", count);
+            CHECK_MSG(count == 1 && signal.atPx == torchPx && nearlyU(signal.zUnits, -12.0) && !signal.temporary &&
+                          signal.systems == 2,
+                      "the fire signal on the torch, z -12, its two systems: " + Point(signal.atPx));
+        } else if (litOn > 0 && tick == litOn + 1) {
+            const MagicPortalsLayer::EffectReport signal = FirstEffect(layer, "fire_signal.ent", count);
+            CHECK_MSG(count == 1 && signal.atPx == torch->signal.atPx && signal.atPx.y < torchPx.y - 17.0 &&
+                          signal.atPx.x > torchPx.x,
+                      "a tick on, riding the signal just past the top: " + Point(signal.atPx - torchPx));
+            const std::vector<MagicPortalsLayer::TorchReport> torches = layer.TorchReports();
+            CHECK_MSG(torches.size() == 1 && !torches[0].levelPicture, "and the level's unlit torch gone");
+        }
+        if (goneNow && wallGoneOn < 0) {
+            wallGoneOn = tick;
+            const MagicPortalsLayer::EffectReport dust = FirstEffect(layer, "wall_destroy.ent", count);
+            CHECK_MSG(count == 1 && dust.atPx == wallPx && nearlyU(dust.zUnits, 2.0) && dust.angleDeg == 0.0f &&
+                          dust.scriptScale == 1.0,
+                      "the light wall's dust on it, z 2, unturned, x1: " + Point(dust.atPx));
+        }
+        if (outNow && outOn < 0) {
+            outOn = tick;
+            CHECK_MSG(EffectsOf(layer, "light_from_projectile.ent").empty() && EffectsOf(layer, "fire_signal.ent").empty(),
+                      "the lit torch and the signal gone with the shot");
+            const MagicPortalsLayer::EffectReport back = FirstEffect(layer, "light_off.ent", count);
+            CHECK_MSG(count == 1 && back.atPx == torchPx && nearlyU(back.zUnits, kBareTen) && !back.temporary &&
+                          back.systems == 2,
+                      "the torch put back at vector3(originalPos, 10): " + Point(back.atPx) + " z " +
+                          std::to_string(back.zUnits));
+            if (back.quad != entt::null) {
+                const TransformComponent& placed = registry.get<TransformComponent>(back.quad);
+                const glm::dvec2 centre = MagicPortals::Units::ToPixels(placed.position);
+                CHECK_MSG(glm::distance(centre, torchPx + glm::dvec2(0.0, 16.0)) < 1e-3 && placed.rotation.z == 0.0f,
+                          "type 2, bottom-centred on (0, -48): the same 16 below as the lit one: " + Point(centre));
+            }
+            const MagicPortalsLayer::EffectReport sparkles = FirstEffect(layer, "light_off_sparkles.ent", count);
+            CHECK_MSG(count == 1 && sparkles.atPx == torchPx && nearlyU(sparkles.zUnits, kBareTen),
+                      "light_off_sparkles there too");
+            const MagicPortalsLayer::EffectReport smoke = FirstEffect(layer, "light_wall_create.ent", count);
+            CHECK_MSG(count == 1 && smoke.atPx == wallPx && nearlyU(smoke.zUnits, kGhostZ, 1e-9) &&
+                          smoke.angleDeg == 0.0f && smoke.temporary,
+                      "light_wall_create at the ghost, the wall's depth less 4 raw px: z " +
+                          std::to_string(smoke.zUnits));
+            const MagicPortalsLayer::EffectReport wall = FirstEffect(layer, "light_wall.ent", count);
+            CHECK_MSG(count == 1 && wall.atPx == wallPx && nearlyU(wall.zUnits, kGhostZ, 1e-9) && wall.drawn &&
+                          nearlyU(wall.alpha, static_cast<double>(MagicPortalsLayer::kTick), 1e-6),
+                      "the wall back at the ghost, one frame into its fade: alpha " + std::to_string(wall.alpha));
+        }
+        if (outOn > 0 && tick == outOn + 60) {
+            int count2 = 0;
+            const MagicPortalsLayer::EffectReport wall = FirstEffect(layer, "light_wall.ent", count2);
+            CHECK_MSG(count2 == 1 && nearlyU(wall.alpha, 1.0), "a second on, whole: " + std::to_string(wall.alpha));
+        }
+        if (outOn > 0 && lightingNow && relitOn < 0) relitOn = tick;
+        if (relitOn > 0 && tick == relitOn) {
+            const MagicPortalsLayer::EffectReport lit = FirstEffect(layer, "light_from_projectile.ent", count);
+            CHECK_MSG(count == 1 && nearlyU(lit.zUnits, kBareTen),
+                      "lit again, on the depth the torch was put back at: z " + std::to_string(lit.zUnits));
+            CHECK_EQ(EffectsOf(layer, "light_off.ent").size(), std::size_t{1});
+        }
+        if (relitOn > 0 && tick == relitOn + 1) {
+            CHECK_MSG(EffectsOf(layer, "light_off.ent").empty(), "and the torch put back goes on the tick after");
+        }
+        if (relitOn > 0 && goneNow && tick > wallGoneOn) {
+            wallGoneAgainOn = tick;
+            CHECK_MSG(EffectsOf(layer, "light_wall.ent").empty(), "the rebuilt wall goes at its 1500 ms");
+            bool atGhost = false;
+            for (const MagicPortalsLayer::EffectReport& dust : EffectsOf(layer, "wall_destroy.ent")) {
+                if (dust.atPx == wallPx && nearlyU(dust.zUnits, kGhostZ, 1e-9)) atGhost = true;
+            }
+            CHECK_MSG(atGhost, "and its dust is where it stood, at the ghost's depth");
+            break;
+        }
+    }
+    CHECK_MSG(litOn > 0 && wallGoneOn > litOn && outOn > wallGoneOn && relitOn > outOn && wallGoneAgainOn > relitOn,
+              "lit " + std::to_string(litOn) + ", wall gone " + std::to_string(wallGoneOn) + ", put out " +
+                  std::to_string(outOn) + ", lit again " + std::to_string(relitOn) + ", wall gone again " +
+                  std::to_string(wallGoneAgainOn));
+    std::printf("  4-29: lit on tick %d, the wall gone %d, put out %d, lit again %d, the wall gone again %d\n", litOn,
+                wallGoneOn, outOn, relitOn, wallGoneAgainOn);
+    layer.OnDetach(registry);
+}
+
+// THE TRAIL (effects.json movement_trail) on 4-05 (level4c), a weightless level:
+// none at rest; at 0.5 m/s the first tick adds one at once - the clock ran on at rest
+// - riding on the player at its own depth and drawn in front of it; then one every
+// 24th tick; and none at 0.4 exactly. None where the world has gravity (1-01).
+void AWeightlessPlayerLeavesATrail() {
+    if (!OriginalArtIsThere("AWeightlessPlayerLeavesATrail")) return;
+    constexpr double kPlayerZ = 4.0 / (720.0 / 256.0);
+    for (const char* name : {"level4c", "level0"}) {
+        const bool weightless = std::string(name) == "level4c";
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), name);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        const entt::entity player = layer.SimLevel()->player;
+        const auto trails = [&layer]() { return EffectsOf(layer, "movement_trail.ent"); };
+        const auto push = [&registry, player](float speed) {
+            registry.get<RigidBodyComponent>(player).velocity = glm::vec3(speed, 0.0f, 0.0f);
+        };
+        for (int tick = 0; tick < 30; ++tick) {
+            push(0.0f);
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(trails().empty(), std::string(name) + ": none at rest");
+        // 0.4 exactly: the test is strictly above.
+        for (int tick = 0; tick < 5; ++tick) {
+            push(0.4f);
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(trails().empty(), std::string(name) + ": none at 0.4 m/s");
+        std::vector<int> ids;
+        std::vector<int> on;
+        for (int tick = 1; tick <= 60; ++tick) {
+            push(0.5f);
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            for (const MagicPortalsLayer::EffectReport& trail : trails()) {
+                if (std::find(ids.begin(), ids.end(), trail.id) != ids.end()) continue;
+                ids.push_back(trail.id);
+                on.push_back(tick);
+                const glm::dvec2 playerPx =
+                    MagicPortals::Units::ToPixels(registry.get<TransformComponent>(player).position);
+                CHECK_MSG(glm::distance(trail.atPx, playerPx) < 1e-6 && nearlyU(trail.zUnits, kPlayerZ) &&
+                              trail.temporary && trail.systems == 1 && trail.pool == 10 && !trail.drawn,
+                          "a trail on the player " + Point(playerPx) + " at its z " + std::to_string(trail.zUnits) +
+                              ": 10 portal_particle.png, temporary");
+                CHECK_MSG(trail.systemZ.size() == 1 && trail.systemZ[0] > layer.PlayerSlotZ(),
+                          "drawn over the body, as F10 has it");
+            }
+        }
+        if (weightless) {
+            CHECK_MSG(on.size() == 3 && on[0] == 1 && on[1] == 25 && on[2] == 49,
+                      "level4c: the first at once, then every 24th tick: " +
+                          (on.empty() ? std::string("none") : std::to_string(on[0])) + " of " +
+                          std::to_string(on.size()));
+            std::printf("  4-05: at 0.5 m/s, trails on ticks %d, %d and %d of 60\n", on.size() > 0 ? on[0] : -1,
+                        on.size() > 1 ? on[1] : -1, on.size() > 2 ? on[2] : -1);
+        } else {
+            CHECK_MSG(on.empty(), "level0 has the world's gravity: no trail");
+        }
+        layer.OnDetach(registry);
+    }
+}
+
+// A LAP ROUND A WELL (gravitywell.json roundabout; effects.json roundabout_effect),
+// on 4-17 (level16c): the player walked counter-clockwise round its well. On the tick
+// the lap is run the frame adds roundabout_effect at the well's area - its xy, a
+// bare -5 - the sound is latched, and the agent's picture, which stood at a whole
+// turn (none), starts its turn: counter-clockwise, past a whole turn a quarter of a
+// second in, and settled again at 3000 ms.
+void ALapRoundAWellFlashesAndTurnsItsAgent() {
+    if (!OriginalArtIsThere("ALapRoundAWellFlashesAndTurnsItsAgent")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level16c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || layer.SimLevel()->wells.wells.empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::GravityWell::Well well = layer.SimLevel()->wells.wells.front();
+    const MagicPortals::GravityWell::Roundabout rules = layer.SimLevel()->wells.rules.roundabout;
+    const entt::entity agent = SpriteOf(registry, "Magic Portals Sprite", "/gravity_agent.png");
+    CHECK(agent != entt::null);
+    if (agent == entt::null) return;
+    CHECK_MSG(layer.WellSpinDegrees(0) == 360.0 && registry.get<TransformComponent>(agent).rotation.z == 0.0f,
+              "at rest a whole turn, drawn as none");
+    const entt::entity player = layer.SimLevel()->player;
+    int lapOn = -1;
+    for (int tick = 0; tick < 200 && lapOn < 0; ++tick) {
+        const double rad = tick * 4.0 * 3.14159265358979323846 / 180.0;
+        PutPlayerAt(registry, layer, well.atPx + glm::dvec2(std::cos(rad), -std::sin(rad)) * (well.radiusPx * 0.5));
+        registry.get<RigidBodyComponent>(player).velocity = glm::vec3(0.0f);
+        tickWith(layer, registry, kRest, {}, {});
+        // The sweep is stepped in BeforeStep, after the tick's latch: the lap is
+        // read by the next tick's, as everything BeforeStep records is.
+        if (!layer.SimLevel()->wells.lapsNow.empty()) {
+            lapOn = tick;
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            tickWith(layer, registry, kRest, {}, {});
+            const std::vector<std::string> sounds = layer.LatchedSounds();
+            CHECK_MSG(std::find(sounds.begin(), sounds.end(), "roundabout") != sounds.end(),
+                      "the lap latches playRoundaboutSound's event");
+            CHECK(EffectsOf(layer, "roundabout_effect.ent").empty());
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(lapOn > 0, "the player lapped the well, on tick " + std::to_string(lapOn));
+    if (lapOn < 0) return;
+    int count = 0;
+    const MagicPortalsLayer::EffectReport flash = FirstEffect(layer, "roundabout_effect.ent", count);
+    CHECK_MSG(count == 1 && flash.atPx == well.atPx && nearlyU(flash.zUnits, -5.0 / (720.0 / 256.0)) &&
+                  flash.temporary && flash.systems == 2,
+              "roundabout_effect at the well's area " + Point(well.atPx) + ", z -5 bare: " + Point(flash.atPx) + " z " +
+                  std::to_string(flash.zUnits));
+    // The latch zeroed the agent's clock and set its sign, and the same tick's
+    // callback step took it one frame on before its picture was placed.
+    const double tickMs = static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
+    {
+        const double spin = layer.WellSpinDegrees(0);
+        CHECK_MSG(nearlyU(spin, MagicPortals::GravityWell::SpinDegrees(rules, tickMs, 1.0), 1e-9) && spin > 0.0,
+                  "the lap's tick: zeroed and one step on, counter-clockwise: " + std::to_string(spin));
+        const float drawn = registry.get<TransformComponent>(agent).rotation.z;
+        CHECK_MSG(std::fabs(static_cast<double>(drawn) - std::fmod(spin, 360.0) * 3.14159265358979323846 / 180.0) < 1e-5,
+                  "and its picture turned by it, +z: " + std::to_string(drawn));
+    }
+    double most = 0.0;
+    int mostOn = -1;
+    for (int tick = 2; tick <= 200; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const double spin = layer.WellSpinDegrees(0);
+        CHECK_MSG(nearlyU(spin, MagicPortals::GravityWell::SpinDegrees(rules, tickMs * tick, 1.0), 1e-3),
+                  "its clock a tick a tick: " + std::to_string(spin));
+        if (spin > most) {
+            most = spin;
+            mostOn = tick;
+        }
+    }
+    CHECK_MSG(most > 480.0 && mostOn > 10 && mostOn < 22, "past a whole turn a quarter of a second in: " +
+                                                              std::to_string(most) + " on tick " + std::to_string(mostOn));
+    CHECK_MSG(layer.WellSpinDegrees(0) == 360.0 && registry.get<TransformComponent>(agent).rotation.z == 0.0f,
+              "and settled on the turn by 3000 ms, drawn as none again");
+    std::printf("  4-17: a lap round %s on tick %d: roundabout_effect at %s z %.4f; the agent turns to %.1f degrees\n",
+                well.name.c_str(), lapOn, Point(flash.atPx).c_str(), flash.zUnits, most);
+    layer.OnDetach(registry);
+}
+
+// THE RING'S KILL, on 3-25 (level24b): the player put in a shock ring dies to it, and
+// ETHCallback_shock_area adds shock_death at the character's own point and depth (R10's
+// 4 / 2.8125) - once. And a player already dead is not killed again: one put in a
+// ring after falling out of the level adds none (isCharacterDead).
+void AShockRingsKillLeavesShockDeathAtThePlayer() {
+    if (!OriginalArtIsThere("AShockRingsKillLeavesShockDeathAtThePlayer")) return;
+    constexpr double kPlayerZ = 4.0 / (720.0 / 256.0);
+    for (const bool fallFirst : {false, true}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level24b");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 3; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(!layer.SimLevel()->fields.fields.empty(), "3-25 places a shock ring");
+        if (layer.SimLevel()->fields.fields.empty()) return;
+        const std::string ring = layer.SimLevel()->fields.fields[0].name;
+        if (fallFirst) {
+            const glm::dvec2 under(layer.BoundsPx().x * 0.5,
+                                   layer.BoundsPx().y + layer.SimLevel()->hazards.marginPx.y + 64.0);
+            for (int tick = 0; tick < 5 && !layer.SimLevel()->hazards.playerDied; ++tick) {
+                PutPlayerAt(registry, layer, under);
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+            CHECK_MSG(layer.SimLevel()->hazards.playerDied && layer.SimLevel()->hazards.diedByFalling,
+                      "the player fell out first");
+        }
+        const int before = layer.EffectsSpawned();
+        glm::dvec2 killedAt(0.0);
+        bool claimed = false;
+        for (int tick = 0; tick < 5 && !claimed; ++tick) {
+            const MagicPortals::Fields::Field* field = layer.SimLevel()->fields.FindField(ring);
+            if (field == nullptr) break;
+            PutPlayerAt(registry, layer, field->atPx);
+            tickWith(layer, registry, kRest, {}, {});
+            claimed = layer.SimLevel()->fields.playerKilled;
+            if (claimed) killedAt = playerPx(registry, layer);
+            else layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(claimed, "the ring claims the player");
+        if (!claimed) return;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        int deaths = 0;
+        const MagicPortalsLayer::EffectReport death = FirstEffect(layer, "shock_death.ent", deaths);
+        if (fallFirst) {
+            CHECK_MSG(deaths == 0 && layer.SimLevel()->hazards.killedBy != ring,
+                      "a player dead already is not killed again: " + std::to_string(deaths));
+        } else {
+            CHECK_MSG(layer.SimLevel()->hazards.playerDied && layer.SimLevel()->hazards.killedBy == ring,
+                      "the ring's is the death: " + layer.SimLevel()->hazards.killedBy);
+            // And checkGameLost's blood.ent, the hp branch every death but a fall takes
+            // (step 96): two on the frame since the merge of the two tracks (planning
+            // step 112), the ring's first.
+            int bloods = 0;
+            const MagicPortalsLayer::EffectReport blood = FirstEffect(layer, "blood.ent", bloods);
+            CHECK_MSG(deaths == 1 && bloods == 1 && layer.EffectsSpawned() == before + 2 && death.id < blood.id &&
+                          death.atPx == killedAt && nearlyU(death.zUnits, kPlayerZ) && death.pool == 8 + 1,
+                      "one shock_death at the player " + Point(killedAt) + ", on its 1.4222: " + Point(death.atPx) +
+                          " z " + std::to_string(death.zUnits) + ", then its blood");
+            // Held in the ring, the player is not killed twice.
+            for (int tick = 0; tick < 10; ++tick) {
+                const MagicPortals::Fields::Field* field = layer.SimLevel()->fields.FindField(ring);
+                if (field != nullptr) PutPlayerAt(registry, layer, field->atPx);
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+            FirstEffect(layer, "shock_death.ent", deaths);
+            CHECK_MSG(deaths == 1, "and only once: " + std::to_string(deaths));
+            std::printf("  3-25: killed by %s: shock_death at %s z %.4f\n", ring.c_str(), Point(death.atPx).c_str(),
+                        death.zUnits);
+        }
+        layer.OnDetach(registry);
+    }
+}
+
+// ---- what a wall, a stone and a lift door leave (the visuals plan's 11.1) --------
+
+// How far apart an effect's drawn particles lie, across (x) and down (y) the
+// level: its live quads' centres, as placeSprite put them.
+glm::dvec2 QuadSpreadPx(entt::registry& registry, const MagicPortalsLayer::EffectReport& effect, int& read) {
+    glm::dvec2 low(1e12);
+    glm::dvec2 high(-1e12);
+    read = 0;
+    for (const entt::entity quad : effect.particleQuads) {
+        if (!registry.valid(quad)) continue;
+        const glm::dvec2 at = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(quad).position);
+        low = glm::min(low, at);
+        high = glm::max(high, at);
+        ++read;
+    }
+    return read > 0 ? high - low : glm::dvec2(0.0);
+}
+
+// A stone thrown at a breakable wall: on the tick it breaks nothing is added; on
+// the frame one wall_destroy at the wall's NODE, on its eth_z, turned by its angle
+// and at its size - its 22 dirt and 10 smoke specks along a line that runs down
+// the screen on 1-09's upright wall and across it on 1-13's, which the .tscn turns
+// 1.5708 clockwise (the original's -90): D4 section 2.2b's 13 of 33.
+void ABreakableWallLeavesItsDustTurnedByTheWall() {
+    if (!OriginalArtIsThere("ABreakableWallLeavesItsDustTurnedByTheWall")) return;
+    struct Throw {
+        const char* level;
+        const char* tag;
+        glm::dvec2 wallPx;
+        glm::dvec2 fromPx;
+        glm::dvec2 velocityPx;
+        bool lying;
+    };
+    const Throw throws[] = {{"level8", "1-09", {320.0, 124.0}, {305.0 - 30.0 - 20.0, 95.0}, {300.0, 0.0}, false},
+                            {"level12", "1-13", {192.0, 282.0}, {192.0, 282.0 - 16.0 - 30.0 - 6.0}, {0.0, 300.0}, true}};
+    for (const Throw& thrown : throws) {
+        const std::string row = std::string(thrown.tag) + " (" + thrown.level + ")";
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), thrown.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CHECK_MSG(layer.SimLevel()->demolish.stones.size() == 1, row + ": one stone");
+        if (layer.SimLevel()->demolish.stones.size() != 1) continue;
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 3; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        const entt::entity stone = layer.SimLevel()->demolish.stones.front().body;
+        auto& transform = registry.get<TransformComponent>(stone);
+        const glm::vec3 at = MagicPortals::Units::ToWorld(thrown.fromPx.x, thrown.fromPx.y);
+        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+        registry.get<RigidBodyComponent>(stone).velocity =
+            glm::vec3(MagicPortals::Units::ToMetres(thrown.velocityPx.x),
+                      -MagicPortals::Units::ToMetres(thrown.velocityPx.y), 0.0f);
+        int spawnedBefore = layer.EffectsSpawned();
+        bool broke = false;
+        for (int tick = 0; tick < 40 && !broke; ++tick) {
+            spawnedBefore = layer.EffectsSpawned();
+            tickWith(layer, registry, kRest, {}, {});
+            broke = layer.SimLevel()->demolish.Broken() == 1;
+            if (!broke) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(broke, row + ": the stone broke its wall");
+        if (!broke) continue;
+        int count = 0;
+        FirstEffect(layer, "wall_destroy.ent", count);
+        CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, row + ": nothing is added on the tick");
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::EffectReport dust = FirstEffect(layer, "wall_destroy.ent", count);
+        CHECK_MSG(count == 1, row + ": one wall_destroy on the frame: " + std::to_string(count));
+        if (dust.id == 0) continue;
+        const float wantDeg = thrown.lying ? static_cast<float>(-1.5708 * 180.0 / 3.14159265358979323846) : 0.0f;
+        CHECK_MSG(dust.atPx == thrown.wallPx && nearlyU(dust.zUnits, -2.0) && static_cast<float>(dust.angleDeg) == wantDeg &&
+                      dust.scriptScale == 1.0,
+                  row + ": at the wall's node " + Point(thrown.wallPx) + ", its -2, turned " + std::to_string(wantDeg) +
+                      ", x1: " + Point(dust.atPx) + " z " + std::to_string(dust.zUnits) + " turned " +
+                      std::to_string(dust.angleDeg) + " x" + std::to_string(dust.scriptScale));
+        CHECK_MSG(!dust.drawn && !dust.hasLight && dust.temporary && dust.systems == 2 && dust.pool == 22 + 10 &&
+                      dust.systemSizePx.size() == 2 && nearlyU(dust.systemSizePx[0], 19.0) &&
+                      nearlyU(dust.systemSizePx[1], 60.0),
+                  row + ": 22 dirt at 19 and 10 smoke at 60, temporary");
+        CHECK_MSG(dust.systemZ.size() == 2 && dust.systemZ[0] > layer.PlayerSlotZ() &&
+                      dust.systemZ[1] > layer.PlayerSlotZ(),
+                  row + ": both at their StartPoint's 32 in front of the wall, so of the player");
+        // THE TURN, as drawn: every speck released at once along RandStartPoint (0,
+        // 101) and (0, 102), turned by the wall.
+        int read = 0;
+        const glm::dvec2 spread = QuadSpreadPx(registry, dust, read);
+        const double along = thrown.lying ? spread.x : spread.y;
+        const double across = thrown.lying ? spread.y : spread.x;
+        std::printf("  %s: the wall broken; wall_destroy at %s z %.1f turned %.5f, %d specks spread %.2f along the "
+                    "wall's line and %.2f across it\n",
+                    row.c_str(), Point(dust.atPx).c_str(), dust.zUnits, static_cast<double>(dust.angleDeg), read,
+                    along, across);
+        CHECK_MSG(read == 32 && along > 60.0 && along <= 102.0 + 8.0 && across < 8.0,
+                  row + ": its specks along the wall's line (" + std::string(thrown.lying ? "across" : "down") +
+                      " the screen): " + std::to_string(along) + " along, " + std::to_string(across) + " across, " +
+                      std::to_string(read) + " read");
+        const Burnt burnt = BurnDown(layer, registry, dust.id, 150);
+        CHECK_MSG(burnt.freedOn >= 66 && burnt.freedOn <= 110 && burnt.freed >= 1,
+                  row + ": freed by its pools, the dirt's 1100-1800 ms: frame " + std::to_string(burnt.freedOn));
+        layer.OnDetach(registry);
+    }
+}
+
+// 4-32's wall 2217, the one wall that carries destroyEffectScale (2): broken by
+// the dark dragon's summon - a script's destroy(), no stone - once the torch's
+// light wall has gone, as step 101's case drives it. Its dust at twice the size:
+// every system's numbers doubled with the entity's (ETHParticleSystem.cpp:27-40).
+void The432WallsDustIsTwiceTheSize() {
+    if (!OriginalArtIsThere("The432WallsDustIsTwiceTheSize")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || layer.SimLevel()->torch.lights.empty()) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    const glm::dvec2 torchPx = layer.SimLevel()->torch.lights.front().atPx;
+    PutPlayerAt(registry, layer, glm::dvec2(240.0, 190.0));
+    for (int waited = 0; waited < 600 && (waited < 60 || !onScreen(registry, torchPx)); ++waited) {
+        quakeTickWith(layer, registry, ticks);
+    }
+    tap(layer, registry, screenOf(registry, torchPx));
+    ++ticks;
+    tickUntilUp(layer, registry, ticks, 400, [](const PlayedLevel& played) { return played.torch.lit; });
+    CHECK_MSG(layer.SimLevel()->torch.lit > 0, "4-32: the shot lit the torch; the last shot: " + lastFailure(layer));
+    if (layer.SimLevel()->torch.lit == 0) return;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const std::string wallNode = layer.SimLevel()->darkDragon.wallNode;
+    const QuakeEdge arrived = tickUntilUp(layer, registry, ticks, 1000, [](const PlayedLevel& played) {
+        for (const auto& breakable : played.demolish.breakables) {
+            if (breakable.name == played.darkDragon.wallNode && breakable.broken) return 1;
+        }
+        return 0;
+    });
+    CHECK_MSG(arrived.tick > 0 && wallNode == "breakable_wall_2217", "4-32: the summon took " + wallNode);
+    if (arrived.tick <= 0) return;
+    int count = 0;
+    FirstEffect(layer, "wall_destroy.ent", count);
+    CHECK_MSG(count == 0, "4-32: nothing added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    // Two, as this case adds them (no frame between the lighting and the summon):
+    // 2217's, and - since the visuals plan's 11.2 - the light wall's own, where it
+    // went 1500 ms after the torch was lit: at its node (64, 240), its -4, turned
+    // by it (-1.5708 in the .tscn, the original's +90) and at 1.
+    MagicPortalsLayer::EffectReport dust;
+    MagicPortalsLayer::EffectReport lightWall;
+    int lightWalls = 0;
+    for (const MagicPortalsLayer::EffectReport& report : EffectsOf(layer, "wall_destroy.ent")) {
+        if (report.atPx == glm::dvec2(32.0, 128.0)) {
+            dust = report;
+            ++count;
+        } else {
+            lightWall = report;
+            ++lightWalls;
+        }
+    }
+    CHECK_MSG(lightWalls == 1 && lightWall.atPx == glm::dvec2(64.0, 240.0) && nearlyU(lightWall.zUnits, -4.0) &&
+                  nearlyU(lightWall.angleDeg, 90.0, 1e-3) && lightWall.scriptScale == 1.0,
+              "4-32: the light wall's dust at its node, -4, turned 90, at 1: " + Point(lightWall.atPx) + " angle " +
+                  std::to_string(lightWall.angleDeg));
+    std::printf("  4-32: %s gone on tick %d: wall_destroy at %s z %.1f x%.1f, sizes %.1f and %.1f\n",
+                wallNode.c_str(), arrived.tick, Point(dust.atPx).c_str(), dust.zUnits, dust.scriptScale,
+                dust.systemSizePx.empty() ? 0.0 : dust.systemSizePx[0],
+                dust.systemSizePx.size() < 2 ? 0.0 : dust.systemSizePx[1]);
+    CHECK_MSG(count == 1 && dust.atPx == glm::dvec2(32.0, 128.0) && nearlyU(dust.zUnits, -2.0) &&
+                  dust.angleDeg == 0.0f && dust.scriptScale == 2.0,
+              "4-32: one wall_destroy at 2217's node, its -2, unturned, at 2: " + Point(dust.atPx) + " x" +
+                  std::to_string(dust.scriptScale));
+    CHECK_MSG(dust.systemSizePx.size() == 2 && nearlyU(dust.systemSizePx[0], 38.0) &&
+                  nearlyU(dust.systemSizePx[1], 120.0) && dust.pool == 22 + 10,
+              "4-32: dirt at 38 and smoke at 120 - twice 19 and 60");
+    int read = 0;
+    const glm::dvec2 spread = QuadSpreadPx(registry, dust, read);
+    CHECK_MSG(read == 32 && spread.y > 120.0 && spread.y <= 204.0 + 12.0 && spread.x < 14.0,
+              "4-32: its line twice as long, down the screen: " + std::to_string(spread.y) + " down, " +
+                  std::to_string(spread.x) + " across");
+    layer.OnDetach(registry);
+}
+
+// A thrown stone a despawner takes, on 1-24 (level23) left to run: on the tick
+// nothing is added; on the frame one rolling_stone_destroy where the step left it
+// (Launchers' record), at a depth of its own, 32, and at 1.3 - two smoke puffs at
+// 68 x 1.3. The thrower's entity is rolling_stone.ent, the entity whose callback
+// adds it; so is the beholder's rock (test_mp_boss pins boss.json's).
+void AStoneADespawnerTakesLeavesItsPuff() {
+    if (!OriginalArtIsThere("AStoneADespawnerTakesLeavesItsPuff")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level23");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CHECK_MSG(layer.SimLevel()->launchers.launchers.size() == 1 &&
+                  layer.SimLevel()->launchers.launchers.front().entity == "rolling_stone.ent",
+              "1-24 throws rolling_stone.ent");
+    CloseTheLevelStartPopup(layer, registry);
+    int spawnedBefore = layer.EffectsSpawned();
+    int tick = 0;
+    bool taken = false;
+    for (; tick < 400 && !taken; ++tick) {
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        taken = layer.SimLevel()->launchers.despawned > 0;
+        if (!taken) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(taken && layer.SimLevel()->launchers.despawnedNow.size() == 1,
+              "a despawner takes a stone within 400 ticks");
+    if (!taken || layer.SimLevel()->launchers.despawnedNow.size() != 1) return;
+    const MagicPortals::Launchers::StoneGone gone = layer.SimLevel()->launchers.despawnedNow.front();
+    int count = 0;
+    FirstEffect(layer, "rolling_stone_destroy.ent", count);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport puff = FirstEffect(layer, "rolling_stone_destroy.ent", count);
+    std::printf("  1-24: %s taken by the destroyier on tick %d: rolling_stone_destroy at %s z %.1f x%.2f, %d at "
+                "%.2f\n",
+                gone.name.c_str(), tick, Point(puff.atPx).c_str(), puff.zUnits, puff.scriptScale, puff.pool,
+                puff.systemSizePx.empty() ? 0.0 : puff.systemSizePx[0]);
+    CHECK_MSG(count == 1 && puff.atPx == gone.atPx && nearlyU(puff.zUnits, 32.0) && nearlyU(puff.scriptScale, 1.3) &&
+                  puff.angleDeg == 0.0f,
+              "one rolling_stone_destroy at the stone " + Point(gone.atPx) + ", z 32, x1.3: " + Point(puff.atPx) +
+                  " z " + std::to_string(puff.zUnits));
+    CHECK_MSG(!puff.drawn && !puff.hasLight && puff.temporary && puff.systems == 1 && puff.pool == 2 &&
+                  puff.systemSizePx.size() == 1 && nearlyU(puff.systemSizePx[0], 68.0 * 1.3) &&
+                  puff.systemZ[0] > layer.PlayerSlotZ(),
+              "two smoke at 88.4, temporary, in front of the player");
+    const Burnt burnt = BurnDown(layer, registry, puff.id, 120);
+    CHECK_MSG(burnt.freedOn >= 50 && burnt.freedOn <= 66 && burnt.freed >= 1,
+              "freed by its pools, 950 +- 100 ms: frame " + std::to_string(burnt.freedOn));
+    layer.OnDetach(registry);
+}
+
+// 3-15 (level14b) left to run: step 76's knight on button_1666 opens a switched
+// door and later lets it close (step 101's ticks). On each turn nothing is added
+// on the tick; on the frame one door_lift_particles at the door's point where the
+// tick BEGAN - the watch's progress, not the one BeforeStep has just stepped -
+// half its 128 up as it opens (the shut door's top edge) and half down as it
+// closes (the raised door's bottom edge), unturned, on its depth.
+void ALiftDoorLeavesItsDustAsItOpensAndCloses() {
+    if (!OriginalArtIsThere("ALiftDoorLeavesItsDustAsItOpensAndCloses")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level14b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CHECK(!layer.SimLevel()->channels.doors.empty());
+    CloseTheLevelStartPopup(layer, registry);
+    int tick = 0;
+    std::vector<int> seenIds;
+    for (const bool opening : {true, false}) {
+        const std::string what = opening ? "opening" : "closing";
+        std::size_t turned = 0;
+        float fromProgress = 0.0f;
+        int spawnedBefore = layer.EffectsSpawned();
+        bool found = false;
+        for (int n = 0; n < 600 && !found; ++n) {
+            const auto& doors = layer.SimLevel()->channels.doors;
+            std::vector<char> was;
+            std::vector<float> progress;
+            for (const auto& door : doors) {
+                was.push_back(door.motion.opening ? char{1} : char{0});
+                progress.push_back(door.motion.progress);
+            }
+            spawnedBefore = layer.EffectsSpawned();
+            tickWith(layer, registry, kRest, {}, {});
+            ++tick;
+            for (std::size_t i = 0; i < doors.size() && !found; ++i) {
+                if ((doors[i].motion.opening ? char{1} : char{0}) == was[i]) continue;
+                CHECK_MSG(doors[i].motion.opening == opening, "the first turn after the last is the " + what);
+                found = true;
+                turned = i;
+                fromProgress = progress[i];
+            }
+            if (!found) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(found, "3-15: a door starts " + what);
+        if (!found) return;
+        const MagicPortals::Puzzle::SwitchedDoor& door = layer.SimLevel()->channels.doors[turned];
+        CHECK_MSG(layer.EffectsSpawned() == spawnedBefore, "3-15: nothing is added on the tick the door starts " + what);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 1, "3-15: one added on the frame");
+        MagicPortalsLayer::EffectReport dust;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "door_lift_particles.ent" &&
+                std::find(seenIds.begin(), seenIds.end(), report.id) == seenIds.end()) {
+                dust = report;
+            }
+        }
+        CHECK_MSG(dust.id != 0, "3-15: the door's " + what + " dust");
+        if (dust.id == 0) return;
+        seenIds.push_back(dust.id);
+        const glm::dvec2 from =
+            MagicPortals::Units::ToPixels(glm::mix(door.motion.closed, door.motion.open, fromProgress));
+        const double wantDy = opening ? -64.0 : 64.0;
+        std::printf("  3-15: %s %s on tick %d from %s (progress %.4f): door_lift_particles at %s z %.4f, %d at %.1f\n",
+                    door.name.c_str(), what.c_str(), tick, Point(from).c_str(), static_cast<double>(fromProgress),
+                    Point(dust.atPx).c_str(), dust.zUnits, dust.pool,
+                    dust.systemSizePx.empty() ? 0.0 : dust.systemSizePx[0]);
+        CHECK_MSG(std::fabs(dust.atPx.x - from.x) < 1e-3 && std::fabs(dust.atPx.y - from.y - wantDy) < 1e-3,
+                  "3-15: at the door's point where the tick began, " + std::to_string(wantDy) + " down: " +
+                      Point(dust.atPx) + " against " + Point(from));
+        CHECK_MSG(opening ? fromProgress == 0.0f : fromProgress == 1.0f,
+                  "3-15: the door " + std::string(opening ? "shut" : "fully raised") + " as it turns: " +
+                      std::to_string(fromProgress));
+        // door_lift_1677 (430, 32), channel 1, which carries no eth_z: its depth 0.
+        CHECK_MSG(door.name == "door_lift_1677" && nearlyU(dust.zUnits, 0.0) && dust.angleDeg == 0.0f &&
+                      dust.scriptScale == 1.0,
+                  "3-15: door_lift_1677's, on its 0, unturned, x1: " + door.name + " z " +
+                      std::to_string(dust.zUnits));
+        CHECK_MSG(!dust.drawn && !dust.hasLight && dust.temporary && dust.systems == 1 && dust.pool == 22 &&
+                      dust.systemSizePx.size() == 1 && nearlyU(dust.systemSizePx[0], 18.0) &&
+                      dust.systemZ[0] < layer.PlayerSlotZ(),
+                  "3-15: 22 dirt at 18, temporary, on the door's depth behind the player");
+        // Its specks start at alpha 0 (Color0), which draws nothing, so they are
+        // read six frames on: along the edge, RandStartPoint (24, 0), each moved by
+        // at most its RandomizeDir (1, 0.6) and gravity's 0.03 a frame since.
+        for (int frame = 0; frame < 6; ++frame) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        int read = 0;
+        const glm::dvec2 spread = QuadSpreadPx(registry, ByIdIn(layer.EffectReports(), dust.id), read);
+        CHECK_MSG(read == 22 && spread.x > 12.0 && spread.x <= 24.0 + 7.0 && spread.y < 5.0,
+                  "3-15: its specks along the edge six frames on: " + std::to_string(spread.x) + " across, " +
+                      std::to_string(spread.y) + " down, " + std::to_string(read) + " read");
+    }
+    layer.OnDetach(registry);
+}
+
+// ---- The shock rings (the visuals plan's 13.1, step 111) ---------------------
+//
+// shock_area.ent, which each shock agent adds round itself on its first frame (art.json
+// shock_ring; decode D6 and its check): at the field's point, the lethal diameter
+// across, (0.4, 0.5, 0.5) added, at the ABSOLUTE depth -10; turned 20 degrees a second
+// of game time, which a pause holds; and scaled every frame by a fresh factor in
+// [0.993, 1.007] about that diameter, which a pause does not hold.
+
+const MagicPortalsLayer::ShockRingReport* RingOf(const std::vector<MagicPortalsLayer::ShockRingReport>& rings,
+                                                 const std::string& field) {
+    for (const MagicPortalsLayer::ShockRingReport& ring : rings) {
+        if (ring.field == field) return &ring;
+    }
+    return nullptr;
+}
+
+// How many of the level's own pictures stand behind and in front of a depth.
+void PicturesAbout(entt::registry& registry, float z, int& behind, int& inFront) {
+    behind = 0;
+    inFront = 0;
+    for (auto [entity, tag, transform] : registry.view<TagComponent, TransformComponent>().each()) {
+        (void)entity;
+        if (tag.tag != "Magic Portals Sprite") continue;
+        if (transform.position.z < z) ++behind;
+        if (transform.position.z > z) ++inFront;
+    }
+}
+
+void AShockAgentWearsItsRing() {
+    if (!OriginalArtIsThere("AShockAgentWearsItsRing")) return;
+    // 3-24 (level23b): agent 2048 at (320, 44), areaRadius 80, and 2023 at (256, 192),
+    // areaRadius 60 - the two rings the gate reads against the library's h6.3.
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level23b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+    CHECK_EQ(rings.size(), std::size_t{2});
+    CHECK_EQ(Tagged(registry, "Magic Portals Shock Ring"), 2);
+    const struct Want {
+        const char* field;
+        glm::dvec2 atPx;
+        double radius;
+    } wants[] = {{"shock_agent_2048", {320.0, 44.0}, 80.0}, {"shock_agent_2023", {256.0, 192.0}, 60.0}};
+    float ringZ = 0.0f;
+    for (const Want& want : wants) {
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, want.field);
+        CHECK_MSG(ring != nullptr && ring->quad != entt::null && registry.valid(ring->quad),
+                  std::string(want.field) + " wears a ring");
+        if (ring == nullptr || ring->quad == entt::null || !registry.valid(ring->quad)) continue;
+        const auto& transform = registry.get<TransformComponent>(ring->quad);
+        const auto& material = registry.get<MaterialComponent>(ring->quad);
+        // Its .ent's picture, as the original's loader picks its tier: hd/white_ring.png.
+        CHECK_MSG(EndsWith(material.albedoTexturePath, "/entities/hd/white_ring.png"),
+                  std::string(want.field) + ": hd/white_ring.png, not " + material.albedoTexturePath);
+        CHECK_MSG(material.blend == MaterialComponent::BlendMode::Additive && ring->additive,
+                  std::string(want.field) + "'s ring is added (blendMode 1)");
+        CHECK_MSG(material.albedoColor == glm::vec4(0.4f, 0.5f, 0.5f, 1.0f),
+                  std::string(want.field) + "'s ring is (0.4, 0.5, 0.5), not (" +
+                      std::to_string(material.albedoColor.r) + ", " + std::to_string(material.albedoColor.g) + ", " +
+                      std::to_string(material.albedoColor.b) + ", " + std::to_string(material.albedoColor.a) + ")");
+        CHECK_MSG(ring->atPx == want.atPx &&
+                      glm::distance(MagicPortals::Units::ToPixels(transform.position), want.atPx) < 1e-3,
+                  std::string(want.field) + "'s ring at its field's point " + Point(want.atPx) + ": " +
+                      Point(ring->atPx));
+        CHECK_MSG(ring->baseUnits == want.radius * 2.0, std::string(want.field) + ": the lethal diameter, " +
+                                                             std::to_string(ring->baseUnits));
+        CHECK_MSG(ring->jitters == 1 && ring->jitter >= 0.993 && ring->jitter <= 1.007,
+                  std::string(want.field) + ": one frame's factor, in [0.993, 1.007]: " +
+                      std::to_string(ring->jitter));
+        const float across = MagicPortals::Units::ToMetres(ring->baseUnits * ring->jitter);
+        CHECK_MSG(std::fabs(transform.scale.x - across) < 1e-6f && transform.scale.y == transform.scale.x,
+                  std::string(want.field) + " is drawn its diameter times the factor, both ways");
+        CHECK_MSG(ring->lookZ == -10.0, std::string(want.field) + ": at the absolute -10, not " +
+                                            std::to_string(ring->lookZ));
+        ringZ = ring->z;
+    }
+
+    // AFTER THE ART AT OR BELOW -10 AND BEFORE THE NEXT: 3-24's sky (-70), arch and
+    // wall (-20), doorway (-19), door (-18) and orange light (-14) behind it, and the
+    // platforms, the agents and everything else in front - a slot's 0.53125 before the
+    // first of them, the table's own fraction.
+    int behind = 0;
+    int inFront = 0;
+    PicturesAbout(registry, ringZ, behind, inFront);
+    CHECK_MSG(behind == 6, "3-24: 6 pictures behind the rings, " + std::to_string(behind));
+    float agentZ = 0.0f;
+    for (auto [entity, tag, material, transform] :
+         registry.view<TagComponent, MaterialComponent, TransformComponent>().each()) {
+        (void)entity;
+        if (tag.tag == "Magic Portals Sprite" && EndsWith(material.albedoTexturePath, "/shock_agent.png")) {
+            agentZ = transform.position.z;
+        }
+    }
+    CHECK_MSG(agentZ > ringZ, "and the agent's own picture in front of its ring");
+    std::printf("  3-24: two rings at z %.6f, %d pictures behind and %d in front\n", static_cast<double>(ringZ),
+                behind, inFront);
+    layer.OnDetach(registry);
+
+    // 4-07 (level6c): a ring on a dark weightless level with a door glow at -22, whose
+    // picture is pushed into m_sprites after the rings are resolved - counted, it would
+    // put the ring a slot too deep. Behind it: the sky (-100), the spiral (-96), the
+    // planet (-90), the doorway (-19), the door (-14), the antiportal (-12), and the
+    // button, the lift door and the button at -10, which it is drawn over (at or below).
+    entt::registry dark;
+    publishViewport(dark);
+    MagicPortalsLayer level6c(TestPaths(), "level6c");
+    level6c.OnAttach(dark);
+    CHECK_MSG(level6c.SimLevel() != nullptr && level6c.ArtError().empty(), level6c.LoadError() + level6c.ArtError());
+    if (level6c.SimLevel() == nullptr || !level6c.ArtError().empty()) return;
+    CloseTheLevelStartPopup(level6c, dark);
+    tickWith(level6c, dark, kRest, {}, {});
+    level6c.OnUpdate(dark, MagicPortalsLayer::kTick);
+    const std::vector<MagicPortalsLayer::ShockRingReport> darkRings = level6c.ShockRings();
+    CHECK_EQ(darkRings.size(), std::size_t{1});
+    CHECK_EQ(Tagged(dark, "Magic Portals Door Highlight"), 1);
+    if (darkRings.size() == 1 && darkRings[0].quad != entt::null) {
+        PicturesAbout(dark, darkRings[0].z, behind, inFront);
+        CHECK_MSG(behind == 9, "4-07: 9 pictures behind the ring, the door glow not counted: " +
+                                   std::to_string(behind));
+        const entt::entity glow = FirstTagged(dark, "Magic Portals Door Highlight");
+        CHECK_MSG(glow != entt::null && dark.get<TransformComponent>(glow).position.z < darkRings[0].z,
+                  "the glow at -22 behind the ring at -10");
+        CHECK_MSG(dark.get<MaterialComponent>(darkRings[0].quad).albedoColor == glm::vec4(0.4f, 0.5f, 0.5f, 1.0f),
+                  "the ring's own colour on a dark level: emissive 1 takes no ambient");
+        std::printf("  4-07: one ring at z %.6f, %d pictures behind and %d in front\n",
+                    static_cast<double>(darkRings[0].z), behind, inFront);
+    }
+    level6c.OnDetach(dark);
+
+    // A level with no shock agent has no ring.
+    entt::registry none;
+    publishViewport(none);
+    MagicPortalsLayer plain(TestPaths(), "level0");
+    plain.OnAttach(none);
+    CHECK_EQ(Tagged(none, "Magic Portals Shock Ring"), 0);
+    CHECK(plain.ShockRings().empty());
+    plain.OnDetach(none);
+}
+
+// THE TWO CLOCKS (00_order 8.13's 13.1 row, D6_check section 5.5): the turn is game
+// time - 20 degrees a second, stepped on the tick, held by a pause - and the scale is
+// the frame's - a fresh factor in [0.993, 1.007] about the fixed base every frame,
+// the pause or not.
+void AShockRingTurnsOnGameTimeAndJittersEveryFrame() {
+    if (!OriginalArtIsThere("AShockRingTurnsOnGameTimeAndJittersEveryFrame")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level23b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto read = [&layer]() {
+        const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, "shock_agent_2048");
+        return ring != nullptr ? *ring : MagicPortalsLayer::ShockRingReport{};
+    };
+    const MagicPortalsLayer::ShockRingReport first = read();
+    CHECK_MSG(first.quad != entt::null, "3-24's upper ring is there");
+    if (first.quad == entt::null) return;
+    const entt::entity quad = first.quad;
+    const double base = first.baseUnits;
+    // unitsPerSecond(20) over one tick, as Motion::Advance takes it: 20 x frame ms / 1000.
+    const double stepDeg = 20.0 * (static_cast<double>(MagicPortalsLayer::kTick) * 1000.0) / 1000.0;
+    int turnWrong = 0;
+    int drawnWrong = 0;
+    int outside = 0;
+    int repeated = 0;
+    double lo = 2.0;
+    double hi = 0.0;
+    double sum = 0.0;
+    int frames = 0;
+    MagicPortalsLayer::ShockRingReport last = read();
+    for (int tick = 0; tick < 400; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::ShockRingReport now = read();
+        // One step a tick, counter-clockwise, which the engine's +z is.
+        if (std::fabs(now.turnedDeg - (last.turnedDeg + stepDeg)) > 1e-9) ++turnWrong;
+        const auto& transform = registry.get<TransformComponent>(quad);
+        const float turnedRad = static_cast<float>(now.turnedDeg * 3.14159265358979323846 / 180.0);
+        // Drawn at the base times THIS frame's factor: never the last frame's times it.
+        if (std::fabs(transform.rotation.z - turnedRad) > 1e-5f ||
+            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(base * now.jitter)) > 1e-6f ||
+            now.baseUnits != base || now.jitters != last.jitters + 1) {
+            ++drawnWrong;
+        }
+        if (now.jitter < 0.993 || now.jitter > 1.007) ++outside;
+        if (now.jitter == last.jitter) ++repeated;
+        lo = std::min(lo, now.jitter);
+        hi = std::max(hi, now.jitter);
+        sum += now.jitter;
+        ++frames;
+        last = now;
+    }
+    const double mean = sum / frames;
+    CHECK_MSG(turnWrong == 0, "20 degrees a second, one step a tick: " + std::to_string(turnWrong) + " ticks wrong");
+    CHECK_MSG(std::fabs(last.turnedDeg - first.turnedDeg - 400.0 * stepDeg) < 1e-6,
+              "133.3 degrees in 400 ticks: " + std::to_string(last.turnedDeg - first.turnedDeg));
+    CHECK_MSG(drawnWrong == 0, "every frame drawn at its turn and at base x its own factor: " +
+                                   std::to_string(drawnWrong) + " wrong");
+    CHECK_MSG(outside == 0 && repeated == 0,
+              "400 factors in [0.993, 1.007], each fresh: " + std::to_string(outside) + " outside, " +
+                  std::to_string(repeated) + " repeated");
+    CHECK_MSG(lo < 0.9935 && hi > 1.0065 && std::fabs(mean - 1.0) < 0.001,
+              "spread over the whole range about the base, no drift: " + std::to_string(lo) + " to " +
+                  std::to_string(hi) + ", mean " + std::to_string(mean));
+
+    // A PAUSE HOLDS THE TURN AND NOT THE JITTER.
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(layer.Paused(), "Escape pauses 3-24");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::ShockRingReport held = read();
+    int pausedTurned = 0;
+    int pausedHeld = 0;
+    int pausedWrong = 0;
+    last = held;
+    for (int frame = 0; frame < 60; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::ShockRingReport now = read();
+        if (now.turnedDeg != held.turnedDeg) ++pausedTurned;
+        if (now.jitter == last.jitter || now.jitters != last.jitters + 1) ++pausedHeld;
+        const auto& transform = registry.get<TransformComponent>(quad);
+        if (now.jitter < 0.993 || now.jitter > 1.007 ||
+            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(base * now.jitter)) > 1e-6f) {
+            ++pausedWrong;
+        }
+        last = now;
+    }
+    CHECK_MSG(pausedTurned == 0, "the pause holds the turn: " + std::to_string(pausedTurned) + " frames turned");
+    CHECK_MSG(pausedHeld == 0, "and not the jitter: a fresh factor every paused frame, " +
+                                   std::to_string(pausedHeld) + " held");
+    CHECK_MSG(pausedWrong == 0, "each in [0.993, 1.007] about the base: " + std::to_string(pausedWrong) + " wrong");
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(!layer.Paused(), "and Escape again resumes it");
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(read().turnedDeg > held.turnedDeg, "and the turn goes on");
+    std::printf("  3-24: 400 ticks turned %.4f degrees; factors %.5f to %.5f, mean %.5f; 60 paused frames: "
+                "the turn held, 60 fresh factors\n",
+                last.turnedDeg - first.turnedDeg, lo, hi, mean);
+    layer.OnDetach(registry);
+}
+
+// 3-28's (level27b) swinging ring is where its field is, as the area's own
+// linearMotion puts it: the ring IS the lethal centre Fields moves.
+void AMovingShockRingIsWhereItsFieldIs() {
+    if (!OriginalArtIsThere("AMovingShockRingIsWhereItsFieldIs")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level27b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    CHECK_EQ(layer.ShockRings().size(), std::size_t{3});
+    int wrong = 0;
+    double travel = 0.0;
+    for (int tick = 0; tick < 90; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortals::Fields::Field* field = layer.SimLevel()->fields.FindField("shock_agent_2128");
+        const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, "shock_agent_2128");
+        if (field == nullptr || ring == nullptr || ring->quad == entt::null) {
+            ++wrong;
+            continue;
+        }
+        const glm::dvec2 drawn = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(ring->quad).position);
+        if (ring->atPx != field->atPx || glm::distance(drawn, field->atPx) > 1e-3) ++wrong;
+        travel = std::max(travel, std::fabs(field->atPx.y - field->centrePx.y));
+    }
+    CHECK_MSG(wrong == 0, "the ring at its field's point every tick: " + std::to_string(wrong) + " wrong");
+    CHECK_MSG(travel > 60.0, "and the field swings its stride of 64: " + std::to_string(travel));
+    layer.OnDetach(registry);
+}
+
+// K8 (the inherited reading): the rings' factors come off the effects' stream and
+// the level's own particles are untouched by them. Two layers on 3-24 draw the same
+// until one of them spawns an effect, which takes draws off that stream: its rings'
+// factors part from the other's from then on, and the level's emitters never do.
+void AShockRingsJitterIsTheEffectsStreamsAlone() {
+    if (!OriginalArtIsThere("AShockRingsJitterIsTheEffectsStreamsAlone")) return;
+    entt::registry plain;
+    entt::registry withEffect;
+    publishViewport(plain);
+    publishViewport(withEffect);
+    MagicPortalsLayer a(TestPaths(), "level23b");
+    MagicPortalsLayer b(TestPaths(), "level23b");
+    a.OnAttach(plain);
+    b.OnAttach(withEffect);
+    CHECK_MSG(a.SimLevel() != nullptr && a.ArtError().empty(), a.LoadError() + a.ArtError());
+    if (a.SimLevel() == nullptr || !a.ArtError().empty()) return;
+    CloseTheLevelStartPopup(a, plain);
+    CloseTheLevelStartPopup(b, withEffect);
+    int emittersDiffered = 0;
+    int compared = 0;
+    int ringsApartBefore = 0;
+    int ringsApartAfter = 0;
+    for (int frame = 0; frame < 120; ++frame) {
+        tickWith(a, plain, kRest, {}, {});
+        tickWith(b, withEffect, kRest, {}, {});
+        a.OnUpdate(plain, MagicPortalsLayer::kTick);
+        b.OnUpdate(withEffect, MagicPortalsLayer::kTick);
+        if (frame == 20) {
+            MagicPortalsLayer::EffectSpawn spawn;
+            spawn.entity = "sparkles.ent";
+            spawn.atPx = glm::dvec2(300.0, 100.0);
+            spawn.zUnits = 32.0;
+            CHECK(b.SpawnEffect(withEffect, spawn) > 0);
+        }
+        const std::vector<MagicPortalsLayer::EmitterReport> left = a.EmitterReports();
+        const std::vector<MagicPortalsLayer::EmitterReport> right = b.EmitterReports();
+        if (left.size() != right.size()) {
+            ++emittersDiffered;
+        } else {
+            for (std::size_t i = 0; i < left.size(); ++i) {
+                ++compared;
+                if (left[i].node != right[i].node || left[i].active != right[i].active ||
+                    left[i].drawn != right[i].drawn || left[i].newestBornPx != right[i].newestBornPx ||
+                    left[i].newestAgeMs != right[i].newestAgeMs) {
+                    ++emittersDiffered;
+                }
+            }
+        }
+        const std::vector<MagicPortalsLayer::ShockRingReport> ringsA = a.ShockRings();
+        const std::vector<MagicPortalsLayer::ShockRingReport> ringsB = b.ShockRings();
+        bool apart = ringsA.size() != ringsB.size();
+        for (std::size_t i = 0; !apart && i < ringsA.size(); ++i) apart = ringsA[i].jitter != ringsB[i].jitter;
+        if (apart) ++(frame <= 20 ? ringsApartBefore : ringsApartAfter);
+    }
+    // 3-24's six systems of its own - the two agents' lightning among them - over 120 frames.
+    CHECK_MSG(compared == 6 * 120, "the level's emitters were compared: " + std::to_string(compared));
+    CHECK_MSG(emittersDiffered == 0, "the rings' draws move no particle of the level's own: " +
+                                         std::to_string(emittersDiffered) + " reading(s) differ");
+    CHECK_MSG(ringsApartBefore == 0, "the two layers' rings draw alike until the effect: " +
+                                         std::to_string(ringsApartBefore) + " frames apart");
+    CHECK_MSG(ringsApartAfter > 90, "and part once it has taken draws off the same stream: " +
+                                        std::to_string(ringsApartAfter) + " of 99 frames apart");
+    std::printf("  K8 (13.1): %d emitter readings the same; ring factors apart on %d of the 99 frames after an "
+                "effect\n",
+                compared, ringsApartAfter);
+    a.OnDetach(plain);
+    b.OnDetach(withEffect);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
+    TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
+    AShakeDrawnOutsideTheEngineLoopDoesNotPileUp();
+    TheLightWallGoingShakesTheView();
+    AFallShakesTheView();
+    ADiamondTakenAndStruckShakesTheView();
+    TheGhostsShotEndingShakesTheView();
+    ASwitchedDoorShakesTheViewAsItGoes();
+    EventsALevelMakesOnItsOwnShakeTheView();
+    AStoneThroughAWallShakesItsImpactThenTwenty();
+    AnUnlockedDoorShakesTheView();
+    TheDarkDragonsLevelShakesTheView();
+    ATrembleIsDrawnWhateverTicksAFrameRuns();
+    APlayerLandingShakesTheView();
+    AStandingPlayerBeginsNothing();
+    ABodyFallingOnThePlayerShakesTheView();
+    AKnightIsLookedAtWhereTheOriginalsStands();
+    TheBeholderHurtShakesTheView();
+    TheF14RouteLandsOnTheBlock();
+    TheSceneHasFourBlackBarsInFrontOfEverything();
+    TheBlackBarsStopAt768OnAWideScene();
     TheBetweenSlotTableSaysWhereEachClassStands();
     TheTableIsTheFractionTheLayerDrawsAt();
     AnEffectsPictureHaloAndSystemsStandWhereTheTableSays();
@@ -10299,6 +14747,7 @@ void runTests() {
     AMinionTheFloorTakesLeavesASkullAndBlood();
     AMinionAStrikeTakesLeavesBloodAndNoSkull();
     TheBlackKnightCarriesItsAuraAsAMultiply();
+    TheBlackKnightsLandingMakesNoTremble();
     TheGhostComesWithItsKnightsDeath();
     TheDarkDragonIsDrawnAsItsCallbackLeavesIt();
     Level31DrawsTheBeholder();
@@ -10306,6 +14755,8 @@ void runTests() {
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();
     ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack();
     ATapLandsWhereItPoints();
+    AScheduledTapFiresTheShotARealPressFires();
+    AScheduledTapOnAControlIsSpentOnIt();
     Level8FromTheSpawnWithTapsAndWalking();
     LevelsFollowInOrderAndRetryIsInstant();
     NSkipsToTheNextLevel();
@@ -10396,6 +14847,37 @@ void runTests() {
     ALitTorchBakesTheLevelAtRunTime();
     EveryLightWallStandsReadyToLeaveItsGhost();
     ALitTorchLeavesAGhostWhereItsWallStood();
+    AShotIntoA17WallEndsInPortalFail();
+    AnAntiportalTapOn17EndsRedAtZeroAndShakes();
+    TheBlockerKillsF3sLongShotRedAndShakesAfter();
+    ATapWhileAShotFliesShowsTheHourglass();
+    ABudgetZeroTapByTheSignMakesRedWavesAndAShake();
+    TheGhostsShotMarksWhereItIsAimed();
+    OnLevel22aTheShotIsBehindThePlatformAtOne();
+    TheShotLeavesFromBehindThePlayer();
+    AShotTurnedByAReflectorMarksItsNewEnd();
+    AFireDiamondTapsMarkIsTheLeftoverByte();
+    ATakenCrystalLeavesItsPickWhereItStood();
+    ATimedCrystalGoesWithItsVanishAtItsTime();
+    AKeyTakenOn318LeavesItsPickAtTheKey();
+    AKeyAndItsKeyholeLeaveWhatTheScriptAdds();
+    AShockDiamondLeavesItsPickItsDeathAndItsStrike();
+    AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs();
+    AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds();
+    AFireSignalPutOutLeavesItsWaterAtItsTorch();
+    AShotLightsTheTorchAsTheEntityItAdds();
+    ATorchPutOutComesBackAndItsWallFadesIn();
+    AWeightlessPlayerLeavesATrail();
+    ALapRoundAWellFlashesAndTurnsItsAgent();
+    AShockRingsKillLeavesShockDeathAtThePlayer();
+    ABreakableWallLeavesItsDustTurnedByTheWall();
+    The432WallsDustIsTwiceTheSize();
+    AStoneADespawnerTakesLeavesItsPuff();
+    ALiftDoorLeavesItsDustAsItOpensAndCloses();
+    AShockAgentWearsItsRing();
+    AShockRingTurnsOnGameTimeAndJittersEveryFrame();
+    AMovingShockRingIsWhereItsFieldIs();
+    AShockRingsJitterIsTheEffectsStreamsAlone();
 }
 
 } // namespace

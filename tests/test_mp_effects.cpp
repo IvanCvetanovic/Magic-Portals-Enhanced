@@ -14,6 +14,7 @@
 
 #include "TestHarness.hpp"
 
+#include "sim/Earthquake.hpp"
 #include "sim/Effects.hpp"
 #include "sim/Loading.hpp"
 #include "sim/Particles.hpp"
@@ -609,8 +610,9 @@ void TheGhostsCallsAreItsOwn() {
     CHECK_MSG(shot.offsetUnits == 0.0 && shot.offsetFixedUnits == glm::dvec2(0.0), "shot: no offset");
     CHECK_MSG(shot.z == 10.0 && shot.zScaled, "shot: z scale(10)");
     CHECK(shot.turn == Effects::Turn::AlongFlightMinus90 && shot.scale == 1.0);
-    // #127-156: portal_mark.ent at vector3(finalPos, scale(32)), unturned.
-    const Effects::Rule& mark = rules.enemyShootMark;
+    // #127-156: portal_mark.ent at vector3(finalPos, scale(32)), unturned - the
+    // player's shot's own row, one for both callers since planning step 112.
+    const Effects::Rule& mark = rules.portalMark;
     CHECK_MSG(mark.entity == "portal_mark.ent" && mark.z == 32.0 && mark.zScaled && mark.turn == Effects::Turn::Fixed &&
                   mark.angleDeg == 0.0 && mark.scale == 1.0 && mark.offsetUnits == 0.0,
               "mark: portal_mark.ent at scale(32), unturned");
@@ -642,7 +644,7 @@ void TheGhostsCallsAreItsOwn() {
     CHECK_MSG(fired.atPx == at && fired.z == 10.0 && fired.zScaled, "the shot at its own point, z 10");
     CHECK_MSG(std::fabs(static_cast<double>(fired.angleDeg) - AngleOf(dir)) < 1e-4,
               "turned getAngle(dir) - 90: " + Num(fired.angleDeg) + " for " + Num(AngleOf(dir)));
-    const Effects::Spawn marked = Effects::EnemyShootMark(rules, glm::dvec2(400.0, 208.0));
+    const Effects::Spawn marked = Effects::At(rules.portalMark, glm::dvec2(400.0, 208.0));
     CHECK_MSG(marked.atPx == glm::dvec2(400.0, 208.0) && marked.z == 32.0 && marked.angleDeg == 0.0f,
               "the mark where the shot is going");
     const Effects::Spawn flashed = Effects::EnemyShootFlash(rules, at, 10.0);
@@ -691,11 +693,487 @@ void TheGhostsCallsAreItsOwn() {
     CHECK_MSG(closing && last < gap * 0.1, "and closes on it, frame by frame: " + Num(gap) + " -> " + Num(last));
 }
 
+// ---- the shot and what its tap and its end leave (the visuals plan's 10.1) -------
+
+void TheShotSideRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    struct Row {
+        const Effects::Rule* rule;
+        const char* entity;
+        double offset;
+        double z;
+        bool zScaled;
+    };
+    // Every one AddEntity or AddScaledEntity at the script's own size and angle
+    // 0. The marks, the hourglass, the waves and the violet end stand at
+    // g_scale.scale(32); the flash and the red end at the projectile's own bare 0.
+    const Row rows[] = {
+        {&rules.projectileShoot, "projectile_shoot.ent", 24.0, 0.0, false},
+        {&rules.projectileShootReflected, "projectile_shoot.ent", 0.0, 0.0, false},
+        {&rules.portalMark, "portal_mark.ent", 0.0, 32.0, true},
+        {&rules.redCross, "red_cross.ent", 0.0, 32.0, true},
+        {&rules.hourglass, "hourglass.ent", 0.0, 32.0, true},
+        {&rules.redWaves, "red_waves.ent", 0.0, 32.0, true},
+        {&rules.portalFail, "portal_fail.ent", 0.0, 32.0, true},
+        {&rules.portalFailInField, "portal_fail_in_antiportal.ent", 0.0, 0.0, false},
+    };
+    for (const Row& row : rows) {
+        const Effects::Rule& rule = *row.rule;
+        CHECK_MSG(rule.entity == row.entity && rule.offsetUnits == row.offset && rule.z == row.z &&
+                      rule.zScaled == row.zScaled && rule.turn == Effects::Turn::Fixed && rule.angleDeg == 0.0 &&
+                      rule.scale == 1.0,
+                  std::string(row.entity) + ": offset " + Num(rule.offsetUnits) + ", z " + Num(rule.z) +
+                      (rule.zScaled ? " scaled" : " bare"));
+    }
+    // The point rows are added where they are given.
+    const glm::dvec2 at(260.0, 194.8);
+    const Effects::Spawn mark = Effects::At(rules.portalMark, at);
+    CHECK_MSG(mark.entity == "portal_mark.ent" && mark.atPx == at && mark.z == 32.0 && mark.zScaled &&
+                  mark.angleDeg == 0.0f && mark.scale == 1.0,
+              "portal_mark at the tap, z scale(32): " + At(mark.atPx));
+    const Effects::Spawn failed = Effects::At(rules.portalFailInField, at);
+    CHECK_MSG(failed.atPx == at && failed.z == 0.0 && !failed.zScaled, "the red end at the point, z a bare 0");
+    // And the flash 24 units out along the shot's way, unturned: a shot from
+    // (41, 196) at a tap (160, 112) flashes at 24 x normalize(119, -84).
+    const glm::dvec2 from(41.0, 196.0);
+    const glm::dvec2 tap(160.0, 112.0);
+    const glm::dvec2 d = Direction(tap, from);
+    const Effects::Spawn flash = Effects::ProjectileShoot(rules, from, tap);
+    CHECK_MSG(Near(flash.atPx.x, from.x + 24.0 * d.x, 1e-5) && Near(flash.atPx.y, from.y + 24.0 * d.y, 1e-5),
+              "projectile_shoot 24 out along the shot: " + At(flash.atPx));
+    CHECK_MSG(Near(glm::distance(flash.atPx, from), 24.0, 1e-5), "24 from where it left");
+    CHECK(flash.angleDeg == 0.0f && flash.z == 0.0 && !flash.zScaled);
+    // A shot with nowhere to go flashes where it is (normalize of zero is zero).
+    CHECK(Effects::ProjectileShoot(rules, from, from).atPx == from);
+    std::printf("  the shot's flash: %s for a shot from %s to %s\n", At(flash.atPx).c_str(), At(from).c_str(),
+                At(tap).c_str());
+}
+
+// ---- what a crystal leaves where it was (the visuals plan's 10.2) -----------------
+
+void TheCrystalRowsAddToTheCrystalsOwnPoint() {
+    const Effects::Rules rules = TheRules();
+    // pickCrystalEffect #1-32: AddScaledEntity('crystal_pick.ent', crystal.GetPosition() +
+    // vector3(0, 0, scale(20)), getScale()); ETHCallback_timer #135-167: the same point,
+    // AddScaledEntity('crystal_vanish.ent', ..., scale(1.3)).
+    const Effects::Rule& pick = rules.crystalPick;
+    const Effects::Rule& vanish = rules.crystalVanish;
+    CHECK_MSG(pick.entity == "crystal_pick.ent" && pick.offsetUnits == 0.0 && pick.z == 20.0 && pick.zScaled &&
+                  pick.turn == Effects::Turn::Fixed && pick.angleDeg == 0.0 && pick.scale == 1.0,
+              "crystal_pick: z scale(20) on the crystal's own, angle 0, at the script's size: " + pick.entity);
+    CHECK_MSG(vanish.entity == "crystal_vanish.ent" && vanish.offsetUnits == 0.0 && vanish.z == 20.0 &&
+                  vanish.zScaled && vanish.turn == Effects::Turn::Fixed && vanish.angleDeg == 0.0 &&
+                  vanish.scale == 1.3,
+              "crystal_vanish: the same point, at scale(1.3): " + vanish.entity + " x " + Num(vanish.scale));
+
+    // THE Z IS ADDED to the crystal's, not put in place of it: 1-22's crystal_ent_878
+    // stands at (300, 210) with an eth_z of -6, so its burst is at 14; one at 0 at 20;
+    // and one at the deepest a level places (-20) at 0.
+    const glm::dvec2 at(300.0, 210.0);
+    const Effects::Spawn taken = Effects::OnEntity(pick, at, -6.0);
+    CHECK_MSG(taken.entity == "crystal_pick.ent" && taken.atPx == at && taken.z == 14.0 && taken.zScaled &&
+                  taken.angleDeg == 0.0f && taken.scale == 1.0,
+              "crystal_pick at the crystal, z -6 + 20 = 14: " + At(taken.atPx) + " z " + Num(taken.z));
+    CHECK(Effects::OnEntity(pick, at, 0.0).z == 20.0);
+    CHECK(Effects::OnEntity(pick, at, -20.0).z == 0.0);
+    const Effects::Spawn gone = Effects::OnEntity(vanish, glm::dvec2(400.0, 208.0), 0.0);
+    CHECK_MSG(gone.entity == "crystal_vanish.ent" && gone.atPx == glm::dvec2(400.0, 208.0) && gone.z == 20.0 &&
+                  gone.zScaled && gone.angleDeg == 0.0f && gone.scale == 1.3,
+              "crystal_vanish at 1-27's crystal_1264, z 20, x 1.3: " + At(gone.atPx) + " z " + Num(gone.z));
+    // And At, which every other point row uses, would have put it at a flat 20:
+    // the difference is the crystal's own depth.
+    CHECK(Effects::At(pick, at).z == 20.0 && taken.z != Effects::At(pick, at).z);
+    std::printf("  crystal_pick at %s z %s; crystal_vanish x %s\n", At(taken.atPx).c_str(), Num(taken.z).c_str(),
+                Num(gone.scale).c_str());
+}
+
+// ---- what a key and its keyhole leave (the visuals plan's 10.3) -------------------
+
+void TheKeyRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    struct Row {
+        const Effects::Rule* rule;
+        const char* entity;
+        double z;
+        bool scaled;
+    };
+    // ETHCallback_key #768-799 and #599-629; ETHCallback_keyhole #150-164, #168-194
+    // and #198-229: five AddScaledEntity calls, so none turned and none offset.
+    const Row rows[] = {{&rules.keyPick, "key_pick.ent", 32.0, true},
+                        {&rules.keyUnlockHalo, "key_unlock_halo.ent", 32.0, true},
+                        {&rules.keyholeVanish, "keyhole_vanish.ent", 32.0, true},
+                        {&rules.doorLockedVanish, "door_locked_vanish.ent", 2.0, false},
+                        {&rules.wallDestroyAtDoor, "wall_destroy.ent", 0.0, true}};
+    for (const Row& row : rows) {
+        const Effects::Rule& rule = *row.rule;
+        CHECK_MSG(rule.entity == row.entity && rule.offsetUnits == 0.0 && rule.z == row.z &&
+                      rule.zScaled == row.scaled && rule.turn == Effects::Turn::Fixed && rule.angleDeg == 0.0 &&
+                      rule.scale == 1.0,
+                  std::string(row.entity) + ": z " + Num(rule.z) + (rule.zScaled ? " scaled" : " bare") +
+                      ", angle 0, at getScale()");
+    }
+    CHECK_MSG(rules.keyUnlockHaloAfterMs == 666.0, "the halo on the fly-in's frame 1, w0's 666 ms: " +
+                                                       Num(rules.keyUnlockHaloAfterMs));
+
+    // 3-09 (level8b), whose five depths are all different: key_ent at (32, 32) z -6,
+    // keyhole at (582, 198) z -14, its door at (624, 160) z -8.
+    const glm::dvec2 key(32.0, 32.0);
+    const glm::dvec2 hole(582.0, 198.0);
+    const glm::dvec2 door(624.0, 160.0);
+    const Effects::Spawn pick = Effects::OnEntity(rules.keyPick, key, -6.0);
+    CHECK_MSG(pick.entity == "key_pick.ent" && pick.atPx == key && pick.z == 26.0 && pick.zScaled &&
+                  pick.angleDeg == 0.0f,
+              "key_pick at the key, -6 + 32 = 26: " + At(pick.atPx) + " z " + Num(pick.z));
+    const Effects::Spawn burst = Effects::OnEntity(rules.keyholeVanish, hole, -14.0);
+    CHECK_MSG(burst.atPx == hole && burst.z == 18.0, "keyhole_vanish at the keyhole, -14 + 32 = 18: " + Num(burst.z));
+    const Effects::Spawn dust = Effects::OnEntity(rules.wallDestroyAtDoor, door, -8.0);
+    CHECK_MSG(dust.entity == "wall_destroy.ent" && dust.atPx == door && dust.z == -8.0 && dust.angleDeg == 0.0f,
+              "wall_destroy at the door's own point and depth, unturned: z " + Num(dust.z));
+    // THE HALO'S Z IS ITS OWN: vector3(keyholePos, scale(32)), not added to the
+    // keyhole's -14 - At, where OnEntity would have said 18.
+    const Effects::Spawn halo = Effects::At(rules.keyUnlockHalo, hole);
+    CHECK_MSG(halo.entity == "key_unlock_halo.ent" && halo.atPx == hole && halo.z == 32.0 && halo.zScaled,
+              "the halo at the keyhole, z 32 of its own: " + Num(halo.z));
+    CHECK(Effects::OnEntity(rules.keyUnlockHalo, hole, -14.0).z != halo.z);
+
+    // THE DOOR'S SPARKLES: its -(-2) is a bare literal, so ONLY the 2 comes onto the
+    // level's axis - 2 / 2.8125 = 0.7111 - and the door's own -8 stays as it is.
+    constexpr double kFactor = 720.0 / 256.0;
+    const Effects::Spawn sparkles = Effects::OnEntityBare(rules.doorLockedVanish, door, -8.0, kFactor);
+    CHECK_MSG(sparkles.entity == "door_locked_vanish.ent" && sparkles.atPx == door && sparkles.zScaled &&
+                  Near(sparkles.z, -8.0 + 2.0 / kFactor, 1e-12),
+              "door_locked_vanish at the door, -8 + 0.7111: z " + Num(sparkles.z));
+    // Dividing the WHOLE sum instead - what effectAdd does with a bare z - would have
+    // put it at -2.13, six units in front of the door it belongs to.
+    CHECK(!Near(sparkles.z, (-8.0 + 2.0) / kFactor, 1e-3));
+    CHECK(Effects::OnEntityBare(rules.doorLockedVanish, door, -8.0, 0.0).z == -6.0);
+    // Over the 41 doors' depths (D4_check: -8, -6, -4, -2, 0, +4) the sparkles stand
+    // at door + 0.711, whose rounded slots are one in front of each door's: 00_order
+    // 8.13's {-6 .. +6} is the same +2 read in raw units.
+    const double doorZ[] = {-8.0, -6.0, -4.0, -2.0, 0.0, 4.0};
+    const double slot[] = {-7.0, -5.0, -3.0, -1.0, 1.0, 5.0};
+    for (std::size_t i = 0; i < 6; ++i) {
+        const double z = Effects::OnEntityBare(rules.doorLockedVanish, door, doorZ[i], kFactor).z;
+        CHECK_MSG(std::round(z) == slot[i], "a door at " + Num(doorZ[i]) + ": its sparkles at " + Num(z) +
+                                                ", slot " + Num(std::round(z)));
+    }
+    std::printf("  3-09: key_pick z %s, halo z %s, keyhole_vanish z %s, door_locked_vanish z %s, wall_destroy z %s\n",
+                Num(pick.z).c_str(), Num(halo.z).c_str(), Num(burst.z).c_str(), Num(sparkles.z).c_str(),
+                Num(dust.z).c_str());
+}
+
+// The halo comes on the fly-in's frame 1: the tick the key finds its keyhole sets
+// foundKeyhole, the next builds the manager with its clock at 0, and every later
+// one adds its ms until w0's 666 are reached.
+void TheUnlockHaloComesOnTheFlyInsFrameOne() {
+    const Effects::Rules rules = TheRules();
+    const auto haloTick = [&rules](double tickMs) {
+        Effects::FlyIn clock;
+        int added = 0;
+        int on = -1;
+        // Tick 0 is the unlock's own; the tick is counted from it.
+        for (int tick = 0; tick < 400; ++tick) {
+            if (Effects::AdvanceFlyIn(rules, clock, true, tickMs)) {
+                ++added;
+                if (on < 0) on = tick;
+            }
+        }
+        CHECK_MSG(added == 1, "added once: " + std::to_string(added));
+        return on;
+    };
+    const int at60 = haloTick(1000.0 / 60.0);
+    CHECK_MSG(at60 == 41, "at 60 Hz, the 41st tick after the unlock: " + std::to_string(at60));
+    const int at30 = haloTick(1000.0 / 30.0);
+    CHECK_MSG(at30 == 21, "at 30 Hz, the 21st: " + std::to_string(at30));
+    // The stride's test is m_time >= 666 (CMPu, JS): 6 frames of 111 ms reach it
+    // exactly, 6 of 110 do not.
+    CHECK_MSG(haloTick(111.0) == 1 + 6, "666 of 666 is frame 1");
+    CHECK_MSG(haloTick(110.0) == 1 + 7, "660 is not");
+    // A key not spent has no fly-in; its clock does not start.
+    Effects::FlyIn idle;
+    for (int tick = 0; tick < 100; ++tick) CHECK(!Effects::AdvanceFlyIn(rules, idle, false, 1000.0 / 60.0));
+    CHECK(!idle.found && !idle.built && idle.ms == 0.0 && !idle.haloAdded);
+    std::printf("  the unlock halo: %d ticks after the unlock at 60 Hz, %d at 30 Hz\n", at60, at30);
+}
+
+// What a diamond, a shock ring and a fire signal leave (the visuals plan's 10.4):
+// eight calls, each pinned as read, and the arithmetic of each reading - on an
+// entity's own depth, a bare 10 on one, a bare 10 of its own, and the strike's
+// midpoint and its radians handed over as degrees.
+void TheShockBurnAndExtinguishRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    struct Row {
+        const Effects::Rule* rule;
+        const char* entity;
+        double z;
+        bool scaled;
+    };
+    // Seven AddScaledEntity calls - unturned, unoffset, at getScale() - and the
+    // strike's AddEntity, below.
+    const Row rows[] = {{&rules.shockDiamondPick, "shock_diamond_pick.ent", 0.0, true},
+                        {&rules.shockDeath, "shock_death.ent", 0.0, true},
+                        {&rules.shockDeathAtAgent, "shock_death.ent", 10.0, false},
+                        {&rules.burnAtPickup, "burn_projectile.ent", 10.0, false},
+                        {&rules.burnAtShot, "burn_projectile.ent", 10.0, false},
+                        {&rules.extinguishAtDiamond, "extinguish_fire.ent", 0.0, true},
+                        {&rules.extinguishAtSignal, "extinguish_fire.ent", 10.0, false}};
+    for (const Row& row : rows) {
+        const Effects::Rule& rule = *row.rule;
+        CHECK_MSG(rule.entity == row.entity && rule.offsetUnits == 0.0 && rule.z == row.z &&
+                      rule.zScaled == row.scaled && rule.turn == Effects::Turn::Fixed && rule.angleDeg == 0.0 &&
+                      rule.scale == 1.0,
+                  std::string(row.entity) + ": z " + Num(rule.z) + (rule.zScaled ? " scaled" : " bare") +
+                      ", angle 0, at getScale()");
+    }
+    const Effects::Rule& strike = rules.shockStrike;
+    CHECK_MSG(strike.entity == "shock_strike.ent" && strike.offsetUnits == 0.0 && strike.z == 0.0 &&
+                  strike.zScaled && strike.turn == Effects::Turn::RadiansAsDegrees && strike.scale == 1.0,
+              "shock_strike: at the midpoint, turned by getAngle's radians as they are, at getScale()");
+
+    // On the entity's own depth: 3-16's diamond (204, 124), eth_z 0, and a knight
+    // struck at the entity point of a body centred at (212, 124) - 2 / 2.8125 deep.
+    constexpr double kFactor = 720.0 / 256.0;
+    const glm::dvec2 diamond(204.0, 124.0);
+    const double minionZ = 2.0 / kFactor;
+    const Effects::Spawn pick = Effects::OnEntity(rules.shockDiamondPick, diamond, 0.0);
+    CHECK_MSG(pick.entity == "shock_diamond_pick.ent" && pick.atPx == diamond && pick.z == 0.0 && pick.zScaled &&
+                  pick.angleDeg == 0.0f,
+              "shock_diamond_pick at the diamond, on its own depth: z " + Num(pick.z));
+    const glm::dvec2 knight(212.0, 124.0 - 11.1);
+    const Effects::Spawn death = Effects::OnEntity(rules.shockDeath, knight, minionZ);
+    CHECK_MSG(death.atPx == knight && Near(death.z, 0.711111, 1e-6) && death.angleDeg == 0.0f,
+              "shock_death at the knight, on its 0.711: " + Num(death.z));
+    // THE STRIKE: the midpoint of the two points and of the two depths, turned by
+    // atan2f(d.x, d.y) of d = normalize(enemy - diamond), wrapped into [0, 2 pi), and
+    // handed over AS DEGREES - so at most 6.28 of them.
+    const Effects::Spawn bolt = Effects::Strike(strike, diamond, 0.0, knight, minionZ);
+    CHECK_MSG(bolt.entity == "shock_strike.ent" && Near(bolt.atPx.x, 208.0, 1e-12) &&
+                  Near(bolt.atPx.y, 124.0 - 5.55, 1e-12) && Near(bolt.z, minionZ * 0.5, 1e-12) && bolt.zScaled,
+              "shock_strike halfway, z halfway: " + At(bolt.atPx) + " z " + Num(bolt.z));
+    // d = (8, -11.1): up and to the right, atan2(8, -11.1) = 2.5163 in (pi / 2, pi).
+    double wantRadians = std::atan2(8.0, -11.1);
+    if (wantRadians < 0.0) wantRadians += 2.0 * kPi;
+    CHECK_MSG(Near(bolt.angleDeg, wantRadians, 1e-5) && bolt.angleDeg < 6.2832f,
+              "turned by the radians, as degrees: " + Num(bolt.angleDeg));
+    // The compass, as D4 section 5.3 gives it: an enemy below (+y) 0, to the right
+    // pi / 2, above pi, to the left 3 pi / 2 - each a number of DEGREES.
+    struct Compass {
+        glm::dvec2 enemy;
+        double want;
+    };
+    const Compass compass[] = {{{204.0, 150.0}, 0.0},
+                               {{230.0, 124.0}, kPi * 0.5},
+                               {{204.0, 100.0}, kPi},
+                               {{180.0, 124.0}, kPi * 1.5}};
+    for (const Compass& c : compass) {
+        const float got = Effects::Strike(strike, diamond, 0.0, c.enemy, 0.0).angleDeg;
+        CHECK_MSG(Near(got, c.want, 1e-5), "an enemy at " + At(c.enemy) + ": " + Num(got) + ", want " + Num(c.want));
+    }
+    // And the one it is not: the script's own "along the line" is
+    // radianToDegree(getAngle(d)) - 90, which would turn a strike at an enemy to
+    // the right by 0 degrees and one below by -90.
+    Effects::Rule along = strike;
+    along.turn = Effects::Turn::TowardTravellerMinus90;
+    CHECK(Near(Effects::Strike(along, diamond, 0.0, glm::dvec2(204.0, 150.0), 0.0).angleDeg, -90.0, 1e-4));
+    // Two points on one spot: normalize gives zero, getAngle 0.
+    CHECK(Effects::Strike(strike, diamond, 0.0, diamond, 0.0).angleDeg == 0.0f);
+
+    // A BARE 10 on an entity's depth: only the 10 comes onto the level's axis - 3-32's
+    // fire diamond at eth_z -10 takes its burn at -10 + 3.5556 = -6.4444, and a shock
+    // agent at 0 its shock_death at 3.5556.
+    const Effects::Spawn burn = Effects::OnEntityBare(rules.burnAtPickup, glm::dvec2(356.0, 128.0), -10.0, kFactor);
+    CHECK_MSG(burn.entity == "burn_projectile.ent" && burn.zScaled && Near(burn.z, -10.0 + 10.0 / kFactor, 1e-12),
+              "burn_projectile at the fire diamond: " + Num(burn.z));
+    const Effects::Spawn agent = Effects::OnEntityBare(rules.shockDeathAtAgent, glm::dvec2(224.0, 384.0), 0.0, kFactor);
+    CHECK_MSG(agent.entity == "shock_death.ent" && Near(agent.z, 3.555556, 1e-6), "at the agent: " + Num(agent.z));
+    // A BARE 10 of its own: At keeps the literal and says it is bare, for the
+    // layer's effectAdd to bring onto the level's axis - burnProjectile's and the
+    // fire signal's.
+    const Effects::Spawn shot = Effects::At(rules.burnAtShot, glm::dvec2(100.0, 60.0));
+    const Effects::Spawn water = Effects::At(rules.extinguishAtSignal, glm::dvec2(247.0, 141.0));
+    CHECK_MSG(shot.z == 10.0 && !shot.zScaled && water.z == 10.0 && !water.zScaled &&
+                  water.entity == "extinguish_fire.ent",
+              "burn_projectile and the signal's water at a bare 10 of their own");
+    const Effects::Spawn drained = Effects::OnEntity(rules.extinguishAtDiamond, glm::dvec2(384.0, 150.0), 0.0);
+    CHECK_MSG(drained.entity == "extinguish_fire.ent" && drained.z == 0.0 && drained.zScaled,
+              "the drained diamond's water on its own depth");
+    std::printf("  10.4: strike at %s z %s turned %s; burn at pickup z %s; agent z %s\n", At(bolt.atPx).c_str(),
+                Num(bolt.z).c_str(), Num(bolt.angleDeg).c_str(), Num(burn.z).c_str(), Num(agent.z).c_str());
+}
+
+// ---- what a wall, a stone and a lift door leave (the visuals plan's 11.1) -------
+
+void TheWallStoneAndDoorRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    constexpr double kFactor = 720.0 / 256.0;
+    // THE WALL'S: the 6-argument AddEntity at the wall's own point and depth, turned
+    // by the wall, at effectScale x getScale().
+    const Effects::Rule& wall = rules.wallDestroy;
+    CHECK_MSG(wall.entity == "wall_destroy.ent" && wall.offsetUnits == 0.0 && wall.z == 0.0 && wall.zScaled &&
+                  wall.turn == Effects::Turn::EntityAngle && wall.scale == 1.0,
+              "wall_destroy: on the wall's own GetPosition(), turned by its GetAngle(), at getScale()");
+    CHECK_MSG(rules.wallDestroyScaleKey == "destroyEffectScale",
+              "the wall's float: '" + rules.wallDestroyScaleKey + "'");
+    // One arm computes effectScale for the dust and the shake (#14-31, #33-38 and
+    // #73-76): earthquake.json names the same float.
+    Earthquake::Rules quake;
+    std::string quakeError;
+    CHECK_MSG(Earthquake::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/earthquake.json", quake, quakeError),
+              "earthquake.json reads: " + quakeError);
+    CHECK_MSG(quake.wallScaleKey == rules.wallDestroyScaleKey,
+              "the shake's key is the dust's: '" + quake.wallScaleKey + "'");
+    // #14-31: 1 unless the float is above 0.
+    CHECK(Effects::EffectScale(0.0) == 1.0 && Effects::EffectScale(-3.0) == 1.0 && Effects::EffectScale(2.0) == 2.0 &&
+          Effects::EffectScale(0.5) == 0.5);
+    // 1-09's wall (320, 124), eth_z -2, unturned; 1-13's (192, 282) turned 1.5708
+    // clockwise in the .tscn, the original's -90; 4-32's 2217 (32, 128), -2, at 2.
+    const Effects::Spawn upright = Effects::WallDestroy(rules, glm::dvec2(320.0, 124.0), -2.0, 0.0, 1.0);
+    CHECK_MSG(upright.entity == "wall_destroy.ent" && upright.atPx == glm::dvec2(320.0, 124.0) && upright.z == -2.0 &&
+                  upright.zScaled && upright.angleDeg == 0.0f && upright.scale == 1.0,
+              "an upright wall's dust at it, z -2, unturned, x1: " + At(upright.atPx) + " z " + Num(upright.z));
+    const double turnedDeg = -1.5708 * 180.0 / kPi;
+    const Effects::Spawn lying = Effects::WallDestroy(rules, glm::dvec2(192.0, 282.0), -2.0, turnedDeg, 1.0);
+    CHECK_MSG(Near(lying.angleDeg, -90.0, 1e-3) && lying.atPx == glm::dvec2(192.0, 282.0),
+              "a wall turned a quarter turns its dust with it: " + Num(lying.angleDeg));
+    const Effects::Spawn big = Effects::WallDestroy(rules, glm::dvec2(32.0, 128.0), -2.0, 0.0, Effects::EffectScale(2.0));
+    CHECK_MSG(big.scale == 2.0, "4-32's wall 2217 at twice the size: " + Num(big.scale));
+    // Turned as the engine turns a particle (ETHParticleManager.cpp:489, :520): the
+    // start line RandStartPoint (0, 101) of an upright wall runs down the screen; at
+    // -90 it runs across it.
+    const glm::dvec2 top = Particles::Turn(glm::dvec2(0.0, -50.5), lying.angleDeg);
+    CHECK_MSG(Near(std::fabs(top.x), 50.5, 1e-3) && Near(top.y, 0.0, 1e-3),
+              "the dust's line lies across the screen on a -90 wall: " + At(top));
+
+    // THE STONE'S: AddScaledEntity at vector3(its GetPositionXY(), scale(32)), a depth
+    // of its own, at scale(1.3).
+    const Effects::Rule& stone = rules.stoneDestroy;
+    CHECK_MSG(stone.entity == "rolling_stone_destroy.ent" && stone.offsetUnits == 0.0 && stone.z == 32.0 &&
+                  stone.zScaled && stone.turn == Effects::Turn::Fixed && stone.angleDeg == 0.0 && stone.scale == 1.3,
+              "rolling_stone_destroy: z 32 of its own, unturned, at 1.3");
+    const Effects::Spawn puff = Effects::At(stone, glm::dvec2(64.0, 380.0));
+    CHECK_MSG(puff.atPx == glm::dvec2(64.0, 380.0) && puff.z == 32.0 && puff.zScaled && puff.scale == 1.3,
+              "at the stone, z 32: " + Num(puff.z));
+
+    // THE DOOR'S TWO: AddScaledEntity at the door's GetPosition() -/+ (0, 0.5 h, 0),
+    // unturned, its z the door's plus a bare 0.
+    const Effects::Rule& open = rules.doorLiftOpen;
+    const Effects::Rule& close = rules.doorLiftClose;
+    for (const Effects::Rule* rule : {&open, &close}) {
+        CHECK_MSG(rule->entity == "door_lift_particles.ent" && rule->offsetUnits == 0.0 && rule->z == 0.0 &&
+                      !rule->zScaled && rule->turn == Effects::Turn::Fixed && rule->angleDeg == 0.0 &&
+                      rule->scale == 1.0,
+                  "door_lift_particles: a bare 0 on the door's depth, unturned, at getScale()");
+    }
+    CHECK_MSG(rules.doorLiftOpenSizeY == -0.5 && rules.doorLiftCloseSizeY == 0.5,
+              "half the door's height up as it opens, down as it closes: " + Num(rules.doorLiftOpenSizeY) + ", " +
+                  Num(rules.doorLiftCloseSizeY));
+    // 3-15's door, 128 high, shut at (288, 176) eth_z -2 and raised 126 by the port.
+    const Effects::Spawn opening = Effects::DoorLiftDust(rules, true, glm::dvec2(288.0, 176.0), -2.0, 128.0, kFactor);
+    const Effects::Spawn closing =
+        Effects::DoorLiftDust(rules, false, glm::dvec2(288.0, 176.0 - 126.0), -2.0, 128.0, kFactor);
+    CHECK_MSG(opening.entity == "door_lift_particles.ent" && opening.atPx == glm::dvec2(288.0, 112.0) &&
+                  opening.z == -2.0 && opening.zScaled && opening.angleDeg == 0.0f && opening.scale == 1.0,
+              "opening: at its top edge, on its depth: " + At(opening.atPx) + " z " + Num(opening.z));
+    CHECK_MSG(closing.atPx == glm::dvec2(288.0, 50.0 + 64.0) && closing.z == -2.0,
+              "closing: at the raised door's bottom edge: " + At(closing.atPx));
+    std::printf("  11.1: a -90 wall's dust turned %s, its line %s; 2217 x%s; the door's dust %s and %s\n",
+                Num(lying.angleDeg).c_str(), At(top).c_str(), Num(big.scale).c_str(), At(opening.atPx).c_str(),
+                At(closing.atPx).c_str());
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
     std::ifstream file(path, std::ios::binary);
     return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+// THE TORCH, ITS WALL, THE TRAIL AND THE LAP (the visuals plan's 11.2;
+// effects.json _torches_trail_roundabout), each call as the listing has it.
+void TheTorchTrailAndRoundaboutRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    constexpr double kFactor = 720.0 / 256.0;
+    // ETHCallback_light_off's three and addFireSignalIfNecessary's, on the torch's
+    // own GetPosition() - 4-29's (88, 50), eth_z -12 - unturned at getScale().
+    for (const Effects::Rule* rule :
+         {&rules.lightFromProjectile, &rules.lightOnSparkles, &rules.fireSignal, &rules.movementTrail}) {
+        CHECK_MSG(rule->offsetUnits == 0.0 && rule->z == 0.0 && rule->zScaled && rule->turn == Effects::Turn::Fixed &&
+                      rule->angleDeg == 0.0 && rule->scale == 1.0,
+                  rule->entity + ": on the entity's own GetPosition(), unturned, at getScale()");
+    }
+    CHECK(rules.lightFromProjectile.entity == "light_from_projectile.ent" &&
+          rules.lightOnSparkles.entity == "light_on_sparkles.ent" && rules.fireSignal.entity == "fire_signal.ent" &&
+          rules.movementTrail.entity == "movement_trail.ent");
+    const Effects::Spawn lit = Effects::OnEntity(rules.lightFromProjectile, glm::dvec2(88.0, 50.0), -12.0);
+    CHECK_MSG(lit.atPx == glm::dvec2(88.0, 50.0) && lit.z == -12.0 && lit.zScaled && lit.angleDeg == 0.0f,
+              "the lit torch on the torch: " + At(lit.atPx) + " z " + Num(lit.z));
+    // bounceLightEntity(this, 1f): 1 +- 0.04, 160 ms a leg, starting large.
+    CHECK_MSG(rules.litTorchBounce.from == 1.04 && rules.litTorchBounce.to == 0.96 &&
+                  rules.litTorchBounce.strideMs == 160.0,
+              "the lit torch bounces 1.04 -> 0.96 on 160 ms legs");
+    // ETHCallback_fire_signal's: the torch put back and its sparkles at
+    // vector3(originalPos, 10), a bare 10 - 3.556 of the level's units - and the
+    // burst at the spent shot, a bare 0 (both rows).
+    for (const Effects::Rule* rule : {&rules.lightOffAtSignal, &rules.lightOffSparkles}) {
+        CHECK_MSG(rule->z == 10.0 && !rule->zScaled && rule->turn == Effects::Turn::Fixed && rule->angleDeg == 0.0 &&
+                      rule->scale == 1.0 && rule->offsetUnits == 0.0,
+                  rule->entity + ": at vector3(originalPos, 10), a bare 10, unturned");
+    }
+    CHECK(rules.lightOffAtSignal.entity == "light_off.ent" && rules.lightOffSparkles.entity == "light_off_sparkles.ent");
+    for (const Effects::Rule* rule : {&rules.portalDeathAtLitTorch, &rules.portalDeathAtSignal}) {
+        CHECK_MSG(rule->entity == "portal_death.ent" && rule->z == 0.0 && !rule->zScaled &&
+                      rule->turn == Effects::Turn::Fixed && rule->angleDeg == 0.0 && rule->scale == 1.0,
+                  "portal_death at the spent projectile, its bare 0");
+    }
+    // addLightWall's two and ETHCallback_light_wall's dust: at an entity, turned
+    // by it - 4-32's wall is -1.5708 in the .tscn, the original's +90.
+    for (const Effects::Rule* rule : {&rules.lightWallCreate, &rules.lightWallAtGhost, &rules.wallDestroyLightWall}) {
+        CHECK_MSG(rule->offsetUnits == 0.0 && rule->z == 0.0 && rule->zScaled &&
+                      rule->turn == Effects::Turn::EntityAngle && rule->scale == 1.0,
+                  rule->entity + ": on the entity's own GetPosition(), turned by its GetAngle()");
+    }
+    CHECK(rules.lightWallCreate.entity == "light_wall_create.ent" && rules.lightWallAtGhost.entity == "light_wall.ent" &&
+          rules.wallDestroyLightWall.entity == "wall_destroy.ent");
+    const double wallDeg = 1.5708 * 180.0 / kPi;
+    const double ghostZ = -4.0 - 4.0 / kFactor;
+    const Effects::Spawn back = Effects::OnEntityTurned(rules.lightWallAtGhost, glm::dvec2(64.0, 240.0), ghostZ, wallDeg);
+    CHECK_MSG(back.atPx == glm::dvec2(64.0, 240.0) && Near(back.z, -5.4222, 1e-4) && Near(back.angleDeg, 90.0, 1e-3),
+              "4-32's wall back at the ghost, turned 90: z " + Num(back.z) + " angle " + Num(back.angleDeg));
+    const Effects::Spawn dust =
+        Effects::OnEntityTurned(rules.wallDestroyLightWall, glm::dvec2(192.0, 96.0), 2.0, 0.0);
+    CHECK_MSG(dust.atPx == glm::dvec2(192.0, 96.0) && dust.z == 2.0 && dust.angleDeg == 0.0f && dust.scale == 1.0,
+              "4-29's wall's dust on it, unturned, x1 (no destroyEffectScale)");
+    CHECK_MSG(rules.lightWallAlphaFrom == 0.0 && rules.lightWallAlphaPerSecond == 1.0,
+              "the new wall: SetAlpha(0), then up by unitsPerSecond(1)");
+    // computeRoundabout's flash at the area, vector3(xy, -5) with a bare -5.
+    CHECK_MSG(rules.roundabout.entity == "roundabout_effect.ent" && rules.roundabout.z == -5.0 &&
+                  !rules.roundabout.zScaled && rules.roundabout.turn == Effects::Turn::Fixed &&
+                  rules.roundabout.scale == 1.0,
+              "roundabout_effect at the well's area, a bare -5");
+
+    // addTrail's clock: it runs whatever the speed; a trail only above 0.4 AND past
+    // 400 ms, both strictly, and the clock back to 0 on one.
+    CHECK_MSG(rules.trailMinSpeed == 0.4 && rules.trailEveryMs == 400.0, "addTrail's 0.4f and 400");
+    constexpr double kTick = 1000.0 / 60.0;
+    double clock = 0.0;
+    int added = 0;
+    for (int tick = 0; tick < 30; ++tick) added += Effects::TrailDue(rules, clock, 0.4, kTick) ? 1 : 0;
+    CHECK_MSG(added == 0 && clock > 400.0, "at 0.4 exactly, none - and the clock has run on: " + Num(clock));
+    CHECK_MSG(Effects::TrailDue(rules, clock, 0.41, kTick) && clock == 0.0,
+              "the first tick past 0.4 adds one at once, the clock already past 400");
+    std::vector<int> ticks;
+    for (int tick = 1; tick <= 100; ++tick) {
+        if (Effects::TrailDue(rules, clock, 1.4, kTick)) ticks.push_back(tick);
+    }
+    // 24 ticks of 1000/60 ms add up to 400.0000000000001 - a hair past 400 - so at
+    // 60 Hz a trail comes every 24th tick. The original's clock is whole
+    // milliseconds of real frame time (16s and 17s), which reach 400 on the 24th
+    // frame or so and pass it there or on the 25th.
+    CHECK_MSG(ticks.size() == 4 && ticks[0] == 24 && ticks[1] == 48 && ticks[2] == 72 && ticks[3] == 96,
+              "then every 24th tick at 60 Hz: " + std::to_string(ticks.empty() ? -1 : ticks[0]));
+    double exact = 0.0;
+    CHECK_MSG(!Effects::TrailDue(rules, exact, 1.0, 400.0) && Effects::TrailDue(rules, exact, 1.0, 1e-9),
+              "400 ms is not past 400");
 }
 
 void ARowMissingAFactIsRefused() {
@@ -788,7 +1266,6 @@ void ARowMissingAFactIsRefused() {
     // Chapter 3's ghost (12.2): each row, the shot's turn, the flash's depth over the
     // shot's, and the appear effect's own callback.
     refused("no_enemy_shoot.json", "\"enemy_shoot\": {", "\"enemy_shoot_gone\": {", "enemy_shoot");
-    refused("no_enemy_mark.json", "\"enemy_shoot_mark\": {", "\"enemy_mark_gone\": {", "enemy_shoot_mark");
     refused("no_enemy_flash.json", "\"enemy_shoot_flash\": {", "\"enemy_flash_gone\": {", "enemy_shoot_flash");
     refused("no_enemy_burst.json", "\"enemy_shoot_burst\": {", "\"enemy_burst_gone\": {", "enemy_shoot_burst");
     refused("no_ghost_appear.json", "\"ghost_appear_effect\": {", "\"ghost_appear_gone\": {", "ghost_appear_effect");
@@ -801,6 +1278,142 @@ void ARowMissingAFactIsRefused() {
     refused("no_grow.json", "\"scale_per_frame\": 1.0049999952316284,", "", "ghost_appear_effect");
     refused("no_inset.json", "\"inset_units\": 12,", "", "skull.inset_units");
     refused("no_room.json", "\"inset_units\": 12,", "\"inset_units\": 0,", "skull.inset_units");
+    // The shot's rows (10.1): each required, the point rows refused a direction,
+    // and the flash refused a turn it is never given.
+    refused("no_mark.json", "\"portal_mark\": {", "\"portal_mark_gone\": {", "portal_mark");
+    refused("no_fail_field.json", "\"portal_fail_in_antiportal\": {", "\"fail_field_gone\": {",
+            "portal_fail_in_antiportal");
+    refused("mark_offset.json", "\"entity\": \"portal_mark.ent\",\n    \"offset_units\": 0,",
+            "\"entity\": \"portal_mark.ent\",\n    \"offset_units\": 3,", "portal_mark");
+    refused("flash_turned.json", "\"offset_units\": 24,\n    \"z\": {\"value\": 0, \"scaled\": false},\n    \"angle\": 0,",
+            "\"offset_units\": 24,\n    \"z\": {\"value\": 0, \"scaled\": false},\n    \"angle\": "
+            "\"toward_traveller_minus_90\",",
+            "projectile_shoot");
+
+    // The crystal's two rows (10.2): each required, neither given a direction, and
+    // neither z a bare literal - it is added to the crystal's own depth.
+    refused("no_pick.json", "\"crystal_pick\": {", "\"crystal_pick_gone\": {", "crystal_pick");
+    refused("no_vanish.json", "\"crystal_vanish\": {", "\"crystal_vanish_gone\": {", "crystal_vanish");
+    refused("vanish_offset.json", "\"entity\": \"crystal_vanish.ent\",\n    \"offset_units\": 0,",
+            "\"entity\": \"crystal_vanish.ent\",\n    \"offset_units\": 4,", "crystal_vanish");
+    refused("pick_bare_z.json",
+            "\"entity\": \"crystal_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 20, \"scaled\": true},",
+            "\"entity\": \"crystal_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 20, \"scaled\": false},",
+            "crystal_pick.z");
+
+    // The key's five (10.3): each required, none given a direction or a turn, each
+    // z read the one way the decode has it, and the halo's time required.
+    refused("no_key_pick.json", "\"key_pick\": {", "\"key_pick_gone\": {", "key_pick");
+    refused("no_door_vanish.json", "\"door_locked_vanish\": {", "\"door_locked_vanish_gone\": {",
+            "door_locked_vanish");
+    refused("no_door_dust.json", "\"wall_destroy_at_door\": {", "\"wall_destroy_gone\": {", "wall_destroy_at_door");
+    refused("hole_offset.json", "\"entity\": \"keyhole_vanish.ent\",\n    \"offset_units\": 0,",
+            "\"entity\": \"keyhole_vanish.ent\",\n    \"offset_units\": 4,", "keyhole_vanish");
+    refused("door_dust_turned.json",
+            "\"entity\": \"wall_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n"
+            "    \"angle\": 0,",
+            "\"entity\": \"wall_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n"
+            "    \"angle\": 90,",
+            "wall_destroy_at_door");
+    refused("key_pick_bare_z.json",
+            "\"entity\": \"key_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": true},",
+            "\"entity\": \"key_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": false},",
+            "key_pick.z");
+    refused("door_vanish_scaled.json",
+            "\"entity\": \"door_locked_vanish.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 2, \"scaled\": false},",
+            "\"entity\": \"door_locked_vanish.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 2, \"scaled\": true},",
+            "door_locked_vanish.z");
+    refused("no_halo_time.json", "\"after_fly_in_ms\": 666,", "", "key_unlock_halo.after_fly_in_ms");
+    // The 10.4 rows: each required, the strike turned by nothing but its radians,
+    // the rest never turned, and each z read the one way the decode has it.
+    refused("no_shock_pick.json", "\"shock_diamond_pick\": {", "\"shock_pick_gone\": {", "shock_diamond_pick");
+    refused("no_strike.json", "\"shock_strike\": {", "\"shock_strike_gone\": {", "shock_strike");
+    refused("no_signal_water.json", "\"extinguish_fire_at_signal\": {", "\"signal_water_gone\": {",
+            "extinguish_fire_at_signal");
+    refused("strike_along.json", "\"angle\": \"get_angle_radians_as_degrees\",",
+            "\"angle\": \"toward_traveller_minus_90\",", "shock_strike");
+    refused("strike_flat.json", "\"angle\": \"get_angle_radians_as_degrees\",", "\"angle\": 0,", "shock_strike");
+    refused("death_turned.json",
+            "\"entity\": \"shock_death.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n"
+            "    \"angle\": 0,",
+            "\"entity\": \"shock_death.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n"
+            "    \"angle\": 90,",
+            "shock_death");
+    refused("burn_scaled.json",
+            "\"entity\": \"burn_projectile.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 10, \"scaled\": false},",
+            "\"entity\": \"burn_projectile.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 10, \"scaled\": true},",
+            "burn_projectile_at_pickup.z");
+    refused("pick_raised.json",
+            "\"entity\": \"shock_diamond_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
+            "\"entity\": \"shock_diamond_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": true},",
+            "shock_diamond_pick.z");
+    refused("halo_at_once.json", "\"after_fly_in_ms\": 666,", "\"after_fly_in_ms\": 0,",
+            "key_unlock_halo.after_fly_in_ms");
+    // The 11.1 rows: each required; the wall's turned by its wall and nothing
+    // else, and its float named; the stone's and the door's never turned; each z
+    // read the one way the decode has it; the door's shares signed as decoded.
+    refused("no_wall_dust.json", "\"wall_destroy\": {", "\"wall_destroy_gone\": {", "wall_destroy");
+    refused("no_stone_puff.json", "\"rolling_stone_destroy\": {", "\"stone_puff_gone\": {", "rolling_stone_destroy");
+    refused("no_door_open.json", "\"door_lift_particles_open\": {", "\"door_open_gone\": {", "door_lift_particles_open");
+    refused("no_door_close.json", "\"door_lift_particles_close\": {", "\"door_close_gone\": {",
+            "door_lift_particles_close");
+    refused("wall_flat.json", "\"angle\": \"entity_angle\",", "\"angle\": 0,", "wall_destroy");
+    refused("no_wall_key.json", "\"scale_key\": \"destroyEffectScale\",", "", "wall_destroy.scale_key");
+    refused("stone_turned.json", "\"z\": {\"value\": 32, \"scaled\": true},\n    \"angle\": 0,\n    \"scale\": 1.3,",
+            "\"z\": {\"value\": 32, \"scaled\": true},\n    \"angle\": \"entity_angle\",\n    \"scale\": 1.3,",
+            "rolling_stone_destroy");
+    refused("stone_bare.json",
+            "\"entity\": \"rolling_stone_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": "
+            "true},",
+            "\"entity\": \"rolling_stone_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": "
+            "false},",
+            "rolling_stone_destroy.z");
+    refused("door_scaled.json",
+            "\"entity\": \"door_lift_particles.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": false},",
+            "\"entity\": \"door_lift_particles.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
+            "door_lift_particles_open.z");
+    refused("door_turned.json", "\"angle\": 0,\n    \"scale\": 1,\n    \"offset_size_y\": -0.5,",
+            "\"angle\": 90,\n    \"scale\": 1,\n    \"offset_size_y\": -0.5,", "door_lift_particles_open");
+    refused("door_open_down.json", "\"offset_size_y\": -0.5,", "\"offset_size_y\": 0.5,",
+            "door_lift_particles_open.offset_size_y");
+    refused("door_close_up.json", "\"offset_size_y\": 0.5,", "\"offset_size_y\": -0.5,",
+            "door_lift_particles_close.offset_size_y");
+    refused("no_door_share.json", "\"offset_size_y\": 0.5,", "", "door_lift_particles_close.offset_size_y");
+    // The 11.2 rows: each required, and each fact the decode gives it refused read
+    // the other way.
+    refused("no_lit_torch.json", "\"light_from_projectile\": {", "\"lit_torch_gone\": {", "light_from_projectile");
+    refused("no_signal.json", "\"fire_signal\": {", "\"fire_signal_gone\": {", "fire_signal");
+    refused("no_trail.json", "\"movement_trail\": {", "\"trail_gone\": {", "movement_trail");
+    refused("no_lap.json", "\"roundabout_effect\": {", "\"lap_gone\": {", "roundabout_effect");
+    refused("lit_torch_bare.json",
+            "\"entity\": \"light_from_projectile.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
+            "\"entity\": \"light_from_projectile.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": false},",
+            "light_from_projectile.z");
+    refused("put_back_scaled.json",
+            "\"entity\": \"light_off.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 10, \"scaled\": false},",
+            "\"entity\": \"light_off.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 10, \"scaled\": true},",
+            "light_off_at_signal.z");
+    refused("lap_scaled.json", "\"z\": {\"value\": -5, \"scaled\": false},", "\"z\": {\"value\": -5, \"scaled\": true},",
+            "roundabout_effect.z");
+    refused("wall_back_flat.json",
+            "\"entity\": \"light_wall.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": \"entity_angle\",",
+            "\"entity\": \"light_wall.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 0,",
+            "light_wall_at_ghost");
+    refused("signal_turned.json",
+            "\"entity\": \"fire_signal.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 0,",
+            "\"entity\": \"fire_signal.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 90,",
+            "fire_signal");
+    refused("trail_big.json",
+            "\"entity\": \"movement_trail.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 0,\n    \"scale\": 1,",
+            "\"entity\": \"movement_trail.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 0,\n    \"scale\": 2,",
+            "movement_trail.ent");
+    refused("no_bounce.json", "\"bounce\": {\"from\": 1.04, \"to\": 0.96, \"stride_ms\": 160},", "",
+            "light_from_projectile.bounce");
+    refused("flat_bounce.json", "\"bounce\": {\"from\": 1.04, \"to\": 0.96, \"stride_ms\": 160},",
+            "\"bounce\": {\"from\": 1.0, \"to\": 0.96, \"stride_ms\": 160},", "light_from_projectile.bounce");
+    refused("no_wall_fade.json", "\"alpha_per_second\": 1,", "", "light_wall_at_ghost");
+    refused("no_trail_speed.json", "\"min_speed\": 0.4,", "", "movement_trail");
+    refused("no_trail_clock.json", "\"every_ms\": 400,", "\"every_ms\": 0,", "movement_trail");
 
     Effects::Rules rules;
     std::string why;
@@ -823,6 +1436,13 @@ int main() {
     TheKillFadeIsNineTenthsAFrame();
     TheLevelsEndAndADeathLandWhereTheScriptPutsThem();
     TheGhostsCallsAreItsOwn();
+    TheShotSideRowsAreTheDecodedCalls();
+    TheCrystalRowsAddToTheCrystalsOwnPoint();
+    TheKeyRowsAreTheDecodedCalls();
+    TheUnlockHaloComesOnTheFlyInsFrameOne();
+    TheShockBurnAndExtinguishRowsAreTheDecodedCalls();
+    TheWallStoneAndDoorRowsAreTheDecodedCalls();
+    TheTorchTrailAndRoundaboutRowsAreTheDecodedCalls();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

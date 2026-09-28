@@ -67,8 +67,10 @@
 // places none at all, which makes picking that one up a one-way choice.
 //
 // Not built, and recorded in data/diamonds.json: the alpha, the idle pulse, the
-// effect entities, the sounds, the earthquakes, the remake's 28 x 24 trigger box
-// that the original does not use, and the drop the original does on shallLeave.
+// sounds, the remake's 28 x 24 trigger box that the original does not use, and
+// the drop the original does on shallLeave. The earthquakes and the effect
+// entities are the layer's, read from each diamond's owner and `gone`, `struck`
+// and the two per-tick records below (earthquake.json, effects.json).
 
 #include "sim/Carry.hpp"
 #include "sim/Roles.hpp"
@@ -102,6 +104,17 @@ struct Diamond : Carry::Carried {
     bool gone = false; // it struck a minion, or a gutter mouth took it
 };
 
+// One strike, as the tick that made it saw it: where the diamond was and where
+// the minion it struck was. The minion is destroyed by Minions::Take in the same
+// tick, so nothing after it can read where it stood; ETHCallback_shock_diamond
+// adds shock_death at it and shock_strike between the two (effects.json).
+struct Strike {
+    std::size_t diamond = 0;       // its index in State::diamonds
+    glm::dvec2 diamondPx{0.0};     // the diamond's point, trailed as this tick left it
+    glm::dvec2 preyCentrePx{0.0};  // the struck minion's BODY centre, which the 30 px is measured to
+    entt::entity prey = entt::null; // the body, destroyed by the time anyone reads this
+};
+
 // A gutter mouth: the drain that destroys a fire diamond, and so the way the
 // player gets portals back. Its mouth is the node's own trigger_size at its
 // trigger_offset, which is 10 x 51 in level30b and 10 x 76 in level31b - a tall
@@ -125,6 +138,17 @@ struct State {
     // the character every frame the diamond is carried and clears it when the
     // diamond dies. Game reads this to turn a portal shot into a fireball.
     bool carrierHasFire = false;
+
+    // WHAT THIS TICK DID, for the layer's effects and for nothing in the
+    // simulation: cleared by every Tick and refilled, as Fire::State::blastsPx and
+    // Turrets::State::spentPx are, and read by no rule here or in Game.
+    //
+    // `strikes`: each minion a shock diamond struck, in the order struck.
+    // `burnedPx`: where each portal shot a carried fire diamond turned into a
+    // fireball stood - burnProjectile's point - which Game writes as it converts
+    // it, straight after this Tick.
+    std::vector<Strike> strikes;
+    std::vector<glm::dvec2> burnedPx;
 
     // One tick, after the physics step - a diamond follows where the step left
     // whoever carries it, as a key does.
