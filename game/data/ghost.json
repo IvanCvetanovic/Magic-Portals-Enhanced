@@ -21,7 +21,16 @@
     "",
     "WHAT LEVEL31B IS. The level holds a keyhole (152, 204) and a door_locked (120, 160),",
     "both metadata/color yellow, and NO KEY ANYWHERE. The only key in the level is the one",
-    "this boss drops when it dies. So the fight is the lock, and Keys is what opens it."
+    "this boss drops when it dies. So the fight is the lock, and Keys is what opens it.",
+    "",
+    "WHEN IT IS THERE (the owner's standing ruling R4, planning step 98): NOT from the level's",
+    "start. The level places ghost_pos, which is only where it flies to; the ghost.ent is added",
+    "by the black knight's own death (spawn below), wherever and however the knight dies, and",
+    "flies from there. Before it there is no ghost, no shot and no restock.",
+    "",
+    "FOOTAGE (out/parity/footage/F15.md) disagrees with 'fire is the weapon' above: a fireball",
+    "passes through the ghost, a sensor, and only a barrel's explode() can burn it. The port",
+    "keeps the fireball, and says why in _not_built."
   ],
 
   "anchor": {
@@ -45,29 +54,103 @@
     "radius_px": 64.0
   },
 
+  "spawn": {
+    "by_entity": "ghost_minion.ent",
+    "z_offset_units": -1.0,
+    "scale": 0.3,
+    "deletes_entity_id": 1430,
+    "_source": [
+      "THE OWNER'S STANDING RULING R4 (in favour of what the original does): the ghost appears after the",
+      "black knight dies. ETHCallback_ghost_minion (bytes 451487..451999, the remake's out/parity/asbc/",
+      "all_functions.txt, md5 48fe65ce; decode/D8.md section 2 and 4, D8_check.md): #1-6 currentPos =",
+      "GetPosition() before the minion's own callback runs; #25 ETHCallback_minion, whose only DeleteEntity",
+      "(#1478-1504) follows isDestroyed - a killer floor, a strike or a burn all end there; #35-40 once",
+      "!IsAlive(): #43-78 AddEntity('ghost.ent', currentPos + vector3(0, 0, scale(-1)), 0, out, '',",
+      "scale(0.3)); #92-94 playGhostAppearSound; #96-103 DeleteEntity(SeekEntity(1430)). 'ghost.ent' is",
+      "added nowhere else in the listing and placed by no scene (D8 section 4), and its callback is",
+      "ETHCallback_ghost by the engine's naming rule (ETHASUtil.cpp:63-68): the spawned entity IS the boss.",
+      "by_entity is the marker's entity the sim holds since R16 (minions.json spawn, planning step 97).",
+      "z_offset_units is scale(-1): one level unit behind its knight at any screen (00_order 8.13 K13).",
+      "scale is scale(0.3): the entity's scale at its init, which waypoint 0 reads back (appear below).",
+      "deletes_entity_id: level31b's entity 1430, anti_sight_wall.ent at (528, 192), a sensor with no",
+      "sprite; the converter names its node anti_sight_wall_ent_1430 (tscn.py _node_name). The port has",
+      "no minion sight, so taking it away changes nothing the port plays (planning step 98)."
+    ],
+    "_first_callback": [
+      "INFERRED, and pinned by test_mp_ghost: ghost.ent is static=1, so its callback is queued from a",
+      "visible bucket during the frame's draw and runs in the NEXT update (ETHScene.cpp:547-572,",
+      "ETHActiveEntityHandler.cpp:145-167; D8 section 4's side finding). So the tick the knight dies adds",
+      "the ghost at the .ent's own look (white, alpha 1) at scale 0.3, and its init block and first",
+      "APPEARING update run on the tick after."
+    ]
+  },
+
   "appear": {
     "_note": [
-      "The APPEARING arm flies a WaypointManager rather than gliding. Four waypoints are",
-      "added in the init block; Waypoint's constructor is (pos, time, color, filter, angle),",
-      "read off Waypoint::Waypoint's parameters, and getCurrentPoint interpolates pos, color",
-      "and angle between the current waypoint and the next with the CURRENT one's filter",
-      "applied to the timer's bias. The angle is used as a uniform SetScale and the colour's",
-      "alpha as SetAlpha, so the ghost fades and swells into being.",
+      "ETHCallback_ghost's init block (bytes 451999..457261 #26-324) builds a WaypointManager",
+      "(repeat false, raw SetV1 [10, 0] #102) of FIVE addWaypoint calls (#173-301), each Waypoint(pos,",
+      "time, FloatColor(uint), filter, scale) - its `angle` field is read back as a uniform SetScale",
+      "(#428-439). The APPEARING arm (#369-494) calls update, then getCurrentPoint, and writes the",
+      "point's pos (SetPositionXY), colour (SetColor rgb), scale and alpha; on isLastFrame it sets",
+      "SHOOTING, shotsFired 0 and elapsedTime seed_elapsed_ms.",
       "",
-      "mid_fraction is the quarter in midPoint = currentPos + (ghost_pos - currentPos) / 4."
+      "WaypointManager::update (42421..42634) is FrameTimer::set(0, count - 1, waypoints[frame].time,",
+      "repeat) then setCurrentStride(waypoints[frame].time): the time is added, a changed first or last",
+      "resets to frame 0 with no time (the first update, since the constructor's own set leaves last 0),",
+      "else it steps at most ONE frame once the time reaches the stride. getCurrentPoint (41513..42094)",
+      "blends the current waypoint into the next (the current one again on the last frame) by the",
+      "CURRENT one's filter of getBias = min(stride, time) / max(stride, 1). defaultFilter(v) = v and",
+      "smoothEnd(v) = sin(v x PIb) (313837..313971). So legs of 1200, 2500 and 50 ms, a fourth of 0 that",
+      "lasts one callback, and the fifth waypoint terminal (D8 section 3, D8_check section 3).",
+      "",
+      "at: 'spawn' is the ghost's own GetPositionXY at its init (#107-112), the knight's point; 'quarter'",
+      "is midPoint = currentPos + (ghost_pos - currentPos) / 4 (#130-148), mid_fraction; 'anchor' is",
+      "ghost_pos (#114-128). argb is the FloatColor(uint) constant, a = (c >> 24) / 255 and so on",
+      "(86246..86521; the one-argument overload is DECODED, D8_check C6). scale 'spawn' is GetScale().x,",
+      "the spawn's scale(0.3).",
+      "",
+      "FOOTAGE (out/parity/footage/F15.md section 3, r1 with the camera still): the path within 2-5 u of",
+      "this model from P0 = the knight's spot, the scale within 0.03, the black-to-grey change riding the",
+      "second leg with alpha 0.8 -> 1."
     ],
-    "total_ms": 3750.0,
-    "seed_elapsed_ms": 3000.0,
     "mid_fraction": 0.25,
-    "legs_ms": [1200.0, 2500.0, 50.0, 0.0],
-    "_filters": ["defaultFilter", "smoothEnd", "defaultFilter", "defaultFilter"],
-    "_scales": ["the entity's own GetScale().x", 0.6, 1.0, 1.0],
-    "_seeds_elapsed_ms": 3000.0,
+    "seed_elapsed_ms": 3000.0,
+    "waypoints": [
+      {"at": "spawn",   "time_ms": 1200.0, "argb": "0xAA000000", "filter": "linear",     "scale": "spawn"},
+      {"at": "quarter", "time_ms": 2500.0, "argb": "0xCC000000", "filter": "smooth_end", "scale": 0.6},
+      {"at": "anchor",  "time_ms": 50.0,   "argb": "0xFFFFFFFF", "filter": "linear",     "scale": 1.0},
+      {"at": "anchor",  "time_ms": 0.0,    "argb": "0xFFFFFFFF", "filter": "linear",     "scale": 1.0},
+      {"at": "anchor",  "time_ms": 0.0,    "argb": "0xFFFFFFFF", "filter": "linear",     "scale": 1.0}
+    ],
     "_seeds_note": [
       "On WaypointManager::isLastFrame the arm sets state SHOOTING, shotsFired 0 and",
       "elapsedTime 3000 - NOT zero. Seeding the clock at the shot interval means the first",
       "shot comes on the first frame of SHOOTING rather than three seconds later."
     ]
+  },
+
+  "look": {
+    "_source": [
+      "What ETHCallback_ghost writes on the entity outside APPEARING (D8, system_5.md 5c-4 corrected by",
+      "D8): SHOOTING #510-512 SetFrame(0); RAGE_MODE #992-998 SetFrame(3) and SetAlpha(0.5), and #1199-1201",
+      "SetAlpha(1) as it goes back to SHOOTING; DAMAGE #789-816 SetAlpha(0.5) and bounce(this, V2_ONE,",
+      "vector2(1.1, 1.1), 500); DEATH #1220-1263 SetAlpha(1) and bounce(this, vector2(1.1, 1.1),",
+      "vector2(1.25, 1.25), 400). Nothing else writes the colour after APPEARING, the frame outside",
+      "SHOOTING and RAGE_MODE, or the scale outside APPEARING and the two bounces: each persists, so RAGE",
+      "shows the scale DAMAGE's bounce last left. bounce (utilEntityEffect bytes 327057..327527) keeps ONE",
+      "clock, blinkElapsedTime, made at 0 on its first call and never reset, advanced only by its own calls",
+      "(#27-39) before it reads it: the count of strides says which way it runs and smoothEnd of the",
+      "remainder where (Art::Pulse, the beholder's). ghost.png is 4 x 1 (ghost.ent SpriteCut): cell 3 is",
+      "the raging face."
+    ],
+    "shooting_frame": 0,
+    "rage_frame": 3,
+    "rage_alpha": 0.5,
+    "alpha_leaving_rage": 1.0,
+    "damage_alpha": 0.5,
+    "death_alpha": 1.0,
+    "damage_bounce": {"from": 1.0, "to": 1.1, "stride_ms": 500.0},
+    "death_bounce": {"from": 1.1, "to": 1.25, "stride_ms": 400.0}
   },
 
   "shooting": {
@@ -102,19 +185,38 @@
       "",
       "killPortal is NOT reachable from this boss. That branch fires only when the shot's",
       "target is named portal.ent, and the ghost always passes the player as its target. So",
-      "the step minions.json deferred stays deferred, and this shot only kills the player.",
-      "",
-      "The muzzle flash (projectile_shoot.ent) and the portal_mark.ent that telegraphs where",
-      "the shot will land are presentation and are not built."
+      "the step minions.json deferred stays deferred, and this shot only kills the player."
+    ],
+    "_nudge_px": [
+      "ETHCallback_enemy_shoot (bytes 435266..436701) #1-56, on its first call: initialPos = GetPositionXY()",
+      "(the muzzle, casterPos), then AddToPositionXY(scale(direction x 16)) - the shot is moved 16 units",
+      "along its way before it first flies - and squaredDistance = |destiny - initialPos|^2 is its range,",
+      "measured from the muzzle and not from where the nudge left it (#75-108); #164-200 destroy once",
+      "|position - initialPos|^2 passes it. So the shot starts 16 units out and flies 16 units less.",
+      "Read since planning step 98 (the visuals plan's 12.2): a GAMEPLAY change - a shot now reaches the",
+      "player's point 16 / 120 s sooner than the port's did, and is drawn where the original draws it."
+    ],
+    "cells": {"first": 0, "last": 5, "stride_ms": 30.0},
+    "_cells": [
+      "#126-137: SetFrame(_projectileFrameTimer.set(0, 5, 30, true)) every call - the ONE script-global",
+      "FrameTimer the player's shot steps too (art.json shot.animation), so every live shot's callback",
+      "adds its frame's time to it. enemy_shoot.ent: projectile_transparent.png, SpriteCut 6 x 1."
+    ],
+    "_pictures": [
+      "What the calls add around it (effects.json, planning step 98): addEnemyShoot #127-168 portal_mark.ent",
+      "at vector3(finalPos, scale(32)); #62-71 projectile_shoot.ent at the nudged shot's own vector3; and",
+      "once destroyed, #324-363 startEarthquake(10) (not built on this track), portal_fail_in_antiportal.ent",
+      "at vector3(the shot's own point, 0) and playEnemyShootExplodeSound (not built)."
     ]
   },
 
   "damage": {
     "to_rage_ms": 4000.0,
-    "alpha": 0.5,
     "_note": [
-      "hp <= 0 goes straight to DEATH. Otherwise it holds at alpha 0.5, bounces, scatters",
-      "explosions, and after 4000 ms goes to RAGE_MODE rather than back to SHOOTING."
+      "hp <= 0 goes straight to DEATH. Otherwise it holds at alpha 0.5, bounces (look), scatters",
+      "explosions, and after 4000 ms goes to RAGE_MODE rather than back to SHOOTING. It does not",
+      "hover: linearMotion is called only in SHOOTING and RAGE_MODE (#508, #990), and bounce writes",
+      "no position (#102 SetScale), so DAMAGE and DEATH hold it where the swing left it."
     ]
   },
 
@@ -164,27 +266,33 @@
     "_not_built": [
       "DAMAGE and DEATH both scatter small_explosion_no_light.ent through overTimeEntityAdder",
       "at 400 ms, at an offset of scale(64) * (0.4 + randF(0.7)) along a random angle, built",
-      "as (-cos, sin). Presentation in a renderer-free port, and random - recorded, not built."
+      "as (-cos, sin). Presentation, and random - recorded, not built."
     ]
   },
 
   "_not_built": [
-    "The picture and the noise: ghost_appear_effect.ent, the frame changes (0 in SHOOTING,",
-    "3 in RAGE_MODE), the alpha and scale the waypoints drive, the bounces, the explosions,",
-    "playGameMusic and the boss music the DEATH arm stops, and all five ghost sounds.",
+    "The noise: all five ghost sounds, the appear sound among them (ETHCallback_ghost_minion #92-94).",
+    "playGameMusic(bossFight = true) IS built (the layer's updateMusic, from the ghost's init, #320-324;",
+    "DEATH's StopSample #1224-1243 leaves the level silent). level31b's no_music (Game::readProperties",
+    "#166-181), which leaves the level silent until then, is not: the port honours no level's no_music.",
     "",
-    "The ghost_minion. level31b's minion_spawn carries metadata/entityName ghost_minion.ent -",
-    "the ONLY use of that field in all 128 levels - and ETHCallback_ghost_minion tints itself",
-    "black, delegates wholesale to ETHCallback_minion, and on death spawns a ghost.ent and",
-    "deletes itself. The port spawns ghost_minion.ent there since planning step 97 (R16,",
-    "minions.json spawn) but builds none of that death arm, so the transformation does not",
-    "happen (R4, the visuals plan's 12.2). It costs nothing playable: the spawned ghost.ent is",
-    "not this boss and has no callback of its own that any level reads.",
+    "The scattered explosions (DAMAGE and DEATH's overTimeEntityAdder) and the death blast's 2.0.",
     "",
     "The barrel bomb restock. addEntityIfItCantBeFound would put a barrel_bomb at",
     "barrel_spawn; Fire owns bombs and fills them from the scene, so a mid-run bomb is the",
     "same mid-run-Add step minions.json names for Fire::Burnable and Demolish::Breakable.",
     "The FIRE DIAMOND restock IS built, because Diamonds holds its diamonds in a plain",
-    "vector and a diamond is not a body."
+    "vector and a diamond is not a body. RAGE_MODE's own restock of the fire diamond every frame",
+    "while the player lives (#1034-1071) is not built.",
+    "",
+    "The body. ghost.ent is a static sensor, 128 x 139 at (5, -7): the original's portal ray has no",
+    "ghost.ent in its ignore list, so a shot across the box fails (F15 finding 2), and a fireball",
+    "passes through it, since ETHBeginContactCallback_fireball returns on a sensor (F15 finding 1) - so",
+    "in the original only explode() can burn the ghost. The port keeps its fireball test (Game.cpp:",
+    "a fireball within radius_px burns it), because the barrel that is the original's weapon is not",
+    "restocked here: explode-only would leave the port's ghost unkillable. The owner's to rule.",
+    "",
+    "Static bucket clocks: ghost.ent's callback runs only while its bucket is on screen",
+    "(ETHScene.cpp:541-574); the port's runs every tick."
   ]
 }

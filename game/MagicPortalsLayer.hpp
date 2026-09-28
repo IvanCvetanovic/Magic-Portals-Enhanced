@@ -375,8 +375,8 @@ public:
     // then a weightless room's door glow in buildSprites, the halos in
     // buildLights after it, then a tick's syncDrawables (a thrown stone),
     // syncBoss (the beholder, its spikes), syncMinions (a minion, then an
-    // escort) and syncWallGhost (the ghost of a taken light wall), and an
-    // effect on the frame. What the renderer does with an exact tie is NOT
+    // escort), syncGhost (chapter 3's boss, planning step 98) and syncWallGhost
+    // (the ghost of a taken light wall), and an effect on the frame. What the renderer does with an exact tie is NOT
     // pinned by this step - it is one z, and nothing here makes the two draw in
     // a stated order - so the table states the order and test_mp_layer pins the
     // table, which is what 00_order K13 asks for ("pins that order, not
@@ -417,6 +417,7 @@ public:
         Spike,          // and its spikes, at -4
         Minion,         // a minion or knight, minion_spawn's raw 2 in the level's units
         Escort,         // the escort the chapter-3 boss calls, at its anchor's depth
+        Ghost,          // chapter 3's boss, one level unit behind the knight whose death adds it
         WallGhost,      // the ghost a lit torch leaves where its light wall stood, the wall's depth - 1.42
         Effect,         // an entity the script ADDS (Effects::Spawn), at round(z)
         LiftedSystems,  // a placement's systems whose <StartPoint> z is not 0, at its owner's z plus it
@@ -457,6 +458,7 @@ public:
         {Slot::Spike, "beholder spike", -0.5, false},
         {Slot::Minion, "minion", -0.5, false},
         {Slot::Escort, "escort", -0.5, false},
+        {Slot::Ghost, "ghost", -0.5, false},
         {Slot::WallGhost, "light wall ghost", -0.5, false},
         {Slot::Effect, "effect", -0.5, false},
         {Slot::LiftedSystems, "lifted particle systems", -0.5, true},
@@ -504,6 +506,15 @@ public:
             // (m_minions, by place: that list only grows). The systems of the
             // entity a marker added: the ghost_minion's aura (planning step 97).
             Minion,
+            // Chapter 3's boss's point (Ghost::State::atPx) while it is there: what
+            // ghost_appear_effect's followUp chases (planning step 98).
+            Ghost,
+            // One of its shots in flight, by the id the sim gave it (`index`).
+            GhostShot,
+            // A key with no node of its own - the one the ghost drops - by its place
+            // in Keys::State::keys (`index`), where the carry left it and its bob put
+            // it (m_droppedKeys).
+            Key,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -544,6 +555,14 @@ public:
         // (ETHRenderEntity.cpp:112-117 against ETHParticleManager.cpp:381-389), so
         // its particles are never tinted by it.
         glm::dvec3 colour{1.0};
+        // ITS OWN CALLBACK'S followUp, where it has one: it eases toward what
+        // `followUpTarget` names, every frame after its particles are stepped
+        // (ghost_appear_effect.ent, planning step 98).
+        std::optional<Effects::FollowUpRule> followUp;
+        EffectOwner followUpTarget;
+        // And its ETHEntity::Scale(n) every frame: its systems' lengths and every
+        // live particle's size and speed times this. 1 for everything else.
+        double scalePerFrame = 1.0;
     };
     // AddEntity, on the FRAME and never on the tick: the effect's id, or -1 when
     // the level has no art, the .ent cannot be read, or what it is to follow has
@@ -579,6 +598,12 @@ public:
         // or for an AM_MODULATE system the multiply made from it.
         std::vector<std::string> systemImage;
         double scriptScale = 1.0; // the Scale() it was added with
+        double angleDeg = 0.0;    // Ethanon's angle, counter-clockwise on the screen
+        int cell = 0;             // the cell of its picture's sheet it is drawn on
+        glm::dvec2 centrePx{0.0}; // where its picture is centred: its point less its turned pivot
+        glm::dvec2 cellPx{0.0};   // and its size there
+        glm::dvec2 uvScale{0.0};  // the share of its sheet a cell samples, 0 for a one-cell picture
+        glm::dvec2 uvOffset{0.0};
         glm::dvec3 colour{1.0}; // ETHEntity::SetColor, on its sprite alone
         glm::dvec2 scale{1.0};  // times its <Scale>: the one its light and picture take
         // Its light and halo as the owner's scale leaves them (Lighting::OwnerScaled,
@@ -653,6 +678,33 @@ public:
         glm::dvec2 uvOffset{0.0};  // and where
     };
     std::vector<MinionReport> MinionReports() const;
+
+    // Chapter 3's boss (art.json ghost, ghost.json look), for the suites: as the
+    // last tick left it. `present` is false on the 127 levels with no ghost_pos, and
+    // `drawn` false until the black knight's death adds it (R4).
+    struct GhostReport {
+        bool present = false;
+        bool spawned = false;
+        bool drawn = false;
+        entt::entity quad{entt::null};
+        std::string texture;       // the tier file the original draws
+        int cell = 0;              // the frame of ghost.png it shows
+        glm::dvec3 colour{1.0};    // SetColor
+        double alpha = 1.0;        // SetAlpha
+        double scale = 1.0;        // SetScale
+        glm::dvec2 atPx{0.0};      // the ghost's point: Ghost::State::atPx
+        glm::dvec2 centrePx{0.0};  // where its picture is centred: that point less the pivot, scaled
+        glm::dvec2 sizePx{0.0};    // one frame, in units, times the scale
+        glm::dvec2 frameUnits{0.0};
+        glm::dvec2 uvScale{0.0};
+        glm::dvec2 uvOffset{0.0};
+        float z = 0.0f;            // its slot among the art (Slot::Ghost)
+        double lookZ = 0.0;        // its depth in the level's units
+    };
+    GhostReport GhostDrawing() const;
+    // Which of sounds.json's tracks the screen and the level ask for now, whether or
+    // not a device plays it: the menu's, the level's, the boss's, or none.
+    std::string WantedTrack() const;
 
     // 2-32's dragon and its claw (dragon.json), for the suites: as the last tick
     // left them. `present` is false on the 127 levels that place neither.
@@ -1204,6 +1256,9 @@ private:
     // one's arm (Art::UpdateMinion), and their pictures where their bodies stand.
     void advanceMinions(float fixedDelta);
     void syncMinions(entt::registry& registry);
+    // Chapter 3's boss, as the tick left its Look: made when the knight's death adds
+    // it, unmade when it has gone (planning step 98).
+    void syncGhost(entt::registry& registry);
     // One MinionQuad per minion the sim holds, a summoned escort's added when it is.
     void matchMinions();
     // The carrancas' fireballs. Its own function rather than a block inside
@@ -1539,6 +1594,37 @@ private:
     // 2-32's dragon: dragon_boss.png cut 2 x 2 as SetupSpriteRects cuts it
     // (dragon.json picture), and the two sprites the sim drives. A sheet that
     // cannot be cut leaves the cut empty and the picture whole, and says so once.
+    // CHAPTER 3'S BOSS (art.json ghost): ghost.png's tier file cut as the original
+    // cuts it, its quad while the sim holds a ghost that has been added, and its
+    // depth - one level unit behind the knight whose death adds it (Slot::Ghost).
+    struct GhostQuad {
+        entt::entity quad{entt::null};
+        std::string sheet; // the file; empty when it cannot be read or cut
+        Tiers::Cut cut;
+        float z{0.0f};
+        double lookZ{0.0};
+        glm::dvec2 centrePx{0.0};
+        glm::dvec2 sizePx{0.0};
+        int cell{0};
+    };
+    GhostQuad m_ghost;
+    // Its appear effect, queued once, on the tick its init block runs.
+    bool m_ghostAppearQueued{false};
+    // Its shots that already have their entities (enemy_shoot.ent, portal_mark.ent,
+    // projectile_shoot.ent), by the sim's id, and the cell _projectileFrameTimer gave
+    // each on the last tick (stepLevel).
+    std::vector<int> m_ghostShotEffects;
+    std::map<int, int> m_ghostShotCells;
+    // A key with no node - the one the ghost drops - drawn as the key.ent the script
+    // adds: its place in Keys::State::keys, the effect that draws it, and the bob its
+    // callback gives it while it lies unowned (ETHCallback_key's linearMotion, from a
+    // start angle drawn on the effects' stream, 00_order K8).
+    struct DroppedKey {
+        int key{-1};
+        Motion::Linear bob;
+    };
+    std::vector<DroppedKey> m_droppedKeys;
+
     Tiers::Cut m_dragonCut;
     int m_dragonSprite{-1}; // in m_sprites
     int m_clawSprite{-1};
@@ -1624,12 +1710,22 @@ private:
         bool alwaysActive = false;
         bool hidden = false;    // its owner is hidden, so nothing of it draws
         glm::dvec2 cellPx{0.0}; // its picture's frame, scaled; zero when it has none
+        // A sheet of more than one cell, cut as SetupSpriteRects cuts it
+        // (Tiers::FrameCut), and the cell its script puts it on: the uv is written
+        // from these, never an even split (00_order E1).
+        Tiers::Cut cut;
+        int cell = 0;
         float z = 0.0f;         // Slot::Effect
         float haloZ = 0.0f;     // Slot::EffectHalo
         entt::entity quad{entt::null};
         entt::entity light{entt::null};
         entt::entity halo{entt::null};
         EffectOwner follow;
+        // Its own callback's followUp and Scale, where it has them (EffectSpawn).
+        std::optional<Effects::FollowUpRule> followUp;
+        EffectOwner followUpTarget;
+        Effects::FollowUp followUpState;
+        double scalePerFrame = 1.0;
         std::vector<Emitter> emitters;
     };
     // Every particle system of an entity of the original's, at a place: false when

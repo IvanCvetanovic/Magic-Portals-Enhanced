@@ -17,39 +17,43 @@
 //
 // HOW IT IS HURT, which is why this step follows the fire diamond. The SHOOTING
 // arm ends with isBurned(this): burned, it goes to DAMAGE, takes hp += -1, calls
-// healBurn(this) and sounds. Nothing else in level31b can burn anything, so the
-// fire diamond IS the weapon - the fireballs a converted portal shot becomes. A
-// port that built this boss without the fire diamond would have built an
-// invulnerable one.
+// healBurn(this) and sounds. `burned` is set from OUTSIDE, by the same Game block
+// that lights a crate and detonates a bomb when a fireball reaches one, and Tick
+// reads and clears it exactly as healBurn does. F15 found that the original's
+// fireball passes through the ghost, a sensor, and that only a barrel's explode()
+// can burn it; the port keeps the fireball because the barrel is not restocked
+// here (ghost.json _not_built says so).
 //
-// `burned` here is set from OUTSIDE, by the same Game block that lights a crate
-// and detonates a bomb when a fireball reaches one. The ghost is not a scene
-// entity and so is never in Fire::Burnable, which Fire::Find fills from nodes;
-// rather than force a mid-run insert into Fire, the flag is this module's and
-// Tick reads and clears it exactly as healBurn does.
+// WHEN IT IS THERE, which is the owner's standing ruling R4 (planning step 98).
+// The level places ghost_pos, and that is only where the ghost FLIES TO: the
+// ghost.ent is added by the black knight's death (ETHCallback_ghost_minion
+// #35-104), at the knight's point, one level unit behind it and at scale 0.3, and
+// only then does it run: its init block builds the five appear waypoints and
+// starts the boss music, and its APPEARING arm flies it from the knight's point to
+// ghost_pos, black to white and 0.3 to 1 (ghost.json appear). Before that there is
+// no ghost - no shot, no restock, nothing a fireball can reach. Game spawns it,
+// from Minions::State::deaths, whatever killed the knight.
 //
-// WHERE IT STARTS, and this is a consequence rather than a choice. In the
-// original a ghost.ent is created by a dying ghost_minion and flies TO ghost_pos;
-// the port does not build that transformation - the sim spawns the ghost_minion.ent
-// its marker names (R16, planning step 97) but not what it adds when it dies,
-// which is R4's, the visuals plan's 12.2 - so the ghost begins at ghost_pos. Its
-// four appear waypoints are currentPos, the quarter-point, and ghost_pos twice,
-// which with currentPos == ghost_pos all coincide. So the appearance keeps its
-// DURATION (1200 + 2500 + 50 + 0 ms) and loses its path, and what the waypoints
-// drove besides position - the colour, the alpha, the swelling scale - is
-// presentation this port has no renderer for anyway.
+// ITS POINT MOVES, and it is one point. APPEARING writes it from the waypoints and
+// SHOOTING and RAGE_MODE from linearMotion's hover (motions.json ghost); DAMAGE and
+// DEATH leave it where it is. A shot leaves from it and the key is dropped at it,
+// so the simulation keeps it, where every other linearMotion in the port is the
+// layer's picture alone.
 //
 // WHAT IT REPORTS RATHER THAN DOES. Tick returns a Turn: summon a minion here,
 // drop a key here, put a fire diamond back there. Minions owns minion bodies,
 // Keys owns keys and Diamonds owns diamonds, and each walks its own list every
 // frame - so Game funnels, as it does for every other module that reaches across.
+// Its LOOK (colour, alpha, scale, cell) is what the callback writes on the
+// entity; nothing in the simulation reads it back, and the layer draws it.
 //
-// Not built, and recorded in data/ghost.json: the pictures and every sound, the
-// ghost_minion's transformation into a ghost.ent, the barrel bomb restock (a
-// mid-run Fire::Bomb, which is the step minions.json already names), the death
-// blast's 2.0, and the scattered explosions.
+// Not built, and recorded in data/ghost.json: every sound, the barrel bomb
+// restock (a mid-run Fire::Bomb, which is the step minions.json already names),
+// RAGE_MODE's own fire diamond restock, the death blast's 2.0, the scattered
+// explosions, and the static body a portal shot cannot cross.
 
 #include "sim/Minions.hpp"
+#include "sim/Motion.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
 
@@ -65,20 +69,67 @@ namespace MagicPortals::Ghost {
 // BEHOLDER-style state constants, but the ghost's own five.
 enum class Phase : int { Appearing = 0, Shooting = 1, Rage = 2, Damage = 3, Death = 4 };
 
+// Where one of the init block's waypoints stands (ghost.json appear.waypoints[].at).
+enum class WaypointAt {
+    Spawn,   // currentPos: the ghost's own point at its init, the knight's
+    Quarter, // midPoint: currentPos + (ghost_pos - currentPos) x mid_fraction
+    Anchor,  // destPos: ghost_pos
+};
+
+// The filter a leg is eased by: the CURRENT waypoint's.
+enum class Filter {
+    Linear,    // defaultFilter(v) = v
+    SmoothEnd, // smoothEnd(v) = sin(v x PIb)
+};
+
+// One addWaypoint call: Waypoint(pos, time, FloatColor(argb), filter, scale).
+struct WaypointRule {
+    WaypointAt at = WaypointAt::Spawn;
+    double timeMs = 0.0;
+    glm::dvec4 colour{1.0};    // FloatColor(uint): r, g, b and a, each 0..1
+    Filter filter = Filter::Linear;
+    bool scaleIsSpawn = false; // GetScale().x at the init
+    double scale = 1.0;        // else this
+};
+
+// bounce(): from one uniform scale to the other and back, a stride each way,
+// eased by smoothEnd, on the entity's one blinkElapsedTime.
+struct Bounce {
+    double from = 1.0;
+    double to = 1.0;
+    double strideMs = 0.0;
+
+    double ScaleAt(double elapsedMs) const;
+};
+
 // The port's ghost.json.
 struct Rules {
     std::string anchorName; // ghost_pos: the boss_spawn node, matched by NAME
     int maxHp = 0;
     double radiusPx = 0.0;
 
-    double appearMs = 0.0;      // the four legs summed; the path is degenerate here
-    double seedElapsedMs = 0.0; // SHOOTING starts with its clock already at the interval
+    // What adds it (spawn): the entity whose death adds it, the depth it is added
+    // at over that entity's own (scale(-1), level units), its scale at the init,
+    // and the level entity the same death deletes, by its id.
+    std::string spawnedBy;
+    double spawnZOffsetUnits = 0.0;
+    double spawnScale = 0.0;
+    int deletesEntityId = 0;
+
+    double midFraction = 0.0;          // midPoint's quarter
+    std::vector<WaypointRule> waypoints; // the five, in the order they are added
+    double seedElapsedMs = 0.0;          // SHOOTING starts with its clock already at the interval
 
     double intervalMs = 0.0; // between shots, and between restocks
     glm::dvec2 muzzlePx{0.0};
 
     double shotSpeedPxS = 0.0;
     double shotHitPx = 0.0;
+    double shotNudgePx = 0.0; // how far out a shot starts: its first callback's AddToPositionXY
+    // _projectileFrameTimer.set(first, last, stride, true), every call of every shot
+    int shotFirstCell = 0;
+    int shotLastCell = 0;
+    double shotCellStrideMs = 0.0;
 
     double toRageMs = 0.0;      // DAMAGE holds this long before RAGE_MODE
     double summonWindowMs = 0.0; // and RAGE_MODE summons inside this
@@ -89,7 +140,18 @@ struct Rules {
     std::string diamondSpawnName; // fire_diamond_spawn
 
     double burstMs = 0.0; // DEATH waits this long, then drops the key
+    std::string keyEntityName; // key.ent: what DEATH adds, which the layer draws
     std::string keyColour;
+
+    // What each arm writes on the entity (ghost.json look).
+    int shootingFrame = 0;
+    int rageFrame = 0;
+    double rageAlpha = 1.0;
+    double alphaLeavingRage = 1.0;
+    double damageAlpha = 1.0;
+    double deathAlpha = 1.0;
+    Bounce damageBounce;
+    Bounce deathBounce;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -102,9 +164,13 @@ bool Plays(const Rules& rules, const Tscn::Node& node);
 
 // One of the ghost's shots: enemy_shoot.ent, which only ever kills the player.
 struct Shot {
+    int id = 0;               // counted from 1 over the level, never reused: what the layer follows
     glm::dvec2 atPx{0.0};
     glm::dvec2 velocityPx{0.0};
-    double flownPx = 0.0;
+    glm::dvec2 directionPx{0.0}; // its `direction`, a unit vector
+    glm::dvec2 fromPx{0.0};      // casterPos: the muzzle, where its range is measured from
+    glm::dvec2 destinyPx{0.0};   // finalPos: where the player stood as it was fired
+    double flownPx = 0.0;        // from the muzzle, the nudge included
     double rangePx = 0.0;
 };
 
@@ -114,12 +180,64 @@ struct Shot {
 // carried - so a second identical struct would be two names for one thing, and
 // Minions::Summon would need a conversion to say so.
 
+// The WaypointManager the init block builds, as it plays (ghost.json appear).
+struct Appear {
+    struct Point {
+        glm::dvec2 atPx{0.0};
+        double timeMs = 0.0;
+        glm::dvec4 colour{1.0};
+        Filter filter = Filter::Linear;
+        double scale = 1.0;
+    };
+    std::vector<Point> points;
+    // Its FrameTimer, as the constructor's own set(0, 0, 0, repeat) leaves it.
+    int first = 0;
+    int last = 0;
+    int frame = 0;
+    double timeMs = 0.0;
+    double strideMs = 0.0;
+
+    // WaypointManager::update: FrameTimer::set(0, count - 1, this frame's time,
+    // false), then setCurrentStride(the new frame's time).
+    void Update(double frameMs);
+    // getCurrentPoint: this waypoint into the next, by this one's filter.
+    Point Current() const;
+    bool IsLastFrame() const { return !points.empty() && frame == last; }
+};
+
+// What the callback writes on the entity: SetColor, SetAlpha, SetScale, SetFrame.
+struct Look {
+    glm::dvec3 colour{1.0}; // the .ent's own, white, until its init writes one
+    double alpha = 1.0;
+    double scale = 1.0;
+    int frame = 0;
+};
+
 struct State {
     Rules rules;
 
     bool present = false; // the level places a ghost_pos
     std::string name;     // the node's name
-    glm::dvec2 atPx{0.0}; // where it is, which is where it was placed
+    std::string keyName;  // what the key it drops answers to: its name and "#key"
+    glm::dvec2 anchorPx{0.0}; // ghost_pos: where it flies to and hovers about
+    // Where it is: the knight's point from the tick it is added, then where each
+    // arm puts it. Before then it is ghost_pos and nothing reads it (Alive()).
+    glm::dvec2 atPx{0.0};
+
+    // R4. The knight died and the ghost.ent is added (Spawn), and its first
+    // callback - the init block - has run.
+    bool spawned = false;
+    bool initialised = false;
+    glm::dvec2 spawnPx{0.0};
+    // The node the same death deletes (Rules::deletesEntityId): the level's node
+    // whose name carries that id, found by Find. Empty where the level has none.
+    std::string deletesNode;
+
+    Appear appear;
+    Look look;
+    double blinkMs = 0.0;          // bounce's blinkElapsedTime
+    Motion::Linear hover;          // linearMotion's custom data
+    glm::dvec2 hoverOriginPx{0.0}; // its originalPos, written by its first call
 
     bool hasRedLine = false;
     double redLineX = 0.0;
@@ -137,9 +255,14 @@ struct State {
     bool gone = false;
 
     int shotsFired = 0;
-    int hits = 0;    // times it was burned
-    int summons = 0; // minions it called
+    int shotsMade = 0; // every shot of the level: the ids
+    int hits = 0;      // times it was burned
+    int summons = 0;   // minions it called
     std::vector<Shot> shots;
+    // Where each shot that ended on this tick stood as it was destroyed - in its
+    // range or on the player - cleared and refilled by every Tick, for the layer
+    // (the explosion it leaves): nothing in the simulation reads it.
+    std::vector<glm::dvec2> spentPx;
 
     // Reported, not acted on: Game::AfterStep folds this into Hazards, as the
     // boss's, the carrancas', the fire's and the rings' are.
@@ -152,13 +275,22 @@ struct State {
         bool droppedKey = false;
         glm::dvec2 keyPx{0.0};
         bool restockDiamond = false; // a fire diamond back at its spawn
+        bool initialised = false;    // its init block ran this tick: the boss music, the appear effect
     };
 
-    // One tick, after the physics step. `minionsStanding` is how many minions the
-    // level still has - RAGE_MODE waits on its escort being killed.
-    Turn Tick(entt::registry& registry, entt::entity player, std::size_t minionsStanding, float dt);
+    // ETHCallback_ghost_minion #43-78: the ghost.ent added at the dying knight's
+    // point (its GetPosition before its own callback ran). It is drawn at the
+    // .ent's own look at the spawn's scale until its first callback, on the NEXT
+    // Tick (ghost.json spawn._first_callback).
+    void Spawn(const glm::dvec2& knightPx);
 
-    bool Alive() const { return present && !gone; }
+    // One tick, after the physics step. `minionsStanding` is how many minions the
+    // level still has - RAGE_MODE waits on its escort being killed - and `motion`
+    // the motions.json the hover's linearMotion runs by.
+    Turn Tick(entt::registry& registry, entt::entity player, std::size_t minionsStanding,
+              const Motion::Rules& motion, float dt);
+
+    bool Alive() const { return present && spawned && !gone; }
 };
 
 // The level's ghost, the markers it reads by name, and the patrol its escort

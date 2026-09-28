@@ -368,6 +368,28 @@ std::vector<entt::entity> State::Take(entt::registry& registry, const std::vecto
     return removed;
 }
 
+std::vector<entt::entity> State::Burn(entt::registry& registry, const std::vector<entt::entity>& bodies) {
+    std::vector<entt::entity> removed;
+    for (const entt::entity body : bodies) {
+        if (body == entt::null) continue;
+        for (std::size_t i = 0; i < minions.size(); ++i) {
+            Minion& minion = minions[i];
+            if (minion.gone || minion.body != body) continue;
+            minion.gone = true;
+            ++burned;
+            if (registry.valid(minion.body)) {
+                Death death{i, EntityPointOf(registry, minion.body, rules), false};
+                death.byFire = true;
+                deaths.push_back(death);
+                registry.destroy(minion.body);
+            }
+            removed.push_back(minion.body);
+            break;
+        }
+    }
+    return removed;
+}
+
 const Minion* State::FindMinion(const std::string& name) const {
     for (const Minion& minion : minions) {
         if (minion.name == name) return &minion;

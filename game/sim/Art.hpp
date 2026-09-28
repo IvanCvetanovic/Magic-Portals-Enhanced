@@ -331,6 +331,14 @@ struct Minion : Picture {
     glm::dvec3 blackEmissive{0.0};  // its .ent's <EmissiveColor>
 };
 
+// Chapter 3's boss, as ghost.ent draws it (art.json's ghost): a 4 x 1 sheet whose
+// cell, colour, alpha and scale ETHCallback_ghost writes (sim/Ghost's Look), drawn
+// with its pivot on the ghost's point.
+struct Ghost : Picture {
+    double pivotXPx = 0.0; // its PivotAdjust
+    double pivotYPx = 0.0;
+};
+
 // Which of ETHCallback_minion's arms an update took, as far as its frame goes.
 enum class MinionArm {
     None,    // no update ran for it: nothing written
@@ -367,6 +375,7 @@ struct Rules {
     Antiportal antiportal;
     Timer timer;         // timer.ent, the dial behind a timed crystal
     Minion minion;       // minion.ent, the minions and knights
+    Ghost ghost;         // ghost.ent, chapter 3's boss
     Door door;           // the exit door's second sheet, and door_highlight.ent behind it
     // dashed_door.ent, which a lit torch leaves where its light wall stood
     LightWallGhost lightWallGhost;

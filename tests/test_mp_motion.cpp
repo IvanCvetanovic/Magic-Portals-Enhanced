@@ -110,10 +110,15 @@ const std::string kPlaced = "{\"entity\": \"hand_drawn_arrow\", \"linear_motion\
 const std::string kDoorRow = "\"entities\": [\"door\"], \"speed\": 1.2, \"stride\": 1.0, \"vertical\": true, "
                              "\"axis_deg\": 0.0, \"start_angle_from\": 0.0, \"start_angle_to\": 0.0";
 
+// And the ghost's (planning step 98), required as well.
+const std::string kGhostRow = "\"entities\": [\"ghost\"], \"speed\": 0.7, \"stride\": 8.0, \"vertical\": true, "
+                              "\"axis_deg\": 0.0, \"start_angle_from\": 1.5707963705062866, "
+                              "\"start_angle_to\": 1.5707963705062866";
+
 std::string File(const std::string& linear, const std::string& crystal, const std::string& key,
                  const std::string& placed = "[" + kPlaced + "]", const std::string& door = kDoorRow) {
     return "{\"linear_motion\": {" + linear + "}, \"crystal\": {" + crystal + "}, \"key\": {" + key +
-           "}, \"door\": {" + door + "}, \"placed\": " + placed + "}";
+           "}, \"door\": {" + door + "}, \"ghost\": {" + kGhostRow + "}, \"placed\": " + placed + "}";
 }
 
 const std::string kLinear = "\"frame_cap_ms\": 200.0, \"wrap_rad\": 6.2831854820251465";
@@ -136,6 +141,13 @@ void TheRulesAreMotionsJsons() {
               "ETHCallback_crystal's entity, without its .ent");
     CHECK_MSG(rules.key.entities.size() == 1 && rules.key.Names("key") && !rules.key.Names("key_pos"),
               "ETHCallback_key's, and key_pos is another entity");
+    // ETHCallback_ghost's (planning step 98): linearMotion(this, true, 0, PIb) at
+    // ghost.ent's own speed 0.7f and stride 8, a constant start.
+    CHECK_MSG(rules.ghost.Names("ghost") && rules.ghost.vertical && rules.ghost.axisDeg == 0.0 &&
+                  rules.ghost.speed == static_cast<double>(0.7f) && rules.ghost.stride == 8.0 &&
+                  rules.ghost.startFrom == static_cast<double>(1.570796327f) &&
+                  rules.ghost.startTo == rules.ghost.startFrom,
+              "the ghost's hover: vertical, axis 0, speed 0.7f, stride 8, from PIb");
 
     // What would draw another motion than the script's is refused, by name.
     {
@@ -532,6 +544,9 @@ void ThePlacedRowsAreTheCallbacks() {
     // What would run another callback than the script's is refused, by name.
     CHECK(Refused("{\"linear_motion\": {" + kLinear + "}, \"crystal\": {" + kRow + "}, \"key\": {" + kRow +
                       "}, \"door\": {" + kDoorRow + "}}",
+                  "ghost is missing"));
+    CHECK(Refused("{\"linear_motion\": {" + kLinear + "}, \"crystal\": {" + kRow + "}, \"key\": {" + kRow +
+                      "}, \"door\": {" + kDoorRow + "}, \"ghost\": {" + kGhostRow + "}}",
                   "placed is missing"));
     const auto one = [](const std::string& row) { return File(kLinear, kRow, kRow, "[" + row + "]"); };
     CHECK(Refused(one(PlacedRow("hand_tap",

@@ -56,10 +56,12 @@
 // player meets; this floor is not in the remake's path at all, and a kill floor
 // shrunk to 16 px would miss everything that fell past it.
 //
-// NOT built here, and deliberately: sight, shooting, and a minion being burnable
-// or breakable. minion.ent carries breakable=1, burnable=1 and teleportable=1;
-// only the last is wired, since a portalled minion landing on the killer floor
-// is how the "kill all minions" achievements are won. data/minions.json records
+// NOT built here, and deliberately: sight, shooting, and a minion being
+// breakable. minion.ent carries breakable=1, burnable=1 and teleportable=1;
+// teleportable is wired, since a portalled minion landing on the killer floor is
+// how the "kill all minions" achievements are won, and so is burnable against a
+// fireball (Burn, planning step 98: the black knight's death by fire is what adds
+// chapter 3's ghost, R4). An explosion's burn is not. data/minions.json records
 // the rest against what it would take to build them.
 
 #include "sim/LevelBuilder.hpp"
@@ -169,7 +171,8 @@ struct Death {
     // Its ENTITY point, the one GetPosition() reads: the body's centre less
     // Rules::EntityAboveCentrePx, taken before the body is destroyed.
     glm::dvec2 atPx{0.0, 0.0};
-    bool byKiller = false; // a killer floor; otherwise a strike (Take)
+    bool byKiller = false; // a killer floor; otherwise a strike (Take) or a burn (Burn)
+    bool byFire = false;   // a fireball burned it (Burn): addFlames, which is not built
 };
 
 struct State {
@@ -179,6 +182,7 @@ struct State {
 
     int killed = 0; // minions taken by a killer floor
     int taken = 0;  // and by something else: a shock diamond's strike
+    int burned = 0; // and by a fireball (Burn)
 
     // Every minion destroyed since the last Tick, in the order it went. Cleared
     // by Tick and written by Cull and Take, as Turrets::State::spentPx is cleared
@@ -224,6 +228,15 @@ struct State {
     // would sit in it with an invalid body. Returns what it destroyed, for
     // Forget, as Cull does; a body that is not a minion of this level is ignored.
     std::vector<entt::entity> Take(entt::registry& registry, const std::vector<entt::entity>& bodies);
+
+    // A minion a fireball reached (planning step 98). minion.ent and ghost_minion.ent
+    // both carry burnable=1, and ETHBeginContactCallback_fireball calls burn() on
+    // any non-sensor it touches that is (#159-173); the minion's own callback then
+    // finds itself burned - isBurned, destroy, addFlames (ETHCallback_minion
+    // #1456-1471) - and destroyed, and adds blood.ent and deletes itself
+    // (#1478-1504). So a fireball kills a minion outright, the frame it touches it,
+    // and records a Death as Take does. Returns what it destroyed, for Forget.
+    std::vector<entt::entity> Burn(entt::registry& registry, const std::vector<entt::entity>& bodies);
 
     const Minion* FindMinion(const std::string& name) const;
 

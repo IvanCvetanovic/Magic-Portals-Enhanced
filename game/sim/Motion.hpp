@@ -29,12 +29,14 @@
 // start angle of 0, with the speed 1.2 and stride 1 readProperties wrote on them.
 // The same rows say
 // which of them SetAlpha(0.55) and which turn a set number of degrees a second
-// (the dashed circle, AddToAngle(unitsPerSecond(8))). The ghost's hover of 12.2
-// takes the same helper with another row.
+// (the dashed circle, AddToAngle(unitsPerSecond(8))). And (12.2) the ghost's hover,
+// ETHCallback_ghost's, vertical from a start angle of PIb.
 //
-// Renderer-free and free of the registry and of Game::Level: a motion moves a
-// PICTURE (and what its entity carries - its particles), never a body, a trigger
-// or the state hash. The layer keeps the state, as it keeps the sky's.
+// Renderer-free and free of the registry and of Game::Level. Every motion but one
+// moves a PICTURE (and what its entity carries - its particles), never a body, a
+// trigger or the state hash, and the layer keeps its state, as it keeps the sky's.
+// The one is the ghost's: its point is where it shoots from and drops its key, so
+// sim/Ghost keeps that motion and moves the point itself (motions.json ghost).
 
 #include <cstdint>
 #include <random>
@@ -89,6 +91,10 @@ struct Rules {
     // is called ON, not three callbacks, and nothing keys off Names() for it: the
     // level's `no_gravity` says whether it runs (the layer, art.json `door`).
     Row door;
+    // ETHCallback_ghost's, in SHOOTING and RAGE_MODE: chapter 3's boss. The one row
+    // whose motion the SIMULATION keeps (sim/Ghost), because it moves the point the
+    // ghost shoots from and drops its key at, not a picture alone.
+    Row ghost;
     std::vector<Placed> placed; // the placed pictures' callbacks, one entity each
 
     // The row whose callback a placement of this entity (without .ent) runs, or null.

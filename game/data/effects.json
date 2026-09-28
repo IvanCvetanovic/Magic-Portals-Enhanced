@@ -17,7 +17,9 @@
     "MainCharacter's own, drawn by step 7.1 - added once at a level's",
     "start rather than at a call site, so it has a shape and a reader of its own. And the level's",
     "end and a death (11.3, planning step 96): levelFinishedEffect's red_suck_effect and red_sparkles,",
-    "blood where the character or a minion is killed, and skull where either falls. Every other",
+    "blood where the character or a minion is killed, and skull where either falls. And chapter 3's",
+    "ghost (12.2, planning step 98): its shot and the three entities the shot's calls add, and the dark",
+    "puffs that follow it in, with the followUp and Scale their own callback runs. Every other",
     "effect the script adds gets its row with the step that draws it, so a",
     "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
     "sim/Effects, strictly: every field below is required.",
@@ -34,7 +36,8 @@
     "<Scale> (Art::Entity::ScaleAt). `angle` is Ethanon's, in degrees, counter-clockwise on the",
     "screen: a number, or the named rule toward_traveller_minus_90, radianToDegree(getAngle(d)) -",
     "90 with d = normalize(traveller - portal) and getAngle(v) = atan2f(v.x, v.y) wrapped into",
-    "[0, 2 pi) (GameMath.h:711-715), computed in floats as the script computes it."
+    "[0, 2 pi) (GameMath.h:711-715), computed in floats as the script computes it; or",
+    "along_flight_minus_90, the same sum on the entity's own direction, which its callback turns it by."
   ],
 
   "_never_spawned": {
@@ -427,6 +430,105 @@
       "1.8, maxSize 22, colour (1, 1, 1, 0.7) to (1, 1, 1, 0), luminance 1. Temporary. F13 section 3.1: on",
       "1-06 at (240.5, 685.5) px - the fall's x and 720 - 12 x 2.8125 = 686.25 - full size (a 62 px quad,",
       "22 u) by 0.135 s, then fading linearly to nothing 0.83 s after its first frame."
+    ]
+  },
+
+  "enemy_shoot": {
+    "entity": "enemy_shoot.ent",
+    "offset_units": 0,
+    "z": {"value": 10, "scaled": true},
+    "angle": "along_flight_minus_90",
+    "scale": 1,
+    "_source": [
+      "CHAPTER 3'S GHOST'S SHOT (the visuals plan's 12.2, planning step 98). addEnemyShoot",
+      "(ETHCallback_minion.angelscript, bytes 434575..435266) #1-12 direction = normalize(finalPos -",
+      "casterPos); #16-45 AddEntity('enemy_shoot.ent', vector3(casterPos, g_scale.scale(10)), 0f, @projectile,",
+      "'', g_scale.getScale()) - the z THROUGH g_scale.scale; then #59-123 its direction, destiny, casterPos,",
+      "targetName and targetID. Its own callback, ETHCallback_enemy_shoot (435266..436701), turns it every",
+      "call: #139-148 SetAngle(radianToDegree(getAngle(dir)) - 90), and dir never changes, so the angle is",
+      "along_flight_minus_90 from its first frame (the AddEntity's 0 is never drawn: the shot is added",
+      "inside the ghost's callback and its own first call turns it). It is drawn where the sim's shot is,",
+      "the 16-unit nudge of its first call included (ghost.json shot._nudge_px), and its cell is",
+      "_projectileFrameTimer's (#126-137, ghost.json shot.cells).",
+      "ITS .ent: projectile_transparent.png, SpriteCut 6 x 1, PivotAdjust (4, 0), blendMode 0, emissive 1,",
+      "applyLight 1, a <Light> of range 64 and colour (2, 0, 0) at z -28 with halo.bmp 146 x 0.25, no",
+      "particles. Not temporary: it goes when the sim's shot goes."
+    ]
+  },
+
+  "enemy_shoot_mark": {
+    "entity": "portal_mark.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "addEnemyShoot #127-156: AddEntity('portal_mark.ent', vector3(finalPos, g_scale.scale(32)), 0f,",
+      "@projectile, '', g_scale.getScale()) - where the shot is going, the player's point as it was fired.",
+      "NAMED FOR THIS CALL SITE, not for the entity: the player's own shot adds a portal_mark.ent from",
+      "another call (managePortalInsertion, R15), which track B's step 10.1 builds as a row of its own;",
+      "when the two tracks merge each keeps its call site's row (planning step 98's merge note).",
+      "ITS .ent: no <Sprite>; one system of 1 dashed_circle_particle.png, alphaMode 0, allAtOnce, repeat 1,",
+      "life 1100, size 32 shrinking 0.1, angleDir 1.5, colour (1, 1, 1, 0.6) to (1, 1, 1, 0). Temporary."
+    ]
+  },
+
+  "enemy_shoot_flash": {
+    "entity": "projectile_shoot.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_enemy_shoot #1-71, its FIRST call (no initialPos yet): initialPos = GetPositionXY(), the",
+      "16-unit nudge along direction (#29-55), then #57-71 AddScaledEntity('projectile_shoot.ent',",
+      "GetPosition(), g_scale.getScale()) - the shot's own vector3 after the nudge, its z the shot's scale(10),",
+      "so the row is 0 over it as blood's is over its victim's. The red ring F15 sees at the muzzle.",
+      "ITS .ent: no <Sprite>; one system of 1 onda.png, alphaMode 1, repeat 1, life 350, size 11 growing 2.7",
+      "(min 16), <StartPoint> z 4, colour (0.9, 0.7, 1, 1) to 0. Temporary."
+    ]
+  },
+
+  "enemy_shoot_burst": {
+    "entity": "portal_fail_in_antiportal.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_enemy_shoot #316-363, once isDestroyed - past its range (#164-200) or on the player",
+      "within fakeRadius (#202-314): startEarthquake(10) (#331-333; this track has no earthquake yet),",
+      "#324-350 AddScaledEntity('portal_fail_in_antiportal.ent', vector3(GetPositionXY(), 0f),",
+      "g_scale.getScale()) - the shot's own point and a bare 0 - then playEnemyShootExplodeSound (not among",
+      "the port's sounds) and DeleteEntity. F15: the shot explodes where the player was."
+    ]
+  },
+
+  "ghost_appear_effect": {
+    "entity": "ghost_appear_effect.ent",
+    "offset_units": 0,
+    "z": {"value": 1, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "follow_up": {"offset_units": [-8, -8], "stride_ms": 600, "rate_ms": 100, "dont_pause": true},
+    "scale_per_frame": 1.0049999952316284,
+    "_source": [
+      "ETHCallback_ghost's init block #150-169 (bytes 451999..457261): AddScaledEntity(",
+      "'ghost_appear_effect.ent', vector3(currentPos, GetPositionZ() + 1f), g_scale.getScale()) - at the",
+      "ghost's own point as it is added (the knight's), and the z its OWN depth plus a BARE 1 (ADDIf 1f,",
+      "raw [2, 2, 1065353216]; decode/D8.md section 2): 1 / 2.8125 over the ghost, which on the port's axis",
+      "is the knight's raw 2 less 1 plus that, 0.0667.",
+      "ITS OWN CALLBACK, ETHCallback_ghost_appear_effect (458062..458374), every frame: #1-49",
+      "followUp(this, SeekEntity('ghost.ent').GetPositionXY() - g_scale.scale(vector2(8, 8)), 600, 100,",
+      "true) - it eases after the ghost as it flies in, smoothEnd over 600 ms, aimed again at most every",
+      "100 ms (followUp, utilEntityEffect bytes 328407..329130; PositionInterpolator 19341..20325), counting",
+      "the raw frame time (dontPause); and #51-53 Scale(1.005f), which grows its particle systems' every",
+      "length and every live particle's size and speed by that a frame (ETHEntity.cpp:591-599,",
+      "ETHParticleManager.cpp:444-451). follow_up.offset_units is the scale(8, 8) taken off, so -8, -8.",
+      "scale_per_frame is the float 1.005f.",
+      "ITS .ent: no <Sprite>; one system of 4 sharp_explosion.png (4 x 3 cells), alphaMode 0, repeat 5,",
+      "life 600, size 24, rand start point 32 x 32, colour (0, 0, 0, 1) at both ends: black puffs, 20 in all.",
+      "Temporary. F15 section 3: the black ghost stands behind the flames on the knight's spot."
     ]
   }
 }

@@ -3,6 +3,7 @@
 #include "core/DetMath.hpp"
 #include "core/Json.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -15,6 +16,7 @@ namespace {
 namespace Json = Supersonic::Json;
 
 constexpr const char* kTowardTravellerMinus90 = "toward_traveller_minus_90";
+constexpr const char* kAlongFlightMinus90 = "along_flight_minus_90";
 
 bool Finite(const Json::Value& value) {
     return value.IsNumber() && std::isfinite(value.AsNumber());
@@ -60,8 +62,10 @@ bool ReadRule(const Json::Value& root, const char* name, Rule& out, std::string&
         read.angleDeg = angle.AsNumber();
     } else if (angle.IsString() && angle.AsString() == kTowardTravellerMinus90) {
         read.turn = Turn::TowardTravellerMinus90;
+    } else if (angle.IsString() && angle.AsString() == kAlongFlightMinus90) {
+        read.turn = Turn::AlongFlightMinus90;
     } else {
-        error = where + ".angle is a number or " + kTowardTravellerMinus90;
+        error = where + ".angle is a number, " + kTowardTravellerMinus90 + " or " + kAlongFlightMinus90;
         return false;
     }
     if (!Finite(row["scale"]) || !(row["scale"].AsNumber() > 0.0)) {
@@ -214,7 +218,11 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadPlacedPortal(root, "placed_portal", read.placedPortal, why) ||
         !ReadEyes(root, "red_eyes", read.eyes, why) || !ReadRule(root, "red_suck_effect", read.finishSuck, why) ||
         !ReadRule(root, "red_sparkles", read.finishSparkles, why) || !ReadRule(root, "blood", read.blood, why) ||
-        !ReadRule(root, "skull", read.skull, why)) {
+        !ReadRule(root, "skull", read.skull, why) || !ReadRule(root, "enemy_shoot", read.enemyShoot, why) ||
+        !ReadRule(root, "enemy_shoot_mark", read.enemyShootMark, why) ||
+        !ReadRule(root, "enemy_shoot_flash", read.enemyShootFlash, why) ||
+        !ReadRule(root, "enemy_shoot_burst", read.enemyShootBurst, why) ||
+        !ReadRule(root, "ghost_appear_effect", read.ghostAppear, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -234,6 +242,38 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": blood.z is {\"value\": 0, \"scaled\": true}: its depth is its victim's own";
         return false;
     }
+    // The ghost's appear effect's own callback: followUp and Scale, every frame.
+    {
+        const Json::Value& follow = root["ghost_appear_effect"]["follow_up"];
+        const Json::Value& offset = follow["offset_units"];
+        const bool followOk = follow.IsObject() && offset.IsArray() && offset.AsArray().size() == 2 &&
+                              Finite(offset.AsArray()[0]) && Finite(offset.AsArray()[1]) &&
+                              Finite(follow["stride_ms"]) && follow["stride_ms"].AsNumber() > 0.0 &&
+                              Finite(follow["rate_ms"]) && follow["rate_ms"].AsNumber() >= 0.0 &&
+                              follow["dont_pause"].IsBool();
+        const Json::Value& grow = root["ghost_appear_effect"]["scale_per_frame"];
+        if (!followOk || !Finite(grow) || !(grow.AsNumber() > 0.0)) {
+            error = path + ": ghost_appear_effect needs follow_up (offset_units [x, y], stride_ms above 0, rate_ms "
+                           "from 0, dont_pause) and a scale_per_frame above 0";
+            return false;
+        }
+        read.ghostAppearFollow.offsetUnits = glm::dvec2(offset.AsArray()[0].AsNumber(), offset.AsArray()[1].AsNumber());
+        read.ghostAppearFollow.strideMs = follow["stride_ms"].AsNumber();
+        read.ghostAppearFollow.rateMs = follow["rate_ms"].AsNumber();
+        read.ghostAppearFollow.dontPause = follow["dont_pause"].AsBool();
+        read.ghostAppearScalePerFrame = grow.AsNumber();
+    }
+    // The shot's flash, like blood, is added at its OWNER's own vector3: 0 over it.
+    if (read.enemyShootFlash.z != 0.0 || !read.enemyShootFlash.zScaled) {
+        error = path + ": enemy_shoot_flash.z is {\"value\": 0, \"scaled\": true}: its depth is the shot's own";
+        return false;
+    }
+    // And the one row that is turned along a flight is the shot itself.
+    if (read.enemyShoot.turn != Turn::AlongFlightMinus90 || read.enemyShoot.offsetUnits != 0.0) {
+        error = path + ": enemy_shoot is turned along_flight_minus_90 and offset 0: its callback turns it";
+        return false;
+    }
+
     // The rows that are given a point and nothing else: no direction to be offset
     // along or turned by. appearEffect, addFireball - whose `dir` is the entity's
     // own custom data and not the angle it is added at - and both explosions,
@@ -251,7 +291,11 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"red_suck_effect", &read.finishSuck},
                      {"red_sparkles", &read.finishSparkles},
                      {"blood", &read.blood},
-                     {"skull", &read.skull}};
+                     {"skull", &read.skull},
+                     {"enemy_shoot_mark", &read.enemyShootMark},
+                     {"enemy_shoot_flash", &read.enemyShootFlash},
+                     {"enemy_shoot_burst", &read.enemyShootBurst},
+                     {"ghost_appear_effect", &read.ghostAppear}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
@@ -274,7 +318,12 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"portal_death", &read.death},
                      {"red_sparkles", &read.finishSparkles},
                      {"blood", &read.blood},
-                     {"skull", &read.skull}};
+                     {"skull", &read.skull},
+                     {"enemy_shoot", &read.enemyShoot},
+                     {"enemy_shoot_mark", &read.enemyShootMark},
+                     {"enemy_shoot_flash", &read.enemyShootFlash},
+                     {"enemy_shoot_burst", &read.enemyShootBurst},
+                     {"ghost_appear_effect", &read.ghostAppear}};
     for (const auto& row : unshifted) {
         if (row.rule->offsetFixedUnits != glm::dvec2(0.0)) {
             error = path + ": " + row.name + " adds no fixed offset: its offset_units is a number";
@@ -306,7 +355,8 @@ glm::dvec2 VanishDirection(const glm::dvec2& travellerPx, const glm::dvec2& port
 float AngleDegrees(const Rule& rule, const glm::dvec2& direction) {
     if (rule.turn == Turn::Fixed) return static_cast<float>(rule.angleDeg);
     // #28-34: getAngle(direction), radianToDegree, SUBIf 90f - the same float
-    // steps as Art::Shot::AngleDegrees (ETHCallback_projectile #102-111).
+    // steps as Art::Shot::AngleDegrees (ETHCallback_projectile #102-111), and as
+    // ETHCallback_enemy_shoot's #139-148 for along_flight_minus_90.
     constexpr float kPi = 3.141592654f; // gs2d::math::constant::PI
     float radians = Supersonic::DetMath::atan2(static_cast<float>(direction.x), static_cast<float>(direction.y));
     if (radians < 0.0f) radians += 2.0f * kPi;
@@ -434,6 +484,75 @@ glm::dvec2 KillerSkullPoint(const Rules& rules, double minionX, const glm::dvec2
 
 Spawn Skull(const Rules& rules, const glm::dvec2& atPx) {
     return SpawnOf(rules.skull, atPx, glm::dvec2(0.0));
+}
+
+// ---- chapter 3's ghost and its shots (the visuals plan's 12.2) ------------------
+
+Spawn EnemyShoot(const Rules& rules, const glm::dvec2& shotPx, const glm::dvec2& direction) {
+    return SpawnOf(rules.enemyShoot, shotPx, direction);
+}
+
+Spawn EnemyShootMark(const Rules& rules, const glm::dvec2& finalPx) {
+    return SpawnOf(rules.enemyShootMark, finalPx, glm::dvec2(0.0));
+}
+
+Spawn EnemyShootFlash(const Rules& rules, const glm::dvec2& shotPx, double shotZUnits) {
+    // GetPosition() is the shot's vector3: its depth is the shot's own, as blood's
+    // is its victim's.
+    Spawn spawn = SpawnOf(rules.enemyShootFlash, shotPx, glm::dvec2(0.0));
+    spawn.z = shotZUnits + rules.enemyShootFlash.z;
+    spawn.zScaled = true;
+    return spawn;
+}
+
+Spawn EnemyShootBurst(const Rules& rules, const glm::dvec2& shotPx) {
+    return SpawnOf(rules.enemyShootBurst, shotPx, glm::dvec2(0.0));
+}
+
+Spawn GhostAppear(const Rules& rules, const glm::dvec2& ghostPx, double ghostZUnits) {
+    // vector3(currentPos, GetPositionZ() + 1f): the ghost's own depth, on the
+    // level's axis, and the row's bare 1 over it.
+    Spawn spawn = SpawnOf(rules.ghostAppear, ghostPx, glm::dvec2(0.0));
+    spawn.zBaseUnits = ghostZUnits;
+    return spawn;
+}
+
+glm::dvec2 FollowUp::Current(const FollowUpRule& rule) const {
+    // PositionInterpolator::getCurrentPos (bytes 20104..20325): the far end once
+    // the timer is over (elapsed > time), else the filter of the clamped fraction -
+    // smoothEnd, which followUp sets on it (#29-38).
+    if (!(rule.strideMs > 0.0) || elapsedMs > rule.strideMs) return to;
+    const double bias = std::clamp(elapsedMs / rule.strideMs, 0.0, 1.0);
+    const double eased = static_cast<double>(Supersonic::DetMath::sin(static_cast<float>(bias) * 1.570796327f));
+    return from + (to - from) * eased;
+}
+
+glm::dvec2 FollowUp::Tick(const FollowUpRule& rule, const glm::dvec2& atPx, const glm::dvec2& targetPx,
+                          double frameMs) {
+    const glm::dvec2 destination = targetPx + rule.offsetUnits;
+    // #1-67, the first call: an interpolator from where the entity stands to the
+    // destination, and switchTime 0.
+    if (!started) {
+        from = atPx;
+        to = destination;
+        elapsedMs = 0.0;
+        sinceAimedMs = 0.0;
+        started = true;
+    }
+    // #93-143: aimed again from where it is now only when the destination is not
+    // where the entity stands, and strictly after updateRate.
+    if (destination != atPx && sinceAimedMs > rule.rateMs) {
+        from = Current(rule);
+        to = destination;
+        elapsedMs = 0.0;
+        sinceAimedMs = 0.0;
+    }
+    // #147-179: the frame's time to both clocks, then SetPositionXY where the
+    // interpolator now says.
+    const double step = std::max(frameMs, 0.0);
+    sinceAimedMs += step;
+    elapsedMs += step;
+    return Current(rule);
 }
 
 } // namespace MagicPortals::Effects

@@ -881,5 +881,26 @@
       "findCharacterDirection(getAngle(GetLinearVelocity()), true) BEFORE this update's SetLinearVelocity:",
       "the previous update's velocity x < 0 is row 1, anything else row 2"
     ]
+  },
+
+  "ghost": {
+    "_source": [
+      "Chapter 3's boss (sim/Ghost), as ghost.ent draws it and ETHCallback_ghost writes it (the visuals plan's",
+      "12.2, planning step 98; system_5.md 5c-4 with decode/D8.md): ghost.ent Sprite ghost.png, SpriteCut",
+      "4 x 1, blendMode 0, PivotAdjust (-6, 10), EmissiveColor (1, 1, 1), static 1, applyLight 0, no",
+      "<Normal>, no <Light>, no particles. The original draws its hd/ twin, 973 x 256 at density 2: 486 x",
+      "128 units, cut as SetupSpriteRects cuts it (Tiers::FrameCut) into frames of 121 x 128 units. Its",
+      "colour, alpha, scale and cell are its script's (ghost.json appear and look), its point the sim's, and",
+      "its depth one level unit behind the knight whose death adds it (ghost.json spawn.z_offset_units)."
+    ],
+    "sprite": "ghost.png",
+    "additive": false,
+    "emissive": [1.0, 1.0, 1.0],
+    "static": true,
+    "apply_light": false,
+    "_lighting": "ghost.ent: <Entity static=1 applyLight=0>, no <Normal>, no <Light>. Takes no light and gives none",
+    "columns": 4,
+    "rows": 1,
+    "pivot_px": [-6, 10]
   }
 }

@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "core/Application.hpp"
+#include "core/DetMath.hpp"
 #include "core/Input.hpp"
 #include "core/Light2D.hpp"
 #include "core/Log.hpp"
@@ -569,6 +570,9 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_wallGhost = WallGhost{};
     for (MinionQuad& minion : m_minions) destroy(minion.quad);
     m_minions.clear();
+    destroy(m_ghost.quad);
+    m_ghost = GhostQuad{};
+    m_ghostAppearQueued = false;
     // The walk arrows and the corner buttons go with the level they were built
     // for, and so does what the level opened with.
     unloadControls();
@@ -1270,9 +1274,57 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
                glm::dvec2(art.pivotXPx, art.pivotYPx) + owner.offsetPx;
         return true;
     }
+    case EffectOwner::Kind::Ghost:
+        // SeekEntity('ghost.ent'): while the knight's death has added it and it has
+        // not deleted itself.
+        if (!m_level.ghost.Alive()) return false;
+        atPx = m_level.ghost.atPx + owner.offsetPx;
+        return true;
+    case EffectOwner::Kind::GhostShot:
+        // By the id the sim gave it, which it never gives again: a shot going takes
+        // the ones after it along one place in the list.
+        for (const Ghost::Shot& shot : m_level.ghost.shots) {
+            if (shot.id != owner.index) continue;
+            atPx = shot.atPx + owner.offsetPx;
+            return true;
+        }
+        return false;
+    case EffectOwner::Kind::Key: {
+        // Where the carry left it and its bob put it, as a level key's picture is
+        // (syncSprites): it goes, sparkles and all, when the keyhole it opened goes.
+        if (owner.index < 0 || owner.index >= static_cast<int>(m_level.keys.keys.size())) return false;
+        const Keys::Key& key = m_level.keys.keys[static_cast<std::size_t>(owner.index)];
+        if (key.spent && key.opened >= 0 && key.opened < static_cast<int>(m_level.keys.keyholes.size()) &&
+            m_level.keys.keyholes[static_cast<std::size_t>(key.opened)].gone) {
+            return false;
+        }
+        atPx = key.atPx + owner.offsetPx;
+        for (const DroppedKey& dropped : m_droppedKeys) {
+            if (dropped.key == owner.index && key.owner == entt::null && !key.spent) atPx += Motion::OffsetPx(dropped.bob);
+        }
+        return true;
+    }
     }
     return false;
 }
+
+namespace {
+
+// ETHSpriteEntity::ComputeInScreenSpriteCenter (ETHSpriteEntity.cpp:690-709): the
+// pivot, at the entity's scale, turned by -DegreeToRadian(angle) in the screen's
+// y-down axes and taken off the entity's point - which for an angle of 0 is the
+// point less the pivot, the rule every unturned picture is drawn by. Art::Shot::
+// CentrePx, for a picture the effects runtime draws.
+glm::dvec2 TurnedPictureCentre(const glm::dvec2& atPx, const glm::dvec2& scaledPivot, double angleDeg) {
+    float s = 0.0f;
+    float c = 1.0f;
+    Supersonic::DetMath::sincos(-static_cast<float>(angleDeg) * (3.141592654f / 180.0f), s, c);
+    const double sd = static_cast<double>(s);
+    const double cd = static_cast<double>(c);
+    return atPx - glm::dvec2(cd * scaledPivot.x - sd * scaledPivot.y, sd * scaledPivot.x + cd * scaledPivot.y);
+}
+
+} // namespace
 
 int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& spawn) {
     using namespace Supersonic;
@@ -1296,6 +1348,9 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     effect.zUnits = spawn.zUnits;
     effect.follow = spawn.follow;
     effect.colour = spawn.colour;
+    effect.followUp = spawn.followUp;
+    effect.followUpTarget = spawn.followUpTarget;
+    effect.scalePerFrame = spawn.scalePerFrame;
     effect.temporary = art.Temporary();
     // ShouldEntityBeAlwaysActive (ETHActiveEntityHandler.cpp:70-74): temporary, or
     // dynamic with a callback or a simulated body. The first arm is read off the
@@ -1318,19 +1373,17 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     // is drawn by syncMinions, so it has none here (EffectSpawn::picture).
     if (!art.sprite.empty() && spawn.picture) {
         const Sprites::Image& sheet = drawnImage(originalImage(art.sprite));
-        const glm::dvec2 cellPx = frameUnits(sheet, art.columns, art.rows);
-        if (cellPx == glm::dvec2(0.0)) {
-            SUPERSONIC_LOG_WARN("Magic Portals") << "effect picture could not be read: " << sheet.path << std::endl;
+        std::string why;
+        if (sheet.units.x <= 0 || sheet.units.y <= 0 ||
+            !Tiers::FrameCut(sheet.texels, sheet.density, art.columns, art.rows, effect.cut, why)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "effect picture could not be read or cut: " << sheet.path << " "
+                                                 << why << std::endl;
         } else {
-            effect.cellPx = cellPx * effect.scale;
+            effect.cellPx = glm::dvec2(effect.cut.frameUnits) * effect.scale;
             effect.quad = makeSprite(registry, "Magic Portals Effect", sheet.path, art.additive);
-            if (art.Frames() > 1) {
-                auto& animation = registry.emplace<SpriteAnimationComponent>(effect.quad);
-                animation.columns = static_cast<uint32_t>(art.columns);
-                animation.rows = static_cast<uint32_t>(art.rows);
-                animation.frameCount = 1;
-                animation.playing = false; // its cell is the script's, as the shot's is
-            }
+            // A sheet of more than one cell is sampled a cell at a time, cut where
+            // SetupSpriteRects cuts it (00_order E1): its cell is its script's, as
+            // the shot's is, and the uv is written for it in updateEffects.
         }
     }
 
@@ -1443,6 +1496,10 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_effectQueue.clear();
     m_eyes = -1;
     m_fireballEffects.clear();
+    m_ghostShotEffects.clear();
+    m_ghostShotCells.clear();
+    m_droppedKeys.clear();
+    m_ghostAppearQueued = false;
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -1471,10 +1528,26 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
         effect.hidden = hidden;
 
         if (effect.quad != entt::null) {
+            // A shot of the chapter-3 ghost is on the cell _projectileFrameTimer
+            // gave it on the last tick (stepLevel).
+            if (effect.follow.kind == EffectOwner::Kind::GhostShot) {
+                if (const auto cell = m_ghostShotCells.find(effect.follow.index); cell != m_ghostShotCells.end()) {
+                    effect.cell = cell->second;
+                }
+            }
+            if (effect.art.Frames() > 1) {
+                const int columns = std::max(1, effect.art.columns);
+                const int cell = std::clamp(effect.cell, 0, effect.art.Frames() - 1);
+                auto& material = registry.get<MaterialComponent>(effect.quad);
+                material.uvScale = glm::vec2(effect.cut.uvScale);
+                material.uvOffset = glm::vec2(Tiers::UvOffset(effect.cut, cell % columns, cell / columns));
+            }
             // Ethanon's angle turns counter-clockwise on the screen, which is the
-            // engine's rotation about +z, exactly as the shot's is.
-            placeSprite(registry, effect.quad, effect.atPx - effect.art.pivotPx * effect.scale, effect.cellPx,
-                        effect.z, static_cast<float>(effect.angleDeg * 3.14159265358979323846 / 180.0));
+            // engine's rotation about +z, exactly as the shot's is; and the pivot
+            // turns with the picture (TurnedPictureCentre).
+            placeSprite(registry, effect.quad,
+                        TurnedPictureCentre(effect.atPx, effect.art.pivotPx * effect.scale, effect.angleDeg),
+                        effect.cellPx, effect.z, static_cast<float>(effect.angleDeg * 3.14159265358979323846 / 180.0));
             registry.get<RenderableComponent>(effect.quad).isVisible = !hidden;
             // AT THE COLOUR SetColor LEFT ON IT, here and not in syncLighting: an
             // effect is added and faded on the FRAME, and a tint that waited for
@@ -1517,6 +1590,28 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
                 }
             }
             if (!Particles::Finished(emitter.system, emitter.particles)) over = false;
+        }
+        // AND ITS OWN CALLBACK, after its particles were stepped at the point the
+        // last frame left it (ETHActiveEntityHandler.cpp:157-162): followUp moves
+        // it toward what it follows, and Scale grows its systems and every live
+        // particle (ghost_appear_effect.ent, planning step 98).
+        if (effect.followUp) {
+            glm::dvec2 targetPx(0.0);
+            bool targetHidden = false;
+            if (effectOwnerPoint(registry, effect.followUpTarget, targetPx, targetHidden)) {
+                effect.atPx = effect.followUpState.Tick(*effect.followUp, effect.atPx, targetPx, elapsedMs);
+            }
+        }
+        if (effect.scalePerFrame != 1.0) {
+            const double grow = effect.scalePerFrame;
+            effect.scale *= grow;
+            for (Emitter& emitter : effect.emitters) {
+                Particles::Scale(emitter.system, grow);
+                for (Particles::Particle& particle : emitter.particles) {
+                    particle.size *= grow;
+                    particle.velocityPx *= grow;
+                }
+            }
         }
         // ETHActiveEntityHandler: only a temporary entity is the engine's to
         // delete, and only once every one of its pools is over. Anything else is
@@ -1714,6 +1809,16 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         report.z = effect.z;
         report.haloZ = effect.haloZ;
         report.scriptScale = effect.scriptScale;
+        report.angleDeg = effect.angleDeg;
+        report.cell = effect.cell;
+        report.cellPx = effect.cellPx;
+        report.centrePx = TurnedPictureCentre(effect.atPx, effect.art.pivotPx * effect.scale, effect.angleDeg);
+        if (effect.art.Frames() > 1) {
+            const int columns = std::max(1, effect.art.columns);
+            const int cell = std::clamp(effect.cell, 0, effect.art.Frames() - 1);
+            report.uvScale = effect.cut.uvScale;
+            report.uvOffset = Tiers::UvOffset(effect.cut, cell % columns, cell / columns);
+        }
         report.colour = effect.colour;
         report.scale = effect.scale;
         report.temporary = effect.temporary;
@@ -3129,6 +3234,28 @@ void MagicPortalsLayer::buildDrawables(entt::registry& registry) {
         }
     }
 
+    // CHAPTER 3'S BOSS (art.json ghost): ghost.png's tier file, hd/ghost.png, 973 x
+    // 256 at density 2, cut 4 x 1 as SetupSpriteRects cuts it - frames of 121 x 128
+    // units. Its quad comes when the black knight's death adds it (syncGhost). Its
+    // depth: the knight's raw 2 over the factor, less the one level unit
+    // scale(-1) puts it behind (ghost.json spawn; 00_order 8.13 K13).
+    m_ghost = GhostQuad{};
+    m_ghostAppearQueued = false;
+    if (m_level.ghost.present) {
+        const Art::Ghost& art = m_artRules.ghost;
+        const Sprites::Image& sheet = drawnImage(originalImage(art.sprite));
+        std::string why;
+        if (sheet.units.x > 0 && sheet.units.y > 0 &&
+            Tiers::FrameCut(sheet.texels, sheet.density, art.columns, art.rows, m_ghost.cut, why)) {
+            m_ghost.sheet = sheet.path;
+        } else if (m_artReady) {
+            SUPERSONIC_LOG_WARN("Magic Portals")
+                << "the ghost is not drawn: " << sheet.path << " could not be cut " << why << std::endl;
+        }
+        m_ghost.lookZ = m_artRules.LevelDepth(m_artRules.minion.z) + m_level.ghost.rules.spawnZOffsetUnits;
+        m_ghost.z = slotAfter(m_ghost.lookZ, Slot::Ghost);
+    }
+
     // The player, as dark_mage.ent draws it, standing on the idle column of the
     // way GameCharacter faces it when it is made (Art.hpp): each level starts
     // there, and its walk's column and time start from nothing. On a no_gravity
@@ -4072,6 +4199,13 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
     // angle because the original steps all three in that one loop with that one
     // frame. It runs whether or not the level has a glow or a background to bob.
     if (m_doorBobRuns) Motion::Advance(m_motionRules, m_doorBob, frameMs);
+    // A key no node pictures bobs as a level key does: ETHCallback_key while no one
+    // carries it and it has not found its keyhole.
+    for (DroppedKey& dropped : m_droppedKeys) {
+        if (dropped.key < 0 || dropped.key >= static_cast<int>(m_level.keys.keys.size())) continue;
+        const Keys::Key& key = m_level.keys.keys[static_cast<std::size_t>(dropped.key)];
+        if (key.owner == entt::null && !key.spent) Motion::Advance(m_motionRules, dropped.bob, frameMs);
+    }
     // And ETHCallback_antiportal's AddToAngle, once for every ring the level placed:
     // they are turned by the same step on the same frames, so the port keeps one
     // angle for them (m_antiportalTurn). Its step is unitsPerSecond's, capped at
@@ -4415,6 +4549,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
 
     syncBoss(registry);
     syncMinions(registry);
+    syncGhost(registry);
     syncTurrets(registry);
 
     const auto boxPx = [](const Trigger::Box& box, glm::dvec2& centrePx, glm::dvec2& sizePx) {
@@ -4710,6 +4845,15 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         const glm::dvec3 emissive = blind ? glm::dvec3(0.0) : (minion.black ? minionArt.blackEmissive : minionArt.emissive);
         const glm::vec4 colour = minion.black ? glm::vec4(glm::vec3(minionArt.blackColour), 1.0f) : white;
         tint(registry, minion.quad, colour, emissive, {}, receiverOf(minionArt, minion.lookZ));
+    }
+    // CHAPTER 3'S BOSS at the colour and the alpha its callback wrote this tick
+    // (SetColor, SetAlpha), which the sprite path weights its texels by as it does
+    // the dial's. ghost.ent's emissive 1 makes min(1, ambient + 1) whole, so the
+    // black it flies in as is the colour's and not the room's.
+    if (m_ghost.quad != entt::null) {
+        const Ghost::Look& look = m_level.ghost.look;
+        tint(registry, m_ghost.quad, glm::vec4(glm::vec3(look.colour), static_cast<float>(look.alpha)),
+             m_artRules.ghost.emissive, {}, receiverOf(m_artRules.ghost, m_ghost.lookZ));
     }
 
     // The lights, placed after everything that owns one.
@@ -5204,6 +5348,68 @@ void MagicPortalsLayer::syncMinions(entt::registry& registry) {
         material.uvScale = glm::vec2(m_minionCut.uvScale);
         material.uvOffset = glm::vec2(Tiers::UvOffset(m_minionCut, drawn.pose.column, drawn.pose.row));
     }
+}
+
+// ---- chapter 3's boss (the visuals plan's 12.2, planning step 98) ----------------
+//
+// ghost.ent as ETHCallback_ghost draws it: added by the black knight's death at
+// the knight's point (R4, Game), at the .ent's own white and alpha 1 and the
+// spawn's scale 0.3 until its first callback writes its Look, which the sim keeps
+// - the waypoints' colour, alpha and scale as it flies to ghost_pos, cell 0 in
+// SHOOTING and 3 at alpha 0.5 in RAGE_MODE, the bounces in DAMAGE and DEATH. Drawn
+// with its pivot on its point at that scale, the cell cut as the original cuts
+// it, one level unit behind its knight (Slot::Ghost), and coloured in
+// syncLighting. Made when it is added, unmade when it deletes itself.
+void MagicPortalsLayer::syncGhost(entt::registry& registry) {
+    using namespace Supersonic;
+    const Ghost::State& ghost = m_level.ghost;
+    if (!ghost.Alive() || !m_artReady || m_ghost.sheet.empty()) {
+        if (m_ghost.quad != entt::null && registry.valid(m_ghost.quad)) registry.destroy(m_ghost.quad);
+        m_ghost.quad = entt::null;
+        return;
+    }
+    const Art::Ghost& art = m_artRules.ghost;
+    if (m_ghost.quad == entt::null) {
+        m_ghost.quad = makeSprite(registry, "Magic Portals Ghost", m_ghost.sheet, art.additive);
+        // It moves on the tick - its flight, its hover - and is drawn between ticks.
+        registry.emplace<InterpolatedTransformComponent>(m_ghost.quad);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "the ghost is added at " << ghost.atPx.x << ", " << ghost.atPx.y
+                                             << " on tick " << m_ticks << std::endl;
+    }
+    const int frames = std::max(1, art.Frames());
+    m_ghost.cell = std::clamp(ghost.look.frame, 0, frames - 1);
+    const double scale = ghost.look.scale;
+    m_ghost.sizePx = glm::dvec2(m_ghost.cut.frameUnits) * scale;
+    m_ghost.centrePx = ghost.atPx - glm::dvec2(art.pivotXPx, art.pivotYPx) * scale;
+    placeSprite(registry, m_ghost.quad, m_ghost.centrePx, m_ghost.sizePx, m_ghost.z, 0.0f);
+    const int columns = std::max(1, art.columns);
+    auto& material = registry.get<MaterialComponent>(m_ghost.quad);
+    material.uvScale = glm::vec2(m_ghost.cut.uvScale);
+    material.uvOffset = glm::vec2(Tiers::UvOffset(m_ghost.cut, m_ghost.cell % columns, m_ghost.cell / columns));
+}
+
+MagicPortalsLayer::GhostReport MagicPortalsLayer::GhostDrawing() const {
+    GhostReport report;
+    const Ghost::State& ghost = m_level.ghost;
+    report.present = ghost.present;
+    report.spawned = ghost.spawned;
+    report.drawn = m_ghost.quad != entt::null;
+    report.quad = m_ghost.quad;
+    report.texture = m_ghost.sheet;
+    report.cell = m_ghost.cell;
+    report.colour = ghost.look.colour;
+    report.alpha = ghost.look.alpha;
+    report.scale = ghost.look.scale;
+    report.atPx = ghost.atPx;
+    report.centrePx = m_ghost.centrePx;
+    report.sizePx = m_ghost.sizePx;
+    report.frameUnits = glm::dvec2(m_ghost.cut.frameUnits);
+    report.uvScale = m_ghost.cut.uvScale;
+    const int columns = std::max(1, m_artRules.ghost.columns);
+    report.uvOffset = Tiers::UvOffset(m_ghost.cut, m_ghost.cell % columns, m_ghost.cell / columns);
+    report.z = m_ghost.z;
+    report.lookZ = m_ghost.lookZ;
+    return report;
 }
 
 MagicPortalsLayer::DragonReport MagicPortalsLayer::DragonPicture() const {
@@ -6142,7 +6348,8 @@ MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn
     add.atPx = spawn.atPx;
     // The factor is art.json's and is refused below 0 when it is read, so the
     // guard is for a level drawn with no art at all - which draws no effect.
-    add.zUnits = spawn.zScaled || !(m_artRules.scaleFactor > 0.0) ? spawn.z : m_artRules.LevelDepth(spawn.z);
+    add.zUnits = spawn.zBaseUnits +
+                 (spawn.zScaled || !(m_artRules.scaleFactor > 0.0) ? spawn.z : m_artRules.LevelDepth(spawn.z));
     add.angleDeg = spawn.angleDeg;
     add.scale = spawn.scale;
     return add;
@@ -6296,6 +6503,79 @@ void MagicPortalsLayer::latchSimEffects() {
                                                 : m_artRules.LevelDepth(m_artRules.minion.z);
             m_effectQueue.push_back(effectAdd(Effects::Blood(m_effectRules, death.atPx, minionZ)));
         }
+    }
+
+    // CHAPTER 3'S BOSS (the visuals plan's 12.2, planning step 98). Its init block
+    // - the tick after the knight's death added it (R4) - adds ghost_appear_effect.ent
+    // at its point as it was added and a bare 1 over its own depth; that entity's
+    // own callback chases the ghost in (followUp) and grows its dark puffs (Scale).
+    const Ghost::State& ghost = m_level.ghost;
+    if (ghost.present && ghost.initialised && !m_ghostAppearQueued) {
+        EffectSpawn add = effectAdd(Effects::GhostAppear(m_effectRules, ghost.spawnPx, m_ghost.lookZ));
+        add.followUp = m_effectRules.ghostAppearFollow;
+        add.followUpTarget.kind = EffectOwner::Kind::Ghost;
+        add.scalePerFrame = m_effectRules.ghostAppearScalePerFrame;
+        m_effectQueue.push_back(add);
+        m_ghostAppearQueued = true;
+    }
+    // ITS SHOTS. addEnemyShoot adds the shot and the portal_mark.ent where it is
+    // going, and the shot's own first call adds projectile_shoot.ent where the nudge
+    // left it; the port nudges it as it is fired, so all three come on the tick it
+    // appears. A LIST WALK, as the fireballs' is: each once, by the sim's id.
+    const double shotZ =
+        m_effectRules.enemyShoot.zScaled || !(m_artRules.scaleFactor > 0.0)
+            ? m_effectRules.enemyShoot.z
+            : m_artRules.LevelDepth(m_effectRules.enemyShoot.z);
+    std::vector<int> flyingShots;
+    flyingShots.reserve(ghost.shots.size());
+    for (const Ghost::Shot& shot : ghost.shots) {
+        flyingShots.push_back(shot.id);
+        if (std::find(m_ghostShotEffects.begin(), m_ghostShotEffects.end(), shot.id) != m_ghostShotEffects.end()) {
+            continue;
+        }
+        EffectSpawn add = effectAdd(Effects::EnemyShoot(m_effectRules, shot.atPx, shot.directionPx));
+        add.follow.kind = EffectOwner::Kind::GhostShot;
+        add.follow.index = shot.id;
+        m_effectQueue.push_back(add);
+        m_effectQueue.push_back(effectAdd(Effects::EnemyShootMark(m_effectRules, shot.destinyPx)));
+        m_effectQueue.push_back(effectAdd(Effects::EnemyShootFlash(m_effectRules, shot.atPx, shotZ)));
+        m_ghostShotEffects.push_back(shot.id);
+    }
+    m_ghostShotEffects.erase(std::remove_if(m_ghostShotEffects.begin(), m_ghostShotEffects.end(),
+                                            [&flyingShots](int id) {
+                                                return std::find(flyingShots.begin(), flyingShots.end(), id) ==
+                                                       flyingShots.end();
+                                            }),
+                             m_ghostShotEffects.end());
+    // And where one was destroyed, in its range or on the player:
+    // portal_fail_in_antiportal.ent at its point, a bare 0.
+    for (const glm::dvec2& atPx : ghost.spentPx) {
+        m_effectQueue.push_back(effectAdd(Effects::EnemyShootBurst(m_effectRules, atPx)));
+    }
+    // THE KEY IT DROPS, which no node pictures: the key.ent its DEATH arm adds at its
+    // own vector3 (AddScaledEntity('key.ent', GetPosition(), getScale()), #1354-1368),
+    // drawn by the runtime - key.png and its two sparkle systems - where the carry
+    // leaves it, bobbing while it lies (ETHCallback_key's linearMotion, the level
+    // keys' row, from a start angle on the effects' stream).
+    for (std::size_t k = 0; k < m_level.keys.keys.size() && m_artReady && ghost.present; ++k) {
+        const int index = static_cast<int>(k);
+        if (m_level.keys.keys[k].name != ghost.keyName) continue;
+        const bool known = std::any_of(m_droppedKeys.begin(), m_droppedKeys.end(),
+                                       [index](const DroppedKey& dropped) { return dropped.key == index; });
+        if (known) continue;
+        DroppedKey dropped;
+        dropped.key = index;
+        const Motion::Row& row = m_motionRules.key;
+        dropped.bob = Motion::Start(row, row.startTo > row.startFrom ? effectRandom(row.startFrom, row.startTo)
+                                                                      : row.startFrom);
+        m_droppedKeys.push_back(dropped);
+        EffectSpawn add;
+        add.entity = ghost.rules.keyEntityName;
+        add.atPx = m_level.keys.keys[k].atPx;
+        add.zUnits = m_ghost.lookZ;
+        add.follow.kind = EffectOwner::Kind::Key;
+        add.follow.index = index;
+        m_effectQueue.push_back(add);
     }
 }
 
@@ -6475,7 +6755,7 @@ void MagicPortalsLayer::playLatched(entt::registry& registry, float deltaTime) {
     m_latched.clear();
 }
 
-void MagicPortalsLayer::updateMusic(entt::registry& registry) {
+std::string MagicPortalsLayer::WantedTrack() const {
     // Which track belongs to what is on screen. The medal screen keeps the
     // level loaded, so it falls into the level's own branch and the music does
     // not stop underneath it.
@@ -6488,9 +6768,22 @@ void MagicPortalsLayer::updateMusic(entt::registry& registry) {
         wanted = "menu";
     } else if (m_loaded) {
         // Game.angelscript starts playGameMusic(isBossFight); the port's boss
-        // levels are the ones that built a beholder.
-        wanted = m_level.boss.beholder.has_value() ? "boss" : "game";
+        // levels are the ones that built a beholder. And chapter 3's ghost starts
+        // playGameMusic(bossFight = true) from its init block (#320-324), once the
+        // black knight's death has added it (R4), and its DEATH arm stops that
+        // sample (#1224-1243) and starts nothing: the level is silent after it.
+        const Ghost::State& ghost = m_level.ghost;
+        if (ghost.present && ghost.initialised) {
+            wanted = ghost.gone || ghost.phase == Ghost::Phase::Death ? "" : "boss";
+        } else {
+            wanted = m_level.boss.beholder.has_value() ? "boss" : "game";
+        }
     }
+    return wanted;
+}
+
+void MagicPortalsLayer::updateMusic(entt::registry& registry) {
+    const std::string wanted = WantedTrack();
     if (wanted == m_track) return;
 
     Supersonic::AudioEngine** slot = registry.ctx().find<Supersonic::AudioEngine*>();
@@ -6781,6 +7074,17 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     if (m_level.portals.flight) {
         const Art::Shot& bolt = m_artRules.shot;
         m_shotCell = m_shotFrames.Set(0, bolt.Frames() - 1, bolt.strideMs, true, static_cast<double>(fixedDelta) * 1000.0);
+    }
+    // And ETHCallback_enemy_shoot's SetFrame(_projectileFrameTimer.set(0, 5, 30, true))
+    // (#126-137), once a step for every shot of the chapter-3 ghost in flight: the
+    // SAME timer, so each call adds its step to it, and a player's shot and a ghost's
+    // in the air together step it twice. After the player's, in the sim's order: the
+    // original's order among entity callbacks is its scene walk's, INFERRED.
+    m_ghostShotCells.clear();
+    for (const Ghost::Shot& shot : m_level.ghost.shots) {
+        const Ghost::Rules& rules = m_level.ghost.rules;
+        m_ghostShotCells[shot.id] = m_shotFrames.Set(rules.shotFirstCell, rules.shotLastCell, rules.shotCellStrideMs,
+                                                     true, static_cast<double>(fixedDelta) * 1000.0);
     }
     // linearMotion's calls BEFORE the pictures are placed: a call steps the angle and
     // writes the position in one, and the frame draws what it wrote (motions.json).

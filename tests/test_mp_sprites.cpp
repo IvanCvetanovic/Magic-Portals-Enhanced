@@ -1417,6 +1417,49 @@ void TheMinionSheetIsCutWhereTheOriginalCutsIt() {
               "106.875 x 151.875 px on the screen");
 }
 
+// CHAPTER 3'S BOSS (art.json ghost, planning step 98): ghost.ent's picture facts,
+// pinned against the .ent itself as the original reads it, and its sheet cut where
+// the original cuts it - hd/ghost.png, 973 x 256 at density 2, is 486 x 128 units,
+// so a frame is 121 x 128 units (242 x 256 texels), not the 121.5 an even split
+// gives: cell 3, the raging face, starts 2 texels left of an even split's.
+void TheGhostIsGhostEnt() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    const Art::Ghost& ghost = rules.ghost;
+    CHECK_MSG(ghost.sprite == "ghost.png" && !ghost.additive && ghost.columns == 4 && ghost.rows == 1,
+              "ghost.ent: ghost.png, cut 4 x 1, mixed");
+    CHECK_MSG(ghost.emissive == glm::dvec3(1.0) && ghost.isStatic && !ghost.applyLight && ghost.normal.empty() &&
+                  !ghost.light,
+              "emissive 1, static, applies no light, no normal map, no light");
+    CHECK_MSG(ghost.pivotXPx == -6.0 && ghost.pivotYPx == 10.0, "PivotAdjust (-6, 10)");
+    CHECK_MSG(ghost.framesPerSecond == 0.0, "its cell is its script's, never played");
+    // And against the file the original reads.
+    Art::Entity ent;
+    const bool read = Art::LoadEnt(kOriginal + "/entities/ghost.ent", ent, error);
+    if (!read) {
+        std::printf("  ghost.ent not read (%s): the .ent half skipped\n", error.c_str());
+        return;
+    }
+    CHECK_MSG(ent.sprite == ghost.sprite && ent.columns == ghost.columns && ent.rows == ghost.rows &&
+                  ent.additive == ghost.additive && ent.emissive == ghost.emissive &&
+                  ent.isStatic == ghost.isStatic && ent.applyLight == ghost.applyLight &&
+                  ent.pivotPx == glm::dvec2(ghost.pivotXPx, ghost.pivotYPx) && ent.systems.empty() && !ent.light,
+              "art.json's ghost is ghost.ent, to the attribute");
+    Sprites::Image image;
+    const bool drawn = Sprites::Drawn(TheTiers(), kOriginal + "/entities/" + ghost.sprite, image, error);
+    CHECK_MSG(drawn && image.tier == "hd" && image.texels == glm::ivec2(973, 256) && image.density == 2.0f &&
+                  image.units == glm::ivec2(486, 128),
+              "ghost.png is drawn from hd/, 973 x 256 at density 2: " + image.path + " " + error);
+    Tiers::Cut cut;
+    CHECK_MSG(Tiers::FrameCut(image.texels, image.density, ghost.columns, ghost.rows, cut, error) &&
+                  cut.frameUnits == glm::ivec2(121, 128) && cut.frameTexels == glm::dvec2(242.0, 256.0),
+              "frames of 121 x 128 units, 242 x 256 texels " + error);
+    const glm::dvec2 rage = Tiers::UvOffset(cut, 3, 0);
+    CHECK_MSG(std::fabs(rage.x * 973.0 - 726.0) < 1e-9 && rage.y == 0.0,
+              "cell 3 at 726 of 973 texels, 3 x 242: " + std::to_string(rage.x * 973.0));
+}
+
 // 00_order 2.3: the pictures the port draws for itself and every particle bitmap, by
 // the names its data gives, through the rule a level's art takes (Sprites::Drawn).
 // The APK's hd files for the player's two sheets, the beholder, the rolling stone, a
@@ -3240,6 +3283,7 @@ int main() {
         TheOriginalsImagesAreCutAsTheEntsSay();
         ThePortsOwnPicturesAreDrawnFromTheirTiers();
         TheMinionSheetIsCutWhereTheOriginalCutsIt();
+        TheGhostIsGhostEnt();
         EveryOriginalImageIsSizedAsTheRendererReadsIt();
         TheOriginalsParticlesAreRead();
         AnEntityWithoutParticlesSaysSoWithoutFailing();

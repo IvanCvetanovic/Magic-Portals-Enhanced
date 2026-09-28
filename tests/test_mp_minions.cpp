@@ -584,6 +584,55 @@ void aMinionsDeathIsWrittenDownForTheFrame() {
                 tick, above);
 }
 
+// A FIREBALL BURNS A MINION (planning step 98). ETHBeginContactCallback_fireball
+// burns any non-sensor burnable it touches (#159-173) and is destroyed (#146-152);
+// ETHCallback_minion finds itself burned and destroyed and deletes itself
+// (#1456-1504). minion.ent carries burnable=1, so a fireball on a minion kills it
+// that tick, as a strike does, and writes its Death down - by fire, not by a floor.
+void aFireballBurnsTheMinionItReaches() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+    const Minions::Minion* patroller = run.level.minions.FindMinion(kPatroller);
+    CHECK(patroller != nullptr);
+    if (patroller == nullptr || patroller->body == entt::null) return;
+    const entt::entity body = patroller->body;
+    const std::size_t at = static_cast<std::size_t>(patroller - run.level.minions.minions.data());
+    // A fireball a hair clear of it first, moving away: it touches nothing.
+    const glm::dvec2 centrePx = Units::ToPixels(run.registry.get<TransformComponent>(body).position);
+    Turrets::Fireball clear;
+    clear.name = "test#clear";
+    clear.atPx = centrePx + glm::dvec2(0.0, -80.0);
+    clear.velocityPx = glm::dvec2(0.0, -130.0);
+    run.level.turrets.fireballs.push_back(clear);
+    Tick(run);
+    CHECK_MSG(run.registry.valid(body) && run.level.minions.burned == 0, "a fireball that misses burns nothing");
+    run.level.turrets.fireballs.clear();
+
+    // One on it: the fire diamond's kind, which cannot hurt the player.
+    Turrets::Fireball ball;
+    ball.name = "test#burn";
+    ball.atPx = Units::ToPixels(run.registry.get<TransformComponent>(body).position);
+    ball.killsPlayer = false;
+    run.level.turrets.fireballs.push_back(ball);
+    Tick(run);
+    CHECK_MSG(!run.registry.valid(body), "the fireball burned the minion it reached, that tick");
+    CHECK_MSG(run.level.minions.burned == 1 && run.level.minions.killed == 0 && run.level.minions.taken == 0,
+              "counted as burned: " + std::to_string(run.level.minions.burned));
+    CHECK_MSG(run.level.turrets.fireballs.empty() && run.level.turrets.spentPx.size() == 1,
+              "and the fireball is spent on it, where it stood");
+    CHECK_EQ(run.level.minions.deaths.size(), static_cast<std::size_t>(1));
+    if (run.level.minions.deaths.size() == 1) {
+        const Minions::Death& death = run.level.minions.deaths.front();
+        CHECK_MSG(death.byFire && !death.byKiller && death.minion == at, "a Death by fire, the patroller's");
+    }
+    const bool travels = std::find(run.level.portals.travellers.begin(), run.level.portals.travellers.end(), body) !=
+                         run.level.portals.travellers.end();
+    CHECK_MSG(!travels, "and it is no longer among the portals' travellers");
+    // Burning it again writes nothing: it is gone.
+    run.level.minions.Burn(run.registry, {body});
+    CHECK_EQ(run.level.minions.burned, 1);
+}
+
 // ---- R16: the marker's entityName (planning step 97) -------------------------
 
 // An attribute of an .ent's <Entity ...> element, as the file writes it; empty
@@ -774,6 +823,7 @@ void runTests() {
     theKillerFloorKillsNoPlayer();
     theKillerFloorTakesAMinion();
     aMinionsDeathIsWrittenDownForTheFrame();
+    aFireballBurnsTheMinionItReaches();
     aMarkerAddsTheEntityItNames();
     anEntityTheRulesDoNotKnowIsRefused();
     theBlackKnightsBodyIsAMinions();

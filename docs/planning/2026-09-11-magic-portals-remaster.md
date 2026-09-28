@@ -17725,3 +17725,229 @@ accepted: six suites, `test_mp_layer`, 128 sweep captures and one clip, on `b876
   never empty (`minion.ent` by default), so the test must be re-pointed at `minion.entity`, keeping `ghost_minion.ent`
   out of `minion_impact` as the original's missing `ETHBeginContactCallback_ghost_minion` does - a rename that merely
   compiles is not enough. Likewise any later minion fall sound, `holdTime` cap or `ScoreDashboard` count.
+
+## Step 98 - the ghost as the black knight's death adds it (R4): a fireball burns a minion, the ghost flies in from the knight on five waypoints, hovers, shoots with the three entities its shot adds, rages on cell 3 at alpha 0.5, and the key it drops is drawn (built)
+
+The visuals plan's step 12.2 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 12, as section 8.13
+amends it; its brief `system_5.md` 5c-4; decode `decode/D8.md` with `D8_check.md`; conflicts K4, K8 and K13; section 4's
+`enemy_shoot.ent` and boss-key rows). Track A, on MPR `main` in `build/`, after step 97 (`3affd2f`). Changed:
+`game/sim/{Ghost,Minions,Motion,Effects,Art}.{hpp,cpp}`, `game/sim/Game.cpp`, `game/MagicPortalsLayer.{hpp,cpp}`,
+`game/data/{ghost,motions,art,effects,minions}.json`, `tests/test_mp_{ghost,minions,effects,sprites,layer,motion}.cpp`,
+this record and the backlog. The engine submodule stays at `4bfcf67`; nothing under `engine/` or `tools/` is touched,
+and `out/levels`, `out/assets` and `out/data` are not written. Smart App Control refused `MagicPortals.exe` on its build
+and on both of its relinks (`701876e8`, `a514d2a4`, `b5deb246`), the cap the run sets, so the build measured the suites
+alone; **an independent check (`out/parity/visuals/12.2/verify1/`) then relinked the three refused exes once, link-only,
+and took every capture gate on `MagicPortals.exe` `7e43f9b3`, which Smart App Control accepted** - the rows below carry
+its numbers.
+
+**BLOCKERS CHECKED.** Section 7 names R4, 3.2, 6.3, D8 and F15; section 8.13 removes D8 (closed). **R4** is the owner's
+standing ruling (named by him on 2026-09-16, in favour of what the original does); **3.2**'s `sim/Motion` is step 69;
+**6.3**'s effects runtime and `m_effectRandom` are step 83; **F15** is recorded (`out/parity/footage/F15.md`: the kill,
+the appearance and the hover, not rage). None unmet. The baseline is step 97's after, `11.4/after/sweep`: its 128 PNGs
+match the md5s its `capture.txt` logged (128 of 128), and the committed binary `b87639e7` reproduced 1-01 f420
+`e2da5131` before anything changed (`12.2/before/1-01_level0_f420.png`).
+
+**THE OWNER'S STANDING RULINGS.** **R4 is applied** as the owner's standing ruling: the ghost appears after the black
+knight dies, as the original's does - on the knight's death however it dies (fire, a killer floor, a strike), level31b's
+entity 1430 deleted in the same moment, the boss music from the ghost's init, and no shot and no restock before it.
+**R16** (step 97) is what it stands on: the sim knows which minion is the `ghost_minion.ent`. **R10** and **R12** are used,
+not decided (the knight at the raw 2 over 2.8125). R1, R2, R22 and R23 are not built. **R24 and R25 (step 76) remain the
+owner's to rule**; this step applies neither further.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce8baea16b94ed84d8d7be84b0`,
+re-checked; the `.ent` files under `reference/extracted/assets/entities/`).
+- **The spawn.** `ETHCallback_ghost_minion` (451487..451999): #1-6 `currentPos = GetPosition()`; #25 `ETHCallback_minion`,
+  whose one `DeleteEntity` follows `isDestroyed` (#1478-1504) - a floor's `destroy`, a strike's, or its own burn
+  (`isBurned` -> `destroy`, `addFlames`, #1456-1471); #35-40 `!IsAlive()`; #43-78 `AddEntity('ghost.ent', currentPos +
+  vector3(0, 0, scale(-1)), 0, out, '', scale(0.3))`; #92-94 `playGhostAppearSound`; #96-103
+  `DeleteEntity(SeekEntity(1430))`, level31b's `anti_sight_wall.ent`, a sensor with no sprite. A fireball burns a minion:
+  `ETHBeginContactCallback_fireball` (418930..419710) #146-173 destroys itself and `burn()`s a non-sensor burnable, and
+  `minion.ent` and `ghost_minion.ent` both carry `burnable 1`.
+- **The init and the appearance.** `ETHCallback_ghost` (451999..457261) #26-324: hp 3, the red line, five `addWaypoint`
+  calls (#173-301: the knight's point, the quarter point, ghost_pos three times; 1200 / 2500 / 50 / 0 / 0 ms;
+  `FloatColor` 0xAA000000, 0xCC000000, 0xFFFFFFFF x 3; `defaultFilter` but the second leg's `smoothEnd`; scale
+  `GetScale().x`, 0.6, 1, 1, 1), `ghost_appear_effect.ent` at `vector3(currentPos, GetPositionZ() + 1f)` (#150-169, a bare
+  1) and `playGameMusic(true)` (#320-324). APPEARING (#369-494) plays them through `WaypointManager::update` (42421..42634,
+  `FrameTimer::set` 23254..23650: at most one frame a call, the first call's reset) and `getCurrentPoint` (41513..42094),
+  and on the fifth goes to SHOOTING with elapsedTime 3000.
+- **The hover and the look.** SHOOTING (#499-512) and RAGE_MODE (#981-998) call `linearMotion(this, true, 0, PIb)` at the
+  `.ent`'s speed 0.7 and stride 8; SHOOTING `SetFrame(0)`, RAGE_MODE `SetFrame(3)` and `SetAlpha(0.5)` and `SetAlpha(1)`
+  on the way out (#1199-1201); DAMAGE `SetAlpha(0.5)` and `bounce(1 -> 1.1, 500)`; DEATH `SetAlpha(1)`, `bounce(1.1 ->
+  1.25, 400)`, `StopSample` of the boss music (#1224-1243) and at 3550 ms `key.ent` at its own `GetPosition()`
+  (#1354-1368). `bounce` (327057..327527) keeps one `blinkElapsedTime`, never reset.
+- **The shot.** `addEnemyShoot` (434575..435266): `enemy_shoot.ent` at `vector3(casterPos, scale(10))`, `portal_mark.ent`
+  at `vector3(finalPos, scale(32))`. `ETHCallback_enemy_shoot` (435266..436701): its first call moves it 16 units along
+  `direction` and adds `projectile_shoot.ent` there (#1-71), its range measured from the muzzle; every call
+  `SetFrame(_projectileFrameTimer.set(0, 5, 30, true))` and `SetAngle(getAngle(dir) - 90)` (#126-148); destroyed, it adds
+  `portal_fail_in_antiportal.ent` at `vector3(its point, 0)` and `startEarthquake(10)` (#316-363).
+- **The appear effect's own callback** (458062..458374): `followUp(this, ghost - scale(8, 8), 600, 100, true)` and
+  `Scale(1.005f)` every frame - `followUp` (328407..329130) eases by `smoothEnd` over 600 ms and aims again after more
+  than 100 ms while it has not arrived; `ETHEntity::Scale` grows every system's lengths and every live particle
+  (`ETHEntity.cpp:591-599`, `ETHParticleManager.cpp:444-451`). D8 left `followUp`'s arguments undecoded; this step read
+  them.
+
+**WHAT WAS BUILT.**
+- **`sim/Ghost`**: `Spawn(knightPx)` - the ghost added at the dying knight's entity point, at the `.ent`'s own white and
+  alpha 1 and scale 0.3, its init on the NEXT tick (INFERRED: `ghost.ent` is static, and a static entity's callback is
+  queued from the draw pass, `ETHScene.cpp:547-572`); the init builds `Appear`, the WaypointManager as the listing plays it
+  (`FrameTimer::set`'s reset, one frame a call, the current waypoint's filter, `min(stride, time) / max(stride, 1)`);
+  `Look` (colour, alpha, scale, cell) written by each arm; the hover through `Motion::Linear` on the ghost's own point
+  (`Alive()` now means added and not gone); every shot an id, its muzzle, its destiny, the 16-unit nudge, and
+  `spentPx` for the layer; `keyName` for the key it drops. `ghost.json` gains `spawn`, `appear.waypoints`, `look`,
+  `shot.cells`, and reads `shot.nudge_px`; `appear.total_ms` and the damage block's `alpha` go (the waypoints and `look`
+  hold them).
+- **`sim/Minions::Burn`** and `Death::byFire`; **`Game`**: the fireball block burns a minion it overlaps (after bombs,
+  before the ghost); after the ghost's Tick, a death of `spawn.by_entity` adds the ghost and destroys node
+  `anti_sight_wall_ent_1430`'s body (found by its id suffix, `tscn.py _node_name`).
+- **`motions.json` `ghost`** (`Motion::Rules::ghost`): the one row whose motion the simulation keeps.
+- **`MagicPortalsLayer`**: `Slot::Ghost` (after the escort's row, before the wall ghost's, -1/2); `syncGhost` on
+  `hd/ghost.png` cut by `Tiers::FrameCut` (121 x 128 units), placed with its pivot on its point at its scale and tinted in
+  `syncLighting` at the `Look`'s colour and alpha; `art.json` `ghost`. The effects runtime: a picture of more than one cell
+  is cut by `FrameCut` with its uv written per frame (no longer the engine's even split), its pivot turned with its angle
+  (`ComputeInScreenSpriteCenter`), an effect's own `followUp` and per-frame `Scale`, and three owners (`Ghost`,
+  `GhostShot`, `Key`); `Effects::Spawn::zBaseUnits` for a bare literal over another entity's depth. `latchSimEffects`
+  adds `ghost_appear_effect.ent` on the init tick, each shot's `enemy_shoot.ent`, `portal_mark.ent` and
+  `projectile_shoot.ent`, a `portal_fail_in_antiportal.ent` where one ends, and the dropped key's `key.ent` with its bob
+  (the key row, a start angle on `m_effectRandom`); `stepLevel` steps `_projectileFrameTimer` once per ghost shot after
+  the player's (the order among callbacks INFERRED); `WantedTrack` (factored out of `updateMusic`) asks for the boss's
+  music from the init and none from DEATH on.
+
+**GAMEPLAY CHANGES - THIS STEP CHANGES GAMEPLAY on 3-29 to 3-32.**
+1. **R4 on 3-32**: no ghost, no shot and no fire-diamond restock from the level's start until the black knight dies;
+   the ghost then flies in from the knight's point over 3.75 s (SHOOTING on its 227th update, 226 after its init)
+   instead of fading in at ghost_pos from the start. The knight can die by fire (below), by the killer floor, or by a
+   strike.
+2. **A fireball burns the minion it reaches**, on the four levels that place a fire diamond and minions (3-29 to 3-32,
+   level28b-31b), the chapter-3 boss's escorts included - the original's `burnable 1`. An explosion's burn of a minion
+   (level18b's bombs) is not built.
+3. **The ghost's point hovers** 8 u up and down in SHOOTING and RAGE_MODE: its shots leave from, and its key drops at,
+   the hovered point.
+4. **A ghost shot starts 16 u out along its way** and its range is measured from the muzzle: it reaches the player's
+   point 16 / 120 s (0.13 s) sooner.
+5. Entity 1430's body is taken away with the knight; it is a sensor nothing in the port reads, so this changes nothing
+   the port plays. Audio only: the boss's music from the ghost's init, silence from its DEATH.
+
+**THE DEPTH (K13).** One new row, `Slot::Ghost`, pinned in `test_mp_layer`: the ghost at the knight's raw 2 over 2.8125
+less one level unit, -0.2889 - after the locked door, before level31b's z-0 platforms and the player (measured on the
+drawn quad), the original's order at 720 p (D8_check C5). No other class moves: nothing reads a `Slot` ordinal but
+`kSlotTable` and `SlotFractionOf` (grep). `ghost_appear_effect` takes the runtime's rule at 0.0667 (a bare 1 over the
+ghost), in front of the z-0 art as the original's 3 - f is. The dropped key is added at the ghost's -0.2889 too, but the
+runtime puts a picture at `slotAfter(round(z))`, and round(-0.2889) is 0: it draws IN FRONT of level31b's z-0 art, where
+the original's (world 2 - f, -0.81) stands behind it - deviation 8.
+
+**THE STREAM (K8).** The dropped key's start angle and every effect's particles draw on `m_effectRandom`; the placement
+stream is untouched. Nothing of the ghost draws a number before the knight dies.
+
+**THE GATES.** "Today" is `b87639e7` and `11.4/after/sweep`. Logs: `out/parity/visuals/12.2/logs/` (the build) and
+`12.2/verify1/` (the independent check, which took the capture gates).
+
+| Gate | Required | Today | Measured |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**, 80 steps (`logs/build1.txt`), then 12 (`build2.txt`, the effect's z fix) and the SAC relinks (`build3`-`build5`); `b5deb246`, the last of those, was launched once and refused. The independent check compiled the 21 changed or header-dependent units with the build's own `cl` command lines into a scratch folder, **0 warnings** (`verify1/wcheck/wcheck_log.txt`), and relinked `MagicPortals.exe`, `test_mp_motion` and `test_mp_diamonds` once, link-only (`verify1/logs/relink1.txt`: 3 links, 0 compiles, 0 warnings): `MagicPortals.exe` **`7e43f9b3`**. No source changed after it; at the commit a dry run on a copy of `build/build.ninja` has no work to do |
+| Cell 3 and alpha 0.5 in rage | cell 3, alpha 0.5 | not drawn | **passes on the drawn quad** (`test_mp_layer` `f6e6f2cf`, the fight driven by taps with the fire diamond carried): `uvOffset.x` 0.7461 (cell 3, 726 of 973 texels), albedo alpha 0.5, white, from RAGE_MODE's first callback; cell 0 and alpha 1 again once it shoots. On the picture (`verify1/face_cells.png`): the raging face shows cell 3's thin eye slit where SHOOTING shows cell 0's thick arc |
+| ... luminance about half of SHOOTING's | a capture | - | **passes as a contrast, not as a raw mean** (`verify1/rage_lum.py`; `route/rage` against `route/bg`, the same background with no ghost at the same camera, 28.80 u): the ghost's contrast over the background in rage is **0.54-0.56** of SHOOTING's (mean \|excess\| 18.1 / 32.1; its bright part 19.8 / 36.5). The literal mean L inside the mask is 40.3 / 49.5 = **0.814**, exactly what a correct alpha 0.5 draw predicts over this background of L 31: 0.5 + 0.5 x Lbg / Lshoot = 0.5 + 0.5 x 31.1 / 49.5 = 0.814; "about half" of the raw mean could hold only over black. Rage is reached only by the port's own fireball rule (a burn from x 256): the original's fireball passes through the ghost (F15 finding 1, the owner's open ruling below) |
+| `enemy_shoot` 6 x 1 sprite with light 64 | the sprite and its light | none | **passes** (`test_mp_layer`): a 42 x 32 cell of `projectile_transparent.png`'s six (uv 42 / 256), light range 64 and halo 146, at scale(10), turned `getAngle(dir) - 90` to 1e-3 degrees, carried by the shot; `portal_mark.ent` at the destiny at scale(32), `projectile_shoot.ent` with it, `portal_fail_in_antiportal.ent` where it ends. On the picture (`verify1/shot_crops.png`): a white-pink core with a red glow leaves the muzzle at (-20, -32) with the growing onda ring and bursts red at the player, as F15 r2 #240-#251; the core about (253, 229, 233) against the original's (252, 234, 235) |
+| `test_mp_ghost` stays at 73 | 73 | 75 (step 97) | **NOT MET, by design**: the plan's 73 predates step 97's 75, and R4 changes what the suite pins. Re-pinned from the decode: **141 checks, 0 failures** |
+| F15 (visual gate), the simulation | the appearance and hover F15 measured | fades in at ghost_pos from the start | **passes** (`test_mp_ghost`): the knight burned at x 640; scale at F15's seven moments within **0.028** (0.728 at +1.729 s against 0.700; 0.994 at +3.435 against 1.000); the path within **4.52 u** of F15's five points (0.63, 0.28, 4.52, 2.55, 1.28); the hover 8.000 u either way, 0 across, first moving UP from the centre at 5.6 u/s (within 0.01), a swing 8983 ms tick-quantised (8976 the closed form; F15 9020-9050 on a slow emulator) |
+| (widened) R4 on 3-32 | no ghost, shot or restock before the knight dies; it comes on any death | a ghost from the start | **passes** (`test_mp_ghost`): 20 s with the player past the red line and the fire diamond gone - no ghost, no shot, no restock, a fireball through ghost_pos burns nothing, entity 1430 standing; a fireball on the knight burns it that tick and adds the ghost at its entity point with 1430's body gone and the other sight wall kept; the killer floor adds it too; its init the tick after, black at alpha 0xAA / 255, scale 0.3; SHOOTING on its 227th update, 226 after its init, every update the five waypoints' closed form to 1e-3 u and 1e-4. In the exe on 3-32 (`verify1/route/clip`): the knight burned by a fireball on tick 468 at (628.8, 206.2), the ghost added that tick, SHOOTING on tick 695, the player dead to its first shot on tick 721; the same walk with no kill adds no ghost |
+| (widened) a fireball burns a minion | the original's `burnable 1` | passes through | **passes** (`test_mp_minions`, `test_mp_ghost`): level0b's patroller burned that tick, a Death by fire, the fireball spent, one 80 u off burning nothing; 3-32's escort burned the same way |
+| F15 (visual gate), the picture | frames against F15's | - | **matches in kind** (`verify1/f15_vs_port_0.png`, `_1.png`): a port clip of the fire route (`verify1/route/clip`, the kill on tick 468, every 2nd frame) against F15 r1, both world-aligned (r1's still camera 227.2 u, the port's 245.69 u; background NCC 0.960). At +0.73, 1.26, 1.73, 2.12, 2.52, 2.94, 3.17, 3.44 and 3.74 s a black translucent silhouette on the knight's spot grows and flies up-left with black puffs chasing it, turns grey with the red face, and arrives at ghost_pos at the same size and place. The back patch's R as a fraction of its arrival value at +2.12 / 2.52 / 2.94 / 3.44 s: original 0.54 / 0.65 / 0.90 / 1.00, port 0.47 / 0.73 / 0.95 / 0.99; arrival colour (77.2, 37.6, 34.6) against the port's (74.7, 38.5, 36.2). A vertical seam through the kill's explosion (f468-f500) is the ghost quad's left edge plus the sprite's 13-texel transparent margin (6.5 u times the scale): the ghost's own silhouette under the additive explosion, as F15 #160 shows. The hover, the hood tracked from f692 (`verify1/hover_cv.py`): -2.84 / -5.33 / -7.47 / -7.82 u at +0.58 / 1.08 / 1.75 / 1.92 s against the model's -3.26 / -5.57 / -7.56 / -7.81, x drift at most 0.71 u. Two differences: deviations 9 and 10 |
+| 1-01 f420 on the new binary | `e2da5131` | `e2da5131` (`b87639e7`) | **passes**: `e2da5131` on `7e43f9b3`, rc 0, the first launch of that hash (`verify1/capture.txt`) |
+| (widened) the 128-level f420 sweep | against `11.4/after/sweep`, every change explained | 128 PNGs | **passes: 128 of 128 byte-identical** (`verify1/compare_sweep.json`), as predicted - without input no knight dies and no fireball meets a minion (the only fireball-and-minion levels need the fire diamond taken), the runtime's new cut and turned pivot change no effect a level adds on its own (`portal.ent` is 1 x 1 with no pivot), and `Slot::Ghost` moves no other class. All 128 runs rc 0, validation active and silent in 128 logs; the baseline's 128 PNGs checked against the md5s its `capture.txt` logged first (128 of 128), and `verify1/sweep`'s against its own at the commit (128 of 128). **Sweep baseline**: `12.2/verify1/sweep` |
+
+**THE SUITES**, run directly, once each, on the binaries in `build/`: **`test_mp_ghost` 141** (75), **`test_mp_minions`
+288** (278; a fireball burns the minion it reaches, and one that misses burns nothing), **`test_mp_effects` 382** (343;
+the five rows, `followUp`, the refusals), **`test_mp_sprites` 1,266** (1,256; `art.json` `ghost` against `ghost.ent`,
+the 121 x 128 cut), **`test_mp_layer` 2,011** (1,959; `TheGhostComesWithItsKnightsDeath`, the table's twelfth
+between-slot row, and step 97's deviation 5 fixed), **`test_mp_boss` 126**, **`test_mp_keys` 124**, **`test_mp_start`
+753**, 0 failures each. `test_mp_layer`'s first binary (`34a5ecec`) ran 2,010 checks with 3 failures - the puffs' depth
+(`effectAdd` did not add `zBaseUnits`, fixed) and two reads a tick early (a state is set on one callback and its face on
+the next, the test fixed) - and its fixed binary was refused once and relinked (`f6e6f2cf`). At the build,
+`test_mp_motion` **failed on its last launch**: `71b2bb20`, 167 checks, **14 failures**, every one a fixture with no
+`ghost` row, which `LoadRules` now requires; the fixture edit that answers them (`kGhostRow`) was built but not
+launched, as `343cc592` and its one relink `46219146` were refused. `test_mp_diamonds` was not launched (`9df89061` and
+its relink `62e5f813` refused); desk-checked then: its `holdingOneTurnsAPortalShotIntoAFireball` now burns level28b's
+wayA patroller, which walks (274-308, 112) on the fireball's line about 0.6 s in, and no check of that case reads the
+minion. Both are closed by the independent check (below). The full `ctest` was not run. No source changed after
+`build2`; the binaries the counts are from: `test_mp_ghost` `6f77b49c`, `test_mp_minions` `ccec8716`, `test_mp_start`
+`691d590d`, `test_mp_layer` `f6e6f2cf`, and `build1`'s `test_mp_effects` `0a7714b1`, `test_mp_sprites` `6cd6f840`,
+`test_mp_boss` `6f0a9427` and `test_mp_keys` `b5fc0076`, which `build2` did not relink. `MagicPortals.exe` `b5deb246`
+was launched once and refused; the independent check's relink `7e43f9b3` supersedes it. **The independent check** ran
+every suite above once more on the same binaries at the same counts and launched the two it relinked: **`test_mp_motion`
+169** (`c8ae473e`, the fixture fix) and **`test_mp_diamonds` 126** (`4241e7ee`), 0 failures each (`verify1/logs/`).
+`test_mp_torch` was not run: its one fireball case is on level25c at the torch (238, 30), and that level's minion stands
+at (316, 208), out of its reach (a desk check).
+
+**SMART APP CONTROL. 11 refusals in 24 launches**: `test_mp_ghost` `98b5c863`, `test_mp_minions` `1932df5c`,
+`test_mp_diamonds` `9df89061` and `62e5f813`, `test_mp_start` `eb5812c1`, `test_mp_motion` `343cc592` and `46219146`,
+`test_mp_layer` `a830c7c5`, `MagicPortals.exe` `701876e8`, `a514d2a4` and `b5deb246`. Accepted: the committed
+`b87639e7` three times (1-01 and two runs of 3-32 calibrating a tap route) and ten suite launches. **The independent
+check: 0 refusals in 147 launches** - 137 of `MagicPortals.exe` `7e43f9b3` (1-01, 127 sweep levels, 6 route runs, 3
+death-tick frames) and 10 suites, after its one link-only relink of the three refused exes. The commit launched
+nothing.
+
+**RECORDED DEVIATIONS.**
+1. **Closed by the independent check: every capture gate** was NOT RUN at the build (Smart App Control); `verify1/`
+   took the F15 picture, the rage luminance, 1-01 and the sweep on `7e43f9b3` (the gate rows).
+2. **Closed by the independent check: `test_mp_motion`** failed on its last launch at the build (167 checks, 14
+   failures, fixtures with no `ghost` row) with its fix unlaunched, and `test_mp_diamonds` was unlaunched; relinked
+   once, they read 169 and 126, 0 failures (above).
+3. **The tick the knight dies draws the ghost** at the `.ent`'s white, alpha 1 and scale 0.3 on the knight's point, for
+   one tick, before its init writes black (INFERRED from the engine's draw pass: a static entity added in a frame's
+   update is drawn in that frame and its callback queued for the next). Pinned in `test_mp_ghost` and `test_mp_layer`;
+   no footage shows it (F15 r1 hides the contact in a 216 ms gap). Seen on the port's picture in the independent check
+   (`verify1/route/deathtick`): f468 draws the 0.3-scale ghost white, its pale tail beside the explosion, and f469
+   draws it black. The original's frame at that tick is still unseen, so the row stays INFERRED against it.
+4. **A fireball within 64 u of the ghost while it is APPEARING** sets `burned`, which the first SHOOTING tick then counts:
+   the port's own fireball rule applied from the ghost's spawn. Unpinned; the original's fireball passes through the
+   ghost in any state (F15).
+5. **The appear effect follows the ghost's tick point** (`Kind::Ghost`), not its drawn one, as the eyes follow the
+   player's (step 97's deviation 2).
+6. **Not built**: every ghost sound and the enemy shot's sounds; `startEarthquake(10)` when a shot ends (track B's Q.1
+   has the earthquake); RAGE_MODE's own fire-diamond restock (#1034-1071); the DAMAGE and DEATH explosions and the death
+   blast; the static bucket clock (`ETHScene.cpp:541-574`: a ghost off the view does not advance in the original, and a
+   knight killed on the floor at y 768 adds its ghost far below the view); the ghost's static box that fails a portal ray
+   across it (F15 finding 2); `no_music` (level31b, level0c, level18c, level31c are silent at load in the original) and
+   `isBossFight` (the boss's music from load on 2-32); an explosion's burn of a minion (level18b).
+7. **Two shots in flight step `_projectileFrameTimer` twice a tick**, the player's first (the original's order among
+   entity callbacks is its scene walk's, INFERRED).
+8. **The dropped key draws in front of level31b's z-0 art** (found by the review of this record, not measured): its
+   `zUnits` is the ghost's -0.2889, but the effects runtime rounds a picture's depth before counting the slot, and
+   round(-0.2889) is 0, so the key and its sparkles stand after the five platforms; the original's key, at the ghost's
+   world 2 - f, stands behind them. The round-at-0 case step 97 noted for the aura, reached here. A picture-only depth,
+   on 3-32 once the ghost has died, and only where the key overlaps z-0 art. Not fixed: a source edit relinks under
+   Smart App Control. Next: the runtime's picture slot for a depth between two slots, unrounded (`Slot::Ghost`'s rule).
+9. **No `fire32` flames on the burned knight** (found by the independent check): F15 r1 #157-#171 shows about 1.3 s
+   of flames on the knight's spot, the minion's burn's `addFlames` (#1456-1471); the port draws the explosion and the
+   blood only (`verify1/f15_vs_port_0.png` at +0.73 and +1.26 s). `addFlames` is not built (`Minions.hpp`'s
+   `byFire` note); step 96 left `fire32` for the owner, and this is the same row.
+10. **The first ghost shot leaves sooner than the original's, unexplained** (found by the independent check): the
+    port's first shot leaves on SHOOTING's first tick (tick 695); F15 section 3 has the original's 0.2-0.3 s after the
+    hover starts, not explained there. With the 16 u nudge, the port's standing player died on tick 721, about 0.5 s
+    before the original's first shot is even visible at the same moment after the kill.
+
+**LEFT FOR THE OWNER.**
+- **Fire against the ghost** (F15 finding 1): the original's fireball passes through `ghost.ent`, a sensor, and only a
+  barrel's `explode()` burns it; the port keeps the fireball because the barrel restock is not built, and explode-only
+  would leave the port's ghost unkillable.
+- `no_music` and `isBossFight` (deviation 6), which change what 3-32, 2-32 and three other levels play at load.
+
+**LEFT FOR LATER.**
+- The ghost's hover moves its SIMULATION point - its shots' origin and its key - through `Motion::OffsetPx`
+  (`Ghost.cpp:122`), which calls `std::cos` (`Motion.cpp:245`, `:252`), where the simulation's trig goes through
+  `DetMath` so replays reproduce (`engine/src/core/DetMath.hpp`; `Ghost.cpp`'s own `SmoothEnd` does). Next: a `DetMath`
+  version of the offset for the simulation's row, leaving the layer's picture motions, and so the sweep, as they are.
+  A simulation change, not made in the commit (found by the independent check).
+- `game/MagicPortalsLayer.hpp`: the `GhostQuad` block and its comment sit between 2-32's dragon comment
+  ("dragon_boss.png cut 2 x 2 ...") and `m_dragonCut`, which it describes. Move the block above that comment in a step
+  that relinks anyway: a header edit relinks every suite under Smart App Control.
+- 4-32's dropped yellow key's picture stays 12.1's (the runtime draws only the ghost's, by its `keyName`).
+
+**MERGE NOTES (`visuals-d`).**
+- The effects runtime now cuts a picture of more than one cell with `Tiers::FrameCut` and turns its pivot with its
+  angle: any effect track B draws with more than one cell, or with a pivot and an angle, moves at the merge.
+- `effects.json` `enemy_shoot_mark` (addEnemyShoot's `portal_mark.ent`) and track B's 10.1 row for the player's shot are
+  two call sites: keep both rows.
+- `Slot::Ghost` is a new row of the between-slot table; reconcile it with any rows track B added.
+- `Minions::Death::byFire` is new; Q.2's `minion_impact` still leaves the black knight out (step 97's note).
+- The enemy shot's `startEarthquake(10)` (#331-333) waits for Q.1's earthquake.

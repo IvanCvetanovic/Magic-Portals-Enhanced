@@ -164,6 +164,37 @@
     ]
   },
 
+  "ghost": {
+    "entities": ["ghost"],
+    "speed": 0.699999988079071,
+    "stride": 8.0,
+    "vertical": true,
+    "axis_deg": 0.0,
+    "start_angle_from": 1.5707963705062866,
+    "start_angle_to": 1.5707963705062866,
+    "_source": [
+      "The chapter-3 boss's hover (the visuals plan's 12.2, planning step 98; decode/D8.md section 1,",
+      "confirmed by D8_check.md section 1). ETHCallback_ghost (bytes 451999..457261) calls linearMotion in",
+      "SHOOTING (ins 499-508) and RAGE_MODE (ins 981-990) and nowhere else, both times with the same",
+      "pushes, last argument first: PshG4 PIb (startAngle), PshC4 0f (angle), SetV1 1 (vertical, raw",
+      "[10, 1] and [41, 1]) and thisEntity. So linearMotion(this, vertical = true, angle = 0, startAngle",
+      "= PIb). speed and stride are ghost.ent's own CustomData, 0.7 and 8 (floats, so 0.7 is",
+      "0.699999988079071); PIb is the engine's 1.570796327f (GameMath.h:40, registered at",
+      "ETHScriptObjRegister.cpp:513-516) and a constant, so nothing is drawn from any phase stream.",
+      "Its offset is 8 cos(PIb + phi) = -8 sin(phi): the ghost starts at the centre of its swing moving",
+      "UP at full speed, 5.6 units a second (D8_check C2), amplitude 8, period 2 PI / 0.7 = 8.976 s.",
+      "",
+      "UNLIKE EVERY ROW ABOVE, THIS ONE MOVES THE ENTITY THE SIMULATION HOLDS (sim/Ghost): the ghost's",
+      "point is where its shots leave from (atPx + muzzle) and where it drops its key, and the original has",
+      "one point, not two (linearMotion ends in SetPosition). Its originalPos is where the first call",
+      "finds it, ghost_pos after APPEARING's last SetPositionXY; DAMAGE and DEATH do not call it, so the",
+      "swing holds there and resumes on the same angle.",
+      "",
+      "FOOTAGE (out/parity/footage/F15.md section 4): vertical only (x constant to +-0.08 u), amplitude",
+      "8.0 u, period 9.02-9.05 s, starting at the centre and moving up, centred on ghost_pos."
+    ]
+  },
+
   "placed": [
     {
       "entity": "hand_drawn_arrow",

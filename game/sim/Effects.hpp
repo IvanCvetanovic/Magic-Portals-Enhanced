@@ -21,7 +21,9 @@
 // red_eyes (MainCharacter), the one effect every level shows: added once at the
 // level's start and moved onto the character's face every frame. And the level's
 // end and a death (11.3): the door's red suck and sparkles, blood where the
-// character or a minion was killed, and a skull where either fell.
+// character or a minion was killed, and a skull where either fell. And chapter
+// 3's ghost (12.2): the shots it fires, what each adds, and the dark puffs that
+// follow it in.
 
 #include <string>
 
@@ -33,6 +35,10 @@ namespace MagicPortals::Effects {
 enum class Turn {
     Fixed,                  // the literal `angleDeg`
     TowardTravellerMinus90, // radianToDegree(getAngle(normalize(traveller - portal))) - 90
+    // radianToDegree(getAngle(its own direction)) - 90, which the entity's callback
+    // sets every frame: the chapter-3 ghost's shot (ETHCallback_enemy_shoot
+    // #139-148), whose direction never changes.
+    AlongFlightMinus90,
 };
 
 // One call site: effects.json's row.
@@ -92,6 +98,34 @@ struct PlacedPortal {
     double deathAfterKillMs = 0.0; // then portal_death.ent and DeleteEntity
 };
 
+// followUp(entity, destPos, interpStride, updateRate, dontPause)
+// (utilEntityEffect.angelscript, bytes 328407..329130), which an entity's own
+// callback calls every frame: it eases the entity toward a point by smoothEnd over
+// `strideMs`, and aims again at most every `rateMs`. The destination is another
+// entity's point plus `offsetUnits`, in the level's units (g_scale.scale).
+struct FollowUpRule {
+    glm::dvec2 offsetUnits{0.0};
+    double strideMs = 0.0;
+    double rateMs = 0.0;
+    bool dontPause = false; // it counts GetLastFrameElapsedTime, which a pause does not stop
+};
+
+// What followUp keeps on the entity: its PositionInterpolator and switchTime.
+struct FollowUp {
+    glm::dvec2 from{0.0};
+    glm::dvec2 to{0.0};
+    double elapsedMs = 0.0;
+    double sinceAimedMs = 0.0; // switchTime
+    bool started = false;
+
+    // One call, `frameMs` into the frame, with the entity at `atPx` and the one it
+    // follows at `targetPx`: where the call puts the entity.
+    glm::dvec2 Tick(const FollowUpRule& rule, const glm::dvec2& atPx, const glm::dvec2& targetPx, double frameMs);
+    // PositionInterpolator::getCurrentPos: the end once the time is past, and
+    // smoothEnd of the fraction before it.
+    glm::dvec2 Current(const FollowUpRule& rule) const;
+};
+
 struct Rules {
     Rule suck;     // vanishEffect's suck_effect.ent, at the entry portal
     Rule sparkles; // vanishEffect's sparkles.ent, where the traveller stood
@@ -125,6 +159,21 @@ struct Rules {
     // killer floor took - each held inside the view by skullInsetUnits.
     Rule skull;
     double skullInsetUnits = 0.0; // g_scale.scale(12)
+    // CHAPTER 3'S GHOST AND ITS SHOTS (the visuals plan's 12.2, planning step 98).
+    // addEnemyShoot's enemy_shoot.ent, the shot itself, and the portal_mark.ent it
+    // adds where the shot is going - named for this call site, for track B's
+    // portal_mark of the player's shot is another call with its own row;
+    // ETHCallback_enemy_shoot's projectile_shoot.ent on its first call and
+    // portal_fail_in_antiportal.ent where it is destroyed; and
+    // ETHCallback_ghost's ghost_appear_effect.ent, with the followUp and the
+    // Scale(1.005) its own callback runs every frame.
+    Rule enemyShoot;
+    Rule enemyShootMark;
+    Rule enemyShootFlash;
+    Rule enemyShootBurst;
+    Rule ghostAppear;
+    FollowUpRule ghostAppearFollow;
+    double ghostAppearScalePerFrame = 1.0;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -138,6 +187,11 @@ struct Spawn {
     glm::dvec2 atPx{0.0};
     double z = 0.0;
     bool zScaled = true;
+    // A depth already on the level's axis that `z` is added to, whichever way `z`
+    // is written: another entity's own GetPositionZ(), to which a call adds a BARE
+    // literal (ETHCallback_ghost's `GetPositionZ() + 1f`). 0 for every call that
+    // gives its z whole.
+    double zBaseUnits = 0.0;
     float angleDeg = 0.0f;
     double scale = 1.0;
 };
@@ -237,5 +291,26 @@ glm::dvec2 KillerSkullPoint(const Rules& rules, double minionX, const glm::dvec2
 
 // AddScaledEntity('skull.ent', vector3(point, 0), getScale()).
 Spawn Skull(const Rules& rules, const glm::dvec2& atPx);
+
+// ---- chapter 3's ghost and its shots (the visuals plan's 12.2) ------------------
+
+// addEnemyShoot #16-45: AddEntity('enemy_shoot.ent', vector3(casterPos, scale(10)),
+// 0, ...) - drawn at the shot's own point from its first call, turned along its
+// direction by that call (#139-148).
+Spawn EnemyShoot(const Rules& rules, const glm::dvec2& shotPx, const glm::dvec2& direction);
+// addEnemyShoot #127-156: AddEntity('portal_mark.ent', vector3(finalPos, scale(32)),
+// 0, ..., getScale()).
+Spawn EnemyShootMark(const Rules& rules, const glm::dvec2& finalPx);
+// ETHCallback_enemy_shoot #57-71, its first call, after the nudge:
+// AddScaledEntity('projectile_shoot.ent', GetPosition(), getScale()) - the shot's
+// own vector3, its depth `shotZUnits` included.
+Spawn EnemyShootFlash(const Rules& rules, const glm::dvec2& shotPx, double shotZUnits);
+// #324-350, once it is destroyed: AddScaledEntity('portal_fail_in_antiportal.ent',
+// vector3(GetPositionXY(), 0), getScale()).
+Spawn EnemyShootBurst(const Rules& rules, const glm::dvec2& shotPx);
+// ETHCallback_ghost's init #150-169: AddScaledEntity('ghost_appear_effect.ent',
+// vector3(currentPos, GetPositionZ() + 1f), getScale()) - at the ghost's point as it
+// is added, the knight's, a BARE 1 over the ghost's own depth `ghostZUnits`.
+Spawn GhostAppear(const Rules& rules, const glm::dvec2& ghostPx, double ghostZUnits);
 
 } // namespace MagicPortals::Effects

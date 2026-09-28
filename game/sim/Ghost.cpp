@@ -3,10 +3,13 @@
 #include "sim/Units.hpp"
 
 #include "core/Components.hpp"
+#include "core/DetMath.hpp"
 #include "core/Json.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -18,6 +21,13 @@ namespace {
 
 namespace Json = Supersonic::Json;
 using Supersonic::TransformComponent;
+
+constexpr const char* kAtSpawn = "spawn";
+constexpr const char* kAtQuarter = "quarter";
+constexpr const char* kAtAnchor = "anchor";
+constexpr const char* kFilterLinear = "linear";
+constexpr const char* kFilterSmoothEnd = "smooth_end";
+constexpr const char* kScaleSpawn = "spawn";
 
 glm::dvec2 PxOf(entt::registry& registry, entt::entity body) {
     return Units::ToPixels(registry.get<TransformComponent>(body).position);
@@ -53,6 +63,17 @@ double MetaNumber(const Tscn::Node& node, const char* key, double fallback) {
     return read;
 }
 
+// smoothEnd(v) = sin(v x PIb) (bytes 313899..313971), through DetMath as every
+// trigonometric call on the simulation's side is: the point it eases is where the
+// ghost shoots from.
+double SmoothEnd(double bias) {
+    return static_cast<double>(Supersonic::DetMath::sin(static_cast<float>(bias) * 1.570796327f));
+}
+
+double Filtered(Filter filter, double bias) {
+    return filter == Filter::SmoothEnd ? SmoothEnd(bias) : bias;
+}
+
 // One placed waypoint, before the prefix has claimed it - Minions::Find's shape,
 // because the patrol this boss hands its escort is an ordinary minion patrol.
 struct Placed {
@@ -61,7 +82,99 @@ struct Placed {
     double holdMs = 0.0;
 };
 
+// FloatColor(uint) (bytes 86246..86521): a = (c >> 24) / 255, r = (c >> 16 & 255)
+// / 255, g and b likewise. Written in ghost.json as the constant the script
+// pushes, "0xAARRGGBB".
+bool Argb(const Json::Value& value, glm::dvec4& out) {
+    if (!value.IsString()) return false;
+    const std::string text = value.AsString();
+    if (text.size() != 10 || text.compare(0, 2, "0x") != 0) return false;
+    char* end = nullptr;
+    const unsigned long argb = std::strtoul(text.c_str() + 2, &end, 16);
+    if (end == nullptr || *end != '\0') return false;
+    const auto channel = [argb](int shift) { return static_cast<double>((argb >> shift) & 0xFFu) / 255.0; };
+    out = glm::dvec4(channel(16), channel(8), channel(0), channel(24));
+    return true;
+}
+
+bool ReadBounce(const Json::Value& value, Bounce& out) {
+    if (!value.IsObject() || !value["from"].IsNumber() || !value["to"].IsNumber() ||
+        !value["stride_ms"].IsNumber() || !(value["stride_ms"].AsNumber() > 0.0) ||
+        !(value["from"].AsNumber() > 0.0) || !(value["to"].AsNumber() > 0.0)) {
+        return false;
+    }
+    out.from = value["from"].AsNumber();
+    out.to = value["to"].AsNumber();
+    out.strideMs = value["stride_ms"].AsNumber();
+    return true;
+}
+
+bool UnitInterval(const Json::Value& value) {
+    return value.IsNumber() && value.AsNumber() >= 0.0 && value.AsNumber() <= 1.0;
+}
+
+// linearMotion (motions.json ghost), as SHOOTING and RAGE_MODE call it: its first
+// call writes originalPos from where the ghost stands, and every call puts the
+// ghost at originalPos plus the swing.
+void Hover(State& ghost, const Motion::Rules& motion, double frameMs) {
+    if (!ghost.hover.started) ghost.hoverOriginPx = ghost.atPx;
+    Motion::Advance(motion, ghost.hover, frameMs);
+    ghost.atPx = ghost.hoverOriginPx + Motion::OffsetPx(ghost.hover);
+}
+
 } // namespace
+
+double Bounce::ScaleAt(double elapsedMs) const {
+    // bounce() #55-102: which leg (elapsed / stride), which way it runs (that count
+    // odd), how far along (the remainder over the stride), eased by smoothEnd.
+    const double strides = std::floor(elapsedMs / strideMs);
+    double bias = (elapsedMs - strides * strideMs) / strideMs;
+    if (std::fmod(strides, 2.0) == 1.0) bias = 1.0 - bias;
+    return from + (to - from) * SmoothEnd(bias);
+}
+
+void Appear::Update(double frameMs) {
+    if (points.empty()) return;
+    // FrameTimer::set (bytes 23254..23650): #3-4 the stride, #6-11 the time added,
+    // #13-43 a changed first or last starts again at first with no time, else
+    // #45-76 ONE frame once the time reaches the stride, the stride taken off, and
+    // past last - this manager does not repeat - held on last with no time.
+    const int wantLast = static_cast<int>(points.size()) - 1;
+    strideMs = points[static_cast<std::size_t>(frame)].timeMs;
+    timeMs += frameMs;
+    if (first != 0 || last != wantLast) {
+        first = 0;
+        last = wantLast;
+        frame = 0;
+        timeMs = 0.0;
+    } else if (timeMs >= strideMs) {
+        ++frame;
+        timeMs -= strideMs;
+        if (frame > last) {
+            frame = last;
+            timeMs = 0.0;
+        }
+    }
+    // WaypointManager::update #39-59: setCurrentStride(waypoints[get()].time).
+    strideMs = points[static_cast<std::size_t>(frame)].timeMs;
+}
+
+Appear::Point Appear::Current() const {
+    if (points.empty()) return Point{};
+    // getCurrentPoint #3-28: the next waypoint, or this one again on the last.
+    const Point& current = points[static_cast<std::size_t>(frame)];
+    const Point& next = points[static_cast<std::size_t>(IsLastFrame() ? frame : frame + 1)];
+    // FrameTimer::getBias (23716..23810): min(stride, time) / max(stride, 1).
+    const double bias = std::min(strideMs, timeMs) / std::max(strideMs, 1.0);
+    // #54-123: the CURRENT waypoint's filter, and interpolate (a + (b - a) x f) for
+    // the scale, the colour (rgb and alpha each) and the point.
+    const double f = Filtered(current.filter, bias);
+    Point blended = current;
+    blended.atPx = current.atPx + (next.atPx - current.atPx) * f;
+    blended.colour = current.colour + (next.colour - current.colour) * f;
+    blended.scale = current.scale + (next.scale - current.scale) * f;
+    return blended;
+}
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     std::ifstream file(path, std::ios::binary);
@@ -102,10 +215,15 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 
     Rules read;
     double maxHp = 0.0;
+    double deletesId = 0.0;
     if (!text_("anchor", "entity_name", read.anchorName)) return false;
     if (!number("body", "max_hp", maxHp)) return false;
     if (!number("body", "radius_px", read.radiusPx)) return false;
-    if (!number("appear", "total_ms", read.appearMs)) return false;
+    if (!text_("spawn", "by_entity", read.spawnedBy)) return false;
+    if (!number("spawn", "z_offset_units", read.spawnZOffsetUnits)) return false;
+    if (!number("spawn", "scale", read.spawnScale)) return false;
+    if (!number("spawn", "deletes_entity_id", deletesId)) return false;
+    if (!number("appear", "mid_fraction", read.midFraction)) return false;
     if (!number("appear", "seed_elapsed_ms", read.seedElapsedMs)) return false;
     if (!number("shooting", "interval_ms", read.intervalMs)) return false;
     if (!number("shooting", "muzzle_x", read.muzzlePx.x)) return false;
@@ -114,12 +232,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!text_("shooting", "diamond_spawn_entity_name", read.diamondSpawnName)) return false;
     if (!number("shot", "speed_px_s", read.shotSpeedPxS)) return false;
     if (!number("shot", "hit_px", read.shotHitPx)) return false;
+    if (!number("shot", "nudge_px", read.shotNudgePx)) return false;
     if (!number("damage", "to_rage_ms", read.toRageMs)) return false;
     if (!number("rage", "summon_window_ms", read.summonWindowMs)) return false;
     if (!text_("rage", "waypoint_prefix", read.waypointPrefix)) return false;
     if (!text_("rage", "anchor_entity_name", read.summonAnchorName)) return false;
     if (!number("death", "burst_ms", read.burstMs)) return false;
     if (!text_("death", "key_colour", read.keyColour)) return false;
+    if (!text_("death", "key_entity_name", read.keyEntityName)) return false;
     read.maxHp = static_cast<int>(maxHp);
 
     // Each of these would look like a boss that works. No hp is a boss that is
@@ -138,18 +258,120 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": shooting.interval_ms is above zero";
         return false;
     }
-    if (read.shotSpeedPxS <= 0.0 || read.shotHitPx <= 0.0) {
-        error = path + ": shot.speed_px_s and shot.hit_px are above zero";
+    if (read.shotSpeedPxS <= 0.0 || read.shotHitPx <= 0.0 || read.shotNudgePx < 0.0) {
+        error = path + ": shot.speed_px_s and shot.hit_px are above zero, and shot.nudge_px is not below it";
         return false;
     }
     if (read.anchorName.empty() || read.waypointPrefix.empty() || read.summonAnchorName.empty()) {
         error = path + ": anchor, rage.waypoint_prefix and rage.anchor_entity_name all name something";
         return false;
     }
-    if (read.keyColour.empty()) {
-        error = path + ": death.key_colour is the colour key.ent's own custom data carries";
+    if (read.keyColour.empty() || read.keyEntityName.empty()) {
+        error = path + ": death.key_colour is the colour key.ent's own custom data carries, and death.key_entity_name "
+                       "the entity DEATH adds";
         return false;
     }
+    // What adds it: a knight that adds nothing, or at a scale of nothing, would be a
+    // ghost that never comes or cannot be seen - and neither is the script's.
+    if (read.spawnedBy.empty() || !(read.spawnScale > 0.0) || deletesId < 0.0 ||
+        deletesId != std::floor(deletesId)) {
+        error = path + ": spawn.by_entity names the entity whose death adds the ghost, spawn.scale is above zero "
+                       "and spawn.deletes_entity_id is a whole number from 0";
+        return false;
+    }
+    read.deletesEntityId = static_cast<int>(deletesId);
+    if (!(read.midFraction > 0.0 && read.midFraction < 1.0)) {
+        error = path + ": appear.mid_fraction lies between the two ends it is the fraction of";
+        return false;
+    }
+
+    // The five waypoints, each stated in full: a leg nobody decoded would fly the
+    // ghost a path the original does not.
+    const Json::Value& waypoints = root["appear"]["waypoints"];
+    if (!waypoints.IsArray() || waypoints.AsArray().empty()) {
+        error = path + ": appear.waypoints is a list of the init block's addWaypoint calls";
+        return false;
+    }
+    for (const Json::Value& entry : waypoints.AsArray()) {
+        const std::string where = path + ": appear.waypoints[" + std::to_string(read.waypoints.size()) + "]";
+        WaypointRule rule;
+        const std::string at = entry["at"].AsString("");
+        if (at == kAtSpawn) {
+            rule.at = WaypointAt::Spawn;
+        } else if (at == kAtQuarter) {
+            rule.at = WaypointAt::Quarter;
+        } else if (at == kAtAnchor) {
+            rule.at = WaypointAt::Anchor;
+        } else {
+            error = where + ".at is spawn, quarter or anchor";
+            return false;
+        }
+        const std::string filter = entry["filter"].AsString("");
+        if (filter == kFilterLinear) {
+            rule.filter = Filter::Linear;
+        } else if (filter == kFilterSmoothEnd) {
+            rule.filter = Filter::SmoothEnd;
+        } else {
+            error = where + ".filter is linear or smooth_end";
+            return false;
+        }
+        if (!entry["time_ms"].IsNumber() || entry["time_ms"].AsNumber() < 0.0) {
+            error = where + ".time_ms is a number from 0";
+            return false;
+        }
+        rule.timeMs = entry["time_ms"].AsNumber();
+        if (!Argb(entry["argb"], rule.colour)) {
+            error = where + ".argb is the FloatColor constant, \"0xAARRGGBB\"";
+            return false;
+        }
+        const Json::Value& scale = entry["scale"];
+        if (scale.IsString() && scale.AsString() == kScaleSpawn) {
+            rule.scaleIsSpawn = true;
+        } else if (scale.IsNumber() && scale.AsNumber() > 0.0) {
+            rule.scale = scale.AsNumber();
+        } else {
+            error = where + ".scale is \"spawn\" or a number above zero";
+            return false;
+        }
+        read.waypoints.push_back(rule);
+    }
+
+    // What the arms write on the entity: none defaulted, since a cell or an alpha
+    // nobody decoded would be drawn as if it were the script's.
+    const Json::Value& look = root["look"];
+    const auto frame = [&look](const char* key, int& into) {
+        const Json::Value& value = look[key];
+        if (!value.IsNumber() || value.AsNumber() < 0.0 || value.AsNumber() != std::floor(value.AsNumber())) {
+            return false;
+        }
+        into = static_cast<int>(value.AsNumber());
+        return true;
+    };
+    if (!look.IsObject() || !frame("shooting_frame", read.shootingFrame) || !frame("rage_frame", read.rageFrame) ||
+        !UnitInterval(look["rage_alpha"]) || !UnitInterval(look["alpha_leaving_rage"]) ||
+        !UnitInterval(look["damage_alpha"]) || !UnitInterval(look["death_alpha"]) ||
+        !ReadBounce(look["damage_bounce"], read.damageBounce) || !ReadBounce(look["death_bounce"], read.deathBounce)) {
+        error = path + ": look needs shooting_frame and rage_frame (whole numbers from 0), rage_alpha, "
+                       "alpha_leaving_rage, damage_alpha and death_alpha (each 0..1), and damage_bounce and "
+                       "death_bounce (from and to above 0, stride_ms above 0)";
+        return false;
+    }
+    read.rageAlpha = look["rage_alpha"].AsNumber();
+    read.alphaLeavingRage = look["alpha_leaving_rage"].AsNumber();
+    read.damageAlpha = look["damage_alpha"].AsNumber();
+    read.deathAlpha = look["death_alpha"].AsNumber();
+
+    // The one timer every shot steps (shot.cells).
+    const Json::Value& cells = root["shot"]["cells"];
+    if (!cells.IsObject() || !cells["first"].IsNumber() || !cells["last"].IsNumber() ||
+        !cells["stride_ms"].IsNumber() || cells["first"].AsNumber() < 0.0 ||
+        cells["last"].AsNumber() < cells["first"].AsNumber() || !(cells["stride_ms"].AsNumber() > 0.0)) {
+        error = path + ": shot.cells needs first, last from first, and a stride_ms above 0";
+        return false;
+    }
+    read.shotFirstCell = static_cast<int>(cells["first"].AsNumber());
+    read.shotLastCell = static_cast<int>(cells["last"].AsNumber());
+    read.shotCellStrideMs = cells["stride_ms"].AsNumber();
 
     out = std::move(read);
     return true;
@@ -161,8 +383,24 @@ bool Plays(const Rules& rules, const Tscn::Node& node) {
     return Roles::EntityName(node) == rules.anchorName;
 }
 
-State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size_t minionsStanding, float dt) {
+void State::Spawn(const glm::dvec2& knightPx) {
+    if (!present || spawned) return;
+    spawned = true;
+    initialised = false;
+    spawnPx = knightPx;
+    atPx = knightPx;
+    // AddEntity's scale(0.3), on an entity whose own colour is the .ent's white at
+    // alpha 1 until its callback writes one.
+    look = Look{};
+    look.scale = rules.spawnScale;
+    blinkMs = 0.0;
+    hover = Motion::Linear{};
+}
+
+State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size_t minionsStanding,
+                        const Motion::Rules& motion, float dt) {
     Turn turn;
+    spentPx.clear();
     if (!present) return turn;
 
     const double ms = static_cast<double>(dt) * 1000.0;
@@ -186,33 +424,74 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size
             if (playerThere && !playerKilled && Squared(playerPx - shot.atPx) < hit2) {
                 playerKilled = true;
                 killedBy = name;
+                spentPx.push_back(shot.atPx);
                 continue; // and the shot destroys itself
             }
-            if (shot.flownPx >= shot.rangePx) continue;
+            if (shot.flownPx >= shot.rangePx) {
+                spentPx.push_back(shot.atPx);
+                continue;
+            }
             living.push_back(shot);
         }
         shots = std::move(living);
     }
 
-    if (gone) return turn;
+    // R4: nothing of it runs before the black knight's death adds it, and its first
+    // callback is the tick after that (Spawn).
+    if (!spawned || gone) return turn;
+
+    if (!initialised) {
+        // THE INIT BLOCK (#26-324): elapsedTime, state and shotsFired 0, hp 3, the
+        // red line, and the five waypoints from where it stands now and ghost_pos -
+        // then playGameMusic(bossFight = true), which the layer plays.
+        initialised = true;
+        turn.initialised = true;
+        hp = rules.maxHp;
+        phase = Phase::Appearing;
+        elapsedMs = 0.0;
+        shotsFired = 0;
+        const glm::dvec2 current = atPx;
+        const glm::dvec2 mid = current + (anchorPx - current) * rules.midFraction;
+        appear = Appear{};
+        for (const WaypointRule& rule : rules.waypoints) {
+            Appear::Point point;
+            point.atPx = rule.at == WaypointAt::Spawn ? current : (rule.at == WaypointAt::Quarter ? mid : anchorPx);
+            point.timeMs = rule.timeMs;
+            point.colour = rule.colour;
+            point.filter = rule.filter;
+            // GetScale().x: the entity's own scale, which AddEntity gave it.
+            point.scale = rule.scaleIsSpawn ? look.scale : rule.scale;
+            appear.points.push_back(point);
+        }
+        hover = Motion::Start(motion.ghost, motion.ghost.startFrom);
+    }
 
     elapsedMs += ms;
 
     switch (phase) {
         case Phase::Appearing: {
-            // Degenerate here: every appear waypoint is ghost_pos, because the
-            // port's ghost is not flown in by a dying ghost_minion. What is left
-            // of it is the duration. Ghost.hpp says why.
-            if (elapsedMs > rules.appearMs) {
+            // #369-494: update, getCurrentPoint, and the point, the colour, the
+            // scale and the alpha written; the last frame goes to SHOOTING.
+            appear.Update(ms);
+            const Appear::Point point = appear.Current();
+            atPx = point.atPx;
+            look.colour = glm::dvec3(point.colour);
+            look.alpha = point.colour.a;
+            look.scale = point.scale;
+            if (appear.IsLastFrame()) {
                 phase = Phase::Shooting;
                 // NOT zero: the original seeds the clock at the shot interval, so
                 // the first shot comes on the first frame of SHOOTING.
                 elapsedMs = rules.seedElapsedMs;
+                shotsFired = 0;
             }
             break;
         }
 
         case Phase::Shooting: {
+            // #499-512: linearMotion, then SetFrame(0).
+            Hover(*this, motion, ms);
+            look.frame = rules.shootingFrame;
             if (elapsedMs > rules.intervalMs) {
                 elapsedMs = 0.0;
 
@@ -221,15 +500,24 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size
                 // one down the gutter mouth survivable.
                 turn.restockDiamond = hasDiamondSpawn;
 
-                // And it shoots only at a player past the red line.
+                // And it shoots only at a player past the red line, from its own
+                // point - wherever the hover has put it - plus the muzzle.
                 if (playerThere && (!hasRedLine || playerPx.x > redLineX)) {
                     const glm::dvec2 from = atPx + rules.muzzlePx;
                     const glm::dvec2 along = playerPx - from;
                     const double reach = Length(along);
                     if (reach > 0.0) {
                         Shot made;
-                        made.atPx = from;
-                        made.velocityPx = (along / reach) * rules.shotSpeedPxS;
+                        made.id = ++shotsMade;
+                        made.directionPx = along / reach;
+                        made.fromPx = from;
+                        made.destinyPx = playerPx;
+                        // ETHCallback_enemy_shoot's first call moves it nudge_px
+                        // along its way before it flies, and measures its range from
+                        // the muzzle (ghost.json shot._nudge_px).
+                        made.atPx = from + made.directionPx * rules.shotNudgePx;
+                        made.flownPx = rules.shotNudgePx;
+                        made.velocityPx = made.directionPx * rules.shotSpeedPxS;
                         made.rangePx = reach;
                         shots.push_back(made);
                         ++shotsFired;
@@ -254,15 +542,25 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size
             if (hp <= 0) {
                 phase = Phase::Death;
                 elapsedMs = 0.0;
-            } else if (elapsedMs > rules.toRageMs) {
-                phase = Phase::Rage;
-                elapsedMs = 0.0;
-                summonedThisRage = false;
+            } else {
+                // #789-816: SetAlpha(0.5) and bounce(1 -> 1.1, 500), in place.
+                look.alpha = rules.damageAlpha;
+                blinkMs += ms;
+                look.scale = rules.damageBounce.ScaleAt(blinkMs);
+                if (elapsedMs > rules.toRageMs) {
+                    phase = Phase::Rage;
+                    elapsedMs = 0.0;
+                    summonedThisRage = false;
+                }
             }
             break;
         }
 
         case Phase::Rage: {
+            // #981-998: linearMotion, SetFrame(3), SetAlpha(0.5).
+            Hover(*this, motion, ms);
+            look.frame = rules.rageFrame;
+            look.alpha = rules.rageAlpha;
             // It waits on its escort. While none stands it calls one, inside the
             // first window; once one stands it STAYS here until the player kills
             // it, and only then has the window passed and it goes back to
@@ -277,12 +575,18 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size
                 } else {
                     phase = Phase::Shooting;
                     elapsedMs = 0.0;
+                    // #1199-1201: SetAlpha(1) on the way back out.
+                    look.alpha = rules.alphaLeavingRage;
                 }
             }
             break;
         }
 
         case Phase::Death: {
+            // #1220-1263: SetAlpha(1) and bounce(1.1 -> 1.25, 400), in place.
+            look.alpha = rules.deathAlpha;
+            blinkMs += ms;
+            look.scale = rules.deathBounce.ScaleAt(blinkMs);
             if (elapsedMs > rules.burstMs) {
                 gone = true;
                 turn.droppedKey = true;
@@ -300,12 +604,20 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
     out.rules = rules;
 
     std::vector<Placed> placed;
+    const std::string deletesSuffix = "_" + std::to_string(rules.deletesEntityId);
 
     for (const Tscn::Node& node : scene.nodes) {
         if (node.parent != ".") continue;
 
         const std::string entity = Roles::EntityName(node);
         const std::string role = Roles::RoleOf(roles, node);
+
+        // The entity the knight's death deletes, by its id: the converter names a
+        // node <entity>_<id> (tscn.py _node_name), so the id is its name's suffix.
+        if (rules.deletesEntityId > 0 && out.deletesNode.empty() && node.name.size() > deletesSuffix.size() &&
+            node.name.compare(node.name.size() - deletesSuffix.size(), deletesSuffix.size(), deletesSuffix) == 0) {
+            out.deletesNode = node.name;
+        }
 
         if (role == Roles::kWaypoint) {
             Placed one;
@@ -356,10 +668,16 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
         }
         out.present = true;
         out.name = node.name;
+        out.keyName = node.name + "#key";
+        out.anchorPx = atPx;
         out.atPx = atPx;
     }
 
-    if (!out.present) return true;
+    if (!out.present) {
+        // A level with no ghost has nothing for a knight's death to delete either.
+        out.deletesNode.clear();
+        return true;
+    }
 
     out.hp = rules.maxHp;
     out.phase = Phase::Appearing;

@@ -719,6 +719,25 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     ghost.alphaBase = ghostEntry["alpha_base"].AsNumber();
     ghost.alphaAmplitude = ghostEntry["alpha_amplitude"].AsNumber();
     ghost.spinDegPerSec = ghostEntry["spin_deg_per_s"].AsNumber();
+
+    // Chapter 3's boss: ghost.ent's picture, whose cell is chosen by its script,
+    // and its pivot. Without the pivot it would hang off its point as nobody read.
+    if (!root.Has("ghost")) {
+        error = path + ": ghost is an object";
+        return false;
+    }
+    const Json::Value& bossEntry = root["ghost"];
+    if (!ReadPicture(bossEntry, "ghost", static_cast<Picture&>(read.ghost), why, false)) {
+        error = path + ": " + why;
+        return false;
+    }
+    glm::dvec2 bossPivot(0.0);
+    if (!Pair(bossEntry["pivot_px"], bossPivot)) {
+        error = path + ": ghost needs pivot_px";
+        return false;
+    }
+    read.ghost.pivotXPx = bossPivot.x;
+    read.ghost.pivotYPx = bossPivot.y;
     out = std::move(read);
     return true;
 }

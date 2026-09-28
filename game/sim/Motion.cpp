@@ -209,7 +209,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     if (!ReadRow(path, root, "crystal", read.crystal, error) || !ReadRow(path, root, "key", read.key, error) ||
-        !ReadRow(path, root, "door", read.door, error) || !ReadPlaced(path, root, read, read.placed, error)) {
+        !ReadRow(path, root, "door", read.door, error) || !ReadRow(path, root, "ghost", read.ghost, error) ||
+        !ReadPlaced(path, root, read, read.placed, error)) {
         return false;
     }
     out = std::move(read);

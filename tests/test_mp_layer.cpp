@@ -7932,6 +7932,7 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::WellRing) == -0.5);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::DoorHighlight) == -0.5);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::WallGhost) == -0.5);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Ghost) == -0.5);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ThrownStone) == -0.5);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::HaloNoPicture) == -0.5);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Effect) == -0.5);
@@ -7945,19 +7946,19 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Systems) == 0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::ShotHalo) == 0.5);
 
-    // THE TIE THE TABLE STATES. The eleven between-slot classes share one
+    // THE TIE THE TABLE STATES. The twelve between-slot classes share one
     // fraction, so two of them at one z_index land on exactly one z; what orders
     // them there is the order the port adds their quads, which is the order of
     // the rows - the minions before the escort a boss summons, as the original's
     // escort is spawned by a minion and shares its depth. The table pins the
-    // ORDER, not uniqueness (00_order K13). The twelfth row at -1/2, a
+    // ORDER, not uniqueness (00_order K13). The thirteenth row at -1/2, a
     // placement's lifted systems (step 92), spreads over the quarter after it,
-    // so it stands on no z the eleven do.
+    // so it stands on no z the twelve do.
     int tied = 0;
     for (const auto& row : table) {
         if (row.fraction == -0.5 && !row.spreads) ++tied;
     }
-    CHECK_MSG(tied == 11, "eleven classes stand between the slots: " + std::to_string(tied));
+    CHECK_MSG(tied == 12, "twelve classes stand between the slots: " + std::to_string(tied));
     CHECK(static_cast<int>(Slot::Minion) < static_cast<int>(Slot::Escort));
     CHECK(static_cast<int>(Slot::TimerDial) < static_cast<int>(Slot::WellRing));
     // The two the merge of the two tracks added, each where the layer adds its
@@ -7967,6 +7968,10 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     CHECK(static_cast<int>(Slot::WellRing) < static_cast<int>(Slot::DoorHighlight));
     CHECK(static_cast<int>(Slot::DoorHighlight) < static_cast<int>(Slot::HaloNoPicture));
     CHECK(static_cast<int>(Slot::Escort) < static_cast<int>(Slot::WallGhost));
+    // Chapter 3's boss (planning step 98): syncGhost runs after syncMinions and
+    // before syncWallGhost, so its row stands between the escort's and the wall's.
+    CHECK(static_cast<int>(Slot::Escort) < static_cast<int>(Slot::Ghost));
+    CHECK(static_cast<int>(Slot::Ghost) < static_cast<int>(Slot::WallGhost));
     CHECK(static_cast<int>(Slot::WallGhost) < static_cast<int>(Slot::Effect));
     // A placement's lifted systems: after every picture of the gap they land in,
     // before its placed portals, effect halos and effect systems.
@@ -9581,7 +9586,8 @@ void TheBlackKnightCarriesItsAuraAsAMultiply() {
             if (count != 1) continue;
             aura = now;
             ++carried;
-            const MagicPortalsLayer::MinionReport* drawn = MinionOf(layer.MinionReports(), "minion_spawn_908");
+            const std::vector<MagicPortalsLayer::MinionReport> minionReports = layer.MinionReports();
+            const MagicPortalsLayer::MinionReport* drawn = MinionOf(minionReports, "minion_spawn_908");
             if (drawn == nullptr || drawn->quad == entt::null) continue;
             const glm::dvec2 drawnPx =
                 MagicPortals::Units::ToPixels(registry.get<TransformComponent>(drawn->quad).position) + pivot;
@@ -9681,7 +9687,8 @@ void TheBlackKnightCarriesItsAuraAsAMultiply() {
     // the player at 1.42 - where the original sorts it (ETHEntityRenderingManager.cpp:
     // 94-104).
     const float auraZ = aura.systemZ.empty() ? 0.0f : aura.systemZ.front();
-    const MagicPortalsLayer::MinionReport* drawn = MinionOf(layer.MinionReports(), "minion_spawn_908");
+    const std::vector<MagicPortalsLayer::MinionReport> minionReports = layer.MinionReports();
+    const MagicPortalsLayer::MinionReport* drawn = MinionOf(minionReports, "minion_spawn_908");
     float deepestAtZero = 1e9f;
     float door = -1e9f;
     for (const MagicPortalsLayer::PictureReport& picture : layer.PictureReports()) {
@@ -9728,6 +9735,310 @@ void TheBlackKnightCarriesItsAuraAsAMultiply() {
     layer.OnDetach(registry);
 }
 
+// CHAPTER 3'S BOSS (the visuals plan's 12.2, planning step 98; the owner's standing
+// ruling R4). level31b plays for a while with no ghost at all and the level's own
+// music; the black knight dies and ghost.ent is added where it went, drawn at the
+// .ent's own white at scale 0.3 on that tick, one level unit behind the knight -
+// behind the level's z-0 art - and black at alpha 0.667 from its first callback,
+// the tick after, which also starts the boss's music and adds the dark puffs that
+// chase it in. Then the fight, driven as a player drives it: the fire diamond
+// carried, taps at the ghost that become fireballs, a shot of its own with the
+// three entities its calls add, the raging face at alpha 0.5, and at the end the
+// key it drops - the level's only one - drawn as the key.ent the script adds.
+void TheGhostComesWithItsKnightsDeath() {
+    if (!OriginalArtIsThere("TheGhostComesWithItsKnightsDeath")) return;
+    MagicPortals::Art::Rules art;
+    std::string artError;
+    CHECK_MSG(MagicPortals::Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", art, artError),
+              artError);
+    const glm::dvec2 pivot(art.ghost.pivotXPx, art.ghost.pivotYPx);
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    const auto frame = [&layer, &registry](const glm::vec2& pointer, std::vector<std::string> down,
+                                           std::vector<std::string> pressed) {
+        tickWith(layer, registry, pointer, std::move(down), std::move(pressed));
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    };
+    const auto step = [&frame]() { frame(kRest, {}, {}); };
+    const auto effectsNamed = [&layer](const char* entity) {
+        std::vector<MagicPortalsLayer::EffectReport> found;
+        for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
+            if (one.entity == entity) found.push_back(one);
+        }
+        return found;
+    };
+
+    // BEFORE: a second of the level, and no ghost, no puffs, the level's own music.
+    for (int tick = 0; tick < 60; ++tick) step();
+    CHECK_MSG(layer.GhostDrawing().present && !layer.GhostDrawing().spawned && !layer.GhostDrawing().drawn &&
+                  Tagged(registry, "Magic Portals Ghost") == 0,
+              "level31b has a ghost_pos and no ghost while its knight lives");
+    CHECK_MSG(layer.WantedTrack() == "game", "and the level's own music: " + layer.WantedTrack());
+    CHECK_MSG(effectsNamed("ghost_appear_effect.ent").empty(), "and no puffs");
+
+    // THE KNIGHT DIES: onto the level's killer floor, where the frame after ends it.
+    const MagicPortals::Minions::Minion* knight = level.minions.FindMinion("minion_spawn_908");
+    if (knight == nullptr || knight->body == entt::null || level.minions.killers.empty()) {
+        CHECK_MSG(false, "level31b's knight and its killer floor");
+        return;
+    }
+    const entt::entity body = knight->body;
+    const glm::vec2 centre = level.minions.killers.front().box.centre;
+    const glm::dvec2 floorPx = MagicPortals::Units::ToPixels(glm::vec3(centre.x, centre.y, 0.0f));
+    for (int tick = 0; tick < 5 && registry.valid(body); ++tick) {
+        PutBodyAt(registry, body, floorPx);
+        step();
+    }
+    CHECK_MSG(!registry.valid(body) && level.ghost.spawned, "the floor took the knight, and the ghost is added");
+    if (!level.ghost.spawned) return;
+    const MagicPortalsLayer::GhostReport added = layer.GhostDrawing();
+    const double lookZ = 2.0 / 2.8125 - 1.0;
+    CHECK_MSG(added.drawn && Tagged(registry, "Magic Portals Ghost") == 1 && EndsWith(added.texture, "hd/ghost.png"),
+              "drawn on the tick it is added, from hd/ghost.png: " + added.texture);
+    CHECK_MSG(added.colour == glm::dvec3(1.0) && added.alpha == 1.0 && added.scale == 0.3 && added.cell == 0,
+              "at the .ent's own white, alpha 1, on cell 0, at scale(0.3)");
+    CHECK_MSG(added.frameUnits == glm::dvec2(121.0, 128.0) && glm::distance(added.sizePx, glm::dvec2(36.3, 38.4)) < 1e-9,
+              "a frame of 121 x 128 units, at 0.3: " + Point(added.sizePx));
+    CHECK_MSG(glm::distance(added.centrePx, added.atPx - pivot * 0.3) < 1e-9 && added.atPx == level.ghost.spawnPx,
+              "its pivot (-6, 10) on the knight's point, scaled");
+    CHECK_MSG(NearD(added.lookZ, lookZ, 1e-12), "one level unit behind the knight's raw 2: " + std::to_string(added.lookZ));
+    {
+        const auto& transform = registry.get<TransformComponent>(added.quad);
+        CHECK_MSG(transform.position.z == added.z &&
+                      glm::distance(MagicPortals::Units::ToPixels(transform.position), added.centrePx) < 1e-3,
+                  "and its quad is placed there");
+        const auto& material = registry.get<MaterialComponent>(added.quad);
+        CHECK_MSG(glm::distance(glm::dvec2(material.uvScale), added.uvScale) < 1e-6 &&
+                      glm::distance(glm::dvec2(material.uvOffset), glm::dvec2(0.0)) < 1e-9,
+                  "sampling cell 0 of the sheet as the original cuts it");
+    }
+    // Its depth among the art: after the locked door at -6, before level31b's z-0
+    // platforms and the player - the knight's raw 2 less one level unit, -0.29.
+    float deepestAtZero = 1e9f;
+    float door = -1e9f;
+    for (const MagicPortalsLayer::PictureReport& picture : layer.PictureReports()) {
+        if (picture.zIndex == 0) deepestAtZero = std::min(deepestAtZero, picture.z);
+        if (picture.node == "door_locked_ent_1252") door = picture.z;
+    }
+    CHECK_MSG(added.z > door && added.z < deepestAtZero && added.z < layer.PlayerSlotZ(),
+              "behind the z-0 art " + std::to_string(deepestAtZero) + " and the player, in front of the locked door " +
+                  std::to_string(door) + ": " + std::to_string(added.z));
+    CHECK_MSG(layer.WantedTrack() == "game", "its init has not run: the level's music still");
+
+    // ITS FIRST CALLBACK: black at alpha 0.667, the boss's music, and the puffs.
+    step();
+    const MagicPortalsLayer::GhostReport first = layer.GhostDrawing();
+    CHECK_MSG(first.colour == glm::dvec3(0.0) && NearD(first.alpha, 170.0 / 255.0, 1e-12) && NearD(first.scale, 0.3, 1e-12),
+              "waypoint 0: black, alpha 0.667, scale 0.3");
+    {
+        const auto& material = registry.get<MaterialComponent>(first.quad);
+        CHECK_MSG(glm::distance(glm::dvec4(material.albedoColor), glm::dvec4(0.0, 0.0, 0.0, 170.0 / 255.0)) < 1e-6,
+                  "drawn black at that alpha (emissive 1: no room darkens it)");
+    }
+    CHECK_MSG(layer.WantedTrack() == "boss", "playGameMusic(bossFight = true) from its init: " + layer.WantedTrack());
+    const std::vector<MagicPortalsLayer::EffectReport> puffs = effectsNamed("ghost_appear_effect.ent");
+    CHECK_MSG(puffs.size() == 1, "one ghost_appear_effect.ent: " + std::to_string(puffs.size()));
+    if (puffs.size() == 1) {
+        CHECK_MSG(NearD(puffs[0].zUnits, lookZ + 1.0 / 2.8125, 1e-12),
+                  "a bare 1 over the ghost's depth: " + std::to_string(puffs[0].zUnits));
+        CHECK_MSG(puffs[0].systems == 1 && puffs[0].pool == 4 && puffs[0].temporary && !puffs[0].drawn,
+                  "four black sharp_explosion puffs, no picture, temporary");
+    }
+
+    // IT FLIES IN, the puffs after it (followUp) and growing (Scale 1.005 a frame).
+    double puffSize = puffs.empty() || puffs[0].systemSizePx.empty() ? 0.0 : puffs[0].systemSizePx[0];
+    int ticks = 0;
+    double worstChase = 0.0;
+    int chased = 0;
+    while (ticks < 400 && level.ghost.phase == MagicPortals::Ghost::Phase::Appearing) {
+        step();
+        ++ticks;
+        const std::vector<MagicPortalsLayer::EffectReport> now = effectsNamed("ghost_appear_effect.ent");
+        if (now.size() == 1 && ticks > 60) {
+            ++chased;
+            worstChase = std::max(worstChase, glm::distance(now[0].atPx, level.ghost.atPx + glm::dvec2(-8.0, -8.0)));
+            if (!now[0].systemSizePx.empty()) puffSize = now[0].systemSizePx[0];
+        }
+    }
+    CHECK_MSG(level.ghost.phase == MagicPortals::Ghost::Phase::Shooting && ticks == 226,
+              "at ghost_pos and shooting 226 ticks after its first callback: " + std::to_string(ticks));
+    const MagicPortalsLayer::GhostReport arrived = layer.GhostDrawing();
+    CHECK_MSG(arrived.colour == glm::dvec3(1.0) && arrived.alpha == 1.0 && arrived.scale == 1.0 &&
+                  arrived.atPx == level.ghost.anchorPx,
+              "white, alpha 1, scale 1, at ghost_pos");
+    CHECK_MSG(chased > 0 && puffSize > 24.0 * 2.0, "the puffs chased it and grew: size " + std::to_string(puffSize) +
+                                                     " after " + std::to_string(chased) + " frames, worst " +
+                                                     std::to_string(worstChase) + " u behind");
+
+    // THE FIGHT. The fire diamond carried, then the player behind the red line, in
+    // the pocket left of the gutter - where the ghost does not shoot.
+    if (level.diamonds.diamonds.empty() || level.player == entt::null) return;
+    const glm::dvec2 diamondPx = level.diamonds.diamonds[0].atPx;
+    for (int tick = 0; tick < 30 && !level.diamonds.carrierHasFire; ++tick) {
+        PutBodyAt(registry, level.player, diamondPx);
+        step();
+    }
+    CHECK_MSG(level.diamonds.carrierHasFire, "the player carries the fire diamond");
+    // Just short of the red line at 262 and right of the gutter's steam (x 235-245,
+    // which would take the diamond): the ghost at 488 is a few units off the view's
+    // right edge from here, so the tap is on the way to it, and the fireball flies on.
+    const glm::dvec2 pocket(258.0, 200.0);
+    const auto burnIt = [&]() {
+        const int hitsBefore = level.ghost.hits;
+        for (int attempt = 0; attempt < 4 && level.ghost.hits == hitsBefore; ++attempt) {
+            for (int tick = 0; tick < 30; ++tick) {
+                PutBodyAt(registry, level.player, pocket);
+                step();
+            }
+            PutBodyAt(registry, level.player, pocket);
+            const glm::dvec2 from = playerPx(registry, layer);
+            const glm::dvec2 aim = from + (level.ghost.atPx - from) * 0.8;
+            frame(screenOf(registry, aim), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+            for (int tick = 0; tick < 240 && level.ghost.hits == hitsBefore; ++tick) {
+                PutBodyAt(registry, level.player, pocket);
+                step();
+            }
+        }
+        return level.ghost.hits > hitsBefore;
+    };
+    const bool burned = burnIt();
+    CHECK_MSG(burned, "a tap at the ghost with the fire diamond carried burns it: " + lastFailure(layer));
+    if (!burned) return;
+    // DAMAGE, then RAGE_MODE: the raging face, cell 3, at alpha 0.5.
+    for (int tick = 0; tick < 300 && level.ghost.phase != MagicPortals::Ghost::Phase::Rage; ++tick) {
+        PutBodyAt(registry, level.player, pocket);
+        step();
+    }
+    CHECK_MSG(level.ghost.phase == MagicPortals::Ghost::Phase::Rage, "hurt, and then raging");
+    // DAMAGE's last callback set the state; RAGE_MODE's first writes the face.
+    PutBodyAt(registry, level.player, pocket);
+    step();
+    const MagicPortalsLayer::GhostReport rage = layer.GhostDrawing();
+    {
+        const auto& material = registry.get<MaterialComponent>(rage.quad);
+        const glm::dvec2 cell3 = MagicPortals::Tiers::UvOffset(
+            MagicPortals::Tiers::Cut{glm::ivec2(486, 128), glm::ivec2(121, 128), glm::dvec2(242.0, 256.0),
+                                     rage.uvScale},
+            3, 0);
+        CHECK_MSG(rage.cell == 3 && glm::distance(glm::dvec2(material.uvOffset), cell3) < 1e-6,
+                  "raging on cell 3: " + std::to_string(rage.cell));
+        CHECK_MSG(NearD(rage.alpha, 0.5, 1e-12) && std::fabs(material.albedoColor.a - 0.5f) < 1e-6f &&
+                      material.albedoColor.r == 1.0f,
+                  "at alpha 0.5, white: half SHOOTING's weight on every texel");
+        std::printf("  level31b: raging on cell 3 at alpha %.2f (uv %.4f), scale %.4f\n", rage.alpha,
+                    static_cast<double>(material.uvOffset.x), rage.scale);
+    }
+
+    // ITS ESCORT, onto the killer floor, and it shoots again.
+    const auto killEscorts = [&]() {
+        for (int tick = 0; tick < 60; ++tick) {
+            bool any = false;
+            for (const MagicPortals::Minions::Minion& minion : level.minions.minions) {
+                if (!minion.summoned || minion.gone || minion.body == entt::null || !registry.valid(minion.body)) continue;
+                PutBodyAt(registry, minion.body, floorPx);
+                any = true;
+            }
+            PutBodyAt(registry, level.player, pocket);
+            step();
+            if (!any && level.ghost.phase == MagicPortals::Ghost::Phase::Shooting) return true;
+        }
+        return level.ghost.phase == MagicPortals::Ghost::Phase::Shooting;
+    };
+    CHECK_MSG(killEscorts(), "its escort taken, it comes back out shooting");
+    // RAGE_MODE's last callback set SetAlpha(1); SHOOTING's first writes cell 0.
+    CHECK_MSG(layer.GhostDrawing().cell == 3 && layer.GhostDrawing().alpha == 1.0,
+              "at alpha 1 as it leaves, still on cell 3");
+    PutBodyAt(registry, level.player, pocket);
+    step();
+    CHECK_MSG(layer.GhostDrawing().cell == 0 && layer.GhostDrawing().alpha == 1.0, "and on cell 0 once it shoots again");
+
+    // A SHOT: the player past the red line for one beat, and then back behind it.
+    const glm::dvec2 exposed(400.0, 200.0);
+    const int shotsBefore = level.ghost.shotsMade;
+    for (int tick = 0; tick < 240 && level.ghost.shotsMade == shotsBefore; ++tick) {
+        PutBodyAt(registry, level.player, exposed);
+        step();
+    }
+    CHECK_MSG(level.ghost.shotsMade == shotsBefore + 1, "past the red line, it shoots");
+    PutBodyAt(registry, level.player, pocket);
+    step();
+    step();
+    const std::vector<MagicPortalsLayer::EffectReport> shots = effectsNamed("enemy_shoot.ent");
+    const std::vector<MagicPortalsLayer::EffectReport> marks = effectsNamed("portal_mark.ent");
+    const std::vector<MagicPortalsLayer::EffectReport> flashes = effectsNamed("projectile_shoot.ent");
+    CHECK_MSG(shots.size() == 1 && marks.size() == 1 && flashes.size() == 1,
+              "enemy_shoot.ent, portal_mark.ent and projectile_shoot.ent: " + std::to_string(shots.size()) + ", " +
+                  std::to_string(marks.size()) + ", " + std::to_string(flashes.size()));
+    if (shots.size() == 1 && !level.ghost.shots.empty()) {
+        const MagicPortalsLayer::EffectReport& shot = shots[0];
+        const MagicPortals::Ghost::Shot& flying = level.ghost.shots.front();
+        CHECK_MSG(shot.drawn && shot.hasLight && shot.hasHalo && NearD(shot.lightRange, 64.0, 1e-9) &&
+                      glm::distance(shot.haloPx, glm::dvec2(146.0)) < 1e-9,
+                  "its picture, its light of range 64 and its halo of 146");
+        CHECK_MSG(shot.followKind == MagicPortalsLayer::EffectOwner::Kind::GhostShot && shot.atPx == flying.atPx,
+                  "carried by the shot: " + Point(shot.atPx) + " for " + Point(flying.atPx));
+        CHECK_MSG(glm::distance(shot.cellPx, glm::dvec2(42.0, 32.0)) < 1e-9 && shot.cell >= 0 && shot.cell <= 5 &&
+                      NearD(shot.uvScale.x, 42.0 / 256.0, 1e-9),
+                  "a 42 x 32 cell of projectile_transparent.png's six: cell " + std::to_string(shot.cell));
+        CHECK_MSG(NearD(shot.zUnits, 10.0, 1e-12), "at scale(10)");
+        const double wantAngle = std::atan2(flying.directionPx.x, flying.directionPx.y);
+        const double wantDeg = (wantAngle < 0.0 ? wantAngle + 2.0 * 3.14159265358979 : wantAngle) * 180.0 /
+                                   3.14159265358979 -
+                               90.0;
+        CHECK_MSG(std::fabs(shot.angleDeg - wantDeg) < 1e-3, "turned along its way: " + std::to_string(shot.angleDeg));
+        CHECK_MSG(glm::distance(marks[0].atPx, flying.destinyPx) < 1e-9 && NearD(marks[0].zUnits, 32.0, 1e-12),
+                  "the mark where the player stood, at scale(32)");
+    }
+    // It flies out its range and bursts where it ends.
+    int bursts = 0;
+    for (int tick = 0; tick < 240 && bursts == 0; ++tick) {
+        PutBodyAt(registry, level.player, pocket);
+        step();
+        bursts = static_cast<int>(effectsNamed("portal_fail_in_antiportal.ent").size());
+    }
+    CHECK_MSG(bursts == 1 && effectsNamed("enemy_shoot.ent").empty(), "and ends in a portal_fail_in_antiportal.ent");
+
+    // TWO MORE BURNS, and the key.
+    for (int round = 0; round < 2; ++round) {
+        const bool again = burnIt();
+        CHECK_MSG(again, "burned again, round " + std::to_string(round + 2));
+        if (!again) return;
+        if (level.ghost.hp > 0) {
+            for (int tick = 0; tick < 300 && level.ghost.phase != MagicPortals::Ghost::Phase::Rage; ++tick) {
+                PutBodyAt(registry, level.player, pocket);
+                step();
+            }
+            killEscorts();
+        }
+    }
+    for (int tick = 0; tick < 400 && !level.ghost.gone; ++tick) {
+        PutBodyAt(registry, level.player, pocket);
+        step();
+    }
+    CHECK_MSG(level.ghost.gone && Tagged(registry, "Magic Portals Ghost") == 0, "it has gone, and its picture");
+    CHECK_MSG(layer.WantedTrack().empty(), "and its DEATH stopped the music: '" + layer.WantedTrack() + "'");
+    step();
+    const std::vector<MagicPortalsLayer::EffectReport> keys = effectsNamed("key.ent");
+    CHECK_MSG(keys.size() == 1, "the key it drops is drawn: " + std::to_string(keys.size()));
+    if (keys.size() == 1) {
+        CHECK_MSG(keys[0].drawn && keys[0].systems == 2 && keys[0].followKind == MagicPortalsLayer::EffectOwner::Kind::Key,
+                  "key.png and its two sparkles, carried as the key is");
+        CHECK_MSG(NearD(keys[0].zUnits, lookZ, 1e-12), "at the ghost's own depth");
+        CHECK_MSG(glm::distance(keys[0].atPx, level.keys.keys.back().atPx) < 1.6, "where it lies, bobbing: " +
+                                                                                     Point(keys[0].atPx));
+    }
+    std::printf("  level31b: the ghost added on the knight's death, in at ghost_pos 226 ticks later, burned %d times, "
+                "shot %d, and dropped its key\n",
+                level.ghost.hits, level.ghost.shotsMade);
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheBetweenSlotTableSaysWhereEachClassStands();
@@ -9751,6 +10062,7 @@ void runTests() {
     AMinionTheFloorTakesLeavesASkullAndBlood();
     AMinionAStrikeTakesLeavesBloodAndNoSkull();
     TheBlackKnightCarriesItsAuraAsAMultiply();
+    TheGhostComesWithItsKnightsDeath();
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();

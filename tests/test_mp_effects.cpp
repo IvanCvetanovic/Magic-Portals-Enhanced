@@ -597,6 +597,100 @@ void TheKillFadeIsNineTenthsAFrame() {
     CHECK(Effects::KillFade(rules, red, 0.0) == red);
 }
 
+// ---- chapter 3's ghost and its shots (the visuals plan's 12.2) ------------------
+
+void TheGhostsCallsAreItsOwn() {
+    const Effects::Rules rules = TheRules();
+
+    // addEnemyShoot #16-45: AddEntity('enemy_shoot.ent', vector3(casterPos, scale(10)),
+    // ...), turned along its way by its own callback (#139-148).
+    const Effects::Rule& shot = rules.enemyShoot;
+    CHECK_MSG(shot.entity == "enemy_shoot.ent", "shot: " + shot.entity);
+    CHECK_MSG(shot.offsetUnits == 0.0 && shot.offsetFixedUnits == glm::dvec2(0.0), "shot: no offset");
+    CHECK_MSG(shot.z == 10.0 && shot.zScaled, "shot: z scale(10)");
+    CHECK(shot.turn == Effects::Turn::AlongFlightMinus90 && shot.scale == 1.0);
+    // #127-156: portal_mark.ent at vector3(finalPos, scale(32)), unturned.
+    const Effects::Rule& mark = rules.enemyShootMark;
+    CHECK_MSG(mark.entity == "portal_mark.ent" && mark.z == 32.0 && mark.zScaled && mark.turn == Effects::Turn::Fixed &&
+                  mark.angleDeg == 0.0 && mark.scale == 1.0 && mark.offsetUnits == 0.0,
+              "mark: portal_mark.ent at scale(32), unturned");
+    // ETHCallback_enemy_shoot #57-71: projectile_shoot.ent at the shot's own vector3.
+    const Effects::Rule& flash = rules.enemyShootFlash;
+    CHECK_MSG(flash.entity == "projectile_shoot.ent" && flash.z == 0.0 && flash.zScaled &&
+                  flash.turn == Effects::Turn::Fixed && flash.scale == 1.0,
+              "flash: projectile_shoot.ent, 0 over the shot's depth");
+    // #324-350: portal_fail_in_antiportal.ent at vector3(its point, 0f).
+    const Effects::Rule& burst = rules.enemyShootBurst;
+    CHECK_MSG(burst.entity == "portal_fail_in_antiportal.ent" && burst.z == 0.0 && !burst.zScaled &&
+                  burst.turn == Effects::Turn::Fixed && burst.scale == 1.0,
+              "burst: portal_fail_in_antiportal.ent at a bare 0");
+    // ETHCallback_ghost's init #150-169: a BARE 1 over the ghost's own depth, and the
+    // effect's own callback: followUp(ghost - scale(8, 8), 600, 100, true), Scale(1.005f).
+    const Effects::Rule& appear = rules.ghostAppear;
+    CHECK_MSG(appear.entity == "ghost_appear_effect.ent" && appear.z == 1.0 && !appear.zScaled &&
+                  appear.turn == Effects::Turn::Fixed && appear.scale == 1.0,
+              "appear: ghost_appear_effect.ent, a bare 1 over the ghost");
+    CHECK_MSG(rules.ghostAppearFollow.offsetUnits == glm::dvec2(-8.0, -8.0) && rules.ghostAppearFollow.strideMs == 600.0 &&
+                  rules.ghostAppearFollow.rateMs == 100.0 && rules.ghostAppearFollow.dontPause,
+              "its followUp: 8 up and left of the ghost, 600 ms, every 100 ms, whatever the pause");
+    CHECK_MSG(rules.ghostAppearScalePerFrame == static_cast<double>(1.005f), "and Scale(1.005f) every frame");
+
+    // Where each lands.
+    const glm::dvec2 at(612.25, 205.5);
+    const glm::dvec2 dir(-0.6, -0.8);
+    const Effects::Spawn fired = Effects::EnemyShoot(rules, at, dir);
+    CHECK_MSG(fired.atPx == at && fired.z == 10.0 && fired.zScaled, "the shot at its own point, z 10");
+    CHECK_MSG(std::fabs(static_cast<double>(fired.angleDeg) - AngleOf(dir)) < 1e-4,
+              "turned getAngle(dir) - 90: " + Num(fired.angleDeg) + " for " + Num(AngleOf(dir)));
+    const Effects::Spawn marked = Effects::EnemyShootMark(rules, glm::dvec2(400.0, 208.0));
+    CHECK_MSG(marked.atPx == glm::dvec2(400.0, 208.0) && marked.z == 32.0 && marked.angleDeg == 0.0f,
+              "the mark where the shot is going");
+    const Effects::Spawn flashed = Effects::EnemyShootFlash(rules, at, 10.0);
+    CHECK_MSG(flashed.atPx == at && flashed.z == 10.0 && flashed.zScaled && flashed.zBaseUnits == 0.0,
+              "the flash at the shot's own vector3");
+    const Effects::Spawn burst0 = Effects::EnemyShootBurst(rules, at);
+    CHECK_MSG(burst0.atPx == at && burst0.z == 0.0 && !burst0.zScaled, "the burst at its point, a bare 0");
+    const Effects::Spawn appeared = Effects::GhostAppear(rules, at, 2.0 / 2.8125 - 1.0);
+    CHECK_MSG(appeared.atPx == at && appeared.z == 1.0 && !appeared.zScaled &&
+                  std::fabs(appeared.zBaseUnits - (2.0 / 2.8125 - 1.0)) < 1e-12,
+              "the puffs at the ghost's point, a bare 1 over its own depth");
+
+    // followUp, a call at a time: the first eases from where it stands to the
+    // destination by smoothEnd over 600 ms; it is not aimed again until more than
+    // 100 ms have passed since, and then from where it is now.
+    const Effects::FollowUpRule& follow = rules.ghostAppearFollow;
+    Effects::FollowUp up;
+    const glm::dvec2 start(640.0, 206.0);
+    const glm::dvec2 ghost(640.0, 206.0);
+    glm::dvec2 now = up.Tick(follow, start, ghost, 16.0);
+    const glm::dvec2 dest = ghost + glm::dvec2(-8.0, -8.0);
+    const double eased = std::sin(16.0 / 600.0 * kPi / 2.0);
+    CHECK_MSG(glm::distance(now, start + (dest - start) * eased) < 1e-4,
+              "one frame toward 8 up and left: " + At(now));
+    // The ghost moves off; for 100 ms and one frame more the old ease runs on.
+    const glm::dvec2 moved(620.0, 200.0);
+    for (int frame = 0; frame < 6; ++frame) now = up.Tick(follow, now, moved, 16.0);
+    const double eased7 = std::sin(7.0 * 16.0 / 600.0 * kPi / 2.0);
+    CHECK_MSG(glm::distance(now, start + (dest - start) * eased7) < 1e-4, "still easing to the first destination");
+    now = up.Tick(follow, now, moved, 16.0); // switchTime 112 > 100: aimed again from here
+    CHECK_MSG(up.to == moved + glm::dvec2(-8.0, -8.0) && up.elapsedMs == 16.0,
+              "aimed again after more than 100 ms, at the ghost's new point");
+    // Aimed again every 112 ms while it has not arrived, each time from where it is:
+    // a 600 ms ease restarted before it ends, so it closes in on the point rather
+    // than landing on it - sin(112 / 600 x PI / 2) of what is left, each time.
+    const glm::dvec2 there = moved + glm::dvec2(-8.0, -8.0);
+    const double gap = glm::distance(now, there);
+    bool closing = true;
+    double last = gap;
+    for (int frame = 0; frame < 63; ++frame) {
+        now = up.Tick(follow, now, moved, 16.0);
+        const double left = glm::distance(now, there);
+        closing = closing && left < last;
+        last = left;
+    }
+    CHECK_MSG(closing && last < gap * 0.1, "and closes on it, frame by frame: " + Num(gap) + " -> " + Num(last));
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
@@ -691,6 +785,20 @@ void ARowMissingAFactIsRefused() {
             "\"entity\": \"blood.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
             "\"entity\": \"blood.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": false},",
             "blood.z");
+    // Chapter 3's ghost (12.2): each row, the shot's turn, the flash's depth over the
+    // shot's, and the appear effect's own callback.
+    refused("no_enemy_shoot.json", "\"enemy_shoot\": {", "\"enemy_shoot_gone\": {", "enemy_shoot");
+    refused("no_enemy_mark.json", "\"enemy_shoot_mark\": {", "\"enemy_mark_gone\": {", "enemy_shoot_mark");
+    refused("no_enemy_flash.json", "\"enemy_shoot_flash\": {", "\"enemy_flash_gone\": {", "enemy_shoot_flash");
+    refused("no_enemy_burst.json", "\"enemy_shoot_burst\": {", "\"enemy_burst_gone\": {", "enemy_shoot_burst");
+    refused("no_ghost_appear.json", "\"ghost_appear_effect\": {", "\"ghost_appear_gone\": {", "ghost_appear_effect");
+    refused("shot_unturned.json", "\"angle\": \"along_flight_minus_90\",", "\"angle\": 0,", "enemy_shoot");
+    refused("flash_bare.json",
+            "\"entity\": \"projectile_shoot.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
+            "\"entity\": \"projectile_shoot.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": false},",
+            "enemy_shoot_flash.z");
+    refused("no_follow.json", "\"follow_up\": {", "\"follow_gone\": {", "ghost_appear_effect");
+    refused("no_grow.json", "\"scale_per_frame\": 1.0049999952316284,", "", "ghost_appear_effect");
     refused("no_inset.json", "\"inset_units\": 12,", "", "skull.inset_units");
     refused("no_room.json", "\"inset_units\": 12,", "\"inset_units\": 0,", "skull.inset_units");
 
@@ -714,6 +822,7 @@ int main() {
     TheManagerColoursTheFirstTwoAndBlanksALonePortal();
     TheKillFadeIsNineTenthsAFrame();
     TheLevelsEndAndADeathLandWhereTheScriptPutsThem();
+    TheGhostsCallsAreItsOwn();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

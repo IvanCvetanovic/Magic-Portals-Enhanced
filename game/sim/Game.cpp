@@ -341,6 +341,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // chain ripples a tick at a time rather than collapsing into one frame.
     {
         std::vector<std::string> spent;
+        std::vector<entt::entity> burnedMinions;
         const glm::vec2 half(static_cast<float>(Units::ToMetres(level.turrets.rules.hitPx.x * 0.5)),
                              static_cast<float>(Units::ToMetres(level.turrets.rules.hitPx.y * 0.5)));
         for (const Turrets::Fireball& ball : level.turrets.fireballs) {
@@ -380,6 +381,22 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
                     break;
                 }
             }
+            // A minion: minion.ent and ghost_minion.ent are both burnable, a
+            // non-sensor burnable is burned (#159-173), and a burned minion's own
+            // callback destroys it (Minions::Burn, planning step 98). This is how
+            // 3-32's black knight dies by fire, and so how its ghost comes (R4).
+            if (!struck) {
+                for (const Minions::Minion& minion : level.minions.minions) {
+                    if (minion.gone || minion.body == entt::null || !registry.valid(minion.body)) continue;
+                    if (!Trigger::Overlaps(registry, minion.body, box)) continue;
+                    // Two fireballs on one minion in one tick are both spent on it.
+                    if (std::find(burnedMinions.begin(), burnedMinions.end(), minion.body) == burnedMinions.end()) {
+                        burnedMinions.push_back(minion.body);
+                    }
+                    struck = true;
+                    break;
+                }
+            }
             // And chapter 3's boss, which is the ONLY thing a fireball can hurt
             // that Fire does not hold: the ghost is not a scene entity, so
             // Fire::Find never sees it. Its GHOST_RADIUS is a radius rather than
@@ -405,6 +422,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
                 return std::find(spent.begin(), spent.end(), ball.name) != spent.end();
             });
         }
+        for (const entt::entity gone : level.minions.Burn(registry, burnedMinions)) Forget(level, gone);
     }
     for (const entt::entity gone : level.launchers.Cull(registry)) Forget(level, gone);
     // And a minion the step left in a killer floor. Not a hazard: that floor does
@@ -507,7 +525,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             ++standing;
         }
 
-        const Ghost::State::Turn turn = level.ghost.Tick(registry, level.player, standing, dt);
+        const Ghost::State::Turn turn = level.ghost.Tick(registry, level.player, standing, data.motion, dt);
 
         // The escort, on the patrol the boss resolved when the level was found.
         if (turn.summon) {
@@ -523,7 +541,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         // lock. Its colour is key.ent's own, not the keyhole's.
         if (turn.droppedKey) {
             Keys::Key dropped;
-            dropped.name = level.ghost.name + "#key";
+            dropped.name = level.ghost.keyName;
             dropped.colour = level.ghost.rules.keyColour;
             dropped.atPx = turn.keyPx;
             dropped.fromPx = turn.keyPx;
@@ -558,6 +576,32 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         if (level.ghost.playerKilled && !level.hazards.playerDied) {
             level.hazards.playerDied = true;
             level.hazards.killedBy = level.ghost.killedBy;
+        }
+
+        // R4, THE OWNER'S STANDING RULING: the black knight's death adds the ghost.
+        // ETHCallback_ghost_minion runs ETHCallback_minion (#25), which deletes the
+        // knight however it was destroyed - a killer floor, a strike, a burn - and
+        // then, finding it not alive (#35-40), adds ghost.ent at the point it read
+        // before (#43-78) and deletes the level's entity 1430 (#96-103). AFTER the
+        // ghost's Tick, so its first callback is the next tick (ghost.json spawn).
+        if (!level.ghost.spawned) {
+            for (const Minions::Death& death : level.minions.deaths) {
+                if (death.minion >= level.minions.minions.size()) continue;
+                if (level.minions.minions[death.minion].entity != level.ghost.rules.spawnedBy) continue;
+                level.ghost.Spawn(death.atPx);
+                // DeleteEntity(SeekEntity(1430)): level31b's anti_sight_wall, a
+                // sensor with no sprite. Its body goes as a crushed platform's does.
+                if (!level.ghost.deletesNode.empty()) {
+                    const auto found = level.built.entities.find(level.ghost.deletesNode);
+                    if (found != level.built.entities.end()) {
+                        const entt::entity gone = found->second;
+                        if (registry.valid(gone)) registry.destroy(gone);
+                        Forget(level, gone);
+                        level.built.entities.erase(found);
+                    }
+                }
+                break;
+            }
         }
     }
     // Chapter 4's torches. BEFORE Portals::Tick on purpose: lighting one calls
