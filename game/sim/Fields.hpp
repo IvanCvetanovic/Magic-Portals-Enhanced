@@ -37,11 +37,13 @@
 // boss's, the carrancas' and the fire's are, so there is one death in the port
 // and not four.
 //
-// Not built, and recorded in data/fields.json: the spin, the throb, the tint, the
-// z offset, the bounce pulse, the sound and the death entity. And the burnable
-// flag 11 placements carry, which needs no wiring: Fire sets `burned` on such an
-// agent and never removes it, because removal is gated on fire.json's fade_names
-// and those are the crates.
+// The ring's picture - its spin, its per-frame throb, its tint and its absolute
+// depth of -10 - is the layer's (art.json shock_ring, the visuals plan's 13.1),
+// drawn where this State puts atPx; the death entity is effects.json's. Not built,
+// and recorded in data/fields.json: the agent's bounce pulse and the sound. And the
+// burnable flag 11 placements carry, which needs no wiring: Fire sets `burned` on
+// such an agent and never removes it, because removal is gated on fire.json's
+// fade_names and those are the crates.
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"

@@ -166,17 +166,33 @@ std::string BareEntityName(const Tscn::Node& node) {
     return entity;
 }
 
-// One cell of a particle system's bitmap in units, as the port samples it: the
-// bitmap's texels over its density, split evenly by the system's SpriteCut (the
-// engine's SpriteAnimationComponent). The original strides a cut particle sheet in
-// whole units (ETHParticleManager::DrawParticleSystem calls SetupSpriteRects,
-// ETHParticleManager.cpp:397-401; gs2d Sprite.cpp:119-120), so on a sheet whose
-// units are not a multiple of its columns - tesla_shock_black_bg.png, 256 over 5 -
-// its cell is 51 units where this is 51.2. A quad is drawn at the particle's own
-// size either way (Particles::QuadPx); only where a cell is sampled differs.
+// One cell of a particle system's bitmap in units, split evenly by the system's
+// SpriteCut: the engine's SpriteAnimationComponent, and the cell wherever the
+// bitmap's units divide by the cut. A quad is drawn at the particle's own size
+// either way (Particles::QuadPx); only where a cell is sampled differs.
 glm::dvec2 ParticleCellUnits(const Sprites::Image& image, const Particles::System& system) {
     return glm::dvec2(image.texels) / static_cast<double>(image.density) /
            glm::dvec2(system.columns, system.rows);
+}
+
+// Whether a system's cut sheet is one the even split would sample past, and the
+// original's own cut of it when so. SetupSpriteRects strides a cut sheet in whole
+// units (gs2d Sprite.cpp:119-130) and DrawParticleSystem sets each particle's rect
+// from it (ETHParticleManager.cpp:397-401): where the units divide by the cut the
+// flipbook's even split is that same rect, and where they do not - shock_strike.png,
+// 512 over 5, and tesla_shock_black_bg.png, 256 over 5 - the quad takes the
+// original's (Emitter::wholeUnitCut). One rule for a level's emitters, an effect's
+// and the loading screen's.
+bool WholeUnitCut(const Sprites::Image& image, const Particles::System& system, Tiers::Cut& out) {
+    if (system.Frames() <= 1) return false;
+    Tiers::Cut cut;
+    std::string why;
+    if (!Tiers::FrameCut(image.texels, image.density, system.columns, system.rows, cut, why)) return false;
+    if (cut.frameUnits.x * system.columns == cut.units.x && cut.frameUnits.y * system.rows == cut.units.y) {
+        return false;
+    }
+    out = cut;
+    return true;
 }
 
 } // namespace
@@ -567,6 +583,8 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_wallGhost = WallGhost{};
     for (BlackBarQuad& bar : m_blackBars) destroy(bar.quad);
     m_blackBars.clear();
+    for (ShockRingQuad& ring : m_shockRings) destroy(ring.quad);
+    m_shockRings.clear();
     for (MinionQuad& minion : m_minions) destroy(minion.quad);
     m_minions.clear();
     // The walk arrows and the corner buttons go with the level they were built
@@ -799,6 +817,13 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
             emitter.z = systemZ(drawn.z, Slot::Systems, static_cast<int>(slot), static_cast<int>(systems.size()));
             emitter.image = image.path;
             emitter.cellPx = ParticleCellUnits(image, system);
+            // A shock agent's and a shock diamond's tesla_shock_black_bg.png, cut as
+            // the original cuts it (step 67's recorded deviation, the visuals plan's
+            // 13.1). It moves no draw: the stream is the placement one as before.
+            if (WholeUnitCut(image, system, emitter.cut)) {
+                emitter.wholeUnitCut = true;
+                emitter.cellPx = glm::dvec2(emitter.cut.frameUnits);
+            }
             // Which entity and which of its systems: a light's brightness follows
             // the live share of its owner's FIRST system (syncLights).
             emitter.sprite = static_cast<int>(index);
@@ -837,6 +862,10 @@ bool MagicPortalsLayer::addEntityEmitters(const std::string& entity, const glm::
         emitter.z = z + 0.001f * static_cast<float>(m_emitters.size());
         emitter.image = image.path;
         emitter.cellPx = ParticleCellUnits(image, system);
+        if (WholeUnitCut(image, system, emitter.cut)) {
+            emitter.wholeUnitCut = true;
+            emitter.cellPx = glm::dvec2(emitter.cut.frameUnits);
+        }
         emitter.slot = static_cast<int>(slot);
         emitter.particles = Particles::MakePool(system, std::min(system.count, kMaxParticles), owner,
                                                 [this](double from, double to) { return particleRandom(from, to); });
@@ -1316,19 +1345,11 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
                             Slot::EffectSystems, slot, systems);
         emitter.image = image.path;
         emitter.cellPx = ParticleCellUnits(image, system);
-        // SetupSpriteRects strides a cut sheet in whole units (Sprite.cpp:119-130)
-        // and DrawParticleSystem sets each particle's rect from it
-        // (ETHParticleManager.cpp:397-401). Where the units divide by the cut, the
-        // flipbook's even split is the same rect; where they do not - shock_strike.png,
-        // 512 over 5 - the quad takes the original's own (Emitter::wholeUnitCut).
-        if (system.Frames() > 1) {
-            Tiers::Cut cut;
-            std::string why;
-            if (Tiers::FrameCut(image.texels, image.density, system.columns, system.rows, cut, why) &&
-                (cut.frameUnits.x * system.columns != cut.units.x || cut.frameUnits.y * system.rows != cut.units.y)) {
-                emitter.wholeUnitCut = true;
-                emitter.cut = cut;
-            }
+        // SetupSpriteRects strides a cut sheet in whole units: shock_strike.png, 512
+        // over 5, takes the original's own rect (WholeUnitCut), and reports its frame.
+        if (WholeUnitCut(image, system, emitter.cut)) {
+            emitter.wholeUnitCut = true;
+            emitter.cellPx = glm::dvec2(emitter.cut.frameUnits);
         }
         emitter.sprite = -1; // no level sprite carries it: this effect does
         emitter.slot = slot;
@@ -3730,6 +3751,14 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             m_sprites.push_back(std::move(made));
         }
     }
+    // THE RING EACH SHOCK AGENT ADDS ROUND ITSELF (art.json shock_ring), at the
+    // absolute -10. Resolved HERE, for slotAfter's sake: it counts what is in
+    // m_sprites at or below the depth asked, so the door glow below (z_index -22,
+    // on 4-04 to 4-08, 4-12, 4-14 and 4-15, which place rings too) must not be in
+    // it yet, or every ring on those levels would stand a slot too deep; the well
+    // rings above stand at -5 and are not counted at -10. The rings' own quads are
+    // not m_sprites', so nothing after them counts them.
+    buildShockRings(registry);
     // THE GLOW BEHIND A `shadowless_door` LEVEL'S EXIT DOOR (art.json door), which
     // no level file places: Game::readProperties adds a door_highlight.ent at the
     // door's own point on the 17 levels that set `shadowless_door` and
@@ -3859,6 +3888,146 @@ std::vector<MagicPortalsLayer::BlackBarReport> MagicPortalsLayer::BlackBars() co
         report.centrePx = bar.centrePx;
         report.sizePx = bar.sizePx;
         report.z = kLayerableTopZ;
+        reports.push_back(std::move(report));
+    }
+    return reports;
+}
+
+// THE RING EACH SHOCK AGENT ADDS ROUND ITSELF (art.json shock_ring; the visuals plan's
+// 13.1, decode D6 and its check). ETHCallback_shock_agent adds shock_area.ent at its
+// own point on its first frame, at the ABSOLUTE depth g_scale.scale(-10) - not the
+// agent's z less 10, and six agents stand at another z than 0 - sizes it to the
+// lethal diameter with scaleToSize and colours it (0.4, 0.5, 0.5). The port builds
+// one per field with the level's art. The picture is the .ent's own, read at run
+// time: white_ring.png, whose 720 px tier is hd/white_ring.png, 256 texels at density
+// 2 (drawnImage), drawn at scaleToSize's size and not at the file's 128 units.
+//
+// An .ent the port cannot draw as the original draws this one - a vertical or
+// layerable type, a pivot, particles or a light the decode did not read - leaves the
+// rings out and says why, as the black bars do.
+void MagicPortalsLayer::buildShockRings(entt::registry& registry) {
+    m_shockRings.clear();
+    m_shockRingEntity = Art::Entity{};
+    const std::vector<Fields::Field>& fields = m_level.fields.fields;
+    if (fields.empty()) return;
+    const Art::ShockRing& rules = m_artRules.shockRing;
+    std::string error;
+    if (!Art::LoadEnt(m_paths.original + "/entities/" + rules.entity, m_shockRingEntity, error)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "no ring round the shock agents: " << error << std::endl;
+        return;
+    }
+    const Art::Entity& entity = m_shockRingEntity;
+    if (entity.sprite.empty() || entity.type != Art::EntityType::Horizontal || entity.pivotPx != glm::dvec2(0.0) ||
+        !entity.systems.empty() || entity.light.has_value()) {
+        SUPERSONIC_LOG_WARN("Magic Portals")
+            << "no ring round the shock agents: " << rules.entity
+            << " is not the plain horizontal picture the decode read (a sprite, type 0, no pivot, no particles, "
+               "no light)"
+            << std::endl;
+        return;
+    }
+    const Sprites::Image& image = drawnImage(originalImage(entity.sprite));
+    if (image.units.x <= 0 || image.units.y <= 0) {
+        SUPERSONIC_LOG_WARN("Magic Portals")
+            << "no ring round the shock agents: " << image.path << " could not be read" << std::endl;
+        return;
+    }
+    // After the level's pictures at or below -10 and before the next: the art at
+    // -70 to -14 behind it on 3-24, the platforms at 0 and the agent itself in front.
+    const double lookZ = rules.LevelZ(m_artRules.scaleFactor);
+    const float z = slotAfter(lookZ, Slot::ShockRing);
+    for (std::size_t i = 0; i < fields.size(); ++i) {
+        const Fields::Field& field = fields[i];
+        ShockRingQuad ring;
+        ring.field = static_cast<int>(i);
+        ring.texture = image.path;
+        ring.atPx = field.atPx;
+        ring.baseUnits = rules.SizeUnits(field.radiusPx);
+        ring.turn.degPerS = rules.spinDegPerS;
+        ring.z = z;
+        ring.lookZ = lookZ;
+        // No lightmap: a bake belongs to an entity the level file placed, and this
+        // one is added while the level runs.
+        if (!field.gone) {
+            ring.quad = makeSprite(registry, "Magic Portals Shock Ring", image.path, entity.additive);
+            placeShockRing(registry, ring);
+        }
+        m_shockRings.push_back(std::move(ring));
+    }
+    SUPERSONIC_LOG_INFO("Magic Portals") << "shock rings: " << m_shockRings.size() << " of " << image.path
+                                         << " at z " << lookZ << ", " << (entity.additive ? "added" : "blended")
+                                         << ", colour (" << rules.colour.x << ", " << rules.colour.y << ", "
+                                         << rules.colour.z << ")" << std::endl;
+}
+
+void MagicPortalsLayer::placeShockRing(entt::registry& registry, const ShockRingQuad& ring) {
+    if (ring.quad == entt::null || !registry.valid(ring.quad)) return;
+    // AddToAngle turns it counter-clockwise on the screen from the 0 AddEntity gave
+    // it, as the antiportal's does; its picture is symmetric to 1 %, so this moves
+    // almost no pixel. Uniform on both axes: SetScale(vector2(s x f, s x f)).
+    const double turnedRad = ring.turn.turnedDeg * 3.14159265358979323846 / 180.0;
+    placeSprite(registry, ring.quad, ring.atPx, glm::dvec2(ring.baseUnits * ring.jitter), ring.z,
+                Units::ToWorldRotation(-turnedRad));
+}
+
+void MagicPortalsLayer::syncShockRings(entt::registry& registry) {
+    const std::vector<Fields::Field>& fields = m_level.fields.fields;
+    for (ShockRingQuad& ring : m_shockRings) {
+        if (ring.quad == entt::null) continue;
+        if (ring.field < 0 || ring.field >= static_cast<int>(fields.size())) continue;
+        const Fields::Field& field = fields[static_cast<std::size_t>(ring.field)];
+        // deleteEntity(childID) takes the ring with the agent a fireball destroyed
+        // (ETHCallback_shock_agent's isDestroyed arm), on the tick Fields marks it.
+        if (field.gone) {
+            if (registry.valid(ring.quad)) registry.destroy(ring.quad);
+            ring.quad = entt::null;
+            SUPERSONIC_LOG_INFO("Magic Portals")
+                << "the ring round " << field.name << " goes with its agent on tick " << m_ticks << std::endl;
+            continue;
+        }
+        // The area's own linearMotion, which Fields plays for the kill: the ring is
+        // where its lethal centre is.
+        ring.atPx = field.atPx;
+        placeShockRing(registry, ring);
+    }
+}
+
+void MagicPortalsLayer::jitterShockRings(entt::registry& registry) {
+    // ETHCallback_shock_area #51-66, every frame: SetScale(base x (0.993 +
+    // randF(0.014))), fresh about the base the agent stored and never about the last
+    // frame's. It reads no time manager, and the engine runs the scene's callbacks on
+    // every frame whatever the pause (ETHEngine.cpp:165-166), so it runs here outside
+    // OnUpdate's pause gate. The draw is the effects' stream's (00_order K8): the
+    // original's comes from one generator re-seeded from its clock every frame
+    // (ETHScene.cpp:496), so no sequence of it is a parity value, and the placement
+    // stream the level's own particles draw from is left as it was.
+    const Art::ShockRing& rules = m_artRules.shockRing;
+    for (ShockRingQuad& ring : m_shockRings) {
+        if (ring.quad == entt::null || !registry.valid(ring.quad)) continue;
+        ring.jitter = rules.JitterAt(effectRandom(0.0, rules.jitterSpan));
+        ++ring.jitters;
+        placeShockRing(registry, ring);
+    }
+}
+
+std::vector<MagicPortalsLayer::ShockRingReport> MagicPortalsLayer::ShockRings() const {
+    std::vector<ShockRingReport> reports;
+    reports.reserve(m_shockRings.size());
+    for (const ShockRingQuad& ring : m_shockRings) {
+        ShockRingReport report;
+        if (ring.field >= 0 && ring.field < static_cast<int>(m_level.fields.fields.size())) {
+            report.field = m_level.fields.fields[static_cast<std::size_t>(ring.field)].name;
+        }
+        report.quad = ring.quad;
+        report.texture = ring.texture;
+        report.additive = m_shockRingEntity.additive;
+        report.atPx = ring.atPx;
+        report.baseUnits = ring.baseUnits;
+        report.jitter = ring.jitter;
+        report.jitters = ring.jitters;
+        report.turnedDeg = ring.turn.turnedDeg;
+        report.z = ring.z;
+        report.lookZ = ring.lookZ;
         reports.push_back(std::move(report));
     }
     return reports;
@@ -4152,6 +4321,12 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
     // (Min(1000.0f, ComputeElapsedTimeF(video)), android/main.cpp:180-181; art.json
     // antiportal).
     Motion::Advance(m_motionRules, m_antiportalTurn, frameMs);
+    // And ETHCallback_shock_area's AddToAngle(unitsPerSecond(20)) for every ring
+    // still standing: game time, so it holds under a pause, where no tick runs. Its
+    // scale is the FRAME's (jitterShockRings), which a pause does not hold.
+    for (ShockRingQuad& ring : m_shockRings) {
+        if (ring.quad != entt::null) Motion::Advance(m_motionRules, ring.turn, frameMs);
+    }
     // AND ETHCallback_light_wall_ghost's two clocks, while the wall it replaces is
     // flagged or gone (art.json light_wall_ghost). The tick the torch is lit only
     // adds the entity - the original's callback cannot have run before the frame
@@ -4621,6 +4796,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     syncSprites(registry);
     syncTimers(registry);
     syncWallGhost(registry);
+    syncShockRings(registry);
 
     // The art in place of the boxes, unless B asks for them or there is no art.
     // What no level pictures - the player, the portals a shot opens, the shot -
@@ -4760,6 +4936,14 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         tint(registry, m_wallGhost.quad, glm::vec4(1.0f, 1.0f, 1.0f, static_cast<float>(m_wallGhost.alpha)),
              m_artRules.lightWallGhost.emissive, {},
              receiverOf(m_artRules.lightWallGhost, m_wallGhost.lookZ));
+    }
+    // The shock rings at the colour their agent gave them (art.json shock_ring), with
+    // shock_area.ent's own facts: emissive 1 makes min(1, ambient + 1) whole, so each
+    // is (0.4, 0.5, 0.5) added on every level, chapter 4's dark ones too.
+    for (const ShockRingQuad& ring : m_shockRings) {
+        if (ring.quad == entt::null) continue;
+        tint(registry, ring.quad, glm::vec4(glm::vec3(m_artRules.shockRing.colour), 1.0f), m_shockRingEntity.emissive,
+             {}, receiverOf(m_shockRingEntity, ring.lookZ));
     }
     // The black bars, with black_bar.ent's own facts: emissive 0, static, no light.
     // Their texels are black, so any ambient leaves them black; what this keeps is
@@ -8335,6 +8519,11 @@ void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
         syncPlacedPortals(registry, static_cast<double>(deltaTime) * 1000.0);
         updateEffects(registry, deltaTime);
     }
+    // And the shock rings' scale, which is the one thing here a pause does NOT
+    // hold: ETHCallback_shock_area draws it every frame, off any clock (the visuals
+    // plan's 13.1). After the effects, so a frame's draws on the effects' stream come
+    // in the order the frame adds them.
+    jitterShockRings(registry);
     // And the lights and halos those particles brighten and dim.
     syncLights(registry);
     // And the sounds the tick latched, played here for the same reason: a

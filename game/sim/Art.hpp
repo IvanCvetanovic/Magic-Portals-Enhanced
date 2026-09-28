@@ -387,6 +387,32 @@ struct BlackBars {
     std::vector<glm::dvec2> Centres(const glm::dvec2& sceneMax) const;
 };
 
+// ---- the ring a shock agent adds round itself (art.json shock_ring) ------------
+//
+// ETHCallback_shock_agent adds shock_area.ent at its own point once, at the absolute
+// depth g_scale.scale(-10), sizes it to the lethal diameter and colours it; the ring's
+// own callback, ETHCallback_shock_area, then turns it by game time and sets its scale
+// every frame to its fixed base times a fresh random factor (decode D6 and its check).
+// The entity's picture, blend, emissive and lighting are its .ent's, read at run time
+// by LoadEnt; what is here is what the two scripts do to it.
+struct ShockRing {
+    std::string entity;       // shock_area.ent
+    glm::dvec3 colour{1.0};   // SetColor(vector3(0.8, 1, 1) x 0.5): its rgb, alpha kept at 1
+    double z = 0.0;           // AddEntity's depth, as the script writes it
+    bool zScaled = false;     // g_scale.scale()'d (the level's units as is) or a bare literal
+    double spinDegPerS = 0.0; // AddToAngle(unitsPerSecond(this)): counter-clockwise, game time
+    double jitterFrom = 1.0;  // SetScale(base x (from + randF(span))), every frame
+    double jitterSpan = 0.0;
+
+    // Its depth in the level's units: a scaled depth as it stands, a bare literal
+    // over the scale factor (step 86's rule, Rules::LevelDepth).
+    double LevelZ(double scaleFactor) const { return zScaled ? z : z / scaleFactor; }
+    // scaleToSize's size for a ring of `radiusUnits`: the diameter, both ways.
+    double SizeUnits(double radiusUnits) const { return radiusUnits * 2.0; }
+    // The factor one frame's draw gives: `drawn` is randF(span), in [0, span].
+    double JitterAt(double drawn) const { return jitterFrom + drawn; }
+};
+
 struct Rules {
     Picture portal;      // portal.ent
     Shot shot;           // projectile.ent
@@ -407,6 +433,8 @@ struct Rules {
     LightWallGhost lightWallGhost;
     // black_bar.ent, four times round the scene
     BlackBars blackBars;
+    // shock_area.ent, the ring each shock agent adds round itself
+    ShockRing shockRing;
     // What a depth a script adds something at is in the level's units: that depth
     // over this (art.json depth). A level's nodes were multiplied by it at load and
     // what a script adds at a literal z was not.

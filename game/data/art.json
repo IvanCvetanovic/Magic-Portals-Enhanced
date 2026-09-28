@@ -901,5 +901,70 @@
       {"x_half_widths": 1, "side": "below_bottom", "_source": "C, ins 110-137: sceneMax.y + half.y - (256, max.y + 16)"},
       {"x_half_widths": 2, "side": "below_bottom", "_source": "D, ins 141-169: half.x x 2, sceneMax.y + half.y - (512, max.y + 16)"}
     ]
+  },
+
+  "shock_ring": {
+    "_source": [
+      "THE RING A SHOCK AGENT ADDS ROUND ITSELF: shock_area.ent, which no level file places. The visuals plan's",
+      "step 13.1 (the remake's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.7, 8.13 and 8.14, and",
+      "decode/D6.md with D6_check.md, which wins where they differ), planning step 131. From the remake's",
+      "out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
+      "  ETHCallback_shock_agent, bytes 446781..448212, once (#1-12 the areaAdded guard, set at #114-123):",
+      "    #13-29     radius = g_scale.scale(GetFloat('areaRadius')); #31 diameter = radius x 2 (MULIf 2f)",
+      "    #34-54     AddEntity('shock_area.ent', vector3(GetPositionXY(), g_scale.scale(-10)), @area): the",
+      "               z is ABSOLUTE, not the agent's z less 10 (#35 PshC4 0xc1200000 = -10.0); six of the",
+      "               21 agents stand at z 6, -6 or 4 (level14c, level18c, level27b x 3, level27c)",
+      "    #66-77     scaleToSize(area, vector2(diameter, diameter)): the ring is drawn 2 x areaRadius across",
+      "    #79-97     area.SetFloat('currentScale', area.GetScale().x / g_scale.getScale()): the fixed base",
+      "    #127-141   area.SetColor(vector3(0.8, 1, 1) x 0.5): three value pushes select vector3(float, float,",
+      "               float) (scriptmath3d.cpp:197), pushed last-first, and opMul(float) (:209) - (0.4, 0.5, 0.5)",
+      "  ETHCallback_shock_area, bytes 448212..448931, every frame its bucket is drawn:",
+      "    #1-16      s = g_scale.scale(GetFloat('currentScale')), the base the agent stored",
+      "    #17-25     AddToAngle(g_timeManager.unitsPerSecond(20)): 20 degrees a second of GAME time,",
+      "               frame-capped at 200 ms and 0 under a pause (m_factor 0; STimeManager::pause 7727..7781)",
+      "    #51-66     SetScale(vector2(s x f, s x f)), f = 0.993 + randF(0.014) (#51's SetV4 0.007 is a dead",
+      "               store): uniform on [0.993, 1.007] (Randomizer.cpp:44-47, MersenneTwister.h:149-153), fresh",
+      "               every frame about the fixed base - not a random walk - and NOT paused: #50-66 read no",
+      "               time manager, and the engine updates the scene and runs its callbacks every frame",
+      "               (ETHEngine.cpp:165-166, ETHActiveEntityHandler.cpp:134-138, 157-161)",
+      "THE ENTITY, read at run time by Art::LoadEnt and not copied here: shock_area.ent type 0, static 1,",
+      "applyLight 0, blendMode 1 (AM_ADD, Video.h:60-63: glBlendFunc(GL_ONE, GL_ONE), GLES2Video.cpp:792-795),",
+      "EmissiveColor (1, 1, 1), Scale 1, PivotAdjust (0, 0), SpriteCut 1 x 1, Sprite white_ring.png, no",
+      "<Particles>, no <Light>, no <CustomData>. The draw is min(1, ambient + emissive) x m_v4Color",
+      "(ETHRenderEntity.cpp:113-117), and emissive is read whatever applyLight says",
+      "(ETHEntityProperties.cpp:265, outside :240), so the ring is (0.4, 0.5, 0.5) added on every level,",
+      "chapter 4's dark ones too. The layer refuses an .ent that says otherwise and draws no ring."
+    ],
+    "_measured": [
+      "The original's library frame 3-24_h6.3 (level23b: agent 2048 at (320, 44) areaRadius 80, agent 2023",
+      "at (256, 192) areaRadius 60), read by the D6 check's own rays (planning step 131's ring_gate.py):",
+      "rim delta (107, 130, 126) and (99, 129, 124), R/G 0.823 and 0.767 about the decoded 0.80, B/G 0.967",
+      "and 0.961; the outer half-max edge 78.70 u and 59.83 u - areaRadius, inside hd/white_ring.png's own",
+      "half-max fraction 0.992 and the jitter's +-0.7 %. The reversed reading (1, 1, 0.8) x 0.5 would give",
+      "R/G 1.00 and B/G 0.80, and is rejected on both rings."
+    ],
+    "_not_built": [
+      "THE BUCKET CLOCK. shock_area.ent is static=1 with a callback, so the original turns and jitters a",
+      "ring only while its bucket is drawn (D6_check section 5.7; ETHScene.cpp:482-491). The port runs both",
+      "for every ring from the level's first tick and frame, as it runs the antiportal's (art.json",
+      "antiportal). The turn cannot be seen (white_ring.png is symmetric to 1 %), and the original's jitter",
+      "draws come from a generator re-seeded from its clock every frame (ETHScene.cpp:496), so no phase or",
+      "sequence of either is a parity value.",
+      "THE FIRST FRAME. The original's ring is added inside its agent's callback, after the frame's render",
+      "list was built, so it is first drawn one frame later, turned and jittered once; the port's is drawn",
+      "from the level's first frame, under the level's opening black.",
+      "THE AGENT'S OWN PULSE, bounce(this, V2_ONE, vector2(0.95, 0.95), 300) at ETHCallback_shock_agent",
+      "#241-263, pulses the agent's sprite, not this ring: not decoded to its argument order, not built.",
+      "playShockStrikeSound, when a ring kills, stays sounds.json's name."
+    ],
+    "entity": "shock_area.ent",
+    "colour": [0.4, 0.5, 0.5],
+    "_colour": "ETHCallback_shock_agent #127-141: area.SetColor(vector3(0.8, 1, 1) x 0.5). SetColor writes m_v4Color's rgb and keeps its alpha 1 (ETHEntity.cpp:96, 100, 493-498); no other SetColor, SetEmissiveColor, SetAlpha or Hide in the listing reaches the ring (D6_check section 1)",
+    "z": {"value": -10.0, "scaled": true},
+    "_z": "#35-46: g_scale.scale(-10), which is -10 x m_scaleFactor in the world and so -10 in the level's units, where the port draws (a scaled depth, not a bare literal: step 86's divide by depth.scale_factor does not apply). After the level's pictures at or below -10 and before the next, and behind the agent it belongs to",
+    "spin_deg_per_s": 20.0,
+    "_spin_deg_per_s": "ETHCallback_shock_area #17-25, AddToAngle(unitsPerSecond(20)): degrees (GLES2Sprite.cpp:268-270), counter-clockwise on the screen, from angle 0; unitsPerSecond's step (bytes 8045..8162, its divisor 1000.0 exactly, D6_check section 4) is capped at motions.json's frame_cap_ms and is 0 under a pause, so the turn stands still there",
+    "jitter": {"from": 0.993, "span": 0.014},
+    "_jitter": "ETHCallback_shock_area #53-66: SetScale(base x (0.993 + randF(0.014))), randF(n) uniform on [0, n] inclusive, drawn every frame, paused or not. The port draws it from its effects' stream (m_effectRandom, 00_order K8): the placement stream is untouched. +-0.2 to +-0.74 u at the rings' radii of 28 to 105"
   }
 }

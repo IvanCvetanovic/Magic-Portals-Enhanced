@@ -767,6 +767,34 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     blackBars.entity = barsEntry["entity"].AsString("");
+
+    // The ring a shock agent adds round itself: the entity, and what its two
+    // callbacks do to it. None has a default - a colour, a depth, a turn or a
+    // jitter the port chose would be a ring nobody decoded - and a jitter whose
+    // factor could reach zero or below would draw no ring or a mirrored one.
+    ShockRing& ring = read.shockRing;
+    const Json::Value& ringEntry = root["shock_ring"];
+    double ringColour[3] = {0.0, 0.0, 0.0};
+    const Json::Value& ringZ = ringEntry["z"];
+    const Json::Value& ringJitter = ringEntry["jitter"];
+    const bool ringOk = root.Has("shock_ring") && ringEntry.IsObject() && ringEntry["entity"].IsString() &&
+                        !ringEntry["entity"].AsString("").empty() && Numbers(ringEntry["colour"], 3, ringColour) &&
+                        ringColour[0] >= 0.0 && ringColour[1] >= 0.0 && ringColour[2] >= 0.0 && ringZ.IsObject() &&
+                        Finite(ringZ["value"]) && ringZ["scaled"].IsBool() && Finite(ringEntry["spin_deg_per_s"]) &&
+                        ringJitter.IsObject() && Finite(ringJitter["from"]) && ringJitter["from"].AsNumber() > 0.0 &&
+                        Finite(ringJitter["span"]) && ringJitter["span"].AsNumber() >= 0.0;
+    if (!ringOk) {
+        error = path + ": shock_ring needs an entity, a colour of three numbers none below 0, a z with a value "
+                       "and scaled, a spin_deg_per_s, and a jitter with a from above 0 and a span from 0";
+        return false;
+    }
+    ring.entity = ringEntry["entity"].AsString("");
+    ring.colour = glm::dvec3(ringColour[0], ringColour[1], ringColour[2]);
+    ring.z = ringZ["value"].AsNumber();
+    ring.zScaled = ringZ["scaled"].AsBool();
+    ring.spinDegPerS = ringEntry["spin_deg_per_s"].AsNumber();
+    ring.jitterFrom = ringJitter["from"].AsNumber();
+    ring.jitterSpan = ringJitter["span"].AsNumber();
     out = std::move(read);
     return true;
 }

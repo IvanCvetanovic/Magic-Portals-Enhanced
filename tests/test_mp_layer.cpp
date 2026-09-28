@@ -260,6 +260,9 @@ entt::entity FirstTagged(entt::registry& registry, const char* tag) {
 
 // Defined further down, beside the checks that first needed it.
 bool EndsWith(const std::string& path, const std::string& file);
+// A field's ring among the layer's shock rings, or null (the visuals plan's 13.1).
+const MagicPortalsLayer::ShockRingReport* RingOf(const std::vector<MagicPortalsLayer::ShockRingReport>& rings,
+                                                 const std::string& field);
 
 // The original's extracted images - what no level pictures is drawn with - are
 // outside this repository like the levels, but a machine can have the levels and
@@ -3187,9 +3190,13 @@ void AnEmitterFollowsItsOwner() {
 }
 
 // 2e on a cell that is NOT square: 3-24's shock agents draw tesla_shock_black_bg.png,
-// cut 5 x 2 from 256 x 64, cells of 51.2 x 32 - and every quad is still size by size
+// cut 5 x 2 from 256 x 64 - and every quad is still size by size
 // (ETHParticleManager.cpp:413). 1-1's cells are all square, so this is where a quad
-// taking its cell's shape would show.
+// taking its cell's shape would show. AND THE CELL IS THE ORIGINAL'S (the visuals
+// plan's 13.1, step 67's recorded deviation): SetupSpriteRects strides the sheet in
+// whole units, 51 x 32 (gs2d Sprite.cpp:119-130), so each quad samples 51 / 256 of
+// the texture across at a whole stride, where an even split's fifth, 51.2, sampled
+// 1.6 units past the last column's own.
 void AParticleOnANonSquareCellIsDrawnSquare() {
     if (!OriginalArtIsThere("AParticleOnANonSquareCellIsDrawnSquare")) return;
     entt::registry registry;
@@ -3204,8 +3211,8 @@ void AParticleOnANonSquareCellIsDrawnSquare() {
     for (const MagicPortalsLayer::EmitterReport& report : layer.EmitterReports()) {
         if (report.bitmap != "tesla_shock_black_bg.png") continue;
         ++shocks;
-        CHECK_MSG(std::fabs(report.cellPx.x - 51.2) < 1e-9 && std::fabs(report.cellPx.y - 32.0) < 1e-9,
-                  report.node + ": a 51.2 x 32 cell, " + std::to_string(report.cellPx.x) + " x " +
+        CHECK_MSG(report.cellPx == glm::dvec2(51.0, 32.0),
+                  report.node + ": a 51 x 32 cell, " + std::to_string(report.cellPx.x) + " x " +
                       std::to_string(report.cellPx.y));
         // No tier file: drawn from the bitmap named (00_order 2.3).
         CHECK_MSG(EndsWith(report.image, "/particles/tesla_shock_black_bg.png"), report.image);
@@ -3214,20 +3221,36 @@ void AParticleOnANonSquareCellIsDrawnSquare() {
 
     int shockDraws = 0;
     int notSquare = 0;
+    int notTheCut = 0;
+    std::set<int> columns;
     for (int frame = 0; frame < 120; ++frame) {
         tickWith(layer, registry, kRest, {}, {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         for (auto [entity, tag, material, transform] :
              registry.view<TagComponent, MaterialComponent, TransformComponent>().each()) {
-            (void)entity;
             if (tag.tag != "Magic Portals Particle") continue;
             if (transform.scale.x != transform.scale.y) ++notSquare;
-            if (EndsWith(material.albedoTexturePath, "/tesla_shock_black_bg.png")) ++shockDraws;
+            if (!EndsWith(material.albedoTexturePath, "/tesla_shock_black_bg.png")) continue;
+            ++shockDraws;
+            const float column = material.uvOffset.x / 0.19921875f;
+            const float row = material.uvOffset.y / 0.5f;
+            const bool whole = std::fabs(column - std::round(column)) < 1e-5f && column >= 0.0f && column <= 4.0f &&
+                               std::fabs(row - std::round(row)) < 1e-5f && row >= 0.0f && row <= 1.0f;
+            if (material.uvScale != glm::vec2(0.19921875f, 0.5f) || !whole ||
+                registry.all_of<SpriteAnimationComponent>(entity)) {
+                ++notTheCut;
+            }
+            columns.insert(static_cast<int>(std::lround(column)));
         }
     }
-    std::printf("  3-24: %d shock-cell particle draws over 120 frames, %d not square\n", shockDraws, notSquare);
+    std::printf("  3-24: %d shock-cell particle draws over 120 frames, %d not square, %d off the whole-unit cut, "
+                "%d columns seen\n",
+                shockDraws, notSquare, notTheCut, static_cast<int>(columns.size()));
     CHECK_MSG(shockDraws > 0, "a shock particle was drawn");
     CHECK_MSG(notSquare == 0, std::to_string(notSquare) + " particle draw(s) not square");
+    CHECK_MSG(notTheCut == 0, std::to_string(notTheCut) + " tesla_shock_black_bg.png draw(s) not at 51 / 256 x "
+                                                           "32 / 64 on a whole stride");
+    CHECK_MSG(columns.size() > 1, "and more than one column is drawn");
     layer.OnDetach(registry);
 }
 
@@ -9302,6 +9325,21 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
                                       std::to_string(deepest) + ", stands behind the shot");
     }
 
+    // THE SHOCK RING (the visuals plan's 13.1, step 131): at the absolute -10, deeper
+    // than every other class but the door glow, so BEHIND all of them where it shares
+    // their gap - the shot, a minion, an effect - and so the first row; still in front
+    // of the previous slot's halo and of its deepest system for up to 6 of them (the
+    // most any .ent carries is 2).
+    const double shockRing = MagicPortalsLayer::SlotFractionOf(Slot::ShockRing);
+    CHECK(shockRing == -0.53125);
+    CHECK(static_cast<int>(Slot::ShockRing) == 0);
+    CHECK_MSG(shockRing < shot && -0.75 < shockRing, "the shock ring behind the shot, in front of the last halo");
+    for (const int n : {1, 2, 6}) {
+        const double deepest = -1.0 + MagicPortals::Particles::SlotFraction(n - 1, n);
+        CHECK_MSG(deepest < shockRing, "the previous slot's last of " + std::to_string(n) + " systems, at " +
+                                           std::to_string(deepest) + ", stands behind the shock ring");
+    }
+
     // THE TIE THE TABLE STATES. The eleven between-slot classes share one
     // fraction, so two of them at one z_index land on exactly one z; what orders
     // them there is the order the port adds their quads, which is the order of
@@ -11752,6 +11790,14 @@ void AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds() {
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     }
     CHECK_MSG(!layer.SimLevel()->hazards.playerDied, "the player stands clear of the ring");
+    // Its ring (art.json shock_ring, step 131) stands until the agent goes.
+    const int ringsBefore = Tagged(registry, "Magic Portals Shock Ring");
+    {
+        const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, "shock_agent_ent_2441");
+        CHECK_MSG(ring != nullptr && ring->quad != entt::null && ringsBefore >= 1,
+                  "shock_agent_ent_2441 wears its ring before the fireball");
+    }
     const glm::dvec2 aim = agentAt + glm::dvec2(60.0, 0.0);
     CHECK_MSG(onScreen(registry, aim), "the tap is on screen");
     PutPlayerAt(registry, layer, standAt);
@@ -11768,6 +11814,16 @@ void AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds() {
     }
     CHECK_MSG(gone, "the fireball destroyed the agent");
     if (!gone) return;
+    // deleteEntity(childID) takes the ring with the agent, on the tick Fields marks it.
+    {
+        const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, "shock_agent_ent_2441");
+        CHECK_MSG(ring != nullptr && ring->quad == entt::null &&
+                      Tagged(registry, "Magic Portals Shock Ring") == ringsBefore - 1,
+                  "and its ring goes with it on that tick: " +
+                      std::to_string(Tagged(registry, "Magic Portals Shock Ring")) + " of " +
+                      std::to_string(ringsBefore) + " left");
+    }
     int deaths = 0;
     FirstEffect(layer, "shock_death.ent", deaths);
     CHECK_MSG(deaths == 0, "nothing is added on the tick");
@@ -12642,6 +12698,362 @@ void ALiftDoorLeavesItsDustAsItOpensAndCloses() {
     layer.OnDetach(registry);
 }
 
+// ---- The shock rings (the visuals plan's 13.1, step 131) ---------------------
+//
+// shock_area.ent, which each shock agent adds round itself on its first frame (art.json
+// shock_ring; decode D6 and its check): at the field's point, the lethal diameter
+// across, (0.4, 0.5, 0.5) added, at the ABSOLUTE depth -10; turned 20 degrees a second
+// of game time, which a pause holds; and scaled every frame by a fresh factor in
+// [0.993, 1.007] about that diameter, which a pause does not hold.
+
+const MagicPortalsLayer::ShockRingReport* RingOf(const std::vector<MagicPortalsLayer::ShockRingReport>& rings,
+                                                 const std::string& field) {
+    for (const MagicPortalsLayer::ShockRingReport& ring : rings) {
+        if (ring.field == field) return &ring;
+    }
+    return nullptr;
+}
+
+// How many of the level's own pictures stand behind and in front of a depth.
+void PicturesAbout(entt::registry& registry, float z, int& behind, int& inFront) {
+    behind = 0;
+    inFront = 0;
+    for (auto [entity, tag, transform] : registry.view<TagComponent, TransformComponent>().each()) {
+        (void)entity;
+        if (tag.tag != "Magic Portals Sprite") continue;
+        if (transform.position.z < z) ++behind;
+        if (transform.position.z > z) ++inFront;
+    }
+}
+
+void AShockAgentWearsItsRing() {
+    if (!OriginalArtIsThere("AShockAgentWearsItsRing")) return;
+    // 3-24 (level23b): agent 2048 at (320, 44), areaRadius 80, and 2023 at (256, 192),
+    // areaRadius 60 - the two rings the gate reads against the library's h6.3.
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level23b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+    CHECK_EQ(rings.size(), std::size_t{2});
+    CHECK_EQ(Tagged(registry, "Magic Portals Shock Ring"), 2);
+    const struct Want {
+        const char* field;
+        glm::dvec2 atPx;
+        double radius;
+    } wants[] = {{"shock_agent_2048", {320.0, 44.0}, 80.0}, {"shock_agent_2023", {256.0, 192.0}, 60.0}};
+    float ringZ = 0.0f;
+    for (const Want& want : wants) {
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, want.field);
+        CHECK_MSG(ring != nullptr && ring->quad != entt::null && registry.valid(ring->quad),
+                  std::string(want.field) + " wears a ring");
+        if (ring == nullptr || ring->quad == entt::null || !registry.valid(ring->quad)) continue;
+        const auto& transform = registry.get<TransformComponent>(ring->quad);
+        const auto& material = registry.get<MaterialComponent>(ring->quad);
+        // Its .ent's picture, as the original's loader picks its tier: hd/white_ring.png.
+        CHECK_MSG(EndsWith(material.albedoTexturePath, "/entities/hd/white_ring.png"),
+                  std::string(want.field) + ": hd/white_ring.png, not " + material.albedoTexturePath);
+        CHECK_MSG(material.blend == MaterialComponent::BlendMode::Additive && ring->additive,
+                  std::string(want.field) + "'s ring is added (blendMode 1)");
+        CHECK_MSG(material.albedoColor == glm::vec4(0.4f, 0.5f, 0.5f, 1.0f),
+                  std::string(want.field) + "'s ring is (0.4, 0.5, 0.5), not (" +
+                      std::to_string(material.albedoColor.r) + ", " + std::to_string(material.albedoColor.g) + ", " +
+                      std::to_string(material.albedoColor.b) + ", " + std::to_string(material.albedoColor.a) + ")");
+        CHECK_MSG(ring->atPx == want.atPx &&
+                      glm::distance(MagicPortals::Units::ToPixels(transform.position), want.atPx) < 1e-3,
+                  std::string(want.field) + "'s ring at its field's point " + Point(want.atPx) + ": " +
+                      Point(ring->atPx));
+        CHECK_MSG(ring->baseUnits == want.radius * 2.0, std::string(want.field) + ": the lethal diameter, " +
+                                                             std::to_string(ring->baseUnits));
+        CHECK_MSG(ring->jitters == 1 && ring->jitter >= 0.993 && ring->jitter <= 1.007,
+                  std::string(want.field) + ": one frame's factor, in [0.993, 1.007]: " +
+                      std::to_string(ring->jitter));
+        const float across = MagicPortals::Units::ToMetres(ring->baseUnits * ring->jitter);
+        CHECK_MSG(std::fabs(transform.scale.x - across) < 1e-6f && transform.scale.y == transform.scale.x,
+                  std::string(want.field) + " is drawn its diameter times the factor, both ways");
+        CHECK_MSG(ring->lookZ == -10.0, std::string(want.field) + ": at the absolute -10, not " +
+                                            std::to_string(ring->lookZ));
+        ringZ = ring->z;
+    }
+
+    // AFTER THE ART AT OR BELOW -10 AND BEFORE THE NEXT: 3-24's sky (-70), arch and
+    // wall (-20), doorway (-19), door (-18) and orange light (-14) behind it, and the
+    // platforms, the agents and everything else in front - a slot's 0.53125 before the
+    // first of them, the table's own fraction.
+    int behind = 0;
+    int inFront = 0;
+    PicturesAbout(registry, ringZ, behind, inFront);
+    CHECK_MSG(behind == 6, "3-24: 6 pictures behind the rings, " + std::to_string(behind));
+    float agentZ = 0.0f;
+    for (auto [entity, tag, material, transform] :
+         registry.view<TagComponent, MaterialComponent, TransformComponent>().each()) {
+        (void)entity;
+        if (tag.tag == "Magic Portals Sprite" && EndsWith(material.albedoTexturePath, "/shock_agent.png")) {
+            agentZ = transform.position.z;
+        }
+    }
+    CHECK_MSG(agentZ > ringZ, "and the agent's own picture in front of its ring");
+    std::printf("  3-24: two rings at z %.6f, %d pictures behind and %d in front\n", static_cast<double>(ringZ),
+                behind, inFront);
+    layer.OnDetach(registry);
+
+    // 4-07 (level6c): a ring on a dark weightless level with a door glow at -22, whose
+    // picture is pushed into m_sprites after the rings are resolved - counted, it would
+    // put the ring a slot too deep. Behind it: the sky (-100), the spiral (-96), the
+    // planet (-90), the doorway (-19), the door (-14), the antiportal (-12), and the
+    // button, the lift door and the button at -10, which it is drawn over (at or below).
+    entt::registry dark;
+    publishViewport(dark);
+    MagicPortalsLayer level6c(TestPaths(), "level6c");
+    level6c.OnAttach(dark);
+    CHECK_MSG(level6c.SimLevel() != nullptr && level6c.ArtError().empty(), level6c.LoadError() + level6c.ArtError());
+    if (level6c.SimLevel() == nullptr || !level6c.ArtError().empty()) return;
+    CloseTheLevelStartPopup(level6c, dark);
+    tickWith(level6c, dark, kRest, {}, {});
+    level6c.OnUpdate(dark, MagicPortalsLayer::kTick);
+    const std::vector<MagicPortalsLayer::ShockRingReport> darkRings = level6c.ShockRings();
+    CHECK_EQ(darkRings.size(), std::size_t{1});
+    CHECK_EQ(Tagged(dark, "Magic Portals Door Highlight"), 1);
+    if (darkRings.size() == 1 && darkRings[0].quad != entt::null) {
+        PicturesAbout(dark, darkRings[0].z, behind, inFront);
+        CHECK_MSG(behind == 9, "4-07: 9 pictures behind the ring, the door glow not counted: " +
+                                   std::to_string(behind));
+        const entt::entity glow = FirstTagged(dark, "Magic Portals Door Highlight");
+        CHECK_MSG(glow != entt::null && dark.get<TransformComponent>(glow).position.z < darkRings[0].z,
+                  "the glow at -22 behind the ring at -10");
+        CHECK_MSG(dark.get<MaterialComponent>(darkRings[0].quad).albedoColor == glm::vec4(0.4f, 0.5f, 0.5f, 1.0f),
+                  "the ring's own colour on a dark level: emissive 1 takes no ambient");
+        std::printf("  4-07: one ring at z %.6f, %d pictures behind and %d in front\n",
+                    static_cast<double>(darkRings[0].z), behind, inFront);
+    }
+    level6c.OnDetach(dark);
+
+    // A level with no shock agent has no ring.
+    entt::registry none;
+    publishViewport(none);
+    MagicPortalsLayer plain(TestPaths(), "level0");
+    plain.OnAttach(none);
+    CHECK_EQ(Tagged(none, "Magic Portals Shock Ring"), 0);
+    CHECK(plain.ShockRings().empty());
+    plain.OnDetach(none);
+}
+
+// THE TWO CLOCKS (00_order 8.13's 13.1 row, D6_check section 5.5): the turn is game
+// time - 20 degrees a second, stepped on the tick, held by a pause - and the scale is
+// the frame's - a fresh factor in [0.993, 1.007] about the fixed base every frame,
+// the pause or not.
+void AShockRingTurnsOnGameTimeAndJittersEveryFrame() {
+    if (!OriginalArtIsThere("AShockRingTurnsOnGameTimeAndJittersEveryFrame")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level23b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto read = [&layer]() {
+        const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, "shock_agent_2048");
+        return ring != nullptr ? *ring : MagicPortalsLayer::ShockRingReport{};
+    };
+    const MagicPortalsLayer::ShockRingReport first = read();
+    CHECK_MSG(first.quad != entt::null, "3-24's upper ring is there");
+    if (first.quad == entt::null) return;
+    const entt::entity quad = first.quad;
+    const double base = first.baseUnits;
+    // unitsPerSecond(20) over one tick, as Motion::Advance takes it: 20 x frame ms / 1000.
+    const double stepDeg = 20.0 * (static_cast<double>(MagicPortalsLayer::kTick) * 1000.0) / 1000.0;
+    int turnWrong = 0;
+    int drawnWrong = 0;
+    int outside = 0;
+    int repeated = 0;
+    double lo = 2.0;
+    double hi = 0.0;
+    double sum = 0.0;
+    int frames = 0;
+    MagicPortalsLayer::ShockRingReport last = read();
+    for (int tick = 0; tick < 400; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::ShockRingReport now = read();
+        // One step a tick, counter-clockwise, which the engine's +z is.
+        if (std::fabs(now.turnedDeg - (last.turnedDeg + stepDeg)) > 1e-9) ++turnWrong;
+        const auto& transform = registry.get<TransformComponent>(quad);
+        const float turnedRad = static_cast<float>(now.turnedDeg * 3.14159265358979323846 / 180.0);
+        // Drawn at the base times THIS frame's factor: never the last frame's times it.
+        if (std::fabs(transform.rotation.z - turnedRad) > 1e-5f ||
+            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(base * now.jitter)) > 1e-6f ||
+            now.baseUnits != base || now.jitters != last.jitters + 1) {
+            ++drawnWrong;
+        }
+        if (now.jitter < 0.993 || now.jitter > 1.007) ++outside;
+        if (now.jitter == last.jitter) ++repeated;
+        lo = std::min(lo, now.jitter);
+        hi = std::max(hi, now.jitter);
+        sum += now.jitter;
+        ++frames;
+        last = now;
+    }
+    const double mean = sum / frames;
+    CHECK_MSG(turnWrong == 0, "20 degrees a second, one step a tick: " + std::to_string(turnWrong) + " ticks wrong");
+    CHECK_MSG(std::fabs(last.turnedDeg - first.turnedDeg - 400.0 * stepDeg) < 1e-6,
+              "133.3 degrees in 400 ticks: " + std::to_string(last.turnedDeg - first.turnedDeg));
+    CHECK_MSG(drawnWrong == 0, "every frame drawn at its turn and at base x its own factor: " +
+                                   std::to_string(drawnWrong) + " wrong");
+    CHECK_MSG(outside == 0 && repeated == 0,
+              "400 factors in [0.993, 1.007], each fresh: " + std::to_string(outside) + " outside, " +
+                  std::to_string(repeated) + " repeated");
+    CHECK_MSG(lo < 0.9935 && hi > 1.0065 && std::fabs(mean - 1.0) < 0.001,
+              "spread over the whole range about the base, no drift: " + std::to_string(lo) + " to " +
+                  std::to_string(hi) + ", mean " + std::to_string(mean));
+
+    // A PAUSE HOLDS THE TURN AND NOT THE JITTER.
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(layer.Paused(), "Escape pauses 3-24");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::ShockRingReport held = read();
+    int pausedTurned = 0;
+    int pausedHeld = 0;
+    int pausedWrong = 0;
+    last = held;
+    for (int frame = 0; frame < 60; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::ShockRingReport now = read();
+        if (now.turnedDeg != held.turnedDeg) ++pausedTurned;
+        if (now.jitter == last.jitter || now.jitters != last.jitters + 1) ++pausedHeld;
+        const auto& transform = registry.get<TransformComponent>(quad);
+        if (now.jitter < 0.993 || now.jitter > 1.007 ||
+            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(base * now.jitter)) > 1e-6f) {
+            ++pausedWrong;
+        }
+        last = now;
+    }
+    CHECK_MSG(pausedTurned == 0, "the pause holds the turn: " + std::to_string(pausedTurned) + " frames turned");
+    CHECK_MSG(pausedHeld == 0, "and not the jitter: a fresh factor every paused frame, " +
+                                   std::to_string(pausedHeld) + " held");
+    CHECK_MSG(pausedWrong == 0, "each in [0.993, 1.007] about the base: " + std::to_string(pausedWrong) + " wrong");
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(!layer.Paused(), "and Escape again resumes it");
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(read().turnedDeg > held.turnedDeg, "and the turn goes on");
+    std::printf("  3-24: 400 ticks turned %.4f degrees; factors %.5f to %.5f, mean %.5f; 60 paused frames: "
+                "the turn held, 60 fresh factors\n",
+                last.turnedDeg - first.turnedDeg, lo, hi, mean);
+    layer.OnDetach(registry);
+}
+
+// 3-28's (level27b) swinging ring is where its field is, as the area's own
+// linearMotion puts it: the ring IS the lethal centre Fields moves.
+void AMovingShockRingIsWhereItsFieldIs() {
+    if (!OriginalArtIsThere("AMovingShockRingIsWhereItsFieldIs")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level27b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    CHECK_EQ(layer.ShockRings().size(), std::size_t{3});
+    int wrong = 0;
+    double travel = 0.0;
+    for (int tick = 0; tick < 90; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortals::Fields::Field* field = layer.SimLevel()->fields.FindField("shock_agent_2128");
+        const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
+        const MagicPortalsLayer::ShockRingReport* ring = RingOf(rings, "shock_agent_2128");
+        if (field == nullptr || ring == nullptr || ring->quad == entt::null) {
+            ++wrong;
+            continue;
+        }
+        const glm::dvec2 drawn = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(ring->quad).position);
+        if (ring->atPx != field->atPx || glm::distance(drawn, field->atPx) > 1e-3) ++wrong;
+        travel = std::max(travel, std::fabs(field->atPx.y - field->centrePx.y));
+    }
+    CHECK_MSG(wrong == 0, "the ring at its field's point every tick: " + std::to_string(wrong) + " wrong");
+    CHECK_MSG(travel > 60.0, "and the field swings its stride of 64: " + std::to_string(travel));
+    layer.OnDetach(registry);
+}
+
+// K8 (the inherited reading): the rings' factors come off the effects' stream and
+// the level's own particles are untouched by them. Two layers on 3-24 draw the same
+// until one of them spawns an effect, which takes draws off that stream: its rings'
+// factors part from the other's from then on, and the level's emitters never do.
+void AShockRingsJitterIsTheEffectsStreamsAlone() {
+    if (!OriginalArtIsThere("AShockRingsJitterIsTheEffectsStreamsAlone")) return;
+    entt::registry plain;
+    entt::registry withEffect;
+    publishViewport(plain);
+    publishViewport(withEffect);
+    MagicPortalsLayer a(TestPaths(), "level23b");
+    MagicPortalsLayer b(TestPaths(), "level23b");
+    a.OnAttach(plain);
+    b.OnAttach(withEffect);
+    CHECK_MSG(a.SimLevel() != nullptr && a.ArtError().empty(), a.LoadError() + a.ArtError());
+    if (a.SimLevel() == nullptr || !a.ArtError().empty()) return;
+    CloseTheLevelStartPopup(a, plain);
+    CloseTheLevelStartPopup(b, withEffect);
+    int emittersDiffered = 0;
+    int compared = 0;
+    int ringsApartBefore = 0;
+    int ringsApartAfter = 0;
+    for (int frame = 0; frame < 120; ++frame) {
+        tickWith(a, plain, kRest, {}, {});
+        tickWith(b, withEffect, kRest, {}, {});
+        a.OnUpdate(plain, MagicPortalsLayer::kTick);
+        b.OnUpdate(withEffect, MagicPortalsLayer::kTick);
+        if (frame == 20) {
+            MagicPortalsLayer::EffectSpawn spawn;
+            spawn.entity = "sparkles.ent";
+            spawn.atPx = glm::dvec2(300.0, 100.0);
+            spawn.zUnits = 32.0;
+            CHECK(b.SpawnEffect(withEffect, spawn) > 0);
+        }
+        const std::vector<MagicPortalsLayer::EmitterReport> left = a.EmitterReports();
+        const std::vector<MagicPortalsLayer::EmitterReport> right = b.EmitterReports();
+        if (left.size() != right.size()) {
+            ++emittersDiffered;
+        } else {
+            for (std::size_t i = 0; i < left.size(); ++i) {
+                ++compared;
+                if (left[i].node != right[i].node || left[i].active != right[i].active ||
+                    left[i].drawn != right[i].drawn || left[i].newestBornPx != right[i].newestBornPx ||
+                    left[i].newestAgeMs != right[i].newestAgeMs) {
+                    ++emittersDiffered;
+                }
+            }
+        }
+        const std::vector<MagicPortalsLayer::ShockRingReport> ringsA = a.ShockRings();
+        const std::vector<MagicPortalsLayer::ShockRingReport> ringsB = b.ShockRings();
+        bool apart = ringsA.size() != ringsB.size();
+        for (std::size_t i = 0; !apart && i < ringsA.size(); ++i) apart = ringsA[i].jitter != ringsB[i].jitter;
+        if (apart) ++(frame <= 20 ? ringsApartBefore : ringsApartAfter);
+    }
+    // 3-24's six systems of its own - the two agents' lightning among them - over 120 frames.
+    CHECK_MSG(compared == 6 * 120, "the level's emitters were compared: " + std::to_string(compared));
+    CHECK_MSG(emittersDiffered == 0, "the rings' draws move no particle of the level's own: " +
+                                         std::to_string(emittersDiffered) + " reading(s) differ");
+    CHECK_MSG(ringsApartBefore == 0, "the two layers' rings draw alike until the effect: " +
+                                         std::to_string(ringsApartBefore) + " frames apart");
+    CHECK_MSG(ringsApartAfter > 90, "and part once it has taken draws off the same stream: " +
+                                        std::to_string(ringsApartAfter) + " of 99 frames apart");
+    std::printf("  K8 (13.1): %d emitter readings the same; ring factors apart on %d of the 99 frames after an "
+                "effect\n",
+                compared, ringsApartAfter);
+    a.OnDetach(plain);
+    b.OnDetach(withEffect);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
@@ -12799,6 +13211,10 @@ void runTests() {
     The432WallsDustIsTwiceTheSize();
     AStoneADespawnerTakesLeavesItsPuff();
     ALiftDoorLeavesItsDustAsItOpensAndCloses();
+    AShockAgentWearsItsRing();
+    AShockRingTurnsOnGameTimeAndJittersEveryFrame();
+    AMovingShockRingIsWhereItsFieldIs();
+    AShockRingsJitterIsTheEffectsStreamsAlone();
 }
 
 } // namespace

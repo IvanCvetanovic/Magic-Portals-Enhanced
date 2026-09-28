@@ -347,7 +347,10 @@ public:
         std::string bitmap; // Particles::System::bitmap
         std::string image;  // the file drawn for it: its tier file where one exists (drawnImage)
         double systemSize = 0.0; // Particles::System::size as built: its entity's scale applied
-        glm::dvec2 cellPx{0.0};  // one cell of its bitmap in units, split evenly, which a quad stretches square
+        // One cell of its bitmap in units as its quads sample it, which a quad
+        // stretches square: split evenly, or where the units do not divide by the
+        // cut, the whole-unit frame SetupSpriteRects cuts (Emitter::wholeUnitCut).
+        glm::dvec2 cellPx{0.0};
         int slot = 0;       // which of its entity's systems
         int systems = 0;    // of how many
         bool additive = false;
@@ -425,7 +428,19 @@ public:
     // table that orders by class and not by z: a -0.5 class whose own z is BELOW
     // 0 - a dial, a ring, a door glow, a spike, a wall's ghost - is drawn over
     // the shot where the two share a gap, where the original draws it under.
+    //
+    // THE SHOCK RING (the visuals plan's 13.1, 00_order 8.13's K13 row) is the one
+    // class that pays none of that price: it stands at the absolute -10 its agent
+    // gives it, deeper than every other class the table holds but the door glow's
+    // -22, so it takes a fraction of its own BEHIND all of them - behind the shot,
+    // a minion and an effect wherever it shares their gap, as the original draws
+    // it - and still in front of the previous slot's halo and of its deepest
+    // system for up to 6 of them (the most any .ent carries is 2). Where it shares
+    // a gap with a door glow (4-04 to 4-08, 4-12, 4-14 and 4-15 place both) the two
+    // are drawn the other way round from the original's -22 behind -10; both are
+    // added (AM_ADD, GL_ONE, GL_ONE), and an add commutes, so no pixel shows it.
     enum class Slot {
+        ShockRing,      // a shock agent's ring, at the absolute -10 its AddEntity gives it
         ShotPicture,    // the portal shot, at the z 0 addProjectile gives it, behind the player
         ShotHalo,       // the shot's halo, after its picture and still behind the -0.5 classes
         TimerDial,      // a timed crystal's dial, its crystal's z_index - 2 (art.json timer)
@@ -464,6 +479,7 @@ public:
         bool spreads;
     };
     static constexpr std::array<SlotRow, static_cast<std::size_t>(Slot::Count)> kSlotTable{{
+        {Slot::ShockRing, "shock ring", -0.53125, false},
         {Slot::ShotPicture, "shot", -0.515625, false},
         {Slot::ShotHalo, "shot halo", -0.5078125, false},
         {Slot::TimerDial, "timer dial", -0.5, false},
@@ -776,6 +792,26 @@ public:
         float z{0.0f};             // kLayerableTopZ
     };
     std::vector<BlackBarReport> BlackBars() const;
+
+    // The ring each shock agent adds round itself (art.json shock_ring, the visuals
+    // plan's 13.1): shock_area.ent at the field's point, the lethal diameter across,
+    // turned by game time on the tick and scaled by a fresh factor every frame, pause
+    // or not. One per Fields::State::fields entry and in its order; empty where the
+    // art or the .ent did not read. As the last frame left it.
+    struct ShockRingReport {
+        std::string field;             // the agent's node, Fields::Field::name
+        entt::entity quad{entt::null}; // null once its agent is gone
+        std::string texture;           // the tier file the original draws: hd/white_ring.png
+        bool additive = false;
+        glm::dvec2 atPx{0.0};          // the field's point, where the tick left it
+        double baseUnits = 0.0;        // scaleToSize's size: 2 x areaRadius
+        double jitter = 1.0;           // this frame's factor, in [from, from + span]
+        int jitters = 0;               // the factors drawn so far: one a frame
+        double turnedDeg = 0.0;        // AddToAngle's, counter-clockwise
+        float z{0.0f};                 // Slot::ShockRing after the art at or below -10
+        double lookZ = 0.0;            // its depth in the level's units: -10
+    };
+    std::vector<ShockRingReport> ShockRings() const;
 
     // The slot the player's picture is drawn in, and its depth in the level's units:
     // GameCharacter's 4 over the scale factor (art.json character.z, depth).
@@ -1259,6 +1295,19 @@ private:
     // The ghost of a flagged light wall, made and unmade as the original adds and
     // deletes the entity, and placed at the pulse advanceMotions left it at.
     void syncWallGhost(entt::registry& registry);
+    // The shock rings (m_shockRings): made with the level's art, after every
+    // slotAfter the pictures in m_sprites take and before the door glow is pushed.
+    // ShockRingQuad is defined with the member that holds them, further down.
+    struct ShockRingQuad;
+    void buildShockRings(entt::registry& registry);
+    // On the tick: each ring to its field's point at the turn advanceMotions left,
+    // and gone with its agent.
+    void syncShockRings(entt::registry& registry);
+    // On the frame, pause or not: each standing ring's scale drawn afresh about its
+    // base, from m_effectRandom (ETHCallback_shock_area #51-66).
+    void jitterShockRings(entt::registry& registry);
+    // One ring's quad where its field, its turn and this frame's factor put it.
+    void placeShockRing(entt::registry& registry, const ShockRingQuad& ring);
     // One linearMotion call for every crystal and key whose script makes one this
     // tick (sim/Motion), and one call of every placed picture's callback, BEFORE
     // syncSprites draws where they leave them.
@@ -1591,6 +1640,32 @@ private:
     // facts, which syncLighting tints the bars with.
     Art::Entity m_blackBarEntity;
 
+    // THE SHOCK RINGS (art.json shock_ring): shock_area.ent, which each shock agent
+    // adds round itself on its first frame. Pictures with no node, one per field in
+    // Fields' order, their own quads and not m_sprites' - whose indices are the
+    // drawing slots slotAfter counts - made with the level's art and taken away with
+    // the agent. Picture-side only, never Game::Level or the state hash.
+    //
+    // TWO CLOCKS, as the original's one callback has them: the TURN is game time,
+    // stepped in advanceMotions, so a pause holds it; the JITTER is drawn every
+    // FRAME in OnUpdate, from m_effectRandom, and a pause does not stop it.
+    struct ShockRingQuad {
+        int field{-1};             // in fields.fields
+        entt::entity quad{entt::null};
+        std::string texture;       // the tier file the original draws
+        glm::dvec2 atPx{0.0};      // the field's point, as the last tick left it
+        double baseUnits{0.0};     // scaleToSize's size: the diameter
+        double jitter{1.0};        // this frame's factor
+        int jitters{0};            // the factors drawn so far
+        Motion::Turn turn;         // AddToAngle(unitsPerSecond(spin))
+        float z{0.0f};
+        double lookZ{0.0};
+    };
+    std::vector<ShockRingQuad> m_shockRings;
+    // shock_area.ent as LoadEnt read it with the level: its picture, blend,
+    // emissive and lighting facts.
+    Art::Entity m_shockRingEntity;
+
     // The minions and knights (art.json minion), one per Minions::State::minions
     // entry and in its order: that list only grows, by an escort the boss calls, and
     // a minion taken is marked gone rather than removed. The frame is its script's,
@@ -1649,10 +1724,11 @@ private:
         // A cut sheet whose units do not divide by its cut, cut as SetupSpriteRects
         // cuts it - its stride in WHOLE units (gs2d Sprite.cpp:119-130) - where a
         // flipbook's even split would sample past it: its quads take their uv from
-        // `cut` rather than from a SpriteAnimationComponent. An effect's emitter on
-        // shock_strike.png (512 over 5 is 102, not 102.4) is the one such; a
-        // level's on tesla_shock_black_bg.png is left evenly split, for the
-        // visuals plan's 13.1 (step 67's recorded deviation).
+        // `cut` rather than from a SpriteAnimationComponent. Two sheets the game
+        // draws are such: an effect's shock_strike.png (512 over 5 is 102, not
+        // 102.4), and tesla_shock_black_bg.png (256 over 5 is 51, not 51.2), which a
+        // level's shock agents and shock diamonds carry (the visuals plan's 13.1,
+        // step 67's recorded deviation). One rule for every emitter: WholeUnitCut.
         bool wholeUnitCut = false;
         Tiers::Cut cut;
         int sprite = -1; // the sprite in m_sprites whose entity it belongs to: it goes when that goes

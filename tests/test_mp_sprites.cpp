@@ -2892,6 +2892,74 @@ void BlackBarsWithoutTheirPlacesAreRefused() {
             "a side it does not name");
 }
 
+// The ring a shock agent adds round itself (art.json shock_ring, the visuals plan's
+// 13.1; decode D6 and its check): shock_area.ent as LoadEnt reads it, and what the
+// agent's and the ring's callbacks do to it - SetColor(vector3(0.8, 1, 1) x 0.5), the
+// absolute g_scale.scale(-10), AddToAngle(unitsPerSecond(20)), and SetScale(base x
+// (0.993 + randF(0.014))), with scaleToSize's diameter as that base.
+void TheShockRingIsShockAreaEnt() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    const Art::ShockRing& ring = rules.shockRing;
+    CHECK_MSG(ring.entity == "shock_area.ent", "AddEntity('shock_area.ent', ...)");
+    CHECK_MSG(ring.colour == glm::dvec3(0.8, 1.0, 1.0) * 0.5, "SetColor(vector3(0.8, 1, 1) x 0.5): (0.4, 0.5, 0.5)");
+    CHECK_MSG(ring.z == -10.0 && ring.zScaled && ring.LevelZ(rules.scaleFactor) == -10.0,
+              "g_scale.scale(-10): -10 in the level's units, not -10 / 2.8125");
+    CHECK_MSG(ring.spinDegPerS == 20.0, "AddToAngle(unitsPerSecond(20))");
+    CHECK_MSG(ring.jitterFrom == 0.993 && ring.jitterSpan == 0.014, "0.993 + randF(0.014)");
+    CHECK_MSG(ring.JitterAt(0.0) == 0.993 && std::fabs(ring.JitterAt(ring.jitterSpan) - 1.007) < 1e-12,
+              "the factor from 0.993 to 1.007, the draw's two ends");
+    CHECK_MSG(ring.SizeUnits(80.0) == 160.0 && ring.SizeUnits(28.0) == 56.0 && ring.SizeUnits(105.0) == 210.0,
+              "scaleToSize's diameter: 2 x areaRadius, 56 to 210 over the game's 21 agents");
+
+    // The entity itself, out of the original's file: an added, static, unlit
+    // horizontal picture of white_ring.png at emissive 1, and nothing else.
+    Art::Entity entity;
+    CHECK_MSG(Art::LoadEnt(kOriginal + "/entities/" + ring.entity, entity, error), error);
+    CHECK_MSG(entity.sprite == "white_ring.png" && entity.additive && entity.blendMode == 1 &&
+                  entity.Frames() == 1,
+              "shock_area.ent: white_ring.png, one frame, added (blendMode 1)");
+    CHECK_MSG(entity.emissive == glm::dvec3(1.0) && entity.isStatic && !entity.applyLight && entity.normal.empty() &&
+                  !entity.light && entity.systems.empty(),
+              "emissive 1, static, no light applied or given, no particles");
+    CHECK_MSG(entity.type == Art::EntityType::Horizontal && entity.pivotPx == glm::dvec2(0.0) &&
+                  entity.scale == glm::dvec2(1.0),
+              "type 0, no pivot, Scale 1: centred on its point and turned by its angle");
+}
+
+// Without its numbers the port would draw a ring nobody decoded, or none.
+void AShockRingWithoutItsNumbersIsRefused() {
+    std::ifstream file(kPortData + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const auto refused = [&real](const std::string& from, const std::string& to, const std::string& name) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos && text.find(from, at + 1) == std::string::npos, "once: " + from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-shock-ring-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules rules;
+        std::string error;
+        const bool ok = Art::LoadRules(path.string(), rules, error);
+        CHECK_MSG(!ok, "refused: " + name);
+        CHECK_MSG(error.find("shock_ring needs") != std::string::npos, name + ": " + error);
+    };
+    refused("\"shock_ring\": {", "\"shock_ring_gone\": {", "absent");
+    refused("\"entity\": \"shock_area.ent\",", "\"entity\": \"\",", "no entity");
+    refused("\"colour\": [0.4, 0.5, 0.5],", "\"colour\": [0.4, 0.5],", "two numbers");
+    refused("\"colour\": [0.4, 0.5, 0.5],", "\"colour\": [-0.4, 0.5, 0.5],", "a colour below 0");
+    refused("\"z\": {\"value\": -10.0, \"scaled\": true},", "\"z\": {\"value\": -10.0},", "a z not said scaled");
+    refused("\"spin_deg_per_s\": 20.0,", "\"spin_deg_per_s\": \"20\",", "a spin not a number");
+    refused("\"jitter\": {\"from\": 0.993, \"span\": 0.014},", "\"jitter\": {\"from\": 0.0, \"span\": 0.014},",
+            "a factor that can reach 0");
+    refused("\"jitter\": {\"from\": 0.993, \"span\": 0.014},", "\"jitter\": {\"from\": 0.993, \"span\": -0.014},",
+            "a span below 0");
+}
+
 int main() {
     AnImageSaysItsSizeInItsHeader();
     AnythingElseIsRefusedByName();
@@ -2932,6 +3000,8 @@ int main() {
     AnEntReadsAsTheEngineReadsIt();
     TheBlackBarsAreWhereManageSceneBoundsPutsThem();
     BlackBarsWithoutTheirPlacesAreRefused();
+    TheShockRingIsShockAreaEnt();
+    AShockRingWithoutItsNumbersIsRefused();
 
     std::error_code original;
     if (std::filesystem::is_directory(kOriginal + "/entities", original)) {

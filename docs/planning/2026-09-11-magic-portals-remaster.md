@@ -18128,3 +18128,182 @@ player stays lit after a put-out, where L1 returns him to a silhouette: a LEFT F
 The commit touched no source, header or test - only this record and `torch.json`'s `signal._note`, which still parses
 and whose note lines no loader reads and no fixture searches, so no suite was re-run for it. A dry run on a copy of
 `build.ninja` found no work (`commit/dryrun.txt`). Nothing was launched at commit: 0 refusals.
+
+## Step 131 - the ring a shock agent adds round itself: at the absolute -10, the lethal diameter across, (0.4, 0.5, 0.5) added, turned by game time and scaled afresh every frame, and the lightning's sheet cut as the original cuts it (built)
+
+**TRACK B: the visuals plan's step 13.1** (the remake's `out/parity/visuals/briefs/00_order.md` section 7 as section
+8.13's 13.1 row amends it; section 8.7, decode D6 with `D6_check.md`, which wins where they differ; section 8.14's
+`fields.json` row). It also takes step 67's recorded deviation (the evenly split `tesla_shock_black_bg.png`, which
+step 128 handed on to 13.1) and step 128's deviation 8 (`EmitterReport::cellPx`). Built in the worktree
+`Magic-Portals-Remake-vis4` (branch `visuals-d`, from `e30489a`, step 130), whose build reads the frozen level data in
+`out/snap_pre8`; numbered in track B's range, and the merge renumbers it. Changed: `game/data/art.json` (a
+`shock_ring` row), `game/sim/Art.{hpp,cpp}` (`Art::ShockRing`, read strictly), `game/MagicPortalsLayer.{hpp,cpp}` (the
+rings, a `Slot::ShockRing` row of the between-slot table, one whole-unit cut rule for every emitter),
+`game/data/fields.json` (`_not_built`), `game/sim/Fields.hpp` (its header comment only), and
+`tests/test_mp_{layer,sprites}.cpp`. No engine change (the pin stays `4bfcf67`), no converter change, no format
+finding (no `docs/ethanon-formats.md` entry: the `.ent` is read by the `LoadEnt` that exists). **GAMEPLAY: NONE.**
+
+**BLOCKERS, checked first.** Section 7 names D6 and 6.3. Section 8.13 removes D6 (decoded; `D6_check` CONFIRMED, 22
+citations); 6.3 is step 83 (`m_effectRandom`, the between-slot table, the effects runtime), with step 88's merge. The
+listing is the md5 the decodes cite (`48fe65ce...`). Nothing unmet.
+
+**WHAT THE ORIGINAL DOES** (`art.json` `shock_ring` carries each call with its instructions).
+- **`ETHCallback_shock_agent`** (446781..448212), once (the `areaAdded` guard, #1-12 and #114-123): `AddEntity(
+  'shock_area.ent', vector3(GetPositionXY(), g_scale.scale(-10)), @area)` (#34-64) - an ABSOLUTE depth, -10 in the
+  level's units, not the agent's z less 10 (six of the 21 agents stand at 6, -6 or 4); `scaleToSize(area,
+  vector2(diameter, diameter))` with diameter = 2 x `g_scale.scale(areaRadius)` (#13-31, #66-77); the base
+  `currentScale` stored once (#79-97); `area.SetColor(vector3(0.8, 1, 1) x 0.5)` = (0.4, 0.5, 0.5) (#127-141).
+- **`shock_area.ent`**: `white_ring.png`, type 0, static, applyLight 0, blendMode 1 (AM_ADD), emissive (1, 1, 1), no
+  particles, no light. Drawn `min(1, ambient + emissive) x colour`, emissive read whatever applyLight says
+  (`ETHEntityProperties.cpp:265`): (0.4, 0.5, 0.5) added, the same on chapter 4's dark levels.
+- **`ETHCallback_shock_area`** (448212..448931), every frame: `AddToAngle(unitsPerSecond(20))` (#17-25) - game time,
+  0 under a pause; `SetScale(base x (0.993 + randF(0.014)))` (#51-66) - fresh about the fixed base every frame, not a
+  walk, and NOT paused (it reads no clock; `ETHEngine.cpp:165-166` runs the callbacks every frame). The generator is
+  re-seeded from the clock every frame (`ETHScene.cpp:496`): no sequence of it is a parity value.
+- **`deleteEntity(childID)`** in the agent's destroy arm takes the ring with an agent a fireball destroys.
+- **`tesla_shock_black_bg.png`**, 256 x 64 at density 1, cut 5 x 2 by the one system of `shock_agent.ent` and of
+  `shock_diamond.ent`: `SetupSpriteRects` strides it in whole units, `int(256 / 5)` = 51 (gs2d `Sprite.cpp:119-130`),
+  where the port's flipbook split it evenly at 51.2 (step 67).
+
+**THE CHANGE.**
+1. **`art.json` `shock_ring`**: the entity, `colour` [0.4, 0.5, 0.5], `z` {-10, scaled}, `spin_deg_per_s` 20,
+   `jitter` {from 0.993, span 0.014}, with `_source`, `_measured` (the library's 3-24 rings) and `_not_built`. The
+   `.ent`'s own facts are read at run time by `Art::LoadEnt`, as the black bars' are (step 122), not copied.
+2. **`Art::ShockRing`**, read with no default (an absent row, an empty entity, a colour not three numbers or below 0, a
+   z without `scaled`, a spin not a number, a jitter whose factor could reach 0 or a span below 0 are refused), with
+   `LevelZ` (scaled as it stands, a bare literal over the scale factor), `SizeUnits` (the diameter) and `JitterAt`.
+3. **The layer.** `m_shockRings`, one `ShockRingQuad` per `Fields` field, its own quads and not `m_sprites`', made by
+   `buildShockRings` in `buildSprites` after the well rings and BEFORE the door glow is pushed: `slotAfter` counts
+   `m_sprites` at or below the depth asked, and the glow's -22 on 4-04 to 4-08, 4-12, 4-14 and 4-15 would put every
+   ring there a slot too deep. An `.ent` that is not a plain type-0 picture with no pivot, particles or light is
+   refused with a log line and no ring. The picture is `drawnImage`'s `hd/white_ring.png` (R12, R13) at 2 x
+   `areaRadius`, at `slotAfter(-10, Slot::ShockRing)`. On the TICK, `advanceMotions` steps each ring's `Motion::Turn`
+   (unitsPerSecond's cap; no tick steps under a pause) and `syncShockRings` places it at `field.atPx` (3-28's and
+   4-15's swing) and destroys it on the tick `field.gone`. On the FRAME, `jitterShockRings` - in `OnUpdate`, OUTSIDE
+   the pause gate, after `updateEffects` - draws `0.993 + effectRandom(0, 0.014)` and places the quad at base x
+   factor. `syncLighting` tints it (0.4, 0.5, 0.5, 1) with the `.ent`'s emissive and no lightmap. `ShockRings()`
+   reports each.
+4. **K13's row**: `Slot::ShockRing`, fraction **-0.53125** (-0.5 - 1/32), the table's first row. The ring is deeper
+   than every other class but the door glow, so it stands behind the shot, a minion and an effect wherever it shares
+   their gap, as the original draws it, and still in front of the previous slot's halo (-0.75) and its deepest system
+   for up to 6 (the most any `.ent` carries is 2). The one inversion - a ring and a door glow in one gap, where the
+   original draws the glow's -22 behind - cannot show: both are added, and an add commutes.
+5. **One whole-unit cut rule** (`WholeUnitCut`): `buildEmitters` (the level's own emitters - the agents' and the
+   diamonds' `tesla_shock_black_bg.png` now sample 51 / 256 at whole strides), the effect path (step 128's, folded into
+   it) and `addEntityEmitters` (the loading screen, which draws no such sheet: by step 128's verification census of
+   every `.ent` and `.par` system, the only sheets whose units do not divide by their cut are `shock_strike.png`,
+   `tesla_shock_black_bg.png` and the unused `minion_death.par`'s `death_blood.png` - a census, not a capture). `EmitterReport::cellPx` reports the
+   cut's frame where the cut applies (51 x 32; `shock_strike.png` 102 x 64): step 128's deviation 8 closed. The draws
+   are the same draws: the placement stream does not move.
+6. **The notes**: `fields.json` `_not_built` (section 8.14: the depth is the absolute `scale(-10)`, six agents at
+   z != 0; the ring's picture built; the agent's own pulse and the strike sound still not built) and `Fields.hpp`'s
+   header comment likewise (half of step 128's deviation 10; `Torch.hpp`'s is left).
+
+**THE GATES.** After = this step's build `9078bc95` (`MagicPortals.exe`). Before = the 128-level sweep
+`11.2/after/sweep` (step 130's binary `9b0fa312`, which is the build this step started from; its 128 pngs checked
+against their log lines, 0 bad), on which no ring exists anywhere, which is every gate's "today". Captures, scripts
+and measurements: `out/parity/visuals/13.1/` (`capture_sweep.sh`, `capture_gates.sh`, `ring_gate.py` - the D6 check's
+own two readers made to take a frame - `explain_sweep.py`, `check_capture_log.py`; `gates/`, `after/`, `look/`,
+`after_sheet_3-28_swing.png`, `after_vs_library_sheet.png`). All `--window 1280x720 --fixed-step`. 3-24's camera is at
+(0, 0) at f420, as the D6 check's rays assume for the library: `explain_sweep.py`'s search over the 57 units the level
+can scroll (its max at x 512) lands on (0, 0), and both rings' edges read 0.996 of areaRadius from the assumed centres with IQRs of
+0.3-0.4 units - an offset camera would split the two.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| (0) Baseline | the build reproduces the last after where the step does not reach | - | 1-01 f420 `e2da5131` on `9078bc95` (`after/probe`), as `11.2/after/sweep`; 108 of 128 sweep frames byte-identical |
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in the build that stands (`build2_all.log`, `build3_layer_relink.log`, `build4_layer.log`). `build1_all.log` stopped on a header error - `ShockRingQuad` named in a member's parameter list before its definition - fixed with a forward declaration; its one C4390 was that error's cascade in the translation unit that failed, recompiled clean in build2 |
+| (1) 3-24 rim, the upper ring (agent 2048, areaRadius 80) | against the library `h6.3`: rim G delta 115-140, B/G 0.92-1.06, R/G 0.72-0.86 | no ring: 13 of 119 rays kept, every one on the crystal inside the rim band ((132, 149, 148)); library `h6.3`: **(107, 130, 125.8), R/G 0.823, B/G 0.967** (`t8.0` (107, 130, 123)) | **(107, 130, 124): G 130, R/G 0.823, B/G 0.954 - passes** (57 rays, f420) |
+| (1) 3-24 rim, the lower ring (agent 2023, areaRadius 60) | the same | no ring: 0 of 157 rays kept; library `h6.3`: **(99, 129, 124), R/G 0.767, B/G 0.961** | **(107, 129, 124): G 129, R/G 0.829, B/G 0.961 - passes** (53 rays) |
+| (2) 3-24 outer radius | areaRadius +- 2 % | no edge (the upper's 13 rays read the crystal's, 68.76 u); library `h6.3` 78.70 u (0.984) and 59.83 u (0.997) | **79.71 u (0.9964) and 59.76 u (0.9959) - passes.** Over the 12 frames f90-f420 (every 30th, `gates/ring_gate_after_series_summary.txt`), every one passes: the upper G 130, R/G 0.823, B/G 0.946-0.967, edge 0.983-0.999 x areaRadius; the lower G 129, R/G 0.767-0.829, B/G 0.953-0.961, edge 0.989-1.001 (f30 and f60 are under the level's opening black and read dim) |
+| (3) Spin, a unit test | 20 degrees a second of game time, held by a pause | none | **passes** (`AShockRingTurnsOnGameTimeAndJittersEveryFrame`, 3-24): one step of 20 x 16.667 ms / 1000 on 400 of 400 ticks, 133.3333 degrees in 400 ticks, the quad turned counter-clockwise by it; 0 of 60 paused frames turned; it goes on after the resume |
+| (4) Jitter, a unit test | uniform [0.993, 1.007] a frame about a fixed base, running under a pause | none | **passes**: 400 factors from 0.99301 to 1.00698, mean 0.99983, each fresh, every frame drawn at base x its own factor (no drift); 60 fresh factors on the 60 paused frames, each in range; `test_mp_sprites` pins `JitterAt(0)` 0.993 and `JitterAt(span)` 1.007 |
+| (5) The rings as decoded, a unit test | at the field's point, the diameter across, (0.4, 0.5, 0.5) added, -10 absolute | none | **passes** (`AShockAgentWearsItsRing`): 3-24's two rings, `hd/white_ring.png`, added, colour (0.4, 0.5, 0.5, 1), at (320, 44) and (256, 192), 160 and 120 units x the frame's factor, at -10, the 6 pictures from -70 to -14 behind them and both agents in front (z -1.478125 = the 6th slot less 0.53125 of a slot); 4-07's one ring, 9 pictures behind it - its three at -10 among them, the door glow not counted - the glow behind it, its colour whole on a dark level (z -1.466125); level0 none |
+| (6) The swinging ring, a unit test | where its field is | none | **passes** (`AMovingShockRingIsWhereItsFieldIs`): 3-28's `shock_agent_2128` ring at its field's point on 90 of 90 ticks over a swing past 60 units; by eye, `after_sheet_3-28_swing.png` |
+| (7) Gone with its agent, a unit test | `deleteEntity(childID)` | none | **passes** (step 128's 3-31 fireball route, `AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds`): `shock_agent_ent_2441`'s ring there before the tap, gone on the tick `Fields` marks the agent gone, 1 ring -> 0 |
+| (8) The lightning's sheet (step 67's deviation) | `tesla_shock_black_bg.png` as the original cuts it | a flipbook's even split, 51.2 x 32 | **passes** (`AParticleOnANonSquareCellIsDrawnSquare`, its 51.2 pin rewritten deliberately): the report 51 x 32 on 3-24's systems; 634 drawn quads over 120 frames all at uvScale (0.19921875, 0.5) on a whole stride with no `SpriteAnimationComponent`, 5 columns seen, all square |
+| (9) K13 | every new depth a row of the one table, pinned | - | **passes**: `Slot::ShockRing` -0.53125, the first row (the rows stay in drawing order), behind the shot and in front of the previous slot's deepest system for 1, 2 and 6 systems; the eleven -0.5 classes unchanged; the drawn z read back off the registry (row 5) |
+| (10) K8 (the inherited reading: the placement stream untouched) | no level particle moved | - | **passes** (`AShockRingsJitterIsTheEffectsStreamsAlone`): two layers on 3-24, one of which spawns an effect at frame 20 - 720 emitter readings (the level's 6 systems x 120 frames) identical, and the rings' factors identical to frame 20 and apart on 99 of the 99 frames after; `AnEffectMovesNoParticleOfTheLevels` passes too |
+| (11) The 128-level f420 sweep | changes explained | `11.2/after/sweep` | **passes: 20 of 128 differ, every changed pixel named** (`after/explain_sweep.txt`, below). All 128 exit 0, validation ACTIVE in 128 logs and silent, every png matching its log line (`after/check_capture_log.txt`: 129 checked, 0 bad); 16 logs say `shock rings:`, 21 rings in all (12 levels x 1, 3 x 2, 1 x 3: the census's 21) |
+| (12) No gameplay change | nothing the simulation reads moves | - | **passes**: `Fields` is untouched but for its header comment; the rings are picture-side; `test_mp_fields` 63 as before |
+
+**THE SWEEP'S 20** (`after/explain_sweep.txt`: clusters after a 9 x 9 dilation, each labelled by what it meets at the
+camera that explains the most of it; `look/`):
+- **15 ring levels with a ring in view** - 3-24, 3-25, 3-26, 3-27, 3-28, 4-04, 4-05, 4-06, 4-07, 4-08, 4-12, 4-14,
+  4-15, 4-19 and 4-28: the annulus of each ring in view (12,215 to 97,859 px a level, max |d| 131-132, the rim's added
+  (107, 130, 124) over the art, cut where nearer art covers it, as the library's are, `after_vs_library_sheet.png`)
+  and the agent's own lightning (the whole-unit cut; 865 to 2,828 px a level, max 25-124, where it stands clear of the
+  annulus; on 4-15, 4-19 and 4-28 it falls inside the annulus's cluster).
+- **The player's red eye on all 16 ring levels**: one cluster of 32 to 96 px (max 9 to 74) at the eye, each with 46 to
+  72 red eye pixels in the 80 x 80 about it (`look/other_clusters.png`; 3-31's 53). The eyes' specks draw on the effects' stream,
+  which the rings' per-frame factors now share - K8's inherited reading, as step 83 set it.
+- **3-31** differs by those 40 px alone (max 9): its ring stands at (224, 384), below the f420 view (the reader's
+  camera search put them in the ring, wrongly; by eye they are the eye, `look/3-31_change.png`).
+- **4-14's carranca fireball** (2,771 px, max 197): the same fireball at the same point, whose `fireball.ent` specks are
+  on the effects' stream too (`look/4-14_other.png`).
+- **The shock diamonds**: 3-16, 3-17, 3-20 and 4-30 differ only at their diamonds (723 to 1,896 px, max 25-81), 3-27
+  also at its own (433 px, max 16) - the whole-unit cut. 3-18's diamond stands at (80, 288), below its f420 view: that
+  frame is byte-identical.
+
+**SUITES**, run directly, on the build that stands (logs `13.1/`): `test_mp_sprites` **1000** (964 at step 130: the two
+new cases), `test_mp_fields` **63** (its data's note changed), `test_mp_layer` **2446** (2382: four new cases, the
+ring's checks in the 3-31 case, the cut's in the non-square case, the table's rows), 0 failures each. `test_mp_layer`
+ran twice: its first build's exe was refused (below); the relinked one ran 2446 checks with 1 failure, this step's
+own new K8 case asking for more than 1000 readings where 3-24 has 6 systems x 120 frames = 720 (a threshold copied
+from level0's case; every reading the same) - pinned at 720, rebuilt, and the second run is 2446 / 0 with every
+printed number unchanged (`test_mp_layer_run2.txt`, `_run3.txt`). The full ctest was not run: the build relinked all
+45 suites and `MagicPortalsSpike` (`Art.cpp` is in the simulation library; `Fields.hpp`'s comment recompiled what
+includes `Game.hpp`). The three run are those whose code or data changed and `test_mp_layer`, the one suite that
+links `MagicPortalsGame`. `LoadRules` now refuses an `art.json` with no `shock_ring`: a grep of every
+`Art::LoadRules(` caller (the layer, and `test_mp_{layer,sprites,minions,timed,zerog}`; none in the spike) finds each
+loading the real `game/data/art.json`, or in `test_mp_sprites` a text-replaced copy of it, and no test writing an
+`art.json` of its own - so `test_mp_minions`, `test_mp_timed` and `test_mp_zerog` read the file the two suites run
+read, and none of them reads a field of the ring. The verification asked for them to be run: before the commit, on
+the build that stands (a dry run of it has no work to do), **`test_mp_minions` 99**, **`test_mp_timed` 84** and
+**`test_mp_zerog` 88**, 0 failures each, the counts step 122 gave (`test_mp_{minions,timed,zerog}_commit.txt`).
+
+**SWEEP BASELINE**: `13.1/after/sweep` now stands for all 128 levels, the next step's before.
+
+**SMART APP CONTROL: 1 refusal.** `test_mp_layer.exe` `10d18399` was refused on its first launch (Permission denied,
+exit 126); deleted and relinked once (`3604e1d5`), it ran; rebuilt after the threshold fix (`0dff310a`), it ran.
+Launches: `MagicPortals.exe` `9078bc95` 131 times (the 1-01 probe, the 128 sweep captures, the two gate series), 0
+refused; `test_mp_sprites` (`c0b57d99`) and `test_mp_fields` (`927bce46`) once each; the verification's 128 captures
+and three suite runs, 0 refused; `test_mp_minions` (`af6241cf`), `test_mp_timed` (`8db5bb78`) and `test_mp_zerog`
+(`ddeec347`) once each before the commit, 0 refused. No other exe was deleted or relinked for a refusal.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **The bucket clock.** The original turns, jitters and tests a ring only while its bucket is drawn (`D6_check` 5.7);
+   the port turns and jitters every ring from the level's first tick and frame (3-31's below its view too), as it runs
+   the antiportal's. Neither shows: the picture is symmetric to 1 % and the original's jitter has no reproducible
+   sequence.
+2. **The first frame.** The original's ring is added inside its agent's callback, after the frame's render list, so it
+   is first drawn a frame later, turned and jittered once; the port's is there from the level's first frame, under the
+   opening black.
+3. **The clock's rate.** `unitsPerSecond` reads the truncated whole milliseconds (16 at 60 Hz), so the port's turn runs
+   4.17 % fast, as every scripted clock of the port's does (`art.json` antiportal; port-wide, not emulated). Invisible.
+4. **`randF(n)` is [0, n] inclusive**; the port's uniform draw is [0, n), so 1.007 itself is never drawn.
+5. **The door glow's order** in a shared gap (THE CHANGE 4): inverted, and an add commutes.
+6. **Paused frames now write two quads' transforms** (3-24's rings), where on a paused frame nothing else of the level
+   moves; they are pictures in the registry `StateHash` walks, as every particle quad is on the frames it moves, and
+   the port's replays hash on ticks.
+7. **The agent's own pulse** (`bounce(V2_ONE, vector2(0.95, 0.95), 300)`, agent #241-263, on the AGENT's sprite) and
+   `playShockStrikeSound` are not built (`fields.json` `_not_built`).
+
+**RULINGS APPLIED.** The standing direction that R1-R23 follow what the original does: **R12**, the 720 px tier
+(`hd/white_ring.png`, 256 texels at density 2, drawn at `scaleToSize`'s size); **R13**, route B (the tier from the
+name); **R10**, the player at 1.42, in front of every ring. R1, R2, R22 and R23 are not built; **R24 and R25** are
+neither touched nor withdrawn. **K13**: one new row, `Slot::ShockRing`. **K8**: the inherited reading (gate 10). The
+depth rule of step 86: `g_scale.scale(-10)` is a scaled depth, -10 as it stands.
+
+**GAMEPLAY: NONE.** `Fields::State` is untouched; the rings, their turns and their factors are picture-side.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **The off-screen kill** (gameplay, pre-existing, not this step's): `Fields::Tick` polls every ring every tick, where
+  the original's `ETHCallback_shock_area` kills only while its bucket is drawn (`D6_check` 5.7).
+- **The agent's pulse** (deviation 7): its argument order is not re-derived (`D6.md` section 6); a small step with it.
+- **The strike sound** (`playShockStrikeSound`), with the other unbuilt sounds.
+- **`Torch.hpp`'s stale comment** (step 128's deviation 10, the half left), at the next edit that recompiles it.
+- For the backlog (the close agent): a 13.1 row; step 67's deviation (the evenly split particle sheet, backlog
+  section 2's 2.3 row) and step 128's deviation 8 closed; the batch-13 line's "blocked on D6" is stale.
+- For the merge's renumbering: "step 131" is written in `art.json` (`shock_ring` `_source` and `_measured`),
+  `fields.json` (`_not_built`) and three comments of `tests/test_mp_layer.cpp`.
