@@ -8793,7 +8793,14 @@ void ALitTorchBakesTheLevelAtRunTime() {
     const std::vector<std::uint8_t> before = masks();
     CHECK_MSG(std::count(before.begin(), before.end(), Lighting::kLiveLights) > 0,
               "unlit: its static walls take only the live lights");
-    CHECK_EQ(Tagged(registry, "Magic Portals Torch Light"), 0);
+    const auto litTorches = [&layer]() {
+        std::vector<MagicPortalsLayer::EffectReport> found;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "light_from_projectile.ent") found.push_back(report);
+        }
+        return found;
+    };
+    CHECK(litTorches().empty());
 
     const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
     tap(layer, registry, screenOf(registry, torchPx));
@@ -8803,9 +8810,14 @@ void ALitTorchBakesTheLevelAtRunTime() {
     CHECK_MSG(layer.SimLevel()->torch.lights[0].lit, "a shot at the torch lit it: " + lastFailure(layer));
     if (!layer.SimLevel()->torch.lights[0].lit) return;
     tickWith(layer, registry, kRest, {}, {});
+    // THE LIT TORCH IS AN ENTITY THE SHOT ADDS (the visuals plan's 11.2): its light
+    // and halo come with light_from_projectile.ent, which the frame adds.
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
 
-    CHECK_EQ(Tagged(registry, "Magic Portals Torch Light"), 1);
-    const entt::entity lamp = FirstTagged(registry, "Magic Portals Torch Light");
+    const std::vector<MagicPortalsLayer::EffectReport> lamps = litTorches();
+    CHECK_EQ(lamps.size(), std::size_t{1});
+    const entt::entity lamp = lamps.size() == 1 ? lamps[0].light : entt::null;
+    CHECK(lamp != entt::null);
     if (lamp != entt::null) {
         const Light2DComponent& light = registry.get<Light2DComponent>(lamp);
         const glm::vec3 colour = light.color * light.intensity;
@@ -8817,6 +8829,17 @@ void ALitTorchBakesTheLevelAtRunTime() {
         const glm::vec3 at = registry.get<TransformComponent>(lamp).position;
         const glm::vec3 want = MagicPortals::Units::ToWorld(torchPx.x, torchPx.y - 12.0);
         CHECK_MSG(std::fabs(at.x - want.x) < 1e-5f && std::fabs(at.y - want.y) < 1e-5f, "12 above the torch");
+        // And its HALO at the light's own (x, y) too - DrawHalo's point
+        // (ETHRenderEntity.cpp:376-386) - where step 55 drew it 12 units low.
+        const entt::entity halo = lamps[0].halo;
+        CHECK(halo != entt::null);
+        if (halo != entt::null) {
+            const glm::vec3 haloAt = registry.get<TransformComponent>(halo).position;
+            CHECK_MSG(std::fabs(haloAt.x - want.x) < 1e-5f && std::fabs(haloAt.y - want.y) < 1e-5f,
+                      "the halo 12 above the torch as well: " + ShowV(haloAt));
+            CHECK_MSG(std::fabs(lamps[0].haloPx.x - 300.0) < 1e-9 && std::fabs(lamps[0].haloPx.y - 300.0) < 1e-9,
+                      "halo.bmp 300 across (no bounce on a level with no wall)");
+        }
     }
     const std::vector<std::uint8_t> after = masks();
     CHECK_MSG(!after.empty() && std::all_of(after.begin(), after.end(), [](std::uint8_t mask) {
@@ -11842,6 +11865,373 @@ void AFireSignalPutOutLeavesItsWaterAtItsTorch() {
     layer.OnDetach(registry);
 }
 
+// THE LIT TORCH IS THE ENTITY ITS SHOT ADDS (the visuals plan's 11.2; effects.json
+// light_from_projectile, light_on_sparkles, portal_death_at_lit_torch), on 4-22
+// (level21c): L1's tap at the torch, which has no wall and so no signal and no
+// bounce. On the tick it lights, the frame adds the three - the lit torch on the
+// torch's own point and depth (eth_z -10), its picture on its pivot 16 below it,
+// where the unlit one stood; its sparkles there; and portal_death where the shot
+// was. The level's own unlit picture goes on the NEXT tick (the `delete` branch).
+void AShotLightsTheTorchAsTheEntityItAdds() {
+    if (!OriginalArtIsThere("AShotLightsTheTorchAsTheEntityItAdds")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level21c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || layer.SimLevel()->torch.lights.empty()) return;
+    const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
+    layer.ScheduleDevTap(60, glm::dvec2(692.0 / 1280.0, 113.0 / 720.0));
+    int litOn = -1;
+    for (int tick = 1; tick <= 200 && litOn < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (layer.SimLevel()->torch.lights[0].lit) {
+            litOn = tick;
+            break;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(litOn > 0, "L1's tap lit 4-22's torch, on tick " + std::to_string(litOn));
+    if (litOn < 0) return;
+    // The tick it is lit: queued, not added; the unlit picture still stands.
+    CHECK(EffectsOf(layer, "light_from_projectile.ent").empty() && EffectsOf(layer, "light_on_sparkles.ent").empty());
+    std::vector<MagicPortalsLayer::TorchReport> torches = layer.TorchReports();
+    CHECK_MSG(torches.size() == 1 && torches[0].levelPicture && !torches[0].unlitGone && nearlyU(torches[0].z, -10.0),
+              "the unlit picture still stands on the tick it is lit, at eth_z -10");
+    const std::optional<glm::dvec2> spent = layer.SimLevel()->torch.spentAtPx;
+    CHECK_MSG(spent.has_value() && glm::distance(*spent, torchPx) < 24.0, "the shot spent within 24 of the torch");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    int count = 0;
+    const MagicPortalsLayer::EffectReport lit = FirstEffect(layer, "light_from_projectile.ent", count);
+    CHECK_MSG(count == 1 && lit.atPx == torchPx && nearlyU(lit.zUnits, -10.0) && lit.angleDeg == 0.0f &&
+                  !lit.temporary && lit.drawn && lit.hasLight && lit.hasHalo,
+              "the lit torch on the torch " + Point(torchPx) + ", z -10, a picture, a light and a halo, not temporary: " +
+                  Point(lit.atPx) + " z " + std::to_string(lit.zUnits));
+    CHECK_MSG(lit.systems == 1 && lit.pool == 12 && lit.bounceScale == glm::dvec2(1.0),
+              "its flame, 12 fire.png, and no bounce where there is no wall");
+    if (lit.quad != entt::null) {
+        const TransformComponent& placed = registry.get<TransformComponent>(lit.quad);
+        const glm::dvec2 centre = MagicPortals::Units::ToPixels(placed.position);
+        const glm::dvec2 size = glm::dvec2(placed.scale.x, placed.scale.y) * MagicPortals::Units::kPixelsPerMetre;
+        CHECK_MSG(glm::distance(centre, torchPx + glm::dvec2(0.0, 16.0)) < 1e-3 && nearlyU(size.x, 32.0, 1e-3) &&
+                      nearlyU(size.y, 64.0, 1e-3) && placed.rotation.z == 0.0f,
+                  "torch_small.png, 32 x 64, centred 16 below the torch on its PivotAdjust (0, -16): " + Point(centre) +
+                      " " + Point(size));
+    }
+    const MagicPortalsLayer::EffectReport sparkles = FirstEffect(layer, "light_on_sparkles.ent", count);
+    CHECK_MSG(count == 1 && sparkles.atPx == torchPx && nearlyU(sparkles.zUnits, -10.0) && sparkles.temporary &&
+                  sparkles.systems == 2 && !sparkles.drawn,
+              "light_on_sparkles on the torch, z -10: onda and 28 sparkles, temporary");
+    const MagicPortalsLayer::EffectReport burst = FirstEffect(layer, "portal_death.ent", count);
+    CHECK_MSG(count == 1 && spent.has_value() && burst.atPx == *spent && nearlyU(burst.zUnits, 0.0),
+              "portal_death where the shot was spent, its bare 0: " + Point(burst.atPx));
+
+    // The next tick runs the `delete` branch: the level's unlit torch and its spark
+    // go, drawn once with the lit torch on the frame before.
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    torches = layer.TorchReports();
+    CHECK_MSG(torches.size() == 1 && !torches[0].levelPicture && torches[0].unlitGone,
+              "the level's unlit picture gone on the tick after");
+    CHECK_EQ(EffectsOf(layer, "light_from_projectile.ent").size(), std::size_t{1});
+    // And it stays: a lit torch on a level with no wall burns for good.
+    for (int frame = 0; frame < 180; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(EffectsOf(layer, "light_from_projectile.ent").size() == 1 && EffectsOf(layer, "light_on_sparkles.ent").empty(),
+              "three seconds on, the lit torch burns on and its sparkles are over");
+    std::printf("  4-22: the torch lit on tick %d: light_from_projectile at %s z %.1f, its sparkles, the burst at %s\n",
+                litOn, Point(lit.atPx).c_str(), lit.zUnits, Point(burst.atPx).c_str());
+    layer.OnDetach(registry);
+}
+
+// PUT OUT AND BROUGHT BACK, on 4-29 (level28c), by L1's two taps and a third: the
+// lit torch bounces (the level has a wall) and its signal rides the orbit; the wall
+// goes with its dust, turned by it; the signal shot takes the lit torch and the
+// signal and adds the torch back - light_off.ent at vector3(originalPos, 10), a
+// vertical entity bottom-centred on its pivot - its sparkles, the burst at the shot,
+// and the wall back at the ghost with its smoke, fading in over a second. Lit again,
+// the torch put back goes on the tick after, and the wall that comes back is the
+// one that goes, where the ghost put it.
+void ATorchPutOutComesBackAndItsWallFadesIn() {
+    if (!OriginalArtIsThere("ATorchPutOutComesBackAndItsWallFadesIn")) return;
+    namespace Torch = MagicPortals::Torch;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || layer.SimLevel()->torch.lights.empty() ||
+        !layer.SimLevel()->torch.wall.present) {
+        return;
+    }
+    const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
+    const glm::dvec2 wallPx(192.0, 96.0);
+    constexpr double kGhostZ = 2.0 - 4.0 / (720.0 / 256.0);
+    const glm::dvec2 point(247.0 / 1280.0, 141.0 / 720.0);
+    layer.ScheduleDevTap(60, point);
+    layer.ScheduleDevTap(250, point);
+    layer.ScheduleDevTap(430, point);
+    int litOn = -1;
+    int wallGoneOn = -1;
+    int outOn = -1;
+    int relitOn = -1;
+    int wallGoneAgainOn = -1;
+    const Torch::State* torch = &layer.SimLevel()->torch;
+    for (int tick = 1; tick <= 640; ++tick) {
+        const int wasLit = torch->lit;
+        const int wasGone = torch->wallsGone;
+        const int wasOut = torch->putOut;
+        tickWith(layer, registry, kRest, {}, {});
+        torch = &layer.SimLevel()->torch;
+        const bool lightingNow = torch->lit > wasLit;
+        const bool goneNow = torch->wallsGone > wasGone;
+        const bool outNow = torch->putOut > wasOut;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        int count = 0;
+        if (lightingNow && litOn < 0) {
+            litOn = tick;
+            const MagicPortalsLayer::EffectReport lit = FirstEffect(layer, "light_from_projectile.ent", count);
+            const MagicPortals::Art::Pulse pulse{glm::dvec2(1.04), glm::dvec2(0.96), 160.0};
+            const glm::dvec2 first = pulse.ScaleAt(static_cast<double>(MagicPortalsLayer::kTick) * 1000.0);
+            CHECK_MSG(count == 1 && nearlyU(lit.zUnits, -12.0) && nearlyU(lit.bounceScale.x, first.x, 1e-9) &&
+                          lit.bounceScale.x > 1.02 && lit.bounceScale.x < 1.04,
+                      "4-29's lit torch, z -12, bouncing from 1.04 - one frame in: " + std::to_string(lit.bounceScale.x));
+            const MagicPortalsLayer::EffectReport signal = FirstEffect(layer, "fire_signal.ent", count);
+            CHECK_MSG(count == 1 && signal.atPx == torchPx && nearlyU(signal.zUnits, -12.0) && !signal.temporary &&
+                          signal.systems == 2,
+                      "the fire signal on the torch, z -12, its two systems: " + Point(signal.atPx));
+        } else if (litOn > 0 && tick == litOn + 1) {
+            const MagicPortalsLayer::EffectReport signal = FirstEffect(layer, "fire_signal.ent", count);
+            CHECK_MSG(count == 1 && signal.atPx == torch->signal.atPx && signal.atPx.y < torchPx.y - 17.0 &&
+                          signal.atPx.x > torchPx.x,
+                      "a tick on, riding the signal just past the top: " + Point(signal.atPx - torchPx));
+            const std::vector<MagicPortalsLayer::TorchReport> torches = layer.TorchReports();
+            CHECK_MSG(torches.size() == 1 && !torches[0].levelPicture, "and the level's unlit torch gone");
+        }
+        if (goneNow && wallGoneOn < 0) {
+            wallGoneOn = tick;
+            const MagicPortalsLayer::EffectReport dust = FirstEffect(layer, "wall_destroy.ent", count);
+            CHECK_MSG(count == 1 && dust.atPx == wallPx && nearlyU(dust.zUnits, 2.0) && dust.angleDeg == 0.0f &&
+                          dust.scriptScale == 1.0,
+                      "the light wall's dust on it, z 2, unturned, x1: " + Point(dust.atPx));
+        }
+        if (outNow && outOn < 0) {
+            outOn = tick;
+            CHECK_MSG(EffectsOf(layer, "light_from_projectile.ent").empty() && EffectsOf(layer, "fire_signal.ent").empty(),
+                      "the lit torch and the signal gone with the shot");
+            const MagicPortalsLayer::EffectReport back = FirstEffect(layer, "light_off.ent", count);
+            CHECK_MSG(count == 1 && back.atPx == torchPx && nearlyU(back.zUnits, kBareTen) && !back.temporary &&
+                          back.systems == 2,
+                      "the torch put back at vector3(originalPos, 10): " + Point(back.atPx) + " z " +
+                          std::to_string(back.zUnits));
+            if (back.quad != entt::null) {
+                const TransformComponent& placed = registry.get<TransformComponent>(back.quad);
+                const glm::dvec2 centre = MagicPortals::Units::ToPixels(placed.position);
+                CHECK_MSG(glm::distance(centre, torchPx + glm::dvec2(0.0, 16.0)) < 1e-3 && placed.rotation.z == 0.0f,
+                          "type 2, bottom-centred on (0, -48): the same 16 below as the lit one: " + Point(centre));
+            }
+            const MagicPortalsLayer::EffectReport sparkles = FirstEffect(layer, "light_off_sparkles.ent", count);
+            CHECK_MSG(count == 1 && sparkles.atPx == torchPx && nearlyU(sparkles.zUnits, kBareTen),
+                      "light_off_sparkles there too");
+            const MagicPortalsLayer::EffectReport smoke = FirstEffect(layer, "light_wall_create.ent", count);
+            CHECK_MSG(count == 1 && smoke.atPx == wallPx && nearlyU(smoke.zUnits, kGhostZ, 1e-9) &&
+                          smoke.angleDeg == 0.0f && smoke.temporary,
+                      "light_wall_create at the ghost, the wall's depth less 4 raw px: z " +
+                          std::to_string(smoke.zUnits));
+            const MagicPortalsLayer::EffectReport wall = FirstEffect(layer, "light_wall.ent", count);
+            CHECK_MSG(count == 1 && wall.atPx == wallPx && nearlyU(wall.zUnits, kGhostZ, 1e-9) && wall.drawn &&
+                          nearlyU(wall.alpha, static_cast<double>(MagicPortalsLayer::kTick), 1e-6),
+                      "the wall back at the ghost, one frame into its fade: alpha " + std::to_string(wall.alpha));
+        }
+        if (outOn > 0 && tick == outOn + 60) {
+            int count2 = 0;
+            const MagicPortalsLayer::EffectReport wall = FirstEffect(layer, "light_wall.ent", count2);
+            CHECK_MSG(count2 == 1 && nearlyU(wall.alpha, 1.0), "a second on, whole: " + std::to_string(wall.alpha));
+        }
+        if (outOn > 0 && lightingNow && relitOn < 0) relitOn = tick;
+        if (relitOn > 0 && tick == relitOn) {
+            const MagicPortalsLayer::EffectReport lit = FirstEffect(layer, "light_from_projectile.ent", count);
+            CHECK_MSG(count == 1 && nearlyU(lit.zUnits, kBareTen),
+                      "lit again, on the depth the torch was put back at: z " + std::to_string(lit.zUnits));
+            CHECK_EQ(EffectsOf(layer, "light_off.ent").size(), std::size_t{1});
+        }
+        if (relitOn > 0 && tick == relitOn + 1) {
+            CHECK_MSG(EffectsOf(layer, "light_off.ent").empty(), "and the torch put back goes on the tick after");
+        }
+        if (relitOn > 0 && goneNow && tick > wallGoneOn) {
+            wallGoneAgainOn = tick;
+            CHECK_MSG(EffectsOf(layer, "light_wall.ent").empty(), "the rebuilt wall goes at its 1500 ms");
+            bool atGhost = false;
+            for (const MagicPortalsLayer::EffectReport& dust : EffectsOf(layer, "wall_destroy.ent")) {
+                if (dust.atPx == wallPx && nearlyU(dust.zUnits, kGhostZ, 1e-9)) atGhost = true;
+            }
+            CHECK_MSG(atGhost, "and its dust is where it stood, at the ghost's depth");
+            break;
+        }
+    }
+    CHECK_MSG(litOn > 0 && wallGoneOn > litOn && outOn > wallGoneOn && relitOn > outOn && wallGoneAgainOn > relitOn,
+              "lit " + std::to_string(litOn) + ", wall gone " + std::to_string(wallGoneOn) + ", put out " +
+                  std::to_string(outOn) + ", lit again " + std::to_string(relitOn) + ", wall gone again " +
+                  std::to_string(wallGoneAgainOn));
+    std::printf("  4-29: lit on tick %d, the wall gone %d, put out %d, lit again %d, the wall gone again %d\n", litOn,
+                wallGoneOn, outOn, relitOn, wallGoneAgainOn);
+    layer.OnDetach(registry);
+}
+
+// THE TRAIL (effects.json movement_trail) on 4-05 (level4c), a weightless level:
+// none at rest; at 0.5 m/s the first tick adds one at once - the clock ran on at rest
+// - riding on the player at its own depth and drawn in front of it; then one every
+// 24th tick; and none at 0.4 exactly. None where the world has gravity (1-01).
+void AWeightlessPlayerLeavesATrail() {
+    if (!OriginalArtIsThere("AWeightlessPlayerLeavesATrail")) return;
+    constexpr double kPlayerZ = 4.0 / (720.0 / 256.0);
+    for (const char* name : {"level4c", "level0"}) {
+        const bool weightless = std::string(name) == "level4c";
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), name);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        const entt::entity player = layer.SimLevel()->player;
+        const auto trails = [&layer]() { return EffectsOf(layer, "movement_trail.ent"); };
+        const auto push = [&registry, player](float speed) {
+            registry.get<RigidBodyComponent>(player).velocity = glm::vec3(speed, 0.0f, 0.0f);
+        };
+        for (int tick = 0; tick < 30; ++tick) {
+            push(0.0f);
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(trails().empty(), std::string(name) + ": none at rest");
+        // 0.4 exactly: the test is strictly above.
+        for (int tick = 0; tick < 5; ++tick) {
+            push(0.4f);
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(trails().empty(), std::string(name) + ": none at 0.4 m/s");
+        std::vector<int> ids;
+        std::vector<int> on;
+        for (int tick = 1; tick <= 60; ++tick) {
+            push(0.5f);
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            for (const MagicPortalsLayer::EffectReport& trail : trails()) {
+                if (std::find(ids.begin(), ids.end(), trail.id) != ids.end()) continue;
+                ids.push_back(trail.id);
+                on.push_back(tick);
+                const glm::dvec2 playerPx =
+                    MagicPortals::Units::ToPixels(registry.get<TransformComponent>(player).position);
+                CHECK_MSG(glm::distance(trail.atPx, playerPx) < 1e-6 && nearlyU(trail.zUnits, kPlayerZ) &&
+                              trail.temporary && trail.systems == 1 && trail.pool == 10 && !trail.drawn,
+                          "a trail on the player " + Point(playerPx) + " at its z " + std::to_string(trail.zUnits) +
+                              ": 10 portal_particle.png, temporary");
+                CHECK_MSG(trail.systemZ.size() == 1 && trail.systemZ[0] > layer.PlayerSlotZ(),
+                          "drawn over the body, as F10 has it");
+            }
+        }
+        if (weightless) {
+            CHECK_MSG(on.size() == 3 && on[0] == 1 && on[1] == 25 && on[2] == 49,
+                      "level4c: the first at once, then every 24th tick: " +
+                          (on.empty() ? std::string("none") : std::to_string(on[0])) + " of " +
+                          std::to_string(on.size()));
+            std::printf("  4-05: at 0.5 m/s, trails on ticks %d, %d and %d of 60\n", on.size() > 0 ? on[0] : -1,
+                        on.size() > 1 ? on[1] : -1, on.size() > 2 ? on[2] : -1);
+        } else {
+            CHECK_MSG(on.empty(), "level0 has the world's gravity: no trail");
+        }
+        layer.OnDetach(registry);
+    }
+}
+
+// A LAP ROUND A WELL (gravitywell.json roundabout; effects.json roundabout_effect),
+// on 4-17 (level16c): the player walked counter-clockwise round its well. On the tick
+// the lap is run the frame adds roundabout_effect at the well's area - its xy, a
+// bare -5 - the sound is latched, and the agent's picture, which stood at a whole
+// turn (none), starts its turn: counter-clockwise, past a whole turn a quarter of a
+// second in, and settled again at 3000 ms.
+void ALapRoundAWellFlashesAndTurnsItsAgent() {
+    if (!OriginalArtIsThere("ALapRoundAWellFlashesAndTurnsItsAgent")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level16c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || layer.SimLevel()->wells.wells.empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::GravityWell::Well well = layer.SimLevel()->wells.wells.front();
+    const MagicPortals::GravityWell::Roundabout rules = layer.SimLevel()->wells.rules.roundabout;
+    const entt::entity agent = SpriteOf(registry, "Magic Portals Sprite", "/gravity_agent.png");
+    CHECK(agent != entt::null);
+    if (agent == entt::null) return;
+    CHECK_MSG(layer.WellSpinDegrees(0) == 360.0 && registry.get<TransformComponent>(agent).rotation.z == 0.0f,
+              "at rest a whole turn, drawn as none");
+    const entt::entity player = layer.SimLevel()->player;
+    int lapOn = -1;
+    for (int tick = 0; tick < 200 && lapOn < 0; ++tick) {
+        const double rad = tick * 4.0 * 3.14159265358979323846 / 180.0;
+        PutPlayerAt(registry, layer, well.atPx + glm::dvec2(std::cos(rad), -std::sin(rad)) * (well.radiusPx * 0.5));
+        registry.get<RigidBodyComponent>(player).velocity = glm::vec3(0.0f);
+        tickWith(layer, registry, kRest, {}, {});
+        // The sweep is stepped in BeforeStep, after the tick's latch: the lap is
+        // read by the next tick's, as everything BeforeStep records is.
+        if (!layer.SimLevel()->wells.lapsNow.empty()) {
+            lapOn = tick;
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            tickWith(layer, registry, kRest, {}, {});
+            const std::vector<std::string> sounds = layer.LatchedSounds();
+            CHECK_MSG(std::find(sounds.begin(), sounds.end(), "roundabout") != sounds.end(),
+                      "the lap latches playRoundaboutSound's event");
+            CHECK(EffectsOf(layer, "roundabout_effect.ent").empty());
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(lapOn > 0, "the player lapped the well, on tick " + std::to_string(lapOn));
+    if (lapOn < 0) return;
+    int count = 0;
+    const MagicPortalsLayer::EffectReport flash = FirstEffect(layer, "roundabout_effect.ent", count);
+    CHECK_MSG(count == 1 && flash.atPx == well.atPx && nearlyU(flash.zUnits, -5.0 / (720.0 / 256.0)) &&
+                  flash.temporary && flash.systems == 2,
+              "roundabout_effect at the well's area " + Point(well.atPx) + ", z -5 bare: " + Point(flash.atPx) + " z " +
+                  std::to_string(flash.zUnits));
+    // The latch zeroed the agent's clock and set its sign, and the same tick's
+    // callback step took it one frame on before its picture was placed.
+    const double tickMs = static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
+    {
+        const double spin = layer.WellSpinDegrees(0);
+        CHECK_MSG(nearlyU(spin, MagicPortals::GravityWell::SpinDegrees(rules, tickMs, 1.0), 1e-9) && spin > 0.0,
+                  "the lap's tick: zeroed and one step on, counter-clockwise: " + std::to_string(spin));
+        const float drawn = registry.get<TransformComponent>(agent).rotation.z;
+        CHECK_MSG(std::fabs(static_cast<double>(drawn) - std::fmod(spin, 360.0) * 3.14159265358979323846 / 180.0) < 1e-5,
+                  "and its picture turned by it, +z: " + std::to_string(drawn));
+    }
+    double most = 0.0;
+    int mostOn = -1;
+    for (int tick = 2; tick <= 200; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const double spin = layer.WellSpinDegrees(0);
+        CHECK_MSG(nearlyU(spin, MagicPortals::GravityWell::SpinDegrees(rules, tickMs * tick, 1.0), 1e-3),
+                  "its clock a tick a tick: " + std::to_string(spin));
+        if (spin > most) {
+            most = spin;
+            mostOn = tick;
+        }
+    }
+    CHECK_MSG(most > 480.0 && mostOn > 10 && mostOn < 22, "past a whole turn a quarter of a second in: " +
+                                                              std::to_string(most) + " on tick " + std::to_string(mostOn));
+    CHECK_MSG(layer.WellSpinDegrees(0) == 360.0 && registry.get<TransformComponent>(agent).rotation.z == 0.0f,
+              "and settled on the turn by 3000 ms, drawn as none again");
+    std::printf("  4-17: a lap round %s on tick %d: roundabout_effect at %s z %.4f; the agent turns to %.1f degrees\n",
+                well.name.c_str(), lapOn, Point(flash.atPx).c_str(), flash.zUnits, most);
+    layer.OnDetach(registry);
+}
+
 // THE RING'S KILL, on 3-25 (level24b): the player put in a shock ring dies to it, and
 // ETHCallback_shock_area adds shock_death at the character's own point and depth (R10's
 // 4 / 2.8125) - once. And a player already dead is not killed again: one put in a
@@ -12065,7 +12455,26 @@ void The432WallsDustIsTwiceTheSize() {
     FirstEffect(layer, "wall_destroy.ent", count);
     CHECK_MSG(count == 0, "4-32: nothing added on the tick");
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-    const MagicPortalsLayer::EffectReport dust = FirstEffect(layer, "wall_destroy.ent", count);
+    // Two, as this case adds them (no frame between the lighting and the summon):
+    // 2217's, and - since the visuals plan's 11.2 - the light wall's own, where it
+    // went 1500 ms after the torch was lit: at its node (64, 240), its -4, turned
+    // by it (-1.5708 in the .tscn, the original's +90) and at 1.
+    MagicPortalsLayer::EffectReport dust;
+    MagicPortalsLayer::EffectReport lightWall;
+    int lightWalls = 0;
+    for (const MagicPortalsLayer::EffectReport& report : EffectsOf(layer, "wall_destroy.ent")) {
+        if (report.atPx == glm::dvec2(32.0, 128.0)) {
+            dust = report;
+            ++count;
+        } else {
+            lightWall = report;
+            ++lightWalls;
+        }
+    }
+    CHECK_MSG(lightWalls == 1 && lightWall.atPx == glm::dvec2(64.0, 240.0) && nearlyU(lightWall.zUnits, -4.0) &&
+                  nearlyU(lightWall.angleDeg, 90.0, 1e-3) && lightWall.scriptScale == 1.0,
+              "4-32: the light wall's dust at its node, -4, turned 90, at 1: " + Point(lightWall.atPx) + " angle " +
+                  std::to_string(lightWall.angleDeg));
     std::printf("  4-32: %s gone on tick %d: wall_destroy at %s z %.1f x%.1f, sizes %.1f and %.1f\n",
                 wallNode.c_str(), arrived.tick, Point(dust.atPx).c_str(), dust.zUnits, dust.scriptScale,
                 dust.systemSizePx.empty() ? 0.0 : dust.systemSizePx[0],
@@ -12381,6 +12790,10 @@ void runTests() {
     AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs();
     AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds();
     AFireSignalPutOutLeavesItsWaterAtItsTorch();
+    AShotLightsTheTorchAsTheEntityItAdds();
+    ATorchPutOutComesBackAndItsWallFadesIn();
+    AWeightlessPlayerLeavesATrail();
+    ALapRoundAWellFlashesAndTurnsItsAgent();
     AShockRingsKillLeavesShockDeathAtThePlayer();
     ABreakableWallLeavesItsDustTurnedByTheWall();
     The432WallsDustIsTwiceTheSize();

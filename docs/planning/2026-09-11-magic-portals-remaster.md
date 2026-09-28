@@ -17797,3 +17797,334 @@ sweep captures, three after and three toggled gate captures); `test_mp_effects` 
 - For the backlog (the close agent): an 11.1 row; deviations 1-4 as gameplay rows.
 - For the merge's renumbering: "step 129" is written in `effects.json` (the `_walls_stones_doors` note and
   `rolling_stone_destroy`'s source).
+
+## Step 130 - what a torch, its light wall, a weightless player and a gravity well add: the lit torch as the entity its shot adds, its signal clockwise from above, the torch put back and the wall faded in, the trail, and the lap (built)
+
+**TRACK B: the visuals plan's step 11.2** (the remake's `out/parity/visuals/briefs/00_order.md` section 7 as section
+8.13's 11.2 row amends it; `system_7.md` 7f-5 and `systems_3_4.md` 3e; decode D3 section 5 with `D3_check`, whose four
+direct answers hold). It also owns `docs/parity-backlog.md` section 1's G6 leftover (`light_from_projectile.ent`'s own
+sprite and flame) and step 82's finding that a lit torch's halo is drawn 12 units low. Built in the worktree
+`Magic-Portals-Remake-vis4` (branch `visuals-d`, from `3a2d5fc`, step 129), whose build reads the frozen level data in
+`out/snap_pre8`; numbered in track B's range, and the merge renumbers it. Changed: `game/data/effects.json` (twelve rows
+under a `_torches_trail_roundabout` note), `game/data/gravitywell.json` (`roundabout`), `game/data/torch.json` (the
+signal's note, `_not_built`), `game/data/sounds.json` (the `roundabout` event), `game/data/art.json` (`torch_light`
+removed), `game/sim/Effects.{hpp,cpp}`, `game/sim/Torch.{hpp,cpp}`, `game/sim/GravityWell.{hpp,cpp}`,
+`game/sim/Art.{hpp,cpp}`, `game/MagicPortalsLayer.{hpp,cpp}`, and `tests/test_mp_{torch,wells,effects,layer,sprites}.cpp`.
+No engine change (the pin stays `4bfcf67`), no converter change, no format finding (no `docs/ethanon-formats.md`
+entry: `type` 2's bottom-centre origin is already there). **GAMEPLAY: ONE CHANGE - the fire signal's orbit** (THE
+CHANGE 3; recorded as the owner's to rule). The orbit is the original's PICTURE; it changes the port's PLAY only
+because the port tests the put-out at the orbiting ball, where the original tests at the torch's own point and never
+counts a fireball - a deviation from the torch step (step 30) that the fix round below found and records for the
+owner, not rebuilt (deviation 1, LEFT FOR THE OWNER).
+
+**BLOCKERS, checked first.** Section 7 names D3, L1 and F10. Section 8.13 removes D3 (its roundabout answer re-derived
+by the check); footage L1 (`L1_light_4-22`, `L1_out_4-29`) and F10 (`F10_recoil_4-05`) are delivered (footage
+`INDEX.md`). The effects runtime and the between-slot table are step 83's (with step 88's merge), the bare-literal rule
+step 86's, `--tap` lighting a torch step 120's, the ghost step 80's, the signal's `extinguish_fire` step 128's. The
+listing is the md5 the decodes cite (`48fe65ce...`). Nothing unmet.
+
+**WHAT THE ORIGINAL DOES** (`effects.json` and `gravitywell.json` carry each call with its instructions).
+- **Lighting** (`ETHCallback_light_off`, 467198..467878), on the frame a shot or a fireball comes within 24:
+  `light_from_projectile.ent` and `light_on_sparkles.ent` at the torch's own `GetPosition()` (#69-101), the `delete`
+  flag that deletes the torch on the NEXT frame (#105-114, #1-35), `killProjectile`, `portal_death.ent` at the
+  projectile (#125-139), the ghost (step 80), and `addFireSignalIfNecessary`: `fire_signal.ent` at the torch where a
+  `light_wall.ent` can still be found (#17-32) - and `SetUInt('bounce', 1)` on the `light_from_projectile.ent` it seeks
+  (#36-68). `light_from_projectile.ent` IS the lit torch: `torch_small.png` on `PivotAdjust (0, -16)`, 12 `fire.png`
+  at `StartPoint (0, -12)`, and a static `<Light>` range 512 at (0, -12, 24) whose halo `DrawHalo` stands at the
+  light's own (x, y) (`ETHRenderEntity.cpp:376-386`) - the 12 units step 82 found art.json's copy of it missing.
+- **The bounce is reachable.** `ETHScene::AddEntity` puts an entity in its bucket at once (`ETHScene.cpp:260-289`), so
+  the seek finds the torch added on the same frame; `ETHCallback_light_from_projectile` then calls
+  `bounceLightEntity(this, 1f)`: `bounce(this, vector2(1.04), vector2(0.96), 160)`. `SetScale` moves the picture and
+  its halo, never the particles (`ETHEntity.cpp:601-608`). `torch.json` called it unreachable.
+- **The signal** (`ETHCallback_fire_signal`, 470827..471942): at `originalPos + scale(18) x vector2(sin, -cos)` of an
+  angle 300 degrees a second (#42-108; `-cos` pushed first, arguments go last-first, 00_order 8.0 rule 3): straight up
+  at 0, clockwise on the screen. **Its hit test is the torch's point, not the ball's** (read in the fix round):
+  #111-117 call `hasProjectileAround(pos, 24, includeFireballs, @projectile)` with `pos` = v8, copied from
+  `GetVector2('originalPos')` at #64-76 and only read at #100-108 (`vector2::opAdd`'s result goes to
+  `SetPositionXY`), and the flag `SetV1` immediate 0 (#111; `ETHCallback_light_off`'s call pushes 1), so
+  `hasProjectileAround` #59-94 takes `projectile.ent` alone, from the torch point's own bucket only (`GetBucket(pos)`,
+  #4-13; corrected at commit): any shot there within scale(24) of the torch puts it out, and no fireball ever does. Shot: `light_off.ent` and `light_off_sparkles.ent` at `vector3(originalPos, 10)`, a
+  bare 10 (#130-193), `killProjectile`, `deleteLightFromProjectile`, the signal deleted, `portal_death.ent` at the
+  projectile (#228-242), `extinguish_fire` (step 128), and `addLightWall` (472067..472507):
+  `light_wall_create.ent` and a new `light_wall.ent` at the ghost's position and angle (#22-87), the wall at alpha 0
+  (#101-103), which its own callback raises by `unitsPerSecond(1)` to 1 (`ETHCallback_light_wall` #162-178).
+- **The wall going** (`ETHCallback_light_wall` #101-157, past 1500 ms): `wall_destroy.ent` at its own point and depth,
+  turned by it, at `getScale()` (#109-134).
+- **The trail** (`MainCharacter::addTrail`, 132833..133241; from `update` when not paused and not finished): on
+  `noGravity` only, `trailElapsedTime` += the frame's ms; `length(GetLinearVelocity()) / getScale() > 0.4f` and the
+  clock `> 400` (both strict) add `movement_trail.ent` at the character's `GetPosition()` and zero the clock;
+  `ETHCallback_movement_trail` keeps it on the character.
+- **The lap** (`computeRoundabout`, 459694..461443; `gravitywell.json` `roundabout` cites every instruction): per body
+  and per well, a signed sum of the direction's sweep, counted only in range and past acos(0.98); beyond 360 either
+  way a lap, the sum zeroed; for the visible character, `roundabout_effect.ent` at the area (xy, -5 bare), the sound,
+  and the agent's clock zeroed in the lap's sign, which turns its picture `elastic(smoothEnd(min(t, 3000) / 3000)) x
+  360 x sign` (`ETHCallback_gravity_agent` #174-230). `elastic` (314142..314380) decoded here: n at 0 and 1, else
+  `pow(2, -10 n) x sin((n - p/4) x 2 pi / p) + 1`, p = 0.3f widened (SetV8 raw `0x3fd3333340000000`).
+
+**THE CHANGE.**
+1. **`effects.json`**: `light_from_projectile` (with its `bounce` 1.04 / 0.96 / 160), `light_on_sparkles`,
+   `portal_death_at_lit_torch`, `fire_signal`, `light_off_at_signal`, `light_off_sparkles`, `portal_death_at_signal`,
+   `light_wall_create`, `light_wall_at_ghost` (`alpha_from` 0, `alpha_per_second` 1), `wall_destroy_light_wall`,
+   `movement_trail` (`min_speed` 0.4, `every_ms` 400) and `roundabout_effect`, read strictly by `sim/Effects`: each
+   required; each z refused read the other way; the three at an entity refused any turn but its angle; every one at
+   scale 1. `Effects::OnEntityTurned` and `Effects::TrailDue` (the clock, the speed compared as the script's float).
+2. **`art.json` `torch_light` removed** with `Art::Rules::torchLight`: it was a copy of `light_from_projectile.ent`
+   (its test said so), and the lit torch is now that file's entity itself.
+3. **`sim/Torch` (GAMEPLAY)**: the signal is added ON its torch and moves on its next tick to `origin + 18 x (sin,
+   -cos)` - where it was `(-cos, sin)` from a full radius to the torch's left. In the original that move is the
+   picture alone; here it is GAMEPLAY because the port's put-out test stands on the ball (`shotNear(signal.atPx)`,
+   fireballs counted, since step 30), not on the torch's point (deviation 1). And `State::spentAtPx`, write-only:
+   where the shot a switch spent was, on that tick.
+4. **`sim/GravityWell`**: `StepSweep` over every dynamic body and well (`Sweep`, the tick's `lapsNow`, write-only),
+   `Elastic` and `SpinDegrees`, read from `gravitywell.json` `roundabout`.
+5. **The layer.** The effects runtime takes four owners (`FireSignal`, `LitTorch`, `UnlitTorch`, `LightWall`), an
+   alpha its callback raises, a bounce on its picture and halo (not its light: deviation 2), and `type` 2's origin -
+   bottom-centred, never turned. `latchTorches` queues each lighting's, put-out's and wall's entities in their
+   callbacks' order; the level's own torch picture (and its sparkles) goes on the tick after it is lit
+   (`TorchWatch`); the re-added torch and the rebuilt wall ride their owners. `m_torchLights` is gone: the light and
+   halo are the entity's. The trail (zero-g, not finishing or dying) and the laps (the player's, while it is drawn:
+   the flash, `latch("roundabout")`, the agent's clock) in `latchSimEffects`; the agents' clocks advance with the
+   motions and turn their pictures in `syncSprites`. `TorchReports`, `WellSpinDegrees`, and `EffectReport`'s alpha,
+   bounce and handles, for the suites. One log line each, with the tick.
+6. **`sounds.json`**: `roundabout` -> `playRoundaboutSound`.
+
+**THE GATES.** After = this step's build `9b0fa312` (`MagicPortals.exe`). Before = the committed `1e6b7cb9` (step 129),
+whose sweep `11.1/after/sweep` is the before (its 128 pngs match their log lines) and on which every before gate was
+captured before this step's build replaced it. The new build reproduces 1-01 f420 `e2da5131`. Captures, scripts and
+measurements: `out/parity/visuals/11.2/` (`capture_gates.sh`, `capture_sweep.sh`, `explain_sweep.py`,
+`check_capture_log.py`, `measure/signal_orbit.py`, `ghost_vs_l1.py`, `torch_bounce.py`, `lit_room.py`,
+`trail_haze.py` with their `.txt`). All `--window 1280x720 --fixed-step`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| (0) Baseline | the build reproduces the last after where the step does not reach | - | 1-01 f420 `e2da5131` on `9b0fa312`, as `11.1/after/sweep` |
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** on every object that stands (`build2`-`build7`; `build1` and `build3` stopped on test-source errors, `build1`'s one C4834 inside the broken parse) |
+| (1) Test counts (the step's gate) | the suites the change touches, each once, 0 failures | torch 123, wells 98, effects 555, layer 2121, sprites 965 | **`test_mp_torch` 134, `test_mp_wells` 308, `test_mp_effects` 611, `test_mp_layer` 2382, `test_mp_sprites` 964, `test_mp_sounds` 107 - 0 failures each** (`test_mp_layer`'s first run: 2185 checks, 7 failures, below; sprites one fewer: the art.json copy's two checks gone, the lit torch's own read added) |
+| (1a) `test_mp_torch` | the signal as decoded | - | **passes** (`theSignalGoesClockwiseFromAbove`): added on the torch; one tick on at `origin + 18 x (sin 5, -cos 5)` (above, right of centre); a quarter, half, three quarters on: right, below, left - clockwise on the screen; `spentAtPx` the shot's point that tick only; the toggle cases as before |
+| (1b) `test_mp_wells` | the sweep and the spin | - | **passes**: the block read and five refusals; `Elastic(0.5)` = **1.015625**; `SpinDegrees` 0 at the lap, exactly **360** at and past 3000 ms, overshooting to **493.7** at 250 ms, the other sign the same turn; a drift under 11.48 degrees not counted, then the whole 15; out of range kept; a counter-clockwise run of 15-degree steps laps at **374.9998** on step 25, positive, counted ccw; clockwise negative; the player walked round level16c's well (4 degrees a tick) laps on **tick 90**, printed **360.000** (past 360 by the floats' rounding of 30 twelve-degree steps), the record the tick's own |
+| (1c) `test_mp_effects` | the twelve rows, strict | - | **passes** (`TheTorchTrailAndRoundaboutRowsAreTheDecodedCalls` and eighteen refusals): the rows as decoded; 4-32's rebuilt wall at the ghost z **-5.4222**, turned **90**; 4-29's wall dust z 2 unturned x1; `TrailDue` none at 0.4, at once past it after a rest, then **every 24th tick** at 60 Hz (deviation 6), 400 exactly not past |
+| (1d) `test_mp_layer`: 4-22 (`AShotLightsTheTorchAsTheEntityItAdds`) | the lit torch the shot adds | no such entity | **passes**: lit on tick 83; nothing on the tick; on the frame one `light_from_projectile` at **(246, 40) z -10**, its picture 32 x 64 centred **16 below the point**, unturned, a light and a halo, 12 fire, no bounce; one `light_on_sparkles` there; one `portal_death` at the spent shot **(226.12, 50.80)**, z 0; the level's picture gone on the next tick; three seconds on the torch burns on and the sparkles are over |
+| (1e) `test_mp_layer`: the lit torch's light (`ALitTorchBakesTheLevelAtRunTime`) | the light unchanged, the halo 12 up | halo at the torch's point | **passes**: static, range 512, (1, 0.5, 0.2), light at torch - 12; **its halo at torch - 12 too**, 300 across; every lit sprite takes every light, lit-torch ambient |
+| (1f) `test_mp_layer`: 4-29 (`ATorchPutOutComesBackAndItsWallFadesIn`, taps 60, 250, 430) | lit, gone, out, lit again, gone again | - | **passes**: lit **70** (lit torch z -12 bouncing at `Art::Pulse::ScaleAt(16.67 ms)` - 1.027, between 1.02 and 1.04 as the case checks - the signal on the torch, then riding it just past the top), wall gone **160** (dust at (192, 96) z 2), put out **260** (lit torch and signal freed; `light_off` at the torch z **3.5556** centred 16 below its point, unturned; its sparkles; `light_wall_create` and the wall at (192, 96) z **0.5778**, the wall's alpha **1/60** one frame in, **1** sixty frames on), lit again **440** (on z 3.5556; the torch put back gone the tick after), wall gone again **530** (the rebuilt wall freed, its dust at the ghost's depth) |
+| (1g) `test_mp_layer`: 4-05 and 1-01 (`AWeightlessPlayerLeavesATrail`) | the trail's rule | no trail | **passes**: at rest none; at 0.4 m/s none; at 0.5 on ticks **1, 25, 49** of 60, each on the player at its z **1.4222**, 10 particles, temporary, its system in front of the player; on 1-01 (gravity) none |
+| (1h) `test_mp_layer`: 4-17 (`ALapRoundAWellFlashesAndTurnsItsAgent`) | the flash, the sound, the turn | no lap | **passes**: the lap read by the next tick's latch (deviation 8); `roundabout` latched; one `roundabout_effect` at the well **(256, 128) z -1.7778**, two systems, temporary; the agent 360 at rest (drawn unturned), one step in on the lap's tick and turned by it (+z), peaking **493.7 degrees at 250 ms**, back to 360 and unturned by 3000 ms |
+| (1i) `test_mp_layer`: 4-32 (`The432WallsDustIsTwiceTheSize`, 11.1's) | 2217's dust unchanged | one wall_destroy | **passes, amended**: two `wall_destroy` now on the frame the case reads (it runs no frame between the lighting and the summon): 2217's as before (x2, 38 and 120) and the light wall's at **(64, 240) z -4, turned 90 (to 1e-3), x1** |
+| (2) `movement_trail` only when \|v\|/scale > 0.4 and > 400 ms since the last | the rule, and the look (F10) | none | **passes**: (1c) and (1g); on 4-05 (`gates/after/4-05_glide`, F10's tap at (550, 712) on tick 60) trails on ticks **61, 85, 109, ... 229** at 1.4 m/s, every 24; frames identical to the before through f60; the haze over the gliding player adds **+6 to +17 luminance** on the mean of a 90 x 130 px box and spreads **69-90 px** across (`measure/trail_haze.txt`), against F10's "+6..+16, 60-80 px, over the body" |
+| (3) L1 4-22 lit (footage `L1_light_4-22`) | the lit torch the footage shows | the unlit sconce and its blue spark stand lit, no flame | **passes, measured.** `gates/after/4-22_lit` (L1's tap on tick 60, lit on tick 83 both): f2-f82 identical; from f84 the flame over the cup, the expanding pale circle and the sparkles, the burst where the shot was; the unlit spark gone from f86; against footage #200 and #300 the sconce and the flame stand alike (`cmp_422_orig` sheet). The room: within 60 px of the torch 99.6% of pixels change, 60-150 px 99%, beyond 450 px 2.7% (below) (`measure/lit_room.txt`); along the torch's column the halo's lift reads -18 luminance 90-150 px below the torch on each of f300, f350 and f398 (-10 at 150-210 px, 0 beyond), and +4.6, -3.6 and +17.6 in the top 25 rows above it, where the flame's own light plays. **Against L1 (corrected at commit, from the second verification's `verify2/measure/column_v2.txt`; its `flicker_v2.py` re-run in `commit/flicker_v2_rerun.txt`)**: that lift, with the halo's live share (deviation 14), takes the room near the torch FURTHER from the footage, not toward it. Mean luma, footage #100-#372 / before / after f150-f400: rings round the torch 60-100 px **168.5 / 140.9 / 132.6**, 100-150 px **135.9 / 106.7 / 95.8**, 150-200 px **103.8 / 80.1 / 73.2**; the column 100-130 px below it **135.4 / 109.0 / 90.5**; L1 section 3.1's pillar patch **83.5 / 60.7 / 53.3** (std 2.7 / 0 / 2.0) - the gap to L1 grows by 8.3, 10.9, 6.9, 18.5 and 7.4. Above the torch the flame closes it (-80..-50 px: 237.7 / 169.7 / 228.3); floor and wall_right stay steady (port std 0.005 and 0.000, footage 0.000 and 0.000). The lift and the live share are as decoded (`ETHRenderEntity.cpp:354-388`); the residual is `lighting.json`'s `halo_brightness_scale` (LEFT FOR LATER), not retuned here |
+| (4) L1 4-29 lit and put out (footage `L1_out_4-29`) | signal, wall, put-out, rebuild | no signal, lit torch, put-out sparkles, rebuilt wall drawn; the wall stays undrawn after the put-out | **passes, measured.** `gates/after/4-29_out` (taps 60, 250; lit 70, wall gone 160, out **260** - 261 before, deviation 1): the signal **clockwise, 296 degrees a second** (median of 15 clean steps, 14 clockwise), **r 46.4-51.2 px, mean 49.6** (`measure/signal_orbit_after.txt`) against L1's 296-300 clockwise at 48-54; the wall's dust cloud at f160 (L1 #73); the put-out's burst, falling blue-white sparkles, rising smoke, the wall's brown smoke and the wall fading in over 60 frames (L1 #194-#223, about 1.0 s) - side by side in `seq_429_after` against `L1_out_4-29_putout_crops` |
+| (5) The lit torch's bounce (not a plan gate) | where a wall is, and only there | none | **passes, measured** (`measure/torch_bounce.txt`, the plate's width): footage 4-29 **sd 2.31 px**, footage 4-22 **sd 0.035 px**; the port 4-29 (`gates/after/4-29_lit`) **sd 2.73**, 4-22 **0.79** (a 1.04/0.96 swing of an 82 px plate is sd 2.3 px). **The signal as the cause, controlled**: the ball orbits through the plate's rows on 4-29 alone, so the frames with no near-white pixel within 18 px of the plate were measured again - **sd 1.82 px** on the footage's 12 such frames, **2.48** on the port's 71: the scatter stays without the ball. (The first record also cited gate 7's 0.32 s line as the halo's signature; the fix round shows that line is the ghost's own pulse, so it is withdrawn here and says nothing of the bounce.) The footage shows the bounce on the wall level and none without, as decoded; its 0.32 s period is not resolved on the footage's few clear frames |
+| (6) The halo 12 u low (step 82) | at the light's (0, -12) | at (0, 0) | **passes, by the code**: (1e) pins the halo quad at the light's point; `Art.cpp:1034` sets `haloOffset` from the light's own `<Position>`, unscaled, as `DrawHalo` draws it (`ETHRenderEntity.cpp:376-386`). (Corrected at commit: the first record added "(3)'s column profile moves the right way", which compared no footage - against L1 the room near the torch now reads further below the original than before, gate 3. The verification's pixel reader for the halo's centre was inconclusive and is not cited.) |
+| (7) Step 80's ghost against L1 (the task's own gate) | alpha pulse, scale pulse, position | decode only | **position, alpha AND scale pulse CONFIRMED, measured; the scale pulse's amplitude not resolved** (re-recorded in the fix round). 25 dots from `hd/dashed_door.png`, the same code on footage #100-#184 and on the port's 4-29 lit and left lit, f260-f440. **Position** (`measure/ghost_vs_l1.txt`): mean offset from the port's prediction (-0.81, -0.30) px in the footage and (-0.77, -0.39) in the port - the same to 0.1 px (the verifier's own reader, `verify1/ghost_pos_v.txt`: footage minus port (+0.01, +0.34) px over 23 matched dots). **Alpha**: a fitted period **1.208 s** against the port's 1.200, max/min **3.27** against 2.92 (decode 0.3/0.1 = 3), R^2 0.992 and 1.000 (the verifier's contrast measure, `verify1/ghost_alpha_v.txt`: 1.208 against 1.200 s, 2.37 against 2.48, R^2 0.986 and 0.998). **Scale** (`fix1/ghost_rows.py`, `fix1/ghost_rows.txt`): each dot's y fitted at 0.320 s, the 24 dot groups (12 rows, each row's two columns apart: they sit 1.4 px apart in y) projected on one common phase (it carries 99.1% of their power in the footage, 100.0% in the port) and a line fitted in the dot's height. The footage's profile has the port's shape, where the pulse is known to be drawn: **r 0.985** over the 24 groups; the rows above about 290 px and those below it move opposite ways, the zero at **291.4 px** (bootstrap over frames, 90%: 288.8-294.4) against the port's **290.3** (288.5-292.8); slope **3.93** against **4.14** px per 1000 px of height, against a noise floor at 0.45-0.90 s of median 0.14, max 0.53. **The 290 px zero is this reader's bias, not the picture's** (corrected at commit; the fix round put it down to the lit torch's halo, not isolated): the second verification's least-squares shift reader, robust to background and brightness (`verify2/measure/ghost_lk_v2.py`, `ghost_lk_v2.txt`), finds both profiles centred - the port's zero at **267.2 px** (decode 270), slope 5.48 px per 1000 px (decode 6.0), top pair **0.88** and bottom pair **0.94 px** 180 degrees apart; the footage's zero at **268.3 px**, slope 4.74, top **0.78** and bottom **0.83 px** in anti-phase, against an adjacent-period noise floor of median 0.10 px (max 0.35); profile **r 0.999**, the footage **0.87** of the port's. So the confirmation rests on two things: the footage matching the port's centred profile, and the top row moving at the halo's height. **It is the ghost's, not the lit torch's halo's**: the halo (the same 160 ms legs, from the same frame) is centred at the light's (247.5, 106.9) px, the TOP row's height, where its gradient is horizontal and cannot move a dot's y to first order - and the top row moves **0.81 / 0.77 px** in the footage against the port's 0.89 / 0.81 (the known pulse is 0.98 there); a halo alone would put the zero near 107 px, not 291. The row-window reading agrees (the verifier's `verify1/ghost_scale_v2.txt`: the top and bottom rows 179-180 degrees apart in 6 of 9 window placements, the other 3 with no top-row signal; spread 0.686 px, R^2 0.51, noise floor 0.093). **Amplitude**: the footage's profile is **0.90** of the port's (bootstrap 90%: 0.82-0.98) by this reader, **0.87** by the second verification's shift reader (above) and 0.60 by the first verifier's row-window spread (0.686 against 1.14 px) - the decode's 1.006 / 0.994 to within the readers' spread, not pinned closer. **The first record's "scale NOT MEASURABLE ... the two rows move in phase ... the lit torch's halo" is withdrawn**: its per-dot reader read the port's rows in phase (0 degrees) where the known pulse moves them in anti-phase (`verify1/ghost_scale_v.txt`: top r -0.974, bottom r +0.988 against the known pulse), so it failed its own calibration. The alpha's phase cannot be read: the lighting stalls 536 ms (L1 section 5) |
+| (8) `roundabout_effect` on screen | a capture of a lap | - | **passes, measured by the second verification** (corrected at commit: the record said NOT RUN, "no scripted input laps a well" - one tap does). `--level level16c --frames 420 --screenshot-every 2 --tap 100,600@60` (4-17; `verify2/roundabout/417_lap`, validation ACTIVE): laps of **-366.079 degrees on tick 234** and -363.685 on tick 355 (clockwise), each logged `roundabout_effect.ent at (256, 128) z -5 bare`; `--tap 150,460@60` laps **+362.294 on tick 354** (counter-clockwise; `417_tap_150_460.log`). The green flash grows at the well from f236 with its sparkles, and the agent turns and settles by about f300 (`verify2/measure/sheet_417_lap.png`); the verification's rotation matcher (`agent_spin_v2.txt`) runs about 90 degrees off the prediction, likely aliased by the agent's symmetry, so the spin on screen is read qualitatively and (1b) and (1h) pin its numbers. No footage shows a lap |
+| (9) K13 | no depth outside the table | - | **passes**: no new class; the new entities take `Effect`, `EffectHalo` and `EffectSystems` at `slotAfter(round(z))`; the trail's system in front of the player (1g) |
+| (10) K8 (the inherited reading) | the placement stream untouched by what the step adds | - | **passes for what the step adds, with one stated exception (deviation 15)**: every entity added through `SpawnEffect`, on `m_effectRandom`. The exception: from the tick after a lighting the level torch's own two sparkle systems go with its picture, so the level's LATER emitters draw what the earlier would have (4-22 f300: the door's fire and the crystals' sparkles, beyond 450 px of the torch) - as they do after a crystal is taken or a wall broken |
+| (11) The 128-level f420 sweep | changes explained | `11.1/after/sweep` | **passes: 128 of 128 byte-identical** (`after/explain_sweep.txt`): no level lights a torch, laps a well or moves its weightless player past 0.4 m/s by tick 420 unplayed, so no 11.2 event is logged anywhere and nothing is drawn; the torch levels' unlit pictures and the agents at rest are drawn exactly as before (a whole turn draws as none, `SpinDegrees` exactly 360). All 128 exit 0, `Vulkan validation layers: ACTIVE` in 128 logs, no validation message; every png matches its log line (`after/check_capture_log.txt`: 128 checked, 0 bad; the before's 128 too) |
+| (12) Gameplay | one change, stated | - | the signal's orbit (deviation 1): on L1's taps 4-29's put-out tick moves from 261 to 260 - a change in play only because the port tests the put-out at the orbiting ball, where the original tests at the torch's point (fix round; that test is not changed here); `test_mp_torch`'s toggle cases pass; nothing else the simulation reads moves (the sweeps and laps are write-only) |
+
+**`test_mp_layer`'s first run** (`test_mp_layer_run1.txt`; build5's relink, md5 not taken): 2185 checks, 7 failures, in the new cases' own
+reading and 11.1's 4-32 case, none in what the step draws. (a) The 4-22 case read the unlit picture one tick late: the
+latch runs before the tick's `syncSprites` in `fixedTick`, so it is gone the tick after the lighting, as the code does.
+(b) The lap case read the effect on the tick the sweep laps; the sweep steps in `BeforeStep`, after that tick's latch.
+(c) 11.1's 4-32 case took the first `wall_destroy` and found the light wall's. The build between tried a two-latch
+delay for the re-added torch and was taken back (deviation 5). The second run (`test_mp_layer_run2.txt`, `e23bcbfb`):
+2382 checks, 0 failures.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **GAMEPLAY: the fire signal's orbit, the owner's to rule** (as R24 and R25 were recorded): clockwise from above and
+   added on its torch, where the port had it counter-clockwise from a full radius to the left. Decoded (#78-108, the
+   push order) and confirmed by L1 (clockwise, 296-300 degrees a second, 48-54 px). **In the original the orbit is the
+   picture alone** (corrected in the fix round; the first record said "applied as the original plays it"): its
+   put-out test is `hasProjectileAround(originalPos, scale(24), 0)` at the TORCH's point (#64-76, #100-108,
+   #111-117), over the entities of that point's own bucket alone (`GetBucket(pos)`, `hasProjectileAround` #4-13;
+   corrected at commit). It changes play here only because the port, since step 30, tests at the ball (`shotNear(signal.atPx)`)
+   and counts fireballs - the row LEFT FOR THE OWNER below, which this step does not change. The step's
+   `fire_signal` rides the simulation's point, so turning the picture moved the port's hit point with it; a picture
+   that ran the other way, or a picture apart from the port's hit point, were the alternatives. What changes in
+   play: which tick a shot at the circling signal meets it - on L1's taps, 261 -> 260. **And 260 is what the
+   original's own test gives on those taps, by their geometry, not its mechanism**: the put-out shot reaches the
+   lighting shot's point (95.65, 62.42) ten ticks after its tap, as the lighting shot did on tick 70, and the
+   lighting shot was first within scale(24) of the torch there (derived from the step's own logs; no launch).
+2. **The lit torch's light does not bounce** (its picture and halo do): a static light is baked in the original on
+   the frame after the lighting (`GenerateLightmaps`), while the port lights with it every frame, so a range swung with
+   the bounce would pulse walls the original holds still (L1: the floor std 0.1 over 3 s of a bouncing torch).
+3. **The rebuilt wall is an effect at the ghost** (its point, angle, depth), its body rebuilt by `Game` from the node,
+   as before; the next ghost is step 80's, at the node less 1.42 every cycle, where the original's drifts 4 raw pixels
+   further back each cycle (step 80's deviation 3). The rebuilt wall draws on the table's `Effect` class at
+   `round(0.578)`, not the node's slot; applyLight and emissive 1, so full brightness (no lightmap either side).
+4. **The torch put back** is `light_off.ent` at the bare 10's depth (3.556), as the original's; the unlit torch's
+   190-a-second `AddToAngle` is not built for it or the level's (its blue spark stays at 3 o'clock) - `torch.json`
+   `_not_built`, as before.
+5. **One frame of both torches**: the level's unlit picture (and a re-added one) goes with the latch of the tick after
+   the lighting, so it is last drawn on the lighting's frame, beside the lit torch's first; the original's `delete`
+   branch runs on the frame its lit torch is first drawn, after that frame's draw list is made. A two-latch variant was
+   built and taken back: it made the level's picture and a re-added one go a frame apart.
+6. **The trail's cadence** is every 24th tick at 60 Hz: 24 ticks of 1000/60 ms add up to 400.0000000000001, a hair past
+   400. The original's clock is whole milliseconds of real frame time (16s and 17s), which pass 400 on its 24th or 25th
+   frame. F10 leaves the cadence decode-only.
+7. **The trail's speed** is in the port's metres a second, the unit `zerog.json`'s 1.4 recoil is in, so the two keep
+   the decoded ratio. **Not this step's, but found by it**: the port's 1.4 m/s is 70 u/s (`kPixelsPerMetre` 50,
+   Ethanon's `DEFAULT_SCALE` 50, `ETHPhysicsSimulator.cpp:27`), where F10 measured one recoil at 40-44 u/s - a question
+   for `zerog.json`'s owner.
+8. **The laps**: every dynamic body is swept from the level's first tick (the original walks only the bodies near its
+   area, so a far body's first direction is taken later); the agent's clock runs from the lap, not only while its
+   bucket is drawn (00_order 8.12c); the body's point is its centre (the R25 class); an acos past -1 is clamped where
+   the original's would poison the sum; and the lap is read by the next tick's latch, as everything `BeforeStep`
+   records is - the flash, the sound and the agent's clock one tick after the sweep's.
+9. **`roundabout_effect` at the bare -5** (-1.778) where step 73's ring stands at an unconverted -5; the ring is not
+   this step's (LEFT FOR LATER below).
+10. **The trail rides the player owner**, which also hides with the player; the original's never hides, and the trail
+    is added only in play.
+11. **`alwaysActive` is not widened**: `fire_signal`, `light_off`, `light_wall` and `light_from_projectile` name
+    callbacks, but none of them is ever hidden (only the player owner hides), so the second arm changes nothing.
+12. **Static callbacks and visible buckets** (00_order 8.12c): the lit torch's bounce, the rebuilt wall's fade and the
+    agent's turn run from their event, as steps 78-80 and 127 record.
+13. **Sounds**: `playRoundaboutSound` is built; `playLightOnSound`, `playLightOffSound` and `playLightSwitchSound` are
+    not (the wall's `playDemolitionSound` is `wall_broken`'s, as before).
+14. **The halo's brightness** is now its flame's live share (12 `fire.png`), where step 55's was 1 for a flame not
+    built.
+15. **A lit torch takes its level emitters off the placement stream** (gate 10): the original deletes the torch
+    entity, sparkles and all, on the frame after the lighting, and the port's `updateEmitters` stops an emitter whose
+    picture has gone - the rule a taken crystal and a broken wall already follow. So after a lighting every later
+    level emitter draws a shifted sequence (the original has one shared stream for everything, so its draws shift
+    too). Only frames after a lighting, on the ten torch levels; nothing the step ADDS draws on that stream.
+
+**RULINGS APPLIED.** The standing direction that R1-R23 follow what the original does, and deviation 1 in that
+direction for its PICTURE, recorded as the owner's; its gameplay effect comes from the port's put-out test at the
+ball, not from the original's, which tests at the torch (LEFT FOR THE OWNER). R1, R2, R22 and R23 are not built. **R24 and R25** are neither touched nor
+withdrawn. **R10**: the player at 4 / 2.8125 = 1.42, over which the trail's system (z + 2) is drawn. **R12**: the
+720 / 256 the bare 10 and -5 are divided by. **K13**: no new class. **K8**: the inherited reading (gate 10).
+
+**GAMEPLAY: the fire signal's orbit** (deviation 1) - gameplay here only because the port's put-out test stands on the
+ball, where the original's stands on the torch (LEFT FOR THE OWNER; not changed). The records the step adds -
+`Torch::State::spentAtPx`, `GravityWell::State::sweeps` and `lapsNow` - are write-only.
+
+**SUITES**, run directly, once each on the build that stands (logs `11.2/`): `test_mp_torch` **134** (123),
+`test_mp_wells` **308** (98), `test_mp_effects` **611** (555), `test_mp_layer` **2382** (2121), `test_mp_sprites`
+**964** (965), `test_mp_sounds` **107** (its source unchanged; its data gained an event), 0 failures each;
+`test_mp_layer` ran twice (above), `test_mp_effects`' first launch was refused (below). The full ctest was not run: the
+build relinked every suite and `MagicPortalsSpike` (`Torch.hpp`, `GravityWell.hpp` and `Art.hpp` changed); the six run
+are the ones whose code or data the step changed, `test_mp_layer` the only one that links `MagicPortalsGame`, and the
+other suites that include those headers read only fields that did not change (`test_mp_darkdragon` sets `torch.lit`
+itself; `test_mp_play` replays no torch level).
+
+**SWEEP BASELINE**: `11.2/after/sweep` now stands for all 128 levels, the next step's before.
+
+**SMART APP CONTROL: 1 refusal.** `test_mp_effects.exe` `a154c199` was refused on its first launch (Permission denied);
+deleted and relinked once (`6a6d70c4`), it ran. Launches: the committed `1e6b7cb9` 3 times (the before gates); the new
+`MagicPortals.exe` `9b0fa312` 132 times (4 after gate runs, 128 sweep captures); `test_mp_torch` (`06ddc504`),
+`test_mp_wells` (`d9c2b3b1`), `test_mp_sprites` (`b51dae95`) and `test_mp_sounds` (`4fbaf506`) once each;
+`test_mp_layer` twice (build5's relink, md5 not taken; then `e23bcbfb`). No other exe was deleted or relinked.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Deviation 1** (gameplay, the signal's orbit) - to rule on, beside R24 and R25.
+- **GAMEPLAY, found by the fix round, from the torch step (step 30), not rebuilt: the fire signal's put-out test.**
+  The original's `ETHCallback_fire_signal` tests `hasProjectileAround(originalPos, scale(24), includeFireballs 0)`:
+  `pos` is v8, copied from `GetVector2('originalPos')` at #64-76 and only read at #100-108, and #111's `SetV1`
+  immediate 0 (the torch's own call, `ETHCallback_light_off` #47, pushes 1) makes `hasProjectileAround` #59-94 take
+  `projectile.ent` alone, and it walks the torch point's own bucket alone (`GetEntitiesFromBucket(GetBucket(pos))`,
+  `hasProjectileAround` #4-13, bytes 467878..468609; added at commit), so a shot across the bucket's edge is not
+  seen however near. So in the original any shot in the torch's bucket within scale(24) of the TORCH puts it out
+  while the signal stands, and no fireball ever does. The port (`Torch::State::Tick`) tests at the ORBITING BALL (`signal.atPx`) and
+  counts fireballs: a shot through the torch's point but not near the ball goes on, and a fireball near the ball puts
+  the torch out - reachable on 4-32 alone, where the dark dragon's fireballs fly (no torch level places a fire
+  diamond or a carranca). Step 30's record ("What the player must hit to undo their own switch is moving") and
+  `test_mp_torch`'s "and it MOVES, which is what makes it a shot worth aiming" read it the port's way. Gameplay no
+  batch owns; to rule on.
+- **Deviation 7's recoil**: F10's 40-44 u/s against the port's 70 (`zerog.json`).
+- **The torch's sounds** (deviation 13) and the unlit torch's spin (deviation 4), with no owner in section 7.
+- **The one-way wall watch's comment** (`m_wallEffects`, step 129's LEFT FOR LATER): this step gives the light wall a
+  watch of its own (`Torch::State::wallsGone`), so the one-way watch stays harmless; its comment still says a wall
+  does not come back. And step 129's loose `ALiftDoorLeavesItsDustAsItOpensAndCloses` comment. Both left, because a
+  comment edit relinks the measured binaries.
+- **Comments that describe the put-out at the ball as the original's**, left for the same reason (a source edit
+  relinks every suite and the game): `game/sim/Torch.cpp` ("the whole of what makes putting a torch back out a shot
+  worth aiming", line 155, above `Tick`'s orbit), `tests/test_mp_torch.cpp` (`shootingTheSignalPutsTheWallBack`'s "and
+  it MOVES, which is what makes it a shot worth aiming"), and step 30's text, which this record supersedes and does not rewrite. The data notes are
+  corrected (`torch.json` `torch._note` and `signal._note`; `effects.json` `fire_signal` and
+  `extinguish_fire_at_signal`, whose "finds a shot or a fireball" was step 128's).
+- **Step 73's ring depth** (deviation 9): `gravitywell.json` `ring.z` draws the well's ring at -5 port units, where
+  the area it stands for is at the bare -5 = -1.778 (step 86's rule, as this step's `roundabout_effect`). A later
+  step should bring the ring to -1.778.
+- **The lit room near the torch, further from L1** (gate 3; added at commit): with the halo at the light's point and at
+  its flame's live share, both as decoded, 4-22 lit reads 7-19 luma further below the footage than before within
+  60-200 px of the torch and down its column (pillar 53.3 against L1's 83.5, 60.7 before). The global constant behind
+  it is `lighting.json`'s `halo_brightness_scale` 0.6, a `_guess` - section 1's G5 row (step 49's missed gates). Not
+  retuned here: it moves every halo on every level.
+- **The player stays lit after a put-out** (pre-existing; found by the second verification, added at commit): on 4-29
+  the player's box (x 340-450, y 260-440) is mean RGB **(7.2, 4.2, 8.7)** at f50, before the lighting, and **(25.7,
+  14.8, 31.1)** at f300 and f400, after the put-out, where L1 is **(0.8, 0.2, 0.2)** at #20 and **(0.8, 0.2-0.3,
+  0.2-0.3)** at #300 and #400 - the original returns him to the darkest silhouette (`commit/player_box.txt`;
+  `verify2/measure/player_dark_before_after.png`, `sheet_429_putout.png`). Step 129's build gives the same
+  (`gates/before/4-29_out` f300 and f400), so this step did not bring it. For the lighting owner: the put-out's
+  ambient and the run-time bake (steps 45 and 55). Not changed here.
+- For the backlog (the close agent): an 11.2 row; section 1's G6 leftover (`light_from_projectile.ent`'s sprite and
+  flame) closed; step 82's halo row closed; step 80's 13.4 row's deviation (4) ("nothing confirms the ghost")
+  **answered by gate 7 for all three: position, alpha and scale pulse confirmed by L1 4-29, the scale pulse's
+  amplitude not resolved** (0.60, 0.87 and 0.90 of the port's by three readers); deviation 1 as a gameplay row; **the
+  fire signal's put-out test** (above) as a gameplay row for the owner; **step 73's ring z** (-5 -> -1.778) as a row;
+  **the lit room's residual** (G5's `halo_brightness_scale`) and **the player lit after a put-out** as rows.
+- For the merge's renumbering: "step 130" is written in `effects.json` (the `_torches_trail_roundabout` note) and
+  `torch.json` (the signal's note, `_not_built`).
+
+**STEP 130'S FIX ROUND (2026-09-28), AFTER THE VERIFIER FAILED IT.** The verifier re-measured every gate - the
+warnings (all 37 changed translation units recompiled out of tree: 0), the six suites (134, 308, 611, 2382, 964,
+107; 0 failures), the four gate captures (974 frames byte-identical), the orbit (clockwise, median 295.0 degrees a
+second, radius mean 50.56 px), the 4-22 and 4-29 sheets, the bounce and the 128-level sweep (128 of 128
+byte-identical to `11.1/after/sweep` and to `11.2/after/sweep`, 1-01 f420 `e2da5131`) - and failed the step on three
+problems in its RECORD, none in what it draws. This round changes text alone: the planning record above,
+`game/data/torch.json` (`torch._note`, `signal._note`) and `game/data/effects.json` (two notes). **No source, header or
+test changed, nothing was rebuilt or relinked** - the seven binaries match `11.2/binaries_md5_after.txt` - **so no
+pixel moved and `11.2/after/sweep` stands as the next step's before.** Everything of this round is under `11.2/fix1/`.
+
+1. **THE FIRE SIGNAL'S PUT-OUT TEST WAS MISREAD (high, and a real defect in the record).** Re-read in the listing:
+   `ETHCallback_fire_signal` #111-117 call `hasProjectileAround` on `v8[pos]`, which #74-76 copy from
+   `GetVector2('originalPos')` and #100-108 only read (`vector2::opAdd` puts its sum in v4 for `SetPositionXY`), with
+   `SetV1` immediate 0 for `includeFireballs` (the listing prints an immediate as `vN`: `hasProjectileAround`'s own
+   #63 sets 1 and #134 sets 0 the same way; `ETHCallback_light_off` #47 pushes 1). So the original tests at the
+   TORCH's point, `projectile.ent` alone; the port tests at the orbiting ball and counts fireballs. The deviation is
+   the torch step's (step 30), not this step's, and it is gameplay no batch owns, so it is RECORDED, not rebuilt: a
+   new LEFT FOR THE OWNER row, deviation 1, THE CHANGE 3, the GAMEPLAY lines and gate 12 corrected, and the data notes
+   with them (`torch.json`; `effects.json` `fire_signal`, and `extinguish_fire_at_signal`, whose "a shot or a
+   fireball" was step 128's). Step 130 still changes gameplay, and says so: the orbit moves the port's hit point, 261
+   -> 260 on L1's taps - which is also the tick the original's torch-centred test gives on them, by the geometry
+   alone (deviation 1). The census behind "reachable on 4-32 alone": of the ten torch levels, none places a fire
+   diamond or a carranca, and only level31c (4-32) has a `dark_dragon_spawn`, whose fireballs are
+   `Turrets::Fireball` like every other (`DarkDragon.hpp`), so the port hands them to `Torch::State::Tick`.
+2. **GATE 7'S SCALE PULSE (medium, and true).** The first record called the ghost's scale pulse not measurable and
+   the 0.32 s line the lit torch's halo. The verifier showed the reader behind that failed on the port, where the
+   pulse is known. A new reader (`fix1/ghost_rows.py`, `fix1/ghost_rows.txt`), calibrated on the port first, measures
+   all 25 dots' y at 0.320 s on one common phase: the footage's profile over the 24 dot groups (12 rows, their two columns apart) matches the port's
+   (r 0.985), with the zero at 291.4 px against 290.3 and the top row - at the halo's own height, where the halo cannot
+   move a dot's y - moving 0.81 / 0.77 px against the port's 0.89 / 0.81. Gate 7 now reads position, alpha and scale
+   pulse CONFIRMED, the amplitude not resolved (0.90 of the port's by this reader, 0.60 by the verifier's). Gate 5's
+   sentence citing that line as the halo's signature is withdrawn, as is the LEFT FOR THE OWNER line "Step 80's ghost
+   scale pulse stays decode-only"; the backlog hand-off answers 13.4's deviation (4) for all three.
+3. **DEVIATION 9 CARRIED FORWARD (low).** Step 73's ring at -5 port units against the area's bare -5 = -1.778: a LEFT
+   FOR LATER line and a backlog hand-off row.
+
+**SUITES, this round**: the two whose data changed, run directly, once each, on the unchanged binaries:
+`test_mp_torch` **134** (`06ddc504`) and `test_mp_effects` **611** (`6a6d70c4`), 0 failures each
+(`fix1/test_mp_torch_run1.txt`, `fix1/test_mp_effects_run1.txt`). Both loaders read named keys only, and every
+refusal fixture in `test_mp_effects` searches for a quoted key, which no note line contains; the other four suites
+were not re-run. **SMART APP CONTROL, this round: 2 launches, 0 refusals.** The roundabout's on-screen lap (gate 8)
+was left NOT RUN in this round; the second verification ran it (below, and gate 8).
+
+**VERIFIED A SECOND TIME, PASSED (`11.2/verify2`)**, on the same seven binaries (`binaries_md5_after.txt`) and
+relinking nothing: the 37 changed translation units recompiled out of tree with the build's own commands, 0 warnings;
+the six suites once each - torch 134, wells 308, effects 611, layer 2382, sprites 964, sounds 107, 0 failures (layer
+now on the fix round's data too); the four gate captures' 974 frames byte-identical; the orbit re-read by its own
+tracker (footage clockwise, median 289 degrees a second, 296 unwrapped, r 51.4 px; the port 296, r 50.5 px); the 31
+levels the step can reach re-captured byte-identical to `after/sweep`; 46 launches, 0 refusals. Five findings, all
+text, corrected at commit. (Medium) gate 8: one tap laps a well, and the verification captured it - gate 8 rewritten,
+and the fix round's closing sentence with it. (Medium) the lit room near the torch moved further from L1, where gates
+3 and 6 read the column's change as confirmation - gate 3 gains the footage comparison (its pillar figure re-measured
+by the verification's own `flicker_v2.py`, `commit/flicker_v2_rerun.txt`: 83.49 / 60.74 / 53.29), gate 6 rests on
+the code, and a LEFT FOR LATER row goes to G5's `halo_brightness_scale`. (Low) the fire signal's put-out test walks
+the torch point's own bucket alone (`hasProjectileAround` #4-13): WHAT THE ORIGINAL DOES, deviation 1, the LEFT FOR
+THE OWNER row and `torch.json` `signal._note`, whose heading "THE HIT TEST IS NOT THE TORCH'S" said the opposite of
+its own paragraph and now reads "THE HIT TEST IS THE TORCH'S, NOT THE BALL'S". (Low) gate 7's 290 px zero is the fix
+round's reader's bias (the verification's shift reader: 267.2 / 268.3 px, r 0.999, 0.87). (Low, pre-existing) the
+player stays lit after a put-out, where L1 returns him to a silhouette: a LEFT FOR LATER row (`commit/player_box.txt`).
+The commit touched no source, header or test - only this record and `torch.json`'s `signal._note`, which still parses
+and whose note lines no loader reads and no fixture searches, so no suite was re-run for it. A dry run on a copy of
+`build.ninja` found no work (`commit/dryrun.txt`). Nothing was launched at commit: 0 refusals.

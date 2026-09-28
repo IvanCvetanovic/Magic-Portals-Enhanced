@@ -275,6 +275,13 @@
     "stone_broken": "playStoneHitSound",
     "fireball_spat": "playFireballSound",
 
+    "_note_roundabout": [
+      "A LAP ROUND A GRAVITY WELL (the visuals plan's 11.2; gravitywell.json roundabout):",
+      "computeRoundabout #365-367 plays it on the lap that adds roundabout_effect.ent, the",
+      "character's, while it is not hidden."
+    ],
+    "roundabout": "playRoundaboutSound",
+
     "_note_player_died": [
       "DYING IS TWO MOMENTS AND TWO SOUNDS TOO, for the same reason finishing is.",
       "",

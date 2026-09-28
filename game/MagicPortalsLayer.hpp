@@ -523,6 +523,17 @@ public:
             Sprite,       // a level picture's entity point (a crystal, a key, a torch)
             Fireball,     // a carranca's fireball while it flies
             PlacedPortal, // a portal the player opened
+            // Chapter 4's torch and wall (the visuals plan's 11.2), each by what the
+            // original deletes it with. The orbiting fire signal, while Torch has
+            // one (its callback moves it every frame and it is deleted when shot);
+            // the lit torch `index`, while Torch says it is lit
+            // (deleteLightFromProjectile); the torch `index` put back unlit, until
+            // the tick after it is lit again (its `delete` branch); and the light
+            // wall addLightWall built, until the wall is gone again.
+            FireSignal,
+            LitTorch,
+            UnlitTorch,
+            LightWall,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -552,6 +563,18 @@ public:
         // (ETHRenderEntity.cpp:112-117 against ETHParticleManager.cpp:381-389), so
         // its particles are never tinted by it.
         glm::dvec3 colour{1.0};
+        // ETHEntity::SetAlpha, which only its sprite reads either, and what its own
+        // callback adds to it each second of frame time up to 1: the light wall
+        // addLightWall builds is added at 0 and fades in (effects.json
+        // light_wall_at_ghost). 1 and 0 for everything else.
+        double alpha = 1.0;
+        double alphaPerSecond = 0.0;
+        // bounce(), where its callback runs one (effects.json light_from_projectile's
+        // `bounce`, on a level with a light wall): the entity's SetScale swung over
+        // its own, which moves its picture and its halo and never its particles
+        // (ETHEntity.cpp:601-608). Its clock starts at the entity's first frame.
+        bool bounces = false;
+        Art::Pulse bounce;
     };
     // AddEntity, on the FRAME and never on the tick: the effect's id, or -1 when
     // the level has no art, the .ent cannot be read, or what it is to follow has
@@ -589,7 +612,14 @@ public:
         std::vector<double> systemSizePx;
         double scriptScale = 1.0; // the Scale() it was added with
         glm::dvec3 colour{1.0}; // ETHEntity::SetColor, on its sprite alone
+        double alpha = 1.0;     // ETHEntity::SetAlpha, on its sprite alone
         glm::dvec2 scale{1.0};  // times its <Scale>: the one its light and picture take
+        // What bounce() has its SetScale at this frame, over `scale`: 1 but for a lit
+        // torch on a level with a light wall. Its picture and halo take it.
+        glm::dvec2 bounceScale{1.0};
+        entt::entity quad{entt::null};  // its picture, where it has one
+        entt::entity light{entt::null}; // its light and its halo, where it has them
+        entt::entity halo{entt::null};
         // Its light and halo as the owner's scale leaves them (Lighting::OwnerScaled,
         // K7): the range in the level's units, and the halo quad's size in them.
         // Zero where it has neither.
@@ -720,6 +750,19 @@ public:
         double lookZ = 0.0;                // its depth in the level's units
     };
     LightWallGhostReport LightWallGhost() const;
+
+    // Chapter 4's torches as the layer draws them (the visuals plan's 11.2), per
+    // torch of Torch's: whether the level's own unlit picture still stands, and the
+    // depth the torch entity is at now.
+    struct TorchReport {
+        bool levelPicture = false; // its node's quad is there
+        bool unlitGone = false;    // the `delete` branch has run since it was last lit
+        double z = 0.0;
+    };
+    std::vector<TorchReport> TorchReports() const;
+    // A gravity well agent's turn, in Ethanon's degrees, as its callback sets it
+    // this tick (gravitywell.json roundabout): a whole turn at rest.
+    double WellSpinDegrees(int well) const;
 
     // The four black bars round the scene (art.json black_bar): black_bar.ent as
     // Game::manageSceneBounds adds it, placed once with the level at its max
@@ -1043,6 +1086,11 @@ private:
         int motion{-1};       // in m_motions: a crystal or key its script bobs
         bool antiportal{false}; // ETHCallback_antiportal blinks and turns it (art.json)
         int placed{-1};       // in m_placed: a picture its own callback sways, fades or turns
+        // Chapter 4's torch, in torch.lights: its picture goes on the tick after the
+        // torch is lit, as the original's entity deletes itself (m_torchWatch).
+        int torch{-1};
+        // A gravity well's agent, in wells.wells: a lap turns it (m_wellSpins).
+        int well{-1};
         // 2-32's boss: its node stands off the left edge of the level and its
         // callback flies it, turns it and cuts its sheet (sim/Dragon.hpp), and the
         // claw's rides the camera. Both are drawn from the sim, not from the node.
@@ -1148,6 +1196,10 @@ private:
     // clock counts (Effects::AdvanceFlyIn); `registry` is read for the player's
     // point, where a shock ring's kill adds shock_death.
     void latchSimEffects(const entt::registry& registry, float fixedDelta);
+    // Chapter 4's torches, their signal and their wall (the visuals plan's 11.2),
+    // from latchSimEffects: what lighting a torch, putting it out and the wall
+    // going add, each on the tick its state turns over.
+    void latchTorches();
     // What a tap the shot was offered leaves behind (the visuals plan's 10.1),
     // queued the moment Portals::State::Shoot returns: the mark a fired shot
     // leaves at the tap - red_cross or portal_mark by computePortalFinalPos's
@@ -1453,13 +1505,9 @@ private:
     entt::entity m_shotLight{entt::null}; // the shot's own light while it flies
     entt::entity m_shotHalo{entt::null};  // and its halo, when its image is there
     bool m_lightMasksOff{false};          // ForceLightMasksOff
-    // light_from_projectile.ent's light and halo at each lit torch, in the order of
-    // Torch::State::lights; null while that torch is not lit (step 55).
-    struct TorchLight {
-        entt::entity light{entt::null};
-        entt::entity halo{entt::null};
-    };
-    std::vector<TorchLight> m_torchLights;
+    // (light_from_projectile.ent's light and halo, which step 55 built here, are the
+    // effects runtime's since the visuals plan's 11.2: the whole entity is added
+    // where a shot lights a torch, its light and its halo with it.)
     float m_direction{0.0f};                // this tick's walk: -1 left, 1 right, 0 standing
     bool m_facingRight{false};              // which way the player last walked
     // SideScrollerCharacter.pushing: whether the last step's ray met something
@@ -1640,6 +1688,16 @@ private:
         // for a placed portal, white for everything else, and the kill fade's
         // 0.9 a frame once one is dying.
         glm::dvec3 colour{1.0};
+        // ETHEntity::SetAlpha, which only its sprite reads, and what its callback
+        // adds to it a second up to 1 (EffectSpawn::alphaPerSecond).
+        double alpha = 1.0;
+        double alphaPerSecond = 0.0;
+        // bounce() on its SetScale, over `scale` (EffectSpawn::bounces): its clock
+        // in ms and what it gives this frame.
+        bool bounces = false;
+        Art::Pulse bounce;
+        double bounceMs = 0.0;
+        glm::dvec2 bounceScale{1.0};
         glm::dvec2 scale{1.0};    // times its <Scale>: what its picture, halo and light take
         double zUnits = 0.0;
         bool temporary = false; // the engine frees it once its pools are over
@@ -1748,6 +1806,43 @@ private:
     int m_signalsPutOut{0};
     bool m_signalSeen{false};
     glm::dvec2 m_signalOriginPx{0.0};
+    // Per torch of Torch's, in its order (the visuals plan's 11.2): lit at the last
+    // latch; whether the unlit torch is deleted - on the tick AFTER it is lit,
+    // which is when its `delete` branch deletes the entity, and back with the
+    // fresh light_off.ent a put-out adds; and the depth the torch entity stands at
+    // now - its node's eth_z, and after a put-out the bare 10
+    // ETHCallback_fire_signal adds the new one at, which the next lighting's
+    // entities are added on.
+    //
+    // ONE FRAME OF BOTH. The latch that sets unlitGone runs before the tick's
+    // syncSprites, so the level's own picture is last drawn on the frame after the
+    // lighting tick - the frame its lit torch is first drawn on - and the one a
+    // put-out added (EffectOwner::Kind::UnlitTorch) is let go on the same latch.
+    // The original's delete branch runs on the frame the lit torch is first drawn,
+    // after that frame's list of what to draw was made (Scene/ETHScene.cpp:482-511;
+    // 00_order 8.0 rule 6), so it too draws the two together once.
+    struct TorchWatch {
+        bool lit = false;
+        bool unlitGone = false;
+        double z = 0.0;
+    };
+    std::vector<TorchWatch> m_torchWatch;
+    // The light wall's going as the last latch saw it (Torch::State::wallsGone),
+    // and whether the wall standing now is one addLightWall built at the ghost -
+    // its point the ghost's, its depth the ghost's - rather than the level's.
+    int m_wallsGoneSeen{0};
+    bool m_lightWallRebuilt{false};
+    // MainCharacter::addTrail's trailElapsedTime (effects.json movement_trail).
+    double m_trailMs{0.0};
+    // ETHCallback_gravity_agent's effectAngleTime and effectAngleSign, per well of
+    // GravityWell's in its order: a whole turn at rest, from spin_ms; a lap by the
+    // visible player zeroes the clock and sets the sign (gravitywell.json
+    // roundabout).
+    struct WellSpin {
+        double ms = 0.0;
+        double sign = 1.0;
+    };
+    std::vector<WellSpin> m_wellSpins;
     // The cell the player was last drawn on, kept across the door: updateEyes
     // reads GetFrame every frame, and the quad it comes from is destroyed when the
     // character is hidden.

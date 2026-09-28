@@ -237,7 +237,19 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "wall_destroy", read.wallDestroy, why) ||
         !ReadRule(root, "rolling_stone_destroy", read.stoneDestroy, why) ||
         !ReadRule(root, "door_lift_particles_open", read.doorLiftOpen, why) ||
-        !ReadRule(root, "door_lift_particles_close", read.doorLiftClose, why)) {
+        !ReadRule(root, "door_lift_particles_close", read.doorLiftClose, why) ||
+        !ReadRule(root, "light_from_projectile", read.lightFromProjectile, why) ||
+        !ReadRule(root, "light_on_sparkles", read.lightOnSparkles, why) ||
+        !ReadRule(root, "portal_death_at_lit_torch", read.portalDeathAtLitTorch, why) ||
+        !ReadRule(root, "fire_signal", read.fireSignal, why) ||
+        !ReadRule(root, "light_off_at_signal", read.lightOffAtSignal, why) ||
+        !ReadRule(root, "light_off_sparkles", read.lightOffSparkles, why) ||
+        !ReadRule(root, "portal_death_at_signal", read.portalDeathAtSignal, why) ||
+        !ReadRule(root, "light_wall_create", read.lightWallCreate, why) ||
+        !ReadRule(root, "light_wall_at_ghost", read.lightWallAtGhost, why) ||
+        !ReadRule(root, "wall_destroy_light_wall", read.wallDestroyLightWall, why) ||
+        !ReadRule(root, "movement_trail", read.movementTrail, why) ||
+        !ReadRule(root, "roundabout_effect", read.roundabout, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -314,7 +326,16 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"extinguish_fire_at_signal", &read.extinguishAtSignal},
                      {"rolling_stone_destroy", &read.stoneDestroy},
                      {"door_lift_particles_open", &read.doorLiftOpen},
-                     {"door_lift_particles_close", &read.doorLiftClose}};
+                     {"door_lift_particles_close", &read.doorLiftClose},
+                     {"light_from_projectile", &read.lightFromProjectile},
+                     {"light_on_sparkles", &read.lightOnSparkles},
+                     {"portal_death_at_lit_torch", &read.portalDeathAtLitTorch},
+                     {"fire_signal", &read.fireSignal},
+                     {"light_off_at_signal", &read.lightOffAtSignal},
+                     {"light_off_sparkles", &read.lightOffSparkles},
+                     {"portal_death_at_signal", &read.portalDeathAtSignal},
+                     {"movement_trail", &read.movementTrail},
+                     {"roundabout_effect", &read.roundabout}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
@@ -342,7 +363,16 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                     {"extinguish_fire_at_signal", &read.extinguishAtSignal},
                     {"rolling_stone_destroy", &read.stoneDestroy},
                     {"door_lift_particles_open", &read.doorLiftOpen},
-                    {"door_lift_particles_close", &read.doorLiftClose}};
+                    {"door_lift_particles_close", &read.doorLiftClose},
+                    {"light_from_projectile", &read.lightFromProjectile},
+                    {"light_on_sparkles", &read.lightOnSparkles},
+                    {"portal_death_at_lit_torch", &read.portalDeathAtLitTorch},
+                    {"fire_signal", &read.fireSignal},
+                    {"light_off_at_signal", &read.lightOffAtSignal},
+                    {"light_off_sparkles", &read.lightOffSparkles},
+                    {"portal_death_at_signal", &read.portalDeathAtSignal},
+                    {"movement_trail", &read.movementTrail},
+                    {"roundabout_effect", &read.roundabout}};
     for (const auto& row : unturned) {
         if (row.rule->angleDeg != 0.0) {
             error = path + ": " + row.name + " is added by AddScaledEntity, whose angle is 0";
@@ -435,6 +465,107 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                                    : std::string("a bare PshC4 0f on the door's GetPosition(): 0, scaled false"));
             return false;
         }
+    }
+    // The 11.2 rows each read their z one way: on the entity's own GetPosition()
+    // (the torch's, the ghost's, the wall's, the character's: OnEntity or
+    // OnEntityTurned, a 0 of g_scale's); at the spent shot's GetPosition(), whose z
+    // is the bare 0 addProjectile and addFireball give it (At); at
+    // vector3(originalPos, 10) - a bare PshC4 10f, a depth of its own (At); and at
+    // the well's area, vector3(xy, -5) with a bare -5 (At). A row that said the
+    // other would be read half one way.
+    const struct {
+        const char* name;
+        const Rule* rule;
+        bool scaled;
+        double z;
+    } torchDepths[] = {{"light_from_projectile", &read.lightFromProjectile, true, 0.0},
+                       {"light_on_sparkles", &read.lightOnSparkles, true, 0.0},
+                       {"portal_death_at_lit_torch", &read.portalDeathAtLitTorch, false, 0.0},
+                       {"fire_signal", &read.fireSignal, true, 0.0},
+                       {"light_off_at_signal", &read.lightOffAtSignal, false, 10.0},
+                       {"light_off_sparkles", &read.lightOffSparkles, false, 10.0},
+                       {"portal_death_at_signal", &read.portalDeathAtSignal, false, 0.0},
+                       {"light_wall_create", &read.lightWallCreate, true, 0.0},
+                       {"light_wall_at_ghost", &read.lightWallAtGhost, true, 0.0},
+                       {"wall_destroy_light_wall", &read.wallDestroyLightWall, true, 0.0},
+                       {"movement_trail", &read.movementTrail, true, 0.0},
+                       {"roundabout_effect", &read.roundabout, false, -5.0}};
+    for (const auto& row : torchDepths) {
+        if (row.rule->zScaled != row.scaled || row.rule->z != row.z) {
+            error = path + ": " + row.name + ".z is " +
+                    (row.scaled ? std::string("the entity's own GetPosition() z: 0, scaled true")
+                                : "a bare literal in the decode: " + std::to_string(static_cast<int>(row.z)) +
+                                      ", scaled false");
+            return false;
+        }
+    }
+    // The three addLightWall and ETHCallback_light_wall add at an entity are each
+    // turned by that entity's GetAngle() and offset by nothing.
+    const struct {
+        const char* name;
+        const Rule* rule;
+    } turned[] = {{"light_wall_create", &read.lightWallCreate},
+                  {"light_wall_at_ghost", &read.lightWallAtGhost},
+                  {"wall_destroy_light_wall", &read.wallDestroyLightWall}};
+    for (const auto& row : turned) {
+        if (row.rule->turn != Turn::EntityAngle || row.rule->offsetUnits != 0.0) {
+            error = path + ": " + std::string(row.name) + " is turned by the entity's GetAngle() (" + kEntityAngle +
+                    ") and offset by nothing";
+            return false;
+        }
+    }
+    // Every 11.2 call is at getScale(), one of the port's units: the torch's, the
+    // wall's and the trail's pictures and systems are the .ent's own size.
+    const Rule* const unscaled[] = {&read.lightFromProjectile, &read.lightOnSparkles, &read.portalDeathAtLitTorch,
+                                    &read.fireSignal,          &read.lightOffAtSignal, &read.lightOffSparkles,
+                                    &read.portalDeathAtSignal, &read.lightWallCreate, &read.lightWallAtGhost,
+                                    &read.wallDestroyLightWall, &read.movementTrail, &read.roundabout};
+    for (const Rule* rule : unscaled) {
+        if (rule->scale != 1.0) {
+            error = path + ": " + rule->entity + " is added at g_scale.getScale(): scale 1";
+            return false;
+        }
+    }
+    // The lit torch's bounce (bounceLightEntity(this, 1f)): from above 1 to below
+    // it and back, on a stride of some time - a bounce that went nowhere, or
+    // divided by no time, would be a picture of nothing decoded.
+    {
+        const Json::Value& bounce = root["light_from_projectile"]["bounce"];
+        if (!bounce.IsObject() || !Finite(bounce["from"]) || !Finite(bounce["to"]) || !Finite(bounce["stride_ms"])) {
+            error = path + ": light_from_projectile.bounce needs from, to and stride_ms";
+            return false;
+        }
+        read.litTorchBounce.from = bounce["from"].AsNumber();
+        read.litTorchBounce.to = bounce["to"].AsNumber();
+        read.litTorchBounce.strideMs = bounce["stride_ms"].AsNumber();
+        if (!(read.litTorchBounce.from > 1.0) || !(read.litTorchBounce.to < 1.0) ||
+            !(read.litTorchBounce.to > 0.0) || !(read.litTorchBounce.strideMs > 0.0)) {
+            error = path + ": light_from_projectile.bounce runs from above 1 to below it, above 0, on a stride above 0";
+            return false;
+        }
+    }
+    // The rebuilt wall's fade: SetAlpha(0), then up by unitsPerSecond(1).
+    {
+        const Json::Value& from = root["light_wall_at_ghost"]["alpha_from"];
+        const Json::Value& rate = root["light_wall_at_ghost"]["alpha_per_second"];
+        if (!Finite(from) || !(from.AsNumber() >= 0.0 && from.AsNumber() < 1.0) || !Finite(rate) ||
+            !(rate.AsNumber() > 0.0)) {
+            error = path + ": light_wall_at_ghost fades in: alpha_from in [0, 1) and alpha_per_second above 0";
+            return false;
+        }
+        read.lightWallAlphaFrom = from.AsNumber();
+        read.lightWallAlphaPerSecond = rate.AsNumber();
+    }
+    // The trail's two thresholds.
+    {
+        const Json::Value& speed = root["movement_trail"]["min_speed"];
+        const Json::Value& every = root["movement_trail"]["every_ms"];
+        if (!Finite(speed) || speed.AsNumber() < 0.0 || !Finite(every) || !(every.AsNumber() > 0.0)) {
+            error = path + ": movement_trail needs min_speed at or above 0 and every_ms above 0";
+            return false;
+        }
+        read.trailMinSpeed = speed.AsNumber();
+        read.trailEveryMs = every.AsNumber();
     }
     // The wall's is the one call of the four that passes an angle - its wall's -
     // and it is offset by nothing; the other three are in the lists above.
@@ -570,6 +701,27 @@ Spawn WallDestroy(const Rules& rules, const glm::dvec2& wallPx, double wallZ, do
     spawn.angleDeg = static_cast<float>(wallAngleDeg);
     spawn.scale = rules.wallDestroy.scale * effectScale;
     return spawn;
+}
+
+Spawn OnEntityTurned(const Rule& rule, const glm::dvec2& entityPx, double entityZ, double entityAngleDeg) {
+    // The 6-argument AddEntity with the entity's GetPosition() and GetAngle():
+    // addLightWall #22-48 and #62-87 at the ghost, ETHCallback_light_wall #109-134
+    // at the wall. The angle is Ethanon's degrees, handed over as they are.
+    Spawn spawn = OnEntity(rule, entityPx, entityZ);
+    spawn.angleDeg = static_cast<float>(entityAngleDeg);
+    return spawn;
+}
+
+bool TrailDue(const Rules& rules, double& clockMs, double speed, double tickMs) {
+    // #8-24: the clock runs every frame the update does, whatever the speed.
+    clockMs += tickMs;
+    // #44-60: both strictly above - the speed as the script's float against 0.4f -
+    // and #82-95 the clock back to 0 on the one that adds.
+    if (!(static_cast<float>(speed) > static_cast<float>(rules.trailMinSpeed)) || !(clockMs > rules.trailEveryMs)) {
+        return false;
+    }
+    clockMs = 0.0;
+    return true;
 }
 
 Spawn DoorLiftDust(const Rules& rules, bool opening, const glm::dvec2& doorPx, double doorZ, double doorHeightUnits,

@@ -390,7 +390,9 @@ struct BlackBars {
 struct Rules {
     Picture portal;      // portal.ent
     Shot shot;           // projectile.ent
-    Picture torchLight;  // light_from_projectile.ent, added where a shot lights a torch
+    // (light_from_projectile.ent, the lit torch, was a picture here until the visuals
+    // plan's 11.2: it is now added whole, from its own .ent, by the effects runtime -
+    // effects.json light_from_projectile.)
     Character character; // dark_mage.ent, the player
     Beholder beholder;   // beholder.ent, chapter 1's boss
     Spike spike;         // beholder_spike.ent, its spikes

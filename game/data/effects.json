@@ -818,8 +818,9 @@
     "_source": [
       "ETHCallback_fire_signal (ETHCallback_light_off.angelscript, bytes 470827..471942): its first frame stores",
       "originalPos = its GetPositionXY (#1-27) - where addFireSignalIfNecessary added it, at the lit torch's",
-      "GetPosition() (bytes 469055..469393, #18-32); when hasProjectileAround(pos, 24) (#111-128) finds a shot or",
-      "a fireball: #130-146 vector3(originalPos, 10), the 10 a BARE PshC4 pushed first, a depth of its own; then",
+      "GetPosition() (bytes 469055..469393, #18-32); when hasProjectileAround(originalPos, 24, 0) (#111-128) finds",
+      "a shot - projectile.ent alone, the flag an immediate 0, at the torch's point (torch.json signal._note):",
+      "#130-146 vector3(originalPos, 10), the 10 a BARE PshC4 pushed first, a depth of its own; then",
       "light_off.ent (#149-172) and light_off_sparkles.ent (#182-193) there, killProjectile, portal_death at the",
       "projectile (#228-242) - the visuals plan's 11.2 - and #258-269 AddScaledEntity('extinguish_fire.ent', that",
       "vector3, getScale()); #273-275 playLightOffSound; #279 addLightWall. ITS .ent: as extinguish_fire's.",
@@ -930,6 +931,236 @@
       "vector3::opAdd - the door's GetPosition() + (0, 0.5 h, 0): the raised door's bottom edge - then #574-580",
       "@412840 AddScaledEntity and #584-586 startEarthquake(4, 0) (earthquake.json door_closing). ITS .ent: as the",
       "open's."
+    ]
+  },
+
+  "_torches_trail_roundabout": [
+    "WHAT A TORCH, ITS LIGHT WALL, A WEIGHTLESS PLAYER AND A GRAVITY WELL ADD - the visuals plan's 11.2 (00_order",
+    "section 7 as section 8.13's 11.2 row amends it; system_7 7f-5 and systems_3_4 3e; decode D3 section 5 and",
+    "D3_check), drawn from planning step 130. All from the remake's out/parity/asbc/all_functions.txt, md5",
+    "48fe65ce8baea16b94ed84d8d7be84b0. Lighting a torch, ETHCallback_light_off (ETHCallback_light_off.angelscript,",
+    "bytes 467198..467878), on the frame hasProjectileAround(GetPositionXY(), 24, 1) (#47-67) finds a shot or a",
+    "fireball, in its order: light_from_projectile and light_on_sparkles at its own GetPosition() (#69-101), the",
+    "`delete` flag that takes the torch away on the NEXT frame (#105-114, #1-35), killProjectile (#118-123),",
+    "portal_death at the projectile (#125-139), then seekLightWallToDestroy (the ghost, art.json",
+    "light_wall_ghost) and addFireSignalIfNecessary: fire_signal at the torch, and the lit torch's `bounce`,",
+    "where the level has a light wall. Putting it out, ETHCallback_fire_signal (bytes 470827..471942): a fresh",
+    "light_off.ent and light_off_sparkles at vector3(originalPos, 10), killProjectile, the lit torch and the",
+    "signal deleted, portal_death at the projectile, extinguish_fire (extinguish_fire_at_signal, 10.4) and",
+    "addLightWall's light_wall_create and a new light_wall.ent at the ghost, faded in. The wall going,",
+    "ETHCallback_light_wall at 1500 ms: wall_destroy turned by it. MainCharacter::addTrail's movement_trail on a",
+    "weightless level, and computeRoundabout's roundabout_effect where the character laps a well",
+    "(gravitywell.json roundabout). Every one is AddScaledEntity or the 6-argument AddEntity at getScale(), 1 of",
+    "the port's units; the rows each take the point the call names."
+  ],
+
+  "light_from_projectile": {
+    "entity": "light_from_projectile.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "bounce": {"from": 1.04, "to": 0.96, "stride_ms": 160},
+    "_source": [
+      "ETHCallback_light_off #69-83: AddScaledEntity('light_from_projectile.ent', thisEntity.GetPosition(),",
+      "g_scale.getScale()) - the torch's own point and depth. It is the lit torch: <Sprite> torch_small.png on",
+      "PivotAdjust (0, -16) (type 0, drawn centred on its point less the pivot: 16 below it, where the unlit",
+      "light_off.ent - type 2, bottom-centred on (0, -48) - draws the same picture), applyLight 1 with",
+      "light01_normal.png, one system of 12 fire.png cut 4 x 1 at StartPoint (0, -12), a random cell each",
+      "(animationMode 2), repeat 0, and a STATIC <Light> range 512 at (0, -12, 24), (1, 0.5, 0.2), halo.bmp 300",
+      "at 0.7 - whose halo DrawHalo stands at the light's own (x, y) (ETHRenderEntity.cpp:376-386), 12 above the",
+      "torch's point. Not temporary: deleteLightFromProjectile (bytes 472507..472685) deletes it when the signal is",
+      "shot. THE BOUNCE: addFireSignalIfNecessary (bytes 469055..469393) #36-68 SeekEntity finds it - AddEntity",
+      "puts an entity in its bucket at once (ETHScene.cpp:260-289) - and SetUInt('bounce', 1), so where the level",
+      "has a light wall ETHCallback_light_from_projectile (bytes 472685..472846) #1-20 calls",
+      "bounceLightEntity(this, 1f) (bytes 472846..473086) every frame: #1 diff = 1 x 0.04f, #3-6 1 -/+ diff, #8-26",
+      "bounce(this, vector2(1.04), vector2(0.96), 160) - arguments pushed last-first - so its SCALE swings 1.04 ->",
+      "0.96 -> 1.04 on 160 ms legs eased by smoothEnd (the ghost's own bounce, art.json light_wall_ghost). SetScale",
+      "moves the picture and its halo, never its particles (ETHEntity.cpp:601-608). Where there is no wall (4-22",
+      "to 4-25) it never bounces."
+    ]
+  },
+
+  "light_on_sparkles": {
+    "entity": "light_on_sparkles.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_light_off #87-101: AddScaledEntity('light_on_sparkles.ent', thisEntity.GetPosition(),",
+      "getScale()). ITS .ent: no sprite; one onda.png from size 0 at growth 7 over 1000 ms, (1, 0.9, 0.8) to",
+      "black, and 28 sparkles.bmp over 1150 +- 300 ms along RandStartPoint (279, 112), both at StartPoint z 100,",
+      "every system repeat 1: temporary. Footage L1 (4-22 #60-#95): 'a large pale translucent circle centred on",
+      "the torch expands and fades', and small yellow-white sparkles drift round the torch and over the sky."
+    ]
+  },
+
+  "portal_death_at_lit_torch": {
+    "entity": "portal_death.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_light_off #125-139: AddScaledEntity('portal_death.ent', projectile.GetPosition(), getScale())",
+      "after #118-123 killProjectile - the handle outlives the DeleteEntity - so at the shot (or fireball) that",
+      "lit it, whose z is the 0 addProjectile and addFireball give it. ITS .ent: as portal_death's."
+    ]
+  },
+
+  "fire_signal": {
+    "entity": "fire_signal.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "addFireSignalIfNecessary #1-16: only where SeekEntity('light_wall.ent') finds the flagged wall; #17-32",
+      "AddScaledEntity('fire_signal.ent', torch.GetPosition(), getScale()). ETHCallback_fire_signal then moves it",
+      "every frame onto its circle round the torch (sim/Torch: clockwise on the screen from above, 18 out, 300",
+      "degrees a second), and deletes it (#219-225) when a shot comes within scale(24) of the TORCH'S point",
+      "(#111-117; the port tests at the ball, torch.json signal._note): its owner is the signal. ITS .ent: no",
+      "sprite; 24 sparkles.bmp growing to 12 over 900 +- 400 ms, and 2 at 23 living 10 ms, both repeat 0 at",
+      "StartPoint z 6 - the bright ball and the short trail of dots it leaves (L1 section 4.2)."
+    ]
+  },
+
+  "light_off_at_signal": {
+    "entity": "light_off.ent",
+    "offset_units": 0,
+    "z": {"value": 10, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_fire_signal #130-146 vector3(originalPos, 10) - the 10 a BARE PshC4, pushed first - and #149-172",
+      "AddEntity('light_off.ent', that, 0, @lightOff, '', getScale()): the torch put back, unlit, as a new entity",
+      "(#204-215 set its `switch` to 1, which nothing reads). Its depth is that 10 - no longer the level's own. ITS",
+      ".ent: type 2 (ET_VERTICAL, bottom-centred), PivotAdjust (0, -48), torch_small.png, applyLight 1 with",
+      "light01_normal.png, and two sparkles.bmp systems at StartPoint (12, 0, 4), repeat 0: the blue spark. Its",
+      "own callback runs as the level's torch's does."
+    ]
+  },
+
+  "light_off_sparkles": {
+    "entity": "light_off_sparkles.ent",
+    "offset_units": 0,
+    "z": {"value": 10, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_fire_signal #182-193: AddScaledEntity('light_off_sparkles.ent', vector3(originalPos, 10),",
+      "getScale()). ITS .ent: no sprite; 28 sparkles.bmp over 1150 +- 300 ms along RandStartPoint (279, 112) at",
+      "StartPoint z 100, (0.8, 0.9, 1) to (0.2, 0.35, 0.8, 0), repeat 1: temporary. Footage L1 (4-29 #195-#206):",
+      "'blue-white sparkle particles fall below it'."
+    ]
+  },
+
+  "portal_death_at_signal": {
+    "entity": "portal_death.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_fire_signal #228-242: AddScaledEntity('portal_death.ent', projectile.GetPosition(),",
+      "getScale()), after #197-202 killProjectile: at the shot that put it out. ITS .ent: as portal_death's."
+    ]
+  },
+
+  "light_wall_create": {
+    "entity": "light_wall_create.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": "entity_angle",
+    "scale": 1,
+    "_source": [
+      "addLightWall (bytes 472067..472507) #1-20: SeekEntity('light_wall_ghost'); #22-48",
+      "AddEntity('light_wall_create.ent', ghost.GetPosition(), ghost.GetAngle(), @out, '', getScale()) - the",
+      "ghost's point, depth and angle, which are the taken wall's less 4 raw pixels of depth (art.json",
+      "light_wall_ghost). ITS .ent: no sprite; 10 smoke_particle.png at 100, all at once, along RandStartPoint",
+      "(22, 100), fading IN from alpha 0 to 0.8 over 1700 +- 200 ms, StartPoint z 20, repeat 1: temporary."
+    ]
+  },
+
+  "light_wall_at_ghost": {
+    "entity": "light_wall.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": "entity_angle",
+    "scale": 1,
+    "alpha_from": 0,
+    "alpha_per_second": 1,
+    "_source": [
+      "addLightWall #62-87: AddEntity('light_wall.ent', ghost.GetPosition(), ghost.GetAngle(), @wall, '',",
+      "getScale()); #101-103 wall.SetAlpha(0); #105-110 DeleteEntity(ghost). The wall's own callback,",
+      "ETHCallback_light_wall (bytes 470129..470827), while it is not destroyed (#162-178):",
+      "SetAlpha(min(GetAlpha() + unitsPerSecond(1), 1)) - up to whole in one second of frame time. Footage L1",
+      "(4-29 #194-#223): the wall column 2.0 -> 6.2 -> 12.6 -> ... -> 64.4, about 1.0 s. It is the wall the next",
+      "torch takes: its GetPosition() is where that one's wall_destroy stands. ITS .ent: breakable_wall_sand.png,",
+      "applyLight 1 with breakable_wall_nm.png, EmissiveColor (1, 1, 1), and 8 sparkles.bmp along",
+      "RandStartPoint (32, 128), repeat 0. The alpha is the sprite's alone (ETHRenderEntity.cpp:112-117 against",
+      "ETHParticleManager.cpp:381-389)."
+    ]
+  },
+
+  "wall_destroy_light_wall": {
+    "entity": "wall_destroy.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": "entity_angle",
+    "scale": 1,
+    "_source": [
+      "ETHCallback_light_wall #101-157, once destroyed and elapsedTime past 1500 (CMPIu, JNP; sim/Torch's",
+      "wall.fade_ms): #105-107 playDemolitionSound; #109-134 AddEntity('wall_destroy.ent', GetPosition(),",
+      "GetAngle(), @out, '', g_scale.getScale()) - at the light wall's own point and depth, turned by it, at",
+      "getScale() and no destroyEffectScale; #148-150 startEarthquake(20, 0) (earthquake.json light_wall_gone);",
+      "#152-157 DeleteEntity. 4-32's wall is turned 1.5708 rad, so its dust falls from a horizontal line. Footage",
+      "L1 (4-29 #73): 'a brown dust cloud stands where the wall was, with dark debris flecks flying off'. ITS",
+      ".ent: as wall_destroy's."
+    ]
+  },
+
+  "movement_trail": {
+    "entity": "movement_trail.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "min_speed": 0.4,
+    "every_ms": 400,
+    "_source": [
+      "MainCharacter::addTrail (bytes 132833..133241), from MainCharacter::update #63 - not paused, the level not",
+      "finished - every frame: #3-6 only where the character's noGravity is set; #8-24",
+      "AddToUInt('trailElapsedTime', getLastFrameElapsedTime()); #26-42 length(GetLinearVelocity()) /",
+      "g_scale.getScale() - the body's speed in the engine's metres a second over the scale, which is the",
+      "port's metres a second as zerog.json's 1.4 is; #44-45 above min_speed 0.4f (CMPIf, JNP) and #47-60",
+      "trailElapsedTime above every_ms 400 (CMPIu, JNP), both strictly; then #62-80",
+      "AddScaledEntity('movement_trail.ent', GetPosition(), getScale()) and #82-95 the clock back to 0. The clock",
+      "runs whatever the speed, so the first push after a rest adds one at once. ETHCallback_movement_trail",
+      "(bytes 339677..339851) #1-20 SetPosition(SeekEntity('dark_mage.ent').GetPosition()) every frame: it rides",
+      "on the character, depth and all. ITS .ent: no sprite; 10 portal_particle.png from 5 growing 1.2 to 23 over",
+      "400 ms, along RandStartPoint (16, 32) at StartPoint z 2, (0.15, 0.15, 0.15) to nothing, additive, repeat",
+      "1: temporary. Footage F10 (4-05): 'a faint additive haze behind him, about 60-80 px across ... over the",
+      "body, +6..+16 luminance'."
+    ]
+  },
+
+  "roundabout_effect": {
+    "entity": "roundabout_effect.ent",
+    "offset_units": 0,
+    "z": {"value": -5, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "computeRoundabout (ETHCallback_gravity_agent.angelscript, bytes 459694..461443) #347-361, on a lap by the",
+      "character and not hidden (#332-345): AddScaledEntity('roundabout_effect.ent', pivotEntity.GetPosition(),",
+      "getScale()) - the pivot is the area ETHCallback_gravity_agent #28-50 added at vector3(the agent's",
+      "GetPositionXY(), -5), the -5 a BARE literal: -1.778 of the level's units at the 720 px screen (step 86's",
+      "rule). Step 73 drew the well's ring at an unconverted -5; that row is not this step's. ITS .ent: no",
+      "sprite; 20 sparkles.bmp over 650 +- 150 ms along RandStartPoint (112, 112), (0.8, 1, 0.8) to nothing, and",
+      "one onda.png growing by 4.5 over 900 ms, (0.5, 1, 0.5) to black, both at StartPoint z 100, repeat 1:",
+      "temporary."
     ]
   }
 }

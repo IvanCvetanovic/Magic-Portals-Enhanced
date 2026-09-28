@@ -1054,8 +1054,6 @@ void ASheetThatDoesNotSayHowFastIsRefused() {
                                                 "static": false, "apply_light": false)" + portal + R"(},
                                      "shot": {"sprite": "b.png", "additive": true, "columns": 6, "emissive": [1, 1, 1],
                                               "static": false, "apply_light": false)" + shot + R"(},
-                                     "torch_light": {"sprite": "d.png", "additive": false, "emissive": [0, 0, 0],
-                                                     "static": true, "apply_light": true},
                                      "character": {"sprite": "c.png", "additive": false, "columns": 4, "rows": 4,
                                                    "emissive": [1, 1, 1], "static": false, "apply_light": true,
                                                    "initial_direction": 2, "pivot_px": [0, 2],
@@ -1220,8 +1218,6 @@ void APictureWithoutItsEmissiveIsRefused() {
                                                 "apply_light": false)" + emissive + R"(},
                                      "shot": {"sprite": "b.png", "additive": true, "emissive": [1, 1, 1],
                                               "static": false, "apply_light": false},
-                                     "torch_light": {"sprite": "d.png", "additive": false, "emissive": [0, 0, 0],
-                                                     "static": true, "apply_light": true},
                                      "character": {"sprite": "c.png", "additive": false, "emissive": [1, 1, 1],
                                                    "static": false, "apply_light": true}})";
         Write(path, std::vector<unsigned char>(text.begin(), text.end()));
@@ -1241,9 +1237,7 @@ void APictureWithoutItsLightingIsRefused() {
         const std::string text = R"({"portal": {"sprite": "a.png", "additive": true, "emissive": [1, 1, 1])" + portal +
                                  R"(}, "shot": {"sprite": "b.png", "additive": true, "emissive": [1, 1, 1],
                                                 "static": false, "apply_light": false)" + shot +
-                                 R"(}, "torch_light": {"sprite": "d.png", "additive": false, "emissive": [0, 0, 0],
-                                                       "static": true, "apply_light": true},
-                                     "character": {"sprite": "c.png", "additive": false, "emissive": [1, 1, 1],
+                                 R"(}, "character": {"sprite": "c.png", "additive": false, "emissive": [1, 1, 1],
                                                      "static": false, "apply_light": true}})";
         Write(path, std::vector<unsigned char>(text.begin(), text.end()));
         Art::Rules rules;
@@ -1358,6 +1352,12 @@ void ThePortsOwnPicturesAreDrawnFromTheirTiers() {
     CHECK_MSG(GravityWell::LoadRules(kPortData + "/gravitywell.json", wells, error), error);
     const Tiers::Rules tiers = TheTiers();
     const std::string entities = kOriginal + "/entities/";
+    // The lit torch, which the effects runtime adds whole from its own .ent since
+    // the visuals plan's 11.2 (effects.json light_from_projectile): its normal map
+    // and its halo are the names that file gives.
+    Art::Entity litTorch;
+    CHECK_MSG(Art::LoadEnt(entities + "light_from_projectile.ent", litTorch, error) && litTorch.light, error);
+    const std::string litTorchHalo = litTorch.light ? litTorch.light->halo : std::string("halo.bmp");
 
     struct Sheet {
         std::string name;
@@ -1375,7 +1375,7 @@ void ThePortsOwnPicturesAreDrawnFromTheirTiers() {
         {rules.portal.sprite, rules.portal.columns, rules.portal.rows, "", {64, 64}, {64, 64}},
         {rules.spike.sprite, rules.spike.columns, rules.spike.rows, "", {16, 32}, {16, 32}},
         {"normalmaps/" + rules.character.normal, 1, 1, "", {128, 128}, {128, 128}},
-        {"normalmaps/" + rules.torchLight.normal, 1, 1, "", {32, 64}, {32, 64}},
+        {"normalmaps/" + litTorch.normal, 1, 1, "", {32, 64}, {32, 64}},
         // The two pictures the port adds for itself since the merge of steps 68-73:
         // a timed crystal's dial, timer.png as named, eight cells of 32 x 32; and a
         // gravity well's ring, hd/white_ring.png, 256 texels at density 2 - the 1x
@@ -1411,7 +1411,7 @@ void ThePortsOwnPicturesAreDrawnFromTheirTiers() {
     }
 
     // The halos, and black_halo.ent's picture for the loading screen: no tier file.
-    for (const std::string& named : {entities + rules.shot.light->halo, entities + rules.torchLight.light->halo,
+    for (const std::string& named : {entities + rules.shot.light->halo, entities + litTorchHalo,
                                      kOriginal + "/" + loading.haloSprite}) {
         Sprites::Image image;
         CHECK_MSG(Sprites::Drawn(tiers, named, image, error) && image.path == named && image.density == 1.0f,
@@ -2743,18 +2743,18 @@ void EveryEntReadsAsAnEntity() {
     };
     same("portal.ent", rules.portal, true);
     same("projectile.ent", rules.shot, true);
-    same("light_from_projectile.ent", rules.torchLight, false);
     same("dark_mage.ent", rules.character, true);
     same("beholder.ent", rules.beholder, true);
     same("beholder_spike.ent", rules.spike, true);
     same("timer.ent", rules.timer, true);
-    // The one number that is not: a lit torch's halo. DrawHalo draws it at the
-    // light's own position (ETHRenderEntity.cpp:376-386), 12 above the torch's point
-    // in light_from_projectile.ent, as the converter places every level light's
-    // (tscn.py:328); art.json's torch_light carries a halo_offset of (0, 0), so the
-    // port draws that halo 12 units low. Found by this reader, recorded in step 82
-    // and left for the step that draws the lit torch (00_order 7f-5): not a change
-    // this step makes, whose gate is no pixel change.
+    // A lit torch's halo. DrawHalo draws it at the light's own position
+    // (ETHRenderEntity.cpp:376-386), 12 above the torch's point in
+    // light_from_projectile.ent, as the converter places every level light's
+    // (tscn.py:328). Found by this reader in step 82, when art.json's copy of the
+    // entity (torch_light) carried a halo_offset of (0, 0) and the port drew that
+    // halo 12 units low; since the visuals plan's 11.2 the lit torch is this
+    // file's entity itself, added whole by the effects runtime, and the copy is
+    // gone.
     {
         Art::Entity torch;
         std::string why;

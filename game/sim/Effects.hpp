@@ -35,7 +35,12 @@
 // wall_destroy where a breakable wall goes, turned by the wall and at its
 // destroyEffectScale; rolling_stone_destroy where a stone is destroyed; and
 // door_lift_particles at the edge of a switched door as it starts to open or to
-// close.
+// close. And what a torch, its light wall, a weightless player and a gravity
+// well add (11.2): the lit torch itself, light_from_projectile, with the sparkles
+// and the burst its lighting adds and the signal that orbits it; the torch put
+// back, its sparkles and its burst when the signal is shot; the light wall's dust
+// as it goes and its smoke and itself as it comes back; the trail a weightless
+// player leaves; and the flash where it laps a well.
 
 #include <string>
 
@@ -56,6 +61,15 @@ enum class Turn {
     // is along no direction, so AngleDegrees gives 0 and the caller the angle
     // (WallDestroy).
     EntityAngle,
+};
+
+// bounce(entity, from, to, strideMs) as bounceLightEntity calls it: the entity's
+// scale from `from` to `to` and back, one leg a stride, eased by smoothEnd
+// (Art::Pulse is the same curve).
+struct Bounce {
+    double from = 1.0;
+    double to = 1.0;
+    double strideMs = 0.0;
 };
 
 // One call site: effects.json's row.
@@ -199,6 +213,36 @@ struct Rules {
     Rule doorLiftClose;
     double doorLiftOpenSizeY = 0.0;  // x GetSize().y: -0.5, the shut door's top edge
     double doorLiftCloseSizeY = 0.0; // +0.5, the raised door's bottom edge
+    // What a torch, its light wall, a weightless player and a gravity well add
+    // (the visuals plan's 11.2; effects.json _torches_trail_roundabout).
+    // ETHCallback_light_off's three, in its order, when a shot lights a torch:
+    // the lit torch itself on the torch's own point and depth, its sparkles
+    // there, and portal_death at the spent shot; addFireSignalIfNecessary's
+    // signal at the torch, where the level has a light wall - and the lit torch
+    // then bounces (litTorchBounce). ETHCallback_fire_signal's when the signal is
+    // shot: the torch put back and its sparkles at vector3(originalPos, 10), a
+    // bare 10 (At), and portal_death at the shot. addLightWall's smoke and the new
+    // wall at the ghost, turned by it, the wall fading in from lightWallAlphaFrom
+    // at lightWallAlphaPerSecond; ETHCallback_light_wall's dust at the wall as it
+    // goes, turned by it. addTrail's movement_trail on the character, and
+    // computeRoundabout's flash at the well's area, vector3(xy, -5) bare.
+    Rule lightFromProjectile;
+    Bounce litTorchBounce;
+    Rule lightOnSparkles;
+    Rule portalDeathAtLitTorch;
+    Rule fireSignal;
+    Rule lightOffAtSignal;
+    Rule lightOffSparkles;
+    Rule portalDeathAtSignal;
+    Rule lightWallCreate;
+    Rule lightWallAtGhost;
+    double lightWallAlphaFrom = 0.0;
+    double lightWallAlphaPerSecond = 0.0;
+    Rule wallDestroyLightWall;
+    Rule movementTrail;
+    double trailMinSpeed = 0.0; // |GetLinearVelocity()| / getScale(), the port's metres a second, strictly above
+    double trailEveryMs = 0.0;  // trailElapsedTime strictly above
+    Rule roundabout;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -297,6 +341,19 @@ double EffectScale(double datum);
 // the wall's own point and depth (its z plus the row's 0), turned by the wall's
 // Ethanon angle as it is, and at effectScale times the row's scale.
 Spawn WallDestroy(const Rules& rules, const glm::dvec2& wallPx, double wallZ, double wallAngleDeg, double effectScale);
+
+// AddEntity at an entity's own GetPosition() - its z plus the row's - and
+// turned by its GetAngle() as it is: a row of Turn::EntityAngle, which is
+// light_wall_create and light_wall at the ghost addLightWall seeks, and the light
+// wall's own dust (ETHCallback_light_wall #109-134). WallDestroy is this with a
+// breakable wall's effectScale on top.
+Spawn OnEntityTurned(const Rule& rule, const glm::dvec2& entityPx, double entityZ, double entityAngleDeg);
+
+// MainCharacter::addTrail's clock, one frame of it: `tickMs` added whatever the
+// speed (#8-24), and true - the clock back at 0 - where `speed` (the body's, in
+// the port's metres a second) is above trailMinSpeed and the clock above
+// trailEveryMs, both strictly (#44-60, #82-95).
+bool TrailDue(const Rules& rules, double& clockMs, double speed, double tickMs);
 
 // ETHCallback_door_lift #402-434 (`opening`) and #548-580: AddScaledEntity(
 // 'door_lift_particles.ent', door.GetPosition() -/+ vector3(0, 0.5 x GetSize().y,

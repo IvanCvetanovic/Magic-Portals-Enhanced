@@ -134,6 +134,8 @@ State::Turn State::Tick(const std::optional<glm::dvec2>& flightPx, const std::ve
     Turn turn;
     const double ms = static_cast<double>(dt) * 1000.0;
     const double seconds = static_cast<double>(dt);
+    // Written this tick or not at all: where a shot this module spent was.
+    spentAtPx.reset();
 
     // The wall on its way out. destroy() only FLAGS it in the original; the
     // wall's own callback counts to 1500 ms and only then deletes itself. That
@@ -151,11 +153,22 @@ State::Turn State::Tick(const std::optional<glm::dvec2>& flightPx, const std::ve
 
     // The signal circles the torch it came from rather than sitting on it, which
     // is the whole of what makes putting a torch back out a shot worth aiming.
+    //
+    // CLOCKWISE ON THE SCREEN, FROM ABOVE THE TORCH. ETHCallback_fire_signal
+    // (bytes 470827..471942) #42-62 add 300 a second to its `angle` and read it as
+    // radians, then #78-108 put it at originalPos + scale(18) x vector2(...) with
+    // -cos(angle) pushed first (#85-89) and sin(angle) second (#90-93). AngelScript
+    // pushes a call's arguments last-first (00_order 8.0 rule 3), so the vector is
+    // (sin, -cos): straight up at angle 0, and to the right a quarter turn on, down
+    // being +y. Footage L1 (4-29) measured the ball going right, down, left, up at
+    // 296-300 degrees a second on an 18-unit circle. The first frame of its
+    // callback sets the angle to 0 and adds one step before it moves (#12-47), so
+    // the first place it is drawn is one step past the top.
     if (signal.present) {
         signal.angleDeg += rules.spinDegPerSec * seconds;
         while (signal.angleDeg >= 360.0) signal.angleDeg -= 360.0;
         const double radians = signal.angleDeg * kPi / 180.0;
-        signal.atPx = signal.originPx + glm::dvec2(-std::cos(radians), std::sin(radians)) * rules.orbitPx;
+        signal.atPx = signal.originPx + glm::dvec2(std::sin(radians), -std::cos(radians)) * rules.orbitPx;
     }
 
     // What is near a point: the player's shot first, then the fireballs in the
@@ -171,8 +184,10 @@ State::Turn State::Tick(const std::optional<glm::dvec2>& flightPx, const std::ve
     const auto spend = [&](int shot) {
         if (shot == -1) {
             turn.spentFlight = true;
+            spentAtPx = *flightPx;
         } else {
             turn.spentFireball = shot;
+            spentAtPx = fireballPx[static_cast<std::size_t>(shot)];
         }
     };
 
@@ -224,11 +239,15 @@ State::Turn State::Tick(const std::optional<glm::dvec2>& flightPx, const std::ve
             // torch lit inside the wall's 1500 ms window, and no level in the game
             // can ask for that - every one of the ten places a single torch. The
             // cap is here so the rule is the code's rather than the data's.
+            //
+            // addFireSignalIfNecessary adds fire_signal.ent at the torch's own
+            // GetPosition() (#17-32), and it stands there until its callback first
+            // runs - on the next frame, when it steps and moves (above).
             if (!signal.present) {
                 signal.present = true;
                 signal.originPx = light.atPx;
                 signal.angleDeg = 0.0;
-                signal.atPx = light.atPx + glm::dvec2(-rules.orbitPx, 0.0);
+                signal.atPx = light.atPx;
                 signal.fromTorch = light.name;
             }
         }

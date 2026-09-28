@@ -344,6 +344,180 @@ void ItTakesTheLooseBodiesOnly() {
     CHECK(after < before);
 }
 
+// THE LAPS (the visuals plan's 11.2; gravitywell.json roundabout): the numbers
+// the listing states, and a file that leaves them out refused.
+void TheRoundaboutRulesRead() {
+    GravityWell::Rules rules;
+    std::string error;
+    CHECK_MSG(GravityWell::LoadRules(kPortData + "/gravitywell.json", rules, error), error);
+    const GravityWell::Roundabout& lap = rules.roundabout;
+    CHECK_MSG(lap.stepDotBelow == 0.98 && lap.lapDegrees == 360.0, "computeRoundabout #185 0.98f and #285 360f");
+    CHECK_MSG(lap.spinMs == 3000.0 && lap.spinDegrees == 360.0, "ETHCallback_gravity_agent #191-215: 3000 and 360");
+    CHECK_MSG(lap.elasticPeriod == 0.3 && lap.elasticShiftDivisor == 4.0 && lap.elasticDecay == -10.0,
+              "elastic's p 0.3, s = p / 4, pow(2, -10 n)");
+
+    std::ifstream file(kPortData + "/gravitywell.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const std::filesystem::path scratch = std::filesystem::temp_directory_path() / "supersonic-test-mp-wells";
+    std::filesystem::create_directories(scratch);
+    const auto refused = [&real, &scratch](const std::string& from, const std::string& to, const std::string& name) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos, from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = scratch / ("gravitywell-roundabout-" + name + ".json");
+        std::ofstream(path, std::ios::binary) << text;
+        GravityWell::Rules rules;
+        std::string error;
+        CHECK_MSG(!GravityWell::LoadRules(path.string(), rules, error) && error.find("roundabout") != std::string::npos,
+                  name + " refused: " + error);
+    };
+    refused("\"roundabout\": {", "\"roundabout_gone\": {", "missing");
+    refused("\"step_dot_below\": 0.98", "\"step_dot_below\": 1.0", "every-step");
+    refused("\"lap_degrees\": 360.0", "\"lap_degrees\": 0.0", "no-lap");
+    refused("\"elastic_decay\": -10.0", "\"elastic_decay\": 10.0", "no-settle");
+    refused("\"spin_ms\": 3000.0,", "", "no-spin-time");
+}
+
+// elastic (Interpolator.angelscript bytes 314142..314380) and the agent's turn.
+void TheAgentTurnsOnceAndSettles() {
+    GravityWell::Rules rules;
+    std::string error;
+    if (!GravityWell::LoadRules(kPortData + "/gravitywell.json", rules, error)) return;
+    const GravityWell::Roundabout& lap = rules.roundabout;
+    CHECK_MSG(GravityWell::Elastic(lap, 0.0f) == 0.0f && GravityWell::Elastic(lap, 1.0f) == 1.0f,
+              "n itself at 0 and at 1 (#1-13)");
+    // 2^-5 x sin((0.5 - 0.075) x 2 pi / 0.3) + 1 = 1/32 x sin(8.9012) + 1, and
+    // 8.9012 - 2 pi is 5 pi / 6: 1 + 1/64.
+    const float half = GravityWell::Elastic(lap, 0.5f);
+    CHECK_MSG(std::fabs(half - 1.015625f) < 1e-5f, "elastic(0.5) = 1.015625: " + std::to_string(half));
+    // At rest - the clock at 3000 and past it - a whole turn, EXACTLY, which draws as
+    // no turn; at a lap's moment, none.
+    CHECK_EQ(GravityWell::SpinDegrees(lap, 3000.0, 1.0), 360.0);
+    CHECK_EQ(GravityWell::SpinDegrees(lap, 90000.0, 1.0), 360.0);
+    CHECK_EQ(GravityWell::SpinDegrees(lap, 3000.0, -1.0), -360.0);
+    CHECK_EQ(GravityWell::SpinDegrees(lap, 0.0, 1.0), 0.0);
+    // Between, it overshoots the turn and comes back to it, and the sign is the lap's.
+    double most = 0.0;
+    double mostAt = 0.0;
+    for (double ms = 0.0; ms <= 3000.0; ms += 1000.0 / 60.0) {
+        const double turned = GravityWell::SpinDegrees(lap, ms, 1.0);
+        CHECK_MSG(std::fabs(GravityWell::SpinDegrees(lap, ms, -1.0) + turned) < 1e-9, "the other way, the same turn");
+        if (turned > most) {
+            most = turned;
+            mostAt = ms;
+        }
+    }
+    std::printf("  a lapped agent turns %.3f degrees at most, at %.0f ms, and settles on 360 at 3000\n", most, mostAt);
+    // elastic's first crest is near n = 2 s = 0.15, where 2^-1.5 is over 1: about
+    // 1.37 turns, a quarter of a second in (494 degrees at 250 ms on this sampling).
+    CHECK_MSG(most > 480.0 && most < 500.0 && mostAt > 200.0 && mostAt < 320.0,
+              "it overshoots the whole turn by a third, early: " + std::to_string(most));
+}
+
+// computeRoundabout's sweep on its own: nothing on the first call, a step only
+// past 11.48 degrees, nothing out of range and nothing forgotten there, and a lap
+// strictly past 360 - counter-clockwise on the screen (+y down) positive.
+void ASweepCountsTheWayRoundAndLaps() {
+    GravityWell::Rules rules;
+    std::string error;
+    if (!GravityWell::LoadRules(kPortData + "/gravitywell.json", rules, error)) return;
+    const GravityWell::Roundabout& lap = rules.roundabout;
+    // A body on a circle round a well at the origin, at `deg` counter-clockwise on
+    // the screen from the well's right: (cos, -sin), y down.
+    const auto toWell = [](double deg) {
+        const double rad = deg * 3.14159265358979323846 / 180.0;
+        const float x = -static_cast<float>(std::cos(rad));
+        const float y = static_cast<float>(std::sin(rad));
+        const float length = std::sqrt(x * x + y * y);
+        return glm::vec2(x / length, y / length);
+    };
+    const auto bodyY = [](double deg) { return -static_cast<float>(std::sin(deg * 3.14159265358979323846 / 180.0)); };
+
+    GravityWell::Sweep sweep;
+    double degrees = 0.0;
+    CHECK_MSG(!GravityWell::StepSweep(lap, sweep, true, toWell(0.0), true, 0.0f, bodyY(0.0), degrees) &&
+                  sweep.roundSum == 0.0f,
+              "the first call starts the sweep and counts nothing");
+    // 5 and 10 degrees are under acos(0.98): not counted, and the last direction kept.
+    GravityWell::StepSweep(lap, sweep, false, toWell(5.0), true, 0.0f, bodyY(5.0), degrees);
+    GravityWell::StepSweep(lap, sweep, false, toWell(10.0), true, 0.0f, bodyY(10.0), degrees);
+    CHECK_MSG(sweep.roundSum == 0.0f, "a drift under 11.48 degrees is not a step");
+    GravityWell::StepSweep(lap, sweep, false, toWell(15.0), true, 0.0f, bodyY(15.0), degrees);
+    CHECK_MSG(std::fabs(sweep.roundSum - 0.2617994f) < 1e-4f,
+              "past it, the whole 15 degrees since the last step, counter-clockwise positive: " +
+                  std::to_string(sweep.roundSum));
+    // Out of range: nothing counted, nothing forgotten.
+    GravityWell::StepSweep(lap, sweep, false, toWell(60.0), false, 0.0f, bodyY(60.0), degrees);
+    CHECK_MSG(std::fabs(sweep.roundSum - 0.2617994f) < 1e-4f, "out of range the sum is kept and not added to");
+
+    // Round and round, counter-clockwise in 15 degree steps: a lap past 360.
+    GravityWell::Sweep ccw;
+    GravityWell::StepSweep(lap, ccw, true, toWell(0.0), true, 0.0f, bodyY(0.0), degrees);
+    int laps = 0;
+    double lapped = 0.0;
+    int stepsToLap = 0;
+    for (int step = 1; step <= 60 && laps == 0; ++step) {
+        const double deg = step * 15.0;
+        if (GravityWell::StepSweep(lap, ccw, false, toWell(deg), true, 0.0f, bodyY(deg), degrees)) {
+            ++laps;
+            lapped = degrees;
+            stepsToLap = step;
+        }
+    }
+    std::printf("  counter-clockwise in 15 degree steps: a lap of %.4f degrees on step %d\n", lapped, stepsToLap);
+    CHECK_MSG(laps == 1 && lapped > 360.0 && lapped < 376.0 && ccw.ccw == 1 && ccw.cw == 0 && ccw.roundSum == 0.0f,
+              "a counter-clockwise lap, positive, counted ccw, and the sum starts again");
+    // And clockwise, negative.
+    GravityWell::Sweep cw;
+    GravityWell::StepSweep(lap, cw, true, toWell(0.0), true, 0.0f, bodyY(0.0), degrees);
+    double back = 0.0;
+    for (int step = 1; step <= 60 && back == 0.0; ++step) {
+        const double deg = -step * 15.0;
+        if (GravityWell::StepSweep(lap, cw, false, toWell(deg), true, 0.0f, bodyY(deg), degrees)) back = degrees;
+    }
+    CHECK_MSG(back < -360.0 && back > -376.0 && cw.cw == 1, "a clockwise lap, negative: " + std::to_string(back));
+}
+
+// And through Game::Tick: the player walked round level16c's well
+// counter-clockwise on the screen, a lap recorded for it on the tick it passes
+// 360, and none for a body that stays still.
+void ThePlayerLapsAWell() {
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    if (!Open(kWeightless, data, registry, level)) return;
+    if (level.wells.wells.empty() || level.player == entt::null) return;
+    const GravityWell::Well& well = level.wells.wells.front();
+    const double radius = well.radiusPx * 0.5;
+    int lapTick = -1;
+    double degrees = 0.0;
+    for (int tick = 0; tick < 200 && lapTick < 0; ++tick) {
+        // 4 degrees a tick: 90 ticks a turn.
+        const double rad = tick * 4.0 * 3.14159265358979323846 / 180.0;
+        const glm::dvec2 atPx = well.atPx + glm::dvec2(std::cos(rad), -std::sin(rad)) * radius;
+        const glm::vec3 at = Units::ToWorld(atPx.x, atPx.y);
+        auto& transform = registry.get<TransformComponent>(level.player);
+        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+        registry.get<RigidBodyComponent>(level.player).velocity = glm::vec3(0.0f);
+        Game::Tick(data, registry, level, 0.0f, kStep);
+        for (const GravityWell::Lap& lap : level.wells.lapsNow) {
+            if (lap.body == level.player && lap.well == 0) {
+                lapTick = tick;
+                degrees = lap.degrees;
+            }
+        }
+    }
+    std::printf("  %s: the player laps %s on tick %d, %.3f degrees\n", kWeightless, well.name.c_str(), lapTick,
+                degrees);
+    CHECK_MSG(lapTick > 85 && lapTick < 100 && degrees > 360.0, "one lap, a whole turn in, counter-clockwise");
+    Game::Tick(data, registry, level, 0.0f, kStep);
+    CHECK_MSG(level.wells.lapsNow.empty(), "the record is the tick's own");
+}
+
 void TheRoleIsPlayed() {
     CHECK(Roles::IsPorted(Roles::kGravityWell));
     // It does not MOVE, though: the agent is a solid circle that stands still.
@@ -360,6 +534,10 @@ void runTests() {
     ItPullsHarderWhereTheWorldHasGravity();
     NoPortalOpensInsideAWell();
     ItTakesTheLooseBodiesOnly();
+    TheRoundaboutRulesRead();
+    TheAgentTurnsOnceAndSettles();
+    ASweepCountsTheWayRoundAndLaps();
+    ThePlayerLapsAWell();
     TheRoleIsPlayed();
 }
 
@@ -377,5 +555,5 @@ int main() {
         return 77;
     }
     runTests();
-    return ::test::summary("test_mp_wells", 75);
+    return ::test::summary("test_mp_wells", 90);
 }

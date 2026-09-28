@@ -886,6 +886,94 @@ std::string Read(const std::string& path) {
     return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 }
 
+// THE TORCH, ITS WALL, THE TRAIL AND THE LAP (the visuals plan's 11.2;
+// effects.json _torches_trail_roundabout), each call as the listing has it.
+void TheTorchTrailAndRoundaboutRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    constexpr double kFactor = 720.0 / 256.0;
+    // ETHCallback_light_off's three and addFireSignalIfNecessary's, on the torch's
+    // own GetPosition() - 4-29's (88, 50), eth_z -12 - unturned at getScale().
+    for (const Effects::Rule* rule :
+         {&rules.lightFromProjectile, &rules.lightOnSparkles, &rules.fireSignal, &rules.movementTrail}) {
+        CHECK_MSG(rule->offsetUnits == 0.0 && rule->z == 0.0 && rule->zScaled && rule->turn == Effects::Turn::Fixed &&
+                      rule->angleDeg == 0.0 && rule->scale == 1.0,
+                  rule->entity + ": on the entity's own GetPosition(), unturned, at getScale()");
+    }
+    CHECK(rules.lightFromProjectile.entity == "light_from_projectile.ent" &&
+          rules.lightOnSparkles.entity == "light_on_sparkles.ent" && rules.fireSignal.entity == "fire_signal.ent" &&
+          rules.movementTrail.entity == "movement_trail.ent");
+    const Effects::Spawn lit = Effects::OnEntity(rules.lightFromProjectile, glm::dvec2(88.0, 50.0), -12.0);
+    CHECK_MSG(lit.atPx == glm::dvec2(88.0, 50.0) && lit.z == -12.0 && lit.zScaled && lit.angleDeg == 0.0f,
+              "the lit torch on the torch: " + At(lit.atPx) + " z " + Num(lit.z));
+    // bounceLightEntity(this, 1f): 1 +- 0.04, 160 ms a leg, starting large.
+    CHECK_MSG(rules.litTorchBounce.from == 1.04 && rules.litTorchBounce.to == 0.96 &&
+                  rules.litTorchBounce.strideMs == 160.0,
+              "the lit torch bounces 1.04 -> 0.96 on 160 ms legs");
+    // ETHCallback_fire_signal's: the torch put back and its sparkles at
+    // vector3(originalPos, 10), a bare 10 - 3.556 of the level's units - and the
+    // burst at the spent shot, a bare 0 (both rows).
+    for (const Effects::Rule* rule : {&rules.lightOffAtSignal, &rules.lightOffSparkles}) {
+        CHECK_MSG(rule->z == 10.0 && !rule->zScaled && rule->turn == Effects::Turn::Fixed && rule->angleDeg == 0.0 &&
+                      rule->scale == 1.0 && rule->offsetUnits == 0.0,
+                  rule->entity + ": at vector3(originalPos, 10), a bare 10, unturned");
+    }
+    CHECK(rules.lightOffAtSignal.entity == "light_off.ent" && rules.lightOffSparkles.entity == "light_off_sparkles.ent");
+    for (const Effects::Rule* rule : {&rules.portalDeathAtLitTorch, &rules.portalDeathAtSignal}) {
+        CHECK_MSG(rule->entity == "portal_death.ent" && rule->z == 0.0 && !rule->zScaled &&
+                      rule->turn == Effects::Turn::Fixed && rule->angleDeg == 0.0 && rule->scale == 1.0,
+                  "portal_death at the spent projectile, its bare 0");
+    }
+    // addLightWall's two and ETHCallback_light_wall's dust: at an entity, turned
+    // by it - 4-32's wall is -1.5708 in the .tscn, the original's +90.
+    for (const Effects::Rule* rule : {&rules.lightWallCreate, &rules.lightWallAtGhost, &rules.wallDestroyLightWall}) {
+        CHECK_MSG(rule->offsetUnits == 0.0 && rule->z == 0.0 && rule->zScaled &&
+                      rule->turn == Effects::Turn::EntityAngle && rule->scale == 1.0,
+                  rule->entity + ": on the entity's own GetPosition(), turned by its GetAngle()");
+    }
+    CHECK(rules.lightWallCreate.entity == "light_wall_create.ent" && rules.lightWallAtGhost.entity == "light_wall.ent" &&
+          rules.wallDestroyLightWall.entity == "wall_destroy.ent");
+    const double wallDeg = 1.5708 * 180.0 / kPi;
+    const double ghostZ = -4.0 - 4.0 / kFactor;
+    const Effects::Spawn back = Effects::OnEntityTurned(rules.lightWallAtGhost, glm::dvec2(64.0, 240.0), ghostZ, wallDeg);
+    CHECK_MSG(back.atPx == glm::dvec2(64.0, 240.0) && Near(back.z, -5.4222, 1e-4) && Near(back.angleDeg, 90.0, 1e-3),
+              "4-32's wall back at the ghost, turned 90: z " + Num(back.z) + " angle " + Num(back.angleDeg));
+    const Effects::Spawn dust =
+        Effects::OnEntityTurned(rules.wallDestroyLightWall, glm::dvec2(192.0, 96.0), 2.0, 0.0);
+    CHECK_MSG(dust.atPx == glm::dvec2(192.0, 96.0) && dust.z == 2.0 && dust.angleDeg == 0.0f && dust.scale == 1.0,
+              "4-29's wall's dust on it, unturned, x1 (no destroyEffectScale)");
+    CHECK_MSG(rules.lightWallAlphaFrom == 0.0 && rules.lightWallAlphaPerSecond == 1.0,
+              "the new wall: SetAlpha(0), then up by unitsPerSecond(1)");
+    // computeRoundabout's flash at the area, vector3(xy, -5) with a bare -5.
+    CHECK_MSG(rules.roundabout.entity == "roundabout_effect.ent" && rules.roundabout.z == -5.0 &&
+                  !rules.roundabout.zScaled && rules.roundabout.turn == Effects::Turn::Fixed &&
+                  rules.roundabout.scale == 1.0,
+              "roundabout_effect at the well's area, a bare -5");
+
+    // addTrail's clock: it runs whatever the speed; a trail only above 0.4 AND past
+    // 400 ms, both strictly, and the clock back to 0 on one.
+    CHECK_MSG(rules.trailMinSpeed == 0.4 && rules.trailEveryMs == 400.0, "addTrail's 0.4f and 400");
+    constexpr double kTick = 1000.0 / 60.0;
+    double clock = 0.0;
+    int added = 0;
+    for (int tick = 0; tick < 30; ++tick) added += Effects::TrailDue(rules, clock, 0.4, kTick) ? 1 : 0;
+    CHECK_MSG(added == 0 && clock > 400.0, "at 0.4 exactly, none - and the clock has run on: " + Num(clock));
+    CHECK_MSG(Effects::TrailDue(rules, clock, 0.41, kTick) && clock == 0.0,
+              "the first tick past 0.4 adds one at once, the clock already past 400");
+    std::vector<int> ticks;
+    for (int tick = 1; tick <= 100; ++tick) {
+        if (Effects::TrailDue(rules, clock, 1.4, kTick)) ticks.push_back(tick);
+    }
+    // 24 ticks of 1000/60 ms add up to 400.0000000000001 - a hair past 400 - so at
+    // 60 Hz a trail comes every 24th tick. The original's clock is whole
+    // milliseconds of real frame time (16s and 17s), which reach 400 on the 24th
+    // frame or so and pass it there or on the 25th.
+    CHECK_MSG(ticks.size() == 4 && ticks[0] == 24 && ticks[1] == 48 && ticks[2] == 72 && ticks[3] == 96,
+              "then every 24th tick at 60 Hz: " + std::to_string(ticks.empty() ? -1 : ticks[0]));
+    double exact = 0.0;
+    CHECK_MSG(!Effects::TrailDue(rules, exact, 1.0, 400.0) && Effects::TrailDue(rules, exact, 1.0, 1e-9),
+              "400 ms is not past 400");
+}
+
 void ARowMissingAFactIsRefused() {
     const std::string good = Read(kEffects);
     CHECK_MSG(!good.empty(), "effects.json is where the build says: " + kEffects);
@@ -1050,6 +1138,41 @@ void ARowMissingAFactIsRefused() {
     refused("door_close_up.json", "\"offset_size_y\": 0.5,", "\"offset_size_y\": -0.5,",
             "door_lift_particles_close.offset_size_y");
     refused("no_door_share.json", "\"offset_size_y\": 0.5,", "", "door_lift_particles_close.offset_size_y");
+    // The 11.2 rows: each required, and each fact the decode gives it refused read
+    // the other way.
+    refused("no_lit_torch.json", "\"light_from_projectile\": {", "\"lit_torch_gone\": {", "light_from_projectile");
+    refused("no_signal.json", "\"fire_signal\": {", "\"fire_signal_gone\": {", "fire_signal");
+    refused("no_trail.json", "\"movement_trail\": {", "\"trail_gone\": {", "movement_trail");
+    refused("no_lap.json", "\"roundabout_effect\": {", "\"lap_gone\": {", "roundabout_effect");
+    refused("lit_torch_bare.json",
+            "\"entity\": \"light_from_projectile.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
+            "\"entity\": \"light_from_projectile.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": false},",
+            "light_from_projectile.z");
+    refused("put_back_scaled.json",
+            "\"entity\": \"light_off.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 10, \"scaled\": false},",
+            "\"entity\": \"light_off.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 10, \"scaled\": true},",
+            "light_off_at_signal.z");
+    refused("lap_scaled.json", "\"z\": {\"value\": -5, \"scaled\": false},", "\"z\": {\"value\": -5, \"scaled\": true},",
+            "roundabout_effect.z");
+    refused("wall_back_flat.json",
+            "\"entity\": \"light_wall.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": \"entity_angle\",",
+            "\"entity\": \"light_wall.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 0,",
+            "light_wall_at_ghost");
+    refused("signal_turned.json",
+            "\"entity\": \"fire_signal.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 0,",
+            "\"entity\": \"fire_signal.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 90,",
+            "fire_signal");
+    refused("trail_big.json",
+            "\"entity\": \"movement_trail.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 0,\n    \"scale\": 1,",
+            "\"entity\": \"movement_trail.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n    \"angle\": 0,\n    \"scale\": 2,",
+            "movement_trail.ent");
+    refused("no_bounce.json", "\"bounce\": {\"from\": 1.04, \"to\": 0.96, \"stride_ms\": 160},", "",
+            "light_from_projectile.bounce");
+    refused("flat_bounce.json", "\"bounce\": {\"from\": 1.04, \"to\": 0.96, \"stride_ms\": 160},",
+            "\"bounce\": {\"from\": 1.0, \"to\": 0.96, \"stride_ms\": 160},", "light_from_projectile.bounce");
+    refused("no_wall_fade.json", "\"alpha_per_second\": 1,", "", "light_wall_at_ghost");
+    refused("no_trail_speed.json", "\"min_speed\": 0.4,", "", "movement_trail");
+    refused("no_trail_clock.json", "\"every_ms\": 400,", "\"every_ms\": 0,", "movement_trail");
 
     Effects::Rules rules;
     std::string why;
@@ -1076,6 +1199,7 @@ int main() {
     TheUnlockHaloComesOnTheFlyInsFrameOne();
     TheShockBurnAndExtinguishRowsAreTheDecodedCalls();
     TheWallStoneAndDoorRowsAreTheDecodedCalls();
+    TheTorchTrailAndRoundaboutRowsAreTheDecodedCalls();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

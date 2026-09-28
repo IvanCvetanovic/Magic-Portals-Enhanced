@@ -419,16 +419,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": " + parser.Error();
         return false;
     }
-    if (!root.IsObject() || !root.Has("portal") || !root.Has("shot") || !root.Has("torch_light") ||
-        !root.Has("character")) {
-        error = path + ": portal, shot, torch_light and character are each an object";
+    if (!root.IsObject() || !root.Has("portal") || !root.Has("shot") || !root.Has("character")) {
+        error = path + ": portal, shot and character are each an object";
         return false;
     }
     Rules read;
     std::string why;
     if (!ReadPicture(root["portal"], "portal", read.portal, why) ||
         !ReadShot(root["shot"], read.shot, why) ||
-        !ReadPicture(root["torch_light"], "torch_light", read.torchLight, why, false) ||
         // The player's rate is its stride, read with the rest of its walk below.
         !ReadPicture(root["character"], "character", static_cast<Picture&>(read.character), why, false)) {
         error = path + ": " + why;

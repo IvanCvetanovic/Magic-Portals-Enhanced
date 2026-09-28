@@ -5,6 +5,7 @@
 #include "core/Json.hpp"
 #include "sim/Units.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <fstream>
@@ -119,6 +120,31 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     read.ring.z = ring["z"].AsNumber();
 
+    // THE LAPS, required in full, each a number the listing states (the
+    // `roundabout` block cites them). A default for any would draw an effect or
+    // spin a picture on a guess.
+    if (!root["roundabout"].IsObject()) {
+        error = path + ": roundabout is missing";
+        return false;
+    }
+    if (!number("roundabout", "step_dot_below", read.roundabout.stepDotBelow)) return false;
+    if (!number("roundabout", "lap_degrees", read.roundabout.lapDegrees)) return false;
+    if (!number("roundabout", "spin_ms", read.roundabout.spinMs)) return false;
+    if (!number("roundabout", "spin_degrees", read.roundabout.spinDegrees)) return false;
+    if (!number("roundabout", "elastic_period", read.roundabout.elasticPeriod)) return false;
+    if (!number("roundabout", "elastic_shift_divisor", read.roundabout.elasticShiftDivisor)) return false;
+    if (!number("roundabout", "elastic_decay", read.roundabout.elasticDecay)) return false;
+    // A step threshold outside (-1, 1) counts every step or none; a lap of nothing
+    // fires every step; a spin over no time divides by zero; an elastic with no
+    // period or shift divides by zero, and one that does not decay never settles.
+    const Roundabout& lap = read.roundabout;
+    if (!(lap.stepDotBelow > -1.0 && lap.stepDotBelow < 1.0) || !(lap.lapDegrees > 0.0) || !(lap.spinMs > 0.0) ||
+        !(lap.elasticPeriod > 0.0) || !(lap.elasticShiftDivisor > 0.0) || !(lap.elasticDecay < 0.0)) {
+        error = path + ": roundabout needs step_dot_below inside (-1, 1), lap_degrees, spin_ms, elastic_period and "
+                       "elastic_shift_divisor above 0 and elastic_decay below 0";
+        return false;
+    }
+
     // A well with no pull is a solid circle with a no-portal zone round it, and
     // five levels would look built and play wrong.
     if (read.forceZeroGravity <= 0.0 || read.forceWithGravity <= 0.0) {
@@ -167,7 +193,88 @@ glm::vec3 Pull(const Well& well, const Rules& rules, const glm::dvec2& bodyPx, b
     return glm::vec3(static_cast<float>(direction.x * force), static_cast<float>(-direction.y * force), 0.0f);
 }
 
+float Elastic(const Roundabout& rules, float n) {
+    // #1-13: n itself at 0 and at 1.
+    if (n == 0.0f || n == 1.0f) return n;
+    // #15-19: p and s are doubles - p the float 0.3f widened (SetV8's raw
+    // 0x3fd3333340000000), s = p / 4.
+    const double p = static_cast<double>(static_cast<float>(rules.elasticPeriod));
+    const double s = p / rules.elasticShiftDivisor;
+    // #21-25: pow(2, -10 n), in floats (arguments pushed last-first).
+    const float decay = Supersonic::DetMath::pow(2.0f, static_cast<float>(rules.elasticDecay) * n);
+    // #26-36: sin(float(((double)n - s) x (double)(PI x 2) / p)), PI the float global.
+    constexpr float kPi = 3.141592654f;
+    const double argument = (static_cast<double>(n) - s) * static_cast<double>(kPi * 2.0f) / p;
+    const float wave = Supersonic::DetMath::sin(static_cast<float>(argument));
+    // #38-40.
+    return decay * wave + 1.0f;
+}
+
+double SpinDegrees(const Roundabout& rules, double ms, double sign) {
+    // ETHCallback_gravity_agent #191-230: min(3000f, t) / 3000f, smoothEnd, elastic,
+    // x 360, x effectAngleSign. smoothEnd(1) is sin(1.5707964f), which rounds to
+    // exactly 1.0f, so at rest elastic returns its 1 and the turn is a whole 360.
+    const float spin = static_cast<float>(rules.spinMs);
+    const float bias = std::min(spin, static_cast<float>(ms)) / spin;
+    constexpr float kPiOverTwoF = 1.570796327f; // PIb (00_order 8.10, D9)
+    const float eased = Supersonic::DetMath::sin(bias * kPiOverTwoF);
+    return static_cast<double>(Elastic(rules, eased) * static_cast<float>(rules.spinDegrees) *
+                               static_cast<float>(sign));
+}
+
+bool StepSweep(const Roundabout& rules, Sweep& sweep, bool first, const glm::vec2& toWell, bool inRange, float wellY,
+               float bodyY, double& lapDegrees) {
+    // #93-146: the first time a body is met, its sum is 0 and its last direction
+    // this one - so the step below cannot count on that call.
+    if (first) {
+        sweep.roundSum = 0.0f;
+        sweep.lastVector = toWell;
+        sweep.cw = 0;
+        sweep.ccw = 0;
+    }
+    const glm::vec2 last = sweep.lastVector;
+    // #148-169: dp2, in floats.
+    const float product = toWell.x * last.x + toWell.y * last.y;
+    // #171-190: counted only in range, only when the direction moved, and only once
+    // it has moved far enough - the last direction is the one the last COUNTED
+    // step ended on (#265-270), so a slow drift adds up until it passes. Out of
+    // range nothing is counted and nothing is forgotten.
+    if (inRange && toWell != last && product < static_cast<float>(rules.stepDotBelow)) {
+        // #192-252: +1, or -1 where the body is below the well and the direction's
+        // x grew, or above it and the x shrank - which makes a counter-clockwise
+        // sweep on the screen (+y down) positive.
+        float valueSign = 1.0f;
+        const float dx = toWell.x - last.x;
+        if (wellY < bodyY && dx > 0.0f) valueSign = -1.0f;
+        if (wellY > bodyY && dx < 0.0f) valueSign = -1.0f;
+        // #254-263: acos(product), as atan2(sqrt(1 - p^2), p) so that it is the
+        // same bits on every machine. The product of two unit vectors can round a
+        // hair past -1, where acos has no answer; the original's would poison the
+        // sum with a NaN for the rest of the level, and the port's takes the half
+        // turn.
+        const float clamped = std::clamp(product, -1.0f, 1.0f);
+        const float turned =
+            Supersonic::DetMath::atan2(std::sqrt((1.0f - clamped) * (1.0f + clamped)), clamped);
+        sweep.roundSum += turned * valueSign;
+        sweep.lastVector = toWell;
+    }
+    // #272-286: radianToDegree (GameMath.h:717-720) and a lap strictly beyond 360.
+    constexpr float kPi = 3.141592654f;
+    const float degrees = sweep.roundSum / (kPi * 2.0f) * 360.0f;
+    if (!(std::fabs(degrees) > static_cast<float>(rules.lapDegrees))) return false;
+    // #288-330: the sum starts again, and the lap is counted its way round.
+    sweep.roundSum = 0.0f;
+    if (degrees < 0.0f) {
+        ++sweep.cw;
+    } else {
+        ++sweep.ccw;
+    }
+    lapDegrees = static_cast<double>(degrees);
+    return true;
+}
+
 void State::Tick(entt::registry& registry, float dt) {
+    lapsNow.clear();
     if (wells.empty() || dt <= 0.0f) return;
 
     // Every DYNAMIC body: the port's reading of DynamicBodyChooser, which
@@ -178,8 +285,35 @@ void State::Tick(entt::registry& registry, float dt) {
         if (rigid.isKinematic) continue;
         const glm::dvec2 bodyPx(transform.position.x * Units::kPixelsPerMetre,
                                 -transform.position.y * Units::kPixelsPerMetre);
-        for (const Well& well : wells) {
+        for (std::size_t i = 0; i < wells.size(); ++i) {
+            const Well& well = wells[i];
             rigid.velocity += Pull(well, rules, bodyPx, noGravity, dt);
+
+            // And the sweep, from the same point: ETHCallback_gravity_area's
+            // forceDir and inRange (#82-98), normalize in floats (GameMath.h:755-761).
+            const float dx = static_cast<float>(well.atPx.x) - static_cast<float>(bodyPx.x);
+            const float dy = static_cast<float>(well.atPx.y) - static_cast<float>(bodyPx.y);
+            const float length = std::sqrt(dx * dx + dy * dy);
+            const glm::vec2 toWell = length > 0.0f ? glm::vec2(dx / length, dy / length) : glm::vec2(0.0f);
+            const glm::dvec2 apart = well.atPx - bodyPx;
+            const bool inRange = apart.x * apart.x + apart.y * apart.y < well.radiusPx * well.radiusPx;
+            const int wellIndex = static_cast<int>(i);
+            auto found = std::find_if(sweeps.begin(), sweeps.end(), [&](const Sweep& sweep) {
+                return sweep.body == entity && sweep.well == wellIndex;
+            });
+            const bool first = found == sweeps.end();
+            if (first) {
+                Sweep made;
+                made.body = entity;
+                made.well = wellIndex;
+                sweeps.push_back(made);
+                found = sweeps.end() - 1;
+            }
+            double degrees = 0.0;
+            if (StepSweep(rules.roundabout, *found, first, toWell, inRange, static_cast<float>(well.atPx.y),
+                          static_cast<float>(bodyPx.y), degrees)) {
+                lapsNow.push_back(Lap{entity, wellIndex, degrees});
+            }
         }
     }
 }

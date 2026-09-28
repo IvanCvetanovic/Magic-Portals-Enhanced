@@ -1153,6 +1153,36 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
             return true;
         }
         return false;
+    case EffectOwner::Kind::FireSignal:
+        // ETHCallback_fire_signal's SetPositionXY every frame, onto the circle
+        // Torch keeps; DeleteEntity when it is shot, when Torch clears it.
+        if (!m_level.torch.signal.present) return false;
+        atPx = m_level.torch.signal.atPx + owner.offsetPx;
+        return true;
+    case EffectOwner::Kind::LitTorch: {
+        // deleteLightFromProjectile, when the signal is shot: Torch puts it out.
+        const std::vector<Torch::Light>& lights = m_level.torch.lights;
+        if (owner.index < 0 || owner.index >= static_cast<int>(lights.size())) return false;
+        const Torch::Light& light = lights[static_cast<std::size_t>(owner.index)];
+        if (!light.lit) return false;
+        atPx = light.atPx + owner.offsetPx;
+        return true;
+    }
+    case EffectOwner::Kind::UnlitTorch: {
+        // Its own `delete` branch, on the tick after it is lit again (TorchWatch).
+        const std::vector<Torch::Light>& lights = m_level.torch.lights;
+        if (owner.index < 0 || owner.index >= static_cast<int>(lights.size()) ||
+            owner.index >= static_cast<int>(m_torchWatch.size()) ||
+            m_torchWatch[static_cast<std::size_t>(owner.index)].unlitGone) {
+            return false;
+        }
+        atPx = lights[static_cast<std::size_t>(owner.index)].atPx + owner.offsetPx;
+        return true;
+    }
+    case EffectOwner::Kind::LightWall:
+        // ETHCallback_light_wall's DeleteEntity at the end of its 1500 ms.
+        if (!m_level.torch.wall.present || m_level.torch.wall.gone) return false;
+        return true; // it does not move
     }
     return false;
 }
@@ -1179,13 +1209,18 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     effect.zUnits = spawn.zUnits;
     effect.follow = spawn.follow;
     effect.colour = spawn.colour;
+    effect.alpha = spawn.alpha;
+    effect.alphaPerSecond = spawn.alphaPerSecond;
+    effect.bounces = spawn.bounces;
+    effect.bounce = spawn.bounce;
     effect.temporary = art.Temporary();
     // ShouldEntityBeAlwaysActive (ETHActiveEntityHandler.cpp:70-74): temporary, or
     // dynamic with a callback or a simulated body. The port models the first arm
-    // only, because nothing it spawns has the second: red_eyes has no
-    // ETHCallback_/ETHConstructorCallback_ of its own in the listing and no shape,
-    // and it is the only effect anything can hide. The step that spawns an effect
-    // whose .ent names a callback is the step to widen this.
+    // only: red_eyes has no ETHCallback_/ETHConstructorCallback_ of its own in the
+    // listing and no shape, and it is the only effect anything can hide. The 11.2
+    // entities that DO name callbacks - fire_signal, light_off, light_wall, and
+    // light_from_projectile's - are never hidden (none has the player as its
+    // owner), so the second arm could not change what they do.
     effect.alwaysActive = effect.temporary;
     effect.z = slotAfter(std::round(spawn.zUnits), spawn.pictureSlot);
     effect.haloZ = slotAfter(std::round(spawn.zUnits), Slot::EffectHalo);
@@ -1345,6 +1380,11 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_signalsPutOut = 0;
     m_signalSeen = false;
     m_signalOriginPx = glm::dvec2(0.0);
+    m_torchWatch.clear();
+    m_wallsGoneSeen = 0;
+    m_lightWallRebuilt = false;
+    m_trailMs = 0.0;
+    m_wellSpins.clear();
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -1372,19 +1412,42 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
         effect.atPx = atPx;
         effect.hidden = hidden;
 
+        // ITS OWN CALLBACK, before the frame draws it (00_order 8.0 rule 6): the
+        // light wall's SetAlpha(min(GetAlpha() + unitsPerSecond(1), 1)), and the lit
+        // torch's bounce. Both clocks are the frame's; the first frame an entity is
+        // drawn on is one frame into them, as its callback has run once by then.
+        if (effect.alphaPerSecond > 0.0) {
+            effect.alpha = std::min(1.0, effect.alpha + effect.alphaPerSecond * elapsedMs / 1000.0);
+        }
+        if (effect.bounces) {
+            effect.bounceMs += elapsedMs;
+            effect.bounceScale = effect.bounce.ScaleAt(effect.bounceMs);
+        }
+        const glm::dvec2 drawnScale = effect.scale * effect.bounceScale;
+
         if (effect.quad != entt::null) {
             // Ethanon's angle turns counter-clockwise on the screen, which is the
-            // engine's rotation about +z, exactly as the shot's is.
-            placeSprite(registry, effect.quad, effect.atPx - effect.art.pivotPx * effect.scale, effect.cellPx,
-                        effect.z, static_cast<float>(effect.angleDeg * 3.14159265358979323846 / 180.0));
+            // engine's rotation about +z, exactly as the shot's is. ON ITS ORIGIN,
+            // which is its type's (ETHEntity.cpp:25-43, :268-296): the centre for
+            // ET_HORIZONTAL, so the picture's centre is the point less the pivot;
+            // the centre of its BOTTOM edge for ET_VERTICAL - light_off.ent - so it
+            // stands half its height higher, and a vertical entity's picture is
+            // never turned (ETHRenderEntity.cpp:105).
+            const bool vertical = effect.art.type == Art::EntityType::Vertical;
+            const glm::dvec2 cellPx = effect.cellPx * effect.bounceScale;
+            glm::dvec2 centrePx = effect.atPx - effect.art.pivotPx * drawnScale;
+            if (vertical) centrePx.y -= cellPx.y * 0.5;
+            const double angleRad = vertical ? 0.0 : effect.angleDeg * 3.14159265358979323846 / 180.0;
+            placeSprite(registry, effect.quad, centrePx, cellPx, effect.z, static_cast<float>(angleRad));
             registry.get<RenderableComponent>(effect.quad).isVisible = !hidden;
             // AT THE COLOUR SetColor LEFT ON IT, here and not in syncLighting: an
             // effect is added and faded on the FRAME, and a tint that waited for
             // the next tick would draw a dying portal at its old brightness for a
             // frame and a new one white. Its particles take none of this
-            // (ETHParticleManager.cpp:381-389 reads the ambient alone).
-            tint(registry, effect.quad, glm::vec4(glm::vec3(effect.colour), 1.0f), effect.art.emissive, {},
-                 effectReceiver(effect));
+            // (ETHParticleManager.cpp:381-389 reads the ambient alone), nor of the
+            // alpha SetAlpha leaves on it.
+            tint(registry, effect.quad, glm::vec4(glm::vec3(effect.colour), static_cast<float>(effect.alpha)),
+                 effect.art.emissive, {}, effectReceiver(effect));
         }
         if (effect.light != entt::null || effect.halo != entt::null) {
             // At the live share of its FIRST system, as a level light follows its
@@ -1392,8 +1455,16 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
             const double ratio = effect.emitters.empty() ? Lighting::ParticleRatio(0, 0)
                                                          : Lighting::ParticleRatio(effect.emitters.front().active,
                                                                                    effect.emitters.front().system.count);
-            placeLight(registry, effect.light, effect.halo, *effect.art.light, effect.atPx, effect.zUnits,
+            // The halo takes the bounce (DrawHalo sizes it by the entity's scale);
+            // the light does not. A STATIC light is baked where the original's
+            // lights it - GenerateLightmaps, on the frame after the torch is lit -
+            // and the port lights with it every frame, so a range swung with the
+            // bounce would pulse walls the original's lightmaps hold still (L1:
+            // 4-29's floor std 0.1 over 3 s of a bouncing torch).
+            placeLight(registry, effect.light, entt::null, *effect.art.light, effect.atPx, effect.zUnits,
                        effect.art.isStatic, ratio, effect.haloZ, !hidden, effect.scale);
+            placeLight(registry, entt::null, effect.halo, *effect.art.light, effect.atPx, effect.zUnits,
+                       effect.art.isStatic, ratio, effect.haloZ, !hidden, drawnScale);
         }
 
         // A HIDDEN entity is not drawn (ETHScene.cpp:568, ETHRenderEntity.cpp:396),
@@ -1618,7 +1689,12 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         report.haloZ = effect.haloZ;
         report.scriptScale = effect.scriptScale;
         report.colour = effect.colour;
+        report.alpha = effect.alpha;
         report.scale = effect.scale;
+        report.bounceScale = effect.bounceScale;
+        report.quad = effect.quad;
+        report.light = effect.light;
+        report.halo = effect.halo;
         report.temporary = effect.temporary;
         report.alwaysActive = effect.alwaysActive;
         report.hidden = effect.hidden;
@@ -1628,7 +1704,9 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         if (effect.art.light) {
             const Lighting::Light lit = Lighting::OwnerScaled(*effect.art.light, effect.scale);
             report.lightRange = lit.range;
-            report.haloPx = lit.haloSize;
+            // The halo as it is drawn: with a lit torch's bounce, which its light
+            // does not take (updateEffects).
+            report.haloPx = Lighting::OwnerScaled(*effect.art.light, effect.scale * effect.bounceScale).haloSize;
         }
         report.systems = static_cast<int>(effect.emitters.size());
         report.systemZ.reserve(effect.emitters.size());
@@ -3350,6 +3428,8 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         drawn.crystal = indexOf(m_level.goals.crystals, sprite.node);
         drawn.staticPortal = indexOf(m_level.portals.statics, sprite.node);
         drawn.zone = indexOf(m_level.portals.zones, sprite.node);
+        drawn.torch = indexOf(m_level.torch.lights, sprite.node);
+        drawn.well = indexOf(m_level.wells.wells, sprite.node);
         // AN ANTIPORTAL IS DRAWN AT HALF ITS NODE'S SCALE (placement.json
         // antiportal.manager): Game::preLoop scales the entity by its node's `scale`
         // and AntiPortalManager's constructor then calls Scale(0.5) on every entity
@@ -3943,6 +4023,26 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             centrePx += bob;
             ownerPx += bob;
         }
+        // A TORCH THE LEVEL PLACED goes on the tick after a shot lights it, its
+        // picture and its spark with it: its callback's `delete` branch deletes the
+        // entity then (the visuals plan's 11.2). The torch a put-out adds back is a
+        // new entity, the effects runtime's, and never this picture again.
+        if (drawn.torch >= 0 && drawn.torch < static_cast<int>(m_torchWatch.size()) &&
+            m_torchWatch[static_cast<std::size_t>(drawn.torch)].unlitGone) {
+            gone = true;
+        }
+        // AND A GRAVITY WELL'S AGENT, as its callback sets its angle every frame
+        // (gravitywell.json roundabout): a whole turn at rest, which draws as none,
+        // and one turn and a settle over 3000 ms in the way the player last lapped
+        // it. Counter-clockwise on the screen, as Ethanon's angle and the engine's
+        // +z both turn; its particles with it.
+        if (drawn.well >= 0) {
+            const double turnedDeg = std::fmod(WellSpinDegrees(drawn.well), 360.0);
+            if (turnedDeg != 0.0) {
+                rotation += static_cast<float>(turnedDeg * 3.14159265358979323846 / 180.0);
+                ownerAngleDeg += turnedDeg;
+            }
+        }
         if (gone) {
             registry.destroy(drawn.quad);
             drawn.quad = entt::null;
@@ -4024,6 +4124,9 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
     // The tick is the frame the callbacks run on. A paused or popped-up level is not
     // stepped, which is the original's m_factor 0: the angle holds.
     const double frameMs = static_cast<double>(fixedDelta) * 1000.0;
+    // ETHCallback_gravity_agent's effectAngleTime, getLastFrameElapsedTime a frame
+    // (gravitywell.json roundabout); a lap zeroes it (latchSimEffects).
+    for (WellSpin& spin : m_wellSpins) spin.ms += frameMs;
     for (const DrawnSprite& drawn : m_sprites) {
         if (!motionRuns(drawn)) continue;
         Motion::Advance(m_motionRules, m_motions[static_cast<std::size_t>(drawn.motion)], frameMs);
@@ -4838,11 +4941,6 @@ void MagicPortalsLayer::unloadLights(entt::registry& registry) {
         destroy(placed.halo);
     }
     m_placedLights.clear();
-    for (TorchLight& torch : m_torchLights) {
-        destroy(torch.light);
-        destroy(torch.halo);
-    }
-    m_torchLights.clear();
     destroy(m_shotLight);
     destroy(m_shotHalo);
 }
@@ -4916,45 +5014,9 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
               particleRatioOf(placed.emitter), placed.haloZ, present, glm::dvec2(1.0));
     }
 
-    // light_from_projectile.ent's, at each torch while it is lit (step 55, the
-    // design's G6): added by the shot that lights it and deleted by the signal that
-    // puts it out (torch.json). The torch's own depth is the entity's, which is a
-    // guess recorded in art.json. Its flame is not built, so its halo is at the
-    // share of a system with none.
-    const Art::Picture& torchLight = m_artRules.torchLight;
-    const std::vector<Torch::Light>& torches = m_level.torch.lights;
-    m_torchLights.resize(torches.size());
-    for (std::size_t i = 0; i < torches.size(); ++i) {
-        TorchLight& made = m_torchLights[i];
-        if (!torches[i].lit || !torchLight.light) {
-            if (made.light != entt::null && registry.valid(made.light)) registry.destroy(made.light);
-            if (made.halo != entt::null && registry.valid(made.halo)) registry.destroy(made.halo);
-            made = TorchLight{};
-            continue;
-        }
-        double ownerZ = torchLight.z;
-        float haloZ = slotAt(m_playerSlot, Slot::HaloNoPicture);
-        if (const auto look = m_look.nodes.find(torches[i].name); look != m_look.nodes.end()) ownerZ = look->second.z;
-        for (const DrawnSprite& drawn : m_sprites) {
-            if (drawn.sprite.node != torches[i].name) continue;
-            haloZ = slotOver(drawn.z, Slot::Halo);
-            break;
-        }
-        if (made.light == entt::null) {
-            made.light = registry.create();
-            registry.emplace<TagComponent>(made.light, "Magic Portals Torch Light");
-            registry.emplace<TransformComponent>(made.light);
-            registry.emplace<Light2DComponent>(made.light);
-        }
-        const Sprites::Image& torchHalo = drawnImage(originalImage(torchLight.light->halo));
-        if (made.halo == entt::null && m_artReady && torchHalo.units != glm::ivec2(0)) {
-            made.halo = makeSprite(registry, "Magic Portals Torch Halo", torchHalo.path, true);
-        }
-        // ETHCallback_light_off adds it with AddScaledEntity at g_scale.getScale(), one
-        // port unit (#71-83), and light_from_projectile.ent's <Scale> is 1: scale 1.
-        place(made.light, made.halo, *torchLight.light, torches[i].atPx, ownerZ, torchLight.isStatic,
-              Lighting::ParticleRatio(0, 0), haloZ, true, glm::dvec2(1.0));
-    }
+    // (light_from_projectile.ent's light and halo stand at a lit torch as the
+    // effects runtime's since the visuals plan's 11.2: updateEffects places them,
+    // the halo at the light's own (0, -12).)
 
     // The shot's, while it flies.
     const Art::Shot& shot = m_artRules.shot;
@@ -5229,6 +5291,31 @@ MagicPortalsLayer::DoorReport MagicPortalsLayer::DoorPicture() const {
         report.glowAdditive = glow->sprite.additive;
     }
     return report;
+}
+
+std::vector<MagicPortalsLayer::TorchReport> MagicPortalsLayer::TorchReports() const {
+    std::vector<TorchReport> reports;
+    for (std::size_t i = 0; i < m_level.torch.lights.size(); ++i) {
+        TorchReport report;
+        for (const DrawnSprite& drawn : m_sprites) {
+            if (drawn.torch == static_cast<int>(i)) report.levelPicture = drawn.quad != entt::null;
+        }
+        if (i < m_torchWatch.size()) {
+            report.unlitGone = m_torchWatch[i].unlitGone;
+            report.z = m_torchWatch[i].z;
+        }
+        reports.push_back(report);
+    }
+    return reports;
+}
+
+double MagicPortalsLayer::WellSpinDegrees(int well) const {
+    const GravityWell::Roundabout& rules = m_level.wells.rules.roundabout;
+    if (well < 0 || well >= static_cast<int>(m_wellSpins.size())) {
+        return GravityWell::SpinDegrees(rules, rules.spinMs, 1.0);
+    }
+    const WellSpin& spin = m_wellSpins[static_cast<std::size_t>(well)];
+    return GravityWell::SpinDegrees(rules, spin.ms, spin.sign);
 }
 
 MagicPortalsLayer::LightWallGhostReport MagicPortalsLayer::LightWallGhost() const {
@@ -6505,20 +6592,9 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
     }
     m_ringKillSeen = ringKilled;
     m_playerDeadSeen = dead;
-    // A FIRE SIGNAL PUT OUT: ETHCallback_fire_signal adds extinguish_fire at
-    // vector3(originalPos, 10) - originalPos its own first point, which is its
-    // torch's (addFireSignalIfNecessary) - a depth of its own (#130-146, #258-269).
-    // Torch clears the signal on the tick it goes, so its origin is the last
-    // latch's.
-    const Torch::State& torch = m_level.torch;
-    if (torch.putOut > m_signalsPutOut && m_signalSeen) {
-        const Effects::Spawn water = Effects::At(m_effectRules.extinguishAtSignal, m_signalOriginPx);
-        m_effectQueue.push_back(effectAdd(water));
-        logged("fire signal put out", water);
-    }
-    m_signalsPutOut = torch.putOut;
-    m_signalSeen = torch.signal.present;
-    if (torch.signal.present) m_signalOriginPx = torch.signal.originPx;
+    // CHAPTER 4'S TORCHES (the visuals plan's 11.2; effects.json
+    // _torches_trail_roundabout), each call's entities in its callback's own order.
+    latchTorches();
 
     // WHAT A WALL AND A STONE LEAVE (the visuals plan's 11.1; effects.json
     // _walls_stones_doors), after the rest for the reason those are: the scene walk
@@ -6576,6 +6652,207 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
     };
     for (const Launchers::StoneGone& gone : m_level.launchers.despawnedNow) stoneGone(gone, "a despawner");
     for (const Launchers::StoneGone& gone : m_level.boss.brokenNow) stoneGone(gone, "the beholder's level");
+
+    // THE TRAIL A WEIGHTLESS PLAYER LEAVES (effects.json movement_trail):
+    // MainCharacter::addTrail, from its update - which runs unpaused and not once
+    // the level is finished (MainCharacter::update #6-21), so not once the player
+    // has gone into the door or died here - only where the character's noGravity is
+    // set. Its clock runs every such tick; a trail is added at the character's own
+    // point and depth, and rides on it (ETHCallback_movement_trail) - the player
+    // owner, which hides with it too, where the original's has nothing to hide.
+    if (m_level.noGravity && !m_finishing && !m_dying && m_level.player != entt::null &&
+        registry.valid(m_level.player) && registry.all_of<Supersonic::RigidBodyComponent>(m_level.player)) {
+        const glm::vec3 velocity = registry.get<Supersonic::RigidBodyComponent>(m_level.player).velocity;
+        const double speed = std::sqrt(static_cast<double>(velocity.x) * velocity.x +
+                                       static_cast<double>(velocity.y) * velocity.y);
+        if (Effects::TrailDue(m_effectRules, m_trailMs, speed, static_cast<double>(fixedDelta) * 1000.0)) {
+            const glm::dvec2 atPx =
+                Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
+            const Effects::Spawn trail = Effects::OnEntity(m_effectRules.movementTrail, atPx, m_playerZ);
+            EffectSpawn add = effectAdd(trail);
+            add.follow.kind = EffectOwner::Kind::Player;
+            m_effectQueue.push_back(add);
+            SUPERSONIC_LOG_INFO("Magic Portals") << "movement trail on tick " << m_ticks << " at " << speed
+                                                 << " m/s: " << trail.entity << " at (" << trail.atPx.x << ", "
+                                                 << trail.atPx.y << ") z " << trail.z << std::endl;
+        }
+    }
+
+    // A LAP ROUND A WELL (gravitywell.json roundabout; effects.json
+    // roundabout_effect): computeRoundabout #332-419, for the character alone and
+    // only while it is not hidden - the flash at the well's area, the sound, and
+    // the agent's clock zeroed in the lap's way round.
+    const GravityWell::State& wells = m_level.wells;
+    if (m_wellSpins.size() != wells.wells.size()) {
+        m_wellSpins.assign(wells.wells.size(), WellSpin{wells.rules.roundabout.spinMs, 1.0});
+    }
+    for (const GravityWell::Lap& lap : wells.lapsNow) {
+        if (lap.body != m_level.player || m_playerQuad == entt::null) continue;
+        if (lap.well < 0 || lap.well >= static_cast<int>(wells.wells.size())) continue;
+        const GravityWell::Well& well = wells.wells[static_cast<std::size_t>(lap.well)];
+        const Effects::Spawn flash = Effects::At(m_effectRules.roundabout, well.atPx);
+        m_effectQueue.push_back(effectAdd(flash));
+        latch("roundabout");
+        m_wellSpins[static_cast<std::size_t>(lap.well)] = WellSpin{0.0, lap.degrees < 0.0 ? -1.0 : 1.0};
+        SUPERSONIC_LOG_INFO("Magic Portals") << "lap of " << lap.degrees << " degrees round " << well.name
+                                             << " on tick " << m_ticks << ": " << flash.entity << " at ("
+                                             << flash.atPx.x << ", " << flash.atPx.y << ") z " << flash.z
+                                             << " bare" << std::endl;
+    }
+}
+
+// CHAPTER 4'S TORCHES, THEIR SIGNAL AND THEIR WALL (the visuals plan's 11.2;
+// effects.json _torches_trail_roundabout; sim/Torch). Per torch, on the tick its
+// state turns over:
+//
+//   LIT (ETHCallback_light_off, the frame a shot or a fireball comes within 24):
+//   light_from_projectile - the lit torch, its flame, its light and its halo - and
+//   light_on_sparkles, both on the torch's own point and depth; portal_death where
+//   the spent shot was; and, where the level has a light wall, fire_signal, riding
+//   the signal - and then the lit torch bounces. The level's own picture is taken
+//   on the NEXT tick, where the original's `delete` branch deletes the entity.
+//
+//   PUT OUT (ETHCallback_fire_signal, when the signal is shot): a fresh
+//   light_off.ent and light_off_sparkles at vector3(originalPos, 10);
+//   portal_death at the shot; extinguish_fire (the visuals plan's 10.4); and
+//   addLightWall's light_wall_create and the new light_wall at the ghost - its
+//   point and angle, and its depth, the wall's less 4 raw pixels - the wall faded
+//   in from 0.
+//
+// And the wall, 1500 ms after a lighting (ETHCallback_light_wall): wall_destroy at
+// the wall that stands - the level's, or the one addLightWall built - turned by it.
+void MagicPortalsLayer::latchTorches() {
+    const auto pictureOf = [this](auto&& is) {
+        const auto drawn = std::find_if(m_sprites.begin(), m_sprites.end(), is);
+        return drawn == m_sprites.end() ? nullptr : &*drawn;
+    };
+    const auto logged = [this](const char* what, const Effects::Spawn& spawn) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << what << " on tick " << m_ticks << ": " << spawn.entity << " at ("
+                                             << spawn.atPx.x << ", " << spawn.atPx.y << ") z " << spawn.z
+                                             << (spawn.zScaled ? "" : " bare") << " angle " << spawn.angleDeg
+                                             << std::endl;
+    };
+    const Torch::State& torch = m_level.torch;
+    if (m_torchWatch.size() != torch.lights.size()) {
+        m_torchWatch.assign(torch.lights.size(), TorchWatch{});
+        for (std::size_t i = 0; i < torch.lights.size(); ++i) {
+            const DrawnSprite* picture = pictureOf(
+                [&torch, i](const DrawnSprite& drawn) { return drawn.sprite.node == torch.lights[i].name; });
+            m_torchWatch[i].z = picture != nullptr ? picture->lookZ : 0.0;
+        }
+    }
+    // Where the light wall standing now is: its node's point and angle, and its
+    // depth - the node's eth_z, or the ghost's once addLightWall has built it there.
+    glm::dvec2 wallPx(0.0);
+    double wallZ = 0.0;
+    double wallAngleDeg = 0.0;
+    bool wallDrawn = false;
+    if (torch.wall.present) {
+        const std::string& name = torch.wall.name;
+        if (const DrawnSprite* wall = pictureOf([&name](const DrawnSprite& drawn) { return drawn.sprite.node == name; })) {
+            wallDrawn = true;
+            wallPx = wall->sprite.atPx;
+            wallAngleDeg = -wall->sprite.rotation * 180.0 / 3.14159265358979323846;
+            wallZ = m_lightWallRebuilt ? m_wallGhost.lookZ : wall->lookZ;
+        }
+    }
+
+    for (std::size_t i = 0; i < torch.lights.size(); ++i) {
+        const Torch::Light& light = torch.lights[i];
+        TorchWatch& watch = m_torchWatch[i];
+        if (light.lit && !watch.lit) {
+            EffectSpawn lit = effectAdd(Effects::OnEntity(m_effectRules.lightFromProjectile, light.atPx, watch.z));
+            lit.follow.kind = EffectOwner::Kind::LitTorch;
+            lit.follow.index = static_cast<int>(i);
+            // addFireSignalIfNecessary sets its `bounce` where it adds a signal:
+            // this torch's, added this tick.
+            const bool signalled = torch.signal.present && torch.signal.fromTorch == light.name && !m_signalSeen;
+            if (signalled) {
+                const Effects::Bounce& bounce = m_effectRules.litTorchBounce;
+                lit.bounces = true;
+                lit.bounce.fromScale = glm::dvec2(bounce.from);
+                lit.bounce.toScale = glm::dvec2(bounce.to);
+                lit.bounce.strideMs = bounce.strideMs;
+            }
+            m_effectQueue.push_back(lit);
+            const Effects::Spawn sparkles = Effects::OnEntity(m_effectRules.lightOnSparkles, light.atPx, watch.z);
+            m_effectQueue.push_back(effectAdd(sparkles));
+            logged(("torch " + light.name + " lit").c_str(), sparkles);
+            if (torch.spentAtPx.has_value()) {
+                const Effects::Spawn burst = Effects::At(m_effectRules.portalDeathAtLitTorch, *torch.spentAtPx);
+                m_effectQueue.push_back(effectAdd(burst));
+                logged("the shot that lit it spent", burst);
+            }
+            if (signalled) {
+                EffectSpawn signal = effectAdd(Effects::OnEntity(m_effectRules.fireSignal, light.atPx, watch.z));
+                signal.follow.kind = EffectOwner::Kind::FireSignal;
+                m_effectQueue.push_back(signal);
+                SUPERSONIC_LOG_INFO("Magic Portals") << "fire signal added on tick " << m_ticks << " at ("
+                                                     << light.atPx.x << ", " << light.atPx.y << ") z " << watch.z
+                                                     << ", and the lit torch bounces" << std::endl;
+            }
+        } else if (light.lit && watch.lit && !watch.unlitGone) {
+            watch.unlitGone = true;
+            SUPERSONIC_LOG_INFO("Magic Portals") << "torch " << light.name << " deletes its unlit self on tick "
+                                                 << m_ticks << std::endl;
+        } else if (!light.lit && watch.lit) {
+            // A FIRE SIGNAL PUT OUT, and with it this torch. ETHCallback_fire_signal's
+            // originalPos is its own first point, which is its torch's
+            // (addFireSignalIfNecessary); Torch clears the signal on the tick it goes,
+            // so its origin is the last latch's.
+            const glm::dvec2 originPx = m_signalSeen ? m_signalOriginPx : light.atPx;
+            watch.unlitGone = false;
+            EffectSpawn back = effectAdd(Effects::At(m_effectRules.lightOffAtSignal, originPx));
+            back.follow.kind = EffectOwner::Kind::UnlitTorch;
+            back.follow.index = static_cast<int>(i);
+            watch.z = back.zUnits;
+            m_effectQueue.push_back(back);
+            const Effects::Spawn sparkles = Effects::At(m_effectRules.lightOffSparkles, originPx);
+            m_effectQueue.push_back(effectAdd(sparkles));
+            logged(("torch " + light.name + " put back").c_str(), sparkles);
+            if (torch.spentAtPx.has_value()) {
+                const Effects::Spawn burst = Effects::At(m_effectRules.portalDeathAtSignal, *torch.spentAtPx);
+                m_effectQueue.push_back(effectAdd(burst));
+                logged("the shot that put it out spent", burst);
+            }
+            // extinguish_fire at vector3(originalPos, 10), a depth of its own
+            // (#130-146, #258-269; the visuals plan's 10.4).
+            if (torch.putOut > m_signalsPutOut && m_signalSeen) {
+                const Effects::Spawn water = Effects::At(m_effectRules.extinguishAtSignal, m_signalOriginPx);
+                m_effectQueue.push_back(effectAdd(water));
+                logged("fire signal put out", water);
+            }
+            // addLightWall: its smoke, and the wall itself at 0 alpha, both at the
+            // ghost - where the wall stood, 4 raw pixels further back.
+            if (torch.wall.present && wallDrawn && m_wallGhost.sizePx != glm::dvec2(0.0)) {
+                const Effects::Spawn smoke =
+                    Effects::OnEntityTurned(m_effectRules.lightWallCreate, wallPx, m_wallGhost.lookZ, wallAngleDeg);
+                m_effectQueue.push_back(effectAdd(smoke));
+                logged("the light wall comes back", smoke);
+                EffectSpawn wall = effectAdd(
+                    Effects::OnEntityTurned(m_effectRules.lightWallAtGhost, wallPx, m_wallGhost.lookZ, wallAngleDeg));
+                wall.follow.kind = EffectOwner::Kind::LightWall;
+                wall.alpha = m_effectRules.lightWallAlphaFrom;
+                wall.alphaPerSecond = m_effectRules.lightWallAlphaPerSecond;
+                m_effectQueue.push_back(wall);
+                m_lightWallRebuilt = true;
+            }
+        }
+        watch.lit = light.lit;
+    }
+    m_signalsPutOut = torch.putOut;
+    m_signalSeen = torch.signal.present;
+    if (torch.signal.present) m_signalOriginPx = torch.signal.originPx;
+
+    // THE WALL GOING, 1500 ms after the lighting that flagged it: ETHCallback_light_wall
+    // adds wall_destroy at its own point and depth, turned by it.
+    if (torch.wallsGone > m_wallsGoneSeen && wallDrawn) {
+        const Effects::Spawn dust =
+            Effects::OnEntityTurned(m_effectRules.wallDestroyLightWall, wallPx, wallZ, wallAngleDeg);
+        m_effectQueue.push_back(effectAdd(dust));
+        logged(("light wall " + torch.wall.name + " gone").c_str(), dust);
+    }
+    m_wallsGoneSeen = torch.wallsGone;
 }
 
 bool MagicPortalsLayer::isBreakableWall(const std::string& node) const {
