@@ -281,7 +281,26 @@ bool Parse(const std::string& text, const std::string& path, std::vector<System>
 }
 
 bool Drawable(const System& system) {
-    return system.alphaMode == kAlphaAdd || system.alphaMode == kAlphaPixel;
+    return system.alphaMode == kAlphaAdd || system.alphaMode == kAlphaPixel || system.alphaMode == kAlphaModulate;
+}
+
+bool MultipliesExactly(const System& system) {
+    const glm::dvec3 white(1.0);
+    return glm::dvec3(system.colour0) == white && glm::dvec3(system.colour1) == white;
+}
+
+bool MultiplyTexels(const unsigned char* rgb, std::size_t texels, std::vector<unsigned char>& rgba) {
+    rgba.assign(texels * 4u, 0u);
+    for (std::size_t i = 0; i < texels; ++i) {
+        const unsigned char r = rgb[i * 3u];
+        if (rgb[i * 3u + 1u] != r || rgb[i * 3u + 2u] != r) {
+            rgba.clear();
+            return false;
+        }
+        // Black, whatever it was: only the alpha carries the texel.
+        rgba[i * 4u + 3u] = static_cast<unsigned char>(255u - r);
+    }
+    return true;
 }
 
 void Scale(System& system, double scale) {
@@ -435,6 +454,9 @@ bool Finished(const System& system, const std::vector<Particle>& pool) {
 }
 
 glm::dvec4 DrawColour(const System& system, const Particle& particle, const glm::dvec3& ambient) {
+    // GL_ZERO, GL_SRC_COLOR reads neither the ambient nor the alpha: the multiply
+    // image's own alpha is the whole of the draw (00_order K12).
+    if (system.alphaMode == kAlphaModulate) return glm::dvec4(0.0, 0.0, 0.0, 1.0);
     glm::dvec3 lift(1.0);
     if (system.alphaMode == kAlphaPixel || system.alphaMode == kAlphaTest) {
         lift = glm::min(system.luminance + ambient, glm::dvec3(1.0));

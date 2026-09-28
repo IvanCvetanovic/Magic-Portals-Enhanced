@@ -21,7 +21,8 @@
 //     and every AM_PIXEL one carries alpha - which is why sparkles.bmp works at
 //     all, a bitmap with no alpha channel whose black ground adds nothing. The
 //     four AM_MODULATE systems (black_fade, blood, dragon_knight, ghost_minion)
-//     belong to entities no level places.
+//     belong to entities no level places; the port draws them as a multiply
+//     (MultiplyTexels, planning step 96).
 //   - animationMode is ETHParticleSystem::FRAME_ANIMATION_MODE: PLAY_ANIMATION
 //     1, PICK_RANDOM_FRAME 2.
 //
@@ -35,6 +36,7 @@
 // WITH - a quad, a z, a frame of the sheet - is the layer's, per frame, and never
 // the simulation's: nothing here reaches Game::Level or the state hash.
 
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <vector>
@@ -117,9 +119,40 @@ bool Parse(const std::string& text, const std::string& path, std::vector<System>
 
 // Whether the port can draw a system's blend: AM_ADD and AM_PIXEL, the two the
 // levels' 897 placed systems use (887 and 10, their own <Particles>: planning
-// step 91, pinned in test_mp_sprites). AM_MODULATE has no pipeline, and
-// the layer refuses a system that asks for it by name rather than mixing it.
+// step 91, pinned in test_mp_sprites), and AM_MODULATE, which the engine has no
+// pipeline for and the layer draws as the multiply it is (MultipliesExactly,
+// MultiplyTexels; planning step 96). AM_ALPHA_TEST and AM_NONE, which no .ent
+// uses, are refused by name rather than drawn as something they are not.
 bool Drawable(const System& system);
+
+// ---- AM_MODULATE, as a multiply ----------------------------------------------
+//
+// AM_MODULATE blends glBlendFunc(GL_ZERO, GL_SRC_COLOR) (GLES2Video.cpp:796-799):
+// what is under the particle is multiplied by the texel times the particle's
+// colour, and NOTHING reads the alpha - neither the texel's nor the colour's.
+// The port's engine has no such blend. What it has is the ordinary mix, and a
+// texel that is black at an alpha of (255 - grey) mixes to exactly the same
+// result: 0 x a + d x (1 - a) = d x grey / 255. That is the loading screen's
+// black halo since planning step 53, and it is exact under two conditions only:
+//   - the bitmap is GREY, r = g = b at every texel, because one alpha cannot
+//     multiply three channels by three different numbers;
+//   - the particle's colour is WHITE at both ends of its lerp, because the
+//     colour's RGB multiplies the texel's in the original and has nowhere to go
+//     in a black texel.
+// All four AM_MODULATE systems the original ships meet both (00_order E6, K12:
+// blackexplosion.png and black_portal_particle.png are grey to the last texel,
+// and every one of the four is (1, 1, 1) at birth and at death); the layer
+// refuses by name a system that does not, rather than drawing a guess.
+//
+// Whether a system's colour lets the multiply be exact: both ends' RGB white.
+// The alpha is not asked - the blend never reads it (DrawColour).
+bool MultipliesExactly(const System& system);
+
+// The image a multiply is drawn with, from `texels` RGB texels (3 bytes each, as
+// read with its alpha dropped: the blend never reads a texel's alpha either):
+// black, at an alpha of 255 less the texel's grey, 4 bytes a texel in `rgba`.
+// False, and `rgba` left empty, at the first texel that is not grey.
+bool MultiplyTexels(const unsigned char* rgb, std::size_t texels, std::vector<unsigned char>& rgba);
 
 // What ETHEntity::Scale(s) does to each system its entity carries (ETHEntity.cpp:591-599,
 // through ETHSpriteEntity.cpp:512-518 and ETHParticleManager.cpp:444-451):
@@ -240,6 +273,15 @@ bool Finished(const System& system, const std::vector<Particle>& pool);
 // IS 1: AM_ADD blends GL_ONE, GL_ONE, so the original never reads the alpha its
 // colour lerps (a crystal's sparkle goes 1 -> 0) - the port's added pipeline
 // weights by alpha, and would fade it twice.
+//
+// A MULTIPLIED ONE IS (0, 0, 0, 1), for the same reason taken one step further
+// (00_order K12). Its multiply image's alpha IS the weight, so the colour's alpha
+// must not scale it again: blood.ent lerps its black burst 0.2 -> 1, which the
+// original's GL_ZERO, GL_SRC_COLOR never reads, and a 0.2 at birth would draw the
+// darkest texel at a fifth of its strength. Its RGB goes to 0 with it, which the
+// black texel makes no difference to and which keeps anything else from adding.
+// Whether it is drawn at all is still the lerped alpha's (Drawn): black_fade.ent
+// starts at alpha 0, and the original skips it on that frame (:375).
 glm::dvec4 DrawColour(const System& system, const Particle& particle, const glm::dvec3& ambient);
 
 // The quad it is drawn on: SQUARE, size by size, whatever the cell's shape

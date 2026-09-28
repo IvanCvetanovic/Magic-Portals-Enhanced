@@ -35,11 +35,18 @@ bool ReadRule(const Json::Value& root, const char* name, Rule& out, std::string&
         return false;
     }
     read.entity = row["entity"].AsString();
-    if (!Finite(row["offset_units"])) {
-        error = where + ".offset_units is not a number";
+    // A number, along the call's direction; or a pair, a fixed (x, y) added along
+    // none (levelFinishedEffect's vector2(0, 16)).
+    const Json::Value& offset = row["offset_units"];
+    if (Finite(offset)) {
+        read.offsetUnits = offset.AsNumber();
+    } else if (offset.IsArray() && offset.AsArray().size() == 2 && Finite(offset.AsArray()[0]) &&
+               Finite(offset.AsArray()[1])) {
+        read.offsetFixedUnits = glm::dvec2(offset.AsArray()[0].AsNumber(), offset.AsArray()[1].AsNumber());
+    } else {
+        error = where + ".offset_units is not a number or a pair [x, y] of numbers";
         return false;
     }
-    read.offsetUnits = row["offset_units"].AsNumber();
     const Json::Value& z = row["z"];
     if (!z.IsObject() || !Finite(z["value"]) || !z["scaled"].IsBool()) {
         error = where + ".z needs a value and scaled, true or false";
@@ -169,7 +176,7 @@ bool ReadPlacedPortal(const Json::Value& root, const char* name, PlacedPortal& o
 Spawn SpawnOf(const Rule& rule, const glm::dvec2& fromPx, const glm::dvec2& direction) {
     Spawn spawn;
     spawn.entity = rule.entity;
-    spawn.atPx = fromPx + direction * rule.offsetUnits;
+    spawn.atPx = fromPx + direction * rule.offsetUnits + rule.offsetFixedUnits;
     spawn.z = rule.z;
     spawn.zScaled = rule.zScaled;
     spawn.angleDeg = AngleDegrees(rule, direction);
@@ -205,10 +212,18 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "portal_summon_effect", read.summon, why) || !ReadRule(root, "portal", read.portal, why) ||
         !ReadRule(root, "portal_death", read.death, why) ||
         !ReadPlacedPortal(root, "placed_portal", read.placedPortal, why) ||
-        !ReadEyes(root, "red_eyes", read.eyes, why)) {
+        !ReadEyes(root, "red_eyes", read.eyes, why) || !ReadRule(root, "red_suck_effect", read.finishSuck, why) ||
+        !ReadRule(root, "red_sparkles", read.finishSparkles, why) || !ReadRule(root, "blood", read.blood, why) ||
+        !ReadRule(root, "skull", read.skull, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
+    // The skull's one number of its own: how far inside the view it is held.
+    if (!Finite(root["skull"]["inset_units"]) || !(root["skull"]["inset_units"].AsNumber() > 0.0)) {
+        error = path + ": skull.inset_units is not a number above 0";
+        return false;
+    }
+    read.skullInsetUnits = root["skull"]["inset_units"].AsNumber();
     // The rows that are given a point and nothing else: no direction to be offset
     // along or turned by. appearEffect, addFireball - whose `dir` is the entity's
     // own custom data and not the angle it is added at - and both explosions,
@@ -222,10 +237,37 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"explosion_large", &read.largeExplosion},
                      {"portal_summon_effect", &read.summon},
                      {"portal", &read.portal},
-                     {"portal_death", &read.death}};
+                     {"portal_death", &read.death},
+                     {"red_suck_effect", &read.finishSuck},
+                     {"red_sparkles", &read.finishSparkles},
+                     {"blood", &read.blood},
+                     {"skull", &read.skull}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
+            return false;
+        }
+    }
+    // And the fixed offset is levelFinishedEffect's alone: no other call adds one,
+    // so a pair on any other row is a fact nobody decoded.
+    const struct {
+        const char* name;
+        const Rule* rule;
+    } unshifted[] = {{"suck_effect", &read.suck},
+                     {"sparkles", &read.sparkles},
+                     {"appear_effect", &read.appear},
+                     {"fireball", &read.fireball},
+                     {"small_explosion", &read.smallExplosion},
+                     {"explosion_large", &read.largeExplosion},
+                     {"portal_summon_effect", &read.summon},
+                     {"portal", &read.portal},
+                     {"portal_death", &read.death},
+                     {"red_sparkles", &read.finishSparkles},
+                     {"blood", &read.blood},
+                     {"skull", &read.skull}};
+    for (const auto& row : unshifted) {
+        if (row.rule->offsetFixedUnits != glm::dvec2(0.0)) {
+            error = path + ": " + row.name + " adds no fixed offset: its offset_units is a number";
             return false;
         }
     }
@@ -335,6 +377,53 @@ Spawn RedEyes(const Rules& rules, const glm::dvec2& characterPx, double characte
     spawn.angleDeg = 0.0f; // AddScaledEntity's own 0f
     spawn.scale = rules.eyes.scale;
     return spawn;
+}
+
+Spawn FinishSuck(const Rules& rules, const glm::dvec2& doorPx) {
+    // #12-31: doorPos + vector2(0, scale(16)), in vector3(that, 0f), angle 0f.
+    return SpawnOf(rules.finishSuck, doorPx, glm::dvec2(0.0));
+}
+
+Spawn FinishSparkles(const Rules& rules, const glm::dvec2& characterPx) {
+    // #63-69: vector3(charPos, 0f), angle 0f.
+    return SpawnOf(rules.finishSparkles, characterPx, glm::dvec2(0.0));
+}
+
+Spawn Blood(const Rules& rules, const glm::dvec2& victimPx, double victimZ) {
+    Spawn spawn = SpawnOf(rules.blood, victimPx, glm::dvec2(0.0));
+    // GetPosition() is the victim's vector3, so the depth is the victim's own - a
+    // number already on the level's axis - and nothing the call writes.
+    spawn.z = victimZ + rules.blood.z;
+    spawn.zScaled = true;
+    return spawn;
+}
+
+glm::dvec2 FallSkullPoint(const Rules& rules, const glm::dvec2& characterPx, const glm::dvec2& cameraPx,
+                          const glm::dvec2& screenPx, bool noGravity) {
+    const double inset = rules.skullInsetUnits;
+    if (!noGravity) {
+        // #341-361: vector2(charPos.x, screenSize.y + cameraPos.y - scale(12)).
+        return glm::dvec2(characterPx.x, screenPx.y + cameraPx.y - inset);
+    }
+    // #278-289 screenMiddle = cameraPos + screenSize / 2; #291-311 skullPos =
+    // max(min(charPos, cameraPos + screenSize), cameraPos), per component (min and
+    // max are the script's own vector2 helpers); #313-336 skullPos -=
+    // normalize(charPos - screenMiddle) x scale(12). normalize is the script's
+    // float one, which VanishDirection already is.
+    const glm::dvec2 middle = cameraPx + screenPx / 2.0;
+    const glm::dvec2 held = glm::max(glm::min(characterPx, cameraPx + screenPx), cameraPx);
+    return held - VanishDirection(characterPx, middle) * inset;
+}
+
+glm::dvec2 KillerSkullPoint(const Rules& rules, double minionX, const glm::dvec2& cameraPx,
+                            const glm::dvec2& screenPx) {
+    // #30-54: vector3(other.GetPosition().x, screenSize.y + cameraPos.y -
+    // scale(12), 0f).
+    return glm::dvec2(minionX, screenPx.y + cameraPx.y - rules.skullInsetUnits);
+}
+
+Spawn Skull(const Rules& rules, const glm::dvec2& atPx) {
+    return SpawnOf(rules.skull, atPx, glm::dvec2(0.0));
 }
 
 } // namespace MagicPortals::Effects

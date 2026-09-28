@@ -143,6 +143,19 @@ struct Killer {
     Trigger::Box box;
 };
 
+// A minion destroyed on the tick just gone, for the frame to draw what the
+// original adds where it died (the visuals plan's 11.3): ETHCallback_minion's
+// blood.ent at the minion's own point once `destroy` has marked it (#1478-1504),
+// and, where a killer floor did it, ETHBeginContactCallback_enemy_killer's
+// skull.ent under it at the view's foot (#24-60).
+struct Death {
+    std::size_t minion = 0; // its place in State::minions
+    // Its ENTITY point, the one GetPosition() reads: the body's centre less
+    // Rules::EntityAboveCentrePx, taken before the body is destroyed.
+    glm::dvec2 atPx{0.0, 0.0};
+    bool byKiller = false; // a killer floor; otherwise a strike (Take)
+};
+
 struct State {
     Rules rules;
     std::vector<Minion> minions;
@@ -150,6 +163,11 @@ struct State {
 
     int killed = 0; // minions taken by a killer floor
     int taken = 0;  // and by something else: a shock diamond's strike
+
+    // Every minion destroyed since the last Tick, in the order it went. Cleared
+    // by Tick and written by Cull and Take, as Turrets::State::spentPx is cleared
+    // and written: a record for the layer, which nothing in the simulation reads.
+    std::vector<Death> deaths;
 
     // Every minion its marker asks for, built where the marker stands. Returns
     // the bodies it made, which the caller hands to the systems that carry a

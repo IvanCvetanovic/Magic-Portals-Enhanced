@@ -19,7 +19,9 @@
 // sparkles where it stood, and the exit portal flashes. Their drawing is step
 // 7.3's; each later effect brings its own row with the step that draws it. And
 // red_eyes (MainCharacter), the one effect every level shows: added once at the
-// level's start and moved onto the character's face every frame.
+// level's start and moved onto the character's face every frame. And the level's
+// end and a death (11.3): the door's red suck and sparkles, blood where the
+// character or a minion was killed, and a skull where either fell.
 
 #include <string>
 
@@ -37,6 +39,10 @@ enum class Turn {
 struct Rule {
     std::string entity;       // the .ent it adds
     double offsetUnits = 0.0; // g_scale.scale(n) along the call's direction: n
+    // Or g_scale.scale of a fixed (x, y), added along no direction at all:
+    // levelFinishedEffect's (0, 16) below the door. A row states one or the other
+    // (offset_units is a number or a pair), never both.
+    glm::dvec2 offsetFixedUnits{0.0};
     double z = 0.0;           // the vector3's z
     // Whether the z went through g_scale.scale (level units) or is a bare literal
     // (the engine's units, which do not grow with the screen: 00_order 8.12b). The
@@ -107,6 +113,18 @@ struct Rules {
     Rule death;
     PlacedPortal placedPortal;
     EyeRule eyes; // MainCharacter's red_eyes.ent, on the character's face
+    // THE LEVEL'S END AND A DEATH (the visuals plan's 11.3). levelFinishedEffect's
+    // two, in its order: red_suck_effect.ent at the door plus a fixed offset, then
+    // red_sparkles.ent where the character stood.
+    Rule finishSuck;
+    Rule finishSparkles;
+    // blood.ent, at the victim's own vector3: the character killed by anything
+    // but a fall (checkGameLost), and a minion destroyed (ETHCallback_minion).
+    Rule blood;
+    // skull.ent: where the character fell out of the level, or under a minion a
+    // killer floor took - each held inside the view by skullInsetUnits.
+    Rule skull;
+    double skullInsetUnits = 0.0; // g_scale.scale(12)
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -185,5 +203,39 @@ glm::dvec3 EyeOffset(const EyeRule& rule, int drawnFrame, bool noGravity);
 // frame: at the character's point plus that offset, at the character's own depth
 // plus its z, turned 0 and at the rule's scale.
 Spawn RedEyes(const Rules& rules, const glm::dvec2& characterPx, double characterZ, int drawnFrame, bool noGravity);
+
+// ---- the level's end and a death (the visuals plan's 11.3) ---------------------
+
+// levelFinishedEffect(charPos, doorPos), called by checkGameEnd #34-47 with the
+// character's and the final door's GetPositionXY on the frame the two collide:
+// #2-39 the suck at the door plus g_scale.scale(vector2(0, 16)), #53-77 the
+// sparkles at the character. Both at a bare z 0, turned 0, at the script's size.
+Spawn FinishSuck(const Rules& rules, const glm::dvec2& doorPx);
+Spawn FinishSparkles(const Rules& rules, const glm::dvec2& characterPx);
+
+// AddScaledEntity('blood.ent', victim.GetPosition(), getScale()): the victim's
+// whole vector3, so its z is the victim's own depth (on the level's axis) plus the
+// row's 0, and AddScaledEntity's angle is 0.
+Spawn Blood(const Rules& rules, const glm::dvec2& victimPx, double victimZ);
+
+// Where checkGameLost puts the skull of a character that left the level
+// (#255-361), from the character's GetPositionXY, the camera's top-left corner
+// (GetCameraPos) and the screen's size (GetScreenSize), all on the level's axis:
+//   - with gravity, straight under it at the view's foot: (x, camera.y + screen.y
+//     - inset);
+//   - weightless, its point held inside the view (max(min(p, camera + screen),
+//     camera)) and then moved the inset toward the view's middle, along
+//     normalize(p - middle).
+glm::dvec2 FallSkullPoint(const Rules& rules, const glm::dvec2& characterPx, const glm::dvec2& cameraPx,
+                          const glm::dvec2& screenPx, bool noGravity);
+
+// Where ETHBeginContactCallback_enemy_killer puts one under a minion it takes
+// (#24-54): at the minion's x and the view's foot less the inset - the gravity
+// branch's point, whatever the level.
+glm::dvec2 KillerSkullPoint(const Rules& rules, double minionX, const glm::dvec2& cameraPx,
+                            const glm::dvec2& screenPx);
+
+// AddScaledEntity('skull.ent', vector3(point, 0), getScale()).
+Spawn Skull(const Rules& rules, const glm::dvec2& atPx);
 
 } // namespace MagicPortals::Effects

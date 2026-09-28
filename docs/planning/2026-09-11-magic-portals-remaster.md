@@ -17129,3 +17129,396 @@ of `build/build.ninja`: "no work to do".
 - **The brief's 25.2-25.6 u for the original's stone** is not reproduced (above); the band holds either way.
 - Batch 9 is closed. Carried, unchanged: the pictures the layer re-cuts do not take a node's scale (step 93; none of
   the 33 is one), and the unlit torches' vertical shift (step 92's deviation 2).
+
+## Step 96 - the level's end and a death as the script adds them: the red suck and sparkles at the door, blood where a character or a minion is killed, a skull where one falls, and blood's burst drawn as the multiply it is (built)
+
+The visuals plan's step 11.3 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 11; its brief
+`system_7.md` 7f-6; conflict K12). Track A, on MPR `main` in `build/`, after step 95 (`97ea5c6`). Changed:
+`game/data/effects.json`, `game/sim/Effects.{hpp,cpp}`, `game/sim/Minions.{hpp,cpp}`, `game/sim/Particles.{hpp,cpp}`,
+`game/MagicPortalsLayer.{hpp,cpp}`, `tests/test_mp_{effects,layer,minions,sprites}.cpp`, `docs/ethanon-formats.md` and
+the backlog. The engine submodule stays at `4bfcf67` and no file under `engine/` or `tools/` is touched; `out/levels`,
+`out/assets` and `out/data` are untouched. **When the character goes in at the door, the doorway now takes a red suck
+burst 16 units below the door's point and eight red sparks where it stood, and a red light comes up on the stones
+round it; a character killed by anything but a fall leaves `blood.ent` - a near-black burst and a dark puff that
+rises - and one that falls out of the level leaves a skull at the foot of the view under the fall; a minion leaves
+blood where it dies, and a skull too where a killer floor took it. `blood.ent`'s burst is the first `AM_MODULATE`
+system the port draws: through the loading screen's black-halo trick, generalised, with its colour's alpha set
+aside.** Closes the "door suck/sparkle effect and death burst/skull" part of the backlog's UI2 leftover.
+
+**TAKEN OVER.** A first implementer built this step and died when the session's login expired, before writing this
+record. The takeover reviewed its diff against the listing, the four `.ent` files and the engine source as its own
+work (every call site below re-read), found nothing to change in the source, and confirmed that `build/` is that
+source: a ninja dry run on a copy of `build/build.ninja` says "no work to do", `MagicPortals.exe` is `7adf5f3b`, and
+the first implementer's three builds (87, 5 and 5 steps) printed 0 warnings. Its captures were taken on an earlier
+link of the same work (`0064e0a3`; the last edit before the final link moved one statement in `buildEmitters` and
+changes nothing a level draws), so **every capture below was re-taken on `7adf5f3b`**: the 128-level sweep and every
+frame of every gate clip came out byte-identical to that first round (128 of 128; 301, 521, 581 and 85 of as many
+frames), which is kept in `out/parity/visuals/11.3/round1_0064e0a3/`.
+
+**FIX ROUND 1** (after the independent check, `out/parity/visuals/11.3/verify1/`). The check passed every gate but
+two: the F12 light row (NOT MET, medium) and four text points in this record (low). Its reading of the light - "the
+72 % plateau belongs to the light model (step 59)" - is **wrong, and this round shows why**: fitted to the frames, the
+port's light is as bright as the original's and follows the same rule; it stands somewhere else (the F12 light row,
+deviation 1). The same work found that what `GameStateController` adds draws a frame early and that the door frame's
+light is missing in the port, which F12 confirms frame by frame (deviation 8: recorded, not fixed, because the only
+correct fix is the effects runtime's). **No source changed, nothing was built and no exe was launched in this round**
+(0 Smart App Control refusals): `MagicPortals.exe` is still `7adf5f3b`, the diff still the same 16 files, so every
+capture and number below stands. The round's scripts and results are in `out/parity/visuals/11.3/fix1/`. The four text
+points are corrected where they stand: deviation 5, `test_mp_keys`, the title, and "comes on 2 frames late", replaced
+by the door frames' order below.
+
+**FIX ROUND 2** (after the second independent check, `out/parity/visuals/11.3/verify2/`). The check passed every gate
+but the F12 light row (NOT MET, medium) and filed three low points. **The light row stays NOT MET: no change inside this
+step can meet it**, which is the check's own finding ("no change to step 96's code") and this round's, with one more
+piece of evidence. The sparkles, and so their light, stand at x **679.011 u** on level0's door tick (`test_mp_layer`),
+the first tick past **693 - 4 - 10 = 679** (a tick's walk is about 2.7 u): the exit trigger's left edge (`door_ent_484`'s `trigger_size` is 8 wide) less the
+player capsule's radius (`data/player.json` `body.width_px` 20, **marked `_guess`**). So where the light stands is set
+by the port's exit test on a guessed body. The original's half stays INFERRED: `scaledCollide` (330954..331560) is a
+plain overlap of the two entities' absolute collision boxes, `door.ent`'s 8 wide too, and the character's box - the
+entity the script adds, not `level0.esc`'s `main_char` marker - is not decoded here. Three changes can move the row,
+none of them this step's: the exit test (GAMEPLAY, no batch owns it), R25's player half (the owner's), and the effects
+runtime's frame order (deviation 8, step 83's runtime with its own sweep). The row was re-read on this step's own gate
+clip (`fix2/light_fix2.py`): verify2's numbers to the hundredth. Of the three lows: the F12 sparkles row is reworded
+(the check was right: the count clause holds and the picture does not match); a `test_mp_layer` case now pins a
+strike's blood on 3-16; and the blood row's z guard is left for the next step that relinks the simulation (LEFT FOR
+LATER, with the reason). **Only `tests/test_mp_layer.cpp` changed**: the build relinked `test_mp_layer.exe` alone
+(`fdefe196`, 0 warnings, `fix2/build_layer.txt`), `MagicPortals.exe` is still `7adf5f3b`, so the sweep and every clip
+below stand. **Gameplay: none.** 1 launch, 0 refused.
+
+**THE THIRD CHECK, AND THE DECISION TO COMMIT (2026-09-28).** A third independent check
+(`out/parity/visuals/11.3/verify3/`) re-measured every gate on `7adf5f3b` with scripts of its own and reproduced this
+record: the light row to the hundredth (the right-hand stones 12.13-12.14, the left 27.96, the frames f192-f195 at
+0.65 / 0.67 / 0.67 / 12.14 against #139-#142 at 1.86 / 16.64 / 2.31 / 16.66, `verify3/f12_v3.json`); the character's
+cloak 8.2 u left of F12's on its last frame (f192 1,012.5 px against #139 1,035.5, `verify3/charx_v3.json`); the
+disc on a stricter box (peak 6,394 red px at +150 ms against 6,583 at +202), the skull (y 685.5-686.0, 48 x 40 from
++183 ms, zero at +0.811 s), blood (15,500 px at +300 ms against 11,154 at +331; the puff 79.7 against 84.1 px/s on a
+top-edge fit); its sweep byte-identical to this record's `after/sweep` (128 of 128), 125 of 128 against
+`9.3/after/sweep`; the four gate clips byte-identical frame for frame (301, 521, 581, 85). It re-measured the build as
+a compile-only /W4 run of the 8 changed translation units with `build.ninja`'s own flags: **0 warnings, 0 errors**
+(`verify3/compile_check.txt`), and a dry run on a copy of the manifest: no work to do. It ran the six suites once
+each, 0 failures, at the counts below. **138 launches (6 suites, 4 gate clips, 128 sweep captures), 0 refused.** It
+failed the step on the light row alone, and found with fix round 2 that no change inside this step can meet it. It
+filed two low points, both text: this paragraph, and a gameplay finding that is not this step's (the original
+checks the death before the door on one frame, `GameStateController::update` #110 `checkGameLost` then #113
+`checkGameEnd`, whose #21-32 refuse once `finishGame` (122645..122773 #3-8) has set `gameLost` and `gameFinished`;
+the port's `OnFixedUpdate` lets the door win) - filed as a backlog row for Goals and Hazards, LEFT FOR THE OWNER. **The step is committed WITH the nine
+recorded deviations below, under the owner's delegated decision.** Nothing was tuned, and the row that fails, fails
+in the record. The commit changed text only (this record and the backlog): no source, no build, no launch; its own
+dry run on a copy of `build/build.ninja` (the build's own dry run stops at CMake's glob re-check) says no work to do.
+
+**BLOCKERS CHECKED.** 11.3's blockers are footage F12 (the door) and F13 (a fall, and a fire death), both captured on
+2026-09-17 (`out/parity/footage/F12.md`, `F13.md`, every native frame under `footage/work/`). Section 8.13 has no row
+for 11.3, so section 7's row stands: "`red_suck_effect` at door + (0, 16), `red_sparkles`, `skull`; `blood` through a
+generalised `modulateImage`, with alpha forced to 1 for `alphaMode 4`; gates: unit: a grey g over d gives d.g/255
++- 1, with the Color0 alpha of 0.2 ignored; test counts; blockers F12, F13 (visual)". K12 and E6 carry the decode that
+makes an engine blend unnecessary. The baseline is step 95's after, `9.3/after/sweep`, whose 128 PNGs match the md5s
+its `capture.txt` logged; its binary `865c2d4b` no longer exists, so "today" below is HEAD `97ea5c6`'s source and that
+sweep.
+
+**THE OWNER'S STANDING RULINGS.** None of R1-R25 names this step. Two standing ones are used, not decided: **R10** (the
+character at the decoded z 4, 1.422 on the level's axis), the depth blood takes at the character, and **R12** (the 720
+selection), whose 720 / 256 = 2.8125 is the factor a bare literal is divided by. R1, R2, R22 and R23 are not built.
+**R24 and R25 (step 76) remain the owner's to rule**; this step applies neither further: a minion's blood is at the
+entity point R24/R25 already use, and the character's sparkles and blood are at its capsule centre, the player half R25
+left open (deviation 2).
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; the entities under
+`reference/extracted/assets/entities/`).
+- **`GameStateController::checkGameEnd`** (125613..126638) #15-32: on the frame `scaledCollide(finalDoor, character)`
+  holds, the game neither lost nor finished; #34-47 `levelFinishedEffect(character.GetPositionXY(),
+  finalDoor.GetPositionXY())` (pushed last-first); only then #49-54 `Hide`, and the velocity zeroed.
+- **`levelFinishedEffect`** (338001..338422): #12 the angle `PshC4 0f`; #13 the z, a bare `0f`; #14-22
+  `vector2(0f, g_scale.scale(16f))` - the 16 through the scale, and the y; #23-39 `AddEntity('red_suck_effect.ent',
+  vector3(doorPos + that, 0), 0, ..., getScale())`; #53-77 `AddEntity('red_sparkles.ent', vector3(charPos, 0), 0, ...,
+  getScale())`; #91-93 `playFinalDoorSound`. Its other caller, `ETHCallback_dragon_knight` #336, is 2-32's victory
+  cutscene, which the port does not build (`dragon.json` `knight._note`).
+- **`GameStateController::checkGameLost`** (123759..125310), two exclusive branches. **hp** (#3-25: `hp <= 0` and not
+  hidden): #27-43 `AddScaledEntity('blood.ent', character.GetPosition(), getScale())` - the whole vector3, so the
+  character's own z - then `Hide`, `Scale(0.05)`, `finishGame`. **Fall** (#118-190: `GetPositionXY` past `maxPos` or
+  short of `minPos`, and not finished): `playDieByFallSound`, `Hide`, #256-266 `GetCameraPos()` (the view's top-left)
+  and `GetScreenSize()`; with gravity #340-361 the skull at `(charPos.x, cameraPos.y + screenSize.y - scale(12))`;
+  weightless #273-339 at `max(min(charPos, cameraPos + screenSize), cameraPos) - normalize(charPos - screenMiddle) x
+  scale(12)` (`min`/`max` are `utilMath`'s per-component helpers, 317463..318043); #362-365 `startEarthquake(eqValue,
+  0)`, eqValue 20, or 5 weightless (#271, #338); #367-382 `AddScaledEntity('skull.ent', vector3(skullPos, 0f),
+  getScale())`.
+- **`ETHCallback_minion`** (427194..433047) #1473-1504: a minion that finds itself `isDestroyed` adds `blood.ent` at its
+  `GetPosition()` and deletes itself. What destroys one: a killer floor (`ETHBeginContactCallback_enemy_killer`,
+  436701..437083: #9-14 `destroy(other)`, #16-18 `startEarthquake(20, ...)`, #24-60 `skull.ent` at
+  `(other.GetPosition().x, screenSize.y + cameraPos.y - scale(12), 0)`) and a shock diamond's strike
+  (`ETHCallback_shock_diamond` #542-547 `destroy(enemy)`). So a strike leaves blood only; a killer floor, a skull on
+  the contact and blood on the minion's next update.
+- **The entities.** `red_suck_effect.ent`: no sprite, no light; one `inverted_explosion.bmp` cut 10 x 1, additive,
+  repeat 1, played by age, life 500, size 64, `angleStart` 180, `<StartPoint>` (-20, 0, 30), colour (1, 0.3, 0.3).
+  `red_sparkles.ent`: 8 `sparkles.bmp` at once, additive, life 1050 (rand 1150), size 22 (rand 16), growth -0.4,
+  `<StartPoint>` z 30, `<RandStartPoint>` (20, 32), (1, 0.3, 0.3, 1) to black; a `<Light>` of range 68, colour
+  (2, 0, 0) at (0, -16, -15), no halo. `blood.ent`: sys0 8 `blackexplosion.png` 4 x 3 at once, **`alphaMode` 4**, life
+  750 (rand 350), size 64, colour (1, 1, 1, **0.2**) to (1, 1, 1, 1); sys1 8 `strong_particle.png`, `alphaMode` 0, life
+  2400 (rand 1000), black 0.8 to 0, rising `(0, -0.4)`. `skull.ent`: 1 `skull.png`, `alphaMode` 0, life 800, size 1
+  growing 1.8 to `maxSize` 22, (1, 1, 1, 0.7) to 0, luminance 1. All four have a repeat and no sprite: temporary, freed
+  by the engine.
+- **`AM_MODULATE`** is `glBlendFunc(GL_ZERO, GL_SRC_COLOR)` (`gs2d/src/Video/GLES2/GLES2Video.cpp:796-799`): the target
+  times `texel.rgb x colour.rgb`, no alpha anywhere. `finalAmbient` stays (1, 1, 1) for it (`ETHParticleManager.cpp:381-389`
+  lifts only `AM_PIXEL` and `AM_ALPHA_TEST`), and the colour's alpha only decides whether a particle is drawn at all
+  (`:375`, `particle.color.w <= 0.0f`). Written into `docs/ethanon-formats.md` 7.6 with those citations.
+- **The first frames of what `GameStateController` adds** (fix round 1; `docs/ethanon-formats.md` 7.3). `checkGameEnd`
+  and `checkGameLost` run in the scene-update callback: `Game::start` #20-49 hands `LOOP` to `LoadScene`'s
+  `onSceneUpdate` (`ETHScriptWrapper.Scene.cpp:637-642`), and `loop` (312880..313283) #7 `runCurrentLoopFunction` ->
+  `BaseState::loop` #6 -> `GameControllerManager::update` #22 -> `GameStateController::update` #113. `ETHScene::Update`
+  runs that callback AFTER the always-active entities' update (`ETHScene.cpp:467-474`) and BEFORE the frame's list is
+  mapped (`:482`, `:574`), which is where a light's brightness is read (`ETHEntityRenderingManager.cpp:110-116`,
+  `ETHSpriteEntity.cpp:595-608`). An added temporary entity is appended to the always-active list (`ETHScene.cpp:289`,
+  `ETHActiveEntityHandler.cpp:56-61`, `:70-74`), after that frame's walk. And an `allAtOnce` system's count starts at
+  `nParticles` (`ETHParticleManager.cpp:110-117`); each update resets it and counts before it releases (`:199`,
+  `:209-213`). So on the door frame D `red_sparkles`' light is on at full with nothing released; on D+1 the first update
+  counts 0 - the light off - and releases, and the disc and the sparks are drawn for the first time; from D+2 the light
+  follows the count. **F12 shows exactly that**: #140, the first frame without the player, has the stones red and no
+  disc; #141 has the stones grey and the disc's and a spark's first frame; #142 is red again. The R - G gain on F12's
+  two patches is 17.1 / 14.9, then 2.8 / 0.6, then 19.5 / 15.0 (`fix1/light_lr.json`, sheet `fix1/door_frames.png`).
+  F12's "suspect, half-drawn" #141 is that D+1. The row of red dots at eye height on #140 cannot be `red_sparkles`,
+  because nothing is released on D; the character's frozen `red_eyes` (step 84) fit it - INFERRED.
+
+**WHAT WAS BUILT.**
+- **`game/data/effects.json`**: four rows with their `_source` - `red_suck_effect` (`offset_units` the pair `[0, 16]`,
+  z a bare 0), `red_sparkles` (z a bare 0), `blood` (z 0 over the victim's own depth, `scaled` true) and `skull` (z a
+  bare 0, and `inset_units` 12, the `g_scale.scale(12)` both callers hold it in by). `offset_units` is now a number
+  along the call's direction or, for `levelFinishedEffect` alone, a pair added along none.
+- **`sim/Effects`**: the reader takes the pair (`Rule::offsetFixedUnits`) and refuses it on every other row, and
+  refuses a missing or non-positive `inset_units`; `FinishSuck`, `FinishSparkles`, `Blood` (the victim's z added),
+  `FallSkullPoint` (both branches; `normalize` is the script's float one, `VanishDirection`), `KillerSkullPoint` and
+  `Skull`.
+- **`sim/Minions`**: `State::deaths`, cleared by `Tick` and written by `Cull` (a killer floor) and `Take` (a strike),
+  each with the minion's index and its ENTITY point (the body's centre less `EntityAboveCentrePx`, the point
+  `GetPosition()` reads and the patrol already measures from), taken before the body is destroyed. Nothing in the
+  simulation reads it (grep over `game/sim/`); `Cull` and `Take` are the only places a minion body is destroyed, and
+  `Game::AfterStep` calls both after the minions' `Tick`, so the frame reads the record its own tick wrote.
+- **`sim/Particles`**: `Drawable` accepts `AM_MODULATE` (`AM_ALPHA_TEST` and `AM_NONE`, which no `.ent` uses, are
+  still refused by name); `MultipliesExactly` (both ends' RGB white); `MultiplyTexels` (black at 255 - grey, refusing
+  the first texel that is not grey); `DrawColour` returns (0, 0, 0, 1) for a multiply, whatever the ambient and the
+  lerp.
+- **`MagicPortalsLayer`**: `loadingHaloImage` becomes `modulateImage(source)`, the file named for its path under the
+  original's files (`entities_black_halo_multiply.png`, `particles_blackexplosion_multiply.png`), reading three channels
+  and refusing a non-grey image by name; `particleTexture` chooses the texture in all three builders (`buildEmitters`,
+  `addEntityEmitters`, `SpawnEffect`): the multiply for an `AM_MODULATE` system, and a refusal by name for one that
+  would not be exact; `latchFinishEffects` (on the door tick, BEFORE the body is hidden: the suck at the door sprite's
+  entity point, `m_doorSprite`'s `ownerPx`, then the sparkles at the character) and `latchDeathEffects` (on the death
+  tick: the fall's skull, or the hp branch's blood at the character and `m_playerZ`); in `latchSimEffects`, per minion
+  death, a killer floor's skull and then the blood at the minion's entity point and its own depth (`matchMinions`'
+  `lookZ`: 2 / 2.8125 for a marker's minion, the escort's for a summoned one); `cameraCornerPx` (the follow keeps the
+  view's centre; Ethanon's camera is its top-left); `EffectReport::systemImage` for the suites.
+
+**THE MULTIPLY, AND WHY IT IS EXACT HERE.** A black texel at an alpha of 255 - g through the engine's ordinary mix gives
+`0 x a + d x (1 - a) = d x g / 255`, which is `GL_ZERO, GL_SRC_COLOR` over a grey texel and a white colour (E6:
+`blackexplosion.png` and `black_portal_particle.png` are grey to the last texel; all four `alphaMode 4` systems the
+original ships are white at both ends - `test_mp_sprites` checks both on the files). The colour's alpha must not weight
+it again, which is K12's rule: blood lerps 0.2 -> 1, and a kept 0.2 would draw the blackest texel over 200 at 160. It
+holds on a real frame because the port renders with `SceneEncoding::DisplayEncoded` (`MagicPortalsLayer.cpp:152`): the
+float target holds display values and blends in display space, as the original's fixed-point target did; the engine's
+default linear path would multiply in linear light and miss by tens of levels. The unit is measured on the engine's
+blend formula at 8 bits, not on a frame: the port's output is quantised to RGB565 (`lighting.json`
+`framebuffer_rgb565`), whose steps of 8 and 4 levels no captured pixel can resolve to +-1. The loading screen's black
+halo is unchanged: the generalised function writes `entities_black_halo_multiply.png` byte-identical to the old
+`black_halo_multiply.png` (md5 `3c0dd4e3`).
+
+**K13** needs no new row: the four are effects, and take `Slot::Effect`, `Slot::EffectHalo` and `Slot::EffectSystems`
+as step 83 left them; `TheBetweenSlotTableSaysWhereEachClassStands` is unchanged and green. **K8**: all four draw from
+`m_effectRandom` through `SpawnEffect`, so the placement stream is untouched - `AnEffectMovesNoParticleOfTheLevels`
+(step 83's check: a level's own emitters report the same values with an effect added) is green - and on a level where
+one of them fires, every later effect's spread moves against a run where it does not, the reading step 85 recorded.
+
+**THE GATES.** "Today" is HEAD `97ea5c6` and its sweep `9.3/after/sweep`. Captures, scripts and logs:
+`out/parity/visuals/11.3/` (`after/`, `gates/`, `logs/`, `logs2/`, `round1_0064e0a3/`). F12 and F13 are the step's
+blockers, "visual": their rows report what the two sets of frames give on the same measures, port against original.
+The F12 view is the original's to the pixel (the arch over the door template-matches at offset (0, 0), score 0.993). Times are from the door or death tick (the
+port) and from the first frame without the player (the original).
+
+| Gate | Required | Today | Measured |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in the first implementer's three builds (87 steps, then 5 and 5) and in the takeover's one relink of two suites; `build/` current with the source (a ninja dry run on a copy of the manifest: no work to do); `MagicPortals.exe` `7adf5f3b`; and fix round 2's build, `--target test_mp_layer` alone (its object and its link, `fix2/build_layer.txt`), 0 warnings, `MagicPortals.exe` still `7adf5f3b`; the third check: a compile-only /W4 run of the 8 changed units, 0 warnings, 0 errors (`verify3/compile_check.txt`), and a dry run, no work to do |
+| Unit: a grey g over d gives d g / 255 +- 1, Color0's alpha 0.2 ignored | +- 1 for every g and d | a multiply is refused (`test_mp_sprites`: "a multiply is refused, not mixed") | **passes** (`AMultiplyIsItsImagesAlphaAndNotItsColours`): **0 of 65,536 (g, d) pairs past 1, worst 0.498**, on the engine's mix at 8 bits with the colour `DrawColour` gives blood at birth - (0, 0, 0, 1) at three ambients; the 0.2 kept would leave black over 200 at 160, set aside 0; an alpha of 0 is still not drawn (`:375`). On the files: **4 of 4** `alphaMode 4` systems exact (`EveryMultiplyTheOriginalShipsIsExact`); the multiply written from `blackexplosion.png` black at 255 - grey texel for texel, and its eight burst quads mixed at (0, 0, 0, 1) (`test_mp_layer` `ADeathLeavesBloodDrawnAsAMultiply`) |
+| Test counts | the touched suites green, counts recorded | `test_mp_effects` 285 (step 87), `test_mp_sprites` 1,224 (step 95), `test_mp_minions` 99 (step 90), `test_mp_layer` 1,890 (step 94), `test_mp_diamonds` 126 | **passes, 0 failures each: `test_mp_effects` 339, `test_mp_sprites` 1,256, `test_mp_minions` 115, `test_mp_layer` 1,928 (**1,937** with fix round 2's strike case), `test_mp_diamonds` 126, and `test_mp_keys` 124** (in the independent check; below); the third check ran all six once each on the binaries in `build/`, the same counts, 0 failures (`verify3/suites/`); `test_mp_ghost` NOT RUN (Smart App Control) |
+| F12: `red_suck_effect` at the door (visual) | F12 4: a squashed red disc with rays and a smear to the left, #141-#153, strongest #146-#149 | not drawn | **matches**: the disc from the door frame on (the original's from the frame after, deviation 8); red pixels in the doorway box peak **13,190 at +150 ms** (original 13,228 at +202 ms); the smear left of the door frame over 2,000 px from **+33 to +383 ms** (original +99 to +386), peak 4,112 (3,500), under 1,000 by +550 (600 at +449); **the whole disc lands on the original's within 2 px** in the independent check's shift search (deviation 5). Sheet: `gates/sheet_f12.png` |
+| F12: `red_sparkles` (visual) | F12 4: at most 8 red star points, #155-#159 | not drawn | **the count clause holds; the picture does not match** (reworded in fix round 2, as the second check read it): a pool of 8, and 8 or fewer drawn. The spot count reads 8-16 over +467..+767 ms and 5 at +800 on the port and 13-3 over +449..+716 on the original, so that instrument over-counts on both sides. But the sparks stand about 8 u left and 4 u high of the original's - over the doorway's left edge, where F12's are centre-lower - which is deviation 1's cause, the character's point on the door tick; and they read as a few dim spots where #155-#159 show 5-8 distinct star points (`verify2/sheet_sparks.png`, `verify2/sheet_sparks_port_zoom.png`). The port's sparks linger to +800 against +716 |
+| F12: the red light (visual) | F12 4: on at the door frame; the right-hand stones' R - G 16.6-17.1, flat for 0.47 s, stepping to baseline by +1.23 s | none | **NOT MET as written, on two counts, neither of them this step's code** (deviations 1 and 8). **Brightness**: the right-hand stones read **12.13-12.14** flat to +533 ms, then 10.69, 9.35, 7.91, 6.46, 5.07, 3.62, 2.15 and baseline 0.67 at **+1,117 ms**; the original reads 16.6-17.1 and is gone at +1,234. The left-hand stones go the other way: over the unlit frame they gain **27.2 against the original's 17.3**, where the right-hand ones gain 11.5 against 15.1 (`fix1/light_lr.json`). A fit of both engines' light rule to window01's normal map puts the light at **(679.0, 186.25) u against (686.75, 190.25): 7.75 u left and 4.0 u high**. Its gain is **1,517 against 1,522** (the next row). The steps are **eighths in both**: the port's 7/8 down to 1/8, and the original's 8 -> 7 -> 6 -> 5 over +565..+631 ms (0.91, 0.75, 0.62 of its plateau), 4, 3, 2 over +998..+1,099 (0.52, 0.41, 0.24), then 1 at +1,202 and 0 at +1,234. F12's "thirds" are its eight random draws falling in three clumps. **The door frame**: the original's light is on at D (#140), off at D+1 (#141) and on from D+2 (#142); the port's is off at D (f193) and D+1 (f194) and on from D+2 (f195). Sheets: `fix1/door_frames.png`, `fix1/light_look.png`. **Fix round 2** re-read it on this step's own clip (`fix2/light_fix2.json`): the right-hand stones 12.14 flat, its seven steps at 0.873 down to 0.128 of the plateau, the door frames f193-f195 at 0.67 / 0.67 / 12.14 against #140-#142 at 16.64 / 2.31 / 16.66. And its x, 679.011 u, is on the first tick past 693 - 4 - 10 = 679, where the port's exit test fires (a tick's walk is about 2.7 u; FIX ROUND 2). **Still NOT MET; it is re-taken after the exit, R25 and the runtime's order** |
+| (fix round 1) the light's own gain and rule, where it stands | the port's light as bright as the original's at its own point, on the same rule | - | **passes**: `fix1/light_fit3.py` models each frame's R - G gain over its unlit frame (port f222 over f265, original #156 over #179) as gain x texel.r x (1 - d^2/68^2) x max(0, v.n/|v|), both engines' rule (`hPixelLightDiff.ps`; `shader.frag` `shadeSprite2D`), over 450 cells of 10 x 10 px on window01's stones. The door is at (889, 228) px in both (`fix1/door_align.py`, NCC 0.993 / 0.988). **Gain 1,517 against 1,522 (0.3 %), correlation 0.9996 / 0.9973, rms 0.44 / 0.90**; the height 3 u over the door is the best fit for both when left free. It gives back the measured patches: 27.18 / 11.25 against 27.22 / 11.46, and 17.55 / 15.01 against 17.28 / 15.06. With the port's gain at the original's point it predicts **14.97** on the right. By `fix1/light_attrib.py`, the x alone moved gives 15.83 and the y alone 10.61, so the x is the whole shortfall. A second pair (f224 / #155) gives the same points, and gain 1,517 / 1,521 |
+| F13: `skull` on a fall, 1-06 (visual) | F13 3.1: at the view's foot under the fall, 720 - 12 x 2.8125 = 686.25 px; full size 48 x 40 px about 0.135 s after its first frame; a linear fade to nothing about 0.83 s after it | not drawn | **matches**: centre y **685.5-686.0 px** on every full-size frame (original 685.5); x 386.5 px, the port's own fall x (the original's fell at 240.5: the walk, not this step); visible from the death frame (tick 413); **48 x 40 px from +183 ms**; fade **-207 grey levels/s, zero at +0.813 s**, last visible at +0.750 (original -222/s on the same fit, zero at +0.808 after its first frame). No shake (deviation 3). Sheet: `gates/sheet_fall.png` |
+| F13: `blood` on a fire death, 2-10 (visual) | F13 4.2: a near-black burst one frame after the character vanished, largest about 0.27-0.33 s in, mostly gone by 0.5 s; a dark puff rising about 85 px/s | not drawn | **matches in kind and time**: on the death frame (tick 382), 5,852 px under lum 45, mean lum 5.8 (original, one frame later at +65 ms: 5,047, 14.1); **peak 15,500 px at +300 ms**, mean lum 9.9 (11,154 at +331, 20.9); under half its peak from +567 ms (+467); **the puff's top rising 80.5 px/s** (84.3). Larger and darker than the original's by this measure, which counts pixels under lum 45 and so counts fewer where the original's `fire32` flames light the burst (deviation 4); centred 24 px left of the original's, where the port's character died on its fire agent (the hazard's reach, not this step). Sheet: `gates/sheet_fire.png` |
+| (widened) the 128-level f420 sweep, every change explained | against `9.3/after/sweep` | 128 PNGs, all matching their logged md5s | **125 of 128 byte-identical**, both sweeps' PNGs matching their logs 128 of 128 (1-01 `e2da5131`); **3 changed, all explained** (below): 2-12 and 2-32, the two levels whose character dies inside 420 frames with no input (ticks 180 and 285, in the before's logs as in the after's), and 3-09, where a minion meets a killer floor at about tick 91-95 - found, not predicted |
+| (widened) the takeover's round against the first | the same source draws the same frames | round 1 on `0064e0a3` | **byte-identical**: the sweep 128 of 128; the gate clips f12 301, fall2 521, fire2 581 and the 3-09 every-5 clip 85 of as many frames; the four measures' JSON identical (`round2_vs_round1.txt`) |
+| (widened) every level still runs, validation silent | 128 rc=0, validation active, 0 messages | 128 | **passes**: 128 of 128 rc=0, and the 4 gate clips rc=0; validation ACTIVE in all 132 logs, 0 messages |
+
+**THE THREE CHANGED LEVELS.**
+- **2-12** (3,398 px): 3,389 in one piece at (485-576, 523-602) px - a fireball in flight, whose `fireball.ent`
+  particles draw on `m_effectRandom` and spread differently because the character's blood at tick 180 drew from it
+  first; the blood itself is long over at f420. Plus 9 door-flame pixels (below).
+- **2-32** (23,059 px): the character dies on tick 285, and at f420, 2.25 s later, `blood.ent`'s smoke is still alive
+  (its lives are 1.9-2.9 s): a large, faint darkening over the ground at (17-281, 245-429) px, 21,157 px darker; and
+  the dragon's mouth fire, re-pooled on `m_effectRandom` since step 88, spreads differently. The burst itself is over.
+- **3-09** (99 px): the guard walks onto a killer floor with no input (its skull comes up at x 143-187, y 667-705 px
+  between f90 and f100 of `gates/check_3-09`), and by f420 skull and blood are over. What is left: 91 px at the
+  character's eye (868-883, 72-87) - `red_eyes.ent` draws its short-lived particles on `m_effectRandom` - and 8
+  door-flame pixels.
+- **The door-flame pixels** (deviation 9; 8 on 3-09, 9 on 2-12, inside the final door's own additive flame): **every one differs by
+  exactly one RGB565 level in exactly one channel** (5-bit R or B by 8, 6-bit G by 4). The mechanism is INFERRED from
+  the code, not measured: a level emitter destroys a particle's quad when the particle is not drawn and makes a new
+  one when it is (`stepEmitter`, `MagicPortalsLayer.cpp:983-1017`); the registry keeps components packed, and a removal
+  moves the last one into the hole; and the transparent sort breaks a tie at equal depth by gather order
+  (`RenderSystem::SortTransparentDraws`, engine `src/core/RenderSystem.cpp:158-176`). So effect quads coming and going
+  reorder the flame's equal-depth additive quads, and a different summation order rounds differently in the float
+  target. The flame's own particles do not move: that is K8's placement-stream check above. The merge of step 88
+  recorded the same class on 4-14 (15 RGB565-step pixels where the door glow meets effect quads).
+
+**THE SUITES**, run directly, once each, 0 failures, by the first implementer on the binaries now in `build/` (each log
+written after its exe's link and no exe relinked since; no log NUL-padded): **`test_mp_effects` 339** (285 before; the
+four rows and their refusals, the points, the fall skull at 686.25 px, the weightless branch and the killer floor's),
+**`test_mp_sprites` 1,256** (1,224; the unit above, the four `.ent` files as read, 4 of 4 multiplies exact),
+**`test_mp_minions` 115** (99; the death record: a killer floor's written at the entity point where the step left the
+body, a strike's at once, cleared by the next tick, nothing written twice), **`test_mp_layer` 1,928** (1,890; on level0
+the door frame adds the suck at the door (693, 177) + (0, 16) and then the sparkles where the character went in, with
+the light of 68 and no halo, both freed; on level5 a death area adds blood alone at the character, z 1.422, its burst
+on the multiply; on level1 a fall adds the skull alone at the view's foot; on level0b a killer floor adds a skull and
+then blood at the guard's entity point, z 0.711) and **`test_mp_diamonds` 126** (`Take`'s caller). `test_mp_layer` ran
+on the final link (`245e6de9`); the others were linked at 23:50-23:52 on 2026-09-27 and are the files in `build/`.
+**`test_mp_keys` 124**, a reader of the minions: Smart App Control refused its first launch in the takeover, and its
+one relink (`79187820`), not launched then to spare the owner a fourth notification, ran once in the independent check,
+accepted, 0 failures (`verify1/suites/test_mp_keys.txt`). **Not run: `test_mp_ghost`**, which reads the minions too
+(whose change is a record nothing in the sim reads): refused on its first launch and again after its one relink
+(`739d298c`). The full `ctest` was not run. Fix round 2: **`test_mp_layer` 1,937**, 0 failures, on its relink `fdefe196`
+(`fix2/test_mp_layer.txt`): one new case of 9 checks, `AMinionAStrikeTakesLeavesBloodAndNoSkull` - on level15b (3-16),
+the player on `shock_diamond_ent_1741` and minion 0 8 px away, the strike takes it on the second tick and the frame adds
+exactly one `blood.ent` and no `skull.ent`, at the minion's entity point (215.5, 113.17) and z 0.711, its burst on the
+multiply. It covers the layer's strike branch (`Death.byKiller` false), which only `test_mp_minions` pinned before.
+
+**SMART APP CONTROL.** The takeover: **3 refusals in 135 launches** - `test_mp_ghost` twice (its build's binary and its
+one relink), `test_mp_keys` once; the 128 sweep captures and the 4 gate clips on `7adf5f3b`, 0 refused. The first
+implementer's launches (its suites, its sweep, its six clips and two rechecks): none refused in its logs or its
+transcript. The independent check: its six suites (`test_mp_keys`' relink among them), its sweep and its clips on
+`7adf5f3b`, none refused. Fix round 1 launched nothing. The second check: 138 launches, none refused. Fix round 2: 1
+launch (`test_mp_layer`'s relink), none refused. The third check (`verify3/`): 138 launches (6 suites, 4 gate clips,
+128 sweep captures), none refused. The commit: none.
+
+**GAMEPLAY: none changed.** `Minions::State::deaths` is written by `Cull` and `Take` and read only by the layer; no
+simulation rule, body or order moves (125 of 128 levels byte-identical, and the three that change do so in effect
+pixels only).
+
+**RECORDED DEVIATIONS.** Nine, the fifth closed in fix round 1, and **this step is COMMITTED WITH THEM under the
+owner's delegated decision** (2026-09-28, after the third check). One gate row is NOT MET as written - the F12 red
+light (1) - and no change inside this step can meet it; the effects runtime's frame order is found and not fixed (8);
+and 17 sweep pixels are explained by inference only (9). Rows 1, 8 and 9 are the ones the decision names, each with
+what was required, what was measured, its attributed cause and its owning follow-up. **None is tuned.**
+1. **The F12 red light (visual; the gate row NOT MET as written).** **Required:** on at the door frame D; the
+   right-hand stones' R - G 16.6-17.1, flat for about 0.47 s; gone by about +1.23 s. **Measured**
+   (`verify3/f12_v3.json`): the door frames f192-f195 read **0.65 / 0.67 / 0.67 / 12.14**, against the original's
+   #139-#142 at **1.86 / 16.64 / 2.31 / 16.66**. The right patch is flat at **12.13-12.14** to +533 ms, then falls in
+   eighths (10.69, 9.35, 7.91, 6.46, 5.07, 3.62, 2.15) and is back to baseline 0.67 at **+1,117 ms**. The left patch
+   reads **27.96**, against the original's about 17.3. **Attributed cause:** the brightness and the rule are the
+   original's - fitted to both frames, the gain is **1,517 against 1,522**, correlation 0.9996 / 0.9973
+   (`fix1/light_fit3.py`), and both step in eighths of the eight sparks' live share (`Lighting::ParticleRatio`, step
+   59; `ETHSpriteEntity.cpp:595-608`), so nothing here is the lights' owner's - but the light stands **7.75 u left and
+   4.0 u high**: (679.0, 186.25) u against (686.75, 190.25). The fit puts the whole right-hand shortfall on the x (the
+   x alone moved gives 15.83, the y alone 10.61; `fix1/light_attrib.py`). The light's point is the character's on the
+   door tick, plus (0, -16). **The x is where the port's exit test fires**: the character is at **679.011 u** on the
+   door tick, the first tick past **693 - 4 - 10 = 679** (a tick's walk is about 2.7 u), the trigger's left edge
+   (`door_ent_484`'s `trigger_size` 8 wide) less the radius of a capsule whose width is a `player.json` `_guess`
+   (`body.width_px` 20). The character's cloak is **8.2 u left of F12's on its last frame** (f192 1,012.5 px against
+   #139 1,035.5 px; `verify3/charx_v3.json`, as `verify2/char_x.json`). The original's half stays INFERRED, not
+   compared box for box: `scaledCollide(finalDoor, character)` over the two entities' absolute collision boxes
+   (`checkGameEnd` #15-32; `utilCollide.angelscript` 330795..331560), the character's own box not decoded. **The 4.0 u
+   is R25's player half** (deviation 2). The original's light goes out at +1,234 and the port's at +1,117; that comes
+   from eight random sizes (14-30 u at -0.4 u a frame) and lives (475-1,625 ms), which no faithful build reproduces
+   draw for draw. **Owning follow-ups:** the backlog row "Order 11.3 finding, the character goes in at the door 7.75 u
+   left of the original's" (the exit test, a **GAMEPLAY** change, owner Goals); **R25** (the owner's to rule); and the
+   effects runtime's frame order (deviation 8). The same cause gives the F12 sparkles row its mismatched look (dim
+   spots at the doorway's left edge), although that row's count clause passes. **Re-take the row when any of the
+   three lands.**
+2. **The character's point is its capsule centre**, 22 u over its feet where the original's entity point is 18.1: the
+   sparkles and a character's blood sit about 3.9 u high. It is R25's player half, left to the owner by step 76, and
+   step 86's first deviation again. A minion's blood is at its entity point, as R24/R25 already measure it.
+3. **No `startEarthquake`** on this track: the fall's shake (20, or 5 weightless) and the killer floor's (20) are not
+   wired, and F13 shows the fall's starting on the skull's first frame. The earthquake is track B's (step 121 on
+   `visuals-d`); wiring these two callers is for the merge or after it.
+4. **No `fire32`**: section 5 names F13 for "11.3 `skull`, `blood`, `fire32`", but section 7's contents, `system_7`
+   7f-6 and 7f's other rows do not list it, so it has no step; F13's fire death shows flames round the burst that the
+   port does not draw (and that make the burst's measure differ, above). Not built here.
+5. **Closed in fix round 1: the suck's disc lands on the original's within 2 px.** The independent check's shift
+   search over thresholded redness gives the whole disc dx -2..0 and dy -2..+1 px on five of six frame pairs
+   (`verify1/disc_offset.json`). The
+   9 px (3.2 u) this record first gave came from a centroid box that took in the doorway's sparks (deviation 2). A
+   smear-only search differs by 13-14 px in x (24 on the earliest pair). That depends on the instrument's box and was
+   not investigated further.
+6. **Order within a tick.** A killer floor's skull and blood are queued on the one tick, skull first, where the
+   original adds the skull on the contact and the blood on the minion's next update, a frame apart; and a tick's other
+   effects (fireballs, blasts, teleports, minion deaths) are queued before the finish or death effects - the port's
+   order, not a decoded one. Either moves only the effect stream, never a placement.
+7. **Pinned in tests only**: the weightless skull point and the killer floor's skull have no capture against the
+   original (no footage of either; 3-09's sweep skull is the killer floor's, seen but not measured).
+8. **The effects runtime's frame order: what `GameStateController` adds draws a frame early, and the door frame's
+   light is missing** (fix round 1: found here, confirmed on F12, NOT fixed). **Required:** in the original, what
+   `GameStateController` adds is first drawn on D+1, and the door light is on at D, off at D+1 and on from D+2
+   (`ETHScene.cpp:467-474`; `ETHParticleManager.cpp:110-117`; WHAT THE ORIGINAL DOES, the first frames): the original
+   does not update an entity its scene-update callback adds until the next frame, and it reads a light at the count
+   the frame's own update took. **Measured:** the port draws the disc, the sparks, the fall skull and the character's
+   blood from D (f193, where the original's first frame is #141 = D+1), and its door light is off at D and D+1 and on
+   from D+2 (f193-f195 at 0.67 / 0.67 / 12.14, against #140-#142 at 16.64 / 2.31 / 16.66). **Attributed cause:** step
+   83's `updateEffects` steps an effect on its spawn frame and places its light before the step, from the step
+   before; from D+1 on the light's frames agree only because the two offsets cancel. **Owning follow-up:** the backlog
+   row "Order 11.3 deviation, what `GameStateController` adds draws a frame early, and the door frame's light is
+   missing". Not fixed here, because the only correct fix is the runtime's, and it has three parts:
+   (a) the light and halo placed after the step, as the level lights already are (`syncLights` after
+   `updateEmitters`);
+   (b) an `allAtOnce` system's count starting at its size (`ETHParticleManager.cpp:110-117`);
+   (c) the first update decided by where the adder runs. The scene-update callback's adds update a frame later. An
+   always-active entity's own callback's (the minion's blood, `ETHCallback_minion`) update in the same frame, INFERRED
+   from the `std::list` walk (`ETHActiveEntityHandler.cpp:119-142`). A contact callback's (the killer floor's skull) is
+   not traced.
+   It needs its own step and 128-level sweep, because part (a) alone moves every fireball's and explosion's light and
+   halo by a frame on every level that has one. Deferring the first step alone would put the door's light at D+3.
+   F13 cannot resolve a frame on the deaths' effects; F12 does on the door's.
+9. **Door-flame pixels (the sweep).** **Required:** every changed pixel explained. **Measured:** **17 pixels**, 9 on
+   2-12 and 8 on 3-09, inside the final door's additive flame, each **exactly one RGB565 level off in one channel**
+   (5-bit R or B by 8, 6-bit G by 4; `verify3/door_flame_px_v3.json`). **Attributed cause, INFERRED from the code and
+   not measured:** effect quads coming and going reshuffle the packed registry (a level emitter destroys a particle's
+   quad when the particle is not drawn and makes a new one when it is, `stepEmitter`, `MagicPortalsLayer.cpp:983-1017`;
+   a removal moves the last component into the hole), so equal-depth additive quads sum in a different order in the
+   transparent sort's tie-break (`RenderSystem::SortTransparentDraws`, engine `src/core/RenderSystem.cpp:158-176`) and
+   round differently in the float target. The flame's own particles do not move (K8's placement-stream check). The
+   same class was noted on 4-14 at the step-88 merge (15 RGB565-step pixels where the door glow meets effect quads).
+   **Owning follow-up:** none was open before this step; the backlog row "Order 11.3 deviation, door-flame pixels one
+   RGB565 level off" is filed with this commit, owner the effects runtime or the engine's transparent sort. It is
+   quantisation-level noise and does not block.
+
+**LEFT FOR THE OWNER.**
+- **Where the door's red light stands** (deviation 1), and with it the F12 light row, NOT MET after three checks and
+  re-taken once the three below are decided. Its x is the port's exit test on a guessed body (fix round 2: 679.011 u, the
+  first tick past 693 - 4 - 10 = 679). This is not for the lights' owner: where it stands, the light
+  is the original's to 0.3 %. Its 4.0 u height is R25's player half (deviation 2). Its 7.75 u to the left belongs to
+  the exit test (the backlog's new gameplay row). This round's fit checks either (`fix1/light_fit3.py`,
+  `fix1/door_align.py`, `fix1/light_attrib.py`, `fix1/light_lr.py`).
+- **The effects runtime's frame order** (deviation 8): which step takes parts (a)-(c), with its sweep.
+- **`fire32.ent`** (deviation 4): section 5 assigns it to 11.3 and section 7 does not; which step owns it.
+- **A death and the door on one frame** (the third check's low finding; GAMEPLAY, not this step's code and not
+  built): the original checks the death first - `GameStateController::update` #110 `checkGameLost`, then #113
+  `checkGameEnd`, whose #21-32 refuse once `finishGame` (#3-8) has set `gameLost` and `gameFinished` - so a character
+  that dies and reaches the door on one frame loses, with blood or the skull. The port's `OnFixedUpdate` takes the
+  `goals.completed` branch first and the door wins, drawing the suck and the sparks; its comment
+  (`MagicPortalsLayer.cpp:6541-6546`) says the order of two triggers in a frame is not defined. Filed as the backlog
+  row "Order 11.3 finding, the original checks a death before the door", owner Goals and Hazards; that comment changes
+  when the row is built.
+- **The door-flame pixels' order** (deviation 9): the effects runtime's or the engine's transparent sort's.
+
+**LEFT FOR LATER.**
+- **The blood row's z guard** (the second check's low finding, declined in fix round 2): `Effects::Blood` adds `blood.z`
+  to the victim's depth and sets `zScaled`, so a designer's non-zero bare literal would be added undivided by 2.8125.
+  Nothing today reads it wrong (the row is 0, `scaled` true). `LoadRules` should refuse a blood row whose z is not 0 or
+  not `scaled`, with a case in `test_mp_effects`' `ARowMissingAFactIsRefused`. Not built here: any `Effects.cpp` edit
+  relinks `MagicPortals.exe` and every suite, and a fresh binary means a fresh sweep, clips and suites under Smart App
+  Control for a guard that changes no frame. The next step that relinks the simulation carries it (11.4 builds on this
+  step's modulate).
+- The two `startEarthquake` callers (deviation 3), once the earthquake is on `main`.
+- 2-32's victory cutscene (`ETHCallback_dragon_knight`'s own `levelFinishedEffect`, at the knight), with the knight.
+- The minion's `playMinionFallSound` (`enemy_killer` #20-22) is not among the port's sounds.
+- A minion burnt by fire leaves blood too in the original (`ETHCallback_minion` #1464-1471 `destroy` and `addFlames`,
+  then the `isDestroyed` branch), but the port's fire never takes a minion (`minions.json`
+  `_burnable_breakable_not_wired`), so that death, and its blood, do not happen here. Gameplay, not this step's.
+- The backlog's UI2 leftover keeps its other three items (the finished screen's counter past golden + 2, the 3-09 and
+  4-01 popups, the pause's AchievementsPopup). 11.4 (the knights' aura) reuses `modulateImage` and `particleTexture` as
+  they are.

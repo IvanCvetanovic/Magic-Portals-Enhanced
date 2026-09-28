@@ -1597,6 +1597,23 @@ Both are skipped unless `spriteCut.x > 1 || spriteCut.y > 1`.
 `ETHParticleManager::MirrorX/Y` (`:453-471`) also negates each live particle's `dir` and `pos`.
 If the game mirrors entities, replicate by negating these fields — **not** by setting a node `scale.x = -1`.
 
+**The live count a light reads, and an added entity's first frames** (the remake's planning step 96, fix round 1).
+`GetNumActiveParticles` is `m_nActiveParticles`, which `CreateParticleSystem` sets to `nParticles` for an `allAtOnce`
+system and to 0 otherwise (`ETHParticleManager.cpp:110-117`), and which every `UpdateParticleSystem` resets to 0 and
+counts BEFORE it releases or advances anything (`:199`, `:209-213`; release `:219-230`): the particles released and of
+positive size as the previous update left them. A non-static owner's light is scaled by that count over `nParticles`
+(`ETHSpriteEntity::ComputeLightIntensity`, `ETHSpriteEntity.cpp:595-608`), read when the frame's list is mapped
+(`ETHEntityRenderingManager.cpp:110-116`, from `MapEntitiesToBeRendered`, `ETHScene.cpp:574`), which `ETHScene::Update`
+runs after the always-active entities' update (`:467-470`) and after the scene-update callback (`:473-474`, `:482`). A
+temporary entity the script adds is appended to the always-active list (`ETHScene.cpp:289`,
+`ETHActiveEntityHandler.cpp:56-61`, `:70-74`). One added from the scene-update callback - Magic Portals' `loop`, where
+`GameStateController::update` runs - is appended after that frame's walk (`:119-142`), so it is mapped but not updated
+on the frame it is added. For such an `allAtOnce` entity with a `<Light>` the frames go: added - the light at full (the
+initial count), nothing drawn; the next - the first update counts 0, then releases: the light off, the particles drawn
+for the first time; the one after - the count whole, the light on. Footage F12 shows exactly that at 1-01's door
+(#140, #141, #142). One added from an always-active entity's own callback is appended to the list that walk is on,
+and so is updated in the same frame - INFERRED from the `std::list` iteration, not traced on a capture.
+
 ### 7.4 Entity scale propagates into particle values
 `ETHSpriteEntity::LoadParticleSystem` (`:293-322`, scale at `:316`):
 `particleScale = (GetScale().x + GetScale().y) / 2.0f` → `m_system.Scale(scale)`
@@ -1676,6 +1693,17 @@ finalColor = particle.color * Vector4(finalAmbient, 1);
 `(1,1,1)` ⇒ ignores scene ambient (full bright); `(0,0,0)` ⇒ fully ambient-modulated. **Dead under `AM_ADD`.**
 Cross-tab over 54 shipped systems: `(1,1,1)`+ADD 38 (inert), **`(0,0,0)`+PIXEL 14 (LIVE)**, `(1,1,1)`+PIXEL 1,
 `(0,0,0)`+ADD 1. So it cannot be dropped — 14 systems genuinely darken with scene ambient.
+
+**`AM_MODULATE` particles read neither the ambient nor any alpha when they blend** (the remake's planning step 96).
+`finalAmbient` stays `(1,1,1)` for them (the test above names only `AM_PIXEL` and `AM_ALPHA_TEST`), and the GLES2
+blend is `glBlendFunc(GL_ZERO, GL_SRC_COLOR)` (`gs2d/src/Video/GLES2/GLES2Video.cpp:796-799`): the target is multiplied
+by `texel.rgb × particle.color.rgb` and nothing else. The colour's alpha only decides whether a particle is drawn at all,
+through the `particle.color.w <= 0.0f` skip (`ETHParticleManager.cpp:375`) - so `black_fade.ent`, whose `Color0` alpha
+is 0, is skipped on its first frame, and `blood.ent`'s burst, lerping its alpha 0.2 → 1, is drawn at full strength from
+the start. The original's four `alphaMode="4"` systems (`black_fade`, `blood`, `dragon_knight`, `ghost_minion`, the
+entities' own files) are white at both ends of the lerp and draw `blackexplosion.png` or `black_portal_particle.png`,
+which are grey at every texel (r = g = b, checked with stb_image in `test_mp_sprites`), so a black texel at an alpha of
+255 − grey through an ordinary alpha blend is the same multiply exactly.
 
 ### 7.7 Texture side effects and shaders
 - `alphaMode == AM_ADD` changes how the texture is loaded: `graphics->GetPointer(…, cutOutBlackPixels =

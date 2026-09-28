@@ -162,6 +162,113 @@ void TheRowsAreTheDecodedCalls() {
     CHECK_EQ(eyes.z, 1.0);
     CHECK_EQ(eyes.scale, 1.0);
     CHECK(eyes.hideWithPlayer);
+
+    // The level's end and a death (the visuals plan's 11.3). levelFinishedEffect
+    // #12-39: AddEntity('red_suck_effect.ent', vector3(doorPos + vector2(0f,
+    // scale(16)), 0f), 0f, ..., getScale()) - the one fixed offset any row carries,
+    // and not along a direction.
+    const Effects::Rule& finishSuck = rules.finishSuck;
+    CHECK_MSG(finishSuck.entity == "red_suck_effect.ent", "finish suck: " + finishSuck.entity);
+    CHECK_EQ(finishSuck.offsetUnits, 0.0);
+    CHECK_MSG(finishSuck.offsetFixedUnits == glm::dvec2(0.0, 16.0),
+              "16 units below the door: " + At(finishSuck.offsetFixedUnits));
+    CHECK_MSG(finishSuck.z == 0.0 && !finishSuck.zScaled, "finish suck: z a bare 0");
+    CHECK(finishSuck.turn == Effects::Turn::Fixed && finishSuck.angleDeg == 0.0 && finishSuck.scale == 1.0);
+    // #53-77: AddEntity('red_sparkles.ent', vector3(charPos, 0f), 0f, ..., getScale()).
+    const Effects::Rule& finishSparkles = rules.finishSparkles;
+    CHECK_MSG(finishSparkles.entity == "red_sparkles.ent", "finish sparkles: " + finishSparkles.entity);
+    CHECK(finishSparkles.offsetUnits == 0.0 && finishSparkles.offsetFixedUnits == glm::dvec2(0.0));
+    CHECK_MSG(finishSparkles.z == 0.0 && !finishSparkles.zScaled, "finish sparkles: z a bare 0");
+    CHECK(finishSparkles.turn == Effects::Turn::Fixed && finishSparkles.angleDeg == 0.0 && finishSparkles.scale == 1.0);
+    // AddScaledEntity('blood.ent', victim.GetPosition(), getScale()): the victim's own
+    // vector3, so the row's z is 0 over the victim's depth.
+    const Effects::Rule& blood = rules.blood;
+    CHECK_MSG(blood.entity == "blood.ent", "blood: " + blood.entity);
+    CHECK(blood.offsetUnits == 0.0 && blood.offsetFixedUnits == glm::dvec2(0.0));
+    CHECK_MSG(blood.z == 0.0 && blood.zScaled, "blood: 0 over the victim's own depth");
+    CHECK(blood.turn == Effects::Turn::Fixed && blood.angleDeg == 0.0 && blood.scale == 1.0);
+    // AddScaledEntity('skull.ent', vector3(point, 0f), getScale()), the point held
+    // g_scale.scale(12) inside the view.
+    const Effects::Rule& skull = rules.skull;
+    CHECK_MSG(skull.entity == "skull.ent", "skull: " + skull.entity);
+    CHECK(skull.offsetUnits == 0.0 && skull.offsetFixedUnits == glm::dvec2(0.0));
+    CHECK_MSG(skull.z == 0.0 && !skull.zScaled, "skull: z a bare 0");
+    CHECK(skull.turn == Effects::Turn::Fixed && skull.angleDeg == 0.0 && skull.scale == 1.0);
+    CHECK_EQ(rules.skullInsetUnits, 12.0);
+}
+
+// ---- the level's end and a death (the visuals plan's 11.3) ------------------------
+
+void TheLevelsEndAndADeathLandWhereTheScriptPutsThem() {
+    const Effects::Rules rules = TheRules();
+
+    // levelFinishedEffect(charPos, doorPos): the suck 16 below the door, the
+    // sparkles on the character, both unturned at the script's size.
+    const glm::dvec2 door(736.0, 184.0);
+    const glm::dvec2 character(712.5, 196.25);
+    const Effects::Spawn suck = Effects::FinishSuck(rules, door);
+    CHECK_MSG(suck.entity == "red_suck_effect.ent" && suck.atPx == glm::dvec2(736.0, 200.0) && suck.z == 0.0 &&
+                  !suck.zScaled && suck.angleDeg == 0.0f && suck.scale == 1.0,
+              "the suck at the door plus (0, 16): " + At(suck.atPx));
+    const Effects::Spawn sparkles = Effects::FinishSparkles(rules, character);
+    CHECK_MSG(sparkles.entity == "red_sparkles.ent" && sparkles.atPx == character && sparkles.z == 0.0 &&
+                  !sparkles.zScaled && sparkles.angleDeg == 0.0f,
+              "the sparkles on the character: " + At(sparkles.atPx));
+
+    // Blood at the victim's own vector3: the character at z 4 / 2.8125 (art.json),
+    // a marker's minion at 2 / 2.8125.
+    for (const double victimZ : {4.0 / 2.8125, 2.0 / 2.8125}) {
+        const Effects::Spawn blood = Effects::Blood(rules, character, victimZ);
+        CHECK_MSG(blood.entity == "blood.ent" && blood.atPx == character && blood.z == victimZ && blood.zScaled &&
+                      blood.angleDeg == 0.0f && blood.scale == 1.0,
+                  "blood at the victim, its depth the victim's: z " + Num(blood.z));
+    }
+
+    // THE FALL, with gravity (checkGameLost #340-361): straight under the character
+    // at the view's foot less 12 - on 1-06, a view 256 u tall whose top is at 0,
+    // that is 244 u, 686.25 px at 720 (footage F13: 685.5).
+    const glm::dvec2 screen(1280.0 / 2.8125, 256.0);
+    const glm::dvec2 camera(0.0, 0.0);
+    const glm::dvec2 fell(84.3, 402.0);
+    const glm::dvec2 under = Effects::FallSkullPoint(rules, fell, camera, screen, false);
+    CHECK_MSG(under == glm::dvec2(84.3, 244.0), "the skull under the fall: " + At(under));
+    CHECK_MSG(Near(under.y * 2.8125, 686.25, 1e-9), "686.25 px at 720: " + Num(under.y * 2.8125));
+    // Its x is the character's own and is NOT held inside the view.
+    const glm::dvec2 wide = Effects::FallSkullPoint(rules, glm::dvec2(-30.0, 300.0), glm::dvec2(10.0, 20.0), screen, false);
+    CHECK_MSG(wide == glm::dvec2(-30.0, 264.0), "x as it fell, y the view's foot: " + At(wide));
+
+    // WEIGHTLESS (#273-339): the point held inside the view, then moved the inset
+    // toward the view's middle along normalize(p - middle).
+    const glm::dvec2 middle = camera + screen / 2.0;
+    const auto weightless = [&](const glm::dvec2& at) {
+        const glm::dvec2 held = glm::max(glm::min(at, camera + screen), camera);
+        const glm::dvec2 d = at - middle;
+        const double length = std::sqrt(d.x * d.x + d.y * d.y);
+        return held - (length > 0.0 ? d / length : glm::dvec2(0.0)) * 12.0;
+    };
+    for (const glm::dvec2& at : {glm::dvec2(500.0, 128.0), glm::dvec2(100.0, 300.0), glm::dvec2(-40.0, -60.0),
+                                 glm::dvec2(200.0, 100.0)}) {
+        const glm::dvec2 got = Effects::FallSkullPoint(rules, at, camera, screen, true);
+        const glm::dvec2 want = weightless(at);
+        CHECK_MSG(Near(got.x, want.x, 1e-4) && Near(got.y, want.y, 1e-4),
+                  "weightless from " + At(at) + ": " + At(got) + " for " + At(want));
+    }
+    // Off the right edge at the middle's height: held to the edge, then 12 back in.
+    const glm::dvec2 right = Effects::FallSkullPoint(rules, glm::dvec2(500.0, 128.0), camera, screen, true);
+    CHECK_MSG(Near(right.x, screen.x - 12.0, 1e-4) && Near(right.y, 128.0, 1e-4), "12 in from the edge: " + At(right));
+    // At the middle itself normalize gives zero, so it is not moved at all.
+    CHECK(Effects::FallSkullPoint(rules, middle, camera, screen, true) == middle);
+
+    // A KILLER FLOOR's (enemy_killer #24-54): the minion's x and the view's foot,
+    // whatever the level's gravity.
+    const glm::dvec2 killer = Effects::KillerSkullPoint(rules, 321.5, glm::dvec2(100.0, 40.0), screen);
+    CHECK_MSG(killer == glm::dvec2(321.5, 284.0), "under the minion, 12 over the view's foot: " + At(killer));
+    const Effects::Spawn skull = Effects::Skull(rules, killer);
+    CHECK_MSG(skull.entity == "skull.ent" && skull.atPx == killer && skull.z == 0.0 && !skull.zScaled &&
+                  skull.angleDeg == 0.0f && skull.scale == 1.0,
+              "skull.ent at its point, z a bare 0");
+    std::printf("  the end and a death: suck %s, skull under a fall %s (%.2f px), weightless off the edge %s\n",
+                At(suck.atPx).c_str(), At(under).c_str(), under.y * 2.8125, At(right).c_str());
 }
 
 // ---- the eyes -----------------------------------------------------------------
@@ -560,6 +667,24 @@ void ARowMissingAFactIsRefused() {
     refused("no_eye_hide.json", "\"hide_with_player\": true,", "", "red_eyes.hide_with_player");
     refused("eye_shown.json", "\"hide_with_player\": true,", "\"hide_with_player\": false,",
             "red_eyes.hide_with_player");
+    // The level's end and a death (11.3): each row there, the pair only where the
+    // decode put one, and the skull's inset.
+    refused("no_finish_suck.json", "\"red_suck_effect\": {", "\"red_suck_gone\": {", "red_suck_effect");
+    refused("no_finish_sparkles.json", "\"red_sparkles\": {", "\"red_sparkles_gone\": {", "red_sparkles");
+    refused("no_blood.json", "\"blood\": {", "\"blood_gone\": {", "blood");
+    refused("no_skull.json", "\"skull\": {", "\"skull_gone\": {", "skull");
+    refused("short_pair.json", "\"offset_units\": [0, 16],", "\"offset_units\": [16],", "red_suck_effect.offset_units");
+    refused("suck_turned.json", "\"entity\": \"red_suck_effect.ent\",\n    \"offset_units\": [0, 16],\n    \"z\": "
+                                "{\"value\": 0, \"scaled\": false},\n    \"angle\": 0,",
+            "\"entity\": \"red_suck_effect.ent\",\n    \"offset_units\": [0, 16],\n    \"z\": {\"value\": 0, "
+            "\"scaled\": false},\n    \"angle\": \"toward_traveller_minus_90\",",
+            "red_suck_effect");
+    refused("paired_blood.json", "\"entity\": \"blood.ent\",\n    \"offset_units\": 0,",
+            "\"entity\": \"blood.ent\",\n    \"offset_units\": [0, 16],", "blood");
+    refused("paired_suck.json", "\"entity\": \"suck_effect.ent\",\n    \"offset_units\": 32,",
+            "\"entity\": \"suck_effect.ent\",\n    \"offset_units\": [0, 32],", "suck_effect");
+    refused("no_inset.json", "\"inset_units\": 12,", "", "skull.inset_units");
+    refused("no_room.json", "\"inset_units\": 12,", "\"inset_units\": 0,", "skull.inset_units");
 
     Effects::Rules rules;
     std::string why;
@@ -580,6 +705,7 @@ int main() {
     ThePortalsOwnThreeCallsArePointsAndNothingElse();
     TheManagerColoursTheFirstTwoAndBlanksALonePortal();
     TheKillFadeIsNineTenthsAFrame();
+    TheLevelsEndAndADeathLandWhereTheScriptPutsThem();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

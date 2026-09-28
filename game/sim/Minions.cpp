@@ -24,6 +24,15 @@ glm::dvec2 PxOf(entt::registry& registry, entt::entity body) {
     return Units::ToPixels(registry.get<TransformComponent>(body).position);
 }
 
+// The original's entity point of a minion's body, the one its GetPosition() reads:
+// the centre less EntityAboveCentrePx, as the patrol measures it. A body with no
+// transform has no point, and is recorded at its centre's zero rather than read.
+glm::dvec2 EntityPointOf(entt::registry& registry, entt::entity body, const Rules& rules) {
+    const auto* transform = registry.try_get<TransformComponent>(body);
+    if (transform == nullptr) return glm::dvec2(0.0, 0.0);
+    return Units::ToPixels(transform->position) - glm::dvec2(0.0, rules.EntityAboveCentrePx());
+}
+
 // A node's metadata as a number. The converter QUOTES the original's custom data
 // - metadata/holdTime = "4000" - and Value::AsNumber reads that as readily as a
 // bare one, so a hold needs no unquoting of its own.
@@ -196,6 +205,9 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
 }
 
 void State::Tick(entt::registry& registry, float dt) {
+    // Taken first, as Turrets::Tick takes its spent fireballs: what the tick
+    // after this one destroys is what the layer reads next, and the last is gone.
+    deaths.clear();
     const double ms = static_cast<double>(dt) * 1000.0;
     const float speed = Units::ToMetres(SpeedPxPerSecond());
 
@@ -283,12 +295,14 @@ void State::Tick(entt::registry& registry, float dt) {
 
 std::vector<entt::entity> State::Cull(entt::registry& registry) {
     std::vector<entt::entity> removed;
-    for (Minion& minion : minions) {
+    for (std::size_t i = 0; i < minions.size(); ++i) {
+        Minion& minion = minions[i];
         if (minion.gone || minion.body == entt::null || !registry.valid(minion.body)) continue;
         for (const Killer& killer : killers) {
             if (!Trigger::Overlaps(registry, minion.body, killer.box)) continue;
             minion.gone = true;
             ++killed;
+            deaths.push_back(Death{i, EntityPointOf(registry, minion.body, rules), true});
             registry.destroy(minion.body);
             removed.push_back(minion.body);
             break;
@@ -301,11 +315,15 @@ std::vector<entt::entity> State::Take(entt::registry& registry, const std::vecto
     std::vector<entt::entity> removed;
     for (const entt::entity body : bodies) {
         if (body == entt::null) continue;
-        for (Minion& minion : minions) {
+        for (std::size_t i = 0; i < minions.size(); ++i) {
+            Minion& minion = minions[i];
             if (minion.gone || minion.body != body) continue;
             minion.gone = true;
             ++taken;
-            if (registry.valid(minion.body)) registry.destroy(minion.body);
+            if (registry.valid(minion.body)) {
+                deaths.push_back(Death{i, EntityPointOf(registry, minion.body, rules), false});
+                registry.destroy(minion.body);
+            }
             removed.push_back(minion.body);
             break;
         }

@@ -60,9 +60,12 @@
 #include "sim/UiLayer.hpp"
 #include "sim/Units.hpp"
 
+#include <stb_image.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -9120,6 +9123,368 @@ void AnEffectMovesNoParticleOfTheLevels() {
     b.OnDetach(withEffect);
 }
 
+// ---- the level's end and a death (the visuals plan's 11.3) ----------------------
+
+// The effects a frame added after `before`, by id, in the order they were added.
+std::vector<MagicPortalsLayer::EffectReport> AddedAfter(const MagicPortalsLayer& layer, int before) {
+    std::vector<MagicPortalsLayer::EffectReport> added;
+    for (int id = before + 1; id <= layer.EffectsSpawned(); ++id) {
+        const MagicPortalsLayer::EffectReport one = ByIdIn(layer.EffectReports(), id);
+        if (one.id != 0) added.push_back(one);
+    }
+    return added;
+}
+
+// THE DOOR: checkGameEnd calls levelFinishedEffect(character, door) on the frame
+// the two collide - red_suck_effect.ent 16 below the door's own point, then
+// red_sparkles.ent where the character went in, its red light with it. Queued by
+// the door tick and added on the frame after, as every effect is.
+void TheDoorAddsTheRedSuckAndTheSparkles() {
+    if (!OriginalArtIsThere("TheDoorAddsTheRedSuckAndTheSparkles")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    // Walked there a tick at a time, drawing every frame, so what the door frame
+    // adds is told apart from the teleports on the way.
+    int door = -1;
+    int before = 0;
+    glm::dvec2 wentInPx(0.0);
+    for (int tick = 1; tick <= 600 && door < 0; ++tick) {
+        before = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, {});
+        if (layer.Finishing()) {
+            door = tick;
+            wentInPx = playerPx(registry, layer);
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(door > 0, "holding right reaches level0's door");
+    if (door < 0) return;
+    const std::vector<MagicPortalsLayer::EffectReport> added = AddedAfter(layer, before);
+    const MagicPortalsLayer::DoorReport doorPicture = layer.DoorPicture();
+    const auto find = [&added](const char* entity) {
+        for (const MagicPortalsLayer::EffectReport& one : added) {
+            if (one.entity == entity) return one;
+        }
+        return MagicPortalsLayer::EffectReport{};
+    };
+    const MagicPortalsLayer::EffectReport suck = find("red_suck_effect.ent");
+    const MagicPortalsLayer::EffectReport sparkles = find("red_sparkles.ent");
+    CHECK_MSG(suck.id != 0 && sparkles.id != 0 && suck.id < sparkles.id,
+              "the door frame adds the suck and then the sparkles: " + std::to_string(added.size()) + " added");
+    if (suck.id == 0 || sparkles.id == 0) return;
+    CHECK_MSG(glm::distance(suck.atPx, doorPicture.atPx + glm::dvec2(0.0, 16.0)) < 1e-9,
+              "the suck 16 below the door's own point: " + Point(suck.atPx) + " for " + Point(doorPicture.atPx));
+    CHECK_MSG(glm::distance(sparkles.atPx, wentInPx) < 1e-9,
+              "the sparkles where the character went in: " + Point(sparkles.atPx) + " for " + Point(wentInPx));
+    CHECK_MSG(suck.zUnits == 0.0 && sparkles.zUnits == 0.0, "both at a bare 0");
+    CHECK_MSG(suck.temporary && sparkles.temporary && !suck.drawn && !sparkles.drawn,
+              "both temporary, neither with a sprite");
+    CHECK_MSG(suck.systems == 1 && suck.pool == 1 && !suck.systemSizePx.empty() && suck.systemSizePx.front() == 64.0,
+              "the suck: one 64-unit burst");
+    CHECK_MSG(sparkles.systems == 1 && sparkles.pool == 8, "the sparkles: eight");
+    CHECK_MSG(sparkles.hasLight && !sparkles.hasHalo && NearD(sparkles.lightRange, 68.0),
+              "and their red light of 68, with no halo: " + std::to_string(sparkles.lightRange));
+    // In front of every picture at or below the <StartPoint> z 30 they both carry.
+    CHECK_MSG(!suck.systemZ.empty() && suck.systemZ.front() > layer.PlayerSlotZ(),
+              "the burst in front of the doorway: " + std::to_string(suck.systemZ.empty() ? 0.0f : suck.systemZ.front()));
+
+    // And both go by themselves: the burst's one life is 500 ms and the sparkles'
+    // longest 1625, so two seconds of frames is past both - before the medal.
+    for (int frame = 0; frame < 120; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(ByIdIn(layer.EffectReports(), suck.id).id == 0 && ByIdIn(layer.EffectReports(), sparkles.id).id == 0,
+              "both freed once their particles are over");
+    std::printf("  level0's door on tick %d: suck at %s under the door at %s, sparkles at %s, light %.0f\n", door,
+                Point(suck.atPx).c_str(), Point(doorPicture.atPx).c_str(), Point(sparkles.atPx).c_str(),
+                sparkles.lightRange);
+    layer.OnDetach(registry);
+}
+
+// A DEATH THAT IS NOT A FALL: checkGameLost's hp branch adds blood.ent at the
+// character's whole vector3 - its point and its own depth - and blood's black
+// burst is the first AM_MODULATE system anything draws: its particles on the
+// multiply made from blackexplosion.png, black at 255 - grey, at a colour whose
+// alpha is 1 whatever the 0.2 it lerps from.
+void ADeathLeavesBloodDrawnAsAMultiply() {
+    if (!OriginalArtIsThere("ADeathLeavesBloodDrawnAsAMultiply")) return;
+    // The multiply is written once and kept, so a stale one from an earlier build
+    // would be read rather than made: this case makes it.
+    std::error_code ec;
+    const std::filesystem::path made = TestPaths().prisms / "particles_blackexplosion_multiply.png";
+    std::filesystem::remove(made, ec);
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level5");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Hazards::Hazard* hazard = layer.SimLevel()->hazards.FindHazard("death_area_ent_800");
+    CHECK(hazard != nullptr);
+    if (hazard == nullptr) return;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const int before = layer.EffectsSpawned();
+    auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+    transform.position = glm::vec3(hazard->box.centre, transform.position.z);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.Dying() && !layer.SimLevel()->hazards.diedByFalling, "killed, and not by a fall");
+    const glm::dvec2 diedAtPx = playerPx(registry, layer);
+    CHECK_MSG(layer.EffectsSpawned() == before, "nothing added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const std::vector<MagicPortalsLayer::EffectReport> added = AddedAfter(layer, before);
+    CHECK_MSG(added.size() == 1 && added.front().entity == "blood.ent",
+              "the frame adds blood.ent and nothing else: " + std::to_string(added.size()));
+    if (added.size() != 1) return;
+    const MagicPortalsLayer::EffectReport blood = added.front();
+    CHECK_MSG(glm::distance(blood.atPx, diedAtPx) < 1e-9, "at the character: " + Point(blood.atPx));
+    CHECK_MSG(NearD(blood.zUnits, 4.0 / 2.8125, 1e-9), "at the character's own depth: " + std::to_string(blood.zUnits));
+    CHECK_MSG(blood.temporary && !blood.drawn && !blood.hasLight && blood.systems == 2 && blood.pool == 16,
+              "temporary, no sprite, no light, two systems of eight");
+    CHECK_MSG(blood.systemImage.size() == 2 && EndsWith(blood.systemImage[0], "particles_blackexplosion_multiply.png") &&
+                  EndsWith(blood.systemImage[1], "strong_particle.png"),
+              "the burst on the multiply, the smoke on its own bitmap: " +
+                  (blood.systemImage.empty() ? std::string("none") : blood.systemImage[0]));
+    if (blood.systemImage.size() == 2) {
+        // The multiply as written: black at 255 - grey, texel for texel of the file
+        // the loader draws.
+        const std::string source = std::string(MAGICPORTALS_ORIGINAL_DIR) + "/particles/blackexplosion.png";
+        int w = 0, h = 0, n = 0, mw = 0, mh = 0, mn = 0;
+        stbi_uc* grey = stbi_load(source.c_str(), &w, &h, &n, 3);
+        stbi_uc* multiply = stbi_load(blood.systemImage[0].c_str(), &mw, &mh, &mn, 4);
+        int wrong = -1;
+        if (grey != nullptr && multiply != nullptr && w == mw && h == mh) {
+            wrong = 0;
+            for (int i = 0; i < w * h; ++i) {
+                const stbi_uc* m = multiply + static_cast<std::ptrdiff_t>(i) * 4;
+                if (m[0] != 0 || m[1] != 0 || m[2] != 0 || m[3] != 255 - grey[static_cast<std::ptrdiff_t>(i) * 3]) ++wrong;
+            }
+        }
+        if (grey != nullptr) stbi_image_free(grey);
+        if (multiply != nullptr) stbi_image_free(multiply);
+        CHECK_MSG(wrong == 0, "blackexplosion.png's " + std::to_string(w) + " x " + std::to_string(h) +
+                                  " texels, each black at 255 - grey: " + std::to_string(wrong) + " not");
+    }
+    // Its quads: the burst's at (0, 0, 0, 1), the smoke's at its own black 0.8.
+    bool burstColoured = true;
+    int burstQuads = 0;
+    for (const entt::entity quad : blood.particleQuads) {
+        const auto& material = registry.get<MaterialComponent>(quad);
+        if (!EndsWith(material.albedoTexturePath, "_multiply.png")) continue;
+        ++burstQuads;
+        if (material.albedoColor != glm::vec4(0.0f, 0.0f, 0.0f, 1.0f) ||
+            material.blend != MaterialComponent::BlendMode::Alpha) {
+            burstColoured = false;
+        }
+    }
+    CHECK_MSG(burstQuads == 8 && burstColoured,
+              "eight burst quads, mixed, at (0, 0, 0, 1): " + std::to_string(burstQuads));
+    // And it goes by itself: the smoke's longest life is 2900 ms.
+    for (int frame = 0; frame < 200; ++frame) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(ByIdIn(layer.EffectReports(), blood.id).id == 0, "freed once both pools are over");
+    std::printf("  level5: blood at %s z %.3f, its burst on %s\n", Point(blood.atPx).c_str(), blood.zUnits,
+                blood.systemImage.empty() ? "nothing" : blood.systemImage[0].c_str());
+    layer.OnDetach(registry);
+}
+
+// A FALL: checkGameLost's other branch adds skull.ent, not blood - with gravity at
+// the fall's x and 12 units over the view's foot, where the view is as the last
+// tick left the camera.
+void AFallLeavesASkullAtTheViewsFoot() {
+    if (!OriginalArtIsThere("AFallLeavesASkullAtTheViewsFoot")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level1");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const int before = layer.EffectsSpawned();
+    auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+    const glm::vec3 below = MagicPortals::Units::ToWorld(256.0, 400.0);
+    transform.position = glm::vec3(below.x, below.y, transform.position.z);
+    const glm::dvec2 view = layer.ViewPx();
+    // The camera the death is read against is the one the LAST tick left: the
+    // tick that finds the fall latches it before its own follow moves.
+    const glm::dvec2 cornerPx = layer.CameraCentrePx() - view / 2.0;
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.Dying() && layer.SimLevel()->hazards.diedByFalling, "a fall");
+    // No step has moved the body since the death was found on this tick.
+    const glm::dvec2 fellAtPx = playerPx(registry, layer);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const std::vector<MagicPortalsLayer::EffectReport> added = AddedAfter(layer, before);
+    CHECK_MSG(added.size() == 1 && added.front().entity == "skull.ent",
+              "the frame adds skull.ent and nothing else: " + std::to_string(added.size()));
+    if (added.size() != 1) return;
+    const MagicPortalsLayer::EffectReport skull = added.front();
+    const glm::dvec2 want(fellAtPx.x, cornerPx.y + view.y - 12.0);
+    CHECK_MSG(glm::distance(skull.atPx, want) < 1e-6,
+              "under the fall, 12 over the view's foot: " + Point(skull.atPx) + " for " + Point(want));
+    CHECK_MSG(NearD(view.y, 256.0, 1e-9), "a view 256 units tall");
+    CHECK_MSG(skull.zUnits == 0.0 && skull.temporary && skull.systems == 1 && skull.pool == 1,
+              "one skull at a bare 0, temporary");
+    std::printf("  level1: fell at %s, skull at %s\n", Point(fellAtPx).c_str(), Point(skull.atPx).c_str());
+    layer.OnDetach(registry);
+}
+
+// A MINION A KILLER FLOOR TAKES: enemy_killer's skull at the view's foot under
+// it, then its own callback's blood where it stood - both from the one tick, in
+// that order.
+void AMinionTheFloorTakesLeavesASkullAndBlood() {
+    if (!OriginalArtIsThere("AMinionTheFloorTakesLeavesASkullAndBlood")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortals::Minions::Minion* guard = layer.SimLevel()->minions.FindMinion("minion_spawn_913");
+    CHECK(guard != nullptr);
+    if (guard == nullptr || guard->body == entt::null) return;
+    const entt::entity body = guard->body;
+    {
+        auto& transform = registry.get<TransformComponent>(body);
+        const glm::vec3 at = MagicPortals::Units::ToWorld(1152.0, 448.0);
+        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+    }
+    // The record itself is cleared by the tick that reads it (the minions' Tick
+    // runs after the latch), so what is read from outside is the camera the tick
+    // before left - the one the latch reads - and the body where the physics step
+    // left it, between the step and the layer's tick: put inside the solid floor,
+    // the solver moves it out by tens of pixels, so tickWith is taken apart here.
+    const double above = layer.SimLevel()->minions.rules.EntityAboveCentrePx();
+    int before = layer.EffectsSpawned();
+    glm::dvec2 cornerPx(0.0);
+    glm::dvec2 lastBodyPx(0.0);
+    for (int tick = 0; tick < 5 && registry.valid(body); ++tick) {
+        before = layer.EffectsSpawned();
+        cornerPx = layer.CameraCentrePx() - layer.ViewPx() / 2.0;
+        PhysicsSystem::Update(registry, MagicPortalsLayer::kTick);
+        if (registry.valid(body)) {
+            lastBodyPx = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position);
+        }
+        Input::TickInput input;
+        input.mousePosition = kRest;
+        Input::BeginReplayedTick(input);
+        layer.OnFixedUpdate(registry, MagicPortalsLayer::kTick);
+        Input::EndReplayedTick();
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(!registry.valid(body), "the floor took the guard");
+    const std::vector<MagicPortalsLayer::EffectReport> added = AddedAfter(layer, before);
+    CHECK_MSG(added.size() == 2 && added[0].entity == "skull.ent" && added[1].entity == "blood.ent",
+              "a skull and then blood: " + std::to_string(added.size()));
+    if (added.size() != 2) return;
+    const glm::dvec2 diedAtPx = added[1].atPx;
+    const glm::dvec2 entityPx = lastBodyPx - glm::dvec2(0.0, above);
+    CHECK_MSG(glm::distance(diedAtPx, entityPx) < 1e-9,
+              "the blood at its entity point: " + Point(diedAtPx) + " for " + Point(entityPx));
+    const glm::dvec2 want(diedAtPx.x, cornerPx.y + layer.ViewPx().y - 12.0);
+    CHECK_MSG(glm::distance(added[0].atPx, want) < 1e-6,
+              "the skull under it at the view's foot: " + Point(added[0].atPx) + " for " + Point(want));
+    CHECK_MSG(NearD(added[1].zUnits, 2.0 / 2.8125, 1e-9),
+              "at the minion's own depth, the raw 2 over the factor: " + std::to_string(added[1].zUnits));
+    std::printf("  level0b: a guard on the killer floor - skull at %s, blood at %s\n", Point(added[0].atPx).c_str(),
+                Point(added[1].atPx).c_str());
+    layer.OnDetach(registry);
+}
+
+// A body put down at a point, at rest - test_mp_diamonds' PutAt.
+void PutBodyAt(entt::registry& registry, entt::entity body, const glm::dvec2& atPx) {
+    const glm::vec3 world = MagicPortals::Units::ToWorld(atPx.x, atPx.y);
+    auto& transform = registry.get<TransformComponent>(body);
+    transform.position = glm::vec3(world.x, world.y, transform.position.z);
+    if (registry.all_of<RigidBodyComponent>(body)) registry.get<RigidBodyComponent>(body).velocity = glm::vec3(0.0f);
+}
+
+// A MINION A STRIKE TAKES: ETHCallback_shock_diamond #542-547 destroy(enemy), and
+// the minion's own callback then finds itself destroyed and adds blood.ent at its
+// point - and no skull, which only a killer floor's contact callback adds. On 3-16
+// (level15b, footage F14's strike), as test_mp_diamonds strikes: the player on the
+// diamond and a minion 8 px away, taken on one frame and striking on the next.
+void AMinionAStrikeTakesLeavesBloodAndNoSkull() {
+    if (!OriginalArtIsThere("AMinionAStrikeTakesLeavesBloodAndNoSkull")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level15b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    const MagicPortals::Diamonds::Diamond* diamond = level.diamonds.Find("shock_diamond_ent_1741");
+    CHECK_MSG(diamond != nullptr, "level15b places shock_diamond_ent_1741");
+    CHECK_MSG(!level.minions.minions.empty() && level.minions.minions[0].body != entt::null,
+              "level15b spawns minions: " + std::to_string(level.minions.minions.size()));
+    if (diamond == nullptr || level.minions.minions.empty() || level.minions.minions[0].body == entt::null) return;
+    const glm::dvec2 lyingAt = diamond->atPx;
+    const entt::entity minion = level.minions.minions[0].body;
+    const int killedBefore = level.minions.killed;
+    // As the killer floor's case reads it: the body where the physics step left
+    // it, between the step and the layer's tick, which is where Take finds it.
+    const double above = level.minions.rules.EntityAboveCentrePx();
+    int before = layer.EffectsSpawned();
+    int ticks = 0;
+    glm::dvec2 lastBodyPx(0.0);
+    for (; ticks < 4 && registry.valid(minion); ++ticks) {
+        before = layer.EffectsSpawned();
+        PutBodyAt(registry, level.player, lyingAt);
+        PutBodyAt(registry, minion, glm::dvec2(lyingAt.x + 8.0, lyingAt.y));
+        PhysicsSystem::Update(registry, MagicPortalsLayer::kTick);
+        lastBodyPx = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(minion).position);
+        Input::TickInput input;
+        input.mousePosition = kRest;
+        Input::BeginReplayedTick(input);
+        layer.OnFixedUpdate(registry, MagicPortalsLayer::kTick);
+        Input::EndReplayedTick();
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    // How many ticks it takes is test_mp_diamonds' to pin (taken on one, striking
+    // on the next); here it is only printed.
+    CHECK_MSG(!registry.valid(minion), "the strike took the minion within " + std::to_string(ticks) + " tick(s)");
+    CHECK_MSG(level.minions.taken == 1 && level.minions.killed == killedBefore,
+              "by the strike, not a floor: taken " + std::to_string(level.minions.taken) + ", killed " +
+                  std::to_string(level.minions.killed - killedBefore));
+    if (registry.valid(minion)) return;
+    const std::vector<MagicPortalsLayer::EffectReport> added = AddedAfter(layer, before);
+    int bloods = 0;
+    int skulls = 0;
+    std::string names;
+    MagicPortalsLayer::EffectReport blood{};
+    for (const MagicPortalsLayer::EffectReport& one : added) {
+        names += " " + one.entity;
+        if (one.entity == "blood.ent") {
+            ++bloods;
+            blood = one;
+        }
+        if (one.entity == "skull.ent") ++skulls;
+    }
+    CHECK_MSG(bloods == 1 && skulls == 0, "one blood.ent and no skull.ent: added" + names);
+    if (bloods != 1) return;
+    const glm::dvec2 entityPx = lastBodyPx - glm::dvec2(0.0, above);
+    CHECK_MSG(glm::distance(blood.atPx, entityPx) < 1e-9,
+              "the blood at its entity point: " + Point(blood.atPx) + " for " + Point(entityPx));
+    CHECK_MSG(NearD(blood.zUnits, 2.0 / 2.8125, 1e-9),
+              "at the minion's own depth, the raw 2 over the factor: " + std::to_string(blood.zUnits));
+    CHECK_MSG(!blood.systemImage.empty() && EndsWith(blood.systemImage[0], "particles_blackexplosion_multiply.png"),
+              "its burst on the multiply: " + (blood.systemImage.empty() ? std::string("none") : blood.systemImage[0]));
+    std::printf("  level15b: a minion struck on tick %d - blood at %s z %.3f, added:%s\n", ticks,
+                Point(blood.atPx).c_str(), blood.zUnits, names.c_str());
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheBetweenSlotTableSaysWhereEachClassStands();
@@ -9137,6 +9502,11 @@ void runTests() {
     ABombsBlastLeavesALargeExplosion();
     ATeleportAddsTheSuckTheSparklesAndTheFlash();
     AnEffectMovesNoParticleOfTheLevels();
+    TheDoorAddsTheRedSuckAndTheSparkles();
+    ADeathLeavesBloodDrawnAsAMultiply();
+    AFallLeavesASkullAtTheViewsFoot();
+    AMinionTheFloorTakesLeavesASkullAndBlood();
+    AMinionAStrikeTakesLeavesBloodAndNoSkull();
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();

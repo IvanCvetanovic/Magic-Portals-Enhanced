@@ -2228,10 +2228,114 @@ void AnAddedParticleIgnoresItsAlpha() {
     CHECK_MSG(!Particles::Drawn(sparkle, p, false), "and never once its lives are spent");
 
     CHECK_MSG(Particles::Drawable(sparkle) && Particles::Drawable(water), "added and mixed are drawn");
+    // A multiply is drawn too since planning step 96 - as its multiply image, not
+    // mixed - and the two modes no .ent uses are still refused by name.
     Particles::System modulate = sparkle;
     modulate.alphaMode = Particles::kAlphaModulate;
     modulate.additive = false;
-    CHECK_MSG(!Particles::Drawable(modulate), "a multiply is refused, not mixed");
+    CHECK_MSG(Particles::Drawable(modulate), "a multiply is drawn, as the multiply it is");
+    Particles::System tested = sparkle;
+    tested.alphaMode = Particles::kAlphaTest;
+    tested.additive = false;
+    CHECK_MSG(!Particles::Drawable(tested), "AM_ALPHA_TEST, which no .ent uses, is refused");
+    tested.alphaMode = 3;
+    CHECK_MSG(!Particles::Drawable(tested), "and AM_NONE");
+}
+
+// AM_MODULATE AS A MULTIPLY (the visuals plan's 11.3; 00_order E6, K12): the
+// original blends GL_ZERO, GL_SRC_COLOR (GLES2Video.cpp:796-799), dst x texel x
+// colour and no alpha anywhere. The port draws a black texel at an alpha of
+// 255 - grey through its ordinary mix - BlendMode::Alpha is BlendEquation::Mix
+// (engine RenderSystem.cpp:193-194), src x srcAlpha + dst x (1 - srcAlpha)
+// (VulkanPipeline.cpp:44, 63-67), a particle quad's unlit colour the texel times
+// albedoColor, rgb and alpha alike (shader.frag:511, 535-536) - so a grey g over
+// d gives d g / 255, PROVIDED the colour's own alpha does not weight it again:
+// blood.ent's is 0.2 at birth.
+void AMultiplyIsItsImagesAlphaAndNotItsColours() {
+    // blood.ent's sys0, as its file states it.
+    Particles::System blood;
+    blood.alphaMode = Particles::kAlphaModulate;
+    blood.additive = false;
+    blood.count = 8;
+    blood.repeat = 1;
+    blood.lifeTimeMs = 750.0;
+    blood.size = 64.0;
+    blood.maxSize = 1000.0;
+    blood.colour0 = glm::dvec4(1.0, 1.0, 1.0, 0.2);
+    blood.colour1 = glm::dvec4(1.0, 1.0, 1.0, 1.0);
+    Particles::Particle born;
+    born.released = true;
+    born.size = 64.0;
+    born.lifeMs = 750.0;
+    born.colour = blood.colour0;
+
+    // Its colour: (0, 0, 0, 1) whatever the ambient and whatever the lerp says.
+    for (const glm::dvec3& ambient : {glm::dvec3(0.01), glm::dvec3(0.6, 0.5, 0.4), glm::dvec3(1.0)}) {
+        const glm::dvec4 c = Particles::DrawColour(blood, born, ambient);
+        CHECK_MSG(c == glm::dvec4(0.0, 0.0, 0.0, 1.0),
+                  "a multiply's colour is (0, 0, 0, 1): its alpha 0.2 set aside, " + std::to_string(c.a));
+    }
+    // But whether it is drawn is still the lerp's: an alpha of 0 is skipped
+    // (:375), which is black_fade.ent's first frame.
+    CHECK_MSG(Particles::Drawn(blood, born, false), "blood's burst is drawn at birth");
+    Particles::Particle faded = born;
+    faded.colour.a = 0.0;
+    CHECK_MSG(!Particles::Drawn(blood, faded, false), "and a multiply at alpha 0 is not drawn at all");
+
+    // Exact only for a white colour at both ends.
+    CHECK_MSG(Particles::MultipliesExactly(blood), "blood's (1, 1, 1) -> (1, 1, 1) multiplies exactly");
+    Particles::System tinted = blood;
+    tinted.colour1 = glm::dvec4(1.0, 0.3, 0.3, 1.0);
+    CHECK_MSG(!Particles::MultipliesExactly(tinted), "a tinted one does not: one alpha cannot carry three numbers");
+
+    // THE IMAGE: every grey 0-255 as black at 255 - grey.
+    std::vector<unsigned char> rgb;
+    for (int g = 0; g <= 255; ++g) {
+        for (int k = 0; k < 3; ++k) rgb.push_back(static_cast<unsigned char>(g));
+    }
+    std::vector<unsigned char> rgba;
+    CHECK_MSG(Particles::MultiplyTexels(rgb.data(), 256, rgba) && rgba.size() == 256u * 4u,
+              "256 greys make 256 texels");
+    int wrongTexels = 0;
+    for (int g = 0; g <= 255 && rgba.size() == 256u * 4u; ++g) {
+        const std::size_t at = static_cast<std::size_t>(g) * 4u;
+        if (rgba[at] != 0 || rgba[at + 1] != 0 || rgba[at + 2] != 0 || rgba[at + 3] != 255 - g) ++wrongTexels;
+    }
+    CHECK_MSG(wrongTexels == 0, std::to_string(wrongTexels) + " texels are not black at 255 - grey");
+    std::vector<unsigned char> coloured = {10, 10, 10, 10, 11, 10};
+    CHECK_MSG(!Particles::MultiplyTexels(coloured.data(), 2, rgba) && rgba.empty(),
+              "a texel that is not grey refuses the image");
+
+    // THE UNIT (00_order section 7, 11.3): a grey g over d gives d g / 255 +- 1, with
+    // Color0's alpha of 0.2 ignored. The mix, on 8 bits, as the target is written:
+    // every g against every d. The source's colour is the black texel times the
+    // drawn colour, 0 either way.
+    const auto mixed = [](int d, int alphaByte, double colourAlpha, double rgbOut) {
+        const double a = static_cast<double>(alphaByte) / 255.0 * colourAlpha;
+        return std::lround(rgbOut * a + static_cast<double>(d) * (1.0 - a));
+    };
+    const glm::dvec4 drawn = Particles::DrawColour(blood, born, glm::dvec3(0.3));
+    double worst = 0.0;
+    int over = 0;
+    for (int g = 0; g <= 255; ++g) {
+        for (int d = 0; d <= 255; ++d) {
+            const long got = mixed(d, 255 - g, drawn.a, 0.0);
+            const double want = static_cast<double>(d) * static_cast<double>(g) / 255.0;
+            const double off = std::fabs(static_cast<double>(got) - want);
+            worst = std::max(worst, off);
+            if (off > 1.0) ++over;
+        }
+    }
+    CHECK_MSG(over == 0, std::to_string(over) + " of 65,536 (g, d) pairs off d g / 255 by more than 1; worst " +
+                             std::to_string(worst));
+    // And the reason the alpha had to go: weighted by the 0.2 it lerps from, the
+    // blackest texel over 200 leaves 160, not 0.
+    const long lerped = mixed(200, 255, blood.colour0.a, 0.0);
+    CHECK_MSG(lerped == 160, "with the 0.2 kept, black over 200 is " + std::to_string(lerped) + ", not 0");
+    CHECK_MSG(mixed(200, 255, drawn.a, 0.0) == 0, "with it set aside, black over 200 is 0");
+    std::printf("  a multiply: every grey over every d within %.3f of d g / 255 (0 of 65,536 past 1); the 0.2 kept "
+                "would leave black over 200 at %ld\n",
+                worst, lerped);
 }
 
 // 2d: a system draws in its entity's own slot, after the halo's quarter and
@@ -2882,6 +2986,105 @@ void TheEffectsAreTheirEnts() {
                   "sys1, the ring: 2 -> 2.8, growth 7.5 -> 10.5");
         CHECK_MSG(large.systems[0].size == 128.0, "the entity's own systems stay as the file states them");
     }
+
+    // THE LEVEL'S END AND A DEATH (the visuals plan's 11.3): four more, each a
+    // sprite-less temporary the engine frees.
+    const Art::Entity finishSuck = load("red_suck_effect.ent");
+    CHECK_MSG(finishSuck.sprite.empty() && finishSuck.systems.size() == 1 && finishSuck.Temporary() &&
+                  !finishSuck.light,
+              "red_suck_effect: no sprite, one system, temporary, no light");
+    if (finishSuck.systems.size() == 1) {
+        const Particles::System& s = finishSuck.systems.front();
+        CHECK_MSG(s.bitmap == "inverted_explosion.bmp" && s.count == 1 && s.repeat == 1 && s.columns == 10 &&
+                      s.rows == 1 && s.additive && s.size == 64.0 && s.lifeTimeMs == 500.0 && s.angleStart == 180.0 &&
+                      s.startPoint == glm::dvec2(-20.0, 0.0) && s.startPointZ == 30.0 &&
+                      s.colour0 == glm::dvec4(1.0, 0.3, 0.3, 1.0) && s.colour1 == s.colour0,
+                  "its burst: suck_effect's sheet in red, turned 180, 20 to the left and 30 above");
+    }
+    const Art::Entity finishSparkles = load("red_sparkles.ent");
+    CHECK_MSG(finishSparkles.sprite.empty() && finishSparkles.systems.size() == 1 && finishSparkles.Temporary(),
+              "red_sparkles: no sprite, one system, temporary");
+    CHECK_MSG(finishSparkles.light && finishSparkles.light->range == 68.0 &&
+                  finishSparkles.light->colour == glm::dvec3(2.0, 0.0, 0.0) &&
+                  finishSparkles.light->offset == glm::dvec3(0.0, -16.0, -15.0) && finishSparkles.light->halo.empty(),
+              "its light: range 68, (2, 0, 0), 16 up and 15 below, and no halo");
+    if (finishSparkles.systems.size() == 1) {
+        const Particles::System& s = finishSparkles.systems.front();
+        CHECK_MSG(s.bitmap == "sparkles.bmp" && s.count == 8 && s.allAtOnce && s.repeat == 1 && s.additive &&
+                      s.lifeTimeMs == 1050.0 && s.randomLifeTimeMs == 1150.0 && s.size == 22.0 &&
+                      s.randomizeSize == 16.0 && s.growth == -0.4 && s.startPointZ == 30.0 &&
+                      s.randStartPoint == glm::dvec2(20.0, 32.0) && s.colour0 == glm::dvec4(1.0, 0.3, 0.3, 1.0),
+                  "eight red sparks at once, 30 above");
+    }
+    const Art::Entity blood = load("blood.ent");
+    CHECK_MSG(blood.sprite.empty() && blood.systems.size() == 2 && blood.Temporary() && !blood.light,
+              "blood: no sprite, two systems, temporary, no light");
+    if (blood.systems.size() == 2) {
+        const Particles::System& burst = blood.systems[0];
+        CHECK_MSG(burst.bitmap == "blackexplosion.png" && burst.alphaMode == Particles::kAlphaModulate &&
+                      !burst.additive && burst.count == 8 && burst.allAtOnce && burst.columns == 4 &&
+                      burst.rows == 3 && burst.size == 64.0 && burst.colour0 == glm::dvec4(1.0, 1.0, 1.0, 0.2) &&
+                      burst.colour1 == glm::dvec4(1.0),
+                  "sys0 the black burst: blackexplosion.png 4 x 3, AM_MODULATE, white 0.2 -> 1");
+        CHECK_MSG(Particles::Drawable(burst) && Particles::MultipliesExactly(burst),
+                  "drawn, and exactly, as the multiply it is");
+        const Particles::System& smoke = blood.systems[1];
+        CHECK_MSG(smoke.bitmap == "strong_particle.png" && smoke.alphaMode == Particles::kAlphaPixel &&
+                      smoke.count == 8 && smoke.colour0 == glm::dvec4(0.0, 0.0, 0.0, 0.8) &&
+                      smoke.direction == glm::dvec2(0.0, -0.4),
+                  "sys1 the smoke: strong_particle.png mixed, black at 0.8, rising");
+    }
+    const Art::Entity skull = load("skull.ent");
+    CHECK_MSG(skull.sprite.empty() && skull.systems.size() == 1 && skull.Temporary() && !skull.light,
+              "skull: no sprite, one system, temporary, no light");
+    if (skull.systems.size() == 1) {
+        const Particles::System& s = skull.systems.front();
+        CHECK_MSG(s.bitmap == "skull.png" && s.alphaMode == Particles::kAlphaPixel && s.count == 1 &&
+                      s.repeat == 1 && s.lifeTimeMs == 800.0 && s.size == 1.0 && s.growth == 1.8 &&
+                      s.maxSize == 22.0 && s.colour0 == glm::dvec4(1.0, 1.0, 1.0, 0.7) &&
+                      s.colour1 == glm::dvec4(1.0, 1.0, 1.0, 0.0) && s.luminance == glm::dvec3(1.0),
+                  "skull.png, one, grows 1 -> 22 and fades 0.7 -> 0 over 800 ms");
+    }
+}
+
+// EVERY AM_MODULATE SYSTEM THE ORIGINAL SHIPS IS EXACT UNDER THE MULTIPLY (00_order
+// E6, K12): all four - black_fade, blood, dragon_knight, ghost_minion - are white
+// at both ends, and each one's bitmap, read as the renderer reads it (stb_image,
+// three channels), is grey at every texel.
+void EveryMultiplyTheOriginalShipsIsExact() {
+    int multiplies = 0;
+    int exact = 0;
+    std::string firstWrong;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kOriginal + "/entities", ec)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".ent") continue;
+        std::vector<Particles::System> systems;
+        std::string error;
+        if (!Particles::Load(entry.path().string(), systems, error)) continue;
+        for (const Particles::System& system : systems) {
+            if (system.alphaMode != Particles::kAlphaModulate) continue;
+            ++multiplies;
+            const std::string bitmap = kOriginal + "/particles/" + system.bitmap;
+            int width = 0;
+            int height = 0;
+            int channels = 0;
+            stbi_uc* rgb = stbi_load(bitmap.c_str(), &width, &height, &channels, 3);
+            std::vector<unsigned char> rgba;
+            const bool grey =
+                rgb != nullptr &&
+                Particles::MultiplyTexels(rgb, static_cast<std::size_t>(width) * static_cast<std::size_t>(height), rgba);
+            if (rgb != nullptr) stbi_image_free(rgb);
+            if (grey && Particles::MultipliesExactly(system)) {
+                ++exact;
+            } else if (firstWrong.empty()) {
+                firstWrong = entry.path().filename().string() + "'s " + system.bitmap +
+                             (grey ? " is not white" : " is not grey");
+            }
+        }
+    }
+    CHECK_EQ(multiplies, 4);
+    CHECK_MSG(exact == 4, std::to_string(exact) + " of " + std::to_string(multiplies) + " exact: " + firstWrong);
+    std::printf("  the original's AM_MODULATE systems: %d of %d exact as a multiply\n", exact, multiplies);
 }
 
 // Counted over the 190 files by an independent reading (Python's XML parser and
@@ -3022,6 +3225,7 @@ int main() {
     AParticleStartsAtItsEntitysPosition();
     AParticleTurnsCounterClockwise();
     AnAddedParticleIgnoresItsAlpha();
+    AMultiplyIsItsImagesAlphaAndNotItsColours();
     ASystemDrawsInsideItsEntitysSlot();
     AParticlesQuadIsSquare();
     AScaledSystemIsEthanonsScale();
@@ -3040,6 +3244,7 @@ int main() {
         TheOriginalsParticlesAreRead();
         AnEntityWithoutParticlesSaysSoWithoutFailing();
         TheEffectsAreTheirEnts();
+        EveryMultiplyTheOriginalShipsIsExact();
         EveryEntReadsAsAnEntity();
         EveryAddedBitmapIsWithoutAlpha();
         TheOriginalsMp3sDecode();

@@ -15,7 +15,9 @@
     "insertPortal adds for every portal a shot opens, the burst ETHCallback_portal leaves where",
     "one dies, and that callback's own colours and clocks in placed_portal (7.4). And red_eyes,",
     "MainCharacter's own, drawn by step 7.1 - added once at a level's",
-    "start rather than at a call site, so it has a shape and a reader of its own. Every other",
+    "start rather than at a call site, so it has a shape and a reader of its own. And the level's",
+    "end and a death (11.3, planning step 96): levelFinishedEffect's red_suck_effect and red_sparkles,",
+    "blood where the character or a minion is killed, and skull where either falls. Every other",
     "effect the script adds gets its row with the step that draws it, so a",
     "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
     "sim/Effects, strictly: every field below is required.",
@@ -23,7 +25,8 @@
     "UNITS. AddEntity(file, vector3(xy, z), angle, @out, altName, scale), its arguments pushed",
     "last-first (00_order 8.0 rule 3; ETHScriptWrapper.Scene.cpp:131-158). The script's",
     "g_scale.scale(n) is n x screenHeight / 256 (00_order 8.12a), which is n of the port's units,",
-    "so offset_units and a z whose `scaled` is true are those n. A z the call writes as a bare",
+    "so offset_units and a z whose `scaled` is true are those n. offset_units is a number along the",
+    "call's direction, or - for levelFinishedEffect alone - a pair [x, y] added along none. A z the call writes as a bare",
     "literal is in the engine's own units and does not grow with the screen (00_order 8.12b):",
     "`scaled` false says so; the port, whose unit is one level unit, reads the number as it is.",
     "`scale` is a multiple of g_scale.getScale(), the script's scale for anything it adds at its",
@@ -315,6 +318,115 @@
       "refuses a row that says false, because the port's player owner both moves the eyes and hides them, and a",
       "row that said otherwise would need an owner of its own. The field writes down #66-72 redEyes.Hide(true)",
       "beside the arithmetic it belongs to; it is not a number a designer retunes."
+    ]
+  },
+
+  "red_suck_effect": {
+    "entity": "red_suck_effect.ent",
+    "offset_units": [0, 16],
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "levelFinishedEffect (GameStateController.angelscript, bytes 338001..338422), called by",
+      "GameStateController::checkGameEnd (125613..126638) #34-47 on the frame scaledCollide(finalDoor,",
+      "character) first holds: #34-39 finalDoor.GetPositionXY() and #40-45 character.GetPositionXY(), pushed",
+      "last-first, so levelFinishedEffect(charPos, doorPos); checkGameEnd then Hides the character (#49-54)",
+      "and zeroes its velocity. #2-6 g_scale.getScale(); #12 the angle PshC4 0f; #13 the z PshC4 0f, a bare",
+      "literal (0 either way); #14-22 vector2(0f, g_scale.scale(16f)) - the 16 THROUGH g_scale.scale, so 16",
+      "level units, and the y since the 0f is pushed last and is the first argument; #23-27 doorPos + that;",
+      "#28-31 vector3(that, 0f); #32-39 AddEntity('red_suck_effect.ent', ..., 0f, @effect, '', getScale()).",
+      "So 16 units BELOW the door's own point (+y down), at the script's own size.",
+      "ITS OTHER CALLER, ETHCallback_dragon_knight (386379..388631) #315-336, is 2-32's victory cutscene:",
+      "the knight dragon_knight_spawn adds once the level is won walks its two waypoints and, finding no",
+      "third, calls levelFinishedEffect(currentPos, currentPos + g_scale.scale(vector2(16, -16))). The port",
+      "does not build the knight (dragon.json knight._note), so that call is not drawn.",
+      "ITS .ent: no <Sprite>, no <Light>; one system of 1 inverted_explosion.bmp cut 10 x 1, alphaMode 1,",
+      "repeat 1, animationMode 1 (the sheet played by age), life 500, size 64, no growth, angleStart 180,",
+      "<StartPoint> (-20, 0, 30), colour (1, 0.3, 0.3) at both ends. Temporary: the engine frees it when",
+      "its one particle is over. Footage F12 (out/parity/footage/F12.md section 4) shows it on 1-01 as a",
+      "squashed red disc with a smear to the left, #141-#153 (5.147-5.581 s)."
+    ]
+  },
+
+  "red_sparkles": {
+    "entity": "red_sparkles.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "levelFinishedEffect #53-77, after the suck (#39), so it is added and draws its random second:",
+      "#63-64 PshC4 0f twice (the angle, then the z - a bare 0); #65-68 vector3(charPos, 0f), the",
+      "character's GetPositionXY; #70-77 AddEntity('red_sparkles.ent', ..., 0f, @effect, '', getScale()).",
+      "#91-93 then playFinalDoorSound, which the port's sounds.json already maps to level_finished.",
+      "ITS .ent: no <Sprite>; one system of 8 sparkles.bmp, all at once, alphaMode 1, repeat 1, life 1050",
+      "+- 575, size 22 +- 8, growth -0.4, angleDir 3, randAngleStart 360, <StartPoint> z 30,",
+      "<RandStartPoint> (20, 32), colour (1, 0.3, 0.3, 1) to (0, 0, 0, 0); and a <Light> of range 68,",
+      "colour (2, 0, 0) at (0, -16, -15), with no <HaloBitmap>, so no halo. Temporary. F12 section 4: at",
+      "most 8 red star points in the doorway, and the stones round the door lit red at once and going out",
+      "1.23 s after the door frame - the light following its system's live share (Lighting::ParticleRatio)."
+    ]
+  },
+
+  "blood": {
+    "entity": "blood.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "AddScaledEntity('blood.ent', victim.GetPosition(), g_scale.getScale()) - the VICTIM's whole vector3,",
+      "so the z is the victim's own depth plus this row's 0 (Effects::Blood), and AddScaledEntity is",
+      "AddEntity(file, pos, 0f, 0, '', scale) (ETHScriptWrapper.Scene.cpp:176-178), so the angle is 0.",
+      "ITS TWO CALLERS: GameStateController::checkGameLost (123759..125310) #3-43, when the character's",
+      "'hp' is 0 or less (#3-16) and it is not hidden (#17-25) - every death that is not a fall: the",
+      "character is then Hidden (#47-52), Scale(0.05) (#54-58) and finishGame(true) (#60-63); and",
+      "ETHCallback_minion (427194..433047) #1478-1504, when isDestroyed(thisEntity) - a minion a killer",
+      "floor or a strike took - adds it at the minion's GetPosition() and deletes the minion.",
+      "ITS .ent: no <Sprite>, no <Light>; sys0 8 blackexplosion.png cut 4 x 3, all at once, alphaMode 4",
+      "(AM_MODULATE), repeat 1, life 750 +- 175, size 64, minSize 6, <RandStartPoint> (2, 40), colour",
+      "(1, 1, 1, 0.2) to (1, 1, 1, 1); sys1 8 strong_particle.png, all at once, alphaMode 0, repeat 1, life",
+      "2400 +- 500, size 8 +- 8, growth 0.4, minSize 6, <Direction> (0, -0.4) +- (0.1, 0.15),",
+      "<RandStartPoint> (2, 32), colour (0, 0, 0, 0.8) to (0, 0, 0, 0). Temporary.",
+      "SYS0 IS A MULTIPLY, drawn as one (Particles::MultiplyTexels, planning step 96; 00_order E6 and K12):",
+      "blackexplosion.png is grey to the last texel and the colour's RGB is white at both ends, so black at",
+      "an alpha of 255 - grey mixes to exactly dst x grey / 255, and the 0.2 -> 1 its alpha lerps is never",
+      "read by the original's GL_ZERO, GL_SRC_COLOR. F13 section 4.2: on 2-10 a near-black burst one frame",
+      "after the character vanished, largest about 0.27 s in and mostly gone by 0.5 s, then a dark puff",
+      "rising about 85 px/s."
+    ]
+  },
+
+  "skull": {
+    "entity": "skull.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "inset_units": 12,
+    "_source": [
+      "AddScaledEntity('skull.ent', vector3(point, 0f), g_scale.getScale()) at a point held inside the",
+      "view: the z a bare 0, the angle AddScaledEntity's 0. inset_units is the g_scale.scale(12f) both",
+      "callers hold it in by (PshC4 12f then SGlobalScale::scale).",
+      "ITS TWO CALLERS: GameStateController::checkGameLost #117-389, when the character's GetPositionXY is",
+      "past maxPos or short of minPos on either axis (#118-183) and the game is not finished (#186-190):",
+      "playDieByFallSound, Hide, then #256-266 cameraPos = GetCameraPos() (the view's top-left) and",
+      "screenSize = GetScreenSize(); with gravity (#340-361) the skull stands at (charPos.x, cameraPos.y +",
+      "screenSize.y - scale(12)); weightless (#273-339) at max(min(charPos, cameraPos + screenSize),",
+      "cameraPos) - normalize(charPos - screenMiddle) x scale(12), screenMiddle = cameraPos + screenSize",
+      "/ 2 (Effects::FallSkullPoint); #367-382 the AddScaledEntity; #386-389 finishGame(true). And",
+      "ETHBeginContactCallback_enemy_killer (ETHCallback_minion.angelscript, 436701..437083) #24-60, when",
+      "a minion touches a killer floor (#1-7 isMinion), after #9-14 destroy(other): at",
+      "(other.GetPosition().x, screenSize.y + cameraPos.y - scale(12)) whatever the level's gravity",
+      "(Effects::KillerSkullPoint).",
+      "NOT WIRED ON THIS TRACK: both callers' startEarthquake - checkGameLost #362-365 with eqValue 20, or 5",
+      "weightless (#271, #338), and enemy_killer #16-18 with 20 - since this track has no earthquake yet;",
+      "the minion's playMinionFallSound (#20-22) is not among the port's sounds either.",
+      "ITS .ent: no <Sprite>; one system of 1 skull.png, alphaMode 0, repeat 1, life 800, size 1, growth",
+      "1.8, maxSize 22, colour (1, 1, 1, 0.7) to (1, 1, 1, 0), luminance 1. Temporary. F13 section 3.1: on",
+      "1-06 at (240.5, 685.5) px - the fall's x and 720 - 12 x 2.8125 = 686.25 - full size (a 62 px quad,",
+      "22 u) by 0.135 s, then fading linearly to nothing 0.83 s after its first frame."
     ]
   }
 }

@@ -812,6 +812,10 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
                 SUPERSONIC_LOG_WARN("Magic Portals") << "particle image could not be read: " << image.path << std::endl;
                 continue;
             }
+            // What it is drawn with: its bitmap, or the multiply an AM_MODULATE
+            // one is (particleTexture) - none of the levels' systems is one today.
+            const std::string texture = particleTexture(system, image.path, drawn.sprite.node);
+            if (texture.empty()) continue;
             Emitter emitter;
             emitter.system = system;
             emitter.owner = owner;
@@ -844,7 +848,7 @@ void MagicPortalsLayer::buildEmitters(entt::registry& registry) {
                                                  static_cast<int>(slot), static_cast<int>(systems.size()))
                                        : systemZ(drawn.z, Slot::Systems, static_cast<int>(slot),
                                                  static_cast<int>(systems.size()));
-            emitter.image = image.path;
+            emitter.image = texture;
             emitter.cellPx = ParticleCellUnits(image, system);
             // Which entity and which of its systems: a light's brightness follows
             // the live share of its owner's FIRST system (syncLights).
@@ -883,12 +887,14 @@ bool MagicPortalsLayer::addEntityEmitters(const std::string& entity, const glm::
             SUPERSONIC_LOG_WARN("Magic Portals") << "particle image could not be read: " << image.path << std::endl;
             continue;
         }
+        const std::string texture = particleTexture(system, image.path, entity);
+        if (texture.empty()) continue;
         Emitter emitter;
         emitter.system = system;
         emitter.owner = owner;
         // A later system of the same entity draws over an earlier one.
         emitter.z = z + 0.001f * static_cast<float>(m_emitters.size());
-        emitter.image = image.path;
+        emitter.image = texture;
         emitter.cellPx = ParticleCellUnits(image, system);
         emitter.slot = static_cast<int>(slot);
         emitter.particles = Particles::MakePool(system, std::min(system.count, kMaxParticles), owner,
@@ -899,39 +905,66 @@ bool MagicPortalsLayer::addEntityEmitters(const std::string& entity, const glm::
     return true;
 }
 
-std::string MagicPortalsLayer::loadingHaloImage() {
+std::string MagicPortalsLayer::modulateImage(const std::string& source) {
     // Only into a directory the caller named: an empty Paths::prisms would put the
-    // file in the working directory, so the halo is then left undrawn instead.
+    // file in the working directory, so the multiply is then left undrawn instead.
     if (m_paths.prisms.empty()) return {};
-    // black_halo.ent's picture as the loader finds it (drawnImage): black_halo.bmp has
-    // no tier file, so it is the file named.
-    const std::string source = drawnImage(m_paths.original + "/" + m_loadingRules.haloSprite).path;
+    // Named for where it came from under the original's files - entities/
+    // black_halo.bmp is entities_black_halo_multiply.png - so two images of one
+    // stem in two directories, a tier's and its 1x file's, never share a file.
+    const std::filesystem::path from(source);
     std::error_code ec;
+    std::filesystem::path relative = std::filesystem::relative(from, std::filesystem::path(m_paths.original), ec);
+    if (ec || relative.empty() || relative.native().front() == '.') relative = from.filename();
+    std::string name = relative.replace_extension().generic_string();
+    std::replace(name.begin(), name.end(), '/', '_');
     std::filesystem::create_directories(m_paths.prisms, ec);
-    const std::filesystem::path target = m_paths.prisms / "black_halo_multiply.png";
+    const std::filesystem::path target = m_paths.prisms / (name + "_multiply.png");
     if (std::filesystem::exists(target, ec) && std::filesystem::last_write_time(target, ec) >=
-                                                    std::filesystem::last_write_time(source, ec)) {
+                                                    std::filesystem::last_write_time(from, ec)) {
         return target.string();
     }
     int width = 0;
     int height = 0;
     int channels = 0;
-    stbi_uc* grey = stbi_load(source.c_str(), &width, &height, &channels, 1);
-    if (grey == nullptr) {
-        SUPERSONIC_LOG_WARN("Magic Portals") << "loading halo could not be read: " << source << std::endl;
+    // Three channels whatever the file holds: an 8-bit grey BMP comes back with its
+    // grey in all three, and a texel's own alpha is dropped, as GL_ZERO,
+    // GL_SRC_COLOR never reads it.
+    stbi_uc* rgb = stbi_load(source.c_str(), &width, &height, &channels, 3);
+    if (rgb == nullptr) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "a multiply's image could not be read: " << source << std::endl;
         return {};
     }
-    // AM_MODULATE draws dst * texel; black at alpha (1 - texel) leaves exactly that.
-    std::vector<unsigned char> rgba(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u, 0u);
-    for (std::size_t i = 0; i < static_cast<std::size_t>(width) * static_cast<std::size_t>(height); ++i) {
-        rgba[i * 4u + 3u] = static_cast<unsigned char>(255 - grey[i]);
+    std::vector<unsigned char> rgba;
+    const bool grey = Particles::MultiplyTexels(
+        rgb, static_cast<std::size_t>(width) * static_cast<std::size_t>(height), rgba);
+    stbi_image_free(rgb);
+    if (!grey) {
+        SUPERSONIC_LOG_WARN("Magic Portals")
+            << "not drawn as a multiply: " << source
+            << " is not grey, and one alpha cannot multiply three channels by three numbers" << std::endl;
+        return {};
     }
-    stbi_image_free(grey);
     if (stbi_write_png(target.string().c_str(), width, height, 4, rgba.data(), width * 4) == 0) {
-        SUPERSONIC_LOG_WARN("Magic Portals") << "loading halo could not be written: " << target.string() << std::endl;
+        SUPERSONIC_LOG_WARN("Magic Portals") << "a multiply could not be written: " << target.string() << std::endl;
         return {};
     }
     return target.string();
+}
+
+std::string MagicPortalsLayer::particleTexture(const Particles::System& system, const std::string& image,
+                                               const std::string& owner) {
+    if (system.alphaMode != Particles::kAlphaModulate) return image;
+    // AM_MODULATE, drawn as the multiply it is (Particles.hpp): exact for a white
+    // colour over a grey bitmap, and refused by name otherwise rather than drawn
+    // as a guess.
+    if (!Particles::MultipliesExactly(system)) {
+        SUPERSONIC_LOG_WARN("Magic Portals")
+            << "particle system not drawn: " << owner << "'s " << system.bitmap
+            << " is a multiply whose colour is not white, which a black texel cannot carry" << std::endl;
+        return {};
+    }
+    return modulateImage(image);
 }
 
 void MagicPortalsLayer::unloadEmitters(entt::registry& registry) {
@@ -1329,6 +1362,11 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
             SUPERSONIC_LOG_WARN("Magic Portals") << "particle image could not be read: " << image.path << std::endl;
             continue;
         }
+        // blood.ent's black burst is the first AM_MODULATE system anything adds:
+        // drawn as its multiply (particleTexture), with its colour's alpha set
+        // aside (Particles::DrawColour).
+        const std::string texture = particleTexture(system, image.path, spawn.entity);
+        if (texture.empty()) continue;
         Emitter emitter;
         emitter.system = system;
         emitter.owner = owner;
@@ -1346,7 +1384,7 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
         // belong in front of.
         emitter.z = systemZ(slotAfter(std::round(spawn.zUnits + system.startPointZ), Slot::Picture),
                             Slot::EffectSystems, slot, systems);
-        emitter.image = image.path;
+        emitter.image = texture;
         emitter.cellPx = ParticleCellUnits(image, system);
         emitter.sprite = -1; // no level sprite carries it: this effect does
         emitter.slot = slot;
@@ -1676,6 +1714,7 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         for (const Emitter& emitter : effect.emitters) {
             report.systemZ.push_back(emitter.z);
             report.systemSizePx.push_back(emitter.system.size);
+            report.systemImage.push_back(emitter.image);
             report.active += emitter.active;
             report.pool += static_cast<int>(emitter.particles.size());
             for (const Particles::Particle& particle : emitter.particles) {
@@ -2055,8 +2094,12 @@ void MagicPortalsLayer::buildMenu(entt::registry& registry) {
             m_loadingPortal =
                 makeSprite(registry, "Magic Portals Loading Portal", halo.path, m_artRules.portal.additive);
         }
-        // black_halo.ent under it, as the multiply it is (ui.json loading.portal).
-        if (const std::string multiply = loadingHaloImage(); !multiply.empty()) {
+        // black_halo.ent under it, as the multiply it is (ui.json loading.portal):
+        // its picture as the loader finds it (drawnImage) - black_halo.bmp has no
+        // tier file, so it is the file named.
+        if (const std::string multiply =
+                modulateImage(drawnImage(m_paths.original + "/" + m_loadingRules.haloSprite).path);
+            !multiply.empty()) {
             m_loadingHalo = makeSprite(registry, "Magic Portals Loading Halo", multiply, false);
         }
         // portal.ent's particle systems, the spiral and portal.png, just in front of
@@ -6160,6 +6203,71 @@ void MagicPortalsLayer::latchSimEffects() {
         m_effectQueue.push_back(effectAdd(Effects::Sparkles(m_effectRules, went.travellerPx, went.entryPx)));
         m_effectQueue.push_back(effectAdd(Effects::Appear(m_effectRules, went.exitPx)));
     }
+
+    // A MINION THE TICK DESTROYED (the visuals plan's 11.3), in the order it went
+    // (Minions::State::deaths). A killer floor's contact callback adds a skull at
+    // the view's foot under it before anything else, and the minion's own callback
+    // then finds itself destroyed and adds blood.ent at its point and deletes
+    // itself (ETHCallback_minion #1478-1504); a strike does only the second. The
+    // original's skull comes on the contact and the blood on the minion's next
+    // update, a frame apart; here both come from the one tick, skull first.
+    const std::vector<Minions::Death>& died = m_level.minions.deaths;
+    if (!died.empty()) {
+        const glm::dvec2 cameraPx = cameraCornerPx();
+        // Each minion's own depth - a marker's at the raw 2 minion_spawn adds it
+        // at, an escort at its anchor's - is the one matchMinions reads.
+        matchMinions();
+        for (const Minions::Death& death : died) {
+            if (death.byKiller) {
+                m_effectQueue.push_back(effectAdd(Effects::Skull(
+                    m_effectRules, Effects::KillerSkullPoint(m_effectRules, death.atPx.x, cameraPx, ViewPx()))));
+            }
+            const double minionZ =
+                death.minion < m_minions.size() ? m_minions[death.minion].lookZ
+                                                : m_artRules.LevelDepth(m_artRules.minion.z);
+            m_effectQueue.push_back(effectAdd(Effects::Blood(m_effectRules, death.atPx, minionZ)));
+        }
+    }
+}
+
+glm::dvec2 MagicPortalsLayer::cameraCornerPx() const {
+    // The follow keeps the view's CENTRE (Camera.hpp); Ethanon's camera is its
+    // top-left corner.
+    return m_follow.centrePx - ViewPx() / 2.0;
+}
+
+void MagicPortalsLayer::latchFinishEffects(entt::registry& registry) {
+    // checkGameEnd #34-47 on the frame the character and the final door collide:
+    // levelFinishedEffect(character.GetPositionXY(), finalDoor.GetPositionXY()) -
+    // the suck at the door's own point, 16 below it, then the sparkles at the
+    // character. The door is the one SeekEntity finds (m_doorSprite), at its
+    // ENTITY point as the last frame left it, bob and all; the character is its
+    // body, which the doorway's Hide leaves standing where it went in.
+    if (m_doorSprite >= 0 && m_doorSprite < static_cast<int>(m_sprites.size())) {
+        const glm::dvec2 doorPx = m_sprites[static_cast<std::size_t>(m_doorSprite)].ownerPx;
+        m_effectQueue.push_back(effectAdd(Effects::FinishSuck(m_effectRules, doorPx)));
+    }
+    if (m_level.player != entt::null && registry.valid(m_level.player)) {
+        const glm::dvec2 characterPx =
+            Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
+        m_effectQueue.push_back(effectAdd(Effects::FinishSparkles(m_effectRules, characterPx)));
+    }
+}
+
+void MagicPortalsLayer::latchDeathEffects(entt::registry& registry) {
+    if (m_level.player == entt::null || !registry.valid(m_level.player)) return;
+    const glm::dvec2 characterPx =
+        Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
+    if (m_level.hazards.diedByFalling) {
+        // checkGameLost's fall branch (#117-389): the skull held inside the view.
+        m_effectQueue.push_back(effectAdd(Effects::Skull(
+            m_effectRules,
+            Effects::FallSkullPoint(m_effectRules, characterPx, cameraCornerPx(), ViewPx(), m_level.noGravity))));
+        return;
+    }
+    // And its hp branch (#3-63), which every other death the port has goes through:
+    // blood at the character's whole vector3, its depth the character's own.
+    m_effectQueue.push_back(effectAdd(Effects::Blood(m_effectRules, characterPx, m_playerZ)));
 }
 
 void MagicPortalsLayer::latchSimSounds() {
@@ -6453,6 +6561,9 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
             // now maps to playFinalDoorSound, and sounds.json carries the decode
             // of why the cue this once had is called by nothing in the original.
             latch("level_finished");
+            // And levelFinishedEffect's two, which checkGameEnd calls BEFORE it
+            // hides the character: read while the body still stands in the door.
+            latchFinishEffects(registry);
             // Hide(), and the velocity zeroed with it: the character is gone from
             // the doorway and cannot be left walking on the spot. Destroying the
             // two drawables IS the port's Hide - syncDrawables skips what is not
@@ -6485,6 +6596,9 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
             // nothing at all for an hp death; playDeathSound belongs to the
             // screen, 1400 ms later. sounds.json carries that decode.
             if (m_level.hazards.diedByFalling) latch("player_fell");
+            // And what checkGameLost adds where it happened: a skull held inside
+            // the view for a fall, blood at the character for anything else.
+            latchDeathEffects(registry);
             ++m_deaths;
             // Hide(), as the finish does it and as checkGameLost does it too -
             // it hides the character before the delay. Left drawn, a corpse

@@ -141,8 +141,8 @@ public:
         std::string achievements = MAGICPORTALS_ACHIEVEMENTS_FILE;
         std::string data = MAGICPORTALS_DATA_DIR;
         std::string portData = MAGICPORTALS_PORT_DATA_DIR;
-        // Where LevelBuilder may write, and the loading screen's black halo
-        // (loadingHaloImage). Nothing is written when it is empty.
+        // Where LevelBuilder may write, and the multiplies AM_MODULATE is drawn
+        // with (modulateImage). Nothing is written when it is empty.
         std::filesystem::path prisms;
         // What res:// stands for: the converter writes the levels' art beside
         // the levels, so the directory above them (Sprites.hpp).
@@ -485,8 +485,11 @@ public:
     // TICK queues from - adds every fireball in flight, a small_explosion where
     // one was destroyed and an explosion_large where a bomb went off (7.2). The
     // steps that draw the rest wire their own rules there (7.3 teleport, 10.x
-    // pickups). The suites also spawn them by hand, which is how the light cap
-    // and the free rules are measured without a level that asks for one.
+    // pickups, and 11.3's blood and skull for a minion that dies); the level's
+    // end and the player's death queue theirs from the tick that decides them
+    // (latchFinishEffects, latchDeathEffects). The suites also spawn them by hand,
+    // which is how the light cap and the free rules are measured without a level
+    // that asks for one.
     struct EffectOwner {
         enum class Kind {
             None,         // it stays where it was added
@@ -554,6 +557,9 @@ public:
         // the .ent's own, times the entity's particle scale, times the first
         // system's own extra scale where a caller gave one (ScaleParticleSystem).
         std::vector<double> systemSizePx;
+        // And the texture each is drawn with (particleTexture): its bitmap's file,
+        // or for an AM_MODULATE system the multiply made from it.
+        std::vector<std::string> systemImage;
         double scriptScale = 1.0; // the Scale() it was added with
         glm::dvec3 colour{1.0}; // ETHEntity::SetColor, on its sprite alone
         glm::dvec2 scale{1.0};  // times its <Scale>: the one its light and picture take
@@ -1095,9 +1101,20 @@ private:
     // original hides its effects with rather than deleting them.
     bool effectOwnerPoint(const entt::registry& registry, const EffectOwner& owner, glm::dvec2& atPx,
                           bool& hidden) const;
-    // What the TICK adds to the frame's queue. Nothing is wired yet: the rules
-    // arrive with the steps that draw each effect.
+    // What the TICK adds to the frame's queue: each effect's rule arrives with the
+    // step that draws it.
     void latchSimEffects();
+    // THE LEVEL'S END AND A DEATH (the visuals plan's 11.3), queued by the tick
+    // that ends the level: levelFinishedEffect's suck at the door and sparkles at
+    // the character, or checkGameLost's blood (killed) or skull (fallen). Called
+    // from OnFixedUpdate's two branches, which are where the port decides either,
+    // while the body still stands where it went.
+    void latchFinishEffects(entt::registry& registry);
+    void latchDeathEffects(entt::registry& registry);
+    // The view's top-left corner and its size, on the level's axis - the
+    // original's GetCameraPos() and GetScreenSize(), which the skull is held
+    // inside - as the last tick left the follow.
+    glm::dvec2 cameraCornerPx() const;
     // Every placed portal, drawn as insertPortal adds it and killed as
     // ETHCallback_portal kills it: the summon bubble and the portal itself on a
     // new id, the manager's colour each frame, and on an id's disappearance the
@@ -1586,6 +1603,14 @@ private:
     // Every particle system of an entity of the original's, at a place: false when
     // the .ent carries none or cannot be read.
     bool addEntityEmitters(const std::string& entity, const glm::dvec2& atPx, float z, double angleDeg);
+    // The texture a system's particles are drawn with, from `image`, the file the
+    // loader draws for its bitmap: that file for an added or a mixed system, and
+    // its multiply (modulateImage) for an AM_MODULATE one - the one place the
+    // three builders (buildEmitters, addEntityEmitters, SpawnEffect) choose it, so
+    // no builder can hand a multiply's own bitmap to a mixing quad. Empty, and
+    // said by `owner`'s name, for a multiply that would not be exact
+    // (Particles::MultipliesExactly) or whose image cannot be made.
+    std::string particleTexture(const Particles::System& system, const std::string& image, const std::string& owner);
 
     // No emitter draws more than this, whatever its .ent asks for. Chapter 1
     // places 189 of them and the largest asks for 32, so this is a guard
@@ -1789,10 +1814,13 @@ private:
     // How many emitters the portal's own are, at the front of m_emitters.
     std::size_t m_loadingPortalEmitters{0};
     bool m_loadingVanished{false};
-    // black_halo.bmp as the multiply it is drawn with: black, at an alpha of one
-    // less its texel, written once beside the prisms; empty when it cannot be,
-    // or when Paths::prisms names no directory.
-    std::string loadingHaloImage();
+    // An image of the original's as the multiply AM_MODULATE draws it with:
+    // black, at an alpha of 255 less its grey (Particles::MultiplyTexels), written
+    // once beside the prisms and named for where it came from. Empty, and said,
+    // when the image is not grey, cannot be read or written, or Paths::prisms
+    // names no directory. The loading screen's black_halo.bmp since step 53, and
+    // every AM_MODULATE particle system since step 96 (particleTexture).
+    std::string modulateImage(const std::string& source);
     int m_menuWorld{0}; // whose levels the grid shows
     int m_menuPage{0};  // which page of that grid
     std::vector<MenuButton> m_menuButtons;

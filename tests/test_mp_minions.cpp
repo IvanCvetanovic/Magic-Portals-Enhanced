@@ -43,6 +43,7 @@
 #include "TestHarness.hpp"
 
 #include "core/Components.hpp"
+#include "core/PhysicsSystem.hpp"
 #include "sim/Art.hpp"
 #include "sim/Game.hpp"
 #include "sim/Minions.hpp"
@@ -55,6 +56,7 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <vector>
 
 using namespace MagicPortals;
 using Supersonic::RigidBodyComponent;
@@ -507,6 +509,77 @@ void theKillerFloorTakesAMinion() {
               "a taken minion is no longer a traveller");
 }
 
+// THE RECORD THE FRAME DRAWS A DEATH FROM (the visuals plan's 11.3): where each
+// minion the tick destroyed stood - its ENTITY point, the one its script's
+// GetPosition() reads - and whether a killer floor did it (a skull under it as
+// well as blood) or a strike (blood only). Written by Cull and Take, cleared by
+// the next Tick, read by nothing in the simulation.
+void aMinionsDeathIsWrittenDownForTheFrame() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+    const double above = run.level.minions.rules.EntityAboveCentrePx();
+    CHECK_MSG(std::fabs(above - (18.1 - run.level.minions.rules.bodyRadiusPx)) < 1e-9,
+              "the entity point stands 18.1 over the feet: " + std::to_string(above) + " over the centre");
+
+    // A killer floor: the guard dropped into it and ticked until it goes.
+    const Minions::Minion* guard = run.level.minions.FindMinion(kGuard);
+    CHECK(guard != nullptr);
+    if (guard == nullptr || guard->body == entt::null) return;
+    const std::size_t guardAt = static_cast<std::size_t>(guard - run.level.minions.minions.data());
+    const entt::entity body = guard->body;
+    CHECK_MSG(run.level.minions.deaths.empty(), "a level begins with no death written down");
+    PutAt(run.registry, body, glm::dvec2(1152.0, 448.0));
+    // Game::Tick in its three halves, so the body is read where the step left it
+    // and Cull finds it: put INSIDE the solid floor, the solver moves it out by
+    // tens of pixels on the first step, so a point read before the step is not it.
+    glm::dvec2 lastPx(0.0);
+    int tick = 0;
+    for (; tick < 5 && run.registry.valid(body); ++tick) {
+        Game::BeforeStep(run.data, run.registry, run.level, 0.0f, kStep);
+        Supersonic::PhysicsSystem::Update(run.registry, kStep);
+        lastPx = Units::ToPixels(run.registry.get<TransformComponent>(body).position);
+        Game::AfterStep(run.data, run.registry, run.level, kStep);
+    }
+    CHECK_MSG(!run.registry.valid(body), "the floor took the guard");
+    CHECK_EQ(run.level.minions.deaths.size(), static_cast<std::size_t>(1));
+    if (run.level.minions.deaths.size() == 1) {
+        const Minions::Death& death = run.level.minions.deaths.front();
+        CHECK_MSG(death.byKiller, "by the floor");
+        CHECK_EQ(death.minion, guardAt);
+        // Where the step left it, less the rise to its entity point, exactly.
+        const glm::dvec2 want = lastPx - glm::dvec2(0.0, above);
+        CHECK_MSG(glm::distance(death.atPx, want) < 1e-9,
+                  "at its entity point: (" + std::to_string(death.atPx.x) + ", " + std::to_string(death.atPx.y) +
+                      ") for (" + std::to_string(want.x) + ", " + std::to_string(want.y) + ")");
+    }
+    // The next tick clears it: a death is drawn once.
+    Tick(run);
+    CHECK_MSG(run.level.minions.deaths.empty(), "and the next tick has forgotten it");
+
+    // A strike (Take, a shock diamond's): the patroller, where it stands, no step
+    // in between - so exactly its centre less the rise, and not by a floor.
+    const Minions::Minion* patroller = run.level.minions.FindMinion(kPatroller);
+    CHECK(patroller != nullptr);
+    if (patroller == nullptr || patroller->body == entt::null) return;
+    const std::size_t patrollerAt = static_cast<std::size_t>(patroller - run.level.minions.minions.data());
+    const entt::entity struck = patroller->body;
+    const glm::dvec2 centrePx = Units::ToPixels(run.registry.get<TransformComponent>(struck).position);
+    const std::vector<entt::entity> taken = run.level.minions.Take(run.registry, {struck});
+    CHECK_EQ(taken.size(), static_cast<std::size_t>(1));
+    CHECK_EQ(run.level.minions.deaths.size(), static_cast<std::size_t>(1));
+    if (run.level.minions.deaths.size() == 1) {
+        const Minions::Death& death = run.level.minions.deaths.front();
+        CHECK_MSG(!death.byKiller && death.minion == patrollerAt, "a strike, and the patroller");
+        CHECK_MSG(death.atPx == centrePx - glm::dvec2(0.0, above), "exactly its entity point");
+    }
+    // Taking it again writes nothing: it is gone.
+    run.level.minions.Take(run.registry, {struck});
+    CHECK_EQ(run.level.minions.deaths.size(), static_cast<std::size_t>(1));
+    std::printf("  a minion's death: the floor's written after %d tick(s), a strike's at once, each at its entity "
+                "point %.2f over the centre\n",
+                tick, above);
+}
+
 void runTests() {
     theWalkIsTheDecodedSpeedNotTheRemakesGuess();
     aMarkerResolvesItsWaypointsByPrefix();
@@ -520,6 +593,7 @@ void runTests() {
     theKillerFloorIsTheShapeNotTheFallback();
     theKillerFloorKillsNoPlayer();
     theKillerFloorTakesAMinion();
+    aMinionsDeathIsWrittenDownForTheFrame();
 }
 
 } // namespace
