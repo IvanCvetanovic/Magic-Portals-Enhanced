@@ -20904,7 +20904,7 @@ REGENERATED levels, `a70bb8c5`, whose 1-01 fix round 1 reproduced on the committ
 | The 5 both moved (2-13, 2-24, 3-10, 3-20, 4-19) | M == A outside B's objects, M == B inside them (`compare3d.py`, merge_c's construction) | **passes on 4; 2-24 explained below.** 2-13, 3-10, 3-20, 4-19: 0 px outside at every k in {0, 1, 2, 3, 5}, mean \|M-B\| 0.00 inside B's objects against \|A-B\| 98.25, 12.62, 4.58, 47.52. Over all 35 B moved, M == B inside B's objects on 34 (0.00) and 0 px of M != B lies outside A's and B's objects on all 128 |
 | 2-24 (level23a) | every pixel attributed | **attributed: A's level data under B's stream shift.** 55 px differ from A. 25 are B's own move, carried exactly (M == B at all 25): particles on the effects' stream - a carranca's fireballs at the top left, one RGB565 step each - shifted because step 106's `crystal_pick` draws from that stream on tick 1 (the inherited K8 reading: the placement stream is untouched). The other 30 (box 327-336 x 150-160, max 17, one RGB565 step a channel) are the player's red eyes, their renewals shifted by the same draws, where A's level puts the player: on the frozen level the player's spawn landing on its 22 x 29 barrel begins at hit 0.43 (tick 5) and it drops onto a platform on tick 212 (hit 4.43; `player_impact` in B's log); on the regenerated one the barrel is 28.6 x 37.7 (R9) and the player stays on it, so no impact is called before f420 and the eyes stand 100 px higher. B's other 36 px are those eyes at B's player spot (320-329 x 254-263), where M, like A, has no player. Nothing of the merge's own |
 | No tremble on the frame | no tremble on tick 420 in any M log | **passes: none** (`explain_d.py`); every other level's calls before f420 are B's own, tick for tick |
-| The capture is the committed sources' | no source change after the sweep's build | **passes**: after `build3` only this document, the backlog and files under `out/` changed; a dry run links nothing |
+| The capture is the committed sources' | no source change after the sweep's build | **passes**: no file under `game/` or `tests/` (`game/data` included) is newer than the sweep's `MagicPortals.exe` (`find -newer`, empty); after `build3` only this document, the backlog and files under `out/` changed. The sweep's 128 PNGs match their log's md5s, 128 of 128 |
 | A unit test | the rewired call and the renamed watch pinned | **`test_mp_camera` 212, `test_mp_layer` 2901**, 0 failures (`TheMouthLegIsTheFourthWaypoint`, `TheBlackKnightsLandingMakesNoTremble`) |
 
 **THE SUITES,** run directly, once each on the binaries this step leaves, 0 failures: **`test_mp_layer` 2901**
@@ -20946,4 +20946,11 @@ withdraws none. R1, R2, R22 and R23 stay unbuilt. **R24 and R25 remain the owner
 - **`TheDarkDragonsLevelShakesTheView`'s mouth leg starts a tick later** than step 101 measured it (721 against 720):
   the path's first update restarts it with no time and its 0 ms waypoint takes an update of its own. Recorded, not a
   gate: the same 48 ticks, as the listing's FrameTimer gives them.
+- **The skull is placed from the rest camera where the original reads the shaken one** - an overlap of the two
+  tracks that neither could see alone. Step 96's `cameraCornerPx()` is the follow's view, which step 101's shake never
+  moves; D11 section 2 and D11_check section 2 list both skulls among the readers of the SHAKEN camera
+  (`checkGameLost` #257, this frame's, after the generator; `ETHBeginContactCallback_enemy_killer` #35, the previous
+  frame's). So a skull added while a shake is in progress stands up to one tremble off the original's, for good (it
+  stays where it was added). Beside step 101's deviation 6, the list of the original's shaken-camera readers the port
+  keeps at rest. Not measured; no gate here. For the owner of the earthquake's follow-ups.
 - **The standing sweep baseline is now this step's** `merge_d/sweep`, for what were both tracks.

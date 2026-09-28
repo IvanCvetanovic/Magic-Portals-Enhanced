@@ -895,6 +895,11 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       lands.
 - [ ] **Order 11.3 deviation, the character's point is its capsule centre** (step 96): the door's sparkles and a
       character's blood sit about 3.9 u high (22 u over the feet against the original's 18.1). R25's player half.
+- [ ] **Merge finding, the skull reads the rest camera** (step 112): step 96 places both skulls from `cameraCornerPx()`,
+      the follow's view, which step 101's shake never moves; the original reads the shaken camera for both
+      (`checkGameLost` #257 this frame's, `ETHBeginContactCallback_enemy_killer` #35 the previous frame's; D11 section 2,
+      D11_check section 2). A skull added during a shake stands up to one tremble off, where it stays. Not measured.
+      Next: with step 101's deviation 6, the shaken-camera readers the port keeps at rest.
 - [x] **Order 11.3 deviation, no `startEarthquake`** (step 96): the fall's shake (20, or 5 weightless) and the killer
       floor's (20) were not wired on `main`. **Closed by the merge of the two tracks (step 112):** both are
       `earthquake.json`'s `fall` / `fall_no_gravity` and `minion_killed`, track B's step 101 (written as 121 on
