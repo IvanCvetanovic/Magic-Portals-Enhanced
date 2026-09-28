@@ -567,6 +567,10 @@ public:
         int id = 0;
         std::string entity;
         glm::dvec2 atPx{0.0};   // where it stands now: its owner's point, where it has one
+        // The angle its AddEntity was given, in Ethanon's degrees: what its particles
+        // are turned by (Particles::Owner). A radian number on shock_strike, which
+        // the script hands over unconverted (Effects::Turn::RadiansAsDegrees).
+        float angleDeg = 0.0f;
         // The depth the call gave it, on the LEVEL's axis: effectAdd's reading of
         // Effects::Spawn (a scaled z as it stands, a bare literal over the scale
         // factor), before any slot is counted.
@@ -1141,8 +1145,9 @@ private:
                           bool& hidden) const;
     // What the TICK adds to the frame's queue, each rule wired by the step that
     // draws it. `fixedDelta` is the tick's length, which a spent key's fly-in
-    // clock counts (Effects::AdvanceFlyIn).
-    void latchSimEffects(float fixedDelta);
+    // clock counts (Effects::AdvanceFlyIn); `registry` is read for the player's
+    // point, where a shock ring's kill adds shock_death.
+    void latchSimEffects(const entt::registry& registry, float fixedDelta);
     // What a tap the shot was offered leaves behind (the visuals plan's 10.1),
     // queued the moment Portals::State::Shoot returns: the mark a fired shot
     // leaves at the tap - red_cross or portal_mark by computePortalFinalPos's
@@ -1593,6 +1598,15 @@ private:
         float z = 0.0f; // in front of its owner's picture and its halo (Particles::SlotFraction)
         glm::dvec2 cellPx{0.0};
         std::string image;
+        // A cut sheet whose units do not divide by its cut, cut as SetupSpriteRects
+        // cuts it - its stride in WHOLE units (gs2d Sprite.cpp:119-130) - where a
+        // flipbook's even split would sample past it: its quads take their uv from
+        // `cut` rather than from a SpriteAnimationComponent. An effect's emitter on
+        // shock_strike.png (512 over 5 is 102, not 102.4) is the one such; a
+        // level's on tesla_shock_black_bg.png is left evenly split, for the
+        // visuals plan's 13.1 (step 67's recorded deviation).
+        bool wholeUnitCut = false;
+        Tiers::Cut cut;
         int sprite = -1; // the sprite in m_sprites whose entity it belongs to: it goes when that goes
         int slot = 0;    // which of that entity's <ParticleSystem>s it is, from 0
         // ETHEntity::KillParticleSystem: no particle is renewed, and each lives out
@@ -1706,6 +1720,30 @@ private:
     // Per keyhole of Keys': whether the three it adds as it goes - wall_destroy at
     // its door, door_locked_vanish and keyhole_vanish - have been queued.
     std::vector<char> m_keyholeEffects;
+    // What a diamond, a shock ring and a fire signal leave (the visuals plan's
+    // 10.4). Per diamond of Diamonds', in its order: whether it was held and
+    // whether it was gone at the last latch - a pick is queued where `held` turns
+    // on, and a fire diamond's water where `gone` does. Edges and not one-shot
+    // flags, because 3-32's boss puts a drained fire diamond back. Grown, never
+    // snapshotted: a diamond starts lying and standing.
+    struct DiamondWatch {
+        bool held = false;
+        bool gone = false;
+    };
+    std::vector<DiamondWatch> m_diamondEffects;
+    // Per shock agent of Fields', in its order: gone at the last latch (a
+    // fireball destroyed it: shock_death 10 in front of it).
+    std::vector<char> m_fieldEffects;
+    // Whether a shock ring had claimed the player, and the player was dead, at
+    // the last latch: the ring's shock_death goes where it is the kill.
+    bool m_ringKillSeen{false};
+    bool m_playerDeadSeen{false};
+    // The torch's fire signal as the last latch saw it, and how many were put
+    // out: extinguish_fire goes at its originalPos - its torch's point - when the
+    // count goes up, by which time Torch has cleared the signal.
+    int m_signalsPutOut{0};
+    bool m_signalSeen{false};
+    glm::dvec2 m_signalOriginPx{0.0};
     // The cell the player was last drawn on, kept across the door: updateEyes
     // reads GetFrame every frame, and the quad it comes from is destroyed when the
     // character is hidden.

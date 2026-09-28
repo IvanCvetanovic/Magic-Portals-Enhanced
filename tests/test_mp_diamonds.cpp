@@ -212,6 +212,11 @@ void holdingOneTurnsAPortalShotIntoAFireball() {
         found = true;
         CHECK_MSG(ball.velocityPx.x > 0.0, "flying the way the tap pointed");
         CHECK_MSG(std::fabs(ball.velocityPx.y) < 1.0, "and level with it");
+        // burnProjectile's point, recorded for the layer's burn_projectile: where
+        // the shot stood as it was deleted, which is where the fireball is made.
+        CHECK_MSG(run.level.diamonds.burnedPx.size() == static_cast<std::size_t>(1) &&
+                      run.level.diamonds.burnedPx[0] == ball.atPx,
+                  "the tick records the one shot it burned, at the fireball's own point");
     }
     CHECK_MSG(found, "a fireball stands where the shot was");
 
@@ -219,6 +224,7 @@ void holdingOneTurnsAPortalShotIntoAFireball() {
     for (int tick = 0; tick < 60; ++tick) {
         PutAt(run.registry, run.level.player, lyingAt);
         Tick(run);
+        if (tick == 0) CHECK_MSG(run.level.diamonds.burnedPx.empty(), "and the record is that tick's alone");
     }
     CHECK_MSG(!run.level.turrets.playerKilled, "a fireball your own tap bought cannot burn you");
     CHECK_MSG(!run.level.hazards.playerDied, "and nothing else killed the player either");
@@ -347,6 +353,7 @@ void takenOnOneFrameAndStrikingOnTheNext() {
     if (taken == nullptr) return;
     CHECK_MSG(taken->owner == run.level.player, "the player took it");
     CHECK_EQ(run.level.diamonds.picked, 1);
+    CHECK_MSG(run.level.diamonds.strikes.empty(), "no strike recorded on the frame it was taken");
     CHECK_MSG(!taken->gone, "and it has not spent itself on the frame it was taken");
     CHECK_EQ(run.level.diamonds.struck, 0);
     CHECK_MSG(run.registry.valid(minion), "the minion 8 px away is alive after the frame it was taken on");
@@ -359,6 +366,27 @@ void takenOnOneFrameAndStrikingOnTheNext() {
 
     CHECK_EQ(run.level.diamonds.struck, 1);
     CHECK_MSG(!run.registry.valid(minion), "and on the next frame it is struck");
+    // The strike as the tick saw it, for the layer's shock_death and shock_strike:
+    // the diamond's point and the minion's body centre, which the 30 px was
+    // measured to - the minion put 8 px away, less what one step moved it.
+    CHECK_MSG(run.level.diamonds.strikes.size() == static_cast<std::size_t>(1), "one strike recorded");
+    if (!run.level.diamonds.strikes.empty()) {
+        const Diamonds::Strike& strike = run.level.diamonds.strikes[0];
+        const Diamonds::Diamond* struckWith = run.level.diamonds.Find(kDiamond);
+        CHECK_MSG(struckWith != nullptr && strike.diamond < run.level.diamonds.diamonds.size() &&
+                      &run.level.diamonds.diamonds[strike.diamond] == struckWith && strike.diamondPx == struckWith->atPx,
+                  "by this diamond, at its point");
+        CHECK_MSG(strike.prey == minion, "the minion it struck");
+        const glm::dvec2 put(lyingAt.x + 8.0, lyingAt.y);
+        const double moved = std::hypot(strike.preyCentrePx.x - put.x, strike.preyCentrePx.y - put.y);
+        const double reach = std::hypot(strike.preyCentrePx.x - strike.diamondPx.x,
+                                        strike.preyCentrePx.y - strike.diamondPx.y);
+        CHECK_MSG(moved < 4.0 && reach < 30.0, "at its body's centre, " + std::to_string(moved) +
+                                                   " px from where it was put and " + std::to_string(reach) +
+                                                   " from the diamond");
+        std::printf("  the strike: diamond (%.3f, %.3f), prey centre (%.3f, %.3f)\n", strike.diamondPx.x,
+                    strike.diamondPx.y, strike.preyCentrePx.x, strike.preyCentrePx.y);
+    }
     CHECK_EQ(run.level.minions.taken, 1);
     const Diamonds::Diamond* spent = run.level.diamonds.Find(kDiamond);
     CHECK(spent != nullptr);
@@ -368,6 +396,10 @@ void takenOnOneFrameAndStrikingOnTheNext() {
     // And Minions owns the removal: the minion is gone from its own list, not
     // merely destroyed behind its back.
     CHECK_MSG(run.level.minions.minions[0].gone, "Minions knows the minion it lost");
+
+    // The record is the tick's alone.
+    Tick(run);
+    CHECK_MSG(run.level.diamonds.strikes.empty(), "the next tick's record is empty");
 }
 
 // Only a character may take one. A minion put straight onto a diamond leaves it

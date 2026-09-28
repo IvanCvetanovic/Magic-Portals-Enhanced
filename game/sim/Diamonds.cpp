@@ -147,8 +147,12 @@ std::vector<entt::entity> State::Tick(entt::registry& registry, const std::vecto
     // death is what clears it. So the flag is the diamond's state and not the
     // player's, and a diamond that goes down a gutter takes it with it.
     carrierHasFire = false;
+    // This tick's records only: last tick's are the layer's, and read by now.
+    strikes.clear();
+    burnedPx.clear();
 
-    for (Diamond& diamond : diamonds) {
+    for (std::size_t index = 0; index < diamonds.size(); ++index) {
+        Diamond& diamond = diamonds[index];
         if (diamond.gone) continue;
 
         // The top-level branch, on ownerID. Unowned: poll for a carrier and then
@@ -193,10 +197,12 @@ std::vector<entt::entity> State::Tick(entt::registry& registry, const std::vecto
         // module's, so it is handed back instead.
         for (const entt::entity body : prey) {
             if (!Alive(registry, body)) continue;
-            if (Squared(PxOf(registry, body) - diamond.atPx) >= range2) continue;
+            const glm::dvec2 preyPx = PxOf(registry, body);
+            if (Squared(preyPx - diamond.atPx) >= range2) continue;
             diamond.gone = true;
             ++struck;
             hit.push_back(body);
+            strikes.push_back(Strike{index, diamond.atPx, preyPx, body});
             break;
         }
     }

@@ -466,6 +466,10 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // and there is nothing to scale. Diamonds.hpp carries that decode.
     if (level.diamonds.carrierHasFire && level.portals.flight) {
         const Portals::Flight& shot = *level.portals.flight;
+        // burnProjectile's burn_projectile.ent, at the shot as it is deleted
+        // (effects.json burn_projectile): a record for the layer, whether or not
+        // a fireball can be made of it below.
+        level.diamonds.burnedPx.push_back(shot.atPx);
         const glm::dvec2 along = shot.toPx - shot.atPx;
         const double length = std::sqrt(along.x * along.x + along.y * along.y);
         if (length > 0.0) {

@@ -17356,3 +17356,237 @@ or relinked for a refusal.
 - For the backlog (the close agent): a 10.3 row; deviations 3 and 4 as gameplay rows.
 - For the merge's renumbering: "step 127" is written in `effects.json` (the `_keys` note) and `keys.json`
   (`_not_built`).
+
+## Step 128 - what a diamond, a shock ring and a fire signal leave: a shock diamond's pick and strike, a fire diamond's burns and its water, and the death a ring or a dead agent adds (built)
+
+**TRACK B: the visuals plan's step 10.4** (the remake's `out/parity/visuals/briefs/00_order.md` section 7 as section
+8.13's 10.4 row amends it; `system_7.md` 7f-3; decode D4 section 5 and `D4_check.md` section 4, which holds). Built in
+the worktree `Magic-Portals-Remake-vis4` (branch `visuals-d`, from `0da3ac5`, step 127), whose build reads the frozen
+level data in `out/snap_pre8`; numbered in track B's range, and the merge renumbers it. Changed: `game/data/effects.json`
+(eight rows and a `_shock_burn_extinguish` note), `game/sim/Effects.{hpp,cpp}` (the rows, their reader,
+`Turn::RadiansAsDegrees`, `Effects::Strike`), `game/sim/Diamonds.{hpp,cpp}` and `game/sim/Game.cpp` (two write-only
+per-tick records), `game/MagicPortalsLayer.{hpp,cpp}` (the rule in `latchSimEffects`, which now takes the registry;
+the watches; an effect emitter's whole-unit cut; the report's angle), the `_not_built` notes of
+`game/data/{diamonds,fields,torch}.json`, and `tests/test_mp_{effects,diamonds,layer}.cpp`. No engine change (the pin
+stays `4bfcf67`), no converter change, no format finding (no `docs/ethanon-formats.md` entry). **GAMEPLAY: NONE.**
+
+**BLOCKERS, checked first.** Section 7's three: **0.1** is step 60 (a JPEG's size from its frame header,
+`game/sim/Sprites.cpp:36-143`), so `burn_projectile.ent`'s `explosion.JPG` system builds - gate (1b) counts its ten;
+**D4** is removed by section 8.13 (closed, and `D4_check` section 4 holds its #524 reading); **F14** is visual only, and
+it exists (`out/parity/footage/F14.md`, takes r1 and p2 on 3-16). The effects runtime is step 83's, the between-slot
+table step 83's with step 88's merge, the bare-literal rule step 86's, the earthquakes step 121's, a minion's entity
+point step 76's (R24/R25's `EntityAboveCentrePx`). The listing is the md5 the decodes cite (`48fe65ce...`). Nothing
+unmet.
+
+**WHAT THE ORIGINAL DOES** (the listing; `effects.json` carries each call with its instructions). Eight call sites,
+every one `AddScaledEntity` (angle 0, `ETHScriptWrapper.Scene.cpp:176-178`) at `getScale()` but the strike:
+- **`ETHCallback_shock_diamond`** (444545..446781). The free arm (#59-221): the first character within scale(30) not
+  leaving gets `shock_diamond_pick.ent` at the DIAMOND's `GetPosition()` (#160-174), the pick sound,
+  `startEarthquake(15, 0)` (#182-184) and `ownerID`, and the arm returns. The carried arm (#222-561), on a later frame:
+  within the same scale(30) of `MinionChooser`'s minion, the strike sound, `shock_death.ent` at the MINION's
+  `GetPosition()` (#449-463), then `AddEntity('shock_strike.ent', (diamond.GetPosition() + enemy.GetPosition()) x 0.5,
+  getAngle(normalize(enemy - diamond)), ...)` (#466-524) - the one getAngle site of twelve that converts nothing, so
+  RADIANS in [0, 2 pi) go where the engine reads degrees (`ETHParticleManager.cpp:121, :517`) and the strike is turned by
+  at most 6.28 degrees - then `startEarthquake(25, 100)` (#538-540), `destroy(enemy)` and `DeleteEntity(diamond)`.
+- **`ETHCallback_shock_area`** (448212..448931): the `dark_mage.ent` within `squaredRadius` and not `isCharacterDead`
+  (#68-134) gets hp 0, the strike sound and `shock_death.ent` at ITS `GetPosition()` (#136-167).
+- **`ETHCallback_shock_agent`** (446781..448212), once `isDestroyed` (#289-295): `shock_death.ent` at its `GetPosition()`
+  + `vector3(0, 0, 10)`, the 10 a BARE `PshC4` (#301-327), then `small_explosion.ent` at its point (#331-345), its ring
+  and itself deleted. `system_7.md`'s "unreachable" is stale: `ETHBeginContactCallback_fireball` (#62-112) destroys a
+  shock agent it touches, and the port plays that (`Game.cpp`'s fireball block, `Fields::Destroy`).
+- **`ETHCallback_fire_diamond`** (448931..450911): the free arm adds `burn_projectile.ent` at the DIAMOND's
+  `GetPosition()` + a bare 10 (#159-186) - not "at the carrier", as `diamonds.json` said - with `playBurnSound` and
+  `startEarthquake(15, 0)` (#194-196); once `isDestroyed` (a gutter mouth's `destroy()`), `extinguish_fire.ent` at its
+  `GetPosition()` (#427-449). **`burnProjectile`** (351485..351788), for every `projectile.ent` while one is carried:
+  `burn_projectile.ent` at `vector3(the shot's XY, 10)`, a bare depth of its own (#28-44), then `addFireball`.
+- **`ETHCallback_fire_signal`** (470827..471942): shot, it adds `extinguish_fire.ent` at `vector3(originalPos, 10)`
+  (#130-146, #258-269) - `originalPos` its first point, which is its torch's (`addFireSignalIfNecessary` #18-32).
+- **What they are.** `shock_diamond_pick`: 4 `shock_strike.png` cells (5 x 2) all at once, 550 +- 250 ms, size 30 +- 12,
+  and one growing sparkle; `shock_death`: 8 cells over a life, 600 +- 200, 22 +- 32, RandStartPoint (0, 32), and a
+  sparkle; `shock_strike`: 2 cells all at once, 700 ms, size 32, with NO angle of their own (every angle field 0), and a
+  sparkle to 85; `burn_projectile`: 10 `explosion.JPG` all at once, 48 +- 12.2; `extinguish_fire`: 14 `water.png` a0 over
+  a life, 700 +- 100, rising (Direction (0, -1.3)). No `<Sprite>`, every system repeat 1: temporary.
+- **`shock_strike.png` is cut in whole units.** 512 x 128 texels at density 1 (no tier twin); `SetupSpriteRects`
+  strides it `int(512 / 5)` = 102 (`gs2d Sprite.cpp:119-130`), which step 67 recorded as split evenly (102.4) and left
+  for "the step that builds the shock effects". Of every cut sheet an effect draws, it is the only one whose units do
+  not divide by its cut (`blackexplosion`, `dirt_particles`, `explosion`, `fire`, `inverted_explosion`,
+  `sharp_explosion` and `white_explosion` all do); `tesla_shock_black_bg.png` (256 over 5) is drawn only by placed
+  `shock_agent.ent` and `shock_diamond.ent`, which are 13.1's.
+- **The two earthquakes, checked** (section 8.13): #182-184 push 0 then 15, #538-540 push 100 then 25, so
+  `startEarthquake(15, 0)` and `(25, 100)`; `earthquake.json`'s `shock_diamond_picked` 15 and `shock_strike` 25 (and
+  `fire_diamond_picked` 15, #194-196) are those, and each fires on the same tick as its effect (gates 4, 7).
+
+**THE CHANGE.**
+1. **`effects.json`**: `shock_diamond_pick`, `shock_death` (both call sites' arguments), `extinguish_fire` - z `{0,
+   scaled}`, on the entity's own depth; `shock_death_at_agent`, `burn_projectile_at_pickup` - z `{10, scaled false}` on an
+   entity's depth; `burn_projectile`, `extinguish_fire_at_signal` - z `{10, scaled false}` of their own; `shock_strike` -
+   z `{0, scaled}` on the midpoint and angle `get_angle_radians_as_degrees`. Every one offset 0, scale 1, appended after
+   the keys' rows under a `_shock_burn_extinguish` note.
+2. **`sim/Effects`**: the rows read strictly - each required; the seven AddScaledEntity rows refused a direction or an
+   angle other than 0; each z refused read the other way from the decode (value and `scaled` both); the strike refused
+   any turn but `RadiansAsDegrees` and any offset. `Turn::RadiansAsDegrees`: `AngleDegrees` returns getAngle's wrapped
+   radians as they are. `Effects::Strike(rule, diamond, diamondZ, enemy, enemyZ)`: the midpoint of the points and of the
+   depths, turned along `normalize(enemy - diamond)` in the script's floats.
+3. **`sim/Diamonds` and `Game`: two write-only records**, cleared at the top of every `Diamonds::Tick` and read by
+   nothing in the simulation, as `Fire::State::blastsPx` is: `strikes` ({the diamond, its point, the struck minion's
+   body centre, the body}), because `Minions::Take` destroys the minion in the same tick and nothing after can read where
+   it stood; and `burnedPx`, which `Game` writes where it converts a shot (the fireball's own point).
+4. **The layer.** `latchSimEffects(registry, fixedDelta)`, after the keys, per diamond in `Diamonds`' order: a pick
+   where `held` turns on (`shock_diamond_pick`, or `burn_projectile_at_pickup` for a fire diamond) at the diamond's
+   point and its picture's `lookZ`; each strike of that diamond - `shock_death` at the minion's ENTITY point (body centre
+   less `EntityAboveCentrePx`) on its own depth (`MinionQuad::lookZ`: 2 / 2.8125 placed, the anchor's for an escort),
+   then `shock_strike` by `Effects::Strike`; for a fire diamond, `extinguish_fire` where `gone` turns on. Then the burned
+   shots; a shock agent newly `gone` (`shock_death_at_agent`, its picture's depth + 3.5556); a ring's kill -
+   `fields.playerKilled` risen, the player alive at the last latch, and `hazards.killedBy` the ring's, so a player dead
+   already gets none (`isCharacterDead`) - `shock_death` at the player's body point, `m_playerZ` (R10); and a signal put
+   out - `extinguish_fire_at_signal` at the origin the last latch saw (Torch clears the signal on the tick it goes).
+   Edges, not one-shot flags, because 3-32's boss puts a drained fire diamond back. One log line each, with the tick.
+   Every watch is cleared with the level's effects.
+5. **The cut.** An EFFECT's emitter on a cut sheet whose units do not divide by its cut takes `Tiers::FrameCut`'s rect:
+   its quads carry `uvScale` (102 / 512, 64 / 128) and a whole-stride `uvOffset` per frame instead of a
+   `SpriteAnimationComponent`. Every other sheet stays on the flipbook, and a level's own emitters are untouched.
+6. **The notes**: `diamonds.json:189`'s "angled along the line between them" is corrected (section 8.13, `D4.md` section
+   6.2) and its burn "at the carrier" with it; `fields.json`'s "unreachable" destroy path and the ring's `shock_death`,
+   and `torch.json`'s `extinguish_fire`, say what is built now. `Diamonds.hpp`'s header comment likewise.
+
+**THE GATES.** After = this step's build `a49f32c0` (`MagicPortals.exe`). Before = the 128-level sweep `10.3/after/sweep`
+(step 127's binary `acf7f6a2`, whose 1-01 f420 `e2da5131` this build reproduces, `10.4/after/probe`); on it none of the
+eight effects exists anywhere, which is every gate's "today". Captures, scripts and measurements:
+`out/parity/visuals/10.4/` (`capture_sweep.sh`, `compare_sweep.sh`, `explain_sweep.py`, `capture_gates.sh`,
+`measure_white.py`, `sheets.py`; `probes/`, `gates/`, `after/`, the `after_sheet_*.png` and `L1_sheet_4-29_out_small.png`).
+All `--window 1280x720 --fixed-step`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| (0) Baseline | the build reproduces the last after where the step does not reach | - | 1-01 f420 `e2da5131` on `a49f32c0`, as `10.3/after/sweep` |
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in the build that stands (`build1_game.log`, `build3_all.log`, `build4_layer.log`). `build2_all.log` stopped on a test file the edit had broken - a `\n` written as a newline inside a `printf` literal of `test_mp_diamonds.cpp`, C2001 and one C4473 - fixed, and `build3` compiled it with 0 |
+| (1) Test counts (the step's gate) | the suites the change touches, each once, 0 failures | effects 473, diamonds 126, layer 1996 | **`test_mp_effects` 512, `test_mp_diamonds` 134, `test_mp_layer` 2065, 0 failures each** (`test_mp_layer`'s first run, 2064 checks, failed 2, both in the new cases' own set-up; below) |
+| (1a) `test_mp_effects`: the rows and their sums | the decoded calls, strict | - | **passes** (`TheShockBurnAndExtinguishRowsAreTheDecodedCalls` and eight refusals: the 39 more checks): the eight rows as decoded; on 3-16's diamond (204, 124) `shock_diamond_pick` z 0, `shock_death` at a knight z 0.7111, `shock_strike` at the midpoint z 0.3556 turned **2.517095** for d = (8, -11.1); the compass **0, pi/2, pi, 3 pi/2** for an enemy below, right, above, left (D4 section 5.3), where the script's own "along the line" would give -90 below; two points on one spot 0; `burn_projectile_at_pickup` on 3-32's -10 at **-6.4444**; `shock_death_at_agent` 3.5556; the shot's and the signal's bare 10 kept for `effectAdd`; refused: `shock_diamond_pick`, `shock_strike` or `extinguish_fire_at_signal` missing, the strike turned "along" or flat, `shock_death` turned 90, the pickup burn's z scaled, the pick's z 32 |
+| (1b) `test_mp_layer`: a shock diamond on 3-16 (`level15b`) | the pick at the diamond, then on a later tick the death at the minion and the strike between | no effect | **passes** (`AShockDiamondLeavesItsPickItsDeathAndItsStrike`): `shock_diamond_ent_1741` taken, nothing added on the tick; on the frame one `shock_diamond_pick` at **(204, 124) z 0**, unturned, 4 + 1 at 30 and 3, freed on frame 41; carried, the first minion put 8 px off strikes on the next tick (the record: its body centre (215.89, 125.09), pushed 4 px by the step); on the frame, in the script's order, `shock_death` at its entity point **(215.89, 113.99) z 0.7111**, 8 + 1, and `shock_strike` at the midpoint **(209.95, 118.99) z 0.3556 turned 2.270614** (the radians of atan2f(d.x, d.y)), 2 + 1 at 32 and 3, freed within frames 40-45 (its 700 ms) |
+| (1c) `test_mp_layer`: a fire diamond on 3-32 (`level31b`) | its burn a bare 10 in front of it; a carried tap's shot burned where it stands | no effect | **passes** (`AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs`): taken, nothing on the tick, then `burn_projectile` at **(356, 128) z -6.4444** (eth_z -10 + 3.5556), ten `explosion.JPG` at 48 - so 0.1's JPEG is sized; a tap carried: the shot burned on the next tick, the record at the new fireball's own point, and `burn_projectile` there **(356.0, 122.56) z 3.5556** |
+| (1d) `test_mp_layer`: 3-31 (`level30b`), a fireball into the agent, then the drain | `shock_death` a bare 10 in front of the agent; `extinguish_fire` at the drained diamond | no effect | **passes** (`AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds`): the diamond carried, the player held 120 right of `shock_agent_ent_2441`, a tap between: the fireball destroys the agent and `shock_death` goes at **(224, 384) z 3.5556**, 8 + 1; then carried into the gutter mouth, drained, and `extinguish_fire` at the diamond **(384.0, 236.0) z 0**, 14 `water.png` at 24, all released, freed on frame 87 |
+| (1e) `test_mp_layer`: the fire signal on 4-29 (`level28c`) | `extinguish_fire` at the torch, a bare 10 of its own | no effect | **passes** (`AFireSignalPutOutLeavesItsWaterAtItsTorch`): Q.1's tap on tick 60 lights the torch, the same tap on tick 250 puts the signal out on **tick 261**; one `extinguish_fire` at the torch's point **(88, 50) z 3.5556**, 14 |
+| (1f) `test_mp_layer`: a ring's kill on 3-25 (`level24b`) | `shock_death` at the player, once; none on a player dead already | no effect | **passes** (`AShockRingsKillLeavesShockDeathAtThePlayer`): the player put in `shock_agent_2023`'s ring dies to it (`killedBy` the ring) and one `shock_death` goes at its body point **(150, 203.07) z 1.4222** (R10's 4 / 2.8125), none more over 10 ticks held there; a player that fell out of the level first and is then put in the ring: the ring claims it, `killedBy` stays the fall, **no `shock_death`** |
+| (1g) `test_mp_diamonds`: the two records | written on their tick, cleared on the next | 126 | **passes, 134**: no strike recorded on the pickup tick; on the strike tick one, by this diamond at its point, the struck body, its centre 3.9 px from where it was put and within the 30 of the diamond; empty on the next tick; the converted shot's point equal to the new fireball's, empty on the next tick |
+| (2) The cut (step 67's deviation, this sheet) | `shock_strike.png` as the original cuts it | a flipbook's fifth (0.2) | **passes**: every drawn `shock_strike.png` quad of `shock_diamond_pick` (4 of 4) and `shock_strike` (2 of 2) carries uvScale **(0.19921875, 0.5)**, a whole-stride offset (column 0-4, row 0-1) and no `SpriteAnimationComponent` (`CheckShockCut`) |
+| (3) The strike's angle (8.13's 10.4 row) | atan2(d.x, d.y) of d = enemy - diamond, wrapped, used as degrees | - | **passes**: (1a)'s compass and 2.517095; (1b)'s 2.270614; the F14 route's **0.588021** (gate 4, the log) - every one a number of degrees under 6.3 |
+| (4) F14, the strike on 3-16 (the visual check) | the pick's burst round the player; the strike's flash between the hand and the knight, white about 0.76 s, brightest early | not run; by construction no effect | **consistent.** `--level level15b --tap 394,112@40 --tap 205,578@130 --hold right@177-262` (F14 take r1's P1 and P2, step 124's route, and right held 0.78 s after P2 for r1's 1.415 s; `gates/3-16_strike`, every frame): `shock_diamond_ent_1741` **taken on tick 193**, `shock_diamond_picked` 15 on 193; the knight **struck on tick 239**, `shock_strike` 25 on 239; `shock_death` at (295.42, 206.42) z 0.7111, `shock_strike` at (289.92, 198.16) z 0.3556 turned 0.588. White pixels (every channel >= 215, F14's threshold) in a box at the strike (`gates/3-16_white_box.txt`): about 40 before; **581 on f239**, rising to **1978 on f247 (+0.13 s)**, then falling, at the baseline by f270-f282 and 12 or fewer from f289 (+0.83 s) - F14 r1: 2125 / **2181** / 1751 on #133-#135 (+0.06-0.14 s) in its own box, white to #147 (**0.76 s**). The pick: +1300 over its box's baseline on f193, the peak on **f197 (+0.07 s)**, near the baseline by f217 (+0.40 s) - F14: strongest #64-#68 (+0.00-0.14 s), strands by #72 (+0.32 s) (`gates/3-16_white_pick.txt`). By eye (`after_sheet_3-16_strike.png` against `F14_strike_3-16_strike_crops.png`): the flat white flash at the hand, the lightning growing across where the knight stood, strands falling away. Not the same geometry: the port's knight walks into the player (it overlaps him on f236), where F14's stood 27 u off. F14's dark cloud is the minion's `blood.ent`, 11.3's |
+| (5) L1, the signal put out on 4-29 | the water puff at the torch | not run; no effect | **consistent, measured.** `--level level28c --tap 247,141@60 --tap 247,141@250` (`gates/4-29_out`, every frame): put out on **tick 261**. Mean luma of L1's own torch box (x 180-320, y 60-220; `gates/4-29_torchbox.txt`, `gates/L1_4-29_torchbox.txt` from `work/L1/out_4-29_a1_frames`): port 21.6 on the dark frame, **62-69 from +0.30 to +0.80 s**, then 60.5 (+0.85), 48.5 (+0.95), 33.6 (+1.05), 19.0 (+1.15), 10.6 (+1.25), **8.7 (+1.30)**; L1 42.0 on its first dark frame, 83-85 at +0.05-0.07, **58-65 from +0.18 to +0.75**, then 56.5 (+0.82), 42.5 (+0.95), 27.5 (+1.07), 18.2 (+1.15), 11.3 (+1.23), **10.0 (+1.30)**. The plateau and the fade agree to a few luma and ~0.03 s; L1's first 0.15 s is brighter - its white blob and blue burst at the torch are `portal_death` at the shot and `light_off_sparkles` (11.2's, not drawn; `L1_sheet_4-29_out_small.png` against `after_sheet_4-29_out_small.png`) - where the port's 14 drops are still being released |
+| (6) The ring's kill on screen, 3-25 | `shock_death` where the player dies | no effect | **qualitative**: step 127's route (`--hold right@190-300`, `gates/3-25_ring`, every frame): killed by `shock_agent_2023` on **tick 250**, `shock_death` at (190.37, 167.41) z 1.4222 - the sparkle where the player was, the cells released about it over 600 ms (`after_sheet_3-25_ring.png`). No footage of a ring's kill |
+| (7) A fire diamond on screen, 3-30 (`level29b`) | the burn where it is taken, and where a carried tap's shot is | no effect | **qualitative**: `--hold right@30-120 --tap 900,250@150` (`gates/3-30_fire`, every second frame): `fire_diamond_ent_2199` **taken on tick 90** (`fire_diamond_picked` 15 on 90), `burn_projectile` at (242, 238) z 3.5556; the tap's shot **burned on tick 151** at (302.06, 232.33), z 3.5556, and its fireball flies on (`after_sheet_3-30_fire.png`). No footage of a fire diamond |
+| (8) K13 | no depth outside the table | - | **passes**: no new class; all eight take the table's `Effect`, `EffectHalo` and `EffectSystems` rows at `slotAfter(round(z))` |
+| (9) K8 (the inherited reading: the placement stream untouched) | no level particle moved | - | **passes**: every one is added through `SpawnEffect`, whose pools draw on `m_effectRandom` alone; the whole-unit cut is an effect emitter's only; `AnEffectMovesNoParticleOfTheLevels` passes in the 2065 |
+| (10) The 128-level f420 sweep | changes explained | `10.3/after/sweep` | **passes: 128 of 128 byte-identical** to `10.3/after/sweep` (`after/compare_sweep.txt`), 0 missing; **no level's log names a 10.4 event by tick 420** (`after/explain_sweep.txt`: no diamond taken, no strike, no burn, no drain, no agent destroyed, no ring's kill, no signal put out without input - the deaths by f420 are 2-12's and 2-32's, to fireballs), and no effect emitter draws `shock_strike.png` there, so the cut moves nothing either. All 128 exit 0, `Vulkan validation layers: ACTIVE` in 128 logs and no validation message, every png matching its log line (`after/check_capture_log.txt`: 129 checked, 0 bad), and no rules error in any log |
+| (11) No gameplay change | nothing the simulation reads moves | - | **passes**: the two records are written and cleared and read by nothing in the simulation; `Diamonds::Tick`'s loop took an index and nothing else; `test_mp_diamonds`' 126 earlier checks pass unchanged; the layer queues on the tick and adds on the frame (nothing added on the tick, pinned in 1b-1f); the 128 sweep frames byte-identical |
+
+**`test_mp_layer`'s first run** (`test_mp_layer_run1.txt`, `d3c1e62e`): 2064 checks, 2 failures, both in the new cases'
+own set-up and neither in what they measure. (a) 3-16: "the minion where it was put" wanted the struck body within 4 px
+of the point it was put at; the step had pushed it 4.04 px off the player it was put 8 px from. The tolerance is 8 now,
+with the reason. (b) 3-32: the case waited for `carrierHasFire`, which is the CARRIED arm's, a tick after the free arm
+takes the diamond - by then the frame between had added the burn, which is right. The case now waits for the owner. The
+second run (`test_mp_layer_run2.txt`, `0fa39c31`): 2065 checks (one more: the flag checked before the tap), 0 failures;
+every number in the table is the same in both runs.
+
+**Determinism.** Each gate capture is byte-identical to its route probe on every frame both took (3-16 f180-f300 every
+20th, 4-29 f260-f340 every 20th, 3-25's last), and `MagicPortals.exe` was not rebuilt after the first probe, so the
+probes, the gates and the sweep are one binary's.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **The strike's 30 is still measured to the minion's body centre** (`Diamonds`; the backlog's step 76 prey-point
+   row, gameplay, the owner's), while the effects go at the minion's ENTITY point, 11.1 higher, as `GetPosition()` is.
+2. **`shock_agent`'s `small_explosion.ent` (#331-345) is not drawn**: no step's contents name that site; its
+   `shock_death` is drawn because 10.4's contents name `shock_death`. For the owner (below).
+3. **The ring's kill needs the layer's guard**: `Fields::Tick` claims a player dead already (a fall, a fireball) where
+   the original's `isCharacterDead` refuses; nothing in the simulation reads that claim beyond the first death, so the
+   layer adds `shock_death` only where the ring's is the death Hazards records.
+4. **A diamond's point is the simulation's**: an unowned diamond's `bounce` is a blink counter, not motion (step 27's
+   decode), so its pick goes where it lies; a carried one's strike and water where the carry left it this tick. The
+   carried diamond's alpha 0.1 is not built (`diamonds.json` `_not_built`), so its own lightning still draws at full
+   strength while carried.
+5. **The depths are the pictures' `lookZ`** (a node's `eth_z`), as steps 126 and 127's; a diamond or agent with no
+   picture (a level drawn as boxes) adds none of its effects. No frozen level lacks one.
+6. **Two diamonds or two events on one tick** queue in `Diamonds`' order, then the burned shots, the agents, the ring,
+   the signal; the original's order between callbacks is the scene walk's, undecoded, and shows only in the effects'
+   stream (00_order K8).
+7. **The sounds are not built**: `playShockDiamondPickSound`, `playShockStrikeSound`, `playBurnSound`,
+   `playFireExtinguishSound` and `playLightOffSound` stay `sounds.json`'s names, not this step's.
+8. **`EmitterReport::cellPx` still reports an even split** for an effect's emitter (a report field no quad is sized
+   from); the drawn rect is the whole-unit cut's.
+9. **The player's point is its body's centre**, for the ring's `shock_death` and for the carried diamond, whose point
+   the strike's midpoint takes: `docs/parity-backlog.md`'s step 76 row "the player's carrier point" (its capsule's
+   centre 22 u over its feet where the original's entity point stands 18.1 over them, 3.9 u apart). So the ring's
+   `shock_death` stands 3.9 u from the original's, and the strike's midpoint about 2 u. The player's body is that row's
+   owner; nothing here moves it.
+10. **Two header comments are stale**: `Fields.hpp:40-41` ("Not built ... the death entity") and `Torch.hpp:42`
+    ("every effect entity"). Left as they are, because `Game.hpp` includes both, an edit would recompile and relink
+    every suite and the exe, and the measured binaries would no longer be the ones committed (step 127's `Keys.hpp`
+    precedent). The data notes beside them (`fields.json`, `torch.json`) are corrected.
+
+**RULINGS APPLIED.** The standing direction that R1-R23 follow what the original does. R1, R2, R22 and R23 are not
+built. **R24 and R25** are neither touched nor withdrawn; `shock_death` and the strike go at the minion's entity point,
+the number step 76 established (`EntityAboveCentrePx`), and the strike's reach is still the body centre's (deviation 1).
+**R10**: the player at 4 / 2.8125 = 1.4222 for the ring's `shock_death`. **R12**: the 720 / 256 of every bare 10
+(3.5556). **K13**: no new class. **K8**: the inherited reading.
+
+**GAMEPLAY: NONE.** Two write-only records in `Diamonds::State`; nothing the simulation reads changed (gate 11).
+
+**SUITES**, run directly, once each on the build that stands (logs `10.4/`): `test_mp_effects` **512** (473 at step
+127), `test_mp_diamonds` **134** (126), `test_mp_layer` **2065** (1996), 0 failures each; `test_mp_layer` was run twice,
+the first on the build before its two set-up fixes (above). The full ctest was not run. The build relinked all 45 suites
+and `MagicPortalsSpike` (the simulation library changed); only these three were launched, because they are the only ones
+that run the changed code: `sim/Effects` is used by the layer and `test_mp_effects` alone; `test_mp_layer` is the only
+suite that links `MagicPortalsGame`; `test_mp_diamonds` and `test_mp_layer` are the only suites that name
+`carrierHasFire`, `diamonds.struck`, `diamonds.Tick` or `Diamonds::State`; and the records change no reading of any
+other (`test_mp_play` replays level10 and level30, which hold no diamond).
+
+**PROVENANCE OF THE RUNS.** The `_not_built` notes of `diamonds.json`, `fields.json` and `torch.json` were edited at
+15:52:31, while the sweep ran (it had reached 1-29; `MagicPortals.exe` reads them at each level's load). Their readers (`Diamonds::LoadRules`, `Fields::LoadRules`,
+`Torch::LoadRules`) read only named numbers and entity names, none of which changed; every sweep log is checked for a
+rules error in gate (10).
+
+**THE VERIFICATION** (`10.4/verify1/`) re-derived the eight call sites and the two earthquakes from the listing
+(`48fe65ce...`), retook the three suites once each (512, 134 and 2065 checks, 0 failures, every number the same), the
+four gate routes (3-16 301 of 301 frames, 3-25 301 of 301, 4-29 341 of 341, 3-30 121 of 121, byte-identical to
+`gates/`, every event on its logged tick) and the 128-level sweep (128 of 128 byte-identical to `10.3/after/sweep` and
+to `10.4/after/sweep`, validation active and silent, no 10.4 event in any log), recompiled the seven changed sources
+into scratch objects with 0 warnings (`verify1/recompile.log`), and scanned every `.ent` and `.par` system of the
+original for a sheet its cut does not divide into whole units: `shock_strike.png`, the placed agents' and diamonds'
+`tesla_shock_black_bg.png` and the unused `minion_death.par`'s `death_blood.png` only, and no frozen level draws
+`shock_strike.png`, so the whole-unit cut re-cuts no earlier effect. It measured F14 and L1 itself: the strike's white
+peaks at **+0.13 s** in the port (1978, f247) against F14's **+0.09 s** (2181, #134), and both are near nothing by
++0.72-0.76 s; the water's plateau starts at **+0.30 s** against L1's **+0.18 s**, with the same height, fade and end.
+Its three low findings are deviations 8 and 10 and that onset (below).
+
+**THE COMMIT** changed no source after the gates. The build's own `-- -n` stops at CMake's glob check (a dry run
+always counts it as changed); a dry run of a copy of the build's manifest found no work, and `MagicPortals.exe`
+`a49f32c0`, `test_mp_effects` `a12b4f49`, `test_mp_diamonds` `bc668a5b` and `test_mp_layer` `0fa39c31` are the
+binaries measured above. Only this record's text changed at the commit.
+
+**SWEEP BASELINE**: `10.4/after/sweep` now stands for all 128 levels, the next step's before.
+
+**SMART APP CONTROL: 0 refusals.** Launches: the new `MagicPortals.exe` (`a49f32c0`) 139 times (the 1-01 probe, six route probes, four gate captures, the 128 sweep captures); `test_mp_effects`
+(`a12b4f49`) and `test_mp_diamonds` (`bc668a5b`) once each; `test_mp_layer` twice (`d3c1e62e`, then `0fa39c31` after the
+set-up fixes). The verification: `a49f32c0` 133 times (the probe, four gate routes, the 128 sweep) and the three suites
+once each, 0 refusals. The commit launched nothing. No exe was deleted or relinked for a refusal.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **`shock_agent`'s `small_explosion.ent`** (deviation 2), at the agent as it dies to a fireball: a one-row addition
+  beside `shock_death_at_agent`, for whichever step owns it.
+- **The strike's reach from the entity point** (deviation 1; the backlog's step 76 row): gameplay.
+- **The player's point** (deviation 9; the backlog's step 76 carrier-point row): the ring's `shock_death` and the
+  strike's midpoint move with it when the player's body is settled.
+- **`Fields.hpp` and `Torch.hpp`'s stale comments** (deviation 10), at the next edit that recompiles them anyway;
+  `system_7.md`'s "unreachable" for `ETHCallback_shock_agent` #327 is stale too (a fireball destroys an agent).
+- **`tesla_shock_black_bg.png`**, the placed shock agents' and diamonds' sheet, is still split evenly (51.2 against the
+  original's 51): 13.1's, with the effect emitters' whole-unit cut to reuse.
+- **F14's standoff geometry** (the knight 27 u off, struck as it turned) is not what the port's route gives (the knight
+  walks into the player); the diamond's `followUp` lag F14 shows is `Carry`'s, not this step's.
+- **The effects' onset** (from the verification): the strike's white peaks about 0.04 s later than F14's, and the
+  water's plateau starts about 0.12 s later than L1's; peak, fade and end agree. Measure L1's onset again once 11.2
+  draws `portal_death` and `light_off_sparkles`, and look at the release of `extinguish_fire`'s drops (not all at once)
+  only if a gap remains.
+- **`EmitterReport::cellPx`** (deviation 8): where an emitter takes the whole-unit cut, report its cut's frame units,
+  with 13.1's change that reuses that cut for `tesla_shock_black_bg.png`.
+- For the backlog (the close agent): a 10.4 row; deviation 2 as an unowned effect row.
+- For the merge's renumbering: "step 128" is written in `effects.json` (the `_shock_burn_extinguish` note),
+  `diamonds.json`, `fields.json` and `torch.json`.

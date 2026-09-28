@@ -25,7 +25,13 @@
 // runs out - both added to the CRYSTAL's own point, its depth included. And what a
 // key and its keyhole leave (10.3): key_pick where a key is taken, the unlock halo
 // at the keyhole a spent key flies into, and the three the keyhole adds when it
-// goes - the dust at its door, the door's sparkles and its own burst.
+// goes - the dust at its door, the door's sparkles and its own burst. And what a
+// diamond, a shock ring and a fire signal leave (10.4): shock_diamond_pick where a
+// shock diamond is taken, shock_death at what its strike or a ring kills (and 10
+// in front of a shock agent a fireball destroys), shock_strike between the diamond
+// and its minion, burn_projectile where a fire diamond is taken and where each
+// shot it turns is, and extinguish_fire where it goes down a drain and where a
+// fire signal is put out.
 
 #include <string>
 
@@ -37,6 +43,10 @@ namespace MagicPortals::Effects {
 enum class Turn {
     Fixed,                  // the literal `angleDeg`
     TowardTravellerMinus90, // radianToDegree(getAngle(normalize(traveller - portal))) - 90
+    // getAngle(normalize(enemy - diamond)) handed over UNCONVERTED: radians in
+    // [0, 2 pi), which the engine reads as degrees (D4 section 5), so the entity is
+    // turned by at most 6.28 degrees. ETHCallback_shock_diamond #496-498 alone.
+    RadiansAsDegrees,
 };
 
 // One call site: effects.json's row.
@@ -146,6 +156,25 @@ struct Rules {
     Rule keyholeVanish;
     Rule doorLockedVanish;
     Rule wallDestroyAtDoor;
+    // What a diamond, a shock ring and a fire signal leave (the visuals plan's
+    // 10.4; effects.json _shock_burn_extinguish). Every one AddScaledEntity's, so
+    // unturned, but the strike: ETHCallback_shock_diamond's shock_diamond_pick at
+    // the diamond it takes, on the diamond's own depth; shock_death at the minion
+    // its strike kills and ETHCallback_shock_area's at the character a ring kills,
+    // each on the victim's depth, and ETHCallback_shock_agent's a BARE 10 in front
+    // of an agent a fireball destroys (OnEntityBare); the strike between the two
+    // (Strike); ETHCallback_fire_diamond's burn_projectile a bare 10 in front of
+    // the diamond it takes, and burnProjectile's at each shot it turns, at a bare
+    // 10 of its own; extinguish_fire at a diamond a drain takes, on its depth, and
+    // ETHCallback_fire_signal's at a bare 10 of its own where its torch stands.
+    Rule shockDiamondPick;
+    Rule shockDeath;
+    Rule shockDeathAtAgent;
+    Rule shockStrike;
+    Rule burnAtPickup;
+    Rule burnAtShot;
+    Rule extinguishAtDiamond;
+    Rule extinguishAtSignal;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -170,7 +199,8 @@ glm::dvec2 VanishDirection(const glm::dvec2& travellerPx, const glm::dvec2& port
 // Ethanon's angle for `rule` along `direction`: the literal, or
 // radianToDegree(getAngle(direction)) - 90, getAngle(v) being atan2f(v.x, v.y)
 // wrapped into [0, 2 pi) (GameMath.h:711-715) - in floats, through DetMath, as
-// Art::Shot::AngleDegrees computes the shot's.
+// Art::Shot::AngleDegrees computes the shot's - or that getAngle itself, the
+// radians given back as the number of degrees (Turn::RadiansAsDegrees).
 float AngleDegrees(const Rule& rule, const glm::dvec2& direction);
 
 // vanishEffect(travellerPx, portalPx), called with where the traveller stands
@@ -224,6 +254,14 @@ Spawn OnEntity(const Rule& rule, const glm::dvec2& entityPx, double entityZ);
 // so the sum comes back as a level depth (zScaled true). A factor not above 0
 // adds the literal as it stands, as the layer does for a level with no art.
 Spawn OnEntityBare(const Rule& rule, const glm::dvec2& entityPx, double entityZ, double scaleFactor);
+
+// ETHCallback_shock_diamond #466-524: AddEntity(shock_strike, (diamond.GetPosition()
+// + enemy.GetPosition()) x 0.5, getAngle(normalize(enemy - diamond)), ...). The
+// point is the midpoint of the two entities' points and of their depths - both on
+// the level's axis, so the sum is too - plus the row's z; the angle is the rule's
+// along normalize(enemy - diamond), in the script's floats, which for this row is
+// the radians unconverted (Turn::RadiansAsDegrees).
+Spawn Strike(const Rule& rule, const glm::dvec2& diamondPx, double diamondZ, const glm::dvec2& enemyPx, double enemyZ);
 
 // A spent key's fly-in, as far as the port draws it: the clock of the
 // WaypointManager ETHCallback_key builds for it, which says when key_unlock_halo

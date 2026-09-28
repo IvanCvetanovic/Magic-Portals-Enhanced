@@ -11440,6 +11440,484 @@ void AKeyAndItsKeyholeLeaveWhatTheScriptAdds() {
     layer.OnDetach(registry);
 }
 
+// ---- what a diamond, a shock ring and a fire signal leave (the visuals plan's 10.4) --
+
+// A bare 10, as the engine's world units are to the level's at the 720 px screen of R12.
+constexpr double kBareTen = 10.0 / (720.0 / 256.0);
+
+// shock_strike.png, 512 x 128 texels at density 1, cut 5 x 2 AS THE ORIGINAL CUTS IT:
+// SetupSpriteRects strides it in whole units, 102 x 64 (Sprite.cpp:119-130), so each
+// of its quads samples 102 / 512 of the texture across, not a flipbook's fifth, and
+// starts at a whole number of those strides. Counts the quads it read.
+int CheckShockCut(entt::registry& registry, const MagicPortalsLayer::EffectReport& effect, const std::string& what) {
+    int read = 0;
+    for (const entt::entity quad : effect.particleQuads) {
+        if (!registry.valid(quad)) continue;
+        const auto& material = registry.get<MaterialComponent>(quad);
+        if (!EndsWith(material.albedoTexturePath, "/shock_strike.png")) continue;
+        ++read;
+        const float column = material.uvOffset.x / 0.19921875f;
+        const float row = material.uvOffset.y / 0.5f;
+        const bool whole = std::fabs(column - std::round(column)) < 1e-5f && column >= 0.0f && column <= 4.0f &&
+                           std::fabs(row - std::round(row)) < 1e-5f && row >= 0.0f && row <= 1.0f;
+        CHECK_MSG(material.uvScale == glm::vec2(0.19921875f, 0.5f) && whole &&
+                      !registry.all_of<SpriteAnimationComponent>(quad),
+                  what + ": a shock_strike cell of 102 / 512 x 64 / 128 at a whole stride, not a flipbook's: scale (" +
+                      std::to_string(material.uvScale.x) + ", " + std::to_string(material.uvScale.y) + ") offset (" +
+                      std::to_string(material.uvOffset.x) + ", " + std::to_string(material.uvOffset.y) + ")");
+    }
+    return read;
+}
+
+// THE SHOCK DIAMOND, on 3-16 (level15b): shock_diamond_ent_1741 at (204, 124), eth_z 0,
+// taken by the player - shock_diamond_pick at the diamond, on its own depth - and on a
+// later tick, carried, striking the level's first minion put 8 px from it:
+// shock_death at the MINION's entity point (its body's centre less
+// EntityAboveCentrePx) on its depth of 2 / 2.8125, then shock_strike at the midpoint of
+// the two, z and all, turned by getAngle(normalize(enemy - diamond)) - radians,
+// handed over as degrees.
+void AShockDiamondLeavesItsPickItsDeathAndItsStrike() {
+    if (!OriginalArtIsThere("AShockDiamondLeavesItsPickItsDeathAndItsStrike")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level15b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 2; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::string name = "shock_diamond_ent_1741";
+    const MagicPortals::Diamonds::Diamond* diamond = layer.SimLevel()->diamonds.Find(name);
+    CHECK(diamond != nullptr && !layer.SimLevel()->minions.minions.empty());
+    if (diamond == nullptr || layer.SimLevel()->minions.minions.empty()) return;
+    const glm::dvec2 lyingAt = diamond->atPx;
+    CHECK_MSG(lyingAt == glm::dvec2(204.0, 124.0), "it lies at its node: " + Point(lyingAt));
+
+    // TAKEN.
+    int spawnedBefore = layer.EffectsSpawned();
+    for (int tick = 0; tick < 5; ++tick) {
+        PutPlayerAt(registry, layer, lyingAt);
+        tickWith(layer, registry, kRest, {}, {});
+        diamond = layer.SimLevel()->diamonds.Find(name);
+        if (diamond != nullptr && diamond->owner != entt::null) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(diamond != nullptr && diamond->owner == layer.SimLevel()->player, "the player takes it");
+    int count = 0;
+    FirstEffect(layer, "shock_diamond_pick.ent", count);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport pick = FirstEffect(layer, "shock_diamond_pick.ent", count);
+    CHECK_MSG(count == 1 && layer.EffectsSpawned() == spawnedBefore + 1,
+              "one shock_diamond_pick on the frame: " + std::to_string(count));
+    if (pick.id == 0) return;
+    CHECK_MSG(pick.atPx == lyingAt && nearlyU(pick.zUnits, 0.0) && pick.angleDeg == 0.0f,
+              "at the diamond, on its own depth, unturned: " + Point(pick.atPx) + " z " + std::to_string(pick.zUnits));
+    CHECK_MSG(!pick.drawn && !pick.hasLight && pick.temporary && pick.scriptScale == 1.0 && pick.systems == 2 &&
+                  pick.pool == 4 + 1 && pick.systemSizePx.size() == 2 && nearlyU(pick.systemSizePx[0], 30.0) &&
+                  nearlyU(pick.systemSizePx[1], 3.0),
+              "4 shock cells at 30 all at once and a sparkle from 3: " + std::to_string(pick.pool));
+    const int pickCells = CheckShockCut(registry, pick, "shock_diamond_pick");
+    CHECK_MSG(pickCells == 4, "its four cells drawn on the frame it is added: " + std::to_string(pickCells));
+    const Burnt pickBurnt = BurnDown(layer, registry, pick.id, 120);
+    CHECK_MSG(pickBurnt.mostReleased == 5 && pickBurnt.freedOn >= 20 && pickBurnt.freedOn <= 50,
+              "all 5 released, freed on frame " + std::to_string(pickBurnt.freedOn) + " (550 +- 250 ms)");
+
+    // STRUCK, on a later tick, carried.
+    const entt::entity minion = layer.SimLevel()->minions.minions[0].body;
+    const double above = layer.SimLevel()->minions.rules.EntityAboveCentrePx();
+    spawnedBefore = layer.EffectsSpawned();
+    int struck = 0;
+    for (int tick = 0; tick < 5 && registry.valid(minion); ++tick) {
+        PutPlayerAt(registry, layer, lyingAt);
+        auto& at = registry.get<TransformComponent>(minion);
+        const glm::vec3 world = MagicPortals::Units::ToWorld(lyingAt.x + 8.0, lyingAt.y);
+        at.position = glm::vec3(world.x, world.y, at.position.z);
+        tickWith(layer, registry, kRest, {}, {});
+        struck = layer.SimLevel()->diamonds.struck;
+        if (struck > 0) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(struck == 1 && layer.SimLevel()->diamonds.strikes.size() == static_cast<std::size_t>(1),
+              "the minion is struck, and the tick records it");
+    if (layer.SimLevel()->diamonds.strikes.empty()) return;
+    const MagicPortals::Diamonds::Strike strike = layer.SimLevel()->diamonds.strikes[0];
+    CHECK_MSG(EffectsOf(layer, "shock_death.ent").empty() && EffectsOf(layer, "shock_strike.ent").empty(),
+              "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int deaths = 0;
+    int bolts = 0;
+    const MagicPortalsLayer::EffectReport death = FirstEffect(layer, "shock_death.ent", deaths);
+    const MagicPortalsLayer::EffectReport bolt = FirstEffect(layer, "shock_strike.ent", bolts);
+    CHECK_MSG(deaths == 1 && bolts == 1 && layer.EffectsSpawned() == spawnedBefore + 2,
+              "one shock_death and one shock_strike on the frame: " + std::to_string(deaths) + " / " +
+                  std::to_string(bolts));
+    if (death.id == 0 || bolt.id == 0) return;
+    CHECK_MSG(death.id < bolt.id, "in the script's order: the death, then the strike");
+    // AT THE MINION: its entity point, 11.1 over its body's centre, on its 0.711.
+    const glm::dvec2 enemyPx = strike.preyCentrePx - glm::dvec2(0.0, above);
+    constexpr double kMinionZ = 2.0 / (720.0 / 256.0);
+    CHECK_MSG(death.atPx == enemyPx && nearlyU(death.zUnits, kMinionZ) && death.angleDeg == 0.0f,
+              "shock_death at the minion's entity point " + Point(enemyPx) + ": " + Point(death.atPx) + " z " +
+                  std::to_string(death.zUnits));
+    // Put 8 px from the player, whom the diamond sits on: the step pushes the two
+    // bodies apart before the strike reads it (about 4 px, the first run's 4.04).
+    CHECK_MSG(glm::distance(strike.preyCentrePx, glm::dvec2(lyingAt.x + 8.0, lyingAt.y)) < 8.0,
+              "the minion where it was put, less the step's push: " + Point(strike.preyCentrePx));
+    CHECK_MSG(death.systems == 2 && death.pool == 8 + 1 && death.systemSizePx.size() == 2 &&
+                  nearlyU(death.systemSizePx[0], 22.0) && nearlyU(death.systemSizePx[1], 3.0) && death.temporary &&
+                  !death.drawn,
+              "8 shock cells at 22 and a sparkle: " + std::to_string(death.pool));
+    // THE STRIKE: halfway between the diamond's point and the minion's, z halfway
+    // between 0 and 0.711, turned by the radians of atan2f(d.x, d.y), d = normalize(
+    // minion - diamond), wrapped into [0, 2 pi) - a number of degrees under 6.3.
+    const glm::dvec2 mid = (strike.diamondPx + enemyPx) * 0.5;
+    const glm::dvec2 d = glm::normalize(enemyPx - strike.diamondPx);
+    double radians = std::atan2(d.x, d.y);
+    if (radians < 0.0) radians += 2.0 * 3.14159265358979323846;
+    CHECK_MSG(glm::distance(bolt.atPx, mid) < 1e-9 && nearlyU(bolt.zUnits, kMinionZ * 0.5) &&
+                  std::fabs(bolt.angleDeg - radians) < 1e-5 && bolt.angleDeg >= 0.0f && bolt.angleDeg < 6.2832f,
+              "shock_strike at the midpoint " + Point(mid) + " z " + std::to_string(bolt.zUnits) + ", turned " +
+                  std::to_string(bolt.angleDeg) + " (want " + std::to_string(radians) + ")");
+    CHECK_MSG(bolt.systems == 2 && bolt.pool == 2 + 1 && bolt.systemSizePx.size() == 2 &&
+                  nearlyU(bolt.systemSizePx[0], 32.0) && nearlyU(bolt.systemSizePx[1], 3.0) && bolt.temporary,
+              "2 shock cells at 32 all at once and a sparkle: " + std::to_string(bolt.pool));
+    const int boltCells = CheckShockCut(registry, bolt, "shock_strike");
+    CHECK_MSG(boltCells == 2, "its two cells drawn on the frame it is added: " + std::to_string(boltCells));
+    std::printf("  3-16: shock_diamond_pick at %s z %.3f (freed frame %d); struck: shock_death at %s z %.4f, "
+                "shock_strike at %s z %.4f turned %.6f 'degrees'\n",
+                Point(pick.atPx).c_str(), pick.zUnits, pickBurnt.freedOn, Point(death.atPx).c_str(), death.zUnits,
+                Point(bolt.atPx).c_str(), bolt.zUnits, bolt.angleDeg);
+    // Both freed by their pools: the death's last cell released at 7/8 of 600 +- 200
+    // and living as long again, the strike's 700 ms.
+    const Burnt boltBurnt = BurnDown(layer, registry, bolt.id, 150);
+    CHECK_MSG(boltBurnt.freedOn >= 40 && boltBurnt.freedOn <= 45 && boltBurnt.mostReleased == 3,
+              "shock_strike's 700 ms: freed on frame " + std::to_string(boltBurnt.freedOn));
+    layer.OnDetach(registry);
+}
+
+// THE FIRE DIAMOND. On 3-32 (level31b): fire_diamond_ent_1256 at (356, 128), eth_z -10,
+// taken - burn_projectile a BARE 10 in front of the diamond, -10 + 3.5556 - and a tap
+// with it carried, whose shot is burned where it stands: burn_projectile at the shot, at
+// a bare 10 of its own, 3.5556, the point the fireball is made at.
+void AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs() {
+    if (!OriginalArtIsThere("AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const MagicPortals::Diamonds::Diamond* fire = nullptr;
+    for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+        if (diamond.fire && fire == nullptr) fire = &diamond;
+    }
+    CHECK_MSG(fire != nullptr, "3-32 places a fire diamond");
+    if (fire == nullptr) return;
+    const glm::dvec2 lyingAt = fire->atPx;
+    // TAKEN is the tick the free arm writes ownerID; hasFireDiamond is the carried
+    // arm's, a tick later (the first run of this case waited for that and found the
+    // burn already added, as it should be).
+    const auto owned = [&layer]() {
+        for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+            if (diamond.fire && diamond.owner != entt::null) return true;
+        }
+        return false;
+    };
+    int spawnedBefore = layer.EffectsSpawned();
+    for (int i = 0; i < 5 && !owned(); ++i) {
+        PutPlayerAt(registry, layer, lyingAt);
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        if (owned()) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(owned(), "the player takes the fire diamond");
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && EffectsOf(layer, "burn_projectile.ent").empty(),
+              "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int count = 0;
+    const MagicPortalsLayer::EffectReport taken = FirstEffect(layer, "burn_projectile.ent", count);
+    CHECK_MSG(count == 1, "one burn_projectile where it is taken: " + std::to_string(count));
+    if (taken.id == 0) return;
+    CHECK_MSG(taken.atPx == lyingAt && nearlyU(taken.zUnits, -10.0 + kBareTen) && taken.angleDeg == 0.0f,
+              "at the diamond " + Point(lyingAt) + ", -10 + 3.5556: " + Point(taken.atPx) + " z " +
+                  std::to_string(taken.zUnits));
+    CHECK_MSG(taken.systems == 1 && taken.pool == 10 && taken.systemSizePx.size() == 1 &&
+                  nearlyU(taken.systemSizePx[0], 48.0) && taken.temporary && !taken.drawn && !taken.hasLight,
+              "ten explosion.JPG at 48, all at once: " + std::to_string(taken.pool));
+
+    // A TAP, carried: the shot is burned before it ever flies.
+    PutPlayerAt(registry, layer, lyingAt);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.SimLevel()->diamonds.carrierHasFire, "the fire diamond is carried");
+    glm::dvec2 aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
+    for (int i = 0; i < 60 && !onScreen(registry, aim); ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
+    }
+    tap(layer, registry, screenOf(registry, aim));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const int converted = layer.SimLevel()->turrets.converted;
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.SimLevel()->turrets.converted == converted + 1 &&
+                  layer.SimLevel()->diamonds.burnedPx.size() == static_cast<std::size_t>(1),
+              "the shot is burned on the next tick, and the tick records where");
+    if (layer.SimLevel()->diamonds.burnedPx.empty()) return;
+    const glm::dvec2 burnedAt = layer.SimLevel()->diamonds.burnedPx[0];
+    const std::string made = "fire_diamond#" + std::to_string(converted + 1);
+    bool madeThere = false;
+    for (const auto& ball : layer.SimLevel()->turrets.fireballs) {
+        if (ball.name == made) madeThere = ball.atPx == burnedAt;
+    }
+    CHECK_MSG(madeThere, "the fireball is made where the shot was burned: " + Point(burnedAt));
+    const int before = layer.EffectsSpawned();
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    MagicPortalsLayer::EffectReport shot;
+    for (const MagicPortalsLayer::EffectReport& report : EffectsOf(layer, "burn_projectile.ent")) {
+        if (report.id > before) shot = report;
+    }
+    CHECK_MSG(shot.id != 0 && shot.atPx == burnedAt && nearlyU(shot.zUnits, kBareTen) && shot.pool == 10,
+              "burn_projectile at the shot " + Point(burnedAt) + ", a bare 10 of its own: " + Point(shot.atPx) +
+                  " z " + std::to_string(shot.zUnits));
+    std::printf("  3-32: fire diamond taken at %s: burn_projectile z %.4f; its shot burned at %s: z %.4f\n",
+                Point(taken.atPx).c_str(), taken.zUnits, Point(shot.atPx).c_str(), shot.zUnits);
+    layer.OnDetach(registry);
+}
+
+// On 3-31 (level30b): its fire diamond (384, 134), eth_z 0, taken, then its shot turned
+// at the level's one shock agent (224, 384): the fireball destroys the agent, whose
+// destroy arm adds shock_death a bare 10 in front of it. Then the diamond carried into
+// the gutter mouth below its block, which destroys it: extinguish_fire at the diamond,
+// on its own depth.
+void AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds() {
+    if (!OriginalArtIsThere("AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30b");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const MagicPortals::Diamonds::Diamond* fire = nullptr;
+    for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+        if (diamond.fire && fire == nullptr) fire = &diamond;
+    }
+    const MagicPortals::Fields::Field* agent = layer.SimLevel()->fields.FindField("shock_agent_ent_2441");
+    CHECK_MSG(fire != nullptr && agent != nullptr, "3-31 places a fire diamond and shock_agent_ent_2441");
+    if (fire == nullptr || agent == nullptr) return;
+    const glm::dvec2 lyingAt = fire->atPx;
+    const glm::dvec2 agentAt = agent->atPx;
+    for (int i = 0; i < 5 && !layer.SimLevel()->diamonds.carrierHasFire; ++i) {
+        PutPlayerAt(registry, layer, lyingAt);
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(layer.SimLevel()->diamonds.carrierHasFire, "the fire diamond is carried");
+
+    // THE AGENT: the player held 120 to its right in open air, outside its ring's 94,
+    // and a tap between the two; the fireball flies on along it into the agent.
+    const glm::dvec2 standAt = agentAt + glm::dvec2(120.0, 0.0);
+    for (int i = 0; i < 30; ++i) {
+        PutPlayerAt(registry, layer, standAt);
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(!layer.SimLevel()->hazards.playerDied, "the player stands clear of the ring");
+    const glm::dvec2 aim = agentAt + glm::dvec2(60.0, 0.0);
+    CHECK_MSG(onScreen(registry, aim), "the tap is on screen");
+    PutPlayerAt(registry, layer, standAt);
+    tap(layer, registry, screenOf(registry, aim));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    bool gone = false;
+    for (int i = 0; i < 180 && !gone; ++i) {
+        PutPlayerAt(registry, layer, standAt);
+        tickWith(layer, registry, kRest, {}, {});
+        agent = layer.SimLevel()->fields.FindField("shock_agent_ent_2441");
+        gone = agent != nullptr && agent->gone;
+        if (!gone) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(gone, "the fireball destroyed the agent");
+    if (!gone) return;
+    int deaths = 0;
+    FirstEffect(layer, "shock_death.ent", deaths);
+    CHECK_MSG(deaths == 0, "nothing is added on the tick");
+    const int beforeAgent = layer.EffectsSpawned();
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    MagicPortalsLayer::EffectReport death;
+    for (const MagicPortalsLayer::EffectReport& report : EffectsOf(layer, "shock_death.ent")) {
+        if (report.id > beforeAgent) death = report;
+    }
+    CHECK_MSG(death.id != 0 && death.atPx == agent->atPx && nearlyU(death.zUnits, kBareTen) && death.pool == 8 + 1,
+              "shock_death at the agent " + Point(agent->atPx) + ", a bare 10 in front of it: " + Point(death.atPx) +
+                  " z " + std::to_string(death.zUnits));
+    std::printf("  3-31: shock_agent_ent_2441 destroyed by a fireball: shock_death at %s z %.4f\n",
+                Point(death.atPx).c_str(), death.zUnits);
+
+    // THE DRAIN: 10 x 51 hung 46 below the gutter mouth's node at (384, 182).
+    const glm::dvec2 inTheMouth(384.0, 182.0 + 46.0);
+    const MagicPortals::Diamonds::Diamond* held = nullptr;
+    glm::dvec2 drainedAt(0.0);
+    bool drained = false;
+    for (int i = 0; i < 120 && !drained; ++i) {
+        PutPlayerAt(registry, layer, inTheMouth);
+        tickWith(layer, registry, kRest, {}, {});
+        for (const auto& diamond : layer.SimLevel()->diamonds.diamonds) {
+            if (diamond.fire) held = &diamond;
+        }
+        drained = held != nullptr && held->gone;
+        if (drained) drainedAt = held->atPx;
+        else layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(drained, "the drain took the diamond");
+    if (!drained) return;
+    CHECK(EffectsOf(layer, "extinguish_fire.ent").empty());
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int waters = 0;
+    const MagicPortalsLayer::EffectReport water = FirstEffect(layer, "extinguish_fire.ent", waters);
+    CHECK_MSG(waters == 1 && water.atPx == drainedAt && nearlyU(water.zUnits, 0.0) && water.angleDeg == 0.0f,
+              "extinguish_fire at the diamond " + Point(drainedAt) + ", on its own depth: " + Point(water.atPx) +
+                  " z " + std::to_string(water.zUnits));
+    CHECK_MSG(water.systems == 1 && water.pool == 14 && water.systemSizePx.size() == 1 &&
+                  nearlyU(water.systemSizePx[0], 24.0) && water.temporary && !water.drawn,
+              "fourteen water.png at 24 over a life: " + std::to_string(water.pool));
+    const Burnt burnt = BurnDown(layer, registry, water.id, 150);
+    CHECK_MSG(burnt.mostReleased == 14 && burnt.freedOn >= 70 && burnt.freedOn <= 100,
+              "all 14 released, freed on frame " + std::to_string(burnt.freedOn) + " (700 + 700 +- 100 ms)");
+    std::printf("  3-31: the diamond drained at %s: extinguish_fire z %.4f, freed on frame %d\n",
+                Point(water.atPx).c_str(), water.zUnits, burnt.freedOn);
+    layer.OnDetach(registry);
+}
+
+// THE FIRE SIGNAL, on 4-29 (level28c): the torch lit by Q.1's tap on tick 60 (L1's
+// point) and its signal put out by the same tap on tick 250. extinguish_fire goes at
+// vector3(originalPos, 10): the torch's point, at a bare 10 of its own.
+void AFireSignalPutOutLeavesItsWaterAtItsTorch() {
+    if (!OriginalArtIsThere("AFireSignalPutOutLeavesItsWaterAtItsTorch")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level28c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    layer.ScheduleDevTap(60, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
+    layer.ScheduleDevTap(250, glm::dvec2(247.0 / 1280.0, 141.0 / 720.0));
+    bool lit = false;
+    glm::dvec2 torchAt(0.0);
+    int putOutOn = -1;
+    for (int tick = 1; tick <= 400 && putOutOn < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const auto& torch = layer.SimLevel()->torch;
+        if (torch.signal.present) {
+            lit = true;
+            torchAt = torch.signal.originPx;
+        }
+        if (torch.putOut > 0) {
+            putOutOn = tick;
+            break;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(lit && putOutOn > 0, "the torch was lit and its signal put out, on tick " + std::to_string(putOutOn));
+    if (putOutOn < 0) return;
+    CHECK_MSG(!layer.SimLevel()->torch.signal.present, "and the signal is gone");
+    CHECK(EffectsOf(layer, "extinguish_fire.ent").empty());
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int count = 0;
+    const MagicPortalsLayer::EffectReport water = FirstEffect(layer, "extinguish_fire.ent", count);
+    const MagicPortals::Torch::Light* light =
+        layer.SimLevel()->torch.lights.empty() ? nullptr : &layer.SimLevel()->torch.lights[0];
+    CHECK_MSG(count == 1 && light != nullptr && water.atPx == torchAt && torchAt == light->atPx &&
+                  nearlyU(water.zUnits, kBareTen) && water.pool == 14,
+              "one extinguish_fire at the torch " + Point(torchAt) + ", a bare 10 of its own: " + Point(water.atPx) +
+                  " z " + std::to_string(water.zUnits));
+    std::printf("  4-29: the signal put out on tick %d: extinguish_fire at %s z %.4f\n", putOutOn,
+                Point(water.atPx).c_str(), water.zUnits);
+    layer.OnDetach(registry);
+}
+
+// THE RING'S KILL, on 3-25 (level24b): the player put in a shock ring dies to it, and
+// ETHCallback_shock_area adds shock_death at the character's own point and depth (R10's
+// 4 / 2.8125) - once. And a player already dead is not killed again: one put in a
+// ring after falling out of the level adds none (isCharacterDead).
+void AShockRingsKillLeavesShockDeathAtThePlayer() {
+    if (!OriginalArtIsThere("AShockRingsKillLeavesShockDeathAtThePlayer")) return;
+    constexpr double kPlayerZ = 4.0 / (720.0 / 256.0);
+    for (const bool fallFirst : {false, true}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level24b");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 3; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(!layer.SimLevel()->fields.fields.empty(), "3-25 places a shock ring");
+        if (layer.SimLevel()->fields.fields.empty()) return;
+        const std::string ring = layer.SimLevel()->fields.fields[0].name;
+        if (fallFirst) {
+            const glm::dvec2 under(layer.BoundsPx().x * 0.5,
+                                   layer.BoundsPx().y + layer.SimLevel()->hazards.marginPx.y + 64.0);
+            for (int tick = 0; tick < 5 && !layer.SimLevel()->hazards.playerDied; ++tick) {
+                PutPlayerAt(registry, layer, under);
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+            CHECK_MSG(layer.SimLevel()->hazards.playerDied && layer.SimLevel()->hazards.diedByFalling,
+                      "the player fell out first");
+        }
+        const int before = layer.EffectsSpawned();
+        glm::dvec2 killedAt(0.0);
+        bool claimed = false;
+        for (int tick = 0; tick < 5 && !claimed; ++tick) {
+            const MagicPortals::Fields::Field* field = layer.SimLevel()->fields.FindField(ring);
+            if (field == nullptr) break;
+            PutPlayerAt(registry, layer, field->atPx);
+            tickWith(layer, registry, kRest, {}, {});
+            claimed = layer.SimLevel()->fields.playerKilled;
+            if (claimed) killedAt = playerPx(registry, layer);
+            else layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(claimed, "the ring claims the player");
+        if (!claimed) return;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        int deaths = 0;
+        const MagicPortalsLayer::EffectReport death = FirstEffect(layer, "shock_death.ent", deaths);
+        if (fallFirst) {
+            CHECK_MSG(deaths == 0 && layer.SimLevel()->hazards.killedBy != ring,
+                      "a player dead already is not killed again: " + std::to_string(deaths));
+        } else {
+            CHECK_MSG(layer.SimLevel()->hazards.playerDied && layer.SimLevel()->hazards.killedBy == ring,
+                      "the ring's is the death: " + layer.SimLevel()->hazards.killedBy);
+            CHECK_MSG(deaths == 1 && layer.EffectsSpawned() == before + 1 && death.atPx == killedAt &&
+                          nearlyU(death.zUnits, kPlayerZ) && death.pool == 8 + 1,
+                      "one shock_death at the player " + Point(killedAt) + ", on its 1.4222: " + Point(death.atPx) +
+                          " z " + std::to_string(death.zUnits));
+            // Held in the ring, the player is not killed twice.
+            for (int tick = 0; tick < 10; ++tick) {
+                const MagicPortals::Fields::Field* field = layer.SimLevel()->fields.FindField(ring);
+                if (field != nullptr) PutPlayerAt(registry, layer, field->atPx);
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+            FirstEffect(layer, "shock_death.ent", deaths);
+            CHECK_MSG(deaths == 1, "and only once: " + std::to_string(deaths));
+            std::printf("  3-25: killed by %s: shock_death at %s z %.4f\n", ring.c_str(), Point(death.atPx).c_str(),
+                        death.zUnits);
+        }
+        layer.OnDetach(registry);
+    }
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
@@ -11584,6 +12062,11 @@ void runTests() {
     ATimedCrystalGoesWithItsVanishAtItsTime();
     AKeyTakenOn318LeavesItsPickAtTheKey();
     AKeyAndItsKeyholeLeaveWhatTheScriptAdds();
+    AShockDiamondLeavesItsPickItsDeathAndItsStrike();
+    AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs();
+    AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds();
+    AFireSignalPutOutLeavesItsWaterAtItsTorch();
+    AShockRingsKillLeavesShockDeathAtThePlayer();
 }
 
 } // namespace

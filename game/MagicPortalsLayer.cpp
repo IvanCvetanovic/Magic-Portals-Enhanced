@@ -928,7 +928,10 @@ void MagicPortalsLayer::stepEmitter(entt::registry& registry, Emitter& emitter, 
 
         if (quad == entt::null) {
             quad = makeSprite(registry, emitter.tag, emitter.image, system.additive);
-            if (frames > 1) {
+            if (emitter.wholeUnitCut) {
+                // The original's rect, written here rather than by a flipbook.
+                registry.get<MaterialComponent>(quad).uvScale = glm::vec2(emitter.cut.uvScale);
+            } else if (frames > 1) {
                 auto& animation = registry.emplace<SpriteAnimationComponent>(quad);
                 animation.columns = static_cast<uint32_t>(system.columns);
                 animation.rows = static_cast<uint32_t>(system.rows);
@@ -937,7 +940,11 @@ void MagicPortalsLayer::stepEmitter(entt::registry& registry, Emitter& emitter, 
             }
         }
         if (pooled) registry.get<RenderableComponent>(quad).isVisible = true;
-        if (frames > 1) {
+        if (emitter.wholeUnitCut) {
+            const int columns = std::max(1, system.columns);
+            registry.get<MaterialComponent>(quad).uvOffset =
+                glm::vec2(Tiers::UvOffset(emitter.cut, particle.frame % columns, particle.frame / columns));
+        } else if (frames > 1) {
             registry.get<SpriteAnimationComponent>(quad).firstFrame = static_cast<uint32_t>(particle.frame);
         }
         const glm::dvec4 colour = Particles::DrawColour(system, particle, m_ambient);
@@ -1274,6 +1281,20 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
                             Slot::EffectSystems, slot, systems);
         emitter.image = image.path;
         emitter.cellPx = ParticleCellUnits(image, system);
+        // SetupSpriteRects strides a cut sheet in whole units (Sprite.cpp:119-130)
+        // and DrawParticleSystem sets each particle's rect from it
+        // (ETHParticleManager.cpp:397-401). Where the units divide by the cut, the
+        // flipbook's even split is the same rect; where they do not - shock_strike.png,
+        // 512 over 5 - the quad takes the original's own (Emitter::wholeUnitCut).
+        if (system.Frames() > 1) {
+            Tiers::Cut cut;
+            std::string why;
+            if (Tiers::FrameCut(image.texels, image.density, system.columns, system.rows, cut, why) &&
+                (cut.frameUnits.x * system.columns != cut.units.x || cut.frameUnits.y * system.rows != cut.units.y)) {
+                emitter.wholeUnitCut = true;
+                emitter.cut = cut;
+            }
+        }
         emitter.sprite = -1; // no level sprite carries it: this effect does
         emitter.slot = slot;
         emitter.tag = "Magic Portals Effect Particle";
@@ -1316,6 +1337,13 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_crystalEffects.clear();
     m_keyEffects.clear();
     m_keyholeEffects.clear();
+    m_diamondEffects.clear();
+    m_fieldEffects.clear();
+    m_ringKillSeen = false;
+    m_playerDeadSeen = false;
+    m_signalsPutOut = 0;
+    m_signalSeen = false;
+    m_signalOriginPx = glm::dvec2(0.0);
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -1583,6 +1611,7 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         report.id = effect.id;
         report.entity = effect.entity;
         report.atPx = effect.atPx;
+        report.angleDeg = static_cast<float>(effect.angleDeg);
         report.zUnits = effect.zUnits;
         report.z = effect.z;
         report.haloZ = effect.haloZ;
@@ -6095,7 +6124,7 @@ MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn
 // The rule is that queuing happens on the TICK while adding and drawing happen on
 // the FRAME, so that an effect cannot reach Game::Level or the state hash by the
 // back door.
-void MagicPortalsLayer::latchSimEffects(float fixedDelta) {
+void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fixedDelta) {
     if (!m_loaded) return;
 
     // THE FIREBALLS IN FLIGHT. Each one is an entity of the original's -
@@ -6355,6 +6384,140 @@ void MagicPortalsLayer::latchSimEffects(float fixedDelta) {
             << sparkles.entity << " z " << sparkles.z << ", " << burst.entity << " at (" << burst.atPx.x << ", "
             << burst.atPx.y << ") z " << burst.z << std::endl;
     }
+
+    // WHAT A DIAMOND, A SHOCK RING AND A FIRE SIGNAL LEAVE (the visuals plan's 10.4;
+    // effects.json _shock_burn_extinguish), each where its callback adds it and with
+    // no owner, after the keys for the reason those are after the rest. Every
+    // number is said with its tick, so a capture can find what it measures.
+    const auto logged = [this](const char* what, const Effects::Spawn& spawn) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << what << " on tick " << m_ticks << ": " << spawn.entity << " at ("
+                                             << spawn.atPx.x << ", " << spawn.atPx.y << ") z " << spawn.z
+                                             << (spawn.zScaled ? "" : " bare") << " angle " << spawn.angleDeg
+                                             << std::endl;
+    };
+    const double factor = m_artRules.scaleFactor;
+    // PER DIAMOND, in Diamonds' order, as each one's callback adds them. A diamond's
+    // point is the simulation's (an unowned one does not move, and Carry::Acquire
+    // does not move one as it is taken); its depth is its node's eth_z, the
+    // picture's lookZ. A diamond with no picture (a level drawn as boxes) has no
+    // depth to add them at, and adds none.
+    const std::vector<Diamonds::Diamond>& diamonds = m_level.diamonds.diamonds;
+    if (m_diamondEffects.size() < diamonds.size()) m_diamondEffects.resize(diamonds.size());
+    for (std::size_t i = 0; i < diamonds.size(); ++i) {
+        const Diamonds::Diamond& diamond = diamonds[i];
+        DiamondWatch& watch = m_diamondEffects[i];
+        const bool held = !diamond.gone && diamond.owner != entt::null;
+        const bool heldBefore = watch.held;
+        const bool goneBefore = watch.gone;
+        watch.held = held;
+        watch.gone = diamond.gone;
+        const int index = static_cast<int>(i);
+        const DrawnSprite* drawn = pictureOf([index](const DrawnSprite& s) { return s.diamond == index; });
+        if (drawn == nullptr) continue;
+        // TAKEN: the free arm's AddScaledEntity at the diamond's own GetPosition() -
+        // shock_diamond_pick for a shock diamond; for a fire diamond burn_projectile,
+        // a bare 10 in front of it (ETHCallback_fire_diamond #159-186).
+        if (held && !heldBefore) {
+            if (diamond.fire) {
+                const Effects::Spawn burn =
+                    Effects::OnEntityBare(m_effectRules.burnAtPickup, diamond.atPx, drawn->lookZ, factor);
+                m_effectQueue.push_back(effectAdd(burn));
+                logged(("fire diamond " + diamond.name + " taken").c_str(), burn);
+            } else {
+                const Effects::Spawn pick = Effects::OnEntity(m_effectRules.shockDiamondPick, diamond.atPx, drawn->lookZ);
+                m_effectQueue.push_back(effectAdd(pick));
+                logged(("shock diamond " + diamond.name + " taken").c_str(), pick);
+            }
+        }
+        // ITS STRIKE, from the tick's record: the minion is destroyed by now.
+        // shock_death at the MINION's GetPosition() - its entity point, the body's
+        // centre less EntityAboveCentrePx (R25's point), at its own depth - then
+        // shock_strike at the midpoint of the two, turned by the radians
+        // getAngle gives (Effects::Strike). The 30 it was struck within is still
+        // measured to the body's centre (Diamonds; the backlog's prey-point row).
+        for (const Diamonds::Strike& strike : m_level.diamonds.strikes) {
+            if (strike.diamond != i) continue;
+            const glm::dvec2 enemyPx =
+                strike.preyCentrePx - glm::dvec2(0.0, m_level.minions.rules.EntityAboveCentrePx());
+            double enemyZ = m_artRules.LevelDepth(m_artRules.minion.z);
+            const std::vector<Minions::Minion>& minions = m_level.minions.minions;
+            for (std::size_t j = 0; j < minions.size() && j < m_minions.size(); ++j) {
+                if (minions[j].body != strike.prey) continue;
+                enemyZ = m_minions[j].lookZ;
+                break;
+            }
+            const Effects::Spawn death = Effects::OnEntity(m_effectRules.shockDeath, enemyPx, enemyZ);
+            const Effects::Spawn bolt =
+                Effects::Strike(m_effectRules.shockStrike, strike.diamondPx, drawn->lookZ, enemyPx, enemyZ);
+            m_effectQueue.push_back(effectAdd(death));
+            m_effectQueue.push_back(effectAdd(bolt));
+            logged(("shock diamond " + diamond.name + " struck").c_str(), death);
+            logged(("shock diamond " + diamond.name + " struck").c_str(), bolt);
+        }
+        // DOWN A DRAIN: a fire diamond destroyed - only a gutter mouth destroys one -
+        // adds extinguish_fire at its own GetPosition() (#427-449).
+        if (diamond.fire && diamond.gone && !goneBefore) {
+            const Effects::Spawn water = Effects::OnEntity(m_effectRules.extinguishAtDiamond, diamond.atPx, drawn->lookZ);
+            m_effectQueue.push_back(effectAdd(water));
+            logged(("fire diamond " + diamond.name + " drained").c_str(), water);
+        }
+    }
+    // EACH SHOT A CARRIED FIRE DIAMOND TURNED: burnProjectile's burn_projectile at
+    // vector3(the shot's point, 10), a depth of its own (Diamonds::State::burnedPx).
+    for (const glm::dvec2& atPx : m_level.diamonds.burnedPx) {
+        const Effects::Spawn burn = Effects::At(m_effectRules.burnAtShot, atPx);
+        m_effectQueue.push_back(effectAdd(burn));
+        logged("shot burned", burn);
+    }
+    // A SHOCK AGENT A FIREBALL DESTROYED: ETHCallback_shock_agent's destroy arm adds
+    // shock_death at the agent's GetPosition() plus a bare 10 (#301-327). Its
+    // small_explosion (#331-345) is not this step's.
+    const std::vector<Fields::Field>& fields = m_level.fields.fields;
+    if (m_fieldEffects.size() < fields.size()) m_fieldEffects.resize(fields.size(), 0);
+    for (std::size_t i = 0; i < fields.size(); ++i) {
+        const Fields::Field& field = fields[i];
+        const bool goneBefore = m_fieldEffects[i] != 0;
+        m_fieldEffects[i] = field.gone ? 1 : 0;
+        if (!field.gone || goneBefore) continue;
+        const DrawnSprite* drawn = pictureOf([&field](const DrawnSprite& s) { return s.sprite.node == field.name; });
+        if (drawn == nullptr) continue;
+        const Effects::Spawn death =
+            Effects::OnEntityBare(m_effectRules.shockDeathAtAgent, field.atPx, drawn->lookZ, factor);
+        m_effectQueue.push_back(effectAdd(death));
+        logged(("shock agent " + field.name + " destroyed").c_str(), death);
+    }
+    // A RING'S KILL: ETHCallback_shock_area adds shock_death at the character's
+    // GetPosition() as it sets its hp to 0 (#136-167), and only when the character
+    // is not dead already (isCharacterDead, #125-134). Fields claims a kill
+    // whether or not the player died first, so the rule is: the ring claimed it
+    // this tick, the player was alive at the last latch, and the death Hazards
+    // records is the ring's.
+    const bool ringKilled = m_level.fields.playerKilled;
+    const bool dead = m_level.hazards.playerDied;
+    if (ringKilled && !m_ringKillSeen && !m_playerDeadSeen && dead &&
+        m_level.hazards.killedBy == m_level.fields.killedBy && m_level.player != entt::null &&
+        registry.valid(m_level.player) && registry.all_of<Supersonic::TransformComponent>(m_level.player)) {
+        const glm::dvec2 atPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
+        const Effects::Spawn death = Effects::OnEntity(m_effectRules.shockDeath, atPx, m_playerZ);
+        m_effectQueue.push_back(effectAdd(death));
+        logged(("player killed by " + m_level.fields.killedBy).c_str(), death);
+    }
+    m_ringKillSeen = ringKilled;
+    m_playerDeadSeen = dead;
+    // A FIRE SIGNAL PUT OUT: ETHCallback_fire_signal adds extinguish_fire at
+    // vector3(originalPos, 10) - originalPos its own first point, which is its
+    // torch's (addFireSignalIfNecessary) - a depth of its own (#130-146, #258-269).
+    // Torch clears the signal on the tick it goes, so its origin is the last
+    // latch's.
+    const Torch::State& torch = m_level.torch;
+    if (torch.putOut > m_signalsPutOut && m_signalSeen) {
+        const Effects::Spawn water = Effects::At(m_effectRules.extinguishAtSignal, m_signalOriginPx);
+        m_effectQueue.push_back(effectAdd(water));
+        logged("fire signal put out", water);
+    }
+    m_signalsPutOut = torch.putOut;
+    m_signalSeen = torch.signal.present;
+    if (torch.signal.present) m_signalOriginPx = torch.signal.originPx;
 }
 
 void MagicPortalsLayer::queueTapEffects(entt::registry& registry) {
@@ -7082,7 +7245,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
         latchSimSounds();
-        latchSimEffects(fixedDelta);
+        latchSimEffects(registry, fixedDelta);
         latchSimQuakes();
         // ...and the moment the exit reports, the beat before the medal; the
         // moment the player dies, the beat before the lost screen. Should both

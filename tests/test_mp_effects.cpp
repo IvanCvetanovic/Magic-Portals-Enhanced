@@ -693,6 +693,111 @@ void TheUnlockHaloComesOnTheFlyInsFrameOne() {
     std::printf("  the unlock halo: %d ticks after the unlock at 60 Hz, %d at 30 Hz\n", at60, at30);
 }
 
+// What a diamond, a shock ring and a fire signal leave (the visuals plan's 10.4):
+// eight calls, each pinned as read, and the arithmetic of each reading - on an
+// entity's own depth, a bare 10 on one, a bare 10 of its own, and the strike's
+// midpoint and its radians handed over as degrees.
+void TheShockBurnAndExtinguishRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    struct Row {
+        const Effects::Rule* rule;
+        const char* entity;
+        double z;
+        bool scaled;
+    };
+    // Seven AddScaledEntity calls - unturned, unoffset, at getScale() - and the
+    // strike's AddEntity, below.
+    const Row rows[] = {{&rules.shockDiamondPick, "shock_diamond_pick.ent", 0.0, true},
+                        {&rules.shockDeath, "shock_death.ent", 0.0, true},
+                        {&rules.shockDeathAtAgent, "shock_death.ent", 10.0, false},
+                        {&rules.burnAtPickup, "burn_projectile.ent", 10.0, false},
+                        {&rules.burnAtShot, "burn_projectile.ent", 10.0, false},
+                        {&rules.extinguishAtDiamond, "extinguish_fire.ent", 0.0, true},
+                        {&rules.extinguishAtSignal, "extinguish_fire.ent", 10.0, false}};
+    for (const Row& row : rows) {
+        const Effects::Rule& rule = *row.rule;
+        CHECK_MSG(rule.entity == row.entity && rule.offsetUnits == 0.0 && rule.z == row.z &&
+                      rule.zScaled == row.scaled && rule.turn == Effects::Turn::Fixed && rule.angleDeg == 0.0 &&
+                      rule.scale == 1.0,
+                  std::string(row.entity) + ": z " + Num(rule.z) + (rule.zScaled ? " scaled" : " bare") +
+                      ", angle 0, at getScale()");
+    }
+    const Effects::Rule& strike = rules.shockStrike;
+    CHECK_MSG(strike.entity == "shock_strike.ent" && strike.offsetUnits == 0.0 && strike.z == 0.0 &&
+                  strike.zScaled && strike.turn == Effects::Turn::RadiansAsDegrees && strike.scale == 1.0,
+              "shock_strike: at the midpoint, turned by getAngle's radians as they are, at getScale()");
+
+    // On the entity's own depth: 3-16's diamond (204, 124), eth_z 0, and a knight
+    // struck at the entity point of a body centred at (212, 124) - 2 / 2.8125 deep.
+    constexpr double kFactor = 720.0 / 256.0;
+    const glm::dvec2 diamond(204.0, 124.0);
+    const double minionZ = 2.0 / kFactor;
+    const Effects::Spawn pick = Effects::OnEntity(rules.shockDiamondPick, diamond, 0.0);
+    CHECK_MSG(pick.entity == "shock_diamond_pick.ent" && pick.atPx == diamond && pick.z == 0.0 && pick.zScaled &&
+                  pick.angleDeg == 0.0f,
+              "shock_diamond_pick at the diamond, on its own depth: z " + Num(pick.z));
+    const glm::dvec2 knight(212.0, 124.0 - 11.1);
+    const Effects::Spawn death = Effects::OnEntity(rules.shockDeath, knight, minionZ);
+    CHECK_MSG(death.atPx == knight && Near(death.z, 0.711111, 1e-6) && death.angleDeg == 0.0f,
+              "shock_death at the knight, on its 0.711: " + Num(death.z));
+    // THE STRIKE: the midpoint of the two points and of the two depths, turned by
+    // atan2f(d.x, d.y) of d = normalize(enemy - diamond), wrapped into [0, 2 pi), and
+    // handed over AS DEGREES - so at most 6.28 of them.
+    const Effects::Spawn bolt = Effects::Strike(strike, diamond, 0.0, knight, minionZ);
+    CHECK_MSG(bolt.entity == "shock_strike.ent" && Near(bolt.atPx.x, 208.0, 1e-12) &&
+                  Near(bolt.atPx.y, 124.0 - 5.55, 1e-12) && Near(bolt.z, minionZ * 0.5, 1e-12) && bolt.zScaled,
+              "shock_strike halfway, z halfway: " + At(bolt.atPx) + " z " + Num(bolt.z));
+    // d = (8, -11.1): up and to the right, atan2(8, -11.1) = 2.5163 in (pi / 2, pi).
+    double wantRadians = std::atan2(8.0, -11.1);
+    if (wantRadians < 0.0) wantRadians += 2.0 * kPi;
+    CHECK_MSG(Near(bolt.angleDeg, wantRadians, 1e-5) && bolt.angleDeg < 6.2832f,
+              "turned by the radians, as degrees: " + Num(bolt.angleDeg));
+    // The compass, as D4 section 5.3 gives it: an enemy below (+y) 0, to the right
+    // pi / 2, above pi, to the left 3 pi / 2 - each a number of DEGREES.
+    struct Compass {
+        glm::dvec2 enemy;
+        double want;
+    };
+    const Compass compass[] = {{{204.0, 150.0}, 0.0},
+                               {{230.0, 124.0}, kPi * 0.5},
+                               {{204.0, 100.0}, kPi},
+                               {{180.0, 124.0}, kPi * 1.5}};
+    for (const Compass& c : compass) {
+        const float got = Effects::Strike(strike, diamond, 0.0, c.enemy, 0.0).angleDeg;
+        CHECK_MSG(Near(got, c.want, 1e-5), "an enemy at " + At(c.enemy) + ": " + Num(got) + ", want " + Num(c.want));
+    }
+    // And the one it is not: the script's own "along the line" is
+    // radianToDegree(getAngle(d)) - 90, which would turn a strike at an enemy to
+    // the right by 0 degrees and one below by -90.
+    Effects::Rule along = strike;
+    along.turn = Effects::Turn::TowardTravellerMinus90;
+    CHECK(Near(Effects::Strike(along, diamond, 0.0, glm::dvec2(204.0, 150.0), 0.0).angleDeg, -90.0, 1e-4));
+    // Two points on one spot: normalize gives zero, getAngle 0.
+    CHECK(Effects::Strike(strike, diamond, 0.0, diamond, 0.0).angleDeg == 0.0f);
+
+    // A BARE 10 on an entity's depth: only the 10 comes onto the level's axis - 3-32's
+    // fire diamond at eth_z -10 takes its burn at -10 + 3.5556 = -6.4444, and a shock
+    // agent at 0 its shock_death at 3.5556.
+    const Effects::Spawn burn = Effects::OnEntityBare(rules.burnAtPickup, glm::dvec2(356.0, 128.0), -10.0, kFactor);
+    CHECK_MSG(burn.entity == "burn_projectile.ent" && burn.zScaled && Near(burn.z, -10.0 + 10.0 / kFactor, 1e-12),
+              "burn_projectile at the fire diamond: " + Num(burn.z));
+    const Effects::Spawn agent = Effects::OnEntityBare(rules.shockDeathAtAgent, glm::dvec2(224.0, 384.0), 0.0, kFactor);
+    CHECK_MSG(agent.entity == "shock_death.ent" && Near(agent.z, 3.555556, 1e-6), "at the agent: " + Num(agent.z));
+    // A BARE 10 of its own: At keeps the literal and says it is bare, for the
+    // layer's effectAdd to bring onto the level's axis - burnProjectile's and the
+    // fire signal's.
+    const Effects::Spawn shot = Effects::At(rules.burnAtShot, glm::dvec2(100.0, 60.0));
+    const Effects::Spawn water = Effects::At(rules.extinguishAtSignal, glm::dvec2(247.0, 141.0));
+    CHECK_MSG(shot.z == 10.0 && !shot.zScaled && water.z == 10.0 && !water.zScaled &&
+                  water.entity == "extinguish_fire.ent",
+              "burn_projectile and the signal's water at a bare 10 of their own");
+    const Effects::Spawn drained = Effects::OnEntity(rules.extinguishAtDiamond, glm::dvec2(384.0, 150.0), 0.0);
+    CHECK_MSG(drained.entity == "extinguish_fire.ent" && drained.z == 0.0 && drained.zScaled,
+              "the drained diamond's water on its own depth");
+    std::printf("  10.4: strike at %s z %s turned %s; burn at pickup z %s; agent z %s\n", At(bolt.atPx).c_str(),
+                Num(bolt.z).c_str(), Num(bolt.angleDeg).c_str(), Num(burn.z).c_str(), Num(agent.z).c_str());
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
@@ -809,6 +914,29 @@ void ARowMissingAFactIsRefused() {
             "\"entity\": \"door_locked_vanish.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 2, \"scaled\": true},",
             "door_locked_vanish.z");
     refused("no_halo_time.json", "\"after_fly_in_ms\": 666,", "", "key_unlock_halo.after_fly_in_ms");
+    // The 10.4 rows: each required, the strike turned by nothing but its radians,
+    // the rest never turned, and each z read the one way the decode has it.
+    refused("no_shock_pick.json", "\"shock_diamond_pick\": {", "\"shock_pick_gone\": {", "shock_diamond_pick");
+    refused("no_strike.json", "\"shock_strike\": {", "\"shock_strike_gone\": {", "shock_strike");
+    refused("no_signal_water.json", "\"extinguish_fire_at_signal\": {", "\"signal_water_gone\": {",
+            "extinguish_fire_at_signal");
+    refused("strike_along.json", "\"angle\": \"get_angle_radians_as_degrees\",",
+            "\"angle\": \"toward_traveller_minus_90\",", "shock_strike");
+    refused("strike_flat.json", "\"angle\": \"get_angle_radians_as_degrees\",", "\"angle\": 0,", "shock_strike");
+    refused("death_turned.json",
+            "\"entity\": \"shock_death.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n"
+            "    \"angle\": 0,",
+            "\"entity\": \"shock_death.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n"
+            "    \"angle\": 90,",
+            "shock_death");
+    refused("burn_scaled.json",
+            "\"entity\": \"burn_projectile.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 10, \"scaled\": false},",
+            "\"entity\": \"burn_projectile.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 10, \"scaled\": true},",
+            "burn_projectile_at_pickup.z");
+    refused("pick_raised.json",
+            "\"entity\": \"shock_diamond_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
+            "\"entity\": \"shock_diamond_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": true},",
+            "shock_diamond_pick.z");
     refused("halo_at_once.json", "\"after_fly_in_ms\": 666,", "\"after_fly_in_ms\": 0,",
             "key_unlock_halo.after_fly_in_ms");
 
@@ -835,6 +963,7 @@ int main() {
     TheCrystalRowsAddToTheCrystalsOwnPoint();
     TheKeyRowsAreTheDecodedCalls();
     TheUnlockHaloComesOnTheFlyInsFrameOne();
+    TheShockBurnAndExtinguishRowsAreTheDecodedCalls();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

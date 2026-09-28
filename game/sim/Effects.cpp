@@ -15,6 +15,7 @@ namespace {
 namespace Json = Supersonic::Json;
 
 constexpr const char* kTowardTravellerMinus90 = "toward_traveller_minus_90";
+constexpr const char* kRadiansAsDegrees = "get_angle_radians_as_degrees";
 
 bool Finite(const Json::Value& value) {
     return value.IsNumber() && std::isfinite(value.AsNumber());
@@ -53,8 +54,10 @@ bool ReadRule(const Json::Value& root, const char* name, Rule& out, std::string&
         read.angleDeg = angle.AsNumber();
     } else if (angle.IsString() && angle.AsString() == kTowardTravellerMinus90) {
         read.turn = Turn::TowardTravellerMinus90;
+    } else if (angle.IsString() && angle.AsString() == kRadiansAsDegrees) {
+        read.turn = Turn::RadiansAsDegrees;
     } else {
-        error = where + ".angle is a number or " + kTowardTravellerMinus90;
+        error = where + ".angle is a number, " + kTowardTravellerMinus90 + " or " + kRadiansAsDegrees;
         return false;
     }
     if (!Finite(row["scale"]) || !(row["scale"].AsNumber() > 0.0)) {
@@ -218,7 +221,15 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "key_unlock_halo", read.keyUnlockHalo, why) ||
         !ReadRule(root, "keyhole_vanish", read.keyholeVanish, why) ||
         !ReadRule(root, "door_locked_vanish", read.doorLockedVanish, why) ||
-        !ReadRule(root, "wall_destroy_at_door", read.wallDestroyAtDoor, why)) {
+        !ReadRule(root, "wall_destroy_at_door", read.wallDestroyAtDoor, why) ||
+        !ReadRule(root, "shock_diamond_pick", read.shockDiamondPick, why) ||
+        !ReadRule(root, "shock_death", read.shockDeath, why) ||
+        !ReadRule(root, "shock_death_at_agent", read.shockDeathAtAgent, why) ||
+        !ReadRule(root, "shock_strike", read.shockStrike, why) ||
+        !ReadRule(root, "burn_projectile_at_pickup", read.burnAtPickup, why) ||
+        !ReadRule(root, "burn_projectile", read.burnAtShot, why) ||
+        !ReadRule(root, "extinguish_fire", read.extinguishAtDiamond, why) ||
+        !ReadRule(root, "extinguish_fire_at_signal", read.extinguishAtSignal, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -258,7 +269,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"key_unlock_halo", &read.keyUnlockHalo},
                      {"keyhole_vanish", &read.keyholeVanish},
                      {"door_locked_vanish", &read.doorLockedVanish},
-                     {"wall_destroy_at_door", &read.wallDestroyAtDoor}};
+                     {"wall_destroy_at_door", &read.wallDestroyAtDoor},
+                     {"shock_diamond_pick", &read.shockDiamondPick},
+                     {"shock_death", &read.shockDeath},
+                     {"shock_death_at_agent", &read.shockDeathAtAgent},
+                     {"burn_projectile_at_pickup", &read.burnAtPickup},
+                     {"burn_projectile", &read.burnAtShot},
+                     {"extinguish_fire", &read.extinguishAtDiamond},
+                     {"extinguish_fire_at_signal", &read.extinguishAtSignal}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
@@ -276,7 +294,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                     {"key_unlock_halo", &read.keyUnlockHalo},
                     {"keyhole_vanish", &read.keyholeVanish},
                     {"door_locked_vanish", &read.doorLockedVanish},
-                    {"wall_destroy_at_door", &read.wallDestroyAtDoor}};
+                    {"wall_destroy_at_door", &read.wallDestroyAtDoor},
+                    {"shock_diamond_pick", &read.shockDiamondPick},
+                    {"shock_death", &read.shockDeath},
+                    {"shock_death_at_agent", &read.shockDeathAtAgent},
+                    {"burn_projectile_at_pickup", &read.burnAtPickup},
+                    {"burn_projectile", &read.burnAtShot},
+                    {"extinguish_fire", &read.extinguishAtDiamond},
+                    {"extinguish_fire_at_signal", &read.extinguishAtSignal}};
     for (const auto& row : unturned) {
         if (row.rule->angleDeg != 0.0) {
             error = path + ": " + row.name + " is added by AddScaledEntity, whose angle is 0";
@@ -320,6 +345,41 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
             return false;
         }
     }
+    // The 10.4 rows each read their z one way, and the layer calls the reading
+    // the decode has: OnEntity where the z (0) goes on a diamond's or a victim's
+    // own GetPosition(); OnEntityBare where a bare PshC4 10f goes on one (the
+    // agent, the diamond a fire diamond is taken at); At where vector3(xy, 10)
+    // is a depth of its own (burnProjectile, ETHCallback_fire_signal); and the
+    // strike's midpoint, whose z is the two points' own. A row that said the
+    // other would be read half one way.
+    const struct {
+        const char* name;
+        const Rule* rule;
+        bool scaled;
+        double z;
+    } burnDepths[] = {{"shock_diamond_pick", &read.shockDiamondPick, true, 0.0},
+                      {"shock_death", &read.shockDeath, true, 0.0},
+                      {"shock_death_at_agent", &read.shockDeathAtAgent, false, 10.0},
+                      {"shock_strike", &read.shockStrike, true, 0.0},
+                      {"burn_projectile_at_pickup", &read.burnAtPickup, false, 10.0},
+                      {"burn_projectile", &read.burnAtShot, false, 10.0},
+                      {"extinguish_fire", &read.extinguishAtDiamond, true, 0.0},
+                      {"extinguish_fire_at_signal", &read.extinguishAtSignal, false, 10.0}};
+    for (const auto& row : burnDepths) {
+        if (row.rule->zScaled != row.scaled || row.rule->z != row.z) {
+            error = path + ": " + row.name + ".z is " +
+                    (row.scaled ? std::string("the entity's own GetPosition() z: 0, scaled true")
+                                : std::string("a bare PshC4 10f in the decode: 10, scaled false"));
+            return false;
+        }
+    }
+    // The strike is the one AddEntity of them, at a midpoint and turned by the
+    // radians getAngle gives: no offset, and no other turn.
+    if (read.shockStrike.turn != Turn::RadiansAsDegrees || read.shockStrike.offsetUnits != 0.0) {
+        error = path + ": shock_strike is turned by getAngle(normalize(enemy - diamond)) unconverted (" +
+                kRadiansAsDegrees + ") and offset by nothing";
+        return false;
+    }
     // projectile_shoot is offset along the shot's direction but never turned by
     // it: AddScaledEntity passes a flat 0f.
     if (read.projectileShoot.turn != Turn::Fixed) {
@@ -350,11 +410,15 @@ glm::dvec2 VanishDirection(const glm::dvec2& travellerPx, const glm::dvec2& port
 
 float AngleDegrees(const Rule& rule, const glm::dvec2& direction) {
     if (rule.turn == Turn::Fixed) return static_cast<float>(rule.angleDeg);
-    // #28-34: getAngle(direction), radianToDegree, SUBIf 90f - the same float
-    // steps as Art::Shot::AngleDegrees (ETHCallback_projectile #102-111).
+    // getAngle(direction): atan2f(v.x, v.y), and 2 pi more below 0
+    // (GameMath.h:711-715; the .so's literal 6.2831855, which 2 x PI is exactly).
     constexpr float kPi = 3.141592654f; // gs2d::math::constant::PI
     float radians = Supersonic::DetMath::atan2(static_cast<float>(direction.x), static_cast<float>(direction.y));
     if (radians < 0.0f) radians += 2.0f * kPi;
+    // ETHCallback_shock_diamond #496-498: pushed as the angle as it is.
+    if (rule.turn == Turn::RadiansAsDegrees) return radians;
+    // #28-34: radianToDegree, SUBIf 90f - the same float steps as
+    // Art::Shot::AngleDegrees (ETHCallback_projectile #102-111).
     return radians / (kPi * 2.0f) * 360.0f - 90.0f;
 }
 
@@ -410,6 +474,16 @@ Spawn OnEntityBare(const Rule& rule, const glm::dvec2& entityPx, double entityZ,
     const double literal = scaleFactor > 0.0 ? rule.z / scaleFactor : rule.z;
     spawn.z = entityZ + literal;
     spawn.zScaled = true;
+    return spawn;
+}
+
+Spawn Strike(const Rule& rule, const glm::dvec2& diamondPx, double diamondZ, const glm::dvec2& enemyPx, double enemyZ) {
+    // #478-494: normalize(enemy.GetPositionXY() - diamond.GetPositionXY()), the
+    // enemy the object of the subtraction (#486), in the script's floats; #499-513
+    // (diamond.GetPosition() + enemy.GetPosition()) x 0.5, all three components.
+    Spawn spawn = SpawnOf(rule, (diamondPx + enemyPx) * 0.5, glm::dvec2(0.0));
+    spawn.z = (diamondZ + enemyZ) * 0.5 + rule.z;
+    spawn.angleDeg = AngleDegrees(rule, VanishDirection(enemyPx, diamondPx));
     return spawn;
 }
 

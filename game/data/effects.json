@@ -17,7 +17,8 @@
     "MainCharacter's own, drawn by step 7.1 - added once at a level's",
     "start rather than at a call site, so it has a shape and a reader of its own. The shot's",
     "marks and ends (10.1, _shot_side below), what a crystal leaves where it was (10.2,",
-    "_crystals below) and what a key and its keyhole leave (10.3, _keys below). Every other",
+    "_crystals below), what a key and its keyhole leave (10.3, _keys below), and what a diamond, a",
+    "shock ring and a fire signal leave (10.4, _shock_burn_extinguish below). Every other",
     "effect the script adds gets its row with the step that draws it, so a",
     "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
     "sim/Effects, strictly: every field below is required.",
@@ -33,7 +34,9 @@
     "<Scale> (Art::Entity::ScaleAt). `angle` is Ethanon's, in degrees, counter-clockwise on the",
     "screen: a number, or the named rule toward_traveller_minus_90, radianToDegree(getAngle(d)) -",
     "90 with d = normalize(traveller - portal) and getAngle(v) = atan2f(v.x, v.y) wrapped into",
-    "[0, 2 pi) (GameMath.h:711-715), computed in floats as the script computes it."
+    "[0, 2 pi) (GameMath.h:711-715), computed in floats as the script computes it; or",
+    "get_angle_radians_as_degrees, getAngle(d) with d = normalize(enemy - diamond) handed over as it",
+    "is, radians where the engine reads degrees (shock_strike alone)."
   ],
 
   "_never_spawned": {
@@ -644,6 +647,182 @@
       "950 +- 200, size 60, growth 0.6, StartPoint z 32, RandStartPoint (0, 102), white from alpha 0.8 to 0.",
       "Temporary. Footage F9 r7b #229-#241, gone at #242 (0.85-0.89 s), dirt specks falling from #234; r6",
       "#699-#716, gone at #718 (0.93 s)."
+    ]
+  },
+
+  "_shock_burn_extinguish": [
+    "WHAT A DIAMOND, A SHOCK RING AND A FIRE SIGNAL LEAVE - the visuals plan's 10.4 (00_order section 7 as",
+    "section 8.13's 10.4 row amends it; system_7 7f-3; decode D4 section 5 and D4_check section 4), drawn from",
+    "planning step 128. Eight call sites in ETHCallback_shock_diamond, ETHCallback_shock_area, ETHCallback_shock_agent",
+    "(ETHCallback_shock_agent.angelscript), ETHCallback_fire_diamond, burnProjectile (MiscCallbacks) and",
+    "ETHCallback_fire_signal (ETHCallback_light_off.angelscript). Every one but the strike is AddScaledEntity -",
+    "AddEntity(file, pos, 0f, 0, '', scale) (ETHScriptWrapper.Scene.cpp:176-178) - so its angle is 0, and every",
+    "scale is g_scale.getScale(), 1 in the port's units. The vector3 constructor's arguments are pushed last-first",
+    "(00_order 8.0 rule 3), so the value pushed first is its z. Where the call's point is an entity's own",
+    "GetPosition() the z is on top of that entity's depth (Effects::OnEntity): a diamond's eth_z, a minion's 2 /",
+    "2.8125 = 0.711 (art.json minion), the player's 4 / 2.8125 = 1.42 (R10). The 10 that burnProjectile,",
+    "ETHCallback_fire_diamond, ETHCallback_shock_agent and ETHCallback_fire_signal add is a BARE PshC4 10f, in the",
+    "engine's own units: 10 / 2.8125 = 3.556 of the level's (00_order 8.12b; step 86's rule, step 127's",
+    "OnEntityBare where it goes on an entity's depth). THE STRIKE is the one AddEntity: its point the midpoint of",
+    "the diamond's and the minion's GetPosition() - z included - and its angle getAngle(normalize(enemy - diamond)),",
+    "RADIANS in [0, 2 pi) handed to a parameter the engine reads as DEGREES (D4 section 5.2: ETHParticleManager.cpp",
+    ":121, :517; GLES2Sprite.cpp:268-271), so the strike is turned by at most 6.28 degrees - effectively",
+    "axis-aligned, an original-game bug the port reproduces (angle get_angle_radians_as_degrees). None is given an",
+    "owner; all five .ent have no <Sprite> and every system repeat 1, so the engine frees each once its particles are",
+    "over. shock_strike.png is 512 x 128 texels at density 1 (it has no hd or fullhd twin), cut 5 x 2: the original",
+    "strides it in whole units, 102 x 64 (Sprite.cpp:119-130), where an even split is 102.4 - the port cuts it so",
+    "(step 67's recorded deviation, for this sheet; tesla_shock_black_bg.png is 13.1's)."
+  ],
+
+  "shock_diamond_pick": {
+    "entity": "shock_diamond_pick.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_shock_diamond (bytes 444545..446781), the free arm (ownerID < 0, #59-221): for each surrounding",
+      "entity that isCharacter (#117-123) and is not leaving (#125-134) within squaredRange = scale(30)^2 of the",
+      "diamond (#1-32, #136-158): #160-164 g_scale.getScale(), the scale; #165-168 the diamond's own GetPosition();",
+      "#169-174 AddScaledEntity('shock_diamond_pick.ent', that, the scale); #178-180 playShockDiamondPickSound;",
+      "#182-184 startEarthquake(15, 0) (earthquake.json shock_diamond_picked); #186-197 ownerID; the arm then",
+      "returns (#221 JMP 564). ITS .ent: no sprite; sys0 4 shock_strike.png cut 5 x 2, ALL AT ONCE, a1, rep1,",
+      "animationMode 1, life 550 +- 250, size 30 +- 12, randAngleStart 360, StartPoint z 2, white to black; sys1 1",
+      "sparkles.bmp over a life, a1, rep1, life 500, size 3 +- 5, growth 6.55, maxSize 70, (0.5, 0.5, 0.5) to",
+      "black. Temporary. Footage F14 r1 #64-#72 (7.158-7.478 s): the lightning burst round the player as he takes",
+      "it, strongest #64-#68, thinned to strands by #72."
+    ]
+  },
+
+  "shock_death": {
+    "entity": "shock_death.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "Two call sites with one set of arguments, AddScaledEntity('shock_death.ent', victim.GetPosition(),",
+      "getScale()). (A) ETHCallback_shock_diamond's carried arm (#222-561), once MinionChooser's minion is within",
+      "squaredRange (#393-443): #445-447 playShockStrikeSound, #449-453 getScale, #454-457 the MINION's",
+      "GetPosition(), #458-463 AddScaledEntity; then the strike below. (B) ETHCallback_shock_area (bytes",
+      "448212..448931), on the ring that kills: the dark_mage.ent it finds (#68-99) within squaredRadius (#101-123)",
+      "and not already dead (isCharacterDead, #125-134) gets hp 0 (#136-147), #149-151 playShockStrikeSound, and",
+      "#153-167 AddScaledEntity at the CHARACTER's GetPosition(). ITS .ent: no sprite; sys0 8 shock_strike.png cut",
+      "5 x 2 over a life (allAtOnce 0), a1, rep1, life 600 +- 200, size 22 +- 32, RandStartPoint (0, 32),",
+      "randAngleStart 360, StartPoint z 2, white to black; sys1 as shock_diamond_pick's sparkle. Temporary. Footage",
+      "F14 r1 #131-#147: with the strike, white to #147 (0.76 s)."
+    ]
+  },
+
+  "shock_death_at_agent": {
+    "entity": "shock_death.ent",
+    "offset_units": 0,
+    "z": {"value": 10, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_shock_agent (bytes 446781..448212), once isDestroyed (#289-295) - which a fireball's contact sets",
+      "(ETHBeginContactCallback_fireball, bytes from listing line 85862, #62-112: shock_agent or shock_agent.ent, then",
+      "destroy() on it and on itself; the port's Game, Fields::Destroy): #297-299 playShockStrikeSound; #301-305",
+      "getScale; #306-310 vector3(0, 0, 10), the 10 a BARE PshC4 pushed first; #313-318 the agent's GetPosition() +",
+      "that (opAdd, the agent the object); #322-327 AddScaledEntity('shock_death.ent', that, the scale). Then",
+      "#331-345 small_explosion.ent at the agent's GetPosition() (NOT drawn by this step: no step's contents name",
+      "this site), #349-360 deleteEntity(childID) - its ring - and #362-369 DeleteEntity. system_7's 'unreachable'",
+      "is stale since the port's fireball destroys an agent (Game.cpp's fireball block)."
+    ]
+  },
+
+  "shock_strike": {
+    "entity": "shock_strike.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": "get_angle_radians_as_degrees",
+    "scale": 1,
+    "_source": [
+      "ETHCallback_shock_diamond #466-524, straight after (A) above: #468-472 getScale, the scale; #478-488",
+      "vector2::opSub with the ENEMY's GetPositionXY the object (#483-486) and the diamond's the argument",
+      "(#478-481, GETREF 2), so enemy - diamond; #491-494 normalize; #496-497 getAngle; #498 PshV4 v7 - the",
+      "radians pushed as the angle with no radianToDegree (D4 section 5.1: the one getAngle site of the listing's",
+      "12 that converts nothing); #499-513 (diamond.GetPosition() + enemy.GetPosition()) x 0.5, z included;",
+      "#517-524 AddEntity('shock_strike.ent', that, the angle, @e, '', the scale). Then #538-540",
+      "startEarthquake(25, 100) (earthquake.json shock_strike), #542-547 destroy(enemy), #549-555",
+      "DeleteEntity(the diamond). getAngle is atan2f(v.x, v.y) plus 2 pi when below 0 (GameMath.h:711-715; the",
+      ".so's ETHGlobal::GetAngle @0xe4198, literal 6.2831855). ITS .ent: EmissiveColor (1, 1, 1, 0), no sprite;",
+      "sys0 2 shock_strike.png cut 5 x 2, ALL AT ONCE, a1, rep1, life 700, size 32, and no angle randomness at",
+      "all (angleStart, randAngleStart, angleDir, randAngle 0; Direction and RandStartPoint 0), so its particles'",
+      "angle is the call's alone; StartPoint z 2, white to black; sys1 1 sparkles.bmp over a life, life 450, size",
+      "3 +- 5, growth 6.55, maxSize 85, white to black. Temporary. Footage F14 r1 #131 (10.290 s): 'a white flash",
+      "between the player's hand and the knight's spot', brightest #133-#135, white gone at #148 (0.76 s)."
+    ]
+  },
+
+  "burn_projectile_at_pickup": {
+    "entity": "burn_projectile.ent",
+    "offset_units": 0,
+    "z": {"value": 10, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_fire_diamond (bytes 448931..450911), the free arm, as the shock diamond's with isCharacter",
+      "(#117-158): #160-164 getScale; #165-169 vector3(0, 0, 10), the 10 a BARE PshC4 pushed first; #172-177 the",
+      "diamond's GetPosition() + that; #181-186 AddScaledEntity('burn_projectile.ent', that, the scale); #190-192",
+      "playBurnSound; #194-196 startEarthquake(15, 0) (earthquake.json fire_diamond_picked); #198-209 ownerID. At",
+      "the DIAMOND, not at the carrier. ITS .ent: no sprite; sys0 10 explosion.JPG uncut, ALL AT ONCE, a1, rep1,",
+      "animationMode 2, life 450 +- 150, size 48 +- 12.2, growth -1.4, randAngle 11.8, randAngleStart 298,",
+      "RandomizeDir (2.3, 2.3), StartPoint z 10, (1, 0.7, 0.5) to black. Temporary."
+    ]
+  },
+
+  "burn_projectile": {
+    "entity": "burn_projectile.ent",
+    "offset_units": 0,
+    "z": {"value": 10, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "burnProjectile (MiscCallbacks, bytes 351485..351788), called for every projectile.ent by",
+      "turnProjectilesIntoFireBalls (bytes 450911..451146) from ETHCallback_fire_diamond's carried arm (#424) on",
+      "every frame a fire diamond is carried: #1-6 projectilePos = the shot's GetPositionXY; #8-20 its direction;",
+      "#22-27 killProjectile; #29-33 getScale; #34-37 vector3(projectilePos, 10), the 10 a BARE PshC4 pushed first,",
+      "a depth of its own; #38-44 AddScaledEntity('burn_projectile.ent', that, the scale); #48-54 addFireball(",
+      "projectilePos, the direction, 0, 1). The port's conversion is Game's (sim/Diamonds.hpp), which records the",
+      "point (Diamonds::State::burnedPx) where it makes the fireball. ITS .ent: as burn_projectile_at_pickup's."
+    ]
+  },
+
+  "extinguish_fire": {
+    "entity": "extinguish_fire.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_fire_diamond, once isDestroyed (#427-433) - which ETHCallback_gutter_mouth's destroy() sets",
+      "(bytes 451146..451487): #435-439 getScale; #440-442 the diamond's own GetPosition(); #444-449",
+      "AddScaledEntity('extinguish_fire.ent', that, the scale); #453-455 playFireExtinguishSound; #457-463",
+      "DeleteEntity; #466-494 hasFireDiamond 0 on the character it finds. ITS .ent: no sprite; sys0 14 water.png",
+      "over a life (allAtOnce 0), a0 (AM_PIXEL), rep1, life 700 +- 100, size 24, growth 1, randAngle 6,",
+      "randAngleStart 360, Direction (0, -1.3), RandomizeDir (0.5, 0.2), StartPoint z 10, (0.8, 0.8, 0.8, 1) to",
+      "(1, 1, 1, 0). Temporary."
+    ]
+  },
+
+  "extinguish_fire_at_signal": {
+    "entity": "extinguish_fire.ent",
+    "offset_units": 0,
+    "z": {"value": 10, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_fire_signal (ETHCallback_light_off.angelscript, bytes 470827..471942): its first frame stores",
+      "originalPos = its GetPositionXY (#1-27) - where addFireSignalIfNecessary added it, at the lit torch's",
+      "GetPosition() (bytes 469055..469393, #18-32); when hasProjectileAround(pos, 24) (#111-128) finds a shot or",
+      "a fireball: #130-146 vector3(originalPos, 10), the 10 a BARE PshC4 pushed first, a depth of its own; then",
+      "light_off.ent (#149-172) and light_off_sparkles.ent (#182-193) there, killProjectile, portal_death at the",
+      "projectile (#228-242) - the visuals plan's 11.2 - and #258-269 AddScaledEntity('extinguish_fire.ent', that",
+      "vector3, getScale()); #273-275 playLightOffSound; #279 addLightWall. ITS .ent: as extinguish_fire's.",
+      "Footage L1 (4-29, L1.md section 4): the first dark frame #194 (7.759 s), then 'a white smoke puff rises above",
+      "the torch' #195-#206 - water.png's Direction (0, -1.3) is up the screen - faded by about 9.1 s."
     ]
   }
 }

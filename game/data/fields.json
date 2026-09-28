@@ -89,8 +89,9 @@
     "throbs by a random factor between 0.993 and 1.007 of its scale every frame, is tinted",
     "(0.8, 1, 1) * 0.5, and sits at z -10 behind its agent. The agent calls bounce(0.95,",
     "0.95, 300) - which is the blinkElapsedTime pulse of utilEntityEffect, not physics, as",
-    "the shock diamond's is. With them playShockStrikeSound and the shock_death.ent spawned",
-    "on the body when the ring kills.",
+    "the shock diamond's is. With them playShockStrikeSound when the ring kills. (The",
+    "shock_death.ent it adds on the body it kills is built since step 128, the visuals plan's",
+    "10.4: effects.json shock_death.)",
     "",
     "BURNABLE, and it is already consistent. 11 of the 21 placements carry metadata/burnable,",
     "of which only level30b's is in a level that starts. Fire::Find is flag-filtered, so that",
@@ -99,12 +100,13 @@
     "fire.json's burn._note already says so in as many words. Nothing here needs wiring, and",
     "no ring can outlive its agent.",
     "",
-    "The agent's destroy path is therefore unreachable too: isDestroyed leads to",
-    "shock_death.ent, small_explosion.ent, deleteEntity(childID) - which takes the ring with",
-    "it - and DeleteEntity(self). What would set `destroy` is a blast, whose filter is",
-    "isBreakableOrExplosiveOrBurnable and so does include a burnable agent; but fire.json",
-    "already records the blast's `destroy` as not built, for the reason that one body with",
-    "two owners is how a level ends up half broken. When that lands, this is its second",
-    "caller."
+    "The agent's destroy path: isDestroyed leads to shock_death.ent, small_explosion.ent,",
+    "deleteEntity(childID) - which takes the ring with it - and DeleteEntity(self). A blast",
+    "would set `destroy` too (its filter is isBreakableOrExplosiveOrBurnable, which includes",
+    "a burnable agent), and fire.json records the blast's `destroy` as not built. A FIREBALL",
+    "does set it - ETHBeginContactCallback_fireball destroys a shock_agent it touches - and",
+    "that the port plays (Game's fireball block, Fields::Destroy), so this path IS reached,",
+    "and step 128 draws its shock_death.ent, a bare 10 in front of the agent (effects.json",
+    "shock_death_at_agent). Its small_explosion.ent at the agent (#331-345) is not drawn."
   ]
 }
