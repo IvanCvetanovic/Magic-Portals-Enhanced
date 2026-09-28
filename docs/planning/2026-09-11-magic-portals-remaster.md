@@ -17590,3 +17590,210 @@ once each, 0 refusals. The commit launched nothing. No exe was deleted or relink
 - For the backlog (the close agent): a 10.4 row; deviation 2 as an unowned effect row.
 - For the merge's renumbering: "step 128" is written in `effects.json` (the `_shock_burn_extinguish` note),
   `diamonds.json`, `fields.json` and `torch.json`.
+
+## Step 129 - what a wall, a stone and a lift door leave: the dust a breakable wall leaves, turned by the wall and at its size, the puff where a stone is destroyed, and the dust at a lift door's edge as it starts to move (built)
+
+**TRACK B: the visuals plan's step 11.1** (the remake's `out/parity/visuals/briefs/00_order.md` section 7 as section
+8.13's 11.1 row amends it; `system_7.md` 7f-4; decode D4 sections 2 and 3 and `D4_check.md` sections 1 and 2, which
+win). Built in the worktree `Magic-Portals-Remake-vis4` (branch `visuals-d`, from `b3f1861`, step 128), whose build
+reads the frozen level data in `out/snap_pre8`; numbered in track B's range, and the merge renumbers it. Changed:
+`game/data/effects.json` (four rows and a `_walls_stones_doors` note), `game/sim/Effects.{hpp,cpp}` (the rows, their
+reader, `Turn::EntityAngle`, `Effects::EffectScale`, `WallDestroy`, `DoorLiftDust`), `game/sim/Launchers.{hpp,cpp}`,
+`game/sim/Boss.{hpp,cpp}` and `game/sim/Game.cpp` (three write-only per-tick records of where a stone was destroyed),
+`game/MagicPortalsLayer.{hpp,cpp}` (the rules in `latchSimEffects`, the door latch renamed `latchDoors` and given the
+dust, `isBreakableWall` shared with `latchSimQuakes`, one watch), and `tests/test_mp_{effects,launchers,boss,layer}.cpp`.
+No engine change (the pin stays `4bfcf67`), no converter change, no format finding (no `docs/ethanon-formats.md`
+entry). **GAMEPLAY: NONE.**
+
+**BLOCKERS, checked first.** Section 7's one blocker is D4; section 8.13 removes it (closed, confirmed by `D4_check`,
+whose two count corrections are applied here). The effects runtime is step 83's, the between-slot table step 83's with
+step 88's merge, the bare-literal rule step 86's, and the earthquakes 8.13 names are step 121's: `earthquake.json`
+`wall_destroyed` (20 x `destroyEffectScale`, after the update) and `door_opening` / `door_closing` (4) - checked, and
+each fires on the tick its dust is queued (gate 3). The listing is the md5 the decodes cite (`48fe65ce...`). Nothing
+unmet.
+
+**WHAT THE ORIGINAL DOES** (the listing; `effects.json` carries each call with its instructions). Four call sites.
+- **`ETHCallback_breakable_wall`** (347658..348349), once `isDestroyed`: `effectScale` = the wall's float
+  `destroyEffectScale` where it is above 0, else 1 (#14-31); then the 6-argument `AddEntity('wall_destroy.ent',
+  wall.GetPosition(), wall.GetAngle(), @e, '', g_scale.scale(effectScale))` (#33-59; GETREF 1, 3, 4 at #56-58), and
+  `startEarthquake(effectScale x 20, 0)` (#73-76). So the dust stands on the wall's own point and depth, is turned by
+  the wall - the engine turns each particle's start point, direction and angle by the entity's angle and never its
+  gravity (`ETHParticleManager.cpp:121, :489, :517-520`) - and is scaled with every system number
+  (`ETHParticleSystem.cpp:27-40`). **Census, re-counted on the frozen levels (both spellings, 00_order 8.0 rule 4): 33
+  breakable walls in 28 levels (26 `breakable_wall`, 7 `breakable_wall.ent`), 20 at 0, 11 at -90 (`.tscn` rotation
+  1.5708) and 2 at +90 (-1.5708) - 13 of 33 turned a quarter, so their dust falls from a horizontal line - and
+  `destroyEffectScale` on one wall only, 4-32's 2217, at 2**: `D4_check` section 1 exactly.
+- **`ETHCallback_rolling_stone`** (346228..346486), once `isDestroyed`: `AddScaledEntity('rolling_stone_destroy.ent',
+  vector3(GetPositionXY(), g_scale.scale(32)), g_scale.scale(1.3))` (#9-33) - a depth of its own, at 1.3 - then
+  `DeleteEntity`; a stone not destroyed runs `deleteIfGoesOut` and adds nothing. What sets its `destroy`: touching
+  `destroyier.ent` (`ETHBeginContactCallback_rolling_stone` #73-105), a static body when flagged `destroyOnStaticHit`
+  (#170-208: the beholder's rocks), the beholder when it rises into it (`ETHCallback_beholder` #399-464, which looks
+  at `rolling_stone.ent` alone), and breaking a wall when `destroyable` (`ETHBeginContactCallback_breakable_wall`
+  #42-60).
+- **`ETHCallback_door_lift`** (411544..414041): as a door starts to open (the switch active, `status` 0, #330-354) and
+  as it starts to close (the switch off, `status` 2, #472-500), `AddScaledEntity('door_lift_particles.ent',
+  door.GetPosition() -/+ vector3(0, 0.5 x GetSize().y, 0), getScale())` (#402-434 `opSub`, #548-580 `opAdd`), each
+  followed by `startEarthquake(4, 0)`; never turned; `GetPosition()` is the frame's start (`SetPositionXY` is #624).
+- **What they are.** `wall_destroy`: 22 `dirt_particles.png` (4 x 1, a random cell) along `RandStartPoint (0, 101)`
+  and 10 `smoke_particle.png` along (0, 102), both at StartPoint z 32; `rolling_stone_destroy`: 2 smoke puffs, 950 +-
+  100 ms, size 68; `door_lift_particles`: 22 dirt specks along (24, 0), (0.1, 0.05, 0) fading IN from alpha 0 to 0.5,
+  1300 +- 200 ms, gravity 0.03. No `<Sprite>`, every system repeat 1: temporary.
+
+**THE CHANGE.**
+1. **`effects.json`**: `wall_destroy` (z `{0, scaled}` on the wall's depth, angle `entity_angle`, scale 1,
+   `scale_key` `destroyEffectScale`), `rolling_stone_destroy` (z `{32, scaled}` of its own, angle 0, scale 1.3),
+   `door_lift_particles_open` / `_close` (z `{0, scaled false}` - the bare `PshC4 0f` - on the door's depth, angle 0,
+   scale 1, `offset_size_y` -0.5 / +0.5), appended after every existing row under a `_walls_stones_doors` note.
+2. **`sim/Effects`**: the four rows read strictly - each required; the stone's and the door's refused a direction or an
+   angle other than 0; the wall's refused any turn but `Turn::EntityAngle` (the entity's own angle, handed over as it
+   is) and any offset; each z refused read the other way; the scale key required; the door shares refused with the
+   decoded sign flipped. `EffectScale(datum)` is #14-31; `WallDestroy(rules, wall point, wall z, wall angle,
+   effectScale)` is `OnEntity` turned and scaled; `DoorLiftDust(rules, opening, door point, door z, door height,
+   factor)` is `OnEntityBare` moved down the screen by the row's share of the door's own drawn height.
+3. **The stones' records** (write-only, as `Fire::State::blastsPx` and step 128's are; read by nothing in the
+   simulation): `Launchers::State::despawnedNow` - each thrown stone a despawner took this tick, by name and where the
+   step left it (`Cull` empties it first; the cull box's removal, `deleteIfGoesOut`'s, is not recorded);
+   `Boss::State::brokenNow` - each rock broken on the world (`Contacts`, which empties it first) and, named by
+   `Game::AfterStep` from `Demolish`'s stones before `Forget`, each stone the beholder broke (`Boss::State::Turn::
+   brokenPx`, the point beside `broken`).
+4. **The layer.** `latchSimEffects`, after the 10.4 rules: a breakable newly broken whose entity is `breakable_wall`
+   in either spelling (`isBreakableWall`, now also what `latchSimQuakes` asks, so the shake and the dust cannot
+   disagree) queues `wall_destroy` at its NODE's point and `eth_z` (the picture's `sprite` and `lookZ`, kept after its
+   quad goes), turned by the node's rotation as Ethanon's angle, at `EffectScale` of its datum; each record queues
+   `rolling_stone_destroy` where its stone is a `rolling_stone` in either spelling, or has no node - a thrown stone or
+   a rock, which `launchers.json` and `boss.json` make `rolling_stone.ent` (pinned) - `impactBodies`' rule. The doors'
+   latch runs at the tick's END, where step 121 put it because Puzzle turns its doors in `BeforeStep`: renamed
+   `latchDoors`, it queues the dust where a door's `opening` turns over, beside its quake, at the door's point where
+   the tick BEGAN - `mix(closed, open, the watch's progress)` - less or plus half its picture's height times its
+   entity scale (128), on its `eth_z`. One log line each, with the tick. The wall watch is cleared with the level's
+   effects; the door watch was already the level's.
+
+**THE GATES.** After = this step's build `1e6b7cb9` (`MagicPortals.exe`). Before = the 128-level sweep `10.4/after/sweep`
+(step 128's binary `a49f32c0`, whose 1-01 f420 `e2da5131` this build reproduces, `11.1/after/probe`); on it none of the
+four exists anywhere - `effects.json` had no such row - which is every gate's "today". Captures, scripts and
+measurements: `out/parity/visuals/11.1/` (`capture_sweep.sh`, `compare_sweep.sh`, `explain_sweep.py`,
+`capture_gates.sh`, `toggle_rows.py`, `measure_gates.py`, `sheets.py`; `after/`, `gates/`, `probes/`, the
+`after_sheet_*.png`). All `--window 1280x720 --fixed-step`.
+
+**Two befores.** The 1-24 route was found with the committed binary and captured on it (`gates/before`) before this
+step's build replaced it. The 1-28 and 1-32 routes were found after, so their before is this build with the four rows
+pointed at an `.ent` that does not exist (`toggle_rows.py`; `gates/toggle`): `Art::LoadEnt` fails and `SpawnEffect`
+returns before it takes an id or draws a number, and nothing else changes. **The method is checked on 1-24: the
+toggled run is byte-identical to `a49f32c0`'s on all 176 kept frames and the last** (`gates/toggle_check_1-24.txt`).
+`effects.json` was restored after the toggled runs, md5 `132553bc` both sides (the sweep and the after gates ran
+before the toggle).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| (0) Baseline | the build reproduces the last after where the step does not reach | - | 1-01 f420 `e2da5131` on `1e6b7cb9`, as `10.4/after/sweep` |
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1_all.log`, 82 steps; `build2_boss.log`, the relink below; `build3_layer.log`, the suite's fix) |
+| (1) Test counts (the step's gate) | the suites the change touches, each once, 0 failures | effects 512, launchers 101, boss 126, layer 2065 | **`test_mp_effects` 555, `test_mp_launchers` 105, `test_mp_boss` 133, `test_mp_layer` 2121, 0 failures each** (`test_mp_layer`'s first run, 2121 checks, failed 4, all in the new door case's own set-up; below) |
+| (1a) `test_mp_effects`: the rows and their sums | the decoded calls, strict | - | **passes** (`TheWallStoneAndDoorRowsAreTheDecodedCalls` and thirteen refusals: the 43 more checks): the four rows as decoded; `earthquake.json`'s `wall_destroyed.scale_key` is the dust's; `EffectScale` 1 at 0 and below, the datum above; an upright wall's dust at it, z -2, unturned; 1-13's, turned **-90.000214** (the `.tscn`'s 1.5708), its start line (0, -50.5) turned to **(50.5, 0.0002)**; 2217's at **x2**; the door's dust **(288, 112)** as it opens from (288, 176) and **(288, 114)** as it closes from 126 up; refused: each row missing, the wall flat, its key missing, the stone turned or its z bare, the door's z scaled, turned 90 or a share's sign flipped or missing |
+| (1b) `test_mp_layer`: a stone thrown at a wall, 1-09 upright and 1-13 turned | on the frame one `wall_destroy` at the wall's node, its depth, turned by it; its specks along the wall's line | no effect | **passes** (`ABreakableWallLeavesItsDustTurnedByTheWall`): nothing added on the break tick; on the frame one, at the node **(320, 124)** / **(192, 282)**, **z -2**, turned **0** / **-90.00021**, x1, 22 + 10 at 19 and 60, both in front of the player; its 32 drawn specks **97.03 u along the wall's line (down the screen) and 2.81 across** on 1-09, **94.71 along (across the screen) and 2.81 down** on 1-13; freed by its pools (1100-1800 ms) |
+| (1c) `test_mp_layer`: 4-32's wall 2217 | twice the size (8.13: effectScale x getScale, 2 for 2217) | no effect | **passes** (`The432WallsDustIsTwiceTheSize`, step 121's route: the torch shot, the light wall gone, the dark dragon's summon): 2217 gone on **tick 498** with no stone; one `wall_destroy` at **(32, 128) z -2**, unturned, **x2**, dirt **38** and smoke **120** (19 and 60 doubled), its line **over 120 u down the screen** |
+| (1d) `test_mp_layer`: 1-24 left to run | the puff where a despawner takes a stone | no effect | **passes** (`AStoneADespawnerTakesLeavesItsPuff`): `entity_launcher_923#1` taken on **tick 144**; nothing on the tick; on the frame one `rolling_stone_destroy` at the record's point **(74.0, 362.25)**, **z 32**, **x1.3**, 2 smoke at **88.4** in front of the player; freed within 50-66 frames; 1-24 throws `rolling_stone.ent` |
+| (1e) `test_mp_layer`: 3-15 left to run | the dust at the edge where each turn begins | no effect | **passes** (`ALiftDoorLeavesItsDustAsItOpensAndCloses`): `door_lift_1677` (430, 32; no `eth_z`) opens on **tick 290** from progress 0 - the dust at **(430, -32)** - and closes on **tick 443** from progress 1 at (430, -94) - the dust at **(430, -30)**: its point where the tick began, -64 / +64; nothing on either tick; **z 0**, unturned, x1, 22 at 18 behind the player; six frames on, its 22 drawn specks spread along the edge (RandStartPoint (24, 0)) |
+| (1f) The records | written on their tick, empty on the next, read by nothing | launchers 101, boss 126 | **passes**: `test_mp_launchers` - the destroyier's stone recorded as `..._923#1` where it was put, gone from the record on the next tick; none for the cull box; `test_mp_boss` - a rock broken on the world by name and point, the next call's record empty; a rising stone's point in `Turn::brokenPx`; through `Game::Tick` on level31 **`adder_715#1` at (321.3, 192.0)**, and each of the three hits of the owner's win named as the rock that struck (every earlier check of both suites unchanged) |
+| (2) 8.13's facts | the scale, the angle, the offsets, unrotated doors | - | **passes**: (1a)-(1e), and the census above (13 of 33 turned; 2217 the one scaled wall; 46 doors, all `door_lift`, all unturned - the dust's offset is screen-y whatever the door) |
+| (3) The earthquakes (8.13: "wired by Q.1 - check") | each on its call's tick | wired (step 121) | **passes**: in the gate logs `wall_destroyed at 20 on tick 176` with the wall's dust (1-24), `door_opening at 4 on tick 132` and `door_closing at 4 on tick 271` with the door's (1-28), `stone_despawned` and `boss_rock_broken` with the puffs; 2217's 40 is step 121's `TheDarkDragonsLevelShakesTheView`, passing in the same 2121 |
+| (4) A capture of a wall destroyed | the dust where the wall was, turned with it | a49f32c0, `gates/before/1-24_wall` | **passes, measured.** 1-24 (`level23`) `--tap 208,200@30 --tap 1260,256@60` (test_mp_launchers' portal route by taps; `gates/after/1-24_wall`, every frame 165-340): the first thrown stone breaks the LYING `breakable_wall_922` (1.5708) on **tick 176**; f165-f175 byte-identical to the before; **from f176** a changed band of 40,222 px, **x 1001-1279 (to the screen's edge) by y 354-533**: across the screen, where an upright wall's would stand about 450 px tall and 170 wide; the brown band gone by about f240 and the last dirt specks by about f270 (the dirt's 1450 +- 175 ms) (`after_sheet_1-24_wall.png`; `gates/1-24_after_vs_before.txt`, `1-24_wall_roi.txt`). From f212 the top edge of that stone's own puff shows at the bottom-right corner (taken by the destroyier at (473, 312) on tick 211, the rest below the view) - **not where the original puts it**: a thrown stone is `destroyable` (deviation 1), so the original's dies at the wall on tick 176, its puff beside the wall's dust. No footage shows a breakable wall go |
+| (5) A capture of a lift door moving | the dust at the door's edge on each turn | toggled, `gates/toggle/1-28_door` | **passes, measured.** 1-28 (`level27`) `--hold left@120-136 --hold right@260-276` (onto `button_709` and off it; `gates/after/1-28_door`, every frame 110-420): `door_lift_710` opens on **tick 132** and closes on **271**; f110-f132 byte-identical, and f271 unchanged in the door's region (539 px elsewhere: the eye's specks, the effects' stream class) (alpha 0 at birth draws nothing); first specks **f133 / f272, y 264-289**, against the shut door's top edge **268.3 px** and the raised door's bottom edge **273.9** (the camera read from the shut door's bottom edge, row 628, level 226), x symmetric about the door column (718 and 810-816 -> 767, the column 765: the middle of the line is hidden behind the pillar the door rises into); then falling: the open dust's lowest pixel **407, 466, 527, 605 at n = 44, 56, 68, 80 frames**, against y0 + 0.3n + 0.015n(n+1) + half its shrinking size, 404, 463, 534, 617 (within 12 px, 4.3 u); gone by **f220 / f363** (1300 +- 200 ms) (`after_sheet_1-28_open.png`, `_close.png`; `gates/1-28_open_roi.txt`, `1-28_close_roi.txt`). No footage shows a lift door |
+| (6) A stone's puff on screen (not a plan gate) | the puff where a rock breaks | toggled, `gates/toggle/1-32_rock` | **consistent, measured.** 1-32 (`level31`) left to run (`gates/after/1-32_rock`, 1700-1780): `adder_715#1` breaks on the floor on **tick 1714** at (82, 192.18); f1700-f1713 identical; from **f1714** a 260 x 264 px puff centred (232.5, 529.8) - 92 u: two 88.4 u smoke - growing to 408 x 362 by f1759; **identical again from f1775** (950 +- 100 ms), drawn over the lost screen the level runs on behind (the player died earlier in this unplayed run) (`after_sheet_1-32_rock.png`, `gates/1-32_after_vs_toggle.txt`). 1-24's and 1-25's despawners sit below their views, so a despawned stone's puff shows at most its top edge (gate 4) |
+| (7) K13 | no depth outside the table | - | **passes**: no new class; all four take the table's `Effect`, `EffectHalo` and `EffectSystems` rows at `slotAfter(round(z))`, pinned by (1b)-(1e)'s player checks |
+| (8) K8 (the inherited reading: the placement stream untouched) | no level particle moved | - | **passes**: every one is added through `SpawnEffect`, whose pools draw on `m_effectRandom` alone; `AnEffectMovesNoParticleOfTheLevels` passes in the 2121. What does move after one of them, on the effects' stream, is the eyes' specks and a placed portal's spiral (1-24 f179 on: a cluster at the first portal) |
+| (9) The 128-level f420 sweep | changes explained | `10.4/after/sweep` | **passes: 125 of 128 byte-identical; the 3 that differ - 1-24, 1-25, 3-15 - are exactly the levels whose log names an 11.1 event by tick 420, and no level differs without one** (`after/explain_sweep.txt`): 1-24 and 1-25 despawn stones (ticks 144, 234, 324, 414; 151, 241, 331), each puff below the view (at (74, 362.25) and (454, 472.8)); 3-15's door opens on 290 at (430, -32) and its dust is over by 380. Each shows **one ~10 x 10 px cluster at the player's eye** (84 px, max 50, on 1-24; 88 px, max 41, on 1-25; 44 px, max 9, on 3-15: the eyes' specks drawing on the effects' stream after the new effects', the class step 127 measured) and 1-24 one and 1-25 two **single pixels of at most 8 on one channel** on red, lit pixels far from any effect (a changed draw order's rounding, step 127's class). All 128 exit 0, `Vulkan validation layers: ACTIVE` in 128 logs, no validation message, no rules error, every png matching its log line (`after/check_capture_log.txt`: 129 checked, 0 bad); the before's 128 pngs match their own log's md5s too (129 lines checked, 0 bad), so no file of either sweep was cut short |
+| (10) No gameplay change | nothing the simulation reads moves | - | **passes**: the three records are pushed and cleared and read by nothing in the simulation; `test_mp_launchers`' and `test_mp_boss`' earlier checks pass unchanged (the owner's 1-32 win: 3 hits, completed); the layer queues on the tick and adds on the frame (nothing on the tick, pinned in 1b-1e); 125 sweep frames byte-identical and the 3 others as (9) says |
+
+**`test_mp_layer`'s first run** (`test_mp_layer_run1.txt`, `47bfe650`): 2121 checks, 4 failures, all in the new door
+case's own set-up and none in what the step does. (a) It expected `door_lift_1663` (eth_z -2); the door 3-15's knight
+turns is `door_lift_1677` (channel 1, no `eth_z`) - the dust itself was at the right point, -64 and +64 from the door
+where each tick began. (b) It read the specks on the spawn frame, where `door_lift_particles`' Color0 alpha of 0 draws
+none (`Particles::Drawn`); they are read six frames on. The second run (`test_mp_layer_run2.txt`, `825c31e8`): 2121
+checks, 0 failures.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **`destroyable` stones are not destroyed by the wall they break** (`ETHBeginContactCallback_breakable_wall` #42-60):
+   12 placed stones on 10 levels carry `destroyable = 1` (1-13's among them), and `Demolish` keeps them rolling, so
+   their `rolling_stone_destroy` never comes. **So does every stone an `entity_launcher` throws**
+   (`ETHCallback_entity_launcher` #76-106 adds it and keeps it as `v5`, #200-209 `SetUInt('destroyable', 1)` on it):
+   on the two launcher levels with a breakable wall, 1-24 (`level23`) and 1-25 (`level24`; `level25` has none), the
+   original's thrown stone dies at the wall it breaks. The port's rolls on: on gate 4's route `entity_launcher_923#1`
+   breaks wall 922 on tick 176 and is taken by the despawner on tick 211, its puff and its `stone_despawned` shake
+   there, where the original's puff stands beside the wall's dust on tick 176. This also answers step 6's open guess
+   that the flag "may belong to the boss's claw rather than to launchers": the launcher sets it and the wall reads
+   it. Gameplay; for the owner. (The thrown stones were found by the step's verifier and written in at the commit,
+   text only.)
+2. **3-20's placed stone is never taken by its destroyier** (step 121's row 9 note): no puff there. Gameplay.
+3. **The port's door is the remake's** (`Mover::Door`, `kDoorRisePx` 126): it rises 126 u where the script rises it
+   0.8 x h = 102.4 (#66-87), and it turns wherever its channel turns it, where the script opens it only from shut
+   (`status` 0) and closes it only from fully raised (`status` 2). So the close dust stands at the port's raised door's
+   bottom edge (62 above shut, where the original's is 38.4), and a door the port reverses mid-travel adds dust at a
+   point the original would reach only after finishing the leg. The dust follows the port's door, as the shake does
+   (step 121). Gameplay; for the owner.
+4. **The beholder breaks any demolisher stone rising into it** (`Boss::Tick`); the original looks at
+   `rolling_stone.ent` alone (#399-415). Dormant: level31 places no stone, so its own rocks are the only ones.
+   Gameplay; for the owner.
+5. **The wall's angle is the converter's 1.5708 rad**, -90.00021 degrees, where the original's is -90 exactly: 0.0002
+   degrees, 0.0002 u over the 50.5 u half line. An unturned wall's angle is -0 (the negated 0 rotation); it turns
+   nothing either way.
+6. **Static callbacks and visible buckets** (00_order 8.12c): `breakable_wall.ent` and `door_lift.ent` are static, so
+   the original adds their dust only while their bucket is on screen; the port adds it wherever the event is, as steps
+   78-80 and 127 record.
+7. **Not this step's `wall_destroy` calls**: the light wall's (`ETHCallback_light_wall` #134, the visuals plan's 11.2)
+   and 2-32's claw's at angle 90 (`ETHCallback_dragon_claw` #463-470; `dragon.json`'s "pictures still missing").
+8. **Order in one tick**: the walls, then the despawned stones, then the beholder's, after 10.4's rules; the doors' at
+   the tick's end. The original's order between callbacks is the scene walk's and shows only in the effects' stream.
+9. **The layer names a stone the simulation made** (no scene node) as `rolling_stone.ent` from the data that made it,
+   as `impactBodies` does; both files are pinned (`test_mp_layer` for `launchers.json`, `test_mp_boss` for `boss.json`).
+
+**RULINGS APPLIED.** The standing direction that R1-R23 follow what the original does. R1, R2, R22 and R23 are not
+built. **R24 and R25** are neither touched nor withdrawn (3-15's knight still turns its door, gate 1e). **R10**: the
+player at 4 / 2.8125 = 1.42, in front of which the wall's dust (wall z + 32) and the stones' puffs (32) stand and behind
+which the doors' dust stands. **R12**: the 720 / 256 the door's bare 0 is divided by (0 either way). **K13**: no new
+class. **K8**: the inherited reading.
+
+**GAMEPLAY: NONE.** Three write-only records; nothing the simulation reads changed (gate 10).
+
+**SUITES**, run directly, once each on the build that stands (logs `11.1/`): `test_mp_effects` **555** (512 at step
+128), `test_mp_launchers` **105** (101), `test_mp_boss` **133** (126), `test_mp_layer` **2121** (2065), 0 failures each;
+`test_mp_layer` ran twice (the first before its set-up fix, above); `test_mp_boss`'s first launch was refused (below).
+The full ctest was not run. The build relinked all 45 suites and `MagicPortalsSpike` (the simulation library changed);
+only these four were launched: `sim/Effects` is used by the layer and `test_mp_effects` alone, `test_mp_layer` is the
+only suite that links `MagicPortalsGame`, and `test_mp_launchers` and `test_mp_boss` are the suites of the two modules
+that now write a record; `Game.cpp`'s one change pushes into one of those records, so no other suite's reading moves
+(`test_mp_play` was not run).
+
+**SWEEP BASELINE**: `11.1/after/sweep` now stands for all 128 levels, the next step's before.
+
+**SMART APP CONTROL: 1 refusal.** `test_mp_boss.exe` `665eb7ff` was refused on its first launch (Permission denied);
+it was deleted and relinked once (`80e3494e`), which ran. Launches: the committed `a49f32c0` 3 times (the 1-24 probe
+and the two before routes); the new `MagicPortals.exe` (`1e6b7cb9`) 137 times (two 1-28 probes, the 1-01 probe, the 128
+sweep captures, three after and three toggled gate captures); `test_mp_effects` (`d7a5cae1`) and `test_mp_launchers`
+(`7905f99b`) once each; `test_mp_layer` twice (`47bfe650`, then `825c31e8`). No other exe was deleted or relinked.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Deviations 1-4** (gameplay): `destroyable` stones, placed and thrown (1-24's and 1-25's thrown stones die at the
+  wall they break); 3-20's destroyier; the door's rise and its status machine; the beholder's filter. Each would move
+  the effects this step draws with it.
+- **Two more wall breaks the port does not do** (gameplay), so their `wall_destroy` and its shake of 20 never come.
+  (a) A bomb's blast sets `destroy` on every breakable it grabs (`explode` #33 `isBreakableOrExplosiveOrBurnable`,
+  #111-122 `SetUInt('destroy', 1)`); left out on purpose and recorded at `game/sim/Fire.hpp:52-56` and `fire.json`
+  `_breakables_in_a_blast_not_built` (nine chapter-2 levels place both). (b) 4-19's red key:
+  `ETHCallback_red_key_state`, 6000 ms after its key is destroyed (#180-183), deletes itself and destroys the
+  `breakable_wall` it seeks (#185-220); `level18c` places `red_key_state.ent` and `breakable_wall_2756` and no stone,
+  and the port has no `red_key_state`, so 4-19's wall never goes. (b) is recorded nowhere else.
+- **The wall watch is one-way** (`m_wallEffects`; its header comment says a wall does not come back), but the torch's
+  light wall does come back (`Game::AfterStep`'s `putWallBack` sets `broken` false). Harmless here, as the latch marks
+  the light wall and `isBreakableWall` then skips it; 11.2, which adds the light wall's `wall_destroy`, must re-arm
+  the watch when `broken` goes back to false (or give the light wall its own) and correct the comment then. Left as it
+  is, because a header edit relinks every suite, `MagicPortalsSpike` and the game (the test comment's precedent,
+  below).
+- **Deviation 6**, beside steps 78-80's and 127's bucket-visibility rows.
+- **The claw's `wall_destroy`** (2-32) has no owner in 00_order section 7; the light wall's is 11.2's.
+- **A loose test comment**: `ALiftDoorLeavesItsDustAsItOpensAndCloses` says "step 76's knight on button_1666"; the door
+  that turns on 290 is `door_lift_1677`, `switchIdx` 1, whose button is `button_1656` (`button_1666` is channel 0's).
+  Left as it is, because a comment edit relinks `test_mp_layer` and the measured binary would stop being the one that
+  stands (steps 127 and 128's precedent); correct it at the next edit that recompiles the suite anyway.
+- For the backlog (the close agent): an 11.1 row; deviations 1-4 as gameplay rows.
+- For the merge's renumbering: "step 129" is written in `effects.json` (the `_walls_stones_doors` note and
+  `rolling_stone_destroy`'s source).

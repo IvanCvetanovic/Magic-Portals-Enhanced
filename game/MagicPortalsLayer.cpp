@@ -1339,6 +1339,7 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_keyholeEffects.clear();
     m_diamondEffects.clear();
     m_fieldEffects.clear();
+    m_wallEffects.clear();
     m_ringKillSeen = false;
     m_playerDeadSeen = false;
     m_signalsPutOut = 0;
@@ -6518,6 +6519,68 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
     m_signalsPutOut = torch.putOut;
     m_signalSeen = torch.signal.present;
     if (torch.signal.present) m_signalOriginPx = torch.signal.originPx;
+
+    // WHAT A WALL AND A STONE LEAVE (the visuals plan's 11.1; effects.json
+    // _walls_stones_doors), after the rest for the reason those are: the scene walk
+    // orders two callbacks, and it shows only in the effects' stream. The lift
+    // doors' dust is latchDoors', at the tick's end, where Puzzle's doors turn.
+    //
+    // A BREAKABLE WALL THE TICK TOOK - by a stone, or by a script's destroy() (4-32's
+    // summon) - on the walls latchSimQuakes shakes for: ETHCallback_breakable_wall
+    // adds wall_destroy at its own GetPosition(), the NODE's point and eth_z (the
+    // picture's `sprite` and lookZ, kept after its quad goes), turned by its
+    // GetAngle() - the node's rotation, clockwise radians, as Ethanon's
+    // counter-clockwise degrees - and at its destroyEffectScale. A wall with no
+    // picture (a level drawn as boxes) adds none.
+    const std::vector<Demolish::Breakable>& breakables = m_level.demolish.breakables;
+    if (m_wallEffects.size() != breakables.size()) m_wallEffects.assign(breakables.size(), 0);
+    for (std::size_t i = 0; i < breakables.size(); ++i) {
+        const Demolish::Breakable& breakable = breakables[i];
+        if (m_wallEffects[i] != 0 || !breakable.broken) continue;
+        m_wallEffects[i] = 1;
+        if (!isBreakableWall(breakable.name)) continue;
+        const DrawnSprite* wall =
+            pictureOf([&breakable](const DrawnSprite& s) { return s.sprite.node == breakable.name; });
+        if (wall == nullptr) continue;
+        double datum = 0.0;
+        if (const Tscn::Node* node = m_data.scene.FindNode(breakable.name)) {
+            const Tscn::Value* value = node->Meta(m_effectRules.wallDestroyScaleKey);
+            if (value == nullptr || !value->AsNumber(datum)) datum = 0.0;
+        }
+        const double angleDeg = -wall->sprite.rotation * 180.0 / 3.14159265358979323846;
+        const Effects::Spawn dust =
+            Effects::WallDestroy(m_effectRules, wall->sprite.atPx, wall->lookZ, angleDeg, Effects::EffectScale(datum));
+        m_effectQueue.push_back(effectAdd(dust));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "breakable wall " << breakable.name << " destroyed on tick " << m_ticks
+                                             << ": " << dust.entity << " at (" << dust.atPx.x << ", " << dust.atPx.y
+                                             << ") z " << dust.z << " angle " << dust.angleDeg << " x " << dust.scale
+                                             << std::endl;
+    }
+    // A STONE DESTROYED - its `destroy` datum set by a despawner (Launchers), or on
+    // the world or rising into the beholder (Boss) - where the step left it:
+    // ETHCallback_rolling_stone adds rolling_stone_destroy at vector3(its
+    // GetPositionXY(), scale(32)), a depth of its own, at 1.3. Only rolling_stone's
+    // own callback does, so a stone the level placed must be one, in either
+    // spelling; one the simulation made - a thrown stone, a rock - has no node and
+    // is the rolling_stone.ent launchers.json and boss.json make it (impactBodies'
+    // rule; test_mp_layer pins both).
+    const auto stoneGone = [this](const Launchers::StoneGone& gone, const char* by) {
+        const Tscn::Node* node = m_data.scene.FindNode(gone.name);
+        const std::string& entity = m_quakeRules.entity[static_cast<std::size_t>(Earthquake::Call::StoneImpact)];
+        if (node != nullptr && !Earthquake::IsEntity(Roles::EntityName(*node), entity)) return;
+        const Effects::Spawn puff = Effects::At(m_effectRules.stoneDestroy, gone.atPx);
+        m_effectQueue.push_back(effectAdd(puff));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "stone " << gone.name << " destroyed by " << by << " on tick "
+                                             << m_ticks << ": " << puff.entity << " at (" << puff.atPx.x << ", "
+                                             << puff.atPx.y << ") z " << puff.z << " x " << puff.scale << std::endl;
+    };
+    for (const Launchers::StoneGone& gone : m_level.launchers.despawnedNow) stoneGone(gone, "a despawner");
+    for (const Launchers::StoneGone& gone : m_level.boss.brokenNow) stoneGone(gone, "the beholder's level");
+}
+
+bool MagicPortalsLayer::isBreakableWall(const std::string& node) const {
+    const Tscn::Node* found = m_data.scene.FindNode(node);
+    return found != nullptr && Earthquake::IsEntity(Roles::EntityName(*found), m_quakeRules.wallEntity);
 }
 
 void MagicPortalsLayer::queueTapEffects(entt::registry& registry) {
@@ -6665,10 +6728,7 @@ void MagicPortalsLayer::latchSimQuakes() {
             if (now.breakablesBroken[i] == 0 || was.breakablesBroken[i] != 0) continue;
             const Demolish::Breakable& breakable = level.demolish.breakables[i];
             if (level.demolish.FindStone(breakable.brokenBy) != nullptr) struck.push_back(&breakable);
-            const Tscn::Node* node = m_data.scene.FindNode(breakable.name);
-            if (node != nullptr && Earthquake::IsEntity(Roles::EntityName(*node), m_quakeRules.wallEntity)) {
-                wallsBroken.push_back(&breakable);
-            }
+            if (isBreakableWall(breakable.name)) wallsBroken.push_back(&breakable);
         }
     }
 
@@ -6739,7 +6799,7 @@ void MagicPortalsLayer::latchSimQuakes() {
     m_quakeWatch = std::move(now);
 }
 
-void MagicPortalsLayer::latchDoorQuakes() {
+void MagicPortalsLayer::latchDoors() {
     if (!m_loaded) return;
     DoorWatch now;
     now.valid = true;
@@ -6747,9 +6807,33 @@ void MagicPortalsLayer::latchDoorQuakes() {
         now.opening.push_back(door.motion.opening ? char{1} : char{0});
         now.progress.push_back(door.motion.progress);
     }
+    // ETHCallback_door_lift's door_lift_particles as a door starts to open (#434)
+    // or to close (#580), each just before its startEarthquake(4, 0): at the
+    // door's GetPosition() where the frame BEGAN - SetPositionXY comes at #624 -
+    // which is where the last tick left it, not where this tick's BeforeStep has
+    // already moved it, less or plus half its own drawn height (GetSize().y, the
+    // picture's units times its entity scale), on its eth_z. The port's door turns
+    // wherever its channel turns it (Mover::Door), so its dust goes where it is
+    // then. A door with no picture (a level drawn as boxes) adds none.
+    const auto dust = [this](std::size_t i, bool opening, float fromProgress) {
+        const Puzzle::SwitchedDoor& door = m_level.channels.doors[i];
+        const auto drawn = std::find_if(m_sprites.begin(), m_sprites.end(),
+                                        [&door](const DrawnSprite& s) { return s.sprite.node == door.name; });
+        if (drawn == m_sprites.end()) return;
+        const glm::dvec2 doorPx = Units::ToPixels(glm::mix(door.motion.closed, door.motion.open, fromProgress));
+        const Effects::Spawn spawn = Effects::DoorLiftDust(m_effectRules, opening, doorPx, drawn->lookZ,
+                                                           drawn->sprite.sizePx.y * drawn->scale,
+                                                           m_artRules.scaleFactor);
+        m_effectQueue.push_back(effectAdd(spawn));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "door " << door.name << (opening ? " opening" : " closing")
+                                             << " on tick " << m_ticks << " from (" << doorPx.x << ", " << doorPx.y
+                                             << "): " << spawn.entity << " at (" << spawn.atPx.x << ", "
+                                             << spawn.atPx.y << ") z " << spawn.z << std::endl;
+    };
     if (m_doorWatch.valid && now.opening.size() == m_doorWatch.opening.size()) {
         for (std::size_t i = 0; i < now.opening.size(); ++i) {
             if (now.opening[i] != m_doorWatch.opening[i]) {
+                dust(i, now.opening[i] != 0, m_doorWatch.progress[i]);
                 QueueQuake(now.opening[i] != 0 ? Earthquake::Call::DoorOpening : Earthquake::Call::DoorClosing);
             } else if (now.opening[i] == 0 && m_doorWatch.progress[i] > 0.0f && now.progress[i] <= 0.0f) {
                 // Back where the level put it: it lands shut.
@@ -6881,7 +6965,7 @@ void MagicPortalsLayer::quakeTick() {
         m_quakeFramePending = false;
         return;
     }
-    latchDoorQuakes();
+    latchDoors();
     for (const QuakeCall& made : m_quakeCalls) {
         const Earthquake::CallRule& rule = m_quakeRules.Of(made.call);
         if (rule.when == Earthquake::When::BeforeUpdate) m_quake.Start(m_quakeRules, rule.intensity * made.scale);

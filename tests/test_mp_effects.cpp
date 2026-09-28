@@ -14,6 +14,7 @@
 
 #include "TestHarness.hpp"
 
+#include "sim/Earthquake.hpp"
 #include "sim/Effects.hpp"
 #include "sim/Loading.hpp"
 #include "sim/Particles.hpp"
@@ -798,6 +799,86 @@ void TheShockBurnAndExtinguishRowsAreTheDecodedCalls() {
                 Num(bolt.z).c_str(), Num(bolt.angleDeg).c_str(), Num(burn.z).c_str(), Num(agent.z).c_str());
 }
 
+// ---- what a wall, a stone and a lift door leave (the visuals plan's 11.1) -------
+
+void TheWallStoneAndDoorRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    constexpr double kFactor = 720.0 / 256.0;
+    // THE WALL'S: the 6-argument AddEntity at the wall's own point and depth, turned
+    // by the wall, at effectScale x getScale().
+    const Effects::Rule& wall = rules.wallDestroy;
+    CHECK_MSG(wall.entity == "wall_destroy.ent" && wall.offsetUnits == 0.0 && wall.z == 0.0 && wall.zScaled &&
+                  wall.turn == Effects::Turn::EntityAngle && wall.scale == 1.0,
+              "wall_destroy: on the wall's own GetPosition(), turned by its GetAngle(), at getScale()");
+    CHECK_MSG(rules.wallDestroyScaleKey == "destroyEffectScale",
+              "the wall's float: '" + rules.wallDestroyScaleKey + "'");
+    // One arm computes effectScale for the dust and the shake (#14-31, #33-38 and
+    // #73-76): earthquake.json names the same float.
+    Earthquake::Rules quake;
+    std::string quakeError;
+    CHECK_MSG(Earthquake::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/earthquake.json", quake, quakeError),
+              "earthquake.json reads: " + quakeError);
+    CHECK_MSG(quake.wallScaleKey == rules.wallDestroyScaleKey,
+              "the shake's key is the dust's: '" + quake.wallScaleKey + "'");
+    // #14-31: 1 unless the float is above 0.
+    CHECK(Effects::EffectScale(0.0) == 1.0 && Effects::EffectScale(-3.0) == 1.0 && Effects::EffectScale(2.0) == 2.0 &&
+          Effects::EffectScale(0.5) == 0.5);
+    // 1-09's wall (320, 124), eth_z -2, unturned; 1-13's (192, 282) turned 1.5708
+    // clockwise in the .tscn, the original's -90; 4-32's 2217 (32, 128), -2, at 2.
+    const Effects::Spawn upright = Effects::WallDestroy(rules, glm::dvec2(320.0, 124.0), -2.0, 0.0, 1.0);
+    CHECK_MSG(upright.entity == "wall_destroy.ent" && upright.atPx == glm::dvec2(320.0, 124.0) && upright.z == -2.0 &&
+                  upright.zScaled && upright.angleDeg == 0.0f && upright.scale == 1.0,
+              "an upright wall's dust at it, z -2, unturned, x1: " + At(upright.atPx) + " z " + Num(upright.z));
+    const double turnedDeg = -1.5708 * 180.0 / kPi;
+    const Effects::Spawn lying = Effects::WallDestroy(rules, glm::dvec2(192.0, 282.0), -2.0, turnedDeg, 1.0);
+    CHECK_MSG(Near(lying.angleDeg, -90.0, 1e-3) && lying.atPx == glm::dvec2(192.0, 282.0),
+              "a wall turned a quarter turns its dust with it: " + Num(lying.angleDeg));
+    const Effects::Spawn big = Effects::WallDestroy(rules, glm::dvec2(32.0, 128.0), -2.0, 0.0, Effects::EffectScale(2.0));
+    CHECK_MSG(big.scale == 2.0, "4-32's wall 2217 at twice the size: " + Num(big.scale));
+    // Turned as the engine turns a particle (ETHParticleManager.cpp:489, :520): the
+    // start line RandStartPoint (0, 101) of an upright wall runs down the screen; at
+    // -90 it runs across it.
+    const glm::dvec2 top = Particles::Turn(glm::dvec2(0.0, -50.5), lying.angleDeg);
+    CHECK_MSG(Near(std::fabs(top.x), 50.5, 1e-3) && Near(top.y, 0.0, 1e-3),
+              "the dust's line lies across the screen on a -90 wall: " + At(top));
+
+    // THE STONE'S: AddScaledEntity at vector3(its GetPositionXY(), scale(32)), a depth
+    // of its own, at scale(1.3).
+    const Effects::Rule& stone = rules.stoneDestroy;
+    CHECK_MSG(stone.entity == "rolling_stone_destroy.ent" && stone.offsetUnits == 0.0 && stone.z == 32.0 &&
+                  stone.zScaled && stone.turn == Effects::Turn::Fixed && stone.angleDeg == 0.0 && stone.scale == 1.3,
+              "rolling_stone_destroy: z 32 of its own, unturned, at 1.3");
+    const Effects::Spawn puff = Effects::At(stone, glm::dvec2(64.0, 380.0));
+    CHECK_MSG(puff.atPx == glm::dvec2(64.0, 380.0) && puff.z == 32.0 && puff.zScaled && puff.scale == 1.3,
+              "at the stone, z 32: " + Num(puff.z));
+
+    // THE DOOR'S TWO: AddScaledEntity at the door's GetPosition() -/+ (0, 0.5 h, 0),
+    // unturned, its z the door's plus a bare 0.
+    const Effects::Rule& open = rules.doorLiftOpen;
+    const Effects::Rule& close = rules.doorLiftClose;
+    for (const Effects::Rule* rule : {&open, &close}) {
+        CHECK_MSG(rule->entity == "door_lift_particles.ent" && rule->offsetUnits == 0.0 && rule->z == 0.0 &&
+                      !rule->zScaled && rule->turn == Effects::Turn::Fixed && rule->angleDeg == 0.0 &&
+                      rule->scale == 1.0,
+                  "door_lift_particles: a bare 0 on the door's depth, unturned, at getScale()");
+    }
+    CHECK_MSG(rules.doorLiftOpenSizeY == -0.5 && rules.doorLiftCloseSizeY == 0.5,
+              "half the door's height up as it opens, down as it closes: " + Num(rules.doorLiftOpenSizeY) + ", " +
+                  Num(rules.doorLiftCloseSizeY));
+    // 3-15's door, 128 high, shut at (288, 176) eth_z -2 and raised 126 by the port.
+    const Effects::Spawn opening = Effects::DoorLiftDust(rules, true, glm::dvec2(288.0, 176.0), -2.0, 128.0, kFactor);
+    const Effects::Spawn closing =
+        Effects::DoorLiftDust(rules, false, glm::dvec2(288.0, 176.0 - 126.0), -2.0, 128.0, kFactor);
+    CHECK_MSG(opening.entity == "door_lift_particles.ent" && opening.atPx == glm::dvec2(288.0, 112.0) &&
+                  opening.z == -2.0 && opening.zScaled && opening.angleDeg == 0.0f && opening.scale == 1.0,
+              "opening: at its top edge, on its depth: " + At(opening.atPx) + " z " + Num(opening.z));
+    CHECK_MSG(closing.atPx == glm::dvec2(288.0, 50.0 + 64.0) && closing.z == -2.0,
+              "closing: at the raised door's bottom edge: " + At(closing.atPx));
+    std::printf("  11.1: a -90 wall's dust turned %s, its line %s; 2217 x%s; the door's dust %s and %s\n",
+                Num(lying.angleDeg).c_str(), At(top).c_str(), Num(big.scale).c_str(), At(opening.atPx).c_str(),
+                At(closing.atPx).c_str());
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
@@ -939,6 +1020,36 @@ void ARowMissingAFactIsRefused() {
             "shock_diamond_pick.z");
     refused("halo_at_once.json", "\"after_fly_in_ms\": 666,", "\"after_fly_in_ms\": 0,",
             "key_unlock_halo.after_fly_in_ms");
+    // The 11.1 rows: each required; the wall's turned by its wall and nothing
+    // else, and its float named; the stone's and the door's never turned; each z
+    // read the one way the decode has it; the door's shares signed as decoded.
+    refused("no_wall_dust.json", "\"wall_destroy\": {", "\"wall_destroy_gone\": {", "wall_destroy");
+    refused("no_stone_puff.json", "\"rolling_stone_destroy\": {", "\"stone_puff_gone\": {", "rolling_stone_destroy");
+    refused("no_door_open.json", "\"door_lift_particles_open\": {", "\"door_open_gone\": {", "door_lift_particles_open");
+    refused("no_door_close.json", "\"door_lift_particles_close\": {", "\"door_close_gone\": {",
+            "door_lift_particles_close");
+    refused("wall_flat.json", "\"angle\": \"entity_angle\",", "\"angle\": 0,", "wall_destroy");
+    refused("no_wall_key.json", "\"scale_key\": \"destroyEffectScale\",", "", "wall_destroy.scale_key");
+    refused("stone_turned.json", "\"z\": {\"value\": 32, \"scaled\": true},\n    \"angle\": 0,\n    \"scale\": 1.3,",
+            "\"z\": {\"value\": 32, \"scaled\": true},\n    \"angle\": \"entity_angle\",\n    \"scale\": 1.3,",
+            "rolling_stone_destroy");
+    refused("stone_bare.json",
+            "\"entity\": \"rolling_stone_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": "
+            "true},",
+            "\"entity\": \"rolling_stone_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": "
+            "false},",
+            "rolling_stone_destroy.z");
+    refused("door_scaled.json",
+            "\"entity\": \"door_lift_particles.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": false},",
+            "\"entity\": \"door_lift_particles.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
+            "door_lift_particles_open.z");
+    refused("door_turned.json", "\"angle\": 0,\n    \"scale\": 1,\n    \"offset_size_y\": -0.5,",
+            "\"angle\": 90,\n    \"scale\": 1,\n    \"offset_size_y\": -0.5,", "door_lift_particles_open");
+    refused("door_open_down.json", "\"offset_size_y\": -0.5,", "\"offset_size_y\": 0.5,",
+            "door_lift_particles_open.offset_size_y");
+    refused("door_close_up.json", "\"offset_size_y\": 0.5,", "\"offset_size_y\": -0.5,",
+            "door_lift_particles_close.offset_size_y");
+    refused("no_door_share.json", "\"offset_size_y\": 0.5,", "", "door_lift_particles_close.offset_size_y");
 
     Effects::Rules rules;
     std::string why;
@@ -964,6 +1075,7 @@ int main() {
     TheKeyRowsAreTheDecodedCalls();
     TheUnlockHaloComesOnTheFlyInsFrameOne();
     TheShockBurnAndExtinguishRowsAreTheDecodedCalls();
+    TheWallStoneAndDoorRowsAreTheDecodedCalls();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

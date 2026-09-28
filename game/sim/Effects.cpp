@@ -16,6 +16,7 @@ namespace Json = Supersonic::Json;
 
 constexpr const char* kTowardTravellerMinus90 = "toward_traveller_minus_90";
 constexpr const char* kRadiansAsDegrees = "get_angle_radians_as_degrees";
+constexpr const char* kEntityAngle = "entity_angle";
 
 bool Finite(const Json::Value& value) {
     return value.IsNumber() && std::isfinite(value.AsNumber());
@@ -56,8 +57,11 @@ bool ReadRule(const Json::Value& root, const char* name, Rule& out, std::string&
         read.turn = Turn::TowardTravellerMinus90;
     } else if (angle.IsString() && angle.AsString() == kRadiansAsDegrees) {
         read.turn = Turn::RadiansAsDegrees;
+    } else if (angle.IsString() && angle.AsString() == kEntityAngle) {
+        read.turn = Turn::EntityAngle;
     } else {
-        error = where + ".angle is a number, " + kTowardTravellerMinus90 + " or " + kRadiansAsDegrees;
+        error = where + ".angle is a number, " + kTowardTravellerMinus90 + ", " + kRadiansAsDegrees + " or " +
+                kEntityAngle;
         return false;
     }
     if (!Finite(row["scale"]) || !(row["scale"].AsNumber() > 0.0)) {
@@ -229,7 +233,11 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "burn_projectile_at_pickup", read.burnAtPickup, why) ||
         !ReadRule(root, "burn_projectile", read.burnAtShot, why) ||
         !ReadRule(root, "extinguish_fire", read.extinguishAtDiamond, why) ||
-        !ReadRule(root, "extinguish_fire_at_signal", read.extinguishAtSignal, why)) {
+        !ReadRule(root, "extinguish_fire_at_signal", read.extinguishAtSignal, why) ||
+        !ReadRule(root, "wall_destroy", read.wallDestroy, why) ||
+        !ReadRule(root, "rolling_stone_destroy", read.stoneDestroy, why) ||
+        !ReadRule(root, "door_lift_particles_open", read.doorLiftOpen, why) ||
+        !ReadRule(root, "door_lift_particles_close", read.doorLiftClose, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -242,6 +250,33 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.keyUnlockHaloAfterMs = halo.AsNumber();
+    // The wall's datum that scales its dust: the key ETHCallback_breakable_wall
+    // reads (#16-26). Named in the data, not here, as earthquake.json names it for
+    // the same arm's shake.
+    const Json::Value& scaleKey = root["wall_destroy"]["scale_key"];
+    if (!scaleKey.IsString() || scaleKey.AsString().empty()) {
+        error = path + ": wall_destroy.scale_key is not the name of the wall's float";
+        return false;
+    }
+    read.wallDestroyScaleKey = scaleKey.AsString();
+    // The door's two: a share of its own height, up the screen as it opens
+    // (vector3::opSub, #425) and down it as it closes (opAdd, #571). The signs are
+    // the decode's finding, so a row that reads one the other way is refused.
+    const struct {
+        const char* name;
+        double* into;
+        double sign;
+    } lifts[] = {{"door_lift_particles_open", &read.doorLiftOpenSizeY, -1.0},
+                 {"door_lift_particles_close", &read.doorLiftCloseSizeY, 1.0}};
+    for (const auto& lift : lifts) {
+        const Json::Value& share = root[lift.name]["offset_size_y"];
+        if (!Finite(share) || !(share.AsNumber() * lift.sign > 0.0)) {
+            error = path + ": " + lift.name + ".offset_size_y is the share of the door's height it is moved by, " +
+                    (lift.sign < 0.0 ? "up the screen as it opens (below 0)" : "down the screen as it closes (above 0)");
+            return false;
+        }
+        *lift.into = share.AsNumber();
+    }
     // The rows that are given a point and nothing else: no direction to be offset
     // along or turned by. appearEffect, addFireball - whose `dir` is the entity's
     // own custom data and not the angle it is added at - and both explosions,
@@ -276,7 +311,10 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"burn_projectile_at_pickup", &read.burnAtPickup},
                      {"burn_projectile", &read.burnAtShot},
                      {"extinguish_fire", &read.extinguishAtDiamond},
-                     {"extinguish_fire_at_signal", &read.extinguishAtSignal}};
+                     {"extinguish_fire_at_signal", &read.extinguishAtSignal},
+                     {"rolling_stone_destroy", &read.stoneDestroy},
+                     {"door_lift_particles_open", &read.doorLiftOpen},
+                     {"door_lift_particles_close", &read.doorLiftClose}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
@@ -301,7 +339,10 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                     {"burn_projectile_at_pickup", &read.burnAtPickup},
                     {"burn_projectile", &read.burnAtShot},
                     {"extinguish_fire", &read.extinguishAtDiamond},
-                    {"extinguish_fire_at_signal", &read.extinguishAtSignal}};
+                    {"extinguish_fire_at_signal", &read.extinguishAtSignal},
+                    {"rolling_stone_destroy", &read.stoneDestroy},
+                    {"door_lift_particles_open", &read.doorLiftOpen},
+                    {"door_lift_particles_close", &read.doorLiftClose}};
     for (const auto& row : unturned) {
         if (row.rule->angleDeg != 0.0) {
             error = path + ": " + row.name + " is added by AddScaledEntity, whose angle is 0";
@@ -373,6 +414,34 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
             return false;
         }
     }
+    // The 11.1 rows each read their z one way, as the 10.4 rows do: the wall's
+    // dust on the wall's own GetPosition() (no z of its own: OnEntity); the
+    // stone's at vector3(xy, g_scale.scale(32)), a depth of its own (At); the
+    // door's a bare PshC4 0f on the door's GetPosition() (OnEntityBare).
+    const struct {
+        const char* name;
+        const Rule* rule;
+        bool scaled;
+        double z;
+    } wallDepths[] = {{"wall_destroy", &read.wallDestroy, true, 0.0},
+                      {"rolling_stone_destroy", &read.stoneDestroy, true, 32.0},
+                      {"door_lift_particles_open", &read.doorLiftOpen, false, 0.0},
+                      {"door_lift_particles_close", &read.doorLiftClose, false, 0.0}};
+    for (const auto& row : wallDepths) {
+        if (row.rule->zScaled != row.scaled || row.rule->z != row.z) {
+            error = path + ": " + row.name + ".z is " +
+                    (row.z == 32.0 ? std::string("g_scale.scale(32) of its own: 32, scaled true")
+                     : row.scaled  ? std::string("the wall's own GetPosition() z: 0, scaled true")
+                                   : std::string("a bare PshC4 0f on the door's GetPosition(): 0, scaled false"));
+            return false;
+        }
+    }
+    // The wall's is the one call of the four that passes an angle - its wall's -
+    // and it is offset by nothing; the other three are in the lists above.
+    if (read.wallDestroy.turn != Turn::EntityAngle || read.wallDestroy.offsetUnits != 0.0) {
+        error = path + ": wall_destroy is turned by its wall's GetAngle() (" + kEntityAngle + ") and offset by nothing";
+        return false;
+    }
     // The strike is the one AddEntity of them, at a midpoint and turned by the
     // radians getAngle gives: no offset, and no other turn.
     if (read.shockStrike.turn != Turn::RadiansAsDegrees || read.shockStrike.offsetUnits != 0.0) {
@@ -410,6 +479,8 @@ glm::dvec2 VanishDirection(const glm::dvec2& travellerPx, const glm::dvec2& port
 
 float AngleDegrees(const Rule& rule, const glm::dvec2& direction) {
     if (rule.turn == Turn::Fixed) return static_cast<float>(rule.angleDeg);
+    // Along no direction: the caller hands over the entity's own (WallDestroy).
+    if (rule.turn == Turn::EntityAngle) return 0.0f;
     // getAngle(direction): atan2f(v.x, v.y), and 2 pi more below 0
     // (GameMath.h:711-715; the .so's literal 6.2831855, which 2 x PI is exactly).
     constexpr float kPi = 3.141592654f; // gs2d::math::constant::PI
@@ -485,6 +556,29 @@ Spawn Strike(const Rule& rule, const glm::dvec2& diamondPx, double diamondZ, con
     spawn.z = (diamondZ + enemyZ) * 0.5 + rule.z;
     spawn.angleDeg = AngleDegrees(rule, VanishDirection(enemyPx, diamondPx));
     return spawn;
+}
+
+double EffectScale(double datum) {
+    // #14 effectScale = 1; #28-31 CMPIf datum, 0f then JNP: taken only above 0.
+    return datum > 0.0 ? datum : 1.0;
+}
+
+Spawn WallDestroy(const Rules& rules, const glm::dvec2& wallPx, double wallZ, double wallAngleDeg, double effectScale) {
+    // #45-51: the wall's GetAngle() and GetPosition(), its depth included, and
+    // #33-38 g_scale.scale(effectScale), which is effectScale of the port's units.
+    Spawn spawn = OnEntity(rules.wallDestroy, wallPx, wallZ);
+    spawn.angleDeg = static_cast<float>(wallAngleDeg);
+    spawn.scale = rules.wallDestroy.scale * effectScale;
+    return spawn;
+}
+
+Spawn DoorLiftDust(const Rules& rules, bool opening, const glm::dvec2& doorPx, double doorZ, double doorHeightUnits,
+                   double scaleFactor) {
+    // #407-425 / #553-571: vector3(0, 0.5 x GetSize().y, 0) taken from or added to
+    // the door's GetPosition() - screen y only, never rotated - its z a bare 0.
+    const Rule& rule = opening ? rules.doorLiftOpen : rules.doorLiftClose;
+    const double share = opening ? rules.doorLiftOpenSizeY : rules.doorLiftCloseSizeY;
+    return OnEntityBare(rule, doorPx + glm::dvec2(0.0, share * doorHeightUnits), doorZ, scaleFactor);
 }
 
 bool AdvanceFlyIn(const Rules& rules, FlyIn& clock, bool spent, double tickMs) {

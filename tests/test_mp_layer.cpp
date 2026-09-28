@@ -11918,6 +11918,321 @@ void AShockRingsKillLeavesShockDeathAtThePlayer() {
     }
 }
 
+// ---- what a wall, a stone and a lift door leave (the visuals plan's 11.1) --------
+
+// How far apart an effect's drawn particles lie, across (x) and down (y) the
+// level: its live quads' centres, as placeSprite put them.
+glm::dvec2 QuadSpreadPx(entt::registry& registry, const MagicPortalsLayer::EffectReport& effect, int& read) {
+    glm::dvec2 low(1e12);
+    glm::dvec2 high(-1e12);
+    read = 0;
+    for (const entt::entity quad : effect.particleQuads) {
+        if (!registry.valid(quad)) continue;
+        const glm::dvec2 at = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(quad).position);
+        low = glm::min(low, at);
+        high = glm::max(high, at);
+        ++read;
+    }
+    return read > 0 ? high - low : glm::dvec2(0.0);
+}
+
+// A stone thrown at a breakable wall: on the tick it breaks nothing is added; on
+// the frame one wall_destroy at the wall's NODE, on its eth_z, turned by its angle
+// and at its size - its 22 dirt and 10 smoke specks along a line that runs down
+// the screen on 1-09's upright wall and across it on 1-13's, which the .tscn turns
+// 1.5708 clockwise (the original's -90): D4 section 2.2b's 13 of 33.
+void ABreakableWallLeavesItsDustTurnedByTheWall() {
+    if (!OriginalArtIsThere("ABreakableWallLeavesItsDustTurnedByTheWall")) return;
+    struct Throw {
+        const char* level;
+        const char* tag;
+        glm::dvec2 wallPx;
+        glm::dvec2 fromPx;
+        glm::dvec2 velocityPx;
+        bool lying;
+    };
+    const Throw throws[] = {{"level8", "1-09", {320.0, 124.0}, {305.0 - 30.0 - 20.0, 95.0}, {300.0, 0.0}, false},
+                            {"level12", "1-13", {192.0, 282.0}, {192.0, 282.0 - 16.0 - 30.0 - 6.0}, {0.0, 300.0}, true}};
+    for (const Throw& thrown : throws) {
+        const std::string row = std::string(thrown.tag) + " (" + thrown.level + ")";
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), thrown.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CHECK_MSG(layer.SimLevel()->demolish.stones.size() == 1, row + ": one stone");
+        if (layer.SimLevel()->demolish.stones.size() != 1) continue;
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 3; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        const entt::entity stone = layer.SimLevel()->demolish.stones.front().body;
+        auto& transform = registry.get<TransformComponent>(stone);
+        const glm::vec3 at = MagicPortals::Units::ToWorld(thrown.fromPx.x, thrown.fromPx.y);
+        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+        registry.get<RigidBodyComponent>(stone).velocity =
+            glm::vec3(MagicPortals::Units::ToMetres(thrown.velocityPx.x),
+                      -MagicPortals::Units::ToMetres(thrown.velocityPx.y), 0.0f);
+        int spawnedBefore = layer.EffectsSpawned();
+        bool broke = false;
+        for (int tick = 0; tick < 40 && !broke; ++tick) {
+            spawnedBefore = layer.EffectsSpawned();
+            tickWith(layer, registry, kRest, {}, {});
+            broke = layer.SimLevel()->demolish.Broken() == 1;
+            if (!broke) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(broke, row + ": the stone broke its wall");
+        if (!broke) continue;
+        int count = 0;
+        FirstEffect(layer, "wall_destroy.ent", count);
+        CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, row + ": nothing is added on the tick");
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::EffectReport dust = FirstEffect(layer, "wall_destroy.ent", count);
+        CHECK_MSG(count == 1, row + ": one wall_destroy on the frame: " + std::to_string(count));
+        if (dust.id == 0) continue;
+        const float wantDeg = thrown.lying ? static_cast<float>(-1.5708 * 180.0 / 3.14159265358979323846) : 0.0f;
+        CHECK_MSG(dust.atPx == thrown.wallPx && nearlyU(dust.zUnits, -2.0) && dust.angleDeg == wantDeg &&
+                      dust.scriptScale == 1.0,
+                  row + ": at the wall's node " + Point(thrown.wallPx) + ", its -2, turned " + std::to_string(wantDeg) +
+                      ", x1: " + Point(dust.atPx) + " z " + std::to_string(dust.zUnits) + " turned " +
+                      std::to_string(dust.angleDeg) + " x" + std::to_string(dust.scriptScale));
+        CHECK_MSG(!dust.drawn && !dust.hasLight && dust.temporary && dust.systems == 2 && dust.pool == 22 + 10 &&
+                      dust.systemSizePx.size() == 2 && nearlyU(dust.systemSizePx[0], 19.0) &&
+                      nearlyU(dust.systemSizePx[1], 60.0),
+                  row + ": 22 dirt at 19 and 10 smoke at 60, temporary");
+        CHECK_MSG(dust.systemZ.size() == 2 && dust.systemZ[0] > layer.PlayerSlotZ() &&
+                      dust.systemZ[1] > layer.PlayerSlotZ(),
+                  row + ": both at their StartPoint's 32 in front of the wall, so of the player");
+        // THE TURN, as drawn: every speck released at once along RandStartPoint (0,
+        // 101) and (0, 102), turned by the wall.
+        int read = 0;
+        const glm::dvec2 spread = QuadSpreadPx(registry, dust, read);
+        const double along = thrown.lying ? spread.x : spread.y;
+        const double across = thrown.lying ? spread.y : spread.x;
+        std::printf("  %s: the wall broken; wall_destroy at %s z %.1f turned %.5f, %d specks spread %.2f along the "
+                    "wall's line and %.2f across it\n",
+                    row.c_str(), Point(dust.atPx).c_str(), dust.zUnits, static_cast<double>(dust.angleDeg), read,
+                    along, across);
+        CHECK_MSG(read == 32 && along > 60.0 && along <= 102.0 + 8.0 && across < 8.0,
+                  row + ": its specks along the wall's line (" + std::string(thrown.lying ? "across" : "down") +
+                      " the screen): " + std::to_string(along) + " along, " + std::to_string(across) + " across, " +
+                      std::to_string(read) + " read");
+        const Burnt burnt = BurnDown(layer, registry, dust.id, 150);
+        CHECK_MSG(burnt.freedOn >= 66 && burnt.freedOn <= 110 && burnt.freed >= 1,
+                  row + ": freed by its pools, the dirt's 1100-1800 ms: frame " + std::to_string(burnt.freedOn));
+        layer.OnDetach(registry);
+    }
+}
+
+// 4-32's wall 2217, the one wall that carries destroyEffectScale (2): broken by
+// the dark dragon's summon - a script's destroy(), no stone - once the torch's
+// light wall has gone, as step 121's case drives it. Its dust at twice the size:
+// every system's numbers doubled with the entity's (ETHParticleSystem.cpp:27-40).
+void The432WallsDustIsTwiceTheSize() {
+    if (!OriginalArtIsThere("The432WallsDustIsTwiceTheSize")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || layer.SimLevel()->torch.lights.empty()) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    const glm::dvec2 torchPx = layer.SimLevel()->torch.lights.front().atPx;
+    PutPlayerAt(registry, layer, glm::dvec2(240.0, 190.0));
+    for (int waited = 0; waited < 600 && (waited < 60 || !onScreen(registry, torchPx)); ++waited) {
+        quakeTickWith(layer, registry, ticks);
+    }
+    tap(layer, registry, screenOf(registry, torchPx));
+    ++ticks;
+    tickUntilUp(layer, registry, ticks, 400, [](const PlayedLevel& played) { return played.torch.lit; });
+    CHECK_MSG(layer.SimLevel()->torch.lit > 0, "4-32: the shot lit the torch; the last shot: " + lastFailure(layer));
+    if (layer.SimLevel()->torch.lit == 0) return;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const std::string wallNode = layer.SimLevel()->darkDragon.wallNode;
+    const QuakeEdge arrived = tickUntilUp(layer, registry, ticks, 1000, [](const PlayedLevel& played) {
+        for (const auto& breakable : played.demolish.breakables) {
+            if (breakable.name == played.darkDragon.wallNode && breakable.broken) return 1;
+        }
+        return 0;
+    });
+    CHECK_MSG(arrived.tick > 0 && wallNode == "breakable_wall_2217", "4-32: the summon took " + wallNode);
+    if (arrived.tick <= 0) return;
+    int count = 0;
+    FirstEffect(layer, "wall_destroy.ent", count);
+    CHECK_MSG(count == 0, "4-32: nothing added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport dust = FirstEffect(layer, "wall_destroy.ent", count);
+    std::printf("  4-32: %s gone on tick %d: wall_destroy at %s z %.1f x%.1f, sizes %.1f and %.1f\n",
+                wallNode.c_str(), arrived.tick, Point(dust.atPx).c_str(), dust.zUnits, dust.scriptScale,
+                dust.systemSizePx.empty() ? 0.0 : dust.systemSizePx[0],
+                dust.systemSizePx.size() < 2 ? 0.0 : dust.systemSizePx[1]);
+    CHECK_MSG(count == 1 && dust.atPx == glm::dvec2(32.0, 128.0) && nearlyU(dust.zUnits, -2.0) &&
+                  dust.angleDeg == 0.0f && dust.scriptScale == 2.0,
+              "4-32: one wall_destroy at 2217's node, its -2, unturned, at 2: " + Point(dust.atPx) + " x" +
+                  std::to_string(dust.scriptScale));
+    CHECK_MSG(dust.systemSizePx.size() == 2 && nearlyU(dust.systemSizePx[0], 38.0) &&
+                  nearlyU(dust.systemSizePx[1], 120.0) && dust.pool == 22 + 10,
+              "4-32: dirt at 38 and smoke at 120 - twice 19 and 60");
+    int read = 0;
+    const glm::dvec2 spread = QuadSpreadPx(registry, dust, read);
+    CHECK_MSG(read == 32 && spread.y > 120.0 && spread.y <= 204.0 + 12.0 && spread.x < 14.0,
+              "4-32: its line twice as long, down the screen: " + std::to_string(spread.y) + " down, " +
+                  std::to_string(spread.x) + " across");
+    layer.OnDetach(registry);
+}
+
+// A thrown stone a despawner takes, on 1-24 (level23) left to run: on the tick
+// nothing is added; on the frame one rolling_stone_destroy where the step left it
+// (Launchers' record), at a depth of its own, 32, and at 1.3 - two smoke puffs at
+// 68 x 1.3. The thrower's entity is rolling_stone.ent, the entity whose callback
+// adds it; so is the beholder's rock (test_mp_boss pins boss.json's).
+void AStoneADespawnerTakesLeavesItsPuff() {
+    if (!OriginalArtIsThere("AStoneADespawnerTakesLeavesItsPuff")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level23");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CHECK_MSG(layer.SimLevel()->launchers.launchers.size() == 1 &&
+                  layer.SimLevel()->launchers.launchers.front().entity == "rolling_stone.ent",
+              "1-24 throws rolling_stone.ent");
+    CloseTheLevelStartPopup(layer, registry);
+    int spawnedBefore = layer.EffectsSpawned();
+    int tick = 0;
+    bool taken = false;
+    for (; tick < 400 && !taken; ++tick) {
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        taken = layer.SimLevel()->launchers.despawned > 0;
+        if (!taken) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(taken && layer.SimLevel()->launchers.despawnedNow.size() == 1,
+              "a despawner takes a stone within 400 ticks");
+    if (!taken || layer.SimLevel()->launchers.despawnedNow.size() != 1) return;
+    const MagicPortals::Launchers::StoneGone gone = layer.SimLevel()->launchers.despawnedNow.front();
+    int count = 0;
+    FirstEffect(layer, "rolling_stone_destroy.ent", count);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport puff = FirstEffect(layer, "rolling_stone_destroy.ent", count);
+    std::printf("  1-24: %s taken by the destroyier on tick %d: rolling_stone_destroy at %s z %.1f x%.2f, %d at "
+                "%.2f\n",
+                gone.name.c_str(), tick, Point(puff.atPx).c_str(), puff.zUnits, puff.scriptScale, puff.pool,
+                puff.systemSizePx.empty() ? 0.0 : puff.systemSizePx[0]);
+    CHECK_MSG(count == 1 && puff.atPx == gone.atPx && nearlyU(puff.zUnits, 32.0) && nearlyU(puff.scriptScale, 1.3) &&
+                  puff.angleDeg == 0.0f,
+              "one rolling_stone_destroy at the stone " + Point(gone.atPx) + ", z 32, x1.3: " + Point(puff.atPx) +
+                  " z " + std::to_string(puff.zUnits));
+    CHECK_MSG(!puff.drawn && !puff.hasLight && puff.temporary && puff.systems == 1 && puff.pool == 2 &&
+                  puff.systemSizePx.size() == 1 && nearlyU(puff.systemSizePx[0], 68.0 * 1.3) &&
+                  puff.systemZ[0] > layer.PlayerSlotZ(),
+              "two smoke at 88.4, temporary, in front of the player");
+    const Burnt burnt = BurnDown(layer, registry, puff.id, 120);
+    CHECK_MSG(burnt.freedOn >= 50 && burnt.freedOn <= 66 && burnt.freed >= 1,
+              "freed by its pools, 950 +- 100 ms: frame " + std::to_string(burnt.freedOn));
+    layer.OnDetach(registry);
+}
+
+// 3-15 (level14b) left to run: step 76's knight on button_1666 opens a switched
+// door and later lets it close (step 121's ticks). On each turn nothing is added
+// on the tick; on the frame one door_lift_particles at the door's point where the
+// tick BEGAN - the watch's progress, not the one BeforeStep has just stepped -
+// half its 128 up as it opens (the shut door's top edge) and half down as it
+// closes (the raised door's bottom edge), unturned, on its depth.
+void ALiftDoorLeavesItsDustAsItOpensAndCloses() {
+    if (!OriginalArtIsThere("ALiftDoorLeavesItsDustAsItOpensAndCloses")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level14b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CHECK(!layer.SimLevel()->channels.doors.empty());
+    CloseTheLevelStartPopup(layer, registry);
+    int tick = 0;
+    std::vector<int> seenIds;
+    for (const bool opening : {true, false}) {
+        const std::string what = opening ? "opening" : "closing";
+        std::size_t turned = 0;
+        float fromProgress = 0.0f;
+        int spawnedBefore = layer.EffectsSpawned();
+        bool found = false;
+        for (int n = 0; n < 600 && !found; ++n) {
+            const auto& doors = layer.SimLevel()->channels.doors;
+            std::vector<char> was;
+            std::vector<float> progress;
+            for (const auto& door : doors) {
+                was.push_back(door.motion.opening ? char{1} : char{0});
+                progress.push_back(door.motion.progress);
+            }
+            spawnedBefore = layer.EffectsSpawned();
+            tickWith(layer, registry, kRest, {}, {});
+            ++tick;
+            for (std::size_t i = 0; i < doors.size() && !found; ++i) {
+                if ((doors[i].motion.opening ? char{1} : char{0}) == was[i]) continue;
+                CHECK_MSG(doors[i].motion.opening == opening, "the first turn after the last is the " + what);
+                found = true;
+                turned = i;
+                fromProgress = progress[i];
+            }
+            if (!found) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(found, "3-15: a door starts " + what);
+        if (!found) return;
+        const MagicPortals::Puzzle::SwitchedDoor& door = layer.SimLevel()->channels.doors[turned];
+        CHECK_MSG(layer.EffectsSpawned() == spawnedBefore, "3-15: nothing is added on the tick the door starts " + what);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 1, "3-15: one added on the frame");
+        MagicPortalsLayer::EffectReport dust;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "door_lift_particles.ent" &&
+                std::find(seenIds.begin(), seenIds.end(), report.id) == seenIds.end()) {
+                dust = report;
+            }
+        }
+        CHECK_MSG(dust.id != 0, "3-15: the door's " + what + " dust");
+        if (dust.id == 0) return;
+        seenIds.push_back(dust.id);
+        const glm::dvec2 from =
+            MagicPortals::Units::ToPixels(glm::mix(door.motion.closed, door.motion.open, fromProgress));
+        const double wantDy = opening ? -64.0 : 64.0;
+        std::printf("  3-15: %s %s on tick %d from %s (progress %.4f): door_lift_particles at %s z %.4f, %d at %.1f\n",
+                    door.name.c_str(), what.c_str(), tick, Point(from).c_str(), static_cast<double>(fromProgress),
+                    Point(dust.atPx).c_str(), dust.zUnits, dust.pool,
+                    dust.systemSizePx.empty() ? 0.0 : dust.systemSizePx[0]);
+        CHECK_MSG(std::fabs(dust.atPx.x - from.x) < 1e-3 && std::fabs(dust.atPx.y - from.y - wantDy) < 1e-3,
+                  "3-15: at the door's point where the tick began, " + std::to_string(wantDy) + " down: " +
+                      Point(dust.atPx) + " against " + Point(from));
+        CHECK_MSG(opening ? fromProgress == 0.0f : fromProgress == 1.0f,
+                  "3-15: the door " + std::string(opening ? "shut" : "fully raised") + " as it turns: " +
+                      std::to_string(fromProgress));
+        // door_lift_1677 (430, 32), channel 1, which carries no eth_z: its depth 0.
+        CHECK_MSG(door.name == "door_lift_1677" && nearlyU(dust.zUnits, 0.0) && dust.angleDeg == 0.0f &&
+                      dust.scriptScale == 1.0,
+                  "3-15: door_lift_1677's, on its 0, unturned, x1: " + door.name + " z " +
+                      std::to_string(dust.zUnits));
+        CHECK_MSG(!dust.drawn && !dust.hasLight && dust.temporary && dust.systems == 1 && dust.pool == 22 &&
+                      dust.systemSizePx.size() == 1 && nearlyU(dust.systemSizePx[0], 18.0) &&
+                      dust.systemZ[0] < layer.PlayerSlotZ(),
+                  "3-15: 22 dirt at 18, temporary, on the door's depth behind the player");
+        // Its specks start at alpha 0 (Color0), which draws nothing, so they are
+        // read six frames on: along the edge, RandStartPoint (24, 0), each moved by
+        // at most its RandomizeDir (1, 0.6) and gravity's 0.03 a frame since.
+        for (int frame = 0; frame < 6; ++frame) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        int read = 0;
+        const glm::dvec2 spread = QuadSpreadPx(registry, ByIdIn(layer.EffectReports(), dust.id), read);
+        CHECK_MSG(read == 22 && spread.x > 12.0 && spread.x <= 24.0 + 7.0 && spread.y < 5.0,
+                  "3-15: its specks along the edge six frames on: " + std::to_string(spread.x) + " across, " +
+                      std::to_string(spread.y) + " down, " + std::to_string(read) + " read");
+    }
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
@@ -12067,6 +12382,10 @@ void runTests() {
     AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds();
     AFireSignalPutOutLeavesItsWaterAtItsTorch();
     AShockRingsKillLeavesShockDeathAtThePlayer();
+    ABreakableWallLeavesItsDustTurnedByTheWall();
+    The432WallsDustIsTwiceTheSize();
+    AStoneADespawnerTakesLeavesItsPuff();
+    ALiftDoorLeavesItsDustAsItOpensAndCloses();
 }
 
 } // namespace

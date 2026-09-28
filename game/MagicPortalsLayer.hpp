@@ -335,7 +335,7 @@ public:
     std::string EntityNameOf(entt::entity body) const;
     // A startEarthquake call, landed on its row's side of this tick's update
     // (Earthquake::When). Every wired event reaches the generator through here
-    // (latchSimQuakes, latchDoorQuakes); public so that a suite can shake a level
+    // (latchSimQuakes, latchDoors); public so that a suite can shake a level
     // with no event to hand. `scale` multiplies the row's intensity: a wall's
     // destroyEffectScale.
     void QueueQuake(Earthquake::Call call, double scale = 1.0);
@@ -1734,6 +1734,10 @@ private:
     // Per shock agent of Fields', in its order: gone at the last latch (a
     // fireball destroyed it: shock_death 10 in front of it).
     std::vector<char> m_fieldEffects;
+    // Per breakable of Demolish', in its order (the visuals plan's 11.1): whether
+    // its breaking has been seen - a breakable_wall's wall_destroy is queued then.
+    // One-way, as a wall does not come back; sized by the first latch of a level.
+    std::vector<char> m_wallEffects;
     // Whether a shock ring had claimed the player, and the player was dead, at
     // the last latch: the ring's shock_death goes where it is the kill.
     bool m_ringKillSeen{false};
@@ -2264,8 +2268,14 @@ private:
     // before: every call site whose event is AfterStep's. Beside latchSimEffects.
     void latchSimQuakes();
     // And the switched doors, which Puzzle moves in BeforeStep: read at the
-    // tick's end, so a door's call lands on the tick it starts or lands.
-    void latchDoorQuakes();
+    // tick's end, so a door's call lands on the tick it starts or lands, and the
+    // dust ETHCallback_door_lift adds with the call as it starts is queued there
+    // too (the visuals plan's 11.1).
+    void latchDoors();
+    // Whether a node is one of the entity both wall rows are callbacks of
+    // (earthquake.json wall_destroyed.entity, in either spelling): the walls a
+    // break shakes the view for and leaves wall_destroy at.
+    bool isBreakableWall(const std::string& node) const;
     // The bodies' own impacts (rows 4, 8 and 25): the begins the step made, and
     // a stone's touch of a breakable that Demolish took this tick (`struck`),
     // which the watch cannot see once the breakable is gone.

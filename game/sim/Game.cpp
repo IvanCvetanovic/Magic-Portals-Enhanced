@@ -716,6 +716,15 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     stones.reserve(level.demolish.stones.size());
     for (const Demolish::Stone& stone : level.demolish.stones) stones.push_back(stone.body);
     const Boss::State::Turn turn = level.boss.Tick(registry, level.player, stones, dt);
+    // A stone it broke on itself, named for the picture while Demolish still
+    // knows it (Boss::State::brokenNow): its rolling_stone_destroy.
+    for (std::size_t i = 0; i < turn.broken.size() && i < turn.brokenPx.size(); ++i) {
+        for (const Demolish::Stone& stone : level.demolish.stones) {
+            if (stone.body != turn.broken[i]) continue;
+            level.boss.brokenNow.push_back(Launchers::StoneGone{stone.name, turn.brokenPx[i]});
+            break;
+        }
+    }
     for (const entt::entity gone : turn.broken) Forget(level, gone);
     for (const Boss::Rock& rock : turn.dropped) {
         if (level.boss.rock.teleportable) level.portals.travellers.push_back(rock.body);

@@ -100,6 +100,7 @@ std::vector<Thrown> State::Throw(entt::registry& registry, float dt) {
 
 std::vector<entt::entity> State::Cull(entt::registry& registry) {
     std::vector<entt::entity> gone;
+    despawnedNow.clear();
     for (const Thrown& thrown : live) {
         if (!registry.valid(thrown.body)) {
             gone.push_back(thrown.body);
@@ -115,7 +116,13 @@ std::vector<entt::entity> State::Cull(entt::registry& registry) {
             out = Trigger::Overlaps(registry, thrown.body, despawner.box);
         }
         if (!out) continue;
-        if (!leftTheBox) ++despawned;
+        if (!leftTheBox) {
+            // The destroyier's: `destroy` set, so the stone's own callback adds its
+            // puff where it stands. Out of the box is deleteIfGoesOut's, which adds
+            // nothing.
+            ++despawned;
+            despawnedNow.push_back(StoneGone{thrown.name, at});
+        }
         registry.destroy(thrown.body);
         gone.push_back(thrown.body);
     }

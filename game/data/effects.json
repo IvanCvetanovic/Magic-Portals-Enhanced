@@ -17,8 +17,9 @@
     "MainCharacter's own, drawn by step 7.1 - added once at a level's",
     "start rather than at a call site, so it has a shape and a reader of its own. The shot's",
     "marks and ends (10.1, _shot_side below), what a crystal leaves where it was (10.2,",
-    "_crystals below), what a key and its keyhole leave (10.3, _keys below), and what a diamond, a",
-    "shock ring and a fire signal leave (10.4, _shock_burn_extinguish below). Every other",
+    "_crystals below), what a key and its keyhole leave (10.3, _keys below), what a diamond, a",
+    "shock ring and a fire signal leave (10.4, _shock_burn_extinguish below), and what a wall, a",
+    "stone and a lift door leave (11.1, _walls_stones_doors below). Every other",
     "effect the script adds gets its row with the step that draws it, so a",
     "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
     "sim/Effects, strictly: every field below is required.",
@@ -36,7 +37,8 @@
     "90 with d = normalize(traveller - portal) and getAngle(v) = atan2f(v.x, v.y) wrapped into",
     "[0, 2 pi) (GameMath.h:711-715), computed in floats as the script computes it; or",
     "get_angle_radians_as_degrees, getAngle(d) with d = normalize(enemy - diamond) handed over as it",
-    "is, radians where the engine reads degrees (shock_strike alone)."
+    "is, radians where the engine reads degrees (shock_strike alone); or entity_angle, the angle of",
+    "the entity the call adds it at, in degrees as the engine keeps it (wall_destroy alone)."
   ],
 
   "_never_spawned": {
@@ -823,6 +825,111 @@
       "vector3, getScale()); #273-275 playLightOffSound; #279 addLightWall. ITS .ent: as extinguish_fire's.",
       "Footage L1 (4-29, L1.md section 4): the first dark frame #194 (7.759 s), then 'a white smoke puff rises above",
       "the torch' #195-#206 - water.png's Direction (0, -1.3) is up the screen - faded by about 9.1 s."
+    ]
+  },
+
+  "_walls_stones_doors": [
+    "WHAT A WALL, A STONE AND A LIFT DOOR LEAVE - the visuals plan's 11.1 (00_order section 7 as section 8.13's",
+    "11.1 row amends it; system_7 7f-4; decode D4 sections 2 and 3 and D4_check sections 1 and 2), drawn from",
+    "planning step 129. Four call sites. ETHCallback_breakable_wall's is the 6-argument AddEntity(file, pos,",
+    "angle, @out, altName, scale) (ETHScriptWrapper.generic.cpp:330; GETREF 1, 3, 4 at #56-58, D4 section 0.3),",
+    "which passes its wall's own angle - the engine turns each particle's start point, direction and angle by it",
+    "and never its gravity (ETHParticleManager.cpp:121, :489, :517-520) - and effectScale x getScale(),",
+    "effectScale the wall's float `scale_key` where it is above 0, else 1. 13 of the 33 breakable walls (28",
+    "levels, both spellings; re-counted on the frozen levels: 11 at -90, 2 at +90, 20 at 0, as D4_check) are",
+    "turned a quarter, so their dust falls from a horizontal line; only 4-32's wall 2217 sets the scale, to 2.",
+    "The other three are AddScaledEntity(file, pos, scale), whose angle is a flat 0f",
+    "(ETHScriptWrapper.Scene.cpp:176-178): ETHCallback_rolling_stone's rolling_stone_destroy at",
+    "vector3(the stone's GetPositionXY(), g_scale.scale(32)) - a depth of its own - at g_scale.scale(1.3); and",
+    "ETHCallback_door_lift's door_lift_particles at the door's GetPosition() minus (as it opens) or plus (as it",
+    "closes) vector3(0, 0.5 x GetSize().y, 0): `offset_size_y` is that share of the door's own height, down the",
+    "screen, never turned (neither branch calls multiply). The vector3's z is pushed first (00_order 8.0 rule 3).",
+    "None is given an owner; the three .ent have no <Sprite> and every system repeat 1, so each is temporary."
+  ],
+
+  "wall_destroy": {
+    "entity": "wall_destroy.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": "entity_angle",
+    "scale": 1,
+    "scale_key": "destroyEffectScale",
+    "_source": [
+      "ETHCallback_breakable_wall (MiscCallbacks, bytes 347658..348349), once isDestroyed (#6-7): #14 @347726",
+      "effectScale = 1; #16-31 GetFloat('destroyEffectScale') - 0.0f where the wall has none",
+      "(ETHEntity.cpp:851-856) - taken where it is above 0 (CMPIf, JNP); #33-37 g_scale.scale(effectScale), pushed",
+      "first (#38), so the last argument, the scale; #43 @out; #45-47 the wall's GetAngle(), the angle, in degrees;",
+      "#50-51 its GetPosition(), the point - xy and depth its own; #52-59 AddEntity('wall_destroy.ent', ...). Then",
+      "#73-76 startEarthquake(effectScale x 20, 0) (earthquake.json wall_destroyed, whose `entity` names the walls",
+      "this is the callback of). 'destroyEffectScale' is read nowhere else and written by nothing (listing line",
+      "68788); level31c's breakable_wall 2217 alone carries it, 2 (D4 section 2.2). Its three other callers are",
+      "other rows: the keyhole's (wall_destroy_at_door, unturned), ETHCallback_light_wall's (the visuals plan's",
+      "11.2) and ETHCallback_dragon_claw's at angle 90 (#463-470, 2-32's claw). ITS .ent: as",
+      "wall_destroy_at_door's - 22 dirt_particles.png cut 4 x 1 along RandStartPoint (0, 101) and 10",
+      "smoke_particle.png along (0, 102), both at StartPoint z 32: a vertical line on an unturned wall.",
+      "Temporary."
+    ]
+  },
+
+  "rolling_stone_destroy": {
+    "entity": "rolling_stone_destroy.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1.3,
+    "_source": [
+      "ETHCallback_rolling_stone (MiscCallbacks, bytes 346228..346486), once isDestroyed (#5-7; isDestroyed",
+      "347456..347560 reads the `destroy` datum): #9-13 g_scale.scale(1.3), pushed first (#14), so the scale;",
+      "#15-20 g_scale.scale(32), the vector3's z - a depth of its own, not added to the stone's; #21-26",
+      "vector3(the stone's GetPositionXY(), that); #28-33 AddScaledEntity('rolling_stone_destroy.ent', that,",
+      "the scale); #37-42 DeleteEntity. A stone not destroyed runs deleteIfGoesOut (#46-51) and adds nothing.",
+      "WHAT SETS `destroy` (destroy(), bytes 347560..347658): ETHBeginContactCallback_rolling_stone on touching",
+      "destroyier.ent (#73-105, earthquake.json stone_despawned) and, flagged destroyOnStaticHit, on a static",
+      "body (#170-208, boss_rock_broken: the beholder's rocks); ETHCallback_beholder on a rolling_stone.ent rising",
+      "into it (#399-464, beholder_hurt); and ETHBeginContactCallback_breakable_wall on a stone that is",
+      "`destroyable` as it breaks a wall (#42-60), which the port's Demolish does not do (planning step 129). ITS",
+      ".ent: no sprite; 2 smoke_particle.png all at once, a0, rep1, life 950 +- 100, size 68, growth 0.6,",
+      "randAngleStart 273, randAngle 1.2, white from alpha 0.8 to 0. Temporary."
+    ]
+  },
+
+  "door_lift_particles_open": {
+    "entity": "door_lift_particles.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "offset_size_y": -0.5,
+    "_source": [
+      "ETHCallback_door_lift (bytes 411544..414041), OPEN - the switch active and `status` 0, the door at",
+      "originalPos (#330-354): #404-406 g_scale.getScale(), pushed first, the scale; #407 PshC4 0f, the z, bare;",
+      "#410-414 GetSize().y x 0.5, the y; #415 PshC4 0f, the x; #417 vector3(0, 0.5 h, 0); #420-425 the door's",
+      "GetPosition() - that (vector3::opSub, the door the object, #423); #428-434 @412520",
+      "AddScaledEntity('door_lift_particles.ent', that, the scale); #438-440 startEarthquake(4, 0)",
+      "(earthquake.json door_opening). GetPosition() is where the frame began: SetPositionXY comes at #624. h is",
+      "GetSize(), which is GetCurrentSize(), the frame's size times the entity's scale",
+      "(ETHScriptObjRegister.generic.cpp:222, :358; ETHSpriteEntity.cpp:652-683): the door's own drawn height, so",
+      "y down the screen puts this at the shut door's top edge (D4 section 3.4, INFERRED from the lift's -0.8 h",
+      "travel and the dust's +0.03 gravity). ITS .ent: applyLight 1, no sprite; 22 dirt_particles.png cut 4 x 1,",
+      "all at once, a0, rep1, a random frame each, life 1300 +- 200, size 18 +- 2, growth -0.16, randAngleStart",
+      "360, gravity (0, 0.03), RandomizeDir (1, 0.6), RandStartPoint (24, 0), (0.1, 0.05, 0) from alpha 0 to",
+      "0.5. Temporary."
+    ]
+  },
+
+  "door_lift_particles_close": {
+    "entity": "door_lift_particles.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "offset_size_y": 0.5,
+    "_source": [
+      "ETHCallback_door_lift, CLOSE - the switch not active and `status` 2, the door at openPos (#472-500): the",
+      "same arguments as the open's (#550-561 the scale, then z 0, 0.5 h, x 0; #563 the vector3), but #571 @412821",
+      "vector3::opAdd - the door's GetPosition() + (0, 0.5 h, 0): the raised door's bottom edge - then #574-580",
+      "@412840 AddScaledEntity and #584-586 startEarthquake(4, 0) (earthquake.json door_closing). ITS .ent: as the",
+      "open's."
     ]
   }
 }

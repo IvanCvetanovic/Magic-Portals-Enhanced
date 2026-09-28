@@ -31,7 +31,11 @@
 // in front of a shock agent a fireball destroys), shock_strike between the diamond
 // and its minion, burn_projectile where a fire diamond is taken and where each
 // shot it turns is, and extinguish_fire where it goes down a drain and where a
-// fire signal is put out.
+// fire signal is put out. And what a wall, a stone and a lift door leave (11.1):
+// wall_destroy where a breakable wall goes, turned by the wall and at its
+// destroyEffectScale; rolling_stone_destroy where a stone is destroyed; and
+// door_lift_particles at the edge of a switched door as it starts to open or to
+// close.
 
 #include <string>
 
@@ -47,6 +51,11 @@ enum class Turn {
     // [0, 2 pi), which the engine reads as degrees (D4 section 5), so the entity is
     // turned by at most 6.28 degrees. ETHCallback_shock_diamond #496-498 alone.
     RadiansAsDegrees,
+    // The angle of the entity it is added at, in degrees as the engine keeps it:
+    // ETHCallback_breakable_wall #45-47 hands AddEntity its wall's GetAngle(). It
+    // is along no direction, so AngleDegrees gives 0 and the caller the angle
+    // (WallDestroy).
+    EntityAngle,
 };
 
 // One call site: effects.json's row.
@@ -175,6 +184,21 @@ struct Rules {
     Rule burnAtShot;
     Rule extinguishAtDiamond;
     Rule extinguishAtSignal;
+    // What a wall, a stone and a lift door leave (the visuals plan's 11.1;
+    // effects.json _walls_stones_doors). ETHCallback_breakable_wall's
+    // wall_destroy at the wall's own point and depth, turned by the wall and
+    // scaled by its float `wallDestroyScaleKey` where that is above 0;
+    // ETHCallback_rolling_stone's rolling_stone_destroy at 1.3 where a stone is
+    // destroyed, at a depth of its own; and ETHCallback_door_lift's two
+    // door_lift_particles, at the door's point plus its own height times
+    // `doorLift...SizeY` down the screen, on its depth - a bare 0 there.
+    Rule wallDestroy;
+    std::string wallDestroyScaleKey;
+    Rule stoneDestroy;
+    Rule doorLiftOpen;
+    Rule doorLiftClose;
+    double doorLiftOpenSizeY = 0.0;  // x GetSize().y: -0.5, the shut door's top edge
+    double doorLiftCloseSizeY = 0.0; // +0.5, the raised door's bottom edge
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -262,6 +286,25 @@ Spawn OnEntityBare(const Rule& rule, const glm::dvec2& entityPx, double entityZ,
 // along normalize(enemy - diamond), in the script's floats, which for this row is
 // the radians unconverted (Turn::RadiansAsDegrees).
 Spawn Strike(const Rule& rule, const glm::dvec2& diamondPx, double diamondZ, const glm::dvec2& enemyPx, double enemyZ);
+
+// ETHCallback_breakable_wall #14-31: effectScale, the wall's float where it is
+// above 0 - a missing one reads 0 (ETHEntity.cpp:851-856) - and 1 otherwise. The
+// same number multiplies the wall's earthquake (#73-76).
+double EffectScale(double datum);
+
+// ETHCallback_breakable_wall #33-59: AddEntity('wall_destroy.ent',
+// wall.GetPosition(), wall.GetAngle(), @e, '', g_scale.scale(effectScale)) - at
+// the wall's own point and depth (its z plus the row's 0), turned by the wall's
+// Ethanon angle as it is, and at effectScale times the row's scale.
+Spawn WallDestroy(const Rules& rules, const glm::dvec2& wallPx, double wallZ, double wallAngleDeg, double effectScale);
+
+// ETHCallback_door_lift #402-434 (`opening`) and #548-580: AddScaledEntity(
+// 'door_lift_particles.ent', door.GetPosition() -/+ vector3(0, 0.5 x GetSize().y,
+// 0), getScale()) - at the door's point moved down the screen by the row's share
+// of `doorHeightUnits`, the door's own drawn height, and never turned; its z the
+// door's plus the row's bare 0 (OnEntityBare).
+Spawn DoorLiftDust(const Rules& rules, bool opening, const glm::dvec2& doorPx, double doorZ, double doorHeightUnits,
+                   double scaleFactor);
 
 // A spent key's fly-in, as far as the port draws it: the clock of the
 // WaypointManager ETHCallback_key builds for it, which says when key_unlock_halo
