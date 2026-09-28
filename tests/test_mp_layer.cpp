@@ -11197,6 +11197,249 @@ void ATimedCrystalGoesWithItsVanishAtItsTime() {
     layer.OnDetach(registry);
 }
 
+// ---- what a key and its keyhole leave (the visuals plan's 10.3) ---------------------
+
+// THE STEP'S GATE: a key taken on 3-18 (level17b) leaves key_pick at the key, 32 in
+// front of it. minion_spawn A stands on the level's one key, so a MINION takes it as
+// the level starts - ETHCallback_key's free branch admits isMinion as it admits the
+// character, and adds key_pick either way.
+void AKeyTakenOn318LeavesItsPickAtTheKey() {
+    if (!OriginalArtIsThere("AKeyTakenOn318LeavesItsPickAtTheKey")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level17b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const std::string name = "key_ent_2103";
+    const glm::dvec2 node(224.0, 368.0);
+    const MagicPortals::Keys::Key* key = layer.SimLevel()->keys.FindKey(name);
+    CHECK_MSG(key != nullptr && key->owner == entt::null, name + " lies unowned before the first tick");
+    if (key == nullptr) return;
+    const int spawnedBefore = layer.EffectsSpawned();
+    glm::dvec2 lastDrawn(0.0);
+    int tick = 0;
+    while (tick < 60) {
+        if (const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, name)) lastDrawn = now->ownerPx;
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        key = layer.SimLevel()->keys.FindKey(name);
+        if (key != nullptr && key->owner != entt::null) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(key != nullptr && key->owner != entt::null && key->owner != layer.SimLevel()->player,
+              "a minion takes it, on tick " + std::to_string(tick));
+    if (key == nullptr || key->owner == entt::null) return;
+    int picks = 0;
+    FirstEffect(layer, "key_pick.ent", picks);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && picks == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport pick = FirstEffect(layer, "key_pick.ent", picks);
+    CHECK_MSG(picks == 1 && layer.EffectsSpawned() == spawnedBefore + 1,
+              "one key_pick on the frame: " + std::to_string(picks));
+    if (pick.id == 0) return;
+    // AT THE KEY: its entity point as the last tick drew it, and 32 in front of its
+    // eth_z of 0.
+    CHECK_MSG(pick.atPx == lastDrawn && glm::distance(pick.atPx, node) < 2.0,
+              "at the key's drawn point " + Point(lastDrawn) + ", by its node: " + Point(pick.atPx));
+    CHECK_MSG(nearlyU(pick.zUnits, 32.0), "the key's 0 + 32: " + std::to_string(pick.zUnits));
+    // key_pick.ent as read: no sprite or light, temporary; 8 sparkles over a life and
+    // one growing from 3, at the script's own size.
+    CHECK_MSG(!pick.drawn && !pick.hasLight && pick.temporary && pick.scriptScale == 1.0,
+              "no picture, no light, temporary, at getScale()");
+    CHECK_MSG(pick.systems == 2 && pick.pool == 8 + 1 && pick.systemSizePx.size() == 2 &&
+                  nearlyU(pick.systemSizePx[0], 12.0) && nearlyU(pick.systemSizePx[1], 3.0),
+              "8 + 1 sparkles at 12 and 3: " + std::to_string(pick.pool));
+    CHECK_MSG(pick.systemZ.size() == 2 && pick.systemZ[0] > layer.PlayerSlotZ() &&
+                  pick.systemZ[1] > layer.PlayerSlotZ(),
+              "both systems in front of the player");
+    // FREED BY ITS POOLS: the eighth sparkle released at 7/8 of 300 + 100 ms and living
+    // 200 to 400 more, the growing one 500 ms from the first frame.
+    const Burnt burnt = BurnDown(layer, registry, pick.id, 120);
+    std::printf("  3-18: %s taken on tick %d by a minion: key_pick at %s z %.1f, %d of %d released, freed on frame "
+                "%d\n",
+                name.c_str(), tick, Point(pick.atPx).c_str(), pick.zUnits, burnt.mostReleased, pick.pool,
+                burnt.freedOn);
+    CHECK_MSG(burnt.mostReleased == 9 && burnt.freedOn >= 30 && burnt.freedOn <= 50 && burnt.freed == 1,
+              "all 9 released, freed on frame " + std::to_string(burnt.freedOn) + " (30..50)");
+    layer.OnDetach(registry);
+}
+
+// The whole of it on 3-09 (level8b), whose five depths all differ: the player takes
+// key_ent_1335 (eth_z -6) and carries it to keyhole_1338 (-14), whose door is
+// door_locked_ent_1343 (-8). key_pick at the key, 26; the halo at the keyhole on the
+// fly-in's frame 1, 41 ticks after the unlock, at a z of its own, 32; and on the tick
+// the keyhole goes, with the door's shake, the three the keyhole adds in its order:
+// wall_destroy at the door (-8), door_locked_vanish 2 raw units in front of it
+// (-8 + 0.711) and keyhole_vanish 32 in front of the keyhole (18).
+void AKeyAndItsKeyholeLeaveWhatTheScriptAdds() {
+    if (!OriginalArtIsThere("AKeyAndItsKeyholeLeaveWhatTheScriptAdds")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level8b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 10; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::string keyName = "key_ent_1335";
+    const std::string holeName = "keyhole_1338";
+    const glm::dvec2 holeAt(582.0, 198.0);
+    const glm::dvec2 doorAt(624.0, 160.0);
+    constexpr double kBare = 2.0 / (720.0 / 256.0);
+    const MagicPortals::Keys::Key* key = layer.SimLevel()->keys.FindKey(keyName);
+    const MagicPortals::Keys::Keyhole* hole = layer.SimLevel()->keys.FindKeyhole(holeName);
+    CHECK(key != nullptr && hole != nullptr);
+    if (key == nullptr || hole == nullptr) return;
+    CHECK_MSG(key->owner == entt::null && hole->doorName == "door_locked_ent_1343" && hole->atPx == holeAt,
+              "the key lies unowned, and the keyhole opens door_locked_ent_1343");
+    int count = 0;
+    FirstEffect(layer, "key_pick.ent", count);
+    CHECK_MSG(count == 0, "no key_pick while the key lies");
+
+    // TAKEN, by the player, at the key's drawn point.
+    const std::optional<MagicPortalsLayer::MotionReport> lying = MotionOf(layer, keyName);
+    CHECK(lying.has_value() && !lying->crystal);
+    if (!lying) return;
+    PutPlayerAt(registry, layer, lying->ownerPx);
+    glm::dvec2 lastDrawn = lying->ownerPx;
+    int spawnedBefore = layer.EffectsSpawned();
+    for (int tick = 0; tick < 5; ++tick) {
+        if (const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, keyName)) {
+            lastDrawn = now->ownerPx;
+        }
+        tickWith(layer, registry, kRest, {}, {});
+        key = layer.SimLevel()->keys.FindKey(keyName);
+        if (key != nullptr && key->owner != entt::null) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(key != nullptr && key->owner == layer.SimLevel()->player, "the player takes " + keyName);
+    if (key == nullptr || key->owner == entt::null) return;
+    FirstEffect(layer, "key_pick.ent", count);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the pick's tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport pick = FirstEffect(layer, "key_pick.ent", count);
+    CHECK_MSG(count == 1 && pick.atPx == lastDrawn && nearlyU(pick.zUnits, 26.0),
+              "one key_pick at the key's drawn point " + Point(lastDrawn) + ", -6 + 32 = 26: " + Point(pick.atPx) +
+                  " z " + std::to_string(pick.zUnits));
+
+    // THE UNLOCK: carried onto the keyhole. No second pick while it is carried.
+    int strayPicks = 0;
+    int carried = 0;
+    while (carried < 300) {
+        PutPlayerAt(registry, layer, holeAt);
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        ++carried;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "key_pick.ent" && report.id != pick.id) ++strayPicks;
+        }
+        key = layer.SimLevel()->keys.FindKey(keyName);
+        if (key != nullptr && key->spent) break;
+    }
+    CHECK_MSG(key != nullptr && key->spent && key->opened >= 0 &&
+                  layer.SimLevel()->keys.keyholes[static_cast<std::size_t>(key->opened)].name == holeName,
+              "the key opens " + holeName + " after " + std::to_string(carried) + " ticks");
+    CHECK_MSG(strayPicks == 0, "no second key_pick while carried: " + std::to_string(strayPicks));
+    if (key == nullptr || !key->spent) return;
+
+    // THE HALO, on the fly-in's frame 1: the 41st tick after the unlock at 60 Hz.
+    int haloAfter = -1;
+    MagicPortalsLayer::EffectReport halo;
+    for (int n = 1; n <= 80 && haloAfter < 0; ++n) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        halo = FirstEffect(layer, "key_unlock_halo.ent", count);
+        if (count > 0) haloAfter = n;
+    }
+    CHECK_MSG(haloAfter == 41 && count == 1, "one halo, on the 41st tick after the unlock: " + std::to_string(haloAfter));
+    CHECK_MSG(halo.atPx == holeAt && nearlyU(halo.zUnits, 32.0),
+              "at the keyhole, z 32 of its own (not -14 + 32): " + Point(halo.atPx) + " z " +
+                  std::to_string(halo.zUnits));
+    CHECK_MSG(!halo.drawn && !halo.hasLight && halo.temporary && halo.systems == 1 && halo.pool == 1 &&
+                  halo.systemSizePx.size() == 1 && nearlyU(halo.systemSizePx[0], 3.0) &&
+                  halo.systemZ[0] > layer.PlayerSlotZ(),
+              "one sparkle growing from 3, temporary, in front of the player");
+
+    // THE KEYHOLE GOES: on that tick nothing is added and the door's 20 shakes; on
+    // the frame the three come, in the script's order.
+    int goneAfter = -1;
+    for (int n = 1; n <= 200; ++n) {
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        hole = layer.SimLevel()->keys.FindKeyhole(holeName);
+        if (hole != nullptr && hole->gone) {
+            goneAfter = haloAfter + n;
+            break;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(goneAfter > 0, "the keyhole goes");
+    if (goneAfter < 0) return;
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore, "nothing is added on the keyhole's tick");
+    CHECK_MSG(std::fabs(layer.Quake().amplitudePx - quakeRowPx(20.0)) < 1e-9,
+              "door_unlocked's 20 on the same tick: " + std::to_string(layer.Quake().amplitudePx) + " px");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 3,
+              "three on the frame: " + std::to_string(layer.EffectsSpawned() - spawnedBefore));
+    int dusts = 0;
+    int sparkleSets = 0;
+    int bursts = 0;
+    const MagicPortalsLayer::EffectReport dust = FirstEffect(layer, "wall_destroy.ent", dusts);
+    const MagicPortalsLayer::EffectReport sparkles = FirstEffect(layer, "door_locked_vanish.ent", sparkleSets);
+    const MagicPortalsLayer::EffectReport burst = FirstEffect(layer, "keyhole_vanish.ent", bursts);
+    CHECK_MSG(dusts == 1 && sparkleSets == 1 && bursts == 1, "one of each");
+    if (dust.id == 0 || sparkles.id == 0 || burst.id == 0) return;
+    CHECK_MSG(dust.id < sparkles.id && sparkles.id < burst.id,
+              "added in ETHCallback_keyhole's order: wall_destroy, door_locked_vanish, keyhole_vanish");
+    // wall_destroy: at the door's own point and depth, dirt and smoke, both systems
+    // at their StartPoint's 32 in front of it.
+    CHECK_MSG(dust.atPx == doorAt && nearlyU(dust.zUnits, -8.0) && !dust.drawn && !dust.hasLight &&
+                  dust.temporary && dust.systems == 2 && dust.pool == 22 + 10 && dust.systemSizePx.size() == 2 &&
+                  nearlyU(dust.systemSizePx[0], 19.0) && nearlyU(dust.systemSizePx[1], 60.0),
+              "wall_destroy at the door " + Point(dust.atPx) + " z " + std::to_string(dust.zUnits) + ", 22 + 10");
+    CHECK_MSG(dust.systemZ.size() == 2 && dust.systemZ[0] > layer.PlayerSlotZ() &&
+                  dust.systemZ[1] > layer.PlayerSlotZ(),
+              "its dirt and smoke in front of the player (-8 + 32)");
+    // door_locked_vanish: at the door, 0.711 in front of its -8 - behind the player.
+    CHECK_MSG(sparkles.atPx == doorAt && nearlyU(sparkles.zUnits, -8.0 + kBare) && sparkles.systems == 1 &&
+                  sparkles.pool == 30 && sparkles.systemSizePx.size() == 1 &&
+                  nearlyU(sparkles.systemSizePx[0], 9.0) && sparkles.systemZ[0] < layer.PlayerSlotZ(),
+              "door_locked_vanish at the door, z " + std::to_string(sparkles.zUnits) + ", 30 sparkles");
+    // keyhole_vanish: at the keyhole, -14 + 32 = 18, in front of the player.
+    CHECK_MSG(burst.atPx == holeAt && nearlyU(burst.zUnits, 18.0) && burst.systems == 1 && burst.pool == 1 &&
+                  burst.systemSizePx.size() == 1 && nearlyU(burst.systemSizePx[0], 74.0) &&
+                  burst.systemZ[0] > layer.PlayerSlotZ(),
+              "keyhole_vanish at the keyhole, z " + std::to_string(burst.zUnits));
+
+    // EACH FREED BY ITS POOLS, frames only.
+    int dustFreed = -1;
+    int sparklesFreed = -1;
+    int burstFreed = -1;
+    for (int frame = 1; frame <= 150 && (dustFreed < 0 || sparklesFreed < 0 || burstFreed < 0); ++frame) {
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::vector<MagicPortalsLayer::EffectReport> reports = layer.EffectReports();
+        if (dustFreed < 0 && ByIdIn(reports, dust.id).id == 0) dustFreed = frame;
+        if (sparklesFreed < 0 && ByIdIn(reports, sparkles.id).id == 0) sparklesFreed = frame;
+        if (burstFreed < 0 && ByIdIn(reports, burst.id).id == 0) burstFreed = frame;
+    }
+    std::printf("  3-09: key_pick z %.3f; unlocked after %d carried ticks, the halo %d ticks later at z %.3f; the "
+                "keyhole gone %d ticks after the unlock: wall_destroy z %.3f (freed frame %d), door_locked_vanish z "
+                "%.4f (%d), keyhole_vanish z %.3f (%d)\n",
+                pick.zUnits, carried, haloAfter, halo.zUnits, goneAfter, dust.zUnits, dustFreed, sparkles.zUnits,
+                sparklesFreed, burst.zUnits, burstFreed);
+    CHECK_MSG(goneAfter >= 89 && goneAfter <= 90, "the keyhole's 1500 ms: " + std::to_string(goneAfter));
+    CHECK_MSG(dustFreed >= 66 && dustFreed <= 110, "wall_destroy's 1100-1800 ms: " + std::to_string(dustFreed));
+    CHECK_MSG(sparklesFreed >= 50 && sparklesFreed <= 68,
+              "door_locked_vanish's last sparkle out by 531 + 350-550 ms: " + std::to_string(sparklesFreed));
+    CHECK_MSG(burstFreed >= 41 && burstFreed <= 45, "keyhole_vanish's 700 ms: " + std::to_string(burstFreed));
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
@@ -11339,6 +11582,8 @@ void runTests() {
     AFireDiamondTapsMarkIsTheLeftoverByte();
     ATakenCrystalLeavesItsPickWhereItStood();
     ATimedCrystalGoesWithItsVanishAtItsTime();
+    AKeyTakenOn318LeavesItsPickAtTheKey();
+    AKeyAndItsKeyholeLeaveWhatTheScriptAdds();
 }
 
 } // namespace

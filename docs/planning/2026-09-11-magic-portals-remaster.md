@@ -17163,3 +17163,196 @@ string, which no reader parses, so `test_mp_sprites` (which pins its numbers) wa
   the one that built `0ec11c49`): a per-system pool count in `EffectReport`, so the suites pin `crystal_pick`'s
   {5, 2} and `crystal_vanish`'s {1, 2} rather than the sum; and the crystal's depth read from its node's `eth_z`
   rather than the lighting look's `lookZ`, or the `m_lit` dependency said in `latchSimEffects`' comment.
+
+## Step 127 - what a key and its keyhole leave: the sparkles where a key is taken, the halo it flies into, and the dust, the sparkles and the burst when its door goes (built)
+
+**TRACK B: the visuals plan's step 10.3** (the remake's `out/parity/visuals/briefs/00_order.md` section 7 as section
+8.13's 10.3 row amends it; `system_7.md` 7f-2 and G.5; decode D4 section 4 and `D4_check.md`, which wins). Built in the
+worktree `Magic-Portals-Remake-vis4` (branch `visuals-d`, from `d072502`, step 126), whose build reads the frozen level
+data in `out/snap_pre8`; numbered in track B's range, and the merge renumbers it. Changed: `game/data/effects.json` (five
+rows and a `_keys` note), `game/sim/Effects.{hpp,cpp}` (the rows, their reader, `Effects::OnEntityBare`,
+`Effects::FlyIn`/`AdvanceFlyIn`), `game/MagicPortalsLayer.{hpp,cpp}` (the rule in `latchSimEffects`, which now takes the
+tick's length, and two members), `game/data/keys.json` (its `_not_built` note only), `tests/test_mp_effects.cpp` and
+`tests/test_mp_layer.cpp`. No engine change (the pin stays `4bfcf67`), no converter change, no format finding (no
+`docs/ethanon-formats.md` entry). **GAMEPLAY: NONE.**
+
+**BLOCKERS, checked first.** Section 7's two are D4 and F9; section 8.13 removes D4 (closed, confirmed by `D4_check`)
+and leaves F9 as a visual check only, and F9 exists (`out/parity/footage/F9.md`, takes r6 and r7b on 3-18). The effects
+runtime is step 83's, the between-slot table step 83's with step 88's merge, the key's bob step 69's, the door's shake
+step 121's (`earthquake.json` `door_unlocked`, fired from `Keys::State::opened`), and a minion's carrier point step 76's
+R25. The listing is the md5 the decodes cite (`48fe65ce...`). Nothing unmet.
+
+**WHAT THE ORIGINAL DOES** (the listing, `ETHCallback_key.angelscript`; `effects.json` carries each call with its
+instructions).
+- **Taken.** `ETHCallback_key`'s free branch (`ownerID` < 0, #653-858) bobs the key (#667-679), then for every
+  surrounding entity that `isCharacter` OR `isMinion` and is not leaving, within `squaredRange` = scale(26)^2 of the
+  key's point (#713-766), adds `key_pick.ent` by `AddScaledEntity` at the key's `GetPosition()` + `vector3(0, 0,
+  g_scale.scale(32))` (#768-799), plays the pick sound and takes that carrier as owner. So a KNIGHT taking a key adds it
+  as the player does, and the z is added to the key's own depth.
+- **Unlocked.** Within the same range of a keyhole of its colour the owned branch sets `foundKeyhole` on the key and
+  `unlocked` on the keyhole (#1084-1123). On the NEXT frame the found branch builds a `WaypointManager` of six waypoints
+  (#221-551: the key's point 666 ms, then keyhole + scale(20, -4), + scale(8, -4), fading) and plays it; on the frame
+  the manager steps to frame 1 (#593-635) it adds `key_unlock_halo.ent` at `vector3(keyholePos, g_scale.scale(32))` - a
+  depth of its OWN, not added to the keyhole's. `FrameTimer::set` (bytes 23254..23650) resets its clock to 0 on the
+  building frame and steps the frame once `m_time >= 666` (unsigned, #46-57), so at 60 Hz the halo comes on the 41st
+  frame after the unlock.
+- **Gone.** `ETHCallback_keyhole` (443376..444400) counts `elapsedTime` once unlocked, fades from 1000 to 1500 ms
+  (`keys.json` keyhole), and at alpha 0 (#99-100) finds its door and adds, in this order: `wall_destroy.ent` at the
+  door's `GetPosition()` by `AddScaledEntity` - angle 0, where `ETHCallback_breakable_wall`'s call of the same entity
+  passes the wall's (#150-164); `door_locked_vanish.ent` at `door.GetPosition() - vector3(0, 0, -2)` - the -2 a BARE
+  `PshC4` with no `g_scale.scale` (#168-194); `keyhole_vanish.ent` at the keyhole's `GetPosition()` + `vector3(0, 0,
+  g_scale.scale(32))` (#198-229); then the demolition sound, `startEarthquake(20, 100)` (#237-239) and the deletion of
+  door and keyhole.
+- **What they are.** All five `.ent` have no `<Sprite>` and every system repeat 1, so the engine frees each once its
+  particles are over; none is given an owner. `key_pick`: 8 `sparkles.bmp` over a life (300 +- 100, size 12 +- 5) and 1
+  growing from 3 by 6.55 to 70 at (0.5, 0.5, 0.5); `key_unlock_halo`: 1 sparkle, life 550, from 3 by 6.55 to 70,
+  white; `keyhole_vanish`: 1 `explosion.png` (4 x 3) all at once, size 74, life 700; `door_locked_vanish`: 30 sparkles
+  over a life (450 +- 100, 9 +- 25) over RandStartPoint (26, 100); `wall_destroy`: 22 dirt cells a0 (random frame,
+  gravity 0.03, 1450 +- 350) and 10 smoke a0 (950 +- 200, size 60), both at StartPoint z 32.
+- **The census** (the frozen `out/snap_pre8`, both spellings, 00_order 8.0 rule 4): **41 locked doors in 34 levels**
+  (8 `door_locked`, 33 `door_locked.ent`), z -6 x19, -4 x7, -8 x7, 0 x4, -2 x3, +4 x1 - `D4_check`'s count and spread
+  exactly; 41 keyholes (14 + 27); 39 keys placed (8 + 31), and the two the 3-32 and 4-32 bosses drop.
+
+**THE CHANGE.**
+1. **`effects.json`**: `key_pick` (z `{32, scaled}`), `key_unlock_halo` (z `{32, scaled}`, plus `after_fly_in_ms` 666
+   with the `FrameTimer` citation), `keyhole_vanish` (z `{32, scaled}`), `door_locked_vanish` (z `{2, scaled false}`) and
+   `wall_destroy_at_door` (`wall_destroy.ent`, z `{0, scaled}`), every one offset 0, angle 0, scale 1, appended after
+   every existing row under a `_keys` note; `keys.json`'s `_not_built` no longer lists them.
+2. **`sim/Effects`**: the five rows read strictly - each required, refused a direction (the point-only list), refused
+   an angle other than 0 (AddScaledEntity's flat 0f), and refused its z read the other way from the decode; the halo's
+   time required above 0. `Effects::OnEntityBare(rule, point, entityZ, scaleFactor)` is `OnEntity` for a bare-literal
+   z: ONLY the literal is divided by the scale factor (2 / 2.8125 = 0.711) before it goes on the entity's depth, which
+   is already on the level's axis - `effectAdd` divides a WHOLE bare z, which here would have put the sparkles at
+   (-8 + 2) / 2.8125 = -2.13, six units in front of their door. `Effects::FlyIn` and `AdvanceFlyIn` are the fly-in's
+   clock as the decode has it: found on the unlock tick, built with its clock at 0 on the next, the halo on the first
+   tick whose sum reaches 666.
+3. **The layer.** `latchSimEffects(fixedDelta)` keeps, per key of `Keys`', the carrier it had at the last latch and its
+   fly-in clock (`m_keyEffects`), and per keyhole whether its three were queued (`m_keyholeEffects`); both cleared
+   with the level's effects. A key whose owner CHANGES to a carrier queues `key_pick` at its picture's entity point as
+   the tick before drew it (this tick's `Keys::Tick` has already trailed it toward the carrier) and its node's `eth_z`
+   + 32 - so the player's pick and a knight's alike, and a re-take after a drop a latch has seen, or a hand-over to
+   another carrier, is a second pick (a drop and re-take by one carrier between two latches changes nothing the latch
+   sees, and queues none); the watch starts unowned, so a pick on the level's first tick is a pick. A spent key's clock
+   queues `key_unlock_halo` at the keyhole it opened,
+   z 32. A keyhole newly `gone` queues the three in the script's order at its door's NODE point (the picture's
+   `ownerPx` is its body's) and depth and its own. One log line each, with the tick. Queued after the crystals: the
+   order two callbacks add their entities in is the scene walk's, undecoded, and shows only in the effects' stream. A
+   key with no picture (a level drawn as boxes; a boss's dropped key, whose art is 12.1's and 12.2's) queues no pick;
+   the halo needs no picture, only the keyhole's point from `Keys`. A keyhole whose own picture OR its door's is missing
+   queues none of its three, though the burst needs only the keyhole's and the dust and sparkles only the door's; no
+   frozen level has either missing (all 82 keyholes and doors carry a `Sprite2D`).
+
+**THE GATES.** After = this step's build `acf7f6a2`. Before = the 128-level sweep `10.2/after/sweep` (step 126's
+binary `0ec11c49`, whose 1-01 f420 `e2da5131` this build reproduces, `10.3/after/probe`); on it no key effect exists
+anywhere - HEAD's `effects.json` has no key row and `latchSimEffects` no key rule - which is every gate's "today".
+Captures, scripts and measurements: `out/parity/visuals/10.3/` (`capture_sweep.sh`, `compare_sweep.sh`,
+`explain_sweep.py`, `clusters.py`, `capture_gates.sh`; `after/compare_sweep.txt`, `after/explain_sweep.txt`,
+`after/explain/clusters.txt`, `after/check_capture_log.txt`; `probes/`, `gates/3-25_pick/`,
+`after_sheet_3-25_pick.png`). All `--window 1280x720 --fixed-step`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| (0) Baseline | the build reproduces the last after where the step does not reach | - | 1-01 f420 `e2da5131` on `acf7f6a2` (1-01 has no key), as `10.2/after/sweep` |
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**, one build (`build1_all.log`: the sim library, the layer, both touched suites, and a relink of every other suite and exe) |
+| (1) `test_mp_layer`: a key taken on 3-18 spawns `key_pick` at key + 32 (the step's gate) | one `key_pick` at the key, z key + 32 | no effect | **passes** (`AKeyTakenOn318LeavesItsPickAtTheKey`, `level17b`): `key_ent_2103` taken on **tick 1 by a minion** (minion_spawn A stands on it; the owner is not the player); nothing added on the tick; on the frame exactly one `key_pick.ent`, at the key's drawn entity point (224, 368), **z 32** = its eth_z 0 + 32, **8 + 1 particles in 2 systems** at 12 and 3, no picture, no light, temporary, at getScale(), both systems in front of the player; all 9 released, **freed on frame 40** (30..50: the eighth sparkle at 7/8 of 400 ms living 200-400 more, the growing one 500 ms) |
+| (1b) `test_mp_layer`: the whole of it on 3-09, whose five depths differ | the five where the script adds them | no effect | **passes** (`AKeyAndItsKeyholeLeaveWhatTheScriptAdds`, `level8b`): the player takes `key_ent_1335` (eth_z -6) - `key_pick` at its drawn point (32, 31.05), **z 26**; carried onto `keyhole_1338` (-14), unlocked on the first carried tick, no second pick while carried; **`key_unlock_halo` on the 41st tick after the unlock** at the keyhole (582, 198), **z 32 of its own** (not -14 + 32 = 18), one sparkle from 3, in front of the player; the keyhole **gone 89 ticks after the unlock tick** (its 1500 ms), nothing added on that tick and **`door_unlocked`'s 19.6875 px (20) shaking on it**; on the frame exactly three, ids in the script's order: `wall_destroy` at the door (624, 160) **z -8**, 22 + 10 at 19 and 60, both systems in front of the player (-8 + 32); `door_locked_vanish` at the door **z -7.2889** (-8 + 2 / 2.8125), 30 at 9, behind the player; `keyhole_vanish` at the keyhole **z 18**, 1 at 74, in front of the player; freed on frames 98, 59 and 42 (1100-1800, 531 + 350-550 and 700 ms) |
+| (1c) `test_mp_effects`: the rows and the rules | the decoded calls, strict | 324 | **passes, 473 checks**: the five rows as decoded; on 3-09's points `key_pick` 26, `keyhole_vanish` 18, the door's dust -8 unturned, the halo 32 where `OnEntity` would say 18; `OnEntityBare` -7.2889 (not -2.13, the whole sum divided), and at a factor of 0 the literal as it stands; over the 41 doors' depths (-8, -6, -4, -2, 0, +4) the sparkles' slots -7, -5, -3, -1, 1, 5; `AdvanceFlyIn` adds the halo once, on tick 41 at 60 Hz and 21 at 30 Hz, on 6 x 111 ms (666 reached) and not on 6 x 110; nothing for a key not spent; refused: `key_pick`, `door_locked_vanish` or `wall_destroy_at_door` missing, an offset on `keyhole_vanish`, the door's dust turned 90, `key_pick`'s z bare, `door_locked_vanish`'s scaled, the halo's time missing or 0 |
+| (2) Earthquake (20, 100) at the door | Q.1's row, on the door's tick | wired (step 121) | **passes**: (1b)'s 19.6875 px on the tick the keyhole goes, with the three effects on its frame; step 121's `AnUnlockedDoorShakesTheView` (3-08) passes in the same run |
+| (3) The 41 doors, re-counted | the census D4_check gives | - | **41 in 34 levels**, 8 + 33, z -6 x19, -4 x7, -8 x7, 0 x4, -2 x3, +4 x1 (above) |
+| (4) A pick on screen, 3-25 (`level24b`) `--hold right@190-300` (every frame, `gates/3-25_pick`) | the sparkles where the key was, when it is taken | not run; by construction no pick effect (HEAD has no key row) | **consistent, qualitative**: the first route probe (`probes/`) found it - `key_ent_2059` (eth_z -2) taken on **tick 243** in mid-fall at (150, 126.73), **z 30**, the player killed by the shock agent on tick 250 (the port's shock field, which this step does not touch); the sparkles and the growing star stand where the key was taken while the key goes on with the player (`after_sheet_3-25_pick.png`, f242-f280; `after_3-25_f252_crop.png`). NOT measured in pixels: the camera follows the falling player and the pick point is over the parallaxed moon, and there is no before run of the route (see the note below the table). The capture is byte-identical to the probe at f200, f240, f260, f280 and f300 (determinism) |
+| (5) F9 (3-18; visual only) | the original's picture | - | **the unlock's pictures NOT RUN; its timings consistent**. No route in the port reaches a keyhole without a warp in the two probes spent (3-25 dies to its shock agent; 4-20 `--hold left` takes two crystals and stops short), and F9's own 3-18 route is sixteen inputs deep, so the halo, the keyhole's burst and the door's dust are held to F9 by the suite's numbers: the halo added **0.683 s** after the unlock (41 ticks) against F9 r7b's first sight within +0.69-0.79 s (#214 13.378 without it, #215 13.427 with) and r6's within +0.61-0.82 s (a 202 ms gap before #685), growing from size 3, so its first frames are small; the door gone **1.5 s** after the unlock (the rule F9's cross-check stands on: r6's halo-based and door-based unlocks agree); door gone, dust, sparkles and burst on **one frame** in both (F9 r7b #229, r6 #699); `keyhole_vanish` freed at 700 ms against F9's 0.55 s seen (#229-#236, fading to black); the dust's smoke at 750-1150 ms and dirt at 1100-1800 against F9's 0.85-0.93 s seen. The pick itself: F9 r6 #409 has it lost in the shock burst |
+| (6) K13 | no depth outside the table | - | **passes**: no new class; all five take the table's `Effect`, `EffectHalo` and `EffectSystems` rows at `slotAfter(round(z))`, pinned by (1)/(1b)'s player checks and step 83's `AnEffectsPictureHaloAndSystemsStandWhereTheTableSays` |
+| (7) K8 (the inherited reading: the placement stream untouched) | no level particle moved | - | **passes**: every one is added through `SpawnEffect`, whose pools and steps draw on `m_effectRandom` alone, and `AnEffectMovesNoParticleOfTheLevels` passes in the 1996 |
+| (8) The 128-level f420 sweep | changes explained | `10.2/after/sweep` | **113 of 128 byte-identical; the 15 that differ are exactly the 15 whose log names a key event by tick 420, and no level differs without one** (`after/explain_sweep.txt`). Every event by 420 is a PICK - no unlock, halo or keyhole on any level. On 14 of the 15 a knight takes the key: on 11 on tick 1 or 2, where minion_spawn stands on it (3-18, 3-20, 3-21's three keys, 3-23's two, 3-26, 3-29, 3-30, 3-31, 4-28, 4-29, 4-30), and on 3 where a patrol reaches one (3-10 on tick 125, 3-16 on 46, 3-17 on 72 and 109); on 4-20 the player, who spawns on its key. Each shows one **~10 x 10 px cluster at the player's face, 76-93 px, max 17-74** (the red eyes, whose specks draw on the effects' stream after the pick's: each box holds 45-59 saturated red pixels in both frames and sits among 1,037-1,147 of the hood's purple ones within 25 px, `after/explain/eyes_check.txt`), plus stray clusters **of at most 16 px and at most 9 of 255, on pixels lit in both frames** - and on 3-31 one of **69 px at (1050, 572)-(1090, 623), max 9, all 69 lit in both** (`after/explain/clusters.txt`): step 126's class, a changed draw or blend order's rounding once an effect's quads came and went, not a moved particle, which would differ by tens to hundreds over a whole quad. All 128 exit 0, validation ACTIVE in 128 logs and no message, every png matching its log line (`after/check_capture_log.txt`) |
+| (9) No gameplay change | nothing the simulation reads moves | - | **passes**: `Keys`, `Carry`, the minions and every clock are untouched; the layer reads `owner`, `spent`/`opened` and `gone` and queues pictures on the frame (nothing is added on the tick, pinned in (1) and (1b)); 113 sweep levels are identical and the 15 others differ only as (8) says |
+
+**No before run of a gate route.** This step's build replaced the committed binary `0ec11c49` before its routes were
+known, and a before binary was not rebuilt from `d072502`: it would be a fresh exe under Smart App Control for a
+comparison the sweep already makes (the 15 changed frames, each explained) and the suite's placements already pin. So
+gate (4) is qualitative, where step 126's pick gates were frame for frame.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **The fly-in is not built** (`keys.json` `_not_built`, not in 10.3's contents): F9 shows the key swung 20 u right of
+   the keyhole, slid in and faded, and deleted about 1.27 s after the unlock; the port's spent key holds where it opened
+   its keyhole until the keyhole goes (1.5 s). Only the fly-in's CLOCK is built, because it times the halo.
+2. **The door's sparkles by the standing bare-literal rule** (step 86; step 80's 4 raw px is the direct precedent):
+   door z + 0.711, whose rounded slot is one in front of the door's (-7, -5, -3, -1, 1, 5 over the 41). 00_order
+   8.13's "{-6, -4, -2, 0, +2, +6}" is the same +2 read in raw units. The price of `round()`: a node at exactly door z +
+   1 is drawn behind the sparkles where the original draws it in front (the sparkles stand 0.711, not 1, in front).
+3. **Several carriers in range on one frame**: the original's loop does not stop at the first (#852-857), so each adds
+   a `key_pick` and the last is the owner; `Carry::Acquire` takes the first, so the port adds one. Who carries is
+   gameplay, named here and left.
+4. **The keyhole's clock is gameplay the port runs everywhere**: `keyhole.ent` is static, and a static entity's
+   callback runs only in visible buckets (00_order 8.12c; `ETHScene.cpp` `UpdateCurrentFrameEntities` after
+   `MapEntitiesToBeRendered`), so the original's 1500 ms counts only while the keyhole is on screen. Left for the owner
+   with steps 78, 79 and 80's bucket-visibility rows.
+5. **The key's point is the tick before's**, bob and all, as step 126's crystal (at most 0.05 u of bob), and on a key
+   taken on the level's first tick it is its node (no tick has drawn it yet), where the original's first frame has
+   already bobbed it.
+6. **The depths are the pictures' `lookZ`** (the node's `eth_z` when the level's lighting read, which all 128 do), as
+   step 126's; a level whose lighting failed would put these at a flat 32, 0.711 and 0.
+7. **The effects' stream moves after each pick** (00_order K8, the inherited reading): the eyes' specks differ after
+   one, as gate (8) measures; no particle of a level's own emitters does.
+8. **`Keys.hpp`'s header comment is now stale** ("NOT built ... the three vanish entities"); left as it is, because
+   `Game.hpp` includes it and a comment edit would recompile and relink every suite (Smart App Control).
+
+**RULINGS APPLIED.** The standing direction that R1-R23 follow what the original does. R1, R2, R22 and R23 are not
+built. **R24 and R25** are neither touched nor withdrawn: R24's patrols are what bring 3-10's, 3-16's and 3-17's knights
+to their keys (gate 8), and R25 is the point a knight's key is carried at; `key_pick` is added at the KEY, not the
+carrier, so neither moves an effect. **R10**: the player at 4 / 2.8125 = 1.42, which `key_pick`, the halo, the burst and
+the door's dust (at 32 in front of it) stand in front of and the door's sparkles (door + 0.711; +4.711 on 4-30's one
+door at +4) behind. **R12**: the 720 / 256 of the bare literal. **K13**: no new class. **K8**: the inherited reading.
+
+**GAMEPLAY: NONE.** `Keys`, the carry, the minions and every clock are as they were (gate 9).
+
+**SUITES**, run directly, once each (logs `10.3/`): `test_mp_effects` **473** (324 at step 126), `test_mp_layer`
+**1996** (1958), 0 failures each. The full ctest was not run. The build relinked all 45 suites (the sim library
+changed); only these two were launched, because they are the only ones that run the changed code: `sim/Effects` is
+used by the layer and `test_mp_effects` alone (`Art.hpp` names it in a comment), and `test_mp_layer` is the only suite
+that links `MagicPortalsGame` (`tests/CMakeLists.txt:184`) - no other `tests/*.cpp` names `MagicPortalsLayer`,
+`EffectReport(s)`, `EffectsSpawned`, `Effects::LoadRules` or `effects.json`. `keys.json` changed only inside a
+`_not_built` string, which no reader parses, so `test_mp_keys` was not run.
+
+**PROVENANCE OF THE RUNS.** Every run above is the source of this step as committed, with one exception that cannot
+show: `keys.json`'s `_not_built` note was edited after the two suites ran, at 13:51:42, as the sweep finished its
+1-01 and began 1-02. `keys.json` is read at run time and `Keys::LoadRules` reads only `key` and `keyhole`'s numbers,
+none of which changed, so the suites, the probe and the first sweep level read the same rules as every later run.
+
+**THE VERIFICATION** (`10.3/verify1/`) re-derived the rule from the listing, retook both suites (473 and 1996 checks,
+0 failures), the 128-level sweep (128 of 128 byte-identical to `10.3/after/sweep`; against `10.2/after/sweep` 113
+identical and the same 15, each naming a key event), the 3-25 pick route (301 of 301 frames identical to
+`gates/3-25_pick`) and the census, recompiled the four changed sources into scratch objects with 0 warnings, and saw
+the changed clusters at the player's red eyes by eye (`verify1/crops_sheet.png`).
+
+**THE COMMIT'S REBUILD.** After every gate ran, the commit corrected two comments at their line counts - `KeyWatch`'s
+in `MagicPortalsLayer.hpp` (a drop and re-take by one carrier between two latches queues no pick; it had said every
+re-take is one) and the keyhole rule's in `MagicPortalsLayer.cpp` (a missing picture of the keyhole OR its door drops
+all three) - and THE CHANGE 3 above to match. Before the edit a dry run of the build's own manifest found no work
+(`acf7f6a2`, `18821d04` and `dd018943` current); the rebuild after it compiled four objects (the layer, `main`,
+`LevelVisit`, `test_mp_layer`) and relinked `MagicPortals.exe` (`0a536a28`) and `test_mp_layer.exe` (`0428b7d7`),
+**0 warnings** (`10.3/commit/build.log`). Neither was launched: every section of each is byte-identical to
+`acf7f6a2`'s and `dd018943`'s but for the 4-byte link time, in the PE header and the debug directory
+(`10.3/commit/pe_compare.txt`), so every gate above holds for the committed build. `test_mp_effects` was not relinked.
+
+**SWEEP BASELINE**: `10.3/after/sweep` now stands for all 128 levels, the next step's before.
+
+**SMART APP CONTROL: 0 refusals.** Launches: the new `test_mp_effects` (`18821d04`) and `test_mp_layer` (`dd018943`)
+once each; the new `MagicPortals.exe` (`acf7f6a2`) 132 (the probe, the 128 sweep captures, two route probes and one gate
+capture). The committed `0ec11c49` was not launched. The verification: both suites once more and `acf7f6a2` 129 times
+(its sweep and the 3-25 route), 0 refusals. The commit's `0a536a28` and `0428b7d7`: never launched. No exe was deleted
+or relinked for a refusal.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Deviation 3** (who carries when several are in range) and **deviation 4** (the keyhole's clock only while
+  visible): gameplay, beside the bucket-visibility rows of steps 78-80.
+- **The fly-in** (deviation 1): the key's flight and fade, for whichever step takes the key's picture next.
+- **The boss-dropped keys' art** (12.1, 12.2): with a picture, their picks get a point to be added at.
+- A capture of the unlock against F9's pictures needs a route to a keyhole in the port (none found in two probes) or
+  a capture-only warp.
+- From the verification, for later (a code change, not made at the commit): `latchSimEffects` drops all three when
+  either the keyhole's or the door's picture is missing (`if (hole == nullptr || door == nullptr) continue;`); queue
+  the dust and sparkles on the door's picture and the burst on the keyhole's, or pin in a suite that every keyhole and
+  locked door of the 34 levels has one. No frozen level is affected.
+- For the backlog (the close agent): a 10.3 row; deviations 3 and 4 as gameplay rows.
+- For the merge's renumbering: "step 127" is written in `effects.json` (the `_keys` note) and `keys.json`
+  (`_not_built`).

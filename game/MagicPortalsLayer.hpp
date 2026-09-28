@@ -1140,8 +1140,9 @@ private:
     bool effectOwnerPoint(const entt::registry& registry, const EffectOwner& owner, glm::dvec2& atPx,
                           bool& hidden) const;
     // What the TICK adds to the frame's queue, each rule wired by the step that
-    // draws it.
-    void latchSimEffects();
+    // draws it. `fixedDelta` is the tick's length, which a spent key's fly-in
+    // clock counts (Effects::AdvanceFlyIn).
+    void latchSimEffects(float fixedDelta);
     // What a tap the shot was offered leaves behind (the visuals plan's 10.1),
     // queued the moment Portals::State::Shoot returns: the mark a fired shot
     // leaves at the tap - red_cross or portal_mark by computePortalFinalPos's
@@ -1690,6 +1691,21 @@ private:
     // queued. A state walk rather than a count, so the one queued is the one
     // that went, at its own point; sized by the first latch of a level.
     std::vector<char> m_crystalEffects;
+    // Per key of Keys', in its order (the visuals plan's 10.3): the carrier it
+    // had at the last latch - key_pick is queued when that CHANGES to one; a
+    // drop and re-take by one carrier between latches is no change - and its
+    // fly-in clock once spent, which queues key_unlock_halo. Grown, never
+    // snapshotted: a key the level starts with is unowned until a carrier takes
+    // it, so a pick on the very first tick (3-18's knight) is a pick; and a key a
+    // boss drops joins the end of Keys' list.
+    struct KeyWatch {
+        entt::entity owner{entt::null};
+        Effects::FlyIn flyIn;
+    };
+    std::vector<KeyWatch> m_keyEffects;
+    // Per keyhole of Keys': whether the three it adds as it goes - wall_destroy at
+    // its door, door_locked_vanish and keyhole_vanish - have been queued.
+    std::vector<char> m_keyholeEffects;
     // The cell the player was last drawn on, kept across the door: updateEyes
     // reads GetFrame every frame, and the quad it comes from is destroyed when the
     // character is hidden.

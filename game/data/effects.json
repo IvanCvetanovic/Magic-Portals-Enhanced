@@ -16,8 +16,8 @@
     "one dies, and that callback's own colours and clocks in placed_portal (7.4). And red_eyes,",
     "MainCharacter's own, drawn by step 7.1 - added once at a level's",
     "start rather than at a call site, so it has a shape and a reader of its own. The shot's",
-    "marks and ends (10.1, _shot_side below) and what a crystal leaves where it was (10.2,",
-    "_crystals below). Every other",
+    "marks and ends (10.1, _shot_side below), what a crystal leaves where it was (10.2,",
+    "_crystals below) and what a key and its keyhole leave (10.3, _keys below). Every other",
     "effect the script adds gets its row with the step that draws it, so a",
     "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
     "sim/Effects, strictly: every field below is required.",
@@ -515,6 +515,135 @@
       "sprite; sys0 1 explosion.png cut 4 x 3, all at once, a1, rep1, life 350, size 22, growth 0.9, maxSize 92,",
       "randAngle 1.3, (0.7, 0.7, 1) throughout; sys1 2 crystal_particle.png all at once, as crystal_pick's sys1.",
       "Temporary. The library still original/levels/2-04_h2.8.png (level3a's 4 s crystal) holds the original's."
+    ]
+  },
+
+  "_keys": [
+    "WHAT A KEY AND ITS KEYHOLE LEAVE - the visuals plan's 10.3 (00_order section 7 as section 8.13 amends it;",
+    "system_7 7f-2; decode D4 and D4_check), drawn from planning step 127. Five AddScaledEntity calls in",
+    "ETHCallback_key.angelscript, each AddEntity(file, pos, 0f, 0, '', scale) (ETHScriptWrapper.Scene.cpp:176-178),",
+    "so every angle is 0; the vector3 constructor's arguments are pushed last-first (00_order 8.0 rule 3), so the",
+    "value pushed first is its z. Where a row's z is ADDED to an entity's own GetPosition() (vector3::opAdd/opSub),",
+    "it is on top of that entity's depth - the node's eth_z - and not a depth of the level's own: key_pick on the",
+    "key's, keyhole_vanish on the keyhole's, door_locked_vanish and the door's wall_destroy on the door's. The",
+    "unlock halo alone is vector3(keyholePos, scale(32)): a depth of its own. door_locked_vanish's 2 is the one",
+    "BARE literal, in the engine's units, so it is 2 / 2.8125 = 0.711 of the level's on top of the door's depth",
+    "(00_order 8.12b; the rule step 86 reads a bare depth by, and step 80's 4 raw px behind the light wall);",
+    "the other z go through g_scale.scale. None is given an owner: each stays where it was added, and all five",
+    ".ent have no <Sprite> and every system repeat 1, so the engine frees each once its particles are over."
+  ],
+
+  "key_pick": {
+    "entity": "key_pick.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_key (bytes 438490..442683), the free branch (ownerID < 0, #653-858): #667-679 linearMotion, the",
+      "bob; #681-702 getSurroundingEntities; for each one that isCharacter or isMinion (#713-731) and is not",
+      "leaving (shallLeave, #733-742) with squaredDistance(its GetPositionXY, the key's) under squaredRange =",
+      "scale(26)^2 (#40-56, #744-766): #768-772 g_scale.getScale(), the scale; #773-782 vector3(0, 0,",
+      "g_scale.scale(32)); #785-790 the key's GetPosition() + that; #793-799 AddScaledEntity('key_pick.ent',",
+      "that, the scale); #803-805 playKeyPickSound; #807-820 ownerID = the carrier's id; #822-851 a red key's",
+      "achievement 61. A MINION taking it adds it too: the branch admits isMinion. The loop does not stop at the",
+      "first (#852-857), so every carrier in range on one frame adds one and the last is the owner. ITS .ent: no",
+      "sprite; sys0 8 sparkles.bmp released over a lifetime (allAtOnce 0), a1, rep1, life 300 +- 100, size",
+      "12 +- 5, growth -0.05, RandStartPoint (8, 18), white to black; sys1 1 sparkles.bmp, a1, rep1, life 500,",
+      "size 3, growth 6.55, maxSize 70, (0.5, 0.5, 0.5) to black. Temporary. Footage F9 r6 #409 (3-18): the",
+      "key taken behind the player, its sparkles lost in the shock burst there."
+    ]
+  },
+
+  "key_unlock_halo": {
+    "entity": "key_unlock_halo.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "after_fly_in_ms": 666,
+    "_source": [
+      "ETHCallback_key's found branch (foundKeyhole, read #203-220): on its first frame (#223-250, no waypoints",
+      "yet) it builds a WaypointManager (#252-259) of six Waypoint(pos, time, color, smoothEnd, angle) (#261-517;",
+      "the constructor 40418..40678): w0 the key's own point, 666 ms; w1 keyholePos + scale(20, -4), 0 ms; w2",
+      "the same, 400; w3 keyholePos + scale(8, -4), 200; w4 and w5 there at alpha 0, 0 ms each. Every frame",
+      "(#552-651) WaypointManager::update (42421..42634), and when getFrame() == 1 (#593-597; CMPIu prints its",
+      "immediate 1 as v1, 00_order 8.0 rule 1): #599-603 getScale; #604-608 g_scale.scale(32); #610-622",
+      "vector3(keyholePos, that) - the vector2 and a z of its OWN, not added to the keyhole's depth; #624-629",
+      "AddScaledEntity('key_unlock_halo.ent', that, the scale); #633-635 playKeyUnlockSound. keyholePos is the",
+      "keyhole's GetPositionXY where the key found it (#1097-1108). ITS .ent: no sprite; one sparkles.bmp, a1,",
+      "rep1, life 550, size 3, growth 6.55, maxSize 70, StartPoint (0, -2), white to black. Temporary."
+    ],
+    "_after_fly_in_ms": [
+      "w0's time, in the manager's own clock. FrameTimer::set (bytes 23254..23650) adds the frame's ms to m_time",
+      "(#6-11); a changed first or last frame resets the frame and m_time to 0 (#13-44), which is what the frame",
+      "that builds the manager does (its constructor's set(0, 0, 0), then update's set(0, 5, 666)); otherwise",
+      "m_time >= the stride (#46-49, unsigned) steps the frame and takes the stride off (#51-57). So frame 1",
+      "first holds on the first frame whose m_time, counted from the frame after the build, reaches 666, and",
+      "holds for that one frame, w1's stride being 0. The manager is built on the frame after the one that set",
+      "foundKeyhole (#1084-1093, at the end of the owned branch; read #204-220 on the next), so at the port's",
+      "60 Hz the halo is added on the 41st tick after the unlock (Effects::AdvanceFlyIn). Footage F9 r7b: the",
+      "halo visible #215-#221 (13.43-13.74 s) against an unlock at 12.64-12.69 s (the door's 1500 ms back from",
+      "#229); this decode puts it at 13.32-13.37, growing from size 3."
+    ]
+  },
+
+  "keyhole_vanish": {
+    "entity": "keyhole_vanish.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_keyhole (bytes 443376..444400), once `unlocked` (#36-47): elapsedTime += the frame's ms",
+      "(#49-63); past 1000 (#77-78) alpha = 1 - min(1, max(0, (elapsed - 1000) / 500)) (#80-97, keys.json",
+      "keyhole); when that is 0 (#99-100) DoorLockedChooser finds its door (#102-148) and, in this order:",
+      "wall_destroy.ent at the door (#150-164), door_locked_vanish.ent (#168-194), keyhole_vanish.ent",
+      "(#198-229), playDemolitionSound (#233-235), startEarthquake(20, 100) (#237-239, earthquake.json",
+      "door_unlocked), DeleteEntity the door (#241-248) and the keyhole (#250-257). This row: #198-202",
+      "getScale; #203-208 g_scale.scale(32), pushed first, so the z; #209-212 vector3(0, 0, that); #216-220",
+      "the keyhole's GetPosition() + that (opAdd, the keyhole the object, #218); #224-229 AddScaledEntity. ITS",
+      ".ent: no sprite; one explosion.png cut 4 x 3, all at once, a1, rep1, life 700, size 74, growth 4, maxSize",
+      "73, randAngle 1.3, white to black. Temporary. Footage F9 r7b #229-#236 (the disc, then the splat),",
+      "gone at #237; r6 #699-#705."
+    ]
+  },
+
+  "door_locked_vanish": {
+    "entity": "door_locked_vanish.ent",
+    "offset_units": 0,
+    "z": {"value": 2, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_keyhole #168-172 getScale, the scale; #173 PshC4 -2f (raw 0xC0000000, D4_check), pushed",
+      "first, so the z, and a BARE literal - no g_scale.scale between #172 and #177; #174-177 vector3(0, 0, -2);",
+      "#180-185 the door's GetPosition() - that (vector3::opSub, the door the object, #183), which is the door's",
+      "point 2 IN FRONT of its depth: the 2 here is that net addition (D4 section 4; D4_check's census: 41",
+      "doors, z -6 x19, -4 x7, -8 x7, 0 x4, -2 x3, +4 x1); #188-194 AddScaledEntity. ITS .ent: no sprite; 30",
+      "sparkles.bmp released over a lifetime (allAtOnce 0), a1, rep1, life 450 +- 100, size 9 +- 25, growth",
+      "-0.05, RandStartPoint (26, 100), white to black. Temporary. Footage F9: at 17 fps its sparkles are not",
+      "told apart from the door's dust."
+    ]
+  },
+
+  "wall_destroy_at_door": {
+    "entity": "wall_destroy.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_keyhole #150-154 getScale, the scale; #155-158 the door's GetPosition(); #159-164",
+      "AddScaledEntity('wall_destroy.ent', that, the scale): the door's own point and depth, angle 0 - unlike",
+      "ETHCallback_breakable_wall's call of the same entity, which passes the wall's angle and its effectScale",
+      "(D4 section 2; the visuals plan's 11.1, a row of its own). ITS .ent: no sprite; sys0 22",
+      "dirt_particles.png cut 4 x 1, all at once, a0, rep1, a random frame each (animationMode 2), life",
+      "1450 +- 350, size 19 +- 22, gravity (0, 0.03), RandomizeDir (3, 3), StartPoint z 32, RandStartPoint",
+      "(0, 101), (0.1, 0.05, 0) from alpha 1 to 0; sys1 10 smoke_particle.png all at once, a0, rep1, life",
+      "950 +- 200, size 60, growth 0.6, StartPoint z 32, RandStartPoint (0, 102), white from alpha 0.8 to 0.",
+      "Temporary. Footage F9 r7b #229-#241, gone at #242 (0.85-0.89 s), dirt specks falling from #234; r6",
+      "#699-#716, gone at #718 (0.93 s)."
     ]
   }
 }

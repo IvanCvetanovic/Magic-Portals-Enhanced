@@ -213,10 +213,24 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "portal_fail", read.portalFail, why) ||
         !ReadRule(root, "portal_fail_in_antiportal", read.portalFailInField, why) ||
         !ReadRule(root, "crystal_pick", read.crystalPick, why) ||
-        !ReadRule(root, "crystal_vanish", read.crystalVanish, why)) {
+        !ReadRule(root, "crystal_vanish", read.crystalVanish, why) ||
+        !ReadRule(root, "key_pick", read.keyPick, why) ||
+        !ReadRule(root, "key_unlock_halo", read.keyUnlockHalo, why) ||
+        !ReadRule(root, "keyhole_vanish", read.keyholeVanish, why) ||
+        !ReadRule(root, "door_locked_vanish", read.doorLockedVanish, why) ||
+        !ReadRule(root, "wall_destroy_at_door", read.wallDestroyAtDoor, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
+    // The halo's one number beside its call: w0's time on the fly-in's clock. A
+    // halo at no time would be added on the frame the manager is built, which is
+    // a different frame from the one the waypoints say.
+    const Json::Value& halo = root["key_unlock_halo"]["after_fly_in_ms"];
+    if (!Finite(halo) || !(halo.AsNumber() > 0.0)) {
+        error = path + ": key_unlock_halo.after_fly_in_ms is not a number above 0";
+        return false;
+    }
+    read.keyUnlockHaloAfterMs = halo.AsNumber();
     // The rows that are given a point and nothing else: no direction to be offset
     // along or turned by. appearEffect, addFireball - whose `dir` is the entity's
     // own custom data and not the angle it is added at - and both explosions,
@@ -239,10 +253,33 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"portal_fail", &read.portalFail},
                      {"portal_fail_in_antiportal", &read.portalFailInField},
                      {"crystal_pick", &read.crystalPick},
-                     {"crystal_vanish", &read.crystalVanish}};
+                     {"crystal_vanish", &read.crystalVanish},
+                     {"key_pick", &read.keyPick},
+                     {"key_unlock_halo", &read.keyUnlockHalo},
+                     {"keyhole_vanish", &read.keyholeVanish},
+                     {"door_locked_vanish", &read.doorLockedVanish},
+                     {"wall_destroy_at_door", &read.wallDestroyAtDoor}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
+            return false;
+        }
+    }
+    // The key's five are AddScaledEntity calls, whose angle is a flat 0f
+    // (ETHScriptWrapper.Scene.cpp:176-178): the door's wall_destroy in particular
+    // is NOT turned by the door, as breakable_wall's call of the same entity is by
+    // its wall.
+    const struct {
+        const char* name;
+        const Rule* rule;
+    } unturned[] = {{"key_pick", &read.keyPick},
+                    {"key_unlock_halo", &read.keyUnlockHalo},
+                    {"keyhole_vanish", &read.keyholeVanish},
+                    {"door_locked_vanish", &read.doorLockedVanish},
+                    {"wall_destroy_at_door", &read.wallDestroyAtDoor}};
+    for (const auto& row : unturned) {
+        if (row.rule->angleDeg != 0.0) {
+            error = path + ": " + row.name + " is added by AddScaledEntity, whose angle is 0";
             return false;
         }
     }
@@ -258,6 +295,28 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         if (!row.rule->zScaled) {
             error = path + ": " + row.name + ".z is added to the crystal's own depth, so it goes through "
                                               "g_scale.scale: scaled true";
+            return false;
+        }
+    }
+    // The key's rows each read their z one way, and the layer calls the reading
+    // the decode has: OnEntity for the three whose z is g_scale.scale's (or none,
+    // at the door) and At for the halo, whose scale(32) is a depth of its own;
+    // OnEntityBare for door_locked_vanish's bare 2 (#173, no g_scale.scale between
+    // #172 and #177). A row that said the other would be read half one way.
+    const struct {
+        const char* name;
+        const Rule* rule;
+        bool scaled;
+    } keyDepths[] = {{"key_pick", &read.keyPick, true},
+                     {"key_unlock_halo", &read.keyUnlockHalo, true},
+                     {"keyhole_vanish", &read.keyholeVanish, true},
+                     {"door_locked_vanish", &read.doorLockedVanish, false},
+                     {"wall_destroy_at_door", &read.wallDestroyAtDoor, true}};
+    for (const auto& row : keyDepths) {
+        if (row.rule->zScaled != row.scaled) {
+            error = path + ": " + row.name + ".z is " +
+                    (row.scaled ? "g_scale.scale's in the decode: scaled true"
+                                : "a bare literal in the decode (PshC4 -2f, no g_scale.scale): scaled false");
             return false;
         }
     }
@@ -340,6 +399,41 @@ Spawn OnEntity(const Rule& rule, const glm::dvec2& entityPx, double entityZ) {
     Spawn spawn = SpawnOf(rule, entityPx, glm::dvec2(0.0));
     spawn.z = entityZ + rule.z;
     return spawn;
+}
+
+Spawn OnEntityBare(const Rule& rule, const glm::dvec2& entityPx, double entityZ, double scaleFactor) {
+    // ETHCallback_keyhole #173-185: door.GetPosition() - vector3(0, 0, -2), the -2
+    // a raw PshC4 with no g_scale.scale. The door's own z was scaled with the
+    // level (its eth_z is on the level's axis); the literal was not, so it alone
+    // comes onto that axis: 2 / 2.8125 = 0.711 at the 720 px screen of R12.
+    Spawn spawn = SpawnOf(rule, entityPx, glm::dvec2(0.0));
+    const double literal = scaleFactor > 0.0 ? rule.z / scaleFactor : rule.z;
+    spawn.z = entityZ + literal;
+    spawn.zScaled = true;
+    return spawn;
+}
+
+bool AdvanceFlyIn(const Rules& rules, FlyIn& clock, bool spent, double tickMs) {
+    if (!spent || clock.haloAdded) return false;
+    // ETHCallback_key #1084-1093: the frame the key finds its keyhole only sets
+    // foundKeyhole; #204-220 read it on the next.
+    if (!clock.found) {
+        clock.found = true;
+        return false;
+    }
+    // #223-259 build the manager on that next frame, and FrameTimer::set leaves
+    // its m_time at 0 there: a changed last frame resets it (#13-44).
+    if (!clock.built) {
+        clock.built = true;
+        clock.ms = 0.0;
+        return false;
+    }
+    // Every later frame adds its ms (#6-11), and m_time >= w0's stride steps it to
+    // frame 1 (#46-57), on which #593-629 add the halo.
+    clock.ms += tickMs;
+    if (clock.ms < rules.keyUnlockHaloAfterMs) return false;
+    clock.haloAdded = true;
+    return true;
 }
 
 Spawn ProjectileShoot(const Rules& rules, const glm::dvec2& fromPx, const glm::dvec2& towardPx) {

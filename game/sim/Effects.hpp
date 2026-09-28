@@ -22,7 +22,10 @@
 // level's start and moved onto the character's face every frame. The shot's
 // marks and ends (the visuals plan's 10.1). And what a crystal leaves where it
 // was (10.2): crystal_pick where one is taken, crystal_vanish where a timed one
-// runs out - both added to the CRYSTAL's own point, its depth included.
+// runs out - both added to the CRYSTAL's own point, its depth included. And what a
+// key and its keyhole leave (10.3): key_pick where a key is taken, the unlock halo
+// at the keyhole a spent key flies into, and the three the keyhole adds when it
+// goes - the dust at its door, the door's sparkles and its own burst.
 
 #include <string>
 
@@ -130,6 +133,19 @@ struct Rules {
     // own (OnEntity).
     Rule crystalPick;
     Rule crystalVanish;
+    // What a key and its keyhole leave (the visuals plan's 10.3; effects.json
+    // _keys). ETHCallback_key's key_pick where a carrier takes a key, on the KEY's
+    // own depth; its key_unlock_halo at the keyhole, at a depth of its own, once
+    // the spent key's fly-in clock reaches `keyUnlockHaloAfterMs`; and
+    // ETHCallback_keyhole's three when the keyhole goes, in its order: wall_destroy
+    // at the door, door_locked_vanish on the door's depth - its z the one BARE
+    // literal of the five (OnEntityBare) - and keyhole_vanish on the keyhole's.
+    Rule keyPick;
+    Rule keyUnlockHalo;
+    double keyUnlockHaloAfterMs = 0.0; // the fly-in's w0: its time before frame 1
+    Rule keyholeVanish;
+    Rule doorLockedVanish;
+    Rule wallDestroyAtDoor;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -196,8 +212,37 @@ Spawn At(const Rule& rule, const glm::dvec2& atPx);
 // row's z added to the entity's own depth rather than standing for one of the
 // level's (vector3::opAdd), and no direction. `entityZ` is that entity's depth on
 // the level's axis (a node's eth_z), so the sum is as scaled as the row's z is:
-// crystal_pick and crystal_vanish, whose scale(20) goes on the crystal's own z.
+// crystal_pick and crystal_vanish, whose scale(20) goes on the crystal's own z;
+// key_pick and keyhole_vanish, whose scale(32) goes on the key's and the
+// keyhole's; and the door's wall_destroy, at the door's own depth.
 Spawn OnEntity(const Rule& rule, const glm::dvec2& entityPx, double entityZ);
+
+// OnEntity for a row whose z is a BARE literal: door_locked_vanish's 2, which is
+// in the engine's world units and does not grow with the screen (00_order 8.12b).
+// Only the literal is divided by `scaleFactor` (art.json's 720 / 256) before it
+// goes on the entity's depth - the entity's own is already on the level's axis -
+// so the sum comes back as a level depth (zScaled true). A factor not above 0
+// adds the literal as it stands, as the layer does for a level with no art.
+Spawn OnEntityBare(const Rule& rule, const glm::dvec2& entityPx, double entityZ, double scaleFactor);
+
+// A spent key's fly-in, as far as the port draws it: the clock of the
+// WaypointManager ETHCallback_key builds for it, which says when key_unlock_halo
+// is added. The flight itself - the key swung to the keyhole, slid in and faded -
+// is not built (keys.json _not_built); nor is the key deleted at its last frame.
+struct FlyIn {
+    bool found = false;     // the key found its keyhole (Keys::Key::spent turned over)
+    bool built = false;     // the next frame: the manager built and its clock at 0
+    double ms = 0.0;        // the manager's m_time since
+    bool haloAdded = false; // frame 1 reached, and the halo added: once
+};
+
+// One tick of it, given the key's state after the tick and the tick's length:
+// true on the one tick key_unlock_halo is added. The tick `spent` first reads
+// true is the frame foundKeyhole is set on; the next builds the manager with its
+// clock at 0; every later one adds its ms, and the first to reach
+// keyUnlockHaloAfterMs steps the manager to frame 1 - the 41st tick after the
+// unlock at 60 Hz.
+bool AdvanceFlyIn(const Rules& rules, FlyIn& clock, bool spent, double tickMs);
 
 // ETHCallback_projectile's first frame: projectile_shoot where the shot has
 // jumped to, `offsetUnits` out from `fromPx` along normalize(towardPx - fromPx),

@@ -1314,6 +1314,8 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_fireballEffects.clear();
     m_ghostShotsMarked = -1;
     m_crystalEffects.clear();
+    m_keyEffects.clear();
+    m_keyholeEffects.clear();
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -6093,7 +6095,7 @@ MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn
 // The rule is that queuing happens on the TICK while adding and drawing happen on
 // the FRAME, so that an effect cannot reach Game::Level or the state hash by the
 // back door.
-void MagicPortalsLayer::latchSimEffects() {
+void MagicPortalsLayer::latchSimEffects(float fixedDelta) {
     if (!m_loaded) return;
 
     // THE FIREBALLS IN FLIGHT. Each one is an entity of the original's -
@@ -6276,6 +6278,82 @@ void MagicPortalsLayer::latchSimEffects() {
                                              << (crystal.collected ? " taken" : " gone at its time") << " on tick "
                                              << m_ticks << " at (" << spawn.atPx.x << ", " << spawn.atPx.y << ") z "
                                              << spawn.z << ": " << rule.entity << " x " << rule.scale << std::endl;
+    }
+
+    // WHAT A KEY AND ITS KEYHOLE LEAVE (the visuals plan's 10.3; effects.json _keys),
+    // each where its callback adds it and with no owner, after the crystals for the
+    // reason those are after the rest: the scene walk orders two callbacks, and it
+    // shows only in the effects' stream.
+    const auto pictureOf = [this](auto&& is) {
+        const auto drawn = std::find_if(m_sprites.begin(), m_sprites.end(), is);
+        return drawn == m_sprites.end() ? nullptr : &*drawn;
+    };
+    const std::vector<Keys::Key>& keys = m_level.keys.keys;
+    const std::vector<Keys::Keyhole>& keyholes = m_level.keys.keyholes;
+    if (m_keyEffects.size() < keys.size()) m_keyEffects.resize(keys.size());
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        const Keys::Key& key = keys[i];
+        KeyWatch& watch = m_keyEffects[i];
+        // TAKEN: ETHCallback_key's free branch adds key_pick at the key's own
+        // GetPosition() - its bob of this frame, its eth_z - plus scale(32) as a
+        // carrier takes it, the player or a minion alike. The point is where the
+        // last tick drew the key: this tick's Keys::Tick has already trailed it
+        // toward the carrier. A key with no picture (a level drawn as boxes, or a
+        // boss's dropped key, whose art is 12.1's and 12.2's) has no point to add
+        // it at, as a crystal's has none.
+        if (key.owner != entt::null && key.owner != watch.owner) {
+            const int index = static_cast<int>(i);
+            if (const DrawnSprite* drawn = pictureOf([index](const DrawnSprite& s) { return s.key == index; })) {
+                const Effects::Spawn spawn = Effects::OnEntity(m_effectRules.keyPick, drawn->ownerPx, drawn->lookZ);
+                m_effectQueue.push_back(effectAdd(spawn));
+                SUPERSONIC_LOG_INFO("Magic Portals") << "key " << key.name << " taken on tick " << m_ticks << " at ("
+                                                     << spawn.atPx.x << ", " << spawn.atPx.y << ") z " << spawn.z
+                                                     << ": " << spawn.entity << std::endl;
+            }
+        }
+        watch.owner = key.owner;
+        // SPENT: the fly-in's clock, whose frame 1 adds key_unlock_halo at
+        // vector3(keyholePos, scale(32)) - the keyhole it found, at a depth of its
+        // own - 41 ticks after the unlock at 60 Hz. The flight itself is not built.
+        const bool haloNow =
+            Effects::AdvanceFlyIn(m_effectRules, watch.flyIn, key.spent, static_cast<double>(fixedDelta) * 1000.0);
+        if (haloNow && key.opened >= 0 && key.opened < static_cast<int>(keyholes.size())) {
+            const Keys::Keyhole& found = keyholes[static_cast<std::size_t>(key.opened)];
+            const Effects::Spawn spawn = Effects::At(m_effectRules.keyUnlockHalo, found.atPx);
+            m_effectQueue.push_back(effectAdd(spawn));
+            SUPERSONIC_LOG_INFO("Magic Portals") << "key " << key.name << " into " << found.name << ": halo on tick "
+                                                 << m_ticks << " (" << watch.flyIn.ms << " ms of its fly-in) at ("
+                                                 << spawn.atPx.x << ", " << spawn.atPx.y << ") z " << spawn.z << ": "
+                                                 << spawn.entity << std::endl;
+        }
+    }
+    // GONE: ETHCallback_keyhole, once its fade has left nothing, adds in this order
+    // wall_destroy at its door's point and depth, door_locked_vanish 2 raw units in
+    // front of the door, and keyhole_vanish scale(32) in front of itself - then
+    // shakes (latchSimQuakes' door_unlocked) and deletes both. The door's point is
+    // its NODE's, which is its entity's: the picture's ownerPx is its body's. If
+    // the keyhole or its door has no picture, none of the three is queued, though
+    // the burst needs only the keyhole's, the rest only the door's; no level lacks one.
+    if (m_keyholeEffects.size() != keyholes.size()) m_keyholeEffects.assign(keyholes.size(), 0);
+    for (std::size_t j = 0; j < keyholes.size(); ++j) {
+        const Keys::Keyhole& keyhole = keyholes[j];
+        if (m_keyholeEffects[j] != 0 || !keyhole.gone) continue;
+        m_keyholeEffects[j] = 1;
+        const int index = static_cast<int>(j);
+        const DrawnSprite* hole = pictureOf([index](const DrawnSprite& s) { return s.keyhole == index; });
+        const DrawnSprite* door =
+            pictureOf([&keyhole](const DrawnSprite& s) { return s.sprite.node == keyhole.doorName; });
+        if (hole == nullptr || door == nullptr) continue;
+        const Effects::Spawn dust = Effects::OnEntity(m_effectRules.wallDestroyAtDoor, door->sprite.atPx, door->lookZ);
+        const Effects::Spawn sparkles = Effects::OnEntityBare(m_effectRules.doorLockedVanish, door->sprite.atPx,
+                                                              door->lookZ, m_artRules.scaleFactor);
+        const Effects::Spawn burst = Effects::OnEntity(m_effectRules.keyholeVanish, hole->sprite.atPx, hole->lookZ);
+        for (const Effects::Spawn* spawn : {&dust, &sparkles, &burst}) m_effectQueue.push_back(effectAdd(*spawn));
+        SUPERSONIC_LOG_INFO("Magic Portals")
+            << "keyhole " << keyhole.name << " gone on tick " << m_ticks << " with " << keyhole.doorName << ": "
+            << dust.entity << " at (" << dust.atPx.x << ", " << dust.atPx.y << ") z " << dust.z << ", "
+            << sparkles.entity << " z " << sparkles.z << ", " << burst.entity << " at (" << burst.atPx.x << ", "
+            << burst.atPx.y << ") z " << burst.z << std::endl;
     }
 }
 
@@ -7004,7 +7082,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
         latchSimSounds();
-        latchSimEffects();
+        latchSimEffects(fixedDelta);
         latchSimQuakes();
         // ...and the moment the exit reports, the beat before the medal; the
         // moment the player dies, the beat before the lost screen. Should both

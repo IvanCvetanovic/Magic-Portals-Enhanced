@@ -584,6 +584,115 @@ void TheCrystalRowsAddToTheCrystalsOwnPoint() {
                 Num(gone.scale).c_str());
 }
 
+// ---- what a key and its keyhole leave (the visuals plan's 10.3) -------------------
+
+void TheKeyRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    struct Row {
+        const Effects::Rule* rule;
+        const char* entity;
+        double z;
+        bool scaled;
+    };
+    // ETHCallback_key #768-799 and #599-629; ETHCallback_keyhole #150-164, #168-194
+    // and #198-229: five AddScaledEntity calls, so none turned and none offset.
+    const Row rows[] = {{&rules.keyPick, "key_pick.ent", 32.0, true},
+                        {&rules.keyUnlockHalo, "key_unlock_halo.ent", 32.0, true},
+                        {&rules.keyholeVanish, "keyhole_vanish.ent", 32.0, true},
+                        {&rules.doorLockedVanish, "door_locked_vanish.ent", 2.0, false},
+                        {&rules.wallDestroyAtDoor, "wall_destroy.ent", 0.0, true}};
+    for (const Row& row : rows) {
+        const Effects::Rule& rule = *row.rule;
+        CHECK_MSG(rule.entity == row.entity && rule.offsetUnits == 0.0 && rule.z == row.z &&
+                      rule.zScaled == row.scaled && rule.turn == Effects::Turn::Fixed && rule.angleDeg == 0.0 &&
+                      rule.scale == 1.0,
+                  std::string(row.entity) + ": z " + Num(rule.z) + (rule.zScaled ? " scaled" : " bare") +
+                      ", angle 0, at getScale()");
+    }
+    CHECK_MSG(rules.keyUnlockHaloAfterMs == 666.0, "the halo on the fly-in's frame 1, w0's 666 ms: " +
+                                                       Num(rules.keyUnlockHaloAfterMs));
+
+    // 3-09 (level8b), whose five depths are all different: key_ent at (32, 32) z -6,
+    // keyhole at (582, 198) z -14, its door at (624, 160) z -8.
+    const glm::dvec2 key(32.0, 32.0);
+    const glm::dvec2 hole(582.0, 198.0);
+    const glm::dvec2 door(624.0, 160.0);
+    const Effects::Spawn pick = Effects::OnEntity(rules.keyPick, key, -6.0);
+    CHECK_MSG(pick.entity == "key_pick.ent" && pick.atPx == key && pick.z == 26.0 && pick.zScaled &&
+                  pick.angleDeg == 0.0f,
+              "key_pick at the key, -6 + 32 = 26: " + At(pick.atPx) + " z " + Num(pick.z));
+    const Effects::Spawn burst = Effects::OnEntity(rules.keyholeVanish, hole, -14.0);
+    CHECK_MSG(burst.atPx == hole && burst.z == 18.0, "keyhole_vanish at the keyhole, -14 + 32 = 18: " + Num(burst.z));
+    const Effects::Spawn dust = Effects::OnEntity(rules.wallDestroyAtDoor, door, -8.0);
+    CHECK_MSG(dust.entity == "wall_destroy.ent" && dust.atPx == door && dust.z == -8.0 && dust.angleDeg == 0.0f,
+              "wall_destroy at the door's own point and depth, unturned: z " + Num(dust.z));
+    // THE HALO'S Z IS ITS OWN: vector3(keyholePos, scale(32)), not added to the
+    // keyhole's -14 - At, where OnEntity would have said 18.
+    const Effects::Spawn halo = Effects::At(rules.keyUnlockHalo, hole);
+    CHECK_MSG(halo.entity == "key_unlock_halo.ent" && halo.atPx == hole && halo.z == 32.0 && halo.zScaled,
+              "the halo at the keyhole, z 32 of its own: " + Num(halo.z));
+    CHECK(Effects::OnEntity(rules.keyUnlockHalo, hole, -14.0).z != halo.z);
+
+    // THE DOOR'S SPARKLES: its -(-2) is a bare literal, so ONLY the 2 comes onto the
+    // level's axis - 2 / 2.8125 = 0.7111 - and the door's own -8 stays as it is.
+    constexpr double kFactor = 720.0 / 256.0;
+    const Effects::Spawn sparkles = Effects::OnEntityBare(rules.doorLockedVanish, door, -8.0, kFactor);
+    CHECK_MSG(sparkles.entity == "door_locked_vanish.ent" && sparkles.atPx == door && sparkles.zScaled &&
+                  Near(sparkles.z, -8.0 + 2.0 / kFactor, 1e-12),
+              "door_locked_vanish at the door, -8 + 0.7111: z " + Num(sparkles.z));
+    // Dividing the WHOLE sum instead - what effectAdd does with a bare z - would have
+    // put it at -2.13, six units in front of the door it belongs to.
+    CHECK(!Near(sparkles.z, (-8.0 + 2.0) / kFactor, 1e-3));
+    CHECK(Effects::OnEntityBare(rules.doorLockedVanish, door, -8.0, 0.0).z == -6.0);
+    // Over the 41 doors' depths (D4_check: -8, -6, -4, -2, 0, +4) the sparkles stand
+    // at door + 0.711, whose rounded slots are one in front of each door's: 00_order
+    // 8.13's {-6 .. +6} is the same +2 read in raw units.
+    const double doorZ[] = {-8.0, -6.0, -4.0, -2.0, 0.0, 4.0};
+    const double slot[] = {-7.0, -5.0, -3.0, -1.0, 1.0, 5.0};
+    for (std::size_t i = 0; i < 6; ++i) {
+        const double z = Effects::OnEntityBare(rules.doorLockedVanish, door, doorZ[i], kFactor).z;
+        CHECK_MSG(std::round(z) == slot[i], "a door at " + Num(doorZ[i]) + ": its sparkles at " + Num(z) +
+                                                ", slot " + Num(std::round(z)));
+    }
+    std::printf("  3-09: key_pick z %s, halo z %s, keyhole_vanish z %s, door_locked_vanish z %s, wall_destroy z %s\n",
+                Num(pick.z).c_str(), Num(halo.z).c_str(), Num(burst.z).c_str(), Num(sparkles.z).c_str(),
+                Num(dust.z).c_str());
+}
+
+// The halo comes on the fly-in's frame 1: the tick the key finds its keyhole sets
+// foundKeyhole, the next builds the manager with its clock at 0, and every later
+// one adds its ms until w0's 666 are reached.
+void TheUnlockHaloComesOnTheFlyInsFrameOne() {
+    const Effects::Rules rules = TheRules();
+    const auto haloTick = [&rules](double tickMs) {
+        Effects::FlyIn clock;
+        int added = 0;
+        int on = -1;
+        // Tick 0 is the unlock's own; the tick is counted from it.
+        for (int tick = 0; tick < 400; ++tick) {
+            if (Effects::AdvanceFlyIn(rules, clock, true, tickMs)) {
+                ++added;
+                if (on < 0) on = tick;
+            }
+        }
+        CHECK_MSG(added == 1, "added once: " + std::to_string(added));
+        return on;
+    };
+    const int at60 = haloTick(1000.0 / 60.0);
+    CHECK_MSG(at60 == 41, "at 60 Hz, the 41st tick after the unlock: " + std::to_string(at60));
+    const int at30 = haloTick(1000.0 / 30.0);
+    CHECK_MSG(at30 == 21, "at 30 Hz, the 21st: " + std::to_string(at30));
+    // The stride's test is m_time >= 666 (CMPu, JS): 6 frames of 111 ms reach it
+    // exactly, 6 of 110 do not.
+    CHECK_MSG(haloTick(111.0) == 1 + 6, "666 of 666 is frame 1");
+    CHECK_MSG(haloTick(110.0) == 1 + 7, "660 is not");
+    // A key not spent has no fly-in; its clock does not start.
+    Effects::FlyIn idle;
+    for (int tick = 0; tick < 100; ++tick) CHECK(!Effects::AdvanceFlyIn(rules, idle, false, 1000.0 / 60.0));
+    CHECK(!idle.found && !idle.built && idle.ms == 0.0 && !idle.haloAdded);
+    std::printf("  the unlock halo: %d ticks after the unlock at 60 Hz, %d at 30 Hz\n", at60, at30);
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
@@ -677,6 +786,32 @@ void ARowMissingAFactIsRefused() {
             "\"entity\": \"crystal_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 20, \"scaled\": false},",
             "crystal_pick.z");
 
+    // The key's five (10.3): each required, none given a direction or a turn, each
+    // z read the one way the decode has it, and the halo's time required.
+    refused("no_key_pick.json", "\"key_pick\": {", "\"key_pick_gone\": {", "key_pick");
+    refused("no_door_vanish.json", "\"door_locked_vanish\": {", "\"door_locked_vanish_gone\": {",
+            "door_locked_vanish");
+    refused("no_door_dust.json", "\"wall_destroy_at_door\": {", "\"wall_destroy_gone\": {", "wall_destroy_at_door");
+    refused("hole_offset.json", "\"entity\": \"keyhole_vanish.ent\",\n    \"offset_units\": 0,",
+            "\"entity\": \"keyhole_vanish.ent\",\n    \"offset_units\": 4,", "keyhole_vanish");
+    refused("door_dust_turned.json",
+            "\"entity\": \"wall_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n"
+            "    \"angle\": 0,",
+            "\"entity\": \"wall_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},\n"
+            "    \"angle\": 90,",
+            "wall_destroy_at_door");
+    refused("key_pick_bare_z.json",
+            "\"entity\": \"key_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": true},",
+            "\"entity\": \"key_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 32, \"scaled\": false},",
+            "key_pick.z");
+    refused("door_vanish_scaled.json",
+            "\"entity\": \"door_locked_vanish.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 2, \"scaled\": false},",
+            "\"entity\": \"door_locked_vanish.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 2, \"scaled\": true},",
+            "door_locked_vanish.z");
+    refused("no_halo_time.json", "\"after_fly_in_ms\": 666,", "", "key_unlock_halo.after_fly_in_ms");
+    refused("halo_at_once.json", "\"after_fly_in_ms\": 666,", "\"after_fly_in_ms\": 0,",
+            "key_unlock_halo.after_fly_in_ms");
+
     Effects::Rules rules;
     std::string why;
     CHECK(!Effects::LoadRules((dir / "no-such-file.json").string(), rules, why));
@@ -698,6 +833,8 @@ int main() {
     TheKillFadeIsNineTenthsAFrame();
     TheShotSideRowsAreTheDecodedCalls();
     TheCrystalRowsAddToTheCrystalsOwnPoint();
+    TheKeyRowsAreTheDecodedCalls();
+    TheUnlockHaloComesOnTheFlyInsFrameOne();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }
