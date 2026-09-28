@@ -573,6 +573,7 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     destroy(m_ghost.quad);
     m_ghost = GhostQuad{};
     m_ghostAppearQueued = false;
+    m_darkDragonQueued = false;
     // The walk arrows and the corner buttons go with the level they were built
     // for, and so does what the level opened with.
     unloadControls();
@@ -1274,6 +1275,12 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
                glm::dvec2(art.pivotXPx, art.pivotYPx) + owner.offsetPx;
         return true;
     }
+    case EffectOwner::Kind::DarkDragon:
+        // The summon's dark_dragon.ent, while it is there: its DYING arm's last
+        // waypoint deletes it, and its picture and its mouth go with it.
+        if (!m_level.darkDragon.Alive()) return false;
+        atPx = m_level.darkDragon.atPx + owner.offsetPx;
+        return true;
     case EffectOwner::Kind::Ghost:
         // SeekEntity('ghost.ent'): while the knight's death has added it and it has
         // not deleted itself.
@@ -1348,6 +1355,7 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     effect.zUnits = spawn.zUnits;
     effect.follow = spawn.follow;
     effect.colour = spawn.colour;
+    effect.emissive = art.emissive;
     effect.followUp = spawn.followUp;
     effect.followUpTarget = spawn.followUpTarget;
     effect.scalePerFrame = spawn.scalePerFrame;
@@ -1500,6 +1508,7 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_ghostShotCells.clear();
     m_droppedKeys.clear();
     m_ghostAppearQueued = false;
+    m_darkDragonQueued = false;
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -1526,6 +1535,16 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
         }
         effect.atPx = atPx;
         effect.hidden = hidden;
+        // CHAPTER 4'S BOSS (planning step 99): what its callback wrote this tick -
+        // SetFrame, SetAngle, SetEmissiveColor. Its mouth's Kill/Play waits until
+        // its particles have been stepped, below.
+        const bool darkDragon = effect.follow.kind == EffectOwner::Kind::DarkDragon;
+        if (darkDragon) {
+            const DarkDragon::Look& look = m_level.darkDragon.look;
+            effect.cell = look.frame;
+            effect.angleDeg = look.angleDeg;
+            effect.emissive = look.emissive;
+        }
 
         if (effect.quad != entt::null) {
             // A shot of the chapter-3 ghost is on the cell _projectileFrameTimer
@@ -1554,7 +1573,7 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
             // the next tick would draw a dying portal at its old brightness for a
             // frame and a new one white. Its particles take none of this
             // (ETHParticleManager.cpp:381-389 reads the ambient alone).
-            tint(registry, effect.quad, glm::vec4(glm::vec3(effect.colour), 1.0f), effect.art.emissive, {},
+            tint(registry, effect.quad, glm::vec4(glm::vec3(effect.colour), 1.0f), effect.emissive, {},
                  effectReceiver(effect));
         }
         if (effect.light != entt::null || effect.halo != entt::null) {
@@ -1590,6 +1609,34 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
                 }
             }
             if (!Particles::Finished(emitter.system, emitter.particles)) over = false;
+        }
+        // THE DARK DRAGON'S MOUTH, as its callback leaves it AFTER the step: the
+        // engine updates an entity's particles and then runs its callback
+        // (ETHActiveEntityHandler.cpp:134-138, ETHSpriteEntity.cpp:455-459), and
+        // draws after both (ETHScene.cpp:459-497, then RenderScene). So this
+        // frame's step ran on the kill the LAST update left, and now the
+        // callback's KillParticleSystem(0) or PlayParticleSystem(0) lands - Play
+        // being Kill(false) and a pool reset to the entity with nothing released
+        // (ETHSpriteEntity.cpp:795-811, ETHParticleManager.cpp:274-286), on the
+        // effects' stream (00_order K8). Then the draw's own test on every
+        // particle (:371-378): on an update that restarts it NOTHING of the fire
+        // is drawn, which is F16's mouth while Play is called every update, and the
+        // first update that does not restart it releases particle 0 at the mouth.
+        if (darkDragon && steps && !effect.emitters.empty()) {
+            const DarkDragon::Look& look = m_level.darkDragon.look;
+            Emitter& mouth = effect.emitters.front();
+            if (look.systemRestarted) {
+                mouth.particles = Particles::MakePool(mouth.system, static_cast<int>(mouth.particles.size()),
+                                                      mouth.owner, random);
+            }
+            mouth.killed = look.systemKilled;
+            for (std::size_t p = 0; p < mouth.particles.size() && p < mouth.quads.size(); ++p) {
+                const entt::entity quad = mouth.quads[p];
+                if (quad == entt::null || !registry.valid(quad)) continue;
+                if (!Particles::Drawn(mouth.system, mouth.particles[p], mouth.killed)) {
+                    registry.get<RenderableComponent>(quad).isVisible = false;
+                }
+            }
         }
         // AND ITS OWN CALLBACK, after its particles were stepped at the point the
         // last frame left it (ETHActiveEntityHandler.cpp:157-162): followUp moves
@@ -1825,6 +1872,9 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         report.alwaysActive = effect.alwaysActive;
         report.hidden = effect.hidden;
         report.drawn = effect.quad != entt::null;
+        report.quad = effect.quad;
+        report.emissive = effect.emissive;
+        report.firstSystemKilled = !effect.emitters.empty() && effect.emitters.front().killed;
         report.hasLight = effect.light != entt::null;
         report.hasHalo = effect.halo != entt::null;
         report.followKind = effect.follow.kind;
@@ -6552,14 +6602,37 @@ void MagicPortalsLayer::latchSimEffects() {
     for (const glm::dvec2& atPx : ghost.spentPx) {
         m_effectQueue.push_back(effectAdd(Effects::EnemyShootBurst(m_effectRules, atPx)));
     }
-    // THE KEY IT DROPS, which no node pictures: the key.ent its DEATH arm adds at its
-    // own vector3 (AddScaledEntity('key.ent', GetPosition(), getScale()), #1354-1368),
+    // CHAPTER 4'S BOSS (the visuals plan's 12.1, planning step 99): the
+    // dark_dragon.ent the summon adds (AddScaledEntity at the spawn, getScale()),
+    // drawn whole by the runtime - dragon_boss.png cut 2 x 2 on its pivot, lit
+    // through dragon_normal.png, and its mouth's explosion.JPG system - and carried
+    // by the sim's point, turned, framed and lit by its Look every frame
+    // (updateEffects). At the z 0 its hover's SetPosition keeps it at from its
+    // second update (darkdragon.json look). Dynamic, with a callback and a body.
+    const DarkDragon::State& darkDragon = m_level.darkDragon;
+    if (darkDragon.Alive() && !m_darkDragonQueued && m_artReady) {
+        EffectSpawn add;
+        add.entity = darkDragon.rules.entityName;
+        add.atPx = darkDragon.atPx;
+        add.zUnits = darkDragon.rules.zUnits;
+        add.angleDeg = darkDragon.look.angleDeg;
+        add.follow.kind = EffectOwner::Kind::DarkDragon;
+        add.alwaysActive = true;
+        m_effectQueue.push_back(add);
+        m_darkDragonQueued = true;
+    }
+    // THE KEY A BOSS DROPS, which no node pictures: the key.ent the ghost's DEATH arm
+    // adds at its own vector3 (AddScaledEntity('key.ent', GetPosition(), getScale()),
+    // #1354-1368), and the dark dragon's DYING arm at key_pos's (ins 1851-1878),
     // drawn by the runtime - key.png and its two sparkle systems - where the carry
     // leaves it, bobbing while it lies (ETHCallback_key's linearMotion, the level
     // keys' row, from a start angle on the effects' stream).
-    for (std::size_t k = 0; k < m_level.keys.keys.size() && m_artReady && ghost.present; ++k) {
+    for (std::size_t k = 0; k < m_level.keys.keys.size() && m_artReady; ++k) {
         const int index = static_cast<int>(k);
-        if (m_level.keys.keys[k].name != ghost.keyName) continue;
+        const std::string& keyName = m_level.keys.keys[k].name;
+        const bool ghosts = ghost.present && keyName == ghost.keyName;
+        const bool dragons = darkDragon.present && keyName == darkDragon.keyName;
+        if (!ghosts && !dragons) continue;
         const bool known = std::any_of(m_droppedKeys.begin(), m_droppedKeys.end(),
                                        [index](const DroppedKey& dropped) { return dropped.key == index; });
         if (known) continue;
@@ -6570,9 +6643,9 @@ void MagicPortalsLayer::latchSimEffects() {
                                                                       : row.startFrom);
         m_droppedKeys.push_back(dropped);
         EffectSpawn add;
-        add.entity = ghost.rules.keyEntityName;
+        add.entity = ghosts ? ghost.rules.keyEntityName : darkDragon.rules.keyEntity;
         add.atPx = m_level.keys.keys[k].atPx;
-        add.zUnits = m_ghost.lookZ;
+        add.zUnits = ghosts ? m_ghost.lookZ : darkDragon.keyZUnits;
         add.follow.kind = EffectOwner::Kind::Key;
         add.follow.index = index;
         m_effectQueue.push_back(add);
@@ -6894,6 +6967,13 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
 
     const double dtMs = static_cast<double>(fixedDelta) * 1000.0;
     if (m_loaded) {
+        // DEV ONLY: a burn a capture scheduled for this tick, set as Game's blast
+        // test sets it, for the step's own AfterStep to read on this same tick.
+        if (m_level.darkDragon.Alive() &&
+            std::find(m_devBurns.begin(), m_devBurns.end(), m_ticks) != m_devBurns.end()) {
+            m_level.darkDragon.burned = true;
+            SUPERSONIC_LOG_INFO("Magic Portals") << "DEV burn of the dark dragon on tick " << m_ticks << std::endl;
+        }
         // The app has just stepped physics. So first what follows a step...
         Game::AfterStep(m_data, registry, m_level, fixedDelta);
         // What the tick just did, remembered for the frame to play. Before the
@@ -7447,6 +7527,8 @@ void MagicPortalsLayer::ScheduleDevPress(int tick, DevPress press) {
 void MagicPortalsLayer::ScheduleDevHold(int from, int to, float direction) {
     m_devHolds.push_back(DevHold{from, to, direction});
 }
+
+void MagicPortalsLayer::ScheduleDevBurn(int tick) { m_devBurns.push_back(tick); }
 
 // ---- how a level ends ------------------------------------------------------------
 

@@ -511,10 +511,14 @@ public:
             Ghost,
             // One of its shots in flight, by the id the sim gave it (`index`).
             GhostShot,
-            // A key with no node of its own - the one the ghost drops - by its place
-            // in Keys::State::keys (`index`), where the carry left it and its bob put
-            // it (m_droppedKeys).
+            // A key with no node of its own - the one the ghost or the dark dragon
+            // drops - by its place in Keys::State::keys (`index`), where the carry left
+            // it and its bob put it (m_droppedKeys).
             Key,
+            // Chapter 4's boss (DarkDragon::State::atPx) while it is there: the
+            // dark_dragon.ent the summon adds, whose cell, angle, emissive and mouth
+            // the runtime takes from the sim's Look every frame (planning step 99).
+            DarkDragon,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -605,6 +609,9 @@ public:
         glm::dvec2 uvScale{0.0};  // the share of its sheet a cell samples, 0 for a one-cell picture
         glm::dvec2 uvOffset{0.0};
         glm::dvec3 colour{1.0}; // ETHEntity::SetColor, on its sprite alone
+        // ETHEntity::SetEmissiveColor as it stands: the .ent's own, or what its
+        // script last wrote (the dark dragon's flash).
+        glm::dvec3 emissive{0.0};
         glm::dvec2 scale{1.0};  // times its <Scale>: the one its light and picture take
         // Its light and halo as the owner's scale leaves them (Lighting::OwnerScaled,
         // K7): the range in the level's units, and the halo quad's size in them.
@@ -614,6 +621,9 @@ public:
         bool temporary = false; // ETHEntity::IsTemporary: the engine frees it when its pools are over
         bool hidden = false;    // its owner is hidden (the player in a door), so nothing of it draws
         bool drawn = false;     // it has a picture quad
+        entt::entity quad{entt::null}; // and that quad
+        // Whether its first system is killed (KillParticleSystem): it releases no more.
+        bool firstSystemKilled = false;
         bool hasLight = false;
         bool hasHalo = false;
         // The registry entities its particles are drawn on, the live ones in
@@ -989,6 +999,17 @@ public:
     // arrow would: -1 left, 1 right. A --fixed-step capture has no input, and the
     // finished and lost screens need a walk into a door or a hazard.
     void ScheduleDevHold(int from, int to, float direction);
+
+    // DEV ONLY: burn 4-32's dark dragon on the layer's tick `tick`, as a barrel's
+    // blast within its reach does (Game's blast test sets the same flag). Its
+    // wound and its death are reached only by portalling the level's one barrel
+    // into its own fireball's path, which no scripted input does, and its flash
+    // and its white death are captures the visuals plan asks for. Ignored on a
+    // tick the dragon is not there to burn.
+    void ScheduleDevBurn(int tick);
+    // The layer's own tick count, which every DEV schedule above is written in: 1 on
+    // the first OnFixedUpdate.
+    int LayerTicks() const { return m_ticks; }
 
     // ---- how a level ends -----------------------------------------------------
     //
@@ -1624,6 +1645,8 @@ private:
         Motion::Linear bob;
     };
     std::vector<DroppedKey> m_droppedKeys;
+    // CHAPTER 4'S BOSS: its dark_dragon.ent, queued once, on the tick the summon adds it.
+    bool m_darkDragonQueued{false};
 
     Tiers::Cut m_dragonCut;
     int m_dragonSprite{-1}; // in m_sprites
@@ -1697,6 +1720,9 @@ private:
         // for a placed portal, white for everything else, and the kill fade's
         // 0.9 a frame once one is dying.
         glm::dvec3 colour{1.0};
+        // ETHEntity::SetEmissiveColor: the .ent's <EmissiveColor> when it is added,
+        // and what its script writes after (the dark dragon's DAMAGE and DYING).
+        glm::dvec3 emissive{0.0};
         glm::dvec2 scale{1.0};    // times its <Scale>: what its picture, halo and light take
         double zUnits = 0.0;
         bool temporary = false; // the engine frees it once its pools are over
@@ -2241,6 +2267,7 @@ private:
         int pressedTick{0};
     };
     std::vector<DevTap> m_devTaps;
+    std::vector<int> m_devBurns;
     int m_ticks{0};
 
     void buildControls();

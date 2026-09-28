@@ -46,6 +46,7 @@
 #include "core/ViewportInfo.hpp"
 
 #include "sim/Art.hpp"
+#include "sim/DarkDragon.hpp"
 #include "sim/Dragon.hpp"
 #include "sim/GravityWell.hpp"
 #include "sim/LevelEnd.hpp"
@@ -10039,6 +10040,242 @@ void TheGhostComesWithItsKnightsDeath() {
     layer.OnDetach(registry);
 }
 
+// CHAPTER 4'S BOSS (the visuals plan's 12.1, planning step 99): the dark_dragon.ent
+// the summon adds, drawn whole by the effects runtime from the original's own .ent -
+// dragon_boss.png cut 2 x 2 on its pivot, lit through dragon_normal.png, its mouth's
+// explosion.JPG system - and carried, turned, framed and lit every frame by the Look
+// its callback writes (sim/DarkDragon): the fly-in's cells, the red and bright of a
+// wound, the white of its death, and the yellow key it leaves.
+void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
+    if (!OriginalArtIsThere("TheDarkDragonIsDrawnAsItsCallbackLeavesIt")) return;
+    using MagicPortals::DarkDragon::Phase;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    const MagicPortals::DarkDragon::State& dragon = level.darkDragon;
+    if (!dragon.present || level.torch.lights.empty() || level.player == entt::null) {
+        CHECK_MSG(false, "level31c places the dark dragon's spawn, a torch and a player");
+        return;
+    }
+    const auto step = [&layer, &registry]() {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    };
+    const auto dragonEffect = [&layer]() -> std::optional<MagicPortalsLayer::EffectReport> {
+        for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
+            if (one.entity == "dark_dragon.ent") return one;
+        }
+        return std::nullopt;
+    };
+
+    // THE .ENT THE RUNTIME DRAWS, which the sim's rules carry the facts of.
+    MagicPortals::Art::Entity ent;
+    std::string entError;
+    CHECK_MSG(MagicPortals::Art::LoadEnt(TestPaths().original + "/entities/dark_dragon.ent", ent, entError), entError);
+    CHECK_MSG(ent.emissive == dragon.rules.emissive && ent.columns == 2 && ent.rows == 2 &&
+                  ent.pivotPx == glm::dvec2(-48.0, 7.0) && ent.systems.size() == 1 && ent.applyLight &&
+                  ent.normal == "dragon_normal.png",
+              "dark_dragon.ent: emissive 0.15, cut 2 x 2, pivot (-48, 7), lit with dragon_normal.png, one system");
+    const glm::dvec2 mouthStart = ent.systems.empty() ? glm::dvec2(0.0) : ent.systems.front().startPoint;
+
+    // THE TORCH, shot from the floor F16's player stood on.
+    waitForFirstTap(layer, registry);
+    const glm::dvec2 floor(241.0, 200.0);
+    for (int tick = 0; tick < 30; ++tick) {
+        PutBodyAt(registry, level.player, floor);
+        step();
+    }
+    tap(layer, registry, screenOf(registry, level.torch.lights.front().atPx));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    for (int tick = 0; tick < 240 && !level.torch.lights.front().lit; ++tick) step();
+    CHECK_MSG(level.torch.lights.front().lit, "a shot from the floor lit 4-32's torch: " + lastFailure(layer));
+    if (!level.torch.lights.front().lit) return;
+    int drawnEarly = 0;
+    for (int tick = 0; tick < 900 && !dragon.alive; ++tick) {
+        step();
+        if (!dragon.alive && dragonEffect().has_value()) ++drawnEarly;
+    }
+    CHECK_MSG(dragon.alive && drawnEarly == 0, "nothing of it before the summon, then the summon");
+    if (!dragon.alive) return;
+
+    // THE SUMMON'S FRAME: AddScaledEntity's entity before its first update.
+    const std::optional<MagicPortalsLayer::EffectReport> added = dragonEffect();
+    CHECK_MSG(added.has_value(), "dark_dragon.ent is drawn on the tick the summon adds it");
+    if (!added) return;
+    CHECK_MSG(added->drawn && added->followKind == MagicPortalsLayer::EffectOwner::Kind::DarkDragon &&
+                  added->atPx == dragon.spawnPx && added->systems == 1 && !added->firstSystemKilled,
+              "at the spawn, carried by the sim, its one system playing");
+    CHECK_MSG(added->cell == 2 && added->angleDeg == 0.0 && added->emissive == glm::dvec3(0.15),
+              "on its startFrame 2, unturned, at its own emissive: cell " + std::to_string(added->cell));
+    CHECK_MSG(glm::distance(added->cellPx, glm::dvec2(226.0, 180.0)) < 1e-9 &&
+                  glm::distance(added->uvScale, glm::dvec2(0.5)) < 1e-9 &&
+                  glm::distance(added->uvOffset, glm::dvec2(0.0, 0.5)) < 1e-9,
+              "a 226 x 180 cell of dragon_boss.png, cell 2 its lower left");
+    CHECK_MSG(glm::distance(added->centrePx, dragon.spawnPx + glm::dvec2(48.0, -7.0)) < 1e-9,
+              "hung on its pivot: " + Point(added->centrePx));
+    // ITS DEPTH: 0, where its hover's SetPosition keeps it - after every picture at
+    // or below 0, before the player at z 4.
+    float highestAtOrBelow = -1e9f;
+    float lowestAbove = 1e9f;
+    for (const MagicPortalsLayer::PictureReport& picture : layer.PictureReports()) {
+        if (picture.zIndex <= 0) highestAtOrBelow = std::max(highestAtOrBelow, picture.z);
+        if (picture.zIndex > 0) lowestAbove = std::min(lowestAbove, picture.z);
+    }
+    CHECK_MSG(added->zUnits == 0.0 && added->z > highestAtOrBelow && added->z < layer.PlayerSlotZ() &&
+                  added->z < lowestAbove,
+              "in front of level31c's art, behind the player: " + std::to_string(added->z));
+    {
+        const auto& material = registry.get<MaterialComponent>(added->quad);
+        CHECK_MSG(EndsWith(material.albedoTexturePath, "dragon_boss.png") &&
+                      EndsWith(material.normalTexturePath, "dragon_normal.png"),
+                  "drawn from dragon_boss.png, lit through dragon_normal.png: " + material.albedoTexturePath);
+    }
+
+    // THE FLY-IN AND THE FIRST SECONDS OF THE FIGHT, frame by frame: what is drawn
+    // is what the callback left.
+    int frames = 0;
+    int mismatched = 0;
+    int restarts = 0;
+    int restartsDrawing = 0;
+    int firstFree = 0;
+    int strayMouth = 0;
+    bool restartedLastFrame = false;
+    std::vector<int> cells;
+    double worstCentre = 0.0;
+    double worstRotation = 0.0;
+    double worstLight = 0.0;
+    for (int tick = 0; tick < 445 + 120; ++tick) {
+        PutBodyAt(registry, level.player, floor);
+        step();
+        const std::optional<MagicPortalsLayer::EffectReport> now = dragonEffect();
+        if (!now) continue;
+        ++frames;
+        const MagicPortals::DarkDragon::Look& look = dragon.look;
+        if (now->cell != look.frame || now->angleDeg != look.angleDeg || now->emissive != look.emissive ||
+            now->atPx != dragon.atPx || now->firstSystemKilled != look.systemKilled) {
+            ++mismatched;
+        }
+        cells.push_back(now->cell);
+        // Hung on its pivot TURNED with it (ComputeInScreenSpriteCenter), and turned.
+        const double a = -now->angleDeg * 3.14159265358979323846 / 180.0;
+        const glm::dvec2 pivot(-48.0, 7.0);
+        const glm::dvec2 wantCentre = now->atPx - glm::dvec2(std::cos(a) * pivot.x - std::sin(a) * pivot.y,
+                                                             std::sin(a) * pivot.x + std::cos(a) * pivot.y);
+        worstCentre = std::max(worstCentre, glm::distance(now->centrePx, wantCentre));
+        const auto& transform = registry.get<TransformComponent>(now->quad);
+        worstRotation = std::max(worstRotation, std::fabs(static_cast<double>(transform.rotation.z) -
+                                                          now->angleDeg * 3.14159265358979323846 / 180.0));
+        const auto& material = registry.get<MaterialComponent>(now->quad);
+        worstLight = std::max(worstLight,
+                              glm::distance(glm::dvec3(material.sprite2D.ambient),
+                                            MagicPortals::Lighting::AmbientTerm(layer.AmbientNow(), now->emissive)));
+        // THE MOUTH, AS THE ENGINE ORDERS IT: the particles stepped, THEN the
+        // callback's Play, THEN the draw. An update that restarts it draws none of
+        // the fire - nothing released, no quad shown - and the first that does not
+        // releases particle 0 at the mouth: <StartPoint> (96, 13) turned.
+        if (look.systemRestarted) {
+            ++restarts;
+            const bool shown = std::any_of(now->particleQuads.begin(), now->particleQuads.end(),
+                                           [&registry](entt::entity quad) {
+                                               return registry.valid(quad) &&
+                                                      registry.get<RenderableComponent>(quad).isVisible;
+                                           });
+            if (now->released != 0 || shown) ++restartsDrawing;
+        } else if (restartedLastFrame) {
+            ++firstFree;
+            const glm::dvec2 mouth = now->atPx + MagicPortals::Particles::Turn(mouthStart, now->angleDeg);
+            const bool atMouth = std::any_of(now->newbornPx.begin(), now->newbornPx.end(), [&mouth](const glm::dvec2& born) {
+                return glm::distance(born, mouth) < 1e-6;
+            });
+            if (!atMouth) ++strayMouth;
+        }
+        restartedLastFrame = look.systemRestarted;
+    }
+    CHECK_MSG(frames == 565 && mismatched == 0,
+              "the callback's cell, angle, emissive, point and mouth on every frame: " + std::to_string(mismatched) +
+                  " of " + std::to_string(frames) + " off");
+    // The runtime turns the pivot through DetMath's single-precision sincos.
+    CHECK_MSG(worstCentre < 1e-4 && worstRotation < 1e-5,
+              "on its pivot, turned: " + std::to_string(worstCentre) + ", " + std::to_string(worstRotation));
+    CHECK_MSG(worstLight < 1e-6, "lit at the room's ambient plus its emissive: " + std::to_string(worstLight));
+    CHECK_MSG(restarts >= 34 && restartsDrawing == 0,
+              "an update that restarts the mouth draws none of its fire: " + std::to_string(restartsDrawing) + " of " +
+                  std::to_string(restarts) + " drew some");
+    CHECK_MSG(firstFree >= 1 && strayMouth == 0, "the first update after a restart releases at the turned mouth: " +
+                                                     std::to_string(firstFree) + " such, " +
+                                                     std::to_string(strayMouth) + " elsewhere");
+    std::printf("  level31c: the mouth restarted on %d frames with nothing of it drawn, and free again on %d\n",
+                restarts, firstFree);
+    // Cell 0 through the first three waypoints, 0 -> 3 on the fourth, 3 into the fight.
+    bool zeroThenThree = cells.size() == 565 && cells.front() == 0;
+    for (std::size_t i = 1; i < cells.size(); ++i) zeroThenThree = zeroThenThree && cells[i] >= cells[i - 1];
+    CHECK_MSG(zeroThenThree && !cells.empty() && cells.back() == 3,
+              "0 through the fly-in's first legs, opening once to 3, held");
+    CHECK_MSG(dragon.phase == Phase::Fighting, "fighting");
+
+    // A WOUND: its flash is the path's colour, red at its reddest.
+    layer.ScheduleDevBurn(layer.LayerTicks() + 1);
+    step();
+    CHECK_MSG(dragon.phase == Phase::Damage, "the DEV burn wounded it");
+    // The first flash's waypoint begins on the 61st update after the wound: the
+    // path's own first update restarts it, and the 1000 ms leg takes 60 more.
+    for (int tick = 0; tick < 61; ++tick) step();
+    const std::optional<MagicPortalsLayer::EffectReport> red = dragonEffect();
+    CHECK_MSG(red && glm::distance(red->emissive, glm::dvec3(1.0, 0.0, 0.0)) < 1e-6, "red, the first flash's waypoint");
+    if (red) {
+        const auto& material = registry.get<MaterialComponent>(red->quad);
+        const glm::vec3 lit = material.sprite2D.ambient;
+        CHECK_MSG(lit.r == 1.0f && lit.r >= 2.0f * lit.g,
+                  "its red term whole, its green the room's: " + std::to_string(lit.r) + " / " + std::to_string(lit.g));
+        std::printf("  level31c: at the first red flash the sprite's ambient term is (%.3f, %.3f, %.3f)\n",
+                    static_cast<double>(lit.r), static_cast<double>(lit.g), static_cast<double>(lit.b));
+    }
+    for (int tick = 0; tick < 18; ++tick) step();
+    const std::optional<MagicPortalsLayer::EffectReport> bright = dragonEffect();
+    CHECK_MSG(bright && glm::distance(bright->emissive, glm::dvec3(0.45)) < 1e-6, "then three times its own");
+
+    // TWO MORE, and its death: WHITE.
+    for (int round = 0; round < 2; ++round) {
+        for (int tick = 0; tick < 400 && dragon.phase != Phase::Fighting; ++tick) step();
+        layer.ScheduleDevBurn(layer.LayerTicks() + 1);
+        step();
+    }
+    CHECK_MSG(dragon.phase == Phase::Dying && dragon.hp == 0, "the third burn kills it");
+    step();
+    const std::optional<MagicPortalsLayer::EffectReport> dying = dragonEffect();
+    CHECK_MSG(dying && dying->emissive == glm::dvec3(1.0), "dying, white");
+    if (dying) {
+        const auto& material = registry.get<MaterialComponent>(dying->quad);
+        CHECK_MSG(material.sprite2D.ambient == glm::vec3(1.0f), "drawn at its whole brightness, whatever the room");
+    }
+    for (int tick = 0; tick < 700 && !dragon.gone; ++tick) step();
+    CHECK_MSG(dragon.gone && !dragonEffect().has_value(), "it has gone, and its picture and its mouth");
+    step();
+    std::vector<MagicPortalsLayer::EffectReport> keys;
+    for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
+        if (one.entity == "key.ent") keys.push_back(one);
+    }
+    CHECK_MSG(keys.size() == 1, "the yellow key it drops is drawn: " + std::to_string(keys.size()));
+    if (keys.size() == 1 && !level.keys.keys.empty()) {
+        CHECK_MSG(keys[0].drawn && keys[0].systems == 2 &&
+                      keys[0].followKind == MagicPortalsLayer::EffectOwner::Kind::Key,
+                  "key.png and its two sparkles, carried as the key is");
+        CHECK_MSG(NearD(keys[0].zUnits, 6.0, 1e-12), "at key_pos's own depth, 6");
+        CHECK_MSG(glm::distance(keys[0].atPx, level.keys.keys.back().atPx) < 1.6 &&
+                      glm::distance(level.keys.keys.back().atPx, glm::dvec2(78.0, 208.0)) < 1e-9,
+                  "at key_pos, bobbing: " + Point(keys[0].atPx));
+    }
+    std::printf("  level31c: the dark dragon drawn on %d frames as its callback left it, wounded, dead, and its "
+                "key drawn\n",
+                frames);
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheBetweenSlotTableSaysWhereEachClassStands();
@@ -10063,6 +10300,7 @@ void runTests() {
     AMinionAStrikeTakesLeavesBloodAndNoSkull();
     TheBlackKnightCarriesItsAuraAsAMultiply();
     TheGhostComesWithItsKnightsDeath();
+    TheDarkDragonIsDrawnAsItsCallbackLeavesIt();
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();

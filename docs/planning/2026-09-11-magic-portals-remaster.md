@@ -17951,3 +17951,312 @@ nothing.
 - `Slot::Ghost` is a new row of the between-slot table; reconcile it with any rows track B added.
 - `Minions::Death::byFire` is new; Q.2's `minion_impact` still leaves the black knight out (step 97's note).
 - The enemy shot's `startEarthquake(10)` (#331-333) waits for Q.1's earthquake.
+
+## Step 99 - the dark dragon as its callback plays it: seven eased waypoints and the jaw that opens on the fourth, the Follower's lagged angle, the hover and the neck on its point, eight flash legs (R20), white as it dies, and the yellow key it drops drawn (built)
+
+The visuals plan's step 12.1 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 12, as section 8.13
+amends it; its brief `system_5.md` 5c-3; decodes `decode/D7.md` with `D7_check.md` and section 8.10's D9; section 4's
+boss-key row; footage F16). Track A, on MPR `main` in `build/`, after step 98 (`1d05b59`). Changed: `game/sim/Ease.{hpp,cpp}`
+(new), `game/sim/CMakeLists.txt`, `game/sim/DarkDragon.{hpp,cpp}`, `game/sim/Game.cpp`, `game/data/darkdragon.json`,
+`game/MagicPortalsLayer.{hpp,cpp}`, `game/main.cpp`, `tests/test_mp_{darkdragon,layer}.cpp`, this record and the backlog.
+The engine submodule stays at `4bfcf67`; nothing under `engine/` or `tools/` is touched, and `out/levels`, `out/assets`
+and `out/data` are not written. Captures, scripts and logs: `out/parity/visuals/12.1/`.
+
+**Level 4-32's boss is drawn for the first time.** Before this step the dark dragon was a point the simulation moved and
+nothing drew: a torch-shot replay shows its fireball leave from empty air (`12.1/before/route/r_f1398.png`). Now it is the
+`dark_dragon.ent` the summon adds, drawn whole by the effects runtime from the original's own `.ent` - `dragon_boss.png`
+cut 2 x 2 on its pivot (-48, 7), lit through `dragon_normal.png`, its one `explosion.JPG` system at the mouth - and every
+frame it takes the cell, the angle, the emissive and the mouth's kill or restart the callback wrote.
+
+**FIX ROUND 1** (after the independent check, `out/parity/visuals/12.1/verify1/`; this round's scripts, captures and
+logs are in `12.1/fix1/`). The check reproduced every number and failed the step on two medium findings, both real, and
+filed five lows. **(1) The mouth's fire was drawn while `PlayParticleSystem(0)` is called every update, where the
+original shows none.** Ethanon updates an entity's particles and THEN runs its callback
+(`ETHActiveEntityHandler.cpp:134-138`, `ETHSpriteEntity.cpp:455-459`), and draws after both (`ETHScene.cpp:459-497`,
+then `RenderScene`); Play leaves every particle unreleased (`ETHParticleManager.cpp:274-286`), and the draw skips an
+unreleased one (`:375`). The port remade the pool first and then stepped it, which released particle 0 at the mouth on
+every such frame: a steady ball about 60 px wide on 17 frames of the replay, where F16 has nothing. `updateEffects` now
+steps the mouth first, then lands the callback's Kill or Play, then applies the draw's own test to each particle, and
+the F16 row below now agrees. **(2) The wound-end torch shot was read backwards in this record.** The original fires it
+only when `SeekEntity('light_off.ent')` finds one - a torch its fire signal put out - and so relights it; it never
+fires at a lit torch. The port fires at the torch lit or not, and a lit one it puts out, bringing the light wall back.
+That shot predates this step and no batch owns it, so it is corrected in the text (the DAMAGE bullet, gameplay item 4,
+`darkdragon.json`, `DarkDragon.hpp`, a `test_mp_darkdragon` message) and filed for the owner, not changed. Of the lows:
+deviation 4 (the wound read before the shot) is **closed by building the callback's order**, a GAMEPLAY change (item
+7); the flash row records FIGHTING's own R / G beside the red legs'; LEFT FOR THE OWNER gains the missing restock (4-32
+cannot be won in the port) and F16's unexplained 0.2 s; 2-32's mouth, which has the same order, is filed for step 77's
+owner. Source changed (`MagicPortalsLayer.cpp`, `DarkDragon.{hpp,cpp}`, `darkdragon.json`, both suites), so the tree
+was rebuilt (80 steps, 0 warnings, `fix1/logs/build1.txt`), the three suites re-run, and every capture re-taken on
+`MagicPortals.exe` `753dc103`.
+
+**SECOND CHECK** (`out/parity/visuals/12.1/verify2/`): passed every gate. It re-derived the callback from the listing
+before reading the code; compiled the 7 changed units with the build's own commands, no link, at 0 warnings; re-captured
+the route (234 of 234) and the burn run (361 of 361) byte-identical to `fix1/`; put 79 of 79 frames it could judge on
+the cells with its own fit (least margin 0.023); read the red legs' R / G at 3.49 / 3.49 / 3.45 / 3.40 on its own mask;
+ran the three suites once each at 216 / 2,042 / 753, 0 failures; and swept 128 of 128 byte-identical to the baseline.
+Its four low findings went in at the commit as text only - no code or binary changed, and the one JSON change is a
+`_note` string: the hover note in `darkdragon.json` (its speed and stride are copied from the `.ent`'s CustomData, not
+read from it), the cells row
+counted from f726, the backlog's step 98 commit cell filled in this step's diff, and a candidate for F16's 0.2 s
+(LEFT FOR THE OWNER).
+
+**BLOCKERS CHECKED.** Section 7 names 0.1, D7, D9 and F16; section 8.13 removes D7 and D9 (closed, 8.8 and 8.10). **0.1**
+is step 60 (the JPEG probe `explosion.JPG` needs). **F16** is recorded (`out/parity/footage/F16.md`: the fly-in, the
+jaw, the mouth's fire and the first shot; the flash was not reached). **R20** is the owner's standing ruling. None unmet.
+The baseline is step 98's after, `12.2/verify1/sweep`: its 128 PNGs match the md5s its `capture.txt` logged (128 of 128),
+and the committed binary `7e43f9b3` reproduced 1-01 f420 `e2da5131` before anything changed
+(`12.1/before/1-01_level0_f420.png`). The route "before" (`12.1/before/route`, frames 1-1400 every 6) was taken on it too.
+
+**THE OWNER'S STANDING RULINGS.** **R20 is applied** as the owner's standing ruling: DAMAGE is 1000 + 8 x 300 = 3400 ms,
+eight flash legs, where the port had six and 2800 ms (gameplay, below). **R10** (the player at z 4) and **R12** (the
+720 tier: `dragon_boss.png` has no hd twin) are used, not decided. R1, R2, R22 and R23 are not built. **R24 and R25 (step
+76) remain the owner's to rule**; this step applies neither further (the aim reads the player's body centre, R25's
+player half, deviation 7).
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce8baea16b94ed84d8d7be84b0`,
+re-checked; `ETHCallback_dark_dragon`, bytes 389418..397662, read in full for this step).
+- **The init (ins 15-375, its first update):** elapsedTime and neckAdjustElapsedTime 0, `KillParticleSystem(0)`,
+  state APPEARING, hp 3, `originalEmissive = GetEmissiveColor()`, `SetFrame(0)`, seven `addWaypoint` calls (ins
+  178-341: `Waypoint(pos, time, FloatColor(-1), filter, angle)` - here, shout, shout, shout+move x 3, fighting; 2500 /
+  0 / 1000 / 1000 / 700 / 2200 / 0 ms; smoothBothSides, smoothBothSides, smoothBeginning, smoothEnd, smoothBeginning,
+  smoothEnd, smoothBothSides; 14, 0, 0, 10, 28, 27, -12 degrees) and `Follower(V2_ZERO, 800, 150)` (ins 343-356).
+- **Every update, before the state is read:** `linearMotion(dragon, true, 0, PIb)` (ins 390-399) - its body
+  (327527..328407) writes `originalPos = GetPosition()` on its first call and then SetPositions the entity at the
+  `originalPos` the LAST update wrote plus `cos(angle) x stride` vertically, with `dark_dragon.ent`'s speed 1.6 and
+  stride 7; then the fire clock (ins 413-425), the interval by hp (ins 483-503), `waypoints.update()` unless paused
+  (ins 505-514), and `originalPos = vector3(waypoint.pos, 0)` from its current point (ins 516-537).
+- **The WaypointManager** (40760..42634): `FrameTimer::set` moves on at most one waypoint an update and restarts at
+  waypoint 0 with no time on its first; `getCurrentPoint` interpolates the position, the angle and the colour alike by
+  the CURRENT waypoint's filter on the raw bias `min(stride, time) / max(stride, 1)`; `getBias` is that raw bias.
+- **APPEARING (ins 539-683):** `SetAngle(waypoint.angle)`, `originalPos` written; on waypoint 3 the fire clock is zeroed
+  every update, `startEarthquake(10)` past bias 0.2, the frame `clamp(uint(smoothBeginning(bias) x 14), 0, 3)`, and on
+  frame 3 `PlayParticleSystem(0)` every update and the open-mouth sound once. `CMPIu ..., v3` is the constant 3 (00_order
+  8.0): `darkdragon.json`'s "waypoint 0 ... frame 0" was the misreading system_5 named. On frame 6 (the last): FIGHTING,
+  `forcePosition(rad(GetAngle() + 360), 0)`, `update()` - the fire clock is NOT zeroed.
+- **FIGHTING (ins 688-1515):** `update()` unless paused, then `setDestinationPos((computeDarkDragonAngle(dragon, char),
+  0))` - `getAngle(normalize(dragon - char)) + PIb x 1.2`, unclamped (398213..398405) - then `SetAngle(deg(getPos().x))`;
+  the neck: `bias = clamp((365 - A) / 25)`, lift `(smoothBothSides(bias) x 2 - 1) x scale(18) x min(neck / 2000, 1)`
+  added to `originalPos` (ins 734-818); unless finished, Kill below interval / 2 and Play above interval / 4 x 3 every
+  update (ins 829-847), the shot past the interval (ins 849-1065: `GetClosestContact(dragonPos, charPos)` must be the
+  character; `a = rad(-A - 110 + 29)`, `fireBallPos = dragonPos - scale(95) x (sin a, -cos a)`,
+  `addFireball(fireBallPos, normalize(charPos - fireBallPos), true, 2)`, `startEarthquake(15)`, the barrel restock),
+  then `isBurned` (ins 1067): DAMAGE, elapsed 0, hp -1, a fresh WaypointManager (ins 1125-1489), neck 0, `killAll`.
+  The mouth, the shot and the wound all sit inside `!isFinished` (the JLowZ at ins 827 skips to 1515).
+- **DAMAGE (ins 1517-1768):** its path is (its own point, 1000 ms, the angle it holds, originalEmissive), then EIGHT
+  (shout + scale(32, -32), 300 ms, angle + 27) red, 3x-bright, red ... (PshC4 300 at ins 1288, 1312, 1336, 1360, 1384,
+  1408, 1432, 1456; red `FloatColor(0xFFFF0000)`, bright originalEmissive x 3), then (fighting, 0 ms, angle + 27,
+  originalEmissive), all smoothBothSides. Each update `SetAngle` and `SetEmissiveColor` from the point; the jaw shut
+  over leg 0 (`smoothBeginning(1 - bias) x 7`) and opened over leg n-2 (`smoothBeginning(bias) x 7`); on leg n-1,
+  **only if `SeekEntity('light_off.ent')` finds one** (ins 1675-1694), the torch shot from the mouth at the angle it
+  holds, along `normalize(light - dragonPos)` (ins 1622-1720); then elapsed 0, FIGHTING, `forcePosition(rad(GetAngle()))`
+  with no turn added, `update()`.
+- **What the torch shot finds** (fix round 1). SeekEntity compares names exactly (`ETHBucketManager.cpp:394-406`);
+  level31c places its torch as bare `light_off` (`level31c.esc` entity 1689); a lit torch sets `delete` and deletes
+  itself on its next update (`ETHCallback_light_off` ins 1-35, 105-114); and only `ETHCallback_fire_signal` adds a
+  `light_off.ent` (bytes 470827..471942, ins 161) - the torch put out again. So the original never fires at a lit torch. At one its
+  fire signal put out it does, and `hasProjectileAround` (467878..468609) counts `fireball.ent` by name within scale(24)
+  of it when `includeFireballs` is true, which `ETHCallback_light_off` passes (ins 47): the shot relights it - the decode
+  plus the geometry (the port's arithmetic puts the shot 1.8 u from the torch from F16's floor), not measured.
+- **The mouth, in the engine's order** (fix round 1). An always-active entity's particles are updated and THEN its
+  callback runs (`ETHActiveEntityHandler.cpp:134-138`, `ETHSpriteEntity.cpp:455-459`), and the scene is drawn after both
+  (`ETHScene.cpp:459-497`). Play resets every particle unreleased (`ETHParticleManager.cpp:274-286`) and the draw skips
+  one (`:375`), so an update that calls `PlayParticleSystem(0)` draws none of the fire, and the first update without it
+  releases particle 0 at the mouth. F16 shows exactly that: no fire on #238-#250 (leg 3 on cell 3) or #319-#340
+  (FIGHTING above 3 / 4 of the interval), and a fire from #252 and until #318.
+- **DYING (ins 1775-1946, 1947-2171):** entered after the switch when hp is 0 and the state is not DYING: elapsed 0 and
+  (its point, 3000 ms, the angle) -> (shout + scale(32, -64), 6000 ms, angle + 30) -> (that + (0, 256), 0), all
+  smoothBothSides and `FloatColor(-1)`; each update `SetEmissiveColor` WHITE, `SetAngle`, the jaw shut over leg 0
+  (`x 14`); on the last, `key.ent` at key_pos's own `GetPosition()` (z 6), `ghost_utility_spawn.ent`, the platform,
+  `explode`, `DeleteEntity`.
+- **Its depth.** `originalPos` is written with z 0 (ins 529-537) and the hover's `SetPosition` on this physics entity
+  writes z too (`ETHPhysicsEntityController.cpp:92-96`), so from its second update the dragon stands at z 0 - not the
+  spawn's 8 that system_5 INFERRED and 00_order's K13 row took (`slotAfter(8)`): deviation 1.
+- **`smoothBeginning(v) = 1 - smoothEnd(1 - v)` and `smoothBothSides(v) = smoothBeginning(smoothEnd(v))`** (bytes
+  313971..314142), `smoothEnd(v) = sin(v x PIb)` (313899..313971), read from the listing for `sim/Ease`.
+
+**WHAT WAS BUILT.**
+- **`sim/Ease`** (new): the three filters, in single precision through DetMath, and their JSON names.
+- **`sim/DarkDragon`**: `Path` (the WaypointManager as it plays, with position, angle and colour), `Look` (frame, angle,
+  emissive, the mouth's kill and restart), the init on the first update after the summon, the hover on `originPx` every
+  update, the three arms in the callback's order, the Follower (`sim/Follower`, 800 / 150 on the script's 16 ms), the
+  neck, `AimRadians`, `MuzzlePx`, `NeckLiftPx`, and DYING after the switch; `keyName` and `keyZUnits` from key_pos.
+  FIGHTING reads the wound after the mouth and the shot, all three inside `!completed` (fix round 1; `ShootAtPlayer`, a
+  file-local function, so a shot that does not leave still reaches the wound).
+  `Tick` takes motions.json's linearMotion arithmetic (`Game.cpp` passes `data.motion`).
+- **`darkdragon.json`**: `fight` gains the muzzle, the mouth's windows, the Follower, the aim offset, the seed and the
+  neck; new `hover` and `look` blocks; `appearing.waypoints` (at, ms, filter, angle) replaces `hold_ms`, with `mouth_leg`
+  3; `damage` gains `flashes 8` (R20), the angle, the filter, the red, `bright_times` and the jaw's steps; `dying` the
+  angle, the filter, the white, the jaw's steps and `key_entity`; `not_built` rewritten; every note corrected against
+  the listing (the fight note's reversed subtraction, the jaw's waypoint, the neck "moves the drawn head, not the boss").
+- **`MagicPortalsLayer`**: `EffectOwner::Kind::DarkDragon`; `latchSimEffects` adds `dark_dragon.ent` on the summon's
+  tick (at `look.z_units` 0, the summon's getScale 1, always active); `updateEffects` takes the sim's `Look` for that
+  effect every frame - cell, angle (which turns the pivot and the mouth's owner), emissive - and lands the mouth's kill
+  or restart AFTER that frame's step, in the engine's order: the pool remade on `m_effectRandom`, then the draw's own
+  test (`Particles::Drawn`) on every particle's quad, so a restart frame draws none of the fire (fix round 1; the first
+  round remade it before the step, as 2-32's `updateEmitters` still does); an effect's own `emissive` (the `.ent`'s until a script writes
+  one) is what `tint` takes; the key loop draws the dark dragon's key as the ghost's (key.ent, its bob on the effects'
+  stream) at key_pos's z 6. `EffectReport` gains `emissive`, `quad` and `firstSystemKilled`; `LayerTicks()` and
+  **`ScheduleDevBurn`** (DEV ONLY), set before the tick's `AfterStep`.
+- **`main.cpp`**: `--burn-dragon <tick>` (DEV ONLY, repeatable): 4-32's dragon burned on that tick, as a barrel's
+  blast in its reach burns it - the flash and the death are captures no scripted input reaches (F16 section 6).
+
+**GAMEPLAY CHANGES - THIS STEP CHANGES GAMEPLAY on 4-32 (level31c), and on no other level.**
+1. **R20: a wound lasts 3400 ms** - the torch shot and the return to FIGHTING come 205 updates after the wound (the port's
+   168, 2800 ms), eight flash legs.
+2. **The paths are eased by each waypoint's own filter** (they were linear) and a WaypointManager moves one waypoint an
+   update: where the dragon stands on every tick of APPEARING, DAMAGE and DYING - the point a blast is measured to and a
+   shot leaves from. DAMAGE and DYING now start from where it stands, not from `fighting`.
+3. **Its point hovers** 7 u up and down (period 3.93 s) in every state, riding one update behind the path, and **the neck
+   lifts or drops it** by up to 18 u in FIGHTING with the smoothed angle (a player below-right drops it about 11 u).
+4. **The shots leave from the mouth** (`MuzzlePx`, turned with the head): at the player aimed from the mouth, and at the
+   torch along the line from its own point to the torch - from the floor F16's player stood on, that shot passes 1.8 u
+   from the torch; a second wound taken the tick it came back (the head thrown to about 400 degrees) sends it about 35 u
+   high (arithmetic from the decode, as the original). **The shot at the torch itself is not the original's** (fix round
+   1, corrected here; this step does not change it): the original fires it only at an unlit `light_off.ent` and relights
+   it; the port, as before this step, fires at the torch lit or not and puts a lit one out, bringing the light wall back
+   (LEFT FOR THE OWNER).
+5. **The first shot comes 1.3 s into the fight** (77 updates), not 4.2 s: the fire clock runs on from the jaw's waypoint
+   (2917 ms at FIGHTING's first update). On the replay the player dies on tick 1285; the committed build's first shot left on
+   tick 1382.
+6. The DEV `--burn-dragon` flag changes nothing without it.
+7. **The wound is read after the mouth and the shot** (fix round 1, ins 1067), and all three only while the level is not
+   finished (ins 821-827): a blast on the update it fires lets that shot leave first; a wound below half the interval
+   enters DAMAGE with its mouth killed, where the first round left it burning; a burn after the level is finished is not
+   read (`test_mp_darkdragon` `TheWoundIsReadAfterItsShot`). It was read first, before the mouth.
+
+**THE DEPTH (K13).** No new row: the dragon is an entity the script adds, on `Slot::Effect` at round(0) - after every
+picture of level31c at or below 0 (its walls -20..-4, the breakable wall -2, the antiportal -14, the torch -12, the
+platforms 0) and before the player's slot (z 4, 1.42) - pinned in `test_mp_layer` on the summon's frame. It ties with
+the other z-0 effects (its own fireballs, `small_explosion.ent`), ordered by the engine's gather order (deviation 1). The
+key: `slotAfter(round(6))`, in front of the player, as the original's z 6 is.
+
+**THE STREAM (K8).** The mouth's pool and every restart draw on `m_effectRandom`, as do the key's bob and its sparkles;
+the placement stream is untouched, and nothing of the dragon exists until a torch is shot. Fix round 1 remakes the pool
+after the mouth's step rather than before it, which reorders those draws against the eyes' on the same stream: on
+`fix1/route` f6-f684 are byte-identical to `before/route` (114 frames) and, up to the first shot (f1206), everything
+right of x 560 that changed is the player's eyes (x 615-625, y 530-541, at most 97 px; `fix1/k8_fix1.log`).
+
+**THE GATES.** "Today" is `7e43f9b3` and `12.2/verify1/sweep`. The route is F16's: `--hold left@1-172 --tap 546,96@250`
+(`12.1/route.sh`), which stands the player on the floor at about (255, 202) and lights the torch on tick 267 (the wall's
+ghost is logged on 268, the tick after); the dragon is added on tick 686 and FIGHTING begins on 1131 - DERIVED from that
+and the sim's 179 + 240 + 445 ticks, not logged, and borne out by both cell fits agreeing on every frame from f690. The
+camera's corner is (28.0, 0), from block 2278's outline (569-657 px); a first calibration on the torch's spark read 16,
+wrong by the spark's own offset, and both fits first ran on it and read cell 0 everywhere. `before/route` and
+`after/route` are byte-identical on all 114 frames f6-f684; from f690 they also differ in the player's eyes (72 px at
+f690, the effects' stream the dragon's pool now draws on first, K8). Fix round 1 re-took both runs on `753dc103`
+(`fix1/route`, `fix1/burn`): f6-f918 are byte-identical to the first round's, and from f924 - the first restart frame
+- they differ at the mouth and in the eyes (`fix1/route_vs_after.txt`).
+
+| Gate | Required | Today | Measured |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**: `logs/build1.txt` (76 steps), `build2.txt` (6, the DEV burn moved before `AfterStep`), `build3.txt` (3, `test_mp_layer`'s fix), the two SAC relinks (`relink_start.txt`, `relink_exe1.txt`); fix round 1: `fix1/logs/build1.txt`, 80 steps, 0 warnings |
+| Replay of the torch shot, every 6 frames: cell 0 through legs 0-2, 0 -> 3 on leg 3, 3 through FIGHTING | those cells | **not drawn**: no dragon on any frame of `before/route` | **passes, on the pixels: 105 of 105 frames from f738** agree with the drawn cell, and 107 of 107 from f726 (f726 and f732 show the snout entering, cell 0, margins 0.125 and 0.232; f720's 186 changed px cannot be judged) (`work/silhouette_121.py` -> `after/silhouette_690_1362.json`; the count from f726 corrected at the commit, found by the independent check): legs 0-2, 27 frames f738-f894, cell 0; leg 3, f900 0, f906 0, **f912 1, f918 2, f924 3**, f930-f954 3; legs 4-5, 29 frames, 3; FIGHTING, 39 frames f1134-f1362, 3; least margin 0.037 IoU. Method: each cell's alpha at the drawn pose against what the frame changed from `before/route`'s same frame, 70 px round the mouth muted. The luminance fit (`work/fit_121.py`, 5.2's method) agrees on **96 of 99** frames it can judge (`after/fit_690_1362_mute.json`): its three misses are f774-f786, the head still entering at the left edge (scores 0.25-0.41, runner-ups within 0.04), and on leg 3 it reads 0, 0, 1, 2, 3 at f900-f924 with scores 0.92-0.93. On the quad (`test_mp_layer`): the report's cell is the callback's on 565 of 565 frames, cell 2 (the `.ent`'s startFrame) on the summon's frame at uv (0, 0.5). **Fix round 1**, on `fix1/route`: the silhouette fit again 105 of 105 from f738 (107 of 107 from f726), least margin 0.037, the same cell on every frame (`fix1/silhouette_690_1362.json`); the check's continuous score (its `cells_v2_fixed.py` and `fight_v.py` pointed at `fix1/route`) puts 81 of 81 frames f726-f1206 on the rule - 0 through f906, 1 at f912, 2 at f918, 3 on f924-f1206, 13 of them in FIGHTING - least margin 13.5 (`fix1/cells_v2_fix1.json`, `fix1/fight_fix1.json`) |
+| Flash: mean R of the body >= 2 x G in DAMAGE's flash legs | >= 2 | not drawn | **passes on the red legs - by the step up at the decode's red-leg ticks, not by the 2 x threshold alone**, because the body already reads about 2 at the `.ent`'s own emissive: **FIGHTING 1.94** (f1134; the check's mask 2.07). At the first frames of red legs 1, 3, 5, 7 - f1200, f1236, f1272, f1308, the burn on 1139 + 1 + 60 and then every 36 - it reads **3.61, 3.61, 3.58, 3.53** (`work/flash_121.py` -> `after/flash.json`, the body the cell's alpha less the mouth; the check's mask 3.63, 3.64, 3.61, 3.56). The bright legs read 1.68 (the check's 1.79-1.82: emissive 0.45 grey, R = G by design, the torch's light warms it). Fix round 1 re-read it on `fix1/burn`: the same to the hundredth on this mask (FIGHTING 1.94; 3.61, 3.61, 3.58, 3.53; bright 1.68), and 2.07 / 3.63, 3.65, 3.62, 3.57 / 1.79-1.82 on the check's (`fix1/flash_121_fix1.log`, `fix1/flash_fix1.json`). No footage of a wound exists (F16 section 6). Reached with `--burn-dragon 1139 1345 1551` (`after/burn`), a DEV input (deviation 6). On the quad: the ambient term (1.000, 0.100, 0.250) at the first red |
+| `smoothBeginning` at 0, 0.5 and 1 | the listing's | not in the port | **passes** (`test_mp_darkdragon`): 0, 0.29289322, 1 within 1e-6; `smoothEnd` 0, 0.70710678, 1; `smoothBothSides(0.5)`; the jaw's thresholds 0.242 / 0.345 / 0.425 |
+| (8.13) the hold on entering FIGHTING | ~10 ticks at 348 | - | **passes**: the entry update draws -12 and the next **9** draw 348 exactly (D7_check's "10 ticks at 348" counts the retarget's); the 10th retargets |
+| (8.13) 3.1 % on the first tick after a retarget | sin(16/800 x PI/2) | - | **passes: 3.14 %** toward the destination the ninth set |
+| (8.13) steady state 378 - phi | 378 - phi | - | **passes**: 347.91 toward 348.34 after 200 updates (phi about 30 for the player on the floor); every update's destination is `AimRadians` of that update's positions (0 off) |
+| `test_mp_darkdragon` stays at 97 | 97 | 99 (step 85) | **NOT MET, by design: 216 checks, 0 failures** (209 in the first round; fix round 1 adds `TheWoundIsReadAfterItsShot`, 7) - R20, the eased paths, the hover and the neck move what it pinned (the arrival at `fighting` exactly, the 2800 ms wound), and the schedule, the angle, the jaw, the flash, the muzzle and the death are new |
+| F16 (visual confirmation) | frames and fire | - | **agrees - on the mouth's fire since fix round 1 - with one raw gap**: at `shout` 2.52 s after the summon (F16 2.50), FIGHTING 7.42 s (7.35); the jaw 1 / 2 / 3 at 0.242 / 0.345 / 0.425 of leg 3 put F16's by-eye cells (1 by #234, 3 by #238) within one frame on either decoded anchor (the quake at bias 0.2 on #233, or the shot 4200 ms after leg 3's last tick). **Counted from F16's burst frame #152 instead, the port's jaw is about 0.2 s late**: cell 1 / 3 at 3.77 / 3.95 s after the summon against F16's 3.57 / 3.78 s - while F16's own shout and FIGHTING agree with 2500 / 7400 ms, its leg 3 begins about 0.15 s early against them (3.31-3.37 s after #152 on the two anchors, against 3.50); not explained; the FIGHTING angle 346-348 (F16 -10..-12, the player 14 u further right here); **the mouth's fire (fix round 1): none drawn on an update that restarts it**, as F16 shows none on #238-#250 (leg 3 on cell 3) and #319-#340 (FIGHTING above 3 / 4 of the interval) (`fix1/mouthfire_port_vs_f16.png`). Measured as lum > 200 px, each source against its own frames without fire (`fix1/mouthfire_fix1.py`): in an 80 px box on the turned mouth the port reads **0 on all 17 restart frames** of the every-6 replay (f924-f954, f1146-f1206) and on the 5 killed frames before them, against 900-2,353 (median 1,569) on the 31 free-running frames f960-f1140; the first round's binary read **952-1,014** on those 17 (`fix1/mouthfire_after_route.txt`: the ball the check found). In the check's box (x 0-560, y 140-600) the port reads 0-315 (median 169) restarted, 0-123 killed, 900-2,491 free; F16 in the same box 0-439 (median 111) on #238-#250 and 242-649 (320) on #319-#340, against 1-838 (237) on its fire-free legs 1-2 and 1,208-2,974 (2,323) free-running. The fire comes on the update after the fire clock's last zeroing (leg 3's last, tick 956: on from 957), goes out on the first update past 3150 ms (tick 1145: 188 updates, **3.13 s**) and the shot leaves 4200 ms after that zeroing (tick 1208, **4.20 s**); F16: on #252 (11.069 s, which F16 takes as that zeroing), out #319 (**3.09 s** later), the shot #341 (**4.20 s**). The first round's "0 bright px while Play restarts it" used min RGB > 225, which also read 0 on its ball: its timings described the clock, not the picture, and they stand |
+| The dropped yellow key's picture | drawn | not drawn (section 4) | **passes**: `key.ent` at key_pos (78, 208), z 6, its two sparkles, bobbing (`test_mp_layer`); on the picture at f2100 of `after/burn`, and in fix round 1 from f2094 of `fix1/burn` on `753dc103`, at (140, 585) px with the dragon and its fire gone (`fix1/key_f2106.png`; its sparkles differ from the first round's, on the effects' stream) |
+| 1-01 f420 on the new binary | `e2da5131` | `e2da5131` (`7e43f9b3`) | **passes**: `e2da5131` on `a70bb8c5`, and on fix round 1's `753dc103` (`fix1/one01`) |
+| (widened) the 128-level f420 sweep | against `12.2/verify1/sweep`, every change explained | 128 PNGs | **passes: 128 of 128 byte-identical** (`12.1/compare_sweep.sh`), as predicted - nothing of the dragon exists until a torch is shot, the runtime's new emissive field is the `.ent`'s for every other effect, and the key loop draws the ghost's key as before. All 128 runs rc 0, validation active and silent in 128 logs; the baseline's 128 PNGs checked against its `capture.txt` first, and this sweep's against its own (128 of 128). **Fix round 1** (`fix1/sweep`, on `753dc103`): again 128 of 128 byte-identical to `12.2/verify1/sweep` and to `12.1/after/sweep`; 128 runs rc 0, validation active and silent in 128 logs, its PNGs against its own `capture.txt` 128 of 128 and all 128 decoded (`fix1/compare_sweep.txt`). **Sweep baseline**: `12.1/fix1/sweep` |
+
+**THE SUITES**, run directly, once each, on the binaries in `build/`: **`test_mp_darkdragon` 209** (99), **`test_mp_layer`
+2,041** (2,011; `TheDarkDragonIsDrawnAsItsCallbackLeavesIt`), **`test_mp_start` 753** (753; every level reads the new
+`darkdragon.json`), 0 failures each. `test_mp_layer`'s first binary (`71d5d86a`) read 2,038 checks with 10 failures: the
+DEV burn was set before `BeforeStep`, which the layer's `AfterStep` reads a tick later (moved before `AfterStep`), and
+the case counted the summon's own frame as "before" and held its pivot to 1e-6 where the runtime turns it in single
+precision; its second (`98cb457a`) read 2,041 with 2, the red flash read one update early (a test fix); the third
+(`23919714`) 2,041 and 0. Not run: the other 42 suites - no other suite reads the dark dragon's behaviour
+(`test_mp_dragon`, `test_mp_bounce` and `test_mp_torch` only name level31c among levels without their boss or with its
+torch), and `test_mp_effects` tests `sim/Effects`, which is untouched. The full `ctest` was not run. That still holds
+after fix round 1's reorder of the FIGHTING arm: it changes what happens only on a tick where `burned` is set, or once
+`completed` is set with a burn pending, and no suite but `test_mp_darkdragon` and `test_mp_layer` burns the dragon
+(`test_mp_torch` and `test_mp_bounce` never portal a barrel into its fireball). **Fix round 1**, on its rebuild, once each (`fix1/logs/`): **`test_mp_darkdragon` 216** (`c40825bc`; `TheWoundIsReadAfterItsShot` adds 7,
+and every other line of its output is the first round's), **`test_mp_layer` 2,042** (`eb58fcb3`; the restart check
+split in two: 98 restart frames with none of the fire drawn - nothing released, no quad shown - and 2 first free frames,
+the end of leg 3 and the update after the first shot, releasing at the turned mouth), **`test_mp_start` 753**
+(`1764b9a0`; every level reads the edited `darkdragon.json`), 0 failures each.
+
+**SMART APP CONTROL. 2 refusals in 141 launches**: `test_mp_start` `fbf64242` (relinked once, `36087e47` ran) and
+`MagicPortals.exe` `19010860` (relinked once, `a70bb8c5` ran 1-01, the two routes and the sweep). Accepted: the committed
+`7e43f9b3` four times (1-01, two walk calibrations, the before route), `test_mp_darkdragon` `07ee2617`, `test_mp_layer`
+three binaries. **Fix round 1: 0 refusals in 134 launches** - the three suites, and `753dc103` for 1-01, the route, the
+burn run and the 128-level sweep.
+
+**RECORDED DEVIATIONS.**
+1. **Its depth is 0, where the plan's K13 row said `slotAfter(8)`**: the listing (above) has the hover's SetPosition write
+   `originalPos`'s z 0 from the second update. The summon's frame and its first update stand the original at the spawn's
+   z 8, at the spawn point off the view's left edge; the port draws those two frames at 0 too. At 0 it ties with its own
+   z-0 fireballs and small explosions, in the engine's gather order (INFERRED against Ethanon's insertion order).
+2. **The summon's frame draws the `.ent` before its first update**: startFrame 2, angle 0, its system playing, at the
+   spawn (INFERRED from the engine's add-then-draw, as step 98's deviation 3 for the ghost). Pinned in both suites.
+3. **Two clocks, as step 77's**: the Follower on the script's whole 16 ms, the path, the fire clock, the neck and the
+   hover on the tick's 16.667; the original's `FrameTimer::set` adds `GetLastFrameElapsedTime` (ins 6-11), the same
+   truncated clock (the PORT-WIDE clock row). The fly-in is 444 updates after the init here, about 463 on a 16 ms clock.
+4. **Closed in fix round 1: the wound is read after the shot**, as ins 1067 orders it (gameplay item 7). The first round
+   read it first, which on the DEV burns of 1345 and 1551 (17 ms into the fight, below half the interval) skipped the
+   Kill and kept the mouth's fire burning through the second wound and the death: min RGB > 200 px left of x 560, median
+   1,382 on f1350-f1548 and 1,112 on f1560-f2094 then, **243 and 243 now**, the torch's own at x 537-553
+   (`fix1/burn_fire.log`).
+5. **Not built**: every sound; the earthquakes (the jaw's waypoint past bias 0.2 at 10, and 15 per shot - Q.1's); the
+   small explosions of DAMAGE and DYING (`darkDragonOvertimeSmallExplosionAdder`, ins 1558-1563, 1813-1818) and the
+   death's `explode`; `ghost_utility_spawn.ent`; the barrel restock after each shot (ins 997-1064), without which 4-32
+   cannot be won in the port (LEFT FOR THE OWNER).
+6. **The flash and the death were captured with a DEV input** (`--burn-dragon`): the only burn is a barrel's blast
+   within 190 u of the dragon, which needs the level's one barrel portalled into its own fireball's first 80 u - F16
+   section 6 found no way to set that up in the original, and a scripted tap route in the port is the same problem. The
+   flag sets the flag the blast test sets; what follows is the sim's own.
+7. **The aim reads the player's body centre** (`PxOf`), where the original's `GetPositionXY` is the entity point - R25's
+   player half, left to its owner in the backlog.
+8. **The pause guards** (`!isPaused` on the path's update and the Follower's) are met by the port not ticking a paused
+   level at all, as step 77's.
+9. **The mouth's restart is taken on the frame** while the tick's flag stands, as 2-32's dragon's (step 77's row): under
+   `--fixed-step` once a tick, but a display drawing faster than it ticks remakes the pool on each of that tick's frames.
+   Every one of them draws none of the fire, as the original's update does (fix round 1), but each moves the effects'
+   stream. Picture only.
+10. **It is drawn at its tick point**, with no interpolation between ticks (the ghost's quad has one): on a display faster
+    than 60 Hz it steps at the tick. Picture only.
+
+**LEFT FOR THE OWNER.**
+- **The summon's clock** (F16 section 3): the original counts `arm_ms` from the level's start, gated on the light, so a
+  torch lit after 3 s summons 4 s after it; the port counts from the light (7 s). Gameplay, filed; not this step's.
+- F16 section 6's clip of a real wound (the barrel's interception) would confirm the flash against the original.
+- **The wound's shot at the torch** (fix round 1; GAMEPLAY, not built in this run): in the original it fires only when
+  `light_off.ent` exists - a torch its fire signal put out - and relights it, so a wound HELPS a player whose light went
+  out; it never fires at a lit torch. The port fires at the torch whenever level31c has one (`Game.cpp` `hasTorch`), and
+  against a lit torch Torch's toggle puts it out and brings the light wall back (the DEV burn run: dark after the first
+  wound's shot on tick 1344, the wall back on 1389) - the reverse. Building it needs the sim to tell an unlit torch from
+  a lit one at that moment; it predates this step, and no batch owns it.
+- **4-32 cannot be won in the port**: level31c places one `barrel_bomb` (`test_mp_darkdragon`: "1 bomb(s)"), the dragon
+  takes three burns, and the barrel's restock after each shot (`addEntityIfItCantBeFound`, ins 997-1064) is not built.
+  Gameplay, filed (deviation 5).
+- **F16's jaw against its burst frame** (confirmation only, not blocking): counted from #152 the port's jaw is about 0.2 s
+  late (cell 1 / 3 at 3.77 / 3.95 s after the summon against 3.57 / 3.78 s), while F16's own shout and FIGHTING agree
+  with 2500 / 7400 ms and its leg 3 begins about 0.15-0.19 s early against them. Not explained. A candidate, from the
+  independent check and not measured: F16 has a 228 ms recording gap at #150 -> #151 just before #152 (F16.md, frame
+  timing), its FIGHTING anchor is an upper bound ("by #316"), and measured from the port's own fire-on the later
+  intervals agree (fire out 3.13 against 3.09 s, the shot 4.20 against 4.20 s). A uniform offset of every later event
+  from #152 fits #152's timestamp standing off the true summon, not a timing difference in the dragon; against it,
+  #151, 36 ms before #152, still shows the wall intact.
+
+**LEFT FOR LATER.**
+- `Ghost::Appear` and `DarkDragon::Path` are the same WaypointManager twice (the ghost's with two filters and a scale,
+  this one with four and an angle). Next: one `sim` WaypointManager both use, in a step that touches the ghost anyway.
+- The cells are read against the drawn state, not the original: a capture of the original's 4-32 fly-in at 60 fps
+  would let them be read against F16's successor rather than by eye.
+- **2-32's mouth, for step 77's owner** (fix round 1): `updateEmitters` remakes 2-32's dragon's pool before its step, as
+  this step's first round did, so it draws particle 0 at the mouth on every update its callback calls
+  `PlayParticleSystem(0)`, where the engine's order (above) draws none. INFERRED from the same order; no footage of
+  2-32's mouth was checked. Filed in the backlog, not changed here.
+
+**MERGE NOTES (`visuals-d`).**
+- Q.1's earthquake: the dark dragon asks for `startEarthquake(10)` on every update of the jaw's waypoint past bias 0.2
+  (ins 573-578) and `startEarthquake(15)` per shot at the player (ins 980-982); `DarkDragon::Look` and `Turn` carry
+  neither yet - add them where Q.1 reads its other callers.
+- `EffectOwner::Kind::DarkDragon` and the effect's own `emissive` are new in the runtime; `tint` now reads the effect's
+  emissive (the `.ent`'s unless a script writes one), so a track-B effect is unchanged unless it writes it.
+- `main.cpp` `--burn-dragon` and `MagicPortalsLayer::ScheduleDevBurn` / `LayerTicks` are new DEV entries.
+- The dark dragon's mouth lands its Kill / Play in `updateEffects` AFTER the effect's emitter loop (fix round 1), and
+  `DarkDragon::Tick`'s FIGHTING arm reads the wound after its mouth and shot.

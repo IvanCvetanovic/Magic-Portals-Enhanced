@@ -672,7 +672,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         const bool hasTorch = !level.torch.lights.empty();
         const glm::dvec2 torchPx = hasTorch ? level.torch.lights.front().atPx : glm::dvec2(0.0);
         const DarkDragon::State::Turn turn = level.darkDragon.Tick(
-            registry, level.player, level.torch.lit > 0, torchPx, hasTorch, level.goals.completed, dt);
+            registry, level.player, level.torch.lit > 0, torchPx, hasTorch, level.goals.completed, data.motion, dt);
 
         // breakDarkDragonWall. The wall carries metadata/breakable, so it is
         // already a Demolish::Breakable with a body - the removal goes through
@@ -720,7 +720,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         // darkdragon.json because the key is made at run time and has no node.
         if (turn.droppedKey) {
             Keys::Key dropped;
-            dropped.name = level.darkDragon.name + "#key";
+            dropped.name = level.darkDragon.keyName;
             dropped.colour = level.darkDragon.rules.keyColour;
             dropped.atPx = turn.keyPx;
             dropped.fromPx = turn.keyPx;

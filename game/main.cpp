@@ -88,6 +88,10 @@ int main(int argc, char** argv) {
         glm::dvec2 to{0.0};
     };
     std::vector<Drag> drags;
+    // DEV ONLY: 4-32's dark dragon burned on a stated tick, as a barrel's blast in
+    // its reach burns it: its wound's flash and its white death are captures no
+    // scripted input reaches (MagicPortalsLayer::ScheduleDevBurn).
+    std::vector<int> burns;
     // DEV ONLY: no 2D light reaches any sprite (MagicPortalsLayer::ForceLightMasksOff),
     // for a capture to be compared with the same capture lit.
     bool lightMasksOff = false;
@@ -184,6 +188,23 @@ int main(int argc, char** argv) {
                 return EXIT_FAILURE;
             }
             holds.push_back(hold);
+            continue;
+        }
+        if (arg == "--burn-dragon") {
+            const std::string value = i + 1 < argc ? argv[++i] : "";
+            int tick = 0;
+            try {
+                std::size_t used = 0;
+                tick = std::stoi(value, &used);
+                if (used != value.size()) tick = 0;
+            } catch (const std::exception&) {
+                tick = 0;
+            }
+            if (tick < 1) {
+                std::cerr << "--burn-dragon wants the game's tick to burn it on, at least 1, got '" << value << "'\n";
+                return EXIT_FAILURE;
+            }
+            burns.push_back(tick);
             continue;
         }
         if (arg == "--press") {
@@ -302,6 +323,9 @@ int main(int argc, char** argv) {
                   << "  --hold <left|right>@<from>-<to>\n"
                   << "                    DEV: hold a walk from the game's tick <from> to <to>, for a\n"
                   << "                    capture that walks into a door or a hazard; repeatable\n"
+                  << "  --burn-dragon <tick>\n"
+                  << "                    DEV: burn 4-32's dark dragon on the game's tick <tick>, as a\n"
+                  << "                    barrel's blast in its reach does; repeatable\n"
                   << "  --visit-levels <lightmapped|all|name,...>\n"
                   << "                    DEV: visit these levels in one process, taking the material set\n"
                   << "                    of every lightmapped sprite, which the level drops on leaving; the\n"
@@ -379,6 +403,7 @@ int main(int argc, char** argv) {
         auto game = std::make_unique<MagicPortals::MagicPortalsLayer>(paths, start);
         for (const auto& [tick, press] : presses) game->ScheduleDevPress(tick, press);
         for (const Hold& hold : holds) game->ScheduleDevHold(hold.from, hold.to, hold.direction);
+        for (const int burn : burns) game->ScheduleDevBurn(burn);
         for (const Tap& tap : taps) game->ScheduleDevTap(tap.tick, tap.fraction, tap.releaseTick);
         for (const Drag& drag : drags) game->ScheduleDevDrag(drag.tick, drag.from, drag.to, drag.releaseTick);
         MagicPortals::MagicPortalsLayer& gameLayer = *game;

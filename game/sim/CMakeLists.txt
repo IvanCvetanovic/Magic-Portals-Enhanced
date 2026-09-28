@@ -17,6 +17,7 @@ add_library(MagicPortalsSim STATIC
     Dashboard.cpp
     Demolish.cpp
     Diamonds.cpp
+    Ease.cpp
     Effects.cpp
     Fields.cpp
     Fire.cpp
