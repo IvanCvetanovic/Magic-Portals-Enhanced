@@ -15,7 +15,9 @@
     "insertPortal adds for every portal a shot opens, the burst ETHCallback_portal leaves where",
     "one dies, and that callback's own colours and clocks in placed_portal (7.4). And red_eyes,",
     "MainCharacter's own, drawn by step 7.1 - added once at a level's",
-    "start rather than at a call site, so it has a shape and a reader of its own. Every other",
+    "start rather than at a call site, so it has a shape and a reader of its own. The shot's",
+    "marks and ends (10.1, _shot_side below) and what a crystal leaves where it was (10.2,",
+    "_crystals below). Every other",
     "effect the script adds gets its row with the step that draws it, so a",
     "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
     "sim/Effects, strictly: every field below is required.",
@@ -461,6 +463,58 @@
       "once, a1, rep1, life 350 +- 805, size 32, growth 4.4, maxSize 69, StartPoint z 20, (1, 0.4, 0.4) to",
       "black; a <Light> range 66, (1.6, 0, 0), z 6, no halo. Temporary. Footage F3 #102 (the blocker) and",
       "#162-168 (an arrival in the field): a red burst, and a vertical shake of at least 5 px."
+    ]
+  },
+
+  "_crystals": [
+    "WHAT A CRYSTAL LEAVES WHERE IT WAS - the visuals plan's 10.2 (00_order section 7; system_7 7f-1), drawn from",
+    "planning step 126. Two call sites in ETHCallback_crystal.angelscript, each an AddScaledEntity at the",
+    "CRYSTAL's own GetPosition() plus vector3(0, 0, g_scale.scale(20)): the vector3 is ADDED to the crystal's",
+    "position, its z included (vector3::opAdd), so `z` here is on top of the crystal's own depth - the node's",
+    "eth_z, -20 to 8 over the 470 crystals the levels place - and not a depth of the level's own. The one rule",
+    "that reads them is Effects::OnEntity. AddScaledEntity is AddEntity(file, pos, 0f, 0, '', scale)",
+    "(ETHScriptWrapper.Scene.cpp:176-178), so the angle is 0; the vector3 constructor's arguments are pushed",
+    "last-first (00_order 8.0 rule 3), so the scale(20) pushed first is its z. Neither entity is given an owner:",
+    "the crystal is deleted in the same call, so each stays where it was added and the engine frees it once its",
+    "particles are over (no <Sprite>, every system repeat 1: temporary)."
+  ],
+
+  "crystal_pick": {
+    "entity": "crystal_pick.ent",
+    "offset_units": 0,
+    "z": {"value": 20, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "pickCrystalEffect (ETHCallback_crystal.angelscript, bytes 426274..426511), called with the crystal by",
+      "MainCharacter::crystalPicker (bytes 133241..134236) #179-184 once the character is within the crystal's",
+      "squaredRange: #1-4 g_scale.getScale(), the scale; #6-15 vector3(0, 0, g_scale.scale(20)); #16-23",
+      "thisEntity.GetPosition() + that; #27-32 AddScaledEntity('crystal_pick.ent', that, the scale). Then #36-38",
+      "playCrystalPickSound and #40-45 DeleteEntity(the crystal). ITS .ent: no sprite; sys0 5 sparkles.bmp",
+      "released over a lifetime (allAtOnce 0), a1, rep1, life 350 +- 150, size 20 +- 16, growth -0.4,",
+      "StartPoint (0, -2), RandStartPoint (10, 18), (0.8, 0.8, 1) to black; sys1 2 crystal_particle.png ALL AT",
+      "ONCE, a1, rep1, life 400, size 28, growth 0.5, white to black. Temporary. Footage F14 r1 #53-#59 (3-16,",
+      "the timed crystal taken on landing): a crystal drawn over the player, growing and fading, gone by #60."
+    ]
+  },
+
+  "crystal_vanish": {
+    "entity": "crystal_vanish.ent",
+    "offset_units": 0,
+    "z": {"value": 20, "scaled": true},
+    "angle": 0,
+    "scale": 1.3,
+    "_source": [
+      "ETHCallback_timer (ETHCallback_crystal.angelscript, bytes 425217..426274), the timed crystal's dial, on",
+      "every frame once its elapsedTime passes its time (#102-103, strict) and while the crystal it counts down",
+      "still exists (#127-133): #135-140 g_scale.scale(1.3f), the scale - 1.3 of the port's units, since",
+      "g_scale.scale(n) is n x getScale() (00_order 8.12a); #141-150 vector3(0, 0, g_scale.scale(20)); #151-160",
+      "crystal.GetPosition() + that; #162-167 AddScaledEntity('crystal_vanish.ent', that, the scale); #171-173",
+      "playCrystalVanishSound; #175-180 DeleteEntity(the crystal). A crystal TAKEN before its time is null there",
+      "(#53-79 find it by id), so it gets no burst: its dial only shrinks away (art.json timer). ITS .ent: no",
+      "sprite; sys0 1 explosion.png cut 4 x 3, all at once, a1, rep1, life 350, size 22, growth 0.9, maxSize 92,",
+      "randAngle 1.3, (0.7, 0.7, 1) throughout; sys1 2 crystal_particle.png all at once, as crystal_pick's sys1.",
+      "Temporary. The library still original/levels/2-04_h2.8.png (level3a's 4 s crystal) holds the original's."
     ]
   }
 }

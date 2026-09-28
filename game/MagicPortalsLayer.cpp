@@ -1313,6 +1313,7 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_eyes = -1;
     m_fireballEffects.clear();
     m_ghostShotsMarked = -1;
+    m_crystalEffects.clear();
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -4093,7 +4094,8 @@ std::vector<MagicPortalsLayer::MotionReport> MagicPortalsLayer::MotionReports() 
 // tick, and goes once its scale as the original stores it, x m_scaleFactor, is
 // below goneBelowScale (Art::Timer::Gone). A crystal taken early gives the dial one
 // more live tick first (below), and shrinks it from the next. The crystal_vanish
-// burst at the time is not drawn (the visuals plan's 10.2).
+// burst at the time is latchSimEffects' (the visuals plan's 10.2), and a crystal
+// taken early gets crystal_pick there and no burst.
 void MagicPortalsLayer::syncTimers(entt::registry& registry) {
     using namespace Supersonic;
     const Art::Timer& timer = m_artRules.timer;
@@ -6231,6 +6233,50 @@ void MagicPortalsLayer::latchSimEffects() {
         m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.portalMark, aimPx)));
     }
     m_ghostShotsMarked = ghostFired;
+
+    // WHAT A CRYSTAL LEAVES WHERE IT WAS (the visuals plan's 10.2; effects.json
+    // _crystals): pickCrystalEffect's crystal_pick where the character takes one,
+    // and ETHCallback_timer's crystal_vanish, at 1.3, where a timed one's time runs
+    // out while it is still there. Each is added at the crystal's GetPosition() and
+    // 20 in front of the crystal's own depth, with no owner - the crystal is
+    // deleted in the same call - so it stays where it was added and is freed when
+    // its particles are over.
+    //
+    // THE POINT is the crystal's entity where its picture was last drawn: the tick
+    // before this one placed it, bob and all (syncSprites, which runs after this),
+    // and linearMotion's SetPosition is what GetPosition returns - 00_order K2's
+    // and K11's final-centre read. Its depth is the node's eth_z (lookZ), which
+    // linearMotion keeps. The original's crystal and character callbacks run in an
+    // order the scene walk gives, so its point may be this frame's bob rather than
+    // the last one's: at 2 rad/s and 1.5 units, at most 0.05 of a unit apart.
+    //
+    // Goals makes the two exclusive - a crystal taken on the tick its time runs out
+    // is taken - and so does the original: the timer finds the crystal deleted by
+    // the pick (#53-79) and adds nothing (#127-133), so a crystal taken early has
+    // its dial shrink away with no burst. Queued after every other rule above: the
+    // order two callbacks add their entities in is the scene walk's, undecoded, and
+    // it shows only in the effects' stream (00_order K8), never in a placement.
+    const std::vector<Goals::Crystal>& crystals = m_level.goals.crystals;
+    if (m_crystalEffects.size() != crystals.size()) m_crystalEffects.assign(crystals.size(), 0);
+    for (std::size_t i = 0; i < crystals.size(); ++i) {
+        const Goals::Crystal& crystal = crystals[i];
+        if (m_crystalEffects[i] != 0 || !(crystal.collected || crystal.expired)) continue;
+        m_crystalEffects[i] = 1;
+        const auto drawn = std::find_if(m_sprites.begin(), m_sprites.end(), [i](const DrawnSprite& sprite) {
+            return sprite.crystal == static_cast<int>(i);
+        });
+        // No picture of it, so no entity point of it: a level drawn as boxes, which
+        // draws no effect at all.
+        if (drawn == m_sprites.end()) continue;
+        const Effects::Rule& rule = crystal.collected ? m_effectRules.crystalPick : m_effectRules.crystalVanish;
+        const Effects::Spawn spawn = Effects::OnEntity(rule, drawn->ownerPx, drawn->lookZ);
+        m_effectQueue.push_back(effectAdd(spawn));
+        // Said with the tick, so a capture can find what it measures.
+        SUPERSONIC_LOG_INFO("Magic Portals") << "crystal " << crystal.name
+                                             << (crystal.collected ? " taken" : " gone at its time") << " on tick "
+                                             << m_ticks << " at (" << spawn.atPx.x << ", " << spawn.atPx.y << ") z "
+                                             << spawn.z << ": " << rule.entity << " x " << rule.scale << std::endl;
+    }
 }
 
 void MagicPortalsLayer::queueTapEffects(entt::registry& registry) {

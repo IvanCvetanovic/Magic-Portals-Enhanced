@@ -10963,6 +10963,240 @@ void AFireDiamondTapsMarkIsTheLeftoverByte() {
     layer.OnDetach(registry);
 }
 
+// ---- What a crystal leaves where it was (the visuals plan's 10.2, step 126) ----------
+//
+// pickCrystalEffect adds crystal_pick.ent where the character takes a crystal, and
+// ETHCallback_timer adds crystal_vanish.ent, at 1.3, where a timed crystal's time
+// runs out while it is still there: each at the crystal's GetPosition() plus
+// vector3(0, 0, scale(20)), so on top of the crystal's own depth, and with no
+// owner. 00_order 10.2's gate: "a taken crystal spawns exactly 5 + 2 particles at
+// z + 20, freed at Finished". 1-27 (level26) carries both kinds: crystal_ent_1269
+// at (80, 140), eth_z -4, in open air, and the timed crystal_1264 at (400, 208),
+// eth_z 0, 10 s.
+
+// The first live effect of that .ent, or an empty report; `count` says how many.
+MagicPortalsLayer::EffectReport FirstEffect(const MagicPortalsLayer& layer, const std::string& entity, int& count) {
+    MagicPortalsLayer::EffectReport found;
+    count = 0;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity != entity) continue;
+        if (count++ == 0) found = report;
+    }
+    return found;
+}
+
+// Frames (no ticks) until the effect `id` is freed: on which frame it went, the
+// most of its particles ever released, and how many effects went on the way.
+struct Burnt {
+    int freedOn = -1;
+    int mostReleased = 0;
+    int freed = 0;
+};
+
+Burnt BurnDown(MagicPortalsLayer& layer, entt::registry& registry, int id, int frames) {
+    Burnt burnt;
+    const int freedBefore = layer.EffectsFreed();
+    for (int frame = 1; frame <= frames; ++frame) {
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::EffectReport mine = ByIdIn(layer.EffectReports(), id);
+        if (mine.id == 0) {
+            burnt.freedOn = frame;
+            break;
+        }
+        burnt.mostReleased = std::max(burnt.mostReleased, mine.released);
+    }
+    burnt.freed = layer.EffectsFreed() - freedBefore;
+    return burnt;
+}
+
+void ATakenCrystalLeavesItsPickWhereItStood() {
+    if (!OriginalArtIsThere("ATakenCrystalLeavesItsPickWhereItStood")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level26");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    // Long enough for the bob to have moved it off its node.
+    for (int tick = 0; tick < 40; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::string name = "crystal_ent_1269";
+    const glm::dvec2 node(80.0, 140.0);
+    const std::optional<MagicPortalsLayer::MotionReport> before = MotionOf(layer, name);
+    CHECK(before.has_value() && before->crystal && before->moving);
+    if (!before) return;
+    CHECK_MSG(glm::distance(before->ownerPx, node) > 0.01,
+              "the bob has moved it off its node: " + Point(before->ownerPx));
+    const int spawnedBefore = layer.EffectsSpawned();
+
+    PutPlayerAt(registry, layer, before->ownerPx);
+    const MagicPortals::Goals::Crystal* crystal = nullptr;
+    glm::dvec2 lastDrawn = before->ownerPx;
+    for (int ticks = 0; ticks < 5; ++ticks) {
+        const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, name);
+        if (now) lastDrawn = now->ownerPx;
+        tickWith(layer, registry, kRest, {}, {});
+        crystal = layer.SimLevel()->goals.FindCrystal(name);
+        if (crystal != nullptr && crystal->collected) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(crystal != nullptr && crystal->collected, "the player takes " + name);
+    if (crystal == nullptr || !crystal->collected) return;
+    // THE TICK ONLY QUEUES IT: the frame adds it.
+    int picks = 0;
+    FirstEffect(layer, "crystal_pick.ent", picks);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && picks == 0, "nothing is added on the tick");
+    const std::optional<MagicPortalsLayer::MotionReport> after = MotionOf(layer, name);
+    CHECK_MSG(after && after->ownerPx == lastDrawn,
+              "the crystal's entity point is where the last tick drew it: " + Point(lastDrawn));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore + 1,
+              "one added on the frame: " + std::to_string(layer.EffectsSpawned() - spawnedBefore));
+    const MagicPortalsLayer::EffectReport pick = FirstEffect(layer, "crystal_pick.ent", picks);
+    int vanishes = 0;
+    FirstEffect(layer, "crystal_vanish.ent", vanishes);
+    CHECK_MSG(picks == 1 && vanishes == 0, "one crystal_pick and no crystal_vanish: " + std::to_string(picks) +
+                                               " / " + std::to_string(vanishes));
+    if (pick.id == 0) return;
+
+    // WHERE: the crystal's own point, bob and all - not its node - and 20 in front
+    // of ITS depth: -4 + 20 = 16, where a flat scale(20) would have said 20.
+    CHECK_MSG(pick.atPx == lastDrawn && glm::distance(pick.atPx, node) > 0.01,
+              "at the crystal's drawn entity point " + Point(lastDrawn) + ", not its node: " + Point(pick.atPx));
+    CHECK_MSG(nearlyU(pick.zUnits, 16.0), "z -4 + 20 = 16: " + std::to_string(pick.zUnits));
+    // WHAT: crystal_pick.ent as read - no sprite, no light, temporary; 5 sparkles and 2
+    // crystals, at the script's own size.
+    CHECK_MSG(!pick.drawn && !pick.hasLight && pick.temporary && pick.scriptScale == 1.0,
+              "no picture, no light, temporary, at getScale()");
+    CHECK_MSG(pick.systems == 2 && pick.pool == 5 + 2,
+              "5 + 2 particles in 2 systems: " + std::to_string(pick.systems) + " systems, " +
+                  std::to_string(pick.pool));
+    CHECK_MSG(pick.systemSizePx.size() == 2 && nearlyU(pick.systemSizePx[0], 20.0) &&
+                  nearlyU(pick.systemSizePx[1], 28.0),
+              "sparkles at 20, the crystal at 28");
+    // IN FRONT OF THE PLAYER, as F14 r1 #54-#57 show the original's crystal drawn over
+    // the mage: 16 against the player's 4 / 2.8125.
+    CHECK_MSG(pick.systemZ.size() == 2 && pick.systemZ[0] > layer.PlayerSlotZ() &&
+                  pick.systemZ[1] > layer.PlayerSlotZ(),
+              "both systems in front of the player");
+
+    // FREED AT FINISHED, by its pools and nothing else: the fifth sparkle is released
+    // past 4/5 of 350 + 150 ms (24 frames) and lives 200 to 500 ms (12 to 30 more),
+    // the two crystals 400 ms from the first frame - so the pools are over no sooner
+    // than frame 35 and no later than 54.
+    const Burnt burnt = BurnDown(layer, registry, pick.id, 120);
+    std::printf("  crystal_pick at %s z %.1f: %d of %d particles released, freed on frame %d\n",
+                Point(pick.atPx).c_str(), pick.zUnits, burnt.mostReleased, pick.pool, burnt.freedOn);
+    CHECK_MSG(burnt.mostReleased == 7, "all 7 released before it went: " + std::to_string(burnt.mostReleased));
+    CHECK_MSG(burnt.freedOn >= 35 && burnt.freedOn <= 54,
+              "freed when its pools are over, frame " + std::to_string(burnt.freedOn) + " (35..54)");
+    CHECK_MSG(burnt.freed == 1, "exactly it freed: " + std::to_string(burnt.freed));
+
+    // A TIMED CRYSTAL TAKEN BEFORE ITS TIME: crystal_pick, its dial shrinking away,
+    // and no crystal_vanish - ETHCallback_timer finds it deleted and adds nothing -
+    // even once its 10 s are long past.
+    const std::string timed = "crystal_1264";
+    const std::optional<MagicPortalsLayer::MotionReport> timedAt = MotionOf(layer, timed);
+    CHECK(timedAt.has_value());
+    if (!timedAt) return;
+    PutPlayerAt(registry, layer, timedAt->ownerPx);
+    int ticks = 0;
+    int pickedTimed = 0;
+    int vanished = 0;
+    while (ticks < 660) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        ++ticks;
+        int count = 0;
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity == "crystal_pick.ent" && glm::distance(report.atPx, timedAt->ownerPx) < 1.0) ++count;
+        }
+        pickedTimed = std::max(pickedTimed, count);
+        FirstEffect(layer, "crystal_vanish.ent", count);
+        vanished += count;
+    }
+    const MagicPortals::Goals::Crystal* taken = layer.SimLevel()->goals.FindCrystal(timed);
+    const std::optional<MagicPortalsLayer::TimerReport> dial = DialOf(layer, timed);
+    std::printf("  %s taken early: %d crystal_pick at it, %d crystal_vanish in %d ticks\n", timed.c_str(),
+                pickedTimed, vanished, ticks);
+    CHECK_MSG(taken != nullptr && taken->collected && !taken->expired, timed + " taken early");
+    CHECK_MSG(pickedTimed == 1 && vanished == 0,
+              "one crystal_pick at it, and no crystal_vanish over " + std::to_string(ticks) + " ticks: " +
+                  std::to_string(pickedTimed) + " / " + std::to_string(vanished));
+    CHECK_MSG(dial && !dial->drawn, "its dial shrank away");
+    layer.OnDetach(registry);
+}
+
+void ATimedCrystalGoesWithItsVanishAtItsTime() {
+    if (!OriginalArtIsThere("ATimedCrystalGoesWithItsVanishAtItsTime")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level26");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    const std::string name = "crystal_1264";
+    glm::dvec2 lastDrawn(0.0);
+    int tick = 0;
+    int early = 0;
+    const MagicPortals::Goals::Crystal* crystal = nullptr;
+    int spawnedBefore = 0;
+    while (tick < 700) {
+        const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, name);
+        if (now) lastDrawn = now->ownerPx;
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        crystal = layer.SimLevel()->goals.FindCrystal(name);
+        if (crystal == nullptr || crystal->expired || crystal->collected) break;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        int count = 0;
+        FirstEffect(layer, "crystal_vanish.ent", count);
+        early += count;
+    }
+    CHECK_MSG(crystal != nullptr && crystal->expired && tick == 600,
+              name + " goes at its time on tick " + std::to_string(tick) + ", the 600th");
+    CHECK_MSG(early == 0, "no burst before its time: " + std::to_string(early));
+    if (crystal == nullptr || !crystal->expired) return;
+    int vanishes = 0;
+    FirstEffect(layer, "crystal_vanish.ent", vanishes);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && vanishes == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport gone = FirstEffect(layer, "crystal_vanish.ent", vanishes);
+    int picks = 0;
+    FirstEffect(layer, "crystal_pick.ent", picks);
+    CHECK_MSG(vanishes == 1 && picks == 0 && layer.EffectsSpawned() == spawnedBefore + 1,
+              "one crystal_vanish and no crystal_pick on the frame: " + std::to_string(vanishes) + " / " +
+                  std::to_string(picks));
+    if (gone.id == 0) return;
+    CHECK_MSG(gone.atPx == lastDrawn && glm::distance(gone.atPx, glm::dvec2(400.0, 208.0)) > 0.01,
+              "at the crystal's last drawn entity point " + Point(lastDrawn) + ", bob and all: " + Point(gone.atPx));
+    CHECK_MSG(nearlyU(gone.zUnits, 20.0), "its eth_z 0 + 20: " + std::to_string(gone.zUnits));
+    // AT scale(1.3): the script's Scale, which the .ent's <Scale> 1 leaves as it is and
+    // every particle takes - the explosion's 22 and the crystal's 28 drawn at 28.6 and
+    // 36.4. One explosion cell and two crystals, all at once.
+    CHECK_MSG(gone.scriptScale == 1.3 && nearlyU(gone.scale.x, 1.3), "at 1.3: " + std::to_string(gone.scale.x));
+    CHECK_MSG(gone.systems == 2 && gone.pool == 1 + 2, "1 + 2 particles: " + std::to_string(gone.pool));
+    CHECK_MSG(gone.systemSizePx.size() == 2 && nearlyU(gone.systemSizePx[0], 22.0 * 1.3) &&
+                  nearlyU(gone.systemSizePx[1], 28.0 * 1.3),
+              "28.6 and 36.4");
+    CHECK_MSG(!gone.drawn && !gone.hasLight && gone.temporary, "no picture, no light, temporary");
+    CHECK_MSG(gone.systemZ.size() == 2 && gone.systemZ[0] > layer.PlayerSlotZ() &&
+                  gone.systemZ[1] > layer.PlayerSlotZ(),
+              "in front of the player");
+    // Both systems all at once, 350 and 400 ms from the frame it was added: the
+    // crystals' 400 are over on the 25th frame after it, give or take a rounding.
+    const Burnt burnt = BurnDown(layer, registry, gone.id, 120);
+    std::printf("  crystal_vanish at %s z %.1f x %.1f: freed on frame %d\n", Point(gone.atPx).c_str(), gone.zUnits,
+                gone.scriptScale, burnt.freedOn);
+    CHECK_MSG(burnt.mostReleased == 3 && burnt.freedOn >= 24 && burnt.freedOn <= 27 && burnt.freed == 1,
+              "all 3 released, freed on frame " + std::to_string(burnt.freedOn) + " (24..27)");
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
@@ -11103,6 +11337,8 @@ void runTests() {
     TheShotLeavesFromBehindThePlayer();
     AShotTurnedByAReflectorMarksItsNewEnd();
     AFireDiamondTapsMarkIsTheLeftoverByte();
+    ATakenCrystalLeavesItsPickWhereItStood();
+    ATimedCrystalGoesWithItsVanishAtItsTime();
 }
 
 } // namespace

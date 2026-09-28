@@ -546,6 +546,44 @@ void TheShotSideRowsAreTheDecodedCalls() {
                 At(tap).c_str());
 }
 
+// ---- what a crystal leaves where it was (the visuals plan's 10.2) -----------------
+
+void TheCrystalRowsAddToTheCrystalsOwnPoint() {
+    const Effects::Rules rules = TheRules();
+    // pickCrystalEffect #1-32: AddScaledEntity('crystal_pick.ent', crystal.GetPosition() +
+    // vector3(0, 0, scale(20)), getScale()); ETHCallback_timer #135-167: the same point,
+    // AddScaledEntity('crystal_vanish.ent', ..., scale(1.3)).
+    const Effects::Rule& pick = rules.crystalPick;
+    const Effects::Rule& vanish = rules.crystalVanish;
+    CHECK_MSG(pick.entity == "crystal_pick.ent" && pick.offsetUnits == 0.0 && pick.z == 20.0 && pick.zScaled &&
+                  pick.turn == Effects::Turn::Fixed && pick.angleDeg == 0.0 && pick.scale == 1.0,
+              "crystal_pick: z scale(20) on the crystal's own, angle 0, at the script's size: " + pick.entity);
+    CHECK_MSG(vanish.entity == "crystal_vanish.ent" && vanish.offsetUnits == 0.0 && vanish.z == 20.0 &&
+                  vanish.zScaled && vanish.turn == Effects::Turn::Fixed && vanish.angleDeg == 0.0 &&
+                  vanish.scale == 1.3,
+              "crystal_vanish: the same point, at scale(1.3): " + vanish.entity + " x " + Num(vanish.scale));
+
+    // THE Z IS ADDED to the crystal's, not put in place of it: 1-22's crystal_ent_878
+    // stands at (300, 210) with an eth_z of -6, so its burst is at 14; one at 0 at 20;
+    // and one at the deepest a level places (-20) at 0.
+    const glm::dvec2 at(300.0, 210.0);
+    const Effects::Spawn taken = Effects::OnEntity(pick, at, -6.0);
+    CHECK_MSG(taken.entity == "crystal_pick.ent" && taken.atPx == at && taken.z == 14.0 && taken.zScaled &&
+                  taken.angleDeg == 0.0f && taken.scale == 1.0,
+              "crystal_pick at the crystal, z -6 + 20 = 14: " + At(taken.atPx) + " z " + Num(taken.z));
+    CHECK(Effects::OnEntity(pick, at, 0.0).z == 20.0);
+    CHECK(Effects::OnEntity(pick, at, -20.0).z == 0.0);
+    const Effects::Spawn gone = Effects::OnEntity(vanish, glm::dvec2(400.0, 208.0), 0.0);
+    CHECK_MSG(gone.entity == "crystal_vanish.ent" && gone.atPx == glm::dvec2(400.0, 208.0) && gone.z == 20.0 &&
+                  gone.zScaled && gone.angleDeg == 0.0f && gone.scale == 1.3,
+              "crystal_vanish at 1-27's crystal_1264, z 20, x 1.3: " + At(gone.atPx) + " z " + Num(gone.z));
+    // And At, which every other point row uses, would have put it at a flat 20:
+    // the difference is the crystal's own depth.
+    CHECK(Effects::At(pick, at).z == 20.0 && taken.z != Effects::At(pick, at).z);
+    std::printf("  crystal_pick at %s z %s; crystal_vanish x %s\n", At(taken.atPx).c_str(), Num(taken.z).c_str(),
+                Num(gone.scale).c_str());
+}
+
 // ---- what is refused ----------------------------------------------------------
 
 std::string Read(const std::string& path) {
@@ -628,6 +666,17 @@ void ARowMissingAFactIsRefused() {
             "\"toward_traveller_minus_90\",",
             "projectile_shoot");
 
+    // The crystal's two rows (10.2): each required, neither given a direction, and
+    // neither z a bare literal - it is added to the crystal's own depth.
+    refused("no_pick.json", "\"crystal_pick\": {", "\"crystal_pick_gone\": {", "crystal_pick");
+    refused("no_vanish.json", "\"crystal_vanish\": {", "\"crystal_vanish_gone\": {", "crystal_vanish");
+    refused("vanish_offset.json", "\"entity\": \"crystal_vanish.ent\",\n    \"offset_units\": 0,",
+            "\"entity\": \"crystal_vanish.ent\",\n    \"offset_units\": 4,", "crystal_vanish");
+    refused("pick_bare_z.json",
+            "\"entity\": \"crystal_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 20, \"scaled\": true},",
+            "\"entity\": \"crystal_pick.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 20, \"scaled\": false},",
+            "crystal_pick.z");
+
     Effects::Rules rules;
     std::string why;
     CHECK(!Effects::LoadRules((dir / "no-such-file.json").string(), rules, why));
@@ -648,6 +697,7 @@ int main() {
     TheManagerColoursTheFirstTwoAndBlanksALonePortal();
     TheKillFadeIsNineTenthsAFrame();
     TheShotSideRowsAreTheDecodedCalls();
+    TheCrystalRowsAddToTheCrystalsOwnPoint();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

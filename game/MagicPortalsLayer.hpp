@@ -512,8 +512,9 @@ public:
     // (buildEyes, the visuals plan's 7.1), and latchSimEffects - the place the
     // TICK queues from - adds every fireball in flight, a small_explosion where
     // one was destroyed and an explosion_large where a bomb went off (7.2). The
-    // steps that draw the rest wire their own rules there (7.3 teleport, 10.x
-    // pickups). The suites also spawn them by hand, which is how the light cap
+    // steps that draw the rest wire their own rules there (7.3 teleport, 10.1 the
+    // shot's marks, 10.2 a crystal's pick and vanish). The suites also spawn them
+    // by hand, which is how the light cap
     // and the free rules are measured without a level that asks for one.
     struct EffectOwner {
         enum class Kind {
@@ -1684,6 +1685,11 @@ private:
     // How many of the ghost's shots have had their portal_mark (addEnemyShoot),
     // -1 until a level's first latch sets the mark, as the watches do.
     int m_ghostShotsMarked{-1};
+    // Per crystal of Goals', in its order: whether what it leaves where it was -
+    // crystal_pick when taken, crystal_vanish when its time ran out - has been
+    // queued. A state walk rather than a count, so the one queued is the one
+    // that went, at its own point; sized by the first latch of a level.
+    std::vector<char> m_crystalEffects;
     // The cell the player was last drawn on, kept across the door: updateEyes
     // reads GetFrame every frame, and the quad it comes from is destroyed when the
     // character is hidden.

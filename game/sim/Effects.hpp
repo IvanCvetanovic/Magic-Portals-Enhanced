@@ -19,7 +19,10 @@
 // sparkles where it stood, and the exit portal flashes. Their drawing is step
 // 7.3's; each later effect brings its own row with the step that draws it. And
 // red_eyes (MainCharacter), the one effect every level shows: added once at the
-// level's start and moved onto the character's face every frame.
+// level's start and moved onto the character's face every frame. The shot's
+// marks and ends (the visuals plan's 10.1). And what a crystal leaves where it
+// was (10.2): crystal_pick where one is taken, crystal_vanish where a timed one
+// runs out - both added to the CRYSTAL's own point, its depth included.
 
 #include <string>
 
@@ -120,6 +123,13 @@ struct Rules {
     Rule redWaves;
     Rule portalFail;
     Rule portalFailInField;
+    // What a crystal leaves where it was (the visuals plan's 10.2):
+    // pickCrystalEffect's crystal_pick where the character takes one, and
+    // ETHCallback_timer's crystal_vanish, 1.3 times the size, where a timed one's
+    // time runs out while it is still there. Each `z` is added to the crystal's
+    // own (OnEntity).
+    Rule crystalPick;
+    Rule crystalVanish;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -181,6 +191,13 @@ Spawn Death(const Rules& rules, const glm::dvec2& atPx);
 // every shot-side row but projectile_shoot (the loader refuses one that says
 // otherwise).
 Spawn At(const Rule& rule, const glm::dvec2& atPx);
+
+// AddScaledEntity at an ENTITY's own GetPosition() plus vector3(0, 0, z): the
+// row's z added to the entity's own depth rather than standing for one of the
+// level's (vector3::opAdd), and no direction. `entityZ` is that entity's depth on
+// the level's axis (a node's eth_z), so the sum is as scaled as the row's z is:
+// crystal_pick and crystal_vanish, whose scale(20) goes on the crystal's own z.
+Spawn OnEntity(const Rule& rule, const glm::dvec2& entityPx, double entityZ);
 
 // ETHCallback_projectile's first frame: projectile_shoot where the shot has
 // jumped to, `offsetUnits` out from `fromPx` along normalize(towardPx - fromPx),

@@ -211,7 +211,9 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "portal_mark", read.portalMark, why) || !ReadRule(root, "red_cross", read.redCross, why) ||
         !ReadRule(root, "hourglass", read.hourglass, why) || !ReadRule(root, "red_waves", read.redWaves, why) ||
         !ReadRule(root, "portal_fail", read.portalFail, why) ||
-        !ReadRule(root, "portal_fail_in_antiportal", read.portalFailInField, why)) {
+        !ReadRule(root, "portal_fail_in_antiportal", read.portalFailInField, why) ||
+        !ReadRule(root, "crystal_pick", read.crystalPick, why) ||
+        !ReadRule(root, "crystal_vanish", read.crystalVanish, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -235,10 +237,27 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"hourglass", &read.hourglass},
                      {"red_waves", &read.redWaves},
                      {"portal_fail", &read.portalFail},
-                     {"portal_fail_in_antiportal", &read.portalFailInField}};
+                     {"portal_fail_in_antiportal", &read.portalFailInField},
+                     {"crystal_pick", &read.crystalPick},
+                     {"crystal_vanish", &read.crystalVanish}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
+            return false;
+        }
+    }
+    // The crystal's two rows add their z to the crystal's own depth, which is on
+    // the level's axis: a bare literal there would be a sum of two units, and the
+    // decode has g_scale.scale(20) for both, so a row that said otherwise is
+    // refused rather than read half one way.
+    const struct {
+        const char* name;
+        const Rule* rule;
+    } onEntity[] = {{"crystal_pick", &read.crystalPick}, {"crystal_vanish", &read.crystalVanish}};
+    for (const auto& row : onEntity) {
+        if (!row.rule->zScaled) {
+            error = path + ": " + row.name + ".z is added to the crystal's own depth, so it goes through "
+                                              "g_scale.scale: scaled true";
             return false;
         }
     }
@@ -312,6 +331,16 @@ Spawn Portal(const Rules& rules, const glm::dvec2& atPx) { return SpawnOf(rules.
 Spawn Death(const Rules& rules, const glm::dvec2& atPx) { return SpawnOf(rules.death, atPx, glm::dvec2(0.0)); }
 
 Spawn At(const Rule& rule, const glm::dvec2& atPx) { return SpawnOf(rule, atPx, glm::dvec2(0.0)); }
+
+Spawn OnEntity(const Rule& rule, const glm::dvec2& entityPx, double entityZ) {
+    // thisEntity.GetPosition() + vector3(0, 0, z): the xy the entity's own, and
+    // the z the entity's plus the row's (pickCrystalEffect #6-23, ETHCallback_timer
+    // #141-160). The entity's depth is already on the level's axis, and the row's
+    // goes through g_scale.scale, so the sum keeps the row's own reading.
+    Spawn spawn = SpawnOf(rule, entityPx, glm::dvec2(0.0));
+    spawn.z = entityZ + rule.z;
+    return spawn;
+}
 
 Spawn ProjectileShoot(const Rules& rules, const glm::dvec2& fromPx, const glm::dvec2& towardPx) {
     // The `direction` addProjectile stores: normalize(destiny - casterPos), in the

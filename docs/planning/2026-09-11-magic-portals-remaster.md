@@ -17010,3 +17010,156 @@ gate runs and the 128 sweep captures).
   the player's drawn height is evidence on the existing "Step 76 deviation, the player's carrier point" row, not a new
   row; deviation 1's one-tick start is a new row for the effects runtime.
 - For the merge's renumbering: "step 125" is written only in this document.
+
+## Step 126 - what a crystal leaves where it was: the sparkles where one is taken, and the burst where a timed one runs out (built)
+
+**TRACK B: the visuals plan's step 10.2** (the remake's `out/parity/visuals/briefs/00_order.md` section 7; section 8.13
+has no 10.2 row, so section 7 stands; `system_7.md` 7f-1 and G.5; `systems_9_10.md` 10c for the timer; K11 and K2).
+Built in the worktree `Magic-Portals-Remake-vis4` (branch `visuals-d`, from `224196f`, step 125), whose build reads
+the frozen level data in `out/snap_pre8`; numbered in track B's range, and the merge renumbers it. Changed:
+`game/data/effects.json` (two rows), `game/sim/Effects.{hpp,cpp}` (the rows, their reader, `Effects::OnEntity`),
+`game/MagicPortalsLayer.{hpp,cpp}` (the rule in `latchSimEffects`, one member), `game/data/art.json` (a stale "not
+built" note in `timer._source`), `tests/test_mp_effects.cpp` and `tests/test_mp_layer.cpp`. No engine change (the pin
+stays `4bfcf67`), no converter change, no format finding (no `docs/ethanon-formats.md` entry). **GAMEPLAY: NONE.**
+
+**BLOCKERS, checked first.** Section 7's one blocker is 3.1, the timer dial: committed as step 68 (`0be2725`), and its
+shrink at expiry is the tick this burst lands on. The effects runtime is step 83's, the between-slot table step 83's
+with step 88's merge, the crystal bob step 69's (3.2), which K11 and K2 make the point both effects are added at.
+The listing is the md5 the decodes cite (`48fe65ce...`). Nothing unmet.
+
+**WHAT THE ORIGINAL DOES** (the listing, `ETHCallback_crystal.angelscript`; `effects.json` carries each call with its
+instructions).
+- **Taken.** `MainCharacter::crystalPicker` (133241..134236) finds a crystal within its `squaredRange` (#111-177) and
+  calls `pickCrystalEffect` (426274..426511, #179-184), which adds `crystal_pick.ent` by `AddScaledEntity` at
+  `crystal.GetPosition() + vector3(0, 0, g_scale.scale(20))` at `g_scale.getScale()` (#1-32; the constructor's
+  arguments are pushed last-first, 00_order 8.0 rule 3, so the `scale(20)` pushed first is z), plays the pick sound and
+  deletes the crystal (#36-45). The vector3 is ADDED to the crystal's position, its z included: the burst stands 20 in
+  front of the crystal's own depth - the node's `eth_z`, -20 to 8 over the 470 crystals the levels place - not at a
+  depth of the level's own.
+- **Gone at its time.** `ETHCallback_timer` (425217..426274), the dial's callback, once its `elapsedTime` passes its
+  `time` (#102-103, strict) and while the crystal it counts down still exists (#127-133): `AddScaledEntity(
+  'crystal_vanish.ent', crystal.GetPosition() + vector3(0, 0, scale(20)), scale(1.3))` (#135-167), the vanish sound,
+  `DeleteEntity(crystal)` (#171-180). `g_scale.scale(1.3)` is 1.3 of the port's units (00_order 8.12a). A crystal
+  taken first is null there (#53-79 find it by id), so it gets no burst: its dial only shrinks away (step 68).
+- **What they are.** `crystal_pick.ent`: no sprite; sys0 5 `sparkles.bmp` released across a lifetime (allAtOnce 0), a1,
+  rep1, life 350 +- 150 ms, size 20 +- 16, (0.8, 0.8, 1) to black; sys1 2 `crystal_particle.png` all at once, a1, rep1,
+  life 400, size 28, growth 0.5, white to black. `crystal_vanish.ent`: no sprite; sys0 1 `explosion.png` cut 4 x 3 all
+  at once, life 350, size 22, growth 0.9, (0.7, 0.7, 1); sys1 as the pick's. Both temporary (no sprite, every system
+  repeat 1), so the engine frees each once its particles are over; neither is given an owner, since the crystal goes in
+  the same call.
+- **Linear motion keeps the z.** `linearMotion` (327527..328407) stores `originalPos` as the whole vector3 and ends in
+  `SetPosition(originalPos + offset)` (#1-25, #197-208), so the bobbed crystal's `GetPosition()` is its bob and its own
+  depth.
+
+**THE CHANGE.**
+1. **`effects.json`**: `crystal_pick` (offset 0, z `{20, scaled}`, angle 0, scale 1) and `crystal_vanish` (the same,
+   scale 1.3), under a `_crystals` note; `timer._source` in `art.json` no longer says the burst is not built.
+2. **`sim/Effects`**: both rows read strictly and refused a direction (the point-only list), and refused a bare z -
+   their z is added to the crystal's own depth, so it must go through `g_scale.scale`; `Effects::OnEntity(rule, point,
+   entityZ)` is `AddScaledEntity` at an entity's `GetPosition()` plus `vector3(0, 0, z)` (where `Effects::At` puts a
+   row's z in place of any).
+3. **The layer.** `latchSimEffects` walks Goals' crystals against `m_crystalEffects` (one flag per crystal, cleared with
+   the level's effects): a crystal newly `collected` queues `crystal_pick`, one newly `expired` `crystal_vanish`, each
+   at its picture's entity point as the tick before drew it - bob and all (K2's and K11's final-centre read) - and its
+   node's `eth_z` plus 20, with no owner; one log line each, with the tick. Goals makes the two exclusive (a crystal
+   taken on the tick its time runs out is taken), as the original's timer does. Queued after every other rule of the
+   tick: the order two callbacks add their entities in is the scene walk's, undecoded, and shows only in the effects'
+   stream. A crystal with no picture (a level drawn as boxes) queues nothing, as no effect is drawn there. The depth
+   is the picture's `lookZ`, which `buildSprites` sets from the lighting look only when the level's lighting read
+   (`m_lit`, `MagicPortalsLayer.cpp` ~3280-3293); a level whose lighting failed would put the burst at a flat 20. All
+   128 read today, and the timer dial reads the same field.
+
+**THE GATES.** Before = the committed build `b1f43812` (step 124's binary, which step 125 left as it was): its gate runs
+taken before any edit (`10.2/before/gates`; its 1-01 f420 probe reproduces `e2da5131`) and the 128-level sweep
+`Q.2/after/sweep` (which step 125's `10.1b/after/sweep` reproduces 128 of 128). After = this step's build `0ec11c49`.
+Captures, scripts and measurements: `out/parity/visuals/10.2/` (`capture_gates.sh`, `measure_gates.py` ->
+`after/measure_gates.{json,txt}`, `after/f14/` (`measure_f14.py`, `f14_vs_port_3-16.png`), `after/lib204/`
+(`measure_lib204.py`, `lib_vs_port_2-04.png`), `capture_sweep.sh`, `compare_sweep.sh`, `explain_sweep.py`). All
+`--window 1280x720 --fixed-step`, every frame; each gate run is the same deterministic run before and after, so what
+differs is this step's.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| (0) Baseline | the committed build reproduces the last after | - | the committed `b1f43812` reproduces 1-01 f420 `e2da5131` (`before/gates/probe`), and so does this step's `0ec11c49` (1-01 has no crystal event) |
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**, one build (`build1_all.log`, 56 steps: the sim library, the layer, both touched suites, and a relink of every other suite and exe) |
+| (1) `test_mp_layer`: a taken crystal spawns exactly 5 + 2 particles at z + 20, freed at `Finished` | 7 particles in 2 systems, at the crystal's z + 20, freed when its pools are over | no effect | **passes** (`ATakenCrystalLeavesItsPickWhereItStood`, 1-27 `level26`): `crystal_ent_1269` - node (80, 140), `eth_z` -4, chosen so that "z + 20" cannot pass as a flat 20 - bobbed to (80, 138.598) and taken on tick 41; nothing added on the tick; on the frame exactly one `crystal_pick.ent` and no `crystal_vanish.ent`, at the crystal's entity point exactly as the last tick drew it (not its node), **z 16 = -4 + 20**, **7 particles in 2 systems** (the `.ent`'s 5 + 2, told apart by their sizes 20 and 28; the suite pins the sum and the sizes, not the split, which holds by construction: `spawnEffect` sizes each system's pool `min(count, 64)` in the `.ent`'s order), no picture, no light, temporary, at `getScale()`, both systems in front of the player; **all 7 released and freed on frame 43**, by its pools (the window the `.ent` gives: the fifth sparkle released on the 24th step, 400 ms, living 200-500 ms more, so frames 35..54), exactly one effect freed |
+| (1b) `test_mp_layer`: the vanish at its time, x 1.3 | one `crystal_vanish`, x 1.3, at z + 20, on the expiry tick | no effect | **passes** (`ATimedCrystalGoesWithItsVanishAtItsTime`): `crystal_1264` (10 s) goes on tick 600, with no burst before; nothing on the tick; on the frame one `crystal_vanish.ent` and no pick, at its bobbed point (400, 207.328), z 20, `Scale` 1.3, **1 + 2 particles at 28.6 and 36.4** (22 and 28 x 1.3), no picture or light, temporary, in front of the player; all 3 released, freed on frame 24 (all at once, 400 ms) |
+| (1c) `test_mp_layer`: a timed crystal taken early | one pick, and no vanish ever | - | **passes**: `crystal_1264` taken on tick 42 - one `crystal_pick` at it, **0 `crystal_vanish` over 660 ticks** (past its 600), its dial shrunk away |
+| (1d) `test_mp_effects`: the rows and the rule | the decoded calls, strict | 308 | **passes, 324 checks**: both rows as decoded; `OnEntity` puts 1-22's `crystal_ent_878` (z -6) at 14, a z-0 crystal at 20, the deepest (-20) at 0, where `At` would say 20; refused: either row missing, an offset on one, a bare z on one |
+| (2) Capture of a pickup, 1-24 (`level23`) `--hold right@90-150` | the burst where the crystal was, when it is taken | the crystal and its dial go on tick 131, nothing left | **passes**: `crystal_1219` (timed) taken on tick 131; f1-f130 byte-identical to the before; the first difference f131; the burst's first frame centred **(-0.5, +1.0) px** from the crystal's picture on f130 (870.5, 330.4 against 871.0, 329.4), 57 x 58 px; drawn unbroken f131..f174, **44 frames**: lifted more than 20 to f172, 68 px more than 12 on f173 (at most 16), 325 px of at most 8 on f174, nothing on f175 (the verification's retake, `10.2/verify1/measure_v1.txt`: last frame over 12 f173); the suite's pick, freed on frame 43, is 1-27's, a different run with its own draws - both inside the `.ent`'s 35..54; **drawn over the player**: where the two overlap (f138-f144) 2,129-3,194 of the player's 6,586-6,770 opaque body pixels are lifted by more than 20 (mean 44-66, max 247), where drawn behind they would be hidden (`after/front_of_player.txt`); and no `crystal_vanish` for it at its 5 s (the run's log names only `crystal_1191`'s at tick 360). Control: 1-22 (`level21`) held right the same way takes nothing - its two crystals stand behind the cracked wall - and its 200 frames are byte-identical |
+| (3) Capture of a timed crystal expiring, 1-24 idle (and 2-04) | the x 1.3 burst where the crystal was, at its time | the crystal goes on tick 300 (360), its dial shrinking, nothing else | **passes**: `crystal_1219` gone on tick 300 and `crystal_1191` on tick 360; f1-f299 byte-identical; first difference f300; the bursts' first frames centred **(-0.3, -0.7)** and **(+0.6, -2.3) px** from the crystals' pictures on the frame before; **drawn 24 frames each** (f300..f323, f360..f383: `crystal_particle`'s 400 ms); first-frame box **73 x 76 px against the pick's 57 x 58: 1.28 and 1.31, the 1.3**. 2-04 (`level3a`, 4 s): tick 240, (+1.2, +0.1) px, 74 x 75 px, f240..f263 |
+| (4) The pick against footage F14 r1 (3-16, the timed crystal taken on landing; `after/f14/f14_vs_port_3-16.png`) | the original's picture | the crystal gone and nothing in its place | **consistent (qualitative; 22 fps resolves no single frame)**, on step 124's F14 route (`--tap 394,112@40 --tap 205,578@130`): `crystal_1755` taken on tick 148, the burst centred (+0.2, +1.3) px from the crystal, unbroken f148..f196. As F14: a white crystal at the crystal's place on the pick (F14 #53, port f148), then **drawn over the player** as he lands (F14 #54-#57; port f150-f162, with 2,781-3,263 of 6,770 body pixels lifted, mean 58-65), faded by +283-317 ms (F14 #58-#59; the port's `crystal_particle` at 29-21 % of its light then) and gone about +350 ms after #53 (F14 #60; the port's at 400 ms). Alike in kind, not frame for frame (the verification, `10.2/verify1/look/f14_vs_port_v1.png`): the port's first 2-3 frames are whiter (1,863 white px at f149 against 1,490 at #53 in an 80 px box, over a different background), and where #60 is empty the port's f170 is still faint. F14 runs at 22 fps, so one frame is not resolved (deviation 1) |
+| (5) The vanish against the library still `original/levels/2-04_h2.8.png` (`after/lib204/`) | the original's picture | - | **consistent, the nearest state by far, not a match to the floor**: over a 100 px box at the crystal, the still against the port's 2-04 frames - mean absolute difference **16.0 at +83 ms** after the vanish (16.0-20.3 from f240 to f253), against **49.1** with the crystal still there (f239) and **74.7** with nothing (f264 on). The like-for-like floor of the two games in that box - the original's `2-04_h0.3` (crystal and dial) against the port's best frame with them (f74) - is **8.9**, so the burst sits at 1.8x the floor, its still's clock known only to about 0.5 s (systems_9_10 10c). Bright blue-white pixels: 3,418 in the still, 2,578-3,262 in the port's (peak f248), 998 in the original with the crystal alone (h0.3) |
+| (6) K13 | no depth outside the table | - | **passes**: no new class; both effects take the table's `Effect`, `EffectHalo` and `EffectSystems` rows at `slotAfter(round(eth_z + 20))`, pinned by (1)'s in-front-of-the-player checks and by step 83's `AnEffectsPictureHaloAndSystemsStandWhereTheTableSays` |
+| (7) K8 (the inherited reading: the placement stream untouched) | no level particle moved | - | **passes**: both effects are added through `SpawnEffect`, whose pools and steps draw on `m_effectRandom` alone, and `AnEffectMovesNoParticleOfTheLevels` passes in the 1958. On the frames inspected (2-04 f250, 3-16 f175, 1-24 f340; `after/diff_*.png`) every pixel that changes more than 60 u from a burst belongs to another effect on the effects' stream - the red eyes (1-24), a carranca's fireball (2-04), the portals' death bursts on the F14 route (3-16); the other frames of `measure_gates.json` were counted, not attributed |
+| (8) The 128-level f420 sweep | changes explained | `Q.2/after/sweep` | **121 of 128 byte-identical; the 7 that differ are exactly the 7 whose log names a crystal event by tick 420, and no level differs without one** (`after/compare_sweep.txt`, `after/explain_sweep.txt`). All 128 exit 0, `Vulkan validation layers: ACTIVE` in 128 logs and no validation message, every png matching its log line (`after/check_capture_log.txt`, binary `0ec11c49`). The burst itself at f420: **2-13** (`level12a`, its 7.0 s crystal gone on tick 420: 5,587 px in an 87 x 90 px box at the crystal, its first frame) and **3-06** (`level5b`, 6.8 s, tick 408: 8,092 px, the burst 12 frames in, and the eyes). Only the red eyes: **1-24** (ticks 300, 360; 82 px in an 11 x 10 px box, at most 58), **3-16** (tick 360, idle; 80 px, at most 25) and **4-06** (`level5c`, ticks 234, 240, 276; 88 px, at most 58). **2-04** (tick 240): the eyes and a carranca's fireball (3,959 px round it, at most 239), both on the effects' stream. **2-24** (`level23a`): the player spawns overlapping `crystal_ent_1252` (96, 48) and takes it on tick 1 (the port's pickup rule, deviation 3; the before took it too, only drew nothing; the original's `2-24_h0.3`, about 1.1 s in, has no crystal there either, and its other two, (96, 16) and (128, 16), stand): 61 px, **none over 9 of 255** (steps of 4, 5, 8 and 9) - 36 at the eyes, whose specks start at one point (`red_eyes.ent` has no `RandStartPoint`), so a moved stream moves only their lives, and 14 and 11 at the fire agent's flame and the door's (`10.2/verify1/explain_sweep_v1.txt`), additive particles of the level's own that a moved placement stream would redraw elsewhere by far more: every one of those 25 is lit in both frames, where a moved particle would differ by tens to hundreds over a whole quad. The same class shows on the 1-24 pick run at `crystal_1216`'s own sparkles, 1-2 px of at most 9 on f201, f221, f351, f361, f391 and f400 (`10.2/verify1/gameplay_v1.txt`). Measured bound: at most 9 of 255, on pixels lit in both; consistent with the rounding of a changed draw or blend order once the burst's quads came and went (step 123's gate 11 reading), not proven to be it |
+| (9) No gameplay change | nothing the simulation reads moves | - | **passes**: Goals, its trigger and every clock are untouched; the layer reads `collected`/`expired` and the pictures' points and queues pictures on the frame (nothing is added on the tick, pinned); every gate run is byte-identical to the before up to its event, and 121 sweep levels are identical |
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **`crystal_pick` is drawn one tick early; `crystal_vanish` is not.** The rule is step 125's deviation 1, and this
+   step reads which side of it each call falls on. `ETHScene::Update` runs the always-active entities' updates and
+   callbacks first (`Scene/ETHScene.cpp:467`), then the scene's update script (`:473-474`), then maps what the frame
+   draws (`:482`). An entity `AddEntity` makes temporary is pushed onto the always-active list
+   (`Scene/ETHScene.cpp:289`, `Scene/ETHActiveEntityHandler.cpp:56-66`), a `std::list` the update loop walks to its
+   `end()` (`:119-141`). `crystal_vanish` is added from `ETHCallback_timer`, the callback of `timer.ent` - dynamic
+   (`static="0"`) and with a callback, so itself on that list - INSIDE the loop, so the loop reaches the new entity in
+   the same pass: it is updated, its particles released, and drawn on the frame of the expiry, where the port draws it.
+   `crystal_pick` is added from `MainCharacter::update`, a controller (decode D11_check C16: UI layers, fade-in,
+   character, camera, ...) which the scene's update script runs AFTER the loop, so it is first updated, and first drawn,
+   on the next frame (its particles unreleased until then, `Particles/ETHParticleManager.cpp:125`, `:219-228`, `:375`):
+   the frame the crystal goes shows neither crystal nor burst in the original (`DeleteEntity` takes the crystal out of
+   its bucket at once, `Scene/ETHScene.cpp:924-927`, before the frame is mapped), and the burst in the port. No
+   footage resolves one frame here (F14 is 22 fps). Left, with step 125's, for the effects runtime's owner.
+2. **The expiry tick is the port's.** Goals expires a crystal on the tick `leftS` reaches 0; the timer's `elapsed >
+   time` is strict and counts floored frame milliseconds. They can fall a tick apart - step 68's note (art.json
+   `timer`), not changed here: the burst lands on the tick the dial starts to shrink, which is the one rule 3.1 and this
+   step share.
+3. **The moment and place of a pickup are the port's (gameplay, not built).** The port takes a crystal when the
+   player's body overlaps the crystal's trigger box (Goals, the remake's rule); `crystalPicker` takes it when the
+   character's point is within `squaredRange` of the crystal's point shifted `scale(14)` either way (#111-177). The
+   burst follows whichever takes it; the pickup rule is gameplay no batch owns, named here and left.
+4. **The crystal's point is the tick before's.** The layer reads the picture's entity point as the last tick placed it;
+   the original's crystal and character callbacks run in the scene walk's order, so its point may be one frame's bob
+   later - at 2 rad/s and 1.5 units, at most 0.05 of a unit.
+5. **The effects' stream moves after each burst (00_order K8, the inherited reading).** Every later draw on
+   `m_effectRandom` - the red eyes, a fireball's fire, a portal's death - is taken in a different place in the stream,
+   so those pictures differ after a pick or a vanish; no particle of a level's own emitters does
+   (`AnEffectMovesNoParticleOfTheLevels` passes, and both effects are added through `SpawnEffect`, whose pools and
+   steps draw on `m_effectRandom` alone). What else differs is measured, not shown to be a cause: at most 9 of 255, on
+   pixels lit in both frames, in steps of 4 to 9 - 2-24's fire agent and door flames (gate 8) and `crystal_1216`'s
+   sparkles on the 1-24 pick run (`10.2/verify1/gameplay_v1.txt`) - read as a changed draw or blend order's rounding.
+
+**RULINGS APPLIED.** The standing direction that R1-R23 follow what the original does, for both pictures and their
+place; the footage and the library still agree with the decode here (gates 4 and 5). R1, R2, R22 and R23 are not built; **R24 and R25** are
+neither touched nor withdrawn (the pickup's moment, deviation 3, is not R25: R25 is a carrier's point for a key).
+**R10**: the player at 4 / 2.8125 = 1.42, which both bursts stand in front of. **K13**: no new class - both effects are
+the table's `Effect`, `EffectHalo` and `EffectSystems` rows at `slotAfter(round(eth_z + 20))`. **K8**: the inherited
+reading (gate 7).
+
+**GAMEPLAY: NONE.** Goals, the trigger and every clock are as they were; the layer reads Goals' flags and the pictures'
+points, and writes nothing the simulation reads (gate 9).
+
+**SUITES**, run directly, once each (logs `10.2/`): `test_mp_effects` **324** (308 at step 123), `test_mp_layer`
+**1958** (1924 at step 124), 0 failures each. The full ctest was not run. The build relinked all 45 suites (the sim
+library changed); only these two, which the change touches, were launched. `art.json` changed only inside a `_source`
+string, which no reader parses, so `test_mp_sprites` (which pins its numbers) was not run.
+
+**SWEEP BASELINE**: `10.2/after/sweep` now stands for all 128 levels, the next step's before.
+
+**SMART APP CONTROL: 0 refusals.** Launches: the committed `b1f43812` 6 (the probe and five gate runs); the new
+`test_mp_effects` (`5f73bab6`) and `test_mp_layer` (`8cc3491d`) once each; the new `MagicPortals.exe` (`0ec11c49`) 134
+(the probe, five gate runs and the 128 sweep captures). No exe was deleted or relinked for a refusal.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **The pickup rule** (deviation 3): the port's trigger box against `crystalPicker`'s range from the character's point,
+  a gameplay difference in when and where a crystal is taken.
+- **Deviation 1**, beside step 125's: a particle-only picture added from the scene's update script (a controller) first
+  drawn on the tick + 1 at age 0; one added from an always-active entity's callback drawn at once, as now.
+- For the backlog (the close agent): a 10.2 row; the effects runtime's one-tick-start row (step 125) gains
+  `crystal_pick` and the reading that `crystal_vanish` is on time; the pickup rule is a new gameplay row.
+- For the merge's renumbering: "step 126" is written in `effects.json` (the `_crystals` note) and `art.json`
+  (`timer._source`), and in `test_mp_layer.cpp` (one comment).
+- For later, from the verification (not made at the commit: each is a code change, and the committed source is kept
+  the one that built `0ec11c49`): a per-system pool count in `EffectReport`, so the suites pin `crystal_pick`'s
+  {5, 2} and `crystal_vanish`'s {1, 2} rather than the sum; and the crystal's depth read from its node's `eth_z`
+  rather than the lighting look's `lookZ`, or the `m_lit` dependency said in `latchSimEffects`' comment.
