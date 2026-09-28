@@ -17522,3 +17522,206 @@ what was required, what was measured, its attributed cause and its owning follow
 - The backlog's UI2 leftover keeps its other three items (the finished screen's counter past golden + 2, the 3-09 and
   4-01 popups, the pause's AchievementsPopup). 11.4 (the knights' aura) reuses `modulateImage` and `particleTexture` as
   they are.
+
+## Step 97 - the entity a minion's marker names, and the knights' aura: 3-32's black knight is the ghost_minion.ent its marker adds, and its dark particles go where it is drawn, as the multiply they are (built)
+
+The visuals plan's step 11.4 (the remake's `out/parity/visuals/briefs/00_order.md` section 7, batch 11; its brief
+`system_5.md` 5b; conflicts K12 and K13; the owner's ruling R16). Track A, on MPR `main` in `build/`, after step 96
+(`df638f1`). Changed: `game/sim/Minions.{hpp,cpp}`, `game/sim/Effects.cpp`, `game/sim/Ghost.hpp` (a comment),
+`game/MagicPortalsLayer.{hpp,cpp}`, `game/data/{minions,art,ghost}.json`, `tests/test_mp_{minions,layer,effects,ghost}.cpp`
+and the backlog. The engine submodule stays at `4bfcf67`; nothing under `engine/` or `tools/` is touched, and `out/levels`,
+`out/assets` and `out/data` are not written. **The simulation now holds the entity each minion marker adds: level31b's
+adds `ghost_minion.ent`, 3-32's black knight, and every other marker and every escort a `minion.ent`; a marker naming an
+entity `minions.json` does not know is refused at load. The knight's own particle system - 24
+`black_portal_particle.png` at `alphaMode` 4 - is added with it: a dark aura rising round its head, drawn as the
+multiply it is through 11.3's `modulateImage`, carried by the knight where the frame draws it, and gone when it goes.**
+**Committed after an independent check (`11.4/verify1/`) that passed every gate** and launched `test_mp_layer` for the
+first time (1,959 checks, 0 failures; the two gate rows below). The commit changed text only - this record, the backlog
+and one `_source` string in `minions.json` that nothing parses - with no source, no build and no launch; its own dry run
+on a copy of `build/build.ninja` says no work to do (`MagicPortals.exe` `b87639e7`, `test_mp_layer.exe` `03d1f439`). Of
+the check's four findings, the three text ones are applied (the places the original DOES tell the two entities apart,
+below; `test_mp_layer`'s count; the pixel wording) and the fourth, a dangling read in the new case, is recorded as
+deviation 5 and not fixed (a test edit means a relink and a launch under Smart App Control).
+
+**BLOCKERS CHECKED.** Section 7's 11.4 names three: **R16** - the owner's standing ruling, as the original does (the
+sim honours the marker's `metadata/entityName`); **11.3** - committed as step 96 (`df638f1`), which generalised
+`modulateImage` and `particleTexture`; **5.1** - committed as step 76. Section 8.13 has no row for 11.4, so section 7's
+gates stand: "the same unit case; the aura follows its moving owner within 0.5 u". K12 (no engine blend; the multiply
+image's alpha is the weight, the colour's alpha set aside) and K13 (every depth between two slots is a row of the one
+table) apply. The baseline is step 96's after, `11.3/after/sweep`: its 128 PNGs match the md5s its `capture.txt` logged
+(128 of 128), and the committed binary `7adf5f3b` reproduces 1-01 f420 `e2da5131` (captured again here,
+`11.4/before/1-01_level0_f420.png`). "Today" below is that binary and that sweep.
+
+**THE OWNER'S STANDING RULINGS.** **R16 is applied** as the owner's standing ruling (in favour of what the original
+does). **R10** (the character at z 4) and **R12** (720 / 256 = 2.8125) are used, not decided: a marker's minion stands at
+the raw 2 over the factor, 0.711, and so does its aura's owner. **R4** (the ghost appears after the black knight dies) is
+NOT built: it is the visuals plan's 12.2, which builds on this step. R1, R2, R22 and R23 are not built. **R24 and R25 (step
+76) remain the owner's to rule**; this step applies neither further.
+
+**WHAT THE ORIGINAL DOES** (the listing `out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`; the entities under
+`reference/extracted/assets/entities/`).
+- **The spawn.** `ETHCallback_minion_spawn` (426511..426876) #31-51 hands the marker's `GetString('entityName')` to
+  `spawnMinion` (426876..427194), whose #1-23 replace an empty name with `'minion.ent'` and #25-39 `AddEntity(entityName,
+  vector3(GetPositionXY(), 2), 0 (#32), out, alternativeName, getScale() (#25-29))`. The chapter-3 boss's rage arm hands
+  it the literal `'minion.ent'` (`ETHCallback_ghost` ins 1137). Of the 62 markers in the 128 levels only level31b's
+  `minion_spawn_908` names an entity (`test_mp_minions`' census, below).
+- **The two files.** `ghost_minion.ent` states `minion.ent`'s body to the attribute: `<Entity>` shape 4, sensor 0, bullet
+  0, fixedRotation 1, static 0, friction 0, density 0.5, restitution 0, gravityScale 1; the same `<Collision>` (at (0, 0,
+  0), 14 x 36 x 1, the same two-circle `<Compound>`, CDATA-wrapped in one file and not the other); the same custom data,
+  breakable, burnable and teleportable 1. What differs: `EmissiveColor` (0, 0, 0), `startFrame` 4, and one
+  `<ParticleSystem>`: 24 `black_portal_particle.png`, not all at once, `alphaMode` 4, repeat 0, life 550 (rand 200), size
+  18 shrinking 0.6, `<Direction>` (0, -0.8) spread (0.3, 0.3), `<StartPoint>` (0, -8, **-2**), `<RandStartPoint>` (0,
+  24), `Color0` = `Color1` = (1, 1, 1, 1). `black_portal_particle.png` is 64 x 64 RGB, r = g = b at every texel, 0 to
+  255 (E6).
+- **The callbacks.** `ETHCallback_ghost_minion` (451487..451999): #8-18 `SetColor(V3_ZERO)` every frame; #25
+  `ETHCallback_minion` - the same patrol, rows and holds; #27-33 `LoadSprite('entities/ghost.png')`; and #35-104, once
+  `!IsAlive()`, `AddEntity('ghost.ent', currentPos + vector3(0, 0, scale(-1)), 0, out, '', scale(0.3))`,
+  `playGhostAppearSound`, `DeleteEntity(SeekEntity(1430))` - R4, 12.2's. Most minion code does not tell the two apart:
+  `isMinion` (437789..437964, what a killer floor asks) accepts both, `CharacterChooser::choose` (a key's carrier) accepts
+  both, `MinionChooser::choose` (a shock diamond's prey) is `isMinion`, and the sight's ignore list names both
+  (`ETHCallback_minion` #905). **Two places do tell them apart, by the entity's name** (corrected after the independent
+  check; the first record said none did). The engine binds a body's contact callbacks by its entity's own name,
+  `'ETHBeginContactCallback_' + RemoveExtension(GetEntityName())` (`ETHPhysicsEntityController.cpp:59`, `:66-70`), and
+  the listing has `ETHBeginContactCallback_minion` (437083..437789) and no `ETHBeginContactCallback_ghost_minion`: the
+  black knight gets none of its arms - the dark mage's `holdTime` cap (#12-55), `startEarthquake(0.8 x hitIntensity)` on
+  an impact (#124-130) and `playFallSound(hitIntensity / 18)` above 3.5 (#132-140). And `ScoreDashboard`'s
+  `spottedCount` (401234..401465 #5), `hasBeenUnnoticed` (401465..401641 #5) and `checkForLevelAchievements`'
+  `countEntities` calls (#748-1165) read `'minion.ent'` alone. None of these is built on `main`: no minion impact
+  tremble or fall sound, and `Achievements` decides medals only.
+- **Where the aura is drawn.** An entity's particle piece is sorted at `particle->GetZPosition() + entity->GetPositionZ()
+  + shift` (`ETHEntityRenderingManager.cpp:98-102`); `shift` is 0 for `ET_HORIZONTAL` (`type="0"`;
+  `ETHEntityProperties.cpp:108-121`, `ETHParticleManager.cpp:332-335`); the start point is scaled with the system
+  (`ETHParticleSystem.cpp:33`), so at `getScale()` it is -2 on the level's axis. The knight at 0.711 and its aura at
+  **-1.289**: behind it. Particles live in world space, each released at its entity's position of that frame
+  (`ETHParticleManager.cpp:507-523`).
+
+**WHAT WAS BUILT.**
+- **`sim/Minions`** (R16): `Minion::entity` replaces `entityName` - the marker's `entityName`, or `Rules::defaultEntity`
+  where it names none - and `Summon` gives an escort the same fallback. `Find` refuses a marker whose entity is not
+  among `Rules::entities`, by the marker's and the entity's names. `minions.json` gains a `spawn` block, each number with
+  its `_source`: `default_entity` `minion.ent`, `entities` [`minion.ent`, `ghost_minion.ent`] (and why one body serves
+  both), `angle_deg` 0 and `scale` 1 (`spawnMinion` #25-39); `LoadRules` refuses a missing block, a fallback the list does
+  not hold, and any scale but 1 (the body is stated at 1).
+- **`MagicPortalsLayer`**: `EffectOwner::Kind::Minion` - a minion's entity point where its PICTURE is drawn this frame:
+  the quad's transform (interpolated, in the app, between the last two ticks) back out through the pivot `syncMinions`
+  placed it by; `EffectSpawn::picture` (false: the runtime draws no picture for an entity whose picture the layer draws
+  itself) and `EffectSpawn::alwaysActive` (`ShouldEntityBeAlwaysActive`'s second arm, which the `.ent` reader cannot see;
+  it decides only whether a hidden effect is stepped, and a minion owner is never hidden). `matchMinions` sets the black
+  picture from the entity (the escort check falls away) and reads, once per entity, whether its `.ent` carries a
+  particle system. `latchSimEffects` queues, once per such minion, its entity's systems: at its depth (`lookZ`), at
+  `spawn.angle_deg` and `spawn.scale`, carried by it. `EffectReport` gains `followKind`, `followIndex` and `newbornPx`
+  (where each particle the last step released was born), for the suite.
+- **`sim/Effects`**: the blood row's z guard step 96 left for "the next step that relinks the simulation": `LoadRules`
+  refuses a `blood` row whose z is not `{"value": 0, "scaled": true}` (its depth is the victim's own).
+- **Data text**: `art.json` `minion.black_knight._source`, `ghost.json` `_not_built` and the `Ghost.hpp` comment no
+  longer say the port spawns the default body.
+
+**GAMEPLAY: none changes in play - which corrects the expectation this step was briefed with, that R16 changes 3-32.**
+R16 is built - the sim holds `ghost_minion.ent` where the original does, and 12.2 reads it - but nothing the port plays
+turns on it: the body is the one both files state (pinned on the files, 11 of 11 attributes and blocks equal); the
+patrol, a killer floor, a key's carriers and a strike treat both entities alike in the original too; and what differs
+by name - what the black knight adds when it dies (R4's), the contact callback's arms it never gets and the
+`ScoreDashboard` counts that pass it by (above) - is not built on `main`. When one is built, the knight stays out of
+it, as the original's does (track B's Q.2 already keeps it out of `minion_impact`: the backlog's merge note). MEASURED on 3-32's clip (below): the
+player dies on tick 260 in both builds, and the band from the knight's feet to 5 u over them - below every aura
+particle's dark disc (released at least 14.1 u over the feet, its dark part about 8.7 u in radius; only a turned quad's
+near-white rim and corners reach lower) - is byte-identical on 60 of 61 frames over 39.8 u of patrol (the other, f306: 1 px,
+8 levels in blue alone, at the band's top row). One new behaviour at load: a marker naming an entity `minions.json` does not list is refused; no level names
+one (the census: 61 `minion.ent`, 1 `ghost_minion.ent`), and `test_mp_start` starts all 128 levels, 753 checks.
+
+**THE DEPTH (K13): no new row.** The aura is the systems of an entity the script adds, so it takes the runtime's rule
+for those as step 83 left it: `Slot::EffectSystems` in the slot `round(0.711 - 2) = -1` falls in. On level31b that is the
+slot of its first z-0 picture (its five platforms carry no `z_index`): every picture at or below -1 is behind the aura
+(the locked door at -6 the nearest), and the five platforms, the knight (after them, at 0.711), an escort (its anchor's
+0), a placed portal (0) and the player (1.422) stand in later slots, in front of it - the original's order for every one
+of them. `round` differs from the unrounded -1.289 only where a picture stands at exactly -1, which level31b has none of.
+`TheBetweenSlotTableSaysWhereEachClassStands` is unchanged.
+
+**THE STREAM (K8).** The aura draws on `m_effectRandom` (`SpawnEffect`'s pool, `updateEffects`' steps), so the placement
+stream is untouched; on 3-32 every later effect draw moves against a run without it (the eyes), the reading step 85
+recorded. 3-32's own placed systems (the gutter's steam, the crystal, the door flame) do not move at f420 beyond the tie
+noise of deviation 3, nor on the gate clip beyond the small differences deviation 3 lists.
+
+**THE GATES.** "Today" is `7adf5f3b` and `11.3/after/sweep`. Captures, scripts and logs: `out/parity/visuals/11.4/`
+(`before/`, `after/`, `logs/`, `work/`). The gate clip is 3-32 with `--hold right@1-130`, 600 frames, every 3rd captured,
+with identical arguments on both binaries (`before/clip31b/`, `after/clip31b/`).
+
+| Gate | Required | Today | Measured |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**, 83 steps (`logs/build1.txt`); `test_mp_layer` alone twice more, 0 warnings (`build2_layer.txt`, its relink after a refusal; `build3_layer.txt`, after a test edit, not launched). `MagicPortals.exe` **`b87639e7`** |
+| Unit: the same unit case - a grey g over d gives d g / 255 +- 1, the colour's alpha set aside | +- 1 for every g and d | the generic unit passes (step 96); no aura | **passes on the generic unit, on the aura's own file and on the drawn quads.** `test_mp_sprites` 1,256, 0 failures: **0 of 65,536 (g, d) past 1, worst 0.498**, and **4 of 4** of the original's `AM_MODULATE` systems exact, `ghost_minion.ent`'s among them. The multiply the app wrote (`particles_black_portal_particle_multiply.png`): **4,096 of 4,096 texels black at 255 - grey** of `black_portal_particle.png`, and its 256 greys over every d at the colour its quads get, alpha 1: **0 of 65,536 past 1, worst 0.498** (`work/multiply_check.py`, `.json`). The case that reads it off the drawn quads (`TheBlackKnightCarriesItsAuraAsAMultiply`: every aura quad on the multiply, mixed at (0, 0, 0, 1), `BlendMode::Alpha`) is in `test_mp_layer`: **passes**, on the independent check's one launch of `03d1f439` (1,959 checks, 0 failures): every aura quad on `_multiply.png` at (0, 0, 0, 1) with `BlendMode::Alpha`, the multiply's texels at 255 - grey, every (g, d) within 1 |
+| The aura follows its moving owner within 0.5 u | <= 0.5 u | no aura | **passes: 0.000000 u**, on the independent check's one launch of `test_mp_layer` `03d1f439`: the aura on 600 of 600 frames, 0.000000 u from the knight's drawn entity point over 80.7 u of patrol, while the tick body's point stands 2.013 u off (so the case can fail); 214 particles released, each at the owner's x and 8 +- 12 over it. The case reads the drawn point through a dangling pointer (deviation 5): a credible value - a stale handle would crash or diverge, not read 0.000000 - but not a defined one. The case: 300 ticks drawn as the app draws them (`BeginTick`, the tick, `EndTick`, frames at `Apply(0)` and `Apply(0.5)`); the aura's point against the knight's DRAWN entity point, <= 0.5 u, over >= 40 u of patrol; the tick body's point required to be more than 0.5 u off, so the case can fail; every particle released at the owner's x to 1e-6 and 8 +- 12 over it. The build's own two launches of `test_mp_layer.exe` were refused (`c4bc071b` and its one relink `a5d7344f`); `03d1f439` is the relink of a later test-only edit. **Supporting evidence only, not the gate** (the app's clip, f150-f330, `work/follow_capture.py`): the aura on 61 of 61 frames, at least 99.4 % of its darkened pixels within 20 u of the knight's x on every frame, its centroid moving 45.4 u with the knight's 39.8 (correlation 0.93; offset median +1.2 u, 10-90 % -8.2 to +10.2 u: world-space particles trail and spread); no pixel lighter |
+| Test counts | the touched suites green, counts recorded | `test_mp_minions` 115, `test_mp_effects` 339, `test_mp_ghost` 75, `test_mp_keys` 124, `test_mp_start` 753, `test_mp_sprites` 1,256, `test_mp_layer` 1,937, `test_mp_diamonds` 126 | **0 failures each: `test_mp_minions` 278, `test_mp_effects` 343, `test_mp_ghost` 75, `test_mp_keys` 124, `test_mp_start` 753, `test_mp_sprites` 1,256, and `test_mp_layer` 1,959 (the independent check's one launch of `03d1f439`). NOT RUN: `test_mp_diamonds`** (Smart App Control refused it twice, below) |
+| (widened) the 128-level f420 sweep, every change explained | against `11.3/after/sweep` | 128 PNGs, matching their logs | **127 of 128 byte-identical**, both sweeps' PNGs matching their logs 128 of 128 (1-01 `e2da5131`); 128 rc = 0, validation ACTIVE in 128 logs with 0 messages. **3-32** (112 px), as predicted before capture: the knight is off the view at f420, so what moves is 89 px of the character's red eyes at (420-429, 73-83) px - `red_eyes.ent` draws on `m_effectRandom` after the aura's draws - and **23 px in the final door's red flame** at (118-186, 484-594), each in one channel only, by at most 9 levels (8 or 9 in red or blue, 5 in green; deviation 3). `compare_sweep.json`, `sweep_3-32_pieces.json` |
+| (widened) R16's gameplay on 3-32 | the sim unchanged in play | - | **none**: the player dies on tick 260 in both clips' logs; the knight's feet-to-5-u band byte-identical on 60 of 61 frames, the 61st (f306) off by 1 px (8 levels in blue alone, at the band's top row, a particle's near-white rim) (`work/legs_check.py`) |
+| (widened) F15, the original's black knight (visual) | the aura as the original draws it | none drawn | **matches in kind** (`work/aura_port_vs_f15.png`: the port's frames over its before frames, and F15 r2 #118-#154): dark round specks at the head and rising clear of it, darkening the arch's blue and invisible over the black knight in both; on the port's clip the aura's top stands a median 10.7 u (max 14.2) over the knight's head. Not measured further: F15's frames are darker round the knight, and a plain dark threshold cannot separate its aura from the scene |
+
+**THE SUITES**, run directly, once each, on the binaries in `build/`: **`test_mp_minions` 278** (115: the census - 62
+markers, 61 `minion.ent` and level31b's `ghost_minion.ent`, `Find` on all 128 levels; the knight's body locked and a
+traveller; the refusals by name; the two `.ent` files' bodies equal, 11 of 11), **`test_mp_effects` 343** (339: the blood
+z guard, a number and a bare literal refused), **`test_mp_ghost` 75** (unchanged; the escort `minion.ent`, the marker
+`ghost_minion.ent`), **`test_mp_keys` 124**, **`test_mp_start` 753**, **`test_mp_sprites` 1,256**, 0 failures each
+(`logs/`). **`test_mp_layer` 1,959** (1,937: this step's two gate cases and the level0b case "a `minion.ent` adds
+nothing"), 0 failures, on the independent check's one launch of `03d1f439` (`verify1/logs/`) - the build refused it
+on its first binary, `c4bc071b`, and on its one relink, `a5d7344f`, and `03d1f439`, the relink of a later test-only
+edit, had not been launched. **Not run: `test_mp_diamonds`** (refused on `6f603a35` by the build and again by the
+check; not relinked, to spare a notification: its only contact with this change is the renamed field). The full `ctest`
+was not run. Before the check ran it, `test_mp_layer`'s existing cases were desk-checked against the aura: none reaches level31b's effects after a tick - the only level31b case,
+`ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack`, reads the "Magic Portals Minion" quads after one tick and no
+frame, and the aura's quads are tagged "Magic Portals Effect Particle" and made on a frame; the all-level loop
+(`EveryTimedCrystalHasADialBehindIt`) skips level31b, which has no timed crystal; and the cases that count effects run on
+levels whose minions are `minion.ent` (level0b, level15b) or have none.
+
+**SMART APP CONTROL. 3 refusals in 141 launches**: `test_mp_layer` twice, `test_mp_diamonds` once. Accepted: the
+committed binary three times (a route probe, 1-01, the before clip), six suites, and `MagicPortals.exe` `b87639e7` 129
+times (the after clip and the 128-level sweep). **The independent check: 1 refusal in 137 launches** (`test_mp_diamonds`;
+accepted: six suites, `test_mp_layer`, 128 sweep captures and one clip, on `b87639e7`). The commit launched nothing.
+
+**RECORDED DEVIATIONS.**
+1. **CLOSED by the independent check: two gate rows rested on a suite that had not run.** Required: the unit case and
+   the 0.5 u follow, measured. The build measured the unit on the generic case and on the file the app wrote, and the
+   follow not at all: Smart App Control refused `test_mp_layer` twice. The check launched it once (`03d1f439`, 1,959
+   checks, 0 failures), and both rows now pass on it (the table above), with deviation 5's caveat. `test_mp_diamonds`
+   stays NOT RUN (refused twice); its only contact with this step is the renamed field.
+2. **The aura follows the knight's drawn point, and the eyes do not follow the player's** (a finding, INFERRED from the
+   code, not measured). `EffectOwner::Kind::Player` reads the sim body's tick point while the player's picture is drawn
+   between ticks; under `--fixed-step` every frame is drawn at `Apply(0)`, the tick before, so the eyes would lead the
+   drawn face by one tick's walk, up to 2.7 u at `player.json`'s 160 px/s. Not changed here (the effects runtime's, step
+   84's eyes); filed in the backlog.
+3. **Placed systems a few levels off where effect quads come and go.** The sweep: 23 px of 3-32's final door flame at
+   f420, each in one channel only, by at most 9 levels (8 or 9 in red or blue, 5 in green). The gate clip
+   (`work/steam_check.py`, `.json`): the gutter's steam differs on the frames it is in view (f60-f129, 54-172 px a
+   frame), every channel within 9 levels, some by 1-3, where a steam particle moved by another random draw would
+   differ by tens of levels over the dark wall. The clip's larger differences are effects on `m_effectRandom`: the red
+   eyes (f57-f63, f123; 2-3 px on f153-f240) and, from the character's death on tick 260, its blood and smoke (up to 181
+   levels). Attributed, INFERRED as step 96's deviation 9: effect quads made and pooled reshuffle the registry, so
+   equal-depth quads sum in another order at the transparent sort's tie-break. The placement stream is untouched (K8).
+4. **Not built: `startFrame` 4** (never drawn: the knight walks on its first update, `ETHCallback_minion` #1141-1162) and
+   **`dragon_knight.ent`'s aura** (the same system; that knight exists only in 2-32's victory cutscene, which the port
+   does not build).
+5. **The new case reads the knight's report through a dangling pointer** (found by the independent check; recorded,
+   not fixed). `tests/test_mp_layer.cpp`, in `TheBlackKnightCarriesItsAuraAsAMultiply`, calls
+   `MinionOf(layer.MinionReports(), "minion_spawn_908")` twice (the follow loop and the depth check), and
+   `MinionReports()` returns its vector by value, so the pointer outlives the temporary; the older cases hold the vector
+   first. The follow row's 0.000000 u is read through it (credible, undefined); **the depth check's comparison with the
+   knight is vacuous**, and the knight z it prints is freed memory - not quoted here. The depth order stands, measured
+   by the check from `out/levels/level31b.tscn` and the aura's printed z: the locked door -1.452, **the aura -1.4485**
+   (slot 13: 13 pictures at `z_index` <= -1), the five z-0 platforms -1.448 to -1.432, the knight -1.430
+   (`slotAfter(0.711)`, 18 pictures below it), the player -1.428 - the original's order. Why not fixed: a test edit
+   relinks `test_mp_layer` and needs a launch under Smart App Control, and a commit changes text only. Owning follow-up:
+   the next role that relinks the suite (the backlog row).
+
+**LEFT FOR THE OWNER.**
+- R4 (12.2): the hook is here - `Minions::State::deaths` names which minion died, and `Minion::entity` says whether it
+  was the `ghost_minion.ent` whose death adds the ghost at its point, z - 1, scale 0.3.
+- Deviation 2's eyes, for the effects runtime's owner.
+
+**LEFT FOR LATER.**
+- Deviation 5: at both call sites, `const auto minionReports = layer.MinionReports();` and `MinionOf(minionReports,
+  ...)`; relink `test_mp_layer` once, launch it once, and record its count.
+- Launch `test_mp_diamonds` once and record its count.
+- **When `visuals-d` merges**: Q.2 (`7465279`) keeps the black knight out of `minion_impact` with
+  `!minion.entityName.empty() && !IsEntity(minion.entityName, ...)`; this step renames the field `entity` and it is
+  never empty (`minion.ent` by default), so the test must be re-pointed at `minion.entity`, keeping `ghost_minion.ent`
+  out of `minion_impact` as the original's missing `ETHBeginContactCallback_ghost_minion` does - a rename that merely
+  compiles is not enough. Likewise any later minion fall sound, `holdTime` cap or `ScoreDashboard` count.

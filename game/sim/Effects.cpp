@@ -224,6 +224,16 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.skullInsetUnits = root["skull"]["inset_units"].AsNumber();
+    // Blood's depth is its VICTIM's own: both callers pass GetPosition()'s whole
+    // vector3 (checkGameLost #27-43, ETHCallback_minion #1478-1504), a number
+    // already on the level's axis, which Blood adds this row's z to and keeps
+    // scaled. So the row says 0, scaled: a bare literal there would be added
+    // undivided by the factor, and any other number is a depth nobody decoded
+    // (11.3's third check; built with the next step to relink the simulation).
+    if (read.blood.z != 0.0 || !read.blood.zScaled) {
+        error = path + ": blood.z is {\"value\": 0, \"scaled\": true}: its depth is its victim's own";
+        return false;
+    }
     // The rows that are given a point and nothing else: no direction to be offset
     // along or turned by. appearEffect, addFireball - whose `dir` is the entity's
     // own custom data and not the angle it is added at - and both explosions,

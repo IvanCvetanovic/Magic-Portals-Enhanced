@@ -47,6 +47,8 @@
 #include "sim/Art.hpp"
 #include "sim/Game.hpp"
 #include "sim/Minions.hpp"
+#include "sim/Particles.hpp"
+#include "sim/Tscn.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
@@ -54,6 +56,8 @@
 #include <cstddef>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -198,8 +202,8 @@ void aPatrollerWalksToItsFirstWaypoint() {
     const Minions::Minion* walked = run.level.minions.FindMinion(kPatroller);
     CHECK_MSG(walked != nullptr && walked->arm == Minions::Arm::Walk && walked->facing == Minions::Facing::Left,
               "the walk arm, facing left");
-    CHECK_MSG(walked != nullptr && !walked->summoned && walked->entityName.empty(),
-              "a marker's minion.ent: no entityName on level0b's markers");
+    CHECK_MSG(walked != nullptr && !walked->summoned && walked->entity == "minion.ent",
+              "a marker's minion.ent: level0b's markers name no entityName, so spawnMinion's fallback");
 }
 
 // The facing is set only where the walk sets the velocity, and a minion that has
@@ -580,6 +584,182 @@ void aMinionsDeathIsWrittenDownForTheFrame() {
                 tick, above);
 }
 
+// ---- R16: the marker's entityName (planning step 97) -------------------------
+
+// An attribute of an .ent's <Entity ...> element, as the file writes it; empty
+// where it states none.
+std::string EntityAttribute(const std::string& text, const std::string& name) {
+    const std::size_t open = text.find("<Entity ");
+    if (open == std::string::npos) return {};
+    const std::string head = text.substr(open, text.find('>', open) - open);
+    const std::string key = " " + name + "=\"";
+    const std::size_t at = head.find(key);
+    if (at == std::string::npos) return {};
+    const std::size_t from = at + key.size();
+    return head.substr(from, head.find('"', from) - from);
+}
+
+// A block of an .ent, <tag> to </tag>, with every space, tab and line break and
+// the CDATA markers taken out: minion.ent wraps its <Compound> in CDATA and
+// ghost_minion.ent does not, which says nothing about the shapes inside.
+std::string EntityBlock(const std::string& text, const std::string& tag) {
+    const std::size_t open = text.find("<" + tag + ">");
+    const std::size_t close = text.find("</" + tag + ">");
+    if (open == std::string::npos || close == std::string::npos || close < open) return {};
+    std::string block = text.substr(open, close - open);
+    for (const char* marker : {"<![CDATA[", "]]>"}) {
+        for (std::size_t at = block.find(marker); at != std::string::npos; at = block.find(marker)) {
+            block.erase(at, std::string(marker).size());
+        }
+    }
+    block.erase(std::remove_if(block.begin(), block.end(),
+                               [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }),
+                block.end());
+    return block;
+}
+
+// A marker adds the entity its metadata/entityName names, or minion.ent where it
+// names none (spawnMinion #1-23), and the sim holds which: level31b's one marker
+// adds ghost_minion.ent, the chapter-3 boss's black knight, and every other
+// marker of the 128 levels a minion.ent. Its body is the one body{} states.
+void aMarkerAddsTheEntityItNames() {
+    Run run;
+    if (!Begin("level31b", run)) return;
+    const Minions::Rules& rules = run.level.minions.rules;
+    CHECK_MSG(rules.defaultEntity == "minion.ent", "spawnMinion's fallback: " + rules.defaultEntity);
+    CHECK_MSG(rules.entities == std::vector<std::string>({"minion.ent", "ghost_minion.ent"}),
+              "the two entities a marker may add");
+    CHECK_MSG(rules.spawnAngleDeg == 0.0 && rules.spawnScale == 1.0, "added unturned, at the global scale 1");
+    CHECK_EQ(run.level.minions.minions.size(), static_cast<std::size_t>(1));
+    const Minions::Minion* knight = run.level.minions.FindMinion("minion_spawn_908");
+    CHECK_MSG(knight != nullptr && knight->entity == "ghost_minion.ent" && !knight->summoned,
+              "level31b's marker adds ghost_minion.ent");
+    if (knight == nullptr || knight->body == entt::null) return;
+    // The body a minion.ent's is: the one circle of body.radius_px, turning on
+    // nothing, and teleportable (among the portals' travellers).
+    const auto& rigid = run.registry.get<RigidBodyComponent>(knight->body);
+    CHECK_MSG(rigid.lockRotation == glm::bvec3(true, true, true), "fixedRotation, as both .ent files say");
+    const bool travels = std::find(run.level.portals.travellers.begin(), run.level.portals.travellers.end(),
+                                   knight->body) != run.level.portals.travellers.end();
+    CHECK_MSG(travels, "teleportable, as both .ent files say");
+
+    // And the census: every marker of the 128 levels, found as Game finds it.
+    int markers = 0;
+    int black = 0;
+    std::string other;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".tscn") continue;
+        Tscn::Scene scene;
+        std::string error;
+        if (!Tscn::Load(entry.path().string(), scene, error)) continue;
+        Minions::State state;
+        CHECK_MSG(Minions::Find(scene, run.data.roles, rules, state, error), entry.path().filename().string() + ": " + error);
+        for (const Minions::Minion& minion : state.minions) {
+            ++markers;
+            if (minion.entity == "ghost_minion.ent") {
+                ++black;
+                if (entry.path().stem() != "level31b") other += " " + entry.path().stem().string();
+            } else if (minion.entity != "minion.ent") {
+                other += " " + minion.name + "=" + minion.entity;
+            }
+        }
+    }
+    CHECK_EQ(markers, 62);
+    CHECK_MSG(black == 1 && other.empty(), "one ghost_minion.ent, on level31b, and 61 minion.ent:" + other);
+    std::printf("  R16: %d markers in the 128 levels, %d adding ghost_minion.ent (level31b), %d minion.ent\n", markers,
+                black, markers - black);
+}
+
+// A marker that names an entity minions.json does not build is refused by name,
+// not built as a minion.ent's body in silence; and the rules refuse a spawn block
+// that is missing, whose fallback it does not list, or at another scale.
+void anEntityTheRulesDoNotKnowIsRefused() {
+    Run run;
+    if (!Begin("level31b", run)) return;
+    Minions::Rules narrowed = run.level.minions.rules;
+    narrowed.entities = {"minion.ent"};
+    Minions::State state;
+    std::string error;
+    CHECK_MSG(!Minions::Find(run.data.scene, run.data.roles, narrowed, state, error) &&
+                  error.find("minion_spawn_908") != std::string::npos &&
+                  error.find("ghost_minion.ent") != std::string::npos,
+              "refused by the marker's name and the entity's: " + error);
+
+    std::ifstream file(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/minions.json", std::ios::binary);
+    std::ostringstream read;
+    read << file.rdbuf();
+    const std::string good = read.str();
+    CHECK_MSG(!good.empty(), "minions.json is where the build says");
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-minions-rules";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const auto refused = [&](const char* name, const std::string& from, const std::string& to, const char* named) {
+        std::string text = good;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos, std::string(name) + ": the fixture finds '" + from + "'");
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::string path = (dir / name).string();
+        {
+            std::ofstream out(path, std::ios::binary);
+            out << text;
+        }
+        Minions::Rules rules;
+        std::string why;
+        CHECK_MSG(!Minions::LoadRules(path, rules, why) && why.find(named) != std::string::npos,
+                  std::string(name) + " is refused by name: " + why);
+    };
+    refused("no_spawn.json", "\"spawn\": {", "\"spawn_gone\": {", "spawn.default_entity");
+    refused("no_fallback.json", "\"entities\": [\"minion.ent\", \"ghost_minion.ent\"]", "\"entities\": [\"ghost_minion.ent\"]",
+            "spawn.default_entity");
+    refused("scaled.json", "\"scale\": 1.0,", "\"scale\": 2.0,", "spawn.scale");
+    Minions::Rules rules;
+    std::string why;
+    CHECK_MSG(Minions::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/minions.json", rules, why), why);
+}
+
+// ONE BODY SERVES BOTH, and this is why: ghost_minion.ent states minion.ent's body
+// to the attribute - the same shape, flags, friction, density, restitution and
+// gravity scale, the same <Collision> with its two-circle <Compound>, and the same
+// custom data. Read from the original's own two files (minions.json spawn).
+void theBlackKnightsBodyIsAMinions() {
+    const std::string entities = std::string(MAGICPORTALS_ORIGINAL_DIR) + "/entities/";
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(entities + "ghost_minion.ent", ec)) {
+        std::printf("  theBlackKnightsBodyIsAMinions SKIPPED - needs the original's entities at %s\n",
+                    entities.c_str());
+        return;
+    }
+    std::string minion;
+    std::string black;
+    std::string error;
+    CHECK_MSG(Particles::ReadEnt(entities + "minion.ent", minion, error), error);
+    CHECK_MSG(Particles::ReadEnt(entities + "ghost_minion.ent", black, error), error);
+    if (minion.empty() || black.empty()) return;
+    int same = 0;
+    for (const char* attribute :
+         {"shape", "sensor", "bullet", "fixedRotation", "static", "friction", "density", "restitution", "gravityScale"}) {
+        const std::string a = EntityAttribute(minion, attribute);
+        const std::string b = EntityAttribute(black, attribute);
+        CHECK_MSG(!a.empty() && a == b, std::string(attribute) + ": minion.ent " + a + ", ghost_minion.ent " + b);
+        if (!a.empty() && a == b) ++same;
+    }
+    for (const char* block : {"Collision", "CustomData"}) {
+        const std::string a = EntityBlock(minion, block);
+        const std::string b = EntityBlock(black, block);
+        CHECK_MSG(!a.empty() && a == b, std::string("<") + block + "> differs: " + a + " against " + b);
+        if (!a.empty() && a == b) ++same;
+    }
+    // And what does differ is not the body: the emissive and the aura.
+    CHECK_MSG(EntityAttribute(black, "startFrame") == "4" && EntityAttribute(minion, "startFrame").empty(),
+              "ghost_minion.ent starts on frame 4, never drawn (its first update walks)");
+    CHECK_MSG(black.find("black_portal_particle.png") != std::string::npos &&
+                  minion.find("<ParticleSystem") == std::string::npos,
+              "and carries the aura minion.ent does not");
+    std::printf("  ghost_minion.ent's body is minion.ent's: %d of 11 attributes and blocks the same\n", same);
+}
+
 void runTests() {
     theWalkIsTheDecodedSpeedNotTheRemakesGuess();
     aMarkerResolvesItsWaypointsByPrefix();
@@ -594,6 +774,9 @@ void runTests() {
     theKillerFloorKillsNoPlayer();
     theKillerFloorTakesAMinion();
     aMinionsDeathIsWrittenDownForTheFrame();
+    aMarkerAddsTheEntityItNames();
+    anEntityTheRulesDoNotKnowIsRefused();
+    theBlackKnightsBodyIsAMinions();
 }
 
 } // namespace

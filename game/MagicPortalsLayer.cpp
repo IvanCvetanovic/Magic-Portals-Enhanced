@@ -1252,6 +1252,24 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
             return true;
         }
         return false;
+    case EffectOwner::Kind::Minion: {
+        // WHERE ITS PICTURE STANDS THIS FRAME, and not where the tick left its
+        // body. The original has one point: the callback moves the entity, and the
+        // frame releases its particles from, and draws its sprite at, that point.
+        // The app draws a body between its last two ticks (InterpolationSystem), so
+        // the body's own point runs a tick ahead of the knight on the screen - 0.65
+        // units at the patrol's 39 a second - and systems released from it would
+        // lead their knight. The picture's centre, back out through the pivot
+        // syncMinions placed it by, is that entity point as it is drawn.
+        if (owner.index < 0 || owner.index >= static_cast<int>(m_minions.size())) return false;
+        const MinionQuad& drawn = m_minions[static_cast<std::size_t>(owner.index)];
+        // Taken away (a killer floor, a strike): DeleteEntity takes its systems too.
+        if (drawn.quad == entt::null || !registry.valid(drawn.quad)) return false;
+        const Art::Minion& art = m_artRules.minion;
+        atPx = Units::ToPixels(registry.get<TransformComponent>(drawn.quad).position) +
+               glm::dvec2(art.pivotXPx, art.pivotYPx) + owner.offsetPx;
+        return true;
+    }
     }
     return false;
 }
@@ -1280,12 +1298,12 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     effect.colour = spawn.colour;
     effect.temporary = art.Temporary();
     // ShouldEntityBeAlwaysActive (ETHActiveEntityHandler.cpp:70-74): temporary, or
-    // dynamic with a callback or a simulated body. The port models the first arm
-    // only, because nothing it spawns has the second: red_eyes has no
-    // ETHCallback_/ETHConstructorCallback_ of its own in the listing and no shape,
-    // and it is the only effect anything can hide. The step that spawns an effect
-    // whose .ent names a callback is the step to widen this.
-    effect.alwaysActive = effect.temporary;
+    // dynamic with a callback or a simulated body. The first arm is read off the
+    // .ent; the second is the caller's to say, since the .ent reader reads neither
+    // a shape nor a callback: red_eyes has neither (no ETHCallback_ of its own in
+    // the listing, no shape), and a minion has both (ETHCallback_ghost_minion and
+    // shape 4, planning step 97).
+    effect.alwaysActive = effect.temporary || spawn.alwaysActive;
     effect.z = slotAfter(std::round(spawn.zUnits), spawn.pictureSlot);
     effect.haloZ = slotAfter(std::round(spawn.zUnits), Slot::EffectHalo);
     // What it is to follow, before it is counted as added: an effect added to
@@ -1296,8 +1314,9 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     // ITS PICTURE, on its pivot: a torch's hangs 16 below its node from a
     // <PivotAdjust> of (0, -16), so a picture's centre is its entity's point less
     // the pivot, at the entity's scale - the rule the player's picture is drawn
-    // by. Most effects carry none at all (fireball.ent, red_eyes.ent).
-    if (!art.sprite.empty()) {
+    // by. Most effects carry none at all (fireball.ent, red_eyes.ent). A minion's
+    // is drawn by syncMinions, so it has none here (EffectSpawn::picture).
+    if (!art.sprite.empty() && spawn.picture) {
         const Sprites::Image& sheet = drawnImage(originalImage(art.sprite));
         const glm::dvec2 cellPx = frameUnits(sheet, art.columns, art.rows);
         if (cellPx == glm::dvec2(0.0)) {
@@ -1703,6 +1722,8 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
         report.drawn = effect.quad != entt::null;
         report.hasLight = effect.light != entt::null;
         report.hasHalo = effect.halo != entt::null;
+        report.followKind = effect.follow.kind;
+        report.followIndex = effect.follow.index;
         if (effect.art.light) {
             const Lighting::Light lit = Lighting::OwnerScaled(*effect.art.light, effect.scale);
             report.lightRange = lit.range;
@@ -1721,6 +1742,7 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
                 if (!particle.released) continue;
                 ++report.released;
                 report.ageSumMs += particle.elapsedMs;
+                if (particle.elapsedMs == 0.0) report.newbornPx.push_back(particle.bornPx);
             }
             for (const entt::entity quad : emitter.quads) {
                 if (quad == entt::null) continue;
@@ -5104,9 +5126,21 @@ void MagicPortalsLayer::matchMinions() {
         const Minions::Minion& minion = minions[m_minions.size()];
         MinionQuad made;
         made.pose.row = art.startRow;
-        // ghost_minion.ent by its marker's entityName; the boss's escorts are
-        // minion.ent (ETHCallback_ghost ins 1137, 'minion.ent').
-        made.black = !minion.summoned && minion.entityName == art.blackEntity;
+        // ghost_minion.ent, the entity level31b's marker adds (R16); the boss's
+        // escorts are minion.ent (ETHCallback_ghost ins 1137, 'minion.ent').
+        made.black = minion.entity == art.blackEntity;
+        // And whether that entity carries particle systems of its own, read off its
+        // .ent once per entity: ghost_minion.ent's aura, and nothing on a minion.ent.
+        auto known = m_entityCarriesSystems.find(minion.entity);
+        if (known == m_entityCarriesSystems.end()) {
+            std::vector<Particles::System> systems;
+            std::string error;
+            const bool carries =
+                !m_paths.original.empty() &&
+                Particles::Load(m_paths.original + "/entities/" + minion.entity, systems, error) && !systems.empty();
+            known = m_entityCarriesSystems.emplace(minion.entity, carries).first;
+        }
+        made.systems = known->second;
         made.z = minion.summoned ? m_escortZ : m_minionZ;
         made.lookZ = minion.summoned ? m_escortLookZ : m_artRules.LevelDepth(art.z);
         m_minions.push_back(made);
@@ -6127,6 +6161,41 @@ MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn
 // back door.
 void MagicPortalsLayer::latchSimEffects() {
     if (!m_loaded) return;
+
+    // A MINION'S OWN SYSTEMS (the visuals plan's 11.4, planning step 97). The
+    // entity a marker adds is ghost_minion.ent on 3-32 (R16), and that .ent
+    // carries 24 black_portal_particle.png at alphaMode 4: the knights' dark
+    // aura, a multiply (particleTexture). spawnMinion's AddEntity adds them with
+    // the entity, so they are queued once, when the minion is matched, and are
+    // carried by its PICTURE (EffectOwner::Kind::Minion) until it is taken away,
+    // when they go with it. The runtime draws no picture for it: the knight is
+    // syncMinions'. At the minion's own depth - a raw 2 over the factor for a
+    // marker's - whose system's <StartPoint> z of -2 puts them behind it
+    // (SpawnEffect). On the effects' stream (00_order K8): nothing the level
+    // places draws a number more or less for them.
+    //
+    // A minion.ent carries none, so nothing is added for the 61 other markers or
+    // an escort. dragon_knight.ent carries the same system, and comes only after
+    // 2-32 is won, which the port does not build.
+    matchMinions();
+    for (std::size_t i = 0; i < m_minions.size() && i < m_level.minions.minions.size(); ++i) {
+        MinionQuad& drawn = m_minions[i];
+        const Minions::Minion& minion = m_level.minions.minions[i];
+        if (!drawn.systems || drawn.systemsQueued || minion.gone || minion.body == entt::null) continue;
+        EffectSpawn add;
+        add.entity = minion.entity;
+        add.atPx = minion.spawnPx; // where the marker added it; its picture's point replaces it
+        add.zUnits = drawn.lookZ;
+        // spawnMinion's AddEntity angle and getScale() (minions.json spawn).
+        add.angleDeg = m_level.minions.rules.spawnAngleDeg;
+        add.scale = m_level.minions.rules.spawnScale;
+        add.follow.kind = EffectOwner::Kind::Minion;
+        add.follow.index = static_cast<int>(i);
+        add.picture = false;
+        add.alwaysActive = true;
+        m_effectQueue.push_back(add);
+        drawn.systemsQueued = true;
+    }
 
     // THE FIREBALLS IN FLIGHT. Each one is an entity of the original's -
     // addFireball's fireball.ent - and the entity is the whole of what is seen:

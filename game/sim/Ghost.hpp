@@ -30,8 +30,9 @@
 //
 // WHERE IT STARTS, and this is a consequence rather than a choice. In the
 // original a ghost.ent is created by a dying ghost_minion and flies TO ghost_pos;
-// the port does not build that transformation - minions.json records that a
-// marker's entityName is never honoured - so the ghost begins at ghost_pos. Its
+// the port does not build that transformation - the sim spawns the ghost_minion.ent
+// its marker names (R16, planning step 97) but not what it adds when it dies,
+// which is R4's, the visuals plan's 12.2 - so the ghost begins at ghost_pos. Its
 // four appear waypoints are currentPos, the quarter-point, and ghost_pos twice,
 // which with currentPos == ghost_pos all coincide. So the appearance keeps its
 // DURATION (1200 + 2500 + 50 + 0 ms) and loses its path, and what the waypoints

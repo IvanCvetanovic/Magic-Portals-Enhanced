@@ -866,8 +866,10 @@
         "level31b's marker spawns ghost_minion.ent (its metadata/entityName), the chapter-3 boss's black",
         "knight. ETHCallback_ghost_minion (bytes 451487..451999) ins 8-18 SetColor(V3_ZERO) every frame, then",
         "ins 25 runs ETHCallback_minion: the same rows, walk and hold. ghost_minion.ent: the same sheet, cut",
-        "and PivotAdjust, EmissiveColor (0, 0, 0). Its 24 black_portal_particle.png (alphaMode 4) are the",
-        "visuals plan's 11.4, not built here. The sim spawns the default body (R16 is 11.4's)"
+        "and PivotAdjust, EmissiveColor (0, 0, 0). The sim holds the entity the marker adds",
+        "(Minions::Minion::entity; R16, planning step 97), and the knight is drawn black where it is this",
+        "one. Its 24 black_portal_particle.png (alphaMode 4) are added with it by the layer as the",
+        "effects runtime's systems of that entity, carried by the knight's drawn point (step 97)"
       ],
       "entity": "ghost_minion.ent",
       "colour": [0.0, 0.0, 0.0],

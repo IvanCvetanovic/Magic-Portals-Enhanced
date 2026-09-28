@@ -5,6 +5,7 @@
 #include "core/Components.hpp"
 #include "core/Json.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <fstream>
@@ -113,6 +114,28 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     read.killerName = killer["entity_name"].AsString();
 
+    // What a marker adds (R16). Refused when missing rather than taken as
+    // minion.ent: a marker naming an entity is the whole of the rule.
+    const Json::Value& spawn = root["spawn"];
+    if (!spawn.Has("default_entity") || !spawn["default_entity"].IsString()) {
+        error = path + ": spawn.default_entity is missing or not a string";
+        return false;
+    }
+    read.defaultEntity = spawn["default_entity"].AsString();
+    if (!spawn.Has("entities") || !spawn["entities"].IsArray()) {
+        error = path + ": spawn.entities is missing or not a list";
+        return false;
+    }
+    if (!number("spawn", "angle_deg", read.spawnAngleDeg)) return false;
+    if (!number("spawn", "scale", read.spawnScale)) return false;
+    for (const Json::Value& named : spawn["entities"].AsArray()) {
+        if (!named.IsString() || named.AsString().empty()) {
+            error = path + ": spawn.entities names an entity in each entry";
+            return false;
+        }
+        read.entities.push_back(named.AsString());
+    }
+
     // Each of these would look like a level that works. A speed of nothing is a
     // minion that stands where it spawned; a step of nothing divides by zero
     // turning that speed into one per second; an arrival of nothing is never
@@ -154,6 +177,19 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": killer.entity_name names an entity";
         return false;
     }
+    // The fallback is itself something a marker may add, or a marker that names
+    // nothing would be refused by the list it fell back past.
+    if (read.defaultEntity.empty() ||
+        std::find(read.entities.begin(), read.entities.end(), read.defaultEntity) == read.entities.end()) {
+        error = path + ": spawn.default_entity is one of spawn.entities";
+        return false;
+    }
+    // The body is built from body{} as it stands; a spawn at another scale would
+    // need that body scaled with it, which nothing here does.
+    if (read.spawnScale != 1.0) {
+        error = path + ": spawn.scale is 1, the scale body{} is stated at";
+        return false;
+    }
 
     out = std::move(read);
     return true;
@@ -188,6 +224,7 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
                            const std::vector<Waypoint>& patrol) {
     Minion minion;
     minion.name = name;
+    minion.entity = rules.defaultEntity;
     minion.summoned = true;
     minion.spawnPx = atPx;
     minion.waypoints = patrol;
@@ -395,7 +432,17 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
         Minion minion;
         minion.name = node.name;
         minion.waypointName = MetaText(node, "waypointName");
-        minion.entityName = MetaText(node, "entityName");
+        // ETHCallback_minion_spawn #31-51 hands GetString('entityName') to
+        // spawnMinion, whose #1-23 make an empty one 'minion.ent' before AddEntity
+        // (#25-39) adds it. So the marker says what is added, and the sim holds
+        // that (R16). An entity minions.json does not know is refused, not built as
+        // a minion.ent's body in silence.
+        minion.entity = MetaText(node, "entityName");
+        if (minion.entity.empty()) minion.entity = rules.defaultEntity;
+        if (std::find(rules.entities.begin(), rules.entities.end(), minion.entity) == rules.entities.end()) {
+            error = node.name + " adds " + minion.entity + ", which is not among minions.json's spawn.entities";
+            return false;
+        }
         if (!PositionOf(node, minion.spawnPx)) {
             error = node.name + " is a minion marker with no position";
             return false;

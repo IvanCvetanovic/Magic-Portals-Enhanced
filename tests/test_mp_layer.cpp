@@ -9485,6 +9485,249 @@ void AMinionAStrikeTakesLeavesBloodAndNoSkull() {
     layer.OnDetach(registry);
 }
 
+// THE KNIGHTS' AURA (the visuals plan's 11.4, planning step 97). 3-32's black
+// knight is the ghost_minion.ent its marker adds (R16), and that .ent's one system
+// - 24 black_portal_particle.png at alphaMode 4 - comes with it: added once, on the
+// effects' stream, drawn as its multiply, carried by the knight where it is DRAWN,
+// behind it, and gone when it goes; a retry adds it again. A minion.ent carries
+// none, so level0b's two knights add nothing.
+//
+// Drawn the way the APP draws it: BeginTick, the tick, EndTick, then frames from
+// Apply(alpha) - alpha 0 as --fixed-step lands every frame, and 0.5 between. A
+// body is drawn between its last two ticks, so a point read off the tick's body
+// would lead the knight on the screen by up to a tick's walk, 0.65 units at 39 a
+// second: this measures that too, so the gate ("the aura follows its moving owner
+// within 0.5 u") is one this case can fail.
+void TheBlackKnightCarriesItsAuraAsAMultiply() {
+    if (!OriginalArtIsThere("TheBlackKnightCarriesItsAuraAsAMultiply")) return;
+    // The multiply is written once and kept: this case makes it.
+    std::error_code ec;
+    std::filesystem::remove(TestPaths().prisms / "particles_black_portal_particle_multiply.png", ec);
+    MagicPortals::Art::Rules art;
+    std::string artError;
+    CHECK_MSG(MagicPortals::Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", art, artError),
+              artError);
+    const glm::dvec2 pivot(art.minion.pivotXPx, art.minion.pivotYPx);
+    const auto auraOf = [](const std::vector<MagicPortalsLayer::EffectReport>& reports, int& count) {
+        MagicPortalsLayer::EffectReport found{};
+        count = 0;
+        for (const MagicPortalsLayer::EffectReport& one : reports) {
+            if (one.entity != "ghost_minion.ent") continue;
+            ++count;
+            found = one;
+        }
+        return found;
+    };
+
+    // A minion.ent carries none: level0b's patroller and guard add no effect.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0b");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() != nullptr && layer.ArtError().empty()) {
+            CloseTheLevelStartPopup(layer, registry);
+            const int before = layer.EffectsSpawned();
+            for (int tick = 0; tick < 3; ++tick) {
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+            CHECK_MSG(layer.MinionReports().size() == 2 && layer.EffectsSpawned() == before,
+                      "level0b's two minion.ent knights add nothing: " +
+                          std::to_string(layer.EffectsSpawned() - before) + " added");
+        }
+        layer.OnDetach(registry);
+    }
+
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    const MagicPortals::Minions::Minion* knight = level.minions.FindMinion("minion_spawn_908");
+    CHECK_MSG(knight != nullptr && knight->entity == "ghost_minion.ent", "level31b's marker adds ghost_minion.ent");
+    if (knight == nullptr || knight->body == entt::null) return;
+    const entt::entity body = knight->body;
+    const double above = level.minions.rules.EntityAboveCentrePx();
+
+    int most = 0;          // aura effects alive at once, at most
+    int frames = 0;
+    int carried = 0;       // frames it was there
+    int newborns = 0;
+    int strayBorn = 0;
+    double worstDrawn = 0.0;   // from the knight's drawn entity point
+    double worstBody = 0.0;    // from the point the tick left its body at
+    double leftmost = 1e9;
+    double rightmost = -1e9;
+    MagicPortalsLayer::EffectReport aura{};
+    for (int tick = 0; tick < 300; ++tick) {
+        InterpolationSystem::BeginTick(registry);
+        tickWith(layer, registry, kRest, {}, {});
+        InterpolationSystem::EndTick(registry);
+        if (!registry.valid(body)) break;
+        const glm::dvec2 tickPx =
+            MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position) - glm::dvec2(0.0, above);
+        for (const float alpha : {0.0f, 0.5f}) {
+            InterpolationSystem::Apply(registry, alpha);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick / 2.0f);
+            ++frames;
+            int count = 0;
+            const MagicPortalsLayer::EffectReport now = auraOf(layer.EffectReports(), count);
+            most = std::max(most, count);
+            if (count != 1) continue;
+            aura = now;
+            ++carried;
+            const MagicPortalsLayer::MinionReport* drawn = MinionOf(layer.MinionReports(), "minion_spawn_908");
+            if (drawn == nullptr || drawn->quad == entt::null) continue;
+            const glm::dvec2 drawnPx =
+                MagicPortals::Units::ToPixels(registry.get<TransformComponent>(drawn->quad).position) + pivot;
+            worstDrawn = std::max(worstDrawn, glm::distance(aura.atPx, drawnPx));
+            worstBody = std::max(worstBody, glm::distance(aura.atPx, tickPx));
+            leftmost = std::min(leftmost, drawnPx.x);
+            rightmost = std::max(rightmost, drawnPx.x);
+            // Each particle this frame released: at the owner's x (<StartPoint> and
+            // <RandStartPoint> x are 0, the angle 0), 8 above it, +-12.
+            for (const glm::dvec2& born : aura.newbornPx) {
+                ++newborns;
+                const double dy = born.y - aura.atPx.y;
+                if (std::fabs(born.x - aura.atPx.x) > 1e-6 || dy < -20.0 - 1e-6 || dy > 4.0 + 1e-6) ++strayBorn;
+            }
+        }
+    }
+    CHECK_MSG(most == 1 && carried >= frames - 2,
+              "one aura, from the first frame on: " + std::to_string(carried) + " of " + std::to_string(frames) +
+                  " frames, at most " + std::to_string(most));
+    CHECK_MSG(rightmost - leftmost >= 40.0,
+              "the knight walks its patrol meanwhile: " + std::to_string(rightmost - leftmost) + " units");
+    CHECK_MSG(worstDrawn <= 0.5, "the aura follows its moving knight within 0.5 u: " + std::to_string(worstDrawn));
+    CHECK_MSG(worstBody > 0.5, "where a point read off the tick's body would not: " + std::to_string(worstBody));
+    CHECK_MSG(newborns > 100 && strayBorn == 0,
+              std::to_string(strayBorn) + " of " + std::to_string(newborns) + " released off the knight's point");
+    // What was added: the entity's systems and no picture of the runtime's own.
+    CHECK_MSG(aura.followKind == MagicPortalsLayer::EffectOwner::Kind::Minion && aura.followIndex == 0,
+              "carried by the knight, minion 0");
+    CHECK_MSG(!aura.drawn && !aura.hasLight && !aura.temporary && aura.alwaysActive && aura.systems == 1 &&
+                  aura.pool == 24,
+              "no picture (the knight is syncMinions'), no light, not temporary, always active, 24 particles");
+    CHECK_MSG(NearD(aura.zUnits, 2.0 / 2.8125, 1e-9), "at the knight's own depth: " + std::to_string(aura.zUnits));
+    CHECK_MSG(aura.systemSizePx.size() == 1 && NearD(aura.systemSizePx[0], 18.0, 1e-9),
+              "at spawnMinion's scale 1: size 18");
+    CHECK_MSG(aura.systemImage.size() == 1 &&
+                  EndsWith(aura.systemImage[0], "particles_black_portal_particle_multiply.png"),
+              "drawn with its multiply: " + (aura.systemImage.empty() ? std::string("none") : aura.systemImage[0]));
+    // The multiply as written: black at 255 - grey, texel for texel of the file
+    // the loader draws (black_portal_particle.png has no tier file).
+    std::vector<int> greys;
+    if (aura.systemImage.size() == 1) {
+        const std::string source = std::string(MAGICPORTALS_ORIGINAL_DIR) + "/particles/black_portal_particle.png";
+        int w = 0, h = 0, n = 0, mw = 0, mh = 0, mn = 0;
+        stbi_uc* grey = stbi_load(source.c_str(), &w, &h, &n, 3);
+        stbi_uc* multiply = stbi_load(aura.systemImage[0].c_str(), &mw, &mh, &mn, 4);
+        int wrong = -1;
+        if (grey != nullptr && multiply != nullptr && w == mw && h == mh) {
+            wrong = 0;
+            for (int i = 0; i < w * h; ++i) {
+                const stbi_uc* m = multiply + static_cast<std::ptrdiff_t>(i) * 4;
+                const int g = grey[static_cast<std::ptrdiff_t>(i) * 3];
+                greys.push_back(g);
+                if (m[0] != 0 || m[1] != 0 || m[2] != 0 || m[3] != 255 - g) ++wrong;
+            }
+        }
+        if (grey != nullptr) stbi_image_free(grey);
+        if (multiply != nullptr) stbi_image_free(multiply);
+        CHECK_MSG(wrong == 0, "black_portal_particle.png's " + std::to_string(w) + " x " + std::to_string(h) +
+                                  " texels, each black at 255 - grey: " + std::to_string(wrong) + " not");
+    }
+    // Its quads, mixed at (0, 0, 0, 1) - and THE UNIT (00_order 11.4, "the same
+    // unit case" as 11.3's): each grey the file holds, over every d, through the
+    // engine's mix at 8 bits with the colour these quads are given, is d g / 255
+    // within 1.
+    int quads = 0;
+    bool coloured = true;
+    float colourAlpha = -1.0f;
+    for (const entt::entity quad : aura.particleQuads) {
+        const auto& material = registry.get<MaterialComponent>(quad);
+        ++quads;
+        colourAlpha = material.albedoColor.a;
+        if (!EndsWith(material.albedoTexturePath, "_multiply.png") ||
+            material.albedoColor != glm::vec4(0.0f, 0.0f, 0.0f, 1.0f) ||
+            material.blend != MaterialComponent::BlendMode::Alpha) {
+            coloured = false;
+        }
+    }
+    CHECK_MSG(quads > 0 && coloured, "its " + std::to_string(quads) + " quads on the multiply, mixed at (0, 0, 0, 1)");
+    std::sort(greys.begin(), greys.end());
+    greys.erase(std::unique(greys.begin(), greys.end()), greys.end());
+    int over = 0;
+    double worst = 0.0;
+    for (const int g : greys) {
+        for (int d = 0; d <= 255; ++d) {
+            const double a = static_cast<double>(255 - g) / 255.0 * static_cast<double>(colourAlpha);
+            const long got = std::lround(static_cast<double>(d) * (1.0 - a));
+            const double off = std::fabs(static_cast<double>(got) - static_cast<double>(d) * g / 255.0);
+            worst = std::max(worst, off);
+            if (off > 1.0) ++over;
+        }
+    }
+    CHECK_MSG(!greys.empty() && over == 0, std::to_string(over) + " of " + std::to_string(greys.size() * 256) +
+                                               " (g, d) pairs past 1; worst " + std::to_string(worst));
+    // BEHIND ITS KNIGHT: the knight's raw 2 plus the system's <StartPoint> z of -2
+    // is -1.29 on the level's axis, after the pictures at or below it (the door at
+    // -6) and before those at 0 (level31b's five platforms), the knight at 0.71 and
+    // the player at 1.42 - where the original sorts it (ETHEntityRenderingManager.cpp:
+    // 94-104).
+    const float auraZ = aura.systemZ.empty() ? 0.0f : aura.systemZ.front();
+    const MagicPortalsLayer::MinionReport* drawn = MinionOf(layer.MinionReports(), "minion_spawn_908");
+    float deepestAtZero = 1e9f;
+    float door = -1e9f;
+    for (const MagicPortalsLayer::PictureReport& picture : layer.PictureReports()) {
+        if (picture.zIndex == 0) deepestAtZero = std::min(deepestAtZero, picture.z);
+        if (picture.node == "door_locked_ent_1252") door = picture.z;
+    }
+    CHECK_MSG(drawn != nullptr && auraZ < drawn->z && auraZ < layer.PlayerSlotZ() && auraZ < deepestAtZero &&
+                  auraZ > door,
+              "behind its knight " + std::to_string(drawn != nullptr ? drawn->z : 0.0f) + ", the player " +
+                  std::to_string(layer.PlayerSlotZ()) + " and the platforms " + std::to_string(deepestAtZero) +
+                  ", in front of the locked door " + std::to_string(door) + ": " + std::to_string(auraZ));
+
+    // AND IT GOES WITH ITS KNIGHT: put on the level's killer floor, the knight is
+    // taken, and the frame after frees what it carried.
+    const int freedBefore = layer.EffectsFreed();
+    CHECK(!level.minions.killers.empty());
+    if (!level.minions.killers.empty()) {
+        const glm::vec2 centre = level.minions.killers.front().box.centre;
+        const glm::dvec2 floorPx = MagicPortals::Units::ToPixels(glm::vec3(centre.x, centre.y, 0.0f));
+        for (int tick = 0; tick < 5 && registry.valid(body); ++tick) {
+            PutBodyAt(registry, body, floorPx);
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        int count = 0;
+        auraOf(layer.EffectReports(), count);
+        CHECK_MSG(!registry.valid(body) && count == 0 && layer.EffectsFreed() > freedBefore,
+                  "the floor took the knight, and its aura with it");
+    }
+    // And a retry adds it again, once (past a level-start popup, where one is raised).
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 2; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    int again = 0;
+    auraOf(layer.EffectReports(), again);
+    CHECK_MSG(again == 1, "a retry adds the aura again, once: " + std::to_string(again));
+    std::printf("  level31b: the aura on %d of %d frames, %.6f u from its drawn knight (%.3f from the tick's body) over "
+                "%.1f units of patrol; %d released, z %.4f behind the knight's %.4f\n",
+                carried, frames, worstDrawn, worstBody, rightmost - leftmost, newborns, static_cast<double>(auraZ),
+                static_cast<double>(drawn != nullptr ? drawn->z : 0.0f));
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     TheLayerPlaysLevel30();
     TheBetweenSlotTableSaysWhereEachClassStands();
@@ -9507,6 +9750,7 @@ void runTests() {
     AFallLeavesASkullAtTheViewsFoot();
     AMinionTheFloorTakesLeavesASkullAndBlood();
     AMinionAStrikeTakesLeavesBloodAndNoSkull();
+    TheBlackKnightCarriesItsAuraAsAMultiply();
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();

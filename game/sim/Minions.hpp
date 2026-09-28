@@ -91,6 +91,16 @@ struct Rules {
     double bodyRadiusPx = 0.0;   // one circle for the original's two
     double entityAboveFeetPx = 0.0; // where the original's entity stands over its feet
     std::string killerName;      // the entity name of the floor that kills a minion
+    // What a marker adds (minions.json spawn): the entity spawnMinion falls back to
+    // when the marker names none, and every entity a marker may name. The one body
+    // above serves them all, because their .ent files state the same one.
+    std::string defaultEntity;
+    std::vector<std::string> entities;
+    // And how spawnMinion adds it: AddEntity's angle and scale, which the layer
+    // adds the entity's own particle systems at. The body above is the scale-1
+    // body, so LoadRules takes no other scale.
+    double spawnAngleDeg = 0.0;
+    double spawnScale = 1.0;
 
     // The body's centre less this is the original's entity point, which arrivePx
     // and settlePx are measured from (minions.json body.entity_above_feet_px).
@@ -121,9 +131,15 @@ enum class Arm {
 struct Minion {
     std::string name;         // the spawner's node name; the minion answers to it
     std::string waypointName; // the prefix, not a name
-    // The marker's metadata/entityName, empty for the default minion.ent. Read for
-    // the picture only: the body spawned is the default one whatever it names.
-    std::string entityName;
+    // The entity the marker ADDS, and so the one the sim holds: its
+    // metadata/entityName, or Rules::defaultEntity where it names none
+    // (spawnMinion #1-23). The owner's standing ruling R16 (planning step 97):
+    // level31b's marker adds ghost_minion.ent, the chapter-3 boss's black knight,
+    // and every other marker a minion.ent. What differs between the two is not
+    // the body - minions.json spawn says why one serves both - but what is drawn
+    // (art.json minion.black_knight, the layer's aura) and what the black one
+    // adds when it dies (ETHCallback_ghost_minion #35-104, R4: not built here).
+    std::string entity;
     bool summoned = false;    // called up by the chapter-3 boss (Summon), not spawned by a marker
     glm::dvec2 spawnPx{0.0, 0.0};
     entt::entity body = entt::null;
@@ -195,7 +211,9 @@ struct State {
     //
     // The patrol is passed IN, already resolved: the boss resolves its prefix
     // when the level is found, because Game::AfterStep has no scene to resolve a
-    // waypoint name from.
+    // waypoint name from. What it adds is a minion.ent: the rage arm hands
+    // spawnMinion that literal (ETHCallback_ghost ins 1137), which is also
+    // spawnMinion's own fallback, Rules::defaultEntity.
     entt::entity Summon(entt::registry& registry, const std::string& name, const glm::dvec2& atPx,
                         const std::vector<Waypoint>& patrol);
 
@@ -231,6 +249,10 @@ struct State {
 //
 // The empty-waypointName branch in Find is therefore defensive rather than
 // exercised: no marker in any of the 128 levels lacks one.
+//
+// And false for a marker whose entity is not one Rules::entities names: a body
+// the port does not know is not built as a minion.ent's in silence. No level
+// names one - level31b's ghost_minion.ent is the only entityName in the 128.
 bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rules, State& out, std::string& error);
 
 } // namespace MagicPortals::Minions

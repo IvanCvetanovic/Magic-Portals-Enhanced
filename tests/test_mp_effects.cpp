@@ -683,6 +683,14 @@ void ARowMissingAFactIsRefused() {
             "\"entity\": \"blood.ent\",\n    \"offset_units\": [0, 16],", "blood");
     refused("paired_suck.json", "\"entity\": \"suck_effect.ent\",\n    \"offset_units\": 32,",
             "\"entity\": \"suck_effect.ent\",\n    \"offset_units\": [0, 32],", "suck_effect");
+    // Blood's depth is its victim's own (planning step 97, 11.3's left-for-later):
+    // the row's z is 0 and scaled, and neither a number nor a bare literal is taken.
+    refused("blood_deeper.json", "\"entity\": \"blood.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0,",
+            "\"entity\": \"blood.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 2,", "blood.z");
+    refused("blood_bare.json",
+            "\"entity\": \"blood.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": true},",
+            "\"entity\": \"blood.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": false},",
+            "blood.z");
     refused("no_inset.json", "\"inset_units\": 12,", "", "skull.inset_units");
     refused("no_room.json", "\"inset_units\": 12,", "\"inset_units\": 0,", "skull.inset_units");
 

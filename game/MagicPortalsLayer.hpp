@@ -487,7 +487,10 @@ public:
     // steps that draw the rest wire their own rules there (7.3 teleport, 10.x
     // pickups, and 11.3's blood and skull for a minion that dies); the level's
     // end and the player's death queue theirs from the tick that decides them
-    // (latchFinishEffects, latchDeathEffects). The suites also spawn them by hand,
+    // (latchFinishEffects, latchDeathEffects). And a minion whose entity carries
+    // particle systems - the ghost_minion's aura, 3-32's black knight - has them
+    // added once, carried by its picture, with no picture of the runtime's own
+    // (latchSimEffects, planning step 97). The suites also spawn them by hand,
     // which is how the light cap and the free rules are measured without a level
     // that asks for one.
     struct EffectOwner {
@@ -497,6 +500,10 @@ public:
             Sprite,       // a level picture's entity point (a crystal, a key, a torch)
             Fireball,     // a carranca's fireball while it flies
             PlacedPortal, // a portal the player opened
+            // A minion's entity point where its PICTURE is drawn this frame
+            // (m_minions, by place: that list only grows). The systems of the
+            // entity a marker added: the ghost_minion's aura (planning step 97).
+            Minion,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -521,6 +528,17 @@ public:
         // (00_order K13), and everything else the script adds is Slot::Effect. Its
         // halo and its systems keep their own classes either way.
         Slot pictureSlot = Slot::Effect;
+        // WHETHER THE RUNTIME DRAWS ITS PICTURE. False for an entity whose picture
+        // the layer already draws as an actor, by its own sync on its own sheet: a
+        // minion's (syncMinions, cut as the original cuts it, framed by the sim's
+        // arm). Its light and its systems are still the runtime's, carried by it
+        // (planning step 97: ghost_minion.ent's aura).
+        bool picture = true;
+        // ShouldEntityBeAlwaysActive's second arm (ETHActiveEntityHandler.cpp:70-74):
+        // dynamic with a callback or a simulated body, which the caller knows and
+        // the .ent reader does not. A minion is both. It decides only whether a
+        // HIDDEN effect is still stepped, and a minion's never is hidden.
+        bool alwaysActive = false;
         // ETHEntity::SetColor, which PortalManager::update gives a placed portal
         // and ETHCallback_portal then fades: ONLY the entity's sprite reads it
         // (ETHRenderEntity.cpp:112-117 against ETHParticleManager.cpp:381-389), so
@@ -578,6 +596,13 @@ public:
         // THIS effect's specks rather than of every effect's at once. They are
         // pooled, so a handle here outlives the frame that drew it.
         std::vector<entt::entity> particleQuads;
+        // What it follows (EffectOwner): the kind, and which one by place or id.
+        EffectOwner::Kind followKind = EffectOwner::Kind::None;
+        int followIndex = -1;
+        // Where each particle the last step released or renewed was born - one
+        // whose age is still 0 - in emitter order: the point its owner stood at
+        // on that step, plus its start point and spread.
+        std::vector<glm::dvec2> newbornPx;
         int systems = 0;        // its emitters
         int pool = 0;           // the particles they were made with, summed
         int active = 0;         // GetNumActiveParticles, summed over them
@@ -1496,11 +1521,18 @@ private:
         entt::entity quad{entt::null};
         Art::MinionPose pose;
         bool black{false};  // ghost_minion.ent: SetColor(0) every frame
+        // Its entity's .ent carries a particle system (ghost_minion.ent's aura), and
+        // whether latchSimEffects has queued them: once, since they go with it.
+        bool systems{false};
+        bool systemsQueued{false};
         float z{0.0f};      // its slot among the art
         double lookZ{0.0};  // its depth in the level's units, and its lighting height
         glm::dvec2 centrePx{0.0}; // where its picture was last centred
     };
     std::vector<MinionQuad> m_minions;
+    // Whether an entity a minion is carries particle systems, by its .ent's name:
+    // read once, since the original's files do not change under a run.
+    std::map<std::string, bool> m_entityCarriesSystems;
     Tiers::Cut m_minionCut;    // minion.png's tier file, cut as SetupSpriteRects cuts it
     std::string m_minionSheet; // that file; empty when it cannot be read or cut
 

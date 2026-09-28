@@ -230,11 +230,11 @@ void hurtItCallsAnEscortAndWaitsForIt() {
     // the level's own marker names ghost_minion.ent, the black knight (step 76).
     if (run.level.minions.minions.size() == before + 1) {
         const Minions::Minion& called = run.level.minions.minions.back();
-        CHECK_MSG(called.summoned && called.entityName.empty(), "the escort is summoned, and a minion.ent");
+        CHECK_MSG(called.summoned && called.entity == "minion.ent", "the escort is summoned, and a minion.ent");
     }
     const Minions::Minion* marker = run.level.minions.FindMinion("minion_spawn_908");
-    CHECK_MSG(marker != nullptr && !marker->summoned && marker->entityName == "ghost_minion.ent",
-              "level31b's own marker names ghost_minion.ent");
+    CHECK_MSG(marker != nullptr && !marker->summoned && marker->entity == "ghost_minion.ent",
+              "level31b's own marker adds ghost_minion.ent, and the sim holds it (R16)");
     CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Rage, "and it waits there");
 
     // It keeps waiting while that escort stands - this is the part that would
