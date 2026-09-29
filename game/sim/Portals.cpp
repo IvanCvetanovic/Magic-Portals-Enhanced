@@ -249,9 +249,10 @@ bool State::InField(const glm::dvec2& atPx) const {
         // The ANTIPORTAL's radius, which is half its own sprite times the node's
         // scale - not the portal's own 14. placement.json has the decode.
         //
-        // A zone carrying its OWN radius uses that instead: a gravity well's
-        // antiportal is sized from the agent's radius rather than from
-        // white_ring.png, so no constant here could express it.
+        // A zone carrying its OWN radius uses that instead. A gravity well's ring
+        // is not a zone at all: the area its agent adds is renamed gravity_area
+        // on the way in, after AntiPortalManager has gathered its fields by name,
+        // so the original never tests a tap against it (00_order R2).
         const double reachPx = zone.radiusPx > 0.0 ? zone.radiusPx : rules.antiportalRadiusPx * zone.scale;
         if (glm::distance(atPx, zone.CentreNowPx()) <= reachPx) return true;
     }
@@ -376,8 +377,9 @@ bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx) {
 // body (a StaticBody2D, a sensor, or a static the port moves kinematically), and
 // "teleportable" is a body Tick carries through a portal (travellers). The
 // fields are the zones the port plays (InField), so a tap's picture tells the
-// truth about the port's own refusal - R1's radius and R2's wells not being
-// built, the original's fields are not the port's.
+// truth about the port's own refusal - R1's radius not being built, the
+// original's fields are not yet the port's. (R2's wells, which were the other
+// difference, are not zones since step 170.)
 
 FinalPos State::FinalPosFrom(entt::registry& registry, const glm::dvec2& destPx, const glm::dvec2& casterPx,
                              bool hasBeenReflected) const {
@@ -540,7 +542,9 @@ void State::Tick(entt::registry& registry, float dt) {
         double first = 2.0; // along the stretch, from 0 to 1: past its end until something is met
         std::string stoppedBy;
         FailKind stopKind = FailKind::Body; // what stoppedBy is, for the picture
-        if (const auto hit = Shot::FirstBody(registry, flight->atPx, next, shooter)) {
+        std::vector<entt::entity> passes = shotPasses;
+        passes.push_back(shooter);
+        if (const auto hit = Shot::FirstBodyPassing(registry, flight->atPx, next, passes)) {
             const auto* tag = registry.try_get<Supersonic::TagComponent>(hit->body);
             stoppedBy = tag != nullptr ? tag->tag : std::string("a body");
             first = hit->along;

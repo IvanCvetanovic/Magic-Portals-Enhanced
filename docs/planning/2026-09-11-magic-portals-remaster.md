@@ -21136,3 +21136,189 @@ later in the program); R24 and R25 are neither touched nor withdrawn; camera dra
   1-01, 1-02 and 1-32 (world 0, levels 0, 1 and 31); 1-02's and 1-32's come from those runs, and where 1-01's came
   from is not established (it may be older). Delete that file for a fresh save before testing the menus' locks
   (B2). The verifier's window runs used a `--saves` directory of their own; the file was left as it is.
+
+## Step 170 - a gravity well refuses no portal and stops no shot: the port's zone round each well taken away, the shot flown through the agent, and 4-17, 4-18 and 4-28 won by routes (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w1c`, branch `w1-c`, from `37c4ece`, step 113), the program's R2**
+(`docs/parity-backlog.md`: the "Gravity wells, the refusal (R2)" row and section 6's B7; the 2026-09-29 audit's B7 in
+the gitignored `out/parity/audit_2026-09-29/REPORT.md`). Its build reads the frozen level data in `out/snap_w1`;
+numbered in track C's range, and the merge renumbers it. Changed: `game/sim/Game.cpp` (the wells' zones out, their
+agents into `shotPasses`), `game/sim/Portals.{hpp,cpp}` (`State::shotPasses`, the flight's test, notes),
+`game/sim/Shot.{hpp,cpp}` (`FirstBodyPassing`), `game/sim/GravityWell.{hpp,cpp}` (`ZoneRadiusPx` removed, notes),
+`game/data/gravitywell.json` (notes only: no number moves), `tests/test_mp_wells.cpp`, `tests/test_mp_routes.cpp` (the
+trace prints the keys, the keyholes and what the player died in), `tests/routes/level16c.json`, `level17c.json`,
+`level27c.json`. No engine change (the pin stays `4bfcf67`), no converter change, no format finding. **GAMEPLAY
+CHANGED (R2, as the original does):** on the five well levels (4-17, 4-18, 4-19, 4-21, 4-28; ten wells) a portal now
+opens anywhere inside a well's green ring, where the port refused every tap within radius - 12 of a well (94 to 248
+px); and the player's shot flies through a well's agent, where it died on it. The agent stays solid to the player
+and to every loose body, and pulls as before.
+
+**BLOCKERS, checked first.** R2 is decided for the original (the 2026-09-29 rulings; `00_order` section 8.4, D3 with
+its check). The decode is in the listing (`all_functions.txt`, md5 `48fe65ce...`): `computePortalFinalPos`'s ray
+passes `gravity_agent` by name (global #30-51; `placement.json` `final_pos.ray_ignores`); `projectile.ent` has shape
+0 and `ETHCallback_projectile` makes no contact query; the antiportal.ent the agent adds is renamed `gravity_area` as
+it is added (`ETHCallback_gravity_agent` #28-50; `ETHScene.cpp:264-266`), after `AntiPortalManager`'s constructor has
+gathered its fields by name (104925..105343 #16-35); and `'gravity_area'` is read only by the force and by
+`checkForLevelAchievements`. Step 113's reachability check and `test_mp_routes` are in the tree. Nothing unmet.
+
+**WHAT CHANGED.**
+- `Game::Start` no longer hands each well to `Portals::State::zones`. It hands the well's agent body
+  (`built.entities` by the well's node name; the wells are found by role, so both spellings) to a new
+  `Portals::State::shotPasses`.
+- `Portals::State::Tick` tests the flight with `Shot::FirstBodyPassing(registry, from, to, shotPasses + shooter)`, an
+  overload beside `FirstBody` (named apart because `entt::null` converts to a span as readily as to an entity, which
+  made `Dragon.cpp` and `DarkDragon.cpp`'s calls ambiguous). Nothing else a flight meets changes: the tap-time ray's
+  other ignores (`char_feet`, `death_area`, `anti_sight_wall`, `shock_agent`, `fireball`) are R23's, not this step's.
+- `GravityWell::Well::ZoneRadiusPx` is gone; `RingSizePx` (radius x 2 - 24) stays, the picture's alone, and
+  `gravitywell.json` `zone.shrink_px` keeps its key and its 24 with a note saying so. `NoPortalZone::radiusPx` stays:
+  nothing sets it now, and every placed antiportal keeps the old arithmetic.
+- The pictures follow without a line of their own: the tap-time prediction already passed `gravity_agent`, so a tap
+  beyond an agent now leaves the `portal_mark` its prediction promised, and a tap inside a ring no longer reads "in a
+  field" - `portal_mark` rather than `red_cross` / `red_waves` (A), a portal rather than `portal_fail_in_antiportal`
+  and its shake. The layer's debug "No-Portal Zone" boxes (drawn only without art) lose the well entries. A well's
+  agent sprite, which the layer placed by its zone while one shared the well's node name (the `drawn.zone` branch,
+  `MagicPortalsLayer.cpp:4441`), is now placed by the agent's static body (the `drawn.body` branch, `:4493`): the same
+  point, since no agent node is rotated and the body never moves - the sweep is byte-identical.
+
+**`test_mp_wells` 321 checks, 0 failures** (step 110's 308). Lines 312-313's two refused taps are flipped:
+`NoPortalOpensInsideAWell` becomes `AWellRefusesNoPortal` - on level16c `FindZone` is null, the level plays no zone,
+and a portal opens at the well's centre and 2 px inside the ring's rim - and `AShotFliesThroughAWell` is new: the
+agent is the first solid body on the line from the spawn through it (`FirstBody` with the player alone meets it, so
+the test cannot pass on a missing body), `FirstBodyPassing` with `shotPasses` meets nothing, `Predict` says no death
+and no red waves, and a real `Shoot` flown by `Game::Tick` opens its portal at (322, 128) with no failure.
+`TheRingIsTheAreaSeen` asserts no zone at all ten placements; `TheRingIsTwentyFourUnitsNarrowerThanTheWell` pins
+`RingSizePx` 188 / 496 / 104 for radii 106 / 260 / 64 (the zone's 94 / 248 / 52 before).
+
+**THE ROUTES** (`tests/routes/`, replayed by `test_mp_routes`; attempts and traces in the gitignored
+`out/parity/program/R2/drafts/`).
+
+| Route | Won on tick | `win_by` | Shots | How | Needs R2 |
+|---|---|---|---|---|---|
+| 4-17 `level16c` | 127 | 180 | 3 | a portal by the door, fired from the spawn through `gravity_agent_ent_2439`; one at (180, 128); a shot into the bouncer throws the player right at 70 px/s into the second, out of the first and on into the door | yes: shot 1 died on the agent before, and portal 2 is 76 px from the well (zone 94) |
+| 4-18 `level17c` | 125 | 180 | 4 | held on `gravity_agent_ent_2490` from tick ~25; a portal at (320, 200), clear of every well, and one on the player; a portal at (540, 120) and one on the player again, out moving up-left into the door (every portal clear of `antiportal_ent_2507`'s 64 px under R1) | yes: portal 2 is on the player 18.7 px from the well (zone 94) |
+| 4-28 `level27c` | 1094 | 1160 | 6 | the knight opens the door: portals take the player onto the ramp; one high over the keyhole at (440, 10) and one on the knight's walk at (140, 206) - it drops past the keyhole with the key, spent 24 px from it by tick 924, the door gone on 1010; a portal behind the descending knight at (380, 172) and one on the player, then right to the door | no: no portal within the old 116 px, no shot across the agent |
+| 4-21 `level20c` | **NOT WON** | - | - | a finding, below | - |
+
+4-28's route **depends on R1 not being built**: three of its six taps lie inside the original's 32 x 6 = 192 px of
+`antiportal_1940` (452, 108; scale 6) - (440, 10) at 98.7 px and (380, 172) at 96.3 px, both just outside the port's
+16 x 6 = 96 (the second by 0.3 px), and the self-tap (296.5, 192.9) at 177.2 px. It also leans on G1 (knights never
+shoot) and on the port's key, which opens its keyhole in any carrier's hands (`Keys::State::Tick`, as `Keys.hpp` reads
+`ETHCallback_key`; not re-derived here). The original's own route is not buildable yet: its knight dies by fire - a
+fire agent burns a minion (`Fire.hpp`'s decode: "a minion is burnable AND a character"), which the port does not wire
+(`minions.json` `_burnable_breakable_not_wired`), or a shot through the flame becomes a fireball (G8, not built). The
+trace of that attempt (`drafts/d1v4`): the knight portalled 8.9 px from `fire_agent_ent_1919` walked on, key in hand.
+
+**4-21 IS NOT WON, AND R2 IS NOT WHY: no route found; the decoded cause is the port's lift door, which has no latch.**
+B7's stated cause - the port-only 248 px zone over the button, the wall and the door - is gone with this step. What
+stands is the port's lift door: the well lets nothing rest on `button_1723`, and the port's door, unlike the
+original's, needs that button held.
+- The stone breaks the wall: portals at (420, 120) over the wall and at (70, 146) beside the stone, both from the
+  spawn platform, drop it onto the wall on tick 80 (`drafts/c4v1`; from below, `drafts/c2v2`, tick 125). It then rises
+  to the agent and stays there at (460, 74.7).
+- The player walked off the platform's end drifts over the bared button and presses it on 9 ticks in all (218-222
+  and 230-233, by the door's own opening and closing lines on 218 / 223 and 230 / 234), pressed against
+  `door_lift_1721`'s face, and floats up to bob against it at x 489, y 62-95.
+- The numbers (`out/parity/program/R2/button_pull.py`): over every place a body can press the button the well's
+  upward pull is 27.65-29.19 m/s^2 on the player against its 24 (`player.json` 1200 px/s^2) and 28.55-29.41 on the
+  stone against the world's 19.6 (`kRemakeWorldGravityPx` 980). The port's door (`Mover::Door`, `kDoorRisePx` 126,
+  linear over the 6000 ms stride) rises 21 px/s and turns back the tick the button is let go (the trace: opening on
+  tick 218 at y 106, closing on 223 at 104.25), so a 44 px player needs 43 px of rise, 2.05 s held; the 9 ticks the
+  player gives it raise it 1.75 px at most.
+- By the original's own numbers (gravity 10 m/s^2, the character's gravity scale 2) the well lifts both there too.
+  **The original needs no hold.** `ETHCallback_door_lift` (411544..414041) opens a door only from shut and closes it
+  only from fully raised: #330-440, the switch active at `status` 0 starts the whole rise (`reset(originalPos ->
+  openPos, stride)`, `status` 1) and nothing in the callback stops it; #442-471, `status` 2 at `openPos`; #473-546, the
+  switch off at `status` 2 starts the fall (`status` -1); #282-328, `status` 0 back at `originalPos`. The rise is
+  0.8 x `GetSize().y` (#61-99), 102.4 (`metal_door.png` is 32 x 128), eased by smoothEnd. So the port's own tick-218
+  press would raise the original's door fully by tick 578 and hold a 44 px gap at the floor from tick 318 to 719
+  (6.7 s); and a shot from where the trace's player bobs against the door (x 489, y 62-95) to the floor beyond it at
+  (600, 170) clears the rising door on 30 of the trace's 59 ticks from 384 to 500, and on none with the port's door
+  (`out/parity/program/R2/fix1/door_window.py`; INFERRED - the player's own path under the original's door is not
+  simulated). That door is step 109's deviation 3, a row the owner has not ruled, so this step does not build it.
+- **Holding the button with portals does not open the port's door either** (measured,
+  `out/parity/program/R2/fix2/drafts/e1`). Placed portals are single-use (`portals.json` `consume_on_traverse`,
+  owner-confirmed) and 4-21 has no static portal, so no loop keeps a body on the button: every return to it costs a
+  fresh pair, and the 400 ms tap gate (`placement.json` `next_ms`) keeps a pair's two taps at least 24 ticks apart. A
+  pair - one portal low at the button, (489, 148), and one on the player - puts the player back on the floor there. It
+  presses for 16 ticks (263-278, and 316-331 for the second pair) before the well lifts it off the sunk button. The
+  door rises 5.6 px (y 106 to 100.4) and lands again 16 ticks later (295 and 348), before the next pair can land. So
+  the port's door never passes about 5.6 px. The lowest shot line under it, from the player's lowest centre (y 148.7)
+  against its face to the floor beyond, needs more than 15 px, and walking under it needs 43. The stone would press
+  for less, since its lift over its weight is larger (INFERRED).
+
+**GATES.**
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | **passes: 0 warnings** in both builds (the first stopped on the ambiguous overload, `build1.log`; `build2.log` full) and the relink |
+| `test_mp_wells` | 312-313 flipped, from the decode; passes | **passes: 321 checks, 0 failures** (308 before): the two taps open, no zone, the shot flies through |
+| `test_mp_routes` | the 11 routes still win; 4-21 won, and routes for 4-17, 4-18, 4-28 | **14 routes, 47 checks, 0 failures**: the 11 at step 113's ticks, 4-17 on 127, 4-18 on 125, 4-28 on 1094. **4-21: NOT MET** - no route found; the decoded cause is the lift door's missing latch (above: step 109 deviation 3; portal resets over the button raise the port's door 5.6 px at most, `fix2/drafts/e1`), not a failed route in the suite |
+| Reachability | no door newly sealed | **passes: 108 reachable, 11 opened, 9 sealed, 0 differ** from `reachability.json` - the same as track C's baseline, because the flood never modelled a zone and no level or table it reads moved |
+| `test_mp_shot`, `test_mp_layer` | the flight and the layer's zone boxes changed: unchanged counts | **passes: 181 and 2901 checks, 0 failures**, their step-112 counts |
+| The sweep | 128 levels at f420; every changed level explained against `base_w1C/sweep` | **passes: 128 of 128 byte-identical** to `base_w1C/sweep` (`out/parity/program/R2/after/sweep`, on `885137c6`; the files' md5s against the baseline's files): no level taps, so no zone and no shot is ever tested, and the layer's zone boxes the wells lost are hidden with art. 128 rc=0, validation ACTIVE in 128 logs and silent; every PNG equals its log's md5; art from `out/snap_w1` in 128 logs; no unscheduled input |
+| The window plays the suite's game | each new route's `door reached on tick` in `--route` = the suite's won tick | **passes: 3 of 3** (4-17 127, 4-18 125, 4-28 1094; `--saves` a directory of the step's own, so no owner save was written); validation ACTIVE and silent in the 3 logs |
+
+**THE SUITES**, run directly, once each on the binaries this step leaves: `test_mp_wells` 321, `test_mp_routes` 47
+(the full set of 14; the `--only` authoring replays are not the gate), `test_mp_shot` 181, `test_mp_layer` 2901,
+0 failures. The other 42 suites were relinked (the library changed) and not launched: their sources are untouched, and
+none fires a shot or places a portal on a well level (`test_mp_zerog` shoots on `level1c` and only starts the well
+levels for their flag; no other suite names one or counts zones), while the sweep starts and runs all 128.
+
+**SMART APP CONTROL: 1 refusal in the step** (recounted at commit). `test_mp_wells.exe`'s first link was refused on
+its first launch; deleted and relinked once (`aa6d3350`), it ran. `MagicPortals.exe` `885137c6` (the full build's
+link) ran first time: the sweep and the three window replays. `test_mp_routes`, `test_mp_shot` and `test_mp_layer`
+ran first time. The two fix rounds, the three verifications and the commit relinked nothing and were refused nothing.
+
+**RECORDED DEVIATIONS** (the step is committed with these four, owner-delegated: every R2 gate passes, and each row
+below names its cause and the step that owns it).
+1. **4-21 (`level20c`) is not won by a route.** Required: a `tests/routes/level20c.json` that wins it from its start
+   to its door. Measured: none (the finding above); the search of portal resets over the button (`fix2/drafts/e1`,
+   reproduced to the tick by the third verification) presses `button_1723` 16 ticks per pair and raises
+   `door_lift_1721` 5.6 px at most (y 106 to 100.4), landing again on 295 and 348, against more than 15 px for a shot
+   line under it and 43 px to walk under. Cause: the port's lift door, not R2 - it has no latch (`Puzzle.cpp:100` sets
+   `opening = pressed` every tick; `Mover::Door` rises 126 px linearly at 21 px/s), where `ETHCallback_door_lift`
+   (411544..414041) opens only from shut and nothing stops a started rise (#330-440), holds `status` 2 at `openPos`
+   (#442-471), closes only from fully raised (#473-546), and rises 0.8 x 128 = 102.4 eased by smoothEnd. Not a
+   regression: 4-21 was unwon at `base_w1C`, and this step removes one of its two blockers. The force, the gravity,
+   the button and the door are untouched. Owner of the follow-up: the backlog's "Order 11.1, GAMEPLAY rows for the
+   owner" row, the lift door's rise and status machine (step 109 deviation 3); it needs no new ruling (section 6's
+   owner's-calls line decides 11.1's four as the original does), only a step spec that names it - LEFT FOR THE OWNER.
+2. **4-28's route (`level27c`) depends on R1 staying unbuilt.** It wins on tick 1094 on this build, but three of its
+   six taps lie inside the original's 32 x 6 = 192 px of `antiportal_1940` (452, 108): (440, 10) at 98.7 px,
+   (380, 172) at 96.3 px (0.3 px outside the port's 16 x 6 = 96) and the self-tap (296.5, 192.9) at 177.2 px. It also
+   leans on G1 (knights never shoot) and on the port's key opening its keyhole in any carrier's hands. Owner: R1's
+   step, which re-routes 4-28 - the original's own route needs the fire agent's burn of a minion (`minions.json`
+   `_burnable_breakable_not_wired`) or G8. Merge hazard: an R1 landing in another track before or with this step
+   fails `test_mp_routes`' 4-28 row at the merge (no R1 step is in flight at this commit).
+3. **Self-taps: that the original opens them is read from the decode, not measured.** 4-18 and 4-28 open a portal on
+   the player itself - on 4-18 because a shot's recoil only ever pushes the player away from the portal it opens, on
+   4-28 to get past the knight. The shot arrives the tick it leaves; the original's ray starts 8 units out along a
+   zero-length aim and meets nothing, so it would open there too. Owner: the owner's testing and the final comparison
+   (backlog section 6).
+4. **Suites relinked but not launched.** Required: the suites the change touches, run once each. Measured: 4 run
+   (`test_mp_wells`, `test_mp_routes`, `test_mp_shot`, `test_mp_layer`); the other 42 of the 46 were relinked and not
+   launched, to spare Smart App Control. None fires a shot or places a portal on a well level (the third
+   verification's grep of `tests/`: `test_mp_zerog` shoots only on `level1c` and `level1`), and the sweep starts all
+   128 through the changed `Game::Start`. Owner: the merge's one full ctest.
+
+**RULINGS APPLIED.** R2 (built: as the original). R1, R17 and R23 stay unbuilt (not this step's); R24 and R25 are
+untouched; camera dragging is untouched.
+
+**LEFT FOR THE OWNER.**
+- **4-21**: the lift door's status machine as the original runs it (step 109 deviation 3: a rise of 0.8 x h eased by
+  smoothEnd, opened only from shut, closed only from fully raised; decided for the original by the 2026-09-29 rulings
+  once a step's spec names it). Its own step, since it moves 46 lift doors on 37 levels: it re-routes 1-14, 1-15,
+  1-16 and 1-32 (each has a `door_lift`), re-pins `test_mp_play`'s `kDoorRisePx` checks and the layer's door-dust
+  test, explains the sweep, and then adds 4-21's route (the candidate above: a portal beyond the raised door, one on
+  the player).
+- **4-28 after R1** (deviation 2).
+
+**LEFT FOR LATER.**
+- The backlog (`docs/parity-backlog.md`) is not edited here: the close role ticks the R2 row and rewrites B7 (zone
+  gone; 4-21 unwon until the lift door is built), notes 4-28's R1 dependency, and adds the fire agent's burn of a
+  minion (an unwired row in `minions.json`) beside G8 as what the original's 4-28 turns on.
+- Tidy, each needing a relink and none a defect today: `AShotFliesThroughAWell` pins `shotPasses` on level16c's one
+  well, where a loop over the five well levels would catch a well built without a body (its agent would stop the
+  shot again - all ten have one now); `NoPortalZone::radiusPx` is set by nothing; `gravitywell.json`'s `zone.shrink_px`
+  is the ring's number under the old name; `Portals::State::Tick` copies `shotPasses` on every tick a shot flies.
+- 4-19 (`level18c`) is B5's (the red key's wall) and has no route here.

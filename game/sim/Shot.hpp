@@ -15,7 +15,8 @@
 // and sphere colliders, turned with their entity, and the polygon LevelBuilder
 // records for each hull (LevelBuilder::PlanePolygon). Every solid body stops a
 // shot, whether static, moving or loose. A trigger never does, and neither does
-// the character the shot leaves from. A capsule, which only the character has,
+// the character the shot leaves from, nor what the caller names beside it (a
+// gravity well's agent: 00_order R2). A capsule, which only the character has,
 // is not read.
 
 #include "sim/Trigger.hpp"
@@ -50,6 +51,11 @@ struct Hit {
 // that starts inside a body meets it at once.
 std::optional<Hit> FirstBody(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
                              entt::entity ignore);
+
+// The same, passing through every body in `ignore`: the shooter and what a shot
+// flies through (Portals::State::shotPasses, the gravity wells).
+std::optional<Hit> FirstBodyPassing(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
+                                    std::span<const entt::entity> ignore);
 
 // The first body the segment meets as the original's GetClosestContact finds it
 // (ETHPhysicsSimulator.cpp:251-268): every body but `ignore`, a trigger as well

@@ -1,0 +1,20 @@
+{
+  "_about": [
+    "4-18, no gravity, four wells: the one at (128, 64) takes the player from the spawn and holds it",
+    "on its agent. A portal at (320, 200), clear of every well's reach, then one on the player itself,",
+    "inside that well - which the port refused before step 170 (R2): the player comes out below at",
+    "rest and drifts down. A portal at (540, 120), right of the door and 66 px from antiportal_ent_2507",
+    "(outside the 64 px the original refuses at, R1), whose recoil sends the player down-left; then one",
+    "on the player again. It comes out at (540, 122) moving left and passes through the door. Won on",
+    "tick 125 (step 170)."
+  ],
+  "level": "level17c",
+  "win_by": 180,
+  "holds": [],
+  "taps": [
+    {"tick": 30, "at": [320, 200]},
+    {"tick": 60, "at": [146.7, 64]},
+    {"tick": 90, "at": [540, 120]},
+    {"tick": 117, "at": [291.3, 243.5]}
+  ]
+}

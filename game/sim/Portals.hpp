@@ -150,10 +150,9 @@ struct NoPortalZone {
     std::string name;          // last, so {centre, scale} still makes a zone
     // An EXPLICIT radius, for a zone that is not an antiportal the level placed.
     // Zero means the old arithmetic - antiportalRadiusPx times this node's own
-    // scale - which is every antiportal in the game. A gravity well's zone sets
-    // it, because its radius is the agent's own (52 to 248 px across the ten
-    // placements) and cannot be reached from a constant 64. GravityWell.hpp has
-    // the arithmetic.
+    // scale - which is every antiportal in the game. Nothing the port builds sets
+    // it now: the gravity wells' zones, which did, are gone (00_order R2, the
+    // remaster doc's step 170), since the original's well refuses no portal.
     double radiusPx = 0.0;
 
     glm::dvec2 CentreNowPx() const { return moving ? motion.AtPx() : centrePx; }
@@ -337,6 +336,11 @@ struct State {
     Shot::Rules shot;
     int budget = 0;
     entt::entity shooter = entt::null; // the player: where a shot leaves from, and what it passes through
+    // What else a flying shot passes through: each gravity well's agent, set by
+    // Game::Start (00_order R2). The original's projectile.ent has no shape and
+    // meets nothing on its way, and the ray that judges its tap passes
+    // gravity_agent by name, so a well stops no shot.
+    std::vector<entt::entity> shotPasses;
     std::vector<NoPortalZone> zones;
     std::vector<Blocker> blockers;
     std::vector<Reflector> reflectors;

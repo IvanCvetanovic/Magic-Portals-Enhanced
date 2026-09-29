@@ -1,0 +1,32 @@
+{
+  "_about": [
+    "4-28. The knight carries the yellow key and the port gives nothing that kills it where the key",
+    "can be reached (the fire agent does not burn a minion: minions.json _burnable_breakable_not_wired;",
+    "a shot through the flame stays a shot: G8). But a key opens its keyhole in any carrier's hands",
+    "(Keys::State::Tick), so the knight opens the door. Off the spawn's left end, a few steps right, a",
+    "portal on the ramp at (270, 200) and one on the player; up the ramp. A portal high over the",
+    "keyhole at (440, 10), then one on the knight's walk at (140, 206): it drops past the keyhole and",
+    "the key is spent 24 px from it on tick ~924; the door goes on 1010. The knight walks down the",
+    "ramp at the player, so a portal behind it at (380, 172) and one on the player, and right to the",
+    "door. Won on tick 1094 (step 170). DEPENDS ON R1 NOT BEING BUILT: three taps lie inside the",
+    "original's 32 x 6 = 192 px of antiportal_1940 (452, 108; scale 6): (440, 10) at 98.7 px and",
+    "(380, 172) at 96.3 px, just outside the port's 16 x 6 = 96 (the second by 0.3 px), and the",
+    "self-tap (296.5, 192.9) at 177.2 px; and on G1 (knights never shoot). R1's step re-routes it."
+  ],
+  "level": "level27c",
+  "win_by": 1160,
+  "holds": [
+    {"walk": "left", "from": 700, "to": 735},
+    {"walk": "right", "from": 762, "to": 772},
+    {"walk": "right", "from": 812, "to": 830},
+    {"walk": "right", "from": 1024, "to": 1160}
+  ],
+  "taps": [
+    {"tick": 780, "at": [270, 200]},
+    {"tick": 806, "at": [55.2, 202.3]},
+    {"tick": 840, "at": [440, 10]},
+    {"tick": 870, "at": [140, 206]},
+    {"tick": 996, "at": [380, 172]},
+    {"tick": 1021, "at": [296.5, 192.9]}
+  ]
+}

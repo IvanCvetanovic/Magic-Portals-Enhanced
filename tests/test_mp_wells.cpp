@@ -7,10 +7,12 @@
 // StaticBody2D and a CircleShape2D - so the solid circle builds itself and the
 // attraction can be read off the radius. The THIRD is invisible: the agent's own
 // callback adds an antiportal.ent at its position on its first tick, and no
-// .tscn in the game mentions it. A port built from the level data alone would
-// let a portal open inside a well, and every role count would still read
-// "playing" - the same blindness light_wall.ent had before test_mp_torch watched
-// the body. So the zone is asserted here, through Portals::State::TryPlace.
+// .tscn in the game mentions it - the green ring. It LOOKS like an antiportal
+// and refuses nothing: renamed gravity_area as it is added, it is never one of
+// AntiPortalManager's fields (00_order R2). Until the remaster doc's step 170 the
+// port played a no-portal zone round every well and let the agent's body stop a
+// shot; that both are gone is asserted here, through Portals::State::TryPlace
+// and a shot flown by the level's own tick.
 //
 // Reads the converted levels from outside this repository, and skips, saying
 // where it looked, when they are absent.
@@ -20,9 +22,12 @@
 #include "core/Components.hpp"
 #include "sim/Game.hpp"
 #include "sim/GravityWell.hpp"
+#include "sim/Portals.hpp"
 #include "sim/Roles.hpp"
+#include "sim/Shot.hpp"
 #include "sim/Units.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -76,7 +81,7 @@ void TheRulesRead() {
     std::printf("  pulls at %.2f m/s in zero gravity and %.2f with, per %.4f ms frame\n", rules.forceZeroGravity,
                 rules.forceWithGravity, rules.referenceFrameMs);
 
-    // And the ring the agent adds with that zone: antiportal.ent's own file, and
+    // And the ring the agent adds: antiportal.ent's own file, and
     // the green its callback paints it at instr 117-131.
     const GravityWell::Ring& ring = rules.ring;
     CHECK_MSG(ring.sprite == "white_ring.png" && ring.additive, "white_ring.png, added (blendMode 1)");
@@ -86,11 +91,10 @@ void TheRulesRead() {
     CHECK_MSG(ring.z == -5.0, "AddEntity's vector3(pos, -5)");
 }
 
-// THE RING IS THE ZONE SEEN, and the size is the primary of the two: scaleToSize
-// gives the added antiportal a SIZE of radius * 2 - 24, and the refusal is half of
-// it (GetSize().x * 0.5). Read in that order, so a ruling about the refusal
-// (00_order R2) cannot move the picture.
-void TheRingIsTheZoneSeen() {
+// THE RING IS THE AREA SEEN: scaleToSize gives the added antiportal a SIZE of
+// radius * 2 - 24, and that is what is drawn. It is not a zone: no well hands the
+// portals one (00_order R2, step 170), at any of the ten placements.
+void TheRingIsTheAreaSeen() {
     GravityWell::Rules rules;
     std::string error;
     if (!GravityWell::LoadRules(kPortData + "/gravitywell.json", rules, error)) return;
@@ -118,8 +122,8 @@ void TheRingIsTheZoneSeen() {
             CHECK_MSG(::test::nearly(static_cast<float>(size), static_cast<float>(one.sizes[i])),
                       well.name + " is drawn " + std::to_string(one.sizes[i]) + " units across, not " +
                           std::to_string(size));
-            // The refusal is half the picture, at every placement.
-            CHECK(::test::nearly(static_cast<float>(well.ZoneRadiusPx(rules)), static_cast<float>(size * 0.5)));
+            // And it refuses nothing, at every placement.
+            CHECK_MSG(level.portals.FindZone(well.name) == nullptr, well.name + " gives the portals no zone");
             ++rings;
         }
         std::printf("  %s: %zu ring(s), the first %.0f units across\n", one.name, level.wells.wells.size(),
@@ -198,19 +202,19 @@ void TenWellsAcrossFiveLevels() {
     }
 }
 
-// radius - 12, not radius. Twelve pixels at every placement in the game.
-void TheZoneIsTwelvePixelsInsideTheWell() {
+// radius * 2 - 24 across, not radius * 2. Twenty-four units at every placement.
+void TheRingIsTwentyFourUnitsNarrowerThanTheWell() {
     GravityWell::Rules rules;
     std::string error;
     if (!GravityWell::LoadRules(kPortData + "/gravitywell.json", rules, error)) return;
 
     GravityWell::Well well;
     well.radiusPx = 106.0;
-    CHECK(::test::nearly(static_cast<float>(well.ZoneRadiusPx(rules)), 94.0f));
+    CHECK(::test::nearly(static_cast<float>(well.RingSizePx(rules)), 188.0f));
     well.radiusPx = 260.0;
-    CHECK(::test::nearly(static_cast<float>(well.ZoneRadiusPx(rules)), 248.0f));
+    CHECK(::test::nearly(static_cast<float>(well.RingSizePx(rules)), 496.0f));
     well.radiusPx = 64.0;
-    CHECK(::test::nearly(static_cast<float>(well.ZoneRadiusPx(rules)), 52.0f));
+    CHECK(::test::nearly(static_cast<float>(well.RingSizePx(rules)), 104.0f));
 }
 
 // The arithmetic on its own, away from any level.
@@ -287,8 +291,14 @@ void ItPullsHarderWhereTheWorldHasGravity() {
     }
 }
 
-// THE PART NO LEVEL FILE MENTIONS.
-void NoPortalOpensInsideAWell() {
+// A WELL REFUSES NO PORTAL (00_order R2, decided for the original; the remaster
+// doc's step 170). The area its agent adds is antiportal.ent, but it is renamed
+// gravity_area as it is added (ETHScene.cpp:264-266), after AntiPortalManager's
+// constructor has gathered its fields by name (104925..105343 #16-35; 00_order
+// section 8.4), so the original never tests a tap against it. Until step 170 the
+// port refused a tap within radius - 12 of every well, and this suite asserted
+// both taps below refused.
+void AWellRefusesNoPortal() {
     Game::Data data;
     entt::registry registry;
     Game::Level level;
@@ -299,23 +309,77 @@ void NoPortalOpensInsideAWell() {
     }
 
     const GravityWell::Well& well = level.wells.wells.front();
-    const double zonePx = well.ZoneRadiusPx(level.wells.rules);
+    const double ringHalfPx = well.RingSizePx(level.wells.rules) * 0.5;
 
-    // A zone was handed to the portals for it, carrying its OWN radius rather
-    // than the antiportal constant.
-    const Portals::NoPortalZone* zone = level.portals.FindZone(well.name);
-    CHECK_MSG(zone != nullptr, well.name + " gave the portals a no-portal zone");
-    if (zone == nullptr) return;
-    CHECK(::test::nearly(static_cast<float>(zone->radiusPx), static_cast<float>(zonePx)));
+    // No zone was handed to the portals for it, and level16c places none of its
+    // own, so the level plays no zone at all.
+    CHECK_MSG(level.portals.FindZone(well.name) == nullptr, well.name + " gives the portals no no-portal zone");
+    CHECK(level.portals.zones.empty());
+    CHECK(!level.portals.InField(well.atPx));
 
-    // Dead centre is refused, and so is a tap just inside the rim.
-    CHECK(!level.portals.TryPlace(well.atPx));
-    CHECK(!level.portals.TryPlace(well.atPx + glm::dvec2(zonePx - 2.0, 0.0)));
-    // And just outside it is not refused for THIS reason. The tap may still fail
-    // on a budget or another zone, so what is asserted is only that the well is
-    // not what stops it - by placing it far enough out to be clear.
-    std::printf("  %s: %s refuses a portal within %.0f px of (%.0f, %.0f)\n", kWeightless, well.name.c_str(), zonePx,
-                well.atPx.x, well.atPx.y);
+    // Dead centre opens a portal, and so does a tap just inside the ring's rim:
+    // the two taps the port refused before step 170.
+    CHECK(level.portals.TryPlace(well.atPx));
+    CHECK(level.portals.TryPlace(well.atPx + glm::dvec2(ringHalfPx - 2.0, 0.0)));
+    CHECK_EQ(static_cast<int>(level.portals.placed.size()), 2);
+    std::printf("  %s: %s refuses no portal, at its centre (%.0f, %.0f) or %.0f px out\n", kWeightless,
+                well.name.c_str(), well.atPx.x, well.atPx.y, ringHalfPx - 2.0);
+}
+
+// AND A SHOT FLIES THROUGH ITS AGENT (R2). The original's projectile.ent has no
+// shape and meets nothing on its way (00_order section 8.4, D3 with its check),
+// and the tap-time ray passes gravity_agent by name (computePortalFinalPos #30-51,
+// placement.json final_pos.ray_ignores). So the agent - solid to the player and to
+// every loose body - is handed to Portals::State::shotPasses, and a shot aimed
+// through it opens its portal beyond. Until step 170 the port's shot died on it.
+void AShotFliesThroughAWell() {
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    if (!Open(kWeightless, data, registry, level)) return;
+    if (level.wells.wells.empty()) return;
+
+    const GravityWell::Well& well = level.wells.wells.front();
+    const auto found = level.built.entities.find(well.name);
+    CHECK_MSG(found != level.built.entities.end(), well.name + " was built");
+    if (found == level.built.entities.end()) return;
+    const entt::entity agent = found->second;
+    CHECK_MSG(std::find(level.portals.shotPasses.begin(), level.portals.shotPasses.end(), agent) !=
+                  level.portals.shotPasses.end(),
+              well.name + " is a body a shot passes");
+    CHECK_EQ(static_cast<int>(level.portals.shotPasses.size()), 1);
+
+    // Past the 400 ms a level holds its first tap off for. Nothing moves the
+    // player meanwhile: level16c has no gravity, and the spawn is outside the
+    // well's reach.
+    for (int tick = 0; tick < 30; ++tick) Game::Tick(data, registry, level, 0.0f, kStep);
+    const glm::dvec2 fromPx = Units::ToPixels(registry.get<TransformComponent>(level.player).position);
+    // Through the agent's centre, and as far again beyond it as half the way to it.
+    const glm::dvec2 tapPx = fromPx + (well.atPx - fromPx) * 1.5;
+
+    // The agent IS on the way: the first solid body the shot's own test meets,
+    // passing the player alone - which is what stopped the port's shot before.
+    const auto blocked = Shot::FirstBody(registry, fromPx, tapPx, level.player);
+    CHECK_MSG(blocked.has_value() && blocked->body == agent, "the agent is the first solid body on the shot's way");
+    std::vector<entt::entity> passes = level.portals.shotPasses;
+    passes.push_back(level.player);
+    CHECK_MSG(!Shot::FirstBodyPassing(registry, fromPx, tapPx, passes).has_value(), "and nothing else is");
+
+    // The tap's picture already said so: the ray passes the agent, so portal_mark.
+    const Portals::FinalPos predicted = level.portals.Predict(registry, fromPx, tapPx);
+    CHECK(!predicted.willDie && !predicted.redWaves);
+
+    // And the shot, fired as a tap fires it and flown by the level's own tick.
+    CHECK(level.portals.Shoot(registry, tapPx));
+    for (int tick = 0; tick < 60 && level.portals.flight; ++tick) Game::Tick(data, registry, level, 0.0f, kStep);
+    CHECK(!level.portals.flight.has_value());
+    CHECK_EQ(level.portals.shotsFailed, 0);
+    CHECK_EQ(static_cast<int>(level.portals.placed.size()), 1);
+    if (!level.portals.placed.empty()) {
+        CHECK(glm::distance(level.portals.placed.front().basePx, tapPx) < 1e-9);
+    }
+    std::printf("  %s: a shot from (%.1f, %.1f) through %s opens its portal at (%.1f, %.1f)\n", kWeightless, fromPx.x,
+                fromPx.y, well.name.c_str(), tapPx.x, tapPx.y);
 }
 
 // A dynamic body is pulled; a kinematic one is not.
@@ -527,12 +591,13 @@ void TheRoleIsPlayed() {
 void runTests() {
     TheRulesRead();
     TenWellsAcrossFiveLevels();
-    TheZoneIsTwelvePixelsInsideTheWell();
-    TheRingIsTheZoneSeen();
+    TheRingIsTwentyFourUnitsNarrowerThanTheWell();
+    TheRingIsTheAreaSeen();
     ARingThatIsNotTheEntitysIsRefused();
     ItPullsInwardAndFadesToNothingAtTheRim();
     ItPullsHarderWhereTheWorldHasGravity();
-    NoPortalOpensInsideAWell();
+    AWellRefusesNoPortal();
+    AShotFliesThroughAWell();
     ItTakesTheLooseBodiesOnly();
     TheRoundaboutRulesRead();
     TheAgentTurnsOnceAndSettles();

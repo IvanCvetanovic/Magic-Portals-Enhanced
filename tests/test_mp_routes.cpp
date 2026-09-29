@@ -142,6 +142,19 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         }
         if (level->boss.buttonRaised) std::printf(" BUTTON RAISED");
     }
+    // The keys, who holds each, and the keyholes they open (step 170, for 4-28's
+    // route); and what the player died in.
+    for (const auto& key : level->keys.keys) {
+        std::printf("\n          key %s (%.1f, %.1f)%s%s", key.name.c_str(), key.atPx.x, key.atPx.y,
+                    key.owner == entt::null ? "" : (key.owner == level->player ? " CARRIED" : " held"),
+                    key.spent ? " SPENT" : "");
+    }
+    for (const auto& keyhole : level->keys.keyholes) {
+        if (keyhole.unlocked) {
+            std::printf("\n          keyhole %s UNLOCKED%s", keyhole.name.c_str(), keyhole.gone ? ", door gone" : "");
+        }
+    }
+    if (level->hazards.playerDied) std::printf("\n          died in %s", level->hazards.killedBy.c_str());
     std::printf("\n");
 }
 

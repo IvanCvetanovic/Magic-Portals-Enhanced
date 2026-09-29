@@ -1,0 +1,18 @@
+{
+  "_about": [
+    "4-17, no gravity: every move is a shot's recoil (zerog.json), and the well at (256, 128) pulls",
+    "whatever comes within 106 px onto its agent. A portal by the door, fired from the spawn straight",
+    "THROUGH gravity_agent_ent_2439 (a well stops no shot since step 170, R2); a second one 76 px from",
+    "the agent, where the port refused before step 170; then a shot into the bouncer, which fails but",
+    "throws the player right at 70 px/s into the second portal. It comes out of the first and drifts",
+    "on into the door. Won on tick 127 (step 170)."
+  ],
+  "level": "level16c",
+  "win_by": 180,
+  "holds": [],
+  "taps": [
+    {"tick": 30, "at": [400, 128]},
+    {"tick": 60, "at": [180, 128]},
+    {"tick": 90, "at": [60, 128]}
+  ]
+}
