@@ -34,6 +34,11 @@ struct Table {
     // remake's advance_level (level_manager.gd:128-134), which leaves what a
     // finished chapter means to its caller.
     int Next(int at) const;
+
+    // The last level of the last world: ScoreManager::isLastLevel(levelIdx)
+    // (bytes 164804..164948), the level after which chapter select opens
+    // GameFinishedPopup (goToNextLevel #68-72).
+    bool FinishesTheGame(int at) const;
 };
 
 // "1-1" for world 0's first level: 1-based for display only (hud.gd:136-139).

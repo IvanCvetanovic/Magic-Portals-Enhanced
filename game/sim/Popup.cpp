@@ -261,6 +261,19 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadOpeners(popups["level_start"], read.levelStart, why, "popups.level_start")) {
         return fail();
     }
+    const Json::Value& taps = popups["tap_screen_to_close"];
+    if (!taps.IsObject() || !taps["help_popup"].IsBool()) {
+        why = "popups.tap_screen_to_close.help_popup is missing or not true or false";
+        return fail();
+    }
+    const bool helpPopupTaps = taps["help_popup"].AsBool();
+    if (!highlight["on_help_popups"].IsBool()) {
+        why = "popups.highlight.on_help_popups is missing or not true or false";
+        return fail();
+    }
+    const bool helpPopupHighlights = highlight["on_help_popups"].AsBool();
+    if (!Byte(root["menu_state"]["press"], "tint_byte", read.pressTintByte, why, "menu_state.press")) return fail();
+    if (!Text(popups["game_finished"], "popup", read.gameFinished, why, "popups.game_finished")) return fail();
     const Json::Value& block = popups["help_block"];
     if (!Text(block, "entity", read.helpBlock.entity, why, "popups.help_block") ||
         !Positive(block, "box_scale", read.helpBlock.boxScale, why, "popups.help_block") ||
@@ -280,6 +293,9 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         Class one;
         one.name = name;
         one.card = read.card;
+        one.closeButton = read.closeButton;
+        one.tapScreenToClose = helpPopupTaps;
+        one.closeButtonHighlight = helpPopupHighlights;
         if (!body.IsObject()) {
             why = where + " is not an object";
             return fail();
@@ -287,8 +303,27 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         // A class with no track has no loop to state.
         if (body.Has("loop_ms") && !Positive(body, "loop_ms", one.loopMs, why, where)) return fail();
         if (body.Has("card") && !ReadPlaced(body["card"], "sprite", one.card, why, where + ".card")) return fail();
+        if (body.Has("close_button") &&
+            !ReadPlaced(body["close_button"], "sprite", one.closeButton, why, where + ".close_button")) {
+            return fail();
+        }
+        if (body.Has("tap_screen_to_close")) {
+            if (!body["tap_screen_to_close"].IsBool()) {
+                why = where + ".tap_screen_to_close is not true or false";
+                return fail();
+            }
+            one.tapScreenToClose = body["tap_screen_to_close"].AsBool();
+        }
+        if (body.Has("close_button_highlight")) {
+            if (!body["close_button_highlight"].IsBool()) {
+                why = where + ".close_button_highlight is not true or false";
+                return fail();
+            }
+            one.closeButtonHighlight = body["close_button_highlight"].AsBool();
+        }
+        // Empty for a class that draws nothing after UILayer::draw (GameFinishedPopup).
         const Json::Value& items = body["draw"];
-        if (!items.IsArray() || items.AsArray().empty()) {
+        if (!items.IsArray()) {
             why = where + ".draw is not a list";
             return fail();
         }
@@ -322,6 +357,10 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                 return fail();
             }
         }
+    }
+    if (read.FindClass(read.gameFinished) == nullptr) {
+        why = "popups.game_finished opens " + read.gameFinished + ", which popups.classes does not describe";
+        return fail();
     }
     out = std::move(read);
     return true;
@@ -421,9 +460,12 @@ bool Gone(const Rules& rules, const Open& open) {
            open.clockMs - open.closedAtMs >= std::max(rules.layer.spriteAppearMs, rules.layer.buttonDismissMs) - 1e-6;
 }
 
-CloseButtonState CloseButtonAt(const Rules& rules, const Open& open, const glm::dvec2& viewUnits) {
+namespace {
+
+CloseButtonState CloseButtonOf(const Rules& rules, const UiLayer::Placed& button, bool highlighted,
+                               const Open& open, const glm::dvec2& viewUnits) {
     CloseButtonState state;
-    const glm::dvec2 home = UiLayer::Anchor(rules.closeButton, viewUnits);
+    const glm::dvec2 home = UiLayer::Anchor(button, viewUnits);
     double elapsed = open.clockMs;
     if (!Closing(open)) {
         state.alphaByte = UiLayer::ButtonAlphaByte(rules.layer, open.clockMs);
@@ -436,10 +478,28 @@ CloseButtonState CloseButtonAt(const Rules& rules, const Open& open, const glm::
         // time the bounce and the blink read stops where the close found it.
         elapsed = open.closedAtMs;
     }
+    if (open.closeTinted) state.tint = static_cast<double>(rules.pressTintByte) / 255.0;
+    // Button::Button's own bounce and blink run from ONE to ONE: no highlight, no
+    // move, whatever the time.
+    if (!highlighted) return state;
     const Rules::Highlight& h = rules.highlight;
     state.scale = glm::mix(h.bounceA, h.bounceB, SmoothEnd(StrideBias(elapsed, h.bounceStrideMs)));
     state.brightness = glm::mix(h.blinkA, h.blinkB, StrideBias(elapsed, h.blinkStrideMs));
     return state;
+}
+
+} // namespace
+
+CloseButtonState CloseButtonAt(const Rules& rules, const Open& open, const glm::dvec2& viewUnits) {
+    return CloseButtonOf(rules, rules.closeButton, true, open, viewUnits);
+}
+
+CloseButtonState CloseButtonAt(const Rules& rules, const Class& cls, const Open& open, const glm::dvec2& viewUnits) {
+    return CloseButtonOf(rules, cls.closeButton, cls.closeButtonHighlight, open, viewUnits);
+}
+
+Hud::Rect CloseButtonRect(const Rules& rules, const Class& cls, const Open& open, const glm::dvec2& viewUnits) {
+    return UiLayer::RectAt(cls.closeButton, CloseButtonAt(rules, cls, open, viewUnits).anchor);
 }
 
 std::vector<Piece> Pieces(const Rules& rules, const Class& cls, const Open& open, const glm::dvec2& viewUnits) {
@@ -472,15 +532,15 @@ std::vector<Piece> Pieces(const Rules& rules, const Class& cls, const Open& open
     card.alphaByte = spriteAlpha(255);
     push(card);
 
-    const CloseButtonState button = CloseButtonAt(rules, open, viewUnits);
+    const CloseButtonState button = CloseButtonAt(rules, cls, open, viewUnits);
     Piece close;
     close.element = Element::CloseButton;
     close.name = "close";
-    close.sprite = rules.closeButton.sprite;
-    UiLayer::Placed scaled = rules.closeButton;
-    scaled.sizeUnits = rules.closeButton.sizeUnits * button.scale;
+    close.sprite = cls.closeButton.sprite;
+    UiLayer::Placed scaled = cls.closeButton;
+    scaled.sizeUnits = cls.closeButton.sizeUnits * button.scale;
     close.rect = UiLayer::RectAt(scaled, button.anchor);
-    close.rgb = glm::dvec3(button.brightness);
+    close.rgb = glm::dvec3(button.brightness * button.tint);
     close.alphaByte = button.alphaByte;
     push(close);
 

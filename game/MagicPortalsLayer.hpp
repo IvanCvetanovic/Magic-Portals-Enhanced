@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <filesystem>
@@ -14,6 +15,10 @@
 
 #include "core/Components.hpp"
 #include "core/EngineLayer.hpp"
+
+namespace Supersonic {
+class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to it (emitPopup)
+}
 
 #include <random>
 
@@ -272,8 +277,6 @@ public:
 
     // The entry in chapters.json being shown, or null when nothing could start.
     const Chapters::Level* Current() const;
-
-    bool ChapterComplete() const { return m_chapterComplete; }
 
     // The menu, when one is up.
     Screen MenuScreen() const { return m_screen; }
@@ -1047,6 +1050,16 @@ public:
     const Chapters::Table& ChapterTable() const { return m_chapters; }
     const Selector::Board& SelectorBoard() const { return m_selectorBoard; }
     const Selector::State& SelectorState() const { return m_selectorState; }
+    // A popup over a menu state: GameFinishedPopup, which chapter select raises
+    // after the last level of the last chapter (planning step 150). Null when none
+    // is up. It is the current UI layer, so the PageManager under it is not updated
+    // (UILayerManager::update): its title and arrows neither enter nor bounce, and
+    // take no touch, until the popup is gone; SelectorLayerMs is that layer's clock.
+    const Popup::Class* MenuPopupClass() const { return m_menuPopup.open ? m_menuPopup.cls : nullptr; }
+    const Popup::Open* MenuPopup() const { return m_menuPopup.open ? &m_menuPopup.state : nullptr; }
+    double SelectorLayerMs() const {
+        return m_menuPopup.open ? 0.0 : std::max(0.0, m_menuClock.ms - m_selectorLayerFromMs);
+    }
     // The credits' strip as the last tick left it.
     const Credits::Scroll& CreditsScroll() const { return m_credits; }
     // Whether the credits' back button is held down inside: the press tint.
@@ -1311,6 +1324,12 @@ private:
     // Chapter select and the grid: a touch on a tile or an arrow, the finger on
     // the pager, the back key, and one tick of the pager.
     void selectorInput(entt::registry& registry);
+    // A popup of `cls` over the menu state that is up (chapter select's
+    // GameFinishedPopup), its clock at the state's.
+    void openMenuPopup(const Popup::Class& cls);
+    // One tick of it, in selectorInput's place while it is up: its close, and the
+    // pager's slide, which PageManager::draw decays and no layer switch stops.
+    void menuPopupTick(entt::registry& registry, float fixedDelta);
     // The credits' touch and the strip's tick (CreditsScreenLayer::update).
     void creditsInput(entt::registry& registry, float fixedDelta);
     // The dashboard's touch, wheel and tick (ScoreDashboard::loop, DashboardLayer).
@@ -1526,7 +1545,9 @@ private:
     bool loadLevel(entt::registry& registry, int index);
     // `keepLightmaps` for a retry, which draws the same level again at once.
     void unloadLevel(entt::registry& registry, bool keepLightmaps = false);
-    // The level at `next`, or the chapter's end when it is -1.
+    // The level at `next`, or, when it is -1, goToNextLevel's chapter end: chapter
+    // select on the chapter's page, and GameFinishedPopup over it after the last
+    // chapter's last level.
     void goTo(entt::registry& registry, int next);
     // The exit reached: recorded, and on to the next level.
     void clearLevel(entt::registry& registry);
@@ -1566,7 +1587,6 @@ private:
 
     Chapters::Table m_chapters;
     int m_current{-1}; // the entry in m_chapters being shown
-    bool m_chapterComplete{false};
     std::optional<Cleared> m_lastCleared;
     int m_deaths{0};
 
@@ -2292,6 +2312,19 @@ private:
     Selector::State m_selectorState;
     Selector::Hit m_selectorDown; // what a touch went down on
     Selector::Hit m_selectorHeld; // and is still inside, drawn at the press tint
+    // The popup over chapter select, and whether the touch that is down went down
+    // on its close button (Button::update's press is a release inside after that).
+    struct MenuPopupScreen {
+        bool open{false};
+        const Popup::Class* cls{nullptr};
+        Popup::Open state;
+        bool downOnClose{false};
+    };
+    MenuPopupScreen m_menuPopup;
+    // Where on the state's clock the PageManager's own reads zero: the state's
+    // first tick, or the tick after a popup over it was gone - its first update,
+    // as a state's first tick is its own.
+    double m_selectorLayerFromMs{0.0};
     Locking::Rules m_lockingRules;
     // The original's achievements, read once at attach from Paths::achievements.
     Achievements::Content m_achievements;
@@ -2515,6 +2548,9 @@ private:
         // (BeforeStep): true for a popup a tap raised mid-tick, as a pause is; false
         // for one raised as the level loads, whose first tick has not begun.
         bool stepOnResume{false};
+        // Whether the touch that is down went down on the close button: what a
+        // press of it is made of for a class that does not tap to close.
+        bool downOnClose{false};
     };
     PopupScreen m_popup;
     // Each popup picture's file resolved once per level, the hd twin where one
@@ -2558,6 +2594,10 @@ private:
     // One tick under a popup. True when it resumed the level on this tick and the
     // level owes the rest of its tick.
     bool popupTick(entt::registry& registry, float fixedDelta);
+    // A popup's pieces (sim/Popup) into the screen overlay on a view of `view`
+    // design units: the level's, from EmitHud, and chapter select's, from EmitMenu.
+    void emitPopup(Supersonic::ScreenOverlay& overlay, const glm::dvec2& view, const Popup::Class& cls,
+                   const Popup::Open& open) const;
     // The help blocks the level places, read as it loads.
     void findHelpBlocks();
     // A tap on a help block, read with the rest of the level's input: true when it

@@ -2,6 +2,7 @@
 
 #include "core/Json.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -19,6 +20,21 @@ int Table::Next(int at) const {
     const std::size_t next = static_cast<std::size_t>(at) + 1;
     if (at < 0 || next >= levels.size()) return -1;
     return levels[next].world == levels[static_cast<std::size_t>(at)].world ? static_cast<int>(next) : -1;
+}
+
+bool Table::FinishesTheGame(int at) const {
+    if (at < 0 || static_cast<std::size_t>(at) >= levels.size()) return false;
+    // Its world's last level (the first overload's index test) in the last world
+    // (the second's g_currentWorld == m_numWorlds - 1), whatever order the file
+    // lists the worlds in.
+    const Level& level = levels[static_cast<std::size_t>(at)];
+    int lastWorld = 0;
+    int lastIndex = -1;
+    for (const Level& one : levels) lastWorld = std::max(lastWorld, one.world);
+    for (const Level& one : levels) {
+        if (one.world == level.world) lastIndex = std::max(lastIndex, one.index);
+    }
+    return level.world == lastWorld && level.index == lastIndex;
 }
 
 std::string Label(const Level& level) {

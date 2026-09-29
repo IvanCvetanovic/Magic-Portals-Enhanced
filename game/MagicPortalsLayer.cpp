@@ -399,7 +399,6 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // they are: a retry does not touch the disk (level_manager.gd:5-13).
     unloadLevel(registry, m_loaded && index == m_current);
     m_current = index;
-    m_chapterComplete = false;
     m_loadError.clear();
     // Every level begins here - the first one, a retry, a skip, and going on
     // from a medal all come through - so this is the one place the finish beat
@@ -689,9 +688,17 @@ void MagicPortalsLayer::goTo(entt::registry& registry, int next) {
         loadLevel(registry, next);
         return;
     }
-    unloadLevel(registry);
-    m_loadError.clear();
-    m_chapterComplete = true;
+    // goToNextLevel (LevelFinishedLayer bytes 408734..409098): a chapter's last
+    // level goes to WorldSelector, never on to the next chapter's first level, and
+    // chapter select opens on the page of the chapter just played (its preLoop
+    // #6-21). After the last chapter's last level it opens GameFinishedPopup over
+    // it (#68-72, preLoop #69-101). Read before openMenu, which forgets the level.
+    const int at = m_current;
+    const bool finished = m_chapters.FinishesTheGame(at);
+    if (at >= 0) m_menuWorld = m_chapters.levels[static_cast<std::size_t>(at)].world;
+    openMenu(registry, Screen::Worlds);
+    if (!finished) return;
+    if (const Popup::Class* cls = m_popupRules.FindClass(m_popupRules.gameFinished)) openMenuPopup(*cls);
 }
 
 // Defined below. Declared here because clearLevel records the FINAL medal and
@@ -2478,6 +2485,9 @@ void MagicPortalsLayer::unloadMenuDrawables(entt::registry& registry) {
 void MagicPortalsLayer::unloadMenu(entt::registry& registry) {
     unloadMenuDrawables(registry);
     m_menuButtons.clear();
+    // A popup over a menu state goes with the state.
+    m_menuPopup = MenuPopupScreen{};
+    m_selectorLayerFromMs = 0.0;
 }
 
 void MagicPortalsLayer::openFinished(entt::registry& registry) {
@@ -2523,12 +2533,16 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
     unloadLevel(registry);
     m_loaded = false;
     m_current = -1;
-    m_chapterComplete = false;
     m_loadError.clear();
     // A STATE CHANGE opens under a black of its own, with every clock from
     // nothing (BaseState::preLoop). Another page of the same grid is not one.
     const bool changed = screen != m_screen;
-    if (changed) beginMenuState();
+    if (changed) {
+        beginMenuState();
+        // A popup over the last state goes with it; a new one is the caller's.
+        m_menuPopup = MenuPopupScreen{};
+        m_selectorLayerFromMs = 0.0;
+    }
     m_screen = screen;
     m_aspect = viewportAspect(registry);
     if (changed && screen == Screen::Credits) {
@@ -2722,7 +2736,121 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, float fixedDelta) {
         return;
     }
 
-    if (m_screen == Screen::Worlds || m_screen == Screen::Levels) selectorInput(registry);
+    if (m_screen == Screen::Worlds || m_screen == Screen::Levels) {
+        if (m_menuPopup.open) {
+            menuPopupTick(registry, fixedDelta);
+        } else {
+            selectorInput(registry);
+        }
+    }
+}
+
+void MagicPortalsLayer::openMenuPopup(const Popup::Class& cls) {
+    // Its pictures, resolved as buildControls resolves a level's popups' - which
+    // went with the level (unloadControls): there is none under a menu state.
+    for (const std::string* file : {&cls.card.sprite, &cls.closeButton.sprite}) {
+        if (m_popupImages.find(*file) != m_popupImages.end()) continue;
+        const std::string path = originalAsset(*file);
+        m_popupImages[*file] = imageSizePx(path).y > 0.0 ? path : std::string();
+    }
+    // As openPopup: one whose card or close button cannot be read is said once and
+    // not raised, rather than standing the chapter select still under nothing.
+    const auto drawable = [this](const std::string& file) {
+        const auto found = m_popupImages.find(file);
+        return found != m_popupImages.end() && !found->second.empty();
+    };
+    if (!drawable(cls.card.sprite) || !drawable(cls.closeButton.sprite)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "popup " << cls.name << " not raised: its card or close button "
+                                             << "could not be read" << std::endl;
+        return;
+    }
+    // Raised in the state's preLoop, so its clock is the state's: zero on the
+    // state's first tick. Popup::Popup pauses g_timeManager, which nothing on a
+    // menu state reads.
+    m_menuPopup = MenuPopupScreen{};
+    m_menuPopup.open = true;
+    m_menuPopup.cls = &cls;
+    m_menuPopup.state = Popup::Start(cls);
+    m_menuTouch = MenuTouch{};
+    m_selectorDown = Selector::Hit{};
+    m_selectorHeld = Selector::Hit{};
+    SUPERSONIC_LOG_INFO("Magic Portals") << "popup " << cls.name << " opened over the menu on tick " << m_ticks
+                                         << std::endl;
+}
+
+namespace {
+
+// Popup::hasReceivedCloseCommand's touch half: where the class taps to close, a
+// touch down anywhere; else a press of 'close', which Button::update makes of a
+// release inside the button whose touch went down inside it (bytes 15892..16865).
+// The back key is the caller's.
+bool TouchClosesPopup(const Popup::Rules& rules, const Popup::Class& cls, const Popup::Open& open,
+                      const glm::dvec2& view, bool pressed, bool released, bool over, const glm::dvec2& at,
+                      bool& downOnClose) {
+    if (Popup::Closing(open)) {
+        downOnClose = false;
+        return false;
+    }
+    if (cls.tapScreenToClose && pressed && over) return true;
+    const Hud::Rect button = Popup::CloseButtonRect(rules, cls, open, view);
+    if (pressed) downOnClose = over && button.Contains(at);
+    if (!released) return false;
+    const bool press = downOnClose && over && button.Contains(at);
+    downOnClose = false;
+    return press;
+}
+
+} // namespace
+
+void MagicPortalsLayer::menuPopupTick(entt::registry& registry, float fixedDelta) {
+    using Supersonic::Input;
+    // LevelSelector::loop reads the back key whatever layer is current: the state
+    // goes, on the next tick as ever, and the popup with it.
+    if (Input::TickWasPressed(kBack) || devPressDue(DevPress::Back)) {
+        m_menuPopup.downOnClose = false;
+        m_pendingMenu.kind = PendingMenu::Kind::Screen;
+        m_pendingMenu.screen = m_screen == Screen::Levels ? Screen::Worlds : Screen::Main;
+        return;
+    }
+    // UI frame time from the state's first tick, which is the popup's zero. The
+    // PageManager is not the current layer, so its clock stands (SelectorLayerMs).
+    const double dtMs = m_menuClock.ticks > 0 ? static_cast<double>(fixedDelta) * 1000.0 : 0.0;
+    Popup::Tick(*m_menuPopup.cls, m_menuPopup.state, dtMs);
+    // Read once a tick: a scheduled tap steps as it is read.
+    const Touch touch = touchThisTick(registry);
+    const bool fingerDown = (touch.pressed || touch.held) && !touch.released;
+    // The pager's slide goes on under it: PageManager::draw decays it, through
+    // Swyper::getOffset (bytes 21658..21861), which reads touch 0's state itself -
+    // no decay while a finger is down (KS_HIT or KS_DOWN), wherever it is. The
+    // swyper's own touch is not tracked meanwhile, so `touching` is put back after.
+    // Its update's fadeForwardArrows does not run, so the arrow's fade is put back.
+    const int forward = m_selectorState.forwardAlphaByte;
+    const bool touching = m_selectorState.touching;
+    m_selectorState.touching = fingerDown;
+    Selector::Step(m_selectorRules, m_selectorBoard, m_selectorState);
+    m_selectorState.touching = touching;
+    m_selectorState.forwardAlphaByte = forward;
+
+    Popup::Open& open = m_menuPopup.state;
+    const bool closes = TouchClosesPopup(m_popupRules, *m_menuPopup.cls, open, MenuBoxPx(), touch.pressed,
+                                         touch.released, touch.over, touch.atView, m_menuPopup.downOnClose);
+    // Button::update #206-233, in UILayer::update before the close is read: while
+    // the touch that went down on the button is on it, 0xFFCCCCCC. A release is not
+    // held, so the press that closes leaves it untinted for the dismissal.
+    if (!Popup::Closing(open)) {
+        const Hud::Rect button = Popup::CloseButtonRect(m_popupRules, *m_menuPopup.cls, open, MenuBoxPx());
+        open.closeTinted = fingerDown && m_menuPopup.downOnClose && touch.over && button.Contains(touch.atView);
+    }
+    if (closes) {
+        Popup::Close(open);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "popup closed over the menu on tick " << m_ticks << std::endl;
+    }
+    // Popup::update: once everything is dismissed, the last layer is current
+    // again, and the PageManager is updated from the next tick.
+    if (!Popup::Gone(m_popupRules, m_menuPopup.state)) return;
+    m_menuPopup = MenuPopupScreen{};
+    m_selectorLayerFromMs = m_menuClock.ms + static_cast<double>(fixedDelta) * 1000.0;
+    SUPERSONIC_LOG_INFO("Magic Portals") << "popup gone over the menu on tick " << m_ticks << std::endl;
 }
 
 void MagicPortalsLayer::beginMenuState() {
@@ -2853,7 +2981,7 @@ void MagicPortalsLayer::selectorInput(entt::registry& registry) {
     if (touch.pressed) {
         MenuState::TouchDown(m_menuTouch.touch, touch.atView);
         m_selectorDown =
-            Selector::HitAt(rules, m_selectorBoard, m_selectorState, view, m_menuClock.ms, touch.atView);
+            Selector::HitAt(rules, m_selectorBoard, m_selectorState, view, SelectorLayerMs(), touch.atView);
         Selector::TouchDown(m_selectorState, touch.atView.x);
     }
     if (touch.held || touch.released) {
@@ -2861,7 +2989,7 @@ void MagicPortalsLayer::selectorInput(entt::registry& registry) {
         Selector::TouchMove(m_selectorState, touch.atView.x, view.x);
     }
     const Selector::Hit on = touch.over ? Selector::HitAt(rules, m_selectorBoard, m_selectorState, view,
-                                                          m_menuClock.ms, touch.atView)
+                                                          SelectorLayerMs(), touch.atView)
                                         : Selector::Hit{};
     const bool inside = m_selectorDown.control != Selector::Control::None && same(on, m_selectorDown);
     m_selectorHeld = inside && touch.held && !touch.released ? m_selectorDown : Selector::Hit{};
@@ -3225,11 +3353,12 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
         return;
     }
     if (m_screen == Screen::Worlds || m_screen == Screen::Levels) {
-        // Every picture and word in the original's order (sim/Selector.hpp), then the
-        // state's black.
+        // Every picture and word in the original's order (sim/Selector.hpp), then a
+        // popup over it, then the state's black. The layer's own entrance and bounces
+        // run on the PageManager's clock, which a popup over it stands still.
         for (const Selector::Piece& piece :
-             Selector::Pieces(m_selectorRules, m_selectorBoard, m_selectorState, view, m_menuClock.ms, m_layerClockMs,
-                              m_selectorHeld.control, m_selectorHeld.item)) {
+             Selector::Pieces(m_selectorRules, m_selectorBoard, m_selectorState, view, SelectorLayerMs(),
+                              m_layerClockMs, m_selectorHeld.control, m_selectorHeld.item)) {
             const glm::vec4 colour(glm::vec3(piece.rgbBytes) / 255.0f, static_cast<float>(piece.alphaByte) / 255.0f);
             if (piece.kind == Selector::Kind::Sprite) {
                 const std::string& image = menuPicture(piece.file);
@@ -3247,6 +3376,11 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                 add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], colour, glyph.uvOffset,
                     glyph.uvOffset + glyph.uvScale);
             }
+        }
+        // UILayerManager::draw draws the popup's layer after the PageManager's, and
+        // so over the tiles and the page counter; BaseState's black over it all.
+        if (m_menuPopup.open && m_menuPopup.cls != nullptr) {
+            emitPopup(overlay, view, *m_menuPopup.cls, m_menuPopup.state);
         }
     }
     add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
@@ -5978,12 +6112,10 @@ void MagicPortalsLayer::updateHud(entt::registry& registry) {
     } else if (m_current < 0) {
         status = "Magic Portals could not start: " + m_loadError;
     } else {
+        // A chapter's end is chapter select now (goTo), which is a menu state; only a
+        // level the port refused is left with no level and no menu.
         const Chapters::Level& entry = m_chapters.levels[static_cast<std::size_t>(m_current)];
-        if (m_chapterComplete) {
-            status = "Chapter " + Count(entry.world + 1) + " complete";
-        } else if (!m_loaded) {
-            status = Chapters::Label(entry) + " is not playable yet: " + m_loadError;
-        }
+        if (!m_loaded) status = Chapters::Label(entry) + " is not playable yet: " + m_loadError;
         // A level being played says NOTHING. The original draws no text over a
         // level at all - no level number, no portal or crystal count - and that
         // is measured rather than remembered: across the settled frames of 41
@@ -5995,8 +6127,11 @@ void MagicPortalsLayer::updateHud(entt::registry& registry) {
 
     std::string result;
     // Nothing over a level, the finished and lost screens included: those draw
-    // the original's own count and medal over it.
-    if (m_lastCleared && !m_loaded) {
+    // the original's own count and medal over it. Nor over a menu state (ui3 spec
+    // D7) - chapter select after a chapter's last level, the grid after the list
+    // button - which this line was written before, for the black a chapter's end
+    // used to leave.
+    if (m_lastCleared && !m_loaded && !menuStateUp()) {
         const Cleared& c = *m_lastCleared;
         result = c.label + " cleared with " + Count(c.portalsUsed) + (c.portalsUsed == 1 ? " portal" : " portals") +
                  (c.crystalsTotal > 0 ? ", " + Count(c.crystals) + "/" + Count(c.crystalsTotal) + " crystals" : "") +
@@ -6251,6 +6386,40 @@ void MagicPortalsLayer::tickNoPortalSign(double dtMs) {
     m_sign.onView.min = m_sign.follow.at - m_sign.sizeUnits * 0.5 - corner;
 }
 
+void MagicPortalsLayer::emitPopup(Supersonic::ScreenOverlay& overlay, const glm::dvec2& view,
+                                  const Popup::Class& cls, const Popup::Open& open) const {
+    using Supersonic::ScreenOverlay;
+    // The pieces are sim/Popup's: the dim, the card, the close button, then the
+    // class's own draw() - turned sprites turned in the view's square units, which
+    // the overlay is told in fractions of this view's shape.
+    const float aspect = static_cast<float>(view.x / view.y);
+    for (const Popup::Piece& piece : Popup::Pieces(m_popupRules, cls, open, view)) {
+        const glm::vec4 colour(glm::vec3(piece.rgb), static_cast<float>(piece.alphaByte) / 255.0f);
+        if (colour.a <= 0.0f) continue;
+        ScreenOverlay::Quad quad;
+        quad.min = glm::vec2(piece.rect.min / view);
+        quad.max = glm::vec2(piece.rect.Max() / view);
+        quad.uvMin = glm::vec2(piece.uvMin);
+        quad.uvMax = glm::vec2(piece.uvMax);
+        quad.color = colour;
+        if (piece.element == Popup::Element::Dim) {
+            // eth_framework_square.png is opaque white in every texel, so tinted
+            // black it is exactly a plain black: no texture.
+            quad.uvMin = glm::vec2(0.0f);
+            quad.uvMax = glm::vec2(1.0f);
+            overlay.Add(std::move(quad));
+            continue;
+        }
+        const auto image = m_popupImages.find(piece.sprite);
+        if (image == m_popupImages.end() || image->second.empty()) continue;
+        quad.texture = image->second;
+        if (piece.angleDeg != 0.0) {
+            quad.basis = ScreenOverlay::Rotation(glm::radians(static_cast<float>(piece.angleDeg)), aspect);
+        }
+        overlay.Add(std::move(quad));
+    }
+}
+
 void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     using Supersonic::ScreenOverlay;
     auto* const* slot = registry.ctx().find<ScreenOverlay*>();
@@ -6384,31 +6553,7 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     //     pieces are sim/Popup's: the dim, the card, the close button, then the
     //     class's own draw() - turned sprites turned in the view's square units,
     //     which the overlay is told in fractions of this view's shape.
-    if (m_popup.open && m_popup.cls != nullptr) {
-        const float aspect = static_cast<float>(view.x / view.y);
-        for (const Popup::Piece& piece : Popup::Pieces(m_popupRules, *m_popup.cls, m_popup.state, view)) {
-            const glm::vec4 colour(glm::vec3(piece.rgb), static_cast<float>(piece.alphaByte) / 255.0f);
-            if (piece.element == Popup::Element::Dim) {
-                // eth_framework_square.png is opaque white in every texel, so tinted
-                // black it is exactly a plain black.
-                add(piece.rect, std::string(), colour);
-                continue;
-            }
-            const auto image = m_popupImages.find(piece.sprite);
-            if (image == m_popupImages.end() || image->second.empty() || colour.a <= 0.0f) continue;
-            ScreenOverlay::Quad quad;
-            quad.min = glm::vec2(piece.rect.min / view);
-            quad.max = glm::vec2(piece.rect.Max() / view);
-            quad.uvMin = glm::vec2(piece.uvMin);
-            quad.uvMax = glm::vec2(piece.uvMax);
-            quad.color = colour;
-            quad.texture = image->second;
-            if (piece.angleDeg != 0.0) {
-                quad.basis = ScreenOverlay::Rotation(glm::radians(static_cast<float>(piece.angleDeg)), aspect);
-            }
-            overlay.Add(std::move(quad));
-        }
-    }
+    if (m_popup.open && m_popup.cls != nullptr) emitPopup(overlay, view, *m_popup.cls, m_popup.state);
 
     // 4b. The finished or the lost screen, when one is up: the CURRENT UI layer
     //     over the running level and whatever the HUD has left, and under the
@@ -6575,7 +6720,7 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // And these are EDGES: held down, a reset would restart the level every
         // tick for as long as the button was pressed.
         case Control::Reset:
-            if (pressed && m_current >= 0 && !m_chapterComplete) loadLevel(registry, m_current);
+            if (pressed && m_current >= 0) loadLevel(registry, m_current);
             break;
         // GameLayer's menu button calls GameState::showMenuPopup (bytes
         // 98935..99036): the pause, over this level, rather than out of it.
@@ -8393,9 +8538,9 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
     // The bodies' boxes over the art, or not: the picture only.
     if (Input::TickWasPressed(kBoxes)) m_showBoxes = !m_showBoxes;
     if (!overLevel) {
-        // Out of a level that is not being played - one the port refused, or a
-        // chapter's end, which otherwise has nowhere to go - to its grid. A level
-        // being played takes the back key as the pause (readInput).
+        // Out of a level that is not being played - one the port refused, which
+        // otherwise has nowhere to go - to its grid. A level being played takes the
+        // back key as the pause (readInput).
         if (m_current >= 0 && !m_loaded && Input::TickWasPressed(kBack)) {
             m_menuWorld = m_chapters.levels[static_cast<std::size_t>(m_current)].world;
             openMenu(registry, Screen::Levels);
@@ -8403,9 +8548,15 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             return;
         }
         // Skip and retry first, so the tick that asks plays the level it lands on.
+        // A skip from a chapter's last level is goToNextLevel's chapter select,
+        // whose first tick is the next.
         if (m_current >= 0 && Input::TickWasPressed(kSkip)) {
             goTo(registry, m_chapters.Next(m_current));
-        } else if (m_current >= 0 && !m_chapterComplete && Input::TickWasPressed(kRetry)) {
+            if (menuStateUp()) {
+                updateHud(registry);
+                return;
+            }
+        } else if (m_current >= 0 && Input::TickWasPressed(kRetry)) {
             loadLevel(registry, m_current);
         }
         // A level that raised its tutorial as it loaded stops HERE, as one loaded
@@ -8948,11 +9099,14 @@ bool MagicPortalsLayer::popupTick(entt::registry& registry, float fixedDelta) {
     m_aspect = viewportAspect(registry);
     layOutControls();
 
-    // Popup::hasReceivedCloseCommand: a touch DOWN anywhere, the close button
-    // included, or the back key. The touch is spent on the close and reaches
-    // nothing under the popup.
+    // Popup::hasReceivedCloseCommand: for a HelpPopup - every class a level raises
+    // - a touch DOWN anywhere, the close button included; for any popup a press of
+    // the close button, or the back key. The touch is spent on the popup and
+    // reaches nothing under it.
     const Touch touch = touchThisTick(registry);
-    if ((touch.pressed && touch.over) || Input::TickWasPressed(kBack)) ClosePopup();
+    const bool touched = TouchClosesPopup(m_popupRules, *m_popup.cls, m_popup.state, ViewPx(), touch.pressed,
+                                          touch.released, touch.over, touch.atView, m_popup.downOnClose);
+    if (touched || Input::TickWasPressed(kBack)) ClosePopup();
 
     // Popup::update: once every sprite and the button are dismissed, the last layer
     // is current again and game time resumes - on this tick.

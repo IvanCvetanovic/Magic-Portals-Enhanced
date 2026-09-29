@@ -296,6 +296,10 @@ int CountImage(const std::vector<ScreenOverlay::Quad>& quads, const std::string&
 int CountCaption(const std::vector<ScreenOverlay::Quad>& quads, const std::string& font);
 glm::vec2 ScreenOfView(const MagicPortalsLayer& layer, const glm::dvec2& onView);
 bool NearD(double a, double b, double eps);
+std::vector<int> BlackIndices(const std::vector<ScreenOverlay::Quad>& quads);
+Hud::Rect OnView(const MagicPortalsLayer& layer, const ScreenOverlay::Quad& quad);
+bool SameRect(const Hud::Rect& a, const Hud::Rect& b, double eps);
+std::string ShowRect(const Hud::Rect& rect);
 
 // ---- One level --------------------------------------------------------------
 
@@ -959,20 +963,35 @@ void ARetryTakesTheThrownStonesAway() {
     layer.OnDetach(registry);
 }
 
+// A chapter's last level goes to chapter select, on the page of the chapter just
+// played, and never on to the next chapter's first level (goToNextLevel,
+// WorldSelector::preLoop #6-21; planning step 150). It used to leave a black
+// "Chapter N complete" line that only Esc left. N here; the medal screen's go-on
+// and the pause's Skip press the same Next (TheGameFinishedCardComesUpAfter4_32).
 void TheChapterEnds() {
-    entt::registry registry;
-    publishViewport(registry);
-    MagicPortalsLayer layer(TestPaths(), "level31");
-    layer.OnAttach(registry);
-    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
-    CHECK(!layer.ChapterComplete());
-    press(layer, registry, MagicPortalsLayer::kSkip);
-    CHECK(layer.ChapterComplete());
-    CHECK(layer.SimLevel() == nullptr);
-    // Nothing to retry at a chapter's end.
-    press(layer, registry, MagicPortalsLayer::kRetry);
-    CHECK(layer.ChapterComplete());
-    layer.OnDetach(registry);
+    using Screen = MagicPortalsLayer::Screen;
+    const struct {
+        const char* level;
+        int page; // two chapters to a page
+    } ends[] = {{"level31", 0}, {"level31a", 0}, {"level31b", 1}};
+    for (const auto& end : ends) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), end.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        press(layer, registry, MagicPortalsLayer::kSkip);
+        CHECK_MSG(layer.MenuScreen() == Screen::Worlds && layer.SimLevel() == nullptr && layer.Current() == nullptr,
+                  std::string(end.level) + ": N from a chapter's last level is chapter select");
+        CHECK_MSG(layer.SelectorState().page == end.page,
+                  std::string(end.level) + ": on its chapter's page, " + std::to_string(layer.SelectorState().page));
+        CHECK_MSG(layer.MenuPopupClass() == nullptr, std::string(end.level) + ": and no card, not being 4-32");
+        // Chapter select is a menu state: the state's first tick is the next, and
+        // R retries nothing there.
+        press(layer, registry, MagicPortalsLayer::kRetry);
+        CHECK(layer.MenuScreen() == Screen::Worlds && layer.MenuStateTicks() == 0);
+        layer.OnDetach(registry);
+    }
 }
 
 void AStartThatIsNoLevelSaysSo() {
@@ -2725,6 +2744,226 @@ void ATileRefusesATouchThatTravelled() {
     CHECK_MSG(layer.MenuScreen() == Screen::Levels, "dragged 40 u: it acts");
 }
 
+// After 4-32 alone, chapter select opens GameFinishedPopup over itself
+// (goToNextLevel #68-72, WorldSelector::preLoop #69-101; planning step 150). It is
+// the current UI layer, so the PageManager under it is not updated: the title and
+// the arrows, which enter on its updates, are not drawn until it is gone. Only a
+// press of its close button - down on it and up on it - or the back key closes it.
+void TheGameFinishedCardComesUpAfter4_32() {
+    if (!OriginalArtIsThere("TheGameFinishedCardComesUpAfter4_32")) return;
+    namespace Popup = MagicPortals::Popup;
+    using Screen = MagicPortalsLayer::Screen;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const auto goOn = [](MagicPortalsLayer& layer, entt::registry& registry) {
+        // The medal screen's go-on, as endScreenTick and the pause's Skip press it.
+        MagicPortalsLayer::MenuButton next;
+        next.kind = Kind::Next;
+        return layer.PressMenu(registry, next);
+    };
+    {
+        // 3-32 by the same button: its chapter's page, and no card.
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level31b");
+        layer.OnAttach(registry);
+        CHECK_MSG(goOn(layer, registry) && layer.MenuScreen() == Screen::Worlds && layer.SelectorState().page == 1 &&
+                      layer.MenuPopupClass() == nullptr,
+                  "3-32's go-on: chapter select on page 2, no card");
+        layer.OnDetach(registry);
+    }
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31c");
+    layer.OnAttach(registry);
+    if (layer.SimLevel() == nullptr) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    CHECK(goOn(layer, registry));
+    CHECK_MSG(layer.MenuScreen() == Screen::Worlds && layer.SelectorState().page == 1,
+              "4-32's go-on: chapter select on chapter 4's page");
+    const Popup::Class* cls = layer.MenuPopupClass();
+    CHECK_MSG(cls != nullptr && cls->name == "GameFinishedPopup", "and GameFinishedPopup over it");
+    if (cls == nullptr) return;
+    const Popup::Rules& rules = layer.PopupRules();
+    // The state's first tick is the popup's zero.
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK(layer.MenuStateMs() == 0.0 && layer.MenuPopup() != nullptr && layer.MenuPopup()->clockMs == 0.0);
+    // 1.6 s in (96 ticks after the first).
+    for (int tick = 0; tick < 96; ++tick) tickWith(layer, registry, kRest, {}, {});
+    // (A tick is the float kTick, so 96 of them are 1600 ms to 1e-4.)
+    CHECK_MSG(NearD(layer.MenuPopup()->clockMs, 1600.0, 1e-3) && layer.SelectorLayerMs() == 0.0,
+              "the popup's clock runs and the PageManager's stands");
+    {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const int icon = IndexOfImage(frame, "world_icon3.png");
+        const int counter = IndexOfImage(frame, "page_numbers.png");
+        const int card = IndexOfImage(frame, "game_finished.png");
+        const int close = IndexOfImage(frame, "popup_close_button.png");
+        const std::vector<int> blacks = BlackIndices(frame);
+        CHECK_MSG(icon >= 0 && counter > icon && card > counter && close > card,
+                  "the tiles and the counter, then the card, then its button");
+        // The state's black is over by 1.6 s (700 ms), so the dim is the one black.
+        CHECK_MSG(blacks.size() == 1 && blacks[0] > counter && blacks[0] < card,
+                  "the dim between the page and the card: " + std::to_string(blacks.size()) + " black(s)");
+        if (blacks.size() == 1) {
+            const ScreenOverlay::Quad& dim = frame[static_cast<std::size_t>(blacks[0])];
+            CHECK_MSG(NearD(dim.color.a, 150.0 / 255.0, 1e-6), "the dim at 150 of 255");
+        }
+        CHECK_MSG(IndexOfImage(frame, "select_chapter.png") < 0 && IndexOfImage(frame, "level_select_forward.png") < 0,
+                  "the title and the arrows not drawn: the PageManager has had no update");
+        if (card >= 0) {
+            const Hud::Rect onView = OnView(layer, frame[static_cast<std::size_t>(card)]);
+            CHECK_MSG(SameRect(onView, Hud::Rect{layer.ViewPx() * 0.5 - glm::dvec2(170.0, 128.0),
+                                                 glm::dvec2(340.0, 256.0)},
+                               1e-3),
+                      "the card 340 x 256 u about the view's centre: " + ShowRect(onView));
+            CHECK_MSG(EndsWith(frame[static_cast<std::size_t>(card)].texture, "/sprites/hd/game_finished.png"),
+                      "drawn with its hd twin");
+        }
+        if (close >= 0) {
+            const Hud::Rect onView = OnView(layer, frame[static_cast<std::size_t>(close)]);
+            CHECK_MSG(glm::length(onView.Centre() - layer.ViewPx() * glm::dvec2(0.92, 0.88)) < 1e-3,
+                      "its button at DEFAULT_EXIT_BUTTON_POS: " + ShowRect(onView));
+        }
+    }
+    // Its button stands still (no setButtonHighlightEffects: Button::Button's ONE
+    // bounce and blink): 64 u and white now, and 200 ms on - half a HelpPopup
+    // stride, where that bounce is at its widest - and 400 ms on.
+    const auto closeQuad = [&registry, &layer]() {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const int close = IndexOfImage(frame, "popup_close_button.png");
+        return close >= 0 ? frame[static_cast<std::size_t>(close)] : ScreenOverlay::Quad{};
+    };
+    const Hud::Rect still{layer.ViewPx() * glm::dvec2(0.92, 0.88) - glm::dvec2(32.0), glm::dvec2(64.0)};
+    for (int step = 0; step < 3; ++step) {
+        if (step > 0) {
+            for (int tick = 0; tick < 12; ++tick) tickWith(layer, registry, kRest, {}, {});
+        }
+        const ScreenOverlay::Quad quad = closeQuad();
+        const Hud::Rect onView = OnView(layer, quad);
+        CHECK_MSG(SameRect(onView, still, 1e-3) && quad.color.r == 1.0f && quad.color.g == 1.0f &&
+                      quad.color.b == 1.0f,
+                  "the button still, 64 u and white, " + std::to_string(200 * step) + " ms on: " + ShowRect(onView) +
+                      " rgb " + std::to_string(quad.color.r));
+    }
+    const Hud::Rect button = Popup::CloseButtonRect(rules, *cls, *layer.MenuPopup(), layer.ViewPx());
+    const glm::vec2 onButton = ScreenOfView(layer, button.Centre());
+    const glm::vec2 onCard = ScreenOfView(layer, layer.ViewPx() * 0.5);
+    // A touch on the card is not a close: it is not a HelpPopup.
+    tap(layer, registry, onCard);
+    CHECK_MSG(!layer.MenuPopup()->closeTinted, "a touch on the card does not tint the button");
+    releaseWith(layer, registry, onCard);
+    CHECK_MSG(!Popup::Closing(*layer.MenuPopup()), "a tap on the card does not close it");
+    // Nor is one down on the button and let go off it, nor the down alone. While the
+    // touch that went down on it is on it, it is drawn at Button::update's
+    // 0xFFCCCCCC (#206-233); off it, white; back on, tinted again.
+    tap(layer, registry, onButton);
+    CHECK_MSG(!Popup::Closing(*layer.MenuPopup()), "the touch down on the button is not the press");
+    {
+        const ScreenOverlay::Quad quad = closeQuad();
+        CHECK_MSG(layer.MenuPopup()->closeTinted && NearD(quad.color.r, 204.0 / 255.0, 1e-6) &&
+                      NearD(quad.color.b, 204.0 / 255.0, 1e-6) && quad.color.a == 1.0f &&
+                      SameRect(OnView(layer, quad), still, 1e-3),
+                  "down on the button: drawn at 204 / 255, " + std::to_string(quad.color.r));
+    }
+    tickWith(layer, registry, onButton, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.MenuPopup()->closeTinted, "held on it: still tinted");
+    tickWith(layer, registry, onCard, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(!layer.MenuPopup()->closeTinted && closeQuad().color.r == 1.0f, "held off it: white");
+    tickWith(layer, registry, onButton, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.MenuPopup()->closeTinted, "back on it, still held: tinted again");
+    // Off it again before the release, so the last held place is off it too.
+    tickWith(layer, registry, onCard, {MagicPortalsLayer::kTap}, {});
+    releaseWith(layer, registry, onCard);
+    CHECK_MSG(!Popup::Closing(*layer.MenuPopup()), "let go off the button: no press");
+    CHECK_MSG(!layer.MenuPopup()->closeTinted, "and let go, white");
+    // Nor does a touch reach the page under it: the tiles take none.
+    const MagicPortalsLayer::MenuButton* chapter = MenuButtonOf(layer, Kind::World, 3);
+    if (chapter != nullptr) {
+        const glm::vec2 onTile = ScreenOfView(layer, chapter->centrePx);
+        tap(layer, registry, onTile);
+        releaseWith(layer, registry, onTile);
+        tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(layer.MenuScreen() == Screen::Worlds, "a tap on chapter 4's icon under it does nothing");
+    }
+    // Down on it and up on it: the press, and the close.
+    tap(layer, registry, onButton);
+    releaseWith(layer, registry, onButton);
+    CHECK_MSG(layer.MenuPopup() != nullptr && Popup::Closing(*layer.MenuPopup()), "a press of the button closes it");
+    // The release that presses it is not a hold: it leaves white, and stays so.
+    CHECK_MSG(layer.MenuPopup() != nullptr && !layer.MenuPopup()->closeTinted && closeQuad().color.r == 1.0f,
+              "the press leaves it untinted");
+    int ticks = 0;
+    bool white = true;
+    while (layer.MenuPopup() != nullptr && ticks < 120) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++ticks;
+        const ScreenOverlay::Quad quad = closeQuad();
+        if (layer.MenuPopup() != nullptr && !quad.texture.empty() && quad.color.r != 1.0f) white = false;
+    }
+    CHECK_MSG(white, "white through the dismissal");
+    CHECK_MSG(ticks == 60, "gone 60 ticks (1000 ms) after the close: " + std::to_string(ticks));
+    CHECK_MSG(layer.MenuScreen() == Screen::Worlds && layer.SelectorLayerMs() == 0.0,
+              "chapter select stays, its layer's clock still at zero");
+    // The PageManager is updated from the next tick: the title and arrows enter
+    // from nothing, 700 ms long, as a state's first tick has them.
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.SelectorLayerMs() == 0.0 &&
+                  IndexOfImage(MenuFrame(registry, layer), "select_chapter.png") < 0,
+              "its first update: the title at alpha 0");
+    for (int tick = 0; tick < 42; ++tick) tickWith(layer, registry, kRest, {}, {});
+    {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const int title = IndexOfImage(frame, "select_chapter.png");
+        CHECK_MSG(NearD(layer.SelectorLayerMs(), 700.0, 1e-3) && title >= 0 &&
+                      frame[static_cast<std::size_t>(std::max(title, 0))].color.a > 0.999f,
+                  "700 ms on, the title whole: " + std::to_string(layer.SelectorLayerMs()) + " ms");
+        CHECK_MSG(IndexOfImage(frame, "game_finished.png") < 0 && BlackIndices(frame).empty(), "and no card, no dim");
+    }
+
+    // The back key with the card up is the main menu, the card going with the state
+    // (LevelSelector::loop reads it whatever layer is current).
+    entt::registry again;
+    publishViewport(again);
+    MagicPortalsLayer back(TestPaths(), "level31c");
+    back.OnAttach(again);
+    CHECK(goOn(back, again) && back.MenuPopupClass() != nullptr);
+    for (int tick = 0; tick < 10; ++tick) tickWith(back, again, kRest, {}, {});
+    pressBack(back, again);
+    tickWith(back, again, kRest, {}, {});
+    CHECK_MSG(back.MenuScreen() == Screen::Main && back.MenuPopupClass() == nullptr,
+              "the back key over the card: the main menu, and the card gone");
+    back.OnDetach(again);
+
+    // The pager's slide to chapter 4's page goes on under the card, but not while a
+    // finger is down, wherever it is: Swyper::getOffset (bytes 21658..21861) decays
+    // only at KS_UP or KS_RELEASE. The swyper tracks no touch meanwhile, so it is
+    // left not touching.
+    entt::registry sliding;
+    publishViewport(sliding);
+    MagicPortalsLayer slide(TestPaths(), "level31c");
+    slide.OnAttach(sliding);
+    CHECK(goOn(slide, sliding) && slide.MenuPopupClass() != nullptr);
+    tickWith(slide, sliding, kRest, {}, {});
+    const double moving = slide.SelectorState().offset;
+    const glm::vec2 onItsCard = ScreenOfView(slide, slide.ViewPx() * 0.5);
+    tap(slide, sliding, onItsCard);
+    const double down = slide.SelectorState().offset;
+    for (int tick = 0; tick < 5; ++tick) tickWith(slide, sliding, onItsCard, {MagicPortalsLayer::kTap}, {});
+    const double held = slide.SelectorState().offset;
+    releaseWith(slide, sliding, onItsCard);
+    const double let = slide.SelectorState().offset;
+    CHECK_MSG(std::fabs(moving) > 0.1, "the page still sliding a tick in: " + std::to_string(moving));
+    CHECK_MSG(down == moving && held == moving,
+              "no decay with a finger down: " + std::to_string(moving) + " -> " + std::to_string(down) + " -> " +
+                  std::to_string(held));
+    CHECK_MSG(std::fabs(let) < std::fabs(moving) && !slide.SelectorState().touching,
+              "it decays again at the release, and the swyper is not left touching: " + std::to_string(let));
+    slide.OnDetach(sliding);
+    layer.OnDetach(registry);
+}
+
 // ---- the medal a finished level earns -----------------------------------------
 
 // Finishing a level puts the medal screen up over it, rather than going
@@ -2780,6 +3019,21 @@ void FinishingALevelShowsTheMedal() {
     CHECK(layer.MenuScreen() == Screen::None);
     CHECK_MSG(IsAt(layer, "level1"), std::string("it went on to ") +
                                          (layer.Current() != nullptr ? layer.Current()->name : "none"));
+
+    // And a menu state after it says nothing of the level cleared (ui3 spec D7): the
+    // port's old "cleared with" line was for the black a chapter's end left, and is
+    // not written over the grid or chapter select (planning step 150).
+    MagicPortalsLayer::MenuButton list;
+    list.kind = Kind::List;
+    layer.PressMenu(registry, list);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK(layer.MenuScreen() == Screen::Levels && layer.LastCleared().has_value());
+    int spoken = 0;
+    for (auto [entity, text] : registry.view<UITextComponent>().each()) {
+        (void)entity;
+        if (!text.text.empty()) ++spoken;
+    }
+    CHECK_MSG(spoken == 0, "no text over the grid after a clear: " + std::to_string(spoken) + " line(s)");
 }
 
 // ---- the entities' particles --------------------------------------------------
@@ -14792,6 +15046,7 @@ void runTests() {
     TheBackKeyOnTheMainMenuQuits();
     TheMainMenusSwitchesAndCornerButtons();
     ATileRefusesATouchThatTravelled();
+    TheGameFinishedCardComesUpAfter4_32();
     ALevelsEntitiesEmit();
     ParticlesGoWithTheirLevel();
     TheTorchAndThePortalsEmitAsTheOriginalDoes();

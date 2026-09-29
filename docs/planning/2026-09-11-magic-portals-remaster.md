@@ -20954,3 +20954,201 @@ withdraws none. R1, R2, R22 and R23 stay unbuilt. **R24 and R25 remain the owner
   stays where it was added). Beside step 101's deviation 6, the list of the original's shaken-camera readers the port
   keeps at rest. Not measured; no gate here. For the owner of the earthquake's follow-ups.
 - **The standing sweep baseline is now this step's** `merge_d/sweep`, for what were both tracks.
+
+## Step 150 - a chapter's last level goes to chapter select on its chapter's page, and after 4-32 chapter select opens GameFinishedPopup (built)
+
+**TRACK B: the program's P1** (`docs/parity-backlog.md` section 6, P1; the 2026-09-29 audit's P1, `check_screens.md`
+1 and `screens_inventory.md` 1). Built in the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, from `29669c3`),
+whose build reads the frozen level data in `out/snap_w1`; numbered in track B's range, and the merge renumbers it.
+Changed: `game/data/ui.json` (`popups`: `tap_screen_to_close`, `highlight.on_help_popups`, `game_finished`, the
+`GameFinishedPopup` class), `game/sim/Popup.{hpp,cpp}` (a class's own close button, tap-to-close and highlight, an
+empty `draw`, `Rules::gameFinished` and `pressTintByte`, `Open::closeTinted`, `CloseButtonAt` with a class,
+`CloseButtonRect`), `game/sim/Chapters.{hpp,cpp}` (`Table::FinishesTheGame`),
+`game/MagicPortalsLayer.{hpp,cpp}` (the chapter end, the popup over a menu state, `emitPopup`, the dead end and its
+`ChapterComplete` removed), `tests/test_mp_{popup,chapters,layer}.cpp`. No engine change (the pin stays `4bfcf67`), no
+converter change, no format finding. **GAMEPLAY: NONE** - which screen follows a chapter's last level, and a card
+over it. Not a gameplay step, so the program's winnability gate (routes, reachability) does not apply; no route is
+added.
+
+**BLOCKERS, checked first.** The spec needs the popup framework (step 52) and chapter select (steps 54, 56); both
+stand. Nothing unmet. No footage or spec of the card exists (`out/parity/specs`, `footage/INDEX.md`, the library's
+`screens/`): the card is decoded, and the framework it is drawn with is the one the help popups measured.
+
+**WHAT THE ORIGINAL DOES** (listing md5 `48fe65ce...`; arguments pushed last-first, as `00_order.md` 8.0 reads them).
+- **`goToNextLevel`** (LevelFinishedLayer bytes 408734..409098; L83417), what the medal screen's go-on and the
+  pause's Skip call: `!isLastLevel(g_currentWorld, level)` (#1-9) goes on to the next level; a chapter's last level
+  goes to `WorldSelector(showGameFinishedPopup, showLastFreeLevelPopup)` (#44-82), never to the next chapter's first
+  level. `showGameFinishedPopup` = `isLastLevel(level)` (#68-72; ScoreManager bytes 164804..164948): the chapter's
+  last level AND `g_currentWorld == m_numWorlds - 1`. `showLastFreeLevelPopup` is the free build's (`isFree`): false.
+- **`WorldSelector::preLoop`** (168793..169733): `LevelSelector::preLoop` (ItemSelector's adds the PageManager, makes
+  it current, `setButtonsSound`); #6-21 `setCurrentPage(pageOf(g_currentWorld))`; #69-101 `openPopup(
+  GameFinishedPopup(layerManager, currentLayer.getName()))`.
+- **`GameFinishedPopup`** (203115..203758): `Popup::Popup` with `sprites/game_finished.png` and
+  `sprites/popup_close_button.png` at `DEFAULT_EXIT_BUTTON_POS` = (0.92, 0.88) (Popup.angelscript's initialiser,
+  306188..306239); #121 `addFacebookButton`. No `draw()` of its own. A Popup, not a HelpPopup: `tapScreenToClose`
+  stays false (Popup::Popup #167-170), so `hasReceivedCloseCommand` (73196..73437) takes only a press of 'close' -
+  Button::update (15892..16865): a release inside whose touch went down inside - or the back key. The press is
+  silent: the layer is added after `setButtonsSound`.
+- **Its close button stands still.** Only HelpPopup's constructor calls `setButtonHighlightEffects` on its 'close'
+  (204244..204540, #29-43); GameFinishedPopup's calls `Popup::Popup` and `addFacebookButton`, which highlights
+  'facebook' alone (370197..370609, #62-73), and neither `Popup::Popup` nor `UILayer::addButton` highlights. So the
+  button keeps `Button::Button`'s `setBounce(V2_ONE, V2_ONE, 300)` and `setBlink(V3_ONE, V3_ONE, 300)` (11444..12579,
+  #141-183): scale and brightness one. While the touch that went down on it is on it, `Button::update` (#206-233) sets
+  `m_color` 0xFFCCCCCC, multiplied into the rgb by `Button::draw` (15237..15660); a release is not held, so the press
+  that closes it leaves it white, and `UIButton::update` (76911..77152) stops calling `Button::update` once it is
+  dismissed, so the colour it had at the close stays (`UIButton::setColor`, 31747..31953, keeps the rgb).
+- **Under it**, `UILayerManager::update` (78899..79028) updates only the current layer, and
+  `PageManager::isAlwaysActive` is false. So the PageManager - its buttons' entrance (UIButton's ctor `setColor(0)`,
+  76108..76681; the InterpolationTimer steps per update, 18750..18855), their bounce, `Page::update`,
+  `fadeForwardArrows`, the finger - stands still until the popup is gone; the pager's decay is in
+  `PageManager::draw` and goes on - through `Swyper::getOffset` (21658..21861), which multiplies by 0.92 only while
+  touch 0 is `KS_UP` or `KS_RELEASE` (0 and 3; gs2d `KeyStateManager.h:30-33`), so not while a finger is down
+  anywhere. The popup's layer is drawn after the PageManager's (over the tiles and the page
+  counter), BaseState's black over all. `LevelSelector::loop` (103865..103991) reads the back key whatever layer is
+  current: the main menu.
+
+**THE CHANGE.**
+1. **`ui.json`**: `popups.tap_screen_to_close.help_popup` true (HelpPopup's: every class but one);
+   `popups.highlight.on_help_popups` true (HelpPopup's `setButtonHighlightEffects`); `popups.game_finished.popup`
+   "GameFinishedPopup"; the class: its `card` (340 x 256 u; the hd twin, 680 x 512, is what is drawn), its
+   `close_button` at (0.92, 0.88), `tap_screen_to_close` false, `close_button_highlight` false, `draw` []. Each with
+   `_source`; the card's placement NOT MEASURED (no footage). The press tint is read from `menu_state.press.tint_byte`
+   (204, decoded and measured for the same Button), not written twice.
+2. **`sim/Popup`**: `Class::closeButton` (the rules' by default), `Class::tapScreenToClose` and
+   `Class::closeButtonHighlight` (off: scale and brightness exactly 1 at every clock); `draw` may be empty;
+   `Rules::gameFinished`, refused unless it names a class; `Rules::pressTintByte`; `Open::closeTinted`, the press tint
+   as the button's last update left it (the caller sets it while the popup is not closing), folded into the close
+   piece's rgb through `CloseButtonState::tint`; `CloseButtonAt(rules, cls, ...)` (the old overload stays HelpPopup's)
+   and `CloseButtonRect` (Button::isPointInButton: the button's own size at its anchor, no bounce).
+3. **`Chapters::Table::FinishesTheGame(at)`**: the last level of the last world.
+4. **The layer.** `goTo(-1)` - N, the medal screen's go-on and the pause's Skip all reach it - sets `m_menuWorld` to
+   the level's chapter, opens `Screen::Worlds` (whose opening page is that chapter's, `Selector::OpeningPage`), and
+   after 4-32 raises the class `game_finished` names over it (`openMenuPopup`, which resolves its two pictures
+   itself: a level's popup pictures go with the level). While it is up, `menuPopupTick` takes the tick in
+   `selectorInput`'s place: the back key (main menu, next tick, as ever), the popup's clock (the state's), the pager's
+   `Step` with the forward arrow's fade put back and its decay held while a finger is down (`touching` set from the
+   tick's touch for the call and put back after, so the swyper is never left touching), `TouchClosesPopup`
+   (tap-to-close where the class says so, else down and up on the button), and the press tint (`closeTinted`: the
+   touch that went down on the button is down and on it). `SelectorLayerMs()` is the PageManager's clock: 0 while a
+   popup is up, from 0 again on the tick after it is gone; `Selector::Pieces` and `HitAt` read it. `EmitMenu` draws
+   the popup after the selector's
+   pieces and before the state's black through `emitPopup`, which is EmitHud's popup drawing moved out whole (the
+   level's popups draw through it unchanged: the sweep's 1-02 and 1-03 frames, popup up at f420, are byte-identical).
+   The level's `popupTick` closes through `TouchClosesPopup` too - the same for every class a level raises. The
+   "Chapter N complete" line, `m_chapterComplete` and `ChapterComplete()` are gone, and the "N-NN cleared with" line
+   is no longer written over a menu state (ui3 spec D7; it was written for that black).
+
+**FIX ROUND 1** (the verifier's `P1/verify1.json`, all four problems real). (1, medium) The close button bounced and
+blinked as a HelpPopup's; the decode has it still: `close_button_highlight` false (gate 3b). (2, low) It took no press
+tint while held: `closeTinted` over a menu state (gate 3c). (3, low) The pager's slide decayed under a held finger:
+held now (gate 5b). (4, low) The gate table's button row assumed HelpPopup's bounce: replaced by 3b. Still
+**GAMEPLAY: NONE**.
+
+**VERIFIED A SECOND TIME, PASSED** (`P1/verify2.json`, on the same `43c6401e` and suite binaries): every gate, the
+decode re-derived first. Its three lows, at commit, in text only: (1) row 5b claimed no capture could hold a finger
+down; the verifier's held series does, and backs rows 5b and 3c now; (2) no unit pins D7 on the chapter-end path:
+row 8 says so, and it is under LEFT FOR LATER (a test change, not made at commit); (3) the card's own "Like us on
+facebook!" gap: under LEFT FOR THE OWNER.
+
+**THE GATES.** After = this step's `MagicPortals.exe` `43c6401e` (fix round 1, `P1/fix1/`); rows measured only on the
+first round's `b47f9e25` (`P1/after/`) say so, and why the fix cannot move them. Before = the baseline build
+`845820ad` (`29669c3`, whose sweep is `program/base_w1B/sweep`). Captures, scripts and measurements:
+`out/parity/program/P1/` (`cap.sh`, `capture_sweep.sh`, `card_gate.py`, `compare_sweep.sh`; `before/`, `after/`) and
+`P1/fix1/` (`cap.sh`, `still_gate.py`, `capture_sweep.sh`, `compare_sweep.sh`; `series_4-32/`, `sweep/`). The flows
+are driven by the pause's Skip (`--press pause@60 --press skip@120`) on the all-gold save (`ui1/saves_gold`, copied
+per run): it presses the same `PressMenu(Next)` the medal screen's go-on does, which a scheduled `--tap` cannot reach
+(below).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1.log` to `build4.log`, and `build2_objs.log`: `test_mp_info`'s and `test_mp_select`'s objects, the other two that include `Chapters.hpp`, compiled, not linked; fix round 1: `fix1/build1.log`, `--target MagicPortals test_mp_popup test_mp_layer`, every object that includes `Popup.hpp` or `MagicPortalsLayer.hpp` recompiled - `Popup`, `MagicPortalsLayer`, `main`, `LevelVisit`, `test_mp_popup`, `test_mp_layer` - 0 warnings; `fix1/build2_relink.log`, `build3_relink.log` the two relinks after refusals) |
+| (1) 1-32's end | chapter select on chapter 1's page, no card | **the dead end**: every pixel 0 (`before/skip_1-32.png` `3153e740`), only Esc out | **passes**: chapter select, page 1, 100 % gold on chapters 1-2, no card (`after/skip_1-32.png` `11730124`, on `b47f9e25`: fix round 1 changes only what a popup over a menu state draws and does, and none is up here) |
+| (2) Each chapter's page | the chapter just played | the dead end | **passes** (unit, `TheChapterEnds`): N from 1-32, 2-32 and 3-32 opens chapter select on pages 1, 1 and 2, no card; R there retries nothing |
+| (3) 4-32's end | chapter select on page 2 with GameFinishedPopup | the same black (`before/skip_4-32.png` `3153e740`) | **passes**: page 2 and the card (`after/series_4-32/`, every 10th frame). The card: TM_CCOEFF_NORMED **0.9993** at TL **(162, 0)** px against the decoded (161.875, 0), 956 x 720 px (f200, f230). Retaken on `43c6401e` (`fix1/series_4-32/`, `still_gate.json`): f10 to f120 and f290 to f420 and the final png (`64a0e49d`) byte-identical to the first round's; f130 to f280 differ only within x 1121..1279, y 576..719 - the button's own box along its entrance, its stillness and its dismissal - so the card's measurement stands |
+| (3b) The close button, as decoded | centre (1177.6, 633.6) px, 64 u = 180 px, STILL: scale 1, brightness 1 (no `setButtonHighlightEffects`) | - | **passes** (fix round 1): f190 to f200 to f210 to f220 to f230, **0** changed px in the button's region (x 1077..1278, y 533..720) and 0 elsewhere; the hd picture fitted with sx, sy free (0.94..1.06): **(1.00, 1.00)** on f190 to f230, TL **(1088, 544)** against the decoded (1087.6, 543.6), score 0.9821. The first round's (`b47f9e25`, verify1): 9642 to 12973 px per 10 frames, (sx, sy) swinging 0.97..1.03 in antiphase - HelpPopup's bounce, now off for this class. Unit: scale and brightness exactly 1 every 25 ms from 700 to 1700 ms, 64 u and white; a HelpPopup's still 0.97..1.03 and 0.95 |
+| (3c) The press tint | 0xFFCCCCCC (204 / 255) while the touch that went down on the button is on it; white after the release that presses it | - | **passes** (fix round 1): f240, the tick of the tap down on the button, draws its opaque texels at **0.800** of f230's mean (64.149 / 80.190), the decoded 204 / 255 = 0.800, and changes nothing outside its box (7813 px inside). The verifier's held series (`P1/verify2/cap/seriesB`, gate 5b's arguments; opaque texels' mean over the untinted frame's): the held press **0.7999** on f240 to f265 and **1.0000** on f270, its release; the drag down on the button 0.7999 at f210, 1.0000 once off it (f215, f220, f225). Unit: down on it tinted; held on it tinted; held off it white; back on it tinted; the press (down and up on it) leaves it white through the dismissal. `test_mp_popup` also pins the sim's own rule that a tint set before a close stays through the dismissal - no menu path closes it while held (the back key leaves the state, card and all, on the next tick); it is the hook for the HelpPopup item under LEFT FOR LATER |
+| (4) The close | a press of the button (down and up on it) or the back key; a tap elsewhere is not one | none | **passes**: the log - a tap on the card at 200/201 does nothing, down/up on the button at 240/241 closes it on 241, gone on **301 (60 ticks, 1000 ms)** (the same on `43c6401e`'s series log); `--press back@220`: the main menu (`after/skip_4-32_back.png`, `b47f9e25`: its final frame has no popup, and the back key's path is unchanged). Unit (`TheGameFinishedCardComesUpAfter4_32`): a card tap, a down alone and a down-on/up-off are no press; a tap on chapter 4's icon under it does nothing |
+| (5) The PageManager under it | title and arrows not drawn while it is up; they enter after it is gone | none | **passes**: f200 has no title or arrows; f330 has them entering (the tick after 301 is their 0); f420 whole (on `43c6401e`: f200 identical to the first round's outside the button's box, f330 and f420 identical whole). Unit: absent from the frame at 1.6 s with `SelectorLayerMs` 0, alpha 0 on the first tick after, whole 700 ms on |
+| (5b) The pager's slide under it | decays under the card (PageManager::draw), not while a finger is down (Swyper::getOffset) | - | **passes** (unit, fix round 1): a tick after 4-32's go-on the offset is still well off 0; a touch down on the card and 5 ticks held leave it exactly as it was, the release decays it again, and the swyper is not left touching. **Captured** by the verifier on `43c6401e` (`P1/verify2/cap/seriesB`, every 5th frame, `series_gate.txt`), with held taps (`--tap <x>,<y>@<tick>-<release tick>`, `--drag`): `--tap 640,360@122-200 --drag 1178,634:640,360@210-225 --tap 1178,634@240-270`. Held on the card: f185 to f190 to f195 **0** px changed, and f190 differs from the unheld series' (`seriesA`) by 368,059 px, 225,557 of them outside the card's columns (the background camera the offset moves); the release: f195 to f200 **360,530** px. The drag's hold: f215 to f220 0 px, its release f220 to f225 334,796 px. The held press: f240 to f245 0 px |
+| (6) Against footage or a spec of the card | match | - | **NOT RUN: none exists**. Placement DECODED; the dim (150), the entrance and the dismissal are the framework's, measured on the help popups (the same Popup::Popup) |
+| (7) The 128-level f420 sweep | every change explained; none expected (no `--level` path changes) | `base_w1B/sweep` | **passes: 128 of 128 byte-identical** to `base_w1B/sweep`, paired by name (`compare_sweep.txt`): 128 rc 0, validation ACTIVE in 128 logs and silent, every png matching its log line, 0 unscheduled input lines. 1-02 and 1-03 (their popup up at f420) are among them: `emitPopup` draws the level's popups as EmitHud did. Retaken on `43c6401e` (`fix1/sweep`, `fix1/compare_sweep.txt`), fix round 1 having changed the shared popup code (`CloseButtonOf`, `Pieces`): **128 of 128 byte-identical** to `P1/after/sweep` and to `base_w1B/sweep`, 128 rc 0, validation ACTIVE in 128 logs and silent, every png matching its log line, 0 unscheduled input lines. **Sweep baseline**: `program/P1/after/sweep` (and `P1/fix1/sweep`, the same bytes) |
+| (8) No text over a menu state after a clear | D7 | the "cleared with" line set over the grid (by the code) | **passes** (unit, `FinishingALevelShowsTheMedal`): 0 lines after the list button. The chapter-end path (N, the pause's Skip, the medal screen's go-on) is checked by reading the code only: `updateHud` leaves the status empty while `menuStateUp()`, and the "cleared with" line is gated by `!menuStateUp()` (no unit pins it: LEFT FOR LATER). `--screenshot` does not capture the engine's UI text (the dead end's own line is not in its black png), so no capture shows either |
+| (9) Winnability | - | - | **N/A**: no gameplay change |
+
+**SUITES**, run directly: `test_mp_popup` **200** (`3e5c492e`; 156 per the record: `TheFileSaysWhatWasDecoded`'s
+class pins, the new `GameFinishedSitsWhereItsConstructorPutsIt` with its stillness and press-tint checks, six
+refusals), `test_mp_chapters` **43** (39; `e3c80107`, the first round's: fix round 1 touches none of its sources or
+headers), `test_mp_layer` **2953** (`fcf8e1c6`; 2901 at step 112: `TheChapterEnds` rewritten, the new
+`TheGameFinishedCardComesUpAfter4_32` with the button's stillness, its press tint and the pager held under a finger,
+the D7 check), 0 failures each on the builds that stand. The first round's stood at 186 and 2938. Earlier runs: `test_mp_popup` once at 1 failure (the test's own 42 ticks fall a hair
+short of 700 ms; set to 700 exactly); `test_mp_layer` once at 1 failure - a real one: the card was not raised, its
+pictures having gone with the level (fixed in `openMenuPopup`) - and once at 4 (the test's own: the float tick's
+1e-4, and the state's black over by 1.6 s). No full ctest: `MagicPortalsSim` changed, so the other 42 suites and
+`MagicPortalsSpike` link a new library and are not relinked here; of their sources only `test_mp_info` and
+`test_mp_select` include a changed header, and both compiled at 0 warnings. The merge's build relinks them.
+`Popup::LoadRules` now refuses a `ui.json` with no `tap_screen_to_close`, `game_finished`, `highlight.on_help_popups`
+or `menu_state.press.tint_byte`: its only callers are the
+layer and `test_mp_popup` (the deps scan: only `test_mp_{popup,layer}` include `Popup.hpp`), both run. The suites that
+text-replace `ui.json` (`test_mp_{hud,levelend,frontdoor,info,select}`, and every string literal of `effects`,
+`sprites`, `popup` and `layer`): 801 of their literals are in the old file, and each one's first occurrence is the
+same line in the new one (`needles.py`) - grep-clean, not run (stale-linked; Smart App Control). Retaken on fix round
+1's file (`fix1/needles.txt`): 803 found, 11 whose first occurrence now has different text within 80 characters, none
+a moved needle - `"menu_state"` and `tint_byte` (`test_mp_frontdoor` finds `"tint_byte": 204` after the quoted
+`"menu_state"` key, both still the first of their kind; the bare `tint_byte` is the word its refusal's message is
+checked for, first met now in the new `_source`'s unquoted `menu_state.press.tint_byte`), `closed by` (`test_mp_sprites`' own `.ent` refusal text) and `level1c` (a level's name in `test_mp_popup` and
+`test_mp_layer`, both run). `--visit-levels`
+(`LevelVisit.cpp`) enters each level by its grid button, never by N, so no chapter end is in its walk.
+
+**SMART APP CONTROL: 0 refusals in the first round, 2 in fix round 1.** Launches: `MagicPortals.exe` `845820ad` 3
+(the before captures), `b47f9e25` 131 (the 1-32 and back-key flows, the 4-32 series, 128 sweep captures) - `143b83fb`,
+the first build's, was never launched; `test_mp_popup` `d1f02a22` and `df1e1b5d`, `test_mp_chapters` `e3c80107`,
+`test_mp_layer` `74bf4b41`, `0efc0c68` and `938cfeb3`, once each. Fix round 1: `MagicPortals.exe` `afa75607`
+**refused** (exit 126) and `c745a7f7` **refused** after a delete and relink; `43c6401e`, the second and last relink,
+ran - the 4-32 series and the 128-level sweep (129 launches); `test_mp_popup` `3e5c492e` and `test_mp_layer`
+`fcf8e1c6` once each, not refused. The verifier (`P1/verify2`) ran `43c6401e` 134 times (a 128-level sweep, 128 of
+128 byte-identical to `P1/after/sweep`, and 6 flows) and the three suites once each: 0 refusals.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **The Facebook button** (#121) is omitted, by the owner's dead-services ruling (ui3 spec 9).
+2. **`g_timeManager`**: Popup::Popup pauses it; nothing on a menu state reads it, so the port does not.
+3. **The first update after the popup** reads 0 on the PageManager's clock, as a state's first tick reads 0 on its
+   own - the port's convention for a UI layer's first update.
+4. **A level's popups close through the same test** (`TouchClosesPopup`): every class a level raises taps to close,
+   so nothing a level shows changes (the sweep's 1-02 and 1-03).
+5. **The release is judged where the pointer is let go**, as the first round had it; `Button::update` judges it at
+   `m_lastDownPos` (#102-129), the touch's place on its last held tick (#44-59, #189-204). The two differ only for a
+   pointer that moves in the very tick it is let go.
+6. **The press tint is set only over a menu state** (fix round 1). A level's popups are HelpPopups, closed by the
+   touch down itself, so over a level the tint would only ever be the one the close freezes (below, for later).
+
+**RULINGS APPLIED.** The standing direction that the original decides; the dead-services ruling (the Facebook
+button). R1, R2, R17 and R23 are not this step's; R24 and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Footage of the card**: none. On the emulator rig (`docs/parity.md`) with the all-gold save: 4-32, pause, Skip -
+  the original's chapter select opens on page 2 with the card; a capture settles its placement and whether the title
+  and arrows are hidden under it as decoded (gate 5).
+- **The card's own art asks for the Facebook button it no longer has**: `game_finished.png` reads "Well done! Stay
+  tuned for more / Like us ... on facebook!", and the gap after "Like us" is where the constructor puts the button
+  (#48-90: `V2_HALF + g_scale.scale(vector2(-30, 9)) / screenSize`, about (556, 385) px; #121 `addFacebookButton`).
+  Omitting it by the dead-services ruling (decision 1) leaves that hole in the card's text. The ruling stands unless
+  the owner says otherwise.
+- **The pause's and the medal screen's buttons act on the press** (`pauseTick` and `endScreenTick` read
+  `TickWasPressed`), where Button::update presses on the release inside; this step's close button acts on the
+  release. Pre-existing, not changed here. The same two read the input directly, so a scheduled `--tap` does not
+  reach them (step 100's real press stops at `touchThisTick`): this step's flows are captured through the pause's
+  Skip instead.
+- **The level-end flow's own capture** (a win on an x-32, then go-on) needs a route to each boss's door: the
+  program's routes (W.1) can drive it once they stand on this track.
+- **A HelpPopup tapped on its own close button fades out tinted** in the original: the touch down's
+  `Button::update` (#206-233) tints it in `UILayer::update`, the same tick's `hasReceivedCloseCommand` dismisses it,
+  and `UIButton::update` (76911..77152) calls `Button::update` no more, so `UIButton::setColor` (31747..31953) keeps
+  the 204 / 255 rgb through the fade. Not built here (the level's popups, outside P1's spec, and no footage checks
+  it); `Open::closeTinted` is the hook - set it in the level's `popupTick` before the close.
+- **D7 on the chapter-end path has no unit** (the verifier's): `TheChapterEnds` (after N) and
+  `TheGameFinishedCardComesUpAfter4_32` (after the go-on) should count the non-empty `UITextComponent` texts and pin
+  0, as `FinishingALevelShowsTheMedal` does after the list button. Not added here: a test change relinks
+  `test_mp_layer` (Smart App Control), and the code is right today (gate 8).
+- For the close role: `docs/parity-backlog.md` section 6's P1 row is this step's to tick (not edited here).
+- For the merge's renumbering: "step 150" is written in `ui.json` (`popups._about`, `game_finished._source`),
+  `game/MagicPortalsLayer.hpp` (a comment) and `tests/test_mp_{popup,chapters,layer}.cpp`.
