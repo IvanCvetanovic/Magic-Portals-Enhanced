@@ -265,7 +265,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "light_wall_at_ghost", read.lightWallAtGhost, why) ||
         !ReadRule(root, "wall_destroy_light_wall", read.wallDestroyLightWall, why) ||
         !ReadRule(root, "movement_trail", read.movementTrail, why) ||
-        !ReadRule(root, "roundabout_effect", read.roundabout, why)) {
+        !ReadRule(root, "roundabout_effect", read.roundabout, why) ||
+        !ReadRule(root, "antiportal_explosion", read.antiportalExplosion, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -406,7 +407,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"light_off_sparkles", &read.lightOffSparkles},
                      {"portal_death_at_signal", &read.portalDeathAtSignal},
                      {"movement_trail", &read.movementTrail},
-                     {"roundabout_effect", &read.roundabout}};
+                     {"roundabout_effect", &read.roundabout},
+                     {"antiportal_explosion", &read.antiportalExplosion}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
@@ -472,7 +474,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"light_wall_at_ghost", &read.lightWallAtGhost},
                      {"wall_destroy_light_wall", &read.wallDestroyLightWall},
                      {"movement_trail", &read.movementTrail},
-                     {"roundabout_effect", &read.roundabout}};
+                     {"roundabout_effect", &read.roundabout},
+                     {"antiportal_explosion", &read.antiportalExplosion}};
     for (const auto& row : unshifted) {
         if (row.rule->offsetFixedUnits != glm::dvec2(0.0)) {
             error = path + ": " + row.name + " adds no fixed offset: its offset_units is a number";
@@ -509,7 +512,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                     {"light_off_sparkles", &read.lightOffSparkles},
                     {"portal_death_at_signal", &read.portalDeathAtSignal},
                     {"movement_trail", &read.movementTrail},
-                    {"roundabout_effect", &read.roundabout}};
+                    {"roundabout_effect", &read.roundabout},
+                    {"antiportal_explosion", &read.antiportalExplosion}};
     for (const auto& row : unturned) {
         if (row.rule->angleDeg != 0.0) {
             error = path + ": " + row.name + " is added by AddScaledEntity, whose angle is 0";

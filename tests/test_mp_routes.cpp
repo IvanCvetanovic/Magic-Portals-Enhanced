@@ -154,6 +154,13 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
             std::printf("\n          keyhole %s UNLOCKED%s", keyhole.name.c_str(), keyhole.gone ? ", door gone" : "");
         }
     }
+    // An anti-portal agent a shot killed, and the ring it took (step 171).
+    for (const auto& agent : level->portals.agents) {
+        if (agent.gone) std::printf("\n          agent %s KILLED", agent.name.c_str());
+    }
+    for (const auto& zone : level->portals.zones) {
+        if (zone.gone) std::printf("\n          ring %s GONE", zone.name.c_str());
+    }
     if (level->hazards.playerDied) std::printf("\n          died in %s", level->hazards.killedBy.c_str());
     std::printf("\n");
 }

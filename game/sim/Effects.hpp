@@ -308,6 +308,10 @@ struct Rules {
     double trailMinSpeed = 0.0; // |GetLinearVelocity()| / getScale(), the port's metres a second, strictly above
     double trailEveryMs = 0.0;  // trailElapsedTime strictly above
     Rule roundabout;
+    // ETHCallback_anti_portal_agent's antiportal_explosion.ent, where a shot killed
+    // an agent: at the agent's point and scale(32), unturned (the remaster record's
+    // step 171).
+    Rule antiportalExplosion;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a

@@ -1,0 +1,34 @@
+{
+  "_about": [
+    "1-21, won by killing the anti-portal agent (step 171, R17). Right to x 278; a shot at (250, 300)",
+    "passes within 22.4 of anti_portal_agent_ent_824 (244, 300) and kills it with antiportal_822 (tick",
+    "65); the same tap again opens a portal over the left block, one on the player. Left to the column;",
+    "a portal in the shaft at (242, 200), one on the block ahead: running right through it, the player",
+    "comes out moving right, flies into the nook and presses button_829 (tick 285); door_lift_831 rises.",
+    "From the nook (it shows the shaft through its opening alone) a portal high at (230, 142) and one low",
+    "at (205, 243); left off the ledge, down into the low one, and out of the high one moving up: at the",
+    "top of that bounce (tick 516) a shot through the lift door's opening into the room at (330, 100).",
+    "The door, off its button since tick ~487, is closing, and still clear of the shot. Down onto the",
+    "block; one on the player; right along the shelf to the door. Won on tick 625 (step 171)."
+  ],
+  "level": "level20",
+  "win_by": 690,
+  "holds": [
+    {"walk": "right", "from": 5, "to": 33},
+    {"walk": "left", "from": 150, "to": 175},
+    {"walk": "right", "from": 260, "to": 320},
+    {"walk": "left", "from": 470, "to": 505},
+    {"walk": "right", "from": 580, "to": 690}
+  ],
+  "taps": [
+    {"tick": 50, "at": [250, 300]},
+    {"tick": 80, "at": [250, 300]},
+    {"tick": 110, "at": [277.7, 458.3]},
+    {"tick": 200, "at": [242, 200]},
+    {"tick": 230, "at": [246, 330]},
+    {"tick": 420, "at": [230, 142]},
+    {"tick": 450, "at": [205, 243]},
+    {"tick": 516, "at": [330, 100]},
+    {"tick": 562, "at": [215, 322.2]}
+  ]
+}

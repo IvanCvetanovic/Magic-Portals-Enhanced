@@ -1,0 +1,27 @@
+{
+  "_about": [
+    "1-11, won by killing the patrolling anti-portal agent over the pillar (step 171, R17). A portal on",
+    "the ledge at (302, 210) and one on the player. From there the only way right is the slot between",
+    "the hanging column (bottom 170) and the pillar (top 128); a shot up it at (400, 44.5) crosses the",
+    "agent's swing and kills anti_portal_agent_599 with antiportal_574 (tick 104), which frees the pillar",
+    "top: a portal over it at (384, 70) through the slot, one on the player. A portal on the block at",
+    "(544, 110), one on the player; one on the door's block at (740, 108), past anti_portal_agent_639's",
+    "reach, one on the player; left into the door. Won on tick 301 (step 171)."
+  ],
+  "level": "level10",
+  "win_by": 360,
+  "holds": [
+    {"walk": "left", "from": 290, "to": 360}
+  ],
+  "taps": [
+    {"tick": 30, "at": [302, 210]},
+    {"tick": 60, "at": [127, 202.3]},
+    {"tick": 90, "at": [400, 44.5]},
+    {"tick": 120, "at": [384, 70]},
+    {"tick": 150, "at": [302, 202.3]},
+    {"tick": 180, "at": [544, 110]},
+    {"tick": 210, "at": [384, 106.3]},
+    {"tick": 240, "at": [740, 108]},
+    {"tick": 270, "at": [544, 106.3]}
+  ]
+}

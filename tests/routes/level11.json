@@ -1,0 +1,26 @@
+{
+  "_about": [
+    "1-12 (step 171). A portal over the left platform's end at (300, 160), one on the player. A portal",
+    "on the block by the gap at (416, 155), under the stub and over the block's top, one on the player.",
+    "A portal on the ramp at (600, 190), under the hanging column, one on the player; it slides slowly",
+    "down the slope. A shot at the top of the view, (644.4, 2), comes within 16 of reflect_agent_675",
+    "(638, 26), whose plane is horizontal, and lands mirrored over the post at (644.4, 80.9): one on the",
+    "player, down onto the post, right off it into the door. anti_portal_agent_ent_599 is passed, not",
+    "killed: the route needs none of antiportal_574. Won on tick 286 (step 171)."
+  ],
+  "level": "level11",
+  "win_by": 340,
+  "holds": [
+    {"walk": "right", "from": 260, "to": 340}
+  ],
+  "taps": [
+    {"tick": 30, "at": [300, 160]},
+    {"tick": 60, "at": [73, 202.3]},
+    {"tick": 90, "at": [416, 155]},
+    {"tick": 120, "at": [300, 202.3]},
+    {"tick": 150, "at": [600, 190]},
+    {"tick": 180, "at": [416, 150.3]},
+    {"tick": 210, "at": [644.4, 2]},
+    {"tick": 240, "at": [593.2, 185.7]}
+  ]
+}

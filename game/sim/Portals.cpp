@@ -235,28 +235,94 @@ bool LoadPlacement(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
 
+    // What kills an anti-portal agent and which ring goes with it: every number
+    // required, since each is the decode's and a default would be a guess.
+    const Json::Value& agent = root["anti_portal_agent"];
+    if (!agent.IsObject() || !agent["size_units"].IsNumber() || !agent["kill_share_of_size"].IsNumber() ||
+        !agent["ring_entity"].IsString() || !agent["bucket_units"].IsNumber() || !agent["seek_neighbours"].IsArray()) {
+        error = path + ": anti_portal_agent needs size_units, kill_share_of_size, ring_entity, bucket_units and "
+                       "seek_neighbours";
+        return false;
+    }
+    Rules::AgentRules readAgent;
+    readAgent.sizeUnits = agent["size_units"].AsNumber(0.0);
+    readAgent.killShare = agent["kill_share_of_size"].AsNumber(0.0);
+    readAgent.ringEntity = agent["ring_entity"].AsString();
+    readAgent.bucketUnits = agent["bucket_units"].AsNumber(0.0);
+    if (!(readAgent.sizeUnits > 0.0) || !(readAgent.killShare > 0.0) || readAgent.ringEntity.empty() ||
+        !(readAgent.bucketUnits > 0.0)) {
+        error = path + ": anti_portal_agent's size, share and bucket are above zero and it names a ring";
+        return false;
+    }
+    for (const Json::Value& offset : agent["seek_neighbours"].AsArray()) {
+        if (!offset.IsArray() || offset.AsArray().size() != 2 || !offset.AsArray()[0].IsNumber() ||
+            !offset.AsArray()[1].IsNumber()) {
+            error = path + ": anti_portal_agent.seek_neighbours holds [x, y] bucket offsets";
+            return false;
+        }
+        readAgent.seekNeighbours.emplace_back(offset.AsArray()[0].AsNumber(0.0), offset.AsArray()[1].AsNumber(0.0));
+    }
+
     out.entryRadiusPx = entry;
     out.antiportalRadiusPx = field;
     out.antiportalEntity = managed;
     out.antiportalManagerScale = managerScale;
     out.finalPos = readFinal;
     out.noPortalSignEntity = noBudget["sign_entity"].AsString();
+    out.agent = readAgent;
     return true;
 }
 
+bool State::Holds(const NoPortalZone& zone, const glm::dvec2& atPx) const {
+    // A deleted one holds nothing (isPointInAntiPortalField #1-10, IsAlive).
+    if (zone.gone) return false;
+    // The ANTIPORTAL's radius, which is half its own sprite times the node's
+    // scale - not the portal's own 14. placement.json has the decode.
+    //
+    // A zone carrying its OWN radius uses that instead. A gravity well's ring is
+    // not a zone at all: the area its agent adds is renamed gravity_area on the
+    // way in, after AntiPortalManager has gathered its fields by name, so the
+    // original never tests a tap against it (00_order R2).
+    const double reachPx = zone.radiusPx > 0.0 ? zone.radiusPx : rules.antiportalRadiusPx * zone.scale;
+    return glm::distance(atPx, zone.CentreNowPx()) <= reachPx;
+}
+
 bool State::InField(const glm::dvec2& atPx) const {
-    for (const NoPortalZone& zone : zones) {
-        // The ANTIPORTAL's radius, which is half its own sprite times the node's
-        // scale - not the portal's own 14. placement.json has the decode.
-        //
-        // A zone carrying its OWN radius uses that instead. A gravity well's ring
-        // is not a zone at all: the area its agent adds is renamed gravity_area
-        // on the way in, after AntiPortalManager has gathered its fields by name,
-        // so the original never tests a tap against it (00_order R2).
-        const double reachPx = zone.radiusPx > 0.0 ? zone.radiusPx : rules.antiportalRadiusPx * zone.scale;
-        if (glm::distance(atPx, zone.CentreNowPx()) <= reachPx) return true;
+    return std::any_of(zones.begin(), zones.end(), [&](const NoPortalZone& zone) { return Holds(zone, atPx); });
+}
+
+std::string State::DeleteRingAt(const glm::dvec2& atPx) {
+    // deleteAntiPortalInThisBucket (bytes 335206..336011): the point's own bucket
+    // first, then each neighbour once, in the decode's order. A bucket is
+    // floor(pos / bucketUnits) of an entity's own position (ETHBucketManager.cpp:
+    // 47-50), and inside one the level's own order stands for the bucket's: the
+    // zones are read in the scene's order and every one of them is static.
+    const double size = rules.agent.bucketUnits;
+    const auto bucketOf = [size](const glm::dvec2& p) { return glm::floor(p / size); };
+    const glm::dvec2 home = bucketOf(atPx);
+    std::vector<glm::dvec2> order{home};
+    for (const glm::dvec2& offset : rules.agent.seekNeighbours) order.push_back(home + offset);
+    for (const glm::dvec2& bucket : order) {
+        for (NoPortalZone& zone : zones) {
+            // The bare spelling alone: GetEntityName() == 'antiportal' (#13-33).
+            if (zone.entity != rules.agent.ringEntity || bucketOf(zone.CentreNowPx()) != bucket) continue;
+            if (!Holds(zone, atPx)) continue;
+            zone.gone = true;
+            return zone.name;
+        }
     }
-    return false;
+    return std::string();
+}
+
+double State::AgentReachPx(const Agent& agent) const {
+    return rules.agent.killShare * rules.agent.sizeUnits * agent.scale;
+}
+
+const Agent* State::FindAgent(const std::string& name) const {
+    for (const Agent& agent : agents) {
+        if (agent.name == name) return &agent;
+    }
+    return nullptr;
 }
 
 bool State::TryPlace(const glm::dvec2& atPx) {
@@ -488,6 +554,7 @@ void State::Tick(entt::registry& registry, float dt) {
     launches.clear();
     reflected.clear();
     failures.clear();
+    agentKills.clear();
     lockoutS = std::max(0.0f, lockoutS - dt);
     // The cooldown clocks run UP, as the original's two Timers do.
     const double elapsedMs = static_cast<double>(dt) * 1000.0;
@@ -495,6 +562,9 @@ void State::Tick(entt::registry& registry, float dt) {
     sinceTapMs += elapsedMs;
     for (NoPortalZone& zone : zones) {
         if (zone.moving) zone.motion.t += dt;
+    }
+    for (Agent& agent : agents) {
+        if (agent.moving && !agent.gone) agent.motion.t += dt;
     }
 
     // EVERY PLACED PORTAL'S OWN CALLBACK, before anything reads where it is
@@ -568,7 +638,38 @@ void State::Tick(entt::registry& registry, float dt) {
                 }
             }
         }
-        if (turnedBy >= 0) {
+        // AN ANTI-PORTAL AGENT KILLS A SHOT STILL IN FLIGHT that comes within its
+        // reach (ETHCallback_anti_portal_agent #61-124), before the shot meets
+        // anything later on its way. A shot that arrives, or is stopped, first is
+        // the projectile's own callback's and never reaches the agent's: the
+        // original's shot is in flight only while it is short of the end of its
+        // way (#79-108), so an agent it would first come near at that end is not
+        // met.
+        int killedBy = -1;
+        for (std::size_t i = 0; i < agents.size(); ++i) {
+            const Agent& agent = agents[i];
+            if (agent.gone) continue;
+            const auto along = Shot::EntersCircle(flight->atPx, next, agent.CentreNowPx(), AgentReachPx(agent));
+            if (along && *along < first && !(arrives && *along >= 1.0)) {
+                killedBy = static_cast<int>(i);
+                first = *along;
+            }
+        }
+        if (killedBy >= 0) {
+            // #126-142 both deleted, and #168-177 the ring round the agent with
+            // them. The explosion, the shake and the sound (#144-166, #179-187)
+            // are the frame's, from this record.
+            Agent& agent = agents[static_cast<std::size_t>(killedBy)];
+            AgentKill kill;
+            kill.agent = agent.name;
+            kill.atPx = agent.CentreNowPx();
+            kill.shotPx = flight->atPx + (next - flight->atPx) * first;
+            agent.gone = true;
+            kill.ring = DeleteRingAt(kill.atPx);
+            agentKills.push_back(kill);
+            ++agentsKilled;
+            flight.reset();
+        } else if (turnedBy >= 0) {
             // Off the reflector where the shot reached it, mirrored, for the rest
             // of its way.
             const glm::dvec2 at = flight->atPx + (next - flight->atPx) * first;
@@ -845,9 +946,35 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
                 }
                 maxPortals = static_cast<int>(number);
             }
+        } else if (role == Roles::kAntiPortalAgent) {
+            // No zone: it refuses nothing, and its own reach is the shot's (Tick).
+            Agent agent;
+            agent.name = node.name;
+            if (const Tscn::Value* position = node.Find("position");
+                position != nullptr && position->kind == Tscn::Value::Kind::Vector2) {
+                agent.centrePx = glm::dvec2(position->numbers[0], position->numbers[1]);
+            }
+            if (const Tscn::Value* scale = node.Meta("scale"); scale != nullptr && !scale->AsNumber(agent.scale)) {
+                error = node.name + "'s scale is not a number";
+                return false;
+            }
+            // ETHCallback_anti_portal_agent #200-250: linearMotion where the node
+            // has a speed, horizontal where its direction says so.
+            if (node.Meta("speed") != nullptr && node.Meta("stride") != nullptr) {
+                const Tscn::Value* direction = node.Meta("direction");
+                const bool sideways = direction != nullptr && direction->kind == Tscn::Value::Kind::String &&
+                                      direction->text == "horizontal";
+                agent.moving = true;
+                if (!Mover::OscillationFromNode(node, sideways ? glm::dvec2(1.0, 0.0) : glm::dvec2(0.0, 1.0),
+                                                movers.oscillationRateScale, agent.motion, error)) {
+                    return false;
+                }
+            }
+            out.agents.push_back(agent);
         } else if (role == Roles::kNoPortalZone) {
             NoPortalZone zone;
             zone.name = node.name;
+            zone.entity = entityName;
             if (const Tscn::Value* position = node.Find("position");
                 position != nullptr && position->kind == Tscn::Value::Kind::Vector2) {
                 zone.centrePx = glm::dvec2(position->numbers[0], position->numbers[1]);

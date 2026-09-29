@@ -1,0 +1,29 @@
+{
+  "_about": [
+    "1-23 (step 171). Left to x 47, clear of the left pad's 64-unit corner; a portal over the hanging",
+    "platform's left end at (150, 80), one on the player. Right along the platform to x 322; a portal on",
+    "the right floor at (545, 190), over rolling_stone_ent_877 (34 px clear) and under the hanging",
+    "column, one on the player. A shot up through the window between the column and the post to",
+    "(618, 50), one on the player; down beside the post and right into the door. Won on tick 410",
+    "(step 171). anti_portal_agent_ent_876 is not killed, and the port cannot kill it: it stands inside",
+    "rolling_stone_ent_877 (radius 30, over the 22.4 reach) and the port's shot dies on the stone's",
+    "surface. The original's would not: its tap-time ray ends push_units (10) INSIDE a teleportable body",
+    "(placement.json final_pos), 20 from the centre, so its shot comes within 22.4 in flight (R23, not",
+    "built). The route needs none of antiportal_878."
+  ],
+  "level": "level22",
+  "win_by": 470,
+  "holds": [
+    {"walk": "left", "from": 5, "to": 70},
+    {"walk": "right", "from": 160, "to": 225},
+    {"walk": "right", "from": 390, "to": 470}
+  ],
+  "taps": [
+    {"tick": 110, "at": [150, 80]},
+    {"tick": 140, "at": [47.0, 202.3]},
+    {"tick": 270, "at": [545, 190]},
+    {"tick": 305, "at": [322.1, 74.3]},
+    {"tick": 335, "at": [618, 50]},
+    {"tick": 365, "at": [545.0, 202.3]}
+  ]
+}

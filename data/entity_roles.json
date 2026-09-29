@@ -91,14 +91,29 @@
       "_note": [
         "Regions where the player may not place a portal. antiportal carries a 'scale'",
         "multiplier; the bytecode has isPointInAntiPortalField and AntiPortalManager.",
-        "anti_portal_agent is the same thing but MOBILE - the 5 inline ones carry",
-        "direction/speed/stride and patrol, so the forbidden region moves.",
-        "no_portal_sign.ent is deliberately NOT here - it is signage marking where a zone is, with the same speed/stride hint animation as the other tutorial graphics. It lives in scenery_hint."
+        "no_portal_sign.ent is deliberately NOT here - it is signage marking where a zone is, with the same speed/stride hint animation as the other tutorial graphics. It lives in scenery_hint.",
+        "anti_portal_agent is NOT here either, since the remaster record's step 171 (00_order R17): the",
+        "original's agent refuses nothing. AntiPortalManager's constructor gathers its fields from",
+        "GetEntityArray('antiportal') and ('antiportal.ent') alone (bytes 104925..105343 #16-37), so",
+        "no tap is tested against an agent. It has a role of its own, below."
       ],
       "names": [
         "antiportal",
         "antiportal.ent",
-        "no_portal",
+        "no_portal"
+      ]
+    },
+    "anti_portal_agent": {
+      "_note": [
+        "The red orb that holds a ring open: 21 placements on 17 levels, both spellings, one",
+        "callback (ETHCallback_anti_portal_agent, bytes 336011..337087). It has no shape and",
+        "refuses no portal. A portal shot still in flight within 0.7 x its size deletes the shot",
+        "and the agent, and the agent deletes the one antiportal round it",
+        "(deleteAntiPortalInThisBucket), so where the ring was a portal may open. Its numbers are",
+        "the port's placement.json `anti_portal_agent`. The ones with a speed and a stride patrol",
+        "(linearMotion, #200-250): two in level10 and one in level13b. Remaster record, step 171."
+      ],
+      "names": [
         "anti_portal_agent",
         "anti_portal_agent.ent"
       ]

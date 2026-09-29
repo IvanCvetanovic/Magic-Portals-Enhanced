@@ -1,0 +1,25 @@
+{
+  "_about": [
+    "1-10, won by killing both anti-portal agents (step 171, R17). From the spawn a shot at",
+    "anti_portal_agent_ent_599 (384, 108) kills it over the block and antiportal_574 (scale 4.5) goes",
+    "with it (tick 56), which frees the block's top: a portal there at (384, 150) and one on the player.",
+    "Right off the block to x 525, under the hanging column. The shot to the door's block at (690, 140)",
+    "passes 21 px from anti_portal_agent_ent_639 (608, 192) and kills it with antiportal_638 (tick 208);",
+    "the same tap again opens the portal, one on the player, and right into the door. Won on tick 292",
+    "(step 171)."
+  ],
+  "level": "level9",
+  "win_by": 350,
+  "holds": [
+    {"walk": "right", "from": 130, "to": 183},
+    {"walk": "right", "from": 290, "to": 350}
+  ],
+  "taps": [
+    {"tick": 30, "at": [384, 108]},
+    {"tick": 70, "at": [384, 150]},
+    {"tick": 110, "at": [127, 204]},
+    {"tick": 200, "at": [690, 140]},
+    {"tick": 230, "at": [690, 140]},
+    {"tick": 260, "at": [525.4, 202.3]}
+  ]
+}

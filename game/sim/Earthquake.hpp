@@ -71,6 +71,9 @@ enum class Call : std::size_t {
     NoPortalTap,
     ShotBlocked,
     ShotFailedInField,
+    // And a shot an anti-portal agent killed (D11 row 3; the remaster record's
+    // step 171): the agent's own static callback.
+    AgentKilled,
     // The bodies' own impacts (D11 rows 4, 8 and 25): the player's, a rolling
     // stone's and a minion's begin contacts, each called with its row's factor
     // times the contact's hitIntensity (Impacts.hpp finds the contacts).

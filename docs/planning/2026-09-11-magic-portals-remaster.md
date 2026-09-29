@@ -21322,3 +21322,219 @@ untouched; camera dragging is untouched.
   shot again - all ten have one now); `NoPortalZone::radiusPx` is set by nothing; `gravitywell.json`'s `zone.shrink_px`
   is the ring's number under the old name; `Portals::State::Tick` copies `shotPasses` on every tick a shot flies.
 - 4-19 (`level18c`) is B5's (the red key's wall) and has no route here.
+
+## Step 171 - a shot kills an anti-portal agent and the ring round it goes with it: the agent a role of its own and no zone, the kill in flight, the one ring the bucket search deletes, the burst, the shake and the sound, and six agent levels won by routes (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w1c`, branch `w1-c`, on step 170's `ce65260`), the program's R17**
+(`docs/parity-backlog.md` section 6's B6; the 2026-09-29 audit's B6 and G7 in the gitignored
+`out/parity/audit_2026-09-29/REPORT.md`; 00_order's R17). Its build reads the frozen level data in `out/snap_w1`;
+numbered in track C's range, and the merge renumbers it. Changed: `data/entity_roles.json` (the agent out of
+`no_portal_zone`, into a role of its own), `game/sim/Roles.{hpp,cpp}` (`kAntiPortalAgent`, ported),
+`game/sim/Portals.{hpp,cpp}` (`Agent`, `AgentKill`, `Rules::AgentRules`, `NoPortalZone::entity` and `gone`, `Holds`,
+`DeleteRingAt`, the kill in `Tick`), `game/data/placement.json` (`anti_portal_agent`, decoded), `game/sim/Effects.{hpp,cpp}`
+and `game/data/effects.json` (`antiportal_explosion`), `game/sim/Earthquake.{hpp,cpp}` and `game/data/earthquake.json`
+(`agent_killed`, D11 row 3), `game/data/sounds.json` (`playExplosionSound(true)`, the event `agent_killed`),
+`game/MagicPortalsLayer.{hpp,cpp}` (the agent's picture and debug box, the ring's picture gone with its zone, the
+burst, the shake, the sound), `tests/test_mp_movers.cpp`, `tests/test_mp_layer.cpp`, `tests/test_mp_camera.cpp`,
+`tests/test_mp_routes.cpp` (the trace names a killed agent and a deleted ring), and six routes, `tests/routes/level9`,
+`level10`, `level11`, `level12b`, `level20`, `level22.json`. No engine change (the pin stays `4bfcf67`), no converter
+change, no format finding. **GAMEPLAY CHANGED (R17, as the original does):** on the 17 levels that place the 21
+anti-portal agents (1-10, 1-11, 1-12, 1-21, 1-23, 2-09, 2-18, 2-26, 2-31, 2-32, 3-12, 3-13, 3-14, 3-31, 4-01, 4-07,
+4-08) the agent refuses no portal - the port refused every tap within 16 px of one - and a portal shot that comes
+within 22.4 px of it while still in flight dies there and kills it, and the antiportal it stands in goes with it:
+where that ring was, a portal may open.
+
+**BLOCKERS, checked first.** R17 is decided for the original (the 2026-09-29 rulings). The decode is in the listing
+(`all_functions.txt`, md5 `48fe65ce...`): `ETHCallback_anti_portal_agent` (336011..337087) and
+`deleteAntiPortalInThisBucket` (335206..336011), below. The effects runtime, the earthquake generator with D11's table
+(row 3: `(20, 100)`) and the sound table exist; R1 is not built, so this step lands before it, as B6 asks. Step 113's
+reachability check and `test_mp_routes` are in the tree. Nothing unmet.
+
+**THE DECODE.** `ETHCallback_anti_portal_agent`, both spellings' callback (00_order 8.0 rule 4), every frame the agent
+runs: #4-9 `pos`; #11-22 `halfSize = GetSize() x 0.7` (the whole size's 0.7, whatever its name); #24-35 the entities of
+the neighbour buckets; for each other entity named `projectile.ent` (#49-77) still in flight - squared distance from its
+`casterPos` under its stored `squaredDistance` (#79-108) - and within `halfSize.x` (#110-124): #126-142
+`DeleteEntity` the shot and itself, #144-166 `AddScaledEntity('antiportal_explosion.ent', vector3(pos, scale(32)),
+getScale())`, #168-177 `deleteAntiPortalInThisBucket(GetBucket(pos), pos, true)`, #179-181 `startEarthquake(20, 100)`,
+#183-187 `playExplosionSound(true)`, and no further shot that frame; #200-250 `linearMotion` where it has a `speed`.
+`anti_portal_agent.png` is 32 x 32 and no agent carries a `scale`, so the reach is 22.4. `deleteAntiPortalInThisBucket`
+deletes the FIRST entity of the bucket whose `GetEntityName()` is exactly `'antiportal'` (#13-33: the bare spelling;
+an `antiportal.ent` is never deleted) and whose field holds the agent (`isPointInAntiPortalField`, #35-47), and returns
+true; else, seeking neighbours, the same in bucket - (1, 0), + (1, 0), - (0, 1), + (0, 1), without seeking further
+(#75-172; arguments pushed last-first). The bucket is `floor(pos / 256)` (`ETHBucketManager.cpp:47-50`, the default
+size: `Game::start`'s four-string `LoadScene`). **The census** (`out/parity/program/R17/agent_census.py`, `.txt`): 21
+agents on 17 levels, each inside exactly one ring, every one spelled bare `antiportal`, in the agent's own bucket; the
+ring is the same at 16 and 32 x scale and at 256, 256 / 1.5 and 256 / 2.8125 u buckets, so the step's answer does not
+wait on R1 or on the bucket-coordinates question. **Measured:** footage F17 (4-01): a shot passing 16 u from
+`anti_portal_agent_ent_2107` bursts it (#44-#52) and `antiportal_2108`'s field is gone by #60.
+
+**WHAT CHANGED.**
+- `entity_roles.json` moves `anti_portal_agent` / `.ent` from `no_portal_zone` to a role `anti_portal_agent`
+  (`Roles::kAntiPortalAgent`, in `IsPorted`); `Portals::Find` makes each an `Agent` - its point, its node's `scale`, its
+  patrol (the port's `Mover::Oscillation`, as the zone had it: R7 is not built) - and no zone. `NoPortalZone` carries
+  its node's entity spelling and a `gone` flag; `State::Holds` is the one field test (a gone zone holds nothing), and
+  `InField` and `TryPlace` read it.
+- `State::Tick`: after the body, blocker and reflector tests, each live agent's reach (`AgentReachPx`, placement.json's
+  0.7 x 32 x scale) is entered along the tick's stretch (`Shot::EntersCircle`); the earliest wins, so a shot that meets
+  a wall or turns off a reflector first is not killed, and one that would first come within reach at the very end of
+  its way has arrived and is not. On a kill the agent is `gone`, `DeleteRingAt` (the decode above, on
+  `rules.agent`) marks one ring `gone`, the flight ends, `agentsKilled` counts it and `agentKills` records it for the
+  frame. It is not a failure: `shotsFailed`, `lastFailure` and `failures` are untouched, so no `portal_fail`, no failed
+  sound and no field shake.
+- The pictures: the agent's sprite (with its `onda.png` system) is placed where it patrols and goes with it; a ring's
+  sprite goes with its zone (`drawn.agent`, `drawn.zone`'s `gone`). The layer adds `antiportal_explosion.ent` at the
+  agent and z 32 (`effects.json`, a point-only unturned row), queues `agent_killed` (intensity 20, after the update: a
+  static entity's) and latches `agent_killed`, which plays `playExplosionSound(true)`: `explosion_huge` alone behind a
+  150 ms `hugeExplosionSoundTimer` (`sounds.json`; the both-samples `playExplosionSound` row is P6's). The debug boxes
+  (drawn only without art): an agent's is the square round its 22.4 reach; a gone zone's and a killed agent's hide.
+
+**THE SUITES' NEW CHECKS.** `test_mp_movers` **124 checks, 0 failures** (53): the level10 agents re-pinned as
+`Agent`s (no zone of theirs); a patrolling agent swings and refuses nothing while its ring refuses its whole swing;
+the decoded numbers and the role; on a rig, a shot to (500, 200) past an agent at (300, 200) inside a bare ring of 48
+and an `antiportal.ent` of 16 is killed at (277.6, 200), deletes the bare ring alone, fails nothing and spends nothing,
+and a portal then opens where the bare ring was; a shot 24.8 off, one ending 30 and 0.1 short, and one past a dead
+agent each open their portal; the bucket order (own, right, below; two buckets off and a ring that does not hold the
+agent never); and F17's 4-01 shot from (153, 146) to (450.1, 85.0) kills `anti_portal_agent_ent_2107` at
+(399.5, 95.4) and deletes `antiportal_2108`, after which F17's second portal (372, 98), refused before, opens. These
+cases belong beside the shot's other ends in `test_mp_shot`; they are in `test_mp_movers` because Smart App Control
+refused both of this step's links of `test_mp_shot` (below). `test_mp_layer` **2921 checks, 0 failures** (2901):
+`AShotKillsF17sAgentWithItsBurstShakeAndSound` walks 4-01's player to the pillar (152.7, 140.3), fires F17's tap and
+finds the kill on tick 111 at (400.3, 94.3), `antiportal_2108` deleted, no failure, `agent_killed` latched once and
+`shot_failed` not, one `antiportal_explosion` at (418, 108) z 32 with its range-199 light, no `portal_fail`, the agent's
+and the ring's pictures gone, and the `agent_killed` row landing 20 after the update (7 u shown on tick 112).
+`test_mp_camera`'s table gains the row (not run: below).
+
+**THE ROUTES** (`tests/routes/`; attempts and traces in the gitignored `out/parity/program/R17/drafts/`, maps in
+`maps/`, the line checks `seg_check.py`).
+
+| Route | Won on tick | `win_by` | Shots | How | Agent killed |
+|---|---|---|---|---|---|
+| 3-13 `level12b` | 1027 | 1090 | 7 | the crate pushed from its right until it drops into the gap by the key's block (released on tick 187: later, it slides over the gap and jams under the column); over it for the blue key; from x 9.8 a shot at (70, 70) left of the block under the agent; portals to the blue keyhole (yellow key taken), right and down, a portal over `breakable_wall_1542` and one beside `rolling_stone_1540` (the stone breaks the wall on tick 720), into the corridor and to the yellow keyhole and the door | yes, tick 350: `anti_portal_agent_ent_1536` and `antiportal_1520` (the 208 px field over the key, the crate and the pocket) |
+| 1-10 `level9` | 292 | 350 | 6 | a shot at the agent over the block; a portal on the freed block top, one on the player; right to x 525; the shot to the door's block kills the second agent in passing, the same tap again opens it, one on the player | both: `_599` (tick 56) with `antiportal_574`, `_639` (tick 208) with `antiportal_638` |
+| 1-11 `level10` | 301 | 360 | 9 | a portal on the ledge; a shot up the slot between the column and the pillar crosses the patrolling agent's swing; portals over the freed pillar, onto the block, onto the door's block past `_639`'s reach, each with one on the player | `anti_portal_agent_599` (tick 104) with `antiportal_574` |
+| 1-12 `level11` | 286 | 340 | 8 | portals over the left platform's end, onto the block by the gap, onto the ramp; a shot at the top of the view comes off `reflect_agent_675` (horizontal) and lands over the post; one on the player each time | none needed |
+| 1-21 `level20` | 625 | 690 | 9 | a shot at the agent, the same tap again for a portal over the left block; running right through a portal in the shaft into the nook, onto `button_829` (tick 285); from the nook a portal high in the shaft and one low, off the ledge into the low one and out of the high one moving up; at the top of that bounce (tick 516) a shot through the lift door's opening into the room; one on the player; right to the door | `anti_portal_agent_ent_824` (tick 65) with `antiportal_822` |
+| 1-23 `level22` | 410 | 470 | 6 | left clear of the left pad's 64-unit corner; a portal over the hanging platform's end, one on the player; right along it; a portal on the right floor over the stone and under the column; a shot up the window between the column and the post; one on the player each time | none: it cannot be (below) |
+
+The 14 routes before this step win on the same ticks (step 170's).
+
+**1-23's agent cannot be killed in the port, and that is R23's, not this step's.** `anti_portal_agent_ent_876`
+(406, 156) stands inside `rolling_stone_ent_877` (radius 30, over the 22.4 reach), and the port's shot dies on the
+first solid body, the stone's surface. The original's does not stop there: its tap-time ray ends `push_units` (10)
+INSIDE a teleportable body (`computePortalFinalPos`; `placement.json` `final_pos`), 20 from the stone's centre, so its
+shot comes within 22.4 in flight and the agent dies. That is 00_order's R23 (the portal-tap list: a teleportable body
+taking a portal), not built. The route wins without the kill.
+
+**THREE OF THE NEW ROUTES DEPEND ON R1 STAYING UNBUILT** (as 4-28's does; `out/parity/program/R17/r1_dependency.py`,
+`.txt`). At the original's 32 x scale these portal taps land inside a ring still alive at their tick: 1-11 the
+self-tap (127, 202.3) in `antiportal_709` (102.3 px, R1 192) and (740, 108) in `antiportal_638` (81.6, R1 112); 1-12
+(416, 155) and the self-tap (416, 150.3) in `antiportal_574` (56.1 and 58.6, R1 80); 1-23 (545, 190), the self-tap
+(322.1, 74.3) and the self-tap (545, 202.3) in `antiportal_878` (143.1, 117.1, 146.5; R1 182.4). 3-13, 1-10 and 1-21
+open every portal after their ring is gone and do not depend on it. R1's step re-routes the three: on 1-12 a shot at
+`anti_portal_agent_ent_599` first would clear `antiportal_574`; 1-23 needs R23 (above) or another way.
+
+**GATES.**
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | **passes: 0 warnings** in the full build (`build1.log`, 48 executables) and in each relink (`build2`-`build5`) |
+| The kill | a shot in flight within 0.7 x size deletes shot and agent, one bare ring in the bucket search, the explosion, shake 20 after the update, `playExplosionSound(true)`; the agent refuses nothing | **passes**: `test_mp_movers` 124 and `test_mp_layer` 2921, 0 failures (above) |
+| `entity_roles.json` | the agent no zone | **passes**: its own role, ported; `FindZone` of an agent is null on level10 and level12b |
+| `test_mp_routes` | 3-13 won by play; a route for each of 1-10, 1-11, 1-12, 1-21, 1-23; the 14 still win | **passes: 20 routes, 65 checks, 0 failures** (47): the 14 at step 170's ticks; 3-13 on 1027, 1-10 on 292, 1-11 on 301, 1-12 on 286, 1-21 on 625, 1-23 on 410 |
+| Reachability | no door newly sealed | **passes: 108 reachable, 11 opened, 9 sealed, 0 differ** from `reachability.json` (`reach_check.txt`): an agent has no body, so its role changes nothing the flood reads |
+| The sweep | 128 levels at f420; every changed level explained against `R2/after/sweep` | **passes: 128 of 128 byte-identical** to `R2/after/sweep` (`out/parity/program/R17/after/sweep`, on `a64d3c25`; `compare_R17.txt`): no level taps at f420, so no shot flies and no agent dies; an agent's picture is placed from its `Agent` at the point its zone gave it, and the agents' debug boxes, now a list of their own made right after the zones', are hidden with art. 128 rc=0, validation ACTIVE in 128 logs and silent; every PNG equals its log's md5 (and R2's 128 theirs); art from `out/snap_w1` in 128 logs; no unscheduled input |
+| The window plays the suite's game | each new route's `door reached on tick` in `--route` = the suite's won tick | **passes: 6 of 6** (3-13 1027, 1-10 292, 1-11 301, 1-12 286, 1-21 625, 1-23 410; `--saves` a directory of the step's own); validation ACTIVE and silent in the 6 logs; the kills logged where the suite has them. Two stills of 3-13 (`window/level12b_kill_f345.png`, `_f356.png`): the shot beside the agent in its red field, then the burst where the agent was, the field gone and the view shaken |
+| `test_mp_shot`, `test_mp_camera`, `test_mp_sounds`, `test_mp_effects` | run once each | **`test_mp_shot` passes: 181 checks, 0 failures** (step 170's count; corrected at commit: its third link, `129d9046`, the one this step leaves, ran first time in the verification, `verify1/test_mp_shot.txt`); **`test_mp_sounds` passes: 107 checks, 0 failures** (`1dd1b6a9`, the verification, first launch); **`test_mp_camera` and `test_mp_effects` NOT RUN**: both links of `test_mp_camera` refused, and `test_mp_effects` (`78d71b2c`) refused on the verification's first launch (below) |
+
+**THE SUITES**, run directly, once each on the binaries this step leaves: `test_mp_movers` 124, `test_mp_layer` 2921,
+`test_mp_routes` 65 (the full set of 20; the `--only` authoring replays of the same binary are not the gate), 0
+failures. The verification ran two more, once each (corrected at commit): `test_mp_shot` 181 (`129d9046`, the third
+link, after its source went back to step 170's) and `test_mp_sounds` 107 (`1dd1b6a9`), 0 failures. Not run:
+`test_mp_camera` (refused twice) and `test_mp_effects` (`78d71b2c`, refused on the verification's first launch);
+the implementation left `test_mp_effects` and `test_mp_sounds` unlaunched by choice
+(their tables gained a row each, which their loaders read: the layer loads both files at every attach, and
+`test_mp_layer`'s new case asserts the explosion row and the sound event; neither pins what the new rows touch:
+`test_mp_sounds` floors the hooks at 55 and names the events it checks, and none of `test_mp_effects`' 102 refused-file
+fixtures, each the real file with its first match of a string replaced, finds its match moved into or by the new row -
+`out/parity/program/R17/effects_fixture_check.py`); and the other 39 of the 46 suites, relinked (the library changed)
+with untouched sources. A grep of `tests/` for the 17 agent levels and for `Shoot(`, `TryPlace(`,
+`InField(` and taps: of the suites that name an agent level (`keys`, `zerog`, `popup`, `demolish`, `dragon`, `hinge`,
+`fields`, `ghost`, `boss`, `darkdragon`, `sprites`, `bounce`, `lighting`, `diamonds`), one fires a shot there -
+`test_mp_diamonds`' drain case on 3-31 (`level30b`), from (384, 228) to (384, 180), 250 u from that level's agent at
+(224, 456) - and none counts zones on one; the sweep starts all 128 levels through the changed `Portals::Find`.
+
+**SMART APP CONTROL: 6 refusals (6 notifications to the owner): 5 in the implementation, 1 in the verification.**
+`test_mp_shot.exe` refused on its first launch; deleted and relinked once, refused again, and its new cases moved to
+`test_mp_movers` before that suite's first launch, so the move cost no launch; `test_mp_shot.cpp` is back to its
+step-170 text, and that source's link (`129d9046`) ran first time in the verification (181, 0 failures).
+`test_mp_camera.exe` refused twice the same way: NOT RUN. `test_mp_routes.exe` refused once; its relink (`1185f257`)
+ran, and every authoring replay used that same binary. `test_mp_movers`, `test_mp_layer` and `MagicPortals.exe`
+(`a64d3c25`: the sweep, the six route replays and the two stills) ran first time. The verification's one refusal:
+`test_mp_effects.exe` (`78d71b2c`) on its first launch, not relinked. The commit relinked nothing. The merge's one full
+ctest owns `test_mp_camera` and `test_mp_effects`; nothing else is to be relinked for them.
+
+**VERIFIED, PASSED (`out/parity/program/R17/verify1/`)**, on the binaries above: the 9 changed translation units
+recompiled to scratch with 0 warnings; an independent census (`census_v.py`: the same 21 agents and rings);
+`test_mp_movers` 124, `test_mp_layer` 2921, `test_mp_routes` 65, `test_mp_shot` 181 and `test_mp_sounds` 107, 0
+failures; reachability 0 differ; its own 128-level f420 sweep byte-identical to this step's and to R2's; 3-13's
+window replay kills the agent on tick 350 and reaches the door on 1027. Its four low findings are text, applied at
+commit: the stale `test_mp_shot` entry, the effects and sounds suites in the deviations, the refusal count, and
+achievement 10 (LEFT FOR LATER).
+
+**RECORDED DEVIATIONS.**
+1. **`test_mp_camera` and `test_mp_effects` not run.** Required: the suites the change touches, run once each.
+   Measured: both links of `test_mp_camera` refused by Smart App Control (the rule allows one relink), and
+   `test_mp_effects` refused on the verification's first launch. `test_mp_camera`'s change is the one table row
+   `{AgentKilled, 20, AfterUpdate}`, whose loader and value `test_mp_layer` measures through the generator
+   (`checkQuakeRow`); `test_mp_effects`' table gained the `antiportal_explosion` row, which `test_mp_layer` loads from
+   the real `effects.json` and asserts, and none of its 102 refused-file fixtures moves (`effects_fixture_check.py`).
+   Owner: the merge's one full ctest. (Corrected at commit: the record said `test_mp_shot` was not run either; its
+   step-170 source, the step's cases for it being in `test_mp_movers`, ran 181, 0 failures, in the verification. It
+   fires its shots on levels with no agent: it reads 1-12, `level11`, for its reflectors alone. `test_mp_sounds`,
+   whose table gained the hook and the event, ran 107, 0 failures, in the verification.)
+2. **Three new routes depend on R1 staying unbuilt** (1-11, 1-12, 1-23; above). Owner: R1's step, which re-routes
+   them, with 4-28 (step 170's deviation 2). Merge hazard: an R1 landing before this step fails their rows.
+3. **1-23's agent is not killable in the port** (R23; above). The route wins without it. Owner: R23's step.
+4. **The new routes lean on other unbuilt rows too**, which the steps that build them must re-verify:
+   - **G9** (the reflector's catch of 32 and its leg `min(|caster - agent|, remaining)`): 1-12's landing over the post
+     is `reflect_agent_675`'s under the port's 16 px catch that mirrors the whole rest; on 1-21 the high portal
+     (230, 142) is 24 u from `reflect_agent_826` and the bounce's shot leaves 26 u from it (a draft's shot to (205, 122)
+     was already turned by it at 16); on 1-23 the shot to (150, 80) passes 29.9 u from `reflect_agent_826` (84, 112).
+     All inside 32.
+   - **The lift door's latch** (step 109's deviation 3; step 170's deviation 1): 1-21 presses `button_829` and threads
+     its shot through `door_lift_831`'s opening while the door closes. Add 1-21 to that step's re-verify list beside
+     1-14, 1-15, 1-16, 1-32 (and 4-21's route).
+   - **R7 / G3** (the full cosine swing): 1-11's kill of `anti_portal_agent_599` works at any point of the port's
+     half swing (366-402); under the original's 348-420 it is phase-dependent. Its door-block shot to (740, 108) passes
+     0.6 px from the lowest point of `anti_portal_agent_639`'s original swing (y 12-108; the port's is 36-84), where
+     it would kill that agent and open nothing.
+
+**RULINGS APPLIED.** R17 (built: as the original). R1, R23 unbuilt (not this step's); R2 as step 170 built it; R24
+and R25 untouched; camera dragging untouched (1-21's hint hand asks the original's player to drag; the route does
+without).
+
+**LEFT FOR THE OWNER.** Nothing new beyond deviations 2 and 3, which wait on R1 and R23.
+
+**LEFT FOR LATER.**
+- A shot fired from within 22.4 of an agent kills it at once - even a self-tap that arrives on its first tick - where
+  the original's projectile jumps 24 u out on its first frame and one that arrives on that frame is never in flight
+  (`placement.json` `anti_portal_agent._not_modelled`). No route and no suite fires from there; 1-10's
+  `anti_portal_agent_ent_639` (608, 192) stands at the player's height on the floor. The fix belongs with G4 (the shot's
+  speed and first jump).
+- The static callback runs only while the agent's bucket is drawn; the port tests every agent every tick
+  (`_not_modelled`: it differs only for an agent within 22.4 of the view's edge whose bucket is wholly outside it).
+- 3-13's crate: pushed too far it slides over the 64 px gap and jams under the column (the port's crate and its
+  friction are the remake's); the route releases it in time. Not measured against the original.
+- Achievement 10, "Red Agent spare", now means something (found by the verification, added at commit):
+  `checkForLevelAchievements` (#190-222) on 1-10 (`level9`), in the `Game` state, counts
+  `'anti_portal_agent;anti_portal_agent.ent'` and dispatches id 10 while an agent is left - and agents can now die.
+  The port unlocks the medal achievements only (`Achievements.hpp`); the step that wires the level achievements must
+  count the live agents, not the placed ones.
+- For the merge: main has uncommitted edits to `tests/test_mp_layer.cpp` (this step adds a case and one line in the
+  run list after `TheBlockerKillsF3sLongShotRedAndShakesAfter`); `Earthquake::Call` gains `AgentKilled` after
+  `ShotFailedInField`, so the enum, `Earthquake.cpp`'s `kKeys`, `earthquake.json` and `test_mp_camera`'s table merge in
+  lockstep with any other track's new call; step 170's and this step's `Portals.{hpp,cpp}` and `test_mp_routes.cpp`
+  trace hunks sit apart.
+- The backlog (`docs/parity-backlog.md`) is not edited here: the close role ticks B6 and G7 (R17 built; 3-13 won),
+  notes 1-23's agent under R23 and the three R1-dependent routes beside 4-28's, raises the route count to 20
+  (1-10 and the other five of this step), and adds the first-tick kill beside G4.
