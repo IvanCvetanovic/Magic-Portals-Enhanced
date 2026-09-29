@@ -360,7 +360,9 @@
         "  arrows.ent / hand_waypoint0 - tutorial hint graphics (see scenery_hint)",
         "  gutter_mouth.ent            - a wall spout; decorative drip emitter",
         "  dragon_claw.ent             - part of the chapter-2 boss, which is a placeholder",
-        "  rocket_launch / _landing    - chapter 4 finale FX markers",
+        "  rocket_launch / _landing    - the anchors of 4-01's and 4-19's win cutscenes, acting only",
+        "                                after the door (the medal's delay is the level's end_delay;",
+        "                                the port's game/data/cutscenes.json)",
         "  red_key_state.ent           - a HUD-ish indicator that the red key is held"
       ],
       "names": [

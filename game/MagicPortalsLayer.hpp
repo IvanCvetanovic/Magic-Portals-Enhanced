@@ -29,6 +29,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Camera.hpp"
 #include "sim/Chapters.hpp"
 #include "sim/Credits.hpp"
+#include "sim/Cutscene.hpp"
 #include "sim/Dashboard.hpp"
 #include "sim/Earthquake.hpp"
 #include "sim/Effects.hpp"
@@ -614,6 +615,10 @@ public:
             LitTorch,
             UnlitTorch,
             LightWall,
+            // 2-32's knight, the dragon_knight.ent its spawn adds once the level is
+            // finished, where its PICTURE is drawn this frame (m_knightQuad), as a
+            // minion's: its aura (planning step 154).
+            Knight,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -876,6 +881,39 @@ public:
         bool glowAdditive = false;
     };
     DoorReport DoorPicture() const;
+
+    // THE WIN CUTSCENES (sim/Cutscene.hpp, cutscenes.json; planning step 154), as the
+    // last tick left them: the delay before the medal, 4-01's rocket and bridge,
+    // 4-19's landing - the door, the key, the eclipse, the spiral and the camera's
+    // target - and 2-32's knight.
+    struct CutsceneReport {
+        double wonDelayMs = 0.0;       // the level's end_delay, or level_end's 1400
+        bool launchPlaced = false;     // the level places rocket_launch
+        bool landingPlaced = false;    // and rocket_landing
+        Cutscene::Launch launch;
+        Cutscene::Landing landing;
+        int launchStartedTick = -1;    // the layer's tick its first update ran on
+        int landingStartedTick = -1;
+        int quakes = 0;                // rocket_launch's startEarthquake calls
+        glm::dvec2 doorAtPx{0.0};      // the door's entity point as drawn: node, bob and cutscene
+        glm::dvec2 doorCentrePx{0.0};  // and its picture's centre
+        entt::entity bridgeQuad{entt::null};
+        glm::dvec2 bridgeCentrePx{0.0};
+        glm::dvec2 bridgeRestPx{0.0};  // where the level's body holds it
+        double keyScale = 1.0;         // the landing's key: its size and alpha
+        glm::dvec2 eclipseAtPx{0.0};   // its entity point as drawn
+        glm::vec4 spiralColour{1.0f};  // the spiral's drawn colour
+        glm::dvec2 cameraTargetPx{0.0}; // what the follow was given this tick
+        Cutscene::Knight knight;
+        glm::dvec2 knightAtPx{0.0};    // its entity point
+        entt::entity knightQuad{entt::null};
+        glm::dvec2 knightCentrePx{0.0};
+        bool knightAuraQueued = false;
+        int knightSpawnedTick = -1;
+        int knightEnteredTick = -1;
+        glm::dvec2 knightEnteredAtPx{0.0};
+    };
+    CutsceneReport CutscenePicture(entt::registry& registry) const;
 
     // The ghost of the wall a lit torch takes away (art.json `light_wall_ghost`,
     // sim/Torch): dashed_door.ent, added at the wall's own point and angle on the
@@ -1185,6 +1223,12 @@ public:
     // and its white death are captures the visuals plan asks for. Ignored on a
     // tick the dragon is not there to burn.
     void ScheduleDevBurn(int tick);
+    // DEV ONLY: the player's body put at a point of the level, its velocity zeroed,
+    // on the layer's tick `tick`, after that tick's physics step and before what
+    // judges where the step left it - so a capture can open a level's door and film
+    // what comes after (planning step 154's cutscenes). A capture aid, never a route:
+    // a win it makes is not a win a player made. Ignored with no level loaded.
+    void ScheduleDevPlace(int tick, const glm::dvec2& atPx);
     // The layer's own tick count, which every DEV schedule above is written in: 1 on
     // the first OnFixedUpdate.
     int LayerTicks() const { return m_ticks; }
@@ -1197,6 +1241,9 @@ public:
     const LevelEnd::Rules& LevelEndRules() const { return m_levelEndRules; }
     // Whether the door was reached, or the player killed, on this level.
     bool Finishing() const { return m_finishing; }
+    // The door to the medal on this level: its end_delay's time where it places one
+    // (Cutscene::EndDelayMs), level_end's won_delay_ms otherwise.
+    double WonDelayMs() const { return m_wonDelayMs; }
     bool Dying() const { return m_dying; }
     // Game time since the door or the death: what the beat is counted in.
     double EndedMs() const { return m_dying ? m_dyingClockMs : m_finishClockMs; }
@@ -1427,6 +1474,17 @@ private:
     // while the body still stands where it went.
     void latchFinishEffects(entt::registry& registry);
     void latchDeathEffects(entt::registry& registry);
+    // THE WIN CUTSCENES' CALLBACKS, once a tick from the tick the level ends: the
+    // launch and the landing while it is won, the knight's spawn once it is
+    // finished and the knight's own update from the tick after (Cutscene.hpp). Their
+    // tracks, their shake and the knight's door come from here; what they move is
+    // placed by syncSprites, advanceMotions and syncKnight.
+    void stepCutscenes(entt::registry& registry, double frameMs);
+    // 2-32's knight: minion.png on its own cut, black, at its body.
+    void syncKnight(entt::registry& registry);
+    // Where the door's entity is this tick: its node, the zero-g bob and the
+    // cutscene's offset - the point the landing puts the character on.
+    glm::dvec2 doorPointPx() const;
     // The view's top-left corner and its size, on the level's axis - the
     // original's GetCameraPos() and GetScreenSize(), which the skull is held
     // inside - as the last tick left the follow.
@@ -1655,6 +1713,7 @@ private:
     Sky::Controller m_sky;                  // the level's StaticSky, built with its sprites
     Sky::SpaceRules m_spaceRules;           // the port's sky.json, space_sky
     Sky::Space m_space;                     // the level's SpaceSky, on the 19 space_bg levels
+    Cutscene::Rules m_cutsceneRules;        // the port's cutscenes.json
     Motion::Rules m_motionRules;            // the port's motions.json
     Effects::Rules m_effectRules;           // the port's effects.json: the calls that add an entity
     // One per crystal and key whose picture is drawn, in the level's drawing order
@@ -2454,15 +2513,43 @@ private:
     //
     // gameWonDelay is 1400 ms (ui.json's level_end.beats, decoded): the
     // constructor writes 1400 to gameLostDelay and copies the same register into
-    // gameWonDelay. A level may override it - the constructor's later arm reads a
-    // `delay` entity's `time` - but NO LEVEL IN THE GAME PLACES ONE, checked
-    // across all 128, so the override is recorded here and not built.
+    // gameWonDelay. A level may override it - the constructor's #143-175 read an
+    // `end_delay` entity's `time` - and THREE LEVELS DO: 4-01 5000, 4-19 14500 and
+    // 2-32 6600, each the level of a cutscene that fills it (m_wonDelayMs,
+    // cutscenes.json; planning step 154). An earlier note here said no level placed
+    // one; the converted levels carry the three as `metadata/time`.
     //
     // This port showed the medal and played both sounds on the tick the exit
     // reported, with the character still standing in the doorway walking on the
     // spot. That is what the owner saw.
     bool m_finishing = false;      // gone into the door, not yet scored
     double m_finishClockMs = 0.0;  // how long since
+    // The level's own gameWonDelay: level_end's, or its end_delay's (cutscenes.json).
+    double m_wonDelayMs = 0.0;
+
+    // THE WIN CUTSCENES (planning step 154). Each is played where its level places
+    // its entity; what they move are pictures, never Game::Level - but for the
+    // knight, a body the spawn adds only once the level is finished.
+    bool m_launchPlaced = false;
+    bool m_landingPlaced = false;
+    Cutscene::Launch m_launch;
+    Cutscene::Landing m_landing;
+    Cutscene::Knight m_knight;
+    int m_launchStartedTick = -1;
+    int m_landingStartedTick = -1;
+    int m_launchQuakes = 0;
+    int m_knightSpawnedTick = -1;
+    int m_knightEnteredTick = -1;
+    glm::dvec2 m_knightEnteredAtPx{0.0};
+    int m_bridgeSprite = -1;       // in m_sprites: the rocket_bridge SeekEntity finds
+    int m_landingKeySprite = -1;   // and the key the landing's SeekEntity('key') finds
+    glm::dvec2 m_cameraTargetPx{0.0};
+    // The knight's picture: minion.png as m_minionCut cuts it, black, and its aura
+    // queued once through the effects runtime (EffectOwner::Kind::Knight).
+    entt::entity m_knightQuad{entt::null};
+    glm::dvec2 m_knightCentrePx{0.0};
+    float m_knightZ{0.5f};
+    bool m_knightAuraQueued = false;
 
     // AND THE SAME BEAT BEFORE THE LOST SCREEN, which this port had none of:
     // death was an instant retry, so a player who walked into level5's
@@ -2701,6 +2788,7 @@ private:
     };
     std::vector<DevTap> m_devTaps;
     std::vector<int> m_devBurns;
+    std::vector<std::pair<int, glm::dvec2>> m_devPlaces;
     int m_ticks{0};
 
     void buildControls();

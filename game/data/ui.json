@@ -600,8 +600,10 @@
         "DECODED: GameStateController::GameStateController (bytes 121296..122160, instructions",
         "24..29) writes 1400 to gameLostDelay and copies it into gameWonDelay; checkGameEnd",
         "(bytes 125613..126638) raises levelFinishedLayer or levelLostLayer once gameEndElapsedTime",
-        "- game time from the door or the death - passes it. A scene end_delay entity can override",
-        "it; no level of the 128 places one (spec 3.4, U4).",
+        "- game time from the door or the death - passes it. A scene end_delay entity overrides the",
+        "won delay (the constructor's #143-175): 3 of the 128 levels place one - 4-01 5000, 4-19",
+        "14500, 2-32 6600 - read by sim/Cutscene from cutscenes.json end_delay (planning step 154;",
+        "the spec's 3.4 and U4 said none did).",
         "MEASURED: door to the finished layer 1.41..1.50 s (finish_1-1.mp4, fitted t0 6.388..6.406);",
         "first HUD-dismiss frame to the lost layer 1.438 s (death_2-10) and 1.349 s (gameover_2-32).",
         "The emulator's clock runs 1.0..1.5% long (spec 0.3): the decode is taken."

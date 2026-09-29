@@ -835,9 +835,10 @@
       "colour": [0.0, 0.0, 0.0],
       "emissive": [0.0, 0.0, 0.0]
     },
-    "_dragon_knight_not_drawn": [
-      "dragon_knight.ent (the same sheet) is spawned by dragon_knight_spawn only after 2-32 is won (step 34),",
-      "and never shows. Its row, for the record (D2_check.md): ETHCallback_dragon_knight ins 507-581 take",
+    "_dragon_knight": [
+      "dragon_knight.ent (the same sheet) is spawned by dragon_knight_spawn only once 2-32 is finished, and",
+      "is drawn since planning step 154 by the layer's syncKnight on this cut, at its own PivotAdjust (0, 0),",
+      "black, with its aura (cutscenes.json dragon_knight). Its row (D2_check.md): ETHCallback_dragon_knight ins 507-581 take",
       "findCharacterDirection(getAngle(GetLinearVelocity()), true) BEFORE this update's SetLinearVelocity:",
       "the previous update's velocity x < 0 is row 1, anything else row 2"
     ]

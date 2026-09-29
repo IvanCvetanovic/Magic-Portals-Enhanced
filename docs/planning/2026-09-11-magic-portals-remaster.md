@@ -21604,3 +21604,203 @@ and R25 untouched. Camera dragging: not touched.
 - For the close role: `docs/parity-backlog.md` section 6's P5 row is this step's to tick (not edited here).
 - For the merge's renumbering: "step 153" is written in `sky.json` (`_about` and `space_sky._source`) and in comments
   in `game/sim/Sky.hpp`, `game/MagicPortalsLayer.cpp`, `tests/test_mp_sky.cpp` and `tests/test_mp_layer.cpp`.
+
+## Step 154 - the win cutscenes: 4-01's rocket launch, 4-19's landing, 2-32's dragon knight, and the end_delay each level sets before its medal (built)
+
+**TRACK B: the program's P2** (`docs/parity-backlog.md` section 6, P2; the audit's P2). Built in the worktree
+`Magic-Portals-Remake-w1b` (branch `w1-b`, on step 153's `691d6de`), whose build reads the frozen level data in
+`out/snap_w1`; numbered in track B's range, and the merge renumbers it. Changed: `game/data/cutscenes.json` (new: the
+decode), `game/sim/Cutscene.{hpp,cpp}` (new: `LoadRules`, `EndDelayMs`, `Places`, `LaunchAt`/`StepLaunch`,
+`LandingBias`/`LandingDoorOffsetPx`/`LandingEclipseYPx`/`SpiralBrightness`/`StepLanding`, `FindKnight`/`SpawnKnight`/
+`StepKnight`/`KnightEntityPx`), `game/sim/Earthquake.{hpp,cpp}` and `earthquake.json` (the `rocket_launch` row, D11 row
+30), `game/MagicPortalsLayer.{hpp,cpp}` (the level's `m_wonDelayMs`, `stepCutscenes`, `syncKnight`, `doorPointPx`,
+`CutscenePicture`, `EffectOwner::Kind::Knight`, the DEV `ScheduleDevPlace`), `game/main.cpp` (the DEV `--place`),
+`game/sim/CMakeLists.txt`, `tests/CMakeLists.txt`, `tests/test_mp_cutscene.cpp` (new), `tests/test_mp_{layer,camera}.cpp`,
+and the notes this makes stale or that were wrong: `ui.json` `level_end.beats` and the header's beat note ("no level
+places an end_delay": three do), `dragon.json` `knight`, `art.json` `_dragon_knight`, `effects.json` `finish`,
+`sounds.json` `_music_note`, `earthquake.json` `_not_wired`, `Dragon.hpp` (and, at the commit, the remake's
+`data/entity_roles.json` `scenery_fx` note and README's capture flags, `--place`). Line 7648 of this record ("Not built: a
+scene `end_delay` override of the 1400 ms. No level places one.") is corrected here, not rewritten: three levels
+place one. No engine change (the pin stays `4bfcf67`), no converter change (`end_delay`'s `time`, the three cutscene
+entities and the waypoints' `hold` are already in the converted levels), no format finding (script behaviour).
+
+**GAMEPLAY: the time from the door to the medal on three levels, and nothing before the door.** 4-01's medal comes
+5000 ms after its door (was 1400), 4-19's 14500 and 2-32's 6600; the lost screen keeps its 1400 everywhere (the
+constructor overrides only `gameWonDelay`). Everything else is after the level is won or lost: pictures, a track, a
+shake, and 2-32's knight - the one body, added only once the level is finished and kept out of `Minions`, whose list
+the achievements count. No door can be sealed by it. **The program's winnability gate cannot be run in this tree**:
+W.1 is not an ancestor of `w1-b` (no `tests/routes/`, `test_mp_routes` or reachability tool), so no route is added.
+The captures below reach the three doors with a DEV place (`--place`), a capture aid and never a route. Recorded
+for the merge: this tree has no route to 4-19's door (B5, the red key's wall, is not built here) and 4-01's intended
+route goes through the anti-portal agent (R1/R17/B6, not built here).
+
+**BLOCKERS, checked first: none.** The converter already writes `metadata/time` on the three `end_delay` nodes
+(level0c 5000, level18c 14500, level31a 6600), `rocket_launch`, `rocket_landing`, `rocket_bridge`, `eclipse.ent`,
+`spiral`, `key`, `dragon_knight_spawn` and `waypoint0` (`hold` 800) / `waypoint1`. The music (step 152) and SpaceSky
+(step 153) are in this tree; F17 is the footage.
+
+**WHAT THE ORIGINAL DOES** (listing `all_functions.txt`, md5 `48fe65ce...`; arguments pushed last-first, `00_order.md`
+8.0; `cutscenes.json` cites every instruction).
+- **The delay.** `GameStateController::GameStateController` (bytes 121296..122160) #24-29 writes 1400 to
+  `gameLostDelay` and copies it into `gameWonDelay`; #143-175 `SeekEntity('end_delay')` and, where found,
+  `gameWonDelay = GetUInt('time')`. Census over the 128: exactly 3, each the level of one cutscene.
+- **4-01, `ETHCallback_rocket_launch`** (462571..464080; `rocket_launch` is `static="1"` in `level0c.esc`, so -
+  INFERRED, not decoded - its callback runs after the game state in the frame and starts on the door's own frame). Once `isGameWon`: its first
+  frame keeps the door's and the bridge's starts, destinies start + `scale(0, -390)` and `scale(-32, 0)`, and plays
+  `playRocketMusic`; every frame `endElapsedTime` and `eqCounter` += the frame time; past `eqCounter > 100` and while
+  `endElapsedTime < 6000`, `eqCounter = 0` and `startEarthquake(3, 0)`; while `endElapsedTime < 7600` the door at
+  `interpolate(start, destiny, smoothBeginning(t / 7600))` and the bridge at `smoothBeginning(t / 3800)` - `interpolate`
+  has no clamp, so the bridge goes on to -64 at 7600.
+- **4-19, `ETHCallback_rocket_landing`** (464080..466030; `static="1"`). Once `isGameWon`: the first frame keeps the
+  door's start, destiny + `scale(256, 400)`, the spiral's colour, and plays `playBackHomeMusic`; every frame
+  `SeekEntity('key')`'s `Scale(0.9)` and `SetAlpha(its scale)`; `endElapsedTime` += the frame time only while below
+  12500; `bias = smoothBeginning(t / 12500)`; the door's `originalPos` - not its position: on this zero-g level
+  `Game::loop`'s `linearMotion` puts it there plus its bob - at `interpolate(start, destiny, bias)`; the character
+  (`dark_mage.ent`) on the door's position; the eclipse from `GetCameraPos() + GetScreenSize() x (0.5, 1)` plus its own
+  height (`GetSize` = `GetCurrentSize`, frame x scale, `ETHSpriteEntity.cpp:652-682`: 64 u) up to it by
+  `smoothEnd(bias)`; the spiral at its kept colour x `max(0, min(interpolate(2, 0.1, smoothEnd(bias)), 1))` - whole
+  until about 6.9 s, a tenth at 12.5. `startAngle`/`destinyAngle` are stored and read by nothing.
+- **2-32, `ETHCallback_dragon_knight_spawn`** (386175..386379; `static="1"`): once `isFinished` - `gameFinished`, which
+  a DEATH sets too - `AddScaledEntity('dragon_knight.ent', its position)` and it deletes itself.
+  **`ETHCallback_dragon_knight`** (386379..388631), from the next frame (INFERRED, deviation 3): within `scale(16)` of `waypoint<dest>` it takes
+  the next, adopting the hold of the one reached; finding no next it deletes itself and calls
+  `levelFinishedEffect(its point, its point + scale(16, -16))` (the suck, the sparkles, `playFinalDoorSound`). It is
+  driven only once it has started and outlasted its hold - so from its spawn it falls undriven to waypoint0 - at
+  `(+-1 x scale(1.7) x frame / GetCurrentPhysicsTimeStepMS, its y velocity)` (the minions' 33.3333 ms step,
+  `minions.json`: 51 px/s), framed `timer.set(0, 3, 120, true)` on row 1 after a leftward step, else 2.
+  `dragon_knight.ent`: `minion.png` 4 x 4, `startFrame` 4, `PivotAdjust (0, 0)` (minion.ent's is (0, 4)), emissive 0,
+  `applyLight` 0, minion.ent's `<Collision>`, and the black knight's 24-particle aura. The knight at 51 px/s enters
+  about 4.9 s after the door, inside 2-32's 6600 - a reading of the minions' speed that the designer's delay agrees
+  with; read as Box2D metres a second (the unit the impact rows read velocity in) it would walk for about 11.5 s and
+  the medal would come first.
+
+**THE CHANGE.**
+1. **`cutscenes.json`** (the decode above, every number cited) and **`sim/Cutscene`**: the delay, the three paths as
+   pure functions and each callback's clock as a small state (`Launch`, `Landing`), and the knight over the registry
+   (`Knight`: its spawn at its entity point on `minion.ent`'s circle, rotation locked, and its update before the
+   physics step, as `Minions::Tick`).
+2. **The layer.** `loadLevel` reads the level's delay (`m_wonDelayMs`, and a `sets end_delay` log line), which of the
+   three it places, and its knight. From the tick the level ends, `stepCutscenes` runs the launch and the landing
+   while it is won, from the door's own tick, each playing its track on its first update and the launch queueing its
+   shake; and the knight's spawn once it is finished - the door's tick or the death's - and its update from the next.
+   The knight goes in with the door's suck, sparkles and sound. What moves is drawn: `syncSprites` adds the launch's
+   offsets to the door (its exhaust with it) and the bridge, the landing's to the door on its bob, shrinks and fades
+   the key and dims the spiral; `advanceMotions` sets the eclipse's y after SpaceSky's; the camera is given the
+   door's point during the landing, where the original moves the character. `syncKnight` draws the knight on
+   `m_minionCut`, black, and queues its aura once (`EffectOwner::Kind::Knight`). The exit's sensor, the bridge's box
+   and the hidden player's body stay where they were. The medal comes at `m_wonDelayMs`, and a restart or any unload
+   forgets all of it and destroys the knight's body and picture.
+3. **`earthquake.json` `rocket_launch`**: intensity 3, `after_update` (a static callback).
+4. **DEV `--place <x>,<y>@<tick>`** (`ScheduleDevPlace`): the player's body put at a level point after that tick's
+   physics step, for a capture to open a door. Never a route.
+
+**THE GATES.** After = `MagicPortals.exe` `ca1d67f2`; before = step 153's committed build and its sweep
+(`program/P5/after/sweep`, 128 of 128 matching its `capture.txt`). Everything under `out/parity/program/P2/`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1.log` full, 88 steps, 50 links; `build4.log` after the test and minion-sheet fixes; three single-target relinks after refusals, `build2`, `build3`, `build5`) |
+| (1) The delay, unit | 3 of 128 levels place `end_delay`: 5000 / 14500 / 6600, each with its cutscene entity and no other level with one | - | **passes** (`test_mp_cutscene`: 128 levels, the three, `rocket_launch` only on level0c, `rocket_landing` only on level18c, `dragon_knight_spawn` only on level31a) |
+| (2) The delay, layer | medal 300 / 870 / 396 ticks after the door (5000 / 14500 / 6600 ms at 16.667); 1400 elsewhere; the lost screen 1400 on 2-32 | 84 on all three | **passes** (`test_mp_layer`: 300, 870, 396; level0 1400; 2-32's death: lost screen at 84) |
+| (3) The delay, exe, against F17 | the finish at the decoded delay after the door, within a tick (F17's 5.10 / 14.65 s are the decode run 1-1.5 % long on the emulator's clock) | - | **passes**: `cap/c401` door tick 60, finished screen tick 360 (5.000 s); `cap/c419` 60 -> 930 (14.500 s); `cap/c232` 2900 -> 3296 (6.600 s) |
+| (4) 4-01's rise and bridge against F17 r1 | F17's own readings, relative to its #244, within its fits' rms: rise 88.5 / 126.2 / 181.0 / 215.5 u at 3.422 / 4.094 / 4.936 / 5.456 s, bridge -32.4 / -40.5 / -48.0 u at 3.981 / 4.611 / 5.293 s | the rocket and bridge do not move | **passes: 7 of 7 read, 6 within F17's fits' rms and the seventh explained** (`measure_c401.txt`, F17's templates on the port's frames; frame offset fitted, f0 61.0, rms 2.06 u over 46 frames): rise **88.6 / 126.6 / 181.5 u** (within 0.5 u), bridge **-32.33 / -40.57 u** (within 0.07 u). The 5.456 s and 5.293 s points, behind the port's medal (up at 5.000 s, where F17's is still faint), were first recorded here as not read; the verifier read them through the medal's translucent veil (`verify1/measure401_v1.py`, templates cut from the port's own frames, so its numbers for the same points differ from these: rise 87.68 / 125.50 / 180.09 / **217.07** u, bridge -32.50 / -40.72 / **-48.70** u). 217.07 is 1.57 u from F17's 215.5 (rms 4.25); -48.70 is 0.70 u from F17's -48.0, outside the bridge fit's 0.29 u, but 0.27 u from the decode's -48.43, and F17's own point is 0.43 u off its fit |
+| (5) 4-01's shake and exhaust against F17 r1 | +-3 px vertical from the launch; the cyan plume growing as the nozzle rises | none | **passes**: block y 550 x44, 547 x10, 554 x3 (F17 550 x71, 553 x24, 547 x20); plume 997 px at 0.9 s -> 4,410 (1.5 s) -> 11,529 (2.4 s) -> 12-15 k by 3.2-3.8 s (F17 23 -> 824 -> 4,097 -> 10,646, 12-15 k by #300-340). 59 calls (unit): see deviation 2 |
+| (6) 4-19's landing against F17 r5 | the porthole on F17's fit (138.1 + 1125 x smoothBeginning(t / 12.5), rms 2.9 px); the spiral band whole to about 7 s and flat from about 12.6 s; the eclipse's top at rest 610 px | none | **passes** (`measure_c419.txt`; tolerance: F17's own fit rms, 2.9 px): measured the same way on both sides (`verify1/porthole_both_v1.py`, a template from each side's first frame after the entry, on F17's r5 and on the port's), the port's porthole is **+0.51 px** from F17's on average, rms **3.06 px**, max 8.8 px over 40 frames at 0.2-7.4 s - the rms of a frame-by-frame difference of two paths that each carry their own bob, so of the size of F17's own 2.9 px scatter about its fit, not a claim to be inside it. First recorded here as +3.49 px against F17's fit (rms 4.20, max 7.5; 2.33 px about that mean) and put down to the two bobs' phases at the win (`measure_c419_offset.txt`, `measure_c419_prewin.txt`); the verifier found the 3.49 a reference mismatch - the port's template point set against the fit's anchor - and not the bobs. The x path: deviation 5. Swirl band 39.8 -> 29.9 (ratio 0.751; F17 40.2 -> 28.8, 0.716), its steep fall from 6.98-7.18 s, flat 29.9 from 12.0 s; eclipse top at rest **610 px** from 12.2 s (606-609 as the medal's veil comes in), 643 / 627 / 616 px at 9.2 / 10.2 / 11.2 s against F17's fit's 643.1 / 626.9 / 615.7 |
+| (7) 2-32's knight | falls, 800 ms at waypoint0, walks right at 51 px/s, in within 16 of waypoint1 before 6600 ms; black on the minion sheet with its aura; the door's effect and sound; spawned by a death too; a restart takes it | not built | **passes**: unit (`test_mp_cutscene`) at waypoint0 on tick 37, walks from 85 (48 ticks), in on 291 (4.85 s) at (2532.6, 174.2), 50.86 px/s, row 2 only; layer (`test_mp_layer`) in 291 ticks after the door, one more `level_finished`, aura queued, no picture left; exe `cap/c232` (door placed on tick 2900: knight added 2900, in 3191, medal 3296) and `cap/c232_death` (a fireball killed the placed player on tick 2943: knight added 2943, in 3234). No footage of the knight exists (F7 is the dragon) |
+| (8) Music | `rocket` from 4-01's door, `back_home` from 4-19's | silent (`no_music`) | **passes**: `music: rocket from tick 60`, `music: back_home from tick 60` (exe logs); `WantedTrack` in `test_mp_layer` |
+| (9) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no input line; 128 of 128 byte-identical (the expectation written before the sweep: no level is won or lost without input) | `P5/after/sweep` | **NOT MET as written: 127 of 128 identical; the one change explained, and the expectation was wrong** (`compare_sweep.txt`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines (and the before's 128 match theirs); no input line. The logs' `sets end_delay` lines: exactly 4-01 5000, 4-19 14500, 2-32 6600. **2-32 changed**: its player dies on tick 285 with no input, as it did before (a fireball; so does 2-12's on tick 180, unchanged), and a death now adds the knight (`dragon_knight added ... on tick 285`, the decode's `isFinished`), off screen at x 2358. The sim is the same - the logs' death, fireball and earthquake lines are identical - and the 21,351 changed pixels (max 59, x 18-280, y 248-426) are the dragon's next fireball at its mouth and its glow: the knight's 24-particle aura draws from the effects' stream (00_order K8), so the fireball fired after it takes different draws. Re-run after the save repair (`after/rerun`, no medal plaque): byte-identical to the sweep's (`c38e39e2`), so the plaque the captures' medal added did not reach f420 |
+| (10) Winnability | routes and the reachability check | - | **routes NOT RUN**: this tree has no route harness (W.1 is not an ancestor); the change is after the door and seals nothing. **Reachability measured by the verifier** out of tree (W.1's tool at `37c4ece` over this tree's data and `snap_w1`, `verify1/reachability_w1b_snap.txt`): 108 reachable / 11 opened / 9 sealed, 0 verdicts different from W.1's pin; 4-01, 4-19 and 2-32 reachable |
+
+**SUITES**, run directly: `test_mp_cutscene` **151** checks, 0 failures (new; its first build was refused, and its
+first run on the relink failed one check of its own - a per-tick peak speed of 54.3 px/s where the gate is the mean,
+50.86 - fixed in the test). `test_mp_layer` **3173**, 0 failures (3116 at step 153; the four new cases; its first run
+had 11 failures in the new cases' own expectations - 51 shakes where the port's clock gives 59, R pressed over the
+medal where only its buttons act, and the knight undrawn on 2-32 because the minion sheet was cut only on levels with
+minions, which is fixed in the layer). `test_mp_camera` **213** (212; the new row). `test_mp_effects` **706**,
+`test_mp_sounds` **107**, `test_mp_dragon` **230**, `test_mp_levelend` **226**, each 0 failures and unchanged: the
+suites that read the JSON whose notes changed (`test_mp_layer` loads all of them through the layer). Not run: the
+other suites reading `art.json`, `ui.json` or `dragon.json` (`_`-notes only; no loader reads them).
+
+**SMART APP CONTROL: 3 refusals** (`P2/sac_refusals.txt`): `test_mp_cutscene` `1893a660`, `test_mp_camera` `a115f687`,
+`test_mp_effects` `17e35421`, each deleted and relinked once and then run. `MagicPortals.exe` `ca1d67f2` ran without a
+refusal: 4 captures, the 128 of the sweep and one re-run of 2-32.
+
+**AN INCIDENT, REPAIRED.** The three cutscene captures were run without `--saves`, so their DEV-placed wins wrote
+medals into the user's own save (`%APPDATA%/Magic Portals/scores.json`): 4-01 and 4-19 bronze, 2-32 gold. Found from
+the sweep's 2-32 log (its level-start plaque loaded a medal that step 153's sweep did not), the three entries were
+removed and the file otherwise left as found (1-01, 1-02, 1-32 gold, none of them this step's; the copy as found is
+`P2/user_scores_after_captures.json`). The sweep's 2-32 ran before the repair and was run again after it (gate 9).
+A later capture that wins a level passes `--saves`.
+
+**VERIFIED, PASSED** (`P2/verify1.json`, on the same `ca1d67f2`, `7952aee3`, `8a1c1218` and `92507938`, head
+`691d6de`, engine `4bfcf67`; no fix round; 0 refusals). The verifier re-derived the rule from the listing before
+reading the code, and the code matches it; it compiled the seven changed translation units with the tree's own
+commands (0 warnings, `build/` untouched); `test_mp_cutscene` 151, `test_mp_layer` 3173, `test_mp_camera` 213,
+`test_mp_effects` 706, `test_mp_sounds` 107, `test_mp_dragon` 230 and `test_mp_levelend` 226, 0 failures, once each;
+its captures are byte-identical to this step's (`v401` and `v419` 80 of 80 frames, `v232` 36 of 36 from f2880); its
+own 128-level sweep is byte-identical to this step's on all 128 (to P5's on 127, 2-32 as gate 9 explains); W.1's
+reachability tool, run out of tree, changes no verdict (gate 10). The owner's save kept its md5 through every run of
+the verifier's, each with `--saves`. Its seven problems: the record's words (gates 4 and 6), the 4-19 camera's x
+(deviation 5) and the stale or loose words are applied here as text at the commit - `effects.json` `finish` (the
+knight comes once the level is finished, a death too), the 4-01 layer case's comment (a shake every 6th tick),
+`cutscenes.json`'s frame-order claims marked INFERRED (as here), `--place` in README's capture flags, and
+`entity_roles.json`'s note on `rocket_launch` / `_landing`; no behaviour changed. The medal saved late (MEDIUM), the
+landing key's sparkles (MEDIUM) and the eclipse's edge line (LOW) would change behaviour: recorded below, not applied.
+At the commit the comment's edit rebuilt `test_mp_layer` alone (one compile, one link, 0 warnings; `MagicPortals.exe`
+and the other suites unchanged), and Smart App Control refused it twice (`92598628`, then `6de34ef4` after one delete
+and relink): **`test_mp_layer` NOT RUN at the commit**; its 3173 checks, 0 failures, stand on `8a1c1218`, whose code
+differs by that comment only. The edited notes load: `test_mp_cutscene` 151 (`cutscenes.json`, `entity_roles.json`)
+and `test_mp_effects` 706 (`effects.json`), 0 failures, on their verified binaries.
+
+**RECORDED DEVIATIONS AND DECISIONS** (gate 9 is NOT MET as written, and explained; gate 10's routes NOT RUN; gate 4 reads its 7 points, one 0.70 u off F17 and explained; the rest pass).
+1. **Pictures, not bodies** (as the door's bob, `motions.json` `door._not_built`): the rocket's sensor and the
+   bridge's box stay where the level put them, and on 4-19 the camera is given the door's point while the hidden
+   player's body stays in the doorway. So the key the player carries stays there too while it shrinks to nothing -
+   0.9 a frame, gone in about half a second, while the rocket has moved under 1 u. The key's own sparkles are not
+   shrunk with it (`ETHEntity::Scale` scales its systems, `ETHEntity.cpp:591-599`; the port's placed emitters take
+   their scale once). What that looks like (the verifier's MEDIUM problem, `verify1/cap/v419`): the key's picture is
+   whole at f60 and gone from f72, but its two white `sparkles.bmp` systems glow on at its point in f72, f84, f120,
+   f180, f300 and f420, until the camera leaves them; in a real play the key trails the hidden body left in the
+   doorway, near which the camera clamps (the scene's right, 968 u), so the glow would hang there for all 14.5 s and
+   under the medal. Not changed: LEFT FOR THE OWNER below.
+2. **The shake's re-arm on the port's clock**: six ticks of 16.6666675 ms are 100.000005 and pass `> 100`, so the port
+   shakes every sixth tick, 59 times; the original's frame time is whole milliseconds (16 at 60 fps) and passes it
+   after seven. The port-wide clock is the owner's open question; the amplitude, 2.95 px, is F17's +-3.
+3. **The knight's timing** is INFERRED to the tick: added on the door's (or death's) tick by a static callback, first
+   updated on the next (an added dynamic entity). Its body's ENTITY point is put on the spawn, where `Minions` puts a
+   minion's centre on its marker.
+4. **The knight after a death** plays behind the lost screen, as `isFinished` says, door sound and all.
+5. **4-19's camera x follows the rocket more tightly than F17's** (the verifier's finding, LOW; a measured residual,
+   not changed): the porthole's x in the port stays at 636-643 px, the view centred on the door's point, where F17's
+   goes 650 -> 671 px over 1.0-7.4 s (a mean of -17 px, std 9, growing to -28); the y path matches (gate 6).
+   INFERRED: the original's camera follows the character its callback moves every frame, and that follow lags more.
+
+**RULINGS APPLIED.** The standing direction that the original decides. R1, R2, R17 and R23 are not this step's; R24
+and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **The medal is saved later than the original saves it.** `checkGameEnd` #75 calls `writeScore` - `setScore` - on
+  the door's frame; the port records the medal when the screen comes up (`clearLevel`). With 5000-14500 ms before it on
+  three levels, the keyboard's N or R in that time (the only input the port reads there) leaves without the medal.
+  Not changed here. The verifier rates it MEDIUM: closing the window in that time loses it too, on 4-19 for 14.5 s,
+  and a mouse-only player cannot press anything then. Its fix: record and save the medal on the door's tick
+  (`m_scores.Record` and `Save` moved from `clearLevel` into the `goals.completed` branch, the screen still at
+  `m_wonDelayMs`), with a layer case - the door, R 60 ticks later, the save holds the medal. Persistence, not play,
+  but a behaviour change: not applied at the commit.
+- **4-19's key sparkles** (deviation 1; the verifier's MEDIUM problem): scale the landing key's emitters by its scale
+  every tick, as `ETHEntity::Scale` scales an entity's systems, or at the least stop drawing them once the key is
+  under a pixel; gated on `verify1/cap/v419` showing no sparkle at the key's point from f72. Not applied (behaviour).
+- **A dark 2-3 px line along the eclipse's quad top edge** on 4-19, from about 6 s in to the medal and under it (the
+  verifier's LOW problem; y 545-547 px at rest, x about 220-1045, row mean 62 -> 42 -> 54 in
+  `verify1/cap/v419/v419_f912.png`; absent from F17 r5 #630, `verify1/dev/eclipse_line_f17_vs_port.png`).
+  `eclipse.png`'s bottom row is opaque across texels ~60-200 and its top row transparent, and the sampler wraps the one
+  onto the other; first visible with this step (step 153 kept the eclipse 2 u below the view). Fix: clamp the
+  eclipse's sampling or inset its UVs by half a texel (the port sets the material's uv itself; no engine change),
+  gated on rows 545-547 matching their neighbours. Not applied (behaviour).
+- 4-19's lighting in the cutscene differs from F17 because `red_key_state`'s 6 s fade (B5) is not built in this tree;
+  so do the breakable wall still standing and the rocket hull lit.
+- For the close role: `docs/parity-backlog.md` section 6's P2 row, and the "Smaller" row's stale `end_delay` note.
+- For the merge's renumbering: "step 154" is written in `cutscenes.json` (`_about`, `dragon_knight._source`), `earthquake.json`, `ui.json`,
+  `dragon.json`, `art.json`, `effects.json`, `sounds.json`, `game/sim/Cutscene.hpp`, `game/sim/Earthquake.hpp`,
+  `game/MagicPortalsLayer.{hpp,cpp}`, `tests/CMakeLists.txt`, `tests/test_mp_cutscene.cpp`,
+  `tests/test_mp_camera.cpp` and `tests/test_mp_layer.cpp`.

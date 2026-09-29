@@ -15733,6 +15733,245 @@ void TheDragonsTakeOffStopsTheBossTrack() {
     layer.OnDetach(registry);
 }
 
+// ---- the win cutscenes (planning step 154) ---------------------------------------
+
+// Puts the player's body in the level's exit and ticks until the layer says the door
+// was reached. Returns the layer's tick it was reached on, or -1.
+int ReachTheDoor(MagicPortalsLayer& layer, entt::registry& registry, const glm::dvec2& exitPx) {
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 10 && !layer.Finishing(); ++tick) {
+        PutPlayerAt(registry, layer, exitPx);
+        auto& rigid = registry.get<RigidBodyComponent>(layer.SimLevel()->player);
+        rigid.velocity = glm::vec3(0.0f);
+        tickWith(layer, registry, kRest, {}, {});
+    }
+    CHECK_MSG(layer.Finishing(), "the door was reached");
+    return layer.Finishing() ? layer.LayerTicks() : -1;
+}
+
+// The restart button of the finished or the lost screen, as a player presses it:
+// over either screen R is not read, the screen's buttons are.
+bool RestartFromTheScreen(MagicPortalsLayer& layer, entt::registry& registry) {
+    for (const MagicPortalsLayer::MenuButton& button : layer.MenuButtons()) {
+        if (button.kind != MagicPortalsLayer::MenuButton::Kind::Retry) continue;
+        layer.PressMenu(registry, button); // by value: pressing clears the list
+        return true;
+    }
+    CHECK_MSG(false, "the screen has a restart button");
+    return false;
+}
+
+// A level with no end_delay keeps level_end's 1400 ms and plays no cutscene.
+void ALevelWithoutAnEndDelayKeepsTheBeat() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK(layer.WonDelayMs() == 1400.0 && layer.LevelEndRules().wonDelayMs == 1400.0);
+    const MagicPortalsLayer::CutsceneReport report = layer.CutscenePicture(registry);
+    CHECK(!report.launchPlaced && !report.landingPlaced && !report.knight.placed);
+    layer.OnDetach(registry);
+}
+
+// 4-01 (level0c): rocket_launch from the door's own tick - the rocket door up
+// (0, -390) over 7600 ms, the bridge left without a clamp, a shake every 6th tick
+// for 6 s, the rocket's track - and the medal 5000 ms after the door, the launch
+// running on under it. Only pictures move: the bridge's box stays.
+void TheRocketLaunchesAfter4_01sDoor() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK(layer.WonDelayMs() == 5000.0);
+    MagicPortalsLayer::CutsceneReport before = layer.CutscenePicture(registry);
+    CHECK(before.launchPlaced && !before.landingPlaced && !before.knight.placed);
+    CHECK_MSG(before.bridgeQuad != entt::null, "the rocket_bridge is drawn");
+    const glm::dvec2 doorRest = before.doorCentrePx;
+    const glm::dvec2 bridgeRest = before.bridgeCentrePx;
+    CHECK(layer.WantedTrack().empty()); // no_music
+
+    const int door = ReachTheDoor(layer, registry, glm::dvec2(757.0, 140.0));
+    if (door < 0) return;
+    MagicPortalsLayer::CutsceneReport now = layer.CutscenePicture(registry);
+    CHECK_EQ(now.launchStartedTick, door);
+    CHECK(now.launch.running && now.launch.elapsedMs > 16.0 && now.launch.elapsedMs < 17.0);
+    CHECK_MSG(layer.WantedTrack() == "rocket", layer.WantedTrack());
+
+    int screenAt = -1;
+    for (int tick = door + 1; tick <= door + 460; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (screenAt < 0 && layer.MenuScreen() == MagicPortalsLayer::Screen::Finished) screenAt = tick;
+        if (tick == door + 228) {
+            // 3800 ms: the bridge at its -32, the door at -390 x smoothBeginning(0.5).
+            now = layer.CutscenePicture(registry);
+            const double t = now.launch.elapsedMs;
+            CHECK_MSG(std::fabs(now.bridgeCentrePx.x - bridgeRest.x - now.launch.pose.bridgeOffsetPx.x) < 1e-6 &&
+                          std::fabs(now.launch.pose.bridgeOffsetPx.x + 32.0 * (1.0 - std::cos(t / 3800.0 * 1.5707963))) <
+                              1e-3,
+                      Point(now.bridgeCentrePx) + " at " + std::to_string(t));
+            CHECK_MSG(std::fabs(now.doorCentrePx.y - doorRest.y - now.launch.pose.doorOffsetPx.y) < 1e-6 &&
+                          now.launch.pose.doorOffsetPx.y < -100.0,
+                      Point(now.doorCentrePx));
+            // The box the level built for it has not moved.
+            CHECK_MSG(glm::length(now.bridgeRestPx - glm::dvec2(716.0, 178.0)) < 0.5, Point(now.bridgeRestPx));
+        }
+    }
+    CHECK_MSG(screenAt == door + 300, "the medal " + std::to_string(screenAt - door) + " ticks after the door");
+    now = layer.CutscenePicture(registry);
+    // Behind the medal the launch went on and stopped at its last pose below 7600,
+    // the 455th update's at 7583.3 ms: the door 388.7 up of its 390, the bridge past
+    // -63.9 of its unclamped -64.
+    const double last = 455.0 * static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
+    CHECK_MSG(std::fabs(now.launch.pose.doorOffsetPx.y + 390.0 * (1.0 - std::cos(last / 7600.0 * 1.5707963))) < 1e-3 &&
+                  now.launch.pose.doorOffsetPx.y < -388.0,
+              Point(now.launch.pose.doorOffsetPx));
+    CHECK_MSG(now.launch.pose.bridgeOffsetPx.x < -63.9 && now.launch.pose.bridgeOffsetPx.x > -64.0,
+              Point(now.launch.pose.bridgeOffsetPx));
+    CHECK_MSG(std::fabs(now.doorCentrePx.y - doorRest.y - now.launch.pose.doorOffsetPx.y) < 1e-6,
+              Point(now.doorCentrePx));
+    // startEarthquake(3, 0) each time the counter passes 100 below 6000 ms. The
+    // port's tick is 16.6666675 ms, so six of them are 100.000005 and pass it: 59
+    // calls, the last on the 354th update (the original's frame time is a whole
+    // number of ms, 16 at 60 fps, which passes it after seven: the port-wide clock
+    // question the owner holds).
+    CHECK_EQ(now.quakes, 59);
+    CHECK_MSG(layer.WantedTrack() == "rocket", layer.WantedTrack());
+    std::printf("  4-01: door on tick %d, medal %d ticks later, rocket at %s, bridge %s, %d shakes\n", door,
+                screenAt - door, Point(now.launch.pose.doorOffsetPx).c_str(),
+                Point(now.launch.pose.bridgeOffsetPx).c_str(), now.quakes);
+
+    // A restart forgets it: the rocket and the bridge back where the level put them.
+    if (!RestartFromTheScreen(layer, registry)) return;
+    tickWith(layer, registry, kRest, {}, {});
+    now = layer.CutscenePicture(registry);
+    CHECK(!now.launch.running && now.launchStartedTick < 0 && now.quakes == 0);
+    CHECK_MSG(glm::length(now.doorCentrePx - doorRest) < 1e-6 && glm::length(now.bridgeCentrePx - bridgeRest) < 1e-6,
+              Point(now.doorCentrePx) + " " + Point(now.bridgeCentrePx));
+    layer.OnDetach(registry);
+}
+
+// 4-19 (level18c): rocket_landing from the door's tick - the rocket door down
+// (256, 400) over 12500 ms on its bob, the camera on it, the key shrinking, the
+// eclipse up to the view's bottom, the spiral dimmed to a tenth, back_home - and
+// the medal 14500 ms after the door.
+void TheRocketLandsAfter4_19sDoor() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level18c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK(layer.WonDelayMs() == 14500.0);
+    const MagicPortalsLayer::CutsceneReport before = layer.CutscenePicture(registry);
+    CHECK(!before.launchPlaced && before.landingPlaced && !before.knight.placed);
+    const glm::vec4 spiralBefore = before.spiralColour;
+
+    const int door = ReachTheDoor(layer, registry, glm::dvec2(590.0, 134.0));
+    if (door < 0) return;
+    CHECK_EQ(layer.CutscenePicture(registry).landingStartedTick, door);
+    CHECK_MSG(layer.WantedTrack() == "back_home", layer.WantedTrack());
+    int screenAt = -1;
+    double keyAtTen = 0.0;
+    for (int tick = door + 1; tick <= door + 880; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (screenAt < 0 && layer.MenuScreen() == MagicPortalsLayer::Screen::Finished) screenAt = tick;
+        if (tick == door + 10) keyAtTen = layer.CutscenePicture(registry).keyScale;
+    }
+    CHECK_MSG(screenAt == door + 870, "the medal " + std::to_string(screenAt - door) + " ticks after the door");
+    CHECK_MSG(std::fabs(keyAtTen - std::pow(0.9, 11.0)) < 1e-9, std::to_string(keyAtTen));
+    const MagicPortalsLayer::CutsceneReport now = layer.CutscenePicture(registry);
+    CHECK(now.landing.elapsedMs >= 12500.0 && now.landing.elapsedMs < 12500.0 + 17.0);
+    const MagicPortalsLayer::DoorReport doorNow = layer.DoorPicture();
+    // The door's point: its node (590, 128), its bob, and the landing's (256, 400).
+    const glm::dvec2 expected = glm::dvec2(590.0, 128.0) + doorNow.offsetPx + glm::dvec2(256.0, 400.0);
+    CHECK_MSG(glm::length(now.doorAtPx - expected) < 0.01, Point(now.doorAtPx) + " against " + Point(expected));
+    // The camera was given that point, and the eclipse is at the view's bottom, 0
+    // below its corner's 256.
+    CHECK_MSG(glm::length(now.cameraTargetPx - now.doorAtPx) < 1.0, Point(now.cameraTargetPx));
+    const glm::dvec2 corner = layer.CameraCentrePx() - layer.ViewPx() * 0.5;
+    CHECK_MSG(std::fabs(now.eclipseAtPx.y - (corner.y + layer.ViewPx().y)) < 0.01,
+              Point(now.eclipseAtPx) + " against the view's bottom " + std::to_string(corner.y + layer.ViewPx().y));
+    CHECK_MSG(std::fabs(now.spiralColour.r - spiralBefore.r * 0.1f) < 1e-4f && spiralBefore.r > 0.5f,
+              std::to_string(now.spiralColour.r) + " from " + std::to_string(spiralBefore.r));
+    std::printf("  4-19: door on tick %d, medal %d ticks later, door at %s, eclipse at %s, spiral %.3f\n", door,
+                screenAt - door, Point(now.doorAtPx).c_str(), Point(now.eclipseAtPx).c_str(),
+                static_cast<double>(now.spiralColour.r));
+    layer.OnDetach(registry);
+}
+
+// 2-32 (level31a): the knight its spawn adds on the door's tick walks in before the
+// medal, 6600 ms after the door, with the door's own effect and sound; black, on
+// minion.png's cut, its aura carried. A death adds it too, and a retry takes it.
+void TheKnightWalksIntoTheDoorAfter2_32() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK(layer.WonDelayMs() == 6600.0);
+    CHECK(layer.CutscenePicture(registry).knight.placed);
+
+    const int door = ReachTheDoor(layer, registry, glm::dvec2(2554.0, 181.0));
+    if (door < 0) return;
+    MagicPortalsLayer::CutsceneReport now = layer.CutscenePicture(registry);
+    CHECK_EQ(now.knightSpawnedTick, door);
+    CHECK(now.knight.body != entt::null);
+    const auto doorSounds = [&layer] {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string("level_finished")));
+    };
+    const int soundsAtDoor = doorSounds();
+    int screenAt = -1;
+    bool drawn = false;
+    bool walkedRight = false;
+    for (int tick = door + 1; tick <= door + 400; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        now = layer.CutscenePicture(registry);
+        if (now.knightQuad != entt::null) drawn = true;
+        if (now.knight.walked && now.knight.row == 2) walkedRight = true;
+        if (screenAt < 0 && layer.MenuScreen() == MagicPortalsLayer::Screen::Finished) screenAt = tick;
+    }
+    CHECK_MSG(screenAt == door + 396, "the medal " + std::to_string(screenAt - door) + " ticks after the door");
+    CHECK(drawn && walkedRight && now.knightAuraQueued);
+    CHECK_MSG(now.knightEnteredTick > door && now.knightEnteredTick < door + 396,
+              "in on tick " + std::to_string(now.knightEnteredTick));
+    CHECK_MSG(glm::length(now.knightEnteredAtPx - glm::dvec2(2548.0, 175.0)) < 16.0, Point(now.knightEnteredAtPx));
+    CHECK(now.knight.gone && now.knightQuad == entt::null);
+    CHECK_EQ(Tagged(registry, "Magic Portals Knight"), 0);
+    CHECK_EQ(doorSounds(), soundsAtDoor + 1);
+    std::printf("  2-32: door on tick %d, the knight in %d ticks later at %s, the medal %d ticks after the door\n", door,
+                now.knightEnteredTick - door, Point(now.knightEnteredAtPx).c_str(), screenAt - door);
+
+    // Killed instead: isFinished is the death too, so the spawn adds it on that tick,
+    // and the lost screen keeps its own 1400 ms.
+    if (!RestartFromTheScreen(layer, registry)) return;
+    CHECK(!layer.Finishing() && !layer.Dying());
+    now = layer.CutscenePicture(registry);
+    CHECK(now.knightSpawnedTick < 0 && now.knight.body == entt::null && !now.knight.spawned);
+    auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+    const glm::vec3 below = MagicPortals::Units::ToWorld(300.0, 600.0);
+    transform.position = glm::vec3(below.x, below.y, transform.position.z);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK(layer.Dying());
+    now = layer.CutscenePicture(registry);
+    CHECK_EQ(now.knightSpawnedTick, layer.LayerTicks());
+    for (int tick = 0; tick < 84; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Dead, "the lost screen at its own 1400 ms");
+    CHECK_MSG(Tagged(registry, "Magic Portals Knight") == 1, "with the knight falling behind it");
+    // A restart from there takes the knight, its body and its picture.
+    if (!RestartFromTheScreen(layer, registry)) return;
+    tickWith(layer, registry, kRest, {}, {});
+    now = layer.CutscenePicture(registry);
+    CHECK(!now.knight.spawned && now.knight.body == entt::null && now.knightQuad == entt::null);
+    CHECK_EQ(Tagged(registry, "Magic Portals Knight"), 0);
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -15919,6 +16158,10 @@ void runTests() {
     AShockRingTurnsOnGameTimeAndJittersEveryFrame();
     AMovingShockRingIsWhereItsFieldIs();
     AShockRingsJitterIsTheEffectsStreamsAlone();
+    ALevelWithoutAnEndDelayKeepsTheBeat();
+    TheRocketLaunchesAfter4_01sDoor();
+    TheRocketLandsAfter4_19sDoor();
+    TheKnightWalksIntoTheDoorAfter2_32();
 }
 
 } // namespace

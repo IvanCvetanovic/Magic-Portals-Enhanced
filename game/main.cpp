@@ -94,6 +94,9 @@ int main(int argc, char** argv) {
     // its reach burns it: its wound's flash and its white death are captures no
     // scripted input reaches (MagicPortalsLayer::ScheduleDevBurn).
     std::vector<int> burns;
+    // DEV ONLY: the player put at a point of the level on a stated tick
+    // (MagicPortalsLayer::ScheduleDevPlace), to film what a door opens: never a route.
+    std::vector<std::pair<int, glm::dvec2>> places;
     // DEV ONLY: no 2D light reaches any sprite (MagicPortalsLayer::ForceLightMasksOff),
     // for a capture to be compared with the same capture lit.
     bool lightMasksOff = false;
@@ -207,6 +210,39 @@ int main(int argc, char** argv) {
                 return EXIT_FAILURE;
             }
             burns.push_back(tick);
+            continue;
+        }
+        if (arg == "--place") {
+            // <x>,<y>@<tick>: the level's own pixels, the layer's tick.
+            const std::string value = i + 1 < argc ? argv[++i] : "";
+            const std::size_t comma = value.find(',');
+            const std::size_t at = value.find('@');
+            bool ok = comma != std::string::npos && at != std::string::npos && comma < at;
+            double x = 0.0;
+            double y = 0.0;
+            int tick = 0;
+            if (ok) {
+                try {
+                    std::size_t used = 0;
+                    const std::string xs = value.substr(0, comma);
+                    const std::string ys = value.substr(comma + 1, at - comma - 1);
+                    const std::string ts = value.substr(at + 1);
+                    x = std::stod(xs, &used);
+                    ok = used == xs.size();
+                    y = std::stod(ys, &used);
+                    ok = ok && used == ys.size();
+                    tick = std::stoi(ts, &used);
+                    ok = ok && used == ts.size();
+                } catch (const std::exception&) {
+                    ok = false;
+                }
+            }
+            if (!ok || tick < 1) {
+                std::cerr << "--place wants <x>,<y>@<tick> (the level's pixels, tick at least 1), got '" << value
+                          << "'\n";
+                return EXIT_FAILURE;
+            }
+            places.emplace_back(tick, glm::dvec2(x, y));
             continue;
         }
         if (arg == "--press") {
@@ -330,6 +366,9 @@ int main(int argc, char** argv) {
                   << "  --burn-dragon <tick>\n"
                   << "                    DEV: burn 4-32's dark dragon on the game's tick <tick>, as a\n"
                   << "                    barrel's blast in its reach does; repeatable\n"
+                  << "  --place <x>,<y>@<tick>\n"
+                  << "                    DEV: put the player at the level's pixel (x, y) on the game's\n"
+                  << "                    tick <tick>, to film what a door opens; never a route; repeatable\n"
                   << "  --visit-levels <lightmapped|all|name,...>\n"
                   << "                    DEV: visit these levels in one process, taking the material set\n"
                   << "                    of every lightmapped sprite, which the level drops on leaving; the\n"
@@ -408,6 +447,7 @@ int main(int argc, char** argv) {
         for (const auto& [tick, press] : presses) game->ScheduleDevPress(tick, press);
         for (const Hold& hold : holds) game->ScheduleDevHold(hold.from, hold.to, hold.direction);
         for (const int burn : burns) game->ScheduleDevBurn(burn);
+        for (const auto& [tick, atPx] : places) game->ScheduleDevPlace(tick, atPx);
         for (const Tap& tap : taps) game->ScheduleDevTap(tap.tick, tap.fraction, tap.releaseTick);
         for (const Drag& drag : drags) game->ScheduleDevDrag(drag.tick, drag.from, drag.to, drag.releaseTick);
         MagicPortals::MagicPortalsLayer& gameLayer = *game;

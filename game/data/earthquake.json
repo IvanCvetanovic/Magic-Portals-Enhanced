@@ -263,6 +263,11 @@
       "_source": "D11 row 25. ETHBeginContactCallback_minion (437083..437789): nothing for a sensor (#1-11); where the other's GetEntityName() is not exactly 'enemy_killer' (#57-74; all 58 placements use that bare name), the normal is overwritten with normalize(other - this) (#81-101), hitIntensity = dp2(GetLinearVelocity(), that) / getScale() (#103-122), and where it is above 0 (#124-125) startEarthquake(0.8 x hitIntensity, 0) (#127-130 MULIf 0.8f). A begin-contact callback, before the update. `entity`: minion.ent's callback; ghost_minion.ent (3-32's one) has none. Wired in step 104.",
       "_sound": "#132-140 playFallSound(hitIntensity / 18) where hitIntensity > 3.5: a sound, not this file's.",
       "_spawn": "Where a minion is made (read in step 104's Q.2 fix; no number of this file's). ETHCallback_minion_spawn (426511..426876) #12-19 takes vector3(GetPositionXY(), 2) of the marker and spawnMinion (426876..427194) #25-39 AddEntity's minion.ent there, so the original's ENTITY POINT is the marker and its feet circle's bottom minions.json body.entity_above_feet_px (18.1) under it; SOURCE: the body is made at the entity's point with Box2D's default velocity 0 (engine/Scene/ETHScene.cpp:261-292, 713-723; engine/Physics/ETHPhysicsSimulator.cpp:65-114), its fixtures set e_newFixture (box2d/Box2D/Dynamics/b2Body.cpp:185), and the next b2World::Step finds the new pairs and runs Collide before it solves anything (box2d/Box2D/Dynamics/b2World.cpp:884-888, 912), so a knight made with its feet in a floor begins it at rest: hitIntensity 0, which #124-125 never calls on. DATA (out/parity/visuals/Q.2/fix2/spawn_census.txt): 51 of the 62 markers put the original's feet into the floor under them, 44 of them by 2.1 (a marker 16 over its floor). The port centres its 7-unit circle on the marker (Minions::State::Spawn), EntityAboveCentrePx = 18.1 - 7 = 11.1 higher, and it falls onto that floor; so the watch looks at a minion it has never seen where the original's stands, 11.1 lower, until its own circle reaches a pair that holds (Impacts::Watched::spawnDropPx)."
+    },
+    "rocket_launch": {
+      "intensity": 3.0,
+      "when": "after_update",
+      "_source": "D11 row 30 (D11_check C42). ETHCallback_rocket_launch (462571..464080) #241-256, startEarthquake(3, 0), on each won frame its eqCounter (+= getLastFrameElapsedTime, #192-206) has passed 100 (#230-231, CMPIu then JP) while endElapsedTime is below 6000 (#234-235, TS); the counter is then zeroed (#241-252). rocket_launch is static=\"1\" in level0c.esc (id 2057), so its callback runs after the game state and the call lands on the next update: after_update. 0.35 x 3 x 2.8125 = 2.95 px, F17 r1's +-3 px from #229. The re-arm and its clock are cutscenes.json rocket_launch's (planning step 154)."
     }
   },
 
@@ -292,8 +297,8 @@
   },
 
   "_not_wired": [
-    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 26 wired above",
-    "(30 rows: row 1 has two intensities, and row 5 - explode - four callers of its own). Rows 2,",
+    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 27 wired above",
+    "(31 rows: row 1 has two intensities, and row 5 - explode - four callers of its own). Rows 2,",
     "6 and 14 were wired by step 103 (the visuals plan's 10.1) on the refusal and the failures",
     "the port ALREADY plays, and rows 4, 8 and 25 (every player, stone and minion impact) by",
     "step 104, on contacts the port finds itself (sim/Impacts.hpp, D11_check C48). Row 3 (a",
@@ -301,7 +306,8 @@
     "the port plays the agent as a no-portal zone and kills no shot on it, and its picture is",
     "00_order 8.13's unowned row. Row 10 (a stone crushing a minion, 25) needs a minion a stone",
     "can kill, which the port does not have (Minions.hpp: not breakable), and that is gameplay.",
-    "Row 21 (a burned carranca) and row 30 (4-01's rocket) need systems the port does not have;",
+    "Row 21 (a burned carranca) needs a system the port does not have; row 30 (4-01's rocket) is",
+    "wired by step 154 (the program's P2) as rocket_launch, with the launch it shakes;",
     "row 13 (shaker) is placed by no level. Row 9 is wired for THROWN stones only: the port's",
     "Launchers never culls 3-20's placed stone on its destroyier (Launchers.hpp), so that one",
     "never shakes."

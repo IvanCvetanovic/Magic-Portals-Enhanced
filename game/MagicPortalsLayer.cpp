@@ -272,6 +272,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
                       Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
                       Earthquake::LoadRules(m_paths.portData + "/earthquake.json", m_quakeRules, error) &&
+                      Cutscene::LoadRules(m_paths.portData + "/cutscenes.json", m_cutsceneRules, error) &&
                       Hud::LoadRules(m_paths.portData + "/ui.json", m_hudRules, error) &&
                       Pause::LoadRules(m_paths.portData + "/ui.json", m_pauseRules, error) &&
                       LevelEnd::LoadRules(m_paths.portData + "/ui.json", m_levelEndRules, error) &&
@@ -421,6 +422,21 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // open already dying and put the lost screen up 1400 ms in.
     m_dying = false;
     m_dyingClockMs = 0.0;
+    // And the cutscenes that play in the beat: a retry plays its level's again
+    // from the start, and a level without one plays none (planning step 154).
+    m_wonDelayMs = m_levelEndRules.wonDelayMs;
+    m_launchPlaced = false;
+    m_landingPlaced = false;
+    m_launch = Cutscene::Launch{};
+    m_landing = Cutscene::Landing{};
+    m_knight = Cutscene::Knight{};
+    m_launchStartedTick = -1;
+    m_landingStartedTick = -1;
+    m_launchQuakes = 0;
+    m_knightSpawnedTick = -1;
+    m_knightEnteredTick = -1;
+    m_knightEnteredAtPx = glm::dvec2(0.0);
+    m_cameraTargetPx = glm::dvec2(0.0);
     // And the screen either raises, with its counters, and the HUD's last byte.
     m_end = EndScreen{};
     m_padEndByte = 0;
@@ -488,6 +504,23 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     glm::dvec2 cameraStartPx(0.0);
     if (!PositionOf(FirstOfRole(m_data, "camera_start"), cameraStartPx)) {
         PositionOf(FirstOfRole(m_data, Roles::kPlayerSpawn), cameraStartPx);
+    }
+
+    // WHAT IT PLAYS BETWEEN ITS DOOR AND ITS MEDAL (cutscenes.json): its end_delay,
+    // and which of the three cutscenes it places - each by its entity, as the
+    // original's callbacks are, and none by the level's name.
+    if (const std::optional<double> delay = Cutscene::EndDelayMs(m_cutsceneRules, m_data.scene)) {
+        m_wonDelayMs = *delay;
+        SUPERSONIC_LOG_INFO("Magic Portals") << entry.name << " sets end_delay " << m_wonDelayMs
+                                             << " ms from its door to its medal" << std::endl;
+    }
+    m_launchPlaced = Cutscene::Places(m_data.scene, m_cutsceneRules.launch.entity);
+    m_landingPlaced = Cutscene::Places(m_data.scene, m_cutsceneRules.landing.entity);
+    if (std::string why; !Cutscene::FindKnight(m_cutsceneRules, m_data.scene, m_knight, why)) {
+        // Played without its knight rather than refused: it is presentation after
+        // the level is finished, and the level plays the same without it.
+        SUPERSONIC_LOG_WARN("Magic Portals") << entry.name << " plays no knight: " << why << std::endl;
+        m_knight = Cutscene::Knight{};
     }
 
     m_loaded = true;
@@ -610,6 +643,13 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_ghost = GhostQuad{};
     m_ghostAppearQueued = false;
     m_darkDragonQueued = false;
+    // 2-32's knight, its picture and the body its spawn added: neither belongs to
+    // the level's Built. Its aura is the effects runtime's, which goes below.
+    destroy(m_knightQuad);
+    destroy(m_knight.body);
+    m_knightAuraQueued = false;
+    m_bridgeSprite = -1;
+    m_landingKeySprite = -1;
     // The walk arrows and the corner buttons go with the level they were built
     // for, and so does what the level opened with.
     unloadControls();
@@ -1412,6 +1452,14 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
         // ETHCallback_light_wall's DeleteEntity at the end of its 1500 ms.
         if (!m_level.torch.wall.present || m_level.torch.wall.gone) return false;
         return true; // it does not move
+    case EffectOwner::Kind::Knight:
+        // 2-32's knight where its PICTURE stands this frame, back out through its
+        // pivot, as a minion's (Kind::Minion). Its DeleteEntity in the door takes
+        // its aura with it.
+        if (m_knightQuad == entt::null || !registry.valid(m_knightQuad)) return false;
+        atPx = Units::ToPixels(registry.get<TransformComponent>(m_knightQuad).position) +
+               m_cutsceneRules.knight.pivotPx + owner.offsetPx;
+        return true;
     }
     return false;
 }
@@ -3583,7 +3631,8 @@ void MagicPortalsLayer::buildDrawables(entt::registry& registry) {
     m_minions.clear();
     m_minionSheet.clear();
     m_minionCut = Tiers::Cut{};
-    if (!m_level.minions.minions.empty() || m_level.ghost.present) {
+    // And 2-32's knight, dragon_knight.ent on the same sheet (cutscenes.json).
+    if (!m_level.minions.minions.empty() || m_level.ghost.present || m_knight.placed) {
         const Art::Minion& art = m_artRules.minion;
         const Sprites::Image& sheet = drawnImage(originalImage(art.sprite));
         std::string why;
@@ -3749,6 +3798,8 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     m_doorSprite = -1;
     m_doorBgSprite = -1;
     m_doorHighlight = -1;
+    m_bridgeSprite = -1;
+    m_landingKeySprite = -1;
     // From the constant start angle Game::loop passes, not from the level's phase
     // stream: nothing here draws a phase (00_order K8), so no crystal's or key's
     // moves because a door bobs.
@@ -3954,6 +4005,18 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             if (node != nullptr && BareEntityName(*node) == m_artRules.door.backgroundEntity) {
                 m_doorBgSprite = static_cast<int>(m_sprites.size());
                 drawn.doorBob = m_doorBobRuns;
+            }
+        }
+        // THE CUTSCENES' OTHER PICTURES (cutscenes.json), each the first node of its
+        // exact name, as its callback's SeekEntity finds it: 4-01's rocket_bridge and
+        // the key 4-19's landing shrinks.
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
+            const std::string name = Roles::EntityName(*node);
+            if (m_bridgeSprite < 0 && m_launchPlaced && name == m_cutsceneRules.launch.bridge) {
+                m_bridgeSprite = static_cast<int>(m_sprites.size());
+            }
+            if (m_landingKeySprite < 0 && m_landingPlaced && name == m_cutsceneRules.landing.key) {
+                m_landingKeySprite = static_cast<int>(m_sprites.size());
             }
         }
         // Its instance colour and emissive, as its node gives them. A node the
@@ -4184,6 +4247,9 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     // where the original draws the marker's minion in front (2 > 0): a tie the
     // between-slot table of the visuals plan's 6.3 (00_order K13) is to order.
     m_minionZ = slotAfter(m_artRules.LevelDepth(m_artRules.minion.z), Slot::Minion);
+    // 2-32's knight, at the depth its spawn's GetPosition() gives AddScaledEntity:
+    // level31a's node at 0 (cutscenes.json dragon_knight._z), behind the player.
+    m_knightZ = slotAfter(0.0, Slot::Minion);
     // The anchor as Ghost::Find takes it: by entity name, the last such node.
     m_escortLookZ = 0.0;
     for (const Tscn::Node& node : m_data.scene.nodes) {
@@ -4658,6 +4724,13 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
                 const double turnedRad = m_space.spiralTurn.turnedDeg * 3.14159265358979323846 / 180.0;
                 rotation = Units::ToWorldRotation(sprite.rotation - turnedRad);
                 ownerAngleDeg += m_space.spiralTurn.turnedDeg;
+                // 4-19's landing dims it (cutscenes.json rocket_landing #413-455): the
+                // colour its first frame kept, SpaceSky's c, times the brightness.
+                if (m_landing.running) {
+                    const double dimmed =
+                        m_space.spiralColour * Cutscene::SpiralBrightness(m_cutsceneRules, m_landing.bias);
+                    drawn.colour = glm::vec4(glm::vec3(static_cast<float>(dimmed)), drawn.colour.a);
+                }
                 break;
             }
             case SpaceRole::Planet:
@@ -4804,6 +4877,31 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             centrePx += bob;
             ownerPx += bob;
         }
+        // AND WHERE A WIN CUTSCENE HAS PUT IT (cutscenes.json): 4-01's rocket door
+        // and bridge where rocket_launch set them, and 4-19's door at the originalPos
+        // rocket_landing writes, which the bob above rides on. Picture and systems
+        // together - the exhaust hangs off the door's point. Only the pictures: the
+        // exit's sensor and the bridge's box stay where the level put them, as the
+        // bob leaves the sensor, and nothing after the win walks on either.
+        const int drawnIndex = static_cast<int>(&drawn - m_sprites.data());
+        if (drawnIndex == m_doorSprite) {
+            glm::dvec2 moved(0.0);
+            if (m_launch.running) moved = m_launch.pose.doorOffsetPx;
+            if (m_landing.running) moved = Cutscene::LandingDoorOffsetPx(m_cutsceneRules, m_landing.bias);
+            centrePx += moved;
+            ownerPx += moved;
+        }
+        if (drawnIndex == m_bridgeSprite && m_launch.running) {
+            centrePx += m_launch.pose.bridgeOffsetPx;
+            ownerPx += m_launch.pose.bridgeOffsetPx;
+        }
+        // And the key the landing's SeekEntity('key') finds: Scale(0.9) a frame about
+        // its own point, and its alpha that scale (#185-227).
+        if (drawnIndex == m_landingKeySprite && m_landing.running) {
+            centrePx = ownerPx + (centrePx - ownerPx) * m_landing.keyScale;
+            sizePx *= m_landing.keyScale;
+            drawn.fade = static_cast<float>(std::clamp(m_landing.keyScale, 0.0, 1.0));
+        }
         // A TORCH THE LEVEL PLACED goes on the tick after a shot lights it, its
         // picture and its spark with it: its callback's `delete` branch deletes the
         // entity then (the visuals plan's 11.2). The torch a put-out adds back is a
@@ -4929,6 +5027,18 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
     // this tick left: the planet's linearMotion step, the spiral's AddToAngle and
     // the eclipse's y, before the pictures are placed from them.
     Sky::AdvanceSpace(m_motionRules, m_space, m_follow.centrePx, ViewPx(), frameMs);
+    // And 4-19's landing, a static callback after SpaceSky's update in the frame, over
+    // the eclipse's y: from its own height below the view's bottom up to it, as
+    // smoothEnd(bias) (cutscenes.json rocket_landing #343-411). Its x stays SpaceSky's.
+    if (m_landing.running && !m_space.eclipseNode.empty()) {
+        double eclipseHeightPx = 0.0;
+        for (const DrawnSprite& drawn : m_sprites) {
+            if (drawn.space == SpaceRole::Eclipse) eclipseHeightPx = drawn.sprite.sizePx.y * drawn.scale;
+        }
+        const glm::dvec2 view = ViewPx();
+        m_space.eclipseYPx = Cutscene::LandingEclipseYPx(m_cutsceneRules, m_landing.bias,
+                                                         (m_follow.centrePx - view * 0.5).y, view.y, eclipseHeightPx);
+    }
     // A key no node pictures bobs as a level key does: ETHCallback_key while no one
     // carries it and it has not found its keyhole.
     for (DroppedKey& dropped : m_droppedKeys) {
@@ -5286,6 +5396,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
 
     syncBoss(registry);
     syncMinions(registry);
+    syncKnight(registry);
     syncGhost(registry);
     syncTurrets(registry);
 
@@ -5621,6 +5732,13 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         const glm::dvec3 emissive = blind ? glm::dvec3(0.0) : (minion.black ? minionArt.blackEmissive : minionArt.emissive);
         const glm::vec4 colour = minion.black ? glm::vec4(glm::vec3(minionArt.blackColour), 1.0f) : white;
         tint(registry, minion.quad, colour, emissive, {}, receiverOf(minionArt, minion.lookZ));
+    }
+    // 2-32's knight: SetColor(V3_ZERO) in its first run and dragon_knight.ent's own
+    // emissive 0, applyLight 0 as minion.ent (cutscenes.json dragon_knight).
+    if (m_knightQuad != entt::null) {
+        const Cutscene::Rules::Knight& knight = m_cutsceneRules.knight;
+        tint(registry, m_knightQuad, glm::vec4(glm::vec3(knight.colour), 1.0f), knight.emissive, {},
+             receiverOf(minionArt, 0.0));
     }
     // CHAPTER 3'S BOSS at the colour and the alpha its callback wrote this tick
     // (SetColor, SetAlpha), which the sprite path weights its texels by as it does
@@ -7160,8 +7278,8 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
     // places draws a number more or less for them.
     //
     // A minion.ent carries none, so nothing is added for the 61 other markers or
-    // an escort. dragon_knight.ent carries the same system, and comes only after
-    // 2-32 is won, which the port does not build.
+    // an escort. dragon_knight.ent carries the same system, and comes only once
+    // 2-32 is finished: syncKnight queues its own (planning step 154).
     matchMinions();
     for (std::size_t i = 0; i < m_minions.size() && i < m_level.minions.minions.size(); ++i) {
         MinionQuad& drawn = m_minions[i];
@@ -7817,6 +7935,152 @@ void MagicPortalsLayer::latchDeathEffects(entt::registry& registry) {
     // And its hp branch (#3-63), which every other death the port has goes through:
     // blood at the character's whole vector3, its depth the character's own.
     m_effectQueue.push_back(effectAdd(Effects::Blood(m_effectRules, characterPx, m_playerZ)));
+}
+
+// ---- THE WIN CUTSCENES (the program's P2, planning step 154) ----------------------
+//
+// cutscenes.json holds the decode; sim/Cutscene the arithmetic. From the tick the
+// level ends, once a tick and behind the finished screen as well (the level goes
+// on running under it, spec D7):
+//   - rocket_launch and rocket_landing while the level is WON, from the door's own
+//     tick - both are static entities, whose callbacks run after the game state
+//     that decided it - each playing its track on its first update;
+//   - dragon_knight_spawn once it is FINISHED, a death as well as the door, on the
+//     same tick; the knight it adds updates from the next, a dynamic entity's
+//     callback, and goes into the door as the player does: levelFinishedEffect's
+//     suck and sparkles and the door's sound.
+void MagicPortalsLayer::stepCutscenes(entt::registry& registry, double frameMs) {
+    if (m_finishing && m_launchPlaced) {
+        const Cutscene::LaunchStep step = Cutscene::StepLaunch(m_cutsceneRules, m_launch, frameMs);
+        if (step.started) {
+            m_launchStartedTick = m_ticks;
+            musicPlay(m_cutsceneRules.launch.track.c_str());
+            SUPERSONIC_LOG_INFO("Magic Portals") << "rocket_launch from tick " << m_ticks << std::endl;
+        }
+        if (step.quake) {
+            ++m_launchQuakes;
+            QueueQuake(Earthquake::Call::RocketLaunch);
+        }
+    }
+    if (m_finishing && m_landingPlaced) {
+        const Cutscene::LandingStep step = Cutscene::StepLanding(m_cutsceneRules, m_landing, frameMs);
+        if (step.started) {
+            m_landingStartedTick = m_ticks;
+            musicPlay(m_cutsceneRules.landing.track.c_str());
+            SUPERSONIC_LOG_INFO("Magic Portals") << "rocket_landing from tick " << m_ticks << std::endl;
+        }
+    }
+    if (!m_knight.placed) return;
+    if (!m_knight.spawned) {
+        if (Cutscene::SpawnKnight(m_cutsceneRules, m_data.minions, registry, m_knight) != entt::null) {
+            m_knightSpawnedTick = m_ticks;
+            SUPERSONIC_LOG_INFO("Magic Portals") << "dragon_knight added at " << m_knight.spawnPx.x << ","
+                                                 << m_knight.spawnPx.y << " on tick " << m_ticks << std::endl;
+        }
+        return;
+    }
+    if (m_knight.gone) return;
+    Cutscene::StepKnight(m_cutsceneRules, m_data.minions, registry, m_knight, frameMs);
+    if (!m_knight.entered) return;
+    // levelFinishedEffect(its point, its point + scale(16, -16)): the suck 16 below
+    // that door point, the sparkles at the knight, playFinalDoorSound.
+    m_knightEnteredTick = m_ticks;
+    m_knightEnteredAtPx = m_knight.enteredAtPx;
+    m_effectQueue.push_back(effectAdd(
+        Effects::FinishSuck(m_effectRules, m_knight.enteredAtPx + m_cutsceneRules.knight.finishOffsetPx)));
+    m_effectQueue.push_back(effectAdd(Effects::FinishSparkles(m_effectRules, m_knight.enteredAtPx)));
+    latch("level_finished");
+    SUPERSONIC_LOG_INFO("Magic Portals") << "dragon_knight went in at " << m_knight.enteredAtPx.x << ","
+                                         << m_knight.enteredAtPx.y << " on tick " << m_ticks << std::endl;
+}
+
+void MagicPortalsLayer::syncKnight(entt::registry& registry) {
+    using namespace Supersonic;
+    const bool standing = m_knight.spawned && !m_knight.gone && m_knight.body != entt::null &&
+                          registry.valid(m_knight.body) && registry.all_of<TransformComponent>(m_knight.body);
+    if (!standing || !m_artReady || m_minionSheet.empty()) {
+        if (m_knightQuad != entt::null && registry.valid(m_knightQuad)) registry.destroy(m_knightQuad);
+        m_knightQuad = entt::null;
+        return;
+    }
+    if (m_knightQuad == entt::null) {
+        m_knightQuad = makeSprite(registry, "Magic Portals Knight", m_minionSheet, m_artRules.minion.additive);
+        // It falls and walks on the tick and is drawn between ticks, as a minion.
+        registry.emplace<InterpolatedTransformComponent>(m_knightQuad);
+    }
+    // minion.png's sheet as the minions', on its own pivot (0, 0): the picture's
+    // centre is its entity point.
+    const glm::dvec2 entityPx = Cutscene::KnightEntityPx(m_data.minions, registry, m_knight);
+    m_knightCentrePx = entityPx - m_cutsceneRules.knight.pivotPx;
+    placeSprite(registry, m_knightQuad, m_knightCentrePx, glm::dvec2(m_minionCut.frameUnits), m_knightZ, 0.0f);
+    auto& material = registry.get<MaterialComponent>(m_knightQuad);
+    material.uvScale = glm::vec2(m_minionCut.uvScale);
+    material.uvOffset = glm::vec2(Tiers::UvOffset(m_minionCut, m_knight.column, m_knight.row));
+    // dragon_knight.ent's 24 black_portal_particle.png at alphaMode 4, added with
+    // it: queued once, carried by its picture (Kind::Knight), at the spawn's depth.
+    if (!m_knightAuraQueued) {
+        EffectSpawn add;
+        add.entity = m_cutsceneRules.knight.entity;
+        add.atPx = entityPx;
+        add.zUnits = 0.0;
+        add.follow.kind = EffectOwner::Kind::Knight;
+        add.picture = false;
+        add.alwaysActive = true;
+        m_effectQueue.push_back(add);
+        m_knightAuraQueued = true;
+    }
+}
+
+glm::dvec2 MagicPortalsLayer::doorPointPx() const {
+    if (m_doorSprite < 0 || m_doorSprite >= static_cast<int>(m_sprites.size())) return glm::dvec2(0.0);
+    const DrawnSprite& door = m_sprites[static_cast<std::size_t>(m_doorSprite)];
+    glm::dvec2 atPx = door.sprite.atPx;
+    if (door.doorBob) atPx += Motion::OffsetPx(m_doorBob);
+    if (m_launch.running) atPx += m_launch.pose.doorOffsetPx;
+    if (m_landing.running) atPx += Cutscene::LandingDoorOffsetPx(m_cutsceneRules, m_landing.bias);
+    return atPx;
+}
+
+MagicPortalsLayer::CutsceneReport MagicPortalsLayer::CutscenePicture(entt::registry& registry) const {
+    CutsceneReport report;
+    report.wonDelayMs = m_wonDelayMs;
+    report.launchPlaced = m_launchPlaced;
+    report.landingPlaced = m_landingPlaced;
+    report.launch = m_launch;
+    report.landing = m_landing;
+    report.launchStartedTick = m_launchStartedTick;
+    report.landingStartedTick = m_landingStartedTick;
+    report.quakes = m_launchQuakes;
+    const auto at = [this](int index) -> const DrawnSprite* {
+        return index >= 0 && index < static_cast<int>(m_sprites.size()) ? &m_sprites[static_cast<std::size_t>(index)]
+                                                                          : nullptr;
+    };
+    if (const DrawnSprite* door = at(m_doorSprite); door != nullptr) {
+        report.doorAtPx = door->ownerPx;
+        report.doorCentrePx = door->centrePx;
+    }
+    if (const DrawnSprite* bridge = at(m_bridgeSprite); bridge != nullptr) {
+        report.bridgeQuad = bridge->quad;
+        report.bridgeCentrePx = bridge->centrePx;
+        if (bridge->body != entt::null && registry.valid(bridge->body)) {
+            report.bridgeRestPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(bridge->body).position);
+        }
+    }
+    report.keyScale = m_landing.running && at(m_landingKeySprite) != nullptr ? m_landing.keyScale : 1.0;
+    for (const DrawnSprite& drawn : m_sprites) {
+        if (drawn.space == SpaceRole::Eclipse) report.eclipseAtPx = drawn.ownerPx;
+        if (drawn.space == SpaceRole::Spiral) report.spiralColour = drawn.colour;
+    }
+    report.cameraTargetPx = m_cameraTargetPx;
+    report.knight = m_knight;
+    report.knightAtPx = Cutscene::KnightEntityPx(m_data.minions, registry, m_knight);
+    report.knightQuad = m_knightQuad;
+    report.knightCentrePx = m_knightCentrePx;
+    report.knightAuraQueued = m_knightAuraQueued;
+    report.knightSpawnedTick = m_knightSpawnedTick;
+    report.knightEnteredTick = m_knightEnteredTick;
+    report.knightEnteredAtPx = m_knightEnteredAtPx;
+    return report;
 }
 
 
@@ -8840,6 +9104,19 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             m_level.darkDragon.burned = true;
             SUPERSONIC_LOG_INFO("Magic Portals") << "DEV burn of the dark dragon on tick " << m_ticks << std::endl;
         }
+        // DEV ONLY: the player put where a capture asked, for this tick's AfterStep
+        // to judge - a door opened for the camera, never a route.
+        for (const auto& [tick, atPx] : m_devPlaces) {
+            if (tick != m_ticks || m_level.player == entt::null || !registry.valid(m_level.player)) continue;
+            auto& transform = registry.get<Supersonic::TransformComponent>(m_level.player);
+            const glm::vec3 world = Units::ToWorld(atPx.x, atPx.y);
+            transform.position = glm::vec3(world.x, world.y, transform.position.z);
+            if (auto* rigid = registry.try_get<Supersonic::RigidBodyComponent>(m_level.player)) {
+                rigid->velocity = glm::vec3(0.0f);
+            }
+            SUPERSONIC_LOG_INFO("Magic Portals") << "DEV place of the player at " << atPx.x << "," << atPx.y
+                                                 << " on tick " << m_ticks << std::endl;
+        }
         // The app has just stepped physics. The pairs it has just brought
         // together first, read before anything after the step moves or breaks a
         // body - Box2D calls a begin-contact callback inside the step itself.
@@ -8864,7 +9141,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             // as the original's does, and the score comes when the beat is up.
             m_finishClockMs += dtMs;
             m_padEndByte = LevelEnd::PadDecayByte(m_levelEndRules, m_padEndByte, 1);
-            if (m_screen == Screen::None && m_finishClockMs >= m_levelEndRules.wonDelayMs) clearLevel(registry);
+            if (m_screen == Screen::None && m_finishClockMs >= m_wonDelayMs) clearLevel(registry);
         } else if (m_dying) {
             // Killed, and the lost screen not up yet: the level goes on running
             // behind it exactly as it does behind the door's effect.
@@ -8935,6 +9212,10 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             SUPERSONIC_LOG_INFO("Magic Portals") << "player died on tick " << m_ticks << ", pads at "
                                                  << m_padEndByte << std::endl;
         }
+        // AND THE WIN CUTSCENES' CALLBACKS, from the tick the level ends: static
+        // entities' callbacks, run after the game state that decided it, so from
+        // the door's own tick (cutscenes.json).
+        if (m_finishing || m_dying) stepCutscenes(registry, dtMs);
     }
     if (m_loaded) {
         // The level is a tick older. BEFORE the input, because the pads slide
@@ -9004,9 +9285,14 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
             Camera::Clamp(glm::dvec2(m_level.dragon.atPx.x + view.x * 0.5, view.y * 0.5), view, m_boundsPx);
         m_follow.holdLeftS = 0.0;
     } else {
-        const glm::dvec2 playerPx =
-            Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
-        m_follow.Tick(m_cameraRules, playerPx, ViewPx(), m_boundsPx, fixedDelta);
+        glm::dvec2 targetPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
+        // 4-19's landing sets the character on the door every frame (cutscenes.json
+        // rocket_landing #335-341), and the camera follows the character. The port
+        // gives the camera that point and leaves the hidden body where it went in:
+        // a body teleported through the floor each tick would push what it met.
+        if (m_landing.running && m_doorSprite >= 0) targetPx = doorPointPx();
+        m_cameraTargetPx = targetPx;
+        m_follow.Tick(m_cameraRules, targetPx, ViewPx(), m_boundsPx, fixedDelta);
     }
     placeCamera(registry);
     layOutControls();
@@ -9420,6 +9706,8 @@ void MagicPortalsLayer::ScheduleDevHold(int from, int to, float direction) {
 }
 
 void MagicPortalsLayer::ScheduleDevBurn(int tick) { m_devBurns.push_back(tick); }
+
+void MagicPortalsLayer::ScheduleDevPlace(int tick, const glm::dvec2& atPx) { m_devPlaces.emplace_back(tick, atPx); }
 
 // ---- how a level ends ------------------------------------------------------------
 

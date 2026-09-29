@@ -223,8 +223,9 @@
     "    dark dragon's death (#1998-2012), the ghost's death (#1227-1241).",
     "  A switch turned off is pauseMusic; the one that comes back on is resumeMusic, which",
     "  plays currentTrack again even where a no_music level or a boss had stopped it.",
-    "  rocket and back_home, 4-01's and 4-19's won cutscenes, are not played yet (the",
-    "  program's P2)."
+    "  rocket and back_home: 4-01's and 4-19's won cutscenes, on their first update from the",
+    "  door's tick (ETHCallback_rocket_launch #172-174, ETHCallback_rocket_landing #181-183;",
+    "  cutscenes.json, planning step 154). Each plays once: playMusic(name, 1, false)."
   ],
 
   "music": {

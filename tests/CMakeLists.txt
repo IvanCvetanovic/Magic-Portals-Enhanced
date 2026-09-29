@@ -158,6 +158,13 @@ add_mp_test(test_mp_hud)
 # Pure, reading only the port's own committed data, so it never skips.
 add_mp_test(test_mp_levelend)
 
+# The win cutscenes and the delay before the medal (planning step 154):
+# cutscenes.json and sim/Cutscene - 4-01's launch, 4-19's landing, 2-32's knight
+# and end_delay. The arithmetic reads only the port's own committed data; the
+# census and the knight read the converted levels and are skipped without them,
+# never with 77.
+add_mp_test(test_mp_cutscene)
+
 # The tutorial and help popups: ui.json's popups and sim/Popup's arithmetic - the
 # framework, every class's waypoint loops, the close button's bounce and blink -
 # pinned against the remake's ui2 spec, section 5. Pure, and it never skips.

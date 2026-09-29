@@ -365,6 +365,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--hold <left\|right>@<from>-<to>` | DEV: hold a walk from game tick `from` to `to` |
 | `--tap <help\|x,y>@<tick>[-<release>]` | DEV: a touch at pixel `x,y` of 1280x720, or on the level's first help block, released on the next tick or at `release` |
 | `--drag <x,y>:<x,y>@<tick>-<release>` | DEV: a touch that moves evenly from the first pixel to the second |
+| `--place <x>,<y>@<tick>` | DEV: put the player at the level's pixel `(x, y)` after that tick's physics step, to film what a door opens; never a win route; pass `--saves` with it, since a win records a medal |
 | `--press <what>@<tick>` | DEV: press `pause`, a pause button (`levels`, `resume`, `skip`, `achievements`, `sound`, `music`), or `back` on a menu |
 | `--saves <dir>` | DEV: keep the medals (`scores.json`) here instead of the user's data directory, for a capture that needs a medal recorded |
 | `--levels <dir>` | read the converted levels from here instead of the configured path |

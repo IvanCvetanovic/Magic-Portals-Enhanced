@@ -209,7 +209,9 @@ void TheEarthquakeIsTheDecodedGenerator() {
                 // callback multiplies, inside the physics step.
                 {Call::PlayerImpact, 0.6, When::BeforeUpdate},
                 {Call::StoneImpact, 2.0, When::BeforeUpdate},
-                {Call::MinionImpact, 0.8, When::BeforeUpdate}};
+                {Call::MinionImpact, 0.8, When::BeforeUpdate},
+                // 4-01's rocket (step 154): rocket_launch is a static entity.
+                {Call::RocketLaunch, 3.0, When::AfterUpdate}};
     CHECK(std::size(rows) == Earthquake::kCalls);
     for (const auto& row : rows) {
         const Earthquake::CallRule& rule = rules.Of(row.call);
