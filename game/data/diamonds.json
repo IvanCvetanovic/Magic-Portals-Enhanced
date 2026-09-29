@@ -105,7 +105,7 @@
     "_fireball_note": [
       "addFireball and both fireball callbacks live in ETHCallback_carranca.angelscript: a",
       "fire diamond's fireball IS a carranca's, the same fireball.ent, so the port reuses",
-      "Turrets::Fireball and turrets.json's 130 px/s and 16 x 16 rather than inventing a",
+      "Turrets::Fireball and turrets.json's 130 px/s and radius_px 9.6 rather than inventing a",
       "second projectile. What differs is ONE PARAMETER.",
       "",
       "killMainCharacter. A carranca passes it set; burnProjectile passes immediate 0. The",

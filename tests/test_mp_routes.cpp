@@ -93,56 +93,9 @@ void Frame(MagicPortalsLayer& layer, Route::Driver& driver, entt::registry& regi
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
 }
 
+// The trace a route is written by, which main's --route-trace prints too (Route.hpp).
 void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char* why) {
-    const MagicPortals::Game::Level* level = layer.SimLevel();
-    std::printf("    t %5d %-5s", layer.LayerTicks(), why);
-    if (level == nullptr) {
-        std::printf(" no level\n");
-        return;
-    }
-    if (level->player != entt::null && registry.valid(level->player)) {
-        const glm::dvec2 at =
-            MagicPortals::Units::ToPixels(registry.get<TransformComponent>(level->player).position);
-        std::printf(" player (%.1f, %.1f)", at.x, at.y);
-        if (const auto* body = registry.try_get<RigidBodyComponent>(level->player)) {
-            std::printf(" v (%.0f, %.0f)", body->velocity.x * MagicPortals::Units::kPixelsPerMetre,
-                        -body->velocity.y * MagicPortals::Units::kPixelsPerMetre);
-        }
-    }
-    const glm::dvec2 camera = layer.CameraCentrePx();
-    std::printf(" camera (%.1f, %.1f) shots %d/%d", camera.x, camera.y, level->portals.shotsFired,
-                level->portals.shotsFailed);
-    if (level->portals.flight) std::printf(" FLYING");
-    for (const auto& placed : level->portals.placed) std::printf(" [%.1f, %.1f]", placed.atPx.x, placed.atPx.y);
-    if (!level->portals.lastFailure.empty()) std::printf(" last fail: %s", level->portals.lastFailure.c_str());
-    if (level->goals.completed) std::printf(" DOOR");
-    // What else moves: every other traveller by its node's name, what the buttons
-    // hold, and 1-32's beholder with its rocks.
-    for (const entt::entity body : level->portals.travellers) {
-        if (body == level->player || !registry.valid(body)) continue;
-        const char* name = "?";
-        for (const auto& [node, entity] : level->built.entities) {
-            if (entity == body) name = node.c_str();
-        }
-        const glm::dvec2 at = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position);
-        std::printf("\n          %s (%.1f, %.1f)", name, at.x, at.y);
-    }
-    for (const auto& button : level->channels.buttons) {
-        std::printf("\n          button %s channel %d %s", button.name.c_str(), button.channel,
-                    level->channels.Pressed(button.channel) ? "PRESSED" : "up");
-    }
-    if (level->boss.beholder) {
-        const auto& boss = *level->boss.beholder;
-        std::printf("\n          beholder (%.1f, %.1f) phase %d hits %d", boss.atPx.x, boss.atPx.y,
-                    static_cast<int>(boss.phase), boss.hits);
-        for (const auto& rock : level->boss.rocks) {
-            if (!registry.valid(rock.body)) continue;
-            const glm::dvec2 at = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(rock.body).position);
-            std::printf(" rock %s (%.1f, %.1f)", rock.name.c_str(), at.x, at.y);
-        }
-        if (level->boss.buttonRaised) std::printf(" BUTTON RAISED");
-    }
-    std::printf("\n");
+    Route::Trace(layer, registry, why);
 }
 
 struct Outcome {

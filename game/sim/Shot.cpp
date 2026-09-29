@@ -236,6 +236,36 @@ std::vector<entt::entity> BodiesAt(entt::registry& registry, const glm::dvec2& a
     return held;
 }
 
+std::vector<entt::entity> SolidBodiesIn(entt::registry& registry, const glm::dvec2& centrePx, double radiusPx,
+                                        std::span<const entt::entity> ignore) {
+    const dvec2 c = Metres(centrePx);
+    const double r = radiusPx / Units::kPixelsPerMetre;
+    const auto nearerThan = [&c](const dvec2& a, const dvec2& b, double reach) {
+        const dvec2 ab = b - a;
+        const double lengthSquared = glm::dot(ab, ab);
+        const double t = lengthSquared > 0.0 ? std::clamp(glm::dot(c - a, ab) / lengthSquared, 0.0, 1.0) : 0.0;
+        const dvec2 gap = c - (a + ab * t);
+        return glm::dot(gap, gap) < reach * reach;
+    };
+    std::vector<entt::entity> touched;
+    EachShape(
+        registry, ignore, false,
+        [&](entt::entity body, const std::vector<dvec2>& points) {
+            // Its centre inside (IntoPolygon of a segment of no length, as BodiesAt
+            // asks), or any edge within the radius.
+            bool meets = IntoPolygon(c, c, points).has_value();
+            for (std::size_t i = 0; !meets && i < points.size(); ++i) {
+                meets = nearerThan(points[i], points[(i + 1) % points.size()], r);
+            }
+            if (meets) touched.push_back(body);
+        },
+        [&](entt::entity body, const dvec2& centre, double radius) {
+            const dvec2 gap = c - centre;
+            if (glm::dot(gap, gap) < (r + radius) * (r + radius)) touched.push_back(body);
+        });
+    return touched;
+}
+
 std::optional<double> Enters(const glm::dvec2& fromPx, const glm::dvec2& toPx, const Trigger::Box& box) {
     const dvec2 lo = dvec2(box.centre) - dvec2(box.half);
     const dvec2 hi = dvec2(box.centre) + dvec2(box.half);

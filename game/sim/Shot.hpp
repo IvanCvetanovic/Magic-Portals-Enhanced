@@ -73,6 +73,17 @@ std::optional<Hit> ClosestContact(entt::registry& registry, const glm::dvec2& fr
 // twice. A point on an edge is held. The capsule is not read, as above.
 std::vector<entt::entity> BodiesAt(entt::registry& registry, const glm::dvec2& atPx);
 
+// Every SOLID body a circle overlaps - never a trigger - other than the bodies in
+// `ignore`, in the registry's order: what a fireball's own body begins a contact
+// with. fireball.ent is a sensor, and Box2D begins a sensor's contact on the step
+// that finds the two shapes overlapping (b2Contact::Update's b2TestOverlap), so a
+// circle meets a polygon it has its centre in or an edge nearer than its radius,
+// and a circle nearer than the two radii. Touching is not overlapping. A trigger
+// is the original's sensor (the converter's Area2D), which the callback passes
+// by. The capsule is not read, as above: the character is Turrets' own test.
+std::vector<entt::entity> SolidBodiesIn(entt::registry& registry, const glm::dvec2& centrePx, double radiusPx,
+                                        std::span<const entt::entity> ignore);
+
 // How far along the segment it first enters the box, or none.
 std::optional<double> Enters(const glm::dvec2& fromPx, const glm::dvec2& toPx, const Trigger::Box& box);
 

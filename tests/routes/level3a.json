@@ -1,0 +1,28 @@
+{
+  "_about": [
+    "2-04. Over the block by portal (taps 1-2) into the niche under carranca_677; then",
+    "crate_no_emissive_ent_804, the crate plugging the hole at the right end, sent to the block top by a",
+    "portal opened against it (taps 3-4: the second end, and then one within 16 px of the crate, which",
+    "carries it through); the player into the hole (taps 5-6), and from its floor into the corridor",
+    "right of rolling_stone_808 (taps 7-8). Left, pushing the stone into the gap, where it breaks",
+    "breakable_wall_815 (tick 431); down after it, and right to the door. Won on tick 534 (step 114)."
+  ],
+  "level": "level3a",
+  "win_by": 600,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 40},
+    {"walk": "right", "from": 95, "to": 140},
+    {"walk": "left", "from": 318, "to": 455},
+    {"walk": "right", "from": 470, "to": 600}
+  ],
+  "taps": [
+    {"tick": 55, "at": [220, 20]},
+    {"tick": 85, "at": [150, 92]},
+    {"tick": 150, "at": [230, 10]},
+    {"tick": 180, "at": [440, 98]},
+    {"tick": 215, "at": [470, 108]},
+    {"tick": 245, "at": [288, 92]},
+    {"tick": 280, "at": [400, 205]},
+    {"tick": 310, "at": [476, 140]}
+  ]
+}

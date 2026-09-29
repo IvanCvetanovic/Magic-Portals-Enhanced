@@ -119,11 +119,21 @@ private:
     std::vector<std::string> m_problems;
 };
 
+// One line of what a route is doing, on stdout: the player, the camera, the shots
+// and portals, every other traveller, the buttons, the switched doors and lifts,
+// the fire (each fireball, where one went off this tick, what burns, the bombs), a
+// death, and 1-32's beholder. test_mp_routes --trace prints it, and so does main's
+// --route-trace, so a route can be written from the window when the suite cannot
+// run (planning step 114).
+void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char* why);
+
 // DEV ONLY: --route. The driver as a layer, pushed after the game's so each of its
 // ticks follows the game's, saying in the log and on exit how the route went.
+// With `traceEvery` above 0 (--route-trace) it also prints Trace every that many
+// ticks, on every tap's tick and on the tick it ends.
 class ReplayLayer final : public Supersonic::EngineLayer {
 public:
-    ReplayLayer(MagicPortalsLayer& game, Plan plan);
+    ReplayLayer(MagicPortalsLayer& game, Plan plan, int traceEvery = 0);
 
     const char* Name() const override { return "Magic Portals route replay (DEV)"; }
 
@@ -134,6 +144,8 @@ public:
 private:
     MagicPortalsLayer& m_game;
     Driver m_driver;
+    int m_traceEvery = 0;
+    bool m_traced = false; // the ending's line, once
     bool m_said = false;
 };
 

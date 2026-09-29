@@ -65,9 +65,10 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 
     Rules read;
     read.speedPx = fireball["speed_px_s"].AsNumber(0.0);
+    read.radiusPx = fireball["radius_px"].AsNumber(0.0);
     read.defaultStrideMs = stride["default_ms"].AsNumber(0.0);
-    if (!ReadPair(fireball["hit_px"], read.hitPx) || !ReadPair(cull["margin_px"], read.cullMarginPx)) {
-        error = path + ": hit_px and margin_px are each two numbers";
+    if (!ReadPair(cull["margin_px"], read.cullMarginPx)) {
+        error = path + ": margin_px is two numbers";
         return false;
     }
     // A speed of nothing is a fireball that never leaves the gargoyle's mouth,
@@ -77,8 +78,9 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": speed_px_s and default_ms are both above zero";
         return false;
     }
-    if (read.hitPx.x <= 0.0 || read.hitPx.y <= 0.0) {
-        error = path + ": hit_px is above zero in both axes";
+    // A fireball of no size touches nothing, and would fly through every wall.
+    if (read.radiusPx <= 0.0) {
+        error = path + ": radius_px is above zero";
         return false;
     }
 
@@ -128,20 +130,18 @@ void State::Tick(entt::registry& registry, entt::entity player, float dt) {
 
     if (player == entt::null || !registry.valid(player) || playerKilled) return;
 
-    // Against the player's own collider rather than a box around its centre:
-    // Trigger is exact in the plane, and a capsule is what the character has.
-    const glm::vec2 half(Units::ToMetres(rules.hitPx.x * 0.5), Units::ToMetres(rules.hitPx.y * 0.5));
+    // The fireball's own circle against the player's own collider: Trigger is
+    // exact in the plane, and a capsule is what the character has.
+    const float radius = Units::ToMetres(rules.radiusPx);
     for (std::size_t i = 0; i < fireballs.size(); ++i) {
         const Fireball& ball = fireballs[i];
         // addFireball's killMainCharacter. A fire diamond's conversion passes it
         // clear and the contact callback bails out on a character when it is, so
         // one of these kills and the other cannot. Turrets.hpp has the decode.
         if (!ball.killsPlayer) continue;
-        Trigger::Box box;
         const glm::vec3 centre = Units::ToWorld(ball.atPx.x, ball.atPx.y);
-        box.centre = glm::vec2(centre.x, centre.y);
-        box.half = half;
-        if (!Trigger::Overlaps(registry, player, box)) continue;
+        const Trigger::Circle circle{glm::vec2(centre.x, centre.y), radius};
+        if (!Trigger::Overlaps(registry, player, circle)) continue;
         playerKilled = true;
         killedBy = ball.name;
         // And the fireball GOES, with a destroy recorded. The one that kills sets
@@ -156,7 +156,17 @@ void State::Tick(entt::registry& registry, entt::entity player, float dt) {
     }
 }
 
-bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rules, State& out, std::string& error) {
+std::vector<entt::entity> State::Bodies() const {
+    std::vector<entt::entity> bodies;
+    bodies.reserve(turrets.size());
+    for (const Turret& turret : turrets) {
+        if (turret.body != entt::null) bodies.push_back(turret.body);
+    }
+    return bodies;
+}
+
+bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built, const Rules& rules,
+          State& out, std::string& error) {
     out = State{};
     out.rules = rules;
 
@@ -173,6 +183,9 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
         Turret turret;
         turret.name = node.name;
         turret.atPx = atPx;
+        if (const auto found = built.entities.find(node.name); found != built.entities.end()) {
+            turret.body = found->second;
+        }
 
         // The remake's defaults for a node that names neither (hazards.gd:340-344).
         glm::dvec2 direction(Meta(node, "dirX", -1.0), Meta(node, "dirY", 0.0));

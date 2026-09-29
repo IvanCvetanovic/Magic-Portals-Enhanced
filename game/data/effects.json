@@ -164,11 +164,11 @@
       "the fireball cannot kill returns at #10-31; a carranca or a sensor that is not a",
       "shock_agent returns at #98-121; everything else reaches #146-152 destroy(thisEntity) -",
       "so a shock agent, a burnable, a bomb, the player it kills, AND ANY SOLID IT TOUCHES.",
-      "The port's fireball is a bare point with no body, so it records the first four",
-      "(Turrets::State::spent_px) and flies through walls; Turrets.hpp says why a body is its",
-      "own step. Neither of the port's other two removals adds one: the cull at the level's edge",
-      "is the port's own, and a torch's switch goes through killProjectile (MiscCallbacks,",
-      "351788..351878), a bare DeleteEntity that sets no flag."
+      "The port records all five (Turrets::State::spent_px): its fireball is a point with",
+      "fireball.ent's 9.6-unit circle, and since planning step 114 a solid body it touches",
+      "spends it as the callback does. Neither of the port's other two removals adds one:",
+      "the cull at the level's edge is the port's own, and a torch's switch goes through",
+      "killProjectile (MiscCallbacks, 351788..351878), a bare DeleteEntity that sets no flag."
     ]
   },
 

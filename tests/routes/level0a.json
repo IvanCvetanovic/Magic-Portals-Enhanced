@@ -1,0 +1,16 @@
+{
+  "_about": [
+    "2-01, walking only (planning step 114, the fireball dies on the first solid thing it touches). Left",
+    "along the top floor, pushing crate_no_emissive_796 off its left end; it falls into",
+    "carranca_right_ent_792's lane and the next fireball burns it (tick 181) while the player stands",
+    "behind it on the ledge below. Right once it has burned away: down the slope, ahead of the next",
+    "fireball, to the door. Won on tick 380 (step 114)."
+  ],
+  "level": "level0a",
+  "win_by": 440,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 200},
+    {"walk": "right", "from": 260, "to": 440}
+  ],
+  "taps": []
+}

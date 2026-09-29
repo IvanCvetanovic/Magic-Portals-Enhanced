@@ -1,0 +1,26 @@
+{
+  "_about": [
+    "2-08. Over block00_no_emissive_ent_813 by portal (taps 1-2); crate_small_no_emissive_ent_854",
+    "carried onto button_827 by a portal over the button and one opened against the crate (taps",
+    "3-4: the second 20 units off the walk pad's quarter circle), which opens door_lift_823. The",
+    "lower carranca's fire then burns crate 826 and crate 853 through the open door (the fireball",
+    "stops on each: planning step 114). Down to the bridge, left to under the single block, and a",
+    "portal pair over the lower carranca into the room with the exit (taps 5-6). Won on tick 722",
+    "(step 114)."
+  ],
+  "level": "level7a",
+  "win_by": 780,
+  "holds": [
+    {"walk": "right", "from": 605, "to": 620},
+    {"walk": "left", "from": 645, "to": 655},
+    {"walk": "left", "from": 705, "to": 780}
+  ],
+  "taps": [
+    {"tick": 30, "at": [310, 20]},
+    {"tick": 55, "at": [236, 79]},
+    {"tick": 90, "at": [448, 212]},
+    {"tick": 115, "at": [478, 199]},
+    {"tick": 672, "at": [110, 155]},
+    {"tick": 697, "at": [322, 218]}
+  ]
+}

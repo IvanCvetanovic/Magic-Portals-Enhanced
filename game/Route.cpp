@@ -2,17 +2,20 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <initializer_list>
 #include <iostream>
 #include <sstream>
 #include <utility>
 
+#include "core/Components.hpp"
 #include "core/Json.hpp"
 #include "core/Log.hpp"
 
 #include "sim/Chapters.hpp"
 #include "sim/Game.hpp"
+#include "sim/Units.hpp"
 
 namespace MagicPortals::Route {
 
@@ -311,7 +314,93 @@ void Driver::AfterTick(MagicPortalsLayer& layer) {
 
 // ---- the replay layer ---------------------------------------------------------
 
-ReplayLayer::ReplayLayer(MagicPortalsLayer& game, Plan plan) : m_game(game), m_driver(std::move(plan)) {}
+void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char* why) {
+    const Game::Level* level = layer.SimLevel();
+    std::printf("    t %5d %-5s", layer.LayerTicks(), why);
+    if (level == nullptr) {
+        std::printf(" no level\n");
+        return;
+    }
+    if (level->player != entt::null && registry.valid(level->player)) {
+        const glm::dvec2 at =
+            Units::ToPixels(registry.get<Supersonic::TransformComponent>(level->player).position);
+        std::printf(" player (%.1f, %.1f)", at.x, at.y);
+        if (const auto* body = registry.try_get<Supersonic::RigidBodyComponent>(level->player)) {
+            std::printf(" v (%.0f, %.0f)", body->velocity.x * Units::kPixelsPerMetre,
+                        -body->velocity.y * Units::kPixelsPerMetre);
+        }
+    }
+    const glm::dvec2 camera = layer.CameraCentrePx();
+    std::printf(" camera (%.1f, %.1f) shots %d/%d", camera.x, camera.y, level->portals.shotsFired,
+                level->portals.shotsFailed);
+    if (level->portals.flight) std::printf(" FLYING");
+    for (const auto& placed : level->portals.placed) std::printf(" [%.1f, %.1f]", placed.atPx.x, placed.atPx.y);
+    if (!level->portals.lastFailure.empty()) std::printf(" last fail: %s", level->portals.lastFailure.c_str());
+    if (level->goals.completed) std::printf(" DOOR");
+    // What else moves: every other traveller by its node's name, what the buttons
+    // hold, and 1-32's beholder with its rocks.
+    for (const entt::entity body : level->portals.travellers) {
+        if (body == level->player || !registry.valid(body)) continue;
+        const char* name = "?";
+        for (const auto& [node, entity] : level->built.entities) {
+            if (entity == body) name = node.c_str();
+        }
+        const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(body).position);
+        std::printf("\n          %s (%.1f, %.1f)", name, at.x, at.y);
+    }
+    for (const auto& button : level->channels.buttons) {
+        std::printf("\n          button %s channel %d %s", button.name.c_str(), button.channel,
+                    level->channels.Pressed(button.channel) ? "PRESSED" : "up");
+    }
+    // A switched door's travel, and where each lift is: what a route waits on.
+    for (const auto& door : level->channels.doors) {
+        std::printf("\n          door %s %s %.3f", door.name.c_str(), door.motion.opening ? "opening" : "closing",
+                    door.motion.progress);
+        if (registry.valid(door.entity)) {
+            const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(door.entity).position);
+            std::printf(" at (%.1f, %.1f)", at.x, at.y);
+        }
+    }
+    for (const auto& lift : level->movers.lifts) {
+        if (!registry.valid(lift.entity)) continue;
+        const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(lift.entity).position);
+        std::printf("\n          lift %s (%.1f, %.1f)", lift.name.c_str(), at.x, at.y);
+    }
+    // The fire (step 114): every fireball in the air, where one went off this
+    // tick, what is burning or gone, and the bombs.
+    for (const auto& ball : level->turrets.fireballs) {
+        std::printf("\n          fireball %s (%.1f, %.1f)", ball.name.c_str(), ball.atPx.x, ball.atPx.y);
+    }
+    for (const glm::dvec2& atPx : level->turrets.spentPx) {
+        std::printf("\n          fireball OFF at (%.1f, %.1f)", atPx.x, atPx.y);
+    }
+    for (const auto& burnable : level->fire.burnables) {
+        if (burnable.burned || burnable.gone) {
+            std::printf("\n          burnable %s %s", burnable.name.c_str(), burnable.gone ? "GONE" : "burning");
+        }
+    }
+    for (const auto& bomb : level->fire.bombs) {
+        if (bomb.requested || bomb.blown) {
+            std::printf("\n          bomb %s %s", bomb.name.c_str(), bomb.blown ? "BLOWN" : "asked");
+        }
+    }
+    if (level->hazards.playerDied) std::printf("\n          PLAYER DIED: %s", level->hazards.killedBy.c_str());
+    if (level->boss.beholder) {
+        const auto& boss = *level->boss.beholder;
+        std::printf("\n          beholder (%.1f, %.1f) phase %d hits %d", boss.atPx.x, boss.atPx.y,
+                    static_cast<int>(boss.phase), boss.hits);
+        for (const auto& rock : level->boss.rocks) {
+            if (!registry.valid(rock.body)) continue;
+            const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(rock.body).position);
+            std::printf(" rock %s (%.1f, %.1f)", rock.name.c_str(), at.x, at.y);
+        }
+        if (level->boss.buttonRaised) std::printf(" BUTTON RAISED");
+    }
+    std::printf("\n");
+}
+
+ReplayLayer::ReplayLayer(MagicPortalsLayer& game, Plan plan, int traceEvery)
+    : m_game(game), m_driver(std::move(plan)), m_traceEvery(traceEvery) {}
 
 void ReplayLayer::OnAttach(entt::registry& registry) {
     (void)registry;
@@ -319,9 +408,22 @@ void ReplayLayer::OnAttach(entt::registry& registry) {
 }
 
 void ReplayLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta) {
-    (void)registry;
     (void)fixedDelta;
+    const bool wasFinished = m_driver.Finished();
     m_driver.AfterTick(m_game);
+    if (m_traceEvery <= 0 || m_traced) return;
+    const int tick = m_game.LayerTicks();
+    const std::vector<Tap>& taps = m_driver.Planned().taps;
+    const bool tapped =
+        std::any_of(taps.begin(), taps.end(), [tick](const Tap& tap) { return tap.tick == tick; });
+    if (m_driver.Finished() && !wasFinished) {
+        m_traced = true;
+        Trace(m_game, registry, m_driver.WonTick() > 0 ? "WON" : "END");
+    } else if (tapped) {
+        Trace(m_game, registry, "TAP");
+    } else if (tick % m_traceEvery == 0) {
+        Trace(m_game, registry, "");
+    }
 }
 
 void ReplayLayer::OnDetach(entt::registry& registry) {

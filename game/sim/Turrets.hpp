@@ -15,21 +15,33 @@
 //     (startEarthquake) and deletes the entity. That is the burnable side, it
 //     belongs with fire_source and explosive, and it is not built here.
 //
-// What a fireball is, from its own fireball.ent: a 16 x 16 sensor with density 0
-// travelling at 130 px/s, with gravityScale set to 0 at spawn. A SENSOR, so the
-// world does not stop it - it flies through walls, crates and stones and only
-// registers what it overlaps. That is the entity's own semantics rather than a
-// simplification of them.
+// What a fireball is, from its own fireball.ent: a dynamic sensor with density 0
+// travelling at 130 px/s, with gravityScale set to 0 at spawn, whose body is a
+// CIRCLE of radius 9.6 (turrets.json). A sensor is not pushed by what it meets,
+// but it still BEGINS A CONTACT with it, and ETHBeginContactCallback_fireball
+// (listing L85862) decides what that contact does:
+//   - a character, when the fireball's killMainCharacter is clear: nothing (#1-31);
+//   - a carranca, or a sensor: nothing (#41-60, #120-121) - but a shock_agent,
+//     the one sensor it names, and itself are both destroyed (#61-119);
+//   - a character it may kill: flames and hp 0 (#123-145), and on to
+//   - EVERYTHING ELSE - a wall, a closed door, a crate, a stone, a barrel, a
+//     minion: destroy(thisEntity) (#146-152) with the small explosion's sound
+//     (#153-158), THEN burn() the body if it is burnable (#159-173) and explode()
+//     it if it is explosive (#174-188).
+// So a fireball dies on the first solid thing it touches, and a closed door
+// stops a carranca's fire (footage F6 #72, on 2-12). Game::AfterStep plays the
+// callback; Shot::SolidBodiesIn is the touch.
 //
 // NOT BUILT, and named here rather than found later:
 //   - Portal transit. fireball.ent carries teleportable 1, and the original's
 //     PortalManager tests for fireball.ent by name in its teleport path, so a
 //     fireball goes through portals. Portals::travellers takes entities, and a
-//     fireball here is a bare point with no body, as the beholder's spikes are.
-//     Giving it one is its own step.
+//     fireball here is a point and a radius with no entity, as the beholder's
+//     spikes are. Giving it one is its own step (the backlog's G6).
 //   - The picture. fireball.ent has no <Sprite> at all: what is seen is its
 //     ParticleSystem and its Light, so there is no image for the layer to draw.
 
+#include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
 
@@ -44,7 +56,7 @@ namespace MagicPortals::Turrets {
 // The port's turrets.json. Decoded but for the cull margin.
 struct Rules {
     double speedPx = 0.0;  // fireball.ent's own speed, 130
-    glm::dvec2 hitPx{0.0}; // and its Collision, 16 x 16
+    double radiusPx = 0.0; // its body's circle: (16 + 16) / 4 x its <Scale> 1.2
     double defaultStrideMs = 0.0;
     glm::dvec2 cullMarginPx{0.0}; // _guess
 };
@@ -55,6 +67,10 @@ struct Turret {
     std::string name;
     glm::dvec2 atPx{0.0};
     glm::dvec2 directionPx{0.0}; // a unit vector, +y down
+    // Its own StaticBody2D, which every fireball passes (isCarranca, #41-50):
+    // the one it spits starts inside it. entt::null for a level built without
+    // its statics.
+    entt::entity body = entt::null;
 
     double strideMs = 0.0;
     // Seeded from the node's startStride, as carrancaCallback seeds elapsedTime,
@@ -101,9 +117,10 @@ struct State {
     // own callback then deletes the entity and adds small_explosion.ent at the
     // point it stood (effects.json's small_explosion row). So the two removals
     // that are NOT a destroy leave nothing here - the cull at the level's edge,
-    // which is the port's own and has no counterpart in a game whose fireballs
-    // fly until they touch something, and a torch's switch, which goes through
-    // killProjectile, a bare DeleteEntity that sets no flag.
+    // which is the port's own safety net for a fireball that leaves the level
+    // without touching anything (the original's flies on until it does), and a
+    // torch's switch, which goes through killProjectile, a bare DeleteEntity
+    // that sets no flag.
     //
     // The layer reads it on the tick that fills it (latchSimEffects) and draws
     // the explosion on the next frame; nothing in this file acts on it.
@@ -125,10 +142,15 @@ struct State {
 
     // After the step: the fireballs fly, leave by the level's edge, and kill.
     void Tick(entt::registry& registry, entt::entity player, float dt);
+
+    // Every carranca's own body: what a fireball's touch passes by.
+    std::vector<entt::entity> Bodies() const;
 };
 
-// Every carranca of a level, and the level's bounds to cull against. False, with
-// `error`, for one whose stride does not read or is not positive.
-bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rules, State& out, std::string& error);
+// Every carranca of a level, each with the body LevelBuilder built for it, and
+// the level's bounds to cull against. False, with `error`, for one whose stride
+// does not read or is not positive.
+bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built, const Rules& rules,
+          State& out, std::string& error);
 
 } // namespace MagicPortals::Turrets

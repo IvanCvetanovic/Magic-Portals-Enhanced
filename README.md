@@ -320,7 +320,8 @@ build/tests/test_mp_routes.exe --only level8 --trace 10
 
 and `--route <absolute path>` replays one in the game's window (the flags below); give it
 `--saves <absolute dir>` too, because a replay that reaches the level's end records its medal,
-and without `--saves` that lands in the player's own save. Beside it, a
+and without `--saves` that lands in the player's own save; `--route-trace <n>` makes that replay
+print the suite's trace lines. Beside it, a
 static check that no level's door is sealed off in the port, over the converted levels, with
 the verdicts pinned in `tools/parity/reachability.json` (it needs the parity venv, below):
 
@@ -395,6 +396,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--visit-levels <lightmapped\|all\|name,...>` | DEV: visit these levels in one process; the run fails unless the engine's material descriptor sets return to its pool |
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |
 | `--route <file>` | DEV: replay a win route (`tests/routes/<level>.json`, absolute) in the window, opening its level; says on exit whether it won. Pair it with `--saves <dir>`: a run past the level's end writes its medal |
+| `--route-trace <n>` | DEV: with `--route`, print the route's trace (`test_mp_routes --trace`'s lines) every n ticks, on each tap and at the end |
 | `--help` | every flag, the engine's own included |
 
 `--hold`, `--tap`, `--drag` and `--press` repeat. `--screenshot`, `--saves`, `--levels`,

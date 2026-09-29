@@ -3,6 +3,7 @@
 #include "core/Components.hpp"
 #include "core/PhysicsSettings.hpp"
 #include "core/PhysicsSystem.hpp"
+#include "sim/Shot.hpp"
 #include "sim/Trigger.hpp"
 #include "sim/Units.hpp"
 
@@ -191,7 +192,7 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     if (!Demolish::Find(data.scene, data.roles, out.built, data.demolish, out.demolish, error)) return false;
     if (!Launchers::Find(data.scene, data.roles, data.launchers, out.launchers, error)) return false;
     if (!Boss::Find(data.scene, data.roles, data.boss, data.launchers, out.boss, error)) return false;
-    if (!Turrets::Find(data.scene, data.roles, data.turrets, out.turrets, error)) return false;
+    if (!Turrets::Find(data.scene, data.roles, out.built, data.turrets, out.turrets, error)) return false;
     if (!Fire::Find(data.scene, data.roles, out.built, data.fire, out.fire, error)) return false;
     if (!Hinge::Find(data.scene, data.roles, out.built, registry, data.hinge, out.hinge, error)) return false;
     if (!Minions::Find(data.scene, data.roles, data.minions, out.minions, error)) return false;
@@ -284,9 +285,9 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
         if (thrown.is.teleportable) level.portals.travellers.push_back(thrown.body);
         if (thrown.is.demolisher) level.demolish.stones.push_back(Demolish::Stone{thrown.name, thrown.body});
     }
-    // And what the carrancas spit. Their fireballs are sensors with no body, so
-    // nothing here hands them to the portals or the demolisher as a thrown stone
-    // is handed; Turrets.hpp says why that is a step of its own.
+    // And what the carrancas spit. A fireball is a point and a radius with no
+    // entity, so nothing here hands it to the portals as a thrown stone is
+    // handed; Turrets.hpp says why transit is a step of its own.
     level.turrets.Fire(dt);
     // The minions walk before the step, as the player is steered before it: what
     // sets a velocity belongs on this side, what judges a position on the other.
@@ -332,9 +333,10 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             if (gap.x * gap.x + gap.y * gap.y <= reach * reach) level.darkDragon.burned = true;
         }
     }
-    // What a fireball ran into (ETHBeginContactCallback_fireball). A carranca's
-    // and a fire diamond's are the same fireball.ent and meet the same things;
-    // only killMainCharacter differs, and Turrets::Tick has already judged that.
+    // What a fireball ran into (ETHBeginContactCallback_fireball, listing
+    // L85862; Turrets.hpp has the whole decode). A carranca's, a dragon's and a
+    // fire diamond's are the same fireball.ent and meet the same things; only
+    // killMainCharacter differs, and Turrets::Tick has already judged the player.
     //
     // AFTER Fire::Tick on purpose. The original sets a flag and the bomb's own
     // callback reads it on a later frame, which is the split Fire.hpp keeps: a
@@ -342,59 +344,52 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     {
         std::vector<std::string> spent;
         std::vector<entt::entity> burnedMinions;
-        const glm::vec2 half(static_cast<float>(Units::ToMetres(level.turrets.rules.hitPx.x * 0.5)),
-                             static_cast<float>(Units::ToMetres(level.turrets.rules.hitPx.y * 0.5)));
+        const float radius = Units::ToMetres(level.turrets.rules.radiusPx);
+        // isCarranca (#41-50): the carrancas' own bodies are passed by, and the
+        // one that spat a fireball holds it at the start of its flight.
+        const std::vector<entt::entity> carrancas = level.turrets.Bodies();
         for (const Turrets::Fireball& ball : level.turrets.fireballs) {
-            Trigger::Box box;
             const glm::vec3 centre = Units::ToWorld(ball.atPx.x, ball.atPx.y);
-            box.centre = glm::vec2(centre.x, centre.y);
-            box.half = half;
+            const Trigger::Circle circle{glm::vec2(centre.x, centre.y), radius};
 
             bool struck = false;
             // A shock agent is the ONE sensor it acts on, tested by name in the
-            // original, and it destroys that one and itself with it.
+            // original (#61-119), and it destroys that one and itself with it.
             for (const Fields::Field& field : level.fields.fields) {
                 if (field.gone || !registry.valid(field.body)) continue;
-                if (!Trigger::Overlaps(registry, field.body, box)) continue;
+                if (!Trigger::Overlaps(registry, field.body, circle)) continue;
                 const entt::entity gone = level.fields.Destroy(field.name, registry);
                 if (gone != entt::null) Forget(level, gone);
                 struck = true;
                 break;
             }
-            // Then the solid things: burn what is burnable, ask what is explosive
-            // to go off. Both are the original's own calls, burn() and explode().
-            if (!struck) {
+            // Then EVERY SOLID BODY it touches: a wall, a closed door, a crate, a
+            // stone, a barrel, a minion. Each destroys it (#146-152); what is
+            // burnable is then burned (#159-173) and what is explosive asked to go
+            // off (#174-188), the original's own burn() and explode(). Every body
+            // it overlaps on the tick it dies is one, because Box2D begins a
+            // contact for every pair its step finds touching and the callback runs
+            // for each. A burning crate and a barrel already asked are still
+            // bodies until their own callbacks take them away, so they stop it too.
+            for (const entt::entity body : Shot::SolidBodiesIn(registry, ball.atPx, level.turrets.rules.radiusPx,
+                                                               carrancas)) {
+                struck = true;
                 for (Fire::Burnable& burnable : level.fire.burnables) {
-                    if (burnable.gone || burnable.burned || !registry.valid(burnable.body)) continue;
-                    if (!Trigger::Overlaps(registry, burnable.body, box)) continue;
-                    burnable.burned = true;
-                    struck = true;
-                    break;
+                    if (burnable.body == body && !burnable.gone) burnable.burned = true;
                 }
-            }
-            if (!struck) {
                 for (Fire::Bomb& bomb : level.fire.bombs) {
-                    if (bomb.blown || bomb.requested || !registry.valid(bomb.body)) continue;
-                    if (!Trigger::Overlaps(registry, bomb.body, box)) continue;
-                    bomb.requested = true;
-                    struck = true;
-                    break;
+                    if (bomb.body == body && !bomb.blown) bomb.requested = true;
                 }
-            }
-            // A minion: minion.ent and ghost_minion.ent are both burnable, a
-            // non-sensor burnable is burned (#159-173), and a burned minion's own
-            // callback destroys it (Minions::Burn, planning step 98). This is how
-            // 3-32's black knight dies by fire, and so how its ghost comes (R4).
-            if (!struck) {
+                // A minion: minion.ent and ghost_minion.ent are both burnable, and
+                // a burned minion's own callback destroys it (Minions::Burn,
+                // planning step 98). This is how 3-32's black knight dies by fire,
+                // and so how its ghost comes (R4).
                 for (const Minions::Minion& minion : level.minions.minions) {
-                    if (minion.gone || minion.body == entt::null || !registry.valid(minion.body)) continue;
-                    if (!Trigger::Overlaps(registry, minion.body, box)) continue;
+                    if (minion.gone || minion.body != body) continue;
                     // Two fireballs on one minion in one tick are both spent on it.
                     if (std::find(burnedMinions.begin(), burnedMinions.end(), minion.body) == burnedMinions.end()) {
                         burnedMinions.push_back(minion.body);
                     }
-                    struck = true;
-                    break;
                 }
             }
             // And chapter 3's boss, which is the ONLY thing a fireball can hurt

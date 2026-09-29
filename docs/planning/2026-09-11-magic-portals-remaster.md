@@ -21136,3 +21136,282 @@ later in the program); R24 and R25 are neither touched nor withdrawn; camera dra
   1-01, 1-02 and 1-32 (world 0, levels 0, 1 and 31); 1-02's and 1-32's come from those runs, and where 1-01's came
   from is not established (it may be older). Delete that file for a fresh save before testing the menus' locks
   (B2). The verifier's window runs used a `--saves` directory of their own; the file was left as it is.
+
+## Step 114 - a fireball dies on the first solid thing it touches: fireball.ent's circle, every wall, door, crate, stone, barrel and minion it meets, and eight chapter-2 levels won by routes (built)
+
+**TRACK A (MPR `main`, `build/`), the program's G5** (`docs/parity-backlog.md` section 6, G5; the 2026-09-29 audit's G5
+and its critic's "new major: fireballs pass through closed doors", in the gitignored `out/parity/audit_2026-09-29/`).
+From `37c4ece`. Changed: `game/sim/Shot.{hpp,cpp}` (`SolidBodiesIn`), `game/sim/Turrets.{hpp,cpp}`, `game/sim/Game.cpp`,
+`game/data/turrets.json`, `game/data/effects.json` (a `_source` sentence), `game/data/diamonds.json` (a `_note`, at the
+end); `game/Route.{hpp,cpp}` and `game/main.cpp` (`--route-trace`, DEV), `README.md`; `tests/test_mp_turrets.cpp`,
+`tests/test_mp_layer.cpp`, `tests/test_mp_routes.cpp`, `tests/routes/` (eight new routes, 2-09's from the fix round at
+the end); `docs/parity-backlog.md`. No engine change (the pin stays `4bfcf67`), no converter change, no format finding.
+The evidence is in `out/parity/program/G5/`.
+
+**GAMEPLAY CHANGED, PLAINLY.** A fireball - a carranca's, 2-32's dragon's, the dark dragon's and a fire diamond's
+converted shot alike - now dies on the first solid body it touches: a wall, a closed door, a platform, a crate, a stone,
+a barrel, a lift, a minion. What it touches is then burned if it is burnable and asked to go off if it is explosive, as
+before; a burning crate and a barrel already asked still stop it. It passes carrancas and sensors (triggers), and a
+character when its killMainCharacter is clear, as before. Its touch is fireball.ent's circle, radius 9.6, where the port
+used a 16 x 16 box for the player's kill and for burnables, bombs and minions: the reach ahead of a fireball grows from
+8 to 9.6 units and its diagonal reach shrinks from 11.3 to 9.6. Until this step the port's fireballs flew through
+everything but the player, burnables, bombs, minions, shock agents and the ghost, to the level's edge. What that does to
+play, measured below: 2-12's player standing at the spawn lives (it died on tick 180); the carrancas' fire no longer
+reaches players, barrels and crates behind a wall or a closed door (the audit's nine fire lanes); a fire diamond's shot
+at 3-32's ghost has to take a clear line (under `double_block_plat_low_emissive_ent_1257`); 2-07's stone, rolled into
+the lane, now shields the button, which is 2-07's own design. And 2-09 loses a shortcut only the port had: until this
+step its fire burned `crate_no_emissive_1004` through the closed `door_lift_1007` on tick 167 with no input, opening
+the hole to the exit's room; now `button_1022` must be held while a fireball passes, the original's rule, and 2-09's
+route goes round the level for it (c).
+
+**BLOCKERS, checked first.** Step 113's harness and reachability check are there (`37c4ece`); the listing
+(`out/parity/asbc/all_functions.txt`, md5 `48fe65ce...`) holds `ETHBeginContactCallback_fireball` at L85862; footage F6
+and its analysis are there. Nothing unmet.
+
+**(a) THE DECODE.** `ETHBeginContactCallback_fireball` (L85862, ETHCallback_carranca.angelscript bytes
+418930..419710), read here in full:
+- #1-31: a character (`isCharacter`, set only by `GameCharacter::GameCharacter` L22931 #43-54, so the player alone) when
+  the fireball's `killMainCharacter` is clear: return.
+- #33-39: `SetAwake`. #41-60: a carranca (`isCarranca`, L85632: `carranca.ent`, `carranca_right.ent`, `carranca`,
+  `carranca_right` - exactly `entity_roles.json`'s `turret`) or a sensor (`IsSensor`): #61-119 a `shock_agent` (either
+  spelling) is destroyed with the fireball, and on to #146; any other returns (#120-121).
+- #123-145: a character it may kill: `addFlames`, `hp` 0; then on, like everything else.
+- #146-152 `destroy(thisEntity)`, #153-158 `playExplosionSound(false)` (the small one), #159-173 `burn()` if
+  `isBurnable`, #174-188 `explode()` if `isExplosive`.
+So everything that is not a carranca, a sensor or a spared character destroys it. The contact is Box2D's: fireball.ent
+is `static="0"` (a dynamic body, `ETHPhysicsSimulator.cpp:68`) with `sensor="1"` (`:109`), and a sensor's contact begins
+on the step that finds the shapes overlapping. Its shape is `shape="2"`, BS_CIRCLE (`ETHEntityProperties.h:96`), radius
+(size.x + size.y) / 4 of its 16 x 16 box (`ETHPhysicsSimulator.cpp:56-62`) after the box is scaled by the entity's
+scale (`:73`), which is its `<Scale>` 1.2 times the spawn's (`ETHSpriteEntity.cpp:61`; addFireball's g_scale, one level
+unit): **9.6 units**, the rule the converter builds every other body by. turrets.json said "shape 2" and the port drew
+a box: a misreading, put right. Box2D's polygon skin (`b2_polygonRadius`, 0.01 m = 0.5 device px at DEFAULT_SCALE 50,
+about 0.18 level units on a 720 px screen) is not modelled.
+
+**(b) THE PORT.** `Shot::SolidBodiesIn(registry, centre, radius, ignore)`: every solid body (box, sphere, hull - never a
+trigger, which is the converter's Area2D and the original's sensor) a circle overlaps, strictly, on `Shot`'s own shape
+walk (`Trigger::Overlaps` reads no hull, and most walls are hulls). `Turrets::Rules::radiusPx` from turrets.json
+`radius_px` 9.6 (was `hit_px` [16, 16]); `Turret::body` and `State::Bodies()`, each carranca's own body, found by
+`Turrets::Find` from the built level; the player's kill in `Turrets::Tick` against the circle. `Game::AfterStep`'s
+fireball block: the shock agent first (unchanged), then `SolidBodiesIn(..., carrancas)` - every body the fireball
+overlaps on the tick spends it (Box2D begins a contact for each pair its step finds, and the callback runs for each),
+and each is burned if it is a burnable, asked if it is a bomb, burned if it is a minion. The ghost's 64 px rule is kept
+as it was (the owner's open call "fire against the ghost", G11), after the solid test. The cull at the level's edge
+stays, a safety net now (turrets.json's note says so). The notes that said a fireball flies through walls are corrected:
+`Turrets.hpp:17-22` (the backlog's "Smaller" row), turrets.json's `fireball._source` and `cull._note`, effects.json's
+`small_explosion._source`, `Game.cpp`'s spit comment, `test_mp_turrets`' header. diamonds.json's `_fireball_note`,
+which named the retired 16 x 16 box, now names `radius_px` 9.6 (the verifier's second pass, at the end).
+
+**(c) THE ROUTES** (`tests/routes/`, replayed by `test_mp_routes` and in the window by `--route`). The spec's
+levels are chapter 2's carranca levels among 2-01..2-11: **2-01, 2-02, 2-03, 2-04, 2-05, 2-06, 2-07, 2-08, 2-09** (2-10
+and 2-11 place none).
+
+| Level | Won on tick | `win_by` | Shots | How |
+|---|---|---|---|---|
+| 2-01 `level0a` | 380 | 440 | 0 | walking: the crate pushed off the top floor falls into the lane and the next fireball burns it (tick 181) while the player waits behind it; down the slope ahead of the next |
+| 2-02 `level1a` | 528 | 590 | 0 | walking: onto `lift_789` as it comes back on its own (G2) on tick 274, still through the three lanes, off at the top |
+| 2-03 `level2a` | 1458 | 1520 | 8 | four fireballs hopped through a portal pair along the floor while `button_760` raises the 16 s door; under it at 0.70 of its travel |
+| 2-04 `level3a` | 534 | 600 | 8 | over the block by portal; the plugging crate carried to the block top by a portal opened against it; into the hole and the corridor; the stone pushed into the gap breaks `breakable_wall_815` (tick 431) |
+| 2-05 `level4a` | 182 | 240 | 4 | the ledge's crate carried away by a portal opened 10 u from it; a portal over the ledge's end |
+| 2-06 `level5a` | - | - | - | **not won: needs G6** (the backlog's row): the door's pocket is sealed by a crate only fire removes (teleportable 0), and the only fire runs under the platform |
+| 2-07 `level6a` | 1007 | 1070 | 0 | walking (`max_portals` 0): the stone pushed off the top rolls down into the lane and stops every fireball; onto `button_937` behind it; under the door |
+| 2-08 `level7a` | 722 | 780 | 6 | over the block by portal; `crate_small_no_emissive_ent_854` carried onto `button_827`; the lower carranca's fire burns crates 826 and 853 through the open door; a pair into the exit's room |
+| 2-09 `level8a` | 1319 | 1380 | 14 | round the level twice (the fix round, below): down the right side to the floor; a pair onto `lift_ent_1016` (G2: it runs on its own) as it comes down; at its top a pair onto `button_1022`, held while the next fireball flies through the risen `door_lift_1007` and burns `crate_no_emissive_1004` (touched on tick 646, gone on 706); onto the lift as it leaves the top, and down with it; a pair to the floor's far right, then up the right side a pair at a time (onto `single_block_plat_no_emissive_ent_1060`, `single_block_plat_no_emissive_ent_1097`, `double_block_plat_no_emissive_ent_1054`); from under `wall04_no_emissive_ent_1006` a pair into the hole the crate left, its tap (225, 250) 42 u from the fields' centre (outside the port's 32 u field, inside the original's 64 u), and right to the door |
+
+Four were first won headless on `test_mp_routes` `e8bea3eb` (the step's sim): 2-01, 2-02, 2-04 and 2-05. Three (2-03,
+2-07 and 2-08) were authored and won only in the window, once the suite could not run (below). Every route - the seven
+and step 113's eleven - was then replayed in the window on the step's `MagicPortals.exe` `abde35af`: **18 of 18 won**
+(`out/parity/program/G5/window/routes.txt`), the four headless ones on their suite ticks and the eleven old ones on step
+113's (1-01 193, 1-02 170, 1-03 303, 1-04 251, 1-05 157, 1-08 102, 1-09 345, 1-14 240, 1-15 504, 1-16 237, 1-32 2858).
+2-09 was authored in the fix round, headless on `test_mp_routes` `23910a6f`, and replayed once in the window on
+`abde35af`: won on tick 1319 both ways (`out/parity/program/G5/fix1/window/routes.txt`). 2-01, 2-07, 2-08 and 2-09
+turn on this step's rule: a crate or a stone in the lane is now a shield, and a closed door stops the fire.
+
+`--route-trace <n>` (DEV, `game/main.cpp`) prints `Route::Trace` - `test_mp_routes --trace`'s lines, moved into
+`game/Route.cpp` with the switched doors, the lifts and the fire added - from the window, which is how 2-03, 2-07 and
+2-08 were written once the suite could not run. The `--help` line for `--route` now says to give `--saves` (the
+backlog's row from step 113); every window run of this step used a throwaway `out/parity/program/G5/saves`.
+
+**GATES.**
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | **passes: 0 warnings** in all seven builds (`out/parity/program/G5/build1..7*.log`); only named targets were built |
+| The contact, lane by lane | each carranca's first fireball ends where the converted geometry puts its first body; none dies on the tick it is fired | **passes**: `EveryLaneEndsOnItsFirstBody` over the 28 carrancas of 21 levels - **19 of 19 static lanes** within one tick's travel (2.17 u) of `lanes_r9.6.txt`'s static prediction (2-01 at x 278.67 vs 278.5; 2-12 104.33 vs 103.5; 4-13 439.33 vs 438.5; ...), the eight whose first body is a crate or a stone printed, 2-06 on the self-running lift (deviation 4); **0 fireballs gone on the tick fired** |
+| 2-12's player at the spawn | no death (before: died on tick 180, the sweep log) | **passes**: the f420 log has none (fire ends on ticks 140 and 380); an idle window run of 900 frames ends four fireballs on the door (140, 380, 620, 860) with no death and the barrel untouched (`f6/level11a_idle.log`); `test_mp_turrets` `AClosedDoorStopsTheFire`: 4 off the door face at x 104.33, the first on tick 138, the barrel never asked |
+| F6 #72 (2-12) | the fireball stops on the closed door | **matches in kind**: F6's burst at #72-#73 is on the door (warm blobs at 305-350 px = 108-124 u, `work/F6/an/b1_blobs.txt`), the port's goes off with its centre at 104.33 u, its front at 113.9, the door's face at 113; the footage's 50-105 ms frame gaps (6.5-13.7 u of travel) and the lit door bricks bound this to about 10 u |
+| 2-05 against F6's clip A | the crate hits where the fireball first touches | **the first two match, the rest differ, and not by this rule** (below) |
+| What it burns and sets off | a crate it touches burns, a barrel it touches goes off the next tick | **passes**: `ACrateItTouchesBurns` (2-05's crate 916 burned on tick 77, the fireball at x 105.17), `ABarrelItTouchesGoesOff` (asked on tick 7, off on 8, once); `test_mp_layer`'s 2-12 blast row (off on tick 125 at (92, 205.5)) |
+| Its passes | carranca, sensor, a character it may not kill | **passes**: `TheTouchIsTheOriginals` (a trigger never met; touching is not overlapping; hull corner 8.49 met, 9.90 not); `ACharacterItMayNotKillIsPassed`; every carranca's fireball leaves its own body |
+| The routes | every carranca level of 2-01..2-11 won by a route, or why not | **8 of 9 won** (table above; 2-09 in the fix round); 2-06 needs G6 - a finding, in the backlog |
+| Reachability | unchanged | **passes**: `reachability.py --check` 128 levels, 108 reachable / 11 opened / 9 sealed, **0 differ** (`reachability_check.txt`) |
+| The after-sweep | every changed level explained against the before (`W.1/after/sweep`, md5s verified 128 of 128) | **passes: 108 byte-identical, 20 changed**, each explained (below); 128 rc=0, validation ACTIVE in 128 logs and silent; every png opens and matches its log's md5 (`after_md5.txt`); no input the capture did not schedule |
+
+**THE SUITES,** run directly, once each on the binaries this step leaves (all `0 failures`): **`test_mp_turrets` 96**
+(`afafa180`), **`test_mp_layer` 2903** (`0da1f271`), **`test_mp_ghost` 141**, **`test_mp_minions` 288**,
+**`test_mp_diamonds` 134**, **`test_mp_darkdragon` 216**, **`test_mp_torch` 134** (`e4170cc8`), **`test_mp_effects`
+706**. `test_mp_routes` was refused twice in the step (`70bd5b73`, then `ef8d678e` after the one delete-and-relink),
+and its evidence then was the window replay through the same `Route::Driver`; the verifier relinked it (`23910a6f`, 0
+warnings, stale against `Route.cpp`) and it ran on its first launch, 59 checks, 0 failures, 18 of 18 won; the fix
+round's run, with 2-09: **`test_mp_routes` 62**, 0 failures, **19 of 19 won** (`fix1/test_mp_routes.txt`). **NOT RUN:
+`test_mp_dragon`** (`15e1dbd4`, then `43f6971c`): 2-32's dragon is covered here only by the sweep (its f420 frame and
+log) and by a static check that `ItSpitsAtWhatItCanSee`'s first muzzle point (the player + (83.1, -7.7)) stands 35.1
+units from the nearest solid body; `test_mp_dragon.cpp` is unchanged.
+
+**THE AFTER-SWEEP, level by level** (`out/parity/program/G5/compare_sweep.txt`: each changed frame's pixel count and
+box, and each log's fire ends and deaths before and after). The 108 identical frames are chapter 1 (no fire), 2-10,
+2-11, 2-16, 2-17, 2-19..2-21, 2-24, 2-26..2-28, 2-30, 2-31 and chapters 3 and 4 but 4-14 - every level with no fireball
+ending differently by tick 420 (2-28's and 4-13's first end on their far walls on ticks 425 and 426; the fire diamond
+levels fire nothing idle).
+- **The fire now ends on a wall, a door, a lift or a stone it used to fly through** - 2-01
+  (`block00_no_emissive_ent_840`, ticks 208, 298, 388, where the fireballs used to cross the frame to its edge), 2-02
+  (the shaft's walls and blocks, 130, 160, 222, 311, 372), 2-03 (`door_lift_758`, 250), 2-04 (the stone and a block,
+  303, 387), 2-06 (the self-running lift, 202), 2-07 (`door_lift_936`, 223, 331), 2-13 (`breakable_wall_1040`, 393),
+  2-15 (the left wall and `door_lift_1136`, 195, 246, 366, 375), 2-18 (`door_lift_1146`, 188, 368), 2-25
+  (`door_lift_1104`, 204), 2-29 (the rolling stone, 162, 409), 4-14 (`block00_ent_2322`, 232). Before, none of these
+  logged a fire end by tick 420.
+- **The fire no longer burns what stood behind a closed door**: 2-08 (the first fireball ends on `door_lift_823` on
+  tick 35, where it used to burn crate 826 on 50; the later ends 160, 275, 280, 416 against 161, 281, 305, 416), 2-09
+  (`door_lift_1007` on 151 and 391, where it used to burn the static `crate_no_emissive_1004` on 167 - the crate now
+  stands, as in the original until the door is held open), 2-14 (`door_lift_1111` on 162 and 402, where it used to burn
+  the crate at (48, 88) on 296).
+- **2-12**: the fire ends on the closed door (140, 380); the player stands at the spawn and the frame is the level, not
+  the lost screen (807,710 px).
+- **One tick earlier, by the circle's reach** (9.6 ahead where the box reached 8): 2-05 (202, 316 against 203, 317),
+  2-22 (238 against 239), 2-23 (166 against 167) - small frames' worth of explosion moved (1,469, 3,877 and 101 px).
+- **2-32**: the dragon's fireball kills the idle player on tick 286, one later than 285 - it comes in at a slant, where
+  the box's corner reached 11.3 and the circle reaches 9.6; the frame is the game-over overlay one tick of fade behind
+  (472,203 px of low-contrast change).
+
+**2-05 AGAINST F6's CLIP A** (`out/parity/footage/F6.md` section 1; the level-time offset from its own setup:
+`carranca_827`'s first shot is decoded at 3.0 s and first seen between #14 at 0.810 and #15 at 0.928, and L1's at 5.0 s
+is #49 at 2.879, so level time = pts + 2.12 +- 0.06 s). An idle window run of 720 frames (`f6/level4a_idle.log`, and
+its trace `f6/level4a_idle_trace.log`) ends fire on ticks 79, 202, 316, 442, 574, 698 (1.32, 3.37, 5.27, 7.37, 9.57,
+11.63 s) and the player lives past 12 s. The original: the outer left crate hit at about 1.3 s (before the clip), R1 on
+the lower right crate at 3.46 s (#22), L1 on "the small crate in front of the player" at 5.67-5.78 s (#60-62), R2 on the
+crate stack at 7.54-7.74 s (#88-91), and the player gone at 10.05 s (#131). The first two agree within the clip's frame
+gaps. From the third they part, and the trace says why: in the port `crate_small_no_emissive_ent_918`, stacked across
+916 and 917, slides into 916's burnt place and takes the second left shot 35 u out (5.27 s), where the original's L1
+flies about 70 u to the crate in front of the player. That is the crates' stacking and burning, not the contact: the
+before sweep ends the same three fireballs on 79, 203 and 317 (one tick later, the circle). Recorded for the fire's
+owner (below), not tuned.
+
+**THE PINS THAT MOVED, each with its reason.** `test_mp_turrets`: `AFireballLeavesTheLevel` (its premise, "nothing in
+the world stops one", is the claim this step corrects) is replaced by `AFireballDiesOnTheFirstWall` (a minute of 2-01:
+38 fired and gone, all on the block's face, 2 in the air, none past it); `AKillingFireballDoesNotFlyOn` walks 1800 ticks
+and pins **2 of 5** levels losing their player (2-08 on tick 560, 2-23 on 661), where it pinned 3 in 900 - 2-12's door
+and 2-07's and 2-15's shield theirs; the reader's `hit_px` [16, 16] is `radius_px` 9.6. New: `TheTouchIsTheOriginals`,
+`ACharacterItMayNotKillIsPassed`, `AClosedDoorStopsTheFire`, `ACrateItTouchesBurns`, `ABarrelItTouchesGoesOff`,
+`EveryLaneEndsOnItsFirstBody`; the carrancas' bodies in `TheCarrancasAreFound`. The suite's floor is 50 checks (was 20).
+`test_mp_layer` (its first run, `7d1e3f88`, failed exactly these three, 2878 checks):
+`ADestroyedFireballLeavesASmallExplosion` now takes 2-01's first destroy on the block's face (x 278.67) and its
+`small_explosion` there, where it asserted that the fire leaves the level with nothing behind;
+`ABombsBlastLeavesALargeExplosion` and the 2-12 row of `EventsALevelMakesOnItsOwnShakeTheView` put the barrel in the
+lane in front of the closed door (92, 200), as a portal would, because the door now stops the fire that used to reach it
+(the blast lands on tick 125 and the quake keeps F6's shape); the 3-32 fight in the ghost's case aims its fire diamond's
+tap at (440, 192), under `double_block_plat_low_emissive_ent_1257`, because the line at 80 % toward `ghost_pos` meets
+that platform's underside 113 u short. No assertion was removed without its replacement.
+
+**SMART APP CONTROL: 5 refusals** (`out/parity/program/G5/sac_refusals.txt`): `test_mp_routes` `70bd5b73` and, deleted
+and relinked once, `ef8d678e` (not run in the step; the verifier's relink, `23910a6f`, ran); `test_mp_dragon`
+`15e1dbd4` and, relinked once, `43f6971c` (NOT RUN);
+`test_mp_torch` `2205f90e`, relinked once, `e4170cc8` ran. `MagicPortals.exe` `abde35af` ran on its first launch (the 18
+route replays, the drafts' probes of 2-03, 2-07 and 2-08 (2-06 was settled from its geometry with no launch; so was
+2-09 at first, wrongly - the fix round played it), the 128 sweep captures, three idle runs), and no refused
+binary was launched again. The first `test_mp_turrets` (`2126a850`) and `test_mp_routes` (`e8bea3eb`) links ran; the
+other 36 suites were not linked (their objects are stale against the library, and their sources did not change).
+
+**RECORDED DEVIATIONS** (none is a gate row NOT MET).
+1. **Every body touched, but the player's kill first.** `Turrets::Tick` judges the player before the solid test, and a
+   fireball that kills is gone before it can also burn a crate it touches on the same tick; in the original both
+   contacts begin on one step and both run. Only a player pressed against a crate or a barrel in the lane can tell.
+2. **The explosion's point** stays where the contact is found, one tick of travel (2.17 u) short of the original's,
+   which moves the fireball once more before it reads `destroy` (effects.json's row said so already).
+3. **The polygon skin** is not modelled (above): the port's touch is about 0.18 units late against a polygon.
+4. **2-06's lane.** The one static lane of 28 that does not end on its first static body: `lift_ent_832` comes down
+   into `carranca_ent_827`'s lane on its own and the first fireball goes off on it at x 192.3 on tick 200, where the
+   original's lift idles at its marker until tapped (G2); `test_mp_turrets` prints it and pins the other 19.
+
+**RULINGS APPLIED.** The original's contact callback, as decoded: this step builds G5 (no R-number). R1, R2, R17 and R23
+are not touched; R24 and R25 are neither touched nor withdrawn; the ghost's port-only fireball rule (G11, the owner's)
+is kept; camera dragging is untouched.
+
+**LEFT FOR LATER.**
+- **2-06 needs G6** (VERIFIED from its geometry and flags); the backlog's row carries it. (2-09 is won, in the fix
+  round. The first record's reason for it having no route - the pocket "within 64 u of the zone at (226, 208)" - gave
+  the original's radius, R1's, not the port's 32 u, and was withdrawn: below.)
+- **Four routes ride what later steps change**: 2-02, 2-07 and 2-09 board a lift the port runs on its own (G2) - 2-09
+  twice, up to the button and down from it, on the lift's own clock - and 2-03 hops each fireball through a portal
+  pair, which G6 would carry the fire through. Those steps re-author them. 2-09's last pair also opens 42 u from its
+  fields' centre: outside the port's 32 u, inside the original's 64 u (R1), where the original's player shoots
+  `anti_portal_agent_ent_1095` and its ring away first (B6). R1's or B6's step re-authors that pair.
+- **`BREAKERS` citations moved** (`tools/parity/reachability.py` and the pinned `_breakers`): `Game.cpp:285` is now
+  `:286`, the fireball block's burn `:364-370` is `:374-379` (the burn itself `:378`), `:495` is `:490`, `:636-641` is
+  `:630-`, `:685-690` is `:679-`, `:775` is `:770`. B1's step rewrites the pin with its `barrel` row; no verdict moved.
+- **`test_mp_dragon`** runs on the next step that links it (the backlog's row); `test_mp_routes` ran (THE SUITES).
+- **4-32's torch shot under this step's rule is not played**: the dark dragon's fireball at the torch
+  (`Game.cpp:702-714`) now dies on any solid body in its way, and `light_off` stands at (210, 34) beside
+  `single_block_plat_no_emissive_ent_2278` (x 230-262, y 8-72); `test_mp_darkdragon` checks only the shot's origin and
+  aim on the tick it is fired. Static only (the verifier's second pass, `verify2/lanes_and_torch.txt`): from that
+  origin, (110.89, 43.94), the 9.6 circle reaches `light_off_1689` at 99.61 u and first touches `2278` at 110.10 u,
+  clear by 10.5 u. The torch shot is already a filed divergence (step 99) and 4-32 is blocked by B3, whose step must
+  play 4-32 anyway and measures it.
+- **`Turrets.hpp`'s shock-agent bullet** says the agent and the fireball are destroyed "(#61-119)"; the listing's #119
+  `JMP 122` and #122 `JMP 146` go on to a second `destroy(thisEntity)`, `playExplosionSound(0)` and `burn()` of the agent
+  (`shock_agent.ent` burnable 1), as (a) above says. No gameplay difference; "(#61-119, and on to #146)", text only, when
+  the header is next touched (it relinks most suites).
+- **2-05's crates against F6** (above): the port's `crate_small_no_emissive_ent_918` slides into a burnt crate's place
+  and takes the next fireball, and the idle player lives past 12 s where the original's dies at about 10.05 s; and F6's
+  crate is gone about 0.6 s after its `small_explosion` (#22 to #32) where fire.json's decoded `burn.time_ms` is 1000.
+  The crates' stacking and fading, not this step's; for the fire row's owner.
+
+**STEP 114'S FIX ROUND (2026-09-29), AFTER THE VERIFIER FAILED IT** (`out/parity/program/G5/verify1.json`). The
+verifier re-measured the build, the decode, the suites (turrets 96, layer 2903, ghost 141, minions 288, diamonds 134,
+darkdragon 216, torch 134, effects 706; `test_mp_routes`, relinked by it, 59 / 0), the reachability check (0 differ) and
+the 128-level sweep (128 of 128 byte-identical to `G5/after/sweep`), and failed the step on 2-09. This round adds one
+route file and changes text: **no source, header, data table or test source changed, and nothing was rebuilt or
+relinked**, so no pixel moved and `G5/after/sweep` stands as the next step's before. Its evidence is under
+`out/parity/program/G5/fix1/`.
+1. **2-09's reason for having no route was false for the port (high, true).** The first record put the burnt crate's
+   pocket inside "a permanent 64 u zone", marked VERIFIED, and inferred the level unwinnable without B6. The port plays
+   `antiportal_1096` at 32 u (`placement.json` `radius_px` 16 x its scale 2) and `anti_portal_agent_ent_1095` at 16 u;
+   64 u is the original's (R1, not built). With the crate gone, a shot from the start platform passes the 26 u gap under
+   `wall04_no_emissive_ent_1006` into the pocket and the hole under it (`fix1/scan_t5.py`: 569 clear taps outside both
+   fields from (268, 186.3), 127 of them below y 240). The route was then played, not reasoned: `tests/routes/level8a.json`
+   wins on tick 1319 with 14 shots (the table in (c)), headless and in the window. The verifier's other lead, the
+   door-dash (1-14's pattern: a pair from beside the held button to the door's foot, under the closing door), was
+   played as a probe and does not exist in the port: from `button_1022` a tap in the fire room (150, 218) and one in the
+   pocket (198, 224) both end on `single_block_plat_no_emissive_ent_1021`, the platform under the player
+   (`fix1/drafts/probe_doordash/trace.txt`, ticks 723 and 753) - instances of the geometry: the fire room (x 97-163)
+   and the pocket (x 193-258) lie under that platform (x 100-164, y 86-118) or behind `block00_no_emissive_ent_1008`
+   (x 162-226, y 54-118), so a line from any standing point on the platform down into either crosses the platform or
+   the block (at best within a unit of the platform's left face); and the port places one pair at a time and spends it on
+   its first crossing, so the pair that brings the player to the button cannot also wait at the door. Hence the way
+   back round the level. The route's other facts, from its per-tick trace (`fix1/drafts/final/trace.txt`): fireballs off
+   the closed door at x 155.2 on ticks 151 and 391; the third off the crate at x 187.7 on 646 (the crate gone on 706);
+   the fourth off the closing door at x 172.5 on 879; no death.
+2. **The 2-09 shortcut this step removed (medium, true)**: GAMEPLAY CHANGED says it now, and the backlog's row.
+3. **"`test_mp_routes` NOT RUN" was superseded (low, true)**: THE SUITES record the verifier's run and this round's.
+4. **`Turrets.hpp`'s shock-agent bullet and 4-32's torch shot (low, true)**: two LEFT FOR LATER lines. The header is
+   not touched here: it would relink most suites under Smart App Control for a comment.
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| 2-09 won by a route, or the leg that fails | a route from the start to the door, replayed | **passes**: `level8a` won on tick 1319 (`win_by` 1380), 14 shots, headless on `23910a6f` and in the window on `abde35af` (`fix1/window/routes.txt`: "door reached on tick 1319"; its frame the level-finished screen) |
+| `test_mp_routes` | every route replayed and won | **passes: 62 checks, 0 failures, 19 of 19 won** (`fix1/test_mp_routes.txt`) |
+| Reachability | unchanged | **passes**: `reachability.py --check` 128 levels, 108 / 11 / 9, **0 differ** (`fix1/reachability_check.txt`) |
+| The record | its claims equal what was measured | the 64 u claim withdrawn in (c), LEFT FOR LATER and the backlog; the route file LF, 0 CR bytes |
+
+**SMART APP CONTROL, this round: 0 refusals** - 13 launches of `test_mp_routes` `23910a6f` (12 drafts and probes
+with `--only`, and the full run) and 1 of `MagicPortals.exe` `abde35af` (the window replay); nothing linked.
+
+**THE VERIFIER'S SECOND PASS** (`out/parity/program/G5/verify2.json`): **pass**, every gate re-measured - the eight
+changed translation units recompiled with ninja's own /W4 command lines into a scratch folder (0 warnings, nothing
+linked), the suites' counts above, `test_mp_routes` 62 / 0 and 19 of 19, a sensor census of the 133 `.esc` against the
+converted nodes (4,065 placements, 0 mismatches), 2-06's G6 finding re-tested from its geometry, reachability 0 differ,
+and its own sweep 128 of 128 byte-identical to `G5/after/sweep`. Its three low notes, text only: diamonds.json's
+`_fireball_note` named the retired 16 x 16 box - corrected in the commit; `Turrets.hpp`'s #119 - left, as LEFT FOR LATER
+says; 4-32's torch shot - its static number added to LEFT FOR LATER and to the backlog's row. `game/data` is read at run
+time from the source tree and a `_note` is prose no reader takes a number from, so nothing was rebuilt or relinked: the
+gates stand on `MagicPortals.exe` `abde35af`, `test_mp_routes` `23910a6f`, `test_mp_turrets` `afafa180` and
+`test_mp_layer` `0da1f271`, each newer than every changed source it is built from. The backlog carries the four
+recorded deviations as open rows; `test_mp_dragon` stays NOT RUN.

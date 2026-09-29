@@ -1,0 +1,16 @@
+{
+  "_about": [
+    "2-02, walking only. lift_789 runs on its own in the port (the backlog's G2: the original's idles",
+    "at marker a until a tap sends it), so this route waits for it: right onto it as it comes back",
+    "down on tick 274, standing still through the three carrancas' lanes on the way up, right off",
+    "at the top onto the bar and along to the door. Won on tick 528 (step 114). It rides the",
+    "self-running lift, so G2's step has to re-author it."
+  ],
+  "level": "level1a",
+  "win_by": 590,
+  "holds": [
+    {"walk": "right", "from": 250, "to": 288},
+    {"walk": "right", "from": 405, "to": 590}
+  ],
+  "taps": []
+}

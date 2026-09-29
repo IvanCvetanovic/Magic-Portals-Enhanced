@@ -1477,7 +1477,8 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
 **Definition of done for this program.**
 - Every level is won by a scripted route that a suite replays, from its start to its door. *(Step 113: the harness
   is built - `tests/routes/`, replayed by `test_mp_routes` - and 11 of 128 levels are won by a route: 1-01, 1-02,
-  1-03, 1-04, 1-05, 1-08, 1-09, 1-14, 1-15, 1-16, 1-32. Open until all 128.)*
+  1-03, 1-04, 1-05, 1-08, 1-09, 1-14, 1-15, 1-16, 1-32. Step 114 adds eight: 2-01, 2-02, 2-03, 2-04, 2-05, 2-07,
+  2-08, 2-09 - 19 of 128. Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Open until B1 turns them to opened.)*
@@ -1518,8 +1519,13 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       +stride; the port sin(2 x speed x t) x stride / 2). 15 platforms on 11 levels, 3 patrolling agents.
 - [ ] **G4. The portal shot flies 600 u/s against 200** (`ETHCallback_projectile` L71109 #113-125, with a 24 u jump
       on its first frame, #29-55).
-- [ ] **G5. Fireballs pass walls and closed doors** (`ETHBeginContactCallback_fireball` L85862 #152 dies on anything
+- [x] **G5. Fireballs pass walls and closed doors** (`ETHBeginContactCallback_fireball` L85862 #152 dies on anything
       solid that is not a carranca, a sensor or a spared character). On 2-12 the player dies at the spawn (tick 180).
+      *Built in step 114*: the fireball's body is fireball.ent's circle, radius 9.6; every solid body it touches spends
+      it, and is burned or set off when it is burnable or explosive; 2-12's player lives at the spawn, the fire
+      stopping on the closed door. Routes for 2-01 to 2-09 but 2-06 (row below). GAMEPLAY: 2-09's crate now burns
+      only while `button_1022` is held as a fireball passes, the original's rule - until step 114 the port's fire burned
+      `crate_no_emissive_1004` through the closed `door_lift_1007` on tick 167 with no input.
 - [ ] **G6. Fireballs never pass through portals** (`mayTeleport` lets one through once; the pair survives).
 - [ ] **G8. A shot through a fire agent's flame becomes a fireball** (`ETHCallback_fire_agent` #254-265
       `burnProjectile`); the port's shot flies on. 20 levels.
@@ -1549,8 +1555,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
 - [ ] **Smaller**: sound switches not saved; the log erased at each launch; tutorial helpers (1-21's camera hint,
       the tap-away hands); the beholder's death explosion; `fire32`, `antiportal_explosion`, `carranca_destroy`,
       `small_explosion_no_light`; the closing lift door crushes nothing; `death_area` kills only the player in a 16 px
-      box; no teleport while a platform sits in a portal; stale notes (`end_delay`, `Turrets.hpp:17-22`,
-      `Camera.hpp:6-10`, `entity_roles.json`'s cosmetic `arrows` and `red_key_state`).
+      box; no teleport while a platform sits in a portal; stale notes (`end_delay`, `Camera.hpp:6-10`,
+      `entity_roles.json`'s cosmetic `arrows` and `red_key_state`; `Turrets.hpp:17-22`'s and `diamonds.json`'s
+      `_fireball_note` were corrected in step 114).
 
 **Tests.** Step 113 built both: the audit's flood is `tools/parity/reachability.py` (the port's own rules read from
 `data/` and `game/data/`, verdicts pinned, ctest `parity_reachability`), and `test_mp_routes` replays every route in
@@ -1566,10 +1573,62 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
 - [ ] **The reachability flood is optimistic** (step 113, deviation 3): a point, not the 20 x 44 body; no no-portal
       zones; locked and switched doors and dynamic bodies free - so 4-19, 3-13, 4-21 and 4-32 read reachable and
       are settled only by their routes.
-- [ ] **`--route` without `--saves` writes the player's own save** when the run goes past the level's end: say so in
+- [x] **`--route` without `--saves` writes the player's own save** when the run goes past the level's end: say so in
       its `--help` line, or give it a throwaway saves directory (code; the next step touching `main.cpp`). Step 113's
       runs left gold for 1-02 and 1-32 in `%APPDATA%/Magic Portals/scores.json` - the owner deletes it for a fresh
-      save (below).
+      save (below). *Step 114's `--help` says it; its own window runs used a throwaway `--saves`.*
+- [ ] **2-06 (`level5a`) has no route: it needs G6** (VERIFIED from its geometry and flags). The door's pocket (x 300-454 above `platform_no_emissive_ent_824`)
+      is sealed by `block00_no_emissive_ent_823` and `crate_no_emissive_796` on it (teleportable 0, burnable 1), up to
+      the ceiling. Fire alone removes the crate, and the level's one carranca fires along y 202, under the platform:
+      only a portal pair that carries its fireball (G6) reaches the crate (step 114).
+- [x] **2-09 (`level8a`) is won by a route** (step 114's fix round: tick 1319, 14 shots). The fire burns
+      `crate_no_emissive_1004` only while `button_1022` holds `door_lift_1007` open (before step 114 the port burned it
+      through the closed door on tick 167 with no input), and nothing dynamic in the level can hold the button, so the
+      player holds it and goes back round: down with the self-running lift (G2), up the right side a pair at a time, and
+      from under `wall04_no_emissive_ent_1006` a pair into the hole the crate left. Step 114's first account - the pocket
+      "within 64 u of (226, 208)", a permanent zone, the level unwinnable without B6 - was wrong for the port: the port
+      plays `antiportal_1096` at 32 u (`placement.json` `radius_px` 16 x its scale 2) and `anti_portal_agent_ent_1095`
+      at 16 u; 64 u is the original's (R1, not built). The route's last tap lies 42 u from the fields' centre, so R1's or
+      B6's step (in the original the agent and its ring are shot away first) re-authors that pair. The door-dash (1-14's
+      pattern) does not exist in the port: the fire room and the pocket lie under the button's platform or behind
+      `block00_no_emissive_ent_1008`, so a tap into either from the button ends on the platform (the fix round's probe:
+      both taps end on `single_block_plat_no_emissive_ent_1021`), and one pair at a time, spent by its first crossing,
+      cannot both bring the player to the button and wait at the door.
+- [ ] **Routes that ride the port's self-running lifts (G2)**: 2-02 (`level1a`) and 2-07 (`level6a`) board their lift
+      as it comes back on its own, and 2-09 (`level8a`) rides `lift_ent_1016` up to the button and down from it on the
+      lift's own clock; G2's step re-authors all three. 2-03 (`level2a`) hops each fireball through a portal
+      pair, which G6 would carry the fire through: G6's step re-authors it.
+- [ ] **`test_mp_dragon` NOT RUN in step 114** (Smart App Control refused it twice); the next step that links it runs
+      it. (`test_mp_routes`, refused twice in the step, was relinked by its verifier and ran: 59 / 0, 18 of 18; the fix
+      round's run, with 2-09, 62 checks, 0 failures, 19 of 19 won.)
+- [ ] **4-32's torch shot under G5's rule is not played** (step 114): the dark dragon's fireball at the torch
+      (`Game.cpp:702-714`) now dies on any solid body in its way; `light_off` stands at (210, 34) beside
+      `single_block_plat_no_emissive_ent_2278`, and `test_mp_darkdragon` checks only the shot's origin and aim. Static
+      only (step 114's verifier, `out/parity/program/G5/verify2/lanes_and_torch.txt`): from `test_mp_darkdragon`'s
+      torch-shot origin (110.89, 43.94) the 9.6 circle reaches `light_off_1689` at 99.61 u and first touches
+      `single_block_plat_no_emissive_ent_2278` at 110.10 u, clear by 10.5 u. For B3's step, which must play 4-32 anyway.
+- [ ] **`Turrets.hpp`'s shock-agent bullet stops at #119** (step 114's verifier): the listing goes on to #146, a second
+      destroy, the small explosion's sound and `burn()` of the agent. Text only, when the header is next touched.
+- [ ] **2-05's crate stack parts from footage F6 after its second fire** (step 114, measured, not this step's rule):
+      the port's `crate_small_no_emissive_ent_918`, stacked across 916 and 917, slides into 916's burnt place and takes
+      the next left fireball at 5.27 s, where F6's L1 reaches the crate in front of the player at about 5.7 s; the idle
+      player lives past 12 s where F6's dies at about 10.05 s. F6's crate is also gone about 0.6 s after its
+      `small_explosion`, where `fire.json` `burn.time_ms` is 1000 (decoded). For the fire and crates' owner.
+- [ ] **The reachability `BREAKERS` citations name `Game.cpp` lines** that step 114 moved (the fireball block was
+      rewritten): `:285`, `:364-370`, `:495`, `:636-641`, `:685-690`, `:775` are now `:286`, `:374-379`, `:490`,
+      `:630-`, `:679-`, `:770`, in the pinned `_breakers` too. B1's step rewrites them with its `barrel` row; the
+      verdicts did not move (`--check` 0 differ).
+- [ ] **A fireball that kills the player is gone before it burns what it also touches** (step 114, deviation 1):
+      `Turrets::Tick` judges the player before the solid test; in the original both contacts begin on one Box2D step
+      and both callbacks run. Only a player pressed against a crate or a barrel in the lane can tell.
+- [ ] **A fireball's explosion lands one tick of travel (2.17 u) short** (step 114, deviation 2): the port places it
+      where the contact is found; the original moves the fireball once more before it reads `destroy`.
+- [ ] **Box2D's polygon skin is not modelled** (step 114, deviation 3): `b2_polygonRadius`, about 0.18 level units,
+      so the port's fireball touches a polygon about 0.18 u late.
+- [ ] **2-06's fire lane ends on the self-running lift** (step 114, deviation 4): `lift_ent_832` comes down into
+      `carranca_ent_827`'s lane on its own and the first fireball goes off on it (x 192.3, tick 200), where the
+      original's lift idles at its marker until tapped. `test_mp_turrets` prints this lane and pins the other 19; G2's
+      step pins it.
 
 **Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
 1-01, 1-02 and 1-32, two of them from step 113's automated runs.

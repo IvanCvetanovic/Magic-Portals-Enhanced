@@ -1,0 +1,37 @@
+{
+  "_about": [
+    "2-03, dodging the fire: the door (door_lift_758, a 16 s stride) opens only while button_760 is held,",
+    "and the button stands in carranca_ent_677's lane, which stops at the closed door (planning step",
+    "114). Each fireball is hopped over through a portal pair laid along the floor - the far end",
+    "first, then the near one, walked into as the fireball closes (taps at F+41 and F+71, F the",
+    "carranca's tick) - and the player walks back behind it, 56 ticks off the button each time.",
+    "Four hops, then left under the door at 0.70 of its travel. Won on tick 1458 (step 114). The",
+    "original's own help popup (W2P3) shows a fireball sent through a portal instead, which is G6:",
+    "with G6 built these hops would carry the fire too, and the route must be re-authored."
+  ],
+  "level": "level2a",
+  "win_by": 1520,
+  "holds": [
+    {"walk": "right", "from": 240, "to": 256},
+    {"walk": "left", "from": 257, "to": 330},
+    {"walk": "right", "from": 444, "to": 452},
+    {"walk": "left", "from": 456, "to": 504},
+    {"walk": "right", "from": 684, "to": 692},
+    {"walk": "left", "from": 696, "to": 744},
+    {"walk": "right", "from": 924, "to": 932},
+    {"walk": "left", "from": 936, "to": 984},
+    {"walk": "right", "from": 1164, "to": 1172},
+    {"walk": "left", "from": 1176, "to": 1224},
+    {"walk": "left", "from": 1406, "to": 1520}
+  ],
+  "taps": [
+    {"tick": 400, "at": [330, 205]},
+    {"tick": 430, "at": [254, 205]},
+    {"tick": 640, "at": [330, 205]},
+    {"tick": 670, "at": [254, 205]},
+    {"tick": 880, "at": [330, 205]},
+    {"tick": 910, "at": [254, 205]},
+    {"tick": 1120, "at": [330, 205]},
+    {"tick": 1150, "at": [254, 205]}
+  ]
+}

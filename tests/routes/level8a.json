@@ -1,0 +1,43 @@
+{
+  "_about": [
+    "2-09. Right off the start platform onto single_block_plat_no_emissive_ent_1060, left off it to",
+    "the floor and left to block00_no_emissive_ent_1065. Onto lift_ent_1016 as it comes down to its",
+    "marker a (the port runs it on its own: G2) by a portal over it and one on the player (taps 1-2);",
+    "up with it, and at its top a portal over button_1022 and one on the player (taps 3-4). The player",
+    "holds the button: door_lift_1007 rises, and the next fireball flies through it and burns",
+    "crate_no_emissive_1004 (planning step 114: a closed door stops the fire). Left off the button's",
+    "platform onto the lift as it leaves the top, down with it, and at the bottom a portal on the",
+    "floor far right and one on the player (taps 5-6). Up the right side a pair at a time: over",
+    "single_block_plat_no_emissive_ent_1060 (7-8), right to the wall, over",
+    "single_block_plat_no_emissive_ent_1097 (9-10), over double_block_plat_no_emissive_ent_1054",
+    "(11-12). Left to wall04_no_emissive_ent_1006, a portal under it into the hole the crate left, 42",
+    "units from antiportal_1096 (outside the port's 32 unit field; the original's is 64, R1), and one",
+    "on the player (13-14); out into the exit's room and right to the door. Won on tick 1319 (step 114)."
+  ],
+  "level": "level8a",
+  "win_by": 1380,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 80},
+    {"walk": "left", "from": 110, "to": 380},
+    {"walk": "left", "from": 826, "to": 880},
+    {"walk": "right", "from": 1112, "to": 1132},
+    {"walk": "left", "from": 1218, "to": 1262},
+    {"walk": "right", "from": 1296, "to": 1380}
+  ],
+  "taps": [
+    {"tick": 322, "at": [30, 340]},
+    {"tick": 348, "at": [138, 458]},
+    {"tick": 470, "at": [140, 60]},
+    {"tick": 496, "at": [9.7, 72]},
+    {"tick": 1000, "at": [420, 450]},
+    {"tick": 1043, "at": [9.7, 312.4]},
+    {"tick": 1070, "at": [470, 300]},
+    {"tick": 1096, "at": [420, 458.3]},
+    {"tick": 1135, "at": [435, 250]},
+    {"tick": 1160, "at": [502.3, 346.3]},
+    {"tick": 1185, "at": [345, 160]},
+    {"tick": 1210, "at": [435, 266.3]},
+    {"tick": 1265, "at": [225, 250]},
+    {"tick": 1290, "at": [268, 186.3]}
+  ]
+}

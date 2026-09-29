@@ -102,6 +102,9 @@ int main(int argc, char** argv) {
     // the same schedule --tap and --hold use, to watch what test_mp_routes asserts.
     // `--route C:/.../tests/routes/level8.json` opens its level unless --level names it.
     std::string routeFile;
+    // DEV ONLY: with --route, print Route::Trace every n ticks, on each tap and at the
+    // end - test_mp_routes --trace's lines, from the window (planning step 114).
+    int routeTrace = 0;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--light-masks-off") {
@@ -114,6 +117,19 @@ int main(int argc, char** argv) {
                 return EXIT_FAILURE;
             }
             routeFile = argv[++i];
+            continue;
+        }
+        if (arg == "--route-trace") {
+            const std::string value = i + 1 < argc ? argv[++i] : "";
+            try {
+                routeTrace = std::stoi(value);
+            } catch (const std::exception&) {
+                routeTrace = 0;
+            }
+            if (routeTrace <= 0) {
+                std::cerr << "--route-trace needs a whole number of ticks above 0, e.g. --route-trace 10\n";
+                return EXIT_FAILURE;
+            }
             continue;
         }
         if (arg == "--drag") {
@@ -358,7 +374,11 @@ int main(int argc, char** argv) {
                   << "                    capture that walks into a door or a hazard; repeatable\n"
                   << "  --route <file>    DEV: replay a win route (tests/routes/<level>.json, given\n"
                   << "                    absolute) in the window: its walks and its taps at points of the\n"
-                  << "                    level, on the ticks it names; says on exit whether it won\n"
+                  << "                    level, on the ticks it names; says on exit whether it won. Give\n"
+                  << "                    --saves <absolute dir> too: a run that goes on past the level's\n"
+                  << "                    end records its medal, in the player's own save without it\n"
+                  << "  --route-trace <n> DEV: with --route, print the route's trace every n ticks, on\n"
+                  << "                    each tap and at the end (test_mp_routes --trace's lines)\n"
                   << "  --burn-dragon <tick>\n"
                   << "                    DEV: burn 4-32's dark dragon on the game's tick <tick>, as a\n"
                   << "                    barrel's blast in its reach does; repeatable\n"
@@ -446,7 +466,9 @@ int main(int argc, char** argv) {
         gameLayer.ForceLightMasksOff(lightMasksOff);
         app.PushLayer(std::move(game));
         // After the game's, so each of its ticks follows the game's own (Route.hpp).
-        if (route) app.PushLayer(std::make_unique<MagicPortals::Route::ReplayLayer>(gameLayer, std::move(*route)));
+        if (route) {
+            app.PushLayer(std::make_unique<MagicPortals::Route::ReplayLayer>(gameLayer, std::move(*route), routeTrace));
+        }
         if (!visit.levels.empty()) {
             app.PushLayer(std::make_unique<MagicPortals::LevelVisitLayer>(gameLayer, paths, visit, visitResult));
         }

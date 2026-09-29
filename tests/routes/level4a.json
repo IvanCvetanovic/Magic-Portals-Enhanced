@@ -1,0 +1,20 @@
+{
+  "_about": [
+    "2-05. crate_no_emissive_ent_912, the crate sealing the ledge, sent away: a portal in the air to",
+    "the left, then one opened 10 px from the crate's face, which carries it through (it falls into",
+    "the corridor). Then a portal just over the ledge's left end and one on the player, and right to",
+    "the door, all before the crate stacks that shield the player have burned. Won on tick 182",
+    "(step 114)."
+  ],
+  "level": "level4a",
+  "win_by": 240,
+  "holds": [
+    {"walk": "right", "from": 125, "to": 240}
+  ],
+  "taps": [
+    {"tick": 30, "at": [100, 70]},
+    {"tick": 60, "at": [244, 140]},
+    {"tick": 95, "at": [260, 138]},
+    {"tick": 120, "at": [214, 244]}
+  ]
+}

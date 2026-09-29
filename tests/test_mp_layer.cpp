@@ -3962,15 +3962,15 @@ void ACarrancasFireballIsSeenAndHeard() {
 }
 
 // And the rule that adds one: a fireball that is DESTROYED leaves a
-// small_explosion where it stood, and one that merely leaves the level does not.
+// small_explosion where it stood.
 //
-// The player is held in the carranca's mouth, which is test_mp_turrets'
+// Two destroys. First the level's own: since planning step 114 a fireball dies
+// on the first solid thing it touches, and 2-01's first goes off on the face of
+// block00_no_emissive_ent_840, its centre at x 278.5 (test_mp_turrets pins the
+// lane). Then the player held in the carranca's mouth, which is test_mp_turrets'
 // AFireballBurnsThePlayer: the contact callback sets flames and hp 0 on the
 // character and then destroys the fireball like any other contact
-// (ETHBeginContactCallback_fireball #123-152), so this is a real destroy and not
-// a corner. Before it, the same level's fireballs fly off the right edge with
-// nothing left behind, because the port's cull has no counterpart in a game
-// whose fireballs fly until they touch something.
+// (ETHBeginContactCallback_fireball #123-152).
 void ADestroyedFireballLeavesASmallExplosion() {
     if (!OriginalArtIsThere("ADestroyedFireballLeavesASmallExplosion")) return;
     entt::registry registry;
@@ -3981,22 +3981,28 @@ void ADestroyedFireballLeavesASmallExplosion() {
     if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
     CloseTheLevelStartPopup(layer, registry);
 
-    const auto explosions = [&layer]() {
-        int found = 0;
-        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
-            if (report.entity == "small_explosion.ent") ++found;
-        }
-        return found;
-    };
-
     // A whole stride and the flight that follows it, with the player where the
-    // level put it: a fireball is spat, crosses the level and is culled.
+    // level put it: a fireball is spat, and goes off on the first block it meets.
+    glm::dvec2 blockPx(0.0);
+    int onBlock = 0;
+    int drawnThere = 0;
     for (int tick = 0; tick < 240; ++tick) {
         tickWith(layer, registry, kRest, {}, {});
+        const bool wentOff = !layer.SimLevel()->turrets.spentPx.empty();
+        if (wentOff && onBlock == 0) blockPx = layer.SimLevel()->turrets.spentPx.front();
+        if (wentOff) ++onBlock;
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (wentOff && onBlock == 1) {
+            for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+                if (report.entity == "small_explosion.ent" && report.atPx == blockPx) ++drawnThere;
+            }
+        }
     }
-    CHECK_MSG(explosions() == 0 && layer.SimLevel()->turrets.spentPx.empty(),
-              "a fireball that leaves the level is not destroyed, and leaves nothing");
+    CHECK_MSG(onBlock >= 1 && std::fabs(blockPx.x - 278.5) <= 130.0 / 60.0 && blockPx.y == 142.0,
+              "the first fireball goes off on the block's face, not at the level's edge: " +
+                  std::to_string(onBlock) + " destroyed, the first at (" + std::to_string(blockPx.x) + ", " +
+                  std::to_string(blockPx.y) + ")");
+    CHECK_MSG(drawnThere == 1, "and small_explosion.ent stands where it went off, on the next frame");
 
     // Then the player into the mouth, held there as the sim suite holds it.
     const MagicPortals::Turrets::Turret& turret = layer.SimLevel()->turrets.turrets.front();
@@ -4040,9 +4046,11 @@ void ADestroyedFireballLeavesASmallExplosion() {
 
 // And a bomb's blast leaves explosion_large where it went off (explode()).
 //
-// Level 2-12 (level11a) places a carranca and a barrel bomb in its line of fire,
-// so the level detonates itself with no input at all: the fireball asks the bomb
-// to go off, the bomb's own tick blows it (Fire's flag-and-poll split) and
+// Level 2-12 (level11a) places a carranca and a barrel bomb in one line of fire,
+// with the closed door_lift_1042 between them - which since planning step 114
+// stops the fire, as footage F6 #72 shows. So the barrel is put in the lane in
+// front of the door, as a portal would put it there: the next fireball asks it to
+// go off, the bomb's own tick blows it (Fire's flag-and-poll split) and
 // Fire::State::blastsPx says where.
 void ABombsBlastLeavesALargeExplosion() {
     if (!OriginalArtIsThere("ABombsBlastLeavesALargeExplosion")) return;
@@ -4053,6 +4061,12 @@ void ABombsBlastLeavesALargeExplosion() {
     CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
     if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
     CloseTheLevelStartPopup(layer, registry);
+    CHECK_MSG(!layer.SimLevel()->fire.bombs.empty(), "2-12 places a barrel bomb");
+    if (layer.SimLevel()->fire.bombs.empty()) return;
+    // Between carranca_right_ent_1048 (61, 200) and the door's face (x 113): in
+    // the lane, clear of both.
+    const entt::entity barrel = layer.SimLevel()->fire.bombs.front().body;
+    registry.get<TransformComponent>(barrel).position = MagicPortals::Units::ToWorld(92.0, 200.0);
 
     glm::dvec2 wherePx(0.0);
     bool blown = false;
@@ -4065,7 +4079,7 @@ void ABombsBlastLeavesALargeExplosion() {
         }
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     }
-    CHECK_MSG(blown, "2-12's carranca sets its barrel off within 15 seconds");
+    CHECK_MSG(blown, "2-12's carranca sets the barrel in its lane off within 15 seconds");
     if (!blown) return;
     int found = 0;
     glm::dvec2 atPx(0.0);
@@ -5430,10 +5444,13 @@ void ASwitchedDoorShakesTheViewAsItGoes() {
 
 // Rows 24, 9, 11, 22 and 5, each from a level left to run: a knight onto its killer
 // floor (3-09), a thrown stone into a destroyier (1-24), a rock the beholder threw
-// breaking (1-32), a carranca's fireball ending and then the barrel a later one sets
-// off (2-12). Contact callbacks and dynamic entities' own: all before the update.
+// breaking (1-32), a carranca's fireball ending on 2-12's barrel and the barrel it
+// sets off. Contact callbacks and dynamic entities' own: all before the update.
 // The barrel's 50 comes one tick after a fireball's 5 was shown, so it lands with
 // nothing due and waits, and the next tremble is that forth undone (F6's shape).
+// Since planning step 114 the closed door_lift_1042 stops 2-12's fire, as F6 #72
+// shows, so the barrel is put in the lane in front of the door (as a portal would
+// put it there) and the first fireball ends on it.
 void EventsALevelMakesOnItsOwnShakeTheView() {
     struct Run {
         const char* level;
@@ -5459,6 +5476,10 @@ void EventsALevelMakesOnItsOwnShakeTheView() {
         CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
         if (layer.SimLevel() == nullptr) continue;
         int ticks = CloseTheLevelStartPopup(layer, registry);
+        if (std::string(run.level) == "level11a" && !layer.SimLevel()->fire.bombs.empty()) {
+            const entt::entity barrel = layer.SimLevel()->fire.bombs.front().body;
+            registry.get<TransformComponent>(barrel).position = MagicPortals::Units::ToWorld(92.0, 200.0);
+        }
         quakeTickWith(layer, registry, ticks);
         quakeTickWith(layer, registry, ticks);
         checkQuakeRow(layer, registry, ticks, tickUntilUp(layer, registry, ticks, run.maxTicks, run.count), run.row,
@@ -11764,8 +11785,12 @@ void TheGhostComesWithItsKnightsDeath() {
                 step();
             }
             PutBodyAt(registry, level.player, pocket);
-            const glm::dvec2 from = playerPx(registry, layer);
-            const glm::dvec2 aim = from + (level.ghost.atPx - from) * 0.8;
+            // UNDER double_block_plat_low_emissive_ent_1257 (294-422, y 144-176), not at
+            // the ghost: since planning step 114 the fireball dies on the first solid
+            // thing it touches, and the straight line from the pocket to ghost_pos meets
+            // that platform's underside at x ~375, 113 u short. Along y ~192 it passes
+            // under the platform and comes within the ghost's 64 at x ~436.
+            const glm::dvec2 aim(440.0, 192.0);
             frame(screenOf(registry, aim), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
             for (int tick = 0; tick < 240 && level.ghost.hits == hitsBefore; ++tick) {
                 PutBodyAt(registry, level.player, pocket);

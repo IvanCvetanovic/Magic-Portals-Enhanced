@@ -1,0 +1,20 @@
+{
+  "_about": [
+    "2-07, walking only (max_portals 0). Onto lift_ent_883 as it comes back to its marker a (the",
+    "port runs it on its own: G2), up, and left along the top, pushing rolling_stone_890 off the",
+    "platform's end; it rolls down the ramp and the shaft and stops on the floor in carranca_891's",
+    "lane, where it stops every fireball (planning step 114). Back onto the lift at the top, off its",
+    "far side to the floor, under the lift and the platform onto button_937, and left under",
+    "door_lift_936 once it has risen. Won on tick 1007 (step 114)."
+  ],
+  "level": "level6a",
+  "win_by": 1070,
+  "holds": [
+    {"walk": "right", "from": 165, "to": 185},
+    {"walk": "left", "from": 262, "to": 305},
+    {"walk": "right", "from": 575, "to": 640},
+    {"walk": "left", "from": 665, "to": 706},
+    {"walk": "left", "from": 925, "to": 1070}
+  ],
+  "taps": []
+}

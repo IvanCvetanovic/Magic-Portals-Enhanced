@@ -15,19 +15,33 @@
   "fireball": {
     "_source": [
       "the original's fireball.ent: CustomData speed 130 and teleportable 1,",
-      "Collision 16 x 16, shape 2, sensor 1, bullet 1, density 0, restitution 0.",
-      "Its gravityScale is 1 in the file and addFireball sets it to 0 at spawn",
-      "(bytes 417483..417923), so a fireball flies flat and never falls.",
+      "Collision 16 x 16, shape 2, sensor 1, bullet 1, density 0, restitution 0,",
+      "static 0, <Scale> 1.2. Its gravityScale is 1 in the file and addFireball sets",
+      "it to 0 at spawn (bytes 417483..417923), so a fireball flies flat and never falls.",
       "",
-      "SENSOR, so nothing stops it: it passes through walls, crates and stones and",
-      "only registers what it overlaps. Flying through the world is faithful, not a",
-      "simplification - it is what shape 2 with density 0 and sensor 1 means.",
+      "radius_px: shape 2 is BS_CIRCLE (ETHEntityProperties.h:96), whose radius is",
+      "(size.x + size.y) / 4 of the collision box (ETHPhysicsSimulator.cpp:56-62) after",
+      "the box is scaled by the entity's scale (:73), which is its <Scale> 1.2 times the",
+      "spawn's own scale (ETHSpriteEntity.cpp:61; addFireball's g_scale, one level unit):",
+      "(16 + 16) / 4 x 1.2 = 9.6 units. The converter builds every other body by the",
+      "same rule (tscn.py _collider_lines).",
+      "",
+      "A SENSOR, but a DYNAMIC one (static 0, ETHPhysicsSimulator.cpp:68), so Box2D",
+      "begins a contact with every body it overlaps and ETHBeginContactCallback_fireball",
+      "(listing L85862) decides what that does: it passes a carranca, a sensor (all but",
+      "a shock_agent, which it destroys with itself) and a character when its",
+      "killMainCharacter is clear; ANYTHING ELSE - a wall, a closed door, a crate, a",
+      "stone, a barrel, a minion - destroys it (#146-152), and is then burned if it is",
+      "burnable and exploded if it is explosive (#159-188). So a fireball dies on the",
+      "first solid thing it touches; footage F6 #72 shows one stopping on 2-12's",
+      "closed door. (Until planning step 114 this file read sensor 1 as 'nothing stops",
+      "it', and the port's fireballs flew through walls. That was wrong.)",
       "",
       "It has no <Sprite>. What is seen is its ParticleSystem (explosion.JPG) and",
       "its Light, so the layer has no image to draw it with."
     ],
     "speed_px_s": 130.0,
-    "hit_px": [16.0, 16.0]
+    "radius_px": 9.6
   },
 
   "stride": {
@@ -71,10 +85,12 @@
 
   "cull": {
     "_note": [
-      "A fireball is a sensor, so nothing in the world stops it and it would fly for",
-      "ever. It is dropped once it leaves the level's bounds by this margin, which is",
-      "how the beholder's spikes are dropped (boss.json). The original relies on",
-      "Ethanon's own culling of entities outside the scene, which is not decoded."
+      "A fireball dies on the first solid thing it touches (the fireball block above),",
+      "so a flight ends at a wall almost everywhere. One that leaves the level without",
+      "touching anything - over an open edge - would fly for ever, so it is dropped once",
+      "it leaves the level's bounds by this margin, which is how the beholder's spikes",
+      "are dropped (boss.json). A safety net, not the end of a flight: the original's",
+      "flies on off the scene, and what Ethanon does with it there is not decoded."
     ],
     "_guess": true,
     "margin_px": [64.0, 64.0]
