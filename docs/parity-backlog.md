@@ -1,6 +1,6 @@
 # Magic Portals parity — backlog
 
-State at 2026-09-21 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
+State at 2026-09-29 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
 match the original, in the order it should be done. Every spec named here lives under
 `Magic-Portals-Remake/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
 
@@ -35,6 +35,28 @@ suites a change touches once each, and report what stayed blocked.
       not move (`4bfcf67` on both tracks, and it is the engine's `origin/main`). See §2's table and merge note.
       **One inherited caution recorded there**: the merge's own ctest log showed 45/45 in **29,660 s**, 29,618 of
       them in `test_mp_zerog`, because the laptop slept mid-run; the re-run puts that suite at 0.29 s.
+- [x] Merge branch `visuals-d` into MPR `main` — done 2026-09-29 (`fc243c6`, parents `848ed92` and `93e3641`, plus
+      the docs-only `d1834c4`; pushed, `origin/main` = `d1834c4`). Track B's steps 120-131 became 100-111 in the order
+      they were committed (the branch's own commit messages keep 120-131); the merge note is planning step 112, whose
+      table is the renumbering map. 14 files conflicted and each kept both tracks' behaviour; three joins git merged as
+      text broke in code and were fixed there (`EffectReport`'s two `angleDeg`, the `Minion::entity` rename, the dark
+      dragon's path). The merge's own gates: build 0 warnings; the 128-level f420 sweep (`merge_d/sweep`, on
+      `MagicPortals.exe` `8b5ab6d2`) 128 of 128 rc=0, validation active and silent, 66 levels neither track moved equal
+      to the merge base, 27 equal to track A, 30 equal to track B, and the 5 both moved attributed (2-24's 55 px are
+      R9's barrel under track B's stream shift); 22 suites run directly once each, 0 failures (`test_mp_layer` 2901);
+      the full ctest once, **40 of 44 passed, 0 failed, 4 Not Run** (Smart App Control). **9 Smart App Control
+      refusals.** An independent check (`merge_d/verify1/`) found the build current (a dry run: no work to do), ran 7
+      suites once each with 0 failures (`test_mp_layer` 2901, `test_mp_sprites` 1354, `test_mp_effects` 706,
+      `test_mp_darkdragon` 216, `test_mp_camera` 212, `test_mp_play` 205, `test_mp_levels` 129), and its own sweep on
+      `8b5ab6d2` matched `merge_d/sweep`'s md5 list 128 of 128. The engine pin did not move: `4bfcf67` on both
+      tracks, which is on the engine's `origin/main` history but no longer its tip (`6cb4036`, another game's backend
+      and renderer work); no engine gap came up, so nothing was bumped. Worktree `Magic-Portals-Remake-vis4` and branch
+      `visuals-d` removed. **The standing sweep baseline is `merge_d/sweep`.**
+- [ ] **`test_mp_launchers` and `test_mp_keys` have not run on the merged binaries** (step 112). The merge relinked
+      both; Smart App Control refused each twice (the first launch or the ctest, then the one relink), and the merge's
+      independent check did not launch them. Their last runs: `test_mp_launchers` 105 on track B (step 109; 98 on
+      track A at step 95) and `test_mp_keys` 124 on track A (step 98; track B did not run it), 0 failures each. Next:
+      the next step that relinks them launches each once and records the count.
 - [ ] Planning doc Step 45 (G3) still reports pre-amendment verdicts; add a note citing `design_port.md` §10 (gate
       amendments) and relabel the two attribution rows as the gates.
 - [ ] `test_mp_launchers`: add a refusal case for a missing/bad throwable emissive.
@@ -62,8 +84,24 @@ E2 overlay map, G4 lightmaps (1-01 mean_abs vs original 29.7 → 15.9), E3 2D po
 the player and the shot lit, halos drawn (step 49; 1-01 15.86 → 12.72), G6 the 5/6/5 surface and the runtime bake
 after a torch is lit (step 55; 4-22 noLM_E<1 vs original 0.95 → 0.13). The design's plan is complete.
 
-- [ ] G6 leftovers: the screen overlay (HUD, pause, menus) is not quantised; the torch light's z is a `_guess`;
-      `light_from_projectile.ent`'s own sprite and flame are not built; no capture of 4-22 lit (footage L1 missing).
+- [ ] G6 leftovers: the screen overlay (HUD, pause, menus) is not quantised. ~~The torch light's z is a `_guess`;
+      `light_from_projectile.ent`'s own sprite and flame are not built; no capture of 4-22 lit (footage L1 missing).~~
+      **Closed by 11.2 (step 110, `e30489a`)**: the lit torch is `light_from_projectile.ent` itself, added at the
+      torch's own `GetPosition()` (`ETHCallback_light_off` #69-101) - `torch_small.png` on its pivot, 12 `fire.png`, its
+      own `<Light>` at (0, -12, 24) - and `art.json`'s `torch_light` copy, with its z `_guess`, is gone; 4-22 lit is
+      captured on L1's tap and compared with footage `L1_light_4-22` (gate 3). The overlay item stays open.
+- [ ] **Found by 11.2 (step 110): the lit room near the torch reads further from L1 than before.** With the halo now
+      at the light's point (step 82's 12 u, closed) and at its flame's live share, both as decoded
+      (`ETHRenderEntity.cpp:354-388`), 4-22 lit reads 7-19 luma further BELOW the footage within 60-200 px of the torch
+      and down its column than step 109's build did (mean luma, footage / before / after: rings 60-100 px 168.5 / 140.9
+      / 132.6, column 100-130 px below 135.4 / 109.0 / 90.5, L1 section 3.1's pillar 83.5 / 60.7 / 53.3). The halo
+      fix is correct by the code and does NOT improve this comparison. The knob is the global `lighting.json`
+      `halo_brightness_scale` 0.6 `_guess` (the G5 row below); not retuned, because it moves every halo on every level.
+      Next: with G5's row.
+- [ ] **Found by 11.2's second verification (step 110), older than it: the player stays lit after a put-out.** On
+      4-29 the player's box is mean RGB (7.2, 4.2, 8.7) before the lighting and (25.7, 14.8, 31.1) at f300 and f400
+      after the put-out, where L1 returns him to (0.8, 0.2-0.3, 0.2-0.3); step 109's build gives the same, so step 110
+      did not bring it (`11.2/commit/player_box.txt`). Next: the put-out's ambient and the run-time bake (steps 45, 55).
 - [ ] **G5's missed gates** (step 49, never independently verified — the session that built it died before its verify):
       1-09 `LM_E<1_halo` 6.17 against ≤ 6.0 (no single halo scale passes both LM_E<1 rows with 1x art); the orange R−B
       excess beside the 1-01 torch at 60/90/150 u is 47/18/18 below the original (asked ±15); "red rises monotonically"
@@ -80,16 +118,24 @@ Open after the plan (design §8):
 - [ ] Footage to record: L1 4-22 torch lit then put out (3 s each); L2 1-2 shot along a wall; L3 a W2 explosion near crates;
       L4 4-26 or 4-29 — light the torch, then watch the wall it takes away (no clip puts a torch out on a level that
       places a light wall, so step 80's ghost is the decode's alone; §5's footage list wants this row too).
+      **L1 is recorded** (`out/parity/footage/INDEX.md`: `L1_light_4-22`, and `L1_out_4-29`, a torch lit and put out on
+      a wall level with its wall's shake), and it covers L4's purpose: 11.2 (step 110, gate 7) confirmed step 80's ghost
+      against it - position, alpha pulse and scale pulse, the scale pulse's amplitude not resolved. L2 and L3 are still
+      to record.
 
 ## 2. Entity visuals (plan: `visuals/plan_port.md`, ranked)
 
-**The batch order, `visuals/briefs/00_order.md` §7 — batches 0-4 closed 2026-09-19, batches 5-7 closed 2026-09-21.**
-None shelved, none skipped, none blocked. Every commit named here is an ancestor of MPR `main` `a5c9e23`, which is
-pushed. "Step" is `docs/planning/2026-09-11-magic-portals-remaster.md`'s number as it stands NOW: batches 0-4 were
-renumbered by the `visuals-b` merge (their own commit messages still say 80-85), and batch 6-7's seven steps were
-renumbered 90-96 → 81-87 by the `visuals-c` merge (`a5c9e23`, step 88; their commit messages still say 90-96).
-"Recorded deviations" are the step's own RECORDED DEVIATIONS section. Where they have rows below, those rows stay
-open. **Next: batches 8-13 less 13.2 and 13.4 — about 18 steps; the list is under the table.**
+**The batch order, `visuals/briefs/00_order.md` §7 — batches 0-4 closed 2026-09-19, batches 5-7 closed 2026-09-21,
+batches 8-13 closed 2026-09-29.** None shelved, none skipped, none blocked. Every commit named here is an ancestor of
+MPR `main` `d1834c4`, which is pushed. "Step" is `docs/planning/2026-09-11-magic-portals-remaster.md`'s number as it
+stands NOW: batches 0-4 were renumbered by the `visuals-b` merge (their own commit messages still say 80-85), batch
+6-7's seven steps were renumbered 90-96 → 81-87 by the `visuals-c` merge (`a5c9e23`, step 88; their commit messages
+still say 90-96), and track B's twelve steps of the last run were renumbered 120-131 → 100-111 by the `visuals-d` merge
+(`fc243c6`, step 112; their commit messages still say 120-131). That run also added four steps §7 does not list, each
+filed under its own id: **T.1** (a scheduled `--tap` is a real press), **Q.1** and **Q.2** (the earthquake, which
+13.3 and 8.13's call-site rows needed) and **10.1b** (10.1 re-measured, no change). "Recorded deviations" are the
+step's own RECORDED DEVIATIONS section. Where they have rows below, those rows stay open. **Every step of §7 is now
+built; what is left is under the table.**
 **3.4 is out of batch order on purpose**: §7 had dropped it for "no data, no footage, no decode", and §8.13 proposed
 it back from decode D10 after batch 3 had closed, so it is built during batch 5's run and filed in its own place here.
 **13.2 and 13.4 are out of batch order on purpose too**: §8.13 named them ready from decode D5 - 13.2's sheet swap,
@@ -105,7 +151,7 @@ batch 5's run and filed last here.
 | 1.3 | pushing rows | committed with five recorded deviations: the wall gate ran on 1-22's wall (level0 has none on its right); row 2 appears the step after the release; the ray as decoded, not as briefed; data shape; the airborne aim follows the port's `air_control` `_guess` | `9c454a7` | 64 |
 | 2.1 | converter copies tier files, writes a manifest | committed with five recorded deviations, all on code and file layout: `tiers.py`, manifest shape, densities read from `app.enml`, a tier file with no 1x file copied, staging run | MPR `e9611e4`, SE `5de8509` | 65 |
 | 2.2 | level art through the resolver | committed with seven recorded deviations; the bare-ground row is met as amended and re-baselined at 5,312 px | `c404615` | 66 |
-| 2.3 | port art and particles through the resolver | committed with three recorded deviations: a cut particle sheet is still split evenly (`tesla_shock_black_bg`, `shock_strike`; for 13.1); the UI fold-in was not taken; the level1c pin was rewritten | `494f6e2` | 67 |
+| 2.3 | port art and particles through the resolver | committed with three recorded deviations: a cut particle sheet is still split evenly (`tesla_shock_black_bg`, `shock_strike`; for 13.1); the UI fold-in was not taken; the level1c pin was rewritten. **The split sheets are closed**: `shock_strike.png` by 10.4 (step 108: an effect's emitter on it samples `int(512 / 5)` = 102 units a column, `SetupSpriteRects`' whole stride) and `tesla_shock_black_bg.png` by 13.1 (step 111: one whole-unit cut rule, `WholeUnitCut`, for the level's own emitters, the effects and the loading screen alike; 51 of 256, `EmitterReport::cellPx` 51 x 32) | `494f6e2` | 67 |
 | 3.1 | timer dial, no fade | committed | `0be2725` | 68 |
 | 3.2 | crystal and key bob, `sim/Motion` | committed | `5ba5b86` | 69 |
 | 3.3 | sway, alpha 0.55, dashed-circle spin | committed | `a32d356` | 70 |
@@ -116,7 +162,7 @@ batch 5's run and filed last here.
 | 5.1 | minions and knights on their sheets | committed with deviations, and **two sim changes applied under no adopted ruling - proposed R24 (the patrol's arrival point) and R25 (a carrier's point), THE OWNER'S TO RULE** (the "Step 76" rows below). Two gate rows NOT MET as written and recorded, not tuned: the non-regression sweep on 10 of the 128 f420 frames, where the repaired patrols carry keys, press 3-15's button and weigh 3-22's seesaw (each checked against the original's own frame and moving toward it), and G5a-5's lit R on one widened-series detection that sits on the line. Three deviations left to their owners: the lone guards' coast, the player's carrier point, a shock diamond's prey point | `9d25691` | 76 |
 | 5.2 | the 2-32 dragon and its claw follow the sim | committed with deviations. One gate row NOT MET as written and recorded, not tuned: `test_mp_dragon` "stays at 151" reads **230 checks, 0 failures** - **R19** and 8.13 ("fireball direction pending R19") rewrite the aim the suite pinned, and the diff removes no assertion. Two deviations left to the owner (the "Step 77" rows below): two clock bases where the original keeps one, and the `2-32_h2.8`-versus-f168 flight-timing gap, which predates the step | `cbbf169` | 77 |
 | 6.1 | the shot as its script adds it, and the owner-scale halo rule | committed, no recorded deviation and no gate row unmet. The portal shot is drawn as `addProjectile` and `ETHCallback_projectile` draw it: its 64 u cell at the script's `Scale(0.8)` = **51.2 u**, turned every frame so the bolt's head leads along its flight, standing on its pivot 3.2 u behind the shot's point, and stepped by ONE global 30 ms timer (the script's `_projectileFrameTimer`) rather than the per-shot 15 fps `_guess` it had. `Lighting::OwnerScaled` carries the same scale into its light: halo 50 -> 40 u, range 70 -> 56, height -12 -> -9.6. A level placement's halo stays unscaled (K7) and the 128 f420 frames are byte-identical to the baseline; step 49's "portal shot on level1" gate, silently disarmed by step 52's popup, is re-armed and passes on all three rows; `art.json`'s shot has no `_guess` left. **K14 is left open and the merge did not close it - the row below** | `e620810` | 81 |
-| 6.2 | the effects entity reader and the pure pieces | committed, no recorded deviation and no gate row unmet. `Art::LoadEnt` reads any of the original's 190 `.ent` files as `ETHEntityProperties::ReadFromXMLFile` does - the engine's own default where a file states nothing, a refusal where it states something unreadable - into an `Art::Entity`; `Particles::Scaled` and `Particles::Finished` are the engine's system scale and `m_finished`; `sim/Effects` and `effects.json` hold the teleport's three `AddEntity` calls and the arithmetic of where they land. Nothing draws with any of it yet (6.3 wires it), so the 128-level f420 sweep is byte-identical. New suite `test_mp_effects`, 78 checks. **Two engine facts found here and owed to later steps**: a lit torch's halo is drawn **12 u low** (`light_from_projectile.ent`'s light sits at (0, -12, 24) and `DrawHalo` uses that (x, y), where `art.json torch_light.light.halo_offset` is (0, 0)) - for 00_order 7f-5 or a follow-up, with a lit-torch capture; and `LoadEnt` drops each file's `type` and `layerDepth`, which is exactly what 13.3's `black_bar` (type 5, layerDepth 1.0, drawn in front of all) and `light_off.ent`'s INDIVIDUAL_OFFSET particle sorting need | `449fb4c` | 82 |
+| 6.2 | the effects entity reader and the pure pieces | committed, no recorded deviation and no gate row unmet. `Art::LoadEnt` reads any of the original's 190 `.ent` files as `ETHEntityProperties::ReadFromXMLFile` does - the engine's own default where a file states nothing, a refusal where it states something unreadable - into an `Art::Entity`; `Particles::Scaled` and `Particles::Finished` are the engine's system scale and `m_finished`; `sim/Effects` and `effects.json` hold the teleport's three `AddEntity` calls and the arithmetic of where they land. Nothing draws with any of it yet (6.3 wires it), so the 128-level f420 sweep is byte-identical. New suite `test_mp_effects`, 78 checks. **Two engine facts found here and owed to later steps**: a lit torch's halo is drawn **12 u low** (`light_from_projectile.ent`'s light sits at (0, -12, 24) and `DrawHalo` uses that (x, y), where `art.json torch_light.light.halo_offset` is (0, 0)) - for 00_order 7f-5 or a follow-up, with a lit-torch capture; and `LoadEnt` drops each file's `type` and `layerDepth`, which is exactly what 13.3's `black_bar` (type 5, layerDepth 1.0, drawn in front of all) and `light_off.ent`'s INDIVIDUAL_OFFSET particle sorting need. **Both closed in the batches 8-13 run**: `LoadEnt` reads `type` and `layerDepth` since 13.3 (step 102; type 0 on 188 files, 2 on `light_off.ent`, 5 on `black_bar.ent`; `ET_VERTICAL`'s drawing and `INDIVIDUAL_OFFSET` sorting stay with the "Order 8.4" vertical-shift row), and the lit torch's halo stands at its light's (0, -12) since 11.2 (step 110, by the code: `haloOffset` from the light's own `<Position>`, as `DrawHalo` draws it) - which moves the lit room FURTHER from L1, §1's row | `449fb4c` | 82 |
 | 6.3 | the effects runtime, a stream of its own (K8) and one between-slot table (K13) | committed, no recorded deviation and no gate row unmet; an independent check failed it on one row and the fix is in the commit. `spawnEffect`/`updateEffects`/`unloadEffects` add an entity of the original's by name - its picture on its pivot, its light and halo at the owner's scale, one pooled emitter per `<ParticleSystem>` - and free it the way the engine frees it; **`m_effectRandom`** keeps every non-placement draw off the level's placement stream (K8); and `slotAfter` is promoted to a member over ONE table of between-slot fractions with a stated order at equal depth (K13), which every user in the tree now reads. Every existing fraction is carried over exactly, so the step moves no pixel: the 128-level f420 sweep is byte-identical and `test_mp_layer` reads 1,339 checks. **A stated exception to K8's wording**: the loading screen's entities stay on the placement stream. **What the renderer does with an exact tie is not pinned** - the table STATES the order and the suite pins the table, and two pairs can still tie (a dial with a ring; the minion/escort pair step 76's census found), so a step that needs a tie broken on the screen gives those rows fractions of their own. Six Smart App Control refusals while it was built, and a seventh in the second independent check | `d36abef` | 83 |
 | 7.1 | the red eyes the character adds on every level | committed, no recorded deviation and no gate row unmet - the first thing the effects runtime actually draws. `MainCharacter`'s constructor adds `red_eyes.ent` at the character and `updateEyes` puts it on the face every frame: 7 u to the side the DRAWN CELL faces, 14.25 u above the character's point (15.65 where gravity is off), 1 u in front of it, hidden with the character; 12 red specks living 120 +- 100 ms in world space, so the eyes glimmer and a walk leaves a short wake. They draw on `m_effectRandom`, so no particle of any level's own emitters moves: of the 128 f420 frames **123 change 87-97 px inside a 4.3 u box at the face, 4 do not change at all**, and one zero-g drift leaves two lone trail pixels. E7's gate change is applied (peak R >= 240 dropped for the MEAN R inside the mask: an unmasked frame-8 cell reaches R 245 on hood highlights alone). The hold-left gate's whole-cell locator failed and was re-read rather than tuned. `test_mp_effects` 179 checks. One Smart App Control refusal, one relink, no loop | `602b3af` | 84 |
 | 7.2 | the fireball, and the small and large explosions | committed **with seven recorded deviations and THREE gate rows NOT MET as written, under the owner's delegated decision, none of them tuned**. Two independent checks failed the step on its RECORD (not on its build); a third re-measured every gate and reproduced every number, and it was committed on that third round. NOT MET: (1) the light's **R-excess tail falls to 10 at 40.0 u against 27.6 +- 6 u**, 6.4 u past the band, with the same scripts reading the ORIGINAL's own pair at the two numbers the band is made of - the knob is the falloff's SHAPE, not the decoded range 50; (2) the **core is MET on the brief's licensed sample** (8.94 u, RGB (242.0, 201.6, 145.2)) **and NOT MET as a population** - 300 readings over a 210-frame series give 4.12-9.95 u, mean 6.39, **42.7 % under the 6.0 floor**, and only 54 % hold all three channels within +-20 (blue 59.7 %), against the original's 7.71 and 8.30 u by the same code; (3) **K8's byte-identity over the sweep** - 107 of 128 identical, and **20 of the 21 that changed redraw the PLAYER'S EYES: 1,499 px, of which 1,448 lie beyond the fireball's own box** on 19 levels. Also recorded: the comparison box is **60 u, derived from `fireball.ent`'s own `<Light>` (range 50 x `<Scale>` 1.2)**, not `system_7` G.2's 40 u, and that substitution is what turns 2-01 from a failure into a pass (22,611 px outside the box at 40 u). The four rows below stay open. **The K8 row carries an inherited ruling**: from 7.2 onward an effect step's K8 row means "the placement stream is untouched" (6.3's own case, 1,200 emitter values, 0 different) rather than "the frame is identical", so 7.3, 7.4 and 8.x do not each re-litigate it | `47564f2` | 85 |
@@ -132,9 +178,21 @@ batch 5's run and filed last here.
 | 11.3 | the level's end and a death: the red suck and sparkles at the door, blood, the skull, and `AM_MODULATE` as a multiply | committed **with nine recorded deviations and one gate row NOT MET as written - the F12 red light - under the owner's delegated decision, not tuned** (the "Order 11.3" rows below; the fifth closed in its fix round); no required gate row unmet (the unit, the test counts). No change inside the step can meet the light row: it is re-taken when the exit test, R25 or the effects runtime's frame order lands. A fit in fix round 1 shows the light is the original's in brightness (gain 1,517 against 1,522) and in rule (eighths of the sparks' live share); it stands 7.75 u left (the port's exit test, filed) and 4.0 u high (R25's player half). And the door frame's light is missing, because the effects runtime draws what `GameStateController` adds a frame early (filed for the runtime, recorded not fixed). `fire32` is left for the owner. Taken over from a first implementer that died at the login expiry: its diff reviewed against the decode and kept unchanged, every capture re-taken on the final binary `7adf5f3b` and byte-identical to its first round. `levelFinishedEffect`'s `red_suck_effect` at the door + (0, 16) and `red_sparkles` (light 68, (2, 0, 0)) at the character on the door tick; `checkGameLost`'s `blood.ent` at the character's vector3 (z 1.422, R10) or, for a fall, `skull.ent` 12 over the view's foot (both branches); a minion's blood at its entity point, and a killer floor's skull under it (`Minions::State::deaths`, read by nothing in the sim). `blood.ent`'s burst drawn as a multiply: `modulateImage` generalised from the loading halo (whose image is byte-identical), `particleTexture` in all three builders, `DrawColour` (0, 0, 0, 1) for `alphaMode 4` (K12). Unit: **0 of 65,536 (g, d) past +-1, worst 0.498**; 4 of 4 of the original's multiplies exact. F12: the disc peaks at 13,190 red px at +150 ms (original 13,228 at +202), the sparks' count clause holding (a pool of 8) but the sparks about 8 u left and 4 u high, fewer distinct points (deviation 1's cause), the light **12.1 against 16.9 R - G on the right-hand stones and a gain of 27.2 against 17.3 on the left** (it stands 7.75 u left), in eighths in both; F13: the skull at y 685.5-686.0 px (original 685.5), 48 x 40 px, fade to zero at +0.813 s (+0.808); blood's burst peaking at +300 ms (+331), the puff rising 80.5 px/s (84.3). **Gameplay: none.** Suites once each, 0 failures: `test_mp_effects` 339, `test_mp_sprites` 1,256, `test_mp_minions` 115, `test_mp_layer` 1,928 (**1,937** after fix round 2), `test_mp_diamonds` 126, `test_mp_keys` 124 (run in the independent check); `test_mp_ghost` NOT RUN (Smart App Control: 3 refusals in the takeover). **Sweep: 125 of 128 byte-identical to `9.3/after/sweep`**; 2-12 and 2-32 (the character dies with no input; 2-32's smoke still alive at f420) and 3-09 (a minion on a killer floor) change in effect-stream pixels, plus 17 door-flame pixels one RGB565 level off (equal-depth tie order, INFERRED; deviation 9, filed below). Engine untouched at `4bfcf67`. An independent check (`11.3/verify1/`) failed the light row and four text points. Fix round 1 (`11.3/fix1/`) changed no source and launched nothing: it added the light fit, the door frames' order (F12 #140 on, #141 off, #142 on, as the engine source gives) and the text. A second check (`11.3/verify2/`) failed the light row again, finding with this record that no change to the step's code can meet it. Fix round 2 (`11.3/fix2/`) showed the light's x is the port's exit test on a guessed body (679.011 u, the first tick past 693 - 4 - 10 = 679, the capsule a `_guess`), reworded the sparkles row, added `test_mp_layer`'s strike case (a shock diamond's strike on 3-16: one `blood.ent`, no skull; the suite alone relinked, `fdefe196`, 1 launch, 0 refused) and left the blood row's z guard for the next step that relinks the simulation. `MagicPortals.exe` `7adf5f3b` unchanged, so the sweep stands. A third check (`11.3/verify3/`) reproduced every number (the light to the hundredth: f192-f195 at 0.65 / 0.67 / 0.67 / 12.14 against #139-#142 at 1.86 / 16.64 / 2.31 / 16.66; the six suites at the same counts; the sweep and the four clips byte-identical; a compile-only /W4 run of the 8 changed units, 0 warnings; 138 launches, 0 refused) and failed the light row alone; it also found that the original checks a death before the door on one frame (a gameplay row filed below). Committed with the nine deviations under the owner's delegated decision; the commit changed text only. **Sweep baseline**: `11.3/after/sweep` | `df638f1` | 96 |
 | 11.4 | the knights' aura, and the sim honouring the marker's `entityName` (R16) | committed with five recorded deviations (the "Order 11.4" rows below; the first, `test_mp_layer` NOT RUN, closed by the independent check), no gate row unmet. R16 as the owner's standing ruling: `Minions::Minion::entity` holds what the marker adds (`minions.json` `spawn`: `minion.ent` by default, `ghost_minion.ent` on level31b, anything else refused at load); the two `.ent` bodies are equal to the attribute, so **gameplay: none changes in play** - what the original does differently by the entity's name (the ghost on the knight's death, R4, 12.2's; `ETHBeginContactCallback_minion`'s arms, the dark mage's `holdTime` cap, the impact tremble and `playFallSound`, which the knight never gets, `ETHPhysicsEntityController.cpp:59`, `:66-70`; `ScoreDashboard`'s `minion.ent`-only counts) is not built on `main` (corrected after the check: the first record said the callbacks did not tell the two apart). The aura: `ghost_minion.ent`'s 24 `black_portal_particle.png` at `alphaMode` 4, added once through the effects runtime with no picture of its own (`EffectSpawn::picture`), carried by the knight's DRAWN point (`EffectOwner::Kind::Minion`), on the multiply (`modulateImage`), at `EffectSystems` of round(0.711 - 2) - behind the platforms, the knight and the player, as the original sorts it; K8 kept (`m_effectRandom`). Unit: 0 of 65,536 past 1 on the generic case (`test_mp_sprites` 1,256), on the multiply the app wrote (4,096 of 4,096 texels) and on the drawn quads (`test_mp_layer`); follow within 0.5 u: **0.000000 u** from the knight's drawn point on 600 of 600 frames over 80.7 u of patrol, the tick body 2.013 u off, 214 released at the owner's x - read through a dangling pointer in the new case (deviation 5, whose depth check against the knight is vacuous; the order measured from `level31b.tscn` instead: door -1.452 < aura -1.4485 < platforms -1.448 to -1.432 < knight -1.430 < player -1.428). Suites: `test_mp_minions` 278, `test_mp_effects` 343 (11.3's blood z guard), `test_mp_ghost` 75, `test_mp_keys` 124, `test_mp_start` 753, `test_mp_sprites` 1,256, `test_mp_layer` 1,959 (the check's one launch of `03d1f439`), 0 failures; `test_mp_diamonds` NOT RUN (refused twice). **Sweep: 127 of 128 byte-identical to `11.3/after/sweep`**; 3-32's eyes (89 px, the effects' stream) and 23 door-flame pixels, each in one channel by at most 9 levels. F15: matches in kind. `MagicPortals.exe` `b87639e7`, 0 warnings; 3 refusals in 141 launches. The independent check passed every gate (`11.4/verify1/`): the 8 changed units compiled with the build's own `cl` commands at 0 warnings, the suites once each at the step's counts, its own sweep 128 of 128 byte-identical to the step's, its retake of the 3-32 clip 201 of 201, the player dying on tick 260 as before; 1 refusal in 137 launches. The commit changed text only (a dry run on a copy of `build.ninja`: no work to do). **Sweep baseline**: `11.4/after/sweep` | `3affd2f` | 97 |
 | 12.2 | the ghost, `enemy_shoot` and its dropped key, and R4 | committed with ten recorded deviations (the "Order 12.2" rows below; the first two - every capture gate, and `test_mp_motion` and `test_mp_diamonds`, NOT RUN at the build under Smart App Control - closed by the independent check) and **one gate row NOT MET as written, by design: `test_mp_ghost` "stays at 73"** (75 after step 97; re-pinned from the decode under R4, 141). R4 as the owner's standing ruling: no ghost, shot or restock on 3-32 until the black knight dies (fire, the killer floor or a strike), the ghost added at its point one level unit behind it and at scale 0.3, entity 1430 deleted, its init the tick after (INFERRED), five waypoints 1200 / 2500 / 50 / 0 ms to ghost_pos black to white, SHOOTING on its 227th update (226 after its init), the boss music from the init. **GAMEPLAY CHANGES**: R4; a fireball burns the minion it reaches on 3-29 to 3-32 (`Minions::Burn`, the escorts included); the ghost's point hovers 8 u (`motions.json` `ghost`), which moves its shots' origin and its key; a ghost shot starts 16 u out (`shot.nudge_px`), 0.13 s sooner. Pictures: `syncGhost` on `hd/ghost.png` cut 121 x 128 (`Slot::Ghost`, -0.2889: behind the z-0 art, in front of the locked door), cell 3 at alpha 0.5 raging (on the quad uv 0.7461 and albedo alpha 0.5; on the picture cell 3's eye slit); `ghost_appear_effect.ent` with its `followUp` and `Scale(1.005)`; `enemy_shoot.ent` (a 42 x 32 cell of six, light 64, halo 146, at scale(10), on the one `_projectileFrameTimer`), `portal_mark.ent` at scale(32), `projectile_shoot.ent`, `portal_fail_in_antiportal.ent`; the dropped `key.ent`, bobbing. F15: in the simulation scale within 0.028, path within 4.52 u, hover 8.000 u moving up from the centre; on the picture (the independent check's fire route: the knight burned on tick 468, the ghost added that tick, SHOOTING on tick 695, the player dead to the first shot on tick 721) it **matches in kind** - the black silhouette grows and flies up-left with its puffs, greys with the red face and arrives at ghost_pos at the same size and place; the back patch's R at 0.47 / 0.73 / 0.95 / 0.99 of its arrival value against the original's 0.54 / 0.65 / 0.90 / 1.00; the hood's hover within 0.42 u of the model. Two differences filed (no `fire32` flames on the knight; the first shot on SHOOTING's first tick, 0.2-0.3 s before the original's). Rage's luminance: the ghost's contrast over the same background 0.54-0.56 of SHOOTING's, the raw mean 0.814 - exactly alpha 0.5 over its L 31 background, 0.5 + 0.5 x 31.1 / 49.5; rage reached only by the port's fireball rule (the owner's open row). Suites, 0 failures: `test_mp_ghost` 141, `test_mp_minions` 288, `test_mp_effects` 382, `test_mp_sprites` 1,266, `test_mp_layer` 2,011, `test_mp_boss` 126, `test_mp_keys` 124, `test_mp_start` 753, and on the check's relinks `test_mp_motion` 169 (the build's binary had failed 14 of 167, fixtures without the `ghost` row) and `test_mp_diamonds` 126. `MagicPortals.exe` `7e43f9b3` (the check's link-only relink), 0 warnings; 1-01 f420 `e2da5131`. **Sweep: 128 of 128 byte-identical to `11.4/after/sweep`**, as predicted. Smart App Control: 11 refusals in 24 launches at the build, 0 in 147 in the check. Engine untouched at `4bfcf67`. The commit changed text only (a dry run on a copy of `build.ninja`: no work to do). **Sweep baseline**: `12.2/verify1/sweep` | `1d05b59` | 98 |
-| 12.1 | the dark dragon and its dropped yellow key's picture, and R20 | committed with ten recorded deviations (the "Order 12.1" rows below; the fourth, the wound read before the shot, closed in fix round 1) and **one gate row NOT MET as written, by design: `test_mp_darkdragon` "stays at 97"** (99 after step 85; re-pinned from the decode under R20, 209). R20 as the owner's standing ruling: a wound is 1000 + 8 x 300 = 3400 ms. `ETHCallback_dark_dragon` read in full and built in its own order: the init on the first update after the summon; `linearMotion(this, true, 0, PIb)` every update on the LAST update's `originalPos` (speed 1.6, stride 7); a WaypointManager (`DarkDragon::Path`: one waypoint an update, the current waypoint's filter on position, angle and colour; `sim/Ease` for smoothEnd / smoothBeginning / smoothBothSides); APPEARING's seven waypoints (14, 0, 0, 10, 28, 27, -12 degrees) with the jaw opening on waypoint 3 (`smoothBeginning(bias) x 14`, restarted every update on cell 3); FIGHTING on the Follower (800 / 150, forced to -12 + 360, 9 updates at 348 then 3.14 % on the 10th, toward `getAngle(normalize(dragon - char)) + PIb x 1.2`, unclamped) with the neck's lift on its point and the mouth killed below interval / 2 and restarted above 3 / 4; DAMAGE red / 3x-bright on eight 300 ms legs, the head thrown +27, the jaw shut and reopened; DYING white, +30, the jaw shut. **GAMEPLAY CHANGES (4-32 only)**: R20 (the torch shot and the return 205 updates after a wound, not 168); the eased paths and DAMAGE / DYING from where it stands; its point hovers 7 u and the neck moves it up to 18 u; the shots leave from the mouth (`MuzzlePx`) - the torch shot along its own point's line to the torch, 1.8 u from it from F16's floor (the shot itself is still the port's: the original fires only at an unlit `light_off.ent` and relights it, filed below); the first shot 1.3 s into the fight, not 4.2 s (the fire clock runs on from the jaw's waypoint); and (fix round 1) the wound read after the mouth and the shot, all three inside `!isFinished`, as ins 1067 orders it. Pictures: `dark_dragon.ent` whole through the effects runtime (`EffectOwner::Kind::DarkDragon`: dragon_boss.png cut 2 x 2 on (-48, 7), dragon_normal.png, the mouth's `explosion.JPG` on `m_effectRandom`), its cell, angle, emissive and mouth from the sim's `Look` every frame; at z 0, not the plan's 8 (the hover's SetPosition writes originalPos's z 0, `ETHPhysicsEntityController.cpp:92-96`); the dropped `key.ent` at key_pos, z 6, bobbing. DEV: `--burn-dragon <tick>`. Gates: the replay's cells on the pixels **105 of 105** frames from f738, 107 of 107 from f726 (0 through legs 0-2, 0 -> 1 -> 2 -> 3 on f906-f924, 3 on to f1362; a silhouette fit against the committed build's frames, byte-identical to f684; 5.2's luminance fit agrees on 96 of 99, missing only while the head enters the view); the flash **R / G 3.61 / 3.61 / 3.58 / 3.53** at the red legs (bright 1.68, fighting 1.94), on a DEV-burn capture; F16 agrees (at shout 2.52 s, FIGHTING 7.42 s, the jaw within a frame of F16's on the decoded anchors but about 0.2 s late counted from F16's burst frame, where F16's own leg 3 runs 0.15 s early, the mouth's fire out 3.13 s after leg 3 and the shot 4.20 s after, F16 3.09 / 4.20) - and, since fix round 1, none of the fire drawn on an update that restarts it, as the engine updates, then runs the callback, then draws: 0 px of lum > 200 in the mouth's box on 17 of 17 such frames against 900-2,353 free-running, F16 none on #238-#250 and #319-#340 (the first round drew a ball there, 952-1,014 px). Suites, 0 failures: `test_mp_darkdragon` **216**, `test_mp_layer` **2,042**, `test_mp_start` 753 (fix round 1; 209, 2,041 and 753 before it). `MagicPortals.exe` **`753dc103`** (fix round 1; `a70bb8c5` before), 0 warnings; 1-01 f420 `e2da5131`. **Sweep: 128 of 128 byte-identical to `12.2/verify1/sweep`**, as predicted (nothing of it exists until a torch is shot); fix round 1 re-swept on `753dc103`: again 128 of 128 byte-identical to it and to `12.1/after/sweep`, 128 rc 0, validation silent. Smart App Control: 2 refusals in 141 launches, and 0 in 134 in fix round 1. Engine untouched at `4bfcf67`. An independent check (`12.1/verify1/`) reproduced every number and failed the step on the mouth's fire (drawn while Play restarts it every update, where F16 shows none) and on this record's reading of the torch shot (backwards); fix round 1 (`12.1/fix1/`) fixed the first in `updateEffects`, corrected the second in the text and filed it, and closed deviation 4. A second check (`12.1/verify2/`) passed every gate: the rule re-derived from the listing before the code, the 7 changed units compiled with the build's own commands at 0 warnings, the route and the burn run re-captured byte-identical, its own fit putting 79 of 79 judged frames on the cells (least margin 0.023), the red legs' R / G 3.49 / 3.49 / 3.45 / 3.40 on its own mask, the three suites at 216 / 2,042 / 753, its sweep 128 of 128 byte-identical; its four low findings - `darkdragon.json`'s hover note, the cells counted from f726, step 98's commit cell filled in this row's diff, a candidate for the jaw's 0.2 s - went in at commit as text only. **Sweep baseline**: `12.1/fix1/sweep` | (this commit) | 99 |
+| 12.1 | the dark dragon and its dropped yellow key's picture, and R20 | committed with ten recorded deviations (the "Order 12.1" rows below; the fourth, the wound read before the shot, closed in fix round 1) and **one gate row NOT MET as written, by design: `test_mp_darkdragon` "stays at 97"** (99 after step 85; re-pinned from the decode under R20, 209). R20 as the owner's standing ruling: a wound is 1000 + 8 x 300 = 3400 ms. `ETHCallback_dark_dragon` read in full and built in its own order: the init on the first update after the summon; `linearMotion(this, true, 0, PIb)` every update on the LAST update's `originalPos` (speed 1.6, stride 7); a WaypointManager (`DarkDragon::Path`: one waypoint an update, the current waypoint's filter on position, angle and colour; `sim/Ease` for smoothEnd / smoothBeginning / smoothBothSides); APPEARING's seven waypoints (14, 0, 0, 10, 28, 27, -12 degrees) with the jaw opening on waypoint 3 (`smoothBeginning(bias) x 14`, restarted every update on cell 3); FIGHTING on the Follower (800 / 150, forced to -12 + 360, 9 updates at 348 then 3.14 % on the 10th, toward `getAngle(normalize(dragon - char)) + PIb x 1.2`, unclamped) with the neck's lift on its point and the mouth killed below interval / 2 and restarted above 3 / 4; DAMAGE red / 3x-bright on eight 300 ms legs, the head thrown +27, the jaw shut and reopened; DYING white, +30, the jaw shut. **GAMEPLAY CHANGES (4-32 only)**: R20 (the torch shot and the return 205 updates after a wound, not 168); the eased paths and DAMAGE / DYING from where it stands; its point hovers 7 u and the neck moves it up to 18 u; the shots leave from the mouth (`MuzzlePx`) - the torch shot along its own point's line to the torch, 1.8 u from it from F16's floor (the shot itself is still the port's: the original fires only at an unlit `light_off.ent` and relights it, filed below); the first shot 1.3 s into the fight, not 4.2 s (the fire clock runs on from the jaw's waypoint); and (fix round 1) the wound read after the mouth and the shot, all three inside `!isFinished`, as ins 1067 orders it. Pictures: `dark_dragon.ent` whole through the effects runtime (`EffectOwner::Kind::DarkDragon`: dragon_boss.png cut 2 x 2 on (-48, 7), dragon_normal.png, the mouth's `explosion.JPG` on `m_effectRandom`), its cell, angle, emissive and mouth from the sim's `Look` every frame; at z 0, not the plan's 8 (the hover's SetPosition writes originalPos's z 0, `ETHPhysicsEntityController.cpp:92-96`); the dropped `key.ent` at key_pos, z 6, bobbing. DEV: `--burn-dragon <tick>`. Gates: the replay's cells on the pixels **105 of 105** frames from f738, 107 of 107 from f726 (0 through legs 0-2, 0 -> 1 -> 2 -> 3 on f906-f924, 3 on to f1362; a silhouette fit against the committed build's frames, byte-identical to f684; 5.2's luminance fit agrees on 96 of 99, missing only while the head enters the view); the flash **R / G 3.61 / 3.61 / 3.58 / 3.53** at the red legs (bright 1.68, fighting 1.94), on a DEV-burn capture; F16 agrees (at shout 2.52 s, FIGHTING 7.42 s, the jaw within a frame of F16's on the decoded anchors but about 0.2 s late counted from F16's burst frame, where F16's own leg 3 runs 0.15 s early, the mouth's fire out 3.13 s after leg 3 and the shot 4.20 s after, F16 3.09 / 4.20) - and, since fix round 1, none of the fire drawn on an update that restarts it, as the engine updates, then runs the callback, then draws: 0 px of lum > 200 in the mouth's box on 17 of 17 such frames against 900-2,353 free-running, F16 none on #238-#250 and #319-#340 (the first round drew a ball there, 952-1,014 px). Suites, 0 failures: `test_mp_darkdragon` **216**, `test_mp_layer` **2,042**, `test_mp_start` 753 (fix round 1; 209, 2,041 and 753 before it). `MagicPortals.exe` **`753dc103`** (fix round 1; `a70bb8c5` before), 0 warnings; 1-01 f420 `e2da5131`. **Sweep: 128 of 128 byte-identical to `12.2/verify1/sweep`**, as predicted (nothing of it exists until a torch is shot); fix round 1 re-swept on `753dc103`: again 128 of 128 byte-identical to it and to `12.1/after/sweep`, 128 rc 0, validation silent. Smart App Control: 2 refusals in 141 launches, and 0 in 134 in fix round 1. Engine untouched at `4bfcf67`. An independent check (`12.1/verify1/`) reproduced every number and failed the step on the mouth's fire (drawn while Play restarts it every update, where F16 shows none) and on this record's reading of the torch shot (backwards); fix round 1 (`12.1/fix1/`) fixed the first in `updateEffects`, corrected the second in the text and filed it, and closed deviation 4. A second check (`12.1/verify2/`) passed every gate: the rule re-derived from the listing before the code, the 7 changed units compiled with the build's own commands at 0 warnings, the route and the burn run re-captured byte-identical, its own fit putting 79 of 79 judged frames on the cells (least margin 0.023), the red legs' R / G 3.49 / 3.49 / 3.45 / 3.40 on its own mask, the three suites at 216 / 2,042 / 753, its sweep 128 of 128 byte-identical; its four low findings - `darkdragon.json`'s hover note, the cells counted from f726, step 98's commit cell filled in this row's diff, a candidate for the jaw's 0.2 s - went in at commit as text only. **Sweep baseline**: `12.1/fix1/sweep` | `848ed92` | 99 |
+| T.1 | a scheduled `--tap` is a real press: the controls read the tick's touch, and its pixels are the viewport's | committed, no recorded deviation and no gate row unmet - a step this run added (not in §7). Its first measurement: the backlog row's mechanism was already gone - step 87 had moved `readInput` onto the tick's `Touch`, so on the committed build a `--tap` already fired a shot and lit 4-29's torch. What was left, and is built: a scheduled tap on a HUD control is spent on the control as a finger's is (it had fired a shot under 1-04's restart button), and its pixels are the viewport's (in a 960 x 540 window it had aimed a third further out and lit nothing). **Gameplay: none** - a real press reads the same expressions. `test_mp_layer` 1606 (+13: `AScheduledTapFiresTheShotARealPressFires`, `AScheduledTapOnAControlIsSpentOnIt`), `test_mp_play` 205, 0 failures. Sweep 128 of 128 byte-identical; 7.4's, 1.1's and the help-block levels' `--tap` captures byte-identical. 0 refusals. With step 87, closes the "`--tap` cannot fire a portal shot" row | `87aa67f` | 100 |
+| Q.1 | the earthquake the original shakes its camera with (decode D11 and D11_check), and every call of it whose event the port had | committed with four recorded deviations, **one of them a gate row NOT MET under the owner's delegated decision, not tuned: F16's 4-32 light wall opens at +-10 px, the port's at +-19.7** (D11_check C52 unsettled; the "Order Q.1" row below). `sim/Earthquake` is `g_earthquakeGen` built literally - a call overwrites the amplitude with clamp(0.35 x intensity, 0, 50) screen px at R12's 720; a tremble every 70 ms, forth then back, halving, stopped under 1 px; y only; no random draw - on the layer's tick clock, drawn on the frame's camera after the interpolation and never on the tick's camera, the taps or the HUD; 24 call sites wired from counters the sims already kept. L1 on 4-29 met: -19.78, +19.79, -9.90, +9.91 ... +1.14 px against -20, +20, -10, +10 ... +1. `test_mp_camera` 100, `test_mp_launchers` 101, `test_mp_layer` 1719. Sweep 128 of 128 byte-identical (12 levels fire calls before f420, none on tick 420). **Gameplay: none.** 0 refusals. Since closed: deviation 1 (a frame of several ticks draws only the last one's move) by Q.2, deviation 4 (the pinned sky where the original draws black bars) by 13.3; D11 rows 2, 6 and 14 wired by 10.1, rows 4, 8 and 25 by Q.2 | `b822a14` | 101 |
+| 13.3 | the four black bars round the scene, and the `type` and `layerDepth` the entity reader dropped | committed, no recorded deviation and no gate row unmet. `Game::manageSceneBounds`' four `black_bar.ent` at (256, -16), (512, -16), (256, maxY + 16), (512, maxY + 16), 512 x 32 each, layerable at 1.0 and drawn at an explicit topmost `kLayerableTopZ` = 1.0 (K13: a slot of its own, not a table row), under the HUD. On 4-29's light wall every uncovered pixel outside the HUD is (0, 0, 0) on all ten shaken frames (19 / 9 / 5 / 2 / 1 whole rows each way, plus the row the edge crosses, a 4x MSAA blend); the other 210 of 220 frames byte-identical. 10 levels are wider than the 768 u the bars cover (re-counted); no capture shows a band stopping at 768. `test_mp_sprites` 965, `test_mp_layer` 1765, and three more at their counts. Sweep 128 of 128 byte-identical. **Gameplay: none.** 1 refusal | `3003e04` | 102 |
+| 10.1 | shot marks and failures (`portal_mark`, `red_cross`, `hourglass`, `red_waves`, `portal_fail`, `portal_fail_in_antiportal`, `projectile_shoot`), and K14 | committed with ten recorded deviations and decisions (rows below), no gate row NOT MET. The mark chosen at the tap by `computePortalFinalPos` run on the port's world (R15, the owner's standing ruling: a picture only); a shot's end drawn where the port's simulation ends it; D11 rows 2, 6 and 14 wired. **K14 closed**: the shot and its halo are the table's first two rows (-0.515625, -0.5078125), behind the player (1-07: 5,518 and 5,502 px inside the player's box, every one darker, as F3 #27 and #206 show the original). F3 matched at every event the port can play. **Gameplay: none** - `Shoot` returns what it returned and moves no clock on a refusal; the R23 overlap was decided up front (the hourglass does not restart the 400 ms clock). `test_mp_layer` 1865, `test_mp_shot` 181, `test_mp_effects` 308, `test_mp_camera` 103, and nine more at their counts. Sweep 128 of 128 byte-identical. 5 refusals | `7ac69b1` | 103 |
+| Q.2 | every tremble a frame's ticks make drawn, and the impacts of the player, a stone and a minion (D11 rows 4, 8, 25) | committed with ten recorded deviations and decisions, no gate row NOT MET; its first verification failed it (4-29 opened at F16's +-9.8, from knights landing off their spawners - calls the original never makes, because it makes each knight standing), a fix round removed those calls, and the third verification passed it. A held frame move draws every tremble whatever the ticks per frame; `sim/Impacts` computes a contact's approach speed port-side (the fastest along the row's line since the body last met or left anything, at most 60 steps), with no engine change; a new minion is looked at where the original's stands. F14's landing: -4.96, +4.98, -2.44, +2.45, -1.15, +1.16 px against F14's -5, +5, -2, +2, -1, +1; L1 on 4-29 met again, all 220 frames byte-identical to the committed build's. 27 of the 30 wired rows pinned by a case. **Corrects D11 section 4 row 4**: the player's contact normal is negated against a box or a polygon, never against a circle or a compound (#27-40; read from the listing, not RAW-checked). `test_mp_camera` 212, `test_mp_layer` 1924. Sweep 128 of 128 byte-identical (25 levels make impact calls by tick 420, none on it). **Gameplay: none.** 4 refusals | `7465279` | 104 |
+| 10.1b | 10.1 read again after the level's opening, and `projectile_shoot` / `portal_mark` against F2 | measured, no change - a step this run added; the diff is its record and its corrections of step 103's (the opening ends at f70, not "about f100"). K14 behind the player after the opening; the wall shot's colours at full brightness match F3 #28-#45; `projectile_shoot` grows 162.8 / 161.2 u/s (the `.ent`'s 162; F2 152.9 / 151.6), `portal_mark` 11 dots, +90 deg/s, 32.08 u, visible 0.983 s against F3's 0.981. One picture deviation recorded, not built: a tap's particle-only pictures start one tick early (row below). Found: the standing player is drawn 9.75 px (3.47 u) higher than the original's (filed on the "Step 76 deviation, the player's carrier point" row). Nothing built; 133 launches of the committed binary, 0 refusals | `224196f` | 105 |
+| 10.2 | `crystal_pick` where a crystal is taken, `crystal_vanish` x 1.3 where a timed one runs out | committed with five recorded deviations and decisions, no gate row NOT MET. Both at the crystal's drawn point, on its own depth + 20 (`Effects::OnEntity`, the vector3 ADDED to `GetPosition()`); 5 + 2 particles for the pick, 1 + 2 at x 1.3 for the vanish (first-frame box 73 x 76 px against the pick's 57 x 58). F14 consistent in kind (22 fps resolves no single frame); 2-04's library still nearest the port's +83 ms frame (16.0 against 49.1 and 74.7). `test_mp_effects` 324, `test_mp_layer` 1958. Sweep 121 of 128 byte-identical, the 7 exactly those with a crystal event by tick 420. **Gameplay: none.** 0 refusals | `d072502` | 106 |
+| 10.3 | `key_pick`, `key_unlock_halo`, and a door's `wall_destroy`, `door_locked_vanish` and `keyhole_vanish` | committed with eight recorded deviations and decisions, no gate row NOT MET. A pick for any carrier, a knight's too, at the key + 32; the halo on the 41st tick after the unlock, at a z of 32 of its own; the three at the keyhole's alpha 0 in the script's order, beside `door_unlocked`'s 20; the door's sparkles at door z + 2 / 2.8125 (`OnEntityBare`: only the bare literal divided). 41 locked doors in 34 levels, D4_check's census. The unlock's pictures against F9 NOT RUN (no route in the port reaches a keyhole without a warp); its timings consistent. `test_mp_effects` 473, `test_mp_layer` 1996. Sweep 113 of 128 byte-identical, the 15 exactly those with a key pick by tick 420. **Gameplay: none.** 0 refusals | `0da3ac5` | 107 |
+| 10.4 | a shock diamond's pick and strike, a fire diamond's burns and its water, the death a ring or a dead agent adds, the put-out signal's water | committed with ten recorded deviations and decisions, no gate row NOT MET. Eight call sites: `shock_diamond_pick`; `shock_death` at a struck minion's entity point, a bare 10 in front of a dead agent, and at the player a ring kills; `shock_strike` turned by getAngle's RADIANS read as degrees (at most 6.28 deg); `burn_projectile` a bare 10 in front of a taken fire diamond and at a burned shot; `extinguish_fire` at a drained diamond and at a put-out signal. `shock_strike.png` cut in whole units (step 67's deviation, for this sheet). F14's strike: its white peaks +0.13 s after the strike against F14's +0.09 s and is gone by +0.72-0.76 s in both; L1's water has the same plateau, fade and end, starting 0.12 s later. `test_mp_effects` 512, `test_mp_diamonds` 134, `test_mp_layer` 2065. Sweep 128 of 128 byte-identical. **Gameplay: none** (two write-only records). 0 refusals | `b3f1861` | 108 |
+| 11.1 | a breakable wall's dust, turned by it and at its size; a destroyed stone's puff; a lift door's dust | committed with nine recorded deviations and decisions (four of them gameplay the owner has, rows below), no gate row NOT MET. `wall_destroy` at the wall's node and depth, turned by it (13 of the 33 walls lie a quarter turn, so their dust falls from a horizontal line), at `destroyEffectScale` (2 on 4-32's wall 2217 alone); `rolling_stone_destroy` at a z of 32 of its own, x 1.3; `door_lift_particles` at the door's edge where the tick began. 1-24's lying wall measured on screen (the band across the screen, not down it); 1-28's door dust falls within 12 px of the decode's arc. `test_mp_effects` 555, `test_mp_launchers` 105, `test_mp_boss` 133, `test_mp_layer` 2121. Sweep 125 of 128 byte-identical, the 3 exactly those with an event by tick 420. **Gameplay: none** (three write-only records). 1 refusal | `3a2d5fc` | 109 |
+| 11.2 | the lit torch as the entity its shot adds, the fire signal, the torch put back and its wall faded in, the weightless trail, the well's lap | committed with fifteen recorded deviations and decisions, no gate row NOT MET; its first verification failed it on its RECORD (the signal's put-out test misread, the ghost's scale pulse called unmeasurable), a text-only fix round answered both, and a second verification passed it. **GAMEPLAY CHANGED, THE OWNER'S TO RULE: the fire signal orbits clockwise from above, added on its torch** (decoded; L1: 296 deg/s at r 49.6 px against 296-300 at 48-54) - the original's PICTURE, and gameplay here only because the port tests the put-out at the orbiting ball (step 30's rule), where the original tests at the torch's point and never counts a fireball (the "Order 11.2" row below); on L1's taps the put-out moves from tick 261 to 260. Built: `light_from_projectile.ent` whole (its sprite, 12 flames, its light, its halo at (0, -12), bouncing 1.04 / 0.96 where a light wall is), `light_on_sparkles`, `portal_death` at the shot, the signal, `light_off` put back at a bare 10, `light_wall_create` and the rebuilt wall fading in over a second, the light wall's own `wall_destroy`, `movement_trail` on the weightless levels (F10: +6 to +17 luma over 69-90 px), `roundabout_effect` and the agent's `elastic` turn (a lap captured on 4-17 by the second verification). Closes §1's G6 `light_from_projectile` item and step 82's 12 u halo (by the code; the room reads further from L1, §1's row), and answers 13.4's deviation 4. `test_mp_torch` 134, `test_mp_wells` 308, `test_mp_effects` 611, `test_mp_layer` 2382, `test_mp_sprites` 964, `test_mp_sounds` 107. Sweep 128 of 128 byte-identical. 1 refusal | `e30489a` | 110 |
+| 13.1 | the ring a shock agent adds round itself, and the lightning's sheet cut as the original cuts it | committed with seven recorded deviations and decisions, no gate row NOT MET. `shock_area.ent` at the ABSOLUTE `scale(-10)`, 2 x areaRadius across, (0.4, 0.5, 0.5) added, turned 20 deg/s of game time (held by a pause), scaled by a fresh factor in [0.993, 1.007] every frame on `m_effectRandom` (running under a pause), gone with its agent; a new table row `Slot::ShockRing` -0.53125 (K13). 3-24 against the library `h6.3`: rim (107, 130, 124) against (107, 130, 125.8) and (99, 129, 124); outer radius 0.9964 and 0.9959 of areaRadius. `tesla_shock_black_bg.png` cut 51 of 256 (step 67's deviation closed; step 108's `cellPx` too). `test_mp_sprites` 1000, `test_mp_fields` 63, `test_mp_layer` 2446. Sweep: 20 of 128 differ, every changed pixel named (the 15 ring levels with a ring in view, the eyes on all 16 ring levels, 4-14's fireball, four diamonds' lightning). **Gameplay: none.** 1 refusal | `93e3641` | 111 |
 | 13.2 | the weightless rooms' door: shadowless sheet, glow, bob | committed with four recorded deviations, no gate row unmet. Built from decode D5 as §8.13 amends §7: `window01_shadowless.png` on the 17 levels that carry `shadowless_door` (4-02 to 4-18), `door_highlight.ent` at the door's point, 128 x 192 u, additive, at depth -22 (a depth in the LEVEL's units - `readProperties` runs before `scaleEntities`), and the 1 u / 1.2 rad/s bob of door, `door_bg` and glow on the 18 `no_gravity` levels. Measured: the glow on exactly 17 of 128 levels; its quad inside the node's prediction to a pixel; least change 0 (additive); mean |after - before - texel| 1.080 of 255; mean |change| 0.047 on the stone in front of it against the 216.0 it would add were it not behind; the bob 0.9996 u at 1.2000 rad/s, period 5.2359 s, its zero crossing at frame 78.52 against 78.54. **Deviations**: (1) the exit's SENSOR does not move with the picture - `linearMotion` ends in `SetPosition` on a body `door.ent` carries (8 x 57 u at (0,20)); the port bobs pictures alone, as `sim/Motion` does everywhere, and it is proposed to the owner beside R21 (row below); (2) the glow's band magnitudes are NOT gated against the original, by §8.13's own instruction (D5 measured them about 40 % under the 1x prediction); (3) 4-19, the one weightless level with no swap and no glow, is not a capture gate - its rocket door sits outside the f420 camera - and is pinned by the 128-level census and the layer's negative case instead; (4) the bucket-visibility clock is not built, as for 3.4. **K13**: the glow is a new between-slot user at `slotAfter(-22)`, pushed last in `buildSprites` so no dial or ring slot moves; §8.13 already lists the row for 6.3's table. **K8** does not arise: the start angle is the constant 0, and the 111 byte-identical levels of the sweep say no phase moved. **Sweep baseline**: `13.2/after/sweep` now stands for all 128 levels, superseding `5.2/verify1/sweep` and 3.4's one-row `3-15` exception | `dc8d3cc` | 79 |
-| 13.4 | the ghost a lit torch leaves where its light wall stood | committed with four recorded deviations, no gate row unmet. Built from decode D5 as §8.13 amends §7: `dashed_door.ent`, named `light_wall_ghost`, at the wall's own point on the six levels that place a light wall (4-26, 4-27, 4-29 to 4-32), from the tick the torch is lit until its orbiting fire signal is shot. `hd/dashed_door.png` at the 720 selection (R12), 32 x 128 u, the wall's angle (1.5708 rad on 4-32), alpha-blended at full brightness 1.4222 u behind the wall - 4 RAW pixels, because `seekLightWallToDestroy` adds them AFTER `scaleEntities`, the opposite of 13.2's -22 - with alpha 0.2 + 0.1 cos on an angle of 300 deg/s and `bounceLightEntity`'s pulse 1.006 -> 0.994 -> 1.006 on 160 ms legs. Measured: 6 of 128 levels resolve it and 4-22 (a torch, no wall) and 1-01 do not; the six points are the wall nodes' own and `lookZ` is 0.578, 0.578, 0.578, -3.422, -1.422, -5.422, each behind the wall's quad; nothing is drawn on the tick the torch is lit (§8.0 rule 6), first drawn alpha **0.299619** and pulse **1.004045**; low 0.100000 and high 0.300000 at ticks 36 and 72, worst departure from the closed form under 1e-6 over 120 ticks, and the quad tinted and scaled on 120 of 120; the wall's own picture gone on the 90th tick after the flag with the ghost still drawn; the quad gone on the tick the wall returns, both clocks at 0, and a relit torch starting again at 0.299619 / 1.004045. **Deviations**: (1) the bucket-visibility clock is not built, as for 3.4 and 13.2 - both clocks run from the tick the ghost is added, and it is reachable in play on 4-32, whose wall stands 146 u left of its torch against a 455 u view; (2) a pause holds both clocks, where the original's `bounce` would go on pulsing; (3) the 4 px the original's rebuilt wall drifts back each light/put-out cycle, which the port's - rebuilt from the level's node - does not; (4) **nothing confirms the ghost against the original**: no footage puts a torch out on a wall level (L1 is 4-22, which has none) and no capture can light one, so every number is the decode's (the `--tap` row below, and §1's L4). **K13**: a new between-slot user at `slotAfter(wall eth_z - 1.4222)`, the row §8.13 already lists for 6.3's table. **K8** does not arise: no random draw. The gates are `test_mp_layer` (1361 checks) and `test_mp_sprites` (762) plus the 128-level sweep, not a capture. **Sweep baseline**: `13.4/after/sweep`, which reproduces `13.2/after/sweep` row for row and now stands for all 128 levels | `f2e0e47` | 80 |
+| 13.4 | the ghost a lit torch leaves where its light wall stood | committed with four recorded deviations, no gate row unmet. Built from decode D5 as §8.13 amends §7: `dashed_door.ent`, named `light_wall_ghost`, at the wall's own point on the six levels that place a light wall (4-26, 4-27, 4-29 to 4-32), from the tick the torch is lit until its orbiting fire signal is shot. `hd/dashed_door.png` at the 720 selection (R12), 32 x 128 u, the wall's angle (1.5708 rad on 4-32), alpha-blended at full brightness 1.4222 u behind the wall - 4 RAW pixels, because `seekLightWallToDestroy` adds them AFTER `scaleEntities`, the opposite of 13.2's -22 - with alpha 0.2 + 0.1 cos on an angle of 300 deg/s and `bounceLightEntity`'s pulse 1.006 -> 0.994 -> 1.006 on 160 ms legs. Measured: 6 of 128 levels resolve it and 4-22 (a torch, no wall) and 1-01 do not; the six points are the wall nodes' own and `lookZ` is 0.578, 0.578, 0.578, -3.422, -1.422, -5.422, each behind the wall's quad; nothing is drawn on the tick the torch is lit (§8.0 rule 6), first drawn alpha **0.299619** and pulse **1.004045**; low 0.100000 and high 0.300000 at ticks 36 and 72, worst departure from the closed form under 1e-6 over 120 ticks, and the quad tinted and scaled on 120 of 120; the wall's own picture gone on the 90th tick after the flag with the ghost still drawn; the quad gone on the tick the wall returns, both clocks at 0, and a relit torch starting again at 0.299619 / 1.004045. **Deviations**: (1) the bucket-visibility clock is not built, as for 3.4 and 13.2 - both clocks run from the tick the ghost is added, and it is reachable in play on 4-32, whose wall stands 146 u left of its torch against a 455 u view; (2) a pause holds both clocks, where the original's `bounce` would go on pulsing; (3) the 4 px the original's rebuilt wall drifts back each light/put-out cycle, which the port's - rebuilt from the level's node - does not; (4) **nothing confirms the ghost against the original**: no footage puts a torch out on a wall level (L1 is 4-22, which has none) and no capture can light one, so every number is the decode's (the `--tap` row below, and §1's L4). **K13**: a new between-slot user at `slotAfter(wall eth_z - 1.4222)`, the row §8.13 already lists for 6.3's table. **K8** does not arise: no random draw. The gates are `test_mp_layer` (1361 checks) and `test_mp_sprites` (762) plus the 128-level sweep, not a capture. **Sweep baseline**: `13.4/after/sweep`, which reproduces `13.2/after/sweep` row for row and now stands for all 128 levels. **Deviation (4) answered by 11.2 (step 110, gate 7)**: footage `L1_out_4-29` confirms the ghost's position (to 0.1 px), its alpha pulse (period 1.208 s against 1.200, max/min 3.27 against 2.92) and its scale pulse's shape (profile r 0.999 on the second verification's reader); the scale pulse's AMPLITUDE is not resolved (0.60, 0.87 and 0.90 of the port's by three readers) | `f2e0e47` | 80 |
 
 Merge `e81c21b` (§0). Integration step 74 (`591e143`, `7281ca5`) sends the well ring and the crystal dial through the
 tier resolver. The ten rings now draw `hd/white_ring.png`. The dial keeps `timer.png`, which has no tier file. It
@@ -157,50 +215,79 @@ rc=0 with Vulkan validation active and no message; M == B inside B's pictures on
 door glow meets B's effect quads, which neither track produces alone). No engine change on either track: the submodule
 stays pinned at `4bfcf67`, which is the engine's own `origin/main`.
 
-**WHAT IS LEFT OF THE VISUALS PLAN (00_order §7), after this run.** Nothing of batches 0-7 is shelved, blocked or
-skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so what remains is:
+**Merge `fc243c6` (planning step 112) closes batches 8-13**, on 2026-09-29, with a docs-only `d1834c4` after it. The
+run went on two tracks at once from `f1769ed`: track A was `main` (8.1-8.4, 9.1-9.3, 11.3, 11.4, 12.2 and 12.1, steps
+89-99, pushed as they went; it regenerated `out/levels` and `out/assets` in 8.2 and 9.2), track B the branch
+`visuals-d` in the worktree `Magic-Portals-Remake-vis4` (T.1, Q.1, 13.3, 10.1, Q.2, 10.1b, 10.2, 10.3, 10.4, 11.1,
+11.2 and 13.1, written as steps 120-131 on the FROZEN level data `out/snap_pre8` and renumbered 100-111 by the merge).
+23 step commits and the two merge commits, all on `main` and pushed; the worktree and the branch are gone. 14 files
+conflicted and each kept both behaviours. **K13**: the table has 22 rows - B's `ShockRing` (-0.53125), `ShotPicture`
+(-0.515625) and `ShotHalo` (-0.5078125) first, A's `Ghost` between `Escort` and `WallGhost`, A's `LiftedSystems` after
+`Effect` - 12 classes at -0.5, 3 spreading, no row twice, no lambda. **K8**: no draw moved; the one order chosen is the
+tick's effects queue, B's additions then A's, so a struck minion's `blood` follows the diamond's own two effects.
+**`portal_mark`**: one spawn rule - A's `enemy_shoot_mark` (the same numbers) folded into it and added once at
+`Ghost::Shot::destinyPx`, overriding step 98's note to keep two rows. **The earthquake meets track A's sims**: row 16
+(the dark dragon's mouth) rewired to A's `DarkDragon::Path` (waypoint 3 past raw bias 0.2: 48 ticks from tick 721 on
+4-32); rows 1 and 24 (a fall, a minion on the killer floor), which step 96 left for the merge, are live; row 25 reads
+`Minion::entity`, so the black knight makes no impact tremble (`TheBlackKnightsLandingMakesNoTremble`). Merge gates in
+§0. **Gameplay: the merge changes none of its own**; it puts both tracks' gameplay in one build - A's R9 bodies (31
+barrels at 1.3, 2-22's stone at 0.8), R4 (3-29 to 3-32: the ghost comes with the black knight's death) and R20 (4-32:
+DAMAGE 3400 ms), and B's 11.2 fire signal (clockwise from above, the owner's to rule). No engine change on either
+track: the submodule stays at `4bfcf67`, on the engine's `origin/main` history but no longer its tip.
 
-- **Batch 8, the levels' own particle systems** (reader first): 8.1 SE-a accept `eth_particles` (**committed, step
-  89**, the row in the table); 8.2 MPR write the 24 inline `<Particles>` blocks as UTF-16 sidecars and regenerate
-  worlds 0-3 (K10) (**committed, step 90**, the row in the table); 8.3 drop the `.ent` fallback for placements; 8.4
-  `StartPoint.z` as depth. 8.3 (**committed, step 91**, the row in the table) dropped the fallback and pinned the
-  counts; 8.4 (**committed, step 92**, the row in the table) draws a placement's system at its owner's z plus its
-  `<StartPoint>` z - 15 carriers, 25 systems - and its after sweep, `8.4/after/sweep`, is the next step's before.
-  Batch 8 is closed but for one owed item: the vertical shift, a K10 pair for 9.2 (row below).
-- **Batch 9, `<Scale>`**: 9.1 `Tscn` accepts `scale` and `Find` applies K9's rule (**committed, step 93**, the
-  row in the table, with 6.1's **latent K7 fixture** built in `test_mp_layer`); 9.2 MPR Sprite2D `scale`,
-  colliders baked, regenerate (**committed, step 94**, the row in the table: the levels regenerated, 33 scale lines, 31
-  barrel boxes and the 2-22 stone's circle - **a gameplay change, R9**); 9.3 pins and gates (**step 95**, the row in
-  the table: the three sprites pinned on the levels, R9's bodies pinned as built, the barrels and the stone measured
-  at the original's size; tests only, the sweep byte-identical). R9 and R13 are the owner's standing rulings (as the
-  original: the `<Scale>` bodies, route B). Step 94 re-pinned `test_mp_levels`' key counts (129 checks, 0 failures)
-  and `test_mp_start`'s tier checks (the "Order 9.2" rows below). **Batch 9 is closed.**
-- **Batch 10, shot-side and pickup effects**: 10.1 shot marks and failures (`red_cross` still waits on R15; F3 for the
-  visual); 10.2 `crystal_pick` / `crystal_vanish`; 10.3 keys; 10.4 shock, burn, extinguish. Their effects-runtime
-  blocker is 6.3, now step 83.
-- **Batch 11, destruction, chapter 4, level end, modulate**: 11.1 walls, stones, lift doors; 11.2 torches, light wall,
-  trail, roundabout (it also owns §1's `light_from_projectile` sprite and flame, and 6.2's **torch halo 12 u low**);
-  11.3 level end and death, which closes §3's UI2 door-suck and death-burst leftover (**committed, step 96**, the row in
-  the table); 11.4 the knights' aura and R16 (**committed, step 97**, the row in the table).
-- **Batch 12, the bosses**: 12.1 the dark dragon and its dropped yellow key; 12.2 the ghost, `enemy_shoot` and its
-  dropped key (**committed, step 98**, the row in the table). **Their `m_effectRandom` blocker (K8) is satisfied — 6.3 is committed as step 83.** What still blocks
-  them is decode and footage, not code: D7/D9 and F16 for 12.1, and **R4** (the ghost appears after the black knight
-  dies — an owner ruling already standing), 3.2's `sim/Motion` (committed, step 69), D8 and F15 for 12.2.
-- **Batch 13, the scenery the script adds**: only **13.1** (the `shock_area` ring — z -10, 20 deg/s, jitter from
-  `m_effectRandom`, gated on 3-24's ring colour against the library `h6.3`; blocked on D6, and on 6.3, which is now
-  committed) and **13.3** (`black_bar`, which needs 6.2's dropped `type` / `layerDepth` read into `Art::Entity`
-  first). 13.2 and 13.4 shipped this run.
-- **Parked, owned by no brief** (§4 of 00_order): the static portal's tint source is still undecoded — 8.2/D1 settled
-  the `_portalColorA/B` globals as the ANTIPORTAL's — and the loading-screen suck burst against `launch_gold` frame
-  160 was never re-checked. Neither is batched.
-- **R22 and R23 of §8.15 were not built**, by instruction; **R24 and R25**, proposed by step 76 and applied there, are
-  still the owner's to rule (the "Step 76, THE OWNER'S TO RULE" rows below), and 7.3's first deviation is R25 again.
+**WHAT IS LEFT OF THE VISUALS PLAN (00_order §7), after the batches 8-13 run.** Every step §7 lists is built - 0.1 to
+13.4 - and none was shelved, blocked or skipped; 6.1's latent K7 fixture is built too (9.1, step 93). What remains is
+work no step of §7 owns, and the owner's calls:
+
+- **Left inside systems the plan built**: 8.4's vertical shift - an `ET_VERTICAL` owner's particle pieces sort
+  +10 raw deeper (the "Order 8.4 deviation, the vertical shift" row); 13.3 now reads `light_off.ent`'s type 2, so the
+  port has the fact, but nothing uses it. And the effects runtime's clock: a particle-only picture added from a
+  controller or a tap is drawn a tick early (`portal_mark`, `red_cross`, `crystal_pick`; the "Order 10.1b" row), and
+  what `GameStateController` adds a frame early (the "Order 11.3" row) - one runtime step could take both.
+- **Pictures the original adds that no step owns** (each in its row below): `shock_agent`'s `small_explosion.ent`
+  (10.4); `antiportal_explosion.ent` (8.13's unowned row, which also needs R23's in-flight kill); `fire32.ent` on a
+  burning character (11.3) and on the burned knight (12.2); 2-32's claw's `wall_destroy` (11.1); a boss-dropped key's
+  `key_pick` (the merge); the key's fly-in into its keyhole (10.3); the carried shock diamond at alpha 0.1 (10.4); the
+  shock agent's pulse (13.1); the unlit torch's spin (11.2); the dark dragon's scattered `small_explosion_no_light`,
+  its death's `explode` and `ghost_utility_spawn` (12.1); the ghost's DAMAGE and DEATH explosions (12.2); and the
+  sounds 10.4, 11.2, 12.1, 12.2 and 13.1 name.
+- **The earthquake's follow-ups**: Q.1's gate 4 NOT MET (F16's +-10 opening; the owner accepts it or C52 is settled);
+  whether the generator resets at a load; the shaken-camera readers the port keeps at rest, the skull among them
+  (Q.1's deviation 6 and the merge's finding); D11 rows 3, 13, 21, 30 and 10 / 8's kill unwired, row 9 dead on 3-20;
+  `beholder_death`, `ghost_death` and `dark_dragon_death` wired but driven by no case; `Impacts::kRecentSteps` still
+  a number in code.
+- **Gameplay rulings decided for what the original does, and not built** (no batch owns them; they were kept out of
+  this run by instruction): **R1** - an antiportal refuses at 32 x scale, the port at 16 (the "System 4" row); **R2** -
+  the gravity well refuses nothing, the port still refuses and `test_mp_wells` asserts it (the "Gravity wells" row);
+  **R23** - §8.14's portal-tap list: a refused tap restarts the 400 ms clock, budget-0 feedback, a reflected shot never
+  dies on a wall, the in-flight kills (`anti_portal_agent`, a `fire_agent`'s flame, `light_off`), no death on a well,
+  the zero-g recoil aimed at finalPos. 10.1's pictures now show each of these wherever it bites (the "Order 10.1"
+  rows). **R22** - how to re-baseline 1-01's static portal 582's ring excess (1.62x, its pulsing part 3.02x), which no
+  script lever explains - is a gate choice for System 2's follow-up (the "Step 59" row), also unbuilt.
+- **The owner's calls still open**: **R24 and R25**, applied by step 76, still the owner's to rule (the "Step 76, THE
+  OWNER'S TO RULE" row; the player's point is R25's other half, and 7.3, 10.1, 10.1b and 10.4 each record it again);
+  **the two PORT-WIDE rows** - the script clock the original floors to whole milliseconds, and every body's picture
+  drawn a tick behind the sim; **11.2's fire signal**, applied and the owner's to rule, and step 30's put-out test at
+  the ball, which the original makes at the torch; and the gameplay rows this run filed for the owner without
+  changing them - 12.1's barrel-bomb restock (4-32 cannot be won without it), its summon clock and its wound's shot
+  at the torch, 12.2's fire against the ghost, 11.3's death before the door, 10.2's pickup rule, 10.3's carriers and
+  the keyhole's visible clock, 11.1's four (`destroyable` stones, 3-20's destroyier, the lift door's rise and status
+  machine, the beholder's filter) and its two unbuilt wall breaks, Q.2's minion spawn point and the engine's staged
+  braking, 13.1's off-screen kill, 11.2's zero-g recoil speed, 13.2's exit sensor (beside R21) and step 73's ring
+  depth.
+- **Parked, owned by no brief** (§4 of 00_order), carried over and not re-checked in this run: the static portal's
+  tint source - 8.2/D1 settled the `_portalColorA/B` globals as the ANTIPORTAL's - and the loading-screen suck burst
+  against `launch_gold` frame 160.
+- **The standing sweep baseline** is `merge_d/sweep` (step 112, `MagicPortals.exe` `8b5ab6d2`, the regenerated
+  levels; 1-01 f420 `e2da5131`).
 
 - [x] **Step 0** — engine `--screenshot-every N` (every temporal check depends on it). Done: SE step 57 (`29448a8`).
 - [ ] System 1 colour transfer — largely done by lighting E1/G2; re-check its remaining rows.
 - [ ] **System 2 particles**: emitter origin at the entity position (torch flame 13.4 u too low), spin sign
       (counter-clockwise ~108°/s), alpha, depth (particles 2.5 layers in front of their sprite), square quads,
-      following moving owners; AM_MODULATE blend (engine has alpha + additive only).
+      following moving owners; AM_MODULATE blend (engine has alpha + additive only). **AM_MODULATE is built as a
+      multiply** by 11.3 (step 96: `modulateImage`, `DrawColour` (0, 0, 0, 1) for `alphaMode` 4; 0 of 65,536 (g, d)
+      pairs past +-1) and used by 11.4's aura (step 97); the other items are not re-checked here.
 - [ ] **Step 59's two recorded particle deviations** (SE step 59, committed with them, not tuned): on 1-01's static
       portals, the ring excess r 25-45 px on 582 is 106.5 against the original's 65.6 +-25% (1.62x; 1.33x against the
       58 footage frames), and the iris core's temporal s.d. on 604 and 582 is 3.41 / 3.19 against <= 3 on 51 frames
@@ -413,7 +500,14 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       `door._not_built`. Next: the owner's ruling, proposed beside R21 (which moved the button's body under its
       picture) - either offset the exit trigger by the bob each tick, as `SetPosition` does, or rule that the port's
       scripted motions move pictures only.
-- [ ] **Found building step 80 (order 13.4): `--tap` cannot fire a portal shot, so no capture can light a torch.**
+- [x] **Found building step 80 (order 13.4): `--tap` cannot fire a portal shot, so no capture can light a torch.**
+      **CLOSED by step 87 (`5a60733`) with T.1 (step 100, `87aa67f`).** Step 87 had already moved `readInput` onto the
+      tick's `Touch`, read before `helpBlockInput`, so a `--tap` fired the shot on every level - T.1's first
+      measurement, on the committed build: `--level level28c --tap 247,141@60` lights 4-29's torch (the wall going on
+      tick 71). T.1 then made the last two roads one: a scheduled tap on a HUD control is spent on the control, and its
+      pixels are the viewport's in any window. So 7.2's, 7.4's and 10.1-10.4's capture gates no longer have to rest on
+      the suites, and 10.1 to 11.2 took `--tap` captures. What a `--tap` still cannot press: the pause's and the end
+      screens' buttons (the "Left by T.1" row). The row as it was:
       `readInput`'s shot reads `Input::MousePosition()` and `ViewportInfo::pointerOverGame`
       (`game/MagicPortalsLayer.cpp:4996-4999`), which a scheduled `--tap` never sets - it fills this layer's own
       `Touch` alone - and during play that `Touch` is not even built on a level with no help block: `helpBlockInput`
@@ -446,16 +540,18 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       (four of the five well levels place no light; level27c's `fire_agent_ent_1919` has its own picture), but such a
       light on a well level would sit a slot too deep. Next: step 6.3's slot table leaves between-slot pictures out of
       that count, pinned in `test_mp_layer`.
-- [ ] **System 5 actors with sheets**: the minions and knights (62 markers in 35 levels, and the chapter-3 boss's
+- [x] **System 5 actors with sheets**: the minions and knights (62 markers in 35 levels, and the chapter-3 boss's
       escorts) are drawn on `hd/minion.png` cut as the original cuts it, on the decoded rows 1/2, behind the player at
       its decoded depth 4 (R10), on patrols that now arrive where the original's do - **built, planning step 76**
       (order 5.1; committed 2026-09-20 as MPR `9d25691`), with the "Step 76" rows below.
       The 2-32 dragon follows it: its own cell, its flight, its `Follower`-driven angle and R19's fireball, and
       its claw - **built, planning step 77** (order 5.2; committed 2026-09-20 as MPR `cbbf169`), with the
       "Step 77" rows below.
-      What is left of the system: the dark dragon (12.1). The knights' dark aura, and the sim honouring the marker's
-      `entityName` (R16), are built in planning step 97 (order 11.4), and the ghost that the knight's death adds (R4),
-      its shot and its dropped key in planning step 98 (order 12.2), each with its "Order" rows below.
+      The knights' dark aura, and the sim honouring the marker's `entityName` (R16), are built in planning step 97
+      (order 11.4), the ghost that the knight's death adds (R4), its shot and its dropped key in planning step 98
+      (order 12.2), and the dark dragon and its dropped key (R20) in planning step 99 (order 12.1, `848ed92`), each
+      with its "Order" rows below. **Every actor of the system is now drawn**; what is left is in those rows and in
+      R24 / R25's.
 - [ ] **Step 76, THE OWNER'S TO RULE: two sim changes applied under no adopted ruling** (proposed as **R24** the
       patrol's arrival point and **R25** a carrier's point, appended to `00_order` §8.15 by 5.1's third round;
       neither is one of R1-R23, and the step's first record called them "the same standing ruling", which was an
@@ -496,9 +592,18 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       So a key or a diamond the player carries rides 3.9 u low, and both its 26 and the diamond's 30 are polled from
       3.9 u low. Not applied here: the capsule is the player's body to settle, not the carry's. Next: the player's
       body, with `Carry::Carrier`'s point already in place to take it.
+      **Evidence from the batches 8-13 run, nothing changed**: 10.1b (step 105) finds the standing player DRAWN 9.75 px
+      (3.47 u) higher on the screen than the original's on 1-03 and 1-07 (cell 8 placed by correlation at top-left y
+      484.75 against 494.5 on nine lossless library stills and F2 / F3 #20; the scene aligned at (0, 0)), against the
+      3.9 u (11 px) the capsule predicts, a residual of about 1.2 px not investigated. The same point also places
+      `projectile_shoot` and 10.1's tap ray (step 103, deviation 2), the ghost's aim (step 103, deviation 7), the ring's
+      `shock_death` and the strike's midpoint (step 108, deviation 9), 11.3's sparkles and blood, and 7.3's
+      teleport effects: each moves with the player's body when it is settled.
 - [ ] **Step 76 deviation, a shock diamond's prey point**: `Diamonds::Tick` measures its 30 to a minion from that
       minion's body centre; `ETHCallback_shock_diamond` ins 421-430 measure it from the minion's `GetPositionXY`,
       11.1 higher, which is about 3.7 u more reach on a shared floor. Next: Diamonds, with the same point.
+      (10.4, step 108, deviation 1: the strike's effects now go at the minion's ENTITY point, as `GetPosition()` is,
+      while the reach is still measured to its body centre - gameplay, unchanged.)
 - [ ] **Step 76 deviation, the lone guards' coast** (beside R5): the original's guard is frictionless (`minion.ent`
       friction 0), so once `shouldntMove` stops driving it at the wider 16 it coasts on to its 8, arrives, adopts the
       999999999 hold and is braked to a stop on column 0. The port's body grips (`kBodyFriction` 1) and stops about
@@ -546,12 +651,20 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
 - [x] **System 6 texture tiers**: hd/fullhd per file (fullhd skies are 512 u wide). Converter + port together, or sprites
       draw twice too big; the Sprite offset × scale trap applies. Built by orders 0.2, 2.1, 2.2 and 2.3 (SE steps 61, 65,
       66 and 67; MPR `e9611e4`) and step 74 for track B's two pictures. What is left is in those steps' RECORDED
-      DEVIATIONS and LEFT FOR THE OWNER, for example the evenly split particle sheet (step 67, for 13.1).
-- [ ] System 7 spawned effect entities: teleport effects, player-placed portal spiral, pickup/explosion effects,
-      `portal_fail*`, key/keyhole effects; carranca fireballs are tan placeholder boxes today.
+      DEVIATIONS and LEFT FOR THE OWNER, for example the evenly split particle sheet (step 67, for 13.1) - **closed
+      by 10.4 (step 108, `shock_strike.png`) and 13.1 (step 111, `tesla_shock_black_bg.png`)**.
+- [x] System 7 spawned effect entities: teleport effects, player-placed portal spiral, pickup/explosion effects,
+      `portal_fail*`, key/keyhole effects; carranca fireballs are tan placeholder boxes today. **Every item named here
+      is built**: the effects runtime (6.2-6.3, steps 82-83), the fireball and its explosions (7.2, step 85), the
+      teleport's three (7.3, 86), the placed portal (7.4, 87), the level end and death (11.3, 96), the marks and
+      `portal_fail*` (10.1, 103), the crystals' (10.2, 106), the keys' and keyholes' (10.3, 107), the diamonds', rings'
+      and signal's (10.4, 108), the walls', stones' and doors' (11.1, 109), the torch's, trail and lap (11.2, 110), the
+      bosses' (12.1, 12.2). The effects the original adds that no step owns are listed under "WHAT IS LEFT" above.
 - [x] System 8 light halos — landed in G5 (step 49); magnitude still open under §1.
 - [ ] System 9 converter-carried per-placement data: scale, sprite frames, the levels' own particle systems
-      (45 placements load the wrong data).
+      (45 placements load the wrong data). **The particle systems are built by batch 8** (steps 89-92: 840 carriers,
+      897 systems, each placement drawing only what its own `<Particles>` states) **and the scale by batch 9** (steps
+      93-95: 33 scaled sprites, R9's bodies). "Sprite frames" is not re-checked here and keeps the row open.
 - [x] System 10 small scripted motions: crystal bob, arrow sway (2.5 u, 1.52 s), timed-crystal fade. Built by orders
       3.1-3.3: the timed crystal's dial with no fade (SE step 68), the crystal and free-key bob in `sim/Motion` (69),
       and the sway of the arrow, dashed circle and tapping hand at alpha 0.55 (70). No recorded deviations; owner items
@@ -568,8 +681,16 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       `_portalColorA/B` globals this row named turn out to be the ANTIPORTAL's — vector3(0.2, 0, 0) and
       vector3(0.4, 0, 0), the blink's two ends (SE step 72).
 
-- [ ] **Order 6.1 deviation, K14: the shot is still drawn IN FRONT of the player, and the merge did not re-derive it**
-      (step 81). 00_order's K14 asks where the shot sits against the player. `addProjectile` adds it at **z 0**, and
+- [x] **Order 6.1 deviation, K14: the shot is still drawn IN FRONT of the player, and the merge did not re-derive it**
+      (step 81). **CLOSED by 10.1 (step 103, `7ac69b1`), re-taken after the level's opening by 10.1b (step 105).**
+      `Slot::ShotPicture` -0.515625 and `Slot::ShotHalo` -0.5078125 are now the between-slot table's first two rows,
+      drawn at `slotAfter(shot.z = 0)`: behind the player (R10's 1.42) and behind a minion where they share a gap.
+      Measured: with the shot at the player on 1-07 (taps of ticks 200 and 290), 5,518 and 5,502 px inside the
+      player's box differ, every one darker - the body now covers the shot and only its blue sparks show at his back,
+      as F3 #27 and #206 show the original; 10.1b reads the same after the opening on 1-07 and 1-03, and the launch's
+      colours against F3 #27 and F2 #26 (4,014 px, 77 % behind the player's middle, against F3's 4,021, 75 %). Its
+      price is recorded (the "Order 10.1" rows): the table orders a gap by class, so a -0.5 class with its own z below
+      0 is drawn over the shot where both share a gap. The row as it was: 00_order's K14 asks where the shot sits against the player. `addProjectile` adds it at **z 0**, and
       R10 puts the player at **z 4**, so the original draws the shot BEHIND the player. Step 81 knowingly kept the
       port's order — a quarter slot in front of a player the port still placed at z 0 on track B's tree, which is
       Ethanon's order at an equal z for what is added later — and left it to "whoever lands second", naming 6.3's
@@ -1145,6 +1266,175 @@ skipped, and 3.4, 13.2 and 13.4 shipped out of order during batch 5's run, so wh
       one), so a track-B effect is unchanged unless it writes it; `--burn-dragon` / `ScheduleDevBurn` / `LayerTicks` are
       new DEV entries; the dragon's mouth lands its Kill / Play in `updateEffects` after the effect's emitter loop.
       Next: the merge agent.
+- [ ] **Left by T.1 (step 100)**: a scheduled `--tap` still cannot press the pause's buttons (they have
+      `ScheduleDevPress`) or the end screens' (nothing), which read the mouse alone; and whether the original fires on
+      touch-down or touch-up is unresolved by L1 (section 2) - the port fires on the down edge, for a press and a
+      scheduled tap alike. Harness and timing only. Next: a capture that needs either.
+- [ ] **Order Q.1, NOT MET: F16's 4-32 light wall opens at +-10 px, the port's at +-19.7** (step 101, gate 4 and
+      deviation 15; committed under the owner's delegated decision, not tuned). The decode and L1 (4-29) open at
+      19.69 px and so does the port (-19.78 / +19.79 on 4-29; +7 u = 19.69 px on 4-32's tick 170); from its second pair
+      on, the port is F16's whole sequence within 0.6 px. Why F16 has no first pair is D11_check C52, UNSETTLED: (a) a
+      phase leak - an earlier sub-pixel call (rows 4 and 25, wired since Q.2) left the generator on a back; or (b) two
+      dropped capture frames. F16's frame times lean to (a) and do not settle it (`Q.1/fix2/f16_timing.txt`). The phase
+      is not seeded to fake it. Q.2 adds that the port now CAN open at +-10 where soft calls come before the wall; no
+      4-32 capture was run (its torch needs the player walked to it). Next: the owner accepts it, or a light-wall clip
+      with a visible frame cadence settles C52.
+- [ ] **Order Q.1, the generator is kept across a restart and into the next level** (step 101, deviation 3), as the
+      original's script module is never rebuilt (C3): a shake running when a level ends plays out over the next one's
+      first frames; a menu freezes it. Next: the owner's call whether a load resets it.
+- [ ] **Order Q.1, the original's other readers of the SHAKEN camera stay at rest in the port** (step 101, deviation 6;
+      D11_check section 2, C36): the help blocks' tap rects; the lift's, `hand_tap`'s and the arrows' hit tests; the
+      beholder's appear test and its spikes' screen cull; `no_portal_sign`'s 100 ms re-aim; 2-32's `dragon_claw` y echo;
+      4-19's `rocket_landing` - each at most one frame and one spike off. The two skulls are the merge's row above ("the
+      skull reads the rest camera"). Next: one step for the shaken camera's readers.
+- [ ] **Order Q.1, D11 rows still unwired** (step 101's NOT WIRED list, as 10.1 and Q.2 left it): row 3
+      (`antiportal_explosion`, a shot an `anti_portal_agent` kills: R23); row 10 (a stone crushing a minion: the port's
+      minions are not breakable) and row 8's other half (a character killed above hitIntensity 2.5) - gameplay; row 13
+      (`shaker`, placed by no level); row 21 (a burned carranca) and row 30 (4-01's rocket), systems the port lacks; row 9
+      on 3-20, whose placed stone the port never culls. And three wired rows no case drives: `beholder_death`,
+      `ghost_death`, `dark_dragon_death` (a boss beaten). Next: their owners; a boss-win case for the three.
+- [ ] **Order Q.1 deviations, recorded** (step 101; none a gate failure): the 50 px cap and the 1 px stop taken at R12's
+      720 px screen (deviation 2; a 1080 px phone's cap is 11.85 u); the light wall goes on its own tick, the original's
+      with its first spike (5); two calls on one side of one tick in the port's order (8); the fireball's 5 a frame early,
+      with its explosion (9); `SpaceSky` not ported, so the 19 `space_bg` levels shake their whole background (10); no
+      vibration (11); F6's barrel on 2-12 not reproduced, because the port's blast takes no wall away (12; gameplay,
+      `Fire.hpp`, nine chapter-2 levels); a static callback's call not limited to visible buckets (14). And the merge's:
+      4-32's mouth leg starts on tick 721 where step 101 measured 720 (the path's 0 ms waypoint takes an update of its
+      own; the same 48 ticks). Next: their owners.
+- [ ] **Left by 13.3 (step 102)**: the band stopping at x 768 on a wide level (10 of 128) rests on
+      `TheBlackBarsStopAt768OnAWideScene` and F17 alone - no capture has a quake while such a view is past 768; the
+      no-portal sign, drawn in the HUD overlay, is over the bars where the original's entity is under them (1-15, 2-07,
+      2-28; not measured); `view.json`'s note says 73 levels are 256 u tall where the `max` markers give 94 (00_order
+      8.14's owner); a reverted comment in `game/sim/Art.cpp` ("every named type has a centre", where `ET_VERTICAL` is
+      `EO_CENTER_BOTTOM`) waits for a rebuild. Next: their owners.
+- [ ] **Order 10.1, the pictures show R23, R1, R2 and R17 wherever they bite** (step 103, deviations 1-4): the hourglass
+      does not restart the 400 ms clock (R23); the mark follows the original's tap-time ray while the shot follows the
+      port's flight, and the two disagree on 46 buttons (37 levels), 4 `destroyier.ent` and one anchor (sensors the
+      original's ray stops on and the port's flight passes), on 116 placed teleportable bodies (62 levels) and 60 minion
+      spawns (35) (the reverse), on the head-height retry, and on a reflected shot meeting a wall (R23); the fields are
+      the port's - antiportals at 16 x scale (R1; 71 placements in 52 levels), wells (R2; 10 in 5) and
+      `anti_portal_agent`s (R17; 21 in 17) as fields, and 1-07's `no_portal_705`; the in-flight kills the port does not
+      play (an `anti_portal_agent`, a `fire_agent`'s flame). The pictures are right for the port's play; each difference
+      is R23's, R1's, R2's or R17's gameplay. Next: those rulings built.
+- [ ] **Order 10.1 deviations, recorded** (step 103, 5-10): no vibration; the fire-diamond tap's mark follows the
+      leftover byte of `absTouchPos.x`, which the port's camera cannot reproduce (D3's unsettled item); the ghost's mark
+      at the player's body centre (R25); `red_cross` looks UNDER `red_waves` in F3 where the add order puts it over (an
+      unpinned tie, not measured); K14's price - a -0.5 class with its own z below 0 (a dial, a ring, a door glow, a
+      spike, a wall's ghost) is drawn over the shot where both share a gap, and at an equal z 0 a placed portal and a z-0
+      effect are ordered by class, not by when each was added (no gate frame shows one); the flash on a fire-diamond shot
+      is undecoded (the port converts the shot before its first leg). Deviation 7's "the ghost exists from the level's
+      start" is stale on `main`: R4 is built there. No footage shows `red_waves` (B) (1-15, 2-07, 2-28). Next: their
+      owners.
+- [ ] **Order Q.2, where the port makes a minion** (step 104, deviation 10; GAMEPLAY, the minions' owner's): the port
+      centres a minion's 7-unit circle on its marker, 11.1 higher than the original makes its knight (the entity point
+      on the marker: its feet into the floor on 51 of the 62 markers, 44 of them by 2.1), so every knight falls about 9 at its level's
+      start where the original's is made standing. The impact watch reads around it; the sim is unchanged. Next: the
+      minions' owner.
+- [ ] **Order Q.2, the engine brakes a landing in stages** (step 104, deviation 3; the engine's): its speculative
+      contacts stop a fall early and in stages (3-16: a 460 px/s fall stopped dead 7.7 px over the floor, falling again,
+      touching 8 ticks later at 20 px/s) - a hover of a few frames on a hard landing, with the landing's shake when the
+      body touches. Gameplay and the engine's; read around, not changed. Next: the engine's owner, if a capture shows the
+      hover against the original.
+- [ ] **Order Q.2 deviations, recorded, and tidy** (step 104): the port's contacts are its own bodies' - one capsule for
+      the player where `dark_mage.ent` has two circles, a 7 px circle for a minion where `minion.ent` has two of 9.1 - so
+      a knight's seam begin can erase a running landing shake where the original's would not, and the reverse
+      (deviations 2, 8); two impact calls on one tick in the port's order (9; no tick of the sweep has two); row 4's sign
+      against a round other not traced (4); no sensor in row 8 (5); a body first looked at begins nothing (6). Deferred,
+      because each relinks every suite and the game: `Impacts::kRecentSteps` (60, `game/sim/Impacts.hpp:83`) into
+      `earthquake.json` with its provenance, and `APlayerLandingShakesTheView`'s header comment (it lands on a back on
+      3-16). Next: the next step that touches `sim/Impacts`.
+- [ ] **Order 10.1b, a particle-only picture added from a controller or a tap starts one tick early** (step 105,
+      deviation 1; step 106, deviation 1): the port draws `portal_mark`, `red_cross` and `crystal_pick` on the frame of
+      the tick that adds them; the original adds them after its always-active update loop (a controller, the portal
+      manager), so their particles are first released and drawn a frame later (`ETHScene.cpp:467`, `:473-474`, `:482`;
+      `ETHParticleManager.cpp:125`, `:219-228`, `:375`). F2 and F3 show no mark on each of their four tap frames and one on
+      the next. `crystal_vanish`, added from `ETHCallback_timer` inside the loop, is on time, as the port draws it;
+      `red_waves` and the hourglass would start a tick late too (no footage frame). 16.7 ms, picture only. Next: the
+      effects runtime - such a picture first drawn on its tick + 1 at age 0, with a test; beside 11.3's "what
+      `GameStateController` adds draws a frame early".
+- [ ] **Order 10.2, the pickup rule** (step 106, deviation 3; GAMEPLAY no batch owns): the port takes a crystal when the
+      player's body overlaps its trigger box (Goals, the remake's rule); `MainCharacter::crystalPicker` takes it when the
+      character's point is within `squaredRange` of the crystal's point shifted `scale(14)` either way (#111-177). The
+      burst follows whichever takes it. Next: the owner.
+- [ ] **Order 10.2 deviations, and tidy** (step 106): the expiry tick is the port's (Goals' `leftS` reaching 0 against
+      the timer's strict `>` on floored frame ms, step 68's note; deviation 2); the crystal's point is the tick before's,
+      at most 0.05 u of bob (4). For later, from its verification: a per-system pool count in `EffectReport` (so the
+      suites pin {5, 2} and {1, 2}, not the sum); the effect's depth read from the node's `eth_z` rather than the lighting
+      look's `lookZ` (a level whose lighting read failed would put the burst at a flat 20; all 128 read today; 10.3 and
+      10.4 read the same field).
+- [ ] **Order 10.3, gameplay rows** (step 107, deviations 3 and 4): several carriers in range on one frame - the
+      original's loop adds a `key_pick` for each and the last owns the key; `Carry::Acquire` takes the first. And the
+      keyhole's 1500 ms counts only while it is on screen in the original (`keyhole.ent` is static, so its callback runs
+      only in visible buckets, 00_order 8.12c); the port counts it everywhere, as it does the button's, the door's and
+      the wall ghost's clocks (steps 78-80). Next: the owner, with the bucket-visibility rows.
+- [ ] **Order 10.3, not built, and tidy** (step 107): the key's fly-in (F9: swung 20 u right of the keyhole, slid in,
+      faded and deleted about 1.27 s after the unlock; the port's spent key holds until the keyhole goes; only the
+      fly-in's clock is built, because it times the halo); a boss-dropped key's `key_pick` (the merge's finding: 10.3
+      adds it only for a key a level node pictures, and 12.1 / 12.2 draw the bosses' keys as effects); the unlock's
+      pictures against F9 need a route to a keyhole or a capture-only warp; `latchSimEffects` drops all three door
+      effects when the keyhole's OR the door's picture is missing (no frozen level has either missing); `Keys.hpp`'s
+      header comment is stale. Next: the key's picture owner.
+- [ ] **Order 10.4, not built, and recorded** (step 108): `shock_agent`'s `small_explosion.ent` where a fireball destroys
+      an agent (#331-345; deviation 2 - a one-row addition beside `shock_death_at_agent`, owned by no step); the carried
+      shock diamond at alpha 0.1 (its lightning still draws at full strength while carried; `diamonds.json`
+      `_not_built`); the sounds (`playShockDiamondPickSound`, `playShockStrikeSound`, `playBurnSound`,
+      `playFireExtinguishSound`, `playLightOffSound`); F14's standoff (its knight struck 27 u off, where the port's route
+      walks the knight into the player); the effects' onset - the strike's white peaks about 0.04 s after F14's, the
+      water's plateau starts about 0.12 s after L1's; `Torch.hpp:42`'s stale comment (`Fields.hpp`'s was fixed by 13.1)
+      and `system_7.md`'s "unreachable" for `ETHCallback_shock_agent`. Next: their owners.
+- [ ] **Order 11.1, GAMEPLAY rows for the owner** (step 109, deviations 1-4; each moves the effects the step draws with
+      it): `destroyable` stones are not destroyed by the wall they break (`ETHBeginContactCallback_breakable_wall`
+      #42-60) - 12 placed stones on 10 levels, and every stone an `entity_launcher` throws (#200-209 set the flag), so on
+      1-24 and 1-25 the original's thrown stone dies at the wall it breaks while the port's rolls on to the despawner;
+      3-20's placed stone is never taken by its destroyier; the port's lift door (`Mover::Door`) rises 126 u where the
+      script rises 0.8 x h = 102.4, and turns wherever its channel turns it where the script opens it only from shut and
+      closes it only from fully raised; the beholder breaks any demolisher stone rising into it, the original only
+      `rolling_stone.ent`. And two wall breaks the port does not do: a bomb's blast destroys every breakable it grabs
+      (`explode` #111-122; `Fire.hpp:52-56`, nine chapter-2 levels), and 4-19's `red_key_state` destroys
+      `breakable_wall_2756` 6000 ms after its key is destroyed (recorded nowhere else). Next: the owner.
+- [ ] **Order 11.1, recorded, and tidy** (step 109): the wall's angle is the converter's 1.5708 rad (-90.00021 deg, 0.0002
+      u over the half line); static callbacks add their dust only while their bucket is drawn in the original
+      (deviation 6, with steps 78-80's rows); 2-32's claw's `wall_destroy` at angle 90 has no owner in 00_order section 7;
+      the wall watch (`m_wallEffects`) is one-way and its comment says a wall does not come back (harmless: 11.2 gave the
+      light wall a watch of its own); `ALiftDoorLeavesItsDustAsItOpensAndCloses` names `button_1666` where the door that
+      turns is `button_1656`'s. The comments wait for an edit that recompiles them anyway.
+- [ ] **Order 11.2, THE OWNER'S TO RULE: the fire signal's orbit** (step 110, deviation 1; GAMEPLAY, applied): clockwise
+      from above and added on its torch (decoded #42-108; L1: 296-300 deg/s at 48-54 px), where the port had it
+      counter-clockwise from a full radius to the torch's left. In the original this is the picture alone; it changes
+      the port's play only because the port's put-out test stands on the ball (the row below): on L1's taps the put-out
+      moves from tick 261 to 260, which is also the tick the original's torch-centred test gives on them, by their
+      geometry. Next: the owner rules on it with the row below.
+- [ ] **Order 11.2, GAMEPLAY from step 30: the fire signal's put-out test** (found by step 110's fix round, not
+      rebuilt): `ETHCallback_fire_signal` #111-117 test `hasProjectileAround(originalPos, scale(24), includeFireballs 0)` -
+      at the TORCH's point, `projectile.ent` alone, in the torch point's own bucket alone (`hasProjectileAround` #4-13).
+      The port (`Torch::State::Tick`, since step 30) tests at the orbiting BALL and counts fireballs, so a shot through
+      the torch's point but not near the ball goes on, and a fireball near the ball puts the torch out - reachable on
+      4-32 alone, where the dark dragon's fireballs fly. `game/sim/Torch.cpp:155`'s comment, `test_mp_torch`'s "it MOVES,
+      which is what makes it a shot worth aiming" and step 30's record read it the port's way; the data notes are
+      corrected. Next: the owner; gameplay no batch owns.
+- [ ] **Order 11.2, the zero-g recoil's speed** (step 110, deviation 7; found there, not its own): the port's 1.4 m/s
+      recoil is 70 u/s (`zerog.json`; `kPixelsPerMetre` 50, Ethanon's `DEFAULT_SCALE`), where F10 measured one at 40-44
+      u/s. Next: `zerog.json`'s owner.
+- [ ] **Order 11.2, step 73's ring depth** (step 110, deviation 9): `gravitywell.json` `ring.z` draws the well's ring at
+      -5 port units, where the area it stands for is at the bare -5 = -1.778 (step 86's rule, which `roundabout_effect`
+      follows). Next: a step that touches the ring: -5 -> -1.778.
+- [ ] **Order 11.2 deviations, recorded** (step 110): the lit torch's light does not bounce with its picture and halo
+      (the original bakes a static light a frame after the lighting; 2); the rebuilt wall is an effect at the ghost,
+      drawn at full brightness, which does not drift the original's 4 raw px a cycle (3); the unlit torch's 190 deg/s spin
+      is not built (4); one frame shows both torches (5); the trail every 24th tick at 60 Hz, where the original's floored
+      clock passes 400 on its 24th or 25th frame (6); every dynamic body swept from the first tick, and the agent's clock
+      off the bucket clock (8); the trail hides with the player (10); the light-on, light-off and switch sounds (13); a
+      lit torch takes its level emitters off the placement stream, so later level emitters draw a shifted sequence after
+      a lighting (15). Next: their owners.
+- [ ] **Order 13.1, the off-screen kill** (step 111; GAMEPLAY, older than it): `Fields::Tick` polls every ring every
+      tick, where the original's `ETHCallback_shock_area` kills only while its bucket is drawn (D6_check 5.7). Next: the
+      owner, with the bucket-visibility rows.
+- [ ] **Order 13.1, not built, and recorded** (step 111, deviations 1-7): the agent's own pulse (`bounce(V2_ONE,
+      vector2(0.95, 0.95), 300)` on the agent's sprite; its argument order not re-derived) and `playShockStrikeSound`;
+      the ring turned and jittered from the level's first tick (the original's only while its bucket is drawn) and there
+      from the first frame (the original's a frame later), on the port's 4.17 %-fast clock (the PORT-WIDE row), with
+      `randF`'s inclusive 1.007 never drawn; paused frames now write the rings' two quads. None shows at 1 %. Next: a
+      small step for the pulse.
 
 ## 3. UI
 

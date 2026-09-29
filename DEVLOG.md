@@ -2392,3 +2392,124 @@ Of the visuals plan, batches 0-7 are closed plus 13.2 and 13.4; about 18 steps r
 with no engine change and no lost work, which is the best this project has done; the cost was 25 Smart App Control
 notifications, one fireball step that took three verification rounds to get its own record straight, a laptop that
 slept through a test run again, and a merge someone had to pick up half-finished.
+
+### 2026-09-27 - Session 20: visuals batches 8-13
+
+*Written 2026-09-29 at the close, from the planning records (steps 89-112 of
+`docs/planning/2026-09-11-magic-portals-remaster.md`), the merge's verification folder `out/parity/visuals/merge_d/`,
+and git - not from a transcript. I did not run the session: I checked the repository, wrote the backlog rows and this
+entry, and committed the two files. Every number below is one a step records or git shows; where a figure is
+assembled from several records rather than observed by me, it says so. The run went from its first commit (`25b0f89`,
+2026-09-27 11:43; track B's baseline sweep was captured from 10:51 that morning) to the merge's docs commit
+(`d1834c4`, 2026-09-29 00:57).*
+
+**Built:**
+- **Every remaining step of the visuals plan (00_order §7), on two tracks at once, 23 step commits.** Track A on
+  `main` (steps 89-99, pushed as it went): 8.1-8.4, the levels' own particle systems - the converter writes each
+  placement's inline `<Particles>` as a sidecar the port reads, and a placement now draws only the systems it states
+  (840 carriers, 897 systems, 24 sidecars), at its owner's z plus its start point's; 9.1-9.3, `<Scale>` - the reader,
+  the converter (33 scaled sprites, 31 barrel bodies 28.6 x 37.7, 2-22's stone a circle of 24) and the pins; 11.3, the
+  level end and a death (red suck, sparkles, blood, skull, and `AM_MODULATE` as a real multiply); 11.4, the knights'
+  aura and R16; 12.2, the ghost as the black knight's death adds it (R4); 12.1, the dark dragon as its callback plays
+  it (R20). Track B on `visuals-d` in the worktree `Magic-Portals-Remake-vis4` (written 120-131 on the frozen levels,
+  renumbered 100-111): T.1, a scheduled `--tap` is a real press; Q.1 and Q.2, the original's earthquake from decode D11
+  and every call whose event the port has, the impacts included; 13.3, the black bars; 10.1, the shot's marks and ends
+  and K14 (the shot now behind the player); 10.1b, 10.1 re-measured after the opening, no change; 10.2-10.4, the
+  crystals', keys' and diamonds' effects; 11.1, walls, stones and lift doors; 11.2, the lit torch as its own entity,
+  the fire signal, the trail and the lap; 13.1, the shock agent's ring.
+- **The two tracks merged** - `fc243c6`, planning step 112, plus `d1834c4` (docs). 14 files conflicted and each kept
+  both behaviours; three joins git merged as text broke in code and were fixed there (`EffectReport`'s two `angleDeg`,
+  the `Minion::entity` rename, the dark dragon's new path under Q.1's mouth shake). `portal_mark` for a ghost's shot
+  is one spawn now, where both tracks had added one. Pushed; the worktree and the branch are gone.
+- **Two converter changes and two regenerations of `out/levels` and `out/assets`**, each into a staging dir under
+  `out/` first, compared, then replaced; `out/snap_pre8` (track B's input and the rollback) untouched.
+
+**GAMEPLAY changed in four steps, each as the original plays it or recorded for the owner:** R9 (step 94: 31 barrel
+bodies 1.3x per axis, 2-22's stone 0.8x; 2-24's player now stands on its barrel); R4 (step 98: on 3-29 to 3-32 no
+ghost until the black knight dies, a fireball burns the minion it reaches, the ghost hovers 8 u, its shots start 16 u
+out); R20 (step 99, 4-32 only: DAMAGE 3400 ms, the eased paths, the hover and the neck, shots from the mouth, the first
+shot 1.3 s into the fight); and step 110's fire signal, clockwise from above - the original's picture, gameplay here
+only because the port tests the put-out at the orbiting ball (step 30's rule; the original tests at the torch). That
+last one is applied and **the owner's to rule**, beside R24 and R25, which stay as step 76 left them.
+
+**Broke / dead ends:**
+- **Smart App Control: 53 refused launches, so 53 notifications for Ivan.** Assembled from the step records, not
+  observed by me: track A 31 - the committed binary `75d590fc` refused on its first launch that morning (it had run
+  128 times on 09-21), then step 91 3, 92 2, 93 3, 94 2, 96 3, 97 4 (3 at the build, 1 in its check), 98 **11 in 24
+  launches**, 99 2; track B 13 - step 102 1, 103 5, 104 4, 109 1, 110 1, 111 1; the merge 9. Steps 89, 90, 95, 100,
+  101, 105-108 had none. The merge's independent check does not record a count. **This does not match the "about 15
+  so far" my task text gave**; I report the records' sum and not the smaller figure. No loop: each refusal cost at
+  most the one relink the rule allows (two for `MagicPortals.exe`), and what stayed refused was reported NOT RUN.
+- **Not run on the merged binaries: `test_mp_launchers` and `test_mp_keys`** - each refused twice at the merge; the
+  merge's ctest read 40 of 44 passed, 0 failed, 4 Not Run. Left as an open row.
+- **Verification failures, most of them on the RECORD, not the build.** Q.1 failed twice (14 of 24 rows had never
+  fired and only one was checked at its site; then F16's missing opening pair written as "partly met" where it is NOT
+  MET). Q.2 failed its first round on a real defect - 4-29's light wall opened at F16's +-9.8 because the port's
+  knights landed off their spawners and shook the camera, calls the original never makes - and passed on its third.
+  11.3's red light failed three checks and was committed NOT MET (7.75 u left, the port's exit test). 12.1 failed
+  once, on the mouth's fire drawn while Play restarts it and on a backwards reading of the torch shot. 11.2 failed on
+  a misread put-out test and a ghost pulse wrongly called unmeasurable. Each was fixed or recorded before its commit.
+- **11.3's first implementer died at a login expiry**; a second took its diff over unchanged and re-took every
+  capture.
+- **Two backlog premises were wrong when their steps began.** The `--tap` row's mechanism had been gone since step 87
+  (T.1's first measurement lit 4-29's torch on the committed build), and 8.4's "a bare literal, divide by 2.8125"
+  premise was false - the engine scales a start point's z with its entity - so nothing moved.
+- **The 12 u halo fix makes the lit room read further from the footage**, not closer: 4-22 lit is 7-19 luma further
+  below L1 near the torch than before. Correct by the code; the knob is G5's `halo_brightness_scale` `_guess`. Filed,
+  not tuned.
+
+**Decision:**
+- **The backlog rows are closed only where a committed step closed them**: the `--tap` row (steps 87 and 100), K14
+  (103, re-taken in 105), 6.2's two engine facts (the halo 12 u low by 110 "by the code", `type` / `layerDepth` by
+  102), §1's `light_from_projectile` item (110; the overlay item keeps the row open), step 67's split sheets (108 and
+  111), System 5 and System 7 (every clause built). The UI2 door-suck and death-burst item was already struck by
+  step 96, and 6.1's latent K7 fixture was already recorded as built in 9.1's row; I left both as they were. 13.4's
+  "nothing confirms the ghost" is annotated as answered by 11.2's gate 7 (the scale pulse's amplitude still not
+  resolved).
+- Track B wrote no backlog rows (its steps left them to the close); they are written here from each step's own
+  RECORDED DEVIATIONS and "for the backlog" list: a table row for each of the twelve and 27 open rows, the gameplay
+  ones marked for the owner. Three more open rows are new: the two suites not run on the merged binaries (§0), the
+  lit room further from L1 and the player left lit after a put-out (§1). Four rows flipped to done: `--tap`, K14,
+  System 5, System 7.
+- **The engine pin stays `4bfcf67`.** It is on the engine's `origin/main` history but no longer its tip (`6cb4036`:
+  another game's Android/iOS/macOS backends and shared-renderer work). No engine gap came up in 23 steps, so nothing
+  was bumped, and the 128-level baseline did not have to be re-proven against a new engine.
+- Nothing built, launched or captured by me: git, grep and reads only.
+
+**Assets check:** yes - `git status --short`, run after appending this entry, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/`. The forbidden-extension grep
+(`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, plus `^out/` and `^reference/`) over
+`git diff --cached --name-only` printed nothing before the commit, and over every file the run changed
+(`f1769ed..d1834c4`) it prints nothing either.
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** 25 commits `f1769ed..d1834c4` (23 steps, the merge, its docs commit), 92 files, +31,099 / -4,582; the
+planning doc 15,817 -> 20,956 lines. Converter: 7 files, +849 / -11, pytest 85 -> 110 (14 new in step 90, 11 in step 94), ruff clean.
+Levels regenerated twice: 840 `eth_particles` lines and 24 sidecars (8.2); 33 `scale` lines, 31 barrel boxes, 1
+circle in 18 levels (9.2). The merge's suites, run directly once each, 0 failures: `test_mp_layer` 2901,
+`test_mp_sprites` 1354, `test_mp_start` 753, `test_mp_effects` 706, `test_mp_lighting` 548, `test_mp_tiers` 527,
+`test_mp_wells` 308, `test_mp_minions` 288, `test_mp_dragon` 230, `test_mp_darkdragon` 216, `test_mp_camera` 212,
+`test_mp_play` 205, `test_mp_tscn` 204, `test_mp_shot` 181, `test_mp_motion` 169, `test_mp_ghost` 141,
+`test_mp_demolish` 138, `test_mp_diamonds` 134, `test_mp_torch` 134, `test_mp_boss` 133, `test_mp_levels` 129,
+`test_mp_fire` 48 (`test_mp_layer` was 1593 at the run's start). The 128-level f420 sweep on the merged
+`MagicPortals.exe` `8b5ab6d2`: 128 of 128 rc=0, validation active in 128 logs and silent; 66 levels neither track moved
+equal to the base, 27 equal to track A, 30 equal to track B, 5 both moved attributed; the merge's independent check
+re-captured it 128 of 128 identical. Build 0 warnings throughout (MSVC /W4, Release, Ninja). Gate rows NOT MET as
+written and recorded, not tuned: Q.1's F16 opening and 11.3's F12 red light; two "stays at N" suite counts were
+re-pinned by design under the rulings (12.2's `test_mp_ghost` "stays at 73", now 141 under R4; 12.1's `test_mp_darkdragon`
+"stays at 97", now 216 under R20). Smart App Control: 53 refused launches, assembled from the records. Engine
+submodule: `4bfcf67`, unchanged. Of 00_order §7, every step is built; what is left is the backlog's "WHAT IS LEFT"
+list - unowned effects, the earthquake's follow-ups, R1 / R2 / R23 (decided, unbuilt), R22, and the owner's calls
+(R24 / R25, the two PORT-WIDE rows, 11.2's fire signal and the new gameplay rows).
+
+**Inferred mood:** a guess from the facts - a long, heavy two-day push that finished the plan it set out to finish,
+with no engine change and no lost work; the cost was 53 Smart App Control notifications (eleven of them in one step),
+a string of verifiers failing records that then had to be rewritten, and one implementer lost to a login expiry.
