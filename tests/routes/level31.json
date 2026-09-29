@@ -1,0 +1,30 @@
+{
+  "_about": [
+    "1-32, the beholder, as the owner beat it (test_mp_boss Level31IsWonAsTheOwnerWonIt) with real",
+    "shots in place of placed portals. Three rounds: it comes over the player and shuts its eye; the",
+    "player steps about 120 px to its left, clear of its spike rings; a portal under the beholder,",
+    "then - fired before the rock is thrown, because a shot flies and a placed portal did not - one",
+    "in the air where the rock will fall, over the player. The rock drops in, comes out under the",
+    "beholder and hits it (ticks 704, 1420, 2111); the third round stands to its right, where no spike",
+    "follows a killing hit. Dead, it raises the button to (528, 220): right onto it, held there while",
+    "door_lift_748 takes its 5000 ms to rise, then right to the door. Won on tick 2858 (step 113)."
+  ],
+  "level": "level31",
+  "win_by": 2960,
+  "holds": [
+    {"walk": "right", "from": 30, "to": 110},
+    {"walk": "left", "from": 565, "to": 601},
+    {"walk": "left", "from": 1310, "to": 1348},
+    {"walk": "right", "from": 2000, "to": 2038},
+    {"walk": "right", "from": 2330, "to": 2451},
+    {"walk": "right", "from": 2800, "to": 2960}
+  ],
+  "taps": [
+    {"tick": 640, "at": [316.6, 150]},
+    {"tick": 680, "at": [197, 100]},
+    {"tick": 1370, "at": [216.7, 136]},
+    {"tick": 1399, "at": [97, 100]},
+    {"tick": 2050, "at": [119.2, 145]},
+    {"tick": 2089, "at": [198, 100]}
+  ]
+}

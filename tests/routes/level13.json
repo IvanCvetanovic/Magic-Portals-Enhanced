@@ -1,0 +1,19 @@
+{
+  "_about": [
+    "1-14: right off the ledge to the floor, left onto button_772 and stay there: door_lift_774 rises",
+    "while the button is held. Through the open door, a portal on the far side; one just ahead of the",
+    "player; right held, in and out beyond the door, which closes behind as the button comes up, and on",
+    "to the exit. Won on tick 240 (step 113)."
+  ],
+  "level": "level13",
+  "win_by": 300,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 30},
+    {"walk": "left", "from": 60, "to": 87},
+    {"walk": "right", "from": 185, "to": 300}
+  ],
+  "taps": [
+    {"tick": 140, "at": [330, 195]},
+    {"tick": 175, "at": [118, 205]}
+  ]
+}

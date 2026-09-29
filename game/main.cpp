@@ -26,6 +26,7 @@
 
 #include "LevelVisit.hpp"
 #include "MagicPortalsLayer.hpp"
+#include "Route.hpp"
 
 int main(int argc, char** argv) {
     // --level, --levels, --art, --data and --saves are the game's own flags. LaunchOptions
@@ -97,10 +98,22 @@ int main(int argc, char** argv) {
     // DEV ONLY: no 2D light reaches any sprite (MagicPortalsLayer::ForceLightMasksOff),
     // for a capture to be compared with the same capture lit.
     bool lightMasksOff = false;
+    // DEV ONLY: a win route (Route.hpp, tests/routes/) replayed in the window, through
+    // the same schedule --tap and --hold use, to watch what test_mp_routes asserts.
+    // `--route C:/.../tests/routes/level8.json` opens its level unless --level names it.
+    std::string routeFile;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--light-masks-off") {
             lightMasksOff = true;
+            continue;
+        }
+        if (arg == "--route") {
+            if (i + 1 >= argc) {
+                std::cerr << "--route needs a route file, e.g. tests/routes/level8.json given absolute\n";
+                return EXIT_FAILURE;
+            }
+            routeFile = argv[++i];
             continue;
         }
         if (arg == "--drag") {
@@ -294,6 +307,22 @@ int main(int argc, char** argv) {
         }
         engineArgs.push_back(argv[i]);
     }
+    // A route names its own level, and opens it unless --level says the same.
+    std::optional<MagicPortals::Route::Plan> route;
+    if (!routeFile.empty()) {
+        MagicPortals::Route::Plan plan;
+        std::string error;
+        if (!MagicPortals::Route::Load(routeFile, plan, error)) {
+            std::cerr << "--route: " << error << "\n";
+            return EXIT_FAILURE;
+        }
+        if (start.empty()) start = plan.level;
+        if (start != plan.level) {
+            std::cerr << "--route plays " << plan.level << ", and --level asks for " << start << "\n";
+            return EXIT_FAILURE;
+        }
+        route = std::move(plan);
+    }
     // The converter writes the art beside the levels, so levels somewhere else
     // bring their art with them unless --art says otherwise.
     if (!artGiven && paths.levels != MAGICPORTALS_LEVELS_DIR) paths.art = paths.levels + "/..";
@@ -327,6 +356,9 @@ int main(int argc, char** argv) {
                   << "  --hold <left|right>@<from>-<to>\n"
                   << "                    DEV: hold a walk from the game's tick <from> to <to>, for a\n"
                   << "                    capture that walks into a door or a hazard; repeatable\n"
+                  << "  --route <file>    DEV: replay a win route (tests/routes/<level>.json, given\n"
+                  << "                    absolute) in the window: its walks and its taps at points of the\n"
+                  << "                    level, on the ticks it names; says on exit whether it won\n"
                   << "  --burn-dragon <tick>\n"
                   << "                    DEV: burn 4-32's dark dragon on the game's tick <tick>, as a\n"
                   << "                    barrel's blast in its reach does; repeatable\n"
@@ -413,6 +445,8 @@ int main(int argc, char** argv) {
         MagicPortals::MagicPortalsLayer& gameLayer = *game;
         gameLayer.ForceLightMasksOff(lightMasksOff);
         app.PushLayer(std::move(game));
+        // After the game's, so each of its ticks follows the game's own (Route.hpp).
+        if (route) app.PushLayer(std::make_unique<MagicPortals::Route::ReplayLayer>(gameLayer, std::move(*route)));
         if (!visit.levels.empty()) {
             app.PushLayer(std::make_unique<MagicPortals::LevelVisitLayer>(gameLayer, paths, visit, visitResult));
         }

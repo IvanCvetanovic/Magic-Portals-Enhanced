@@ -1,0 +1,18 @@
+{
+  "_about": [
+    "1-02: its tutorial popup comes up as the level loads and a touch closes it (tick 1, a touch that",
+    "fires nothing; the level resumes on tick 61). Then the one portal the level grants, shot just left",
+    "of the player on its ledge, where the hand points; left held. The player walks into it, comes out",
+    "of the level's lone static portal in the room below and walks on to the door. Won on tick 170",
+    "(step 113)."
+  ],
+  "level": "level1",
+  "win_by": 240,
+  "holds": [
+    {"walk": "left", "from": 110, "to": 240}
+  ],
+  "taps": [
+    {"tick": 1, "at": [448, 110], "shot": false},
+    {"tick": 100, "at": [382, 117]}
+  ]
+}

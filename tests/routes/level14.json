@@ -1,0 +1,15 @@
+{
+  "_about": [
+    "1-15: walking only - the level grants no portal (max_portals 0). Right held: the player pushes",
+    "crate_ent_654 along the corridor into static portal_static_582, which puts it in the room above,",
+    "and follows it through. Left, pushing the crate onto button_687, which raises door_lift_671; right",
+    "again, through the door, down into the corridor beyond and on to the exit. Won on tick 504 (step 113)."
+  ],
+  "level": "level14",
+  "win_by": 560,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 200},
+    {"walk": "left", "from": 210, "to": 290},
+    {"walk": "right", "from": 330, "to": 560}
+  ]
+}

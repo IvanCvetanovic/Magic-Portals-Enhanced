@@ -1,0 +1,13 @@
+{
+  "_about": [
+    "1-01: right held from the start. The player walks into the first pair of static portals, comes",
+    "out in the lower room, walks through the second pair and on to the door; the level grants no",
+    "portal of its own (max_portals 0). test_mp_statics plays the same through Game::Tick. Won on",
+    "tick 193 (step 113)."
+  ],
+  "level": "level0",
+  "win_by": 240,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 240}
+  ]
+}

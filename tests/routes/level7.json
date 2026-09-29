@@ -1,0 +1,17 @@
+{
+  "_about": [
+    "1-08: a portal over the left end of the door's ledge - under the pillar and just outside",
+    "antiportal_539's reach (4.7 x 16 = 75 px about (616, 71)) - and one just ahead of the player on",
+    "the floor; right held, out onto the ledge and into the door. The crate and its hint are not used.",
+    "Won on tick 102 (step 113)."
+  ],
+  "level": "level7",
+  "win_by": 160,
+  "holds": [
+    {"walk": "right", "from": 75, "to": 160}
+  ],
+  "taps": [
+    {"tick": 30, "at": [565, 138]},
+    {"tick": 65, "at": [420, 205]}
+  ]
+}

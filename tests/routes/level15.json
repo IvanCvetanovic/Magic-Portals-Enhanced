@@ -1,0 +1,21 @@
+{
+  "_about": [
+    "1-16: from the spawn, never moving until the end. A portal over button_687, one in the free space",
+    "just left of crate_ent_740 where it plugs the notch in the pillar: the crate is inside the second",
+    "one's reach, goes through, drops out of the first onto the button and holds door_lift_671 open.",
+    "Then a portal through the emptied notch into the room beyond the pillar, and one just ahead of",
+    "the player; right held, out beyond the pillar, down, through the open door and on to the exit.",
+    "Won on tick 237 (step 113)."
+  ],
+  "level": "level15",
+  "win_by": 300,
+  "holds": [
+    {"walk": "right", "from": 175, "to": 300}
+  ],
+  "taps": [
+    {"tick": 30, "at": [198, 196]},
+    {"tick": 70, "at": [215, 96]},
+    {"tick": 130, "at": [310, 70]},
+    {"tick": 165, "at": [62, 205]}
+  ]
+}

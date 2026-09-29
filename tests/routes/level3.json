@@ -1,0 +1,19 @@
+{
+  "_about": [
+    "1-04: from the ledge, a portal over the right-hand platform (aimed over the block at x 272-336",
+    "and clear of the right walk pad's corner), one just ahead on the ledge; right into it, out over",
+    "the platform; left off its end onto the ledge below; right again, down past the next ledge into",
+    "the door's room and the door. Won on tick 251 (step 113)."
+  ],
+  "level": "level3",
+  "win_by": 300,
+  "holds": [
+    {"walk": "right", "from": 85, "to": 110},
+    {"walk": "left", "from": 135, "to": 175},
+    {"walk": "right", "from": 200, "to": 300}
+  ],
+  "taps": [
+    {"tick": 30, "at": [400, 175]},
+    {"tick": 75, "at": [105, 80]}
+  ]
+}

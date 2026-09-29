@@ -97,11 +97,12 @@ through CMake cache paths baked in when `build/` is configured (steps 5 and 7 be
 CMakeLists.txt     the build: engine/ as a subproject, then game/ and tests/
 engine/            Supersonic-Engine, a git submodule pinned to one commit
 game/              the port: main.cpp, MagicPortalsLayer, LevelVisit, sim/, spike/, and data/ (its own JSON)
-tests/             the port's test_mp_* suites
+tests/             the port's test_mp_* suites; tests/routes/ the win routes test_mp_routes replays
 data/              the remake's gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
 tools/converter/   ethanon2godot — Python 3; .esc/.ent → out/levels, chapters.json, entity art, lightmaps
 tools/asbc/        AngelScript bytecode reader; achievements.py writes out/data/achievements.json
-tools/parity/      emulator driver, reference-library capture, frame comparison, port_build.bat
+tools/parity/      emulator driver, reference-library capture, frame comparison, the reachability
+                   check, port_build.bat
 docs/              format notes, the original's behaviour, parity rig and backlog, permission record
 docs/planning/     the port's planning records
 reference/         ⛔ gitignored in full — not present in a fresh clone (see below)
@@ -296,16 +297,36 @@ ctest --test-dir build
 These are the `test_mp_*` suites (a multi-config generator such as Visual Studio also needs
 `-C Release`). Convert the levels (step 3) before running them. Without the converted levels:
 
-- 27 suites (`levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
+- 28 suites (`levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
   `hazards`, `demolish`, `launchers`, `shot`, `boss`, `layer`, `zerog`, `bounce`, `wells`,
   `dragon`, `darkdragon`, `turrets`, `fire`, `hinge`, `minions`, `ghost`, `torch`, `keys`,
-  `diamonds`, `fields`) exit 77 and print the path they looked in, which ctest reports as
+  `diamonds`, `fields`, `routes`) exit 77 and print the path they looked in, which ctest reports as
   SKIPPED: each carries `SKIPS_WITH_77` on its `add_mp_test` line in `tests/CMakeLists.txt`
   (a mark made in Supersonic-Engine `80a4ed2`, before the port moved here; before it, the
   last nine were missing from the skip list, so ctest would have reported them as Failed);
 - 6 suites (`sprites`, `lighting`, `sky`, `tiers`, `motion`, `sounds`) skip only the part
   that needs the converted levels or the original's extracted assets, say so, and report
   Passed.
+
+**Winning the levels.** `test_mp_routes` replays every file in `tests/routes/`: a level won by
+play from its start to its door - walks held over spans of ticks, taps at points of the level,
+and the tick by which the level must be won (`game/Route.hpp` has the format). A route is added
+by adding its file; the suite finds it. For writing one, the same binary replays a single route
+and prints what it did every n ticks and on every tap:
+
+```bash
+build/tests/test_mp_routes.exe --only level8 --trace 10
+```
+
+and `--route <absolute path>` replays one in the game's window (the flags below); give it
+`--saves <absolute dir>` too, because a replay that reaches the level's end records its medal,
+and without `--saves` that lands in the player's own save. Beside it, a
+static check that no level's door is sealed off in the port, over the converted levels, with
+the verdicts pinned in `tools/parity/reachability.json` (it needs the parity venv, below):
+
+```bash
+tools/parity/.venv/Scripts/python tools/parity/reachability.py --check
+```
 
 ## Run it
 
@@ -373,6 +394,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--light-masks-off` | DEV: draw lights and halos but let no light reach a sprite |
 | `--visit-levels <lightmapped\|all\|name,...>` | DEV: visit these levels in one process; the run fails unless the engine's material descriptor sets return to its pool |
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |
+| `--route <file>` | DEV: replay a win route (`tests/routes/<level>.json`, absolute) in the window, opening its level; says on exit whether it won. Pair it with `--saves <dir>`: a run past the level's end writes its medal |
 | `--help` | every flag, the engine's own included |
 
 `--hold`, `--tap`, `--drag` and `--press` repeat. `--screenshot`, `--saves`, `--levels`,
@@ -397,7 +419,7 @@ Prerequisites, none of which the setup above installs:
 
 ```bat
 python -m venv tools\parity\.venv
-tools\parity\.venv\Scripts\python -m pip install numpy pillow opencv-python-headless imageio-ffmpeg
+tools\parity\.venv\Scripts\python -m pip install numpy pillow opencv-python-headless imageio-ffmpeg pytest ruff
 ```
 
 `tools/parity/` holds the scripts; the command-line ones carry their command line in their
@@ -410,6 +432,9 @@ docstring:
 - `compare.py` — one original frame against one remake frame: offset, edge overlap, mean
   absolute difference, a pair image and an overlay;
 - `frames.py` — turns a screen recording into frames and contact sheets;
+- `reachability.py` — whether each converted level's door can be reached in the port, pinned in
+  `reachability.json`; its tests (`tests/`, on hand-authored scenes) and ruff run from
+  `tools/parity` as `.venv/Scripts/python -m pytest -q` and `.venv/Scripts/python -m ruff check .`;
 - `port_build.bat` — builds the port (step 7 above).
 
 Everything captured from the original is Asantee-origin imagery and stays under

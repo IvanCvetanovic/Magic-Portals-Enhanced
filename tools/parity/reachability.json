@@ -1,0 +1,619 @@
+{
+  "_about": [
+    "Whether each level's door can be reached in the port: tools/parity/reachability.py",
+    "over the converted levels (out/levels), with the port's rules read from data/ and",
+    "game/data/. Derived by the tool, never hand-edited: rerun it with --check after any",
+    "change to the converter, the levels or a mechanism that opens a wall, and with",
+    "--write only in a step that says why a verdict moved. The node names are the",
+    "converter's; nothing of the original's files is here."
+  ],
+  "_breakers": {
+    "stone": "every breakable on a level that holds a demolisher: a rolling stone, a launcher that throws one, or the beholder's rocks (game/sim/Demolish.cpp:73-86 State::Tick, :117-123 the stones, Game.cpp:285 a thrown one, Game.cpp:775 the boss's rock)",
+    "torch": "the torch's light wall (torch.json wall.entity_name) on a level with a torch (game/sim/Game.cpp:636-641)",
+    "dark_dragon": "the dark dragon's wall (darkdragon.json summon.wall, the last node of that name) on a level with its spawn (game/sim/Game.cpp:685-690, DarkDragon.cpp:781-783)",
+    "fire": "a crate that fades when it burns (fire.json burn.fade_names), on a level with fire: a fire agent, a carranca or a fire diamond (game/sim/Fire.cpp:186-189 a fire agent, Game.cpp:364-370 a fireball, Game.cpp:495 a fire diamond's; Fire.cpp:198 the fade)"
+  },
+  "counts": {
+    "opened": 11,
+    "reachable": 108,
+    "sealed": 9
+  },
+  "levels": {
+    "level0": {
+      "label": "1-01",
+      "status": "reachable",
+      "static_portals": true
+    },
+    "level1": {
+      "label": "1-02",
+      "status": "reachable"
+    },
+    "level2": {
+      "label": "1-03",
+      "status": "reachable"
+    },
+    "level3": {
+      "label": "1-04",
+      "status": "reachable"
+    },
+    "level4": {
+      "label": "1-05",
+      "status": "reachable"
+    },
+    "level5": {
+      "label": "1-06",
+      "status": "reachable"
+    },
+    "level6": {
+      "label": "1-07",
+      "status": "reachable"
+    },
+    "level7": {
+      "label": "1-08",
+      "status": "reachable"
+    },
+    "level8": {
+      "label": "1-09",
+      "status": "opened",
+      "opened_by": {
+        "stone": [
+          "breakable_wall_625"
+        ]
+      }
+    },
+    "level9": {
+      "label": "1-10",
+      "status": "reachable"
+    },
+    "level10": {
+      "label": "1-11",
+      "status": "reachable"
+    },
+    "level11": {
+      "label": "1-12",
+      "status": "reachable"
+    },
+    "level12": {
+      "label": "1-13",
+      "status": "opened",
+      "opened_by": {
+        "stone": [
+          "breakable_wall_577"
+        ]
+      }
+    },
+    "level13": {
+      "label": "1-14",
+      "status": "reachable"
+    },
+    "level14": {
+      "label": "1-15",
+      "status": "reachable"
+    },
+    "level15": {
+      "label": "1-16",
+      "status": "reachable"
+    },
+    "level16": {
+      "label": "1-17",
+      "status": "reachable"
+    },
+    "level17": {
+      "label": "1-18",
+      "status": "reachable"
+    },
+    "level18": {
+      "label": "1-19",
+      "status": "opened",
+      "opened_by": {
+        "stone": [
+          "breakable_wall_731"
+        ]
+      }
+    },
+    "level19": {
+      "label": "1-20",
+      "status": "opened",
+      "opened_by": {
+        "stone": [
+          "breakable_wall_ent_1056",
+          "breakable_wall_ent_1061"
+        ]
+      }
+    },
+    "level20": {
+      "label": "1-21",
+      "status": "reachable"
+    },
+    "level21": {
+      "label": "1-22",
+      "status": "reachable"
+    },
+    "level22": {
+      "label": "1-23",
+      "status": "reachable"
+    },
+    "level23": {
+      "label": "1-24",
+      "status": "opened",
+      "opened_by": {
+        "stone": [
+          "breakable_wall_922"
+        ]
+      }
+    },
+    "level24": {
+      "label": "1-25",
+      "status": "reachable"
+    },
+    "level25": {
+      "label": "1-26",
+      "status": "reachable"
+    },
+    "level26": {
+      "label": "1-27",
+      "status": "reachable"
+    },
+    "level27": {
+      "label": "1-28",
+      "status": "reachable"
+    },
+    "level28": {
+      "label": "1-29",
+      "status": "reachable"
+    },
+    "level29": {
+      "label": "1-30",
+      "status": "reachable"
+    },
+    "level30": {
+      "label": "1-31",
+      "status": "reachable"
+    },
+    "level31": {
+      "label": "1-32",
+      "status": "reachable"
+    },
+    "level0a": {
+      "label": "2-01",
+      "status": "reachable"
+    },
+    "level1a": {
+      "label": "2-02",
+      "status": "reachable"
+    },
+    "level2a": {
+      "label": "2-03",
+      "status": "reachable"
+    },
+    "level3a": {
+      "label": "2-04",
+      "status": "opened",
+      "opened_by": {
+        "stone": [
+          "breakable_wall_815"
+        ]
+      }
+    },
+    "level4a": {
+      "label": "2-05",
+      "status": "reachable"
+    },
+    "level5a": {
+      "label": "2-06",
+      "status": "reachable"
+    },
+    "level6a": {
+      "label": "2-07",
+      "status": "reachable"
+    },
+    "level7a": {
+      "label": "2-08",
+      "status": "reachable"
+    },
+    "level8a": {
+      "label": "2-09",
+      "status": "opened",
+      "opened_by": {
+        "fire": [
+          "crate_no_emissive_1004"
+        ]
+      }
+    },
+    "level9a": {
+      "label": "2-10",
+      "status": "reachable"
+    },
+    "level10a": {
+      "label": "2-11",
+      "status": "reachable"
+    },
+    "level11a": {
+      "label": "2-12",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_1040"
+      ]
+    },
+    "level12a": {
+      "label": "2-13",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_1040"
+      ]
+    },
+    "level13a": {
+      "label": "2-14",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_1142"
+      ]
+    },
+    "level14a": {
+      "label": "2-15",
+      "status": "reachable"
+    },
+    "level15a": {
+      "label": "2-16",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_1142"
+      ]
+    },
+    "level16a": {
+      "label": "2-17",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_1142"
+      ]
+    },
+    "level17a": {
+      "label": "2-18",
+      "status": "reachable"
+    },
+    "level18a": {
+      "label": "2-19",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_1040"
+      ]
+    },
+    "level19a": {
+      "label": "2-20",
+      "status": "reachable"
+    },
+    "level20a": {
+      "label": "2-21",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_1040"
+      ]
+    },
+    "level21a": {
+      "label": "2-22",
+      "status": "reachable"
+    },
+    "level22a": {
+      "label": "2-23",
+      "status": "reachable"
+    },
+    "level23a": {
+      "label": "2-24",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_1131"
+      ]
+    },
+    "level24a": {
+      "label": "2-25",
+      "status": "reachable"
+    },
+    "level25a": {
+      "label": "2-26",
+      "status": "reachable"
+    },
+    "level26a": {
+      "label": "2-27",
+      "status": "reachable"
+    },
+    "level27a": {
+      "label": "2-28",
+      "status": "reachable"
+    },
+    "level28a": {
+      "label": "2-29",
+      "status": "opened",
+      "opened_by": {
+        "stone": [
+          "breakable_wall_883"
+        ]
+      }
+    },
+    "level29a": {
+      "label": "2-30",
+      "status": "reachable"
+    },
+    "level30a": {
+      "label": "2-31",
+      "status": "reachable"
+    },
+    "level31a": {
+      "label": "2-32",
+      "status": "reachable"
+    },
+    "level0b": {
+      "label": "3-01",
+      "status": "reachable"
+    },
+    "level1b": {
+      "label": "3-02",
+      "status": "reachable"
+    },
+    "level2b": {
+      "label": "3-03",
+      "status": "reachable"
+    },
+    "level3b": {
+      "label": "3-04",
+      "status": "reachable"
+    },
+    "level4b": {
+      "label": "3-05",
+      "status": "reachable"
+    },
+    "level5b": {
+      "label": "3-06",
+      "status": "reachable"
+    },
+    "level6b": {
+      "label": "3-07",
+      "status": "reachable"
+    },
+    "level7b": {
+      "label": "3-08",
+      "status": "reachable"
+    },
+    "level8b": {
+      "label": "3-09",
+      "status": "reachable"
+    },
+    "level9b": {
+      "label": "3-10",
+      "status": "reachable"
+    },
+    "level10b": {
+      "label": "3-11",
+      "status": "reachable"
+    },
+    "level11b": {
+      "label": "3-12",
+      "status": "reachable"
+    },
+    "level12b": {
+      "label": "3-13",
+      "status": "reachable"
+    },
+    "level13b": {
+      "label": "3-14",
+      "status": "reachable"
+    },
+    "level14b": {
+      "label": "3-15",
+      "status": "reachable"
+    },
+    "level15b": {
+      "label": "3-16",
+      "status": "reachable"
+    },
+    "level16b": {
+      "label": "3-17",
+      "status": "reachable"
+    },
+    "level17b": {
+      "label": "3-18",
+      "status": "reachable"
+    },
+    "level18b": {
+      "label": "3-19",
+      "status": "reachable"
+    },
+    "level19b": {
+      "label": "3-20",
+      "status": "reachable"
+    },
+    "level20b": {
+      "label": "3-21",
+      "status": "reachable"
+    },
+    "level21b": {
+      "label": "3-22",
+      "status": "reachable"
+    },
+    "level22b": {
+      "label": "3-23",
+      "status": "reachable"
+    },
+    "level23b": {
+      "label": "3-24",
+      "status": "reachable"
+    },
+    "level24b": {
+      "label": "3-25",
+      "status": "reachable"
+    },
+    "level25b": {
+      "label": "3-26",
+      "status": "reachable"
+    },
+    "level26b": {
+      "label": "3-27",
+      "status": "reachable"
+    },
+    "level27b": {
+      "label": "3-28",
+      "status": "reachable"
+    },
+    "level28b": {
+      "label": "3-29",
+      "status": "reachable"
+    },
+    "level29b": {
+      "label": "3-30",
+      "status": "reachable"
+    },
+    "level30b": {
+      "label": "3-31",
+      "status": "reachable"
+    },
+    "level31b": {
+      "label": "3-32",
+      "status": "reachable"
+    },
+    "level0c": {
+      "label": "4-01",
+      "status": "reachable"
+    },
+    "level1c": {
+      "label": "4-02",
+      "status": "reachable"
+    },
+    "level2c": {
+      "label": "4-03",
+      "status": "reachable"
+    },
+    "level3c": {
+      "label": "4-04",
+      "status": "reachable"
+    },
+    "level4c": {
+      "label": "4-05",
+      "status": "reachable"
+    },
+    "level5c": {
+      "label": "4-06",
+      "status": "reachable"
+    },
+    "level6c": {
+      "label": "4-07",
+      "status": "reachable"
+    },
+    "level7c": {
+      "label": "4-08",
+      "status": "reachable"
+    },
+    "level8c": {
+      "label": "4-09",
+      "status": "reachable"
+    },
+    "level9c": {
+      "label": "4-10",
+      "status": "reachable"
+    },
+    "level10c": {
+      "label": "4-11",
+      "status": "reachable"
+    },
+    "level11c": {
+      "label": "4-12",
+      "status": "reachable"
+    },
+    "level12c": {
+      "label": "4-13",
+      "status": "reachable"
+    },
+    "level13c": {
+      "label": "4-14",
+      "status": "reachable"
+    },
+    "level14c": {
+      "label": "4-15",
+      "status": "reachable"
+    },
+    "level15c": {
+      "label": "4-16",
+      "status": "sealed",
+      "sealed_by": [
+        "breakable_wall_ent_2389"
+      ]
+    },
+    "level16c": {
+      "label": "4-17",
+      "status": "reachable"
+    },
+    "level17c": {
+      "label": "4-18",
+      "status": "reachable"
+    },
+    "level18c": {
+      "label": "4-19",
+      "status": "reachable"
+    },
+    "level19c": {
+      "label": "4-20",
+      "status": "reachable"
+    },
+    "level20c": {
+      "label": "4-21",
+      "status": "reachable"
+    },
+    "level21c": {
+      "label": "4-22",
+      "status": "reachable"
+    },
+    "level22c": {
+      "label": "4-23",
+      "status": "reachable"
+    },
+    "level23c": {
+      "label": "4-24",
+      "status": "reachable"
+    },
+    "level24c": {
+      "label": "4-25",
+      "status": "reachable"
+    },
+    "level25c": {
+      "label": "4-26",
+      "status": "opened",
+      "opened_by": {
+        "torch": [
+          "light_wall_ent_1859"
+        ]
+      }
+    },
+    "level26c": {
+      "label": "4-27",
+      "status": "opened",
+      "opened_by": {
+        "torch": [
+          "light_wall_ent_1859"
+        ]
+      }
+    },
+    "level27c": {
+      "label": "4-28",
+      "status": "reachable"
+    },
+    "level28c": {
+      "label": "4-29",
+      "status": "opened",
+      "opened_by": {
+        "torch": [
+          "light_wall_ent_1859"
+        ]
+      }
+    },
+    "level29c": {
+      "label": "4-30",
+      "status": "reachable"
+    },
+    "level30c": {
+      "label": "4-31",
+      "status": "reachable"
+    },
+    "level31c": {
+      "label": "4-32",
+      "status": "reachable"
+    }
+  }
+}

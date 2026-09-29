@@ -20954,3 +20954,185 @@ withdraws none. R1, R2, R22 and R23 stay unbuilt. **R24 and R25 remain the owner
   stays where it was added). Beside step 101's deviation 6, the list of the original's shaken-camera readers the port
   keeps at rest. Not measured; no gate here. For the owner of the earthquake's follow-ups.
 - **The standing sweep baseline is now this step's** `merge_d/sweep`, for what were both tracks.
+
+## Step 113 - the reachability check and the win-route harness: a static flood that names every door the port seals, and eleven chapter-1 levels won by routes a suite replays (built)
+
+**TRACK A (MPR `main`, `build/`), the program's W.1** (`docs/parity-backlog.md` section 6: "a static reachability
+check over the converted levels runs as a test" and "every level is won by a scripted route that a suite replays";
+the 2026-09-29 audit's B1 and its "Test coverage gaps", in the gitignored `out/parity/audit_2026-09-29/`). From
+`29669c3`. Changed: `tools/parity/reachability.py`, `tools/parity/reachability.json` (the pinned verdicts),
+`tools/parity/tests/` (the pytest, and seven hand-authored `.tscn` fixtures), `tools/parity/pyproject.toml`;
+`game/Route.{hpp,cpp}` (new), `game/main.cpp` (`--route`), `game/CMakeLists.txt`; `tests/test_mp_routes.cpp` (new),
+`tests/routes/*.json` (eleven routes), `tests/CMakeLists.txt`; `README.md`. No engine change (the pin stays `4bfcf67`),
+no converter change, no format finding. **GAMEPLAY: NONE** - no line under `game/sim/`, `game/data/` or `data/`
+changed, and `MagicPortalsLayer` is untouched: the routes play through the DEV schedule step 100 made a real press.
+
+**BLOCKERS, checked first.** The audit's flood (`check_levels/flood2.py`, over `flood.py` and `lc/ascii_map.py`'s
+parser) is there and reruns: its 22 unreached levels are this step's starting list. `test_mp_layer`'s real-tap drive
+(`tickWith`, `Level8FromTheSpawnWithTapsAndWalking`) and the layer's public DEV schedule (`ScheduleDevTap`,
+`ScheduleDevHold`, `LayerTicks`, `CameraCentrePx`, `ViewPx`) are there. The parity venv had no pytest and no ruff;
+both were installed into it (pytest 9.1.1, ruff 0.16.9) and the README's install line names them. Nothing unmet.
+
+**(a) THE REACHABILITY CHECK.** `reachability.py` reads each converted `.tscn` as the port's reader does (top-level
+nodes, each body's type and its shapes, turned by the node's rotation), floods free space at 4 px from the player's
+spawn inside the fall bound (`hazards.json` `bounds`, `max` plus `margin_px` 64 / 96, where the port kills the
+player: rock), and asks whether a reached cell lies within 8 px of a door's trigger box. What a body is comes from
+the port's own tables, read from the files the port reads, never restated:
+- **ROCK** - a static body with no role that moves it and no flag that removes it.
+- **FREE** - every body that is not static (crates, stones, barrels), every `Area2D`, and the static bodies whose
+  role moves or opens them (`entity_roles.json`): `lift`, the live `moving_platform`, `switched_door`, `locked_door`,
+  `hinge`.
+- **CONDITIONAL** - a breakable (flagged, or named in `demolish.json` `breakable.names`) and a crate that fades when it
+  burns (`fire.json` `burn.fade_names`). One is OPENED only where the level holds a breaker the port has built for it,
+  the table `BREAKERS` with its citations: **stone** (a `demolisher`, a launcher throwing one per `launchers.json`, or
+  the beholder's rocks: `Demolish.cpp:73-86`, `Game.cpp:285`, `:775`), **torch** (its `torch.json` light wall,
+  `Game.cpp:636-641`), **dark dragon** (`darkdragon.json`'s wall, `Game.cpp:685-690`), **fire** (a fire agent, a
+  carranca or a fire diamond, `Fire.cpp:186-189`, `Game.cpp:364-370`, `:495`).
+- A **static portal** pair (`index` to `destiny`) joins the flood across.
+
+The verdict is the cheapest path's: crossing a body the port opens costs 1, one it cannot 1000, so `sealed_by` names
+the fewest walls that have to go. `reachable` (no conditional body on the way), `opened` (only bodies the port
+opens, `opened_by` breaker to nodes), `sealed` (`sealed_by`), and `unreached` - not even with every conditional body
+open, which is a gap in the model to explain rather than a verdict to pin (there is none today). `--check` reruns all 128 and compares
+with the pinned JSON, one line per level that moved and exit 1; `--write` rewrites it. The step that builds a new
+breaker (B1's blast, B5's red key) adds a `BREAKERS` row and rewrites the pin, saying which verdicts moved. ctest runs
+the check as `parity_reachability` (registered where the parity venv is; 77, SKIPPED, without the levels).
+
+**The result, 128 levels: 108 reachable, 11 opened, 9 sealed - the audit's B1 exactly**, each by one wall:
+
+| Level | Verdict | By |
+|---|---|---|
+| 2-12, 2-13, 2-19, 2-21 (`level11a`, `12a`, `18a`, `20a`) | sealed | `breakable_wall_1040` |
+| 2-14, 2-16, 2-17 (`level13a`, `15a`, `16a`) | sealed | `breakable_wall_1142` |
+| 2-24 (`level23a`) | sealed | `breakable_wall_1131` |
+| 4-16 (`level15c`) | sealed | `breakable_wall_ent_2389` |
+| 1-09, 1-13, 1-19, 1-24, 2-04, 2-29 | opened | stone: `breakable_wall_625`, `_577`, `_731`, `_922` (thrown by `entity_launcher_923`), `_815`, `_883` |
+| 1-20 (`level19`) | opened | stone: `breakable_wall_ent_1056` and `_1061` |
+| 2-09 (`level8a`) | opened | fire: `crate_no_emissive_1004`, a static crate plugging the door's pocket, burnt by `carranca_right_ent_1061` |
+| 4-26, 4-27, 4-29 (`level25c`, `26c`, `28c`) | opened | torch: `light_wall_ent_1859` |
+| 1-01 (`level0`) | reachable | through its static portals |
+
+**The audit's flood against this one.** `flood2.py` left 22 levels unreached; the nine sealed are the nine above,
+and the other 13 each come from a class it had by hand: 1-01 (static portals; it had no jump), 1-27 (`lift.ent` is a
+`StaticBody2D` with role `lift` - it was rock), 1-09, 1-13, 1-19, 1-24 and 2-04 (flagless `breakable_wall`, which
+`demolish.json` names - they were rock, so its flood found them unreached even with every breakable open; each has a
+stone), 2-09 (the static burnable crate), 1-20 and 2-29 (flagged walls, with a stone), 4-26, 4-27, 4-29 (the light
+wall, with a torch). **Explained, not pinned as sealed:** 4-19 (`level18c`) is reachable through the crate floor, as
+the audit's skeptic found - a static check cannot say whether that route plays; 4-32's dark dragon wall lies off the
+door's path (the door waits on a locked door, free here, and on B3's key); 3-13 and 4-21 are reachable (no-portal
+zones are not in a flood). The flood is a point: a gap narrower than 4 px can leak, and it carries no body size (the
+audit's 20 x 44 erosion found none sealed).
+
+**(b) THE WIN ROUTES.** A route is `tests/routes/<level>.json`: `level`, `win_by` (the layer's tick by which
+`goals.completed` must be set), `holds` (`walk` left or right, `from`, `to`) and `taps` (`tick`, `at` a point of the
+level, optional `release`, and `shot` false for a touch that must fire nothing - the one that closes 1-02's and
+1-03's tutorial popup); keys starting `_` are comments, any other key is refused, and two taps may not be down at
+once. `game/Route.{hpp,cpp}` reads it and drives a layer: the holds through `ScheduleDevHold`, each tap through
+`ScheduleDevTap` one tick ahead - after tick N-1, from the camera that tick left (`CameraCentrePx`, `ViewPx`), which
+is the camera tick N's input is read against because the layer moves it only after `readInput`. A tap is a point of
+the level, not of the screen, so a later camera change does not move it; **a point the view does not show on its
+tick is not tapped, and the route fails.** After every tick the driver checks the level is still the route's, the
+player has not died, and each tap on its own tick fired its shot (`Portals::State::shotsFired`, `lastTap`) at its
+point within 0.05 px - "fired nothing" names a control, a help block or a popup taking it (a tap within 64 view units
+of a bottom corner is a walk pad's, found on 1-04), and a refusal says which (the 400 ms, a shot in flight).
+
+`test_mp_routes` finds every `.json` in `tests/routes/` at run time (so a track adds a route without touching it),
+loads each level headless through the layer as `test_mp_layer` does (a bare registry, the app's physics step before
+each tick, `OnUpdate` after it, a 1280x720 viewport) and asserts the win by `win_by` with no problem; it wants at
+least ten routes and the three seeds. `test_mp_routes --only <level or file> --trace <n>` replays one and prints the
+player, the camera, the shots, the portals, every other traveller, the buttons and 1-32's beholder every n ticks and
+on every tap - how each route below was written (the attempts: `out/parity/program/W.1/drafts/`). `--route <file>`
+replays one in the game's window, through the same `Route::Driver` as a layer pushed after the game's, and says on
+exit whether it won. Give it `--saves <absolute dir>` as well: a run that goes on past the level's end records the
+medal, and without `--saves` it records it in the player's own `scores.json` (below, LEFT FOR THE OWNER).
+
+| Route | Won on tick | `win_by` | Shots | How |
+|---|---|---|---|---|
+| 1-01 `level0` | 193 | 240 | 0 | right held: its two static pairs (test_mp_statics's route) |
+| 1-02 `level1` | 170 | 240 | 1 | the popup closed on tick 1 (the level resumes on 61); the lone portal left of the ledge, into the static one |
+| 1-03 `level2` | 303 | 360 | 2 | the popup; over the mound to the block's foot; a portal on the block, one just ahead |
+| 1-04 `level3` | 251 | 300 | 2 | over the block at x 272-336 to the right platform; left off it, right down into the door's room |
+| 1-05 `level4` | 157 | 220 | 2 | the crate pushed into the pit, let go before the edge; across the pit by portal |
+| 1-08 `level7` | 102 | 160 | 2 | onto the door's ledge, the portal just outside `antiportal_539`'s 75 px |
+| 1-09 `level8` | 345 | 420 | 2 | test_mp_layer's route: behind the stone, which breaks `breakable_wall_625` on tick 197 |
+| 1-14 `level13` | 240 | 300 | 2 | held on `button_772` while its door is up; a portal through it |
+| 1-15 `level14` | 504 | 560 | 0 | walking only (`max_portals` 0): the crate pushed through the static portal, then onto `button_687` |
+| 1-16 `level15` | 237 | 300 | 4 | the crate plugging the pillar's notch portalled onto `button_687`; then through the empty notch |
+| 1-32 `level31` | 2858 | 2960 | 6 | the owner's beholder fight with real shots (hits on 704, 1420, 2111), the risen button, the door |
+
+1-32 is test_mp_boss's `Level31IsWonAsTheOwnerWonIt` with shots in place of `TryPlace`: a shot flies, so the portal
+where the rock will fall is fired before the rock is thrown (it falls over the player's x, deterministically), and
+the third round stands to the beholder's right, where the 120 px left would be inside the wall and a killing hit
+throws no spikes.
+
+**GATES.**
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | **passes: 0 warnings** in every build of the step (`out/parity/program/W.1/build*.log`); the full build after the last change: `ninja: no work to do` |
+| pytest + ruff | clean in `tools/parity/.venv` | **passes: 17 passed; ruff clean** (scoped by `pyproject.toml` to the new files: the older capture scripts fail it and are not rewritten here) |
+| The pinned reachability JSON | today exactly B1's nine sealed, every other verdict explained | **passes: 108 reachable, 11 opened, 9 sealed** = 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24, 4-16; 0 unreached; `--check` 0 differ (2.5 s); ctest `parity_reachability` Passed |
+| test_mp_routes | passes with >= 10 routes | **passes: 11 routes, 38 checks, 0 failures** (directly, and once through ctest: Passed) |
+| The window plays the suite's game | each route's `door reached on tick` in `--route` = the suite's won tick | **passes: 11 of 11** (1-01 193, 1-02 170, 1-03 303, 1-04 251, 1-05 157, 1-08 102, 1-09 345, 1-14 240, 1-15 504, 1-16 237, 1-32 2858; 1-09's wall on 197 and 1-32's hits on 704, 1420 and 2111 in both); validation ACTIVE and silent in all 11 logs |
+| No gameplay change: the sweep | 128 levels at f420 byte-identical to `merge_d/sweep` | **passes: 128 of 128 byte-identical** (`out/parity/program/W.1/after/sweep`, on `0c2124e6`; the files' md5s against the baseline's files, not the logs); 128 rc=0, validation ACTIVE in 128 logs and silent; every PNG opens, none NUL-padded, each matches its log's md5 |
+| test_mp_layer unchanged | its code untouched by the step, and its run as step 112's | **passes**: the step's code relinked only `MagicPortals.exe` and the new `test_mp_routes.exe`; `test_mp_layer.exe` was relinked once for Smart App Control from its unchanged objects (a link, no compile: `build9_layer_relink.log`), `d249469a` to `f4925eea`, and ran **2901 checks, 0 failures**, step 112's count |
+
+**THE SUITES,** run directly, once each on the binaries this step leaves: **`test_mp_routes` 38** and **`test_mp_layer`
+2901**, 0 failures. No other suite's code or data changed, and no other exe was relinked.
+
+**SMART APP CONTROL: 4 refusals.** `MagicPortals.exe` `5bb0c16e` (the first link with `--route`) and, deleted and
+relinked, `98ff0d54`; relinked a second time, `0c2124e6` ran - the step's exe: 11 route runs and the 128 sweep
+captures, 0 refused. `test_mp_routes.exe`: its first link ran; the rebuild that added the trace's travellers, buttons
+and beholder was refused, deleted and relinked once, and `df757297` ran (every authoring replay, the two suite runs,
+the ctest run). `test_mp_layer.exe` `d249469a` - step 112's binary, unchanged by this step - was refused, deleted and
+relinked once (`f4925eea`, the same objects), and ran. No exe was relinked more than twice, and no refused binary was
+launched again. Every other exe in `build/` keeps its md5 across the step (`exe_md5_before.txt`, `_final.txt`), but
+`test_mp_layer.exe`, relinked for the refusal from the same objects.
+
+**A ROUTE IS INPUT, NEVER A FLAG.** `Route::Load` refuses every key but `level`, `win_by`, `holds` and `taps` (and
+`_` comments), so a route cannot carry a state change - no `PutPlayer`, no `--burn-dragon`, no skip - and what it
+drives is step 100's scheduled press, read by `readInput` as a touch at that point of the view. The win is
+`goals.completed`, the player in the open door, read after the tick that set it.
+
+**RECORDED DEVIATIONS** (none is a gate row NOT MET).
+1. **Ruff is scoped.** `tools/parity/pyproject.toml` `include`s `reachability.py` and `tests/*.py` only: the capture
+   scripts beside them fail ruff's E/F/I/UP/B and are not rewritten here. `ruff check .` in `tools/parity` is a clean
+   bill for the new files, not for the directory, and a new script there is not checked until it is added to the
+   list. The verifier's fix, for a later tools step: `extend-exclude` naming the old scripts in place of `include`.
+2. **The route suite runs the frame.** `test_mp_routes` calls the layer's `OnUpdate` after every tick, as the app does
+   under `--fixed-step`, where `test_mp_layer` mostly does not; the 11-of-11 match with the window is what says the
+   headless run is the game's.
+3. **The flood is optimistic.** It floods a point, not the player's 20 x 44 body; it ignores no-portal zones; it treats
+   locked doors, switched doors and every dynamic body as free. That is why 4-19, 3-13, 4-21 and 4-32 read reachable:
+   those stay for play and for their routes to settle.
+
+**RULINGS APPLIED.** None moves: the step changes no gameplay. R1, R2, R17 and R23 stay unbuilt (their steps come
+later in the program); R24 and R25 are neither touched nor withdrawn; camera dragging is untouched.
+
+**LEFT FOR LATER.**
+- **117 levels have no route.** Each gameplay step adds the routes of the levels it unblocks; B1's nine, B3's 4-32
+  and B5's 4-19 are the first. The format is the step's; the flood's `sealed` verdicts are what they must clear.
+- **The pin moves with the breakers.** B1's step adds a `barrel` row to `BREAKERS` (the blast opening what it grabs)
+  and rewrites `reachability.json`: the nine go from `sealed` to `opened`.
+- **A route's taps are points of the level**, so a camera change does not move them, but a step that changes the
+  camera can still put a point off the view on its tick, and the route then says so: it fails rather than tapping
+  what the screen does not show.
+- **No route plays a menu**: every route opens its level with `--level`'s path (`Locking` bypassed), so B2's locked
+  chapters are a separate check, for the owner's testing.
+- **The backlog** (`docs/parity-backlog.md` section 6) is updated in this step's commit: its "Tests." line, the
+  two definition-of-done rows annotated (not ticked), and the deviations above and the rows below as open rows.
+- **No route yet for 1-07, 1-10 and 1-17**, not a finding. 1-17 (`level16`) was tried headless (the attempt and
+  its trace: `out/parity/program/W.1/drafts/a3/level16.*`): the pocket is sealed to shots until its crates are
+  cleared. 1-07 and 1-10 were read from their ASCII maps (`maps_1-06_1-32.txt` there), not tried headless: an
+  anti-projectile wall under an overhead block with no clear shot line from the spawn, and an antiportal over the
+  block's top. Puzzles that need more authoring; no port defect seen.
+- **`--route` and the save.** The next step that touches `main.cpp` can say `--saves` in `--route`'s `--help` line,
+  or give `--route` a throwaway saves directory of its own; this step keeps `main.cpp` as measured.
+
+**LEFT FOR THE OWNER.**
+- **The owner's save holds medals from this step's automated runs.** The eleven `--route` window runs of 2026-09-29 were
+  launched without `--saves`, so the runs that went on past their level's end recorded their medals in
+  `%APPDATA%/Magic Portals/scores.json`; its last write, 13:53:00, falls inside the 1-32 run. It now holds gold for
+  1-01, 1-02 and 1-32 (world 0, levels 0, 1 and 31); 1-02's and 1-32's come from those runs, and where 1-01's came
+  from is not established (it may be older). Delete that file for a fresh save before testing the menus' locks
+  (B2). The verifier's window runs used a `--saves` directory of their own; the file was left as it is.

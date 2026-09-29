@@ -1,0 +1,18 @@
+# Tool settings for the parity scripts: not a package, and nothing here is installed.
+# pytest and ruff run from tools/parity with its own venv (README, *Parity work*):
+#   .venv/Scripts/python -m pytest -q
+#   .venv/Scripts/python -m ruff check .
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# The reachability check and its tests are held to ruff. The capture scripts beside them
+# (emu.py, capture_*.py, compare.py, frames.py, locate.py, markers.py) predate the rule and are
+# left as they are rather than rewritten under it.
+include = ["reachability.py", "tests/*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

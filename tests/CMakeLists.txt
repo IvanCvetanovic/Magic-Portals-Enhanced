@@ -182,3 +182,27 @@ add_mp_test(test_mp_select)
 # through the camera, and plays level30 from the spawn to the exit.
 add_mp_test(test_mp_layer SKIPS_WITH_77)
 target_link_libraries(test_mp_layer PRIVATE MagicPortalsGame)
+
+# Every level a win route plays from its start to its door (game/Route.hpp): the
+# routes are tests/routes/<level>.json, found at run time, so a route is added
+# without touching the suite. Played through the layer on the DEV schedule main's
+# --route uses; Route.cpp is compiled in here and into MagicPortals rather than put
+# in MagicPortalsGame, so no other suite is relinked for it.
+add_mp_test(test_mp_routes SKIPS_WITH_77)
+target_sources(test_mp_routes PRIVATE ${CMAKE_SOURCE_DIR}/game/Route.cpp)
+target_link_libraries(test_mp_routes PRIVATE MagicPortalsGame)
+target_compile_definitions(test_mp_routes PRIVATE MAGICPORTALS_ROUTES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/routes")
+
+# And the static check beside it: no level's door sealed off in the port, rerun over the
+# converted levels this build reads and compared with tools/parity/reachability.json. It is
+# Python, not a suite, so it is registered only where the parity venv is (README, Parity work);
+# it exits 77 - SKIPPED - without the converted levels, as the suites above do.
+set(SUPERSONIC_MAGICPORTALS_PARITY_PYTHON "${CMAKE_SOURCE_DIR}/tools/parity/.venv/Scripts/python.exe"
+    CACHE FILEPATH "The parity venv's Python, which runs the reachability check")
+if (EXISTS "${SUPERSONIC_MAGICPORTALS_PARITY_PYTHON}")
+    add_test(NAME parity_reachability
+             COMMAND "${SUPERSONIC_MAGICPORTALS_PARITY_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/parity/reachability.py"
+                     --check --levels-dir "${SUPERSONIC_MAGICPORTALS_LEVELS}"
+                     --chapters "${SUPERSONIC_MAGICPORTALS_CHAPTERS}")
+    set_tests_properties(parity_reachability PROPERTIES SKIP_RETURN_CODE 77)
+endif()

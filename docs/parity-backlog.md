@@ -1475,8 +1475,12 @@ evidence stay local, under the gitignored `out/parity/audit_2026-09-29/` (`REPOR
 On 2026-09-29 the owner said: "proceed with improvements until the only thing left is my testing".
 
 **Definition of done for this program.**
-- Every level is won by a scripted route that a suite replays, from its start to its door.
+- Every level is won by a scripted route that a suite replays, from its start to its door. *(Step 113: the harness
+  is built - `tests/routes/`, replayed by `test_mp_routes` - and 11 of 128 levels are won by a route: 1-01, 1-02,
+  1-03, 1-04, 1-05, 1-08, 1-09, 1-14, 1-15, 1-16, 1-32. Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
+  *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
+  it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Open until B1 turns them to opened.)*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1548,8 +1552,27 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       box; no teleport while a platform sits in a portal; stale notes (`end_delay`, `Turrets.hpp:17-22`,
       `Camera.hpp:6-10`, `entity_roles.json`'s cosmetic `arrows` and `red_key_state`).
 
-**Tests.** Only 1-01, 1-09 and 1-32 are won by a suite. The audit's free-space flood found B1; it becomes a test, and
-each gameplay step adds a route for every level it unblocks.
+**Tests.** Step 113 built both: the audit's flood is `tools/parity/reachability.py` (the port's own rules read from
+`data/` and `game/data/`, verdicts pinned, ctest `parity_reachability`), and `test_mp_routes` replays every route in
+`tests/routes/` (11 chapter-1 levels won by play). Each gameplay step adds a route for every level it unblocks, and a
+step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `barrel` row, the nine to opened).
+- [ ] **No route yet for 1-07, 1-10, 1-17** (step 113 left them: 1-17 tried headless, the pocket sealed to shots
+      until its crates are cleared; 1-07 and 1-10 read from their maps only). Puzzles needing authoring time, no port
+      defect seen.
+- [ ] **Ruff in `tools/parity` is scoped by an `include` list** (step 113, deviation 1): a new script is not checked
+      until listed. Fix: `extend-exclude` naming the old capture scripts in place of `include`.
+- [ ] **`test_mp_routes` runs `OnUpdate` every tick** as the app does under `--fixed-step`, where `test_mp_layer`
+      mostly does not (step 113, deviation 2); the 11-of-11 match with the window is its only evidence.
+- [ ] **The reachability flood is optimistic** (step 113, deviation 3): a point, not the 20 x 44 body; no no-portal
+      zones; locked and switched doors and dynamic bodies free - so 4-19, 3-13, 4-21 and 4-32 read reachable and
+      are settled only by their routes.
+- [ ] **`--route` without `--saves` writes the player's own save** when the run goes past the level's end: say so in
+      its `--help` line, or give it a throwaway saves directory (code; the next step touching `main.cpp`). Step 113's
+      runs left gold for 1-02 and 1-32 in `%APPDATA%/Magic Portals/scores.json` - the owner deletes it for a fresh
+      save (below).
+
+**Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
+1-01, 1-02 and 1-32, two of them from step 113's automated runs.
 
 **The owner's calls** (gathered here; each decided as the original does unless he says otherwise): the grant in
 `docs/permission.md` (gates handing a build to anyone else); camera dragging (his 2026-09-11 ruling "no dragging"

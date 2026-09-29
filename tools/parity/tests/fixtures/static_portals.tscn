@@ -1,0 +1,47 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rock"]
+size = Vector2(16, 320)
+
+[node name="static_portals" type="Node2D"]
+
+[node name="max_1" type="Node2D" parent="."]
+position = Vector2(256, 128)
+metadata/entity_name = "max"
+
+[node name="main_char_2" type="Node2D" parent="."]
+position = Vector2(48, 96)
+metadata/entity_name = "main_char"
+
+[node name="door_ent_3" type="Node2D" parent="."]
+position = Vector2(208, 64)
+metadata/entity_name = "door.ent"
+metadata/trigger_size = Vector2(8, 24)
+metadata/trigger_offset = Vector2(0, 32)
+
+[node name="collision_16x320_ent_4" type="Node2D" parent="."]
+position = Vector2(128, 64)
+metadata/entity_name = "collision_16x320.ent"
+
+[node name="Body" type="StaticBody2D" parent="collision_16x320_ent_4"]
+
+[node name="Shape" type="CollisionShape2D" parent="collision_16x320_ent_4/Body"]
+shape = SubResource("RectangleShape2D_rock")
+
+[node name="portal_static_5" type="Node2D" parent="."]
+position = Vector2(64, 32)
+metadata/entity_name = "portal_static"
+metadata/trigger_size = Vector2(32, 32)
+metadata/active = "1"
+metadata/color = "red"
+metadata/index = "0"
+metadata/destiny = "1"
+
+[node name="portal_static_6" type="Node2D" parent="."]
+position = Vector2(192, 160)
+metadata/entity_name = "portal_static"
+metadata/trigger_size = Vector2(32, 32)
+metadata/active = "1"
+metadata/color = "blue"
+metadata/index = "1"
+metadata/destiny = "0"

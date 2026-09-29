@@ -1,0 +1,27 @@
+[gd_scene load_steps=1 format=3]
+
+[node name="rotated" type="Node2D"]
+
+[node name="max_1" type="Node2D" parent="."]
+position = Vector2(256, 128)
+metadata/entity_name = "max"
+
+[node name="main_char_2" type="Node2D" parent="."]
+position = Vector2(48, 96)
+metadata/entity_name = "main_char"
+
+[node name="door_ent_3" type="Node2D" parent="."]
+position = Vector2(208, 64)
+metadata/entity_name = "door.ent"
+metadata/trigger_size = Vector2(8, 24)
+metadata/trigger_offset = Vector2(0, 32)
+
+[node name="pillar_ent_4" type="Node2D" parent="."]
+position = Vector2(128, 64)
+metadata/entity_name = "pillar.ent"
+rotation = 1.5708
+
+[node name="Body" type="StaticBody2D" parent="pillar_ent_4"]
+
+[node name="Shape" type="CollisionPolygon2D" parent="pillar_ent_4/Body"]
+polygon = PackedVector2Array(-160, -8, 160, -8, 160, 8, -160, 8)
