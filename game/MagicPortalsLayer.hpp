@@ -826,8 +826,9 @@ public:
         double lookZ = 0.0;        // its depth in the level's units
     };
     GhostReport GhostDrawing() const;
-    // Which of sounds.json's tracks the screen and the level ask for now, whether or
-    // not a device plays it: the menu's, the level's, the boss's, or none.
+    // Which of sounds.json's tracks the original would be playing now, whether or
+    // not a device plays it: AudioManager.currentTrack, unless its one player has
+    // been stopped since that track was asked for or a switch is off. "" for none.
     std::string WantedTrack() const;
 
     // 2-32's dragon and its claw (dragon.json), for the suites: as the last tick
@@ -2185,9 +2186,25 @@ private:
     // What the simulation did this tick, against what it looked like last.
     void latchSimSounds();
     void playLatched(entt::registry& registry, float deltaTime);
-    // The track the game should be playing now - the menu's, the level's, or
-    // its boss's - started and stopped as that changes.
+    // WantedTrack on the device: started and stopped as it changes.
     void updateMusic(entt::registry& registry);
+    // The original's music calls, on the state below: AudioManager::playMusic
+    // (currentTrack, and the player going), a stop of its one player
+    // (pauseMusic, and a boss's StopSample(getBossMusicName())) and resumeMusic.
+    void musicPlay(const char* track);
+    void musicStop();
+    void musicResume();
+    // A switch's toggle, as its listener (the AudioManager) takes it: off is
+    // pauseMusic; the sound back on resumes only with the music on, the music
+    // back on always (turnGlobalVolumeOn / turnMusicOn, bytes 186452..186631).
+    void switchedSound();
+    void switchedMusic();
+    // Game::preLoop #485-509: the level's track, the boss's, or pauseMusic.
+    void startLevelMusic(int index);
+    // The calls the bosses' callbacks make, read off the tick's level.
+    void latchMusic();
+    // The log's line, each time WantedTrack changes: a run's log says what played.
+    void noteMusic();
     void stopMusic(entt::registry& registry);
     double soundRandom(double from, double to);
     // A hook's sample speed as the engine's pitch: a number it states, a draw
@@ -2251,6 +2268,24 @@ private:
     // the engine's is one process-global stream every other drawer shares, and
     // a run has to sound the same twice.
     std::mt19937 m_soundRandom{20260913u};
+    // THE ORIGINAL'S MUSIC, as its scripts leave it and with or without a device:
+    // AudioManager.currentTrack, and whether the one MediaPlayer has been stopped
+    // since (MediaStreamManager.java: one player; a stop stops whatever it plays).
+    struct Music {
+        std::string current;  // the last playMusic's track, "" as the AudioManager starts it
+        bool stopped = false; // stopped since, until a playMusic or a resumeMusic
+    };
+    Music m_music;
+    // What the level looked like on the last tick, for the calls made once.
+    // Reset with each level, to the fresh level's values: nothing is set yet.
+    struct MusicWatch {
+        bool ghostInitialised = false;
+        bool dragonTookOff = false;
+        bool darkDragonSummoned = false;
+        bool darkDragonDying = false;
+    };
+    MusicWatch m_musicWatch;
+    std::string m_musicNoted{"-"}; // WantedTrack as the log last had it
     std::string m_track; // which of sounds.json's tracks is playing, or empty
     // A looping voice is never "finished", so ReapFinishedVoices leaves it
     // alone for ever: the layer holds this and stops it itself, or menu to

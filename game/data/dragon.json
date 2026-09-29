@@ -392,9 +392,9 @@
   },
 
   "not_built": [
-    "Every sound: playDragonAppearSound at elapsedTime > 2000, playDragonTakeOffSound and",
-    "the boss-music stop at take-off, playDemolitionSound on each crush, playFireballSound.",
-    "sounds.json already names the family.",
+    "Every sound: playDragonAppearSound at elapsedTime > 2000, playDragonTakeOffSound,",
+    "playDemolitionSound on each crush, playFireballSound. sounds.json already names the",
+    "family. (The boss-music stop at take-off IS built: the layer's latchMusic, planning step 152.)",
     "The pictures still missing: wall_destroy.ent's puff, red_suck_effect.ent, and the",
     "minion.png the callback preloads on its first tick and never uses in this callback.",
     "The dragon's own cell, its angle, its particle windows and the claw's picture are built",

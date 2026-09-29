@@ -205,13 +205,26 @@
   },
 
   "_music_note": [
-    "playMusic(name, volume, loop) loads the track, sets its looping and volume and",
-    "plays it, and does NOTHING while the music switch is off. The port has no",
-    "MusicSwitchManager, so its music plays unconditionally - a divergence, stated.",
-    "setDefaultMusicVolume re-derives the same two numbers independently: 0.6 when",
-    "the current track is g_musicNames[0], 0.7 otherwise.",
-    "Game.angelscript starts playGameMusic(isBossFight) for a level unless the level",
-    "says noMusic."
+    "playMusic(name, volume, loop) records the track as currentTrack, then loads it, sets",
+    "its looping and volume and plays it - that last part only while the music switch is",
+    "on. The one MediaPlayer keeps a track it is already playing and stops any other first",
+    "(MediaStreamManager.java:90-104). setDefaultMusicVolume re-derives the same two",
+    "numbers independently: 0.6 when the current track is g_musicNames[0], 0.7 otherwise.",
+    "WHEN each plays (the layer's musicPlay, musicStop and musicResume; planning step 152):",
+    "  menu: PortalMainMenu::preLoop #368, and nowhere else. Chapter and level select,",
+    "    credits and the dashboard call no music hook, so a level's track - or its",
+    "    silence - carries on under them.",
+    "  game or boss: Game::preLoop #485-509, playGameMusic(isBossFight), isBossFight being",
+    "    m_levelIndex == 31, a world's last level; unless the level's properties carry",
+    "    no_music (3-32, 4-01, 4-19, 4-32): turnMusicOff, which is pauseMusic - the track",
+    "    stops and stays currentTrack.",
+    "  boss, mid-level: the ghost's init (#320-324) and the dark dragon's spawn (#118).",
+    "  stopped: the beholder while dead (#1139-1159), the dragon's take-off (#417-431), the",
+    "    dark dragon's death (#1998-2012), the ghost's death (#1227-1241).",
+    "  A switch turned off is pauseMusic; the one that comes back on is resumeMusic, which",
+    "  plays currentTrack again even where a no_music level or a boss had stopped it.",
+    "  rocket and back_home, 4-01's and 4-19's won cutscenes, are not played yet (the",
+    "  program's P2)."
   ],
 
   "music": {

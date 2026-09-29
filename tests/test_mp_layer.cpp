@@ -12172,12 +12172,13 @@ void TheGhostComesWithItsKnightsDeath() {
         return found;
     };
 
-    // BEFORE: a second of the level, and no ghost, no puffs, the level's own music.
+    // BEFORE: a second of the level, and no ghost, no puffs, and no music: level31b
+    // sets no_music, so Game::preLoop's turnMusicOff (#493-509) is all it gets.
     for (int tick = 0; tick < 60; ++tick) step();
     CHECK_MSG(layer.GhostDrawing().present && !layer.GhostDrawing().spawned && !layer.GhostDrawing().drawn &&
                   Tagged(registry, "Magic Portals Ghost") == 0,
               "level31b has a ghost_pos and no ghost while its knight lives");
-    CHECK_MSG(layer.WantedTrack() == "game", "and the level's own music: " + layer.WantedTrack());
+    CHECK_MSG(layer.WantedTrack().empty(), "and no_music: silent, not the level's track: '" + layer.WantedTrack() + "'");
     CHECK_MSG(effectsNamed("ghost_appear_effect.ent").empty(), "and no puffs");
 
     // THE KNIGHT DIES: onto the level's killer floor, where the frame after ends it.
@@ -12227,7 +12228,7 @@ void TheGhostComesWithItsKnightsDeath() {
     CHECK_MSG(added.z > door && added.z < deepestAtZero && added.z < layer.PlayerSlotZ(),
               "behind the z-0 art " + std::to_string(deepestAtZero) + " and the player, in front of the locked door " +
                   std::to_string(door) + ": " + std::to_string(added.z));
-    CHECK_MSG(layer.WantedTrack() == "game", "its init has not run: the level's music still");
+    CHECK_MSG(layer.WantedTrack().empty(), "its init has not run: still silent");
 
     // ITS FIRST CALLBACK: black at alpha 0.667, the boss's music, and the puffs.
     step();
@@ -12492,12 +12493,20 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
     for (int tick = 0; tick < 240 && !level.torch.lights.front().lit; ++tick) step();
     CHECK_MSG(level.torch.lights.front().lit, "a shot from the floor lit 4-32's torch: " + lastFailure(layer));
     if (!level.torch.lights.front().lit) return;
+    // THE MUSIC (planning step 152): level31c sets no_music, so it is silent until
+    // the spawn adds the dragon and calls playGameMusic(true) (#103-118).
+    CHECK_MSG(layer.WantedTrack().empty(), "no_music: silent until the summon: '" + layer.WantedTrack() + "'");
     int drawnEarly = 0;
+    int musicEarly = 0;
     for (int tick = 0; tick < 900 && !dragon.alive; ++tick) {
         step();
         if (!dragon.alive && dragonEffect().has_value()) ++drawnEarly;
+        if (!dragon.alive && !layer.WantedTrack().empty()) ++musicEarly;
     }
     CHECK_MSG(dragon.alive && drawnEarly == 0, "nothing of it before the summon, then the summon");
+    CHECK_MSG(musicEarly == 0 && layer.WantedTrack() == "boss",
+              "and the boss's track from the summon's tick, none before: '" + layer.WantedTrack() + "', " +
+                  std::to_string(musicEarly) + " early");
     if (!dragon.alive) return;
 
     // THE SUMMON'S FRAME: AddScaledEntity's entity before its first update.
@@ -12637,12 +12646,16 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
     CHECK_MSG(bright && glm::distance(bright->emissive, glm::dvec3(0.45)) < 1e-6, "then three times its own");
 
     // TWO MORE, and its death: WHITE.
+    CHECK_MSG(layer.WantedTrack() == "boss", "a wound leaves the boss's track playing");
     for (int round = 0; round < 2; ++round) {
         for (int tick = 0; tick < 400 && dragon.phase != Phase::Fighting; ++tick) step();
+        if (round == 1) CHECK_MSG(layer.WantedTrack() == "boss", "the boss's track up to the killing burn");
         layer.ScheduleDevBurn(layer.LayerTicks() + 1);
         step();
     }
     CHECK_MSG(dragon.phase == Phase::Dying && dragon.hp == 0, "the third burn kills it");
+    // Its death's StopSample (#1958-2012), on the way into DYING, on that tick.
+    CHECK_MSG(layer.WantedTrack().empty(), "and its death stops the track: '" + layer.WantedTrack() + "'");
     step();
     const std::optional<MagicPortalsLayer::EffectReport> dying = dragonEffect();
     CHECK_MSG(dying && dying->emissive == glm::dvec3(1.0), "dying, white");
@@ -12652,6 +12665,7 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
     }
     for (int tick = 0; tick < 700 && !dragon.gone; ++tick) step();
     CHECK_MSG(dragon.gone && !dragonEffect().has_value(), "it has gone, and its picture and its mouth");
+    CHECK_MSG(layer.WantedTrack().empty(), "and nothing starts the music again");
     step();
     std::vector<MagicPortalsLayer::EffectReport> keys;
     for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
@@ -15235,7 +15249,335 @@ void AShockRingsJitterIsTheEffectsStreamsAlone() {
     b.OnDetach(withEffect);
 }
 
+// ---- The music as the original plays it (the program's P7, planning step 152) ----
+//
+// WantedTrack is AudioManager.currentTrack and its one MediaPlayer as the
+// original's calls leave them, with or without a device: Game::preLoop's
+// playGameMusic(isBossFight) or, on a no_music level, turnMusicOff (#485-509);
+// PortalMainMenu::preLoop's playMenuMusic (#368), and no call at all on chapter or
+// level select; the bosses' own starts and stops; and a switch turned back on
+// resuming currentTrack (resumeMusic).
+
+// The data the rule reads: the four levels whose `properties` carry no_music, and
+// every world 32 levels long, so that m_levelIndex == 31 is each world's last.
+void FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight() {
+    std::vector<std::string> silent;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (entry.path().extension() != ".tscn") continue;
+        std::ifstream in(entry.path(), std::ios::binary);
+        std::ostringstream text;
+        text << in.rdbuf();
+        if (text.str().find("metadata/no_music = ") != std::string::npos) silent.push_back(entry.path().stem().string());
+    }
+    std::sort(silent.begin(), silent.end());
+    const std::vector<std::string> four{"level0c", "level18c", "level31b", "level31c"};
+    CHECK_MSG(silent == four, "no_music on 4-01, 4-19, 3-32 and 4-32 only: " + std::to_string(silent.size()) + " levels");
+    MagicPortals::Chapters::Table chapters;
+    std::string error;
+    CHECK_MSG(MagicPortals::Chapters::Load(kChapters, chapters, error), error);
+    std::array<int, 4> perWorld{};
+    for (const MagicPortals::Chapters::Level& level : chapters.levels) {
+        if (level.world >= 0 && level.world < 4) ++perWorld[static_cast<std::size_t>(level.world)];
+    }
+    CHECK_MSG(chapters.levels.size() == 128 && perWorld == (std::array<int, 4>{32, 32, 32, 32}),
+              "four worlds of 32: index 31 is each world's last");
+    int lasts = 0;
+    for (std::size_t at = 0; at < chapters.levels.size(); ++at) {
+        if (chapters.Next(static_cast<int>(at)) >= 0) continue;
+        ++lasts;
+        CHECK_MSG(chapters.levels[at].index == 31, chapters.levels[at].name + " ends its world at index " +
+                                                       std::to_string(chapters.levels[at].index));
+    }
+    CHECK_EQ(lasts, 4);
+}
+
+// Game::preLoop on each kind of level, as it loads.
+void EachLevelOpensOnTheTrackItsPreLoopAsksFor() {
+    const struct Case {
+        const char* level;
+        const char* label;
+        const char* track;
+    } cases[] = {
+        {"level0", "1-01", "game"},  {"level30", "1-31", "game"},  {"level31", "1-32", "boss"},
+        {"level0a", "2-01", "game"}, {"level31a", "2-32", "boss"}, {"level30b", "3-31", "game"},
+        {"level31b", "3-32", ""},    {"level0c", "4-01", ""},      {"level17c", "4-18", "game"},
+        {"level18c", "4-19", ""},    {"level30c", "4-31", "game"}, {"level31c", "4-32", ""},
+    };
+    for (const Case& one : cases) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), one.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, std::string(one.level) + ": " + layer.LoadError());
+        CHECK_MSG(layer.WantedTrack() == one.track, std::string(one.label) + " (" + one.level + ") opens on '" +
+                                                        one.track + "', not '" + layer.WantedTrack() + "'");
+        layer.OnDetach(registry);
+    }
+}
+
+// Back out of a level to the main menu, one Back at a time; the screens it passed.
+void BackUntilTheMainMenu(MagicPortalsLayer& layer, entt::registry& registry, std::vector<std::string>& heard) {
+    using Screen = MagicPortalsLayer::Screen;
+    MagicPortalsLayer::MenuButton back;
+    back.kind = MagicPortalsLayer::MenuButton::Kind::Back;
+    for (int press = 0; press < 12 && layer.MenuScreen() != Screen::Main; ++press) {
+        const Screen before = layer.MenuScreen();
+        if (!layer.PressMenu(registry, back)) break;
+        if (layer.MenuScreen() != before) {
+            heard.push_back(std::string(layer.MenuScreen() == Screen::Worlds ? "worlds" : "main") + ":" +
+                            layer.WantedTrack());
+        }
+    }
+}
+
+// The level's track goes on under the medal, the level grid and chapter select;
+// the main menu is the one state that changes it; a level picked from the grid
+// starts its own.
+void TheLevelsTrackCarriesIntoTheSelectors() {
+    if (!OriginalArtIsThere("TheLevelsTrackCarriesIntoTheSelectors")) return;
+    using Screen = MagicPortalsLayer::Screen;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    CHECK_MSG(layer.WantedTrack() == "game", "1-01's own track: " + layer.WantedTrack());
+    for (int tick = 0; tick < 600 && layer.MenuScreen() != Screen::Finished; ++tick) {
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, {});
+    }
+    CHECK_MSG(layer.MenuScreen() == Screen::Finished && layer.WantedTrack() == "game",
+              "and under its medal: " + layer.WantedTrack());
+    MagicPortalsLayer::MenuButton list;
+    list.kind = Kind::List;
+    CHECK(layer.PressMenu(registry, list));
+    CHECK_MSG(layer.MenuScreen() == Screen::Levels && layer.WantedTrack() == "game",
+              "the level grid carries it (the port used to switch to the menu's here): '" + layer.WantedTrack() + "'");
+    std::vector<std::string> heard;
+    BackUntilTheMainMenu(layer, registry, heard);
+    CHECK_MSG(heard == (std::vector<std::string>{"worlds:game", "main:menu"}),
+              "chapter select still the level's, the main menu its own: " +
+                  (heard.empty() ? std::string("nothing") : heard.front() + " / " + heard.back()));
+    const MagicPortalsLayer::MenuButton* play = MenuButtonOf(layer, Kind::Play);
+    if (play == nullptr) {
+        CHECK_MSG(false, "the main menu has no play button");
+        return;
+    }
+    layer.PressMenu(registry, *play);
+    CHECK_MSG(layer.MenuScreen() == Screen::Worlds && layer.WantedTrack() == "menu", "chapter select from the menu: the menu's");
+    const MagicPortalsLayer::MenuButton* world = MenuButtonOf(layer, Kind::World, 0);
+    if (world == nullptr) {
+        CHECK_MSG(false, "chapter select has no world button");
+        return;
+    }
+    layer.PressMenu(registry, *world);
+    CHECK_MSG(layer.MenuScreen() == Screen::Levels && layer.WantedTrack() == "menu", "and the grid under it");
+    const MagicPortalsLayer::MenuButton* first = MenuButtonOf(layer, Kind::Level, 0);
+    if (first == nullptr) {
+        CHECK_MSG(false, "the grid has no level button");
+        return;
+    }
+    layer.PressMenu(registry, *first);
+    CHECK_MSG(IsAt(layer, "level0") && layer.WantedTrack() == "game", "and 1-01 picked from it starts its own");
+    layer.OnDetach(registry);
+}
+
+// A no_music level's silence carries into the grid and chapter select just the
+// same, a retry is silent again, and only the main menu brings a track back.
+void ANoMusicLevelsSilenceCarriesIntoTheSelectors() {
+    using Screen = MagicPortalsLayer::Screen;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    CHECK_MSG(layer.WantedTrack().empty(), "4-01 opens silent: '" + layer.WantedTrack() + "'");
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CHECK_MSG(IsAt(layer, "level0c") && layer.WantedTrack().empty(), "and a retry of it is silent again");
+    MagicPortalsLayer::MenuButton list;
+    list.kind = MagicPortalsLayer::MenuButton::Kind::List;
+    CHECK(layer.PressMenu(registry, list));
+    CHECK_MSG(layer.MenuScreen() == Screen::Levels && layer.WantedTrack().empty(), "the grid after it is silent");
+    std::vector<std::string> heard;
+    BackUntilTheMainMenu(layer, registry, heard);
+    CHECK_MSG(heard == (std::vector<std::string>{"worlds:", "main:menu"}),
+              "chapter select silent too, and the main menu's track at the main menu");
+    layer.OnDetach(registry);
+}
+
+// turnMusicOff on a no_music level is pauseMusic: the track stops and stays
+// currentTrack. A switch turned off and on again resumes it - the original's, and
+// it sounds like a bug: 4-19 reached by a skip from 4-18 plays 4-18's track again.
+// The sound switch resumes only while the music switch is on.
+void ASwitchBackOnResumesTheTrackANoMusicLevelStopped() {
+    if (!OriginalArtIsThere("ASwitchBackOnResumesTheTrackANoMusicLevelStopped")) return;
+    namespace Pause = MagicPortals::Pause;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level17c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    CHECK_MSG(layer.WantedTrack() == "game", "4-18's own track");
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+    press(layer, registry, MagicPortalsLayer::kSkip);
+    CHECK_MSG(IsAt(layer, "level18c") && layer.WantedTrack().empty(), "4-19 skipped to: silent");
+    const auto pauseIt = [&layer, &registry]() {
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+        press(layer, registry, MagicPortalsLayer::kBack);
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        return layer.Paused();
+    };
+    CHECK_MSG(pauseIt(), "the pause over 4-19");
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Music) && !layer.MusicOn() && layer.WantedTrack().empty(),
+              "the music switch off");
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Music) && layer.MusicOn() && layer.WantedTrack() == "game",
+              "and on again: resumeMusic plays currentTrack, 4-18's: '" + layer.WantedTrack() + "'");
+
+    // Stopped again by a retry, then the sound switch.
+    CHECK(layer.PressPause(registry, Pause::Button::Resume));
+    for (int tick = 0; tick < 60 && layer.Paused(); ++tick) tickWith(layer, registry, kRest, {}, {});
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CHECK_MSG(IsAt(layer, "level18c") && layer.WantedTrack().empty(), "a retry: turnMusicOff again");
+    CHECK_MSG(pauseIt(), "the pause again");
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Sound) && !layer.SoundOn() && layer.WantedTrack().empty(),
+              "the sound switch off");
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Sound) && layer.SoundOn() && layer.WantedTrack() == "game",
+              "and on again with the music on: turnGlobalVolumeOn resumes it");
+    // With the music off, the sound back on resumes nothing; the music back on does.
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK(layer.PressPause(registry, Pause::Button::Music) && !layer.MusicOn());
+    CHECK(layer.PressPause(registry, Pause::Button::Sound) && !layer.SoundOn());
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Sound) && layer.SoundOn() && layer.WantedTrack().empty(),
+              "the sound back on with the music off: nothing");
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Music) && layer.MusicOn() && layer.WantedTrack() == "game",
+              "the music back on: resumed");
+    layer.OnDetach(registry);
+}
+
+// 1-32: the boss's track from its load, on through the fight, stopped while the
+// beholder is dead (ETHCallback_beholder #1139-1159, every update in
+// BEHOLDER_STATE_DEAD) and silent after it has gone - the port used to play on,
+// its beholder never cleared. Each rock it drops is put rising into its eye, the
+// three hits TheBeholderHurtShakesTheView's one is.
+void TheBeholdersDeathStopsItsTrack() {
+    using MagicPortals::Boss::Phase;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr || !layer.SimLevel()->boss.beholder.has_value()) return;
+    CHECK_MSG(layer.WantedTrack() == "boss", "1-32 opens on the boss's track: " + layer.WantedTrack());
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    const MagicPortals::Boss::Beholder& beholder = *level.boss.beholder;
+    const auto step = [&layer, &registry]() {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    };
+    int thrown = 0;
+    int shoved = 0;
+    int offWhileAlive = 0;
+    int ticks = 0;
+    for (; ticks < 12000 && beholder.phase != Phase::Dead; ++ticks) {
+        step();
+        if (beholder.phase != Phase::Dead && layer.WantedTrack() != "boss") ++offWhileAlive;
+        if (beholder.rocksThrown > thrown && !level.boss.rocks.empty()) {
+            thrown = beholder.rocksThrown;
+            const entt::entity rock = level.boss.rocks.back().body;
+            if (!registry.valid(rock)) continue;
+            const glm::vec3 inside = MagicPortals::Units::ToWorld(beholder.atPx.x, beholder.atPx.y + 10.0);
+            auto& at = registry.get<TransformComponent>(rock);
+            at.position = glm::vec3(inside.x, inside.y, at.position.z);
+            registry.get<RigidBodyComponent>(rock).velocity =
+                glm::vec3(0.0f, MagicPortals::Units::ToMetres(200.0), 0.0f);
+            ++shoved;
+        }
+    }
+    CHECK_MSG(beholder.phase == Phase::Dead && beholder.hits == 3,
+              "three rocks rising into it kill it: " + std::to_string(beholder.hits) + " hits of " +
+                  std::to_string(shoved) + " rocks put, " + std::to_string(ticks) + " ticks");
+    CHECK_MSG(offWhileAlive == 0, "the boss's track through the whole fight: " + std::to_string(offWhileAlive) +
+                                      " ticks without it");
+    CHECK_MSG(layer.WantedTrack().empty(), "dead: stopped on that tick: '" + layer.WantedTrack() + "'");
+    int heard = 0;
+    for (int tick = 0; tick < 400 && !beholder.gone; ++tick) {
+        step();
+        if (!layer.WantedTrack().empty()) ++heard;
+    }
+    for (int tick = 0; tick < 60; ++tick) {
+        step();
+        if (!layer.WantedTrack().empty()) ++heard;
+    }
+    CHECK_MSG(beholder.gone && level.boss.buttonRaised && heard == 0,
+              "silent through its death and after it has gone, its button raised: " + std::to_string(heard) +
+                  " ticks with a track");
+    std::printf("  1-32: the beholder dead on tick %d after %d rocks; the track stopped with it\n", ticks, shoved);
+    // A retry is a fresh Game::preLoop: playGameMusic(true) starts the stopped track again.
+    MagicPortalsLayer::MenuButton retry;
+    retry.kind = MagicPortalsLayer::MenuButton::Kind::Retry;
+    CHECK(layer.PressMenu(registry, retry));
+    CHECK_MSG(IsAt(layer, "level31") && layer.WantedTrack() == "boss", "a retry: the boss's track again");
+    layer.OnDetach(registry);
+}
+
+// 2-32: the boss's track from its load (isBossFight: the world's last level), and
+// the take-off's StopSample (ETHCallback_dragon #409-431), once, as it climbs away
+// past take_off - about 51.6 s in.
+void TheDragonsTakeOffStopsTheBossTrack() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr || !layer.SimLevel()->dragon.present) return;
+    CHECK_MSG(layer.WantedTrack() == "boss", "2-32 opens on the boss's track (it played the level's): " +
+                                                 layer.WantedTrack());
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Dragon::State& dragon = layer.SimLevel()->dragon;
+    int offBefore = 0;
+    int ticks = 0;
+    for (; ticks < 4000 && !dragon.tookOff; ++ticks) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (!dragon.tookOff && layer.WantedTrack() != "boss") ++offBefore;
+    }
+    CHECK_MSG(dragon.tookOff && offBefore == 0, "the boss's track until the take-off, on tick " + std::to_string(ticks));
+    CHECK_MSG(layer.WantedTrack().empty(), "and none from its tick: '" + layer.WantedTrack() + "'");
+    int heard = 0;
+    for (int tick = 0; tick < 120; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (!layer.WantedTrack().empty()) ++heard;
+    }
+    CHECK_MSG(heard == 0, "nor after it: " + std::to_string(heard));
+    std::printf("  2-32: the dragon took off on tick %d, and the boss's track stopped with it\n", ticks);
+    layer.OnDetach(registry);
+}
+
 void runTests() {
+    FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
+    EachLevelOpensOnTheTrackItsPreLoopAsksFor();
+    TheLevelsTrackCarriesIntoTheSelectors();
+    ANoMusicLevelsSilenceCarriesIntoTheSelectors();
+    ASwitchBackOnResumesTheTrackANoMusicLevelStopped();
+    TheBeholdersDeathStopsItsTrack();
+    TheDragonsTakeOffStopsTheBossTrack();
     TheLayerPlaysLevel30();
     TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
     AShakeDrawnOutsideTheEngineLoopDoesNotPileUp();

@@ -47,6 +47,15 @@ constexpr float kCameraDistance = 20.0f;
 // view is 455 px wide.
 constexpr float kDefaultAspect = 16.0f / 9.0f;
 
+// sounds.json's tracks, by the calls that ask for them: playMenuMusic,
+// playGameMusic(false) and playGameMusic(true), which is getBossMusicName's.
+constexpr const char* kMenuTrack = "menu";
+constexpr const char* kGameTrack = "game";
+constexpr const char* kBossTrack = "boss";
+// The `properties` datum that silences a level: Game::readProperties (bytes
+// 116676..118260) #166-181 sets noMusic on its presence (CheckCustomData).
+constexpr const char* kNoMusicFlag = "no_music";
+
 // Markers - buttons, crystals, the exit, portals - stand in front of the bodies.
 constexpr float kMarkerZ = 0.5f;
 constexpr float kMarkerDepth = 0.1f;
@@ -481,6 +490,10 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     }
 
     m_loaded = true;
+    // Its music, as Game::preLoop starts it - a retry and a skip included, each a
+    // fresh Game state - and the bosses' calls watched from nothing.
+    m_musicWatch = MusicWatch{};
+    startLevelMusic(index);
     // The lightmaps this level names, held until it goes. The same list again
     // after a retry, which kept the last one.
     m_heldLightmaps.clear();
@@ -2546,6 +2559,11 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
     }
     m_screen = screen;
     m_aspect = viewportAspect(registry);
+    // PortalMainMenu::preLoop #368 playMenuMusic: the ONE state that changes the
+    // track. Chapter and level select, credits and the dashboard call no music
+    // hook, so what played before them - a level's track, or the silence of a
+    // no_music level or a beaten boss - goes on under them.
+    if (changed && screen == Screen::Main) musicPlay(kMenuTrack);
     if (changed && screen == Screen::Credits) {
         // CreditsScreenLayer's constructor: the strip's top on the bottom edge.
         m_credits = Credits::Start(MenuBoxPx());
@@ -3226,6 +3244,7 @@ bool MagicPortalsLayer::PressMainMenu(entt::registry& registry, MainMenu::Button
         } else {
             m_mainMusicAddedMs = dismissing ? m_mainMusicDismissedMs + dismissMs : now;
         }
+        switchedSound();
         latch("menu_button");
         return true;
     }
@@ -3235,6 +3254,7 @@ bool MagicPortalsLayer::PressMainMenu(entt::registry& registry, MainMenu::Button
                              m_menuClock.ms - m_mainMusicDismissedMs < m_mainMenuRules.layer.buttonDismissMs);
         if (!shown) return false;
         m_musicOn = !m_musicOn;
+        switchedMusic();
         latch("menu_button");
         return true;
     }
@@ -8493,30 +8513,120 @@ void MagicPortalsLayer::playLatched(entt::registry& registry, float deltaTime) {
 }
 
 std::string MagicPortalsLayer::WantedTrack() const {
-    // Which track belongs to what is on screen. The medal screen keeps the
-    // level loaded, so it falls into the level's own branch and the music does
-    // not stop underneath it.
-    std::string wanted;
-    if (!m_soundOn || !m_musicOn) {
-        // Either switch off: no music at all.
-    } else if (m_screen == Screen::Main || m_screen == Screen::Worlds || m_screen == Screen::Levels ||
-               m_screen == Screen::Credits || m_screen == Screen::Achievements) {
-        // The menu's track goes on under credits and the dashboard, which play none.
-        wanted = "menu";
-    } else if (m_loaded) {
-        // Game.angelscript starts playGameMusic(isBossFight); the port's boss
-        // levels are the ones that built a beholder. And chapter 3's ghost starts
-        // playGameMusic(bossFight = true) from its init block (#320-324), once the
-        // black knight's death has added it (R4), and its DEATH arm stops that
-        // sample (#1224-1243) and starts nothing: the level is silent after it.
-        const Ghost::State& ghost = m_level.ghost;
-        if (ghost.present && ghost.initialised) {
-            wanted = ghost.gone || ghost.phase == Ghost::Phase::Death ? "" : "boss";
-        } else {
-            wanted = m_level.boss.beholder.has_value() ? "boss" : "game";
-        }
+    // NOT what is on screen: what the original's calls have left (m_music), and
+    // heard only with both switches on - either off is pauseMusic, and the one
+    // that comes back on resumes currentTrack (switchedSound, switchedMusic).
+    if (!m_soundOn || !m_musicOn || m_music.stopped) return std::string();
+    return m_music.current;
+}
+
+void MagicPortalsLayer::noteMusic() {
+    const std::string wanted = WantedTrack();
+    if (wanted == m_musicNoted) return;
+    m_musicNoted = wanted;
+    SUPERSONIC_LOG_INFO("Magic Portals") << "music: " << (wanted.empty() ? std::string("none") : wanted)
+                                         << " from tick " << m_ticks << std::endl;
+}
+
+void MagicPortalsLayer::musicPlay(const char* track) {
+    // AudioManager::playMusic (bytes 195443..195631): currentTrack first (#3-8),
+    // then - only with the music switch on (#10-18) - LoadMusic, LoopSample,
+    // SetSampleVolume and PlaySample. The one MediaPlayer keeps a track it is
+    // already playing and stops any other first (MediaStreamManager.java:90-104),
+    // which is updateMusic leaving the voice alone while WantedTrack holds. With a
+    // switch off nothing is heard, and the switch's resume plays this.
+    m_music.current = track;
+    m_music.stopped = false;
+    noteMusic();
+}
+
+void MagicPortalsLayer::musicStop() {
+    // pauseMusic (186631..186849): StopSample(currentTrack). And a boss's
+    // StopSample(getBossMusicName()), guarded by SampleExists. Both reach
+    // MediaStreamManager.stop(), which stops the player whatever it plays
+    // (MediaStreamListener.java:55-56, MediaStreamManager.java:64-68).
+    // currentTrack is left as it was, for a resume.
+    m_music.stopped = true;
+    noteMusic();
+}
+
+void MagicPortalsLayer::musicResume() {
+    // resumeMusic (186849..187005): LoadMusic, LoopSample and PlaySample of
+    // currentTrack, whatever had stopped it - a no_music level, a boss's death.
+    m_music.stopped = false;
+    noteMusic();
+}
+
+void MagicPortalsLayer::switchedSound() {
+    // GlobalSoundSwitch::manageSoundSwitch -> GlobalVolumeManager::saveVolume
+    // (28964..29196) #33-47 -> turnGlobalVolumeOff (pauseMusic) or
+    // turnGlobalVolumeOn, which resumes only while the music switch is on.
+    if (!m_soundOn) {
+        musicStop();
+    } else if (m_musicOn) {
+        musicResume();
     }
-    return wanted;
+}
+
+void MagicPortalsLayer::switchedMusic() {
+    // MusicSwitchManager::saveMusicState (29772..30017) #36-52 -> the listener's
+    // turnMusicOff (pauseMusic) or turnMusicOn (resumeMusic).
+    if (m_musicOn) {
+        musicResume();
+    } else {
+        musicStop();
+    }
+}
+
+void MagicPortalsLayer::startLevelMusic(int index) {
+    // Game::preLoop (112536..114414) #485-509: isBossFight = m_levelIndex == 31
+    // (#485-491, CMPIu v31 the constant), then playGameMusic(isBossFight) unless
+    // noMusic, which calls turnMusicOff instead - pauseMusic: the track that was
+    // playing stops and stays currentTrack. 31 is the last level of a world of 32,
+    // and every world in chapters.json has 32, so the chapters table says it: the
+    // world's last level. Boss or not, 3-32 and 4-32 also set no_music, and so
+    // open silent until their boss starts the track.
+    const Tscn::Node* properties = FirstOfRole(m_data, Roles::kLevelProperties);
+    if (properties != nullptr && properties->Meta(kNoMusicFlag) != nullptr) {
+        musicStop();
+        return;
+    }
+    musicPlay(m_chapters.Next(index) < 0 ? kBossTrack : kGameTrack);
+}
+
+void MagicPortalsLayer::latchMusic() {
+    if (!m_loaded) return;
+    MusicWatch now;
+    // Chapter 3's ghost: playGameMusic(bossFight = true) from its init block
+    // (ETHCallback_ghost #320-324), once; and its DEATH arm's StopSample
+    // (#1210-1243, `CMPIu v26, v4`: the constant 4, DEATH), on every update it
+    // plays until the ghost is gone.
+    const Ghost::State& ghost = m_level.ghost;
+    now.ghostInitialised = ghost.present && ghost.initialised;
+    if (now.ghostInitialised && !m_musicWatch.ghostInitialised) musicPlay(kBossTrack);
+    if (ghost.present && ghost.phase == Ghost::Phase::Death && !ghost.gone) musicStop();
+    // Chapter 1's beholder: BEHOLDER_STATE_DEAD's StopSample (ETHCallback_beholder
+    // #1139-1159), on every update while it is dead and not yet gone. The
+    // beholder is never cleared from the level (its optional stays set), so this
+    // is read off its phase.
+    if (m_level.boss.beholder.has_value() && m_level.boss.beholder->phase == Boss::Phase::Dead &&
+        !m_level.boss.beholder->gone) {
+        musicStop();
+    }
+    // 2-32's dragon: the take-off's StopSample (ETHCallback_dragon #409-431, inside
+    // `if (!tookOff)`), once.
+    now.dragonTookOff = m_level.dragon.present && m_level.dragon.tookOff;
+    if (now.dragonTookOff && !m_musicWatch.dragonTookOff) musicStop();
+    // 4-32's dark dragon: playGameMusic(true) as its spawn adds it
+    // (ETHCallback_dark_dragon_spawn #103-118), and its death's StopSample
+    // (ETHCallback_dark_dragon #1958-2012), once, on the way into DYING
+    // (`hp <= 0 && state != 4`).
+    const DarkDragon::State& dark = m_level.darkDragon;
+    now.darkDragonSummoned = dark.present && dark.summoned;
+    now.darkDragonDying = now.darkDragonSummoned && dark.phase == DarkDragon::Phase::Dying;
+    if (now.darkDragonSummoned && !m_musicWatch.darkDragonSummoned) musicPlay(kBossTrack);
+    if (now.darkDragonDying && !m_musicWatch.darkDragonDying) musicStop();
+    m_musicWatch = now;
 }
 
 void MagicPortalsLayer::updateMusic(entt::registry& registry) {
@@ -8665,6 +8775,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
         latchSimSounds();
+        latchMusic();
         latchSimEffects(registry, fixedDelta);
         latchSimQuakes();
         // ...and the moment the exit reports, the beat before the medal; the
@@ -8803,6 +8914,9 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     // the camera the sim takes from outside.
     m_level.dragon.viewWidthPx = ViewPx().x;
     Game::BeforeStep(m_data, registry, m_level, direction, fixedDelta);
+    // The dragon's callback runs HERE, before the step, and the other bosses'
+    // after it (AfterStep): its take-off's stop is read on its own tick.
+    latchMusic();
     if (m_level.dragon.present) {
         // level31a is the ONE level in all 128 that sets auto_camera, and it
         // sets it to dragon.ent. AutoCameraController::update is a hard lock
@@ -9380,6 +9494,7 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
         } else {
             m_pause.musicAddedMs = dismissing ? m_pause.musicDismissedMs + dismissMs : now;
         }
+        switchedSound();
         latch("menu_button");
         return true;
     }
@@ -9390,6 +9505,7 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
                              m_pause.clockMs - switches.musicDismissedMs < m_pauseRules.layer.buttonDismissMs);
         if (!shown) return false;
         m_musicOn = !m_musicOn;
+        switchedMusic();
         latch("menu_button");
         return true;
     }

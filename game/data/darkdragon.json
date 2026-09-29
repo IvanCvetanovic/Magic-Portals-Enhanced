@@ -417,8 +417,9 @@
   },
 
   "not_built": [
-    "Every sound: the appear, open-mouth, damage and death sounds, playGameMusic and the",
-    "boss-music stop. sounds.json already names the family.",
+    "Every sound: the appear, open-mouth, damage and death sounds. sounds.json already names",
+    "the family. (playGameMusic(true) at the spawn and the boss-music stop at the death ARE",
+    "built: the layer's latchMusic, planning step 152.)",
     "The scattered small_explosion_no_light.ent of DAMAGE and DYING",
     "(darkDragonOvertimeSmallExplosionAdder, ins 1558-1563 and 1813-1818) and the death's",
     "explode burst. (The shake is built since planning step 101: earthquake.json's",

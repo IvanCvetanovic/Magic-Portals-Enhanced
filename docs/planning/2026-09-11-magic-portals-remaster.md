@@ -21293,3 +21293,144 @@ and R25 untouched. Camera dragging: not touched.
   and the five items above want rows.
 - For the merge's renumbering: "step 151" is written in `art.json` (`fire_agent._not_built`,
   `non_teleportable._not_built`, `non_teleportable._clock`) and `keys.json` (`_not_built`).
+
+## Step 152 - the music as the original plays it: four levels open silent, 2-32 opens on the boss's track, a boss's death or take-off stops it, 4-32's dragon starts it, and the level's track carries into the selectors (built)
+
+**TRACK B: the program's P7** (`docs/parity-backlog.md` section 6, P7; the 2026-09-29 audit's P7 and
+`audio_inventory.md` section 3 and findings 10-11). Built in the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, on
+step 151's `105ca1c`), whose build reads the frozen level data in `out/snap_w1`; numbered in track B's range, and the
+merge renumbers it. Changed: `game/MagicPortalsLayer.{hpp,cpp}` (the music state `m_music`, its calls `musicPlay`,
+`musicStop`, `musicResume`, `startLevelMusic`, `latchMusic`, `switchedSound`, `switchedMusic`, the log line
+`noteMusic`; `WantedTrack` rewritten; `openMenu`, `loadLevel`, the tick after `AfterStep`, `stepLevel` after
+`BeforeStep` and the four switch presses call them), `game/data/{sounds,ghost,dragon,darkdragon}.json` (notes only),
+`tests/test_mp_layer.cpp`. No engine change (the pin stays `4bfcf67`), no converter change (it already carries
+`no_music`), no format finding. **GAMEPLAY: NONE** - the music only: the state lives in the layer, is read by
+`updateMusic` on the frame, and nothing of it reaches `Game::Level` or the state hash. Not a gameplay step, so the
+program's winnability gate (routes, reachability) does not apply; no route is added.
+
+**BLOCKERS, checked first: none.** The converter already writes `metadata/no_music = "1"` on the `properties` node of
+exactly `level31b`, `level0c`, `level18c` and `level31c`. The sim already has every moment the calls hang on:
+`Boss::Phase::Dead` and `gone`, `Dragon::State::tookOff`, `DarkDragon::State::summoned` and `Phase::Dying`,
+`Ghost::State::initialised`, `Phase::Death` and `gone`. The engine plays and stops a voice as it did (`updateMusic`).
+
+**WHAT THE ORIGINAL DOES** (listing md5 `48fe65ce...`; `00_order.md` 8.0: a `SetV1`/`CMPIu` operand is a constant,
+arguments pushed last-first). Every call of every music function is listed in `P7/music_calls.txt`.
+- **`AudioManager::playMusic`** (bytes 195443..195631): `currentTrack = name` (#3-8), then, only while the music switch
+  is on (#10-18), LoadMusic, LoopSample, SetSampleVolume and PlaySample (#19-36). `currentTrack` starts '' (the
+  constructor, #64-66). Android has ONE MediaPlayer (`MediaStreamManager.java`): `play` keeps a track that is its
+  current file and playing and stops any other first (:90-104), and does nothing while `globalVolume x volume <= 0`
+  (:95-96); `stop` stops it whatever it plays (:64-68) - `StopMusic`'s `stop_music` ignores the name
+  (`MediaStreamListener.java:55-56`).
+- **`pauseMusic`** (186631..186849): StopSample(currentTrack) when it is set and loaded; `currentTrack` is kept.
+  **`resumeMusic`** (186849..187005): LoadMusic, LoopSample, PlaySample of `currentTrack`. `turnMusicOff`,
+  `turnGlobalVolumeOff` are pauseMusic; `turnMusicOn` is resumeMusic; `turnGlobalVolumeOn` (186562..186631) resumes only
+  while the music switch is on. The AudioManager is both switches' listener (`AudioManager::update` #3-19), called on
+  each toggle (`MusicSwitchManager::saveMusicState` #36-52, `GlobalVolumeManager::saveVolume` #33-47).
+- **`Game::preLoop`** (112536..114414) #485-509: `isBossFight = m_levelIndex == 31` (#485-491); unless `noMusic`,
+  `playGameMusic(isBossFight)` (195988..196194: `running_with_wolves_loop_b` at 0.6 or `finding_wonderland_60_loop` at
+  0.7, both looping); with it, `turnMusicOff` (#506-509). `noMusic` is `CheckCustomData('no_music')` on the
+  `properties` entity, presence alone (`Game::readProperties` 116676..118260 #166-181, called at #33). A retry, a skip
+  and "next" are each a fresh Game state.
+- **`PortalMainMenu::preLoop` #368 `playMenuMusic`** is its only caller. Chapter and level select
+  (`createLevelSelectState`, `WorldSelector`), the credits, the dashboard, the pause and the finished and lost layers
+  call no music function, so a level's track - or its silence - goes on under them.
+- **The bosses.** `ETHCallback_ghost` #320-324 `playGameMusic(true)` in its init block; #1210-1243
+  `StopSample(getBossMusicName())` in its DEATH arm (`CMPIu v26, v4`: the constant 4), every update. `ETHCallback_beholder`
+  #1139-1159 the same StopSample in BEHOLDER_STATE_DEAD (3), every update until it is deleted. `ETHCallback_dragon`
+  #409-431 the StopSample inside `if (!tookOff)`, once, as it climbs past `take_off`. `ETHCallback_dark_dragon_spawn`
+  #103-118: AddScaledEntity('dark_dragon.ent'), breakDarkDragonWall, `playGameMusic(true)`. `ETHCallback_dark_dragon`
+  #1958-2012: `hp <= 0 && state != 4` -> state 4, then the StopSample and playDarkDragonDeathSound, once. Each
+  StopSample is behind `SampleExists(boss)`.
+- Not the port's: `AudioManager::onResume` (the app back from the background, `onResume` in main.angelscript) also
+  resumes `currentTrack`; the desktop has no such event. `playRocketMusic` (`ETHCallback_rocket_launch` #174) and
+  `playBackHomeMusic` (`ETHCallback_rocket_landing` #183) are 4-01's and 4-19's won cutscenes: P2's.
+
+**THE CHANGE.**
+1. **The state** (`MagicPortalsLayer::Music`): `current`, the original's `currentTrack` (a key of `sounds.json`'s
+   `music`: `menu`, `game`, `boss`; "" at start), and `stopped`, the one player stopped since that track was asked for.
+   `WantedTrack()` is `current` with both switches on and not `stopped`, else "" - no longer derived from the screen.
+   `updateMusic` is unchanged: it starts and stops the voice as `WantedTrack` changes, so a track asked for again while
+   it plays goes on (`mayKeepSong`), and one asked for after a stop starts from its beginning.
+2. **The calls**: `musicPlay(track)` (playMusic: `current`, and not stopped), `musicStop()` (pauseMusic and a boss's
+   StopSample), `musicResume()`. `openMenu` into `Screen::Main` (a state change) plays `menu`; nothing else in the menus
+   does. `loadLevel`, once a level is up, runs `startLevelMusic`: `no_music` on the first `properties` node (presence)
+   stops; else `boss` on a world's last level (`Chapters::Table::Next(at) < 0`), `game` otherwise. `latchMusic`, after
+   `AfterStep` and again after `BeforeStep` (the dragon's callback runs there), plays `boss` on the ghost's
+   `initialised` and the dark dragon's `summoned` turning true, stops on the dragon's `tookOff` and the dark dragon's
+   DYING turning true, and stops on every tick the ghost is in DEATH or the beholder in DEAD and not yet gone. Its
+   watch is reset with each level.
+3. **The switches**: a toggle to off stops; the music switch back on resumes; the sound switch back on resumes only
+   with the music switch on.
+4. **The log**: `music: <track or none> from tick N` each time `WantedTrack` changes, so every run's log says what
+   played (gate 1 reads it off the sweep).
+5. **Notes**: `sounds.json` `_music_note` (it said the music plays unconditionally), `ghost.json` `_not_built` (it
+   said no level's `no_music` is honoured), `dragon.json` and `darkdragon.json` `not_built` (the stops and the start).
+
+**THE GATES.** After = `MagicPortals.exe` `35bab8e6` and `test_mp_layer` `5ab36265` (this step's second build; the
+first, `106fea28` / `f996e795`, read the dragon's take-off a tick late - below). Before = step 151's committed `5ff43623`
+and its sweep `program/P34/after/sweep`. Captures, scripts and measurements: `out/parity/program/P7/`
+(`capture_sweep.sh` -> `after/sweep/`, `compare_sweep.py`; `cap.sh` -> `flows/`; `needles.py`; `music_calls.txt`;
+`footage_handlers.txt`; each with its `.txt` or `.json`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1.log`, `build2.log`, `--target MagicPortals test_mp_layer`: `MagicPortalsLayer.cpp`, `main.cpp`, `LevelVisit.cpp`, `test_mp_layer.cpp` compiled - every includer of the layer's header) |
+| (1) The track each level opens on, all 128, on the exe | `boss` on 1-32 and 2-32; none on 3-32, 4-01, 4-19, 4-32; `game` on the other 122 | by the old `WantedTrack` (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`; its exe logged no track): `boss` on 1-32 alone (a beholder built), `game` on the other 127 | **passes** (`compare_sweep.txt`): each of the 128 sweep logs has exactly one `music:` line, from tick 0 - `boss` 2 (1-32, 2-32), none 4 (3-32, 4-01, 4-19, 4-32), `game` 122; 0 otherwise |
+| (2) The same, unit, and the data it reads | as (1); `no_music` on exactly four levels; every world 32 long | - | **passes** (`EachLevelOpensOnTheTrackItsPreLoopAsksFor`, 12 levels: 1-01, 1-31, 1-32, 2-01, 2-32, 3-31, 3-32, 4-01, 4-18, 4-19, 4-31, 4-32; `FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight`: `no_music` in `level0c`, `level18c`, `level31b`, `level31c` only, 4 x 32 levels, each world's last at index 31) |
+| (3) The level's track in the selectors | the level's track under the medal, the level grid and chapter select; `menu` only from the main menu; a level picked from the grid starts its own | `menu` on Worlds and Levels (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`) | **passes.** Unit (`TheLevelsTrackCarriesIntoTheSelectors`): 1-01 won - `game` under the medal, on the grid and on chapter select; `menu` at the main menu, on chapter select and the grid after it; `game` again on 1-01 picked from it. Exe (`flows/f1_1-01_carry.log`, fresh save, 400 frames, pause@120, levels@180, back@240, back@300, each press logged as taken; png `e32aed7d`): `music: game from tick 0`, then `music: menu from tick 301` and no line between; the frame is the main menu |
+| (4) A `no_music` level's silence in the selectors | none on the level, its retry, the grid and chapter select; `menu` at the main menu | `menu` on the grid, and 4-01 opened on `game` (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`) | **passes.** Unit (`ANoMusicLevelsSilenceCarriesIntoTheSelectors`, 4-01). Exe (`flows/f2_4-01_silence.log`, fresh save, 400 frames, the same presses; png `e32aed7d`, the same main menu): `music: none from tick 0`, `music: menu from tick 301`, nothing between |
+| (5) 1-32: the beholder's death | `boss` through the fight; none from the tick it is DEAD, through its going and after; `boss` again on a retry | `boss` through the death and the medal screen: `105ca1c:game/MagicPortalsLayer.cpp:8495-8520` asks only `beholder.has_value()`, never cleared (`Boss.cpp:476`) | **passes** (`TheBeholdersDeathStopsItsTrack`): three dropped rocks put rising into its eye kill it on tick 2115; `boss` on every tick before, none from that tick, none through its going (the button raised) and 60 ticks after; a retry `boss` |
+| (6) 2-32: `isBossFight` and the take-off | `boss` from the load; none from the take-off's tick | `game` from the load, and on through the take-off (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`: no beholder) | **passes** (`TheDragonsTakeOffStopsTheBossTrack`): `boss` from tick 0 to the take-off on tick 3100 (51.7 s), none from that tick and 120 after. The first build stopped it on tick 3101: the dragon ticks in `BeforeStep`, after the tick's `latchMusic` - fixed by a second `latchMusic` after `BeforeStep` |
+| (7) 3-32: `no_music`, then the ghost | none from the load and after the knight's death; `boss` from the ghost's init; none from its death | `game` from the load - MEASURED: step 151's `test_mp_layer` (`1c04cd0d`, `P34/test_mp_layer.txt`, 3017 checks, 0 failures) passed this case's old `WantedTrack() == "game"` at 1 s and once the ghost is added | **passes** (`TheGhostComesWithItsKnightsDeath`, its two changed checks and its unchanged two): none at 1 s and once the ghost is added, `boss` on its first callback, none once it has gone |
+| (8) 4-32: `no_music`, then the dark dragon | none from the load until the summon; `boss` from the summon's tick; none from its death | `game` from the load; never `boss` (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`: the dark dragon is not read) | **passes** (`TheDarkDragonIsDrawnAsItsCallbackLeavesIt`): none once the torch is lit and on every tick to the summon (0 ticks early), `boss` on the summon's tick, through the three wounds, none on the tick the third burn kills it and after it has gone |
+| (9) The switches | off: none; the music switch back on resumes `currentTrack`; the sound switch back on resumes it only with the music on - also where a `no_music` level had stopped it | a switch back on played what the screen asked for | **passes.** Unit (`ASwitchBackOnResumesTheTrackANoMusicLevelStopped`): 4-18 `game`, a skip to 4-19 none; music off none, on `game`; a retry none; sound off none, on `game`; music off, sound off, sound on: none; music on: `game`. Exe (`flows/f3_4-18_skip_resume.log`, gold save, 400 frames, png `0adfe692`, pause@60, skip@120, pause@200, music@260, music@300): `game from tick 0`, `none from tick 120`, `game from tick 300` |
+| (10) Against the original heard | - | - | **NOT RUN: no recording of the original has sound** - the 22 clips in `footage/` (`footage_handlers.txt`), and all 78 mp4s under it (the independent check), carry a video track and no `soun` handler. The step is the decode's; the audit found nothing that needs listening |
+| (11) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no unscheduled input; no picture changes (music only) | `P34/after/sweep` | **passes** (`compare_sweep.txt`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines; 0 unscheduled input lines; **128 of 128 byte-identical** to `P34/after/sweep`. The pngs cannot show music: gate 1 reads the same logs |
+| (12) Winnability | - | - | **N/A**: no gameplay change. Neither check exists in this tree (W.1's `37c4ece` is not an ancestor of `w1-b`: no `tests/routes/`, no `test_mp_routes`, no reachability tool) |
+
+**SUITES**, run directly: `test_mp_layer` **3095**, 0 failures (`5ab36265`; 3017 at step 151: the seven new cases and
+the changed checks in `TheGhostComesWithItsKnightsDeath` and `TheDarkDragonIsDrawnAsItsCallbackLeavesIt`). Its first
+run on `f996e795` (3095 checks, 1 failure) was a real one: the dragon ticks in `BeforeStep`, after the tick's
+`latchMusic`, so the take-off's stop came a tick late (tick 3101 for the dragon's 3100); `latchMusic` now also runs
+after `BeforeStep`. No other suite links `MagicPortalsGame` or includes the layer's header, and no sim source changed,
+so no other suite is relinked. The four JSON files changed only in notes their loaders do not read: the one suite that
+text-replaces one of them (`test_mp_darkdragon`, `darkdragon.json`) has 28 literals in it, each one's first occurrence
+where it was (`needles.txt`); `test_mp_sounds`, `test_mp_dragon` and `test_mp_ghost` read theirs through `LoadRules`
+alone - not run (not relinked).
+
+**SMART APP CONTROL: 0 refusals.** Launches: `test_mp_layer` `f996e795` and `5ab36265` once each; `MagicPortals.exe` `35bab8e6` 131 times (the sweep's 128, three flows); the first build's `106fea28` was never launched.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **`isBossFight` is read from the chapters table**: the original's literal `m_levelIndex == 31`, which is each
+   world's last level because every world in `chapters.json` has 32 (pinned by
+   `FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight`). Putting 31 in `sounds.json` would take a `Sounds.cpp` parse
+   and relink all 45 suites for one number the table already holds.
+2. **`no_music` is named in the layer** (`kNoMusicFlag`), as `Game.cpp` names `darkest`: a property name, not a number,
+   cited to `Game::readProperties` #166-181.
+3. **The calls are made on the tick whose callback makes them** and heard within that same 60 Hz frame:
+   `updateMusic` runs in `OnUpdate`, after the frame's fixed ticks - the frame the original's callback runs in.
+4. **`SampleExists(boss)`** is not modelled. It is false only while the boss track has never been loaded, which needs
+   the music switch off since the session began; then nothing plays, and whichever switch comes back on resumes
+   `currentTrack` in both games (and on a still-dead beholder or a dying ghost the next update stops it again in
+   both). No sequence of the shipped game tells the two apart.
+
+**RULINGS APPLIED.** The standing direction that the original decides; nothing here was an owner's ruling. R1, R2,
+R17 and R23 are not this step's; R24 and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **It sounds like a bug and it is the original's**: a switch turned back on resumes `currentTrack` even where the
+  game had stopped it. 4-19 reached by a skip from 4-18 opens silent, but the music switch off and on again in its
+  pause plays 4-18's track; after 1-32's beholder or 3-32's ghost has gone, the same brings the boss's track back.
+  Built as the original does (gate 9); the owner may prefer silence to stay silence.
+- **The rocket's and the landing's tracks** (`playRocketMusic`, `playBackHomeMusic`) come with 4-01's and 4-19's won
+  cutscenes, which the port has not got: the program's P2.
+- **Listening**: no footage carries sound (none of the 78 mp4s under `footage/` has a sound track), so the tracks'
+  loudness against the effects is not compared; the audit found nothing else that needs an ear.
+- **Not pinned by a test** (the independent check's finding): the track under the lost screen (a death, then a
+  retry) and on the chapter-end path (1-32 and 2-32 finished into chapter select; 4-32 into it with
+  `GameFinishedPopup`). It holds by construction - `WantedTrack` no longer reads the screen, and only `openMenu` into
+  `Screen::Main` plays `menu` - but no `test_mp_layer` case checks it. A test, so not added at the commit.
+- For the close role: `docs/parity-backlog.md` section 6's P7 row is this step's to tick (not edited here), and the
+  audit's "menu music plays after a level" known-everywhere line goes with it.
+- For the merge's renumbering: "step 152" is written in `sounds.json` (`_music_note`), `ghost.json` (`_not_built`),
+  `dragon.json` and `darkdragon.json` (`not_built`), and `tests/test_mp_layer.cpp` (a comment).
