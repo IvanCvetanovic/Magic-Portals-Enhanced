@@ -1439,6 +1439,10 @@ private:
     float readInput(entt::registry& registry);
     void syncDrawables(entt::registry& registry);
     void syncSprites(entt::registry& registry);
+    // The picture of a barrel a restock built from the port's template table (3-32's,
+    // whose level places none to borrow one from). False when the table's picture
+    // does not read.
+    bool templatePicture(const Restock::Added& added, DrawnSprite& made) const;
     // The timed crystals' dials, after syncSprites has placed their crystals: on
     // the tick, as ETHCallback_timer runs a frame.
     void syncTimers(entt::registry& registry);
@@ -2400,6 +2404,8 @@ private:
     // picture and their box: each is made once, by index, the tick it appears.
     std::size_t m_restockDrawn = 0;
     std::size_t m_restockBoxed = 0;
+    // Whether a refused restock (m_level.restock.refusals) has been said, once a level.
+    bool m_restockRefusalSaid = false;
 
     // Puts the lost screen up, over the level that is still loaded behind it.
     // Follows openFinished and NOT openMenu: openMenu unloads the level and

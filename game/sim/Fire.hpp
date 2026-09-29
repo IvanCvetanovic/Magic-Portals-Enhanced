@@ -178,9 +178,9 @@ struct State {
     int blasts = 0;   // bombs that went off
 
     // WHERE the bombs went off this tick, cleared and refilled by every Tick.
-    // Blast() reaches what it grabs by BODY, and chapter 4's boss has none - it is
-    // a sensor the level never places, as the ghost is - so Game tests these
-    // against it by hand, exactly as it tests a fireball against the ghost.
+    // Blast() reaches what it grabs by BODY, and the two bosses a blast hurts have
+    // none - each is a sensor the level never places - so Game tests these against
+    // the dark dragon and the ghost by hand (Ghost::State::BlastReaches).
     std::vector<glm::dvec2> blastsPx;
     // And WHAT they reached with a clear line, whatever it is, cleared and refilled
     // by every Tick: the original's grabbed set, which Game hands to Demolish.

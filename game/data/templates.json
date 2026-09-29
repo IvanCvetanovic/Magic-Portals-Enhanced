@@ -1,0 +1,54 @@
+{
+  "_about": [
+    "The port's template table: the entities the original ADDS at run time that no level of the game",
+    "places, written as the converter writes a placed one, so the port can build them (sim/Restock,",
+    "planning step 117). The simulation reads no .ent: a restock builds the node of a level that places",
+    "the entity (4-32's barrel_bomb), and otherwise the node this table gives. Restock::LoadTemplates",
+    "writes each entry as a .tscn node - an entity Node2D with its metadata, a Sprite2D, a Body and a",
+    "RectangleShape2D - and reads it back through Tscn::Parse, the strict reader every level goes through.",
+    "",
+    "Each entry is checked field by field against the original's .ent (read in place under",
+    "reference/extracted/assets/entities, never copied here): size_px is its Collision Size times its",
+    "<Scale>, as the converter writes a placed body's shape (tscn.py _collider_lines, after CreateBody's",
+    "box.Scale, ETHPhysicsSimulator.cpp:72-73); sprite_scale its",
+    "<Scale>; sprite its <Sprite>; body RigidBody2D for type 0 static 0; metadata its CustomData, quoted as",
+    "the converter quotes it, and the eth_ keys the converter writes for its EmissiveColor, applyLight and",
+    "<Normal>. What the port reads for no rigid body (friction, density) is named and not carried."
+  ],
+
+  "templates": {
+    "barrel_bomb_low_emissive.ent": {
+      "_source": [
+        "ETHCallback_ghost ins 594-630 (out/parity/asbc/all_functions.txt, md5 48fe65ce): the ghost's restock",
+        "adds 'barrel_bomb_low_emissive.ent' at barrel_spawn under the alternativeName 'barrel_bomb'. No level",
+        "places this entity, and level31b places no barrel of any name, so there is no node to build it from.",
+        "",
+        "entities/barrel_bomb_low_emissive.ent is BYTE-IDENTICAL to entities/barrel_bomb.ent (both md5",
+        "84bfa2bfaa47949d744568b293984025, 2026-09-29): type 0, static 0, shape 1 (box), sensor 0; Collision",
+        "Position (0, 0) Size 22 x 29; <Scale> 1.3; <Sprite> barrel32_with_sign.png; <Normal>",
+        "barrel_normal.png; EmissiveColor 0.45 0.45 0.45; applyLight 1; CustomData explosive (uint) 1 and",
+        "teleportable (uint) 1. So its node is the converter's barrel_bomb node with the name changed:",
+        "level31c's barrel_bomb_2225 (out/levels/level31c.tscn) carries exactly these keys, its Sprite2D at",
+        "scale 1.3, a RigidBody2D, and RectangleShape2D_2225 of 28.6 x 37.7, which step 116 checked against",
+        "barrel_bomb.ent field by field. Its minEmissive \"\" is that placement's own CustomData, not the",
+        ".ent's, and is not carried.",
+        "",
+        "Not carried, as for every rigid body the port builds: friction 0.7 (LevelBuilder's kBodyFriction)",
+        "and density 1 (MakeRigid's mass). No eth_z: an added entity stands at its spawn's depth",
+        "(Restock::Site::spawnZ)."
+      ],
+      "node": "barrel_bomb_low_emissive_ent",
+      "body": "RigidBody2D",
+      "size_px": [28.6, 37.7],
+      "sprite": "res://assets/entities/barrel32_with_sign.png",
+      "sprite_scale": 1.3,
+      "metadata": {
+        "explosive": "1",
+        "teleportable": "1",
+        "eth_apply_light": "1",
+        "eth_emissive": "0.45 0.45 0.45",
+        "eth_normal": "res://assets/entities/normalmaps/barrel_normal.png"
+      }
+    }
+  }
+}

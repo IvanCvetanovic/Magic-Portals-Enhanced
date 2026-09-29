@@ -5,6 +5,7 @@
 #include "core/Components.hpp"
 #include "core/DetMath.hpp"
 #include "core/Json.hpp"
+#include "core/PhysicsSystem.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -218,7 +219,6 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     double deletesId = 0.0;
     if (!text_("anchor", "entity_name", read.anchorName)) return false;
     if (!number("body", "max_hp", maxHp)) return false;
-    if (!number("body", "radius_px", read.radiusPx)) return false;
     if (!text_("spawn", "by_entity", read.spawnedBy)) return false;
     if (!number("spawn", "z_offset_units", read.spawnZOffsetUnits)) return false;
     if (!number("spawn", "scale", read.spawnScale)) return false;
@@ -243,16 +243,46 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     read.maxHp = static_cast<int>(maxHp);
 
     // Each of these would look like a boss that works. No hp is a boss that is
-    // already dead; no radius is one nothing can ever reach; no interval divides
+    // already dead; no interval divides
     // the fight into an infinity of shots in one tick; and an empty prefix would
     // resolve every waypoint in the level into its escort's patrol.
     if (read.maxHp <= 0) {
         error = path + ": body.max_hp is above zero";
         return false;
     }
-    if (read.radiusPx <= 0.0) {
-        error = path + ": body.radius_px is above zero";
-        return false;
+    // explode's two boxes (ghost.json blast): one the grabber finds it in, and
+    // the body its ray has to meet. A box of nothing is a ghost no blast can find.
+    {
+        const Json::Value& blast = root["blast"];
+        const auto pair = [&blast](const char* key, glm::dvec2& into, bool positive) {
+            const Json::Value& value = blast[key];
+            if (!value.IsArray() || value.AsArray().size() != 2 || !value.AsArray()[0].IsNumber() ||
+                !value.AsArray()[1].IsNumber()) {
+                return false;
+            }
+            into = glm::dvec2(value.AsArray()[0].AsNumber(), value.AsArray()[1].AsNumber());
+            return !positive || (into.x > 0.0 && into.y > 0.0);
+        };
+        if (!blast.IsObject() || !pair("grab_box_px", read.grabBoxPx, true) ||
+            !pair("body_box_px", read.bodyBoxPx, true) || !pair("body_offset_px", read.bodyOffsetPx, false)) {
+            error = path + ": blast needs grab_box_px and body_box_px (two numbers above 0) and body_offset_px";
+            return false;
+        }
+    }
+    // ins 594-630's five arguments and the port's template (sim/Restock).
+    {
+        const auto restockName = [&](const char* key, std::string& into) { return text_("restock", key, into); };
+        if (!restockName("search", read.restock.search) || !restockName("add", read.restock.add) ||
+            !restockName("spawn", read.restock.spawn) || !restockName("effect", read.restock.effect) ||
+            !restockName("alias", read.restock.alias) || !restockName("template", read.restock.templateEntity)) {
+            return false;
+        }
+        // A search for nothing finds nothing and restocks every beat; a spawn or a
+        // template of nothing is a restock that can never be made.
+        if (read.restock.search.empty() || read.restock.spawn.empty() || read.restock.templateEntity.empty()) {
+            error = path + ": restock.search, restock.spawn and restock.template name an entity";
+            return false;
+        }
     }
     if (read.intervalMs <= 0.0) {
         error = path + ": shooting.interval_ms is above zero";
@@ -397,8 +427,8 @@ void State::Spawn(const glm::dvec2& knightPx) {
     hover = Motion::Linear{};
 }
 
-State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size_t minionsStanding,
-                        const Motion::Rules& motion, float dt) {
+State::Turn State::Tick(entt::registry& registry, entt::entity player, bool playerAlive,
+                        std::size_t minionsStanding, const Motion::Rules& motion, float dt) {
     Turn turn;
     spentPx.clear();
     if (!present) return turn;
@@ -495,9 +525,13 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size
             if (elapsedMs > rules.intervalMs) {
                 elapsedMs = 0.0;
 
-                // The restock rides the same beat: addEntityIfItCantBeFound puts
-                // a fire diamond back at its spawn, which is what makes dropping
-                // one down the gutter mouth survivable.
+                // The restocks ride the same beat, on whichever side of the red
+                // line the player stands (ins 593: the shot's two gates jump here):
+                // addEntityIfItCantBeFound puts a barrel bomb back at barrel_spawn
+                // (ins 594-630), the ghost's one weakness, and a fire diamond at its
+                // spawn (ins 632-667), which is what makes dropping one down the
+                // gutter mouth survivable. Game asks whether either is still there.
+                turn.restock = true;
                 turn.restockDiamond = hasDiamondSpawn;
 
                 // And it shoots only at a player past the red line, from its own
@@ -526,7 +560,9 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size
             }
 
             // isBurned / healBurn. Only this arm reads it in the original, so a
-            // fireball that lands while the ghost is already hurt is spent.
+            // blast that reaches it in another arm - appearing, hurt or raging -
+            // leaves the flag set, and it is counted here, on its next SHOOTING
+            // update.
             if (burned) {
                 burned = false;
                 --hp;
@@ -561,6 +597,10 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size
             Hover(*this, motion, ms);
             look.frame = rules.rageFrame;
             look.alpha = rules.rageAlpha;
+            // #1013-1083: while the player stands with hp above 0, a fire diamond
+            // back at its spawn on EVERY update if none is left - so in rage one
+            // drowned in the gutter comes straight back.
+            if (playerThere && playerAlive) turn.restockDiamond = hasDiamondSpawn;
             // It waits on its escort. While none stands it calls one, inside the
             // first window; once one stands it STAYS here until the player kills
             // it, and only then has the window passed and it goes back to
@@ -597,6 +637,62 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, std::size
     }
 
     return turn;
+}
+
+bool State::BlastReaches(entt::registry& registry, const glm::dvec2& blastPx, double blastRadiusPx) const {
+    if (!Alive()) return false;
+
+    // EntityGrabber (bytes 23924..24990, #126-194): a box-shaped entity is taken
+    // when Shape(GetPositionXY(), GetCollisionBox().size x getScale(), GetAngle())
+    // overlaps the blast's sphere. The ghost is never turned.
+    const glm::dvec2 grabHalf = rules.grabBoxPx * 0.5;
+    const glm::dvec2 outside = glm::max(glm::abs(blastPx - atPx) - grabHalf, glm::dvec2(0.0));
+    if (Squared(outside) > blastRadiusPx * blastRadiusPx) return false;
+
+    // getFirstContactExcept(pos, the entity's point, NonProjectileChooser) (#63-109):
+    // the closest contact along the ray must be the ghost itself. Its body is
+    // ghost.ent's box at the scale it was added with (CreateBody at AddEntity,
+    // ETHPhysicsSimulator.cpp:72-73; SetScale does not rebuild it, ETHEntity.cpp:
+    // 601-608), about its point plus the Collision offset.
+    const glm::dvec2 bodyHalf = rules.bodyBoxPx * rules.spawnScale * 0.5;
+    const glm::dvec2 bodyCentre = atPx + rules.bodyOffsetPx * rules.spawnScale;
+    const glm::dvec2 along = atPx - blastPx;
+    // Where the segment enters the body, as a fraction of it (the slab test). A
+    // blast inside the body enters nothing: b2PolygonShape::RayCast returns false
+    // from inside (box2d b2PolygonShape.cpp:199-258), so the closest contact is
+    // something else or nothing, and either way not the ghost (#86-109).
+    double enter = 0.0;
+    double leave = 1.0;
+    bool inside = true;
+    for (int axis = 0; axis < 2; ++axis) {
+        const double lo = bodyCentre[axis] - bodyHalf[axis];
+        const double hi = bodyCentre[axis] + bodyHalf[axis];
+        const double from = blastPx[axis];
+        if (from < lo || from > hi) inside = false;
+        if (along[axis] == 0.0) {
+            if (from < lo || from > hi) return false;
+            continue;
+        }
+        double t0 = (lo - from) / along[axis];
+        double t1 = (hi - from) / along[axis];
+        if (t0 > t1) std::swap(t0, t1);
+        enter = std::max(enter, t0);
+        leave = std::min(leave, t1);
+    }
+    if (inside || enter > leave) return false;
+
+    // And nothing solid before that entry: the port's ray, as Fire::Blast casts it
+    // for every other entity a blast grabs (solid bodies; the original's also stops
+    // on a sensor, which the port's Fire does not do anywhere).
+    const glm::vec3 from = Units::ToWorld(blastPx.x, blastPx.y);
+    const glm::vec3 to = Units::ToWorld(atPx.x, atPx.y);
+    const float length = glm::length(to - from);
+    if (length <= 1e-6f) return false;
+    const float reach = static_cast<float>(enter) * length;
+    if (reach <= 1e-6f) return true;
+    const Supersonic::PhysicsSystem::RayHit seen =
+        Supersonic::PhysicsSystem::Raycast(registry, from, (to - from) / length, reach, entt::null, false);
+    return !seen.hit;
 }
 
 bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rules, State& out, std::string& error) {

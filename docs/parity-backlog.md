@@ -1133,21 +1133,28 @@ work no step of §7 owns, and the owner's calls:
       relink `62e5f813` refused at the build. Closed by the independent check: its relink `4241e7ee` read 126 checks, 0
       failures (`holdingOneTurnsAPortalShotIntoAFireball`'s fireball now burns level28b's wayA patroller, which no
       check there reads).
-- [ ] **Order 12.2, THE OWNER'S TO RULE: fire against the ghost** (step 98; F15 finding 1). The original's fireball passes
+- [x] **Order 12.2, THE OWNER'S TO RULE: fire against the ghost** (step 98; F15 finding 1). The original's fireball passes
       through `ghost.ent` (a sensor: `ETHBeginContactCallback_fireball` #46-121 returns on one) and only a barrel's
       `explode()` burns it; the port keeps its fireball test (within `radius_px` 64) because the barrel restock
       (`addEntityIfItCantBeFound('barrel_bomb')`) is not built - explode-only would leave the port's ghost unkillable.
       Also unpinned: a fireball while the ghost is APPEARING sets `burned`, counted on its first SHOOTING tick. Rage's
-      picture and luminance (step 98) were reached only through this port-only rule.
+      picture and luminance (step 98) were reached only through this port-only rule. *Built in step 117, as the
+      original does it (the program's rule)*: the 64 px rule is gone, a fireball flies through the ghost, and a
+      barrel's blast burns it (`Ghost::BlastReaches`: the grabber's 80 against `ghost.ent`'s 128 x 139, then the ray
+      to its body, 38.4 x 41.7 at the add's scale, INFERRED); the ghost puts the barrel back itself (the row below).
+      A blast in any arm leaves `burned` set, counted on the next SHOOTING update (pinned for a blast now, not a
+      fireball). GAMEPLAY, 3-32 only. **Won by a route: 3-32**, tick 2724.
 - [ ] **Order 12.2 finding, `no_music` and `isBossFight`** (step 98). `Game::preLoop` #485-509 plays
       `playGameMusic(m_levelIndex == 31)` unless the level's properties carry `no_music` (`readProperties` #166-181): the
       original is silent at load on level0c, level18c, level31b and level31c, and plays the boss's music from load on
       2-32. The port plays "game" on all of them (and "boss" on 1-32); step 98 switches 3-32 to the boss's music from the
       ghost's init and to silence from its DEATH. Audio only. Next: the sound's owner.
 - [ ] **Order 12.2, not built** (step 98, deviation 6): the ghost's and its shot's sounds (the shot's
-      `startEarthquake(10)`, #331-333, is `earthquake.json`'s `enemy_shot_end` since the merge, step 112); RAGE_MODE's own fire-diamond restock every frame while the player
-      lives (#1034-1071); the DAMAGE and DEATH explosions and the death blast's 2.0; `ghost.ent`'s static box, which fails a
-      portal ray across it (F15 finding 2, `computePortalFinalPos` #30, #136-175); the static bucket clock (a ghost off the
+      `startEarthquake(10)`, #331-333, is `earthquake.json`'s `enemy_shot_end` since the merge, step 112); the DAMAGE
+      and DEATH explosions and the death blast's 2.0; `ghost.ent`'s static box, which fails a
+      portal ray across it (F15 finding 2, `computePortalFinalPos` #30, #136-175; step 117 infers that body at 38.4 x
+      41.7, the `.ent`'s box at the add's scale 0.3, where F15 read 128 x 139 - and 3-32's route crosses it with two
+      taps a cycle, so this row's step re-authors them); the static bucket clock (a ghost off the
       view does not advance in the original; a knight killed on the floor at y 768 adds it far below the view); an
       explosion's burn of a minion (level18b's bombs). 4-32's dropped yellow key's picture stays 12.1's.
 - [ ] **Order 12.2 deviation, the dropped key draws in front of level31b's z-0 art** (step 98, deviation 8): its depth is
@@ -1486,7 +1493,7 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   2-08, 2-09 - 19 of 128. Step 115 adds four, 2-12, 2-13, 2-14 and 4-16, so far won only by the window's replay of
   their routes: `test_mp_routes` has not run on them (Smart App Control, three refusals) - 19 of 128 replayed by the
   suite, 23 with the window's. Step 116 adds 4-32, and its `test_mp_routes` run replays all 24 on the window's ticks:
-  24 of 128 replayed by the suite. Open until all 128.)*
+  24 of 128 replayed by the suite. Step 117 adds 3-32: 25 of 128, all replayed by the suite. Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1570,6 +1577,14 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       (`ETHCallback_reflect_agent` L69063 #56-84, #148-196); the port's 16 is a guess and it mirrors the whole rest.
 - [ ] **G10. The player moves as the decode says** - `speed 3`, `SetGravityScale(2)`, velocity set outright, in the
       air `vel.x x min(1, 0.86 x fps/60)`; the port's `move_toward` numbers are Godot-era guesses.
+- [x] **G11. 3-32's ghost can be killed only through a rule the original lacks** (the audit's G11; KNOWN as "Order 12.2,
+      THE OWNER'S TO RULE: fire against the ghost"). *Built in step 117*: a fireball passes through the ghost, a
+      barrel's blast burns it, and the ghost puts the barrel back itself on every beat (the two "Order 12.2" rows and
+      "3-32's ghost restocks too"). GAMEPLAY, 3-32 only. **Won by a route: 3-32**, tick 2724, three wounds by barrels
+      the fire diamond's fireballs set off, the knight burned first (R4), replayed by `test_mp_routes` and in the
+      window on the same tick. Its route crosses the ghost's body with two portal shots a cycle, which the port fails
+      no shot on (F15 finding 2, the "Order 12.2, not built" row): the step that builds that re-authors them. Its six
+      recorded deviations are open rows under **Tests** (step 117, deviations 1-6).
 - [ ] **Release-to-fire**: the original fires on release, if the pointer moved no more than scale(18)
       (`hasPortalRequestInput`); the port fires on press.
 
@@ -1707,7 +1722,9 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       contact (the blast inside its shape), the port grabs it; `EntityGrabber` #13-23 grabs only from the 3x3
       neighbouring buckets (L63238), the port anywhere in 80 u. All predate the step (burnables and bombs), and none
       lies on the four routes' blast lines (the only sensors there, `button_1050` on 2-12 and `button_1112` on 2-14,
-      are off them).
+      are off them). *Step 117 (deviation 2)*: the ghost's blast test casts the same solid-only ray; harmless for
+      3-32's route (`anti_sight_wall_1430` goes with the knight, `anti_sight_wall_1438` is left of any blast that can
+      reach the ghost, and at the route's three blast ticks no shot, minion or bodied portal lies on the ray).
 - [ ] **2-24's kept-out barrel is untried** (step 115 (d)): a barrel left out of the seven-barrel chain to weigh
       `button_1144` while the rest break the walls; if it wins, 2-24 leaves B4.
 
@@ -1719,7 +1736,8 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       goes through its pair before the fireball reaches the portal (G6 would otherwise carry the fireball to the
       barrel's side); the wound-end torch shots do not touch it (it never goes left of x 192 before the key, and the
       torch is lit at the end under either rule, so its last tap puts it out and brings the light wall back).
-- [ ] **The restock's pictures** (step 116): `addEntityAtSpawnPoint` adds `ghost_utility_spawn.ent` (explosion.JPG and
+- [ ] **The restock's pictures** (step 116; 3-32's too since step 117, deviation 5, at `barrel_spawn` and
+      `fire_diamond_spawn`, with `playGhostItemAppearSound`): `addEntityAtSpawnPoint` adds `ghost_utility_spawn.ent` (explosion.JPG and
       onda.png bursts) at `barrel_spawn` with each barrel, and sets the new barrel's `minEmissive` to (1, 1, 1), the
       floor of `ETHCallback_barrel_bomb`'s blink (#1-30), which the port draws for no barrel. The dying dragon's
       `ghost_utility_spawn.ent` beside the key is the same entity. One effects-runtime row and the blink, for the
@@ -1729,7 +1747,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       `hazard`, so `Hazards` gives level31c's `lava_1140` a 16 px box that kills the player. Unreachable: the player
       dies of the level's edge at y 352 (hazards.json bounds), 46 u above the lava's top at 398. No change made; the next
       step touching `hazards.json` can add `lava` to `not_hazard_names`, as `enemy_killer` is.
-- [ ] **3-32's ghost restocks too** (step 116, for the ghost's step): `ETHCallback_ghost` ins 594-630 put a
+- [x] **3-32's ghost restocks too** (step 116, for the ghost's step): `ETHCallback_ghost` ins 594-630 put a
       `barrel_bomb_low_emissive.ent` (named `barrel_bomb`) back at `barrel_spawn` after every shot, and ins 632-667 and
       1047-1083 a `fire_diamond.ent` at `fire_diamond_spawn`. `sim/Restock` is the mechanism, general (a rule of five
       names and a template node; `Found` by exact name; `Add` builds the template's body at the marker); the ghost's
@@ -1739,13 +1757,19 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       `fire_diamond_ent_1256` - so `Add` has no template node for the ghost's barrel. That step first gives
       `sim/Restock` a build source that needs no placed node (a port JSON template for
       `barrel_bomb_low_emissive.ent` with its `.ent` provenance, or a converter-emitted entity table), and has a
-      refused restock say so (the row "A refused restock is silent" below).
-- [ ] **A refused restock is silent** (step 116, deviation 1, and its verifier): the restock is built from a placed
+      refused restock say so (the row "A refused restock is silent" below). *Built in step 117*: the port's template
+      table (`game/data/templates.json`, read through `Tscn::Parse`; `barrel_bomb_low_emissive.ent` is byte-identical
+      to `barrel_bomb.ent`), the barrel on EVERY SHOOTING beat - not after every shot: the red line gates the shot
+      alone (#536, #556 jump to #593; F15 finding 3) - and RAGE_MODE's fire diamond on every update while the player
+      lives (#1013-1083; the row above's "RAGE_MODE's own restock"). GAMEPLAY, 3-32 only.
+- [x] **A refused restock is silent** (step 116, deviation 1, and its verifier): the restock is built from a placed
       node, not from the `.ent` (the simulation reads none; 4-32's `barrel_bomb_2225` was checked field by field
       against `barrel_bomb.ent`, friction 0.7 aside, which no rigid body reads). A caller whose entity no node carries
       cannot be built: `Restock::Add` adds nothing and fills its `why`, and its one caller (`Game.cpp:723-727`) drops
       it, so the level quietly goes without its weapon. Print `why` once, or refuse an unbuildable rule when the
-      level loads. 4-32 never meets it.
+      level loads. 4-32 never meets it. *Closed in step 117*: `Restock::State` counts refusals and keeps the first
+      `why`; the layer says it once a level, and the route trace prints it. No level refuses (both callers' templates
+      exist), and no test drives one: a rule whose template no node carries would pin it.
 - [ ] **`Restock::Found` counts bodies only** (step 116, deviation 2): the original's `SeekEntity` finds any entity by
       its exact name; the port's search runs over the level's bodies and what a restock added, so a search for a
       marker (no body, not in `built`) finds nothing. Every caller the port wires searches for a body; a future caller
@@ -1762,6 +1786,37 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
 - [ ] **The lava's burn branch is untested** (step 116's verifier): `Fire::Tick` burns a burnable that touches the lava
       (`ETHBeginContactCallback_lava` #1-19), and no test covers it; no level puts a burnable where it can reach the
       lava. Entering `test_mp_fire`'s lava barrel as a `Burnable` too and checking `burned` would.
+
+- [ ] **The ghost's body, which the blast's ray meets, is inferred** (step 117, deviation 1): 38.4 x 41.7 about its point
+      plus (1.5, -2.1) - `ghost.ent`'s 128 x 139 at (5, -7) times the add's scale 0.3, the body built when the entity is
+      added (`ETHPhysicsSimulator.cpp:72-73`) and never rebuilt by `SetScale` (`ETHEntity.cpp:601-608`). Read from the
+      engine source, not measured: no footage shows a barrel burning the ghost. F15 finding 2 read the box at 128 x 139;
+      3-32's route's blasts lie outside both.
+- [ ] **3-32's barrel is built from the port's template table, not the `.ent`** (step 117, deviation 3):
+      `game/data/templates.json`'s node for `barrel_bomb_low_emissive.ent`, checked against the `.ent` (byte-identical
+      to `barrel_bomb.ent`) field by field - a claim about two files, as step 116's. Friction 0.7 and density 1 are read
+      for no rigid body. A converter-emitted entity table would carry it from the file itself.
+- [ ] **The restocked barrel's picture slot is unmeasured** (step 117, deviation 4): `Slot::Effect` at the spawn's
+      round(z) 0; where the original draws an added z-0 entity among level31b's z-0 art is not measured.
+- [ ] **The ghost's body fails no portal shot in the port** (step 117, deviation 5; F15 finding 2, the "Order 12.2, not
+      built" row in section 2): the original's `computePortalFinalPos` (#30, #136-175) fails a portal ray across
+      `ghost.ent`'s static box. 3-32's route shoots two portals a cycle across it (at (590, 190) and above the diamond,
+      from x 389 and 495); under F15's 128 x 139 every shot from the floor across x 429-557 fails, so the step that
+      builds it re-authors the route (F15 section 7's pushed barrel is the original player's way).
+- [ ] **The blast's reach has rounded corners; the original's is an octagon** (step 117, deviation 6, its verifier):
+      `EntityGrabber` builds its `Shape` with `edgePlanes` true (#149-150), four 45-degree planes through the box's
+      corners, so the original reaches where both overshoots a and b are below 80 and (a + b) / sqrt 2 is too;
+      `Ghost::BlastReaches` (and `Fire::Blast` for every entity) takes the Euclidean distance, up to 6.6 px short in the
+      corner bands (70 past one side and 40 past the other reaches in the original, not in the port). Fix: that test in
+      `BlastReaches`, a test point there, and `test_mp_ghost.cpp:671`'s "a sphere against a box, not a box" reworded.
+      Behaviour: its own step. 3-32's route's blasts lie past one side only, unaffected.
+- [ ] **22 suites include step 117's changed headers and have not run on its code** (step 117's verifier): boss,
+      bounce, demolish, diamonds, dragon, fields, fire, hazards, hinge, keys, launchers, minions, movers, play, shot,
+      start, statics, timed, torch, turrets, wells, zerog (`test_mp_*`), and every suite links the changed
+      `MagicPortalsSim`. All 36 affected objects compile with 0 warnings (the verifier's compile-only check); the next
+      build of any of them relinks it, so up to 22 first launches Smart App Control may refuse - no ctest loop.
+      `test_mp_diamonds`, `test_mp_minions`, `test_mp_start` and `test_mp_dragon` open level31b: run those first. Once
+      every suite is relinked, `ghost.json`'s unread `body.radius_px` (kept for them) goes.
 
 **Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
 1-01, 1-02 and 1-32, two of them from step 113's automated runs.

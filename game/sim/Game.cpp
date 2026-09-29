@@ -29,9 +29,11 @@ void Forget(Level& level, entt::entity body) {
 
 // What a restock added, taken on as Fire::Find and Portals::Find take a placed
 // body: a bomb or a burnable by its node's flags, and a traveller when its node
-// says teleportable. By the TEMPLATE's node, which is the entity it was built from.
+// says teleportable. By the TEMPLATE's node, which is the entity it was built from:
+// the level's own, or the port's table's.
 void TakeOnAdded(const Data& data, Level& level, const Restock::Added& added) {
-    const Tscn::Node* node = data.scene.FindNode(added.templateNode);
+    const Tscn::Node* node =
+        Restock::TemplateScene(data.scene, data.templates, added.templateFromPort).FindNode(added.templateNode);
     if (node == nullptr) return;
     level.fire.Adopt(*node, added.name, added.body);
     double teleportable = 0.0;
@@ -109,6 +111,10 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!GravityWell::LoadRules(portDataDirectory + "/gravitywell.json", read.wells, error)) return false;
     // And what the remake's role table calls a hazard but the original does not.
     if (!Hazards::LoadRules(portDataDirectory + "/hazards.json", read.hazards, error)) return false;
+    // The entities a boss adds that no level places (sim/Restock): read beside the
+    // level, whose root lighting the table's scene takes, and built by no one until
+    // a restock asks for one.
+    if (!Restock::LoadTemplates(portDataDirectory + "/templates.json", read.scene, read.templates, error)) return false;
     std::error_code ec;
     std::filesystem::create_directories(prismDirectory, ec);
     read.prisms = prismDirectory;
@@ -214,6 +220,9 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     if (!Diamonds::Find(data.scene, data.roles, data.diamonds, out.diamonds, error)) return false;
     if (!Fields::Find(data.scene, data.roles, out.built, data.fields, out.fields, error)) return false;
     if (!Ghost::Find(data.scene, data.roles, data.ghost, out.ghost, error)) return false;
+    // Where its barrel is put back, and from what: level31b places no barrel, so the
+    // port's table (Restock::Resolve takes the level's own first).
+    if (out.ghost.present) out.ghost.restockSite = Restock::Resolve(data.scene, data.templates, data.ghost.restock);
     if (!Torch::Find(data.scene, data.roles, data.torch, out.torch, error)) return false;
     if (!Portals::Find(data.scene, data.roles, out.built, registry, out.player, data.portals, data.movers, data.shot,
                        out.portals, error)) {
@@ -342,17 +351,27 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     for (const Fire::Grab& grab : level.fire.grabbedNow) level.demolish.Grab(grab.body, grab.by);
     for (const entt::entity gone : level.demolish.Destroyed(registry)) Forget(level, gone);
     // A blast within reach of chapter 4's boss burns it, which is the ONLY thing
-    // that can hurt it. Done here rather than inside Fire for the reason the
-    // ghost's fireball test is done in Game: Fire::Blast reaches what it grabs by
-    // BODY, and this boss is a sensor the level never places, so Fire::Find can
-    // never hold it. The reach is its own radius and the blast's together, which
-    // is the original's sphere against its 220 x 220 collider with that box taken
-    // as its half extent - darkdragon.json says so.
+    // that can hurt it. Done here rather than inside Fire because Fire::Blast
+    // reaches what it grabs by BODY, and this boss is a sensor the level never
+    // places, so Fire::Find can never hold it. The reach is its own radius and the
+    // blast's together, which is the original's sphere against its 220 x 220
+    // collider with that box taken as its half extent - darkdragon.json says so.
     if (level.darkDragon.Alive()) {
         const double reach = level.darkDragon.rules.radiusPx + level.fire.rules.blastPx;
         for (const glm::dvec2& blastPx : level.fire.blastsPx) {
             const glm::dvec2 gap = blastPx - level.darkDragon.atPx;
             if (gap.x * gap.x + gap.y * gap.y <= reach * reach) level.darkDragon.burned = true;
+        }
+    }
+    // And chapter 3's, for the same reason, and by the same explode: burnable 1 in
+    // ghost.ent's own data, so the grabber's isBreakableOrExplosiveOrBurnable takes
+    // it, and burn() sets the flag its SHOOTING arm reads (planning step 117). Its
+    // reach is the grabber's box and its ray, not a radius: Ghost::BlastReaches.
+    // The ghost's Tick, further down, reads `burned` on the blast's own tick, as the
+    // original's static callback runs after the barrel's (ETHScene.cpp:464-491).
+    if (level.ghost.Alive()) {
+        for (const glm::dvec2& blastPx : level.fire.blastsPx) {
+            if (level.ghost.BlastReaches(registry, blastPx, level.fire.rules.blastPx)) level.ghost.burned = true;
         }
     }
     // What a fireball ran into (ETHBeginContactCallback_fireball, listing
@@ -414,19 +433,12 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
                     }
                 }
             }
-            // And chapter 3's boss, which is the ONLY thing a fireball can hurt
-            // that Fire does not hold: the ghost is not a scene entity, so
-            // Fire::Find never sees it. Its GHOST_RADIUS is a radius rather than
-            // a box, and it has no collider here at all, so this is a plain
-            // distance. Setting `burned` is the whole of it - Ghost::Tick reads
-            // and clears the flag, which is isBurned followed by healBurn.
-            if (!struck && level.ghost.Alive()) {
-                const glm::dvec2 gap = ball.atPx - level.ghost.atPx;
-                if (gap.x * gap.x + gap.y * gap.y <= level.ghost.rules.radiusPx * level.ghost.rules.radiusPx) {
-                    level.ghost.burned = true;
-                    struck = true;
-                }
-            }
+            // NOT chapter 3's boss. ghost.ent is a sensor, and the callback returns
+            // on any sensor that is not a shock agent (#46-60, #62-121) before it
+            // destroys or burns anything: a fireball flies on through the ghost,
+            // as F15 filmed it (t1 #307-#326). Until planning step 117 the port
+            // burned the ghost with any fireball within 64 px of it, a rule the
+            // original does not have; only a barrel's blast hurts it now (above).
             // `destroy`, as the contact callback sets it, so the layer can put
             // small_explosion.ent where the fireball stood (Turrets::State::spentPx).
             if (struck) {
@@ -523,9 +535,9 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // every frame rather than an entry test, which is what separates one of these
     // from a hazard.
     level.fields.Tick(registry, level.player, dt);
-    // Chapter 3's boss. AFTER the fireball block above on purpose: a fireball
-    // that reaches it this tick sets `burned`, and this reads it on the same
-    // tick rather than the next.
+    // Chapter 3's boss. AFTER the blast test above on purpose: a blast that
+    // reaches it this tick sets `burned`, and this reads it on the same tick
+    // rather than the next.
     //
     // It REPORTS what it wants done rather than doing it - Minions owns minion
     // bodies, Keys owns keys and Diamonds owns diamonds, and each walks its own
@@ -546,7 +558,29 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             ++standing;
         }
 
-        const Ghost::State::Turn turn = level.ghost.Tick(registry, level.player, standing, data.motion, dt);
+        // RAGE_MODE's diamond restock asks for a player with hp above 0: alive, in
+        // the port's terms, which has no hp but a death (Hazards).
+        const bool playerAlive = level.player != entt::null && !level.hazards.playerDied;
+        const Ghost::State::Turn turn =
+            level.ghost.Tick(registry, level.player, playerAlive, standing, data.motion, dt);
+
+        // addEntityIfItCantBeFound (ins 594-630), on SHOOTING's beat: a barrel bomb
+        // at barrel_spawn when the level holds none by that name - the ghost's one
+        // weakness, put back by the ghost itself. Built from the port's template
+        // table (level31b places no barrel) and taken on by Fire and the portals as a
+        // placed barrel is; a restock that cannot be built is counted and said once
+        // (Restock::State::refusals).
+        const Restock::Rule& barrel = level.ghost.rules.restock;
+        if (turn.restock && !level.restock.Found(data.scene, level.built, registry, barrel.search)) {
+            LevelBuilder::Options options;
+            options.prismDirectory = data.prisms;
+            options.roles = &data.roles;
+            std::string why;
+            if (level.restock.Add(data.scene, data.templates, registry, options, barrel, level.ghost.restockSite,
+                                  level.built, why) != entt::null) {
+                TakeOnAdded(data, level, level.restock.added.back());
+            }
+        }
 
         // The escort, on the patrol the boss resolved when the level was found.
         if (turn.summon) {
@@ -571,7 +605,8 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         }
 
         // addEntityIfItCantBeFound: a fire diamond back at its spawn, and only
-        // when none is left. That is what makes dropping one down the gutter
+        // when none is left - on SHOOTING's beat, and on every RAGE_MODE update
+        // while the player lives. That is what makes dropping one down the gutter
         // mouth survivable rather than final.
         if (turn.restockDiamond) {
             bool anyLeft = false;
@@ -721,8 +756,8 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             options.prismDirectory = data.prisms;
             options.roles = &data.roles;
             std::string why;
-            if (level.restock.Add(data.scene, registry, options, restock, level.darkDragon.restockSite, level.built,
-                                  why) != entt::null) {
+            if (level.restock.Add(data.scene, data.templates, registry, options, restock,
+                                  level.darkDragon.restockSite, level.built, why) != entt::null) {
                 TakeOnAdded(data, level, level.restock.added.back());
             }
         }

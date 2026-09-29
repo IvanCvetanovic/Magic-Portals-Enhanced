@@ -667,6 +667,7 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_platformBoxed = false;
     m_restockDrawn = 0;
     m_restockBoxed = 0;
+    m_restockRefusalSaid = false;
     destroy(m_level.player);
     m_level = Game::Level{};
     m_loaded = false;
@@ -4371,18 +4372,80 @@ std::vector<MagicPortalsLayer::ShockRingReport> MagicPortalsLayer::ShockRings() 
     return reports;
 }
 
+bool MagicPortalsLayer::templatePicture(const Restock::Added& added, DrawnSprite& made) const {
+    // The template's picture as buildSprites would make a placed one's: its sprite
+    // by the reader the level's go through (the tier file, its units, its scale),
+    // and its look - emissive, lit, its normal map - by Lighting::Read, over the
+    // table's scene, whose root is this level's (Restock::LoadTemplates). Read when
+    // the first one is added, not at the level's load, so no level that never
+    // restocks draws or reads anything more. A table that will not read draws
+    // nothing, and says why.
+    std::vector<Sprites::Sprite> sprites;
+    std::string why;
+    if (!Sprites::Find(m_data.templates, m_paths.art, m_tierRules, sprites, why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "a restocked " << added.templateNode
+                                             << " is not drawn: its template's picture does not read: " << why
+                                             << std::endl;
+        return false;
+    }
+    const auto sprite = std::find_if(sprites.begin(), sprites.end(), [&added](const Sprites::Sprite& one) {
+        return one.node == added.templateNode;
+    });
+    if (sprite == sprites.end()) return false;
+    made.sprite = *sprite;
+    made.sprite.node = added.name;
+    made.sprite.atPx = added.atPx;
+    made.sprite.rotation = 0.0;
+    made.body = added.body;
+    made.ownerPx = added.atPx;
+    made.centrePx = Sprites::CentrePx(made.sprite);
+    // AddEntity at the marker's vector3, so at its depth: an entity the script adds,
+    // in the slot an effect at that depth takes (Slot::Effect, round(z)).
+    made.z = slotAfter(std::round(added.z), Slot::Effect);
+    made.lookZ = added.z;
+    Lighting::Scene look;
+    if (m_lit && Lighting::Read(m_data.templates, m_paths.art, m_tierRules, look, why)) {
+        if (const auto found = look.nodes.find(added.templateNode); found != look.nodes.end()) {
+            made.colour = glm::vec4(found->second.colour);
+            made.emissive = found->second.emissive;
+            made.isStatic = found->second.isStatic;
+            made.applyLight = found->second.applyLight;
+            made.normal = found->second.normal;
+        }
+    }
+    return true;
+}
+
 void MagicPortalsLayer::syncSprites(entt::registry& registry) {
     using namespace Supersonic;
-    // THE BARRELS 4-32'S DRAGON PUTS BACK (sim/Restock), which buildSprites cannot
-    // have made pictures for: each is added mid-fight under a name no node has.
-    // Each borrows the picture of the node it was built from - the placed barrel's,
-    // whose entry stays in m_sprites after its own quad has gone - and follows its
-    // own body as that one did. Made BEFORE the loop below, which places it on the
-    // tick it appears, and by value, since pushing into m_sprites moves it.
+    // A restock the port could not build, said once a level (the original prints
+    // 'Spawn entity not found ' for a missing marker, addEntityAtSpawnPoint #85-101;
+    // the port also cannot build a template it has no node for).
+    if (m_level.restock.refusals > 0 && !m_restockRefusalSaid) {
+        m_restockRefusalSaid = true;
+        SUPERSONIC_LOG_WARN("Magic Portals") << "a boss's restock was refused (" << m_level.restock.refusals
+                                             << " so far): " << m_level.restock.firstRefusal << std::endl;
+    }
+    // THE BARRELS A BOSS PUTS BACK (sim/Restock), which buildSprites cannot have
+    // made pictures for: each is added mid-fight under a name no node has. 4-32's
+    // borrows the picture of the node it was built from - the placed barrel's,
+    // whose entry stays in m_sprites after its own quad has gone. 3-32's has no
+    // placed barrel to borrow from, so its picture is made from the port's template
+    // (templatePicture). Each follows its own body as a placed one does. Made BEFORE
+    // the loop below, which places it on the tick it appears, and by value, since
+    // pushing into m_sprites moves it.
     while (m_artReady && m_restockDrawn < m_level.restock.added.size()) {
         const Restock::Added& added = m_level.restock.added[m_restockDrawn];
         ++m_restockDrawn;
         if (!registry.valid(added.body)) continue;
+        if (added.templateFromPort) {
+            DrawnSprite made;
+            if (!templatePicture(added, made)) continue;
+            made.quad = makeSprite(registry, "Magic Portals Restocked Sprite", made.sprite.texture, made.sprite.additive);
+            registry.emplace<InterpolatedTransformComponent>(made.quad);
+            m_sprites.push_back(std::move(made));
+            continue;
+        }
         int templateAt = -1;
         for (std::size_t i = 0; i < m_sprites.size(); ++i) {
             if (m_sprites[i].sprite.node == added.templateNode) {
@@ -4985,11 +5048,12 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     while (m_restockBoxed < m_level.restock.added.size()) {
         const Restock::Added& added = m_level.restock.added[m_restockBoxed];
         ++m_restockBoxed;
-        const Tscn::Node* node = m_data.scene.FindNode(added.templateNode);
+        const Tscn::Scene& from = Restock::TemplateScene(m_data.scene, m_data.templates, added.templateFromPort);
+        const Tscn::Node* node = from.FindNode(added.templateNode);
         if (!registry.valid(added.body) || node == nullptr) continue;
         Drawn made;
         made.body = added.body;
-        if (!LevelBuilder::ShapeBoundsPx(m_data.scene, *node, made.offsetPx, made.sizePx)) continue;
+        if (!LevelBuilder::ShapeBoundsPx(from, *node, made.offsetPx, made.sizePx)) continue;
         made.depth = 0.4f; // a rigid body's, as buildDrawables gives one
         made.box = makeBox(registry, "Magic Portals Body", glm::vec3(0.0f), glm::vec3(1.0f), kCrateColour);
         registry.emplace<InterpolatedTransformComponent>(made.box);

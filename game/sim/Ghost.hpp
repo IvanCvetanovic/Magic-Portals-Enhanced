@@ -15,14 +15,15 @@
 // APPEARING 0, SHOOTING 1, RAGE_MODE 2, DAMAGE 3, DEATH 4, GHOST_RADIUS 64. The
 // init writes hp 3.
 //
-// HOW IT IS HURT, which is why this step follows the fire diamond. The SHOOTING
-// arm ends with isBurned(this): burned, it goes to DAMAGE, takes hp += -1, calls
-// healBurn(this) and sounds. `burned` is set from OUTSIDE, by the same Game block
-// that lights a crate and detonates a bomb when a fireball reaches one, and Tick
-// reads and clears it exactly as healBurn does. F15 found that the original's
-// fireball passes through the ghost, a sensor, and that only a barrel's explode()
-// can burn it; the port keeps the fireball because the barrel is not restocked
-// here (ghost.json _not_built says so).
+// HOW IT IS HURT: by a barrel's blast, and by nothing else (planning step 117).
+// The SHOOTING arm ends with isBurned(this): burned, it goes to DAMAGE, takes
+// hp += -1, calls healBurn(this) and sounds. `burned` is set from OUTSIDE, by Game,
+// when a blast reaches it (BlastReaches: explode's EntityGrabber and its ray), and
+// Tick reads and clears it exactly as healBurn does. A fireball passes through it:
+// ghost.ent is a sensor and ETHBeginContactCallback_fireball returns on a sensor
+// that is not a shock agent (#46-121), which F15 filmed. The barrel is the one the
+// ghost itself puts back at barrel_spawn on every beat (Turn::restock), and the fire
+// diamond is what sets it off.
 //
 // WHEN IT IS THERE, which is the owner's standing ruling R4 (planning step 98).
 // The level places ghost_pos, and that is only where the ghost FLIES TO: the
@@ -31,7 +32,7 @@
 // only then does it run: its init block builds the five appear waypoints and
 // starts the boss music, and its APPEARING arm flies it from the knight's point to
 // ghost_pos, black to white and 0.3 to 1 (ghost.json appear). Before that there is
-// no ghost - no shot, no restock, nothing a fireball can reach. Game spawns it,
+// no ghost - no shot, no restock, nothing a blast can reach. Game spawns it,
 // from Minions::State::deaths, whatever killed the knight.
 //
 // ITS POINT MOVES, and it is one point. APPEARING writes it from the waypoints and
@@ -41,19 +42,20 @@
 // layer's picture alone.
 //
 // WHAT IT REPORTS RATHER THAN DOES. Tick returns a Turn: summon a minion here,
-// drop a key here, put a fire diamond back there. Minions owns minion bodies,
-// Keys owns keys and Diamonds owns diamonds, and each walks its own list every
-// frame - so Game funnels, as it does for every other module that reaches across.
+// drop a key here, put a barrel and a fire diamond back. Minions owns minion
+// bodies, Keys owns keys, Diamonds owns diamonds and Restock what a boss adds, and
+// each walks its own list every frame - so Game funnels, as it does for every other
+// module that reaches across.
 // Its LOOK (colour, alpha, scale, cell) is what the callback writes on the
 // entity; nothing in the simulation reads it back, and the layer draws it.
 //
-// Not built, and recorded in data/ghost.json: every sound, the barrel bomb
-// restock (a mid-run Fire::Bomb, which is the step minions.json already names),
-// RAGE_MODE's own fire diamond restock, the death blast's 2.0, the scattered
-// explosions, and the static body a portal shot cannot cross.
+// Not built, and recorded in data/ghost.json: every sound, the death blast's 2.0,
+// the scattered explosions, the restock's ghost_utility_spawn.ent picture, and the
+// static body a portal shot cannot cross.
 
 #include "sim/Minions.hpp"
 #include "sim/Motion.hpp"
+#include "sim/Restock.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
 
@@ -106,7 +108,18 @@ struct Bounce {
 struct Rules {
     std::string anchorName; // ghost_pos: the boss_spawn node, matched by NAME
     int maxHp = 0;
-    double radiusPx = 0.0;
+
+    // What a blast is measured against (ghost.json blast). explode's EntityGrabber
+    // tests its sphere against the .ent's Collision box at the entity's point, by
+    // the global scale alone; its ray then has to meet the ghost's own Box2D body
+    // first, which was built at the entity's scale when it was added (spawnScale)
+    // and never rebuilt. So two boxes, both from ghost.ent's one Collision.
+    glm::dvec2 grabBoxPx{0.0};    // Collision Size, as the grabber reads it
+    glm::dvec2 bodyBoxPx{0.0};    // Collision Size, before the add's scale
+    glm::dvec2 bodyOffsetPx{0.0}; // Collision Position, before the add's scale
+
+    // ins 594-630: the barrel it puts back on every SHOOTING beat (sim/Restock).
+    Restock::Rule restock;
 
     // What adds it (spawn): the entity whose death adds it, the depth it is added
     // at over that entity's own (scale(-1), level units), its scale at the init,
@@ -246,11 +259,15 @@ struct State {
     bool hasDiamondSpawn = false;
     glm::dvec2 diamondSpawnPx{0.0};
     std::vector<Minions::Waypoint> patrol; // what the summoned escort walks
+    // Where its barrel is put back (barrel_spawn) and what the port builds it from:
+    // level31b places no barrel, so the template is the port's table's. Resolved by
+    // Game::Start, which holds that table.
+    Restock::Site restockSite;
 
     Phase phase = Phase::Appearing;
     int hp = 0;
     double elapsedMs = 0.0;
-    bool burned = false; // set by Game when a fireball reaches it; cleared here
+    bool burned = false; // set by Game when a blast reaches it; cleared here
     bool summonedThisRage = false;
     bool gone = false;
 
@@ -274,8 +291,15 @@ struct State {
         bool summon = false; // a minion, at summonPx, on the patrol above
         bool droppedKey = false;
         glm::dvec2 keyPx{0.0};
-        bool restockDiamond = false; // a fire diamond back at its spawn
-        bool initialised = false;    // its init block ran this tick: the boss music, the appear effect
+        // A fire diamond back at its spawn when none is left: on SHOOTING's beat
+        // (ins 632-667), and on every RAGE_MODE update while the player lives
+        // (ins 1034-1083).
+        bool restockDiamond = false;
+        // A barrel bomb back at barrel_spawn when none is found (ins 594-630): on
+        // SHOOTING's beat, whether or not a shot leaves - the red line gates the
+        // shot alone (F15 finding 3).
+        bool restock = false;
+        bool initialised = false; // its init block ran this tick: the boss music, the appear effect
     };
 
     // ETHCallback_ghost_minion #43-78: the ghost.ent added at the dying knight's
@@ -284,11 +308,21 @@ struct State {
     // Tick (ghost.json spawn._first_callback).
     void Spawn(const glm::dvec2& knightPx);
 
-    // One tick, after the physics step. `minionsStanding` is how many minions the
-    // level still has - RAGE_MODE waits on its escort being killed - and `motion`
-    // the motions.json the hover's linearMotion runs by.
-    Turn Tick(entt::registry& registry, entt::entity player, std::size_t minionsStanding,
+    // One tick, after the physics step. `playerAlive` is whether the player stands
+    // with hp above 0 - RAGE_MODE's diamond restock asks it - `minionsStanding` how
+    // many minions the level still has - RAGE_MODE waits on its escort being killed
+    // - and `motion` the motions.json the hover's linearMotion runs by.
+    Turn Tick(entt::registry& registry, entt::entity player, bool playerAlive, std::size_t minionsStanding,
               const Motion::Rules& motion, float dt);
+
+    // explode's reach (MiscCallbacks, listing L67590, #33-122) for the one entity it
+    // can burn that the port holds as no body: EntityGrabber's sphere of the blast's
+    // radius against grabBoxPx at its point, then getFirstContactExcept's ray from
+    // the blast to its point, whose closest contact must be its own body. From
+    // inside that body Box2D reports no contact at all (b2PolygonShape::RayCast), so
+    // a blast there does not reach it; and the ray is the port's, as Fire::Blast's
+    // is: solid bodies only.
+    bool BlastReaches(entt::registry& registry, const glm::dvec2& blastPx, double blastRadiusPx) const;
 
     bool Alive() const { return present && spawned && !gone; }
 };

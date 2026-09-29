@@ -424,9 +424,34 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
                     dragon.atPx.x, dragon.atPx.y, static_cast<int>(dragon.phase), dragon.hp, dragon.elapsedMs,
                     dragon.look.angleDeg, dragon.fired, level->torch.lit, dragon.alive ? "" : " (not here)");
     }
+    // 3-32's ghost (step 117): its point, its arm and hp, whether a blast has burned
+    // it this tick, its beat clock, its shots and burns, and its shots in the air.
+    if (level->ghost.present) {
+        const auto& ghost = level->ghost;
+        std::printf("\n          ghost (%.1f, %.1f) phase %d hp %d%s clock %.0f fired %d hits %d summons %d%s",
+                    ghost.atPx.x, ghost.atPx.y, static_cast<int>(ghost.phase), ghost.hp,
+                    ghost.burned ? " BURNED" : "", ghost.elapsedMs, ghost.shotsFired, ghost.hits, ghost.summons,
+                    ghost.Alive() ? "" : (ghost.gone ? " (gone)" : " (not here)"));
+        for (const auto& shot : ghost.shots) {
+            std::printf(" shot %d (%.1f, %.1f) to (%.1f, %.1f)", shot.id, shot.atPx.x, shot.atPx.y, shot.destinyPx.x,
+                        shot.destinyPx.y);
+        }
+    }
     for (const auto& added : level->restock.added) {
         std::printf("\n          restocked %s at (%.1f, %.1f)%s", added.name.c_str(), added.atPx.x, added.atPx.y,
                     registry.valid(added.body) ? "" : " GONE");
+        if (registry.valid(added.body)) {
+            const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(added.body).position);
+            std::printf(" now (%.1f, %.1f)", at.x, at.y);
+        }
+    }
+    if (level->restock.refusals > 0) {
+        std::printf("\n          restock REFUSED %d: %s", level->restock.refusals, level->restock.firstRefusal.c_str());
+    }
+    for (const auto& minion : level->minions.minions) {
+        if (minion.gone || !registry.valid(minion.body)) continue;
+        const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(minion.body).position);
+        std::printf("\n          minion %s (%.1f, %.1f)", minion.name.c_str(), at.x, at.y);
     }
     std::printf("\n");
 }

@@ -11,11 +11,13 @@
 //               point, and until then there is no ghost, no shot and no restock.
 //               Its init block runs on the tick after, and flies it in on five
 //               waypoints - black and 0.3 to white and 1 - to hover at ghost_pos.
-//   the weapon  FIRE is the only thing that hurts it here: its SHOOTING arm ends
-//               with isBurned(this), and the fire diamond, whose fireballs a
-//               converted portal shot becomes, IS the weapon. (F15 found the
-//               original's fireball passes through the ghost and only a barrel's
-//               explode() burns it; the port keeps the fireball, ghost.json says why.)
+//   the weapon  a BARREL's blast is the only thing that hurts it (planning step
+//               117): its SHOOTING arm ends with isBurned(this), and only explode()
+//               burns it - ghost.ent is a sensor, and a fireball passes through it
+//               (ETHBeginContactCallback_fireball #46-121; F15 filmed it). The
+//               barrel is the one it puts back itself at barrel_spawn on every
+//               beat, built from the port's template table (level31b places none),
+//               and the fire diamond's fireballs are what set it off.
 //
 // The rest a careless port gets wrong:
 //
@@ -38,6 +40,7 @@
 
 #include "core/Components.hpp"
 #include "sim/Game.hpp"
+#include "sim/LevelBuilder.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
@@ -166,7 +169,17 @@ void theRulesAndWhatLevelThirtyOneBHolds() {
 
     const Ghost::Rules& rules = run.level.ghost.rules;
     CHECK_EQ(rules.maxHp, 3);
-    CHECK(::test::nearly(static_cast<float>(rules.radiusPx), 64.0f));
+    // explode's two boxes, both ghost.json blast's: the grabber's, the .ent's
+    // Collision at the global scale alone, and the body its ray meets, that
+    // Collision at the scale the ghost was added with.
+    CHECK_MSG(rules.grabBoxPx == glm::dvec2(128.0, 139.0) && rules.bodyBoxPx == glm::dvec2(128.0, 139.0) &&
+                  rules.bodyOffsetPx == glm::dvec2(5.0, -7.0),
+              "ghost.ent's Collision, 128 x 139 at (5, -7)");
+    // addEntityIfItCantBeFound's five arguments (ins 594-630), pushed last first.
+    CHECK_MSG(rules.restock.search == "barrel_bomb" && rules.restock.add == "barrel_bomb_low_emissive.ent" &&
+                  rules.restock.spawn == "barrel_spawn" && rules.restock.effect == "ghost_utility_spawn.ent" &&
+                  rules.restock.alias == "barrel_bomb" && rules.restock.templateEntity == "barrel_bomb_low_emissive.ent",
+              "the barrel it puts back: barrel_bomb_low_emissive.ent at barrel_spawn, found and named barrel_bomb");
     CHECK(::test::nearly(static_cast<float>(rules.intervalMs), 3000.0f));
     CHECK(::test::nearly(static_cast<float>(rules.toRageMs), 4000.0f));
     CHECK(::test::nearly(static_cast<float>(rules.burstMs), 3550.0f));
@@ -233,6 +246,59 @@ void theRulesAndWhatLevelThirtyOneBHolds() {
               "at minion_spawn_point");
     CHECK_MSG(run.level.ghost.hasDiamondSpawn, "and where a fire diamond goes back");
 
+    // Where its barrel goes back, and what the port builds it from. level31b places
+    // no barrel of any name, so the template is the port's table's.
+    const Restock::Site& site = run.level.ghost.restockSite;
+    CHECK_MSG(site.spawnFound && site.spawnPx == glm::dvec2(190.0, 110.0) && site.spawnZ == 0.0,
+              "barrel_spawn_1435 at (190, 110), no z");
+    CHECK_MSG(site.templateFromPort && site.templateNode == "barrel_bomb_low_emissive_ent",
+              "built from the port's template table: " + site.templateNode);
+    int barrels = 0;
+    for (const Tscn::Node& node : run.data.scene.nodes) {
+        const Tscn::Value* entity = node.Meta("entity_name");
+        if (node.parent == "." && entity != nullptr && entity->text.rfind("barrel_bomb", 0) == 0) ++barrels;
+    }
+    CHECK_MSG(barrels == 0, "level31b places no barrel: " + std::to_string(barrels));
+    // The template, as the converter writes barrel_bomb (templates.json checks it
+    // against barrel_bomb_low_emissive.ent, byte-identical to barrel_bomb.ent).
+    const Tscn::Node* made = run.data.templates.FindNode(site.templateNode);
+    CHECK_MSG(made != nullptr, "the table's scene holds the template's node");
+    if (made != nullptr) {
+        const auto meta = [made](const char* key) {
+            const Tscn::Value* value = made->Meta(key);
+            return value != nullptr ? value->text : std::string("(none)");
+        };
+        CHECK_MSG(meta("entity_name") == "barrel_bomb_low_emissive.ent" && meta("explosive") == "1" &&
+                      meta("teleportable") == "1" && meta("eth_emissive") == "0.45 0.45 0.45" &&
+                      meta("eth_apply_light") == "1" &&
+                      meta("eth_normal") == "res://assets/entities/normalmaps/barrel_normal.png",
+                  "its custom data and eth_ keys, as barrel_bomb's");
+        glm::dvec2 offsetPx(-1.0);
+        glm::dvec2 sizePx(0.0);
+        CHECK_MSG(LevelBuilder::ShapeBoundsPx(run.data.templates, *made, offsetPx, sizePx) &&
+                      offsetPx == glm::dvec2(0.0) && std::fabs(sizePx.x - 28.6) < 1e-9 && std::fabs(sizePx.y - 37.7) < 1e-9,
+                  "its box 22 x 29 at Scale 1.3: " + std::to_string(sizePx.x) + " x " + std::to_string(sizePx.y));
+        const Tscn::Node* body = run.data.templates.Child(*made, "Body");
+        const Tscn::Node* sprite = run.data.templates.Child(*made, "Sprite");
+        CHECK_MSG(body != nullptr && body->type == "RigidBody2D", "a rigid body: type 0, static 0");
+        const Tscn::Value* texture = sprite != nullptr ? sprite->Find("texture") : nullptr;
+        const Tscn::Resource* file = texture != nullptr ? run.data.templates.External(texture->text) : nullptr;
+        const Tscn::Value* scale = sprite != nullptr ? sprite->Find("scale") : nullptr;
+        CHECK_MSG(file != nullptr && file->path == "res://assets/entities/barrel32_with_sign.png" && scale != nullptr &&
+                      scale->numbers.size() == 2 && scale->numbers[0] == 1.3 && scale->numbers[1] == 1.3,
+                  "barrel32_with_sign.png at its Scale 1.3");
+    }
+    // The table's root is the level's own lighting, so the layer reads its look.
+    const auto rootMeta = [](const Tscn::Scene& scene, const char* key) {
+        const Tscn::Node* root = scene.nodes.empty() ? nullptr : &scene.nodes.front();
+        const Tscn::Value* value = root != nullptr ? root->Meta(key) : nullptr;
+        return value != nullptr ? value->text : std::string("(none)");
+    };
+    CHECK_MSG(rootMeta(run.data.templates, "eth_ambient") == rootMeta(run.data.scene, "eth_ambient") &&
+                  rootMeta(run.data.templates, "eth_light_intensity") == rootMeta(run.data.scene, "eth_light_intensity") &&
+                  rootMeta(run.data.scene, "eth_ambient") != "(none)",
+              "the table's root carries level31b's ambient and intensity");
+
     // The escort's patrol, resolved from the wayA prefix at Find time because
     // AfterStep has no scene to resolve it from.
     CHECK_EQ(run.level.ghost.patrol.size(), static_cast<std::size_t>(2));
@@ -260,6 +326,7 @@ void nothingBeforeTheKnightDies() {
     bool restocked = false;
     for (const Diamonds::Diamond& diamond : run.level.diamonds.diamonds) restocked = restocked || !diamond.gone;
     CHECK_MSG(!restocked, "and no fire diamond put back");
+    CHECK_MSG(run.level.restock.added.empty() && run.level.restock.refusals == 0, "and no barrel put back");
     CHECK_MSG(!run.level.hazards.playerDied, "and the player past the line is alive");
     CHECK_MSG(Knight(run) != nullptr && !Knight(run)->gone, "the knight still patrols");
     CHECK_MSG(run.level.built.entities.count("anti_sight_wall_ent_1430") == 1, "and entity 1430 still stands");
@@ -541,32 +608,214 @@ void theRedLineGatesItsShooting() {
     CHECK_MSG(spent, "a shot that reaches its range ends, and says where");
 }
 
-// Fire, and nothing else. The flag is what a fireball sets, and Tick reads and
-// clears it exactly as healBurn does.
-void onlyFireHurtsIt() {
+// The barrel restocked, and where the port's pieces of it live: Fire's bomb of
+// that name, and its body.
+const Restock::Added* Barrel(const Run& run, std::size_t index) {
+    return index < run.level.restock.added.size() ? &run.level.restock.added[index] : nullptr;
+}
+
+// Ask a restocked barrel to go off where it is put, as a fireball on it would
+// (ETHBeginContactCallback_fireball #174-188): it blasts on its own next turn.
+void SetOff(Run& run, const Restock::Added& barrel, const glm::dvec2& atPx) {
+    if (!run.registry.valid(barrel.body)) return;
+    PutAt(run.registry, barrel.body, atPx);
+    for (Fire::Bomb& bomb : run.level.fire.bombs) {
+        if (bomb.body == barrel.body) bomb.requested = true;
+    }
+}
+
+// A BARREL, and nothing else (planning step 117). A fireball passes through it -
+// the original's returns on a sensor - and a blast burns it when the grabber's
+// sphere meets its box and the ray meets its body first.
+void aFireballPassesThroughItAndOnlyABlastBurnsIt() {
     Run run;
     if (!Begin(kLevel, run)) return;
     ReachShooting(run);
 
     CHECK_EQ(run.level.ghost.hp, 3);
     CHECK_EQ(run.level.ghost.hits, 0);
-
-    // A long while with no fire at all, and it is untouched.
     Hold(run, kBehindTheLine, 300);
-    CHECK_MSG(run.level.ghost.hp == 3, "nothing but fire touches it");
-    CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Shooting, "and it is still shooting");
+    CHECK_MSG(run.level.ghost.hp == 3 && run.level.ghost.phase == Ghost::Phase::Shooting,
+              "untouched, and still shooting, with nothing set off");
 
-    // A fireball where it hovers (the port's rule: within radius_px).
+    // A fireball through where it hovers: not spent, and nothing burned.
     Turrets::Fireball ball;
     ball.name = "test#ghost";
     ball.atPx = run.level.ghost.atPx;
+    ball.velocityPx = glm::dvec2(run.level.turrets.rules.speedPx, 0.0);
     ball.killsPlayer = false;
     run.level.turrets.fireballs.push_back(ball);
     Hold(run, kBehindTheLine, 2);
-    CHECK_MSG(run.level.ghost.hp == 2, "burned, it takes one");
-    CHECK_EQ(run.level.ghost.hits, 1);
-    CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Damage, "and goes to damage");
+    const auto flying = [&run]() {
+        for (const Turrets::Fireball& one : run.level.turrets.fireballs) {
+            if (one.name == "test#ghost") return true;
+        }
+        return false;
+    };
+    CHECK_MSG(run.level.ghost.hp == 3 && run.level.ghost.hits == 0 && !run.level.ghost.burned &&
+                  run.level.ghost.phase == Ghost::Phase::Shooting,
+              "a fireball through the ghost burns nothing: it is a sensor");
+    CHECK_MSG(flying(), "and the fireball flies on through it");
+    std::erase_if(run.level.turrets.fireballs, [](const Turrets::Fireball& one) { return one.name == "test#ghost"; });
+
+    // explode's reach, measured from the ghost's own point: the grabber's 80 against
+    // its 128 x 139 box, then the ray to its body, 38.4 x 41.7 about (1.5, -2.1).
+    const Ghost::State& ghost = run.level.ghost;
+    const double r = run.level.fire.rules.blastPx;
+    const glm::dvec2 at = ghost.atPx;
+    CHECK_MSG(r == 80.0, "the grabber's radius, fire.json blast");
+    CHECK_MSG(ghost.BlastReaches(run.registry, at + glm::dvec2(64.0 + 79.0, 0.0), r),
+              "79 past the box's side: reached, with a clear line");
+    CHECK_MSG(!ghost.BlastReaches(run.registry, at + glm::dvec2(64.0 + 81.0, 0.0), r), "81 past it: not reached");
+    CHECK_MSG(!ghost.BlastReaches(run.registry, at + glm::dvec2(64.0 + 60.0, -(69.5 + 60.0)), r),
+              "60 past two sides, 84.9 from the corner: a sphere against a box, not a box");
+    CHECK_MSG(!ghost.BlastReaches(run.registry, at + glm::dvec2(0.0, 10.0), r),
+              "inside its body: Box2D meets nothing from inside, so the ray's contact is not the ghost");
+    CHECK_MSG(ghost.BlastReaches(run.registry, at + glm::dvec2(0.0, -30.0), r),
+              "just outside its body, above: reached");
+    {
+        LevelBuilder::Options options;
+        options.prismDirectory = run.data.prisms;
+        const entt::entity wall = LevelBuilder::BuildStaticBox(run.registry, "test#wall", at + glm::dvec2(70.0, 0.0),
+                                                              glm::dvec2(10.0, 100.0), options);
+        CHECK_MSG(!ghost.BlastReaches(run.registry, at + glm::dvec2(110.0, 0.0), r),
+                  "behind a solid wall: the ray's closest contact is the wall");
+        CHECK_MSG(ghost.BlastReaches(run.registry, at + glm::dvec2(-60.0, -50.0), r),
+                  "above the double block's end, on the open side: reached");
+        run.registry.destroy(wall);
+    }
+
+    // Now the barrel it put back on its first beat, which fell into the pocket.
+    const Restock::Added* first = Barrel(run, 0);
+    CHECK_MSG(first != nullptr && run.registry.valid(first->body), "the first beat put a barrel back");
+    if (first == nullptr) return;
+    // Set off where it lies, far from the ghost: nothing.
+    SetOff(run, *first, glm::dvec2(190.0, 205.0));
+    Hold(run, kBehindTheLine, 3);
+    CHECK_MSG(!run.registry.valid(first->body), "the barrel went off");
+    CHECK_MSG(run.level.ghost.hp == 3 && run.level.ghost.phase == Ghost::Phase::Shooting,
+              "in the pocket, 300 u from it, its blast reaches no ghost");
+    // The next beat puts another back; set off on the floor past the ghost, outside
+    // F15's 128 x 139 box and within the grabber's reach (the route's spot).
+    for (int tick = 0; tick < 200 && run.level.restock.added.size() < 2; ++tick) Hold(run, kBehindTheLine, 1);
+    const Restock::Added* second = Barrel(run, 1);
+    CHECK_MSG(second != nullptr, "the next beat put another back");
+    if (second == nullptr) return;
+    Hold(run, kBehindTheLine, 40);
+    const glm::dvec2 spot(590.0, 205.0);
+    SetOff(run, *second, spot);
+    // Asked, it goes off on the next tick, and the ghost reads the burn on that
+    // same tick (its Tick runs after the blast test in AfterStep).
+    Game::Tick(run.data, run.registry, run.level, 0.0f, kStep);
+    CHECK_MSG(run.level.fire.blasts >= 2 && !run.registry.valid(second->body), "the barrel went off");
+    CHECK_MSG(run.level.ghost.hp == 2 && run.level.ghost.hits == 1 && run.level.ghost.phase == Ghost::Phase::Damage,
+              "a barrel's blast at (590, 205) burns it: hp " + std::to_string(run.level.ghost.hp));
     CHECK_MSG(!run.level.ghost.burned, "healBurn: the flag is cleared rather than left set");
+}
+
+// ins 594-630: on every SHOOTING beat, whichever side of the red line the player is,
+// a barrel at barrel_spawn when none by the name barrel_bomb stands - and never on
+// any other arm's update.
+void itPutsItsBarrelBackOnEveryBeat() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+    BurnTheKnight(run);
+    Hold(run, kBehindTheLine, 200);
+    CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Appearing && run.level.restock.added.empty(),
+              "none while it flies in");
+    // The fire diamond gone, as the gutter takes it, so the beat puts one back too.
+    for (Diamonds::Diamond& diamond : run.level.diamonds.diamonds) {
+        if (diamond.fire) diamond.gone = true;
+    }
+    int ticks = 0;
+    while (ticks < 100 && run.level.restock.added.empty()) {
+        Hold(run, kBehindTheLine, 1);
+        ++ticks;
+    }
+    CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Shooting && run.level.restock.added.size() == 1,
+              "the first beat of SHOOTING puts one back");
+    const Restock::Added* first = Barrel(run, 0);
+    if (first == nullptr) return;
+    CHECK_MSG(first->name == "barrel_bomb_low_emissive_ent#1" && first->alias == "barrel_bomb" &&
+                  first->templateFromPort && first->atPx == glm::dvec2(190.0, 110.0),
+              "barrel_bomb_low_emissive.ent, answering to barrel_bomb, at barrel_spawn: " + first->name);
+    CHECK_MSG(run.level.ghost.shotsFired == 0, "with the player behind the red line: the line gates the shot alone");
+    CHECK_MSG(run.level.restock.refusals == 0, "and nothing refused");
+    bool diamondBack = false;
+    for (const Diamonds::Diamond& diamond : run.level.diamonds.diamonds) {
+        if (diamond.fire && !diamond.gone && diamond.atPx == run.level.ghost.diamondSpawnPx) diamondBack = true;
+    }
+    CHECK_MSG(diamondBack, "and the fire diamond is back at its spawn on the same beat");
+    CHECK_MSG(run.registry.all_of<Supersonic::BoxColliderComponent>(first->body), "a box");
+    if (run.registry.all_of<Supersonic::BoxColliderComponent>(first->body)) {
+        const glm::vec3 size = run.registry.get<Supersonic::BoxColliderComponent>(first->body).size;
+        CHECK_MSG(std::fabs(size.x - Units::ToMetres(28.6)) < 1e-6f && std::fabs(size.y - Units::ToMetres(37.7)) < 1e-6f,
+                  "of 28.6 x 37.7");
+    }
+    bool bomb = false;
+    for (const Fire::Bomb& one : run.level.fire.bombs) bomb = bomb || (one.body == first->body && one.name == first->name);
+    const bool traveller = std::find(run.level.portals.travellers.begin(), run.level.portals.travellers.end(),
+                                     first->body) != run.level.portals.travellers.end();
+    CHECK_MSG(bomb && traveller, "Fire's bomb and a portals traveller, as a placed barrel is");
+
+    // It falls into the pocket and rests on the floor there.
+    Hold(run, kBehindTheLine, 60);
+    const glm::dvec2 rest = Units::ToPixels(run.registry.get<TransformComponent>(first->body).position);
+    CHECK_MSG(std::fabs(rest.x - 190.0) < 1.0 && std::fabs(rest.y - (224.0 - 37.7 / 2.0)) < 1.0,
+              "at rest on the pocket's floor: (" + std::to_string(rest.x) + ", " + std::to_string(rest.y) + ")");
+    std::printf("  level31b: the ghost's barrel back at (190, 110) on SHOOTING's first beat, %d ticks after the knight's "
+                "death, at rest at (%.2f, %.2f)\n",
+                201 + ticks, rest.x, rest.y);
+
+    // While it stands, the beats put none back.
+    Hold(run, kBehindTheLine, 400);
+    CHECK_MSG(run.level.restock.added.size() == 1, "none while it stands, two beats on");
+    // Gone, the next beat does.
+    SetOff(run, *first, rest);
+    Hold(run, kBehindTheLine, 3);
+    CHECK_MSG(!run.registry.valid(first->body), "gone");
+    for (int tick = 0; tick < 200 && run.level.restock.added.size() < 2; ++tick) Hold(run, kBehindTheLine, 1);
+    CHECK_MSG(run.level.restock.added.size() == 2 && run.level.restock.added.back().name == "barrel_bomb_low_emissive_ent#2",
+              "the next beat puts #2 back");
+
+    // Hurt, and raging: no beat, so no barrel, whatever is gone.
+    run.level.ghost.burned = true;
+    Hold(run, kBehindTheLine, 2);
+    if (const Restock::Added* second = Barrel(run, 1)) SetOff(run, *second, glm::dvec2(190.0, 205.0));
+    Hold(run, kBehindTheLine, 400);
+    CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Rage && run.level.restock.added.size() == 2,
+              "through DAMAGE and into RAGE_MODE, none put back");
+}
+
+// RAGE_MODE (#1013-1083): on EVERY update, while the player stands with hp above 0,
+// a fire diamond back at its spawn if none is left.
+void rageRestocksTheFireDiamondEveryUpdate() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+    ReachShooting(run);
+    run.level.ghost.burned = true;
+    Hold(run, kBehindTheLine, 2);
+    Hold(run, kBehindTheLine, 250);
+    CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Rage, "raging");
+    const auto fireDiamondGone = [&run]() {
+        bool gone = true;
+        for (const Diamonds::Diamond& diamond : run.level.diamonds.diamonds) {
+            if (diamond.fire && !diamond.gone) gone = false;
+        }
+        return gone;
+    };
+    for (Diamonds::Diamond& diamond : run.level.diamonds.diamonds) {
+        if (diamond.fire) diamond.gone = true;
+    }
+    Hold(run, kBehindTheLine, 1);
+    CHECK_MSG(!fireDiamondGone(), "gone in rage, it is back on the next update");
+    // Not for a dead player: the arm asks for one with hp above 0.
+    for (Diamonds::Diamond& diamond : run.level.diamonds.diamonds) {
+        if (diamond.fire) diamond.gone = true;
+    }
+    run.level.hazards.playerDied = true;
+    Hold(run, kBehindTheLine, 30);
+    CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Rage && fireDiamondGone(), "and not for a dead player");
 }
 
 // Hurt, it calls an escort and waits for the player to kill it - and looks the part.
@@ -691,7 +940,9 @@ void runTests() {
     itFliesInOnFiveWaypoints();
     itHoversAboutGhostPos();
     theRedLineGatesItsShooting();
-    onlyFireHurtsIt();
+    aFireballPassesThroughItAndOnlyABlastBurnsIt();
+    itPutsItsBarrelBackOnEveryBeat();
+    rageRestocksTheFireDiamondEveryUpdate();
     hurtItCallsAnEscortAndWaitsForIt();
     threeBurnsAndItDropsAYellowKey();
     noOtherLevelHasOne();
@@ -708,5 +959,5 @@ int main() {
         return 77;
     }
     runTests();
-    return ::test::summary("test_mp_ghost", 90);
+    return ::test::summary("test_mp_ghost", 130);
 }

@@ -62,6 +62,10 @@ namespace MagicPortals::Game {
 // remake's own data. Read once and shared.
 struct Data {
     Tscn::Scene scene;
+    // The port's template table (templates.json, sim/Restock): the entities a boss
+    // adds that no level places, as nodes of a scene of their own, whose root holds
+    // this level's root lighting keys. Built only when a restock asks.
+    Tscn::Scene templates;
     Roles::Table roles;
     Player::Tuning tuning;
     Goals::Rules goals;
@@ -132,7 +136,8 @@ struct Level {
     Diamonds::State diamonds;
     // The lethal rings, which swing about the node that placed them.
     Fields::State fields;
-    // Chapter 3's boss, which the fire diamond is the weapon against.
+    // Chapter 3's boss, which only a barrel's blast hurts: the barrel it puts back
+    // itself, set off by the fire diamond's fireballs.
     Ghost::State ghost;
     // Chapter 2's boss, which is the one that cannot be killed: its level is won
     // by reaching the exit while it strafes the player and its claw eats the
@@ -143,10 +148,10 @@ struct Level {
     // own light, hurt only by a barrel bomb its own fireball sets off, and the
     // holder of the only key its level has.
     DarkDragon::State darkDragon;
-    // What a boss put back mid-fight (addEntityIfItCantBeFound): 4-32's barrel
-    // bombs, each built from the placed one at `barrel_spawn` and entered in
-    // `built` under a name of its own, and in Fire and the portals as the placed
-    // one is.
+    // What a boss put back mid-fight (addEntityIfItCantBeFound): the barrel bombs
+    // of 3-32 and 4-32, each built at `barrel_spawn` - from 4-32's placed barrel, or
+    // from the port's template table for 3-32, which places none - and entered in
+    // `built` under a name of its own, and in Fire and the portals as a placed one is.
     Restock::State restock;
     // Chapter 4's torches, and the wall of light one of them drops.
     Torch::State torch;

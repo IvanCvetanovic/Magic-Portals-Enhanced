@@ -11688,9 +11688,10 @@ void TheBlackKnightsLandingMakesNoTremble() {
 // behind the level's z-0 art - and black at alpha 0.667 from its first callback,
 // the tick after, which also starts the boss's music and adds the dark puffs that
 // chase it in. Then the fight, driven as a player drives it: the fire diamond
-// carried, taps at the ghost that become fireballs, a shot of its own with the
-// three entities its calls add, the raging face at alpha 0.5, and at the end the
-// key it drops - the level's only one - drawn as the key.ent the script adds.
+// carried, taps that become fireballs onto the barrels it puts back (step 117), a
+// shot of its own with the three entities its calls add, the raging face at alpha
+// 0.5, and at the end the key it drops - the level's only one - drawn as the key.ent
+// the script adds.
 void TheGhostComesWithItsKnightsDeath() {
     if (!OriginalArtIsThere("TheGhostComesWithItsKnightsDeath")) return;
     MagicPortals::Art::Rules art;
@@ -11832,23 +11833,39 @@ void TheGhostComesWithItsKnightsDeath() {
     }
     CHECK_MSG(level.diamonds.carrierHasFire, "the player carries the fire diamond");
     // Just short of the red line at 262 and right of the gutter's steam (x 235-245,
-    // which would take the diamond): the ghost at 488 is a few units off the view's
-    // right edge from here, so the tap is on the way to it, and the fireball flies on.
+    // which would take the diamond), where the ghost does not shoot.
     const glm::dvec2 pocket(258.0, 200.0);
+    // A BARREL's blast is the one thing that burns it (planning step 117; a fireball
+    // passes through it): the barrel it puts back itself on its beat, set down where
+    // 3-32's route sets one off - on the floor past the ghost, (590, 205), outside
+    // F15's 128 x 139 box and within the grabber's 80 of the ghost's - and a tap
+    // along the floor from the pocket. Its fireball flies on UNDER
+    // double_block_plat_low_emissive_ent_1257 (294-422, y 144-176), through the
+    // ghost, and onto the barrel, which goes off.
+    const glm::dvec2 barrelSpot(590.0, 205.0);
+    const auto standingBarrel = [&]() {
+        for (const MagicPortals::Restock::Added& added : level.restock.added) {
+            if (registry.valid(added.body)) return added.body;
+        }
+        return entt::entity{entt::null};
+    };
     const auto burnIt = [&]() {
         const int hitsBefore = level.ghost.hits;
         for (int attempt = 0; attempt < 4 && level.ghost.hits == hitsBefore; ++attempt) {
+            // Its next beat puts one back, when none stands.
+            for (int tick = 0; tick < 240 && standingBarrel() == entt::null; ++tick) {
+                PutBodyAt(registry, level.player, pocket);
+                step();
+            }
+            const entt::entity barrel = standingBarrel();
+            if (barrel == entt::null) continue;
             for (int tick = 0; tick < 30; ++tick) {
+                PutBodyAt(registry, barrel, barrelSpot);
                 PutBodyAt(registry, level.player, pocket);
                 step();
             }
             PutBodyAt(registry, level.player, pocket);
-            // UNDER double_block_plat_low_emissive_ent_1257 (294-422, y 144-176), not at
-            // the ghost: since planning step 114 the fireball dies on the first solid
-            // thing it touches, and the straight line from the pocket to ghost_pos meets
-            // that platform's underside at x ~375, 113 u short. Along y ~192 it passes
-            // under the platform and comes within the ghost's 64 at x ~436.
-            const glm::dvec2 aim(440.0, 192.0);
+            const glm::dvec2 aim(440.0, 202.0);
             frame(screenOf(registry, aim), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
             for (int tick = 0; tick < 240 && level.ghost.hits == hitsBefore; ++tick) {
                 PutBodyAt(registry, level.player, pocket);
@@ -11858,7 +11875,7 @@ void TheGhostComesWithItsKnightsDeath() {
         return level.ghost.hits > hitsBefore;
     };
     const bool burned = burnIt();
-    CHECK_MSG(burned, "a tap at the ghost with the fire diamond carried burns it: " + lastFailure(layer));
+    CHECK_MSG(burned, "a barrel it put back, set off by the fire diamond's fireball, burns it: " + lastFailure(layer));
     if (!burned) return;
     // DAMAGE, then RAGE_MODE: the raging face, cell 3, at alpha 0.5.
     for (int tick = 0; tick < 300 && level.ghost.phase != MagicPortals::Ghost::Phase::Rage; ++tick) {
