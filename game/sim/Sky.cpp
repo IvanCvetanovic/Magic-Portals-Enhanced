@@ -216,4 +216,176 @@ void Advance(const Rules& rules, Controller& sky, double dtS) {
     }
 }
 
+// ---- SpaceSky ---------------------------------------------------------------
+
+bool LoadSpaceRules(const std::string& path, SpaceRules& out, std::string& error) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        error = path + ": cannot read";
+        return false;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    const std::string content = text.str();
+    Json::Parser parser(content);
+    Json::Value root;
+    if (!parser.Parse(root)) {
+        error = path + ": " + parser.Error();
+        return false;
+    }
+    const Json::Value& block = root["space_sky"];
+    const auto number = [&](const char* key, double& into) -> bool {
+        if (!block.Has(key) || !block[key].IsNumber()) {
+            error = path + ": space_sky." + key + " is missing or not a number";
+            return false;
+        }
+        into = block[key].AsNumber();
+        return true;
+    };
+    const auto string = [&](const char* key, std::string& into) -> bool {
+        if (!block.Has(key) || !block[key].IsString() || block[key].AsString().empty()) {
+            error = path + ": space_sky." + key + " is missing, not a string or empty";
+            return false;
+        }
+        into = block[key].AsString();
+        return true;
+    };
+    const auto pair = [&](const char* key, glm::dvec2& into) -> bool {
+        const Json::Value& value = block[key];
+        if (!value.IsArray() || value.AsArray().size() != 2 || !value.AsArray()[0].IsNumber() ||
+            !value.AsArray()[1].IsNumber()) {
+            error = path + ": space_sky." + key + " is not two numbers";
+            return false;
+        }
+        into = glm::dvec2(value.AsArray()[0].AsNumber(), value.AsArray()[1].AsNumber());
+        return true;
+    };
+
+    SpaceRules read;
+    double startAngle = 0.0;
+    double updateStartAngle = 0.0;
+    if (!string("planet_name", read.planetName) || !string("spiral_name", read.spiralName) ||
+        !string("sky_name", read.skyName) || !string("eclipse_name", read.eclipseName) ||
+        !number("spiral_diagonal_scale", read.spiralDiagonalScale) || !pair("spiral_pitch", read.spiralPitch) ||
+        !number("spiral_turn_deg_per_s", read.spiralTurnDegPerS) ||
+        !string("spiral_colour_key", read.spiralColourKey) ||
+        !number("spiral_colour_default", read.spiralColourDefault) || !pair("sky_pitch", read.skyPitch) ||
+        !pair("planet_pitch", read.planetPitch) || !number("planet_speed", read.planet.speed) ||
+        !number("planet_stride", read.planet.stride) || !number("planet_axis_deg", read.planet.axisDeg) ||
+        !number("planet_start_angle_rad", startAngle) ||
+        !number("planet_update_start_angle_rad", updateStartAngle) ||
+        !number("eclipse_pitch_x", read.eclipsePitchX)) {
+        return false;
+    }
+    if (!block["planet_vertical"].IsBool()) {
+        error = path + ": space_sky.planet_vertical is missing or not true or false";
+        return false;
+    }
+    read.planet.vertical = block["planet_vertical"].AsBool();
+    // The constructor's call is the planet's first, so its start angle is the one
+    // that counts; update's is read by no call and is carried only as decoded.
+    read.planet.startFrom = startAngle;
+    read.planet.startTo = startAngle;
+    read.planet.entities = {read.planetName};
+    // A spiral of no size is not drawn, and a colour of 0 adds nothing: either
+    // would draw a space level with its spiral gone and say nothing.
+    if (!(read.spiralDiagonalScale > 0.0) || !(read.spiralColourDefault > 0.0)) {
+        error = path + ": space_sky.spiral_diagonal_scale and space_sky.spiral_colour_default are above zero";
+        return false;
+    }
+    out = std::move(read);
+    return true;
+}
+
+bool BuildSpace(const SpaceRules& rules, const Rules& skyRules, const Motion::Rules& motion,
+                const Tscn::Scene& scene, const glm::dvec2& viewPx, double constructorFrameMs, Space& out,
+                std::string& error) {
+    Space built;
+    // Game::preLoop's branch, the other side of Build's: the first `properties`,
+    // and space_bg's presence alone.
+    for (const Tscn::Node& node : scene.nodes) {
+        if (node.parent != "." || Roles::EntityName(node) != skyRules.propertiesEntity) continue;
+        built.running = node.Meta(skyRules.spaceBgKey) != nullptr;
+        break;
+    }
+    if (!built.running) {
+        out = Space{};
+        return true;
+    }
+    // SeekEntity(name) for each, an exact == on the entity's name. The original
+    // walks its buckets and the port the file; no level places two of any.
+    const auto seek = [&scene](const std::string& name) -> const Tscn::Node* {
+        for (const Tscn::Node& node : scene.nodes) {
+            if (node.parent == "." && Roles::EntityName(node) == name) return &node;
+        }
+        return nullptr;
+    };
+    if (const Tscn::Node* sky = seek(rules.skyName)) built.skyNode = sky->name;
+    if (const Tscn::Node* spiral = seek(rules.spiralName)) {
+        built.spiralNode = spiral->name;
+        // scaleToSize(vector2(size, size)), size = |screen| x the factor: that side
+        // whatever the picture's own size, because Scale multiplies what it has.
+        built.spiralSidePx = glm::length(viewPx) * rules.spiralDiagonalScale;
+        built.spiralColour = rules.spiralColourDefault;
+        if (const Tscn::Value* datum = spiral->Meta(rules.spiralColourKey)) {
+            double colour = 0.0;
+            if (!datum->AsNumber(colour)) {
+                error = "the spiral " + spiral->name + "'s " + rules.spiralColourKey + " is not a number";
+                return false;
+            }
+            built.spiralColour = colour;
+        }
+        built.spiralTurn.degPerS = rules.spiralTurnDegPerS;
+    }
+    if (const Tscn::Node* planet = seek(rules.planetName)) {
+        built.planetNode = planet->name;
+        // SetFloat speed and stride, then linearMotion's first call: the start
+        // angle, and one step of the frame the constructor runs on.
+        built.planetBob = Motion::Start(rules.planet, rules.planet.startFrom);
+        Motion::Advance(motion, built.planetBob, constructorFrameMs);
+    }
+    if (const Tscn::Node* eclipse = seek(rules.eclipseName)) {
+        glm::dvec2 atPx(0.0);
+        if (PositionOf(*eclipse, atPx)) {
+            built.eclipseNode = eclipse->name;
+            built.eclipseYPx = atPx.y;
+        }
+    }
+    out = std::move(built);
+    return true;
+}
+
+void AdvanceSpace(const Motion::Rules& motion, Space& space, const glm::dvec2& viewCentrePx, const glm::dvec2& viewPx,
+                  double frameMs) {
+    if (!space.running) return;
+    // update's order: the planet, the sky, the spiral, the eclipse. Only the
+    // planet's step, the spiral's turn and the eclipse's y carry anything over.
+    if (!space.planetNode.empty()) Motion::Advance(motion, space.planetBob, frameMs);
+    if (!space.spiralNode.empty()) Motion::Advance(motion, space.spiralTurn, frameMs);
+    // #181-218: its own y plus the corner's y, every frame, so under a camera whose
+    // corner is not at y 0 it walks off. 4-19, the one level with an eclipse, shows
+    // its whole 256 u height, so there the corner's y is 0.
+    if (!space.eclipseNode.empty()) space.eclipseYPx += (viewCentrePx - viewPx * 0.5).y;
+}
+
+glm::dvec2 SpaceSkyPx(const SpaceRules& rules, const glm::dvec2& viewCentrePx, const glm::dvec2& viewPx) {
+    return viewCentrePx - viewPx * 0.5 + viewPx * rules.skyPitch;
+}
+
+glm::dvec2 SpiralPx(const SpaceRules& rules, const glm::dvec2& viewCentrePx, const glm::dvec2& viewPx) {
+    return viewCentrePx - viewPx * 0.5 + viewPx * rules.spiralPitch;
+}
+
+glm::dvec2 PlanetPx(const SpaceRules& rules, const Space& space, const glm::dvec2& viewCentrePx,
+                    const glm::dvec2& viewPx) {
+    // originalPos rewritten to the pin, then linearMotion puts it there plus its bob.
+    return viewCentrePx - viewPx * 0.5 + viewPx * rules.planetPitch + Motion::OffsetPx(space.planetBob);
+}
+
+glm::dvec2 EclipsePx(const SpaceRules& rules, const Space& space, const glm::dvec2& viewCentrePx,
+                     const glm::dvec2& viewPx) {
+    const glm::dvec2 corner = viewCentrePx - viewPx * 0.5;
+    return glm::dvec2(corner.x + viewPx.x * rules.eclipsePitchX, space.eclipseYPx);
+}
+
 } // namespace MagicPortals::Sky

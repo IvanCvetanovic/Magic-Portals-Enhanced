@@ -317,6 +317,9 @@ public:
     // The level's camera-pinned sky (sim/Sky.hpp), as the level's art built it:
     // not running on a space level, or where the art was not read.
     const Sky::Controller& SkyController() const { return m_sky; }
+    // And the space levels' (sim/Sky.hpp SpaceSky): not running off them.
+    const Sky::Space& SpaceController() const { return m_space; }
+    const Sky::SpaceRules& SpaceSkyRules() const { return m_spaceRules; }
 
     // THE EARTHQUAKE (sim/Earthquake.hpp, earthquake.json): the original's one
     // camera shake. The generator as the last tick left it, and the move it gave
@@ -1226,6 +1229,10 @@ private:
         glm::dvec3 emissive{0.0}; // the thrown .ent's, from launchers.json
     };
 
+    // SpaceSky's four (sim/Sky.hpp): the space sky, the spiral, the planet and the
+    // eclipse.
+    enum class SpaceRole { None, Sky, Spiral, Planet, Eclipse };
+
     // One of the level's sprites as a textured quad, and what it follows: the
     // crystal, static portal or no-portal zone it pictures, or else its node's
     // body. Scenery follows nothing.
@@ -1273,6 +1280,8 @@ private:
         int zone{-1};         // in portals.zones
         int sky{-1};          // in m_sky.skies: pinned to the camera, not where the level put it
         bool satellite{false}; // m_sky's satellite, pinned the same way
+        // Which of SpaceSky's four it is, each moved from the camera every frame.
+        SpaceRole space{SpaceRole::None};
         int motion{-1};       // in m_motions: a crystal or key its script bobs
         bool antiportal{false}; // ETHCallback_antiportal blinks and turns it (art.json)
         int placed{-1};       // in m_placed: a picture its own callback sways, fades or turns
@@ -1644,6 +1653,8 @@ private:
     Sky::Rules m_skyRules;                  // the port's sky.json
     Tiers::Rules m_tierRules;               // the port's tiers.json: which file of a level's image is drawn
     Sky::Controller m_sky;                  // the level's StaticSky, built with its sprites
+    Sky::SpaceRules m_spaceRules;           // the port's sky.json, space_sky
+    Sky::Space m_space;                     // the level's SpaceSky, on the 19 space_bg levels
     Motion::Rules m_motionRules;            // the port's motions.json
     Effects::Rules m_effectRules;           // the port's effects.json: the calls that add an entity
     // One per crystal and key whose picture is drawn, in the level's drawing order

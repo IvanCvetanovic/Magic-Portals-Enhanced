@@ -267,6 +267,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Camera::LoadViewHeight(m_paths.portData + "/view.json", m_viewHeightPx, error) &&
                       Art::LoadRules(m_paths.portData + "/art.json", m_artRules, error) &&
                       Sky::LoadRules(m_paths.portData + "/sky.json", m_skyRules, error) &&
+                      Sky::LoadSpaceRules(m_paths.portData + "/sky.json", m_spaceRules, error) &&
                       Tiers::LoadRules(m_paths.portData + "/tiers.json", m_tierRules, error) &&
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
                       Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
@@ -3741,6 +3742,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     m_artError.clear();
     m_sign = NoPortalSign{};
     m_sky = Sky::Controller{};
+    m_space = Sky::Space{};
     m_dragonSprite = -1;
     m_clawSprite = -1;
     m_dragonCut = Tiers::Cut{};
@@ -3824,6 +3826,30 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     if (std::string why; !Sky::Build(m_skyRules, m_data.scene, sprites, m_viewHeightPx, m_sky, why)) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "the sky is drawn where the level put it: " << why << std::endl;
         m_sky = Sky::Controller{};
+    }
+    // AND ON A SPACE LEVEL, SPACESKY (sim/Sky.hpp, sky.json space_sky): the space
+    // sky, the spiral, the planet and the eclipse, each moved from the camera every
+    // frame. The spiral is scaled to the diagonal of the screen as it is now - the
+    // constructor's GetScreenSize - which is read here, where m_aspect may still be
+    // the last level's. Its constructor's linearMotion call steps the planet by the
+    // frame before the level's first update, taken as one tick.
+    {
+        const glm::dvec2 view(m_viewHeightPx * static_cast<double>(viewportAspect(registry)), m_viewHeightPx);
+        if (std::string why;
+            !Sky::BuildSpace(m_spaceRules, m_skyRules, m_motionRules, m_data.scene, view,
+                             static_cast<double>(kTick) * 1000.0, m_space, why)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "the space sky is drawn where the level put it: " << why
+                                                 << std::endl;
+            m_space = Sky::Space{};
+        } else if (m_space.running) {
+            SUPERSONIC_LOG_INFO("Magic Portals")
+                << "space sky: " << (m_space.skyNode.empty() ? "no sky" : m_space.skyNode) << ", "
+                << (m_space.spiralNode.empty() ? std::string("no spiral")
+                                               : m_space.spiralNode + " " + std::to_string(m_space.spiralSidePx) +
+                                                     " u colour " + std::to_string(m_space.spiralColour))
+                << ", " << (m_space.planetNode.empty() ? "no planet" : m_space.planetNode) << ", "
+                << (m_space.eclipseNode.empty() ? "no eclipse" : m_space.eclipseNode) << std::endl;
+        }
     }
     // THE PLAYER'S SLOT: after every sprite at or below its depth, which it was
     // added after (R10, art.json character.z). At 4 / 2.8125 = 1.42 in the level's
@@ -4083,6 +4109,17 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             }
             drawn.satellite = m_sky.hasSatellite && m_sky.satelliteNode == sprite.node;
         }
+        if (m_space.running) {
+            if (sprite.node == m_space.skyNode) drawn.space = SpaceRole::Sky;
+            if (sprite.node == m_space.spiralNode) drawn.space = SpaceRole::Spiral;
+            if (sprite.node == m_space.planetNode) drawn.space = SpaceRole::Planet;
+            if (sprite.node == m_space.eclipseNode) drawn.space = SpaceRole::Eclipse;
+            // SpaceSky's SetColor(c, c, c) on the spiral, once: the rgb, over the look's,
+            // with its alpha kept (ETHEntity.cpp:493-498).
+            if (drawn.space == SpaceRole::Spiral) {
+                drawn.colour = glm::vec4(glm::vec3(static_cast<float>(m_space.spiralColour)), drawn.colour.a);
+            }
+        }
         if (const auto body = m_level.built.entities.find(sprite.node); body != m_level.built.entities.end()) {
             drawn.body = body->second;
             // Bodies move on the tick and are drawn between ticks, as their boxes are.
@@ -4092,7 +4129,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             // Carried on the tick, as a body is moved, and drawn between ticks.
             registry.emplace_or_replace<InterpolatedTransformComponent>(drawn.quad);
         }
-        if (drawn.sky >= 0 || drawn.satellite) {
+        if (drawn.sky >= 0 || drawn.satellite || drawn.space != SpaceRole::None) {
             // Placed on the tick from the camera the tick left, and drawn between
             // ticks as the camera is: both interpolate with the same alpha, so
             // the sky keeps its place on the screen on the frames between.
@@ -4605,6 +4642,34 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         } else if (drawn.satellite) {
             ownerPx = Sky::SatellitePx(m_sky, m_follow.centrePx, ViewPx());
             centrePx += ownerPx - sprite.atPx;
+        } else if (drawn.space != SpaceRole::None) {
+            // Where SpaceSky::update puts its entity from this tick's camera, whatever
+            // the level said, the picture hanging off it by its own offset: the planet's
+            // 60 u up, the eclipse's 30. The spiral is the square scaleToSize made and
+            // turned by what AddToAngle has added, about its own point (its pivot is 0).
+            const glm::dvec2 view = ViewPx();
+            switch (drawn.space) {
+            case SpaceRole::Sky:
+                ownerPx = Sky::SpaceSkyPx(m_spaceRules, m_follow.centrePx, view);
+                break;
+            case SpaceRole::Spiral: {
+                ownerPx = Sky::SpiralPx(m_spaceRules, m_follow.centrePx, view);
+                sizePx = glm::dvec2(m_space.spiralSidePx);
+                const double turnedRad = m_space.spiralTurn.turnedDeg * 3.14159265358979323846 / 180.0;
+                rotation = Units::ToWorldRotation(sprite.rotation - turnedRad);
+                ownerAngleDeg += m_space.spiralTurn.turnedDeg;
+                break;
+            }
+            case SpaceRole::Planet:
+                ownerPx = Sky::PlanetPx(m_spaceRules, m_space, m_follow.centrePx, view);
+                break;
+            case SpaceRole::Eclipse:
+                ownerPx = Sky::EclipsePx(m_spaceRules, m_space, m_follow.centrePx, view);
+                break;
+            case SpaceRole::None:
+                break;
+            }
+            centrePx += ownerPx - sprite.atPx;
         } else if (drawn.crystal >= 0) {
             // A timed crystal does not fade: the original goes at its time, and
             // counts it down on the dial behind it (syncTimers).
@@ -4860,6 +4925,10 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
     // angle because the original steps all three in that one loop with that one
     // frame. It runs whether or not the level has a glow or a background to bob.
     if (m_doorBobRuns) Motion::Advance(m_motionRules, m_doorBob, frameMs);
+    // AND SPACESKY'S UPDATE on a space level (sky.json space_sky), from the camera
+    // this tick left: the planet's linearMotion step, the spiral's AddToAngle and
+    // the eclipse's y, before the pictures are placed from them.
+    Sky::AdvanceSpace(m_motionRules, m_space, m_follow.centrePx, ViewPx(), frameMs);
     // A key no node pictures bobs as a level key does: ETHCallback_key while no one
     // carries it and it has not found its keyhole.
     for (DroppedKey& dropped : m_droppedKeys) {
@@ -8368,7 +8437,13 @@ void MagicPortalsLayer::shakeView(entt::registry& registry) {
     // generator has moved it (Game::preLoop #281-287 against #272-279), so they
     // go with the camera and stay where they were on the screen.
     for (const DrawnSprite& drawn : m_sprites) {
-        if ((drawn.sky < 0 && !drawn.satellite) || drawn.quad == entt::null || !registry.valid(drawn.quad)) continue;
+        // SpaceSky's four with them, from the same GetCameraPos: the eclipse's y as
+        // well, whose frame adds the shaken corner's y (sim/Sky.hpp) - drawn here, and
+        // not kept, as step 153 records.
+        if ((drawn.sky < 0 && !drawn.satellite && drawn.space == SpaceRole::None) || drawn.quad == entt::null ||
+            !registry.valid(drawn.quad)) {
+            continue;
+        }
         if (auto* transform = registry.try_get<TransformComponent>(drawn.quad)) {
             m_quakeDrawn.quads.emplace_back(drawn.quad, transform->position.y);
             transform->position.y += dy;

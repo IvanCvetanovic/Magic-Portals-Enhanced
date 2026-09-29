@@ -54,11 +54,13 @@
 #include "sim/Lighting.hpp"
 #include "sim/Loading.hpp"
 #include "sim/MainMenu.hpp"
+#include "sim/Motion.hpp"
 #include "sim/Particles.hpp"
 #include "sim/MenuState.hpp"
 #include "sim/Pause.hpp"
 #include "sim/Popup.hpp"
 #include "sim/Selector.hpp"
+#include "sim/Sky.hpp"
 #include "sim/UiLayer.hpp"
 #include "sim/Units.hpp"
 
@@ -5368,6 +5370,167 @@ void TheSkyStaysOnTheViewAsTheCameraMoves() {
     CHECK_EQ(ticksOff, 0);
     CHECK_EQ(framesOff, 0);
     layer.OnDetach(registry);
+}
+
+// SPACESKY (sim/Sky.hpp, step 153) on 4-03, level2c, which opens on its player with
+// the camera's centre at x 284.4, the level's right edge - 28.4 u right of the 256
+// the level puts all three at. The space sky is the view's centre, and the spiral
+// and the planet's point its bottom-centre, on every tick and on every frame drawn
+// between ticks; the spiral is the view's diagonal wide, coloured 0.7 and turned
+// 1.7 degrees a second clockwise; the planet hangs 60 u above its point by its
+// pivot, with its bob; and all three go with a shaken camera. Drawn where the
+// level put them - (256, 128) and (256, 256), a 256 u spiral - every check fails.
+// Then 4-19, level18c, the one eclipse: across at the view's centre, and down at
+// its own 320 (drawn 30 u up), which the corner's y of 0 leaves where it is.
+void TheSpaceSkyStaysOnTheViewAsTheCameraMoves() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level2c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    const MagicPortals::Sky::Space& space = layer.SpaceController();
+    CHECK_MSG(space.running && space.skyNode == "space_sky_2061" && space.spiralNode == "spiral_2062" &&
+                  space.planetNode == "planet_bg_ent_2074" && space.eclipseNode.empty(),
+              "level2c builds SpaceSky: its space sky, spiral and planet, and no eclipse");
+    CHECK_MSG(!layer.SkyController().running, "and no StaticSky");
+    const auto quadOf = [&registry](const std::string& file) {
+        entt::entity quad = entt::null;
+        for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+            if (tag.tag == "Magic Portals Sprite" && material.albedoTexturePath.find(file) != std::string::npos) {
+                quad = entity;
+            }
+        }
+        return quad;
+    };
+    const entt::entity sky = quadOf("/space_bg.png");
+    const entt::entity spiral = quadOf("/spiral.png");
+    const entt::entity planet = quadOf("/planet_bg.png");
+    CHECK(sky != entt::null && spiral != entt::null && planet != entt::null);
+    if (sky == entt::null || spiral == entt::null || planet == entt::null) return;
+    for (const entt::entity quad : {sky, spiral, planet}) {
+        CHECK_MSG(registry.all_of<InterpolatedTransformComponent>(quad), "interpolated, as the camera is");
+    }
+    const glm::dvec2 view = layer.ViewPx();
+    const double diagonal = glm::length(view);
+    CHECK_MSG(std::fabs(space.spiralSidePx - diagonal) < 1e-9 && std::fabs(diagonal - 522.2) < 0.05,
+              "the spiral's side is the view's diagonal: " + std::to_string(space.spiralSidePx));
+    const glm::vec3 spiralScale = registry.get<TransformComponent>(spiral).scale;
+    CHECK_MSG(std::fabs(spiralScale.x - MagicPortals::Units::ToMetres(diagonal)) < 1e-4f &&
+                  spiralScale.x == spiralScale.y,
+              "and so is its quad: " + std::to_string(spiralScale.x) + " x " + std::to_string(spiralScale.y) + " m");
+    const glm::vec4 colour = registry.get<MaterialComponent>(spiral).albedoColor;
+    CHECK_MSG(colour.r == 0.7f && colour.g == 0.7f && colour.b == 0.7f,
+              "SetColor(0.7, 0.7, 0.7): " + std::to_string(colour.r));
+
+    // Offsets from the camera, in the world's metres (y up): the bottom-centre is
+    // half a view below the centre, and the planet's picture 60 u above that.
+    const float half = MagicPortals::Units::ToMetres(view.y * 0.5);
+    const auto offset = [&registry](entt::entity quad, const glm::vec3& camera) {
+        const glm::vec3 at = registry.get<TransformComponent>(quad).position;
+        return glm::vec2(at.x - camera.x, at.y - camera.y);
+    };
+    const auto near = [](const glm::vec2& a, const glm::vec2& b) {
+        return std::fabs(a.x - b.x) <= 1e-5f && std::fabs(a.y - b.y) <= 1e-5f;
+    };
+    const double startX = layer.CameraCentrePx().x;
+    CHECK_MSG(std::fabs(startX - 256.0) > 20.0, "the camera is not where the level put the sky: " + std::to_string(startX));
+    int ticksOff = 0, framesOff = 0, frames = 0, planetOff = 0;
+    for (int tick = 0; tick < 240; ++tick) {
+        InterpolationSystem::BeginTick(registry);
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight},
+                 tick == 0 ? std::vector<std::string>{MagicPortalsLayer::kRight} : std::vector<std::string>{});
+        InterpolationSystem::EndTick(registry);
+        if (layer.MenuScreen() != MagicPortalsLayer::Screen::None) break;
+        const glm::vec3 camera = registry.get<CameraComponent>(primaryCamera(registry)).position;
+        if (!near(offset(sky, camera), {0.0f, 0.0f}) || !near(offset(spiral, camera), {0.0f, -half})) ++ticksOff;
+        // The planet's point is the bottom-centre plus its bob; its picture 60 u up.
+        const double bob = MagicPortals::Motion::OffsetPx(space.planetBob).y;
+        const glm::vec2 planetWant(0.0f, -half + MagicPortals::Units::ToMetres(60.0 - bob));
+        if (!near(offset(planet, camera), planetWant)) ++planetOff;
+        for (int f = 1; f <= 4; ++f) {
+            InterpolationSystem::Apply(registry, static_cast<float>(f) / 4.0f);
+            ++frames;
+            const glm::vec3 drawn = registry.get<CameraComponent>(primaryCamera(registry)).position;
+            if (!near(offset(sky, drawn), {0.0f, 0.0f}) || !near(offset(spiral, drawn), {0.0f, -half})) ++framesOff;
+        }
+    }
+    const double turned = layer.SpaceController().spiralTurn.turnedDeg;
+    std::printf("  level2c: camera %.1f -> %.1f px; sky or spiral off on %d tick(s) and %d of %d frame(s), planet off "
+                "on %d tick(s); spiral turned %.3f deg\n",
+                startX, layer.CameraCentrePx().x, ticksOff, framesOff, frames, planetOff, turned);
+    CHECK_EQ(ticksOff, 0);
+    CHECK_EQ(framesOff, 0);
+    CHECK_EQ(planetOff, 0);
+    // 240 ticks at -1.7 degrees a second (the tick is the float 1/60), and the quad
+    // turned by it: clockwise on the screen, a negative turn about the world's +z.
+    CHECK_MSG(std::fabs(turned - (-1.7 * 4.0)) < 1e-5, "turned " + std::to_string(turned) + " degrees");
+    InterpolationSystem::Apply(registry, 1.0f);
+    const float spun = registry.get<TransformComponent>(spiral).rotation.z;
+    CHECK_MSG(std::fabs(spun - static_cast<float>(-6.8 * 3.14159265358979323846 / 180.0)) < 1e-5f,
+              "the quad's turn: " + std::to_string(spun) + " rad");
+
+    // THE SHAKE: a tremble moves the drawn camera, and all three with it (to a float's
+    // rounding: each quad adds the same metres to a different y).
+    layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
+    bool held = true;
+    int trembles = 0;
+    float worst = 0.0f;
+    for (int tick = 0; tick < 12; ++tick) {
+        InterpolationSystem::BeginTick(registry);
+        tickWith(layer, registry, kRest, {}, {});
+        InterpolationSystem::EndTick(registry);
+        InterpolationSystem::Apply(registry, 1.0f);
+        const float cameraY = registry.get<CameraComponent>(primaryCamera(registry)).position.y;
+        const float skyY = registry.get<TransformComponent>(sky).position.y;
+        const float spiralY = registry.get<TransformComponent>(spiral).position.y;
+        const float planetY = registry.get<TransformComponent>(planet).position.y;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const float move = registry.get<CameraComponent>(primaryCamera(registry)).position.y - cameraY;
+        if (move != 0.0f) ++trembles;
+        for (const auto& [quad, before] : {std::pair{sky, skyY}, std::pair{spiral, spiralY}, std::pair{planet, planetY}}) {
+            const float off = std::fabs(registry.get<TransformComponent>(quad).position.y - (before + move));
+            worst = std::max(worst, off);
+            held = held && off <= 1e-5f;
+        }
+    }
+    CHECK_MSG(trembles >= 2, "the light wall's call trembled: " + std::to_string(trembles));
+    CHECK_MSG(held, "the space sky, the spiral and the planet go with the shaken camera; worst " + std::to_string(worst));
+    layer.OnDetach(registry);
+
+    entt::registry eclipseRegistry;
+    publishViewport(eclipseRegistry);
+    MagicPortalsLayer eclipseLevel(TestPaths(), "level18c");
+    eclipseLevel.OnAttach(eclipseRegistry);
+    if (!eclipseLevel.LoadError().empty() || !eclipseLevel.ArtError().empty()) {
+        CHECK_MSG(false, eclipseLevel.LoadError() + eclipseLevel.ArtError());
+        return;
+    }
+    CHECK(eclipseLevel.SpaceController().eclipseNode == "eclipse_ent_2583");
+    entt::entity eclipse = entt::null;
+    for (auto [entity, tag, material] : eclipseRegistry.view<TagComponent, MaterialComponent>().each()) {
+        if (tag.tag == "Magic Portals Sprite" && material.albedoTexturePath.find("/eclipse.png") != std::string::npos) {
+            eclipse = entity;
+        }
+    }
+    CHECK(eclipse != entt::null);
+    if (eclipse == entt::null) return;
+    bool pinned = true;
+    for (int tick = 0; tick < 60; ++tick) {
+        tickWith(eclipseLevel, eclipseRegistry, kRest, {}, {});
+        const glm::dvec2 centre = eclipseLevel.CameraCentrePx();
+        const glm::vec3 want = MagicPortals::Units::ToWorld(centre.x, 320.0 - 30.0);
+        const glm::vec3 at = eclipseRegistry.get<TransformComponent>(eclipse).position;
+        pinned = pinned && std::fabs(at.x - want.x) <= 1e-5f && std::fabs(at.y - want.y) <= 1e-5f &&
+                 eclipseLevel.SpaceController().eclipseYPx == 320.0;
+    }
+    CHECK_MSG(std::fabs(eclipseLevel.CameraCentrePx().x - 256.0) > 1.0 && eclipseLevel.CameraCentrePx().y == 128.0,
+              "4-19's camera is off the level's 256 across, and its corner at y 0: " +
+                  Point(eclipseLevel.CameraCentrePx()));
+    CHECK_MSG(pinned, "the eclipse across the view's centre and at its own 320 on every tick");
+    eclipseLevel.OnDetach(eclipseRegistry);
 }
 
 // ---- THE EARTHQUAKE (planning step 101) ------------------------------------------
@@ -15690,6 +15853,7 @@ void runTests() {
     TheHudIsTheOriginals();
     TheHudStaysOnTheViewAsTheCameraMoves();
     TheSkyStaysOnTheViewAsTheCameraMoves();
+    TheSpaceSkyStaysOnTheViewAsTheCameraMoves();
     AClearPortalsButtonComesWithAPortal();
     APlaqueForALevelWithAMedal();
     TheTutorialRingsAndAWeightlessLevelHasNoPads();

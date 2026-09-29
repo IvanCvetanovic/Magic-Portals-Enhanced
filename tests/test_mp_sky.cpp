@@ -14,7 +14,12 @@
 //   the strip    the t-indexed arithmetic of a scrolling strip, its end pivots, and
 //                its scroll: moved after the frame's positions, capped at 200 ms a
 //                frame, back to 0 once it has run a whole width.
-//   space        a level carrying space_bg at all builds no StaticSky.
+//   space        a level carrying space_bg at all builds no StaticSky, and builds
+//                SpaceSky instead (step 153): the space sky at the view's centre,
+//                the spiral at its bottom-centre as wide as its diagonal, coloured
+//                0.7 or its alpha and turned -1.7 degrees a second, the planet's
+//                bob, and the eclipse's y adding the corner's; and the census of
+//                the four over the 19 space levels.
 //   the census   over the 128 converted levels: 95 one sky, 19 space, 13 neither,
 //                one satellite alone; no sky scrolls; every sky's scale is 1.
 //   the tier     a sky is drawn from the file the original draws (tiers.json,
@@ -28,6 +33,7 @@
 
 #include "TestHarness.hpp"
 
+#include "sim/Motion.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Sky.hpp"
 #include "sim/Sprites.hpp"
@@ -40,6 +46,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -453,6 +460,241 @@ texture = ExtResource("tex_0")
     }
 }
 
+// ---- SpaceSky (planning step 153) -------------------------------------------
+//
+// The 19 space levels' sky, sky.json space_sky: the space sky at the view's
+// centre at its own size; the spiral at the bottom-centre, a square as wide as
+// the view's diagonal, coloured 0.7 (or its `alpha`) and turned 1.7 degrees a
+// second clockwise; the planet at the bottom-centre, bobbing 1 u from PI at 0.5
+// radians a second; the eclipse at the view's centre across and its own y plus
+// the corner's y down. The original's frames put the spiral's centre, side and
+// turn, the sky's centre and the planet's centre where these say (step 153).
+
+Motion::Rules TheMotions() {
+    Motion::Rules rules;
+    std::string error;
+    CHECK_MSG(Motion::LoadRules(kPortData + "/motions.json", rules, error), error);
+    return rules;
+}
+
+Sky::SpaceRules TheSpaceRules() {
+    Sky::SpaceRules rules;
+    std::string error;
+    CHECK_MSG(Sky::LoadSpaceRules(kPortData + "/sky.json", rules, error), error);
+    return rules;
+}
+
+// A space level's four, where 4-19 (level18c) puts them, under its properties.
+Tscn::Scene SpaceScene(bool withAlpha) {
+    Tscn::Scene scene;
+    scene.nodes.push_back(Entity("properties_1", "properties", {31.0, 24.0}));
+    Meta(scene.nodes[0], "space_bg", "1");
+    scene.nodes.push_back(Entity("spiral_2062", "spiral", {256.0, 256.0}));
+    if (withAlpha) Meta(scene.nodes[1], "alpha", "0.6");
+    scene.nodes.push_back(Entity("space_sky_2061", "space_sky", {256.0, 128.0}));
+    scene.nodes.push_back(Entity("planet_bg_ent_2074", "planet_bg.ent", {256.0, 256.0}));
+    scene.nodes.push_back(Entity("eclipse_ent_2583", "eclipse.ent", {256.0, 320.0}));
+    return scene;
+}
+
+void TheSpaceRulesAreSkyJsons() {
+    const Sky::SpaceRules rules = TheSpaceRules();
+    CHECK(rules.planetName == "planet_bg.ent");
+    CHECK(rules.spiralName == "spiral");
+    CHECK(rules.skyName == "space_sky");
+    CHECK(rules.eclipseName == "eclipse.ent");
+    CHECK(rules.spiralDiagonalScale == 1.0);
+    CHECK(rules.spiralPitch == glm::dvec2(0.5, 1.0));
+    CHECK(rules.spiralTurnDegPerS == -1.7);
+    CHECK(rules.spiralColourKey == "alpha");
+    CHECK(rules.spiralColourDefault == 0.7);
+    CHECK_MSG(rules.skyPitch == glm::dvec2(0.5, 0.5), "V2_HALF");
+    CHECK(rules.planetPitch == glm::dvec2(0.5, 1.0));
+    CHECK(rules.planet.speed == 0.5 && rules.planet.stride == 1.0 && rules.planet.vertical &&
+          rules.planet.axisDeg == 0.0);
+    CHECK_MSG(rules.planet.startFrom == static_cast<double>(3.141592654f) &&
+                  rules.planet.startTo == rules.planet.startFrom,
+              "the constructor's start angle is the float PI");
+    CHECK(rules.eclipsePitchX == 0.5);
+
+    // A file with no space_sky block, and one whose spiral would have no size, are
+    // refused - and StaticSky's own loader still reads a file that has none.
+    const std::filesystem::path broken = std::filesystem::temp_directory_path() / "supersonic-test-mp-space.json";
+    std::string error;
+    Sky::SpaceRules refused;
+    {
+        std::ofstream out(broken, std::ios::binary);
+        out << R"({"static_sky": {}})";
+    }
+    CHECK_MSG(!Sky::LoadSpaceRules(broken.string(), refused, error) && error.find("space_sky") != std::string::npos,
+              "no space_sky block: " + error);
+    {
+        std::ifstream in(kPortData + "/sky.json", std::ios::binary);
+        std::ostringstream text;
+        text << in.rdbuf();
+        std::string content = text.str();
+        const std::string key = "\"spiral_diagonal_scale\": 1.0";
+        const std::size_t at = content.find(key);
+        CHECK(at != std::string::npos);
+        if (at != std::string::npos) content.replace(at, key.size(), "\"spiral_diagonal_scale\": 0.0");
+        std::ofstream out(broken, std::ios::binary | std::ios::trunc);
+        out << content;
+    }
+    error.clear();
+    CHECK_MSG(!Sky::LoadSpaceRules(broken.string(), refused, error) &&
+                  error.find("spiral_diagonal_scale") != std::string::npos,
+              "a spiral of no size is refused: " + error);
+    std::error_code ec;
+    std::filesystem::remove(broken, ec);
+}
+
+void ASpaceLevelBuildsSpaceSky() {
+    const Sky::SpaceRules rules = TheSpaceRules();
+    const Motion::Rules motion = TheMotions();
+    const double tickMs = 1000.0 / 60.0;
+    for (const bool withAlpha : {false, true}) {
+        const Tscn::Scene scene = SpaceScene(withAlpha);
+        Sky::Space space;
+        std::string error;
+        CHECK_MSG(Sky::BuildSpace(rules, TheRules(), motion, scene, kView, tickMs, space, error), error);
+        CHECK(space.running);
+        CHECK(space.skyNode == "space_sky_2061");
+        CHECK(space.spiralNode == "spiral_2062");
+        CHECK(space.planetNode == "planet_bg_ent_2074");
+        CHECK(space.eclipseNode == "eclipse_ent_2583");
+        // scaleToSize(|screen|): 522.2 u at 16:9, whatever the picture.
+        CHECK_MSG(std::fabs(space.spiralSidePx - std::sqrt(kView.x * kView.x + kView.y * kView.y)) < 1e-9 &&
+                      std::fabs(space.spiralSidePx - 522.2) < 0.05,
+                  "the spiral is the view's diagonal: " + std::to_string(space.spiralSidePx));
+        CHECK_MSG(space.spiralColour == (withAlpha ? 0.6 : 0.7),
+                  "SetColor(c, c, c), c = its alpha or 0.7: " + std::to_string(space.spiralColour));
+        CHECK(space.spiralTurn.degPerS == -1.7 && space.spiralTurn.turnedDeg == 0.0);
+        // The constructor's linearMotion call: PI, then one step of its frame.
+        CHECK_MSG(space.planetBob.started &&
+                      std::fabs(space.planetBob.angle - (static_cast<double>(3.141592654f) + 0.5 * tickMs / 1000.0)) <
+                          1e-12,
+                  "the planet's angle after the constructor: " + std::to_string(space.planetBob.angle));
+        CHECK(space.eclipseYPx == 320.0);
+    }
+    // The space levels' diagonal on another screen: 4:3, and a view twice as tall.
+    {
+        Sky::Space space;
+        std::string error;
+        CHECK(Sky::BuildSpace(rules, TheRules(), motion, SpaceScene(false), {341.0 + 1.0 / 3.0, 256.0}, tickMs,
+                              space, error));
+        CHECK_MSG(std::fabs(space.spiralSidePx - (341.0 + 1.0 / 3.0) * 1.25) < 1e-9,
+                  "4:3: " + std::to_string(space.spiralSidePx));
+    }
+    // Without space_bg nothing is SpaceSky's; "0" counts as set, as readProperties asks.
+    {
+        Tscn::Scene scene = SpaceScene(false);
+        scene.nodes[0] = Entity("properties_1", "properties", {31.0, 24.0});
+        Sky::Space space;
+        space.running = true;
+        std::string error;
+        CHECK(Sky::BuildSpace(rules, TheRules(), motion, scene, kView, tickMs, space, error));
+        CHECK_MSG(!space.running && space.spiralNode.empty(), "no space_bg, no SpaceSky");
+        Meta(scene.nodes[0], "space_bg", "0");
+        CHECK(Sky::BuildSpace(rules, TheRules(), motion, scene, kView, tickMs, space, error));
+        CHECK_MSG(space.running, "space_bg = 0 is still set");
+    }
+    // Each is sought by its exact name: a spiral.ent is not `spiral`, and a level
+    // missing any of the four builds the rest.
+    {
+        Tscn::Scene scene;
+        scene.nodes.push_back(Entity("properties_1", "properties", {31.0, 24.0}));
+        Meta(scene.nodes[0], "space_bg", "1");
+        scene.nodes.push_back(Entity("spiral_1", "spiral.ent", {256.0, 256.0}));
+        scene.nodes.push_back(Entity("planet_1", "planet_bg", {256.0, 256.0}));
+        scene.nodes.push_back(Entity("space_sky_1", "space_sky", {256.0, 128.0}));
+        Sky::Space space;
+        std::string error;
+        CHECK(Sky::BuildSpace(rules, TheRules(), motion, scene, kView, tickMs, space, error));
+        CHECK_MSG(space.running && space.skyNode == "space_sky_1" && space.spiralNode.empty() &&
+                      space.planetNode.empty() && space.eclipseNode.empty(),
+                  "only space_sky is found");
+    }
+    // A spiral whose alpha is no number is refused, naming it.
+    {
+        Tscn::Scene scene = SpaceScene(false);
+        Meta(scene.nodes[1], "alpha", "dim");
+        Sky::Space space;
+        std::string error;
+        CHECK_MSG(!Sky::BuildSpace(rules, TheRules(), motion, scene, kView, tickMs, space, error) &&
+                      error.find("spiral_2062") != std::string::npos,
+                  "an alpha that is not a number: " + error);
+    }
+}
+
+void SpaceSkyIsPinnedToTheCamera() {
+    const Sky::SpaceRules rules = TheSpaceRules();
+    const Motion::Rules motion = TheMotions();
+    Sky::Space space;
+    std::string error;
+    CHECK(Sky::BuildSpace(rules, TheRules(), motion, SpaceScene(false), kView, 1000.0 / 60.0, space, error));
+    // The view's centre at the level's corner, then panned right: every point moves
+    // with it, whatever the level said.
+    for (const glm::dvec2& camera : {kView * 0.5, glm::dvec2(540.5, 128.0), glm::dvec2(700.0, 128.0)}) {
+        const glm::dvec2 bottom = camera + glm::dvec2(0.0, kView.y * 0.5);
+        CHECK_MSG(Near(Sky::SpaceSkyPx(rules, camera, kView), camera), "the space sky at the view's centre");
+        CHECK_MSG(Near(Sky::SpiralPx(rules, camera, kView), bottom),
+                  "the spiral at the bottom-centre: " + Px(Sky::SpiralPx(rules, camera, kView)));
+        const glm::dvec2 planet = Sky::PlanetPx(rules, space, camera, kView);
+        CHECK_MSG(Near(planet, bottom + glm::dvec2(0.0, std::cos(space.planetBob.angle))),
+                  "the planet at the bottom-centre plus its bob: " + Px(planet));
+        const glm::dvec2 eclipse = Sky::EclipsePx(rules, space, camera, kView);
+        CHECK_MSG(Near(eclipse, {camera.x, 320.0}), "the eclipse across the centre, at its y: " + Px(eclipse));
+    }
+}
+
+void TheSpiralTurnsAndThePlanetBobs() {
+    const Sky::SpaceRules rules = TheSpaceRules();
+    const Motion::Rules motion = TheMotions();
+    const double tickMs = 1000.0 / 60.0;
+    Sky::Space space;
+    std::string error;
+    CHECK(Sky::BuildSpace(rules, TheRules(), motion, SpaceScene(false), kView, tickMs, space, error));
+    const double start = space.planetBob.angle;
+    // Seven seconds of ticks: -11.9 degrees, and the planet 3.5 radians on.
+    for (int tick = 0; tick < 420; ++tick) Sky::AdvanceSpace(motion, space, kView * 0.5, kView, tickMs);
+    CHECK_MSG(std::fabs(space.spiralTurn.turnedDeg - (-1.7 * 7.0)) < 1e-9,
+              "the spiral turned " + std::to_string(space.spiralTurn.turnedDeg) + " degrees");
+    CHECK_MSG(std::fabs(space.planetBob.angle - (start + 0.5 * 7.0 - motion.wrapRad)) < 1e-9,
+              "the planet's angle, a turn taken off: " + std::to_string(space.planetBob.angle));
+    const double bob = Motion::OffsetPx(space.planetBob).y;
+    CHECK_MSG(std::fabs(bob - std::cos(space.planetBob.angle)) < 1e-12 && std::fabs(bob) <= 1.0,
+              "the bob is cos(angle) x 1 u: " + std::to_string(bob));
+    // unitsPerSecond's cap: a frame of a second turns it as 200 ms does; a frame of
+    // 0 - the original's m_factor 0 - turns nothing.
+    const double turned = space.spiralTurn.turnedDeg;
+    Sky::AdvanceSpace(motion, space, kView * 0.5, kView, 1000.0);
+    CHECK_MSG(std::fabs(space.spiralTurn.turnedDeg - (turned - 1.7 * 0.2)) < 1e-9, "capped at 200 ms");
+    const double held = space.spiralTurn.turnedDeg;
+    const double heldAngle = space.planetBob.angle;
+    Sky::AdvanceSpace(motion, space, kView * 0.5, kView, 0.0);
+    CHECK(space.spiralTurn.turnedDeg == held && space.planetBob.angle == heldAngle);
+}
+
+void TheEclipseAddsTheCornersY() {
+    const Sky::SpaceRules rules = TheSpaceRules();
+    const Motion::Rules motion = TheMotions();
+    Sky::Space space;
+    std::string error;
+    CHECK(Sky::BuildSpace(rules, TheRules(), motion, SpaceScene(false), kView, 1000.0 / 60.0, space, error));
+    // 4-19's camera: the view is the level's height, so the corner's y is 0 and the
+    // eclipse holds at 320 however long it runs.
+    for (int tick = 0; tick < 600; ++tick) Sky::AdvanceSpace(motion, space, {600.0, 128.0}, kView, 1000.0 / 60.0);
+    CHECK_MSG(space.eclipseYPx == 320.0, "a corner at y 0 leaves it: " + std::to_string(space.eclipseYPx));
+    // A corner 5 u down adds 5 every frame: its own y plus the camera's, as
+    // update #181-218 writes it.
+    for (int tick = 0; tick < 3; ++tick) Sky::AdvanceSpace(motion, space, {600.0, 133.0}, kView, 1000.0 / 60.0);
+    CHECK_MSG(space.eclipseYPx == 335.0, "three frames at a corner 5 down: " + std::to_string(space.eclipseYPx));
+    // A level with no SpaceSky advances nothing.
+    Sky::Space none;
+    Sky::AdvanceSpace(motion, none, {600.0, 133.0}, kView, 1000.0 / 60.0);
+    CHECK(none.eclipseYPx == 0.0 && none.spiralTurn.turnedDeg == 0.0);
+}
+
 // ---- the converted levels ---------------------------------------------------
 
 void EveryLevelsSky() {
@@ -540,6 +782,73 @@ void EveryLevelsSky() {
     CHECK_MSG(notTheViewsCentre == 0, "every sky at the view's centre, first wrong " + firstWrong);
 }
 
+// SpaceSky over the 128 converted levels: the 19 that set space_bg (level0c to
+// level18c, 4-01 to 4-19) build it, and nothing else does. Each of the 19 places
+// one space sky and one spiral; 18 a planet (all but 4-01); one an eclipse (4-19);
+// and one spiral carries `alpha`, 4-01's 0.6.
+void EveryLevelsSpaceSky() {
+    const Sky::SpaceRules rules = TheSpaceRules();
+    const Sky::Rules skyRules = TheRules();
+    const Motion::Rules motion = TheMotions();
+    int levels = 0, running = 0, skies = 0, spirals = 0, planets = 0, eclipses = 0, tinted = 0;
+    std::string spaceLevels, tintedAt, eclipseAt, noPlanet;
+    std::error_code ec;
+    std::vector<std::filesystem::path> files;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (entry.path().extension() == ".tscn") files.push_back(entry.path());
+    }
+    std::sort(files.begin(), files.end());
+    for (const std::filesystem::path& file : files) {
+        ++levels;
+        const std::string level = file.stem().string();
+        Tscn::Scene scene;
+        std::string error;
+        if (!Tscn::Load(file.string(), scene, error)) {
+            CHECK_MSG(false, level + ": " + error);
+            continue;
+        }
+        Sky::Space space;
+        CHECK_MSG(Sky::BuildSpace(rules, skyRules, motion, scene, kView, 1000.0 / 60.0, space, error),
+                  level + ": " + error);
+        if (!space.running) continue;
+        ++running;
+        spaceLevels += level + " ";
+        if (!space.skyNode.empty()) ++skies;
+        if (!space.spiralNode.empty()) ++spirals;
+        if (!space.planetNode.empty()) {
+            ++planets;
+        } else {
+            noPlanet += level;
+        }
+        if (!space.eclipseNode.empty()) {
+            ++eclipses;
+            eclipseAt += level;
+        }
+        if (space.spiralColour != rules.spiralColourDefault) {
+            ++tinted;
+            tintedAt += level + " " + std::to_string(space.spiralColour);
+        }
+    }
+    std::printf("  %d levels: %d SpaceSky (%s); %d space skies, %d spirals, %d planets (none on %s), %d eclipse (%s); "
+                "%d spiral tinted (%s)\n",
+                levels, running, spaceLevels.c_str(), skies, spirals, planets, noPlanet.c_str(), eclipses,
+                eclipseAt.c_str(), tinted, tintedAt.c_str());
+    CHECK_EQ(levels, 128);
+    CHECK_EQ(running, 19);
+    for (int i = 0; i <= 18; ++i) {
+        const std::string name = "level" + std::to_string(i) + "c ";
+        CHECK_MSG(spaceLevels.find(name) != std::string::npos, name + "builds SpaceSky");
+    }
+    CHECK_EQ(skies, 19);
+    CHECK_EQ(spirals, 19);
+    CHECK_EQ(planets, 18);
+    CHECK(noPlanet == "level0c");
+    CHECK_EQ(eclipses, 1);
+    CHECK(eclipseAt == "level18c");
+    CHECK_EQ(tinted, 1);
+    CHECK_MSG(tintedAt.rfind("level0c 0.6", 0) == 0, "4-01's spiral at 0.6: " + tintedAt);
+}
+
 } // namespace
 
 int main() {
@@ -554,6 +863,11 @@ int main() {
     AScrollingStripAndItsEnds();
     ALoneScrollingSkyIsBothEnds();
     AFullhdSkyIsWiderAndStillCentred();
+    TheSpaceRulesAreSkyJsons();
+    ASpaceLevelBuildsSpaceSky();
+    SpaceSkyIsPinnedToTheCamera();
+    TheSpiralTurnsAndThePlanetBobs();
+    TheEclipseAddsTheCornersY();
 
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec)) {
@@ -563,5 +877,6 @@ int main() {
         return ::test::summary("test_mp_sky", 60);
     }
     EveryLevelsSky();
+    EveryLevelsSpaceSky();
     return ::test::summary("test_mp_sky", 70);
 }

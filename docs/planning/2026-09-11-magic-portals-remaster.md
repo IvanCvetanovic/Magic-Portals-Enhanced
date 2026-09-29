@@ -21434,3 +21434,173 @@ R17 and R23 are not this step's; R24 and R25 untouched. Camera dragging: not tou
   audit's "menu music plays after a level" known-everywhere line goes with it.
 - For the merge's renumbering: "step 152" is written in `sounds.json` (`_music_note`), `ghost.json` (`_not_built`),
   `dragon.json` and `darkdragon.json` (`not_built`), and `tests/test_mp_layer.cpp` (a comment).
+
+## Step 153 - SpaceSky on the 19 space levels: the space sky at the view's centre, the spiral at its bottom-centre as wide as its diagonal and turning, the planet pinned there and bobbing, the eclipse across at the centre (built)
+
+**TRACK B: the program's P5** (`docs/parity-backlog.md` section 6, P5; `sky.json`'s `space_sky._not_ported`). Built in
+the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, on step 152's `1656d8f`), whose build reads the frozen level
+data in `out/snap_w1`; numbered in track B's range, and the merge renumbers it. Changed: `game/data/sky.json` (the
+`space_sky` block, decoded, in place of `_not_ported`), `game/sim/Sky.{hpp,cpp}` (`SpaceRules`, `LoadSpaceRules`,
+`Space`, `BuildSpace`, `AdvanceSpace`, `SpaceSkyPx`, `SpiralPx`, `PlanetPx`, `EclipsePx`),
+`game/MagicPortalsLayer.{hpp,cpp}` (`SpaceRole` on a drawn sprite, `m_spaceRules`, `m_space`; `buildSprites` builds it and colours the spiral,
+`syncSprites` places, sizes and turns the four, `advanceMotions` steps them, `shakeView` moves them with the camera;
+a `space sky:` log line), `tests/test_mp_{sky,layer}.cpp`. No engine change (the pin stays `4bfcf67`), no converter
+change (the four entities and `alpha` are already in the converted levels), no format finding (script behaviour,
+recorded in `sky.json`). **GAMEPLAY: NONE** - pictures only: the four are scenery with no body, nothing of them reaches
+`Game::Level` or the state hash. Not a gameplay step, so the program's winnability gate does not apply; no route is
+added (this tree has no `tests/routes/`, `test_mp_routes` or reachability tool: W.1 is not an ancestor of `w1-b`).
+
+**BLOCKERS, checked first: none.** `sky.json` named the two helpers still to read, `linearMotion`
+(utilEntityEffect.angelscript, bytes 327527..328407) and `scaleToSize` (329349..329538); both are in the listing and
+are read below. The port already has `linearMotion` (`sim/Motion`, `motions.json`) and AddToAngle's turn
+(`Motion::Turn`); the four pictures are already drawn, from their tiers, at their depths. Nothing else seeks them:
+the listing's only other reads of `'spiral'` and `'eclipse.ent'` are `ETHCallback_rocket_landing` (L96705), whose body
+runs only once `isGameWon` (#1-3) - 4-19's landing cutscene, the backlog's P2.
+
+**WHAT THE ORIGINAL DOES** (listing `all_functions.txt`, md5 `48fe65ce...`; arguments pushed last-first and a `SetV1`
+operand a constant, `00_order.md` 8.0 rules 1 and 3). `Game::preLoop` #148-182 builds `SpaceSky()` instead of
+`StaticSky` when the first `properties` carries `space_bg` at all (step 58).
+- **`SpaceSky::SpaceSky`** (Sky.angelscript bytes 156379..157122, L30669-30871): `SeekEntity` - an exact `==` on the
+  name (`ETHBucketManager.cpp:394-407`) - `'planet_bg.ent'`, `'spiral'`, `'space_sky'`, `'eclipse.ent'` (#1-63). The
+  spiral (#65-142): `size = GetScreenSize().length() x 1f`, `scaleToSize(m_spiral, vector2(size, size))`; then
+  `c = 0.7f`, or `GetFloat('alpha')` when `CheckCustomData('alpha') != 0`, and `SetColor(vector3(c, c, c))`.
+  `scaleToSize` (L64873-64902) is `Scale(vector2(size.x / GetSize().x, size.y / GetSize().y))` and `ETHEntity::Scale`
+  multiplies the scale (`ETHEntity.cpp:581-589`): a square as wide as the screen's diagonal whatever the picture; the
+  view's diagonal in the level's units, 522.2 u at 16:9. `SetColor(vector3)` writes the rgb and keeps the alpha
+  (`ETHEntity.cpp:493-498`). The planet (#143-199): `SetFloat('speed', 0.5)`, `SetFloat('stride', 1)`,
+  `linearMotion(m_planet, true, 0, PI)` - vertical, axis 0, start angle the float PI (3.141592654f, `GameMath.h:38`,
+  registered at `ETHScriptObjRegister.cpp:512-515`).
+- **`SpaceSky::update`** (157259..158171, L30886-31104), every frame, from `camPos = GetCameraPos()` (the screen's
+  corner) and `screenSize`: the planet's `originalPos = vector3(camPos + screenSize x (0.5, 1), its z)` and
+  `linearMotion(m_planet, true, 0, 0)` (#15-81) - its point the view's bottom-centre plus `cos(angle) x 1 u`, the
+  angle 0.5 rad/s from PI, a turn taken off once past 2 PI; the sky `SetPositionXY(camPos + screenSize x V2_HALF)`
+  (#83-119; `V2_HALF` is `vector2(0.5f, 0.5f)`, ETHFramework/Constants.angelscript bytes 304963..305014, L60203-60209);
+  the spiral `SetPositionXY(camPos + screenSize x (0.5, 1))` and `AddToAngle(unitsPerSecond(-1.7))` (#121-165) - 1.7
+  degrees a second clockwise, capped at 200 ms a frame, still under a pause; the eclipse `SetPosition(vector3(camPos,
+  0) + vector3(screenSize.x x 0.5, pos.y, pos.z))` with `pos` its own position (#167-218) - across at the view's
+  centre, and down its OWN y plus the corner's y, added every frame. `SpaceSky::draw` is empty.
+- **Census** (the 19 `space_bg` levels, level0c-level18c, 4-01..4-19): a space sky and a spiral on each; a planet on
+  18 (all but 4-01); an eclipse on one (4-19, 320 u down, 64 u tall at scale 2, drawn 30 u up - 2 u below the view);
+  one spiral with `alpha`, 4-01's, 0.6. 4-19's view is the level's whole 256 u, so its corner's y is 0 on every frame
+  and the eclipse holds.
+
+**MEASURED ON THE ORIGINAL** (`P5/fit_spiral.py` -> `fit_original.txt`, `fit_original_4-01.txt`,
+`fit_original_summary.txt`): each library still (h0.3, h2.8, h6.3 of the 19) is fitted with the space sky pinned at
+the centre plus `fullhd/spiral.png` added at its colour (blendMode 1, AM_ADD) as a square of side S at (cx, cy) turned
+by theta, free in all four; the pose kept is the one where the most pixels agree within 12 (as step 58's
+`where_orig_sky.py`). 4-01's `space_sky` instance draws `satellite_sky.png`, the other 18 `space_bg.png`. **57 of 57**
+frames fit the spiral at **side 1468.6 px** - `|1280 x 720|` - and at **(640, 720)**, the bottom-centre (56 exactly;
+4-17's h6.3 at (641, 719)), with 224,296 to 459,262 more pixels agreeing than without it on the 18 (4-01, whose
+space shows through a castle window: 81,965 to 90,145); the angle **-3.1 to -5.3** at h0.3, **-7.2 to -9.4** at
+h2.8, **-13.1 to -15.3** at h6.3, so **-1.650 to -1.683 deg/s** over h0.3 -> h6.3 on all 19 levels (the fit's step
+is 0.1 deg over 6 s): 1.0-2.9 % under the decoded 1.7 (the verifier's refit -1.650..-1.695, mean -1.674, about
+1.5 %). A candidate cause, not checked: Ethanon hands scripts the frame's time cut to whole milliseconds
+(`ETHEngine.cpp:147`, `static_cast<unsigned long>(lastFrameDeltaTimeMS)`), so every `unitsPerSecond` motion runs a
+little slow - by how much depends on the emulator's frame time, never measured (about 4 % at a steady 60 Hz, 1 % at
+30 Hz); the stills' own timing is uncertain by about as much. The port keeps the decoded -1.7 (at f420 the two differ
+by at most 0.2 deg). The planet's opaque pixels
+fit at **x 640** on 54 of 54 frames and y **550-554** (its point at 720 less 60 u, 551.25, and the bob's +-2.8 px:
+550 at h0.3, 552-554 later, as cos rises from PI); the sky alone at **(640, 360)** on 51 of the 54 (4-19's walls and
+bubbles leave 22,763-23,785 sky pixels, fitted at (638-640, 362-365)). 4-19's eclipse is in none of its frames.
+
+**THE CHANGE.**
+1. **`sky.json` `space_sky`**: `planet_name`, `spiral_name`, `sky_name`, `eclipse_name`, `spiral_diagonal_scale` 1,
+   `spiral_pitch` (0.5, 1), `spiral_turn_deg_per_s` -1.7, `spiral_colour_key` `alpha`, `spiral_colour_default` 0.7,
+   `sky_pitch` (0.5, 0.5), `planet_pitch` (0.5, 1), `planet_speed` 0.5, `planet_stride` 1, `planet_vertical`,
+   `planet_axis_deg` 0, `planet_start_angle_rad` the float PI, `planet_update_start_angle_rad` 0 (read by no call:
+   the constructor's is the first), `eclipse_pitch_x` 0.5; `_source` cites each, `_inferred` states the
+   constructor's one-tick step and its bound, `_measured` the original's fit below. `LoadSpaceRules` refuses the file
+   without the block, and a spiral of no size or no colour.
+2. **`sim/Sky`**: `BuildSpace` (the constructor: the four by exact name, each optional; the spiral's side from the
+   view's diagonal and its colour from `alpha`, refused if that is not a number; the planet's `Motion::Linear` from its
+   row, with the constructor's first call stepped by one tick), `AdvanceSpace` (update's carry: the planet's step, the
+   spiral's `Motion::Turn`, the eclipse's y plus the corner's y), and the four points from the camera.
+3. **The layer.** `buildSprites` builds `m_space` beside `m_sky` (the view from `viewportAspect`, as `m_aspect` may be
+   the last level's there), tags the four sprites, sets the spiral's rgb after its look, and interpolates their quads
+   as the sky's. `syncSprites` places each at its point plus its own offset (the planet's 60 u, the eclipse's 30), the
+   spiral at its side and turned as the placed pictures are (`Motion::Turn` folds at +-360 deg, about every 212 s;
+   the engine interpolates rotation along the shortest arc, `engine/src/core/InterpolationSystem.cpp:31-52`, so the
+   fold draws no spin between ticks). `advanceMotions` runs `AdvanceSpace` with the tick's camera, before the pictures
+   are placed. `shakeView` moves all four with the shaken camera, as the sky.
+
+**THE GATES.** After = `MagicPortals.exe` `95c71847` (this step's build; the sweep ran on `sky.json` before its
+`_inferred` and `_measured` notes and the commit's sentence on the turn rate in `_measured`, which no loader reads); before = step 152's committed `35bab8e6` and its sweep
+(`program/P7/after/sweep`, 128 of 128 matching its `capture.txt`). Everything under `out/parity/program/P5/`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1_exe.log` `--target MagicPortals`: `Sky.cpp`, the layer, `main.cpp`, `LevelVisit.cpp`; `build2_suites.log` `--target test_mp_sky test_mp_layer`; `build3_layer.log`; `build4_layer_relink.log`, the one relink after a refusal) |
+| (1) The decode on the original | the spiral's centre (640, 720) +-1 px, side 1468.6 px, turning -1.7 deg/s; the sky's centre (640, 360) where enough sky shows to fit it alone, and else the combined fit (sky pinned at the centre plus the spiral); the planet's x 640 and y 551.25 +- 2.8 | - (the original's frames) | **passes** (`fit_original*.txt`): 57 of 57 stills at side 1468.6 and (640, 720) (one at (641, 719)); -1.650 to -1.683 deg/s on all 19 levels (1.0-2.9 % under the decoded 1.7: a candidate cause above, not checked); the planet at x 640 on 54 of 54, y 550-554. The sky alone at (640, 360) on the 51 stills of 4-02..4-18; on 4-01 (its space seen only through a window) and 4-19 (walls and bubbles, 23 k sky pixels) the sky-alone fit is uninformative - 4-01 (602-681, 378), 4-19 (638-640, 362-365) - and both pass on the combined fit (4-01: 174,491-177,033 px against 86,888-92,526 without the spiral; 4-19: 304,596-307,145 against 24,152-26,204) |
+| (2) The port's frames read as the original's | the same fit on the f420 captures: spiral (640, 720) +-1, side 1468.6, angle -11.9 +- 0.2 (7.0 s at -1.7, 4-01's included); sky (640, 360) as in (1); planet (640, 553.9) (720 + cos(PI + 0.5 x 421/60 - 2 PI) x 2.8125 - 168.75) | spiral: no fit at the decoded pose on any level (it scores below no spiral at all on 19 of 19: 28,169-123,438 px against 99,384-341,739); 256 u (720 px) at the level's (256, 256). Sky (598-682, 354-378), planet x 560-720 (both at 640 only on 4-11, whose camera sits at the level's 256) | **passes on 19 of 19** (`fit_port_after.txt`; before `fit_port_before.txt`): spiral side 1468.6, centre (640, 720) on 14 and (641, 720) or (639, 720) on 5, angle -11.9 on 14, -11.8 on 4, -12.0 on 4-01; sky alone (640, 360) on the 17 of 4-02..4-18, and uninformative where the original's is - 4-01 (606, 378), 4-19 (638, 365) - which pass on the combined fit (4-01 170,335 px against 89,022 without the spiral; 4-19 327,527 against 25,385); planet (640, 554) on 18 of 18 |
+| (3) Against the library stills | the after frame agrees with the original's h6.3 more than the before on each of the 19 | 7,211,027 px over the 19 (11.7-77.8 % a frame) | **passes 19 of 19** (`agree_original.txt`, within 12 on every channel): 12,219,929 px (49.8-91.0 %); gains +121,266 to +397,492 a level; 4-01's window (x 405-850, y 150-610) **33.0 % -> 83.0 %**. The two are different instants (f420 = 7.0 s against about 8.4 s, the spiral 2.4 deg apart) with different players, so neither reaches the whole frame |
+| (4) The audit's 4-03 | the spiral fills the frame as the original's | a 256 u swirl at the level's (256, 256): screen (560, 720), 720 px | **passes**: 1468.6 px at (640, 720), -11.9 deg; 613,614 px agree with the model against 181,194 without the spiral (the original's h6.3: 604,940 against 176,730) |
+| (5) Unit, the sim | the rules and refusals, the build, the pins under three cameras, the turn and bob over 420 ticks, the cap and a paused frame, the eclipse's sum, the census | 380 checks | **passes: `test_mp_sky` 630 checks, 0 failures** (dd8dd612; the same on each of its four runs, the last at the commit on the final tree). Census: 19 SpaceSky (level0c-level18c), 19 space skies, 19 spirals, 18 planets (not level0c), 1 eclipse (level18c), 1 tinted spiral (level0c, 0.6) |
+| (6) Unit, the layer | 4-03's three pinned on every tick and on each of the frames between for 240 ticks; the spiral's side, colour 0.7 and turn; the shake; 4-19's eclipse across at the centre and at 320 for 60 ticks | 3095 checks | **passes: `test_mp_layer` 3116 checks, 0 failures** (ad278a2e; the same on each of its four runs, the last at the commit on the final tree): 0 of 240 ticks and 0 of 960 frames off, the planet off on 0 ticks, turned -6.800 deg in 240 ticks, 3 trembles held. **But 4-03's camera holds at 284.4 px through the 240 ticks** (`level2c: camera 284.4 -> 284.4 px`): the level opens with it at its right edge and a hold does not walk a space level's robot (the verifier's `--hold left@1-300` on 4-03 and 4-19), so only the shake moves it and the pin between ticks under a MOVING camera is not exercised by this case, whatever its name (`TheSpaceSkyStaysOnTheViewAsTheCameraMoves`) says. What covers it: `test_mp_sky` pins the four under three cameras, and the static sky's case pans (`level30: camera 227.6 -> 324.0 px`, 0 of 960 frames off) through the same interpolated placement |
+| (7) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no unscheduled input; the 19 space levels change and the other 109 are byte-identical | `P7/after/sweep` | **passes** (`compare_sweep.txt`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines; 0 unscheduled input lines. **19 changed - exactly 4-01..4-19 - and 109 byte-identical.** Every one of the 19 logs `space sky:` with its four as the census says (the spiral 522.170591 u, colour 0.6 on 4-01 and 0.7 on 18). The 128 logs match the before's but for the profiler's averages, the `Wrote` line, the `space sky:` line, the space pictures' `on` lines and, on 12 of the 19 and no other level, the render profiler's `Shadow passes saved`: `18 (worst 18)` -> `14 (worst 18)` on 4-03, 4-04, 4-05, 4-07, 4-09, 4-10, 4-11, 4-13, 4-17, 4-18 and 4-19, and on 4-08 only the worst, `14 (worst 14)` -> `14 (worst 18)`. Most likely, not checked: the turning spiral and the bobbing planet now change every tick, and with them the cascade passes' signature over the shadow casters, so the four passes are re-recorded more often (`engine/src/renderer/VulkanRenderer.cpp:1631-1641`) - render cost only, no picture or tick of it |
+| (8) Winnability | - | - | **N/A**: no gameplay change; this tree has no routes or reachability tool |
+
+**SUITES**, run directly: `test_mp_sky` **630** checks, 0 failures (380 before: the space rules and their refusals,
+the build, the pins under three cameras, 420 ticks of turn and bob, the frame cap and a paused frame, the eclipse's
+sum, the census over the 128 levels). `test_mp_layer` **3116**, 0 failures (3095 at step 152: 4-03's space sky, spiral
+and planet on every tick and every frame between for 240 ticks, the spiral's side, colour and turn, the shake, and
+4-19's eclipse). Its first run (the build before `ad278a2e`'s) had 3 failures in the new case's own expectations -
+4-03 opens with its camera at the level's right edge, so it cannot pan right (the case now checks only that the
+camera is off the level's 256, which it is from the start: the camera then holds at 284.4 px, so the case pins the
+four under a still camera and a shake, not a pan - gate 6); a turn compared to 1e-9 that the float tick leaves at 3e-7; a shake compared with `==` on
+three y's rounding differently - none in the port. The other 43 suites link the changed `MagicPortalsSim` and are not
+relinked or run: none includes `Sky.hpp` (only the layer, `test_mp_layer` and `test_mp_sky` do); the merge's build
+relinks them.
+
+**SMART APP CONTROL: 1 refusal**: `test_mp_layer` `ee6ad78c` (the build after the case's three expectations were
+fixed; `Permission denied`, exit 126), deleted and relinked once to `ad278a2e`, which ran. Launches: `MagicPortals.exe`
+`95c71847` 128 (the sweep); `test_mp_sky` `dd8dd612` four times (its first run, and after each of the three
+text-only additions to `sky.json`, `_about`'s line, `space_sky`'s `_inferred` and `_measured`, and the commit's
+sentence on the turn rate, which no loader reads); `test_mp_layer` once from its first build (md5 not taken; the 3
+failures) and `ad278a2e` four times (after the relink, and after each of the three). The verifier's launches are its
+own (`P5/verify1`).
+
+**VERIFIED, PASSED** (`P5/verify1.json`, on the same `95c71847`, `dd8dd612` and `ad278a2e`, head `1656d8f`, engine
+`4bfcf67`; no fix round). The verifier read the decode from the listing before the code, and the code matches it; it
+compiled the six changed translation units with the tree's own commands (0 warnings; no relink); `test_mp_sky` 630 and
+`test_mp_layer` 3116, 0 failures, once each; its own 128-level sweep (`P5/verify1/sweep`: 128 rc 0, validation
+silent, 128 of 128 pngs matching their logs, no unscheduled input) is byte-identical to this step's on all 128, and
+against the before changes exactly 4-01..4-19. Its own fit on the original's 57 stills: the global best at side
+1468.6, (640, 720) on 19 of 19 h6.3; 57 of 57 at side 1466.6-1471.1, x 639.5-640.5, y 719.0-720.75; the planet at x
+640, y 552-553 on 18 of 18 h6.3. On the port's f420: side 1468.6-1470.6, x 639.88-640.38, y 719.75-720.50, angle
+-11.84 to -11.88; 19 of 19 closer to the original's h6.3 than before (mean difference 10.6-39.3 -> 3.0-11.6). Its
+three problems, all low, are recorded here as text at the commit, no behaviour changed: 4-03's camera does not pan in
+the layer case (gate 6), the turn rate's gap to the decode (MEASURED ON THE ORIGINAL), and the shadow counter in the
+logs (gate 7).
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **The eclipse's y under a shake.** The original's update adds the corner's y as `GetCameraPos` has it after the
+   earthquake, so a tremble's move stays in the eclipse's y; the port's tick camera stays at rest under a shake (step
+   101), so its eclipse takes the rest corner's y every tick and, on a tremble frame, moves with the drawn camera as
+   the sky does - that frame is the original's, but the tremble is not kept. A forth is always down and its back takes
+   off the saved value exactly (`Earthquake.hpp`), so the kept sum is never negative: the original's eclipse can only
+   go further below the view. On 4-19, the one eclipse, it starts 2 u below: no frame differs.
+2. **The constructor's step.** Its `linearMotion` call steps the planet by the frame before the level's first update,
+   which no capture shows; the port takes one tick (16.67 ms). At most 200 ms (the cap) would move the phase 0.1 rad,
+   under 0.005 u at cos's floor. INFERRED.
+3. **The spiral's side is fixed at load**, from the window's shape then, as the constructor reads `GetScreenSize` once;
+   a window resized mid-level keeps it.
+
+**RULINGS APPLIED.** The standing direction that the original decides. R1, R2, R17 and R23 are not this step's; R24
+and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **P2's landing** (`ETHCallback_rocket_landing`, once 4-19 is won) moves the eclipse to the view's bottom-centre and
+  brightens the spiral over 12.5 s; `SpaceSky::update` goes on adding the corner's y under it, and a camera that moves
+  in that cutscene would carry the eclipse off, as the original's would. Not built (P2).
+- **The original's timed motions may run slow** (the verifier's finding): the spiral turns 1.0-2.9 % under its decoded
+  1.7 deg/s on the stills, and Ethanon's whole-millisecond frame time is a candidate cause that would reach every
+  `unitsPerSecond` motion. The port keeps the decoded rates; a frame-time change would be cross-cutting and needs the
+  emulator's frame time measured first. The owner's call.
+- **Not pinned by a test** (the verifier's finding): the space pictures between ticks under a PANNING camera. The
+  layer case's camera holds at 284.4 px (gate 6); the static sky's case pans through the same placement. A test, so
+  not added at the commit.
+- **Render cost** (the verifier's finding): the space levels' shadow cascades are re-recorded more often (gate 7).
+  Keeping the sky's bodiless quads out of the shadow casters would be a later step; not built.
+- For the close role: `docs/parity-backlog.md` section 6's P5 row is this step's to tick (not edited here).
+- For the merge's renumbering: "step 153" is written in `sky.json` (`_about` and `space_sky._source`) and in comments
+  in `game/sim/Sky.hpp`, `game/MagicPortalsLayer.cpp`, `tests/test_mp_sky.cpp` and `tests/test_mp_layer.cpp`.
