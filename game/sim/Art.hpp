@@ -27,6 +27,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -228,6 +229,62 @@ struct Antiportal {
     // this leg runs, and the remainder how far along it is. SetColor writes the rgb
     // alone (ETHEntity.cpp:493-498), so the alpha is the caller's to keep.
     glm::dvec3 ColourAt(double elapsedMs) const;
+};
+
+// A fire agent as its callback redraws it (art.json's fire_agent;
+// ETHCallback_fire_agent #1-7): whatever picture the level saved for it, every
+// update sets `sprite`. Both spellings of the entity run the callback.
+struct FireAgent {
+    std::string entity; // the entity name, without .ent, whose callback it is
+    std::string sprite; // the file SetSprite names, found in entities/
+};
+
+// A key, a keyhole or a locked door as setKeyColor repaints it before it is first
+// drawn (art.json's key_colour): by its `datum`, a colour `sprites` names has its
+// picture swapped for its entity name as the level spells it plus that suffix, and
+// its colour's rgb set to `colour`; any other keeps its picture and its colour.
+struct KeyColour {
+    std::vector<std::string> entities; // the callers, by entity name without .ent
+    std::string datum;                 // the string custom data it reads
+    std::vector<std::pair<std::string, std::string>> sprites; // a colour, and its suffix
+    glm::dvec3 colour{1.0};            // SetColor after the swap
+
+    // Whether an entity, without its .ent, runs setKeyColor.
+    bool Paints(const std::string& bareEntity) const;
+    // The file setKeyColor names for an entity the level spells `entityName` whose
+    // datum reads `hue`: GetEntityName() plus the suffix, or "" for a colour it
+    // leaves alone.
+    std::string SpriteFor(const std::string& entityName, const std::string& hue) const;
+};
+
+// blinkColor's and blinkEmissive's triangle (utilEntityEffect.angelscript): `from`
+// at 0, `to` a stride later, `from` again a stride after that.
+struct Blink {
+    glm::dvec3 from{1.0};
+    glm::dvec3 to{1.0};
+    double strideMs = 0.0;
+
+    glm::dvec3 At(double elapsedMs) const;
+};
+
+// How manageNonTeleportable marks a crate no portal carries (art.json's
+// non_teleportable): while it is not burned, a crateCallback crate whose `datum`
+// is 0 or absent blinks its emissive when its callback passes zeroEmissive (the
+// _no_emissive crates) and its colour when it does not. The two are written over
+// the node's own, never added to them.
+struct NonTeleportable {
+    enum class Blinks { Nothing, Colour, Emissive };
+
+    // crateCallback's callers, by entity name without .ent, and the zeroEmissive
+    // each passes it.
+    std::vector<std::pair<std::string, bool>> callbacks;
+    std::string datum; // the uint isTeleportable reads
+    Blink colour;      // blinkColor's, SetColor
+    Blink emissive;    // blinkEmissive's, SetEmissiveColor
+
+    // What a placement of `bareEntity` blinks, `teleportable` being whether its
+    // datum is there and not 0 (GetUInt reads an absent one as 0).
+    Blinks For(const std::string& bareEntity, bool teleportable) const;
 };
 
 // The dial the original adds behind a timed crystal, as timer.ent draws it and
@@ -434,6 +491,11 @@ struct Rules {
     StaticPortal staticPortal;
     // antiportal: placed by the levels, blinked and turned by its script
     Antiportal antiportal;
+    // fire_agent, key/keyhole/door_locked and the crates: placed by the levels,
+    // their pictures swapped or blinked by their scripts
+    FireAgent fireAgent;
+    KeyColour keyColour;
+    NonTeleportable nonTeleportable;
     Timer timer;         // timer.ent, the dial behind a timed crystal
     Minion minion;       // minion.ent, the minions and knights
     Ghost ghost;         // ghost.ent, chapter 3's boss

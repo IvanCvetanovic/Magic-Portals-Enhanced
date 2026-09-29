@@ -110,8 +110,9 @@
     "`owner`, `spent`/`opened` and a keyhole's `gone`, and the fly-in's clock is",
     "Effects::AdvanceFlyIn, not this file's. The idle bob is step 69's, motions.json.)",
     "",
-    "Also not built: setKeyColor, which repaints a blue or red key by swapping its sprite to",
-    "<entityName>_blue.png or _red.png and marks it painted. Yellow is the base art and is",
+    "setKeyColor, which repaints a blue or red key, keyhole or locked door by swapping its",
+    "sprite to <entityName>_blue.png or _red.png, is drawn since planning step 151, from the",
+    "port's art.json key_colour: a picture, not this file's. Yellow is the base art and is",
     "never repainted, which is why yellow dominates every count above."
   ]
 }

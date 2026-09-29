@@ -383,6 +383,7 @@ public:
         int zIndex = 0;     // its node's z_index, which orders the slots
         double lookZ = 0.0; // its node's eth_z, unrounded
         float z = 0.0f;     // its slot's z, where its quad is drawn
+        entt::entity quad{entt::null}; // that quad; null once the picture is gone
     };
     std::vector<PictureReport> PictureReports() const;
 
@@ -1287,6 +1288,14 @@ private:
         // Game::loop bobs it on a `no_gravity` level: the exit door, the black
         // behind it, and the glow added behind that (m_doorBob, art.json `door`).
         bool doorBob{false};
+        // A crate manageNonTeleportable blinks (art.json non_teleportable): which of
+        // its two it writes; the crate's place in fire.burnables, whose `burned`
+        // stops it (-1: nothing burns it); and the level's age it last blinked at,
+        // which a burnt crate's emissive keeps.
+        Art::NonTeleportable::Blinks blinks{Art::NonTeleportable::Blinks::Nothing};
+        int burnable{-1};
+        bool blinked{false};
+        double blinkMs{0.0};
     };
     // A placed picture's callback (motions.json `placed`): its row, its
     // linearMotion when it has one, and its turn.

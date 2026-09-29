@@ -1164,6 +1164,7 @@ std::vector<MagicPortalsLayer::PictureReport> MagicPortalsLayer::PictureReports(
         report.zIndex = drawn.sprite.zIndex;
         report.lookZ = drawn.lookZ;
         report.z = drawn.z;
+        report.quad = drawn.quad;
         reports.push_back(std::move(report));
     }
     return reports;
@@ -3855,6 +3856,43 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             return node != nullptr && BareEntityName(*node) == m_artRules.door.entity;
         }();
         if (isDoor && !shadowlessTexture.empty()) sprite.texture = shadowlessTexture;
+        // A FIRE AGENT, AND A BLUE OR RED KEY, KEYHOLE OR LOCKED DOOR, ARE DRAWN
+        // FROM THE FILE THEIR SCRIPTS SET (art.json fire_agent, key_colour):
+        // ETHCallback_fire_agent's SetSprite on every update and setKeyColor's once,
+        // each before the entity is first drawn, so the picture the level saved is
+        // never seen. Matched by the callback's name, the entity less its .ent, and
+        // never by the saved file: an anti_portal_agent keeps its own face. The file
+        // is found as SetSprite finds it, through the tiers; one of other units, or
+        // one that cannot be read, leaves the saved picture and says so.
+        std::string scripted;
+        bool keyPainted = false;
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
+            const std::string bare = BareEntityName(*node);
+            if (bare == m_artRules.fireAgent.entity) {
+                scripted = m_artRules.fireAgent.sprite;
+            } else if (m_artRules.keyColour.Paints(bare)) {
+                const Tscn::Value* colour = node->Meta(m_artRules.keyColour.datum);
+                scripted = m_artRules.keyColour.SpriteFor(
+                    Roles::EntityName(*node),
+                    colour != nullptr && colour->kind == Tscn::Value::Kind::String ? colour->text : std::string());
+                keyPainted = !scripted.empty();
+            }
+        }
+        if (!scripted.empty()) {
+            const Sprites::Image& image = drawnImage(originalImage(scripted));
+            if (image.units.x <= 0 || image.units.y <= 0 ||
+                image.units != Tiers::Units(sprite.texels, sprite.density)) {
+                SUPERSONIC_LOG_WARN("Magic Portals")
+                    << sprite.node << " keeps the picture its level saved: " << image.path
+                    << (image.units.x <= 0 || image.units.y <= 0 ? " could not be read" : " is not its size")
+                    << std::endl;
+            } else {
+                sprite.texture = image.path;
+                sprite.tier = image.tier;
+                sprite.density = image.density;
+                sprite.texels = image.texels;
+            }
+        }
         DrawnSprite drawn;
         drawn.quad = makeSprite(registry, "Magic Portals Sprite", sprite.texture, sprite.additive);
         // The player's slot is kept free.
@@ -3907,6 +3945,25 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
                 colour != nullptr && colour->kind == Tscn::Value::Kind::String ? colour->text : std::string();
             drawn.colour = glm::vec4(glm::vec3(m_artRules.staticPortal.TintFor(named)), drawn.colour.a);
             drawn.scale = m_artRules.staticPortal.scale;
+        }
+        // setKeyColor's SetColor(V3_ONE) after its swap: the rgb, the alpha kept.
+        if (keyPainted) drawn.colour = glm::vec4(glm::vec3(m_artRules.keyColour.colour), drawn.colour.a);
+        // A CRATE NO PORTAL CARRIES BLINKS RED (art.json non_teleportable):
+        // manageNonTeleportable, which crateCallback runs first, for a crate whose
+        // teleportable datum is 0 or absent - GetUInt reads an absent one as 0, as
+        // Portals reads it - and not burned. Which of the two it blinks is its
+        // callback's; syncLighting writes it every tick over the node's own.
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
+            double datum = 0.0;
+            const Tscn::Value* flag = node->Meta(m_artRules.nonTeleportable.datum);
+            const bool teleportable = flag != nullptr && flag->AsNumber(datum) && datum != 0.0;
+            drawn.blinks = m_artRules.nonTeleportable.For(BareEntityName(*node), teleportable);
+            if (drawn.blinks != Art::NonTeleportable::Blinks::Nothing) {
+                const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
+                for (std::size_t b = 0; b < burnables.size(); ++b) {
+                    if (burnables[b].name == sprite.node) drawn.burnable = static_cast<int>(b);
+                }
+            }
         }
         drawn.ownerPx = sprite.atPx;
         drawn.centrePx = Sprites::CentrePx(sprite);
@@ -5367,7 +5424,7 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
 
     const bool runtimeBake = m_lit && Lighting::RuntimeBake(m_level.torch);
     static const std::string noLightmap;
-    for (const DrawnSprite& drawn : m_sprites) {
+    for (DrawnSprite& drawn : m_sprites) {
         Receiver receiver;
         receiver.applyLight = drawn.applyLight;
         receiver.isStatic = drawn.isStatic;
@@ -5383,7 +5440,28 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         if (drawn.antiportal) {
             colour = glm::vec4(glm::vec3(m_artRules.antiportal.ColourAt(m_levelAgeMs)), colour.a);
         }
-        tint(registry, drawn.quad, colour, drawn.emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
+        // A CRATE NO PORTAL CARRIES (art.json non_teleportable), on the same clock:
+        // blinkColor writes the rgb as the ring's does, blinkEmissive the emissive
+        // min(1, ambient + emissive) takes. Once its crate is burned the script stops
+        // writing either: manageBurnable takes the colour from 1 (its fade is not
+        // drawn, so the node's white stands), and the emissive keeps its last blink.
+        glm::dvec3 emissive = drawn.emissive;
+        if (drawn.blinks != Art::NonTeleportable::Blinks::Nothing) {
+            const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
+            const bool burned = drawn.burnable >= 0 && static_cast<std::size_t>(drawn.burnable) < burnables.size() &&
+                                burnables[static_cast<std::size_t>(drawn.burnable)].burned;
+            if (!burned) {
+                drawn.blinkMs = m_levelAgeMs;
+                drawn.blinked = true;
+            }
+            const Art::NonTeleportable& crates = m_artRules.nonTeleportable;
+            if (drawn.blinks == Art::NonTeleportable::Blinks::Colour && !burned) {
+                colour = glm::vec4(glm::vec3(crates.colour.At(drawn.blinkMs)), colour.a);
+            } else if (drawn.blinks == Art::NonTeleportable::Blinks::Emissive && drawn.blinked) {
+                emissive = crates.emissive.At(drawn.blinkMs);
+            }
+        }
+        tint(registry, drawn.quad, colour, emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
     }
     // What no level places, with its .ent's emissive (art.json, launchers.json).
     // None has a lightmap: a bake belongs to an entity the level file placed.

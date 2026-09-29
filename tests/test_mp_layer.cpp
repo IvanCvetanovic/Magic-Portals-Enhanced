@@ -1312,6 +1312,283 @@ void AnAntiportalBlinksRedAndTurnsAndAPauseHoldsBoth() {
     CHECK_MSG(rotationOf(ring762) > heldTurn, "and the turn goes on too");
 }
 
+// The quad a level's node is drawn with, by the layer's own report; null once its
+// picture is gone.
+entt::entity QuadOfNode(const MagicPortalsLayer& layer, const std::string& node) {
+    for (const MagicPortalsLayer::PictureReport& report : layer.PictureReports()) {
+        if (report.node == node) return report.quad;
+    }
+    return entt::null;
+}
+
+// A FIRE AGENT WEARS ITS OWN FACE (art.json fire_agent): ETHCallback_fire_agent
+// sets fire_agent.png on every update, whatever the level saved. 2-20 (level19a)
+// saved fire_agent_1086 with anti_portal_agent.png. 1-12 (level11)'s
+// anti_portal_agent_ent_599 is another entity, with another callback, and keeps
+// its own face.
+void AFireAgentWearsItsOwnFace() {
+    if (!OriginalArtIsThere("AFireAgentWearsItsOwnFace")) return;
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level19a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity agent = QuadOfNode(layer, "fire_agent_1086");
+        CHECK_MSG(agent != entt::null, "2-20 draws fire_agent_1086");
+        if (agent == entt::null) return;
+        const auto& material = registry.get<MaterialComponent>(agent);
+        const auto& transform = registry.get<TransformComponent>(agent);
+        CHECK_MSG(EndsWith(material.albedoTexturePath, "/fire_agent.png"),
+                  "drawn from fire_agent.png: " + material.albedoTexturePath);
+        CHECK_MSG(material.albedoTexturePath.find(MAGICPORTALS_ORIGINAL_DIR) == 0,
+                  "found as SetSprite finds it, in the original's entities: " + material.albedoTexturePath);
+        const float size = MagicPortals::Units::ToMetres(32.0);
+        CHECK_MSG(std::fabs(transform.scale.x - size) < 1e-6f && std::fabs(transform.scale.y - size) < 1e-6f,
+                  "at the saved file's 32 units, which are fire_agent.png's too");
+        CHECK_MSG(material.albedoColor == glm::vec4(1.0f), "in the colour the level gave it");
+        int faces = 0;
+        for (auto [entity, tag, drawn] : registry.view<TagComponent, MaterialComponent>().each()) {
+            (void)entity;
+            if (tag.tag == "Magic Portals Sprite" && EndsWith(drawn.albedoTexturePath, "/anti_portal_agent.png")) {
+                ++faces;
+            }
+        }
+        CHECK_MSG(faces == 0, "and no picture of 2-20 is the anti-portal agent's: " + std::to_string(faces));
+        layer.OnDetach(registry);
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level11");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity agent = QuadOfNode(layer, "anti_portal_agent_ent_599");
+        CHECK_MSG(agent != entt::null &&
+                      EndsWith(registry.get<MaterialComponent>(agent).albedoTexturePath, "/anti_portal_agent.png"),
+                  "1-12's anti_portal_agent_ent_599 keeps its face");
+        layer.OnDetach(registry);
+    }
+}
+
+// BLUE AND RED KEYS, KEYHOLES AND DOORS ARE THEIR COLOURS (art.json key_colour):
+// setKeyColor swaps a blue or red one's picture for <its entity name>_blue.png or
+// _red.png and writes its colour white; a yellow one keeps its picture. 3-13
+// (level12b) holds a yellow set, spelled with .ent, and a blue one; 4-20 (level19c)
+// a red set.
+void BlueAndRedKeysKeyholesAndDoorsAreTheirColours() {
+    if (!OriginalArtIsThere("BlueAndRedKeysKeyholesAndDoorsAreTheirColours")) return;
+    struct Piece {
+        const char* node;
+        const char* file;
+        double widthUnits;
+        double heightUnits;
+    };
+    const auto check = [](const char* level, const std::vector<Piece>& pieces) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        for (const Piece& piece : pieces) {
+            const entt::entity quad = QuadOfNode(layer, piece.node);
+            CHECK_MSG(quad != entt::null, std::string(level) + " draws " + piece.node);
+            if (quad == entt::null) continue;
+            const auto& material = registry.get<MaterialComponent>(quad);
+            const auto& transform = registry.get<TransformComponent>(quad);
+            CHECK_MSG(EndsWith(material.albedoTexturePath, std::string("/") + piece.file),
+                      std::string(level) + " " + piece.node + " is " + piece.file + ": " + material.albedoTexturePath);
+            CHECK_MSG(glm::vec3(material.albedoColor) == glm::vec3(1.0f) && material.albedoColor.a == 1.0f,
+                      std::string(level) + " " + piece.node + " is drawn white");
+            CHECK_MSG(std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(piece.widthUnits)) < 1e-6f &&
+                          std::fabs(transform.scale.y - MagicPortals::Units::ToMetres(piece.heightUnits)) < 1e-6f,
+                      std::string(level) + " " + piece.node + " keeps its size");
+        }
+        layer.OnDetach(registry);
+    };
+    check("level12b", {{"key_1529", "key_blue.png", 32.0, 32.0},
+                       {"keyhole_1538", "keyhole_blue.png", 32.0, 32.0},
+                       {"door_locked_1537", "door_locked_blue.png", 32.0, 128.0},
+                       {"key_ent_1246", "key.png", 32.0, 32.0},
+                       {"keyhole_ent_1197", "keyhole.png", 32.0, 32.0},
+                       {"door_locked_ent_1196", "door_locked.png", 32.0, 128.0}});
+    check("level19c", {{"key_1335", "key_red.png", 32.0, 32.0},
+                       {"keyhole_1338", "keyhole_red.png", 32.0, 32.0},
+                       {"door_locked_1343", "door_locked_red.png", 32.0, 128.0}});
+}
+
+// A CRATE NO PORTAL CARRIES BLINKS RED (art.json non_teleportable):
+// manageNonTeleportable writes its colour, or for a _no_emissive crate its
+// emissive, every tick from the level's age, until the crate is burned.
+//  - 1-30 (level29): crate_902, crate_small_898 and wood_piece_small_901 carry
+//    teleportable 0 and blink their colour; crate_small_ent_897 carries 1 and does not.
+//  - 2-20 (level19a): crate_no_emissive_1128 and crate_small_no_emissive_ent_1129
+//    blink their emissive; put the small one in the fire agent's reach and it burns,
+//    and its emissive then keeps its last blink while the big one goes on.
+//  - 2-08 (level7a): crate_small_no_emissive_826, whose level spells the datum
+//    'telepotable', blinks as GetUInt reads it (0); _ent_854 carries 1 and does not.
+void ACrateNoPortalCarriesBlinksRed() {
+    if (!OriginalArtIsThere("ACrateNoPortalCarriesBlinksRed")) return;
+    namespace Art = MagicPortals::Art;
+    namespace Lighting = MagicPortals::Lighting;
+    Art::Rules art;
+    std::string artError;
+    CHECK_MSG(Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", art, artError), artError);
+    const Art::NonTeleportable& crates = art.nonTeleportable;
+    const auto ambientWith = [](const MagicPortalsLayer& layer, const glm::dvec3& emissive) {
+        return glm::vec3(Lighting::AmbientTerm(layer.AmbientNow(), emissive));
+    };
+    const auto near = [](const glm::vec3& a, const glm::vec3& b) { return glm::length(a - b) < 1e-5f; };
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level29");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const std::vector<std::string> blinking = {"crate_902", "crate_small_898", "wood_piece_small_901"};
+        const entt::entity still = QuadOfNode(layer, "crate_small_ent_897");
+        CHECK_MSG(still != entt::null, "1-30 draws crate_small_ent_897");
+        int wrong = 0;
+        int stillWrong = 0;
+        float lowest = 1.0f;
+        float highest = 0.0f;
+        for (int tick = 0; tick < 80; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const glm::vec3 want(crates.colour.At(layer.LevelAgeMs()));
+            for (const std::string& node : blinking) {
+                const entt::entity quad = QuadOfNode(layer, node);
+                if (quad == entt::null) {
+                    ++wrong;
+                    continue;
+                }
+                const auto& material = registry.get<MaterialComponent>(quad);
+                // Its node's emissive 1 makes min(1, ambient + 1) whole: the blink alone.
+                if (!near(glm::vec3(material.albedoColor), want) || material.albedoColor.a != 1.0f ||
+                    !near(material.sprite2D.ambient, glm::vec3(1.0f))) {
+                    ++wrong;
+                }
+                lowest = std::min(lowest, material.albedoColor.g);
+                highest = std::max(highest, material.albedoColor.g);
+            }
+            if (still != entt::null && registry.get<MaterialComponent>(still).albedoColor != glm::vec4(1.0f)) {
+                ++stillWrong;
+            }
+        }
+        CHECK_MSG(wrong == 0, "each of the three is blinkColor's colour at the level's age: " + std::to_string(wrong) +
+                                  " wrong");
+        CHECK_MSG(lowest < 0.32f && highest > 0.98f,
+                  "over 80 ticks from (1, 0.3, 0.3) to white: green " + std::to_string(lowest) + " to " +
+                      std::to_string(highest));
+        CHECK_MSG(stillWrong == 0, "and the teleportable one is left white");
+        layer.OnDetach(registry);
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level19a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity big = QuadOfNode(layer, "crate_no_emissive_1128");
+        const entt::entity small = QuadOfNode(layer, "crate_small_no_emissive_ent_1129");
+        CHECK_MSG(big != entt::null && small != entt::null, "2-20 draws both crates");
+        if (big == entt::null || small == entt::null) return;
+        int wrong = 0;
+        for (int tick = 0; tick < 40; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const glm::vec3 want = ambientWith(layer, crates.emissive.At(layer.LevelAgeMs()));
+            for (const entt::entity quad : {big, small}) {
+                const auto& material = registry.get<MaterialComponent>(quad);
+                if (!near(material.sprite2D.ambient, want) || material.albedoColor != glm::vec4(1.0f)) ++wrong;
+            }
+        }
+        CHECK_MSG(wrong == 0, "both are blinkEmissive's (0.5, 0, 0) to 0 over the level's ambient, their colour "
+                              "white: " + std::to_string(wrong) + " wrong");
+
+        // Into the fire agent's reach (fire_agent_1086 at (162, 192), 32 units),
+        // which burns it on the tick after.
+        const auto& burnables = layer.SimLevel()->fire.burnables;
+        const auto burnable = std::find_if(burnables.begin(), burnables.end(), [](const auto& b) {
+            return b.name == "crate_small_no_emissive_ent_1129";
+        });
+        const auto body = layer.SimLevel()->built.entities.find("crate_small_no_emissive_ent_1129");
+        CHECK_MSG(burnable != burnables.end() && body != layer.SimLevel()->built.entities.end(),
+                  "the small crate is burnable and has a body");
+        if (burnable == burnables.end() || body == layer.SimLevel()->built.entities.end()) return;
+        const std::size_t index = static_cast<std::size_t>(burnable - burnables.begin());
+        auto& at = registry.get<TransformComponent>(body->second);
+        const glm::vec3 world = MagicPortals::Units::ToWorld(162.0, 200.0);
+        at.position = glm::vec3(world.x, world.y, at.position.z);
+        int ticks = 0;
+        glm::vec3 lastBlink = registry.get<MaterialComponent>(small).sprite2D.ambient;
+        while (!layer.SimLevel()->fire.burnables[index].burned && ticks < 30) {
+            lastBlink = registry.get<MaterialComponent>(small).sprite2D.ambient;
+            tickWith(layer, registry, kRest, {}, {});
+            ++ticks;
+        }
+        CHECK_MSG(layer.SimLevel()->fire.burnables[index].burned,
+                  "the fire agent burns it, " + std::to_string(ticks) + " ticks on");
+        int held = 0;
+        int bigStill = 0;
+        int drawnTicks = 0;
+        glm::vec3 bigBefore = registry.get<MaterialComponent>(big).sprite2D.ambient;
+        for (int tick = 0; tick < 30; ++tick) {
+            if (!registry.valid(small) || QuadOfNode(layer, "crate_small_no_emissive_ent_1129") != small) break;
+            ++drawnTicks;
+            const auto& material = registry.get<MaterialComponent>(small);
+            if (!near(material.sprite2D.ambient, lastBlink) || material.albedoColor != glm::vec4(1.0f)) ++held;
+            tickWith(layer, registry, kRest, {}, {});
+            const glm::vec3 bigNow = registry.get<MaterialComponent>(big).sprite2D.ambient;
+            if (bigNow == bigBefore) ++bigStill;
+            bigBefore = bigNow;
+        }
+        CHECK_MSG(drawnTicks >= 20, "the burning crate is drawn on: " + std::to_string(drawnTicks) + " ticks");
+        CHECK_MSG(held == 0, "a burnt crate's emissive keeps its last blink, its colour white: " +
+                                 std::to_string(held) + " ticks off");
+        CHECK_MSG(bigStill <= 1, "while the unburnt one blinks on: " + std::to_string(bigStill) + " still ticks");
+        layer.OnDetach(registry);
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level7a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity misspelt = QuadOfNode(layer, "crate_small_no_emissive_826");
+        const entt::entity carried = QuadOfNode(layer, "crate_small_no_emissive_ent_854");
+        CHECK_MSG(misspelt != entt::null && carried != entt::null, "2-08 draws both crates");
+        if (misspelt == entt::null || carried == entt::null) return;
+        int wrong = 0;
+        for (int tick = 0; tick < 40; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            if (!near(registry.get<MaterialComponent>(misspelt).sprite2D.ambient,
+                      ambientWith(layer, crates.emissive.At(layer.LevelAgeMs()))) ||
+                !near(registry.get<MaterialComponent>(carried).sprite2D.ambient, ambientWith(layer, glm::dvec3(0.0)))) {
+                ++wrong;
+            }
+        }
+        CHECK_MSG(wrong == 0, "826 blinks, 854 does not: " + std::to_string(wrong) + " ticks wrong");
+        layer.OnDetach(registry);
+    }
+}
+
 void AnAntiportalSpelledWithEntIsDrawnTheSame() {
     // The manager collects both spellings, GetEntityArray("antiportal") and
     // ("antiportal.ent"). 3-29 (level28b) places antiportal_ent_2204 at (372, 160),
@@ -15022,6 +15299,9 @@ void runTests() {
     AnAntiportalSpelledWithEntIsDrawnTheSame();
     AGravityWellWearsAGreenRing();
     AnAntiportalBlinksRedAndTurnsAndAPauseHoldsBoth();
+    AFireAgentWearsItsOwnFace();
+    BlueAndRedKeysKeyholesAndDoorsAreTheirColours();
+    ACrateNoPortalCarriesBlinksRed();
     WithoutTheArtTheLevelIsBoxes();
     APortalAndAShotAreTheOriginals();
     TheShotsCellsRunOnOneTimer();

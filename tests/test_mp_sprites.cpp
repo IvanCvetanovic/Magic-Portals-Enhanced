@@ -792,6 +792,128 @@ void AnAntiportalWithoutItsBlinkIsRefused() {
     refused("\"spin_deg_per_s\": 10.0", "\"spin_deg_per_s\": \"10\"", "a turn that is not a number");
 }
 
+// What three callbacks do to pictures the levels place (art.json fire_agent,
+// key_colour, non_teleportable): ETHCallback_fire_agent's SetSprite, setKeyColor's
+// swap, and manageNonTeleportable's blink. The layer's use of them is
+// test_mp_layer's; the placements they reach are counted below, over the levels.
+void TheFireAgentTheKeysAndTheCratesAreTheirScripts() {
+    Art::Rules rules;
+    std::string error;
+    const bool ok = Art::LoadRules(kPortData + "/art.json", rules, error);
+    CHECK_MSG(ok, error);
+    CHECK_MSG(rules.fireAgent.entity == "fire_agent" && rules.fireAgent.sprite == "fire_agent.png",
+              "ETHCallback_fire_agent #1-7: SetSprite('fire_agent.png')");
+
+    const Art::KeyColour& keys = rules.keyColour;
+    CHECK_MSG(keys.entities == std::vector<std::string>({"key", "keyhole", "door_locked"}) && keys.datum == "color",
+              "setKeyColor's three callers, reading the string 'color'");
+    CHECK_MSG(keys.Paints("key") && keys.Paints("keyhole") && keys.Paints("door_locked") && !keys.Paints("key.ent") &&
+                  !keys.Paints("crate"),
+              "by the callback's name, the entity less its .ent");
+    CHECK_MSG(keys.SpriteFor("key", "blue") == "key_blue.png" && keys.SpriteFor("keyhole", "red") == "keyhole_red.png" &&
+                  keys.SpriteFor("door_locked", "blue") == "door_locked_blue.png",
+              "GetEntityName() + '_blue.png' or '_red.png'");
+    CHECK_MSG(keys.SpriteFor("key", "yellow").empty() && keys.SpriteFor("key", "").empty(),
+              "yellow, and anything but blue and red, keeps its picture");
+    CHECK_MSG(keys.SpriteFor("key.ent", "blue") == "key.ent_blue.png",
+              "the name as the level spells it: a .ent spelling names a file that is not there");
+    CHECK_MSG(keys.colour == glm::dvec3(1.0), "SetColor(V3_ONE) after the swap");
+
+    using Blinks = Art::NonTeleportable::Blinks;
+    const Art::NonTeleportable& crates = rules.nonTeleportable;
+    CHECK_MSG(crates.datum == "teleportable", "isTeleportable reads the uint 'teleportable'");
+    CHECK_EQ(crates.callbacks.size(), std::size_t{5});
+    CHECK_MSG(crates.For("crate", false) == Blinks::Colour && crates.For("crate_small", false) == Blinks::Colour &&
+                  crates.For("wood_piece_small", false) == Blinks::Colour,
+              "ETHCallback_crate, _crate_small and _wood_piece_small pass zeroEmissive 0: the colour");
+    CHECK_MSG(crates.For("crate_no_emissive", false) == Blinks::Emissive &&
+                  crates.For("crate_small_no_emissive", false) == Blinks::Emissive,
+              "the two _no_emissive callbacks pass 1: the emissive");
+    CHECK_MSG(crates.For("crate", true) == Blinks::Nothing && crates.For("crate_no_emissive", true) == Blinks::Nothing,
+              "a teleportable crate is left alone");
+    CHECK_MSG(crates.For("crate_low_emissive", false) == Blinks::Nothing &&
+                  crates.For("barrel_bomb", false) == Blinks::Nothing,
+              "crate_low_emissive has no callback, and nothing else runs crateCallback");
+    CHECK_MSG(crates.colour.strideMs == 600.0 && crates.emissive.strideMs == 600.0, "600 ms a leg, both ways");
+    CHECK_MSG(crates.colour.from == glm::dvec3(1.0, 0.3, 0.3) && crates.colour.to == glm::dvec3(1.0),
+              "blinkColor(this, vector3(1, 0.3, 0.3), V3_ONE, 600)");
+    CHECK_MSG(crates.emissive.from == glm::dvec3(0.5, 0.0, 0.0) && crates.emissive.to == glm::dvec3(0.0),
+              "blinkEmissive(this, vector3(0.5, 0, 0), V3_ZERO, 600)");
+    const auto near3 = [](const glm::dvec3& got, const glm::dvec3& want) {
+        return glm::length(got - want) < 1e-9;
+    };
+    CHECK_MSG(near3(crates.colour.At(0.0), {1.0, 0.3, 0.3}) && near3(crates.colour.At(300.0), {1.0, 0.65, 0.65}) &&
+                  near3(crates.colour.At(600.0), {1.0, 1.0, 1.0}) && near3(crates.colour.At(900.0), {1.0, 0.65, 0.65}) &&
+                  near3(crates.colour.At(1200.0), {1.0, 0.3, 0.3}),
+              "red at 0, white at 600, red again at 1200");
+    CHECK_MSG(near3(crates.emissive.At(0.0), {0.5, 0.0, 0.0}) && near3(crates.emissive.At(600.0), {0.0, 0.0, 0.0}) &&
+                  near3(crates.emissive.At(1200.0), {0.5, 0.0, 0.0}) && near3(crates.emissive.At(-5.0), {0.5, 0.0, 0.0}),
+              "the emissive (0.5, 0, 0) at 0, nothing at 600, (0.5, 0, 0) at 1200, and nothing before the level");
+    // The whole period, against the decode read straight: bias = (ms % 600) / 600,
+    // inverted on an odd leg, and colorA + (colorB - colorA) x bias.
+    int off = 0;
+    for (int ms = 0; ms <= 2400; ++ms) {
+        double bias = static_cast<double>(ms % 600) / 600.0;
+        if ((ms / 600) % 2 == 1) bias = 1.0 - bias;
+        const glm::dvec3 colour = glm::dvec3(1.0, 0.3, 0.3) + (glm::dvec3(1.0) - glm::dvec3(1.0, 0.3, 0.3)) * bias;
+        const glm::dvec3 emissive = glm::dvec3(0.5, 0.0, 0.0) * (1.0 - bias);
+        if (!near3(crates.colour.At(ms), colour) || !near3(crates.emissive.At(ms), emissive)) ++off;
+    }
+    CHECK_MSG(off == 0, std::to_string(off) + " milliseconds off the decode");
+}
+
+// Without them the port draws what the level saved: the anti-portal agent's face,
+// yellow keys and still crates.
+void TheFireAgentTheKeysOrTheCratesWithoutTheirScriptsAreRefused() {
+    std::ifstream file(kPortData + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const auto refused = [&real](const std::string& from, const std::string& to, const std::string& name,
+                                 const std::string& says) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos, from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-scripted-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules rules;
+        std::string error;
+        const bool ok = Art::LoadRules(path.string(), rules, error);
+        CHECK_MSG(!ok, "refused: " + name);
+        CHECK_MSG(error.find(says) != std::string::npos, name + ": " + error);
+    };
+    const std::string fire = "fire_agent needs";
+    refused("\"fire_agent\": {", "\"fire_agent_gone\": {", "fire absent", fire);
+    refused("\"entity\": \"fire_agent\",", "\"entity\": \"fire_agent.ent\",", "fire a name with its extension", fire);
+    refused("\"sprite\": \"fire_agent.png\"", "\"sprite\": \"entities/fire_agent.png\"", "fire a folder", fire);
+    const std::string key = "key_colour needs";
+    refused("\"key_colour\": {", "\"key_colour_gone\": {", "keys absent", key);
+    refused("\"entities\": [\"key\", \"keyhole\", \"door_locked\"]", "\"entities\": [\"key.ent\"]",
+            "keys a name with its extension", key);
+    refused("\"entities\": [\"key\", \"keyhole\", \"door_locked\"]", "\"entities\": []", "keys none", key);
+    refused("\"datum\": \"color\"", "\"datum\": \"\"", "keys no datum", key);
+    refused("\"sprites\": { \"blue\": \"_blue.png\", \"red\": \"_red.png\" }", "\"sprites\": {}", "keys no sprites",
+            key);
+    refused("\"red\": \"_red.png\"", "\"red\": 3", "keys a suffix that is not a name", key);
+    refused("\"colour\": [1.0, 1.0, 1.0]", "\"colour\": [1.0, 1.0]", "keys two numbers", key);
+    const std::string crate = "non_teleportable needs";
+    refused("\"non_teleportable\": {", "\"non_teleportable_gone\": {", "crates absent", crate);
+    refused("{ \"entity\": \"crate\", \"zero_emissive\": false }", "{ \"entity\": \"crate\", \"zero_emissive\": 0 }",
+            "crates a flag that is not true or false", crate);
+    refused("{ \"entity\": \"crate_small\", \"zero_emissive\": false }",
+            "{ \"entity\": \"crate\", \"zero_emissive\": false }", "crates a callback twice", crate);
+    refused("{ \"entity\": \"crate\", \"zero_emissive\": false }", "{ \"entity\": \"crate.ent\", \"zero_emissive\": false }",
+            "crates a name with its extension", crate);
+    refused("\"datum\": \"teleportable\"", "\"datum\": 1", "crates a datum that is not a name", crate);
+    refused("\"stride_ms\": 600.0,\n    \"colour\": {", "\"stride_ms\": 0,\n    \"colour\": {", "crates a leg of 0", crate);
+    refused("\"emissive\": { \"from\": [0.5, 0.0, 0.0]", "\"emissive\": { \"from\": [0.5, 0.0]",
+            "crates two numbers", crate);
+    refused("\"to\": [1.0, 1.0, 1.0] },\n    \"emissive\"", "\"to\": [1.0, -1.0, 1.0] },\n    \"emissive\"",
+            "crates below zero", crate);
+}
+
 // The dial behind a timed crystal (art.json timer): timer.ent's facts, pinned. The
 // clock it runs by is test_mp_timed's.
 void TheTimerIsTimerEnt() {
@@ -1838,6 +1960,123 @@ void TheScaledPlacementsAreDrawnAtTheirScale() {
 // system. Counted over the 128 levels the converter wrote (step 90), and four
 // carriers pinned value for value where the level states what its entity's .ent
 // does not (systems_9_10 9c (3)).
+// THE PLACEMENTS THE THREE SCRIPTS REACH, over the 128 levels the converter wrote
+// (art.json fire_agent, key_colour, non_teleportable): 22 fire agents on 20
+// levels, 20 of them saved with the anti-portal agent's face; 24 blue or red keys,
+// keyholes and doors on 9 levels, none spelled with its .ent, and each file
+// setKeyColor asks for shipped at the size of the one the level saved; and 23
+// crates no portal carries on 15 levels, 15 blinking their emissive and 8 their
+// colour. The 23rd is not the audit's: level7a's crate_small_no_emissive_826 spells
+// its datum 'telepotable', so 'teleportable' is absent and GetUInt reads 0.
+void TheScriptsRepaintWhatTheLevelsPlace() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    const Tiers::Rules tiers = TheTiers();
+    std::error_code ec;
+    const bool original = std::filesystem::is_directory(kOriginal + "/entities", ec);
+    using Blinks = Art::NonTeleportable::Blinks;
+    int levels = 0;
+    int agents = 0;
+    int agentFaces = 0;
+    int painted = 0;
+    int blue = 0;
+    int red = 0;
+    int spelledEnt = 0;
+    int offSize = 0;
+    int crates = 0;
+    int emissive = 0;
+    int colour = 0;
+    std::vector<std::string> absent;
+    std::set<std::string> agentLevels, paintedLevels, blueLevels, redLevels, crateLevels;
+    for (const char* suffix : {"", "a", "b", "c"}) {
+        for (int i = 0; i < 32; ++i) {
+            const std::string level = "level" + std::to_string(i) + suffix;
+            Tscn::Scene scene;
+            std::vector<Sprites::Sprite> all;
+            const bool read = Tscn::Load(kLevels + "/" + level + ".tscn", scene, error) &&
+                              Sprites::Find(scene, kLevels + "/..", tiers, all, error);
+            CHECK_MSG(read, level + ": " + error);
+            if (!read) continue;
+            ++levels;
+            for (const Sprites::Sprite& sprite : all) {
+                const Tscn::Node* node = scene.FindNode(sprite.node);
+                const Tscn::Value* named = node != nullptr ? node->Meta("entity_name") : nullptr;
+                if (named == nullptr || named->kind != Tscn::Value::Kind::String) continue;
+                const std::string entity = named->text;
+                std::string bare = entity;
+                if (bare.size() > 4 && bare.compare(bare.size() - 4, 4, ".ent") == 0) bare.resize(bare.size() - 4);
+
+                if (bare == rules.fireAgent.entity) {
+                    ++agents;
+                    agentLevels.insert(level);
+                    if (FileOf(&sprite) == "anti_portal_agent.png") ++agentFaces;
+                }
+                if (rules.keyColour.Paints(bare)) {
+                    const Tscn::Value* datum = node->Meta(rules.keyColour.datum);
+                    const std::string hue =
+                        datum != nullptr && datum->kind == Tscn::Value::Kind::String ? datum->text : std::string();
+                    const std::string file = rules.keyColour.SpriteFor(entity, hue);
+                    if (!file.empty()) {
+                        ++painted;
+                        paintedLevels.insert(level);
+                        if (hue == "blue") {
+                            ++blue;
+                            blueLevels.insert(level);
+                        }
+                        if (hue == "red") {
+                            ++red;
+                            redLevels.insert(level);
+                        }
+                        if (entity != bare) ++spelledEnt;
+                        Sprites::Image image;
+                        std::string why;
+                        if (original && (!Sprites::Drawn(tiers, kOriginal + "/entities/" + file, image, why) ||
+                                         image.units != Tiers::Units(sprite.texels, sprite.density))) {
+                            ++offSize;
+                            CHECK_MSG(false, level + "/" + sprite.node + ": " + file + " " + why);
+                        }
+                    }
+                }
+                double teleportable = 0.0;
+                const Tscn::Value* flag = node->Meta(rules.nonTeleportable.datum);
+                const bool carried = flag != nullptr && flag->AsNumber(teleportable) && teleportable != 0.0;
+                const Blinks blinks = rules.nonTeleportable.For(bare, carried);
+                if (blinks == Blinks::Nothing) continue;
+                ++crates;
+                crateLevels.insert(level);
+                if (blinks == Blinks::Emissive) ++emissive;
+                if (blinks == Blinks::Colour) ++colour;
+                if (flag == nullptr) absent.push_back(level + "/" + sprite.node);
+            }
+        }
+    }
+    std::printf("  scripted pictures: %d levels; %d fire agents on %zu levels (%d saved as the anti-portal agent); "
+                "%d keys, keyholes and doors repainted on %zu levels (%d blue, %d red); %d crates blinking on %zu "
+                "levels (%d emissive, %d colour, %zu with no datum)\n",
+                levels, agents, agentLevels.size(), agentFaces, painted, paintedLevels.size(), blue, red, crates,
+                crateLevels.size(), emissive, colour, absent.size());
+    CHECK_EQ(levels, 128);
+    CHECK_EQ(agents, 22);
+    CHECK_EQ(agentLevels.size(), std::size_t{20});
+    CHECK_EQ(agentFaces, 20);
+    CHECK_EQ(painted, 24);
+    CHECK_EQ(paintedLevels.size(), std::size_t{9});
+    CHECK_EQ(blue, 18);
+    CHECK_EQ(blueLevels.size(), std::size_t{6});
+    CHECK_EQ(red, 6);
+    CHECK_EQ(redLevels.size(), std::size_t{3});
+    CHECK_MSG(spelledEnt == 0, "no blue or red piece is spelled with its .ent: " + std::to_string(spelledEnt));
+    CHECK_MSG(offSize == 0, std::to_string(offSize) + " repainted file(s) missing or not the saved size");
+    CHECK_EQ(crates, 23);
+    CHECK_EQ(crateLevels.size(), std::size_t{15});
+    CHECK_EQ(emissive, 15);
+    CHECK_EQ(colour, 8);
+    CHECK_MSG(absent == std::vector<std::string>({"level7a/crate_small_no_emissive_826"}),
+              "the one crate with no datum is level7a's 826");
+    if (!original) std::printf("  (the repainted files' sizes not checked: no extracted assets at %s)\n", kOriginal.c_str());
+}
+
 void ThePlacementsCarryTheSystemsTheirLevelsState() {
     const Tiers::Rules tiers = TheTiers();
     int levels = 0;
@@ -3484,6 +3723,8 @@ int main() {
     AStaticPortalWithoutItsScriptIsRefused();
     TheAntiportalBlinksRedAndTurns();
     AnAntiportalWithoutItsBlinkIsRefused();
+    TheFireAgentTheKeysAndTheCratesAreTheirScripts();
+    TheFireAgentTheKeysOrTheCratesWithoutTheirScriptsAreRefused();
     TheTimerIsTimerEnt();
     ATimerWithoutItsClockIsRefused();
     TheLightWallGhostIsDashedDoorEnt();
@@ -3546,6 +3787,7 @@ int main() {
     Level0sStaticPortalsAreAdded();
     AnOffsetAndATurn();
     TheScaledPlacementsAreDrawnAtTheirScale();
+    TheScriptsRepaintWhatTheLevelsPlace();
     ThePlacementsCarryTheSystemsTheirLevelsState();
     return ::test::summary("test_mp_sprites", 70);
 }

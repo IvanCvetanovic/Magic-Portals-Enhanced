@@ -21152,3 +21152,144 @@ button). R1, R2, R17 and R23 are not this step's; R24 and R25 untouched. Camera 
 - For the close role: `docs/parity-backlog.md` section 6's P1 row is this step's to tick (not edited here).
 - For the merge's renumbering: "step 150" is written in `ui.json` (`popups._about`, `game_finished._source`),
   `game/MagicPortalsLayer.hpp` (a comment) and `tests/test_mp_{popup,chapters,layer}.cpp`.
+
+## Step 151 - the fire agent wears its own face, blue and red keys, keyholes and doors are their colours, and a crate no portal carries blinks red (built)
+
+**TRACK B: the program's P3 and P4** (`docs/parity-backlog.md` section 6, P3 and P4; the 2026-09-29 audit's P3 and P4,
+`check_assets.md` items 2 and 4). Built in the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, on step 150's
+`e1dab6e`), whose build reads the frozen level data in `out/snap_w1`; numbered in track B's range, and the merge
+renumbers it. Changed: `game/data/art.json` (three new entries, `fire_agent`, `key_colour`, `non_teleportable`, appended
+after `shock_ring`), `game/data/keys.json` (the `_not_built` note on `setKeyColor`), `game/sim/Art.{hpp,cpp}`
+(`FireAgent`, `KeyColour`, `Blink`, `NonTeleportable`, their loading), `game/MagicPortalsLayer.{hpp,cpp}` (`buildSprites`
+swaps the two scripts' files and sets up the crate's blink; `syncLighting` writes the blink; `PictureReport::quad`),
+`tests/test_mp_{sprites,layer}.cpp`. No engine change (the pin stays `4bfcf67`), no converter change, no format finding
+(all three are script behaviour, recorded in `art.json`). **GAMEPLAY: NONE** - pictures only; the sim's keys, fire,
+crates and portals are untouched. Not a gameplay step, so the program's winnability gate (routes, reachability) does
+not apply; no route is added.
+
+**BLOCKERS, checked first: none.** `fire_agent.png` ships with an hd twin (`entities/`, `entities/hd/`); so do
+`key_blue.png`, `key_red.png`, `keyhole_blue.png`, `keyhole_red.png`, `door_locked_blue.png` and `door_locked_red.png`,
+each the size of its yellow file (32 x 32 or 32 x 128, hd twice). The sim already pairs keys by the same datum
+(`Keys.cpp:141`) and burns crates (`Fire::Burnable::burned`); the blink runtime and its clock are the antiportal's
+(step 72).
+
+**WHAT THE ORIGINAL DOES** (listing md5 `48fe65ce...`; arguments pushed last-first, `00_order.md` 8.0 rule 3; a
+`SetV1` operand is a constant, rule 1).
+- **`ETHCallback_fire_agent`** (MiscCallbacks bytes 350254..351485) #1-7: `SetSprite('fire_agent.png')`, first thing,
+  on every update. Named for the entity less its .ent (`ETHASUtil.cpp:63-67`): 22 placements on 20 levels, 20 saved
+  with `anti_portal_agent.png` (the scene keeps each instance's own `<Sprite>`), two (`level11c`, `level27c`) with
+  `fire_agent.png` already. `SetSprite` (`ETHSpriteEntity.cpp:177-200`) finds the file through the density tiers and
+  cuts it 1 x 1; `fire_agent.ent` is static, and a static callback's change is drawn the same frame (8.0 rule 6, which
+  the D10 check proved for a position; for SetSprite it is INFERRED), so the saved face is never seen.
+- **`setKeyColor`** (ETHCallback_key bytes 437964..438490): `GetString('color')` 'blue' ->
+  `SetSprite(GetEntityName() + '_blue.png')` and `SetColor(V3_ONE)` (#1-60); 'red' -> `_red.png` and `SetColor(V3_ONE)`
+  (#62-122); anything else keeps its picture; `SetUInt('painted', 1)` (#123-135). Called before each is first drawn:
+  `ETHCallback_key` #117 (the first update's block), `ETHCallback_keyhole` #1-32, `ETHCallback_door_locked` #1-19.
+  `GetEntityName` is the name as the level spells it (`ETHEntity.cpp:309-312`): none of the 24 blue or red pieces is
+  spelled with its .ent.
+- **`manageNonTeleportable`** (MiscCallbacks bytes 343765..344140), `crateCallback`'s first call (#1-7): for a crate
+  `!isTeleportable` (`GetUInt('teleportable') != 0`, bytes 343470..343661; its `nonTeleportable` test answers 0 too)
+  and `!isBurned` (#11-21): with `zeroEmissive` `blinkEmissive(this, vector3(0.5, 0, 0), V3_ZERO, 600)` (#23-49), else
+  `blinkColor(this, vector3(1, 0.3, 0.3), V3_ONE, 600)` (#50-73) - a vector3's constructor takes z first, so both are
+  red. `ETHCallback_crate`, `_crate_small`, `_wood_piece_small` pass 0; `_crate_no_emissive` and
+  `_crate_small_no_emissive` pass 1 (bytes 423812..424324); `crate_low_emissive` has no callback. The blink
+  (utilEntityEffect bytes 326140..327057) is the antiportal's triangle: `colorA + (colorB - colorA) x bias` over 600 ms
+  legs, turned back on odd legs, on the entity's own `blinkElapsedTime`. Drawn at min(1, ambient + emissive) x colour
+  (`ETHRenderEntity.cpp:113-117`). Once burned `manageBurnable` writes the colour and not the emissive.
+
+**THE CHANGE.**
+1. **`art.json`**, three entries, each with its `_source`: `fire_agent` (entity `fire_agent`, sprite `fire_agent.png`);
+   `key_colour` (entities `key`, `keyhole`, `door_locked`, datum `color`, sprites `blue` -> `_blue.png` and `red` ->
+   `_red.png`, colour white); `non_teleportable` (the five `crateCallback` callers with their `zero_emissive`, datum
+   `teleportable`, stride 600 ms, colour (1, 0.3, 0.3) -> white, emissive (0.5, 0, 0) -> 0, and `_clock`). None has a
+   default: `Art::LoadRules` refuses the file without them (`fire_agent needs`, `key_colour needs`,
+   `non_teleportable needs`). `keys.json`'s `_not_built` no longer lists `setKeyColor`.
+2. **`sim/Art`**: `FireAgent`; `KeyColour::Paints` (by the callback's name) and `SpriteFor(entityName, hue)` (the name
+   as the level spells it plus the suffix, "" for a colour it leaves alone); `Blink::At` (blinkColor's ins 55-75, the
+   antiportal's math; `Antiportal` itself untouched); `NonTeleportable::For(bareEntity, teleportable)` -> `Nothing`,
+   `Colour` or `Emissive`.
+3. **The layer.** `buildSprites`: before the quad is made, a fire agent's or a blue or red key piece's texture is
+   swapped for `drawnImage(originalImage(file))`, the file SetSprite finds through the tiers, when its units are the
+   saved file's (else it keeps the saved picture and says so; never on the 128 levels); a repainted piece's rgb is set
+   white after its look, as `setKeyColor`'s `SetColor` does; a crate's `blinks` is set from its datum (absent or 0: not
+   teleportable, as `Portals.cpp:871-873` reads it) with its place in `fire.burnables`. `syncLighting` writes the blink
+   every tick over the node's own, from the level's age (a pause holds it, as the antiportal's): the colour branch into
+   the rgb, the emissive branch into the emissive that `min(1, ambient + emissive)` takes; once burned, neither - the
+   colour stands at the node's white (manageBurnable's fade from 1 is not drawn) and the emissive keeps its last
+   blink. `PictureReport::quad` lets a suite find a node's quad.
+
+**THE GATES.** After = `MagicPortals.exe` `5ff43623` (this step's build); before = step 150's committed `43c6401e`
+and its sweep (`program/P1/fix1/sweep`, 128 of 128 matching its `sweep_capture.txt`). Captures, scripts and
+measurements: `out/parity/program/P34/` (`capture_sweep.sh` -> `after/sweep/`, `compare_sweep.py`, `visibility.py`,
+`fire_gate.py`, `key_gate.py`, `cap_series.sh` -> `series/`, `crate_gate.py`; each with its `.txt` or `.json`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build2.log`, `--target MagicPortals test_mp_layer test_mp_sprites test_mp_minions test_mp_timed test_mp_zerog`: `Art.cpp` and every includer of `Art.hpp` recompiled). `build1.log`'s one C4458 (`SpriteFor`'s parameter `colour` hid `KeyColour::colour`) is fixed by naming it `hue`; `build3` relinks `test_mp_minions` only |
+| (1) The fire agent's own face | every fire agent drawn from `fire_agent.png` at 32 u; an `anti_portal_agent` untouched | 20 of 22 drawn as `anti_portal_agent.png` | **passes.** Unit (`AFireAgentWearsItsOwnFace`): 2-20's `fire_agent_1086` from the original's `fire_agent.png`, 32 u, white, and no `anti_portal_agent.png` quad on 2-20; 1-12's `anti_portal_agent_ent_599` keeps its face. Census (`test_mp_sprites`): 22 on 20 levels, 20 saved as the anti-portal agent. Sweep: the 16 whole agents in view (15 levels) and the 2 cut by the view's edge (2-27, 2-30) change, each within its own 94-95 px |
+| (1b) Against the library stills | the original's face is `fire_agent.png`'s; the after's G/R nearer the original's than the before's | the red face: G/R 0.371-0.650 | **passes 19 of 19 readings** (14 levels' h6.3, and t8.0 where it exists; `fire_gate.txt`): the original fits `fire_agent.png` every time (masked CCOEFF 0.598-0.851, the anti-portal face 0.436-0.763), G/R 0.596-0.898; the after 0.667-0.889. 2-20's agent is under the library's tutorial hand (best score 0.356): not read |
+| (1c) Control | the two saved with `fire_agent.png` already, both in view at f420, unchanged | - | **passes**: 4-28 (`level27c`) byte-identical (`b2cadc5d`); 4-12 (`level11c`) changes in its crate alone. Drawing the original's copy of the same file moves no pixel |
+| (2) Blue and red keys, keyholes and doors | a blue or red piece drawn from its `_blue` or `_red` file, white, at its size; yellow unchanged | all 24 gold | **passes.** Unit (`BlueAndRedKeysKeyholesAndDoorsAreTheirColours`): 3-13's blue key, keyhole and door and its three yellow (`.ent`-spelled) ones, 4-20's red set: each its file, white, 32 x 32 or 32 x 128 u. Census: 24 pieces on 9 levels (18 blue on 6, 6 red on 3), none spelled with its .ent, every file shipped at the saved one's size |
+| (2b) Against the library stills | the swapped file fits the original better than the saved one; the after's mean colour nearer the original's | gold | **passes 9 of 9 readings** on the 8 whole pieces in view (`key_gate.txt`): 3-13 door and keyhole, 3-14 door and keyhole, 3-21 door, 4-01 door and keyhole, 4-19 key (h6.3, t8.0). 3-13's door: original BGR (65.0, 55.3, 51.1), after (63.8, 54.8, 50.2), before (50.7, 64.1, 68.2); 4-01's keyhole: original (75.6, 74.6, 188.0), after (69.0, 69.3, 189.5), before (126.2, 174.0, 189.4). 4-19's key fits `key_red.png` (3784 against 10191) but its colour is swamped by the halo behind it (LEFT FOR LATER) |
+| (3) The crate's blink, unit | each tick the blink at the level's age; a teleportable crate untouched; a burnt one's emissive held; the misspelt datum blinks | - | **passes** (`ACrateNoPortalCarriesBlinksRed`): 1-30's three colour-branch crates for 80 ticks (green 0.30 to 1.00) and `crate_small_ent_897` white; 2-20's two emissive-branch crates for 40 ticks, then the small one, put in the fire agent's reach and burnt, keeps its last emissive while the big one blinks on; 2-08's `crate_small_no_emissive_826` blinks and `_ent_854` does not. Census: 23 on 15 levels, 15 emissive, 8 colour, one with no datum |
+| (3b) The frames read as the decode | colour: R x 1, G and B x one c; emissive: R up, G and B x 1 | - | **passes on all 12 changed crate levels** (`crate_gate.txt`, per pixel, after over before, medians): the colour branch (1-30, 1-31, 4-12) R **1.000**, G **0.529**, B **0.510** (one c at f420, in 8 bits); the emissive branch (2-01, 2-06, 2-10, 2-11, 2-20, 2-21, 2-22, 2-23, 2-27) G **1.000**, B **1.000**, R 1.29-3.06 |
+| (3c) One period | a triangle of two 600 ms legs, the before at its zero end | - | **passes** on 2-20's big crate, which stands still (`series/`, f420..f492 every 6 ticks, R/G): 4.27, 5.02, **5.74**, 5.02, 4.27, 3.53, 2.79, 2.03, **1.31**, 2.03, 2.79, 3.53, 4.27 - the top at f432 and the bottom at f468 (36 ticks, 600 ms), equal to the before's 1.310, and f492 equal to f420 |
+| (3d) Against the library stills | the original's crates' R/G inside the port's range, +-10 % | brown | **passes 24 of 24**: 1-30's three crates in its six stills, 1.39 to 4.51, inside the colour branch's [1.288, 4.293] (the before's R/G, and it over the decode's 0.3); 2-20's two in its three stills, 2.65 to 3.57, inside the measured [1.310, 5.745] |
+| (4) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no unscheduled input; every change one of the three scripts' pictures; every expected level left unchanged explained | `P1/fix1/sweep` | **passes** (`compare_sweep.txt`, `visibility.txt`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines; 0 unscheduled input lines. **29 changed, 99 byte-identical**; every changed level is one of the censuses' 34 (0 unexpected), each diff component the size of an affected picture (1-30's five touching crates make one; 4-01's door differs in its two coloured edge strips). The 5 unchanged: 3-30's set, 2-31's two agents and 3-31's crate are outside the view (the camera model - the player's node, clamped inside the level - agrees with the measured corner to 0.1 u on all 14 levels where an agent measures it); 2-08's two crates and 2-09's one are burnt by the carrancas' fireballs before f420 (`series/`: red, then gone by f390 and f240). Partly in view: 3-13's blue key at the view's edge; 3-17's and 3-21's blue keys carried by a knight and 4-20's red one by the player (its node 5 u from `main_char`'s), each drawn behind its carrier, 109 to 702 px showing. Out of view at f420 and in the library's stills, so gated by the unit and the census alone: 3-23's blue key, keyhole and door (its one change is its fire agent) and 4-20's red keyhole and door |
+| (5) Winnability | - | - | **N/A**: no gameplay change. Neither was run here: this tree, on step 150's `e1dab6e`, has no `tests/routes/`, no `test_mp_routes` and no reachability tool (W.1's `37c4ece` is not an ancestor of `w1-b`) |
+
+**SUITES**, run directly once each, 0 failures: `test_mp_sprites` **1575** (1354 at step 112: the rules, 19
+refusals, and the census over the 128 levels), `test_mp_layer` **3017** (2953 at step 150: the three new cases),
+`test_mp_timed` **84** and `test_mp_zerog` **88** (as at step 111). **NOT RUN: `test_mp_minions`** (Smart App
+Control: refused, deleted and relinked once, refused again). It reads `art.json` through `Art::LoadRules` only to
+compare its minion entry with `minions.json`, which this step does not touch; the same `LoadRules` on the same file
+passes in the four suites that ran. The other 40 suites and `MagicPortalsSpike` link the changed `MagicPortalsSim`
+and are not relinked here (none includes `Art.hpp` or the layer's header); the merge's build relinks them. The
+suites that text-replace `art.json`: 481 of their literals are in the old file, each one's first occurrence where it
+was (the new entries are appended; two context-only differences, the word `untouched` at the old file's end).
+
+**SMART APP CONTROL: 2 refusals**, both `test_mp_minions` (`231a1fe8`, then `6cd559a9` after the one relink).
+Launches: `MagicPortals.exe` `5ff43623` 132 (the sweep's 128, four series), `test_mp_sprites` `2f4c2ba0`,
+`test_mp_layer` `1c04cd0d`, `test_mp_timed` `765131ea` and `test_mp_zerog` `581c6dcd` once each.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **23 crates, not the audit's 22**: level7a's `crate_small_no_emissive_826` spells its datum `telepotable`, so
+   `teleportable` is absent and `GetUInt` reads 0 - the original blinks it, and the port's portals already refuse it.
+   Checked at the source: `level7a.esc`'s entity 826 holds its properties inline (no `<FileName>` anywhere in the
+   file; `<CustomData>` burnable 1, telepotable 0), and an inline entity is read from its own element alone into a
+   zeroed entity (`ETHEntity.cpp:60-71`, `ETHEntityProperties.cpp:202-221`, `:411`), so `crate_small_no_emissive.ent`'s
+   `teleportable` 1 is never read.
+2. **The blink's clock** is the level's age, the antiportal's (step 72): not floored to whole milliseconds a frame,
+   and from the level's first tick, for all 23. 19 of them are dynamic, and the original is INFERRED to run their
+   callback from the first frame too. Four are `static="1"` in their scenes - 2-09's `crate_no_emissive_1004`
+   (`level8a`), 2-11's `crate_no_emissive_937` (`level10a`), 2-23's `crate_no_emissive_1206` (`level22a`) and 4-12's
+   `crate_2233` (`level11c`) - and a static entity's callback runs only while its bucket is drawn (00_order 8.12c), so
+   the original's blink on those four stands still while they are out of view and the port's runs on (LEFT FOR LATER).
+3. **A burnt crate's colour stands at the node's white**: manageBurnable's fade to black is not drawn (below), and
+   its first value is 1.
+4. **A piece spelled with its .ent** would ask for `key.ent_blue.png`, which does not exist, and the original would
+   draw no picture; none of the 24 is so spelled (pinned), and the port would keep the saved picture and say so.
+
+**RULINGS APPLIED.** The standing direction that the original decides. R1, R2, R17 and R23 are not this step's; R24
+and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER** (found here, each decoded, none built).
+- **The fire agent's pulse**: `ETHCallback_fire_agent` #282-300, `bounce(this, vector2(1.02, 1.02), vector2(0.98,
+  0.98), 300)` - the agent's picture swings 1.02 -> 0.98 -> 1.02, 300 ms a leg (`art.json` `fire_agent._not_built`).
+- **The teleportable crate's own blink**: `crateCallback` #38-121 - a teleportable, unburnt crate whose callback passes
+  zeroEmissive (the `_no_emissive` crates) blinks its emissive (0.2, 0.2, 0.2) -> 0 over 600 ms (#71-93), and one with
+  the uint `blink` (1 - GetAmbientLight()) -> 0 over 200 ms (#96-121); on the dark levels this lights every crate a
+  portal carries (`art.json` `non_teleportable._not_built`).
+- **A burning crate's fade**: `manageBurnable` #41-117, `SetColor(bias)` and `SetAlpha(bias)`, bias
+  1 - burnTime / 1000, then `DeleteEntity`; the port takes a burnt crate away whole at 1000 ms.
+- **4-19's halo**: `red_key_state.ent` (blend 1, `portal_halo.png`) at the red key's point is drawn white in the port;
+  the library's stills show it red. Its callback is B5's (`ETHCallback_red_key_state`), not this step's.
+- **The four static crates' clock** (deviation 2): 2-09's, 2-11's, 2-23's and 4-12's crate are `static="1"`, so
+  the original runs their blink only on the frames their bucket is drawn (00_order 8.12c,
+  `ETHActiveEntityHandler.cpp:70-92`); the port's runs from the level's first tick whether they are seen or not. Their
+  phase on screen is 00_order section 5's bucket-limited callback clock (the visible-bucket margin not read), not
+  decodable from stills; 2-09's is burnt before f420 in the port.
+- For the close role: `docs/parity-backlog.md` section 6's P3 and P4 rows are this step's to tick (not edited here),
+  and the five items above want rows.
+- For the merge's renumbering: "step 151" is written in `art.json` (`fire_agent._not_built`,
+  `non_teleportable._not_built`, `non_teleportable._clock`) and `keys.json` (`_not_built`).
