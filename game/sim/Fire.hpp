@@ -49,11 +49,12 @@
 //   the carrier holds one. What is still not built is a FIRE AGENT reaching a
 //   shot - a shot fired THROUGH a flame keeps flying here - and that belongs in
 //   Shot's segment test, not in this file.
-// - A blast also sets `destroy` on every breakable it grabs. A breakable wall is
-//   Demolish's body to take away, and one body with two owners is how a level ends
-//   up half broken, so it is left out. Nine chapter-2 levels place both a bomb and
-//   a breakable wall (11a, 12a, 13a, 15a, 16a, 18a, 20a, 23a, 28a), which makes
-//   this a follow-up rather than a footnote.
+// - A blast also sets `destroy` on every entity it grabs (explode #111-122). This
+//   file does not act on that: it REPORTS what each blast reached with a clear line
+//   (State::grabbedNow), and Game hands it to Demolish, the one owner of a
+//   breakable's breaking, which takes the breakable walls away on the same tick
+//   (planning step 115). What else reads `destroy` in the original - a carranca, a
+//   shock agent, a minion, a light wall - is not built; demolish.json says so.
 //
 // WHAT BURNING DOES, AND TO WHAT
 //
@@ -132,6 +133,12 @@ struct Bomb {
     bool blown = false;
 };
 
+// A body one blast reached with a clear line, and the bomb whose blast it was.
+struct Grab {
+    std::string by;
+    entt::entity body = entt::null;
+};
+
 struct State {
     Rules rules;
     std::vector<Agent> agents;
@@ -151,6 +158,9 @@ struct State {
     // a sensor the level never places, as the ghost is - so Game tests these
     // against it by hand, exactly as it tests a fireball against the ghost.
     std::vector<glm::dvec2> blastsPx;
+    // And WHAT they reached with a clear line, whatever it is, cleared and refilled
+    // by every Tick: the original's grabbed set, which Game hands to Demolish.
+    std::vector<Grab> grabbedNow;
 
     // One tick, after the physics step. Returns the bodies it took away, which
     // the caller must pass through Forget: a burnt crate can be a portal

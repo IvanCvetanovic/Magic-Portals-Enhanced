@@ -127,6 +127,25 @@ def test_a_launcher_that_throws_a_stone_is_a_breaker_and_one_that_throws_else_is
     assert judge([*nodes, other], rules).status == "sealed"
 
 
+def test_a_barrel_with_fire_opens_a_flagged_breakable_wall_and_nothing_else(rules):
+    # Planning step 115: a blast breaks what isBreakable (the flag) grabs, where the entity is
+    # one demolish.json blast.entities lists, on a level with a barrel and fire to set it off.
+    nodes = scene("breakable")
+    wall = node(nodes, "breakable_wall_4")
+    barrel = r.Node("barrel_bomb_ent_9", "barrel_bomb.ent", (40.0, 20.0), 0.0, {"explosive": '"1"'})
+    carranca = r.Node("carranca_right_ent_10", "carranca_right.ent", (20.0, 90.0), 0.0, {})
+    v = judge([*nodes, barrel, carranca], rules)
+    assert (v.status, v.opened_by) == ("opened", {"barrel": ["breakable_wall_4"]})
+    assert judge([*nodes, barrel], rules).status == "sealed"
+    assert judge([*nodes, carranca], rules).status == "sealed"
+    flagless = dataclasses.replace(wall, meta={})
+    assert judge([n if n is not wall else flagless for n in nodes] + [barrel, carranca],
+                 rules).status == "sealed"
+    light_wall = dataclasses.replace(wall, entity="light_wall.ent")
+    assert judge([n if n is not wall else light_wall for n in nodes] + [barrel, carranca],
+                 rules).status == "sealed"
+
+
 def test_a_torch_opens_its_light_wall_and_nothing_else(rules):
     nodes = scene("breakable")
     wall = node(nodes, "breakable_wall_4")
@@ -210,7 +229,7 @@ def test_write_then_check_passes_and_a_moved_verdict_fails(tmp_path, capsys):
     assert document["counts"] == {"opened": 1, "reachable": 1, "sealed": 1}
     assert document["levels"]["breakable"] == {
         "label": "1-02", "status": "sealed", "sealed_by": ["breakable_wall_4"]}
-    assert set(document["_breakers"]) == {"stone", "torch", "dark_dragon", "fire"}
+    assert set(document["_breakers"]) == {"stone", "barrel", "torch", "dark_dragon", "fire"}
     assert r.main(["--check", *common]) == 0
 
     document["levels"]["breakable"]["status"] = "opened"

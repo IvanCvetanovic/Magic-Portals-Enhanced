@@ -1,0 +1,24 @@
+{
+  "_about": [
+    "2-13 (planning step 115). Right off the ledge to the floor before the first fireball (fired",
+    "on tick 240); a portal ahead on the floor (tap 1) and one over single_block_plat 1059",
+    "(tap 2), and right through them onto the platform, above the fire lane. From there",
+    "barrel_bomb_ent_1056 is sent through a pair (taps 3-4: the floor beside breakable_wall_1040,",
+    "then against the barrel's left face as it slides) to the lane by the wall; the first",
+    "fireball goes off on it (tick 369) and its blast takes the wall (370). Left off the",
+    "platform, ahead of the second fireball, to the door under the ledge. Won on tick 500."
+  ],
+  "level": "level12a",
+  "win_by": 560,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 70},
+    {"walk": "right", "from": 130, "to": 142},
+    {"walk": "left", "from": 380, "to": 560}
+  ],
+  "taps": [
+    {"tick": 80, "at": [256, 206]},
+    {"tick": 105, "at": [345, 110]},
+    {"tick": 175, "at": [180, 200]},
+    {"tick": 200, "at": [402, 110]}
+  ]
+}

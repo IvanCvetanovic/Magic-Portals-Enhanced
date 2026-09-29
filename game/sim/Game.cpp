@@ -319,6 +319,14 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // which move things. What it takes away goes through Forget as a thrown body
     // does: a crate is teleportable, so a burning one can be in portals.travellers.
     for (const entt::entity gone : level.fire.Tick(registry, level.player, dt)) Forget(level, gone);
+    // What each blast grabbed with a clear line has its `destroy` set (explode,
+    // listing L67590, #111-122), and a breakable wall's own callback reads that and
+    // deletes it (ETHCallback_breakable_wall, L68771, #1-86) ON THE SAME FRAME: the
+    // barrel is a dynamic entity and the wall a static one, and Ethanon runs the
+    // static entities' callbacks after the dynamic ones (ETHScene.cpp:464-491).
+    // Demolish owns the breaking, and says which breakables a blast breaks.
+    for (const Fire::Grab& grab : level.fire.grabbedNow) level.demolish.Grab(grab.body, grab.by);
+    for (const entt::entity gone : level.demolish.Destroyed(registry)) Forget(level, gone);
     // A blast within reach of chapter 4's boss burns it, which is the ONLY thing
     // that can hurt it. Done here rather than inside Fire for the reason the
     // ghost's fireball test is done in Game: Fire::Blast reaches what it grabs by
@@ -609,8 +617,8 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     //
     // Torch owns no bodies. The light wall carries metadata/breakable, so it is
     // already a Demolish::Breakable with a body and a box that Demolish walks
-    // every frame - the removal goes through that list rather than behind it, as
-    // a struck minion goes through Minions::Take.
+    // every frame - the removal is Demolish's own, as a struck minion's is
+    // Minions::Take.
     if (!level.torch.lights.empty()) {
         std::optional<glm::dvec2> flightPx;
         if (level.portals.flight) flightPx = level.portals.flight->atPx;
@@ -628,18 +636,9 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         }
 
         if (turn.takeWallAway) {
-            for (Demolish::Breakable& breakable : level.demolish.breakables) {
-                if (breakable.name != level.torch.wall.name || breakable.broken) continue;
-                breakable.broken = true;
-                breakable.brokenBy = level.torch.signal.fromTorch.empty() ? "a torch" : level.torch.signal.fromTorch;
-                const entt::entity gone = breakable.body;
-                breakable.body = entt::null;
-                if (registry.valid(gone)) {
-                    registry.destroy(gone);
-                    Forget(level, gone);
-                }
-                break;
-            }
+            const std::string by = level.torch.signal.fromTorch.empty() ? "a torch" : level.torch.signal.fromTorch;
+            const entt::entity gone = level.demolish.Break(registry, level.torch.wall.name, by);
+            if (gone != entt::null) Forget(level, gone);
         }
 
         // And the way back: a shot signal rebuilds the wall where it stood. This
@@ -652,15 +651,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             std::string built;
             const entt::entity wall =
                 LevelBuilder::BuildEntity(data.scene, level.torch.wall.name, registry, options, level.built, built);
-            if (wall != entt::null) {
-                for (Demolish::Breakable& breakable : level.demolish.breakables) {
-                    if (breakable.name != level.torch.wall.name) continue;
-                    breakable.broken = false;
-                    breakable.brokenBy.clear();
-                    breakable.body = wall;
-                    break;
-                }
-            }
+            if (wall != entt::null) level.demolish.Restore(level.torch.wall.name, wall);
         }
     }
 
@@ -674,21 +665,11 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             registry, level.player, level.torch.lit > 0, torchPx, hasTorch, level.goals.completed, data.motion, dt);
 
         // breakDarkDragonWall. The wall carries metadata/breakable, so it is
-        // already a Demolish::Breakable with a body - the removal goes through
-        // that list rather than behind it, as the torch's own wall does.
+        // already a Demolish::Breakable with a body - Demolish takes it, as it
+        // takes the torch's own wall.
         if (turn.brokeWall && !level.darkDragon.wallNode.empty()) {
-            for (Demolish::Breakable& breakable : level.demolish.breakables) {
-                if (breakable.name != level.darkDragon.wallNode || breakable.broken) continue;
-                breakable.broken = true;
-                breakable.brokenBy = level.darkDragon.name;
-                const entt::entity gone = breakable.body;
-                breakable.body = entt::null;
-                if (registry.valid(gone)) {
-                    registry.destroy(gone);
-                    Forget(level, gone);
-                }
-                break;
-            }
+            const entt::entity gone = level.demolish.Break(registry, level.darkDragon.wallNode, level.darkDragon.name);
+            if (gone != entt::null) Forget(level, gone);
         }
 
         // PortalManager::killAll, on the tick it is wounded. The budget and the

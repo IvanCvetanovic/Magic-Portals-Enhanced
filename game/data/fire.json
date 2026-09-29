@@ -79,11 +79,11 @@
     "radius_px": 80.0,
     "_remake_radius_px_not_applied": 96.0,
     "_decoded_kills_player_not_read": false,
-    "_breakables_in_a_blast_not_built": [
-      "explode also sets `destroy` on every breakable it grabs, which the port does",
-      "NOT do: a breakable wall is Demolish's, and one body with two owners is how a",
-      "level ends up half-broken. Recorded rather than dropped; the remaster doc",
-      "carries it as the follow-up."
+    "_breakables_in_a_blast": [
+      "explode also sets `destroy` on every entity it grabs (#111-122). Fire reports what",
+      "each blast reached with a clear line and Demolish, the one owner of a breakable's",
+      "breaking, takes the breakable walls away on the same tick: demolish.json `blast`",
+      "(planning step 115)."
     ]
   }
 }

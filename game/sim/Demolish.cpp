@@ -67,6 +67,19 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.contactMarginPx = root["contact"]["margin_px"].AsNumber();
+    if (!has("blast", "entities")) return false;
+    const Json::Value& entities = root["blast"]["entities"];
+    if (!entities.IsArray() || entities.AsArray().empty()) {
+        error = path + ": blast.entities is not an array naming at least one entity";
+        return false;
+    }
+    for (const Json::Value& entity : entities.AsArray()) {
+        if (!entity.IsString()) {
+            error = path + ": blast.entities lists something that is not a string";
+            return false;
+        }
+        read.blastEntities.push_back(entity.AsString());
+    }
     out = std::move(read);
     return true;
 }
@@ -85,6 +98,61 @@ void State::Tick(entt::registry& registry) {
             break;
         }
     }
+}
+
+entt::entity State::Break(entt::registry& registry, const std::string& name, const std::string& by) {
+    for (Breakable& breakable : breakables) {
+        if (breakable.name != name || breakable.broken) continue;
+        breakable.broken = true;
+        breakable.brokenBy = by;
+        const entt::entity gone = breakable.body;
+        breakable.body = entt::null;
+        if (!registry.valid(gone)) return entt::null;
+        registry.destroy(gone);
+        return gone;
+    }
+    return entt::null;
+}
+
+void State::Restore(const std::string& name, entt::entity body) {
+    for (Breakable& breakable : breakables) {
+        if (breakable.name != name) continue;
+        breakable.broken = false;
+        breakable.brokenBy.clear();
+        breakable.destroy = false;
+        breakable.destroyBy.clear();
+        breakable.body = body;
+        return;
+    }
+}
+
+bool State::Grab(entt::entity body, const std::string& by) {
+    if (body == entt::null) return false;
+    for (Breakable& breakable : breakables) {
+        if (breakable.body != body || breakable.broken || !breakable.blastBreaks) continue;
+        // The first blast to reach it names it; a second on the same tick sets the
+        // same datum again.
+        if (!breakable.destroy) breakable.destroyBy = by;
+        breakable.destroy = true;
+        return true;
+    }
+    return false;
+}
+
+std::vector<entt::entity> State::Destroyed(entt::registry& registry) {
+    std::vector<entt::entity> gone;
+    for (Breakable& breakable : breakables) {
+        if (!breakable.destroy || breakable.broken) continue;
+        breakable.destroy = false;
+        breakable.broken = true;
+        breakable.brokenBy = breakable.destroyBy;
+        const entt::entity body = breakable.body;
+        breakable.body = entt::null;
+        if (!registry.valid(body)) continue;
+        registry.destroy(body);
+        gone.push_back(body);
+    }
+    return gone;
 }
 
 const Stone* State::FindStone(const std::string& name) const {
@@ -160,8 +228,13 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
 
         Breakable breakable;
         breakable.name = node.name;
+        breakable.entity = entityName;
         breakable.body = found->second;
         breakable.flagged = flagged;
+        // isBreakable reads the flag and nothing else, so a wall that breaks by
+        // name alone is never in a blast's grab.
+        breakable.blastBreaks = flagged && std::find(rules.blastEntities.begin(), rules.blastEntities.end(),
+                                                     entityName) != rules.blastEntities.end();
         const glm::vec3 centre = Units::ToWorld(atPx.x + offsetPx.x, atPx.y + offsetPx.y);
         breakable.box.centre = glm::vec2(centre.x, centre.y);
         breakable.box.half = glm::vec2(Units::ToMetres(sizePx.x * 0.5), Units::ToMetres(sizePx.y * 0.5));

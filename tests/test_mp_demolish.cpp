@@ -316,6 +316,64 @@ void TheMarginIsTheEdge() {
     }
 }
 
+// ---- planning step 115: one owner of a breakable's breaking --------------------
+
+// A blast grabs a breakable by its FLAG (isBreakable, listing L67923), and only the
+// entities demolish.json blast.entities lists read `destroy` here. 2-04's
+// breakable_wall_815 breaks by name alone: never in a blast's grab, as a stone
+// breaks it still. 2-12's is flagged: grabbed, and taken by Destroyed.
+void ABlastGrabsByTheFlag() {
+    Demolish::Rules rules;
+    std::string error;
+    CHECK_MSG(Demolish::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/demolish.json", rules, error), error);
+    CHECK_MSG(rules.blastEntities.size() == 2 && rules.blastEntities[0] == "breakable_wall" &&
+                  rules.blastEntities[1] == "breakable_wall.ent",
+              "blast.entities is breakable_wall in both spellings");
+
+    Run flagless;
+    if (!Begin("level3a", flagless)) return;
+    const Demolish::Breakable* byName = flagless.level.demolish.FindBreakable("breakable_wall_815");
+    CHECK_MSG(byName != nullptr && !byName->flagged && !byName->blastBreaks, "2-04's wall breaks by name alone");
+    if (byName == nullptr) return;
+    CHECK_MSG(!flagless.level.demolish.Grab(byName->body, "a barrel"), "so a blast's grab passes it by");
+    CHECK(flagless.level.demolish.Destroyed(flagless.registry).empty());
+    CHECK(!byName->broken && flagless.registry.valid(byName->body));
+
+    Run flagged;
+    if (!Begin("level11a", flagged)) return;
+    const Demolish::Breakable* wall = flagged.level.demolish.FindBreakable("breakable_wall_1040");
+    CHECK_MSG(wall != nullptr && wall->flagged && wall->blastBreaks, "2-12's wall is flagged");
+    if (wall == nullptr) return;
+    const entt::entity body = wall->body;
+    CHECK(!flagged.level.demolish.Grab(entt::null, "a barrel"));
+    CHECK(flagged.level.demolish.Grab(body, "barrel_bomb_ent_1041"));
+    CHECK_MSG(wall->destroy && !wall->broken, "grabbed: its destroy set, not yet taken");
+    const std::vector<entt::entity> gone = flagged.level.demolish.Destroyed(flagged.registry);
+    CHECK_MSG(gone.size() == 1 && gone.front() == body, "its own callback takes it");
+    CHECK(wall->broken && wall->brokenBy == "barrel_bomb_ent_1041" && !wall->destroy);
+    CHECK(!flagged.registry.valid(body) && wall->body == entt::null);
+    CHECK_MSG(!flagged.level.demolish.Grab(body, "another"), "and a broken wall is grabbed no more");
+    CHECK(flagged.level.demolish.Destroyed(flagged.registry).empty());
+}
+
+// A script's deletion and the way back, as the torch's and the dark dragon's are:
+// Break takes the body and says which, once; Restore stands it again.
+void BreakAndRestoreByName() {
+    Run run;
+    if (!Begin("level11a", run)) return;
+    const Demolish::Breakable* wall = run.level.demolish.FindBreakable("breakable_wall_1040");
+    if (wall == nullptr) return;
+    const entt::entity body = wall->body;
+    CHECK(run.level.demolish.Break(run.registry, "no_such_wall", "a script") == entt::null);
+    CHECK(run.level.demolish.Break(run.registry, "breakable_wall_1040", "a script") == body);
+    CHECK(wall->broken && wall->brokenBy == "a script" && wall->body == entt::null);
+    CHECK(!run.registry.valid(body));
+    CHECK_MSG(run.level.demolish.Break(run.registry, "breakable_wall_1040", "again") == entt::null, "once only");
+    const entt::entity again = run.registry.create();
+    run.level.demolish.Restore("breakable_wall_1040", again);
+    CHECK(!wall->broken && wall->brokenBy.empty() && wall->body == again);
+}
+
 // ---- level 1-9, played -------------------------------------------------------
 
 // Fires a shot and waits for it to land or fail. True when a portal opened.
@@ -380,6 +438,8 @@ void runTests() {
     AStoneWhereTheLevelPutsItBreaksNothing();
     ThePlayerBreaksNothing();
     TheMarginIsTheEdge();
+    ABlastGrabsByTheFlag();
+    BreakAndRestoreByName();
     Level8WithTwoShots();
 }
 

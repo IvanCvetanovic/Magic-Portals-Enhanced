@@ -1,0 +1,30 @@
+{
+  "_about": [
+    "4-16, weightless (planning step 115): every tap also pushes the player 70 u/s away from it.",
+    "barrel_bomb_ent_2396 is sent through a pair (taps 1-2) to float at (226, 130), between the",
+    "two breakable walls and right of platform 2385's end. Two taps (3-4) turn the player down to",
+    "fire_diamond_ent_2404 (taken on tick 143); from then on a tap is a fireball. Tap 5 fires at",
+    "the barrel: its blast takes breakable_wall_ent_2389 and _2390 together (tick 209). Taps 6-7",
+    "take key_ent_2406 (tick 232) and send the player left along the floor through the lower gap",
+    "to keyhole_ent_2392 (unlocked on tick 378; door_locked_ent_2391 goes on 467). Taps 8-12 bring",
+    "the player back out, up past the platform's end and left through the upper gap to the door.",
+    "Won on tick 774."
+  ],
+  "level": "level15c",
+  "win_by": 840,
+  "holds": [],
+  "taps": [
+    {"tick": 30, "at": [226, 128]},
+    {"tick": 55, "at": [300, 98]},
+    {"tick": 80, "at": [369.8, 53.7]},
+    {"tick": 104, "at": [334.8, 15.3]},
+    {"tick": 200, "at": [226, 130]},
+    {"tick": 224, "at": [277.6, 217.3]},
+    {"tick": 248, "at": [303.5, 214.1]},
+    {"tick": 440, "at": [20, 204]},
+    {"tick": 590, "at": [245.9, 180.2]},
+    {"tick": 614, "at": [216.1, 213.2]},
+    {"tick": 699, "at": [237.3, 63]},
+    {"tick": 723, "at": [225, 67.2]}
+  ]
+}

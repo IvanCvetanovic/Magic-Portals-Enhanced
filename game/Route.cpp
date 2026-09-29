@@ -384,6 +384,26 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
             std::printf("\n          bomb %s %s", bomb.name.c_str(), bomb.blown ? "BLOWN" : "asked");
         }
     }
+    // What a blast, a stone, a torch or a dragon broke (step 115), and by what.
+    for (const auto& breakable : level->demolish.breakables) {
+        if (breakable.broken) {
+            std::printf("\n          breakable %s BROKEN by %s", breakable.name.c_str(), breakable.brokenBy.c_str());
+        }
+    }
+    // What the player can carry: a diamond (a fire one turns every tap into a
+    // fireball) and a key - where each is, and whether the player holds it.
+    const auto held = [level](entt::entity owner) { return owner != entt::null && owner == level->player; };
+    for (const auto& diamond : level->diamonds.diamonds) {
+        std::printf("\n          %s diamond %s (%.1f, %.1f)%s", diamond.fire ? "fire" : "shock", diamond.name.c_str(),
+                    diamond.atPx.x, diamond.atPx.y, diamond.gone ? " GONE" : (held(diamond.owner) ? " HELD" : ""));
+    }
+    for (const auto& key : level->keys.keys) {
+        std::printf("\n          key %s (%.1f, %.1f)%s", key.name.c_str(), key.atPx.x, key.atPx.y,
+                    key.spent ? " SPENT" : (held(key.owner) ? " HELD" : ""));
+    }
+    for (const auto& keyhole : level->keys.keyholes) {
+        if (keyhole.unlocked) std::printf("\n          keyhole %s UNLOCKED", keyhole.name.c_str());
+    }
     if (level->hazards.playerDied) std::printf("\n          PLAYER DIED: %s", level->hazards.killedBy.c_str());
     if (level->boss.beholder) {
         const auto& boss = *level->boss.beholder;

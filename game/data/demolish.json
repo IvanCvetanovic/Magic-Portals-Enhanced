@@ -1,7 +1,8 @@
 {
   "_about": [
-    "The Magic Portals port's rolling stones: what a stone breaks, and when it counts as",
-    "touching. See docs/planning/2026-09-11-magic-portals-remaster.md, step 6."
+    "The Magic Portals port's rolling stones and barrel blasts: what a stone breaks, when it",
+    "counts as touching, and what a blast breaks. See docs/planning/2026-09-11-magic-portals-",
+    "remaster.md, steps 6 and 115."
   ],
 
   "breakable": {
@@ -13,9 +14,16 @@
       "each is an inline entity in its .esc whose CustomData lacks breakable, and Ethanon",
       "reads an inline entity as it stands (ETHEntityProperties.cpp:202-224). So the",
       "original decides by something the data does not show. The owner played it, and on",
-      "11 September confirmed that stones broke those walls."
+      "11 September confirmed that stones broke those walls.",
+      "",
+      "DECODED since (planning step 115): the stone's side is ETHBeginContactCallback_breakable_wall",
+      "(MiscCallbacks, listing L68341), which Ethanon binds by the ENTITY's name (ETHASUtil.cpp:63-67)",
+      "and which never reads 'breakable': #1-14 tests the other body's 'demolisher', #16-33 its",
+      "speed against scale(1.5), #35-40 destroy(thisEntity). So every breakable_wall, flagged or",
+      "not, breaks for a stone - the owner's testimony, from the bytecode. The flag is read only",
+      "by isBreakable (L67923), which is a blast's grab (the blast block below)."
     ],
-    "_source": "owner testimony, 11 September 2026",
+    "_source": "owner testimony, 11 September 2026; ETHBeginContactCallback_breakable_wall (listing L68341) #1-40, planning step 115",
     "names": ["breakable_wall"]
   },
 
@@ -28,5 +36,36 @@
     ],
     "_guess": true,
     "margin_px": 1.0
+  },
+
+  "blast": {
+    "_note": [
+      "What a barrel bomb's blast breaks. explode (MiscCallbacks, listing L67590) grabs with an",
+      "EntityGrabber of radius scale(80) filtered by isBreakableOrExplosiveOrBurnable (#33-47;",
+      "fire.json blast.radius_px), keeps each entity whose first contact on the line from the",
+      "blast is itself (#63-109, getFirstContactExcept with NonProjectileChooser), and sets its",
+      "'destroy' to 1 (#111-122). isBreakable (L67923) is GetUInt('breakable') != 0: the FLAG,",
+      "never the name, so the eight flagless breakable_walls above are not grabbed as",
+      "breakables. ETHCallback_breakable_wall (L68771) #1-86 reads isDestroyed and deletes the",
+      "wall with its wall_destroy and startEarthquake(20 x destroyEffectScale), the same frame:",
+      "the barrel's callback is a dynamic entity's, the wall's a static one's, and",
+      "ETHScene::Update runs the static entities' callbacks after the dynamic ones'",
+      "(ETHScene.cpp:464-491). Footage F6 (2-12) shows the wall gone in the frame",
+      "explosion_large first shows (#160).",
+      "",
+      "entities: the breakables whose own callback is ETHCallback_breakable_wall, in either",
+      "spelling (callbacks bind by RemoveExtension of the name, 00_order 8.0 rule 4)."
+    ],
+    "_source": "explode L67590 #33-47, #111-122; isBreakable L67923; ETHCallback_breakable_wall L68771 #1-86 (out/parity/asbc/all_functions.txt)",
+    "entities": ["breakable_wall", "breakable_wall.ent"],
+    "_not_built": [
+      "The rest of the grabbed set that reads 'destroy' in the original, left to its own module:",
+      "a carranca (flagged breakable; carrancaCallback L85350 #128-183: carranca_destroy.ent,",
+      "startEarthquake(20, 0), DeleteEntity) - 2-18's and 2-23's barrels stand 54 and 56 u from",
+      "one; a shock agent and a minion (burnable; ETHCallback_shock_agent L92534 #294,",
+      "ETHCallback_minion L87616 #1478); a light wall (flagged; ETHCallback_light_wall L98075",
+      "#32 takes it away on its own clock). The port's blast burns what is burnable and asks what",
+      "is explosive, as before, and breaks only the entities listed above."
+    ]
   }
 }

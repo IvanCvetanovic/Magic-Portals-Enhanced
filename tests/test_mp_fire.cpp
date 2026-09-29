@@ -19,12 +19,17 @@
 // directions are tested, because that asymmetry is exactly what a remake smooths
 // away without noticing.
 //
+// And what a blast breaks (planning step 115): the breakable walls it reaches with
+// a clear line, on its own tick, through Demolish - and nothing else of what the
+// original's grab sets `destroy` on.
+//
 // Reads the converted levels and the remake's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
 
 #include "core/Components.hpp"
+#include "sim/Demolish.hpp"
 #include "sim/Fire.hpp"
 #include "sim/Game.hpp"
 #include "sim/Units.hpp"
@@ -309,6 +314,101 @@ void AChainRipplesATickAtATime() {
     std::printf("  %s: a chain of %d went off, one tick apart\n", kBombLevel, run.level.fire.blasts);
 }
 
+// ---- planning step 115: what a blast breaks ------------------------------------------
+
+const Demolish::Breakable* BreakableNamed(const Run& run, const std::string& name) {
+    return run.level.demolish.FindBreakable(name);
+}
+
+bool Grabbed(const Run& run, entt::entity body) {
+    for (const Fire::Grab& grab : run.level.fire.grabbedNow) {
+        if (grab.body == body) return true;
+    }
+    return false;
+}
+
+// explode #111-122 sets `destroy` on the breakable wall its grab reaches, and the
+// wall's own callback takes it away on the same frame (demolish.json `blast`):
+// 2-12's barrel_bomb_ent_1041 stands 34 units from breakable_wall_1040, as the
+// level places them and as footage F6 shows them go (#159-#160).
+void ABlastBreaksTheWallItReachesOnItsTick() {
+    Run run;
+    if (!Begin("level11a", run)) return;
+    const Demolish::Breakable* wall = BreakableNamed(run, "breakable_wall_1040");
+    CHECK_MSG(wall != nullptr, "2-12's wall is a Demolish::Breakable");
+    CHECK_MSG(run.level.fire.bombs.size() == 1, "2-12 places one barrel");
+    if (wall == nullptr || run.level.fire.bombs.size() != 1) return;
+    CHECK_MSG(wall->flagged && wall->blastBreaks, "flagged, and breakable_wall is in demolish.json blast.entities");
+    const entt::entity body = wall->body;
+    CHECK(run.registry.valid(body));
+
+    run.level.fire.bombs.front().requested = true;
+    Tick(run);
+    CHECK_EQ(run.level.fire.blasts, 1);
+    CHECK_MSG(Grabbed(run, body), "the blast reaches the wall with a clear line");
+    CHECK_MSG(wall->broken, "and the wall is gone on the blast's own tick");
+    CHECK_MSG(wall->brokenBy == run.level.fire.bombs.front().name,
+              "broken by the barrel, got '" + wall->brokenBy + "'");
+    CHECK_MSG(!run.registry.valid(body) && wall->body == entt::null, "its body taken away, as Demolish takes one");
+    CHECK_EQ(run.level.demolish.Broken(), 1);
+    std::printf("  level11a: barrel_bomb_ent_1041's blast broke breakable_wall_1040 on its own tick\n");
+}
+
+// The grab keeps only what it sees (getFirstContactExcept, #63-109): on 2-16 a
+// barrel put down over the left ledge, whose sphere reaches breakable_wall_1142's
+// box 54 units off, blasts along a line that meets the ledge's top first.
+void AWallBehindRockStands() {
+    Run run;
+    if (!Begin("level15a", run)) return;
+    const Demolish::Breakable* wall = BreakableNamed(run, "breakable_wall_1142");
+    const Fire::Bomb* barrel = run.level.fire.FindBomb("barrel_bomb_ent_1187");
+    CHECK_MSG(wall != nullptr && barrel != nullptr, "2-16's wall and its barrel on the block");
+    if (wall == nullptr || barrel == nullptr) return;
+    PutAt(run.registry, barrel->body, glm::dvec2(80.0, 140.0));
+    for (Fire::Bomb& bomb : run.level.fire.bombs) {
+        if (bomb.name == "barrel_bomb_ent_1187") bomb.requested = true;
+    }
+    Tick(run);
+    CHECK_MSG(run.level.fire.blasts >= 1, "the barrel went off over the ledge");
+    CHECK_MSG(!Grabbed(run, wall->body), "the wall is behind the ledge from there");
+    CHECK_MSG(!wall->broken, "so it stands");
+    std::printf("  level15a: a blast at (80, 140) left breakable_wall_1142 standing behind the ledge\n");
+}
+
+// Out of reach, it stands: 2-13's barrels go off where the level places them, 321
+// units and more from its wall.
+void AWallOutOfReachStands() {
+    Run run;
+    if (!Begin(kBombLevel, run)) return;
+    const Demolish::Breakable* wall = BreakableNamed(run, "breakable_wall_1040");
+    CHECK(wall != nullptr);
+    if (wall == nullptr || run.level.fire.bombs.empty()) return;
+    run.level.fire.bombs.front().requested = true;
+    for (int tick = 0; tick < 5; ++tick) Tick(run);
+    CHECK_MSG(run.level.fire.blasts >= 1, "the barrels went off");
+    CHECK_MSG(!wall->broken, "and the wall stands");
+    std::printf("  %s: %d blast(s) far from breakable_wall_1040, which stands\n", kBombLevel, run.level.fire.blasts);
+}
+
+// The port breaks the walls alone. 2-18's barrel_bomb_ent_1151 stands 54 units
+// above carranca_right_1075, a flagged breakable the blast grabs with a clear
+// line; the original's carrancaCallback (#128-183) would then delete it. The port
+// leaves it to Turrets, which is not built (demolish.json blast._not_built), so
+// it stands and goes on firing - pinned so that building it moves this line.
+void ABlastLeavesACarrancaStanding() {
+    Run run;
+    if (!Begin("level17a", run)) return;
+    const Demolish::Breakable* carranca = BreakableNamed(run, "carranca_right_1075");
+    CHECK_MSG(carranca != nullptr && carranca->flagged && !carranca->blastBreaks,
+              "a carranca is a flagged breakable, and not one the port's blast breaks");
+    if (carranca == nullptr || run.level.fire.bombs.empty()) return;
+    run.level.fire.bombs.front().requested = true;
+    Tick(run);
+    CHECK_EQ(run.level.fire.blasts, 1);
+    CHECK_MSG(Grabbed(run, carranca->body), "the grab reaches it, as the original's does");
+    CHECK_MSG(!carranca->broken && run.registry.valid(carranca->body), "and it stands");
+}
+
 void runTests() {
     TheDecodedNumbersAreNotTheRemakesGuesses();
     TheReaderRefusesWhatWouldBeSilent();
@@ -318,6 +418,10 @@ void runTests() {
     ABurningCrateGoesAfterItsSecond();
     FireKillsThePlayerAndABlastDoesNot();
     AChainRipplesATickAtATime();
+    ABlastBreaksTheWallItReachesOnItsTick();
+    AWallBehindRockStands();
+    AWallOutOfReachStands();
+    ABlastLeavesACarrancaStanding();
 }
 
 } // namespace

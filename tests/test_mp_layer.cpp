@@ -5495,6 +5495,64 @@ void EventsALevelMakesOnItsOwnShakeTheView() {
     }
 }
 
+// Planning step 115: 2-12 as footage F6 plays it. The player stands on button_1050,
+// door_lift_1042 rises, the next fireball reaches barrel_bomb_ent_1041 where the
+// level places it, and its blast takes breakable_wall_1040 ON THE SAME TICK
+// (explode #111-122, then the wall's own callback): wall_destroy stands at the wall,
+// and the wall's startEarthquake(20) comes after the barrel's 50 within one tick,
+// overwriting it, so the view never trembles past 10 px - F6's barrel beside a wall,
+// #159-#175: -5, 0, +5, -10, +10, 0, -5, 0, +5, -2, 0, +2, 0, 0, -1, 0, +1.
+void ABarrelBesideItsWallGoesAsF6() {
+    if (!OriginalArtIsThere("ABarrelBesideItsWallGoesAsF6")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level11a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Demolish::Breakable* wall = layer.SimLevel()->demolish.FindBreakable("breakable_wall_1040");
+    CHECK_MSG(wall != nullptr, "2-12's breakable_wall_1040");
+    if (wall == nullptr) return;
+    // Over button_1050 (159, 95), on the ledge: the player falls onto it.
+    PutPlayerAt(registry, layer, glm::dvec2(159.0, 60.0));
+
+    int blastTick = -1;
+    int wallTick = -1;
+    bool dust = false;
+    std::vector<std::pair<int, double>> trembles; // tick, px
+    for (int tick = 1; tick <= 900 && (blastTick < 0 || tick <= blastTick + 60); ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (layer.QuakeOffsetUnits() != 0.0) trembles.emplace_back(tick, layer.QuakeOffsetUnits() * kQuakePxPerUnit);
+        if (blastTick < 0 && layer.SimLevel()->fire.blasts > 0) blastTick = tick;
+        if (wallTick < 0 && wall->broken) wallTick = tick;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (tick == blastTick) {
+            for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+                if (report.entity == "wall_destroy.ent") dust = true;
+            }
+        }
+    }
+    CHECK_MSG(blastTick > 0, "the fireball reached the barrel through the risen door");
+    CHECK_MSG(wallTick == blastTick, "the wall went on the blast's tick " + std::to_string(blastTick) + ", got " +
+                                         std::to_string(wallTick));
+    CHECK_MSG(wall->brokenBy == "barrel_bomb_ent_1041", "broken by the barrel, got '" + wall->brokenBy + "'");
+    CHECK_MSG(dust, "and wall_destroy.ent stands where it was");
+    CHECK_MSG(!layer.SimLevel()->hazards.playerDied, "the player on the button lives");
+    std::string seen;
+    double largest = 0.0;
+    for (const auto& [tick, px] : trembles) {
+        if (tick < blastTick - 10) continue;
+        largest = std::max(largest, std::fabs(px));
+        char one[32];
+        std::snprintf(one, sizeof one, " %d:%+.1f", tick, px);
+        seen += one;
+    }
+    CHECK_MSG(largest <= 10.0, "no tremble past F6's 10 px:" + seen);
+    std::printf("  2-12: barrel off and wall gone on tick %d; trembles (tick:px)%s\n", blastTick, seen.c_str());
+    layer.OnDetach(registry);
+}
+
 // ---- step 104: every tremble drawn, and the bodies' own impacts ---------------------
 
 // (a) The engine runs up to five ticks between two frames (SupersonicApp.cpp:74,
@@ -14739,6 +14797,7 @@ void runTests() {
     TheGhostsShotEndingShakesTheView();
     ASwitchedDoorShakesTheViewAsItGoes();
     EventsALevelMakesOnItsOwnShakeTheView();
+    ABarrelBesideItsWallGoesAsF6();
     AStoneThroughAWallShakesItsImpactThenTwenty();
     AnUnlockedDoorShakesTheView();
     TheDarkDragonsLevelShakesTheView();

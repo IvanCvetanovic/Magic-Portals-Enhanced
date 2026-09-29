@@ -1,0 +1,20 @@
+{
+  "_about": [
+    "2-12, as footage F6 plays it (planning step 115). A portal left of the player (tap 1) and",
+    "one above the ledge corner (tap 2); walking left through them lands the player on",
+    "button_1050, which lifts door_lift_1042. The second fireball flies through the risen door",
+    "and goes off on barrel_bomb_ent_1041 (tick 456); its blast takes breakable_wall_1040 on its",
+    "own tick (457). Off the ledge and right along the floor, ahead of the third fireball, to the",
+    "door. Won on tick 576."
+  ],
+  "level": "level11a",
+  "win_by": 640,
+  "holds": [
+    {"walk": "left", "from": 88, "to": 130},
+    {"walk": "right", "from": 480, "to": 640}
+  ],
+  "taps": [
+    {"tick": 30, "at": [182, 206]},
+    {"tick": 60, "at": [185, 36]}
+  ]
+}

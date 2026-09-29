@@ -25,6 +25,19 @@
 //   turned by 0 or by a quarter turn.
 // - What the remake's launcher would throw is step 7. Levels 23 and 24 have a
 //   breakable wall and no stone until then.
+//
+// THE ONE OWNER OF A BREAKABLE'S BREAKING (planning step 115). Whatever takes a
+// breakable away - a stone's touch (Tick), a barrel's blast (Grab, then
+// Destroyed), the torch's light wall and the dark dragon's summon (Break) - does
+// it through this state, so the layer's watches (wall_destroy, its earthquake, the
+// demolition sound) read one record. The blast is the original's two halves:
+// explode (MiscCallbacks, listing L67590) #111-122 sets `destroy` on every entity
+// its grab reaches with a clear line, and ETHCallback_breakable_wall (L68771)
+// #1-86 reads it and deletes the wall. The grab takes a breakable by its FLAG
+// (isBreakable, L67923: GetUInt('breakable') != 0), never by name, and only the
+// entities demolish.json `blast.entities` lists read the datum here: a carranca,
+// a light wall, a shock agent and a minion read it too in the original, and are
+// left to their own modules (demolish.json `blast._not_built`).
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
@@ -42,6 +55,9 @@ namespace MagicPortals::Demolish {
 struct Rules {
     std::vector<std::string> breakableNames; // entity names breakable without the flag
     double contactMarginPx = 0.0;
+    // The entities whose own callback deletes them once a blast has set their
+    // `destroy` datum: demolish.json `blast.entities`, either spelling.
+    std::vector<std::string> blastEntities;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -53,11 +69,17 @@ struct Stone {
 
 struct Breakable {
     std::string name;
+    std::string entity;   // its entity, as Roles::EntityName reads it
     entt::entity body = entt::null;
     Trigger::Box box;     // the shape's bounds, in world metres, not grown
     bool flagged = false; // by metadata/breakable, rather than by name
+    bool blastBreaks = false; // flagged, and its entity in rules.blastEntities
+    // The original's `destroy` datum, set by a blast's grab and read by the
+    // wall's own callback (Destroyed), with what set it.
+    bool destroy = false;
+    std::string destroyBy;
     bool broken = false;
-    std::string brokenBy; // the stone that broke it
+    std::string brokenBy; // the stone, barrel, torch or dragon that broke it
 };
 
 struct State {
@@ -65,8 +87,27 @@ struct State {
     std::vector<Stone> stones;
     std::vector<Breakable> breakables;
 
-    // One tick, after the physics step: each stone breaks what it touches.
+    // One tick, after the physics step: each stone breaks what it touches. The
+    // wall's body goes and its handle is kept, which the layer's impact watch
+    // matches the stone's contact by.
     void Tick(entt::registry& registry);
+
+    // A script's deletion, now: the torch's light wall and the dark dragon's wall.
+    // The body goes and the handle is cleared. Returns the body taken, for the
+    // caller's Forget, or entt::null when there was none standing.
+    entt::entity Break(entt::registry& registry, const std::string& name, const std::string& by);
+    // And the way back (the torch's signal, shot): the wall stands again with the
+    // body the builder made for it.
+    void Restore(const std::string& name, entt::entity body);
+
+    // A blast's grab (explode #111-122): `destroy` set on each breakable standing
+    // whose body is `body` and which the blast breaks. Returns whether one was.
+    bool Grab(entt::entity body, const std::string& by);
+    // ETHCallback_breakable_wall #1-86: every breakable whose `destroy` is set is
+    // taken away. Run after the blasts of the same tick, as the original runs its
+    // static entities' callbacks after the dynamic ones (ETHScene.cpp:464-491).
+    // Returns the bodies taken, for the caller's Forget.
+    std::vector<entt::entity> Destroyed(entt::registry& registry);
 
     const Stone* FindStone(const std::string& name) const;
     const Breakable* FindBreakable(const std::string& name) const;

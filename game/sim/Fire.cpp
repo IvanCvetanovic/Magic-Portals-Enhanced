@@ -41,7 +41,7 @@ double SquaredPx(const glm::dvec2& v) {
 // The grabber is a sphere against each candidate's REAL collider, and then a ray:
 // an entity whose first obstruction is not itself is behind something, and the
 // blast does not reach it.
-void Blast(State& state, entt::registry& registry, const glm::dvec2& atPx) {
+void Blast(State& state, entt::registry& registry, const glm::dvec2& atPx, const std::string& by) {
     const glm::vec3 centre = Units::ToWorld(atPx.x, atPx.y);
 
     std::vector<entt::entity> reached;
@@ -58,6 +58,7 @@ void Blast(State& state, entt::registry& registry, const glm::dvec2& atPx) {
                 Supersonic::PhysicsSystem::Raycast(registry, centre, to / distance, distance, entt::null, false);
             if (seen.hit && seen.entity != other) continue;
         }
+        state.grabbedNow.push_back(Grab{by, other});
 
         // A bomb is ASKED, not detonated: it goes off in its own turn, next tick.
         for (Bomb& bomb : state.bombs) {
@@ -148,6 +149,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 std::vector<entt::entity> State::Tick(entt::registry& registry, entt::entity player, float dt) {
     std::vector<entt::entity> removed;
     blastsPx.clear();
+    grabbedNow.clear();
 
     // The bombs asked for BEFORE this tick go off now, and the set is taken first:
     // a blast below may ask another bomb, and that one waits its own turn. This is
@@ -166,7 +168,7 @@ std::vector<entt::entity> State::Tick(entt::registry& registry, entt::entity pla
         removed.push_back(bomb.body);
         ++blasts;
         blastsPx.push_back(atPx);
-        Blast(*this, registry, atPx);
+        Blast(*this, registry, atPx, bomb.name);
     }
 
     // Then the fire agents, which never move and have no body of their own.

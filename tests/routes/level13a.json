@@ -1,0 +1,22 @@
+{
+  "_about": [
+    "2-14 (planning step 115). crate_small_no_emissive_ent_1152 sent through a pair onto",
+    "button_1112 (taps 1-2), which raises door_lift_1111 and lets the fire through along y 89.",
+    "Then barrel_bomb_ent_1116 through a pair (taps 3-4) to fall past (262, 100), timed so the",
+    "second fireball meets it at the height where its blast reaches breakable_wall_1142 with a",
+    "clear line under single_block_plat 1176 (touched on tick 437, the wall gone on 438). Right",
+    "along the floor, down to the door. Won on tick 518. The meeting is tick-exact: a step that",
+    "moves the fire, the shot or the bodies' fall re-authors taps 3-4."
+  ],
+  "level": "level13a",
+  "win_by": 580,
+  "holds": [
+    {"walk": "right", "from": 450, "to": 580}
+  ],
+  "taps": [
+    {"tick": 30, "at": [20, 160]},
+    {"tick": 55, "at": [72, 95]},
+    {"tick": 380, "at": [262, 100]},
+    {"tick": 420, "at": [118, 209]}
+  ]
+}

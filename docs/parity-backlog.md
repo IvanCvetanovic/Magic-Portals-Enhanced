@@ -1298,7 +1298,8 @@ work no step of §7 owns, and the owner's calls:
       with its first spike (5); two calls on one side of one tick in the port's order (8); the fireball's 5 a frame early,
       with its explosion (9); `SpaceSky` not ported, so the 19 `space_bg` levels shake their whole background (10); no
       vibration (11); F6's barrel on 2-12 not reproduced, because the port's blast takes no wall away (12; gameplay,
-      `Fire.hpp`, nine chapter-2 levels); a static callback's call not limited to visible buckets (14). And the merge's:
+      `Fire.hpp`, nine chapter-2 levels - *closed by step 115*: the wall goes on the blast's tick and 2-12 trembles as
+      F6's, at most 9.84 px); a static callback's call not limited to visible buckets (14). And the merge's:
       4-32's mouth leg starts on tick 721 where step 101 measured 720 (the path's 0 ms waypoint takes an update of its
       own; the same 48 ticks). Next: their owners.
 - [ ] **Left by 13.3 (step 102)**: the band stopping at x 768 on a wide level (10 of 128) rests on
@@ -1390,8 +1391,9 @@ work no step of §7 owns, and the owner's calls:
       script rises 0.8 x h = 102.4, and turns wherever its channel turns it where the script opens it only from shut and
       closes it only from fully raised; the beholder breaks any demolisher stone rising into it, the original only
       `rolling_stone.ent`. And two wall breaks the port does not do: a bomb's blast destroys every breakable it grabs
-      (`explode` #111-122; `Fire.hpp:52-56`, nine chapter-2 levels), and 4-19's `red_key_state` destroys
-      `breakable_wall_2756` 6000 ms after its key is destroyed (recorded nowhere else). Next: the owner.
+      (`explode` #111-122; `Fire.hpp:52-56`, nine chapter-2 levels - *the walls built in step 115*, B1), and 4-19's
+      `red_key_state` destroys `breakable_wall_2756` 6000 ms after its key is destroyed (recorded nowhere else). Next:
+      the owner.
 - [ ] **Order 11.1, recorded, and tidy** (step 109): the wall's angle is the converter's 1.5708 rad (-90.00021 deg, 0.0002
       u over the half line); static callbacks add their dust only while their bucket is drawn in the original
       (deviation 6, with steps 78-80's rows); 2-32's claw's `wall_destroy` at angle 90 has no owner in 00_order section 7;
@@ -1478,10 +1480,14 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
 - Every level is won by a scripted route that a suite replays, from its start to its door. *(Step 113: the harness
   is built - `tests/routes/`, replayed by `test_mp_routes` - and 11 of 128 levels are won by a route: 1-01, 1-02,
   1-03, 1-04, 1-05, 1-08, 1-09, 1-14, 1-15, 1-16, 1-32. Step 114 adds eight: 2-01, 2-02, 2-03, 2-04, 2-05, 2-07,
-  2-08, 2-09 - 19 of 128. Open until all 128.)*
+  2-08, 2-09 - 19 of 128. Step 115 adds four, 2-12, 2-13, 2-14 and 4-16, so far won only by the window's replay of
+  their routes: `test_mp_routes` has not run on them (Smart App Control, three refusals) - 19 of 128 replayed by the
+  suite, 23 with the window's. Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
-  it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Open until B1 turns them to opened.)*
+  it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
+  108 reachable, 20 opened, 0 sealed. The flood is optimistic about barrels (a barrel and any fire on the level opens
+  a wall), so five of the nine read opened with no port route yet: G8's and B4's rows. Open until those are won.)*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1492,15 +1498,34 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       won (VERIFIED by a free-space flood; the mechanism was KNOWN in the "Order 11.1" rows). `explode` (listing L67590)
       #111-122 sets `destroy` on every breakable it grabs; the port breaks walls only for a stone, a torch or the dark
       dragon (`Fire.hpp:52-56`, `Demolish.cpp:73-86`). Build it after or with G5, or a fireball through 2-12's closed
-      door sets off its barrel.
+      door sets off its barrel. *Built in step 115*: Demolish is the one owner of a breakable's breaking (a stone, the
+      torch, the dark dragon and now the blast), and a blast takes every flagged `breakable_wall` (either spelling) it
+      reaches with a clear line, on its own tick, with `wall_destroy` and its quake - F6's 2-12 to the tremble.
+      GAMEPLAY. The same rule can also take a wall on 3-19 (`breakable_wall_1556`) and 4-10 (`breakable_wall_ent_2098`,
+      34 u from its barrel), whose doors were reachable before, and possibly 2-29 (`breakable_wall_883`, 72 u): play
+      there can differ (not played). **Won by routes: 2-12, 2-13, 2-14, 4-16** (in the window; `test_mp_routes` has not
+      replayed them yet, row below). The other five have no port route (step 115 (d), measured by
+      `out/parity/program/B1/scan_b1.py`): 2-16, 2-17, 2-19 need G8; 2-21, 2-24 need B4 (their rows). **Mechanism
+      built; open until those five are won**: G8 (under Majors) is a blocker for 2-16, 2-17 and 2-19, B4 for 2-21 and
+      2-24.
 - [ ] **B2. 84 of 128 levels never unlock from the menus** on a fresh save, because 2-12 cannot be won (chapter 2
-      tops out at 34 % of its medals, under the 60 % chapters 3 and 4 need). Goes with B1.
+      tops out at 34 % of its medals, under the 60 % chapters 3 and 4 need). Goes with B1. *Not cleared by step 115*:
+      2-12 is won, but a level opens only when the one before it scored, and chapter 2's order also stops at 2-06 (G6)
+      and 2-10 and 2-11 (G8: 2-10's crates stand 133 u from its fire agent and cannot be sent through a portal, 2-11's
+      static crate 206 u). Measured with a save of chapter 1 gold (a fixture) and every chapter-2 route's medal: 2-13
+      to 2-15 open behind 2-12, 2-07, 2-11 and 2-12 locked, chapter 2 at 23 % (`out/parity/program/B1/b2/`). Open
+      until G6 and G8 let those three be won.
 - [ ] **B3. 4-32 cannot be won** - the barrel restock (`addEntityIfItCantBeFound('barrel_bomb')`, `ETHCallback_dark_dragon`
       ins 997-1064) and the lava's explode contact (`ETHBeginContactCallback_lava` L68416 #21-30) must land together,
       or a missed barrel softlocks. KNOWN ("Order 12.1, not built").
 - [ ] **B4. 2-20, 2-22, 2-23, 2-27 at risk: the draggable handle** (`arrows.ent`, `ETHCallback_arrows` L67305, `doFollow`
       from `fire_agent` #280 and `reflect_agent` #6) is filed as cosmetic and not built; nothing reads `follow`.
-      VERIFIED mechanism, INFERRED unwinnable. Needs release-to-fire (below) and the camera ruling.
+      VERIFIED mechanism, INFERRED unwinnable. Needs release-to-fire (below) and the camera ruling. **Blocks 2-21 and
+      2-24** (step 115, both `follow` agents; no port route found): 2-21's fixed agent is 103 u from its wall at best
+      and the level has one barrel; on 2-24 one barrel in the fixed agent's zone sets off all seven (measured, ticks
+      68-72), leaving nothing to hold `button_1144` in front of the door (that the player alone cannot then pass the
+      door lift is reasoned from the geometry, not played; a barrel kept out of the chain to weigh the button, which
+      works in the original too, was not tried - so 2-24's attribution to B4 is partly reasoned).
 - [ ] **B5. 4-19 at risk: the red key breaks the wall** - `ETHCallback_red_key_state` (L97171): the key carried ->
       its sound, a 6000 ms fade of light and ambient, then `SeekEntity('breakable_wall')` destroyed (F17 #216). Nothing
       reads `red_key_state`. (The "Order 11.1" row says "destroyed"; the trigger is the key carried.)
@@ -1528,7 +1553,10 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       `crate_no_emissive_1004` through the closed `door_lift_1007` on tick 167 with no input.
 - [ ] **G6. Fireballs never pass through portals** (`mayTeleport` lets one through once; the pair survives).
 - [ ] **G8. A shot through a fire agent's flame becomes a fireball** (`ETHCallback_fire_agent` #254-265
-      `burnProjectile`); the port's shot flies on. 20 levels.
+      `burnProjectile`); the port's shot flies on. 20 levels. **A blocker since step 115**: no port route for 2-16
+      (the ledge shadows the wall and the pit barrels from the fire agent's zone), 2-17 (its second wall 87 u from the
+      zone, `door_lift_1111` between) and 2-19 (108 u), nor for 2-10 and 2-11 (B2). The search was direct ignition and
+      one hop through barrels where the level places them; relays through barrels moved first were not searched.
 - [ ] **G9. The reflector catches within `size.x` (32) and its leg is `min(|caster - agent|, remaining)`**
       (`ETHCallback_reflect_agent` L69063 #56-84, #148-196); the port's 16 is a guess and it mirrors the whole rest.
 - [ ] **G10. The player moves as the decode says** - `speed 3`, `SetGravityScale(2)`, velocity set outright, in the
@@ -1572,7 +1600,9 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       mostly does not (step 113, deviation 2); the 11-of-11 match with the window is its only evidence.
 - [ ] **The reachability flood is optimistic** (step 113, deviation 3): a point, not the 20 x 44 body; no no-portal
       zones; locked and switched doors and dynamic bodies free - so 4-19, 3-13, 4-21 and 4-32 read reachable and
-      are settled only by their routes.
+      are settled only by their routes. *And about barrels* (step 115, deviation 1): a barrel and any fire on the
+      level open a wall, whether or not that fire can set the barrel off within the wall's reach - so 2-16, 2-17,
+      2-19, 2-21 and 2-24 read opened with no port route (B1's row).
 - [x] **`--route` without `--saves` writes the player's own save** when the run goes past the level's end: say so in
       its `--help` line, or give it a throwaway saves directory (code; the next step touching `main.cpp`). Step 113's
       runs left gold for 1-02 and 1-32 in `%APPDATA%/Magic Portals/scores.json` - the owner deletes it for a fresh
@@ -1614,10 +1644,11 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       the next left fireball at 5.27 s, where F6's L1 reaches the crate in front of the player at about 5.7 s; the idle
       player lives past 12 s where F6's dies at about 10.05 s. F6's crate is also gone about 0.6 s after its
       `small_explosion`, where `fire.json` `burn.time_ms` is 1000 (decoded). For the fire and crates' owner.
-- [ ] **The reachability `BREAKERS` citations name `Game.cpp` lines** that step 114 moved (the fireball block was
+- [x] **The reachability `BREAKERS` citations name `Game.cpp` lines** that step 114 moved (the fireball block was
       rewritten): `:285`, `:364-370`, `:495`, `:636-641`, `:685-690`, `:775` are now `:286`, `:374-379`, `:490`,
       `:630-`, `:679-`, `:770`, in the pinned `_breakers` too. B1's step rewrites them with its `barrel` row; the
-      verdicts did not move (`--check` 0 differ).
+      verdicts did not move (`--check` 0 differ). *Rewritten in step 115* with the `barrel` row, against the code the
+      step leaves.
 - [ ] **A fireball that kills the player is gone before it burns what it also touches** (step 114, deviation 1):
       `Turrets::Tick` judges the player before the solid test; in the original both contacts begin on one Box2D step
       and both callbacks run. Only a player pressed against a crate or a barrel in the lane can tell.
@@ -1629,6 +1660,39 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       `carranca_ent_827`'s lane on its own and the first fireball goes off on it (x 192.3, tick 200), where the
       original's lift idles at its marker until tapped. `test_mp_turrets` prints this lane and pins the other 19; G2's
       step pins it.
+- [ ] **`test_mp_routes` NOT RUN in step 115** (Smart App Control refused `6090631b`, after its one relink
+      `c8d1403d`, and the verifier's relink `bd6544ad`); its evidence is the window replay of all 23 routes on
+      `MagicPortals.exe` `ff41bf4e`, 23 of 23 won twice with the same ticks, the 19 old ones on step 114's. The next
+      step that links it runs it once; that run is the first headless replay of 2-12, 2-13, 2-14 and 4-16 (authored in
+      the window), and a mismatch there re-authors them, not a regression. Until then those four are won by a route
+      the window replays, not yet by one a suite replays. Nor were `test_mp_launchers`, `test_mp_boss` and
+      `test_mp_start` relinked, which read `demolish.json` through the loader that now requires `blast.entities`
+      (their sources unchanged; the 128-level sweep starts every level through it).
+- [ ] **The rest of `explode`'s destroy set** (step 115): a blast also sets `destroy` on a carranca (flagged breakable;
+      `carrancaCallback` L85350 #128-183: `carranca_destroy.ent`, `startEarthquake(20, 0)`, `DeleteEntity` - 2-18's and
+      2-23's barrels stand 54 and 56 u from one), a shock agent and a minion (burnable; `ETHCallback_shock_agent` L92534
+      #294, `ETHCallback_minion` L87616 #1478) and a light wall (`ETHCallback_light_wall` L98075 #32). The port's blast
+      breaks walls alone (`demolish.json` `blast._not_built`); each needs its own module's death.
+- [ ] **A stone breaks a carranca in the port only** (step 115): `Demolish::Find` holds every flagged breakable,
+      carrancas included, and a stone's touch breaks any of them; the original's stone callback,
+      `ETHBeginContactCallback_breakable_wall` (L68341), is `breakable_wall`'s alone. And it breaks only above a speed
+      (#16-33: faster than `scale(1.5)`), where the port breaks on touch.
+- [ ] **A fireball's touch and its barrel's blast are a tick apart** in the port (Fire's flag-and-poll split), where
+      `ETHScene::Update` runs the barrel's callback after the physics step that set its flag, on the same frame
+      (`ETHScene.cpp:464-467`). F6's frames (50-100 ms) cannot tell. (A chain ripples a tick at a time in the port;
+      in the original a barrel asked by another's blast goes the same frame or the next, by the update order.)
+- [ ] **2-14's route is tick-exact** (step 115): its barrel falls past a passing fireball at the one height its blast
+      reaches the wall from; a step that moves the fire (G4), the shot or a body's fall (G10) re-authors taps 3-4.
+- [ ] **A blast's grab differs from `explode`'s in four small ways** (step 115, deviations 3 and 5-7): the port's
+      sphere meets a hull's bounding box, the original's the turned collision box (the same box for every breakable
+      wall, all at quarter turns); the original's line-of-sight ray stops at a sensor (`b2World.cpp:976-995`), the
+      port's `Raycast(..., includeTriggers=false)` passes it; `explode` #86-96 skips an entity when the ray reports no
+      contact (the blast inside its shape), the port grabs it; `EntityGrabber` #13-23 grabs only from the 3x3
+      neighbouring buckets (L63238), the port anywhere in 80 u. All predate the step (burnables and bombs), and none
+      lies on the four routes' blast lines (the only sensors there, `button_1050` on 2-12 and `button_1112` on 2-14,
+      are off them).
+- [ ] **2-24's kept-out barrel is untried** (step 115 (d)): a barrel left out of the seven-barrel chain to weigh
+      `button_1144` while the rest break the walls; if it wins, 2-24 leaves B4.
 
 **Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
 1-01, 1-02 and 1-32, two of them from step 113's automated runs.
