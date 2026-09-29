@@ -1465,3 +1465,95 @@ work no step of §7 owns, and the owner's calls:
 
 - [ ] 128-level sweep: capture the port at the library's `_h6.3` moment for every level, compare with
       `out/parity/original/levels/`, list residual differences per level, fix upstream (converter / port), repeat.
+
+## 6. After the 2026-09-29 audit: the program to "only the owner's testing left"
+
+A read-only audit on 2026-09-29 read the original's script listing, its assets and the converted levels against the
+port, in six lenses, and had each lens checked by a skeptic. It found gaps the rows above do not carry. Its report and
+evidence stay local, under the gitignored `out/parity/audit_2026-09-29/` (`REPORT.md`, `levels_completability.md`,
+`check_levels/flood2.py`). Tags as there: VERIFIED (both sides read), INFERRED (reasoned), KNOWN (a row above).
+On 2026-09-29 the owner said: "proceed with improvements until the only thing left is my testing".
+
+**Definition of done for this program.**
+- Every level is won by a scripted route that a suite replays, from its start to its door.
+- A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
+- Every blocker and major below is built as the original does it, or its ruling is recorded.
+- The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
+  the largest fixed.
+- The owner's open calls are listed in one place.
+
+**Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
+- [ ] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
+      won (VERIFIED by a free-space flood; the mechanism was KNOWN in the "Order 11.1" rows). `explode` (listing L67590)
+      #111-122 sets `destroy` on every breakable it grabs; the port breaks walls only for a stone, a torch or the dark
+      dragon (`Fire.hpp:52-56`, `Demolish.cpp:73-86`). Build it after or with G5, or a fireball through 2-12's closed
+      door sets off its barrel.
+- [ ] **B2. 84 of 128 levels never unlock from the menus** on a fresh save, because 2-12 cannot be won (chapter 2
+      tops out at 34 % of its medals, under the 60 % chapters 3 and 4 need). Goes with B1.
+- [ ] **B3. 4-32 cannot be won** - the barrel restock (`addEntityIfItCantBeFound('barrel_bomb')`, `ETHCallback_dark_dragon`
+      ins 997-1064) and the lava's explode contact (`ETHBeginContactCallback_lava` L68416 #21-30) must land together,
+      or a missed barrel softlocks. KNOWN ("Order 12.1, not built").
+- [ ] **B4. 2-20, 2-22, 2-23, 2-27 at risk: the draggable handle** (`arrows.ent`, `ETHCallback_arrows` L67305, `doFollow`
+      from `fire_agent` #280 and `reflect_agent` #6) is filed as cosmetic and not built; nothing reads `follow`.
+      VERIFIED mechanism, INFERRED unwinnable. Needs release-to-fire (below) and the camera ruling.
+- [ ] **B5. 4-19 at risk: the red key breaks the wall** - `ETHCallback_red_key_state` (L97171): the key carried ->
+      its sound, a 6000 ms fade of light and ambient, then `SeekEntity('breakable_wall')` destroyed (F17 #216). Nothing
+      reads `red_key_state`. (The "Order 11.1" row says "destroyed"; the trigger is the key carried.)
+- [ ] **B6. 3-13 at risk: an anti-portal agent should die to a shot**, taking its ring with it
+      (`ETHCallback_anti_portal_agent` L66304 #109-187, `deleteAntiPortalInThisBucket`); the port keeps it a permanent
+      zone (R17). 21 agents on 17 levels. Build before or with R1, which alone closes 4-01's route.
+- [ ] **B7. 4-21 at risk: R2** - the well's port-only zone (248 px) covers the button, the wall and the door. KNOWN.
+
+**Majors with no row above** (VERIFIED unless marked).
+- [ ] **G1. Knights never see, shoot or destroy portals** (`ETHCallback_minion` L87616: 120 deg cone + occlusion ray,
+      `addEnemyShoot` every 2000 ms, `killPortal` within scale(16), `!`/`?` marks, `cantReach`, the six darkest levels
+      see only while a torch is lit). 34 levels play easier; `anti_sight_wall` has no purpose.
+- [ ] **G2. Lifts run on their own**; the original's idle at marker `a`, and a tap inside their rect sends them at
+      60 u/s (`ETHCallback_lift` L83504, `sendLiftToOtherPoint`) and fires no portal. 14 lifts on 13 levels.
+- [ ] **G3. Moving platforms swing half as far at twice the rate** (R7: `linearMotion` cos(angle) x stride from
+      +stride; the port sin(2 x speed x t) x stride / 2). 15 platforms on 11 levels, 3 patrolling agents.
+- [ ] **G4. The portal shot flies 600 u/s against 200** (`ETHCallback_projectile` L71109 #113-125, with a 24 u jump
+      on its first frame, #29-55).
+- [ ] **G5. Fireballs pass walls and closed doors** (`ETHBeginContactCallback_fireball` L85862 #152 dies on anything
+      solid that is not a carranca, a sensor or a spared character). On 2-12 the player dies at the spawn (tick 180).
+- [ ] **G6. Fireballs never pass through portals** (`mayTeleport` lets one through once; the pair survives).
+- [ ] **G8. A shot through a fire agent's flame becomes a fireball** (`ETHCallback_fire_agent` #254-265
+      `burnProjectile`); the port's shot flies on. 20 levels.
+- [ ] **G9. The reflector catches within `size.x` (32) and its leg is `min(|caster - agent|, remaining)`**
+      (`ETHCallback_reflect_agent` L69063 #56-84, #148-196); the port's 16 is a guess and it mirrors the whole rest.
+- [ ] **G10. The player moves as the decode says** - `speed 3`, `SetGravityScale(2)`, velocity set outright, in the
+      air `vel.x x min(1, 0.86 x fps/60)`; the port's `move_toward` numbers are Godot-era guesses.
+- [ ] **Release-to-fire**: the original fires on release, if the pointer moved no more than scale(18)
+      (`hasPortalRequestInput`); the port fires on press.
+
+**Presentation** (VERIFIED unless marked).
+- [ ] **P1. A chapter's last level ends on a dead "Chapter N complete" line** (only Esc leaves); the original goes to
+      the chapter select, and after 4-32 opens `GameFinishedPopup`.
+- [ ] **P2. The win cutscenes**: 4-01's rocket launch, 4-19's landing, 2-32's dragon knight, with `end_delay` (5000 /
+      14500 / 6600 ms) and their music; the port holds a flat 1400 ms.
+- [ ] **P3. 20 of 22 fire agents wear the anti-portal agent's face** (`ETHCallback_fire_agent` #1-7 sets
+      `fire_agent.png` every update).
+- [ ] **P4. Blue and red keys, keyholes and doors draw yellow** (`setKeyColor` L90240 swaps to `_blue`/`_red`
+      sprites); the non-teleportable crate's red pulse (`manageNonTeleportable`, 600 ms) is not drawn.
+- [ ] **P5. SpaceSky** (spiral, planet, eclipse) on the 19 space levels. KNOWN only as a cause.
+- [ ] **P6. The sound pass**: the landing thump, keys, crates, stones, blasts and fireball impacts, the timed crystal's
+      alert, the bosses' cues; `playExplosionSound` plays ONE sample chosen by its argument, and
+      `test_mp_sounds.cpp:193` pins the misdecode "both".
+- [ ] **P7. Music**: `no_music` levels, boss tracks starting and stopping, the level's track kept in the selectors.
+- [ ] **P8. Achievements**: about 60 conditions in `checkForLevelAchievements` (27 of 82 can unlock today), the saved
+      set, the "Achievement unlocked!" card, the "This level is locked!" card, the AchievementsPopup.
+- [ ] **Smaller**: sound switches not saved; the log erased at each launch; tutorial helpers (1-21's camera hint,
+      the tap-away hands); the beholder's death explosion; `fire32`, `antiportal_explosion`, `carranca_destroy`,
+      `small_explosion_no_light`; the closing lift door crushes nothing; `death_area` kills only the player in a 16 px
+      box; no teleport while a platform sits in a portal; stale notes (`end_delay`, `Turrets.hpp:17-22`,
+      `Camera.hpp:6-10`, `entity_roles.json`'s cosmetic `arrows` and `red_key_state`).
+
+**Tests.** Only 1-01, 1-09 and 1-32 are won by a suite. The audit's free-space flood found B1; it becomes a test, and
+each gameplay step adds a route for every level it unblocks.
+
+**The owner's calls** (gathered here; each decided as the original does unless he says otherwise): the grant in
+`docs/permission.md` (gates handing a build to anyone else); camera dragging (his 2026-09-11 ruling "no dragging"
+against the decode's 2x-swipe pan on 127 of 128 levels); R24/R25; step 110's fire-signal orbit and the put-out test at
+the ball; the port-wide floored clock and the picture a tick behind; 12.1's summon clock; 11.3's death before the door;
+10.2's pickup rule and 10.3's carriers; 11.1's four; Q.2's spawn point; 13.1's off-screen kill; the zero-g recoil
+speed; the pause's Achievements button on every level; 4-02's easter-egg popup; target platforms.
