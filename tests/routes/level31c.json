@@ -1,0 +1,38 @@
+{
+  "_about": [
+    "4-32, the dark dragon, won by three burns from barrels its own fireballs set off (planning step 116).",
+    "Left off the ledge to the seam at x 255.4 on the floor, where the dragon sees the player; tap 1 lights",
+    "the torch (the light wall goes, the summon comes 7 s later). Each wound: a portal at (171.4, 143.7) on",
+    "the fireball's line, 152 u from the antiportal's centre and within the blast's 190 u of the dragon;",
+    "then, 3 ticks after the shot leaves (1172, 1835, 2426), a portal beside the barrel on block 2219,",
+    "which comes out on the line with the fireball some 30 u short of it: wounds on 1198, 1861, 2452.",
+    "After the first two wounds the next shot at the player restocks the barrel at barrel_spawn (1619,",
+    "2246), and the player walks right out of that fireball's line and back to the seam. Dead, the",
+    "dragon drops the yellow key at (78, 208) and a platform (2993); tap 8 (2500) puts the torch out,",
+    "so the light wall is back: left to the key (3083), right to the keyhole (3295; the locked door goes",
+    "on 3384) and the door. Won on tick 3421. The portals are outside the original's 144 u antiportal (R1),",
+    "and each barrel goes through its pair before the fireball reaches the portal (G6); the summon clock,",
+    "the shot's 600 u/s (G4) and the walk (G10) are the port's, and a step that moves one re-authors this."
+  ],
+  "level": "level31c",
+  "win_by": 3480,
+  "holds": [
+    {"walk": "left", "from": 30, "to": 203},
+    {"walk": "right", "from": 1630, "to": 1659},
+    {"walk": "left", "from": 1740, "to": 1769},
+    {"walk": "right", "from": 2264, "to": 2293},
+    {"walk": "left", "from": 2342, "to": 2371},
+    {"walk": "left", "from": 3020, "to": 3088},
+    {"walk": "right", "from": 3100, "to": 3480}
+  ],
+  "taps": [
+    {"tick": 215, "at": [210, 34]},
+    {"tick": 1120, "at": [171.4, 143.7]},
+    {"tick": 1175, "at": [405, 64]},
+    {"tick": 1790, "at": [171.4, 143.7]},
+    {"tick": 1838, "at": [405, 64]},
+    {"tick": 2390, "at": [171.4, 143.7]},
+    {"tick": 2429, "at": [405, 64]},
+    {"tick": 2500, "at": [210, 34]}
+  ]
+}

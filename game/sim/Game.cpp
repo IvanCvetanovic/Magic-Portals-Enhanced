@@ -27,6 +27,20 @@ void Forget(Level& level, entt::entity body) {
                  stones.end());
 }
 
+// What a restock added, taken on as Fire::Find and Portals::Find take a placed
+// body: a bomb or a burnable by its node's flags, and a traveller when its node
+// says teleportable. By the TEMPLATE's node, which is the entity it was built from.
+void TakeOnAdded(const Data& data, Level& level, const Restock::Added& added) {
+    const Tscn::Node* node = data.scene.FindNode(added.templateNode);
+    if (node == nullptr) return;
+    level.fire.Adopt(*node, added.name, added.body);
+    double teleportable = 0.0;
+    const Tscn::Value* flag = node->Meta("teleportable");
+    if (flag != nullptr && flag->AsNumber(teleportable) && teleportable != 0.0) {
+        level.portals.travellers.push_back(added.body);
+    }
+}
+
 // The beholder dead: the level's button goes to its button_dest, its box and
 // its body both, so what presses it and what draws it follow. The script then
 // calls computeButtonInterpolator again (ETHCallback_beholder #1315), which
@@ -693,6 +707,24 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             // entity's first particle system alone (darkdragon.json).
             made.particleScale = level.darkDragon.rules.fireballParticleScale;
             level.turrets.fireballs.push_back(made);
+        }
+
+        // addEntityIfItCantBeFound (ins 997-1064), after a shot at the player has
+        // left: a barrel bomb at barrel_spawn when the level holds none - its own,
+        // or one an earlier shot put back. level31c places ONE and the dragon takes
+        // three wounds, so without this the fight ends at the first. Built from the
+        // placed barrel's node (darkdragon.json `restock`) and taken on by Fire and
+        // the portals as that one was.
+        const Restock::Rule& restock = level.darkDragon.rules.restock;
+        if (turn.restock && !level.restock.Found(data.scene, level.built, registry, restock.search)) {
+            LevelBuilder::Options options;
+            options.prismDirectory = data.prisms;
+            options.roles = &data.roles;
+            std::string why;
+            if (level.restock.Add(data.scene, registry, options, restock, level.darkDragon.restockSite, level.built,
+                                  why) != entt::null) {
+                TakeOnAdded(data, level, level.restock.added.back());
+            }
         }
 
         // And the key it drops, which is the only key level31c has: the fight IS

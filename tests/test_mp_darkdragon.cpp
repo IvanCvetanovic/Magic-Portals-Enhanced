@@ -169,6 +169,14 @@ void TheRulesRead() {
     CHECK(::test::nearly(static_cast<float>(rules.aimOffsetPib), 1.2f));
     // Its depth: 0, from its second update on (darkdragon.json look).
     CHECK(rules.zUnits == 0.0);
+    // The restock's five arguments as ins 997-1013 push them, last first (planning
+    // step 116), and the placed entity the port builds the added one from.
+    CHECK(rules.restock.search == "barrel_bomb");
+    CHECK(rules.restock.add == "barrel_bomb.ent");
+    CHECK(rules.restock.spawn == "barrel_spawn");
+    CHECK(rules.restock.effect == "ghost_utility_spawn.ent");
+    CHECK(rules.restock.alias == "barrel_bomb");
+    CHECK(rules.restock.templateEntity == "barrel_bomb");
     std::printf("  summoned %.0f + %.0f ms after the torch, arrives over %.0f ms, hp %d, a wound %.0f ms\n",
                 rules.armMs, rules.summonMs, appearMs, rules.maxHp,
                 rules.damageFirstMs + rules.damageFlashes * rules.damageFlashMs);
@@ -212,6 +220,8 @@ void TheRulesAreRefusedWhenTheyDoNotMakeABoss() {
          swapped("\"filter\": \"smooth_end\", \"angle_deg\": 10.0", "\"filter\": \"smooth_middle\", \"angle_deg\": 10.0")},
         {"a waypoint at a place it has not got",
          swapped("\"at\": \"shout_moved\", \"ms\": 700.0", "\"at\": \"shout_below\", \"ms\": 700.0")},
+        // A restock with nowhere to add its barrel can never put one back.
+        {"a restock at no marker", swapped("\"spawn\": \"barrel_spawn\"", "\"spawn\": \"\"")},
     };
 
     int refused = 0;
@@ -229,7 +239,7 @@ void TheRulesAreRefusedWhenTheyDoNotMakeABoss() {
         CHECK_MSG(!ok, std::string("refused: ") + one.name);
         if (!ok) ++refused;
     }
-    CHECK_EQ(refused, 7);
+    CHECK_EQ(refused, 8);
 }
 
 // sim/Ease, the listing's three filters (bytes 313899..314142).
@@ -976,6 +986,153 @@ void ItDropsTheLevelsOnlyKey() {
     CHECK(level.darkDragon.gone);
 }
 
+// Where the sight gate refuses every shot: the ledge the player starts on, with
+// block 2278 and the torch between it and `fighting` (ItSpitsAtThePlayer).
+const glm::dvec2 kHiddenPx(700.0, 40.0);
+
+// Its shot at the player, on this tick: the clock put past the interval, as
+// ItSpitsAtThePlayer puts it, and the fireball taken away again - what is pinned
+// here is what the shot leaves behind, not where the fireball goes.
+bool ShootOnce(Game::Data& data, entt::registry& registry, Game::Level& level) {
+    const int fired = level.darkDragon.fired;
+    level.darkDragon.elapsedMs = level.darkDragon.FireIntervalMs() + 1.0;
+    Game::Tick(data, registry, level, 0.0f, kStep);
+    level.turrets.fireballs.clear();
+    return level.darkDragon.fired == fired + 1;
+}
+
+Fire::Bomb* BombNamed(Game::Level& level, const std::string& name) {
+    for (Fire::Bomb& one : level.fire.bombs) {
+        if (one.name == name) return &one;
+    }
+    return nullptr;
+}
+
+// THE RESTOCK (ETHCallback_dark_dragon ins 997-1064, addEntityIfItCantBeFound;
+// planning step 116): after a shot AT THE PLAYER leaves, a barrel_bomb at
+// barrel_spawn - but only when the level holds none, only when the shot left, and
+// never with a wound's torch shot. Gameplay: without it level31c's one barrel is
+// one wound, and the fight needs three.
+void ItPutsItsBarrelBackAfterAShot() {
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    if (!Open(kLevel, data, registry, level)) return;
+    const Restock::Site& site = level.darkDragon.restockSite;
+    CHECK(site.Ready());
+    CHECK(site.spawnPx == glm::dvec2(430.0, 0.0)); // barrel_spawn_2254
+    CHECK(site.templateNode == "barrel_bomb_2225");
+    if (!Summon(data, registry, level)) return;
+    CHECK_EQ(level.fire.bombs.size(), std::size_t{1});
+    if (level.fire.bombs.size() != 1) return;
+
+    // The placed barrel stands: SeekEntity('barrel_bomb') finds it, and a shot
+    // adds nothing.
+    PutPlayerAt(registry, level.player, kFloorPx);
+    CHECK_MSG(ShootOnce(data, registry, level), "it shoots at the player on the floor");
+    CHECK(level.restock.added.empty());
+
+    // A barrel asked to go off but not yet gone is still there to be found.
+    level.fire.bombs.front().requested = true;
+    CHECK(level.restock.Found(data.scene, level.built, registry, "barrel_bomb"));
+    Game::Tick(data, registry, level, 0.0f, kStep);
+    CHECK(level.fire.bombs.front().blown);
+    CHECK(!level.restock.Found(data.scene, level.built, registry, "barrel_bomb"));
+    // 414 px from the dragon: no wound.
+    CHECK_EQ(level.darkDragon.hits, 0);
+
+    // None left, but the sight gate refuses the shot: nothing is added, and the
+    // clock is not reset, so it asks again on the next tick.
+    PutPlayerAt(registry, level.player, kHiddenPx);
+    CHECK_MSG(!ShootOnce(data, registry, level), "no shot at the player behind the torch's block");
+    CHECK(level.restock.added.empty());
+    CHECK(level.darkDragon.elapsedMs > level.darkDragon.FireIntervalMs());
+
+    // The shot that leaves adds one, at the marker, built as the placed barrel is:
+    // a bomb, a traveller, a body named for the port.
+    PutPlayerAt(registry, level.player, kFloorPx);
+    CHECK(ShootOnce(data, registry, level));
+    CHECK_EQ(level.restock.added.size(), std::size_t{1});
+    if (level.restock.added.size() != 1) return;
+    const Restock::Added added = level.restock.added.front();
+    CHECK(added.name == "barrel_bomb_2225#1");
+    CHECK(added.alias == "barrel_bomb");
+    CHECK(registry.valid(added.body));
+    CHECK(level.built.entities.count(added.name) == 1);
+    const Fire::Bomb* restocked = BombNamed(level, added.name);
+    CHECK_MSG(restocked != nullptr && restocked->body == added.body && !restocked->blown && !restocked->requested,
+              "a bomb, as the placed one is");
+    bool travels = false;
+    for (const entt::entity body : level.portals.travellers) travels = travels || body == added.body;
+    CHECK_MSG(travels, "and a traveller: barrel_bomb.ent's teleportable 1");
+    const auto* box = registry.try_get<Supersonic::BoxColliderComponent>(added.body);
+    CHECK_MSG(box != nullptr && std::fabs(box->size.x * Units::kPixelsPerMetre - 28.6) < 1e-4 &&
+                  std::fabs(box->size.y * Units::kPixelsPerMetre - 37.7) < 1e-4,
+              "its body is barrel_bomb.ent's 22 x 29 at 1.3");
+    CHECK(level.restock.Found(data.scene, level.built, registry, "barrel_bomb"));
+
+    // barrel_spawn stands at the ceiling's face, y 0, so the barrel is added half
+    // inside it; the solver puts it out below, and it falls onto block 2219 where
+    // the level put the first.
+    for (int tick = 0; tick < 120; ++tick) Game::Tick(data, registry, level, 0.0f, kStep);
+    const glm::dvec2 atPx = Units::ToPixels(registry.get<TransformComponent>(added.body).position);
+    CHECK_MSG(std::fabs(atPx.x - 430.0) < 1.0 && std::fabs(atPx.y - (82.0 - 37.7 * 0.5)) < 1.0,
+              "it comes to rest on block 2219, as the placed one did: " + Pt(atPx));
+    std::printf("  restocked %s at (430, 0); at rest after 2 s at %s\n", added.name.c_str(), Pt(atPx).c_str());
+
+    // And with it standing, the next shot adds nothing.
+    CHECK(ShootOnce(data, registry, level));
+    CHECK_EQ(level.restock.added.size(), std::size_t{1});
+
+    // A WOUND'S TORCH SHOT is another branch (ins 1615-1720), and adds nothing:
+    // the restocked barrel spent where it stands, the dragon wounded by hand, and
+    // the wound played out to the shot at the torch.
+    Fire::Bomb* spent = BombNamed(level, added.name);
+    if (spent == nullptr) return;
+    spent->requested = true;
+    Game::Tick(data, registry, level, 0.0f, kStep);
+    CHECK(!registry.valid(added.body));
+    PutPlayerAt(registry, level.player, kHiddenPx);
+    const int firedBefore = level.darkDragon.fired;
+    level.darkDragon.burned = true;
+    RunUntil(data, registry, level, 600, [&] { return level.darkDragon.fired > firedBefore; });
+    CHECK_MSG(level.darkDragon.fired == firedBefore + 1, "it shot at the torch as the wound ended");
+    CHECK_EQ(level.restock.added.size(), std::size_t{1});
+    std::printf("  no barrel added with one standing, behind the sight gate, or with the torch shot\n");
+}
+
+// A BARREL THAT MISSES GOES OFF IN THE LAVA (ETHBeginContactCallback_lava #21-30),
+// and that is what lets the restock put it back: without it the missed barrel lies
+// in the lava for ever, SeekEntity finds it, and the fight stops at that wound.
+// The spec's pair, built together (planning step 116).
+void AMissedBarrelGoesOffInTheLava() {
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    if (!Open(kLevel, data, registry, level)) return;
+    if (!Summon(data, registry, level)) return;
+    if (level.fire.bombs.size() != 1) return;
+    PutPlayerAt(registry, level.player, kHiddenPx);
+
+    // Over the gap between the light wall and block 2256, as a barrel a portal
+    // dropped short of the fire would be.
+    registry.get<TransformComponent>(level.fire.bombs.front().body).position = Units::ToWorld(160.0, 150.0);
+    const int hp = level.darkDragon.hp;
+    const int went = RunUntil(data, registry, level, 300, [&] { return level.fire.bombs.front().blown; });
+    CHECK_MSG(level.fire.bombs.front().blown, "it goes off in the lava");
+    CHECK_EQ(level.fire.blasts, 1);
+    CHECK_EQ(level.darkDragon.hp, hp); // far out of the dragon's reach
+    CHECK(!level.restock.Found(data.scene, level.built, registry, "barrel_bomb"));
+
+    // So the next shot at the player puts one back.
+    PutPlayerAt(registry, level.player, kFloorPx);
+    CHECK(ShootOnce(data, registry, level));
+    CHECK_EQ(level.restock.added.size(), std::size_t{1});
+    std::printf("  a missed barrel went off in the lava %d ticks after it was let fall, and the next shot put "
+                "one back\n",
+                went);
+}
+
 void runTests() {
     TheRulesRead();
     TheRulesAreRefusedWhenTheyDoNotMakeABoss();
@@ -991,6 +1148,8 @@ void runTests() {
     TheWoundIsReadAfterItsShot();
     ItSpitsAtThePlayer();
     ItDropsTheLevelsOnlyKey();
+    ItPutsItsBarrelBackAfterAShot();
+    AMissedBarrelGoesOffInTheLava();
 }
 
 } // namespace

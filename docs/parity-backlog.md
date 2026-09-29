@@ -269,7 +269,8 @@ work no step of §7 owns, and the owner's calls:
   **the two PORT-WIDE rows** - the script clock the original floors to whole milliseconds, and every body's picture
   drawn a tick behind the sim; **11.2's fire signal**, applied and the owner's to rule, and step 30's put-out test at
   the ball, which the original makes at the torch; and the gameplay rows this run filed for the owner without
-  changing them - 12.1's barrel-bomb restock (4-32 cannot be won without it), its summon clock and its wound's shot
+  changing them - 12.1's barrel-bomb restock (4-32 cannot be won without it; built in step 116 under the program's
+  rule, the original's), its summon clock and its wound's shot
   at the torch, 12.2's fire against the ghost, 11.3's death before the door, 10.2's pickup rule, 10.3's carriers and
   the keyhole's visible clock, 11.1's four (`destroyable` stones, 3-20's destroyier, the lift door's rise and status
   machine, the beholder's filter) and its two unbuilt wall breaks, Q.2's minion spawn point and the engine's staged
@@ -1211,6 +1212,8 @@ work no step of §7 owns, and the owner's calls:
       1813-1818) and the death's `explode`; `ghost_utility_spawn.ent`; the barrel bomb's restock after each shot
       (`addEntityIfItCantBeFound`, ins 997-1064) - gameplay, the level's only weapon comes back only through it: level31c
       places ONE `barrel_bomb` and the dragon takes three burns, so **4-32 cannot be won in the port** without it.
+      *The restock is built in step 116* (with the lava's contact, B3), and 4-32 is won by a route; the rest of this
+      row stands, `ghost_utility_spawn.ent` at each restock with it (the "restock's pictures" row).
 - [ ] **Order 12.1 finding, the summon's clock** (step 99; F16 section 3): the original's `dark_dragon_spawn` counts
       `arm_ms` 3000 from the level's start, gated on the light, so a torch lit late summons 4 s after it; the port counts
       from the light, 7 s. Gameplay. Next: the owner.
@@ -1482,7 +1485,8 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   1-03, 1-04, 1-05, 1-08, 1-09, 1-14, 1-15, 1-16, 1-32. Step 114 adds eight: 2-01, 2-02, 2-03, 2-04, 2-05, 2-07,
   2-08, 2-09 - 19 of 128. Step 115 adds four, 2-12, 2-13, 2-14 and 4-16, so far won only by the window's replay of
   their routes: `test_mp_routes` has not run on them (Smart App Control, three refusals) - 19 of 128 replayed by the
-  suite, 23 with the window's. Open until all 128.)*
+  suite, 23 with the window's. Step 116 adds 4-32, and its `test_mp_routes` run replays all 24 on the window's ticks:
+  24 of 128 replayed by the suite. Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1515,9 +1519,14 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       static crate 206 u). Measured with a save of chapter 1 gold (a fixture) and every chapter-2 route's medal: 2-13
       to 2-15 open behind 2-12, 2-07, 2-11 and 2-12 locked, chapter 2 at 23 % (`out/parity/program/B1/b2/`). Open
       until G6 and G8 let those three be won.
-- [ ] **B3. 4-32 cannot be won** - the barrel restock (`addEntityIfItCantBeFound('barrel_bomb')`, `ETHCallback_dark_dragon`
+- [x] **B3. 4-32 cannot be won** - the barrel restock (`addEntityIfItCantBeFound('barrel_bomb')`, `ETHCallback_dark_dragon`
       ins 997-1064) and the lava's explode contact (`ETHBeginContactCallback_lava` L68416 #21-30) must land together,
-      or a missed barrel softlocks. KNOWN ("Order 12.1, not built").
+      or a missed barrel softlocks. KNOWN ("Order 12.1, not built"). *Built in step 116*, both: after every shot at the
+      player that leaves (never a refused one, never the wound's torch shot) a barrel at `barrel_spawn` when the level
+      holds none (`sim/Restock`, general; the dragon's caller wired, the ghost's three left to 3-32's step), and
+      whatever touches the lava is burned if burnable and asked to go off (`Fire`'s lava). GAMEPLAY, 4-32 only (the one
+      level with either). **Won by a route: 4-32**, tick 3421, three burns by barrels its own fireballs set off, no DEV
+      flag, replayed by `test_mp_routes` and in the window on the same tick.
 - [ ] **B4. 2-20, 2-22, 2-23, 2-27 at risk: the draggable handle** (`arrows.ent`, `ETHCallback_arrows` L67305, `doFollow`
       from `fire_agent` #280 and `reflect_agent` #6) is filed as cosmetic and not built; nothing reads `follow`.
       VERIFIED mechanism, INFERRED unwinnable. Needs release-to-fire (below) and the camera ruling. **Blocks 2-21 and
@@ -1631,12 +1640,17 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
 - [ ] **`test_mp_dragon` NOT RUN in step 114** (Smart App Control refused it twice); the next step that links it runs
       it. (`test_mp_routes`, refused twice in the step, was relinked by its verifier and ran: 59 / 0, 18 of 18; the fix
       round's run, with 2-09, 62 checks, 0 failures, 19 of 19 won.)
-- [ ] **4-32's torch shot under G5's rule is not played** (step 114): the dark dragon's fireball at the torch
+- [x] **4-32's torch shot under G5's rule is not played** (step 114): the dark dragon's fireball at the torch
       (`Game.cpp:702-714`) now dies on any solid body in its way; `light_off` stands at (210, 34) beside
       `single_block_plat_no_emissive_ent_2278`, and `test_mp_darkdragon` checks only the shot's origin and aim. Static
       only (step 114's verifier, `out/parity/program/G5/verify2/lanes_and_torch.txt`): from `test_mp_darkdragon`'s
       torch-shot origin (110.89, 43.94) the 9.6 circle reaches `light_off_1689` at 99.61 u and first touches
       `single_block_plat_no_emissive_ent_2278` at 110.10 u, clear by 10.5 u. For B3's step, which must play 4-32 anyway.
+      *Played in step 116* (the 4-32 route): both of the route's wound-end shots reach the torch, none meets the block -
+      tick 1403 from (110.8, 42.1), spent at the lit torch's fire signal on 1431, the torch out and the light wall back;
+      tick 2066 from (110.6, 46.2), spent at the unlit torch on 2102, which it relights (the wall goes 1500 ms later).
+      The rule it plays is still the port's (the "Order 12.1 finding, the wound's shot" row: the original fires only at
+      an unlit torch); the route does not depend on it (row "4-32's route" below).
 - [ ] **`Turrets.hpp`'s shock-agent bullet stops at #119** (step 114's verifier): the listing goes on to #146, a second
       destroy, the small explosion's sound and `burn()` of the agent. Text only, when the header is next touched.
 - [ ] **2-05's crate stack parts from footage F6 after its second fire** (step 114, measured, not this step's rule):
@@ -1660,14 +1674,17 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       `carranca_ent_827`'s lane on its own and the first fireball goes off on it (x 192.3, tick 200), where the
       original's lift idles at its marker until tapped. `test_mp_turrets` prints this lane and pins the other 19; G2's
       step pins it.
-- [ ] **`test_mp_routes` NOT RUN in step 115** (Smart App Control refused `6090631b`, after its one relink
+- [x] **`test_mp_routes` NOT RUN in step 115** (Smart App Control refused `6090631b`, after its one relink
       `c8d1403d`, and the verifier's relink `bd6544ad`); its evidence is the window replay of all 23 routes on
       `MagicPortals.exe` `ff41bf4e`, 23 of 23 won twice with the same ticks, the 19 old ones on step 114's. The next
       step that links it runs it once; that run is the first headless replay of 2-12, 2-13, 2-14 and 4-16 (authored in
       the window), and a mismatch there re-authors them, not a regression. Until then those four are won by a route
       the window replays, not yet by one a suite replays. Nor were `test_mp_launchers`, `test_mp_boss` and
       `test_mp_start` relinked, which read `demolish.json` through the loader that now requires `blast.entities`
-      (their sources unchanged; the 128-level sweep starts every level through it).
+      (their sources unchanged; the 128-level sweep starts every level through it). *Run in step 116*
+      (`2467fcfd`, first launch): 23 of 23 won on the window's ticks, 2-12 576, 2-13 500, 2-14 518 and 4-16 774 among
+      them (74 checks, 0 failures); with 4-32's route, 24 of 24 (77 checks). `test_mp_launchers`, `test_mp_boss`,
+      `test_mp_start` still not relinked (they now also read `fire.json`'s required `lava` block; sources unchanged).
 - [ ] **The rest of `explode`'s destroy set** (step 115): a blast also sets `destroy` on a carranca (flagged breakable;
       `carrancaCallback` L85350 #128-183: `carranca_destroy.ent`, `startEarthquake(20, 0)`, `DeleteEntity` - 2-18's and
       2-23's barrels stand 54 and 56 u from one), a shock agent and a minion (burnable; `ETHCallback_shock_agent` L92534
@@ -1693,6 +1710,58 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       are off them).
 - [ ] **2-24's kept-out barrel is untried** (step 115 (d)): a barrel left out of the seven-barrel chain to weigh
       `button_1144` while the rest break the walls; if it wins, 2-24 leaves B4.
+
+- [ ] **4-32's route rides port-only numbers** (step 116): the summon 7 s after the light (the "Order 12.1 finding,
+      the summon's clock" row: the original's 4 s once 3 s of level time have passed), the portal shot's 600 u/s (G4:
+      each barrel's pair is timed on a 20-tick flight to the portal beside it) and the player's walk (G10: the dodges
+      and the seam at x 255.4 the player settles in). The step whose rule moves one re-authors the route's ticks. Not
+      port-only: its two portals stand 152 u and 358 u from the antiportal's centre (outside R1's 144) and each barrel
+      goes through its pair before the fireball reaches the portal (G6 would otherwise carry the fireball to the
+      barrel's side); the wound-end torch shots do not touch it (it never goes left of x 192 before the key, and the
+      torch is lit at the end under either rule, so its last tap puts it out and brings the light wall back).
+- [ ] **The restock's pictures** (step 116): `addEntityAtSpawnPoint` adds `ghost_utility_spawn.ent` (explosion.JPG and
+      onda.png bursts) at `barrel_spawn` with each barrel, and sets the new barrel's `minEmissive` to (1, 1, 1), the
+      floor of `ETHCallback_barrel_bomb`'s blink (#1-30), which the port draws for no barrel. The dying dragon's
+      `ghost_utility_spawn.ent` beside the key is the same entity. One effects-runtime row and the blink, for the
+      effects' owner.
+- [ ] **The lava is filed as a hazard, and kills nobody in the original** (step 116, finding):
+      `ETHBeginContactCallback_lava` (L68416) only burns and sets `explode`; `entity_roles.json` puts `lava` under
+      `hazard`, so `Hazards` gives level31c's `lava_1140` a 16 px box that kills the player. Unreachable: the player
+      dies of the level's edge at y 352 (hazards.json bounds), 46 u above the lava's top at 398. No change made; the next
+      step touching `hazards.json` can add `lava` to `not_hazard_names`, as `enemy_killer` is.
+- [ ] **3-32's ghost restocks too** (step 116, for the ghost's step): `ETHCallback_ghost` ins 594-630 put a
+      `barrel_bomb_low_emissive.ent` (named `barrel_bomb`) back at `barrel_spawn` after every shot, and ins 632-667 and
+      1047-1083 a `fire_diamond.ent` at `fire_diamond_spawn`. `sim/Restock` is the mechanism, general (a rule of five
+      names and a template node; `Found` by exact name; `Add` builds the template's body at the marker); the ghost's
+      rule and its template check against `barrel_bomb_low_emissive.ent` are that step's, and its fire diamond's
+      restock stays Game's own lines (a diamond is not a body). *Not a wiring job* (step 116's verifier): level31b
+      places no `barrel_bomb` and no explosive node - only `barrel_spawn_1435`, `fire_diamond_spawn_1434` and
+      `fire_diamond_ent_1256` - so `Add` has no template node for the ghost's barrel. That step first gives
+      `sim/Restock` a build source that needs no placed node (a port JSON template for
+      `barrel_bomb_low_emissive.ent` with its `.ent` provenance, or a converter-emitted entity table), and has a
+      refused restock say so (the row "A refused restock is silent" below).
+- [ ] **A refused restock is silent** (step 116, deviation 1, and its verifier): the restock is built from a placed
+      node, not from the `.ent` (the simulation reads none; 4-32's `barrel_bomb_2225` was checked field by field
+      against `barrel_bomb.ent`, friction 0.7 aside, which no rigid body reads). A caller whose entity no node carries
+      cannot be built: `Restock::Add` adds nothing and fills its `why`, and its one caller (`Game.cpp:723-727`) drops
+      it, so the level quietly goes without its weapon. Print `why` once, or refuse an unbuildable rule when the
+      level loads. 4-32 never meets it.
+- [ ] **`Restock::Found` counts bodies only** (step 116, deviation 2): the original's `SeekEntity` finds any entity by
+      its exact name; the port's search runs over the level's bodies and what a restock added, so a search for a
+      marker (no body, not in `built`) finds nothing. Every caller the port wires searches for a body; a future caller
+      that searches for a marker needs it.
+- [ ] **A restocked barrel starts inside 4-32's ceiling** (step 116, deviation 3, INFERRED): `barrel_spawn` stands at
+      (430, 0), the ceiling's face, so each barrel is added 18.85 u inside `collision_768x128_ent_1952`; the port's
+      solver puts it out below over three ticks (y 14.9, 18.0, 18.8) and it rests on block 2219 at (429.9, 63.4)
+      24 ticks after the restock. That the original's Box2D does the same is inferred, not measured: no footage shows
+      a restock. Needs a capture of the original's 4-32 fight.
+- [ ] **The lava's contact is an overlap** (step 116, deviation 4): a body's collider against the lava's box grown by
+      `fire.json` `lava.margin_px` 1.0 (`_guess`, as `demolish.json`'s stone contact), not Box2D's begin-contact. The
+      barrel's going off a tick after its touch is the row "A fireball's touch and its barrel's blast are a tick
+      apart" above (Fire's flag-and-poll split).
+- [ ] **The lava's burn branch is untested** (step 116's verifier): `Fire::Tick` burns a burnable that touches the lava
+      (`ETHBeginContactCallback_lava` #1-19), and no test covers it; no level puts a burnable where it can reach the
+      lava. Entering `test_mp_fire`'s lava barrel as a `Burnable` too and checking `burned` would.
 
 **Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
 1-01, 1-02 and 1-32, two of them from step 113's automated runs.

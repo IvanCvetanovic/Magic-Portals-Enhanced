@@ -19,10 +19,12 @@
 //   - IT IS HURT ONLY BY FIRE, as the ghost is. level31c places no fire agent and
 //     no fire diamond: the only fire in the level is the BARREL BOMB, which is
 //     teleportable, and the only thing that can light it is the dragon's own
-//     fireball. It restocks that bomb after every shot (addEntityIfItCantBeFound,
-//     NOT BUILT: without it the port's 4-32 has one bomb for three wounds). The
-//     boss supplies its own ammunition and its own detonator, and darkdragon.json
-//     has the decode.
+//     fireball. Every shot at the player that leaves restocks that bomb at
+//     `barrel_spawn` when none is left (addEntityIfItCantBeFound, ins 997-1064:
+//     Turn::restock, which Game plays through sim/Restock), and a barrel that
+//     misses goes off in the lava (Fire's lava contact), so a miss costs a shot
+//     rather than the level. The boss supplies its own ammunition and its own
+//     detonator, and darkdragon.json has the decode.
 //   - Each wound takes your portals away, and as it ends the original fires at the
 //     torch ONLY if `light_off.ent` exists - a torch its fire signal put out - and
 //     relights it (ins 1675-1694). The port fires at the torch lit or not, and a
@@ -53,13 +55,14 @@
 //
 // NOT BUILT, and recorded in data/darkdragon.json: every sound, the scattered
 // small explosions of DAMAGE and DYING, the death's explode burst, and the
-// ghost_utility_spawn.ent dropped beside the key. The earthquakes are the layer's
+// ghost_utility_spawn.ent dropped beside the key and at every restock. The earthquakes are the layer's
 // (earthquake.json), read from `phase`, the APPEARING `path`'s waypoint and bias,
 // `fired` and `gone`.
 
 #include "sim/Ease.hpp"
 #include "sim/Follower.hpp"
 #include "sim/Motion.hpp"
+#include "sim/Restock.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
 
@@ -178,6 +181,9 @@ struct Rules {
     Ease::Filter dyingFilter = Ease::Filter::SmoothBothSides;
     glm::dvec3 dyingEmissive{0.0}; // FloatColor(-1): white
     double dyingMouthSteps = 0.0;  // 14
+
+    // The barrel bomb put back after each shot at the player (ins 997-1064).
+    Restock::Rule restock;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -263,6 +269,9 @@ struct State {
     // The platform once it has been built, so the layer can draw it and the
     // level's unload can take it away.
     entt::entity platformBody{entt::null};
+    // Where the restock adds its barrel (`barrel_spawn`) and the placed barrel its
+    // body is built from.
+    Restock::Site restockSite;
 
     // THE SUMMON. `armed` is the marker's own `destroy` flag, which deletes
     // nothing: it only says the light has been seen.
@@ -305,6 +314,10 @@ struct State {
         bool killedPortals = false; // PortalManager::killAll
         bool firedAtTorch = false;  // a fireball aimed at the level's torch
         bool fired = false;         // and one aimed at the player
+        // addEntityIfItCantBeFound, after a shot AT THE PLAYER has left (ins
+        // 997-1064): never on a tick the sight gate refuses, never with the torch
+        // shot. Whether one is found and added is Game's (sim/Restock).
+        bool restock = false;
         glm::dvec2 firePx{0.0};
         glm::dvec2 aimPx{0.0}; // a UNIT vector; Game gives it the fireball's speed
         bool droppedKey = false;

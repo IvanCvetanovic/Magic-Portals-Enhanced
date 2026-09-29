@@ -131,21 +131,24 @@ void TheReaderRefusesWhatWouldBeSilent() {
     const std::string zeroReach = WriteRules("zero-reach.json", R"({
       "fire": {"reach_px": 0.0},
       "burn": {"time_ms": 1000.0, "fade_names": ["crate"]},
-      "blast": {"radius_px": 80.0}
+      "blast": {"radius_px": 80.0},
+      "lava": {"entities": ["lava"], "margin_px": 1.0}
     })");
     CHECK_MSG(!Fire::LoadRules(zeroReach, rules, error), "a reach of nothing is refused");
 
     const std::string zeroBurn = WriteRules("zero-burn.json", R"({
       "fire": {"reach_px": 32.0},
       "burn": {"time_ms": 0.0, "fade_names": ["crate"]},
-      "blast": {"radius_px": 80.0}
+      "blast": {"radius_px": 80.0},
+      "lava": {"entities": ["lava"], "margin_px": 1.0}
     })");
     CHECK_MSG(!Fire::LoadRules(zeroBurn, rules, error), "and a burn that takes no time");
 
     const std::string zeroBlast = WriteRules("zero-blast.json", R"({
       "fire": {"reach_px": 32.0},
       "burn": {"time_ms": 1000.0, "fade_names": ["crate"]},
-      "blast": {"radius_px": 0.0}
+      "blast": {"radius_px": 0.0},
+      "lava": {"entities": ["lava"], "margin_px": 1.0}
     })");
     CHECK_MSG(!Fire::LoadRules(zeroBlast, rules, error), "and a blast that reaches nothing");
 
@@ -153,9 +156,29 @@ void TheReaderRefusesWhatWouldBeSilent() {
     const std::string noFades = WriteRules("no-fades.json", R"({
       "fire": {"reach_px": 32.0},
       "burn": {"time_ms": 1000.0, "fade_names": []},
-      "blast": {"radius_px": 80.0}
+      "blast": {"radius_px": 80.0},
+      "lava": {"entities": ["lava"], "margin_px": 1.0}
     })");
     CHECK_MSG(!Fire::LoadRules(noFades, rules, error), "and a burn that never removes anything");
+
+    // And a lava bound to no entity, which is a barrel that misses lying there for
+    // ever: 4-32's restock would then find it and never put another back.
+    const std::string noLava = WriteRules("no-lava.json", R"({
+      "fire": {"reach_px": 32.0},
+      "burn": {"time_ms": 1000.0, "fade_names": ["crate"]},
+      "blast": {"radius_px": 80.0},
+      "lava": {"entities": [], "margin_px": 1.0}
+    })");
+    CHECK_MSG(!Fire::LoadRules(noLava, rules, error), "and a lava that touches nothing");
+    // The good file, with each case's one change undone, is read: the refusals
+    // above are theirs and not the lava's.
+    const std::string good = WriteRules("good.json", R"({
+      "fire": {"reach_px": 32.0},
+      "burn": {"time_ms": 1000.0, "fade_names": ["crate"]},
+      "blast": {"radius_px": 80.0},
+      "lava": {"entities": ["lava"], "margin_px": 1.0}
+    })");
+    CHECK_MSG(Fire::LoadRules(good, rules, error), "and the same file with nothing wrong is read: " + error);
 }
 
 void WhatTheLevelsCarry() {
@@ -409,6 +432,60 @@ void ABlastLeavesACarrancaStanding() {
     CHECK_MSG(!carranca->broken && run.registry.valid(carranca->body), "and it stands");
 }
 
+// THE LAVA (ETHBeginContactCallback_lava, listing L68416, #1-30; planning step
+// 116): whatever begins a contact with it is burned when burnable and then asked
+// to go off. So a barrel that falls into level31c's lava goes off there, a tick
+// after it touches, as a fireball's barrel does - and nothing it does kills.
+void TheLavaSetsOffABarrelThatFallsIn() {
+    Fire::Rules rules;
+    std::string error;
+    CHECK_MSG(Fire::LoadRules(kPortData + "/fire.json", rules, error), error);
+    const bool bothSpellings = rules.lavaEntities.size() == 2 && rules.lavaEntities[0] == "lava" &&
+                               rules.lavaEntities[1] == "lava.ent";
+    CHECK_MSG(bothSpellings, "the callback is bound to lava by name, both spellings");
+
+    Run run;
+    if (!Begin("level31c", run)) return;
+    CHECK_EQ(run.level.fire.lavas.size(), std::size_t{1});
+    CHECK_EQ(run.level.fire.bombs.size(), std::size_t{1});
+    if (run.level.fire.lavas.size() != 1 || run.level.fire.bombs.size() != 1) return;
+    const Fire::Lava& lava = run.level.fire.lavas.front();
+    CHECK(lava.name == "lava_1140");
+    // lava_1140: a 768 x 128 box at (384, 462), its top at y 398.
+    const glm::dvec2 centrePx = Units::ToPixels(glm::vec3(lava.box.centre, 0.0f));
+    CHECK(::test::nearly(static_cast<float>(centrePx.x), 384.0f, 1e-3f));
+    CHECK(::test::nearly(static_cast<float>(centrePx.y), 462.0f, 1e-3f));
+    CHECK(::test::nearly(lava.box.half.x * static_cast<float>(Units::kPixelsPerMetre), 384.0f, 1e-3f));
+    CHECK(::test::nearly(lava.box.half.y * static_cast<float>(Units::kPixelsPerMetre), 64.0f, 1e-3f));
+
+    // The barrel over the gap between the light wall and block 2256, let fall.
+    Fire::Bomb& bomb = run.level.fire.bombs.front();
+    PutAt(run.registry, bomb.body, glm::dvec2(160.0, 250.0));
+    int asked = -1;
+    for (int tick = 1; tick <= 240 && asked < 0; ++tick) {
+        Tick(run);
+        if (bomb.requested) asked = tick;
+    }
+    CHECK_MSG(asked > 0, "the barrel is asked to go off when it lands in the lava");
+    if (asked <= 0) return;
+    const glm::dvec2 landedPx = Units::ToPixels(run.registry.get<TransformComponent>(bomb.body).position);
+    CHECK_MSG(!bomb.blown && run.level.fire.blasts == 0, "and goes off on its own next turn, not on the touch");
+    // Resting on the lava's top: its centre half its 37.7 height above y 398.
+    CHECK_MSG(std::fabs(landedPx.y - (398.0 - 37.7 * 0.5)) < 2.0, "on the lava's top: " + std::to_string(landedPx.y));
+    Tick(run);
+    CHECK(bomb.blown);
+    CHECK_EQ(run.level.fire.blasts, 1);
+    CHECK_EQ(run.level.fire.blastsPx.size(), std::size_t{1});
+    CHECK_MSG(!run.level.hazards.playerDied, "and nothing died of it");
+    std::printf("  a barrel dropped from y 250 touched the lava on tick %d at y %.2f and went off on the next\n",
+                asked, landedPx.y);
+
+    // And a barrel nowhere near it is never asked: every other level has no lava.
+    Run bombs;
+    if (!Begin(kBombLevel, bombs)) return;
+    CHECK(bombs.level.fire.lavas.empty());
+}
+
 void runTests() {
     TheDecodedNumbersAreNotTheRemakesGuesses();
     TheReaderRefusesWhatWouldBeSilent();
@@ -422,6 +499,7 @@ void runTests() {
     AWallBehindRockStands();
     AWallOutOfReachStands();
     ABlastLeavesACarrancaStanding();
+    TheLavaSetsOffABarrelThatFallsIn();
 }
 
 } // namespace

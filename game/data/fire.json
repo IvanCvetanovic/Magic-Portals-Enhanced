@@ -85,5 +85,28 @@
       "breaking, takes the breakable walls away on the same tick: demolish.json `blast`",
       "(planning step 115)."
     ]
+  },
+  "lava": {
+    "_source": [
+      "ETHBeginContactCallback_lava (MiscCallbacks, listing L68416, bytes 345993..346228), bound",
+      "to the entity by name (ETHCallback_ + RemoveExtension, ETHASUtil.cpp:63-67, so both",
+      "spellings: 00_order 8.0 rule 4), runs for whatever begins a contact with it: #1-11",
+      "GetUInt('burnable') of the other, #12-19 burn(other) when it is not 0; then #21-30",
+      "SetUInt('explode', 1) on the other, unconditionally. Nothing else: no character's hp",
+      "is touched, so the lava kills nobody (level31c's player dies of the level's edge,",
+      "hazards.json bounds, at y 352, 46 u above the lava's top). A barrel's own callback",
+      "(ETHCallback_barrel_bomb #31-60) reads `explode` and blasts, so a barrel that falls",
+      "into the lava goes off there. One lava in the game: level31c's lava_1140, a solid",
+      "768 x 128 box at (384, 462) (the converter's StaticBody2D: sensor 0)."
+    ],
+    "entities": ["lava", "lava.ent"],
+    "_margin_note": [
+      "How near a body must come to the lava's box to touch it. The solver leaves a body",
+      "resting on a floor touching it rather than overlapping it, so the port's overlap",
+      "test grows the box by this much, as demolish.json's contact.margin_px does for a",
+      "stone. A threshold of the port's, not a measurement."
+    ],
+    "_guess": true,
+    "margin_px": 1.0
   }
 }

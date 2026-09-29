@@ -44,6 +44,7 @@
 #include "sim/Player.hpp"
 #include "sim/Portals.hpp"
 #include "sim/Puzzle.hpp"
+#include "sim/Restock.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Torch.hpp"
 #include "sim/Tscn.hpp"
@@ -142,6 +143,11 @@ struct Level {
     // own light, hurt only by a barrel bomb its own fireball sets off, and the
     // holder of the only key its level has.
     DarkDragon::State darkDragon;
+    // What a boss put back mid-fight (addEntityIfItCantBeFound): 4-32's barrel
+    // bombs, each built from the placed one at `barrel_spawn` and entered in
+    // `built` under a name of its own, and in Fire and the portals as the placed
+    // one is.
+    Restock::State restock;
     // Chapter 4's torches, and the wall of light one of them drops.
     Torch::State torch;
     // The slabs that bob in chapter 4's weightless rooms. Kinematic, so each

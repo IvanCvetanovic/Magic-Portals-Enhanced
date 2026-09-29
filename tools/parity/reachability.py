@@ -108,26 +108,26 @@ BREAKERS = {
     Breaker.STONE: (
         "every breakable on a level that holds a demolisher: a rolling stone, a launcher that "
         "throws one, or the beholder's rocks (game/sim/Demolish.cpp:87-101 State::Tick, "
-        ":185-191 the stones, Game.cpp:286 a thrown one, Game.cpp:751 the boss's rock)"
+        ":185-191 the stones, Game.cpp:300 a thrown one, Game.cpp:783 the boss's rock)"
     ),
     Breaker.BARREL: (
         "a flagged breakable whose entity demolish.json blast.entities lists, on a level with a "
         "barrel (metadata/explosive) and fire to set one off: a fire agent, a carranca or a fire "
-        "diamond (game/sim/Fire.cpp:44-73 the blast's grab, Game.cpp:328-329 Demolish's "
+        "diamond (game/sim/Fire.cpp:44-73 the blast's grab, Game.cpp:342-343 Demolish's "
         "Grab and Destroyed on the blast's tick, Demolish.cpp:129-156)"
     ),
     Breaker.TORCH: (
         "the torch's light wall (torch.json wall.entity_name) on a level with a torch "
-        "(game/sim/Game.cpp:638-642, Demolish.cpp:103-115 Break)"
+        "(game/sim/Game.cpp:652-656, Demolish.cpp:103-115 Break)"
     ),
     Breaker.DARK_DRAGON: (
         "the dark dragon's wall (darkdragon.json summon.wall, the last node of that name) on a "
-        "level with its spawn (game/sim/Game.cpp:669-673, DarkDragon.cpp:781-783)"
+        "level with its spawn (game/sim/Game.cpp:683-687, DarkDragon.cpp:797-799)"
     ),
     Breaker.FIRE: (
         "a crate that fades when it burns (fire.json burn.fade_names), on a level with fire: a "
-        "fire agent, a carranca or a fire diamond (game/sim/Fire.cpp:188-192 a fire agent, "
-        "Game.cpp:382-387 a fireball, Game.cpp:498 a fire diamond's; Fire.cpp:203 the fade)"
+        "fire agent, a carranca or a fire diamond (game/sim/Fire.cpp:206-210 a fire agent, "
+        "Game.cpp:396-401 a fireball, Game.cpp:512 a fire diamond's; Fire.cpp:241 the fade)"
     ),
 }
 # The roles and entities that put fire in a level, for Breaker.FIRE.

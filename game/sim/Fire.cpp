@@ -97,8 +97,9 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     const Json::Value& fire = root["fire"];
     const Json::Value& burn = root["burn"];
     const Json::Value& blast = root["blast"];
-    if (!fire.IsObject() || !burn.IsObject() || !blast.IsObject()) {
-        error = path + ": fire, burn and blast are each an object";
+    const Json::Value& lava = root["lava"];
+    if (!fire.IsObject() || !burn.IsObject() || !blast.IsObject() || !lava.IsObject()) {
+        error = path + ": fire, burn, blast and lava are each an object";
         return false;
     }
 
@@ -119,6 +120,23 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         }
         read.fadeNames.push_back(name.AsString());
     }
+    const Json::Value& lavaNames = lava["entities"];
+    if (!lavaNames.IsArray() || lavaNames.AsArray().empty()) {
+        error = path + ": lava.entities is an array naming at least one entity";
+        return false;
+    }
+    for (const Json::Value& name : lavaNames.AsArray()) {
+        if (!name.IsString()) {
+            error = path + ": lava.entities lists a name that is not a string";
+            return false;
+        }
+        read.lavaEntities.push_back(name.AsString());
+    }
+    if (!lava["margin_px"].IsNumber() || lava["margin_px"].AsNumber() < 0.0) {
+        error = path + ": lava.margin_px is a number, not below zero";
+        return false;
+    }
+    read.lavaMarginPx = lava["margin_px"].AsNumber();
 
     // Each of these would look like a level that works. A reach of nothing is a
     // fire agent that never lights anything; a burn of nothing takes a crate away
@@ -193,6 +211,26 @@ std::vector<entt::entity> State::Tick(entt::registry& registry, entt::entity pla
         }
     }
 
+    // And what the lava touches (ETHBeginContactCallback_lava #1-30): burned when it
+    // is burnable, then asked to go off whatever it is - which only a bomb's own
+    // callback reads, on its next turn, as it reads a fireball's.
+    const float lavaMargin = Units::ToMetres(rules.lavaMarginPx);
+    for (const Lava& lava : lavas) {
+        if (!registry.valid(lava.body)) continue;
+        Trigger::Box reach = lava.box;
+        reach.half += glm::vec2(lavaMargin);
+        for (Burnable& burnable : burnables) {
+            if (burnable.burned || burnable.gone || !registry.valid(burnable.body)) continue;
+            if (!Trigger::Overlaps(registry, burnable.body, reach)) continue;
+            burnable.burned = true;
+            ++lit;
+        }
+        for (Bomb& bomb : bombs) {
+            if (bomb.blown || bomb.requested || !registry.valid(bomb.body)) continue;
+            if (Trigger::Overlaps(registry, bomb.body, reach)) bomb.requested = true;
+        }
+    }
+
     // And what is alight burns down. Only a crate does: burn() sets the flag, and
     // the fade that ends in removal is manageBurnable's, whose one caller is
     // crateCallback. Anything else flagged burnable just carries `burned`.
@@ -224,6 +262,24 @@ const Bomb* State::FindBomb(const std::string& name) const {
     return nullptr;
 }
 
+void State::Adopt(const Tscn::Node& node, const std::string& name, entt::entity body) {
+    if (body == entt::null) return;
+    if (Flagged(node, "explosive")) {
+        Bomb bomb;
+        bomb.name = name;
+        bomb.body = body;
+        bombs.push_back(bomb);
+    }
+    if (Flagged(node, "burnable")) {
+        const std::string entityName = Roles::EntityName(node);
+        Burnable made;
+        made.name = name;
+        made.body = body;
+        made.fades = std::find(rules.fadeNames.begin(), rules.fadeNames.end(), entityName) != rules.fadeNames.end();
+        burnables.push_back(made);
+    }
+}
+
 bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built, const Rules& rules,
           State& out, std::string& error) {
     out = State{};
@@ -242,6 +298,33 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
             agent.name = node.name;
             agent.atPx = glm::dvec2(position->numbers[0], position->numbers[1]);
             out.agents.push_back(agent);
+        }
+
+        // The lava, by the name its contact callback is bound to.
+        if (std::find(rules.lavaEntities.begin(), rules.lavaEntities.end(), Roles::EntityName(node)) !=
+            rules.lavaEntities.end()) {
+            const auto body = built.entities.find(node.name);
+            glm::dvec2 offsetPx(0.0);
+            glm::dvec2 sizePx(0.0);
+            const Tscn::Value* position = node.Find("position");
+            if (body != built.entities.end() && position != nullptr &&
+                position->kind == Tscn::Value::Kind::Vector2 &&
+                LevelBuilder::ShapeBoundsPx(scene, node, offsetPx, sizePx)) {
+                double turned = 0.0;
+                const Tscn::Value* rotation = node.Find("rotation");
+                if (rotation != nullptr && rotation->AsNumber(turned) && turned != 0.0) {
+                    error = node.name + " is a turned lava, whose box would turn with it";
+                    return false;
+                }
+                const glm::dvec2 centrePx = glm::dvec2(position->numbers[0], position->numbers[1]) + offsetPx;
+                const glm::vec3 centre = Units::ToWorld(centrePx.x, centrePx.y);
+                Lava lava;
+                lava.name = node.name;
+                lava.body = body->second;
+                lava.box.centre = glm::vec2(centre.x, centre.y);
+                lava.box.half = glm::vec2(Units::ToMetres(sizePx.x * 0.5), Units::ToMetres(sizePx.y * 0.5));
+                out.lavas.push_back(lava);
+            }
         }
 
         // Flags, not roles: the original tests custom data, and a burnable is a

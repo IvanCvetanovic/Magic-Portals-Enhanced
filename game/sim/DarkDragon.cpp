@@ -104,6 +104,9 @@ void ShootAtPlayer(State& dragon, entt::registry& registry, entt::entity player,
     turn.aimPx = along / length;
     ++dragon.fired;
     dragon.elapsedMs = 0.0;
+    // ins 997-1064, inside the branch the shot left by: after addFireball, the
+    // quake and elapsedTime = 0, the barrel bomb put back if none is left.
+    turn.restock = true;
 }
 
 } // namespace
@@ -313,6 +316,19 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!string("dying", "key_colour", read.keyColour)) return false;
     if (!string("dying", "key_entity", read.keyEntity)) return false;
     if (!string("dying", "platform_entity", read.platformEntity)) return false;
+
+    if (!string("restock", "search", read.restock.search)) return false;
+    if (!string("restock", "add", read.restock.add)) return false;
+    if (!string("restock", "spawn", read.restock.spawn)) return false;
+    if (!string("restock", "effect", read.restock.effect)) return false;
+    if (!string("restock", "alias", read.restock.alias)) return false;
+    if (!string("restock", "template", read.restock.templateEntity)) return false;
+    // A search for nothing finds nothing and restocks every shot; a spawn or a
+    // template of nothing is a restock that can never be made.
+    if (read.restock.search.empty() || read.restock.spawn.empty() || read.restock.templateEntity.empty()) {
+        error = path + ": restock.search, restock.spawn and restock.template name an entity";
+        return false;
+    }
 
     // SEVEN waypoints, asserted rather than tolerated: the appearing path is what
     // carries the boss from off the left edge to where it fights, and a table of
@@ -785,6 +801,7 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
     }
     if (!out.present) return true;
     out.keyName = out.name + "#key";
+    out.restockSite = Restock::Resolve(scene, rules.restock);
 
     // Without these two it has nowhere to appear from and nowhere to fight, which
     // is a boss that hovers at the origin rather than one that is built.

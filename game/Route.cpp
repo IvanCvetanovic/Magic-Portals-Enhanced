@@ -416,6 +416,18 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         }
         if (level->boss.buttonRaised) std::printf(" BUTTON RAISED");
     }
+    // 4-32's dragon (step 116): where its point is, its arm and hp, its fire clock
+    // and angle, the shots it has fired, and the torches lit so far.
+    if (level->darkDragon.present) {
+        const auto& dragon = level->darkDragon;
+        std::printf("\n          dark dragon (%.1f, %.1f) phase %d hp %d clock %.0f angle %.1f fired %d torch lit %d%s",
+                    dragon.atPx.x, dragon.atPx.y, static_cast<int>(dragon.phase), dragon.hp, dragon.elapsedMs,
+                    dragon.look.angleDeg, dragon.fired, level->torch.lit, dragon.alive ? "" : " (not here)");
+    }
+    for (const auto& added : level->restock.added) {
+        std::printf("\n          restocked %s at (%.1f, %.1f)%s", added.name.c_str(), added.atPx.x, added.atPx.y,
+                    registry.valid(added.body) ? "" : " GONE");
+    }
     std::printf("\n");
 }
 

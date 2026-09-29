@@ -665,6 +665,8 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     }
     m_platformDrawn = false;
     m_platformBoxed = false;
+    m_restockDrawn = 0;
+    m_restockBoxed = 0;
     destroy(m_level.player);
     m_level = Game::Level{};
     m_loaded = false;
@@ -4371,6 +4373,40 @@ std::vector<MagicPortalsLayer::ShockRingReport> MagicPortalsLayer::ShockRings() 
 
 void MagicPortalsLayer::syncSprites(entt::registry& registry) {
     using namespace Supersonic;
+    // THE BARRELS 4-32'S DRAGON PUTS BACK (sim/Restock), which buildSprites cannot
+    // have made pictures for: each is added mid-fight under a name no node has.
+    // Each borrows the picture of the node it was built from - the placed barrel's,
+    // whose entry stays in m_sprites after its own quad has gone - and follows its
+    // own body as that one did. Made BEFORE the loop below, which places it on the
+    // tick it appears, and by value, since pushing into m_sprites moves it.
+    while (m_artReady && m_restockDrawn < m_level.restock.added.size()) {
+        const Restock::Added& added = m_level.restock.added[m_restockDrawn];
+        ++m_restockDrawn;
+        if (!registry.valid(added.body)) continue;
+        int templateAt = -1;
+        for (std::size_t i = 0; i < m_sprites.size(); ++i) {
+            if (m_sprites[i].sprite.node == added.templateNode) {
+                templateAt = static_cast<int>(i);
+                break;
+            }
+        }
+        if (templateAt < 0) continue;
+        DrawnSprite made = m_sprites[static_cast<std::size_t>(templateAt)];
+        made.sprite.node = added.name;
+        made.sprite.atPx = added.atPx;
+        made.sprite.rotation = 0.0;
+        made.body = added.body;
+        made.ownerPx = added.atPx;
+        // Neither a bake nor a particle sidecar: a bake is the light that fell where
+        // the template stood, read per entity already in the scene by its id; and
+        // barrel_bomb.ent's <Particles /> is empty.
+        made.lightmap.clear();
+        made.particles.clear();
+        made.quad = makeSprite(registry, "Magic Portals Restocked Sprite", made.sprite.texture, made.sprite.additive);
+        // A body, moved on the tick and drawn between ticks, as buildSprites gives one.
+        registry.emplace<InterpolatedTransformComponent>(made.quad);
+        m_sprites.push_back(std::move(made));
+    }
     for (DrawnSprite& drawn : m_sprites) {
         if (drawn.quad == entt::null) continue;
         const Sprites::Sprite& sprite = drawn.sprite;
@@ -4942,6 +4978,22 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
             m_bodies.push_back(made);
             m_platformBoxed = true;
         }
+    }
+
+    // AND THE BARRELS A RESTOCK ADDED (sim/Restock), one box each, as buildDrawables
+    // gives the placed one: its template's shape, a traveller's colour.
+    while (m_restockBoxed < m_level.restock.added.size()) {
+        const Restock::Added& added = m_level.restock.added[m_restockBoxed];
+        ++m_restockBoxed;
+        const Tscn::Node* node = m_data.scene.FindNode(added.templateNode);
+        if (!registry.valid(added.body) || node == nullptr) continue;
+        Drawn made;
+        made.body = added.body;
+        if (!LevelBuilder::ShapeBoundsPx(m_data.scene, *node, made.offsetPx, made.sizePx)) continue;
+        made.depth = 0.4f; // a rigid body's, as buildDrawables gives one
+        made.box = makeBox(registry, "Magic Portals Body", glm::vec3(0.0f), glm::vec3(1.0f), kCrateColour);
+        registry.emplace<InterpolatedTransformComponent>(made.box);
+        m_bodies.push_back(made);
     }
 
     // The player in its slot among the art - or, with the boxes shown or no art

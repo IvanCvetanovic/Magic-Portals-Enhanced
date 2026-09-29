@@ -2396,6 +2396,10 @@ private:
     // picture above is gated on there being art at all, and the box view is the
     // mode used when there is none.
     bool m_platformBoxed = false;
+    // How many of the barrels a restock added (m_level.restock.added) have their
+    // picture and their box: each is made once, by index, the tick it appears.
+    std::size_t m_restockDrawn = 0;
+    std::size_t m_restockBoxed = 0;
 
     // Puts the lost screen up, over the level that is still loaded behind it.
     // Follows openFinished and NOT openMenu: openMenu unloads the level and

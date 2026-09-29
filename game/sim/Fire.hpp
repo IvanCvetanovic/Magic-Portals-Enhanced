@@ -75,6 +75,17 @@
 // ripples one tick at a time rather than collapsing into a single frame, and the
 // port keeps that split rather than recursing.
 //
+// AND THE LAVA, WHICH IS A FLAG TOO
+//
+// ETHBeginContactCallback_lava (MiscCallbacks, listing L68416, bytes 345993..346228)
+// is bound to `lava` by name and runs for whatever begins a contact with it: #1-19
+// burn() if the other is burnable, then #21-30 SetUInt('explode', 1) on it, whatever
+// it is. So a barrel that falls into the lava goes off - its own callback reads the
+// flag, as it reads a fireball's - and 4-32's restock can then put it back (planning
+// step 116). It kills nothing: no line of it touches a character's hp. The port reads
+// a contact as the stones' is read (demolish.json contact): the body's collider
+// overlapping the lava's box grown by fire.json `lava.margin_px`.
+//
 // WHERE IT RUNS, AND WHO CLEARS UP
 //
 // After the step, with the hazards, and before the portals - what it removes is
@@ -85,6 +96,7 @@
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
+#include "sim/Trigger.hpp"
 #include "sim/Tscn.hpp"
 
 #include <string>
@@ -104,6 +116,10 @@ struct Rules {
     // fade and are removed when burned. Everything else flagged burnable just
     // holds the flag.
     std::vector<std::string> fadeNames;
+    // The entities ETHBeginContactCallback_lava is bound to (both spellings), and
+    // how near a body must come to one's box to touch it (a threshold, _guess).
+    std::vector<std::string> lavaEntities;
+    double lavaMarginPx = 0.0;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -133,6 +149,13 @@ struct Bomb {
     bool blown = false;
 };
 
+// A body whose begin-contact callback is the lava's: its box, in world metres.
+struct Lava {
+    std::string name;
+    entt::entity body = entt::null;
+    Trigger::Box box;
+};
+
 // A body one blast reached with a clear line, and the bomb whose blast it was.
 struct Grab {
     std::string by;
@@ -144,6 +167,7 @@ struct State {
     std::vector<Agent> agents;
     std::vector<Burnable> burnables;
     std::vector<Bomb> bombs;
+    std::vector<Lava> lavas;
 
     // Reported, not acted on: Game::AfterStep folds this into Hazards, as it does
     // the boss's and the carrancas'.
@@ -169,11 +193,17 @@ struct State {
 
     const Burnable* FindBurnable(const std::string& name) const;
     const Bomb* FindBomb(const std::string& name) const;
+
+    // A body the level did not place but a script added (sim/Restock), taken on as
+    // Find takes a placed one: a bomb when its node is explosive, a burnable when
+    // it is burnable, under the added entity's own name.
+    void Adopt(const Tscn::Node& node, const std::string& name, entt::entity body);
 };
 
-// A level's fire agents, burnables and bombs, each with the body LevelBuilder
+// A level's fire agents, burnables, bombs and lava, each with the body LevelBuilder
 // built for it. A flagged entity with no body built is passed over, which is what
-// a level started without its statics leaves.
+// a level started without its statics leaves. False, with `error`, for a turned
+// lava, whose box would turn with it.
 bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built, const Rules& rules,
           State& out, std::string& error);
 
