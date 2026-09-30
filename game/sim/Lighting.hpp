@@ -64,6 +64,7 @@
 // Since step 49 (G5) each Look::light is a 2D point light and its halo an added
 // quad, and which sprite takes which light is ReceiverMask and LightLayer below.
 
+#include "sim/RedKey.hpp"
 #include "sim/Tiers.hpp"
 #include "sim/Torch.hpp"
 #include "sim/Tscn.hpp"
@@ -230,6 +231,15 @@ Light OwnerScaled(const Light& light, const glm::dvec2& ownerScale);
 // One frame early against the original, which sets the lit ambient on the frame
 // AFTER the shot; the port has it from the tick the torch is shot.
 glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darkest, const Torch::State& torch);
+// And over those, 4-19's red key state (sim/RedKey.hpp; keys.json red_key_state
+// #75-87, #161-178): from the tick after its key is taken it sets
+// SetAmbientLight('ambientLight' x bias) every frame, 'ambientLight' being what its
+// FIRST call read - the level's start, before any torch: the file's ambient, or
+// darkestAmbient on a `darkest` level - and what it set last stays once it is gone,
+// about nothing. Before its key is taken this is the four-argument Ambient. Only
+// level18c places one, and it places no torch, so the two never meet.
+glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darkest, const Torch::State& torch,
+                   const RedKey::State& redKey);
 
 // What a sprite's colour is multiplied by before anything is added:
 // min(1, ambient + emissive), per channel (ETHRenderEntity.cpp:113-117), for

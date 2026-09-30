@@ -352,6 +352,21 @@
         "light_off.ent"
       ]
     },
+    "red_key_state": {
+      "_note": [
+        "4-19's red halo on the red key (level18c places the one in the game, on key_2701's",
+        "point). NOT scenery: ETHCallback_red_key_state (the remake's out/parity/asbc/",
+        "all_functions.txt L97171) plays playRedKeyGotSound once the key in its bucket is",
+        "taken (#224-277), fades its own colour and the level's ambient light to nothing over",
+        "6000 ms (#88-178), and then destroys SeekEntity('breakable_wall') (#190-220) - the",
+        "wall between the key and the rocket. Filed under scenery_fx as 'a HUD-ish indicator'",
+        "until planning step 118; game/sim/RedKey.hpp plays it."
+      ],
+      "names": [
+        "red_key_state",
+        "red_key_state.ent"
+      ]
+    },
     "scenery_fx": {
       "_note": [
         "Decoration and boss parts with a live ETHCallback but no gameplay consequence.",
@@ -361,14 +376,13 @@
         "  gutter_mouth.ent            - a wall spout; decorative drip emitter",
         "  dragon_claw.ent             - part of the chapter-2 boss, which is a placeholder",
         "  rocket_launch / _landing    - chapter 4 finale FX markers",
-        "  red_key_state.ent           - a HUD-ish indicator that the red key is held"
+        "(red_key_state.ent was filed here until planning step 118: it is its own role above.)"
       ],
       "names": [
         "gutter_mouth.ent",
         "dragon_claw.ent",
         "rocket_launch",
-        "rocket_landing",
-        "red_key_state.ent"
+        "rocket_landing"
       ]
     }
   }

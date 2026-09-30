@@ -1,0 +1,26 @@
+{
+  "_about": [
+    "4-19, weightless, won through the red key (planning step 118): every tap also pushes the player 70 u/s",
+    "away from it. Tap 1 opens a portal over button_2515 (62, 195); tap 2 fails on the closed door_lift_2498",
+    "and leaves the player drifting down. Tap 3 opens one over crate_2495: the crate goes through to the",
+    "button (tick 83) and door_lift_2498 rises for the 15 ticks gravity_agent_2439 leaves it there. Tap 4 is",
+    "shot under the risen door to (440, 148), beside key_2701, and tap 5 opens its partner at the player:",
+    "the player comes out beside the key and takes it (tick 129), and red_key_state_ent_2754 fades the light",
+    "for 6000 ms and breaks breakable_wall_2756 (tick 489) while the player waits against it. Tap 6 pushes",
+    "the player on to the rocket: won on tick 581. The route rides the port's portal shot (600 u/s, G4) and",
+    "its door, which closes as the button is let go (step 109's row): a step that moves either re-authors",
+    "taps 3-5. The original's route (footage F17 r5) opened a portal inside the crate, which the port's shot",
+    "cannot (it fails on the crate)."
+  ],
+  "level": "level18c",
+  "win_by": 640,
+  "holds": [],
+  "taps": [
+    {"tick": 30, "at": [62, 195]},
+    {"tick": 54, "at": [331.8, 165.3]},
+    {"tick": 78, "at": [224, 215]},
+    {"tick": 102, "at": [440, 148]},
+    {"tick": 126, "at": [284.4, 208.5]},
+    {"tick": 492, "at": [400, 170]}
+  ]
+}

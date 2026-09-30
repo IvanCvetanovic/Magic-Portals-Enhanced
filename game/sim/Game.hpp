@@ -44,6 +44,7 @@
 #include "sim/Player.hpp"
 #include "sim/Portals.hpp"
 #include "sim/Puzzle.hpp"
+#include "sim/RedKey.hpp"
 #include "sim/Restock.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Torch.hpp"
@@ -82,6 +83,7 @@ struct Data {
     Hinge::Rules hinge;           // and hinge.json
     Minions::Rules minions;       // and minions.json
     Keys::Rules keys;             // and keys.json
+    RedKey::Rules redKey;         // and its red_key_state block
     Diamonds::Rules diamonds;     // and diamonds.json
     Fields::Rules fields;         // and fields.json
     Ghost::Rules ghost;           // and ghost.json
@@ -132,6 +134,9 @@ struct Level {
     Minions::State minions;
     // Keys carried by the player or by a minion, and the doors they open.
     Keys::State keys;
+    // 4-19's red key state: once its key is taken, the level's light fades for
+    // 6000 ms and then the wall to the rocket breaks (RedKey.hpp).
+    RedKey::State redKey;
     // Shock diamonds, which only the player may carry and which kill a minion.
     Diamonds::State diamonds;
     // The lethal rings, which swing about the node that placed them.

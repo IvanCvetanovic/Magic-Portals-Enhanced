@@ -163,6 +163,24 @@ def test_the_dark_dragon_opens_its_wall(rules):
     assert (v.status, v.opened_by) == ("opened", {"dark_dragon": ["breakable_wall_4"]})
 
 
+def test_the_red_key_state_opens_the_first_breakable_wall_of_that_name(rules):
+    # Planning step 118: ETHCallback_red_key_state destroys SeekEntity('breakable_wall') 6000 ms
+    # after the key named 'key' in its bucket is taken - both names exact, as keys.json says.
+    nodes = scene("breakable")
+    wall = node(nodes, "breakable_wall_4")
+    state = r.Node("red_key_state_ent_9", "red_key_state.ent", (40.0, 20.0), 0.0, {})
+    key = r.Node("key_10", "key", (40.0, 20.0), 0.0, {"color": '"red"'})
+    v = judge([*nodes, state, key], rules)
+    assert (v.status, v.opened_by) == ("opened", {"red_key": ["breakable_wall_4"]})
+    assert judge([*nodes, state], rules).status == "sealed"
+    assert judge([*nodes, key], rules).status == "sealed"
+    dotted_key = dataclasses.replace(key, entity="key.ent")
+    assert judge([*nodes, state, dotted_key], rules).status == "sealed"
+    dotted_wall = dataclasses.replace(wall, entity="breakable_wall.ent")
+    assert judge([n if n is not wall else dotted_wall for n in nodes] + [state, key],
+                 rules).status == "sealed"
+
+
 def test_fire_burns_a_crate_that_fades(rules):
     nodes = scene("crate_fire")
     v = judge(nodes, rules)
@@ -229,7 +247,8 @@ def test_write_then_check_passes_and_a_moved_verdict_fails(tmp_path, capsys):
     assert document["counts"] == {"opened": 1, "reachable": 1, "sealed": 1}
     assert document["levels"]["breakable"] == {
         "label": "1-02", "status": "sealed", "sealed_by": ["breakable_wall_4"]}
-    assert set(document["_breakers"]) == {"stone", "barrel", "torch", "dark_dragon", "fire"}
+    assert set(document["_breakers"]) == {
+        "stone", "barrel", "torch", "dark_dragon", "fire", "red_key"}
     assert r.main(["--check", *common]) == 0
 
     document["levels"]["breakable"]["status"] = "opened"

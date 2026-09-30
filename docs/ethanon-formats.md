@@ -868,6 +868,36 @@ Observed values: `lightIntensity` `2` (10 scenes) / `3` (`physicsTest.esc`); `pa
 `_ETH_DEFAULT_BUCKET_SIZE = 256.0f` scalar at `ETHTypes.h:58`, editor uses `(512,512)`), parallax **origin**
 (normalized, default `(0.5,0.5)`, `ETHParallaxManager.cpp:32-35`), parallax vertical intensity (`0.1`),
 z-buffer enable, lightmap enable, camera position.
+Magic Portals sets its own: **128 level units a bucket.** `Game::start` (listing `out/parity/asbc/all_functions.txt`
+L21003) #3-17 builds `vector2(128, 128) * g_scale.getScale()` and pushes it first - the LAST argument - and #44-49
+push four strings more into the only five-argument `LoadScene` (`string x4, vector2`,
+`ETHScriptWrapper.generic.cpp:316`), which hands the scene `v2BucketSize * GetGlobalScaleManager()->GetScale()`
+(`ETHScriptWrapper.Scene.cpp:637-642`; that engine scale stays 1.0, `ETHGlobalScaleManager.cpp:25-28`, as the game
+never sets it). `Game::preLoop` #37 then runs `SGlobalScale::scaleEntities` (bytes 6838..7228), which scales and
+moves every entity whose `scalable` is not 0 - `CheckCustomData('scalable') == 0` counts as scalable (#13-50) - by
+`SetPosition(GetPosition() * getScale())` (`scaleEntity`, bytes 6072..6337, #38-53). Both uses see one factor,
+`screenHeight / 256` (`updateScaleFactor`, bytes 5592..5699): `main` (L61008 #76-79) sets 256 before any level
+state runs `Game::start`, and the scene's `preLoop` (L61752 #1-4) sets it again before `Game::preLoop`. So a
+bucket is `128 f` screen pixels over positions times `f`: 128 of the `.esc`'s units at any screen (360 px at 720).
+Planning step 118 (`game/data/keys.json` `red_key_state.bucket_units`) first read this as the four-string
+`LoadScene` and the default 256 px = 91.02 units; its fix round corrected it. **Step 72's reading is superseded
+too**: it has `Game::start` calling the four-string `LoadScene`, `scaleEntities` moving only entities that carry
+`scalable` - the listing moves every entity that does not carry `scalable = 0` - and a bucket's order as its load
+order, where a moved type-0 entity goes to the front (the next paragraph).
+
+**A bucket's order after the load** (what the static-callback and draw loops walk inside one bucket,
+`ETHScene.cpp:541-574`): the scene adds its entities in file order to the BACK of their bucket (`ETHScene.cpp:218-246`
+into `:277`), bucketed on the `.esc`'s unscaled positions at the `128 f` size. `scaleEntities` walks
+`GetAllEntitiesInScene` - `GetEntityArray`, bucket by bucket and each list in order (`ETHBucketManager.cpp:625-636`) -
+and every `SetPosition` that changes an entity's bucket queues a move (`ETHScriptWrapper.cpp:133-136`, `ETHEntity.cpp:363-368`,
+`ETHBucketManager.cpp:638-645`), resolved in that order (`:647-662`, from `ETHScene.cpp:513`). `MoveEntity` puts a
+type-0 (`ET_HORIZONTAL`) entity at the FRONT of its new bucket and any other type at the back
+(`ETHBucketManager.cpp:245-252`). So two type-0 entities that shared a bucket at load and move into one bucket
+come out in REVERSE file order, ahead of whatever did not move. On `level18c.esc` `breakable_wall` (id 2756,
+7th in the file) and `red_key_state.ent` (id 2754, 8th), both `type="0"` `static="1"`, share load bucket (1, 0) at
+360 px and move into (3, 1): the state comes first, and the static callbacks run in the order that loop queued them
+(`ETHActiveEntityHandler.cpp:76-88`, `:145-167`), so the state's runs before the wall's in a frame (INFERRED from
+the source, not measured).
 
 ### 4.3 Outer `<Entity>` — the scene instance
 

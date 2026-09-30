@@ -5553,6 +5553,92 @@ void ABarrelBesideItsWallGoesAsF6() {
     layer.OnDetach(registry);
 }
 
+// Planning step 118: 4-19's red key state as the original draws it and as F17 filmed
+// its fade. Its first call scales portal_halo.png by (0.8, 1.5) and colours it (1, 0.1,
+// 0.1); the tick the red key is taken plays playRedKeyGotSound once; from the next tick
+// the halo's colour and the level's ambient (0.8, 0.8, 0.9) are multiplied by
+// smoothBeginning(smoothEnd(1 - t/6000)); and 6000 ms on the halo goes and
+// breakable_wall_2756 with it, with wall_destroy.ent and the demolition sound.
+void TheRedKeyTakenFadesTheLightAndTheWallGoes() {
+    if (!OriginalArtIsThere("TheRedKeyTakenFadesTheLightAndTheWallGoes")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level18c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::RedKey::State& red = layer.SimLevel()->redKey;
+    const MagicPortals::Demolish::Breakable* wall = layer.SimLevel()->demolish.FindBreakable("breakable_wall_2756");
+    CHECK_MSG(red.present && wall != nullptr, "level18c's red key state and its wall");
+    if (!red.present || wall == nullptr) return;
+
+    // The halo: the one portal_halo.png the level draws before a portal is opened.
+    const auto halo = [&registry]() {
+        entt::entity found = entt::null;
+        for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+            if (tag.tag == "Magic Portals Sprite" &&
+                material.albedoTexturePath.find("portal_halo") != std::string::npos) {
+                found = entity;
+            }
+        }
+        return found;
+    };
+    const glm::dvec3 file(0.8, 0.8, 0.9); // level18c's eth_ambient
+    const auto near3 = [](const glm::dvec3& a, const glm::dvec3& b) { return glm::length(a - b) < 1e-5; };
+    tickWith(layer, registry, kRest, {}, {});
+    entt::entity quad = halo();
+    CHECK_MSG(quad != entt::null, "red_key_state's halo is drawn");
+    if (quad == entt::null) return;
+    const glm::vec4 startColour = registry.get<MaterialComponent>(quad).albedoColor;
+    CHECK_MSG(near3(glm::dvec3(startColour), glm::dvec3(1.0, 0.1, 0.1)),
+              "red from its first call: " + Point(glm::dvec2(startColour.g, startColour.b)));
+    const glm::vec3 scale = registry.get<TransformComponent>(quad).scale;
+    CHECK_MSG(std::fabs(scale.x / scale.y - 0.8 / 1.5) < 1e-4,
+              "and stretched (0.8, 1.5) over a square picture: x/y " + std::to_string(scale.x / scale.y));
+    CHECK(near3(layer.AmbientNow(), file));
+
+    PutPlayerAt(registry, layer, glm::dvec2(440.0, 128.0));
+    int taken = -1;
+    int broken = -1;
+    int sounds = 0;
+    int wallSounds = 0;
+    bool dust = false;
+    bool haloGone = false;
+    for (int tick = 1; tick <= 480 && (broken < 0 || tick <= broken + 2); ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        for (const std::string& event : layer.LatchedSounds()) {
+            if (event == "red_key_got") ++sounds;
+            if (event == "wall_broken") ++wallSounds;
+        }
+        if (taken < 0 && red.destroyed) taken = tick;
+        if (broken < 0 && wall->broken) broken = tick;
+        if (taken > 0 && tick == taken + 180) {
+            CHECK_MSG(std::fabs(red.bias - 0.556) < 1e-3, "half way, bias " + std::to_string(red.bias));
+            CHECK_MSG(near3(layer.AmbientNow(), file * red.bias), "the ambient faded with it");
+            const glm::vec4 colour = registry.get<MaterialComponent>(quad).albedoColor;
+            CHECK_MSG(near3(glm::dvec3(colour), glm::dvec3(1.0, 0.1, 0.1) * red.bias), "and the halo");
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (tick == broken) {
+            for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+                if (report.entity == "wall_destroy.ent") dust = true;
+            }
+            haloGone = halo() == entt::null;
+        }
+    }
+    CHECK_MSG(taken == 1, "the key taken on the tick the player reached it, got " + std::to_string(taken));
+    CHECK_MSG(sounds == 1, "playRedKeyGotSound latched once, got " + std::to_string(sounds));
+    CHECK_MSG(broken == taken + 360, "the wall gone 6000 ms after the taking: tick " + std::to_string(broken));
+    CHECK_MSG(wallSounds == 1, "with the demolition sound, got " + std::to_string(wallSounds));
+    CHECK_MSG(dust, "and wall_destroy.ent where it stood");
+    CHECK_MSG(haloGone, "the halo deleted with the state");
+    CHECK_MSG(glm::length(layer.AmbientNow()) < 1e-5, "the ambient left at nothing");
+    CHECK_MSG(!layer.SimLevel()->hazards.playerDied, "the player in the key's room lives");
+    std::printf("  4-19: red key taken on tick %d, the wall gone on %d\n", taken, broken);
+    layer.OnDetach(registry);
+}
+
 // ---- step 104: every tremble drawn, and the bodies' own impacts ---------------------
 
 // (a) The engine runs up to five ticks between two frames (SupersonicApp.cpp:74,
@@ -14815,6 +14901,7 @@ void runTests() {
     ASwitchedDoorShakesTheViewAsItGoes();
     EventsALevelMakesOnItsOwnShakeTheView();
     ABarrelBesideItsWallGoesAsF6();
+    TheRedKeyTakenFadesTheLightAndTheWallGoes();
     AStoneThroughAWallShakesItsImpactThenTwenty();
     AnUnlockedDoorShakesTheView();
     TheDarkDragonsLevelShakesTheView();

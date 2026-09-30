@@ -401,6 +401,11 @@ work no step of §7 owns, and the owner's calls:
       whether the engine buckets the file's coordinates or the drawn ones), then re-read the row **as written**; sweep
       the other 51 levels that place a ring for the same divergence. Owned outside 4.2 — a colour step cannot move a
       draw order, and the row is not to be re-specified to a cover-immune reading, which would hide exactly this signal.
+      **Its premises changed in step 118's fix round** (`docs/ethanon-formats.md`, the bucket paragraphs; not
+      re-derived here): `Game::start` passes its own bucket, 128 level units (the five-argument `LoadScene`);
+      `scaleEntities` moves every entity that does not carry `scalable = 0`, so the engine buckets the drawn
+      coordinates; and a moved type-0 entity goes to the FRONT of its new bucket, so a bucket's order after the load is
+      not its load order.
 - [ ] **Step 72 deviation (84 on `visuals-b`), 4-07's gate ring reads low under art BOTH builds draw in front of it**
       (SE step 72;
       00_order §7 step 4.2's 4-07 `antiportal_2166` row): required max `c_R` 0.36-0.42 and min 0.18-0.24, measured
@@ -1402,14 +1407,20 @@ work no step of §7 owns, and the owner's calls:
       closes it only from fully raised; the beholder breaks any demolisher stone rising into it, the original only
       `rolling_stone.ent`. And two wall breaks the port does not do: a bomb's blast destroys every breakable it grabs
       (`explode` #111-122; `Fire.hpp:52-56`, nine chapter-2 levels - *the walls built in step 115*, B1), and 4-19's
-      `red_key_state` destroys `breakable_wall_2756` 6000 ms after its key is destroyed (recorded nowhere else). Next:
+      `red_key_state` destroys `breakable_wall_2756` 6000 ms after its key is destroyed (recorded nowhere else; *built in
+      step 118*, B5 - its key TAKEN, the destroyed being the state's own datum). Next:
       the owner.
 - [ ] **Order 11.1, recorded, and tidy** (step 109): the wall's angle is the converter's 1.5708 rad (-90.00021 deg, 0.0002
       u over the half line); static callbacks add their dust only while their bucket is drawn in the original
       (deviation 6, with steps 78-80's rows); 2-32's claw's `wall_destroy` at angle 90 has no owner in 00_order section 7;
       the wall watch (`m_wallEffects`) is one-way and its comment says a wall does not come back (harmless: 11.2 gave the
       light wall a watch of its own); `ALiftDoorLeavesItsDustAsItOpensAndCloses` names `button_1666` where the door that
-      turns is `button_1656`'s. The comments wait for an edit that recompiles them anyway.
+      turns is `button_1656`'s; and step 118's `game/sim/RedKey.hpp` (new, committed with them): lines 41-43 have the
+      wall's callback "that frame or the next" in a bucket of its own, lines 63-64 the bucket "256 / 2.8125" - its fix
+      round has 128 and the same frame - and lines 5-6 call the wall "the level's only way to the rocket", unproven
+      (the row "4-19's way under the key's room"); and `game/sim/Game.cpp` 488-489 still send a reader to
+      `RedKey.hpp` for the wall "a frame later" (step 118's withdrawn deviation 3; its verifier found both). The
+      comments wait for an edit that recompiles them anyway.
 - [ ] **Order 11.2, THE OWNER'S TO RULE: the fire signal's orbit** (step 110, deviation 1; GAMEPLAY, applied): clockwise
       from above and added on its torch (decoded #42-108; L1: 296-300 deg/s at 48-54 px), where the port had it
       counter-clockwise from a full radius to the torch's left. In the original this is the picture alone; it changes
@@ -1493,12 +1504,16 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   2-08, 2-09 - 19 of 128. Step 115 adds four, 2-12, 2-13, 2-14 and 4-16, so far won only by the window's replay of
   their routes: `test_mp_routes` has not run on them (Smart App Control, three refusals) - 19 of 128 replayed by the
   suite, 23 with the window's. Step 116 adds 4-32, and its `test_mp_routes` run replays all 24 on the window's ticks:
-  24 of 128 replayed by the suite. Step 117 adds 3-32: 25 of 128, all replayed by the suite. Open until all 128.)*
+  24 of 128 replayed by the suite. Step 117 adds 3-32: 25 of 128, all replayed by the suite. Step 118 adds 4-19, through
+  the red key and its wall, replayed by the suite on tick 581 and in the window (its verifier's, `cbdb4004`): 26 of 128.
+  Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
   108 reachable, 20 opened, 0 sealed. The flood is optimistic about barrels (a barrel and any fire on the level opens
-  a wall), so five of the nine read opened with no port route yet: G8's and B4's rows. Open until those are won.)*
+  a wall), so five of the nine read opened with no port route yet: G8's and B4's rows. Open until those are won.
+  Step 118 adds the `red_key` breaker (4-19's wall); no verdict moves: 4-19 reads `reachable` by a way under the key's
+  room that a point takes and the player would have to clear a crate for - the row "4-19's way under the key's room".)*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1542,9 +1557,17 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       68-72), leaving nothing to hold `button_1144` in front of the door (that the player alone cannot then pass the
       door lift is reasoned from the geometry, not played; a barrel kept out of the chain to weigh the button, which
       works in the original too, was not tried - so 2-24's attribution to B4 is partly reasoned).
-- [ ] **B5. 4-19 at risk: the red key breaks the wall** - `ETHCallback_red_key_state` (L97171): the key carried ->
+- [x] **B5. 4-19 at risk: the red key breaks the wall** - `ETHCallback_red_key_state` (L97171): the key carried ->
       its sound, a 6000 ms fade of light and ambient, then `SeekEntity('breakable_wall')` destroyed (F17 #216). Nothing
-      reads `red_key_state`. (The "Order 11.1" row says "destroyed"; the trigger is the key carried.)
+      reads `red_key_state`. (The "Order 11.1" row says "destroyed"; the trigger is the key carried.) *Built in step 118*
+      (`sim/RedKey`): on the tick the key in its bucket has an owner, `red_key_got`; from the next, the halo's colour and
+      the level's ambient x smoothBeginning(smoothEnd(1 - t/6000)); at 6000 ms the halo goes and Demolish takes
+      `breakable_wall_2756` (`SeekAndDestroy`, then `Destroyed`), with its dust, quake and sound. The halo is drawn red
+      (1, 0.1, 0.1) and stretched (0.8, 1.5) from its first call. `entity_roles.json` gives `red_key_state` its own role.
+      F17's fade fits the port's rule on the original's frames with RMS 0.59 grey levels (as its free fit). GAMEPLAY, 4-19
+      only. **Won by a route: 4-19**, tick 581 (the key 129, the wall 489), replayed by `test_mp_routes` and in the window
+      (`MagicPortals.exe` `cbdb4004`); the after-sweep 127 of 128 byte-identical, 4-19 its halo. Its bucket is 128 level
+      units, `Game::start`'s own (fix round 1; the first record's 91.02 was the four-string `LoadScene` misread).
 - [ ] **B6. 3-13 at risk: an anti-portal agent should die to a shot**, taking its ring with it
       (`ETHCallback_anti_portal_agent` L66304 #109-187, `deleteAntiPortalInThisBucket`); the port keeps it a permanent
       zone (R17). 21 agents on 17 levels. Build before or with R1, which alone closes 4-01's route.
@@ -1608,8 +1631,8 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       the tap-away hands); the beholder's death explosion; `fire32`, `antiportal_explosion`, `carranca_destroy`,
       `small_explosion_no_light`; the closing lift door crushes nothing; `death_area` kills only the player in a 16 px
       box; no teleport while a platform sits in a portal; stale notes (`end_delay`, `Camera.hpp:6-10`,
-      `entity_roles.json`'s cosmetic `arrows` and `red_key_state`; `Turrets.hpp:17-22`'s and `diamonds.json`'s
-      `_fireball_note` were corrected in step 114).
+      `entity_roles.json`'s cosmetic `arrows` (its `red_key_state` a role of its own since step 118); `Turrets.hpp:17-22`'s
+      and `diamonds.json`'s `_fireball_note` were corrected in step 114).
 
 **Tests.** Step 113 built both: the audit's flood is `tools/parity/reachability.py` (the port's own rules read from
 `data/` and `game/data/`, verdicts pinned, ctest `parity_reachability`), and `test_mp_routes` replays every route in
@@ -1624,7 +1647,8 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       mostly does not (step 113, deviation 2); the 11-of-11 match with the window is its only evidence.
 - [ ] **The reachability flood is optimistic** (step 113, deviation 3): a point, not the 20 x 44 body; no no-portal
       zones; locked and switched doors and dynamic bodies free - so 4-19, 3-13, 4-21 and 4-32 read reachable and
-      are settled only by their routes. *And about barrels* (step 115, deviation 1): a barrel and any fire on the
+      are settled only by their routes (4-19's and 4-32's are won; 4-19's flood path is the row "4-19's way under the
+      key's room", step 118). *And about barrels* (step 115, deviation 1): a barrel and any fire on the
       level open a wall, whether or not that fire can set the barrel off within the wall's reach - so 2-16, 2-17,
       2-19, 2-21 and 2-24 read opened with no port route (B1's row).
 - [x] **`--route` without `--saves` writes the player's own save** when the run goes past the level's end: say so in
@@ -1817,6 +1841,46 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       build of any of them relinks it, so up to 22 first launches Smart App Control may refuse - no ctest loop.
       `test_mp_diamonds`, `test_mp_minions`, `test_mp_start` and `test_mp_dragon` open level31b: run those first. Once
       every suite is relinked, `ghost.json`'s unread `body.radius_px` (kept for them) goes.
+      *Step 118* ran `test_mp_keys` (169) and `test_mp_start` (753) on its code, which carries step 117's: 20 of the
+      22 remain. It adds its own: 28 suites include a header it changed (boss, bounce, camera, darkdragon, demolish,
+      diamonds, dragon, fields, fire, geometry, ghost, hazards, hinge, launchers, lighting, minions, motion, movers,
+      play, shot, sky, sprites, statics, timed, torch, turrets, wells, zerog), and all 41 it did not run link its sim
+      (its record, THE SUITES): the next build relinks all 41, up to 41 first launches.
+
+- [x] **Step 118's sweep and window replay NOT RUN** (Smart App Control refused `MagicPortals.exe` `57630962`, `e78d335b`
+      and `f5aacc1f`; both relinks spent). *Run by its verifier* on `cbdb4004` (a link-only relink): the sweep 127 of 128
+      byte-identical to `G11/after/sweep`, 4-19 its halo red and stretched (`B5/verify1/after/sweep`); the route won on
+      581, the key 129 and the wall 489, as the suite. Its fix round replayed the route again on the final data, frame
+      for frame the same (`B5/fix1/window18c`).
+- [ ] **The red key's wall comes 0.15-0.25 s early against F17** (step 118, deviation 4): the port's rule on the
+      original's frames breaks it on #212 (13.601 s); F17 has it whole on #214 and dust on #216 (6.15-6.25 s after the
+      fade's start). The uint milliseconds account for about 55 ms; the wall's callback runs in the state's own frame
+      (fix round 1: they share bucket (3, 1) and the state is ahead in it, inferred from the engine source), so about
+      0.1-0.2 s is not explained. Nor is it a clamp or smoothing of the original's frame time (its verifier): the
+      script's `getLastFrameElapsedTime` is the uint of the engine's delta, truncated to whole milliseconds
+      (`ETHEngine.cpp:147`) and capped only at 1000 ms (gs2d `android/main.cpp:180-181`).
+- [ ] **4-19's key bobs across its state's bucket edge** (step 118, deviation 6, found by its fix round; INFERRED, not
+      built): the state and the key stand on y 128, the top edge of bucket row 1 at 128 u. The original's free key bobs
+      1.5 u about that point and is in row 0 while above it, so a key taken on the upper half of its swing is seen only
+      once it trails back to y 128 or below - at once from below (the route), never while a carrier holds it above. The
+      port reads the key at its node (the pick-up-on-the-node divergence, `motions.json` `_about`), so its trigger is
+      always the taking tick. Building the key's bob into the sim would settle it.
+- [ ] **Step 118's other recorded deviations** (1, 2 and 5; its 3 was withdrawn by the fix round: the wall and the
+      state share bucket (3, 1), the state ahead in it). (1) `red_key_state` and `breakable_wall_2756` are static, so
+      the original runs their callbacks only while their bucket is visible (00_order 8.12c); the port's fade clock runs
+      every tick, as its other static clocks do (section 2's bucket-visibility rows: "Order 10.3, gameplay rows",
+      "Order 13.1, the off-screen kill"). (2) The fade adds the tick's 16.67 ms where the original adds a frame's
+      whole milliseconds (section 2's PORT-WIDE clock row). (5) A key a boss drops (`key.ent`, on 3-32 and 4-32) is
+      never the state's candidate: `seekEntityFromBucket` matches the name exactly. No level places both.
+- [ ] **4-19's way under the key's room** (step 118, finding): the reachability flood reaches the rocket through the
+      3-unit gap between `crate_2494` and `block00_no_emissive_ent_2504`, under the room at y 256-260 and up past x 512,
+      inside the fall bound, so 4-19 reads `reachable` with the wall standing. The player would have to move `crate_2494`
+      first; whether it can, in the port or the original, is not tried. If it can, 4-19 has a way round the key. The
+      check itself (its verifier): flooding with the player's 20 x 44 box rather than a point would not pass a 3-u slit.
+- [ ] **4-19's route rides the port's shot and lift door** (step 118): its third to fifth taps put a shot under a door that
+      the crate on the button holds up for 15 ticks, and turns back as soon as it is let go (step 109's row); the step that
+      builds G4 or the door's open-from-shut rule re-authors them. The original's route (F17 r5) opened a portal inside
+      a crate, which the port's shot, failing on a crate, cannot.
 
 **Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
 1-01, 1-02 and 1-32, two of them from step 113's automated runs.

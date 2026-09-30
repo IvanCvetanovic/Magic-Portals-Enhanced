@@ -78,9 +78,74 @@
       "everywhere: level20b is the only level holding two pairs of one colour, and there",
       "each keyhole is 57 px from its own door and 216 px or more from the other.",
       "",
-      "The bucket SIZE is not set from script - the scene is loaded by name alone - so it is",
-      "not recorded here. It does not change the port's answer: the key's search is bounded",
-      "by the 26 px test rather than by the buckets, and the door's has the global fallback."
+      "The bucket SIZE is set from script - 128 of the level's units, red_key_state.bucket_units",
+      "below (planning step 118, fix round 1; this note said otherwise until then). It does not",
+      "change the port's answer here: the key's search is bounded by the 26 px test rather than",
+      "by the buckets, and the door's has the global fallback."
+    ]
+  },
+
+  "red_key_state": {
+    "_source": [
+      "ETHCallback_red_key_state (the remake's out/parity/asbc/all_functions.txt L97171, md5",
+      "48fe65ce8baea16b94ed84d8d7be84b0), the callback of red_key_state.ent - level18c places the",
+      "one in the game, red_key_state_ent_2754 at (440, 128), on key_2701's own point. A call",
+      "pushes its last argument first (00_order 8.0 rule 3).",
+      "  #1-12    CheckCustomData('colorSet') == 0 - so #14-87 run on its FIRST call only:",
+      "  #14-21   Scale(vector2(0.8, 1.5))                                         -> scale",
+      "  #23-47   SetUInt('colorSet', 1); SetUInt('destroyTime', 0)",
+      "  #49-73   color = vector3(1, 0.1, 0.1); SetVector3('color'); SetColor      -> colour",
+      "  #75-87   SetVector3('ambientLight', GetAmbientLight())",
+      "  #224-253 key = seekEntityFromBucket(GetBucket(GetPositionXY()), 'key'): the FIRST",
+      "           entity whose GetEntityName() is exactly 'key' in its own bucket (L63678)",
+      "                                                                             -> key_entity",
+      "  #255-277 if key.GetInt('ownerID') >= 0: playRedKeyGotSound(); destroy(thisEntity)",
+      "           (MiscCallbacks L68753: SetUInt('destroy', 1)). The trigger is the key TAKEN.",
+      "  #88-95   once isDestroyed (L68734), on every later call:",
+      "  #97      FADE_TIME = 6000                                                 -> fade_ms",
+      "  #99-126  AddToUInt('destroyTime', getLastFrameElapsedTime()); t = GetUInt('destroyTime')",
+      "  #128-138 bias = smoothBeginning(smoothEnd(1 - t / 6000))",
+      "  #140-159 SetColor(GetVector3('color') * bias)",
+      "  #161-178 SetAmbientLight(GetVector3('ambientLight') * bias)",
+      "  #180-183 when uint(t) >= 6000:",
+      "  #185-192 DeleteEntity(thisEntity)",
+      "  #194-220 wall = SeekEntity('breakable_wall') - by its EXACT name (ETHBucketManager.cpp:",
+      "           394-406) - and destroy(wall), which ETHCallback_breakable_wall (L68771 #1-86)",
+      "           reads: the demolition sound, wall_destroy.ent, startEarthquake(20 x",
+      "           destroyEffectScale), DeleteEntity                                  -> wall_entity",
+      "red_key_state.ent (the original's entities/) is portal_halo.png, blendMode 1, emissive 1,",
+      "static, with no <Light>: the 'light' it fades is this halo's colour, and the ambient."
+    ],
+    "_measured": [
+      "Footage F17 (out/parity/footage/F17.md section 2.4, 4-19 take r5): the stone row's grey",
+      "level fits L0 x smoothBeginning(smoothEnd(1 - (t - t0) / 6)) with t0 7.573 s and RMS 0.59",
+      "grey levels over 66 frames (#140-#205), t0 0.12 s after the teleport that took the key",
+      "(#100, 7.449 s); the wall is whole on #214 (13.718) and dust on #216 (13.820), 6.15-6.25 s",
+      "after t0 against the decoded 6000 ms at that take's 13.5-18.8 fps. Lit sprites go black",
+      "and emissive ones stay (the ambient term min(1, ambient + emissive))."
+    ],
+    "key_entity": "key",
+    "wall_entity": "breakable_wall",
+    "fade_ms": 6000.0,
+    "colour": [1.0, 0.1, 0.1],
+    "scale": [0.8, 1.5],
+    "bucket_units": 128.0,
+    "_bucket_units": [
+      "GetBucket is floor(position / bucketSize) (Ethanon ETHBucketManager.cpp:47-50). Game::start",
+      "(listing L21003) #3-17 builds vector2(128, 128) x g_scale.getScale() and pushes it FIRST, so",
+      "it is the last argument; #44-48 push four strings more, and #49 is the only five-argument",
+      "LoadScene (string x4, vector2; ETHScriptWrapper.generic.cpp:316), which hands the scene",
+      "v2BucketSize x the engine's own scale (ETHScriptWrapper.Scene.cpp:637-642) - 1.0, as nothing",
+      "sets it (00_order 8.0 rule 5). Game::preLoop #37 then runs SGlobalScale::scaleEntities, which",
+      "scales every entity without scalable = 0 (bytes 6838..7228 #13-50; level18c marks none):",
+      "scaleEntity (bytes 6072..6337 #38-53) SetPosition(GetPosition() x getScale()). Both see one",
+      "factor, screenHeight / 256 (updateScaleFactor, bytes 5592..5699): main (L61008 #76-79) sets",
+      "256 before any level state runs Game::start, and the scene's preLoop (L61752 #1-4) sets it",
+      "again before Game::preLoop. So a bucket is 128 x f screen pixels over positions x f: 128 of",
+      "the level's units whatever the screen (360 px at 720). On level18c the state, its key and",
+      "breakable_wall_2756 all stand in bucket (3, 1), x 384-512, y 128-256; the state's y 128 is",
+      "that row's top edge. Planning step 118's first reading, the four-string LoadScene and",
+      "Ethanon's default 256 px = 91.02 units, was wrong (its fix round 1)."
     ]
   },
 
@@ -90,10 +155,10 @@
     "disagree - level0c and level31b and level31c each hold a keyhole and a door with no",
     "key, and level18c holds a red key with no keyhole and no door.",
     "",
-    "Left UNEXPLAINED rather than reasoned into something that must work somehow. The red",
-    "key has its own sound, its own help popup and an achievement of its own, and level31b",
-    "and level31c are boss levels, but none of that has been decoded and none of it is",
-    "asserted here."
+    "level18c's is explained since planning step 118: its lock is a wall, not a door. The",
+    "red_key_state block above breaks breakable_wall_2756 6000 ms after the red key is taken.",
+    "level31b's and level31c's keys are the bosses' drops (Ghost, DarkDragon). The red key's",
+    "help popup (ui.json) and its achievement 61 are not decoded here."
   ],
 
   "_not_built": [

@@ -404,6 +404,14 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
     for (const auto& keyhole : level->keys.keyholes) {
         if (keyhole.unlocked) std::printf("\n          keyhole %s UNLOCKED", keyhole.name.c_str());
     }
+    // 4-19's red key state (step 118): once its key is taken, the fade's clock and
+    // bias, and the wall it broke at the end.
+    if (level->redKey.present && level->redKey.destroyed) {
+        const auto& red = level->redKey;
+        std::printf("\n          red key state %s TAKEN by %s, %.0f ms, bias %.3f%s%s", red.name.c_str(),
+                    red.takenBy.c_str(), red.elapsedMs, red.bias, red.gone ? " GONE, wall " : "",
+                    red.gone ? (red.wallName.empty() ? "(none)" : red.wallName.c_str()) : "");
+    }
     if (level->hazards.playerDied) std::printf("\n          PLAYER DIED: %s", level->hazards.killedBy.c_str());
     if (level->boss.beholder) {
         const auto& boss = *level->boss.beholder;

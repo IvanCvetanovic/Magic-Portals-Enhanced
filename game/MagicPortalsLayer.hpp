@@ -1266,6 +1266,9 @@ private:
         int torch{-1};
         // A gravity well's agent, in wells.wells: a lap turns it (m_wellSpins).
         int well{-1};
+        // 4-19's red key state (sim/RedKey.hpp): drawn at its first call's scale per
+        // axis and colour, that colour faded once its key is taken, gone with it.
+        bool redKeyState{false};
         // 2-32's boss: its node stands off the left edge of the level and its
         // callback flies it, turns it and cuts its sheet (sim/Dragon.hpp), and the
         // claw's rides the camera. Both are drawn from the sim, not from the node.
@@ -2191,6 +2194,7 @@ private:
         int bossFrame = 0;
         bool bossGone = false;
         bool bossButtonRaised = false;
+        bool redKeyTaken = false; // 4-19's red key state saw its key taken
         // char rather than bool: std::vector<bool> is not a container of bools,
         // and these are only ever compared with the last tick's.
         std::vector<char> doorsOpening;

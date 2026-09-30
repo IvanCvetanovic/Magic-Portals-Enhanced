@@ -96,6 +96,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Hinge::LoadRules(portDataDirectory + "/hinge.json", read.hinge, error)) return false;
     if (!Minions::LoadRules(portDataDirectory + "/minions.json", read.minions, error)) return false;
     if (!Keys::LoadRules(portDataDirectory + "/keys.json", read.keys, error)) return false;
+    if (!RedKey::LoadRules(portDataDirectory + "/keys.json", read.redKey, error)) return false;
     if (!Diamonds::LoadRules(portDataDirectory + "/diamonds.json", read.diamonds, error)) return false;
     if (!Fields::LoadRules(portDataDirectory + "/fields.json", read.fields, error)) return false;
     if (!Ghost::LoadRules(portDataDirectory + "/ghost.json", read.ghost, error)) return false;
@@ -217,6 +218,7 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     if (!Hinge::Find(data.scene, data.roles, out.built, registry, data.hinge, out.hinge, error)) return false;
     if (!Minions::Find(data.scene, data.roles, data.minions, out.minions, error)) return false;
     if (!Keys::Find(data.scene, data.roles, out.built, data.keys, out.keys, error)) return false;
+    if (!RedKey::Find(data.scene, data.roles, data.redKey, out.redKey, error)) return false;
     if (!Diamonds::Find(data.scene, data.roles, data.diamonds, out.diamonds, error)) return false;
     if (!Fields::Find(data.scene, data.roles, out.built, data.fields, out.fields, error)) return false;
     if (!Ghost::Find(data.scene, data.roles, data.ghost, out.ghost, error)) return false;
@@ -478,6 +480,19 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
             if (!minion.gone && minion.body != entt::null) carriers.push_back(Carry::Carrier{minion.body, minionPoint});
         }
         for (const entt::entity gone : level.keys.Tick(registry, carriers, dt)) Forget(level, gone);
+    }
+    // 4-19's red key state (ETHCallback_red_key_state, listing L97171), AFTER the
+    // keys: a key taken this tick is seen this tick, as the original's static
+    // callback runs after the key's own (ETHScene.cpp:464-491). 6000 ms of fade
+    // later it destroy()s SeekEntity('breakable_wall'), and the wall's own callback
+    // takes it - here Demolish, on the same tick; RedKey.hpp says why the original
+    // may take it a frame later.
+    {
+        const RedKey::State::Turn turn = level.redKey.Tick(level.keys, static_cast<double>(dt) * 1000.0);
+        if (turn.destroyWall) {
+            level.redKey.wallName = level.demolish.SeekAndDestroy(level.redKey.rules.wallEntity, level.redKey.name);
+            for (const entt::entity gone : level.demolish.Destroyed(registry)) Forget(level, gone);
+        }
     }
     // And the shock diamonds, which the OTHER of the two carry filters governs:
     // only a character may take one, so the player alone is offered it and every

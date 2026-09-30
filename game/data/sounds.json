@@ -271,6 +271,13 @@
     "lift_turned": "playElevatorSound",
 
     "wall_broken": "playDemolitionSound",
+    "_note_red_key_got": [
+      "4-19'S RED KEY TAKEN (planning step 118): ETHCallback_red_key_state (listing L97171) #268-270",
+      "calls playRedKeyGotSound on the frame the key in its bucket has an owner, once - the same",
+      "call destroy()s the state. The hook is PlaySample('soundfx/red_key_got.mp3') and nothing",
+      "else (AudioManager bytes 199212..199292). The wall it breaks 6000 ms later is wall_broken."
+    ],
+    "red_key_got": "playRedKeyGotSound",
     "stone_thrown": "playStoneAppearSound",
     "stone_broken": "playStoneHitSound",
     "fireball_spat": "playFireballSound",

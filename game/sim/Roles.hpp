@@ -95,6 +95,10 @@ inline constexpr const char* kBouncer = "bouncer";
 // makes, an attractor over the level's dynamic bodies, and - invisibly, since no
 // level file mentions it - a no-portal zone the agent's own callback adds.
 inline constexpr const char* kGravityWell = "gravity_well";
+// 4-19's red key state (RedKey.hpp): the red halo on the red key, which once the
+// key is taken fades with the level's ambient light and then breaks the wall to
+// the rocket. The role table filed it as scenery_fx, "a HUD-ish indicator".
+inline constexpr const char* kRedKeyState = "red_key_state";
 
 // Roles whose body moves and has to carry what stands on it, so the builder makes
 // them kinematic rather than static: the remake's MOVING_ROLES

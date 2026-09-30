@@ -139,6 +139,16 @@ bool State::Grab(entt::entity body, const std::string& by) {
     return false;
 }
 
+std::string State::SeekAndDestroy(const std::string& entity, const std::string& by) {
+    for (Breakable& breakable : breakables) {
+        if (breakable.entity != entity || breakable.broken) continue;
+        if (!breakable.destroy) breakable.destroyBy = by;
+        breakable.destroy = true;
+        return breakable.name;
+    }
+    return std::string();
+}
+
 std::vector<entt::entity> State::Destroyed(entt::registry& registry) {
     std::vector<entt::entity> gone;
     for (Breakable& breakable : breakables) {

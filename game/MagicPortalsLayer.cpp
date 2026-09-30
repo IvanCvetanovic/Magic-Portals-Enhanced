@@ -3777,6 +3777,14 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             drawn.colour = glm::vec4(glm::vec3(m_artRules.staticPortal.TintFor(named)), drawn.colour.a);
             drawn.scale = m_artRules.staticPortal.scale;
         }
+        // 4-19'S RED KEY STATE IS DRAWN AS ITS FIRST CALL REDRAWS IT (keys.json
+        // red_key_state, #14-73): Scale(vector2(0.8, 1.5)) and SetColor(1, 0.1, 0.1)
+        // over its portal_halo.png, once. The fade multiplies that colour from the
+        // key's taking on (syncLighting), and the picture goes with the entity.
+        if (m_level.redKey.present && sprite.node == m_level.redKey.name) {
+            drawn.redKeyState = true;
+            drawn.colour = glm::vec4(glm::vec3(m_level.redKey.rules.colour), drawn.colour.a);
+        }
         drawn.ownerPx = sprite.atPx;
         drawn.centrePx = Sprites::CentrePx(sprite);
         // Godot's rotation is clockwise and the converter wrote it as Ethanon's
@@ -4647,14 +4655,19 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
                 ownerAngleDeg += turnedDeg;
             }
         }
+        // 4-19's red key state goes when its fade ends: DeleteEntity(thisEntity), #190.
+        if (drawn.redKeyState && m_level.redKey.gone) gone = true;
         if (gone) {
             registry.destroy(drawn.quad);
             drawn.quad = entt::null;
             continue;
         }
         // At the scale a script gave its entity: 1 but for a static portal's 0.8 and
-        // an antiportal's 0.5 times its node's scale.
-        placeSprite(registry, drawn.quad, centrePx, sizePx * drawn.scale, drawn.z, rotation);
+        // an antiportal's 0.5 times its node's scale - and per axis for 4-19's red key
+        // state, whose Scale(vector2) stretches it (0.8, 1.5).
+        glm::dvec2 drawnSizePx = sizePx * drawn.scale;
+        if (drawn.redKeyState) drawnSizePx *= m_level.redKey.rules.scale;
+        placeSprite(registry, drawn.quad, centrePx, drawnSizePx, drawn.z, rotation);
         drawn.centrePx = centrePx;
         drawn.ownerPx = ownerPx;
         drawn.ownerAngleDeg = ownerAngleDeg;
@@ -5344,8 +5357,9 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
 //     than being them. At a dark level's 0.01 they would vanish.
 //   - the menu, the medal screens and the HUD, none of which is in a level.
 void MagicPortalsLayer::syncLighting(entt::registry& registry) {
-    m_ambient = m_lit ? Lighting::Ambient(m_data.lighting, m_look.ambient, m_level.darkest, m_level.torch)
-                      : glm::dvec3(1.0);
+    m_ambient =
+        m_lit ? Lighting::Ambient(m_data.lighting, m_look.ambient, m_level.darkest, m_level.torch, m_level.redKey)
+              : glm::dvec3(1.0);
 
     const bool runtimeBake = m_lit && Lighting::RuntimeBake(m_level.torch);
     static const std::string noLightmap;
@@ -5364,6 +5378,13 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         // still as the original's m_factor 0 stands blinkElapsedTime still.
         if (drawn.antiportal) {
             colour = glm::vec4(glm::vec3(m_artRules.antiportal.ColourAt(m_levelAgeMs)), colour.a);
+        }
+        // 4-19'S RED KEY STATE, faded with the ambient once its key is taken:
+        // SetColor(GetVector3('color') x bias) every frame (#140-159), rgb only.
+        // Its emissive 1 keeps min(1, ambient + emissive) whole, so the halo fades
+        // by this alone while the ambient takes the lit sprites down with it.
+        if (drawn.redKeyState) {
+            colour = glm::vec4(glm::vec3(m_level.redKey.rules.colour * m_level.redKey.bias), colour.a);
         }
         tint(registry, drawn.quad, colour, drawn.emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
     }
@@ -8267,6 +8288,7 @@ void MagicPortalsLayer::latchSimSounds() {
         if (portal.live) ++now.staticsLive;
     }
     now.wallsBroken = m_level.demolish.Broken();
+    now.redKeyTaken = m_level.redKey.destroyed;
     for (const Launchers::Launcher& launcher : m_level.launchers.launchers) now.stonesThrown += launcher.thrown;
     // Summed across the carrancas, as the launchers' throws are: each keeps its
     // own count, and what the sound wants is how many were spat in all.
@@ -8306,6 +8328,14 @@ void MagicPortalsLayer::latchSimSounds() {
     // A static portal goes when it is spent, so this count FALLS.
     for (int i = now.staticsLive; i < m_watch.staticsLive; ++i) latch("portal_spent");
     for (int i = m_watch.wallsBroken; i < now.wallsBroken; ++i) latch("wall_broken");
+    // playRedKeyGotSound, on the tick 4-19's red key state saw its key taken (#268-270).
+    if (now.redKeyTaken && !m_watch.redKeyTaken) {
+        latch("red_key_got");
+        SUPERSONIC_LOG_INFO("Magic Portals") << "red key state " << m_level.redKey.name << ": "
+                                             << m_level.redKey.takenBy << " taken on tick " << m_ticks
+                                             << ", the light fades over " << m_level.redKey.rules.fadeMs << " ms"
+                                             << std::endl;
+    }
     for (int i = m_watch.stonesThrown; i < now.stonesThrown; ++i) latch("stone_thrown");
     for (int i = m_watch.fireballsSpat; i < now.fireballsSpat; ++i) latch("fireball_spat");
     for (int i = m_watch.bossHits; i < now.bossHits; ++i) latch("boss_hurt");

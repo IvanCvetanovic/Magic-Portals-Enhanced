@@ -22021,3 +22021,231 @@ relinked. Its six findings, all low, taken as text (no behaviour changed; the co
 - deviation 2 not shown harmless for 3-32: shown, deviation 2.
 - the route breaks when F15 finding 2 is built: LEFT FOR LATER and the backlog, as they were.
 - `ghost.json` keeps an unread number: LEFT FOR LATER.
+
+## Step 118 - 4-19's red key: taken, the halo and the level's light fade for 6000 ms, and the wall to the rocket breaks - and 4-19 won by a route (built)
+
+**TRACK A (MPR `main`, `build/`), the program's B5** (`docs/parity-backlog.md` section 6; the "Order 11.1" row's second
+wall and the "Smaller" row's stale `red_key_state` note). From `fe656cf`. Changed: `game/sim/RedKey.{hpp,cpp}` (new),
+`game/sim/CMakeLists.txt`, `game/sim/Game.{hpp,cpp}` (`Data::redKey`, `Level::redKey`, its tick after the keys),
+`game/sim/Demolish.{hpp,cpp}` (`SeekAndDestroy`), `game/sim/Lighting.{hpp,cpp}` (an `Ambient` that takes the red key),
+`game/sim/Roles.{hpp,cpp}` (`kRedKeyState`, played); `game/data/keys.json` (`red_key_state`, notes),
+`game/data/sounds.json` (`red_key_got`), `data/entity_roles.json` (the role); `game/MagicPortalsLayer.{hpp,cpp}` (the
+halo's colour, stretch, fade and deletion, the ambient, the sound, a log line); `game/Route.cpp` (DEV: the trace prints
+the state); `tests/test_mp_keys.cpp`, `tests/test_mp_layer.cpp`, `tests/routes/level18c.json` (new);
+`tools/parity/reachability.{py,json}`, `tools/parity/tests/test_reachability.py` (the `red_key` breaker; the `Game.cpp`
+and `Demolish.cpp` citations this step moved); `docs/ethanon-formats.md` (the game's bucket size, and a bucket's order
+after the load); `docs/parity-backlog.md`. No engine change (the pin stays `4bfcf67`), no converter change. The evidence
+is in `out/parity/program/B5/` (the build; `verify1/` the verifier's round; `fix1/` its fix round).
+
+**GAMEPLAY CHANGED, PLAINLY (4-19 only; level18c places the one `red_key_state` in the game).** Until this step
+`breakable_wall_2756`, between the red key's room and the rocket, stood for ever: nothing in the port read
+`red_key_state`, and nothing else on the level breaks the wall. Now, on the tick the red key is taken, the state plays
+`red_key_got.mp3`; over the next 6000 ms its red halo and the level's ambient light fade to nothing (lit sprites go
+black, emissive ones stay); and at 6000 ms the halo is deleted and the wall breaks - `wall_destroy.ent`, its quake and the
+demolition sound, as a blast's wall. The light stays out for the rest of the level. The halo is also drawn as the
+original draws it from the start: red (1, 0.1, 0.1) and stretched (0.8, 1.5), where the port drew it white and round.
+
+**BLOCKERS, checked first.** None unmet: the keys (an owner set on pickup), Demolish as the one owner of a wall's
+breaking with its watches (step 115), the `playRedKeyGotSound` hook (`sounds.json`), zero-g recoil and the gravity wells
+are all in the tree. The task's "last step 112, exe `8b5ab6d2`" was stale: the tree was at step 117 (`fe656cf`),
+`MagicPortals.exe` `8bde8cad`, and the before is `G11/after/sweep` (its 128 pngs open and match `G11/after/capture.txt`,
+re-checked).
+
+**(a) THE DECODE** (`ETHCallback_red_key_state`, `out/parity/asbc/all_functions.txt` L97171, md5 `48fe65ce...`; the
+reading rules of `visuals/briefs/00_order.md` 8.0, arguments pushed last first).
+- #1-87, on its FIRST call only (`CheckCustomData('colorSet')` is empty): `Scale(vector2(0.8, 1.5))` (#14-21, pushed
+  1.5 then 0.8); `color = vector3(1, 0.1, 0.1)` stored and `SetColor` (#49-73); `SetVector3('ambientLight',
+  GetAmbientLight())` (#75-87).
+- #224-277, until destroyed: `seekEntityFromBucket(GetBucket(GetPositionXY()), 'key')` - the first entity whose
+  `GetEntityName()` is exactly `key` in its own bucket (L63678) - and when its `GetInt('ownerID') >= 0`,
+  `playRedKeyGotSound()` and `destroy(thisEntity)` (L68753: `SetUInt('destroy', 1)`). The trigger is the key TAKEN; the
+  "Order 11.1" row's "destroyed" was the state's own datum.
+- #88-222, once destroyed (`isDestroyed`, L68734), from the next call: `destroyTime += getLastFrameElapsedTime()`, `bias =
+  smoothBeginning(smoothEnd(1 - t / 6000))`, `SetColor(color x bias)`, `SetAmbientLight(ambientLight x bias)`; when
+  `uint(t) >= 6000`: `DeleteEntity(thisEntity)`, then `destroy(SeekEntity('breakable_wall'))` - by its exact name
+  (`ETHBucketManager.cpp:394-406`) - which `ETHCallback_breakable_wall` (L68771 #1-86) reads: `playDemolitionSound`,
+  `wall_destroy.ent`, `startEarthquake(20 x destroyEffectScale)`, `DeleteEntity`.
+- `red_key_state.ent` is `portal_halo.png`, blendMode 1, emissive 1, static, with no `<Light>`: "its light" is the halo's
+  colour. `playRedKeyGotSound` is `PlaySample('soundfx/red_key_got.mp3')` alone (bytes 199212..199292).
+- The bucket (corrected by fix round 1): `Game::start` (L21003) #3-17 builds `vector2(128, 128) x getScale()` and
+  pushes it first, the last argument; #49 is the five-argument `LoadScene` (`ETHScriptWrapper.generic.cpp:316`), which
+  hands the scene that size times the engine's scale, 1.0 (`ETHScriptWrapper.Scene.cpp:637-642`); `Game::preLoop` #37
+  `scaleEntities` moves every position by the same `getScale()` (`screenHeight / 256`, set by `main` #76-79 and the
+  scene's `preLoop` #1-4 before either use). So a bucket is **128 level units**: the state, its key and
+  `breakable_wall_2756` all stand in bucket (3, 1), x 384-512, y 128-256, the state and the key on that row's top edge.
+  The first reading - the four-string `LoadScene`, Ethanon's default 256 px, 91.02 units - was wrong; it gave the same
+  answer for the key, not for the wall (deviation 3).
+
+**(b) THE PORT.**
+- `sim/RedKey`: `Find` takes the level's one `red_key_state` (a second is refused) and the nodes whose entity is exactly
+  `key`; `Tick`, after the keys, reads the first of those standing in the state's bucket (`floor(point / 128)`) and, when
+  it has an owner, sets `destroyed` (the sound's tick); from the next tick it adds the tick's 16.67 ms and sets `bias`;
+  at 6000 ms `gone` and `destroyWall`. `keys.json` `red_key_state` holds every number with its instruction.
+- `Game::AfterStep`, after `Keys::Tick`: on `destroyWall`, `Demolish::SeekAndDestroy('breakable_wall')` sets the first
+  standing breakable of that exact entity's `destroy`, flag or none, and `Destroyed` takes it on the same tick, so the
+  layer's wall watch draws `wall_destroy.ent`, queues its quake and latches `wall_broken`, as for a blast's wall.
+- `Lighting::Ambient` gains a five-argument form: before the key is taken, the four-argument one; after, the ambient the
+  state's first call read (the level's start: the file's, or `darkest`'s) times `bias`. The layer colours with it.
+- The layer: the state's picture (`DrawnSprite::redKeyState`) takes `colour` in `buildSprites`, is placed at its size x
+  `scale` per axis, is tinted `colour x bias` every tick (its emissive 1 keeps the ambient term whole) and goes when the
+  state does; `red_key_got` is latched on the tick `destroyed` turns (`sounds.json` maps it to `playRedKeyGotSound`).
+- `entity_roles.json`: `red_key_state` / `red_key_state.ent` are a role of their own (`Roles::kRedKeyState`, in
+  `IsPorted`), not `scenery_fx`.
+
+**(c) THE ROUTE** (`tests/routes/level18c.json`; replayed by `test_mp_routes`, won on tick 581, 6 shots; and in the
+window on `MagicPortals.exe` `cbdb4004`, on the same ticks). Weightless: every tap also pushes the player 70 u/s away
+from it.
+
+| Tick | What |
+|---|---|
+| 30 | a portal over `button_2515` at (62, 195), pushing the player right |
+| 54 | tap (331.8, 165.3): fails on the closed `door_lift_2498`, and leaves the player drifting down at (4, 22) u/s |
+| 78 | a portal over `crate_2495` at (224, 215): the crate goes through to the button (83), and `door_lift_2498` rises for the 15 ticks `gravity_agent_2439` leaves the crate on it (83-97; shut again on 112) |
+| 102 | a shot under the risen door to (440, 148), beside `key_2701`: it opens there on 117 (the player at (295, 197), 80 u from the shock agent) |
+| 126 | its partner at the player (284.4, 208.5): through on 128, the player out beside the key moving right at 69 u/s |
+| 129 | **the red key taken**; the halo and the light fade while the player waits against the wall |
+| 489 | **`breakable_wall_2756` broken by `red_key_state_ent_2754`**, 360 ticks (6000 ms) after the taking |
+| 492 | tap (400, 170) behind the player: on to the rocket, **won on tick 581** (`win_by` 640) |
+
+The route rides the port's portal shot (600 u/s, G4) and its lift door, which turns as soon as the button is let go
+(step 109's row); the step that moves either re-authors taps 3-5. The original's own route (F17 r5) opened a portal inside
+the crate, which the port's shot cannot: it fails on the crate.
+
+**GATES.**
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | **passes: 0 warnings** in every completed build (`B5/build1..6*.log`; `build2` stopped on a broken printf escape in the new layer test, fixed; `build3` clean), named targets only |
+| The trigger | the key taken, not destroyed, seen on its own tick; nothing while it lies | **passes**: `test_mp_keys` `theRedKeyTakenFadesTheLightThenBreaksTheWall` (120 ticks untaken: nothing; taken on the tick the player reaches it, bias 1, clock 0); `test_mp_layer` `TheRedKeyTakenFadesTheLightAndTheWallGoes` (`red_key_got` latched exactly once) |
+| The fade | smoothBeginning(smoothEnd(1 - t/6000)) on the halo and the ambient | **passes**: bias 1 / 0.556 / 0 at 0 / 3000 / 6000 ms (`theRedKeyStateStandsOnItsKey`); 180 ticks on, the clock 3000.0 ms, bias 0.556, `Lighting::Ambient` = (0.8, 0.8, 0.9) x bias to 1e-12; the layer's `AmbientNow` and the halo's colour the same on that tick, and the ambient at nothing once it is gone |
+| The wall | at 6000 ms, SeekEntity's exact name, through Demolish, with its dust and sound | **passes**: broken 360 ticks after the taking, by `red_key_state_ent_2754`, its body gone (`test_mp_keys`); `wall_destroy.ent` and `wall_broken` once on that tick, the halo's quad gone (`test_mp_layer`: taken on tick 1, the wall on 361); `SeekAndDestroy('breakable_wall.ent')` finds nothing, `'breakable_wall'` finds `breakable_wall_2756`, once |
+| Against F17 | the port's rule on the original's frames | **passes** (`B5/f17_gate.py`): the rule's start - two updates after the teleport, #102 at 7.566 s - fits the 66 stone-row grey levels (#140-#205) with RMS **0.59**, as F17's free fit does (t0 7.573, 7 ms apart); the wall is a residual (deviation 4) |
+| The picture | red (1, 0.1, 0.1), stretched (0.8, 1.5) | **passes** on the layer's quad: (1, 0.1, 0.1), x/y 0.5333 over the square `portal_halo.png` (`test_mp_layer`); and in the window (verify1, frames f100/f120): a red halo taller than wide on the key, as in the original's `4-19_t8.0` still; and measured (verify2, the after-sweep's 4-19 f420 against the original's `4-19_t8.0` / `_h6.3`, the same camera): its half-maximum through the key **67 x 112 px** against **66 x 121** / **68 x 114**, the column's centre 384 against 382 / 386 (`B5/verify2/halo_profile.txt`) |
+| The route | 4-19 won from its start by play through the key, the fade and the wall, no DEV flag | **passes: won on tick 581**, the key on 129 and the wall on 489, headless (`test_mp_routes`) and in the window on `cbdb4004` (verify1; again in fix1 on the final data, its 11 frames f60-f660 byte-identical to verify1's): the six scheduled taps and no other input, `red_key_got.mp3`, `wall_destroy.ent` and `demolition.mp3` on 489, validation ACTIVE, 0 messages, a throwaway `--saves` left empty |
+| The bucket | Game::start's own size, 128 level units | **passes** (fix round 1): `keys.json` `bucket_units` 128; `test_mp_keys` pins it, and pins the state, `key_2701` and `breakable_wall_2756` in bucket (3, 1) |
+| Old routes | as step 117 | **passes: 25 of 25** on step 117's ticks (every `won on tick` line the same as `G11/test_mp_routes.txt`); 26 of 26 with 4-19 |
+| Reachability | no door newly sealed | **passes**: `--check` 108 reachable / 20 opened / 0 sealed, 0 differ; `--write` moved only `_breakers` (the `red_key` row and five moved citations); 4-19 stays `reachable`, its wall's opener now `red_key` (finding below); pytest 19 passed (18 and the red key's), ruff clean |
+| All 128 start | every level still loads and starts through the new tables | **passes**: `test_mp_start` 128 of 128 start, 128 play, 753 checks (753) |
+| The after-sweep | every changed level explained against `G11/after/sweep` | **passes** (verify1's capture on `cbdb4004`, kept as the step's `B5/after/sweep` with its `capture.txt` - 128 of 128 PNGs whole and on their logged md5s - and `PROVENANCE.txt`): 128 of 128 rc 0, validation ACTIVE in 128 logs, 0 messages; **127 byte-identical**, and 4-19 changed in 24,533 px, x 1128..1279 y 240..483 - the halo on the key white and round before, red and stretched after; nothing takes the key in 420 idle ticks. The bucket correction moves no pixel: fix1's 4-19 f420 is byte-identical to verify1's (`3519749a`) |
+
+**THE SUITES,** run directly, once each, 0 failures: **`test_mp_keys` 167** (124 at its last recorded run), **`test_mp_layer`
+2928** (2911), **`test_mp_routes` 83** (80; 26 routes), **`test_mp_start` 753** (753). Fix round 1, on the final data
+(`keys.json` is read at run time), once each again: **`test_mp_keys` 169** (relinked: the bucket pins, +2),
+**`test_mp_layer` 2928**, **`test_mp_routes` 83** (every `won on tick` line the same as verify1's), **`test_mp_start` 753**.
+Not relinked, so not run: the other 41. Their `.cpp` files are unchanged, but 28 of them - boss, bounce, camera, darkdragon, demolish, diamonds, dragon, fields,
+fire, geometry, ghost, hazards, hinge, launchers, lighting, minions, motion, movers, play, shot, sky, sprites, statics,
+timed, torch, turrets, wells, zerog - have a test object that includes a changed header (`ninja -t deps`), and every
+suite links the changed `MagicPortalsSim`: the next full build relinks all 41, up to 41 first launches Smart App Control
+may refuse. Every one that loads a level reads `keys.json`'s new block through `Game::LoadData`, which `test_mp_start`
+has run on all 128.
+
+**SMART APP CONTROL: 4 refusals over the step, all `MagicPortals.exe`.** The build: `57630962` (the step's link), then
+`e78d335b` and `f5aacc1f` (its two allowed relinks), each "Permission denied" on its first launch (`B5/sac_refusals.txt`).
+The verifier: `f2a2e5a0` refused (its relink 1), `cbdb4004` allowed (relink 2, link only, the same objects). Fix round 1:
+none - it relinked `test_mp_keys` alone (`4368e23e`, allowed) and launched only exes already allowed. First launches
+allowed: `test_mp_keys` `bcfca90b` then `4368e23e`, `test_mp_layer` `320f6032`, `test_mp_routes` `91e8222b`,
+`test_mp_start` `34785792`. **`build/game/MagicPortals.exe` is `cbdb4004`, the step's exe.**
+
+**RECORDED DEVIATIONS.**
+1. **The bucket-visibility clock** is not built (as for 3.4, 13.2, 13.4): `red_key_state` and the wall are static, and a
+   static callback runs only while its bucket is visible (00_order 8.12c). The port's clock runs every tick.
+2. **Whole milliseconds**: the original adds `getLastFrameElapsedTime()`'s uint a frame; the port adds the tick's 16.67.
+3. **The wall on the fade's own tick - NO LONGER A DEVIATION** (fix round 1; INFERRED from the engine source, not
+   measured). The state and the wall share bucket (3, 1), so the order is that bucket's list, not the visible-bucket
+   loop's. Both are `type="0"`, the 7th (the wall, id 2756) and 8th (the state, 2754) entities of `level18c.esc`, so both
+   load into bucket (1, 0) at 360 px in file order; `scaleEntities` queues their moves in that order and `MoveEntity`
+   puts each type-0 entity at the FRONT of (3, 1), which leaves the state ahead of the wall (`docs/ethanon-formats.md`,
+   "A bucket's order after the load"). The state's callback runs first and the wall reads its `destroy` in the same
+   frame: the port's same tick. (The first reading had the wall in a bucket of its own, x 455-546, and "that frame or
+   the next".)
+4. **The wall's residual against F17**: the port's rule laid on F17's frames breaks the wall on #212 (13.601 s); the
+   footage has it whole on #214 (13.718) and dust on #216 (13.820), 6.15-6.25 s after the rule's start where the rule says
+   6.000. Deviation 2 accounts for about 55 ms (half a millisecond truncated over ~110 frames at that take's 18.8 fps);
+   deviation 3 no longer does, so about 0.1-0.2 s is not explained. Nor is it a clamp or smoothing of the original's
+   frame time (verify2): `STimeManager::getLastFrameElapsedTime` (listing bytes 7894..7961) is
+   `uint(float(GetLastFrameElapsedTime()) x m_factor)`, and the engine truncates the platform's delta to whole
+   milliseconds (`ETHEngine.cpp:147`) and caps it only at 1000 ms (gs2d `android/main.cpp:180-181`), nothing in the
+   range of F17's 53-75 ms frames.
+5. **A key a boss drops** (`key.ent`, on 3-32 and 4-32) is never a candidate: `seekEntityFromBucket` matches the name
+   exactly. No level places both.
+6. **The key's bob against the bucket's edge** (found by fix round 1; INFERRED, not built). The port reads the key at its
+   node, (440, 128), so it is in (3, 1) on the tick it is taken (`Carry::Acquire` leaves it on its point; it trails from
+   the next tick): the trigger is the taking tick, whichever side the player comes from. The original's free key bobs
+   1.5 units about that point (`motions.json` `key`, `linearMotion`) and is in (3, 0) while above y 128, so its state
+   sees a key taken on the upper half of the swing only once the carried key trails back to y 128 or below - a frame or
+   two when the carrier is below it, as on this route (the player at y 150 on tick 129), and not while a carrier holds it
+   above. This is the port's recorded pick-up-on-the-node divergence (`motions.json` `_about`) meeting a bucket edge;
+   F17 (the fade 0.12 s after the teleport) cannot tell the two apart.
+
+**FINDING: the reachability flood reaches 4-19's door past the wall.** Its path (`B5/flood_path.py`, `flood_path.txt`)
+leaves the room through the 3-unit gap between `crate_2494` (x 259-317) and `block00_no_emissive_ent_2504` (x 320) - the
+flood holds a dynamic body free - runs under the key's room at y 256-260, below `block00_no_emissive_ent_2504` and
+`double_block_plat_no_emissive_ent_2694`, and comes up past x 512 to the rocket, inside the fall bound (y 352). A point
+takes it; the 20 x 44 player would have to move `crate_2494` first. Whether a player can - in the port or the original -
+was not tried. So 4-19 reads `reachable` with the wall standing, and the route above goes through the key as asked.
+
+**STEP 118'S FIX ROUND (2026-09-30), AFTER THE VERIFIER FAILED IT** (`out/parity/program/B5/verify1.json`). The
+verifier re-measured the build, the suites, the route (headless and in the window, on the relinked `cbdb4004`), the
+fade on the port's own frames, the reachability check and the 128-level sweep, and failed the step on one medium
+defect: the bucket size. This round changes data, docs and one test: **no game source or header changed**; `keys.json`
+is read at run time, and only `test_mp_keys` was relinked. Its evidence is under `out/parity/program/B5/fix1/`.
+1. **The bucket was mis-decoded (medium, true; re-derived from the listing and the engine before the fix).** `Game::start`
+   calls the five-argument `LoadScene` with `vector2(128, 128) x getScale()`, and the positions are scaled by the same
+   factor: 128 level units, not the default 256 px = 91.02 units ((a), corrected). Fixed in `keys.json` (`bucket_units` 128, its
+   note re-cited, and the `pairing` note's "the bucket SIZE is not set from script" corrected), `docs/ethanon-formats.md`
+   (the paragraph rewritten, step 72's reading marked superseded, and a bucket's order after the load, cited), the test
+   pins, (a), (b) and deviation 3, which the corrected geometry turns into an inferred match. It found deviation 6.
+   Neither changes 4-19's play in the port: the key, the fade and the wall come on the same ticks, and the frames match.
+2. **The sweep and the window replay recorded NOT RUN (low, true)**: the gate rows and SMART APP CONTROL now carry
+   verify1's runs, and the backlog's row is closed.
+3. **The reachability gate cannot see the red-key wall (low, true)**: already the filed finding below and its backlog
+   row; the verifier's suggestion (flood with the player's 20 x 44 box, not a point) is added to that row.
+4. **Step 72's LoadScene and `scaleEntities` readings (low, true)**: marked superseded in `docs/ethanon-formats.md`;
+   step 72's record is history and is not rewritten.
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| Build, 0 warnings | `test_mp_keys` alone | **passes**: `--target test_mp_keys` compiled `test_mp_keys.cpp` and linked, nothing else (`fix1/build1_keys.log`), 0 warnings |
+| The bucket | 128 level units; the state, key and wall in (3, 1) | **passes**: `test_mp_keys` **169 / 0** (`4368e23e`) |
+| Suites on the final data | once each, 0 failures | **passes**: `test_mp_layer` 2928, `test_mp_routes` 83 (52 `won on tick` lines, all verify1's), `test_mp_start` 753 - on their allowed exes, unrelinked |
+| Route 4-19 | won by play, key, fade, wall | **passes**: 129 / 489 / 581 headless and in the window (`cbdb4004`, six taps, validation ACTIVE and silent, `--saves` empty); frames f60-f660 byte-identical to verify1's |
+| Pixels | the bucket moves none | **passes**: 4-19 f420 byte-identical to verify1's after-sweep (`3519749a`); the other 127 levels place no `red_key_state`. So verify1's sweep is the step's after-sweep, kept at `B5/after/sweep`: the next step's before |
+| Reachability | no door newly sealed | **passes**: `--check` 108 reachable / 20 opened, 0 differ; pytest 19 passed; ruff clean; the pin unchanged by this round |
+| Smart App Control | refusals counted | **0 this round** |
+
+**RULINGS APPLIED.** B5 as the original does it (the listing, with F17's fade). R1, R2 (the wells' port-only zones, which
+the route keeps clear of), R17, R23, R24 and R25 are not touched; camera dragging is untouched.
+
+**LEFT FOR LATER.**
+- **Four stale comments, committed with the step** (`RedKey.hpp` is new in it). `game/sim/RedKey.hpp` lines 41-43
+  say the original takes the wall "that frame or the next ... (the wall's is not the state's)", and lines 63-64 call
+  the bucket "Ethanon's default ... 256 / 2.8125": fix round 1 supersedes both (the data, the test and this record
+  carry the 128 and the same frame). `game/sim/Game.cpp` lines 488-489 ("RedKey.hpp says why the original may take
+  it a frame later") point to the same withdrawn deviation 3 (verify2). And `RedKey.hpp` lines 5-6 ("the level's only
+  way to the rocket is past breakable_wall_2756") are unproven rather than wrong: the FINDING above leaves a way
+  under the key's room untried for the player (verify2). The header reaches 28 files through `Game.hpp` and
+  `MagicPortalsLayer.hpp`, and `Game.cpp` is in the sim every suite links, so neither the fix round nor the commit
+  edited them rather than relink those and `MagicPortals.exe`; the comments wait for an edit that recompiles them
+  anyway (the backlog's "Order 11.1, recorded, and tidy" row).
+- **The red key's own picture and sound** are not this step's: the key is still drawn yellow (`setKeyColor`, P4) and its
+  pick sound is P6's; the red key's help popup and achievement 61 stay as they were.
+- **The rocket's landing** (P2): the level still ends on the port's flat 1400 ms, now in the faded light.
+
+**LEFT FOR THE OWNER.** Nothing new. Every route run was headless (`test_mp_routes`, which writes no save) or in the
+window with a throwaway `--saves`, left empty; the owner's `scores.json` was not touched.
+
+**VERIFICATION.** Round 1 (`out/parity/program/B5/verify1.json`): **FAIL** on one medium problem, the bucket size, and
+three low ones, all taken by STEP 118'S FIX ROUND above. Round 2 (`out/parity/program/B5/verify2.json`, independent):
+**PASS**. The decode re-derived from the listing and the Ethanon source before the code was read (the bucket 128 level
+units, the frame order), and the code matches it. Every gate retaken agrees with the numbers above: the 10 changed
+compile units, 0 warnings (compile-only, no link), and the step's exes current against their sources; `test_mp_keys`
+169, `test_mp_layer` 2928, `test_mp_routes` 83 (26 of 26, 4-19 on 581, the other 25 on step 117's ticks),
+`test_mp_start` 753, 0 failures; 4-19 in the window on `cbdb4004`, the six taps and no other input, 67 of 67 frames
+byte-identical to verify1's; reachability 108 / 20 / 0 with 0 differ; the fade's start on the port's frames f0 128.5
+against the rule's 129; its own after-sweep 128 of 128 byte-identical to `B5/after/sweep`. Smart App Control refused
+nothing, and nothing was relinked. Its two findings, both low, taken as text at the commit (no behaviour changed; the
+commit relinked and launched nothing):
+- two more stale comments, `Game.cpp` 488-489 and `RedKey.hpp` 5-6: LEFT FOR LATER and the backlog's "Order 11.1,
+  recorded, and tidy" row, beside the two already filed.
+- the picture and deviation 4 can carry its numbers: the picture row (67 x 112 px against 66-68 x 114-121) and
+  deviation 4 (no clamp or smoothing in the original's frame time).

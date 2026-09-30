@@ -32,6 +32,8 @@
 #include "core/Components.hpp"
 #include "sim/Game.hpp"
 #include "sim/Keys.hpp"
+#include "sim/Lighting.hpp"
+#include "sim/RedKey.hpp"
 #include "sim/Units.hpp"
 
 #include <cmath>
@@ -416,6 +418,129 @@ void everyLevelWithAKeyholePairsIt() {
     }
 }
 
+// ---- 4-19's red key state (planning step 118; keys.json red_key_state) -------------------
+//
+// level18c places the one red_key_state in the game on key_2701's own point, and
+// breakable_wall_2756 between the key's room and the rocket. ETHCallback_red_key_state
+// (listing L97171) watches the first entity named exactly `key` in its bucket; the
+// tick that key has an owner it plays its sound and destroy()s itself, and from the
+// next tick it fades its colour and the ambient by smoothBeginning(smoothEnd(1 -
+// t/6000)) and at 6000 ms destroy()s SeekEntity('breakable_wall').
+
+constexpr const char* kRedLevel = "level18c";
+constexpr const char* kRedState = "red_key_state_ent_2754";
+constexpr const char* kRedKey = "key_2701";
+constexpr const char* kRedWall = "breakable_wall_2756";
+
+void theRedKeyStateStandsOnItsKey() {
+    Run run;
+    if (!Begin(kRedLevel, run)) return;
+    const RedKey::State& red = run.level.redKey;
+    CHECK_MSG(red.present && red.name == kRedState, "level18c's red_key_state, got '" + red.name + "'");
+    CHECK(red.atPx == glm::dvec2(440.0, 128.0));
+    CHECK_EQ(red.keyNodes.size(), static_cast<std::size_t>(1));
+    if (!red.keyNodes.empty()) CHECK(red.keyNodes.front() == kRedKey);
+    // The decode's numbers, read from keys.json.
+    CHECK(red.rules.keyEntity == "key" && red.rules.wallEntity == "breakable_wall");
+    CHECK(::test::nearly(static_cast<float>(red.rules.fadeMs), 6000.0f));
+    CHECK(red.rules.colour == glm::dvec3(1.0, 0.1, 0.1));
+    CHECK(red.rules.scale == glm::dvec2(0.8, 1.5));
+    // Game::start's own LoadScene bucket, vector2(128, 128) x getScale() over positions
+    // x getScale(): 128 of the level's units (step 118's fix round).
+    CHECK(red.rules.bucketUnits == 128.0);
+    // Its bucket, the key's and the wall's are one: (3, 1), x 384-512, y 128-256 - the
+    // state and the key on that row's top edge.
+    const Keys::Key* key = run.level.keys.FindKey(kRedKey);
+    CHECK(key != nullptr);
+    if (key != nullptr) {
+        CHECK(key->colour == "red");
+        CHECK(red.BucketOf(key->atPx) == red.BucketOf(red.atPx));
+    }
+    CHECK(red.BucketOf(red.atPx) == glm::ivec2(3, 1));
+    bool wallSeen = false;
+    for (const Tscn::Node& node : run.data.scene.nodes) {
+        if (node.name != kRedWall) continue;
+        const Tscn::Value* position = node.Find("position");
+        if (position == nullptr || position->kind != Tscn::Value::Kind::Vector2) break;
+        wallSeen = true;
+        CHECK(red.BucketOf(glm::dvec2(position->numbers[0], position->numbers[1])) == glm::ivec2(3, 1));
+    }
+    CHECK_MSG(wallSeen, "level18c's breakable_wall_2756 and its position");
+    // The curve at its ends and its middle: 1, 1 - sin(PIb (1 - sin(PIb / 2))), 0.
+    CHECK(std::fabs(red.BiasAt(0.0) - 1.0) < 1e-6);
+    CHECK_MSG(std::fabs(red.BiasAt(3000.0) - 0.556) < 1e-3, "at 3000 ms " + std::to_string(red.BiasAt(3000.0)));
+    CHECK(std::fabs(red.BiasAt(6000.0)) < 1e-6);
+    // A level that places none has none.
+    Run other;
+    if (Begin(kLevel, other)) CHECK(!other.level.redKey.present);
+}
+
+void theRedKeyTakenFadesTheLightThenBreaksTheWall() {
+    Run run;
+    if (!Begin(kRedLevel, run)) return;
+    const Demolish::Breakable* wall = run.level.demolish.FindBreakable(kRedWall);
+    CHECK_MSG(wall != nullptr, "level18c's breakable_wall_2756");
+    if (wall == nullptr || run.level.player == entt::null) return;
+    const entt::entity wallBody = wall->body;
+    const RedKey::State& red = run.level.redKey;
+
+    // Left lying, nothing happens: the player floats at its spawn, weightless.
+    for (int tick = 0; tick < 120; ++tick) Tick(run);
+    CHECK_MSG(!red.destroyed && red.bias == 1.0 && !wall->broken, "an untaken key fades nothing");
+
+    // Taken: on that tick the sound's moment, and the clock starts on the next.
+    PutAt(run.registry, run.level.player, glm::dvec2(440.0, 128.0));
+    int taken = -1;
+    for (int tick = 1; tick <= 5 && taken < 0; ++tick) {
+        Tick(run);
+        if (red.destroyed) taken = tick;
+    }
+    const Keys::Key* key = run.level.keys.FindKey(kRedKey);
+    CHECK_MSG(taken == 1, "the key's taking seen on its own tick, got " + std::to_string(taken));
+    CHECK(key != nullptr && key->owner == run.level.player);
+    CHECK(red.takenBy == kRedKey);
+    CHECK_MSG(red.elapsedMs == 0.0 && red.bias == 1.0, "nothing faded on the tick it was taken");
+    const glm::dvec3 file(0.8, 0.8, 0.9); // level18c's eth_ambient
+    const Lighting::Rules lighting = run.data.lighting;
+    const Torch::State noTorch;
+    CHECK(Lighting::Ambient(lighting, file, false, noTorch, red) == file);
+
+    // Half way: 180 ticks of 1/60 s after the taking.
+    int since = 0; // ticks since the tick it was taken on
+    for (; since < 180; ++since) Tick(run);
+    CHECK_MSG(std::fabs(red.elapsedMs - 3000.0) < 0.01, "3000 ms on, got " + std::to_string(red.elapsedMs));
+    CHECK_MSG(std::fabs(red.bias - 0.556) < 1e-3, "bias 0.556, got " + std::to_string(red.bias));
+    const glm::dvec3 half = Lighting::Ambient(lighting, file, false, noTorch, red);
+    CHECK_MSG(glm::length(half - file * red.bias) < 1e-12, "the ambient is the start's times the bias");
+    CHECK(!wall->broken && run.registry.valid(wallBody));
+
+    // 6000 ms: 360 ticks after the taking, the state goes and the wall with it.
+    int broken = -1;
+    while (since < 400 && broken < 0) {
+        Tick(run);
+        ++since;
+        if (wall->broken) broken = since;
+    }
+    CHECK_MSG(broken == 360, "the wall broken 360 ticks after the taking, got " + std::to_string(broken));
+    CHECK(red.gone && red.wallName == kRedWall);
+    CHECK_MSG(wall->brokenBy == kRedState, "broken by the red key state, got '" + wall->brokenBy + "'");
+    CHECK_MSG(!run.registry.valid(wallBody), "its body gone");
+    CHECK_MSG(red.bias < 1e-6, "and the light with it: bias " + std::to_string(red.bias));
+    CHECK(glm::length(Lighting::Ambient(lighting, file, false, noTorch, red)) < 1e-6);
+    CHECK_MSG(!run.level.hazards.playerDied, "the player in the key's room lives through it");
+}
+
+// SeekEntity reads the WHOLE name: breakable_wall.ent is not breakable_wall, and a
+// broken wall is not found twice.
+void theRedKeysWallIsSoughtByItsExactName() {
+    Run run;
+    if (!Begin(kRedLevel, run)) return;
+    CHECK(run.level.demolish.SeekAndDestroy("breakable_wall.ent", "a test").empty());
+    CHECK(run.level.demolish.SeekAndDestroy("breakable_wall", "a test") == kRedWall);
+    CHECK_EQ(run.level.demolish.Destroyed(run.registry).size(), static_cast<std::size_t>(1));
+    CHECK(run.level.demolish.SeekAndDestroy("breakable_wall", "a test").empty());
+}
+
 void runTests() {
     theOneRangeServesBothTests();
     aKeyIsTakenAtTwentySixPixels();
@@ -425,6 +550,9 @@ void runTests() {
     unlockingHoldsThenFadesThenTakesTheDoor();
     twoPairsOfOneColourStillPairCorrectly();
     everyLevelWithAKeyholePairsIt();
+    theRedKeyStateStandsOnItsKey();
+    theRedKeyTakenFadesTheLightThenBreaksTheWall();
+    theRedKeysWallIsSoughtByItsExactName();
 }
 
 } // namespace

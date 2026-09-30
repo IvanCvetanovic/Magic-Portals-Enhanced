@@ -91,6 +91,7 @@ class Breaker:
     TORCH = "torch"
     DARK_DRAGON = "dark_dragon"
     FIRE = "fire"
+    RED_KEY = "red_key"
 
 
 # Roles (data/entity_roles.json) whose static body the port moves or opens, with where it does.
@@ -103,36 +104,45 @@ FREE_ROLES = {
 }
 
 # What the port breaks or burns a conditional body with, and where. A step that builds another
-# breaker (the red key's wall, B5) adds its row here and reruns --write.
+# breaker adds its row here and reruns --write.
 BREAKERS = {
     Breaker.STONE: (
         "every breakable on a level that holds a demolisher: a rolling stone, a launcher that "
         "throws one, or the beholder's rocks (game/sim/Demolish.cpp:87-101 State::Tick, "
-        ":185-191 the stones, Game.cpp:309 a thrown one, Game.cpp:818 the boss's rock)"
+        ":195-201 the stones, Game.cpp:311 a thrown one, Game.cpp:833 the boss's rock)"
     ),
     Breaker.BARREL: (
         "a flagged breakable whose entity demolish.json blast.entities lists, on a level with a "
         "barrel (metadata/explosive) and fire to set one off: a fire agent, a carranca or a fire "
-        "diamond (game/sim/Fire.cpp:44-73 the blast's grab, Game.cpp:351-352 Demolish's "
-        "Grab and Destroyed on the blast's tick, Demolish.cpp:129-156)"
+        "diamond (game/sim/Fire.cpp:44-73 the blast's grab, Game.cpp:353-354 Demolish's "
+        "Grab and Destroyed on the blast's tick, Demolish.cpp:129-140, :152-166)"
     ),
     Breaker.TORCH: (
         "the torch's light wall (torch.json wall.entity_name) on a level with a torch "
-        "(game/sim/Game.cpp:687-691, Demolish.cpp:103-115 Break)"
+        "(game/sim/Game.cpp:702-706, Demolish.cpp:103-115 Break)"
     ),
     Breaker.DARK_DRAGON: (
         "the dark dragon's wall (darkdragon.json summon.wall, the last node of that name) on a "
-        "level with its spawn (game/sim/Game.cpp:718-722, DarkDragon.cpp:797-799)"
+        "level with its spawn (game/sim/Game.cpp:733-737, DarkDragon.cpp:797-799)"
     ),
     Breaker.FIRE: (
         "a crate that fades when it burns (fire.json burn.fade_names), on a level with fire: a "
         "fire agent, a carranca or a fire diamond (game/sim/Fire.cpp:206-210 a fire agent, "
-        "Game.cpp:415-420 a fireball, Game.cpp:524 a fire diamond's; Fire.cpp:241 the fade)"
+        "Game.cpp:417-422 a fireball, Game.cpp:539 a fire diamond's; Fire.cpp:241 the fade)"
+    ),
+    Breaker.RED_KEY: (
+        "the first breakable whose entity is exactly keys.json red_key_state.wall_entity, on a "
+        "level that places a red_key_state (entity_roles.json) and a node whose entity is exactly "
+        "red_key_state.key_entity: 6000 ms after that key is taken (game/sim/RedKey.cpp:104-134 "
+        "State::Tick, Game.cpp:491-495 Demolish's SeekAndDestroy and Destroyed, "
+        "Demolish.cpp:142-150)"
     ),
 }
 # The roles and entities that put fire in a level, for Breaker.FIRE.
 FIRE_ROLES = ("fire_source", "turret")
 FIRE_ENTITIES = ("fire_diamond.ent",)
+# The role of 4-19's red key state (entity_roles.json; game/sim/Roles.hpp kRedKeyState).
+RED_KEY_ROLE = "red_key_state"
 BOSS_ROCK_SPAWN = "adder"
 
 
@@ -267,6 +277,8 @@ class Rules:
     dark_dragon_wall: str
     margin_px: tuple[float, float]
     blast_entities: list[str] = field(default_factory=list)
+    red_key_key: str = ""
+    red_key_wall: str = ""
 
 
 def _read(path: Path) -> dict:
@@ -286,6 +298,7 @@ def load_rules(root: Path = ROOT) -> Rules:
     )
     throwables = _read(game / "launchers.json")["throwables"]
     margin = _read(game / "hazards.json")["bounds"]["margin_px"]
+    red_key = _read(game / "keys.json")["red_key_state"]
     return Rules(
         roles=roles,
         breakable_names=list(_read(game / "demolish.json")["breakable"]["names"]),
@@ -299,6 +312,8 @@ def load_rules(root: Path = ROOT) -> Rules:
         dark_dragon_wall=summon["wall"],
         margin_px=(float(margin[0]), float(margin[1])),
         blast_entities=list(_read(game / "demolish.json")["blast"]["entities"]),
+        red_key_key=red_key["key_entity"],
+        red_key_wall=red_key["wall_entity"],
     )
 
 
@@ -331,6 +346,15 @@ def openers(nodes: list[Node], rules: Rules) -> dict[str, str]:
     )
     barrel = fire and any(n.flag("explosive") for n in nodes)
     torch = "torch" in roles_here
+    # SeekEntity finds the first entity of the exact name; the port's Demolish, the first
+    # breakable standing in the level's order.
+    red_key_wall = None
+    if RED_KEY_ROLE in roles_here and any(n.entity == rules.red_key_key for n in nodes):
+        red_key_wall = next(
+            (n.name for n in nodes
+             if n.entity == rules.red_key_wall and classify(n, rules) == Kind.BREAKABLE),
+            None,
+        )
     dragon_wall = None
     if any(n.entity == rules.dark_dragon_spawn for n in nodes):
         for n in nodes:
@@ -344,6 +368,8 @@ def openers(nodes: list[Node], rules: Rules) -> dict[str, str]:
                 out[n.name] = Breaker.DARK_DRAGON
             elif torch and n.entity == rules.torch_wall:
                 out[n.name] = Breaker.TORCH
+            elif n.name == red_key_wall:
+                out[n.name] = Breaker.RED_KEY
             elif stone:
                 out[n.name] = Breaker.STONE
             elif barrel and n.flag("breakable") and n.entity in rules.blast_entities:

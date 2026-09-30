@@ -28,8 +28,9 @@
 //
 // THE ONE OWNER OF A BREAKABLE'S BREAKING (planning step 115). Whatever takes a
 // breakable away - a stone's touch (Tick), a barrel's blast (Grab, then
-// Destroyed), the torch's light wall and the dark dragon's summon (Break) - does
-// it through this state, so the layer's watches (wall_destroy, its earthquake, the
+// Destroyed), the torch's light wall and the dark dragon's summon (Break), 4-19's
+// red key state (SeekAndDestroy, then Destroyed; step 118) - does it through this
+// state, so the layer's watches (wall_destroy, its earthquake, the
 // demolition sound) read one record. The blast is the original's two halves:
 // explode (MiscCallbacks, listing L67590) #111-122 sets `destroy` on every entity
 // its grab reaches with a clear line, and ETHCallback_breakable_wall (L68771)
@@ -103,6 +104,13 @@ struct State {
     // A blast's grab (explode #111-122): `destroy` set on each breakable standing
     // whose body is `body` and which the blast breaks. Returns whether one was.
     bool Grab(entt::entity body, const std::string& by);
+    // A script's destroy(SeekEntity(entity)) - 4-19's red key state, #194-220:
+    // `destroy` set on the first breakable standing whose entity is EXACTLY
+    // `entity` (SeekEntity compares GetEntityName() whole, ETHBucketManager.cpp:
+    // 394-406, so `breakable_wall.ent` is not `breakable_wall`), flag or none - its
+    // own callback reads the datum, not the flag. Destroyed then takes it. Returns
+    // its node's name, or empty when none stands.
+    std::string SeekAndDestroy(const std::string& entity, const std::string& by);
     // ETHCallback_breakable_wall #1-86: every breakable whose `destroy` is set is
     // taken away. Run after the blasts of the same tick, as the original runs its
     // static entities' callbacks after the dynamic ones (ETHScene.cpp:464-491).

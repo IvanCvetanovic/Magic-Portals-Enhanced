@@ -457,6 +457,13 @@ glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darke
     return fileAmbient;
 }
 
+glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darkest, const Torch::State& torch,
+                   const RedKey::State& redKey) {
+    if (!redKey.present || !redKey.destroyed) return Ambient(rules, fileAmbient, darkest, torch);
+    const glm::dvec3 saved = darkest ? rules.darkestAmbient : fileAmbient;
+    return saved * redKey.bias;
+}
+
 glm::dvec3 AmbientTerm(const glm::dvec3& ambient, const glm::dvec3& emissive) {
     return glm::min(glm::dvec3(1.0), ambient + emissive);
 }
