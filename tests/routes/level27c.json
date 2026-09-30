@@ -1,0 +1,29 @@
+{
+  "_about": [
+    "4-28 as the original plays it (planning step 134): the flame burns the knight and the player",
+    "carries its key. Off the spawn's left end (1-32) and a few steps right; a portal at the ramp's",
+    "foot (270, 200) mid-fall (50) and one on the player (76). A portal at (220, 70) (300) and one on",
+    "the knight's walk at (90, 206) (330): the knight walks into it on its way right (~578), comes",
+    "out 45 px right of fire_agent_ent_1919, walks left into the flame and is set alight (604) and",
+    "destroyed a tick later; the yellow key stays where it was, (207.1, 60.3). A portal at (222, 40),",
+    "25 px from the key (610), and one on the player (640): the key is taken as the player comes",
+    "out; right up the ramp, it opens keyhole_ent_1936 (732), the locked door goes (~818), and right",
+    "into the exit. Won on tick 861. No tap inside antiportal_1940's 192 px or antiportal_2024's 96;",
+    "leans on G1 (knights never shoot) and G10."
+  ],
+  "level": "level27c",
+  "win_by": 920,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 32},
+    {"walk": "right", "from": 62, "to": 70},
+    {"walk": "right", "from": 650, "to": 920}
+  ],
+  "taps": [
+    {"tick": 50, "at": [270, 200]},
+    {"tick": 76, "at": [54.9, 202.3]},
+    {"tick": 300, "at": [220, 70]},
+    {"tick": 330, "at": [90, 206]},
+    {"tick": 610, "at": [222, 40]},
+    {"tick": 640, "at": [258.5, 202.3]}
+  ]
+}

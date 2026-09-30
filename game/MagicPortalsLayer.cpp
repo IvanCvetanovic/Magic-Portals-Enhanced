@@ -7832,6 +7832,14 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
         m_effectQueue.push_back(effectAdd(burn));
         logged("shot burned", burn);
     }
+    // AND EACH SHOT A FIRE AGENT'S FLAME TURNED: the same burnProjectile, called by
+    // ETHCallback_fire_agent #265, at the point the shot first came within reach
+    // (Portals::State::burns; planning step 134).
+    for (const Portals::Burn& burned : m_level.portals.burns) {
+        const Effects::Spawn burn = Effects::At(m_effectRules.burnAtShot, burned.atPx);
+        m_effectQueue.push_back(effectAdd(burn));
+        logged(("shot burned by " + burned.flame).c_str(), burn);
+    }
     // A SHOCK AGENT A FIREBALL DESTROYED: ETHCallback_shock_agent's destroy arm adds
     // shock_death at the agent's GetPosition() plus a bare 10 (#301-327). Its
     // small_explosion (#331-345) is not this step's.

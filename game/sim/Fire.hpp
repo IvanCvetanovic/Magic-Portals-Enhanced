@@ -24,8 +24,11 @@
 //   (ETHCallback_fire_agent, bytes 350254..351485.)
 // - It then runs FOUR INDEPENDENT TESTS in this order, not a chain of else:
 //   explosive requests a blast, burnable-and-not-yet-burned burns, a character
-//   dies and is given flames, and projectile.ent is put out. A minion is burnable
-//   AND a character, so it takes the second and the third both.
+//   dies and is given flames, and projectile.ent is burned into a fireball. A
+//   minion is burnable and NOT a character - isCharacter reads the custom data
+//   only GameCharacter's constructor sets, and the one it builds is the player
+//   (planning step 133) - so a minion takes the second alone: burn() sets
+//   `burned`, and its own callback destroys it on the next frame (below).
 // - A blast (explode, MiscCallbacks, bytes 342023..342895) is the other shape: an
 //   EntityGrabber of radius 80 over the entity's REAL collider, circle against
 //   circle or sphere against box, and it skips anything with no physics body at
@@ -38,17 +41,30 @@
 //   and drops it unless the first thing hit is that entity, so a wall shields
 //   what stands behind it.
 //
-// WHAT IS NOT BUILT, SAID HERE RATHER THAN LEFT TO BE NOTICED
+// THE SHOT AND THE MINION, WHICH THIS FILE DOES NOT TEST ITSELF
 //
 // - The fourth branch, burnProjectile, does NOT put a flying projectile.ent out:
 //   it CONVERTS one. It is killProjectile - a bare DeleteEntity - followed by
 //   addFireball along the same direction, so the shot is replaced by a fireball
-//   rather than extinguished. (An earlier wording here said "puts out", which read
-//   as extinguishes and was wrong.) Its one caller is the fire diamond's
-//   turnProjectilesIntoFireBalls, and Diamonds owns that: Game runs it every tick
-//   the carrier holds one. What is still not built is a FIRE AGENT reaching a
-//   shot - a shot fired THROUGH a flame keeps flying here - and that belongs in
-//   Shot's segment test, not in this file.
+//   rather than extinguished. Its two callers are this callback (#253-265) and the
+//   fire diamond's turnProjectilesIntoFireBalls. The port's shot is a point Portals
+//   flies along a segment, so a flame reaches it there (Portals::Flame, the shot
+//   first within reach while still in flight), and Game makes the fireball, as it
+//   makes the fire diamond's (planning step 134).
+// - The second branch reaches a minion, which Minions builds at run time and so
+//   is not among `burnables`. Game measures each minion's entity point against
+//   the flames (Reaching) and holds the ones set alight in `minionsAlight`; the
+//   minion is a dynamic entity, whose callback runs before the static agent's, so
+//   it finds itself burned on the NEXT frame and is destroyed then
+//   (ETHCallback_minion #1456-1471), which Game does on the next tick through
+//   Minions::Burn.
+//
+// WHAT IS NOT BUILT, SAID HERE RATHER THAN LEFT TO BE NOTICED
+//
+// - The callback gathers its own bucket and the four beside it (#10-79), never
+//   the diagonal ones; the port tests every entity. At the 256 u bucket the port
+//   reads (placement.json anti_portal_agent) no agent of the 22 stands within its
+//   reach of a bucket corner, so nothing differs (planning step 134).
 // - A blast also sets `destroy` on every entity it grabs (explode #111-122). This
 //   file does not act on that: it REPORTS what each blast reached with a clear line
 //   (State::grabbedNow), and Game hands it to Demolish, the one owner of a
@@ -185,6 +201,14 @@ struct State {
     // And WHAT they reached with a clear line, whatever it is, cleared and refilled
     // by every Tick: the original's grabbed set, which Game hands to Demolish.
     std::vector<Grab> grabbedNow;
+
+    // The minions a flame set alight this tick (burn(), #193-220), by body, which
+    // Game hands to Minions::Burn on the NEXT tick: a minion's own callback runs
+    // before the static agent's and reads `burned` a frame later.
+    std::vector<entt::entity> minionsAlight;
+
+    // The first fire agent whose reach holds a point: squaredDistance < size.x ^ 2.
+    const Agent* Reaching(const glm::dvec2& pointPx) const;
 
     // One tick, after the physics step. Returns the bodies it took away, which
     // the caller must pass through Forget: a burnt crate can be a portal

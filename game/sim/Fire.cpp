@@ -248,6 +248,14 @@ std::vector<entt::entity> State::Tick(entt::registry& registry, entt::entity pla
     return removed;
 }
 
+const Agent* State::Reaching(const glm::dvec2& pointPx) const {
+    const double reach2 = rules.reachPx * rules.reachPx;
+    for (const Agent& agent : agents) {
+        if (SquaredPx(pointPx - agent.atPx) < reach2) return &agent;
+    }
+    return nullptr;
+}
+
 const Burnable* State::FindBurnable(const std::string& name) const {
     for (const Burnable& burnable : burnables) {
         if (burnable.name == name) return &burnable;

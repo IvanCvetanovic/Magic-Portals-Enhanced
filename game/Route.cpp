@@ -333,6 +333,8 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
     const glm::dvec2 camera = layer.CameraCentrePx();
     std::printf(" camera (%.1f, %.1f) shots %d/%d", camera.x, camera.y, level->portals.shotsFired,
                 level->portals.shotsFailed);
+    // Shots a fire agent's flame burned into fireballs (step 134), when any were.
+    if (level->portals.shotsBurned > 0) std::printf(" burned %d", level->portals.shotsBurned);
     if (level->portals.flight) std::printf(" FLYING");
     for (const auto& placed : level->portals.placed) std::printf(" [%.1f, %.1f]", placed.atPx.x, placed.atPx.y);
     if (!level->portals.lastFailure.empty()) std::printf(" last fail: %s", level->portals.lastFailure.c_str());

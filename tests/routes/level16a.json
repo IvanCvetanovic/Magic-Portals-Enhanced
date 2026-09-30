@@ -1,0 +1,32 @@
+{
+  "_about": [
+    "2-17 (planning step 134, G8): portals from the start at (190, 200) and on barrel_bomb_ent_1205's",
+    "side (125, 125) (24, 48): the barrel falls into fire_agent_ent_1183's flame and its blast breaks",
+    "breakable_wall_1179 (~84) - the player stays right of it, off the blast's line to the wall. A",
+    "portal at (140, 180), 33.1 px from the flame, and one on the player (100, 124): left of the",
+    "flame. Left through the broken wall, pushing crate_small_no_emissive_ent_1227 onto button_1112",
+    "(183), which lifts door_lift_1111 for good; back right to x 120. Portals at (275, 170) and on",
+    "barrel_bomb_ent_1206's side at (242, 110) (250, 274) drop it into the right room at (275, 255);",
+    "a shot right through the flame (320) is burned and its fireball sets the barrel off (361), whose",
+    "blast takes breakable_wall_1142 under the raised door. A portal at (243, 100) and one on the",
+    "player (344, 370): right of the flame, and right into the door. Won on tick 459."
+  ],
+  "level": "level16a",
+  "win_by": 520,
+  "holds": [
+    {"walk": "left", "from": 146, "to": 190},
+    {"walk": "right", "from": 196, "to": 226},
+    {"walk": "right", "from": 372, "to": 520}
+  ],
+  "taps": [
+    {"tick": 24, "at": [190, 200]},
+    {"tick": 48, "at": [125, 125]},
+    {"tick": 100, "at": [140, 180]},
+    {"tick": 124, "at": [275, 252.3]},
+    {"tick": 250, "at": [275, 170]},
+    {"tick": 274, "at": [242, 110]},
+    {"tick": 320, "at": [300, 252.3]},
+    {"tick": 344, "at": [243, 100]},
+    {"tick": 370, "at": [120.2, 252.3]}
+  ]
+}

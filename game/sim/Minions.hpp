@@ -61,7 +61,8 @@
 // teleportable is wired, since a portalled minion landing on the killer floor is
 // how the "kill all minions" achievements are won, and so is burnable against a
 // fireball (Burn, planning step 98: the black knight's death by fire is what adds
-// chapter 3's ghost, R4). An explosion's burn is not. data/minions.json records
+// chapter 3's ghost, R4) and a fire agent's flame (planning step 134, a tick
+// later: Fire::State::minionsAlight). An explosion's burn is not. data/minions.json records
 // the rest against what it would take to build them.
 
 #include "sim/LevelBuilder.hpp"
@@ -172,7 +173,7 @@ struct Death {
     // Rules::EntityAboveCentrePx, taken before the body is destroyed.
     glm::dvec2 atPx{0.0, 0.0};
     bool byKiller = false; // a killer floor; otherwise a strike (Take) or a burn (Burn)
-    bool byFire = false;   // a fireball burned it (Burn): addFlames, which is not built
+    bool byFire = false;   // a fireball or a flame burned it (Burn): addFlames, which is not built
 };
 
 struct State {
@@ -236,6 +237,8 @@ struct State {
     // #1456-1471) - and destroyed, and adds blood.ent and deletes itself
     // (#1478-1504). So a fireball kills a minion outright, the frame it touches it,
     // and records a Death as Take does. Returns what it destroyed, for Forget.
+    // A fire agent's flame burns one too (#193-220 of its callback), and Game calls
+    // this for it on the tick after, when the minion's callback would read it.
     std::vector<entt::entity> Burn(entt::registry& registry, const std::vector<entt::entity>& bodies);
 
     const Minion* FindMinion(const std::string& name) const;

@@ -43,6 +43,21 @@ void TakeOnAdded(const Data& data, Level& level, const Restock::Added& added) {
     }
 }
 
+// burnProjectile's addFireball(projectilePos, projectileDir, false, 1)
+// (MiscCallbacks, bytes 351485..351788, #48-54): the fireball a portal shot is
+// turned into, by a carried fire diamond or by a fire agent's flame. The same
+// fireball.ent a carranca spits, at its speed, but with killMainCharacter CLEAR:
+// the player cannot be hurt by a shot it fired itself. Named for what burned it,
+// on the level's one count of converted shots, so no two share a name.
+void AddBurnedShot(Level& level, const std::string& by, const glm::dvec2& atPx, const glm::dvec2& heading) {
+    Turrets::Fireball made;
+    made.name = by + "#" + std::to_string(++level.turrets.converted);
+    made.atPx = atPx;
+    made.velocityPx = heading * level.turrets.rules.speedPx;
+    made.killsPlayer = false;
+    level.turrets.fireballs.push_back(made);
+}
+
 // The beholder dead: the level's button goes to its button_dest, its box and
 // its body both, so what presses it and what draws it follow. The script then
 // calls computeButtonInterpolator again (ETHCallback_beholder #1315), which
@@ -237,6 +252,13 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     out.portals.noGravity = noGravity;
     out.portals.recoilMps = data.zerog.recoilMetresPerSecond;
 
+    // The fire agents' flames, which burn a shot in flight into a fireball
+    // (Portals::Flame; ETHCallback_fire_agent #253-265), at the reach Fire tests
+    // everything else by.
+    for (const Fire::Agent& agent : out.fire.agents) {
+        out.portals.flames.push_back(Portals::Flame{agent.name, agent.atPx, out.fire.rules.reachPx});
+    }
+
     // The gravity wells. A WELL REFUSES NO PORTAL AND STOPS NO SHOT (00_order R2,
     // decided for the original; the remaster doc's step 125). The antiportal.ent
     // its agent adds on its first tick is renamed gravity_area as it is added
@@ -349,7 +371,37 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // The fire agents, what is burning down, and the bombs - before the portals,
     // which move things. What it takes away goes through Forget as a thrown body
     // does: a crate is teleportable, so a burning one can be in portals.travellers.
+    //
+    // First the minions a flame set alight on the last tick: each is a dynamic
+    // entity, whose own callback runs before the static agent's, so it reads
+    // `burned` on the frame after the burn and destroys itself then
+    // (ETHCallback_minion #1456-1471), with its blood (#1478-1504) - as a
+    // fireball's burn, through Minions::Burn. One a fireball or anything else took
+    // in between is gone already, and Burn passes it by.
+    if (!level.fire.minionsAlight.empty()) {
+        const std::vector<entt::entity> alight = std::move(level.fire.minionsAlight);
+        level.fire.minionsAlight.clear();
+        for (const entt::entity gone : level.minions.Burn(registry, alight)) Forget(level, gone);
+    }
     for (const entt::entity gone : level.fire.Tick(registry, level.player, dt)) Forget(level, gone);
+    // And the flames' burn of a minion, the second of ETHCallback_fire_agent's four
+    // tests (#193-220): minion.ent and ghost_minion.ent carry burnable 1, and a
+    // minion is no character, so this is all a flame does to one. Measured from
+    // its ENTITY point, the one GetPositionXY reads (the body's centre less
+    // EntityAboveCentrePx), against size.x centre to centre.
+    if (!level.fire.agents.empty()) {
+        const glm::dvec2 entityPoint(0.0, -level.minions.rules.EntityAboveCentrePx());
+        for (const Minions::Minion& minion : level.minions.minions) {
+            if (minion.gone || minion.body == entt::null || !registry.valid(minion.body)) continue;
+            const glm::dvec2 atPx =
+                Units::ToPixels(registry.get<Supersonic::TransformComponent>(minion.body).position) + entityPoint;
+            if (level.fire.Reaching(atPx) == nullptr) continue;
+            if (std::find(level.fire.minionsAlight.begin(), level.fire.minionsAlight.end(), minion.body) ==
+                level.fire.minionsAlight.end()) {
+                level.fire.minionsAlight.push_back(minion.body);
+            }
+        }
+    }
     // What each blast grabbed with a clear line has its `destroy` set (explode,
     // listing L67590, #111-122), and a breakable wall's own callback reads that and
     // deletes it (ETHCallback_breakable_wall, L68771, #1-86) ON THE SAME FRAME: the
@@ -540,16 +592,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         level.diamonds.burnedPx.push_back(shot.atPx);
         const glm::dvec2 along = shot.toPx - shot.atPx;
         const double length = std::sqrt(along.x * along.x + along.y * along.y);
-        if (length > 0.0) {
-            Turrets::Fireball made;
-            made.name = "fire_diamond#" + std::to_string(++level.turrets.converted);
-            made.atPx = shot.atPx;
-            made.velocityPx = (along / length) * level.turrets.rules.speedPx;
-            // addFireball's killMainCharacter, passed CLEAR by burnProjectile: the
-            // player cannot be hurt by a shot it fired itself.
-            made.killsPlayer = false;
-            level.turrets.fireballs.push_back(made);
-        }
+        if (length > 0.0) AddBurnedShot(level, "fire_diamond", shot.atPx, along / length);
         level.portals.flight.reset();
     }
     // The shock rings swing, and judge where the step left the player. A poll
@@ -818,6 +861,12 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // The beholder's rocks, against what the step ran them into.
     for (const entt::entity gone : level.boss.Contacts(registry, level.player, level.portals, dt)) Forget(level, gone);
     level.portals.Tick(registry, dt);
+    // A shot a fire agent's flame burned on its way (Portals::Flame): burnProjectile's
+    // fireball, where the shot first came within reach and along its heading. It
+    // flies from the next tick, as the fire diamond's does.
+    for (const Portals::Burn& burn : level.portals.burns) {
+        if (burn.heading != glm::dvec2(0.0)) AddBurnedShot(level, burn.flame, burn.atPx, burn.heading);
+    }
     // Then its turn, on where the portals left things. A rock it drops travels
     // and breaks walls as a thrown one does.
     std::vector<entt::entity> stones;

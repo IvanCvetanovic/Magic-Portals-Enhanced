@@ -555,6 +555,7 @@ void State::Tick(entt::registry& registry, float dt) {
     reflected.clear();
     failures.clear();
     agentKills.clear();
+    burns.clear();
     lockoutS = std::max(0.0f, lockoutS - dt);
     // The cooldown clocks run UP, as the original's two Timers do.
     const double elapsedMs = static_cast<double>(dt) * 1000.0;
@@ -655,7 +656,35 @@ void State::Tick(entt::registry& registry, float dt) {
                 first = *along;
             }
         }
-        if (killedBy >= 0) {
+        // A FIRE AGENT'S FLAME BURNS A SHOT STILL IN FLIGHT that comes within its
+        // reach (ETHCallback_fire_agent #158-177, #253-265), by the same rule: the
+        // shot deletes itself in its own callback on the frame it reaches the end
+        // of its way (ETHCallback_projectile #127-156, #265-270), before the
+        // static agent's callback looks for it. Whichever of the two it meets
+        // first has it.
+        int burnedBy = -1;
+        for (std::size_t i = 0; i < flames.size(); ++i) {
+            const Flame& flame = flames[i];
+            const auto along = Shot::EntersCircle(flight->atPx, next, flame.centrePx, flame.reachPx);
+            if (along && *along < first && !(arrives && *along >= 1.0)) {
+                burnedBy = static_cast<int>(i);
+                first = *along;
+            }
+        }
+        if (burnedBy >= 0) {
+            // burnProjectile: killProjectile, then addFireball(projectilePos,
+            // projectileDir, false, 1) - Game's, from this record. No portal, no
+            // failure and no sound of the shot's own.
+            Burn burn;
+            burn.flame = flames[static_cast<std::size_t>(burnedBy)].name;
+            burn.atPx = flight->atPx + (next - flight->atPx) * first;
+            const glm::dvec2 leg = flight->toPx - flight->atPx;
+            const double length = glm::length(leg);
+            if (length > 0.0) burn.heading = leg / length;
+            burns.push_back(burn);
+            ++shotsBurned;
+            flight.reset();
+        } else if (killedBy >= 0) {
             // #126-142 both deleted, and #168-177 the ring round the agent with
             // them. The explosion, the shake and the sound (#144-166, #179-187)
             // are the frame's, from this record.

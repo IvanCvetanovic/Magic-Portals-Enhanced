@@ -1,0 +1,26 @@
+{
+  "_about": [
+    "2-11 (planning step 134, G8): the static crate_no_emissive_937 seals the door's room, and only a",
+    "fireball from fire_agent_ent_930 heading right can reach it. Left to x 360.3 (ticks 1-22); a",
+    "portal at (95, 191) between the slab's tip, the platform's corner and the flame (32.8 px) (32).",
+    "Off the platform's left end (70-90) and, mid-fall, a portal under the player at (302.5, 178)",
+    "(88): falling into it at ~495 px/s the player comes out of (95, 193) going up (110, the port's",
+    "transit: a character's y turned back, its x kept), and a shot from there at (313, 205) passes",
+    "10.7 px from the agent and is burned (112); its fireball burns the crate (205; gone ~265).",
+    "Holding right, the player arcs over the flame, never nearer than 40 px, lands right of it (160)",
+    "and walks through into the door. Won on tick 314. Leans on the transit, G4 and G10; a fireball",
+    "sent through portals (G6, not built) may be the original's own way."
+  ],
+  "level": "level10a",
+  "win_by": 380,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 22},
+    {"walk": "left", "from": 70, "to": 90},
+    {"walk": "right", "from": 112, "to": 380}
+  ],
+  "taps": [
+    {"tick": 32, "at": [95, 191]},
+    {"tick": 88, "at": [302.5, 178]},
+    {"tick": 112, "at": [313, 205]}
+  ]
+}

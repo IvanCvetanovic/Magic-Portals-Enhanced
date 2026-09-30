@@ -1589,7 +1589,15 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   replays (218 checks, 0 failures), chapter 4: 17. It re-authors 2-18 (1963 -> 1965) and 4-31 (997 -> 1167), and 2-07
   and 4-29 move to 1008 and 1501. The 57 not won lose 4-21, and eleven of them carry a recorded cause. Eleven of the
   57 hold a lift door, whose win the latch and the crush now shape with no route to show it either way: 1-13, 1-18,
-  1-26, 1-31, 2-17, 2-24, 2-29, 3-05, 3-16, 4-22, 4-24. Open until all 128.)*
+  1-26, 1-31, 2-17, 2-24, 2-29, 3-05, 3-16, 4-22, 4-24. **Step 134 (G8 and the flame's burn of a minion) adds 2-10,
+  2-11, 2-16, 2-17, 2-19 and 4-28** (`level9a` 393, `level10a` 314, `level15a` 260, `level16a` 459, `level18a` 342,
+  `level27c` 861, all won by play), re-authors 2-23 (773 -> 758; its shot to the platform's right end is now burned)
+  and, in its fix round, 2-31 (298 -> 248): step 127's kill shot passes 13.8 px from `fire_agent_963` and is burned,
+  as the original does, so the agent is now shot from under its pocket, which the player reaches over `seesaw_915` in
+  flight from a portal outside the ring. **77 of 128** won by a route `test_mp_routes` replays (77 files, 236 checks,
+  0 failures), chapter 1: 20, chapter 2: 24, chapter 3: 15, chapter 4: 18. The 51 not won lose the six; five carry a
+  recorded cause (1-17; 2-06 and 4-14, G6; 2-21 and 2-24, B4), and ten of the lift-door levels above remain (2-17 is
+  won). Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1602,7 +1610,8 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   zone, so a zone that grew or went cannot move a verdict (step 127, deviation 4; the Tests row "The reachability
   flood is optimistic"). The routes are their evidence. Step 133 (LD): 108 / 20 / 0, 0 differ. The flood treats every
   lift door as open (`FREE_ROLES` `switched_door`), so it sees neither the latch nor the crush; that step's evidence is
-  its routes.)*
+  its routes. Step 134 (G8): 108 / 20 / 0, 0 differ; the flood lights a level's barrels by any fire on it and models
+  no portal shot at all (no sight line, no flame), so a burned shot cannot move a verdict; its routes are its evidence.)*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1659,6 +1668,8 @@ that re-takes every baseline, left for its own step (the Tests row "2-32's claw 
 the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp line and the sky's edge rows are gone.*
 *(1) is done by step 133 (LD): the lift door as `ETHCallback_door_lift` runs it, and a closing door crushes the player;
 4-21 is won (tick 587) and 1-14, 1-15, 1-16, 1-21, 1-32 and 4-19 are re-verified on their old ticks (B7).*
+*(2) is done by step 134 (G8): a shot through a flame becomes a fireball and a flame burns a minion; 2-10, 2-11, 2-16,
+2-17, 2-19 and 4-28 are won, and 2-23 and 2-31 re-authored (each had a shot the flame now burns).*
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [ ] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -1674,7 +1685,8 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
       replayed them yet, row below). The other five have no port route (step 115 (d), measured by
       `out/parity/program/B1/scan_b1.py`): 2-16, 2-17, 2-19 need G8; 2-21, 2-24 need B4 (their rows). **Mechanism
       built; open until those five are won**: G8 (under Majors) is a blocker for 2-16, 2-17 and 2-19, B4 for 2-21 and
-      2-24.
+      2-24. *Step 134 (G8) wins 2-16, 2-17 and 2-19 (260, 459, 342), each by a barrel its fireball or a flame sets off
+      after the barrel is moved by a portal pair; 2-21 and 2-24 remain (B4).*
 - [ ] **B2. 84 of 128 levels never unlock from the menus** on a fresh save, because 2-12 cannot be won (chapter 2
       tops out at 34 % of its medals, under the 60 % chapters 3 and 4 need). Goes with B1. *Not cleared by step 115*:
       2-12 is won, but a level opens only when the one before it scored, and chapter 2's order also stops at 2-06 (G6)
@@ -1683,7 +1695,11 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
       to 2-15 open behind 2-12, 2-07, 2-11 and 2-12 locked, chapter 2 at 23 % (`out/parity/program/B1/b2/`). Open
       until G6 and G8 let those three be won. *Unchanged by wave 1*: track C's chapter-2 routes (2-15, 2-18, 2-23,
       2-25, 2-26, 2-30, 2-31, 2-32) lie behind 2-06, 2-10 and 2-11 in the menus' order, and none of those three has a
-      route. Not re-measured.
+      route. Not re-measured. *Step 134 (G8) wins 2-10 and 2-11, re-routes 2-31, and re-measures it as step 115
+      did (`out/parity/program/G8/fix1/b2/`): chapter 1 gold (the fixture) and chapter 2's window-replay medals, 47 of
+      96 (2-31 silver, 2-32 gold); chapter select reads 48 %, under the 60 % chapters 3 and 4 need; 2-11, 2-12, 2-16
+      and 2-32 now open, 2-07 still locked behind 2-06 (G6), 2-21 to 2-23 behind 2-20 (B4), 2-25 behind 2-24, 2-28 to
+      2-30 behind 2-27. Open until G6, B4 and the unrouted levels are won.*
 - [x] **B3. 4-32 cannot be won** - the barrel restock (`addEntityIfItCantBeFound('barrel_bomb')`, `ETHCallback_dark_dragon`
       ins 997-1064) and the lava's explode contact (`ETHBeginContactCallback_lava` L68416 #21-30) must land together,
       or a missed barrel softlocks. KNOWN ("Order 12.1, not built"). *Built in step 116*, both: after every shot at the
@@ -1773,7 +1789,7 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
       is at most 64 px from `shock_agent_2285` (areaRadius 90), and the carranca's lane passes the agent at 100.2 px
       where contact needs 41.3; a fireball flies through a portal in its lane unmoved (`R1/fix2/cap/l13c`). G6's step
       routes 2-06 and 4-14, and re-authors 2-03's route (it hops each fireball through a portal pair).
-- [ ] **G8. A shot through a fire agent's flame becomes a fireball** (`ETHCallback_fire_agent` #254-265
+- [x] **G8. A shot through a fire agent's flame becomes a fireball** (`ETHCallback_fire_agent` #254-265
       `burnProjectile`); the port's shot flies on. 20 levels. **A blocker since step 115**: no port route for 2-16
       (the ledge shadows the wall and the pit barrels from the fire agent's zone), 2-17 (its second wall 87 u from the
       zone, `door_lift_1111` between) and 2-19 (108 u), nor for 2-10 and 2-11 (B2). The search was direct ignition and
@@ -1786,11 +1802,22 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
       original's own way needs G8 or the minion burn (the row below). And **2-31's route passes two shots through
       `fire_agent_963`'s flame** (13.8 and 2.2 px; step 127, deviation 6), which the original snuffs (`fire.json`
       `_burn_projectile_not_built`): 2-31 is won in the port but not as the original plays it, and G8's step
-      re-verifies it (unless another way is found, it goes back to a finding).
-- [ ] **The fire agent burns a minion** (new, step 125 deviation 2 and step 127 deviation 1; beside G8): the
+      re-verifies it (unless another way is found, it goes back to a finding). *Built in step 134*: a shot still in
+      flight within 32 u of a flame is deleted where it first comes within reach and a fireball goes on along its
+      heading, killMainCharacter clear (`Portals::Flame`, `Game::AddBurnedShot`, the fire diamond's conversion now
+      through it). GAMEPLAY on the 20 fire-agent levels. **Won by routes: 2-10, 2-11, 2-16, 2-17, 2-19, 4-28**; 2-23
+      re-authored, and **2-31 re-authored** in the step's fix round (298 -> 248): its old kill shot is burned, and the
+      new one is fired from under the agent's pocket, which the player reaches over `seesaw_915` in flight from a
+      portal outside the ring (his walk up the plank tips it left-down; the port's hinge solver and G10). Tight margins
+      for G4 and G10 to move are listed there.
+- [x] **The fire agent burns a minion** (new, step 125 deviation 2 and step 127 deviation 1; beside G8): the
       original's fire agent burns a burnable minion in its flame, which the port does not wire (`minions.json`
       `_burnable_breakable_not_wired`). With G8 it is the original's way through 4-28 (the knight that carries the
-      yellow key). Whichever step builds either re-attacks 4-28, blind spot included, and re-adds its route.
+      yellow key). Whichever step builds either re-attacks 4-28, blind spot included, and re-adds its route. *Built in
+      step 134*: a minion whose entity point comes within 32 u of a flame is set alight and destroyed on the next tick
+      (`Fire::State::minionsAlight`, `Minions::Burn`); a minion is no character, so the burn is all a flame does to
+      it. GAMEPLAY on 3-19, 3-23 and 4-28. **4-28 won** (861): the knight, portalled beside the flame, walks into it,
+      and the player takes the key it drops.
 - [ ] **G9. The reflector catches within `size.x` (32) and its leg is `min(|caster - agent|, remaining)`**
       (`ETHCallback_reflect_agent` L69063 #56-84, #148-196); the port's 16 is a guess and it mirrors the whole rest.
       *Routes that lean on the port's 16 (wave 1)*: 1-12 (the landing over the post is `reflect_agent_675`'s), 1-21
@@ -2241,6 +2268,30 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       (430, -6.4), which is 32 - 102.4 + 64. The 102.4 itself is pinned in `test_mp_play` (`DoorsTakeTheirStrideFromTheLevel`,
       `ADoorRisesEasedAndLatches`, `ACrateOnAButtonOpensItsDoor`). The next step that relinks `test_mp.exe` anyway adds
       an absolute check that the closing dust sits at y 32 - RisePx() + 64.
+- [ ] **Step 134's recorded deviations** (the flame's burn, G8 and the minion, 1-6). (1) The burn point is where the
+      shot first enters the 32 on the tick's whole stretch (`Shot::EntersCircle`), where the original tests the shot's
+      point once a frame after moving it 200 u/s; a shot grazing the circle within about 0.4 px can differ (the
+      anti-portal agent's reading, step 126). (2) The agent's bucket gather (its own bucket and the four beside it,
+      never the diagonals, `ETHCallback_fire_agent` #10-79) is not modelled: at the port's 256 u bucket no agent of the
+      22 stands within 32 of a bucket corner; at 256 / 1.5 and 256 / 2.8125 six and twelve would, the bucket-size
+      question placement.json leaves open. None of the step's six route shot burns enters in a diagonal bucket at any
+      of the three sizes (`out/parity/program/G8/verify2/bucket/burn_buckets.txt`; 4-28's knight not in that check).
+      (3) A flame's burn of a minion is seen a tick later, as the original's dynamic minion reads it on its next frame.
+      (4) The converted fireball's launch sound (`playFireballSound`) is not played, as for the fire diamond's (the
+      audio audit's row 16, the sound pass P6). (5) The flame's callback runs off screen, where the original's static
+      callback runs only while its bucket is drawn (00_order 8.12c; section 2's bucket-visibility rows, "Order 10.3,
+      gameplay rows" and "Order 13.1, the off-screen kill"): a shot or a knight burned off screen here may not be
+      there. (6) A flame-burned minion shows no flames and makes no sound: `ETHCallback_minion` #1471's `addFlames` is
+      not drawn and `burn()` #16's `playBurnSound` is not played (the "Order 12.2 deviation, no `fire32` flames on the
+      burned knight" row; the audio audit's `playBurnSound` row, missing).
+- [ ] **Step 134's routes lean on the port where no clip shows the original** (step 134, left for the owner).
+      **2-31** (`level30a.json`, 248) rests on the port's seesaw: the plank tips left-down under a player who walks up
+      it from x 389 with his flight's speed (the hinge solver, and G10's walk), and its first portal, (445, 200), is 7 u
+      outside `antiportal_958`'s 192. **Tight margins**, deterministic but for G4 (the shot's speed and its 24 u start)
+      and G10 to move: 2-11's first portal clears the flame by 0.8 px, 2-17's portal left of the flame by 1.1 px,
+      2-23's new shot by 2.8 px, 2-16's last portal by 2.7 px. 2-16, 2-17 and 2-19 teleport a barrel or a crate by a
+      portal pair before the burn, which no clip shows, and 2-11's crate may be the original's G6 way (a fireball sent
+      through portals). Whichever step builds G4, G6 or G10, or measures the seesaw, re-verifies these first.
 
 - [ ] **Wave 1's routes lean on the port where the original is not shown** (step 127, deviation 8; step 125, deviation
       3), each for the step that builds the row to re-verify: body-overlap traversal, where the original tests a point

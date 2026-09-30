@@ -25009,3 +25009,197 @@ compiled into an executable changed after the gates were measured (every changed
 are open rows in `docs/parity-backlog.md` section 6, which this commit also annotates: the dust test's absolute
 re-pin (at its next relink), 2-18's 0.4 px window, deviation 5 with 3-15's door leaving the view, and the 11 lift-door
 levels with no route (1-13, 1-18, 1-26, 1-31, 2-17, 2-24, 2-29, 3-05, 3-16, 4-22, 4-24).
+
+## Step 134 - a shot through a fire agent's flame becomes a fireball, and a flame burns a minion: burnProjectile on the shot's way, the minion alight for a tick, and 2-10, 2-11, 2-16, 2-17, 2-19 and 4-28 won by routes (built)
+
+**THE PROGRAM'S G8 ROW AND ITS "fire agent burns a minion" ROW** (`docs/parity-backlog.md` section 6), decided for the
+original by the 2026-09-29 rulings. Track A, on step 133's `5ee1c66`; the task text named step 132 as main's last and
+70 routes, which the tree had moved past (step 133, 71 routes), so this step is 134 and its "before" sweep is
+`LD/after/sweep` (byte-identical to `P1/clamp/after/sweep`). The evidence is under `out/parity/program/G8/` (`impl.md`,
+the route aids `geo.py`, `losscan.py`, `burnsim.py`, `burnscan.py`, `render_map.py`, `maps/`, `drafts/`, `probe_l30a/`,
+`window/`, `b2/`, `after/`; the fix round's `fix1/`).
+**GAMEPLAY: YES, twice.** (1) On all 20 fire-agent levels (22 agents) a portal shot that comes within 32 u of a fire
+agent's centre while still in flight is deleted there, and a fireball goes on from that point along the shot's
+heading at fireball.ent's 130 u/s with killMainCharacter clear: the shot opens no portal and fails nothing, and its
+fireball burns the first crate, sets off the first barrel or destroys the first shock agent it touches, as any
+fireball does, and passes through the player. Until now the port's shot flew on through a flame. (2) On the three
+levels that place a fire agent and minions (3-19, 3-23, 4-28) a minion whose entity point comes within 32 u of a flame
+is set alight and destroyed on the next tick, with its blood; a key it carried stays where it was. Changed:
+`game/sim/Portals.{hpp,cpp}` (`Flame`, `Burn`, `State::flames`, `burns`, `shotsBurned`, the burn in `Tick`),
+`game/sim/Game.cpp` (the flames from Fire's agents; `AddBurnedShot`, the fire diamond's conversion through it; a burn's
+fireball after `Portals::Tick`; the minions alight, burned a tick later), `game/sim/Fire.{hpp,cpp}` (`Reaching`,
+`minionsAlight`; the header's decode corrected), `game/sim/Minions.hpp` (comments), `game/MagicPortalsLayer.cpp`
+(burn_projectile.ent at each burn), `game/Route.cpp` (the trace counts burned shots), `game/data/fire.json`
+(`_burn_projectile`, `_burn_minion` in place of `_burn_projectile_not_built`), `game/data/minions.json` (the note),
+`tests/test_mp_fire.cpp` (3 new cases), `tests/routes/` (six new routes; 2-23 and 2-31 re-authored),
+`docs/original-gameplay.md` (section 6.2) and this record. No converter change, no format finding, engine untouched at
+`710bffc`.
+
+**BLOCKERS, checked first: none.** The listing is `all_functions.txt` `48fe65ce`. The fire diamond's `burnProjectile`
+conversion (the fireball, killMainCharacter clear) is the port's since step 27 and its burn_projectile.ent since step
+108; Fire's agents and Minions::Burn (step 98) exist; `test_mp_routes` and the reachability check are in the tree.
+
+**THE DECODE** (read under 00_order 8.0's rules):
+- `ETHCallback_fire_agent` (350254..351485), every frame: #10-79 its own bucket and the four beside it (never the
+  diagonals); #81-117 for each entity, `squaredDistance(its GetPositionXY, pos) < size.x x size.x` (size.x is
+  `fire_agent.png`'s 32); #119-177 the four flags `isBurnable`, `isCharacter`, `isExplosive` and the name
+  `projectile.ent`; four independent tests: #179-191 `explode`, #193-220 `burn` when not burned, #222-251 hp 0 and
+  `addFlames` for a character, #253-265 **`burnProjectile`** for the shot.
+- `burnProjectile` (351485..351788): #1-20 the shot's GetPositionXY and its `direction`; #22-27 `killProjectile` (a bare
+  DeleteEntity, 351788..351878); #29-46 burn_projectile.ent at vector3(that point, 10); #48-54 `addFireball(point,
+  direction, false, 1)` - killMainCharacter clear (addFireball 417483..417923 #40-53).
+- The shot's own callback (`ETHCallback_projectile`, 358053..359141) moves it 200 u/s along `direction` (#113-125) and,
+  once it is past the distance it was fired (#127-156), opens its portal or fails and deletes itself (#158-270), in its
+  own callback. fire_agent.ent is static (`static="1"`) and projectile.ent dynamic, and Ethanon runs static callbacks
+  after dynamic ones (ETHScene.cpp:464-491): **only a shot still in flight is burned**, the anti-portal agent's rule.
+- `isCharacter` reads custom data only `GameCharacter::GameCharacter` sets (step 133), and minion.ent carries
+  `burnable` 1 and no `isCharacter`: **a minion takes the burn alone**. `ETHCallback_minion` reads `isBurned` on every
+  path (#1450 is every branch's join; #1456-1471 destroy, addFlames) and deletes itself with its blood (#1478-1504); it
+  is dynamic, so it sees a flame's burn on the next frame.
+
+**THE PORT.**
+- **`Portals::Flame`**, one per fire agent (`Game::Start`, at fire.json's `reach_px`): in `Portals::Tick`'s flight, the
+  shot's stretch is tested against each flame's circle as against an anti-portal agent's (`Shot::EntersCircle`, the
+  earliest thing on the stretch wins, not one the shot meets only on arriving). A burn records `Portals::Burn` (the
+  flame, the point where the shot first came within 32, the leg's unit heading), counts `shotsBurned`, and ends the
+  flight: no portal, no failure, no sound of the shot's.
+- **`Game::AddBurnedShot`** is burnProjectile's addFireball, shared by the fire diamond's conversion (unchanged: same
+  names, same order; `test_mp_diamonds` 134 as before) and each burn after `Portals::Tick`: a fireball named for its
+  flame on the level's one count of converted shots, flying from the next tick.
+- **The minion burn**: after `Fire::Tick`, each standing minion whose entity point (the body's centre less
+  `EntityAboveCentrePx`) is within `Fire::State::Reaching` goes into `minionsAlight`; the next tick, before `Fire::Tick`,
+  those go through `Minions::Burn` (the death by fire, the blood, `Forget`; a key's owner gone, `Carry::Drop`).
+- **The layer** adds burn_projectile.ent (effects.json `burn_projectile`) at each burn's point, as for the fire diamond.
+
+**THE ROUTES** (found with `geo.py`, `losscan.py`, `burnsim.py` and `burnscan.py` over the converted levels, then traced
+in `test_mp_routes --only`; every attempt is under `drafts/`). Each is won by play with no DEV flag, and the window
+replays each on the suite's tick (`window/routes.txt`).
+
+| Level | Route | Won on | How |
+|---|---|---|---|
+| 2-10 `level9a` | new | 393 | two shots through the flame burn the two crates in turn (their fireballs arrive on 94 and 254); a portal pair onto block00's top, then one across the pit, 35 px clear of the flame |
+| 2-11 `level10a` | new | 314 | a portal threaded 32.8 px from the flame; the player falls into a portal under himself and comes out of the first going up (the port's transit), shoots through the flame from its left (10.7 px off its centre), arcs over it (40 px at nearest) and walks in once the static crate has burned (205) |
+| 2-16 `level15a` | new | 260 | no straight fireball reaches the pit's barrels where they settle (`burnscan.py`), so barrel 1187 goes into the pit through a portal pair first; from the ledge left of the flame a shot through it (130) sets 1187 off (171) and the chain breaks the wall (173); a portal down the pit, and into the door |
+| 2-17 `level16a` | new | 459 | barrel 1205, portalled into the flame, breaks wall 1179 (the player kept off its blast's line); the crate, pushed onto the button, lifts the door for good; barrel 1206 portalled into the right room; a shot through the flame from its left sets it off (361) and breaks wall 1142 under the raised door |
+| 2-19 `level18a` | new | 342 | the crate moved off wall04's top and the barrel put there beside the wall, each by a portal pair; from the crate's top a shot through the flame (180) sets the barrel off (236); a portal through the gap |
+| 4-28 `level27c` | new | 861 | as the original: the knight, portalled 45 px right of the flame, walks into it and is burned (604, gone 605); its key stays at (207.1, 60.3); the player comes out of a portal 25 px from it and takes it, walks up the ramp, the key opens the keyhole (732) and the door goes |
+| 2-23 `level22a` | re-authored | 758 (773) | its shot from the platform's left end to its right end passed 26.5 px under `fire_agent_1086` and is now burned; the right-hand portal is shot at (300, 50) from the crate's corner instead (34.8 px clear) |
+| 2-31 `level30a` | re-authored (fix round) | 248 (298) | step 127's kill shot (tick 180) passed 13.8 px from `fire_agent_963` and is now burned (183): the agent and its ring stood, the tap of 228 was refused and the player slid into the flame (262). Now the agent is shot from under its pocket: a portal at (445, 200) and one under the player as he falls off the start platform (100); he comes out going up and left, lands on `seesaw_915` near x 389 (128), walks up it under `single_block_1013`'s corner, tips it left-down past the pivot and slides under 1013 onto `anchor_957` (186-191); a shot from (290.2, 223.8) (185) kills the agent (194); (60, 90) and a portal on the player: the door. No shot burned. Below |
+
+**2-31 RE-ROUTED IN THE FIX ROUND.** Round 1 recorded it a finding again (step 127, deviation 6: "unless another
+way is found, 2-31 goes back to a finding"). `anti_portal_agent_ent_990` (294, 112) sits in a pocket closed above
+(963's 32 px and the agent's 22.4 overlap: the centres are 45.3 apart, so every shot from the upper left that reaches
+the agent passes the flame, as step 127's did) and to the right (`single_block_plat_no_emissive_ent_1013`, x 310-342
+down to y 158), and open from under it, inside `antiportal_958`'s 192 px and over `seesaw_915`. Round 1 dropped the
+player onto the seesaw's right end from (445, 195) and walked him onto it through a portal on the start platform: both
+times it tipped right-down under him, he could not climb past x ~385, and from there the grazing shot meets the
+plank (`probe_l30a/`; the verifier's `verify1/l30a/`). The verifier's untried lead, a stance under the pocket reached
+in flight from a portal outside the ring, is the way (`fix1/d1` to `d3`). The player walks off the start platform's
+left end, and a portal at (598, 276) is put under him mid-fall (100); he comes out of (445, 200) (199 u from the
+ring's centre, 7 u outside its 192) going up and left at (-160, -181), since the player keeps his x and turns his y
+(step 11a). He lands on the plank near x 389 on 128, still moving left, walks up it to under 1013's lower-right corner
+(146), and once his weight is left of the pivot the plank tips left-down and he slides under 1013 and down onto
+`anchor_957` (186-191). A shot at the agent from any point of that way between ticks 175 and 200 kills it (`fix1/d2`);
+the route's, from (290.2, 223.8) on 185, kills it on 194, 17 px clear of 1013's left face and 62.7 px from the flame
+where it ends, and the ring goes. Then a portal at (60, 90) over the door's ledge (212) and one on the player (240):
+the door on 248. No shot burned. Nudged by 1 to 2 ticks and 2 to 4 px (the launch tap on 98 to 102, its point at
+(594 to 602, 276) and (598, 272 to 278)), all 11 variants cross the plank and win on 248
+(`fix1/sens/sensitivity.txt`). The way leans on the port's hinge solver (the plank tipping under a player who walks up
+it), G10 (that walk) and G4 (the shot's speed).
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings | **passes.** `build1_test_mp.log` (`--target test_mp`) and `build2_full.log` (all targets; MagicPortals and MagicPortalsSpike relinked), **0 warnings, 0 errors**. `test_mp.exe` `7e31ca86`, `MagicPortals.exe` `5fbe913a`, `MagicPortalsSpike.exe` `a9168a02` (linked, never launched) |
+| 1-01 at f420 before anything else | byte-identical to the baseline | **passes**: `4b85352e`, equal to `LD/after/sweep` and `P1/clamp/after/sweep` (`check101/`) |
+| The shot burned | a shot in flight within 32 of a flame deleted where it first comes within reach, no portal, no failure; a fireball on its heading at 130 u/s, killMainCharacter clear; a shot 33 px off, or one whose way ends short of the flame, flies on | **passes** (`test_mp_fire` `AShotThroughTheFlameBecomesAFireball`, `AShotThatMissesTheFlameFliesOn`): on level9a a shot 10 px over the agent is burned on its 6th tick at x 190.603 = 221 - sqrt(32^2 - 10^2) (within 1e-6), heading (1, 0), no portal, `shotsFailed` 0, `shotsBurned` 1; its fireball `fire_agent_ent_930#1` flies at (130, 0), passes the player and burns `crate_no_emissive_937` 58 ticks later; 33 px over, the shot opens its portal at the tap; ending 32.6 px short of the agent, it opens there |
+| The minion burned | alight on the tick a flame reaches its entity point, destroyed on the next, by fire | **passes** (`AFlameBurnsAMinionOnTheNextTick`, level27c's knight): 40 px from the flame, nothing; 20 px, `minionsAlight` 1 and still standing; the next tick gone, `burned` +1, a death `byFire` |
+| The fire diamond's conversion unchanged | `test_mp_diamonds` as before | **passes**: 134 checks, as at step 133 |
+| The suites | the runner once; the suites the change touches pass | **passes** (the fix round's `fix1/allmode.log`, one launch, rc 0): 47 suites, **47 passed**, **14,431 checks** against step 133's 14,380: `test_mp_fire` 94 -> **127**, `test_mp_routes` 218 -> **236**, 0 failures; every other count equal. Round 1's run (`allmode.log`) had the same counts with 46 passed: `test_mp_routes` failed twice, both 2-31's |
+| Routes named by the spec | 2-10, 2-11, 2-16, 2-17, 2-19 and 4-28 won by play; 2-31 re-verified | **6 of 6 won** (393, 314, 260, 459, 342, 861), each on the same tick in the window (`window/routes.txt`, `MagicPortals.exe` `5fbe913a`; the logs carry their `shot burned by` lines - 2 on 2-10, 1 each on 2-11, 2-16, 2-17 and 2-19 - with validation ACTIVE and silent). **2-31: re-authored and won** in the fix round (248, 5 shots, no burn), on the same tick in the window (`fix1/window/routes.txt`, `5fbe913a`, validation ACTIVE and silent, taps only on 30, 100, 185, 212 and 240) |
+| Route regression | every route still wins; one the change breaks is re-authored with its reason; none deleted | **passes (fix round).** **77 of 77** route files won by `test_mp_routes` (`fix1/allmode.log`; every result but 2-31's equal to the verifier's run, `fix1/routes_verify1.txt` against `fix1/routes_fix1.txt`): 2-23 re-authored (773 -> 758) and 2-31 (298 -> 248), each for a shot the flame now burns; none deleted. Every other route on its step-133 tick, the fire-agent levels' 2-18 (1965), 2-26 (827), 2-30 (267) and 3-19 (3207) included; the window replayed chapter 2's 24 and 4-28 on the suite's ticks (`window/vs_suite.txt`, 24 of 25 in round 1; 2-31 in `fix1/window/`). Round 1: 76 of 77, 2-31 unwon |
+| B2 | the menu order past 2-10 and 2-11, measured as step 115 did | **measured; B2 not cleared** (the fix round's `fix1/b2/`). The save: chapter 1 all gold (the fixture, world 0 of `out/parity/ui1/saves_gold`) and chapter 2 as the window replays wrote it: 2-01 gold, 2-02 silver, 2-03 bronze, 2-04 gold, 2-05 silver, 2-07 silver, 2-08 silver, 2-09 bronze, **2-10 bronze, 2-11 gold**, 2-12 silver, 2-13 gold, 2-14 silver, 2-15 bronze, **2-16 bronze, 2-17 silver**, 2-18 bronze, **2-19 silver**, 2-23 bronze, 2-25 silver, 2-26 silver, 2-30 gold, **2-31 silver**, 2-32 gold - **47 of 96** (`fix1/b2_save.py`: the verifier's window saves, where 2-32 ran win_by + 600 frames so that its medal is written, and 2-31's replay added). Chapter select reads **48 %** (23 % at step 115), under the 60 % chapters 3 and 4 need (`chapters_p1.png`). Chapter 2's grid: 2-11, 2-12 and 2-16 open now, and 2-32 opens behind 2-31 (a tap on its tile loads `level31a`: `tap_2_32.png`); 2-07 is still locked behind 2-06 (G6), 2-21 to 2-23 behind 2-20 (B4), 2-25 behind 2-24, and 2-28 to 2-30 behind 2-27 (`levels_w2_p1.png`, `levels_w2_p2.png`). Round 1 counted 42 of 96 and 43 %: its 2-32 run stopped at win_by + 240 = 2940 frames, before the medal (the door on 2577, end_delay 6600 ms, the medal about 2973); the verifier's, with 2-32's medal, 45 of 96 and 46 % |
+| Reachability | no door newly sealed | **passes**: `reachability.py --check`, 128 levels, 108 reachable, 20 opened, 0 sealed, 0 differ (`reachability.txt`). The flood lights a level's barrels by any fire on it and models no portal shot at all (no sight line, no flame), so a shot turned into a fireball cannot move a verdict either way; the routes are the evidence |
+| The 128-level f420 sweep | every changed level explained against `LD/after/sweep` | **passes: 128 of 128 byte-identical** (`after/compare_vs_LD.txt`), as predicted: the sweep taps nothing, so no shot burns, and on the three minion-and-flame levels no knight comes within 32 of a flame by tick 420 with no input (3-19's stays at x 15, 3-23's three at x 234 and beyond, 4-28's at x 29; `drafts/sweep`). The same command line and saves (`40bfef3a` before and after), 128 rc 0, validation ACTIVE in 128 logs and silent; every png opens and matches its md5 in `capture.txt` |
+
+**SMART APP CONTROL: 0 refusals.** `test_mp.exe` `7e31ca86` (linked once): every launch ran - the fire suite, the route
+drafts and traces, the full `test_mp_routes` runs and the runner. `MagicPortals.exe` `5fbe913a` (linked once): 157
+launches (the 1-01 check, the sweep, 25 window replays, 3 B2 captures), none refused. Step 133's `MagicPortals.exe`
+`44243d35` ran twice for the seesaw probes. `MagicPortalsSpike.exe` `a9168a02` linked, never launched. The fix
+round: 0 refusals and 0 relinks; `test_mp.exe` 27 launches (drafts, the sensitivity replays and the runner once),
+`MagicPortals.exe` 5 (2-31's window replay, 3 B2 captures and the 2-32 tap). The verifiers: 0 refusals and 0 relinks
+each; the first (`verify1.json`) launched `test_mp.exe` 7 times and `MagicPortals.exe` 161, the second
+(`verify2.json`) `MagicPortals.exe` 161 (the 1-01 check, 25 window replays, 3 B2 captures, 4 visual frames and the
+sweep) and `test_mp.exe` once (the runner). The commit launched nothing.
+
+**RECORDED DEVIATIONS.**
+1. **The burn point is where the shot first enters the 32**, found on the tick's whole stretch (`Shot::EntersCircle`),
+   where the original tests the shot's point once a frame after moving it 200 u/s: its fireball starts up to a frame's
+   travel further in. The same reading as the anti-portal agent's kill (step 126); a shot grazing the circle within
+   about 0.4 px of its edge can differ.
+2. **The agent's bucket gather is not modelled** (#10-79: its bucket and the four beside it, never the diagonals). At
+   the 256 u bucket the port reads (placement.json) no agent of the 22 stands within 32 of a bucket corner
+   (`bucket_census.txt`), so nothing differs; at 256 / 1.5 and 256 / 2.8125 six and twelve would - the bucket-size
+   question placement.json leaves open. None of this step's six route shot burns enters in a diagonal bucket at
+   256, 170.67 or 91.02 u (each enters in the agent's own bucket or one beside it; the verifier's
+   `G8/verify2/bucket/burn_buckets.txt`), so the original's gather burns each at the same entry at any of the three
+   sizes. 4-28's knight is not in that check.
+3. **A flame's burn of a minion is seen by the minion a tick later**, as the original's dynamic minion reads it on its
+   next frame; a fireball's burn still takes it on the same tick (step 98).
+4. **The fireball's launch sound is not played** (addFireball's `playFireballSound`), as it is not for the fire
+   diamond's conversion: the audio audit's row 16, the sound pass (P6). burn_projectile.ent is drawn.
+5. **The flame's callback runs off screen**, where the original runs a static entity's callback only while its bucket
+   is drawn (step 133, deviation 5): a shot or a knight burned off screen here may not be there.
+6. **A flame-burned minion shows no flames and makes no sound** (the verifier's): `ETHCallback_minion` #1471's
+   `addFlames` on its destroy is not drawn, and `burn()` #16's `playBurnSound` is not played when the flame sets it
+   alight; the port draws its blood only (`G8/verify2/visual/level27c_f606.png`). The same as for a fireball's burn of
+   a minion: the backlog's "Order 12.2 deviation, no `fire32` flames on the burned knight" row and the audio audit's
+   `playBurnSound` row (missing).
+
+**LEFT FOR THE OWNER.**
+- **2-31's new way** (above) rests on the port's seesaw, which no clip of the original shows: the plank tips left-down
+  under a player who walks up it from x 389 with his flight's speed. Its first portal, (445, 200), is 7 u outside
+  `antiportal_958`'s 192.
+- **Tight margins**, deterministic in the port but for G4 (the shot's speed and its 24 u start) and G10 (the player's
+  movement) to move: 2-11's first portal clears the flame by 0.8 px (32.8); 2-17's portal to the flame's left by 1.1 px;
+  2-23's new shot by 2.8 px; 2-16's last portal by 2.7. 2-11's crate may be the original's G6 way (a fireball sent
+  through portals); 2-16, 2-17 and 2-19 teleport a barrel or a crate before the burn, which no clip shows.
+
+**STEP 134'S FIX ROUND (2026-09-30), AFTER THE VERIFIER FAILED IT** (`out/parity/program/G8/verify1.json`). The
+verifier re-measured every gate and failed the step on one high problem, one medium and three low. No source changed
+in this round, only 2-31's route file and this record's text. So the build, the 1-01 check, the f420 sweep (128 of
+128 byte-identical to `LD/after/sweep`) and reachability (108 / 20 / 0) stand as measured, on the same `test_mp.exe`
+`7e31ca86` and `MagicPortals.exe` `5fbe913a`. The evidence is under `out/parity/program/G8/fix1/`, and the report is
+`G8/fix1.md`.
+1. **`test_mp_routes` red on 2-31 (high, true; fixed).** 2-31 is re-authored and won on 248 by the verifier's own lead
+   (2-31 RE-ROUTED, above). The runner passes 47 of 47.
+2. **The C: drive filled during the verifier's run (medium; an environment hazard, checked).** What this step rests on
+   was written before it (round 1's sweep, window and B2, 18:53 to 19:32) or checked: the verifier's B2 save (20:19 to
+   20:20) parses and equals its copy (`d9409d7e`), 45 of 96. C: had 5.2 GB free at the round's start; every png this
+   round wrote opens.
+3. **B2 counted without 2-32's medal (low, true; fixed).** Re-measured with 2-31's medal too: 47 of 96, 48 %, and 2-32
+   opens (the B2 row).
+4. **The finding's geometry was stated too narrowly (low; moot).** The finding is gone. The route goes through the
+   channel under 1013 that the verifier named.
+5. **The backlog ticked G8 while the suite was red (low; fixed).** The suite is green, and G8's row names 2-31's new
+   route.
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| 2-31 won by play | its route wins on the step's build | **passes**: won on 248, 5 shots, 0 burned, in `test_mp_routes` and in the window on the same tick (`fix1/window/`, validation ACTIVE and silent, taps only on the route's ticks) |
+| The runner, once | all suites pass | **passes**: 47 of 47, 14,431 checks, `test_mp_routes` 236 checks and 0 failures, rc 0 (`fix1/allmode.log`); every suite's count equals the verifier's |
+| Route regression | 77 of 77 | **passes**: 77 of 77, and every result but 2-31's equals the verifier's run |
+| B2 | measured | **measured**: 47 of 96, 48 %, 2-32 opens; B2 not cleared |
+| Pixels | unchanged | no source changed and the executables are round 1's (md5s above), so the after-sweep stands |
+| Smart App Control | refusals counted | **0 refusals, 0 relinks** (the SMART APP CONTROL paragraph) |
+
+**THE VERIFIER AND THE COMMIT (text only).** The second verifier passed every gate (`G8/verify2.json`, report
+`G8/verify2/verify2.md`: 0 refusals, nothing relinked, the whole runner 47 of 47, 14,431 checks; 77 of 77 routes;
+108 / 20 / 0; the sweep 128 of 128 byte-identical to `P1/clamp/after/sweep` and `LD/after/sweep`; the decode
+re-derived before the code was read) and listed three low problems, all wording. The commit applies them and changes
+no behaviour: deviation 2 now says the route burns are not exposed to the bucket gather, deviation 6 records the
+minion's missing flames and burn sound, and the SMART APP CONTROL paragraph counts both verifiers' launches. No file
+compiled into an executable changed after the gates were measured (every changed `.cpp` and `.hpp` is older than
+`test_mp.exe` `7e31ca86` and `MagicPortals.exe` `5fbe913a`, whose md5s are unchanged; the route files the runner reads
+were last written before the fix round's runner and the verifier's), so nothing was rebuilt or launched. The
+deviations and what is left for the owner are open rows in `docs/parity-backlog.md` section 6, which this commit also
+adds.

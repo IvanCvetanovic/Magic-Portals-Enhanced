@@ -487,6 +487,137 @@ void TheLavaSetsOffABarrelThatFallsIn() {
     CHECK(bombs.level.fire.lavas.empty());
 }
 
+// A SHOT THROUGH THE FLAME BECOMES A FIREBALL (planning step 134): burnProjectile,
+// from ETHCallback_fire_agent #253-265. A shot in flight 10 px over level9a's agent
+// is deleted where it first comes within 32 of it - no portal, no failure - and a
+// fireball goes on from there along its heading, at fireball.ent's 130 u/s, and
+// cannot hurt the player. Then it does what any fireball does: burns the first
+// crate it runs into.
+void AShotThroughTheFlameBecomesAFireball() {
+    Run run;
+    if (!Begin(kFireLevel, run)) return;
+    if (run.level.fire.agents.empty()) return;
+    const Fire::Agent agent = run.level.fire.agents.front();
+    CHECK_EQ(run.level.portals.flames.size(), run.level.fire.agents.size());
+
+    Portals::Flight shot;
+    shot.fromPx = agent.atPx + glm::dvec2(-81.0, -10.0);
+    shot.toPx = agent.atPx + glm::dvec2(79.0, -10.0);
+    shot.atPx = shot.fromPx;
+    run.level.portals.flight = shot;
+    int burnedOn = 0;
+    for (int tick = 1; tick <= 20 && burnedOn == 0; ++tick) {
+        Tick(run);
+        if (!run.level.portals.burns.empty()) burnedOn = tick;
+    }
+    CHECK_MSG(burnedOn > 0, "a shot 10 px over the agent is burned");
+    if (burnedOn == 0) return;
+
+    const Portals::Burn burn = run.level.portals.burns.front();
+    const double entryX = agent.atPx.x - std::sqrt(32.0 * 32.0 - 10.0 * 10.0);
+    CHECK_MSG(burn.flame == agent.name, "by " + agent.name + ", got '" + burn.flame + "'");
+    CHECK_MSG(std::fabs(burn.atPx.x - entryX) < 1e-6 && std::fabs(burn.atPx.y - shot.fromPx.y) < 1e-6,
+              "where it first came within the 32, x " + std::to_string(entryX));
+    CHECK_MSG(std::fabs(burn.heading.x - 1.0) < 1e-9 && std::fabs(burn.heading.y) < 1e-9,
+              "along its own heading");
+    CHECK_MSG(!run.level.portals.flight.has_value(), "the shot is gone");
+    CHECK_MSG(run.level.portals.placed.empty(), "and opened no portal");
+    CHECK_EQ(run.level.portals.shotsFailed, 0);
+    CHECK_EQ(run.level.portals.shotsBurned, 1);
+    CHECK_EQ(run.level.turrets.fireballs.size(), std::size_t{1});
+    if (run.level.turrets.fireballs.empty()) return;
+    const Turrets::Fireball ball = run.level.turrets.fireballs.front();
+    CHECK_MSG(ball.name == agent.name + "#1", "the fireball is named for its flame, got '" + ball.name + "'");
+    CHECK_MSG(std::fabs(ball.atPx.x - entryX) < 1e-6, "and starts where the shot was burned");
+    CHECK_MSG(std::fabs(ball.velocityPx.x - 130.0) < 1e-9 && std::fabs(ball.velocityPx.y) < 1e-9,
+              "flying on at fireball.ent's 130 u/s along the shot's heading");
+    CHECK_MSG(!ball.killsPlayer, "with killMainCharacter clear, as burnProjectile passes it");
+
+    // The crate in its lane: crate_no_emissive_937, 133 u on. It catches.
+    const Fire::Burnable* crate = run.level.fire.FindBurnable("crate_no_emissive_937");
+    CHECK_MSG(crate != nullptr, "level9a's lower crate is a burnable");
+    int litOn = 0;
+    for (int tick = 1; tick <= 90 && litOn == 0; ++tick) {
+        Tick(run);
+        crate = run.level.fire.FindBurnable("crate_no_emissive_937");
+        if (crate != nullptr && crate->burned) litOn = tick;
+    }
+    CHECK_MSG(litOn > 0, "and the fireball burns the crate it runs into");
+    CHECK_MSG(!run.level.hazards.playerDied, "and nothing killed the player");
+    std::printf("  %s: a shot 10 px over %s burned on tick %d at x %.3f; its fireball lit %s %d ticks later\n",
+                kFireLevel, agent.name.c_str(), burnedOn, burn.atPx.x, "crate_no_emissive_937", litOn);
+}
+
+// And a shot that never comes within the 32 flies on, as does one whose way ends
+// short of the flame: only a shot still in flight is burned.
+void AShotThatMissesTheFlameFliesOn() {
+    Run past;
+    if (!Begin(kFireLevel, past)) return;
+    if (past.level.fire.agents.empty()) return;
+    const glm::dvec2 agentPx = past.level.fire.agents.front().atPx;
+    Portals::Flight over;
+    over.fromPx = agentPx + glm::dvec2(-81.0, -33.0);
+    over.toPx = agentPx + glm::dvec2(79.0, -33.0);
+    over.atPx = over.fromPx;
+    past.level.portals.flight = over;
+    for (int tick = 0; tick < 20 && past.level.portals.flight.has_value(); ++tick) Tick(past);
+    CHECK_EQ(past.level.portals.shotsBurned, 0);
+    CHECK_MSG(past.level.turrets.fireballs.empty(), "a shot 33 px over the agent is not burned");
+    CHECK_EQ(past.level.portals.placed.size(), std::size_t{1});
+
+    Run shortOf;
+    if (!Begin(kFireLevel, shortOf)) return;
+    Portals::Flight stops;
+    stops.fromPx = agentPx + glm::dvec2(-81.0, -10.0);
+    stops.toPx = agentPx + glm::dvec2(-31.0, -10.0); // 32.6 from the agent, where it opens
+    stops.atPx = stops.fromPx;
+    shortOf.level.portals.flight = stops;
+    for (int tick = 0; tick < 20 && shortOf.level.portals.flight.has_value(); ++tick) Tick(shortOf);
+    CHECK_EQ(shortOf.level.portals.shotsBurned, 0);
+    CHECK_EQ(shortOf.level.portals.placed.size(), std::size_t{1});
+}
+
+// A FLAME BURNS A MINION (planning step 134): the second of the callback's four
+// tests, burn() on a burnable - and a minion is no character. Its own callback
+// finds itself burned on the frame after, a dynamic entity's running before the
+// static agent's, so it is still there on the tick it is set alight and gone on the
+// next. Measured from its entity point. level27c's knight, 4-28's key carrier.
+void AFlameBurnsAMinionOnTheNextTick() {
+    constexpr const char* kMinionLevel = "level27c";
+    Run run;
+    if (!Begin(kMinionLevel, run)) return;
+    if (run.level.fire.agents.empty() || run.level.minions.minions.empty()) {
+        CHECK_MSG(false, "level27c places a fire agent and a knight");
+        return;
+    }
+    const glm::dvec2 agentPx = run.level.fire.agents.front().atPx;
+    const entt::entity knight = run.level.minions.minions.front().body;
+    const double above = run.level.minions.rules.EntityAboveCentrePx();
+
+    // Its entity point 40 above the agent: out of reach, and nothing happens.
+    PutAt(run.registry, knight, agentPx + glm::dvec2(0.0, -40.0 + above));
+    Tick(run);
+    CHECK_MSG(run.level.fire.minionsAlight.empty(), "a knight whose point is 40 from the flame is not alight");
+
+    // 20 above it: alight, and still standing this tick.
+    PutAt(run.registry, knight, agentPx + glm::dvec2(0.0, -20.0 + above));
+    Tick(run);
+    const int burnedBefore = run.level.minions.burned;
+    CHECK_EQ(run.level.fire.minionsAlight.size(), std::size_t{1});
+    CHECK_MSG(run.registry.valid(knight) && !run.level.minions.minions.front().gone,
+              "a knight set alight is still there on the tick it catches");
+    Tick(run);
+    CHECK_MSG(run.level.minions.minions.front().gone && !run.registry.valid(knight),
+              "and destroyed by its own callback on the next");
+    CHECK_EQ(run.level.minions.burned, burnedBefore + 1);
+    bool byFire = false;
+    for (const Minions::Death& death : run.level.minions.deaths) byFire = byFire || death.byFire;
+    CHECK_MSG(byFire, "a death by fire, whose blood the frame adds");
+    CHECK_MSG(run.level.fire.minionsAlight.empty(), "and nothing is left alight");
+    std::printf("  %s: a knight 20 from %s caught on one tick and was gone on the next\n", kMinionLevel,
+                run.level.fire.agents.front().name.c_str());
+}
+
 void runTests() {
     TheDecodedNumbersAreNotTheRemakesGuesses();
     TheReaderRefusesWhatWouldBeSilent();
@@ -501,6 +632,9 @@ void runTests() {
     AWallOutOfReachStands();
     ABlastLeavesACarrancaStanding();
     TheLavaSetsOffABarrelThatFallsIn();
+    AShotThroughTheFlameBecomesAFireball();
+    AShotThatMissesTheFlameFliesOn();
+    AFlameBurnsAMinionOnTheNextTick();
 }
 
 } // namespace

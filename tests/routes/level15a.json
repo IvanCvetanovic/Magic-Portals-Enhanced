@@ -1,0 +1,27 @@
+{
+  "_about": [
+    "2-16 (planning step 134, G8): no straight fireball from fire_agent_ent_1190 reaches the pit's",
+    "barrels where they settle (barrel_bomb_ent_1195 at y 216.4: out/parity/program/G8/burnscan.py), so",
+    "barrel_bomb_ent_1187 goes into the pit first: a portal over it (176, 145) and one on its top",
+    "(288, 120) from the start (24, 48); it lands on 1195. A portal at (40, 75) and one on the player",
+    "(72, 104): onto platform_no_emissive_ent_1188 left of the flame. A shot from (40, 142.3) at 4.6",
+    "deg below level (130) is burned and its fireball sets 1187 off (171); the blast takes 1195 and",
+    "1185, and 1195's breaks breakable_wall_1142 (173). A portal in the pit at (180, 168), 34.7 px",
+    "from the flame (180), and one on the player (205): down the pit, left through the broken wall,",
+    "into the door. Won on tick 260. Leans on G4 and G10."
+  ],
+  "level": "level15a",
+  "win_by": 320,
+  "holds": [
+    {"walk": "left", "from": 212, "to": 320}
+  ],
+  "taps": [
+    {"tick": 24, "at": [176, 145]},
+    {"tick": 48, "at": [288, 120]},
+    {"tick": 72, "at": [40, 75]},
+    {"tick": 104, "at": [351, 90.3]},
+    {"tick": 130, "at": [239.36, 158.34]},
+    {"tick": 180, "at": [180, 168]},
+    {"tick": 205, "at": [40, 142.3]}
+  ]
+}

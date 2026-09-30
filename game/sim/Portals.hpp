@@ -11,7 +11,9 @@
 //   way, or with that switched off the shot fails. A shot that arrives inside
 //   a no-portal zone fails too. A failed shot costs nothing. One shot flies at
 //   a time. A shot that comes near an anti-portal agent on its way dies there
-//   and kills it, and the agent's ring goes with it (Agent).
+//   and kills it, and the agent's ring goes with it (Agent). One that comes
+//   within a fire agent's reach is burned, and Game makes a fireball of it
+//   (Flame).
 // - A level may also ship static portals (portal_static), which pair by index.
 // - Whatever comes into a portal goes out of its partner, as the original sends
 //   it (transit.json, decoded): at the partner itself, its velocity turned back,
@@ -202,6 +204,30 @@ struct AgentKill {
     std::string ring;       // the zone deleted with it, or empty when none held it
 };
 
+// A FIRE AGENT'S FLAME, as a portal shot meets it (fire.json `fire`, planning step
+// 134). ETHCallback_fire_agent (bytes 350254..351485) tests every entity round it
+// against squaredDistance < size.x ^ 2, centre to centre, and one named
+// projectile.ent (#158-177) goes to burnProjectile (#253-265; bytes
+// 351485..351788): killProjectile, a bare DeleteEntity, then addFireball at the
+// shot's point along its `direction`. The agent is static and its callback runs
+// after the shot's, which deletes itself on the frame it reaches the end of its
+// way, so only a shot still in flight is burned - the anti-portal agent's rule
+// above. Set by Game::Start from Fire's agents; a flame never moves (B4's handle
+// is not built).
+struct Flame {
+    std::string name;
+    glm::dvec2 centrePx{0.0};
+    double reachPx = 0.0; // fire.json reach_px: GetSize().x
+};
+
+// A shot a flame burned this tick: Game makes its fireball, and the frame draws
+// burnProjectile's burn_projectile.ent where it was.
+struct Burn {
+    std::string flame;
+    glm::dvec2 atPx{0.0};    // where it first came within reach: projectilePos
+    glm::dvec2 heading{0.0}; // its leg's direction, unit length: the shot's 'direction'
+};
+
 struct Placed {
     // WHAT NAMES IT, for as long as anything remembers it - the simulation's own
     // list, the layer's drawing of it, and a traversal's record. It is NOT the
@@ -387,6 +413,7 @@ struct State {
     std::vector<entt::entity> shotPasses;
     std::vector<NoPortalZone> zones;
     std::vector<Agent> agents;
+    std::vector<Flame> flames; // the fire agents, set by Game::Start
     std::vector<Blocker> blockers;
     std::vector<Reflector> reflectors;
     std::vector<entt::entity> travellers; // the player, and every teleportable body
@@ -414,6 +441,8 @@ struct State {
     // no failed sound). agentsKilled counts those.
     int shotsFailed = 0;
     int agentsKilled = 0;
+    // Nor is a shot a flame burned: killProjectile plays nothing and fails nothing.
+    int shotsBurned = 0;
     int reflections = 0;     // every time a shot came off a reflector
     std::string lastFailure; // what stopped the last failed shot
 
@@ -453,6 +482,7 @@ struct State {
     std::vector<Reflection> reflected;
     std::vector<Failure> failures;
     std::vector<AgentKill> agentKills; // this tick's alone, as failures are
+    std::vector<Burn> burns;           // this tick's alone: the shot a flame burned
 
     // A tap at a point in the level: a shot fired toward it. False when none
     // goes, because the level allows no portal or a shot is already flying.
@@ -513,8 +543,9 @@ struct State {
 
     // One tick, after the physics step. The lockout runs down, a patrolling zone
     // or agent swings on, a shot flies on - and dies with the first live agent it
-    // comes within reach of while still in flight - and a traveller newly inside
-    // a portal goes out of its partner.
+    // comes within reach of while still in flight, or is burned by the first
+    // flame (`burns`) - and a traveller newly inside a portal goes out of its
+    // partner.
     void Tick(entt::registry& registry, float dt);
 
     // A placed portal's entry circle, put back over its point: the hover moves

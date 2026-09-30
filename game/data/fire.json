@@ -24,12 +24,28 @@
     ],
     "reach_px": 32.0,
     "_remake_reach_px_not_applied": 24.0,
-    "_burn_projectile_not_built": [
-      "A fire agent's fourth branch puts out a flying projectile.ent. The port has",
-      "no such body - its shot is a segment Portals resolves within a tick, not an",
-      "entity - so nothing here can reach one. A shot fired THROUGH a flame therefore",
-      "opens its portal in the port where the original would have snuffed it. The fix",
-      "belongs in Shot's segment test; Fire.hpp says so beside this."
+    "_burn_projectile": [
+      "A fire agent's fourth branch turns a flying projectile.ent into a fireball (planning",
+      "step 134). ETHCallback_fire_agent (bytes 350254..351485) #158-177 names the entity",
+      "'projectile.ent' and #253-265 calls burnProjectile (bytes 351485..351788): #1-20 its",
+      "GetPositionXY and its 'direction', #22-27 killProjectile (a bare DeleteEntity), #29-46",
+      "burn_projectile.ent at vector3(that point, 10) (effects.json burn_projectile), #48-54",
+      "addFireball(point, direction, false, 1) - killMainCharacter clear. The agent is static",
+      "and runs after the shot, which deletes itself on the frame it passes the end of its way",
+      "(ETHCallback_projectile #127-156, #265-270), so only a shot still in flight is burned.",
+      "The port tests it on the shot's way (Portals::Flame, at reach_px) and Game makes the",
+      "fireball (turrets.json's speed and radius). Its launch sound, addFireball's",
+      "playFireballSound, is not played, as it is not for the fire diamond's conversion: the",
+      "audio audit's row 16, the sound pass (P6)."
+    ],
+    "_burn_minion": [
+      "The second branch, burn() on what is burnable and not burned (#193-220), reaches a",
+      "minion too: minion.ent and ghost_minion.ent carry burnable 1, and a minion is not a",
+      "character (isCharacter is set by GameCharacter's constructor alone), so a flame only",
+      "sets its `burned`. The minion is dynamic and its callback runs before the static",
+      "agent's, so it destroys itself on the NEXT frame (ETHCallback_minion #1456-1471) and",
+      "adds its blood (#1478-1504). Measured from its entity point, at reach_px (planning",
+      "step 134)."
     ]
   },
   "burn": {

@@ -302,6 +302,16 @@ Notes that change implementation:
 - A shock field's ring is **drawn** at radius `areaRadius`; hiding it makes it unfair.
 - `blink` is **purely cosmetic** and must never gate anything.
 
+**DECODED** (`ETHCallback_fire_agent`, planning step 134). A fire agent reaches whatever stands
+within its sprite's width, 32 u, centre to centre, and runs four tests on each: it asks a
+barrel to go off, burns what is burnable and not yet burned, kills a character (the player
+alone), and turns a portal shot still in flight into a fireball (`burnProjectile`: the shot is
+deleted and a fireball goes on from where it was, along its heading). So **a shot fired
+through a flame opens no portal**: it becomes a fireball that burns the first crate or sets
+off the first barrel it meets, and cannot hurt the player. A minion is burnable and no
+character: a flame sets it alight and it destroys itself on the next frame, dropping what it
+carried.
+
 ### 6.3 Switches, keys and locks
 
 **DATA.** `button.idx` ↔ `door_lift.switchIdx` — identical multisets in all 37 levels that

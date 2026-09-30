@@ -6,11 +6,14 @@
     "crates (crate_1203 by ~235, crate_1205 by ~370, crate_1204 by ~550); left to x 98.7, where a shot",
     "straight up passes the 5 px gap between crate_no_emissive_1206 and the platform's end: a portal at",
     "(99.5, 100) and one on the player (tick 640), up onto the crate's corner and down onto the",
-    "platform's left end, out of the carrancas' lane before the fireballs fired on 600 and 750 arrive. A",
-    "portal at the platform's right end (345, 186) and one on the player (fire_agent_1086 burns within 32",
-    "px of (162, 160), between the player and the door); left into the door. Won on tick 773. Leans on G4",
-    "(shot speed) and the carrancas' timing (startStride 0 / 2500, stride 5000); re-verify on the merged",
-    "build (G5: each crate is still the first solid thing its fireball meets; no breakable wall for B1)."
+    "platform's left end, out of the carrancas' lane before the fireballs fired on 600 and 750 arrive.",
+    "Re-authored in planning step 134 (G8): the old shot from the platform's left end to its right end",
+    "(345, 186) passed 26.5 px under fire_agent_1086 and is now burned into a fireball. Instead a portal",
+    "at (300, 50) is shot from the crate's corner (tick 666; 34.8 px from the flame) and one on the",
+    "player on the platform's left end (728): out high right of the flame, down onto the platform, and",
+    "left into the door. Won on tick 758 (773 before). Leans on G4 (shot speed) and the carrancas'",
+    "timing (startStride 0 / 2500, stride 5000); G5: each crate is still the first solid thing its",
+    "fireball meets."
   ],
   "level": "level22a",
   "win_by": 850,
@@ -21,7 +24,7 @@
   "taps": [
     {"tick": 612, "at": [99.5, 100]},
     {"tick": 640, "at": [98.7, 266.3]},
-    {"tick": 700, "at": [345, 186]},
+    {"tick": 666, "at": [300, 50]},
     {"tick": 728, "at": [106.7, 186.4]}
   ]
 }

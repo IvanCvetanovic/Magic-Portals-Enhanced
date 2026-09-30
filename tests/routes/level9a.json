@@ -1,0 +1,24 @@
+{
+  "_about": [
+    "2-10 (planning step 134, G8): crate_no_emissive_937 and 938 stand 133 u right of fire_agent_ent_930",
+    "across the pit and cannot be sent through a portal. A shot at 937 through the flame (tick 30,",
+    "passing 2.7 px from the agent) is burned into a fireball that burns the crate (94; gone ~154);",
+    "938 falls into its place and a second shot through the flame burns it (190; 254). A portal on",
+    "block00_no_emissive_ent_978's top (32, 138) and one on the player (215, 240): up onto the block.",
+    "From there a portal at (400, 190), passing the flame at 35 px (330), and one on the player (372):",
+    "over the pit, and right into the door. Won on tick 393. Leans on G4 (the shot's speed) and G10."
+  ],
+  "level": "level9a",
+  "win_by": 460,
+  "holds": [
+    {"walk": "right", "from": 375, "to": 460}
+  ],
+  "taps": [
+    {"tick": 30, "at": [354, 192]},
+    {"tick": 190, "at": [354, 192]},
+    {"tick": 215, "at": [32, 138]},
+    {"tick": 240, "at": [143, 202.3]},
+    {"tick": 330, "at": [400, 190]},
+    {"tick": 372, "at": [32, 138.3]}
+  ]
+}

@@ -1,32 +1,29 @@
 {
   "_about": [
-    "2-31 (R1 fix 2): antiportal_958 (258, 132), scale 6, refuses within 192 px at 32 x scale, which",
-    "holds everything from x 66 to 450 at the ring's height; anti_portal_agent_ent_990 (294, 112) is",
-    "boxed in by platform_960, double_block_961 and single_block_1013, and fix 1's scan found no shot to",
-    "it from outside the ring - but a shot may leave from inside a field (fix2/check_2_31b.txt: 1,347",
-    "free points). A portal at (450, 30) on single_block_987 (217 px from the ring's centre) and one on",
-    "the player: up onto the blocks' tops; left along them to the very end of double_block_961 (centre x",
-    "279.8, sliding slowly off it); a shot from there toward (264.8, 180) passes about 1 px left of the",
-    "block's corner and 21.6 px from the agent (R17's 22.4) and kills it (187); the ring goes. A portal",
-    "at (198, 205) under platform_960 and one on the player, before he slides off into fire_agent_963's",
-    "flame (262): onto single_block_1010; a portal at (60, 90) over the door's ledge and one on the",
-    "player: into the door. Won on tick 298. Leans on two shots passing through fire_agent_963's flame",
-    "(13.8 and 2.2 px from it), which the original snuffs and the port does not (fire.json",
-    "_burn_projectile_not_built): the step that builds that re-verifies 2-31, and if the original snuffs",
-    "them 2-31 is a finding again; the stance on the block's corner (the port's capsule); G10; G4."
+    "2-31, re-authored in planning step 134 (G8): step 127's way shot anti_portal_agent_ent_990 from the",
+    "end of double_block_961 through fire_agent_963's flame (13.8 px from it), and the flame now burns",
+    "that shot into a fireball, as the original does. The new way comes at the agent from UNDER its",
+    "pocket, over seesaw_915. A portal at (445, 200) (199 u from antiportal_958's centre, 7 u outside",
+    "its 192) and, while the player falls off the start platform's left end, one under him at",
+    "(598, 276): he comes out of (445, 200) going up and left (the player keeps his x and turns his y),",
+    "lands on the plank near x 389 (128), walks up it to under single_block_1013's corner (146), and",
+    "once he is past the pivot the plank tips left-down and he slides under 1013 onto anchor_957",
+    "(186-191). From (290.2, 223.8) a shot at the agent (185) kills it on 194, 17 px clear of 1013 and",
+    "62.7 px from the flame at its end; the ring goes. A portal at (60, 90) over the door's ledge (212)",
+    "and one on the player (240): into the door. Won on tick 248, no shot burned. Any kill tap from",
+    "175 to 200 kills. Leans on the port's hinge solver (the plank's tip), G10 (the player's walk up",
+    "the plank) and G4 (the shot's speed)."
   ],
   "level": "level30a",
-  "win_by": 360,
+  "win_by": 330,
   "holds": [
-    {"walk": "left", "from": 100, "to": 163}
+    {"walk": "left", "from": 70, "to": 198}
   ],
   "taps": [
-    {"tick": 30, "at": [450, 30]},
-    {"tick": 64, "at": [696, 228]},
-    {"tick": 180, "at": [264.8, 180]},
-    {"tick": 204, "at": [198, 205]},
-    {"tick": 228, "at": [275.5, 44.3]},
-    {"tick": 260, "at": [60, 90]},
-    {"tick": 290, "at": [198, 220]}
+    {"tick": 30, "at": [445, 200]},
+    {"tick": 100, "at": [598, 276]},
+    {"tick": 185, "at": [294, 112]},
+    {"tick": 212, "at": [60, 90]},
+    {"tick": 240, "at": [244.1, 236.5]}
   ]
 }
