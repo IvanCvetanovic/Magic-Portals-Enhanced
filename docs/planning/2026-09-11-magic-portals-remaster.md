@@ -24883,3 +24883,131 @@ prints the new `--data` line. A pair image `compare.py` writes from now on label
   configured again. The 15 path occurrences above, `origin`'s URL and the auto-memory's paths need updating after it.
 - **The identifiers and keys** listed above. Renaming them is a code and data change for a step of its own.
 - The close role writes the `DEVLOG.md` entry; this step does not touch `DEVLOG.md`. Committed, not pushed.
+
+## Step 170 - the medal saved on the door's tick, as writeScore saves it, and 4-19's key sparkles shrunk with the key by its Scale(0.9) (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w2c`, branch `w2-c`, on step 132's `fd80e82`, engine `710bffc`), the
+program's MS**: step 123's two MEDIUM rows (`docs/parity-backlog.md` section 6, "Left by step 123"; the wave-1
+table's order (6)). Its build reads the frozen level data in `out/snap_w2`; numbered in track C's range, and the merge
+renumbers it. Changed: `game/MagicPortalsLayer.{hpp,cpp}` (`clearLevel` split: `recordWin` on the door's tick, the
+screen `openFinished` at the delay; `stepEmitter`'s `scaleAfterStep`; the landing key's emitters scaled in
+`updateEmitters`; `Emitter::scalingsTaken`; `EmitterReport::largestDrawnSize`), `game/sim/Cutscene.{hpp,cpp}`
+(`Landing::keyScalings`), `game/data/cutscenes.json` (`rocket_landing._source`: the engine decode),
+`tests/test_mp_layer.cpp` (two cases), `tests/test_mp_cutscene.cpp` (two checks). No engine change (the pin stays
+`710bffc`), no converter change, no format finding (script and engine behaviour).
+
+**GAMEPLAY: when the medal is saved, and from which tick's counts, on every level.** Nothing before the door moves;
+what changes is WHEN the medal is saved, on every level:
+on the door's tick, where the port saved it when the finished screen came up - 1400 ms later on 125 levels, 5000 /
+14500 / 6600 ms on 4-01, 4-19 and 2-32. So R, N or the window closed in that beat no longer loses the medal. The
+medal's numbers are read on that tick too (the screen shows them): a portal a shot opens after the door would no
+longer count, as the original's `writeScore` reads `getPortalCounter` on the door's frame (deviation 3). The sparkles
+are pictures.
+
+**BLOCKERS, checked first: none.** Both rows name their decode; the listing (`all_functions.txt`, md5 `48fe65ce...`)
+and the engine source (`reference/ethanon`) settle both; the three levels have routes (`tests/routes/level0c`,
+`level18c`, `level31a`), `test_mp_routes` and `reachability.py` are in the tree; every capture ran with `--saves` on
+its own copy of the seeded save (`merge_w1/sweep_saves/scores.json`, `40bfef3a`).
+
+**WHAT THE ORIGINAL DOES** (arguments pushed last-first, `00_order.md` 8.0).
+- **The medal.** `GameStateController::checkGameEnd` (bytes 125613..126638), on the frame the character reaches the
+  door: #47 `levelFinishedEffect`, #54 `Hide`, #71 `SetLinearVelocity(V2_ZERO)`, **#75 `writeScore`**. `writeScore`
+  (125310..125613): #3-38 `computeScore(getPortalCounter, goldenScore, crystalCount, m_maxCrystals)`; #40-48
+  `ScoreManager::setScore(g_currentWorld, m_levelIndex, score, false)`, which (165965..166605) #3-14 keeps it only when
+  it beats the saved one, and **#139 `enmlFile::writeToFile`: the file is written there and then**; #50-69
+  `LevelFinishedLayer(m_levelIndex, score, portalCounter, numCrystals, m_maxCrystals)` added to the layer manager, not
+  current. Only #209-259, once `gameEndElapsedTime` passes `gameWonDelay`, `setCurrentLayer('levelFinishedLayer')` and
+  `playVictorySound`. The port did the save in `clearLevel`, at the screen.
+- **The key.** `ETHCallback_rocket_landing` #185-227: every won frame `SeekEntity('key')`, `Scale(0.9)` - the
+  `void Scale(const float)` binding (`ETHScriptObjRegister.generic.cpp:399`), `ETHEntity::Scale(float)`
+  (`ETHEntity.cpp:591-599`), which multiplies the entity's scale AND calls `ScaleParticleSystem` on each of its
+  systems (`ETHSpriteEntity.cpp:512-518` -> `ETHParticleManager::ScaleParticleSystem`, `ETHParticleManager.cpp:444-451`:
+  the system's lengths, `ETHParticleSystem.cpp:27-40`, and every particle's size and direction,
+  `ETHParticleManager.h:160-164`) - then `SetAlpha(its scale)`, which is the entity's colour only
+  (`ETHEntity.cpp:505-508`; `DrawParticles` passes no entity colour, `ETHRenderEntity.cpp:390-411`). **The order in a
+  frame**: `key.ent` is `static="0"` with a callback (`ETHCallback_key`), so always active and updated, particles then
+  callback, in `UpdateAlwaysActiveEntities`; `rocket_landing` is `static="1"`, its callback in
+  `UpdateCurrentFrameEntities`, after (`ETHScene.cpp:467-488`; `ETHActiveEntityHandler.cpp:134-138` and `:157-161`,
+  each `Update` then `RunCallbackScript`); the scene draws after both. So the key's particles step at the old scale,
+  are scaled, and are drawn scaled. 4-19's `key_2701` carries two `sparkles.bmp` systems (2 particles each, size 12,
+  spread 5, growth -0.05, start points (-2, -6) and (2, 6)). The port shrank and faded the picture (step 123) and left
+  the systems whole: they glowed on where the key was.
+
+**THE CHANGE.**
+1. **The save on the door's tick.** `recordWin` (was the first half of `clearLevel`) runs in the `goals.completed`
+   branch, after the door's log line: it computes `Cleared` from that tick's counts, keeps it in `m_lastCleared` for the
+   screen, and `Record`s and `Save`s the medal (only a better one, as before). The screen comes at `m_wonDelayMs` as it
+   did (`openFinished`). One log line: `<label> medal N saved on tick T` (or `kept (no save directory)` for a suite's
+   memory-only store, or `the save's M is as good`).
+2. **The key's systems.** `Cutscene::StepLanding` counts its `Scale(0.9)` calls (`keyScalings`, one a tick with
+   `keyScale`). `updateEmitters` gives each emitter of the landing's key sprite as many factors of
+   `key_scale_per_frame` as calls it has not taken (`Emitter::scalingsTaken`), and `stepEmitter`'s new `scaleAfterStep`
+   applies them as the engine does: each particle stepped on the old system, then its size and velocity scaled, then
+   its quad placed; the system scaled last, for the next frame's resets. Nothing else is scaled; an effect's emitter
+   passes 1.
+
+**THE GATES.** Before = the tree's build as set up (`MagicPortals.exe` `23da9600`, step 132's code) and
+`base_w2C/sweep`; after = `MagicPortals.exe` **`63f17802`**, `test_mp.exe` **`3d8f7083`**. Everything under
+`out/parity/program/MS/`. Every run's own save copy was `40bfef3a` before it; the owner's
+`%APPDATA%/Magic Portals/scores.json` read `40bfef3a` before and after every run (`capture.txt`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build/build1.log`: `-j 4 --target MagicPortals test_mp`, 13 steps - `Cutscene`, the layer, `main`, `LevelVisit`, `Route` twice, `test_mp_{cutscene,routes,layer}` - 2 links) |
+| (1) The save, layer | level0 walked to its door: the file (a suite's own directory) holds the medal on the door's tick, the screen 84 ticks later; 4-19: the file holds it on the door's tick and R 60 ticks later restarts the level with it kept | saved at the screen only | **passes** (`TheMedalIsSavedOnTheDoorsTick`): 1-01 door tick 193, gold in the file on it, the screen at +84; 4-19 bronze in the file on the door's tick, kept through R at +60, no screen shown |
+| (2) The save, exe, 60-ish ticks after the door | the three routes' levels: the file holds the medal and the log says saved on the door's tick; before, the file unchanged | the file unchanged (`40bfef3a`) at f420 / f650 / f2640 on 4-01 / 4-19 / 2-32 (doors 351 / 581 / 2577) | **passes**: `4-1 medal 2 saved on tick 351` (file `b389b1c2`), `4-19 medal 1 saved on tick 581` (`8f91cf87`), `2-32 medal 3 saved on tick 2577` (`248f7cd4`) |
+| (3) The same medal and the same screen | past the medal: the same file, screen tick and final frame as before | files `b389b1c2` / `8f91cf87` / `248f7cd4` (silver, bronze, gold), `finished screen current` on 651 / 1451 / 2973 | **passes**: the same three files and ticks; final frames identical on 4-01 (`5e8e40f0`) and 2-32 (`43e44ab9`); 4-19's f1500 differs by the key's sparkles alone (gate 6). The short runs' final frames: 4-01 and 2-32 identical, 4-19's f650 the sparkles alone (1,472 px in (514-615, 440-517), luma removed 34,343, added 0) |
+| (4) Every route's medal on its door tick | `test_mp_routes` 70 won, 215 checks; each route's medal line on its door's tick | 70 won, 215 checks (step 131) | **passes**: 70 won on the same ticks (4-01 351, 4-19 581, 2-32 2577), 215 checks, 0 failures; 70 medal lines, each on the tick of its door line (12 gold, 44 silver, 14 bronze; `suites/medal_lines_check.txt`); without them the output equals step 131's (`P1/clamp/after/allmode.log`, paths normalised: 0 lines differ) |
+| (5) The key's systems, layer | each frame from the door both of `key_2701`'s systems at 12 x the key's scale; no particle drawn over 17 x it; 30 frames on, under 0.67 u; no other system on the level scaled | 12 throughout | **passes** (`TheLandingKeysSparklesShrinkWithIt`, 41 frames): 0 frames off; the largest drawn 11.25 u before the door, **0.5227 u** 30 frames after (4 drawn; 17 x 0.9^31 = 0.650) |
+| (6) The key's sparkles, exe (4-19 won by its route) | frames identical to the door; after it only the sparkles' pixels differ, the glow removed and none added once they are sub-pixel; none left under the medal | the sparkles hang on the key's trail in the doorway through the 14.5 s and under the medal: f1500 916 px, luma 8,086 | **passes** (`d419_measure.txt`, `l419_measure.txt`, `crops/`): every 12th frame to f660, 48 of 55 identical (f12-f576), 7 differ from f588 (door + 7), each box on the key's trail (x 304-628, y 436-520), luma removed 16,000-67,000, added 1,079 at f600 and 177 / 26 at f612 / f624 (INFERRED, not measured: particles renewed at the scaled start points), **0 from f636**; every 60th frame to f1500, 9 of 9 identical to f540, 16 differ from f600 to f1500, luma **added 0.0 from f660**: the difference is the before-frame's sparkles, down to f1500 under the medal (916 px removed) |
+| (7) The 128-level f420 sweep | 128 rc 0, validation silent, pngs whole and matching their log lines, no input line; **128 of 128 identical to `base_w2C/sweep`** (no level is won in 420 frames, and a death saves nothing) | `base_w2C/sweep` | **passes: 128 of 128 identical** (`compare_sweep.txt`; also 128 of 128 to `P1/clamp/after/sweep`): 128 rc 0 (one stall, 4-14, killed at 600 s and re-run once to rc 0 - its window and another tree's capture both froze at 17:08:48), validation ACTIVE in 128 logs and 0 with a message, 128 pngs whole and matching their log lines, 0 input lines, art from `out/snap_w2` in 128 of 128, the seeded save `40bfef3a` before and after; no door line and no medal line in any log; the one death, 2-32's on tick 286, as in the baseline |
+| (8) Winnability | reachability 108 / 20 / 0 and 0 differ; 4-01, 4-19 and 2-32 won by their routes | 108 / 20 / 0, 0 differ | **passes**: `reach_check.txt` 108 reachable, 20 opened, 0 differ (main's venv, as the setup ran it); the three won on 351, 581 and 2577 (gate 4) |
+
+**SUITES**, once each: `test_mp_cutscene` **153** (151 + 2), `test_mp_layer` **3,271** (3,245 + the two cases' 26),
+`test_mp_routes` **215** (70 won), 0 failures each. Not run: the other 44 suites - no unit of theirs includes a changed
+header (the build recompiled none) and none drives the layer.
+
+**SMART APP CONTROL: 0 refusals.** `MagicPortals.exe` `63f17802` and `test_mp.exe` `3d8f7083` were each allowed on
+their first launch (`MagicPortals.exe`: 7 capture runs and the sweep's 129 launches; `test_mp.exe`: 3 runs);
+`CodeIntegrity/Operational` holds 0 events from 16:25 to 17:38 (`MS/sac_check.txt`).
+
+**RECORDED DEVIATIONS.**
+1. **The scalings follow the port's tick**, as the picture's `keyScale` does (step 123): the emitters take as many as
+   the ticks since their last frame, so with more than one tick a frame they are stepped once for several scalings,
+   where the original steps once per scaling. With `--fixed-step`, and at 60 Hz, one each.
+2. **The landing's first scaling is on the door's tick**, which step 123 INFERRED (its `static="1"` callback runs after
+   the game state in the frame); the key's step-then-scale order within a frame is decoded (above).
+3. **The medal's counts are the door tick's.** A shot in flight at the door that opens a portal after it counted
+   before and does not now, as `writeScore` reads `getPortalCounter` on the door's frame (`Portals::TryPlace` counts a
+   portal when it opens). That no crystal is taken after the door is INFERRED (the player is hidden; its body stays in
+   the world and was not checked). The three levels measured give the same medal both ways (gate 3); for the other 67
+   routes the old build's medal past the door was not measured (their runs stop at the win).
+4. **The log** gains one line per won level (change 1).
+5. **Found, not changed**: `ghost_appear_effect`'s per-frame scale (step 98, `updateEffects`) is applied after its
+   quads are placed, so its drawn size runs a frame behind its scale (x 1.005); the key's is drawn scaled. Not this
+   step's.
+
+**RULINGS APPLIED.** The standing direction: the original decides - the save where `writeScore` makes it, the
+systems as `ETHEntity::Scale` scales them. R1, R2, R17, R23 not this step's; R24 and R25 untouched; camera dragging
+not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- For the close role: the backlog's "Left by step 123" row (both MEDIUM items done), and the "Before the owner's
+  testing" paragraph's last sentence (the medal saved late on 4-01, 4-19 and 2-32) is now stale.
+- **The C: drive was nearly full** while this step ran (49-348 MB free until about 17:08, shared with the other
+  tracks): after measuring, the 4-19 series were pruned to one frame a side (`d419_f660`, `l419_f1500`) and the
+  capture runs' final frames removed; every frame's md5 is kept (`series_md5.txt`, `capture.txt`), with the per-frame
+  numbers (`*_measure.json`) and the diff crops (`crops/`). No sweep png was cut short (gate 7). The before exe
+  `23da9600` was overwritten by this step's build, so the before side of gates 2, 3 and 6 rests on those logs, md5s
+  and two surviving frames; the f600-f624 "luma added" readings were not re-taken by the verifier.
+- **`MagicPortals.exe --help` is stale on the player's own save** (the verifier, LOW; not changed here because the
+  string is compiled in and changing it relinks the measured `63f17802`): `--route` says "a run that goes on past the
+  level's end records its medal", and `--hold` says nothing. Since this step ANY run that reaches a door writes the
+  medal on that tick, a `--hold` capture that walks into a door included: give `--saves <absolute dir>` to every run
+  that can reach a door. The next step that relinks `MagicPortals.exe` rewords `--route` and adds the warning to
+  `--hold` (`game/main.cpp:436-443`).
+- Noticed, not examined: a static entity's callback runs only while its bucket is mapped for drawing
+  (`ETHScene.cpp:526-572`, `AddStaticCallbackWhenEligible`); F17 shows 4-19's landing run to its end, so nothing
+  measured here changes.
+- For the merge's renumbering: "planning step 170" is written in `cutscenes.json` (`rocket_landing._source`),
+  `tests/test_mp_layer.cpp` and `tests/test_mp_cutscene.cpp`.

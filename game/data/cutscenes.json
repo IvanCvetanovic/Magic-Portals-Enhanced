@@ -85,6 +85,11 @@
       "#413-429 brightness = max(0, min(interpolate(2, 0.1, smoothEnd(bias)), 1)) - 1 until",
       "smoothEnd(bias) passes 0.526, about 6.9 s in, and 0.1 at 12.5 s; #431-455 the spiral's",
       "SetColor(spiralColor x brightness).",
+      "DECODED (engine): the key's Scale(0.9) is ETHEntity::Scale(float), which scales the entity's",
+      "particle systems with it (reference/ethanon ETHEntity.cpp:591-599, ETHSpriteEntity.cpp:512-518,",
+      "ETHParticleManager.cpp:444-451, ETHParticleSystem.cpp:27-40): key_scale_per_frame shrinks the",
+      "key's two sparkles systems too, after the key's own update and before the draw (the key is",
+      "dynamic, rocket_landing static: ETHScene.cpp:467-488). Planning step 170.",
       "MEASURED (F17 r5, 4-19): the rocket sinks (+400 u) with smoothBeginning(t / 12.5) from t0",
       "21.874 (rms 2.9 px), upright, drifting right; the spiral dims from about 7.1 s and is flat",
       "from 12.6 s; the eclipse's top rises 169 px to rest at 610 px (rms 1.06 px)."

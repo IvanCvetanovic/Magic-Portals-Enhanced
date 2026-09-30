@@ -16401,6 +16401,175 @@ void TheKnightWalksIntoTheDoorAfter2_32() {
     layer.OnDetach(registry);
 }
 
+// THE MEDAL IS SAVED ON THE DOOR'S TICK (planning step 170; step 123's MEDIUM row):
+// checkGameEnd calls writeScore on the frame the character goes in (#75), whose
+// setScore writes the file there and then (#48), and only the screen waits for the
+// level's gameWonDelay. On level0, walked to its door, the file has the medal on
+// that tick and the screen comes 84 ticks (1400 ms) later; on 4-19 (level18c), whose
+// end_delay is 14500 ms, R pressed 60 ticks after the door - which the port reads in
+// the beat - restarts the level with the medal kept, and no screen came up. Into a
+// directory of its own, emptied first and last, never a player's save.
+void TheMedalIsSavedOnTheDoorsTick() {
+    namespace Scores = MagicPortals::Scores;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-medals";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = dir.string();
+    // What the file says, read as the next run would read it.
+    const auto saved = [&dir](int world, int level) {
+        Scores::Store store;
+        std::string why;
+        return store.Open(dir.string(), why) ? store.Get(world, level) : -1;
+    };
+    const auto earned = [](const MagicPortalsLayer& layer) {
+        const auto& c = layer.LastCleared();
+        return c ? MagicPortals::LevelEnd::ComputeScore(c->portalsUsed, c->goldenScore, c->crystals, c->crystalsTotal)
+                 : -1;
+    };
+
+    // level0 (1-01), walked to its door.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level0");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        CHECK_EQ(saved(0, 0), Scores::kUnplayed);
+        for (int tick = 0; tick < 600 && !layer.Finishing(); ++tick) {
+            std::vector<std::string> pressed;
+            if (tick == 0) pressed.push_back(MagicPortalsLayer::kRight);
+            tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, std::move(pressed));
+        }
+        CHECK_MSG(layer.Finishing(), "level0's door is reached by walking right");
+        if (!layer.Finishing()) return;
+        const int door = layer.LayerTicks();
+        const int medal = earned(layer);
+        CHECK_MSG(medal > Scores::kUnplayed && saved(0, 0) == medal,
+                  "on the door's tick the file holds " + std::to_string(saved(0, 0)) + ", the play earned " +
+                      std::to_string(medal));
+        CHECK(layer.MenuScreen() == MagicPortalsLayer::Screen::None);
+        int screenAt = -1;
+        for (int tick = door + 1; tick <= door + 90 && screenAt < 0; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            if (layer.MenuScreen() == MagicPortalsLayer::Screen::Finished) screenAt = tick;
+        }
+        CHECK_MSG(screenAt == door + 84, "the medal screen " + std::to_string(screenAt - door) + " ticks after the door");
+        CHECK_EQ(saved(0, 0), medal);
+        std::printf("  1-01: door on tick %d, medal %d in the file on it, the screen %d ticks later\n", door, medal,
+                    screenAt - door);
+        layer.OnDetach(registry);
+    }
+
+    // 4-19 (level18c): the door, then R in the 14.5 s beat.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level18c");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        CHECK_EQ(saved(3, 18), Scores::kUnplayed);
+        const int door = ReachTheDoor(layer, registry, glm::dvec2(590.0, 134.0));
+        if (door < 0) return;
+        const int medal = earned(layer);
+        CHECK_MSG(medal > Scores::kUnplayed && saved(3, 18) == medal,
+                  "on the door's tick the file holds " + std::to_string(saved(3, 18)) + ", the play earned " +
+                      std::to_string(medal));
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK(layer.Finishing() && layer.MenuScreen() == MagicPortalsLayer::Screen::None);
+        press(layer, registry, MagicPortalsLayer::kRetry);
+        CHECK_MSG(IsAt(layer, "level18c") && layer.SimLevel() != nullptr && !layer.Finishing(),
+                  "R in the beat restarts 4-19");
+        CHECK_MSG(saved(3, 18) == medal, "and the medal stays saved: " + std::to_string(saved(3, 18)));
+        CHECK_MSG(saved(0, 0) > Scores::kUnplayed, "beside 1-01's");
+        std::printf("  4-19: door on tick %d, medal %d in the file on it, kept through R 60 ticks later\n", door, medal);
+        layer.OnDetach(registry);
+    }
+    std::filesystem::remove_all(dir, ec);
+}
+
+// 4-19'S KEY SPARKLES SHRINK WITH IT (planning step 170; step 123's deviation 1):
+// rocket_landing calls the key's Scale(0.9) every frame from the door's (#185-227),
+// and ETHEntity::Scale(float) scales the entity's systems too (ETHEntity.cpp:591-599,
+// ETHParticleSystem.cpp:27-40, PARTICLE::Scale). Each frame both of key_2701's
+// sparkles systems are 12 x the key's scale, every particle drawn no larger than
+// 17 x it (size 12 plus its spread of 5, shrinking from there), and 30 frames on
+// none is drawn over two thirds of a unit. Nothing else on the level is scaled.
+void TheLandingKeysSparklesShrinkWithIt() {
+    if (!OriginalArtIsThere("TheLandingKeysSparklesShrinkWithIt")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level18c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const auto keys = [&layer] {
+        std::vector<MagicPortalsLayer::EmitterReport> found;
+        for (const MagicPortalsLayer::EmitterReport& report : layer.EmitterReports()) {
+            if (report.node == "key_2701") found.push_back(report);
+        }
+        return found;
+    };
+    // The level's other systems, by size, to see that the landing scales none of them.
+    const auto others = [&layer] {
+        std::vector<double> sizes;
+        for (const MagicPortalsLayer::EmitterReport& report : layer.EmitterReports()) {
+            if (report.node != "key_2701") sizes.push_back(report.systemSize);
+        }
+        return sizes;
+    };
+
+    double largestBefore = 0.0;
+    for (int f = 0; f < 60; ++f) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        for (const MagicPortalsLayer::EmitterReport& key : keys()) {
+            largestBefore = std::max(largestBefore, key.largestDrawnSize);
+        }
+    }
+    const std::vector<MagicPortalsLayer::EmitterReport> before = keys();
+    CHECK_EQ(before.size(), 2u);
+    for (const MagicPortalsLayer::EmitterReport& key : before) CHECK(key.systemSize == 12.0);
+    CHECK_MSG(largestBefore > 5.0, "the key's sparkles are drawn before the door: " + std::to_string(largestBefore));
+    const std::vector<double> othersBefore = others();
+
+    const int door = ReachTheDoor(layer, registry, glm::dvec2(590.0, 134.0));
+    if (door < 0) return;
+    int wrongSystem = 0;
+    int tooLarge = 0;
+    double largestAt30 = -1.0;
+    int drawnAt30 = 0;
+    for (int f = 0; f <= 40; ++f) {
+        // The door's tick has run; its frame draws now, then each tick and its frame.
+        if (f > 0) tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::CutsceneReport now = layer.CutscenePicture(registry);
+        const double scale = now.keyScale;
+        if (f == 0) CHECK(now.landing.keyScalings == 1 && std::fabs(scale - 0.9) < 1e-12);
+        for (const MagicPortalsLayer::EmitterReport& key : keys()) {
+            if (std::fabs(key.systemSize - 12.0 * scale) > 1e-9 * 12.0 * scale) ++wrongSystem;
+            if (key.largestDrawnSize > 17.0 * scale * (1.0 + 1e-9)) ++tooLarge;
+            if (f == 30) {
+                largestAt30 = std::max(largestAt30, key.largestDrawnSize);
+                drawnAt30 += key.drawn;
+            }
+        }
+    }
+    CHECK_MSG(wrongSystem == 0, std::to_string(wrongSystem) + " frames' systems not at 12 x the key's scale");
+    CHECK_MSG(tooLarge == 0, std::to_string(tooLarge) + " frames drew a sparkle over 17 x the key's scale");
+    CHECK_MSG(largestAt30 >= 0.0 && largestAt30 < 17.0 * std::pow(0.9, 31.0) * (1.0 + 1e-9) && largestAt30 < 0.67,
+              "30 frames after the door the largest drawn is " + std::to_string(largestAt30) + " units (" +
+                  std::to_string(drawnAt30) + " drawn)");
+    CHECK_MSG(others() == othersBefore, "no other system on the level was scaled");
+    std::printf("  4-19: the key's sparkles at most %.3f units before the door, %.4f 30 frames after it (%d drawn)\n",
+                largestBefore, largestAt30, drawnAt30);
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -16595,6 +16764,8 @@ void runTests() {
     TheRocketLaunchesAfter4_01sDoor();
     TheRocketLandsAfter4_19sDoor();
     TheKnightWalksIntoTheDoorAfter2_32();
+    TheMedalIsSavedOnTheDoorsTick();
+    TheLandingKeysSparklesShrinkWithIt();
 }
 
 } // namespace

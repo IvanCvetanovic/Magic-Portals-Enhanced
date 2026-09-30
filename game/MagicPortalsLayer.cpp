@@ -783,11 +783,11 @@ void MagicPortalsLayer::goTo(entt::registry& registry, int next) {
     if (const Popup::Class* cls = m_popupRules.FindClass(m_popupRules.gameFinished)) openMenuPopup(*cls);
 }
 
-// Defined below. Declared here because clearLevel records the FINAL medal and
+// Defined below. Declared here because recordWin records the FINAL medal and
 // comes first in this file.
 int MedalFor(const MagicPortalsLayer::Cleared& cleared);
 
-void MagicPortalsLayer::clearLevel(entt::registry& registry) {
+void MagicPortalsLayer::recordWin() {
     const Chapters::Level& entry = m_chapters.levels[static_cast<std::size_t>(m_current)];
     Cleared cleared;
     cleared.name = entry.name;
@@ -799,26 +799,38 @@ void MagicPortalsLayer::clearLevel(entt::registry& registry) {
     cleared.crystals = cleared.crystalsTotal - m_level.goals.Remaining();
     m_lastCleared = cleared;
 
-    // THE FINAL MEDAL, not the one the screen is about to count up to.
+    // THE FINAL MEDAL, not the one the screen will count up to.
     //
     // The finished screen's medal follows its counter as it rises, which is a
-    // picture (LevelEnd::ShownScore); this is the result. The original writes it at this same moment
-    // and from a different object - GameStateController::writeScore, not the
-    // layer that animates it - for the same reason.
+    // picture (LevelEnd::ShownScore); this is the result, written from a
+    // different object - GameStateController::writeScore, not the layer that
+    // animates it - for the same reason.
+    //
+    // ON THE DOOR'S TICK, as the original writes it: checkGameEnd calls
+    // writeScore (#75) on the frame the character goes in, its setScore (#48)
+    // writes the file there and then, and the LevelFinishedLayer it builds with
+    // this play's counts (#50-69) is made current only once gameWonDelay has
+    // passed. So nothing in the beat - R, N, the window closed - loses the medal,
+    // on 4-19's 14.5 s as on the 1.4 s of every other level; and the screen counts
+    // up to the door's tick's numbers, which m_lastCleared keeps for it.
     //
     // Saved only when it changed. ScoreManager::setScore writes only when the
     // new score beats the old, so a replay that goes worse takes nothing away
     // and costs no write at all.
-    if (m_scores.Record(entry.world, entry.index, MedalFor(cleared))) {
+    const int medal = MedalFor(cleared);
+    if (m_scores.Record(entry.world, entry.index, medal)) {
         if (std::string why; !m_scores.Save(why)) {
             SUPERSONIC_LOG_WARN("Magic Portals") << "medals not saved: " << why << std::endl;
+        } else {
+            SUPERSONIC_LOG_INFO("Magic Portals") << cleared.label << " medal " << medal
+                                                 << (m_scores.Persists() ? " saved" : " kept (no save directory)")
+                                                 << " on tick " << m_ticks << std::endl;
         }
+    } else {
+        SUPERSONIC_LOG_INFO("Magic Portals") << cleared.label << " medal " << medal << " on tick " << m_ticks
+                                             << ": the save's " << m_scores.Get(entry.world, entry.index)
+                                             << " is as good" << std::endl;
     }
-
-    // The original does not go straight on: GameStateController::writeScore
-    // puts a LevelFinishedLayer up, with the medal the play earned and buttons
-    // to play it again, go on, or pick another.
-    openFinished(registry);
 }
 
 // The medal a play earns, as computeScore has it (ScoreManager.angelscript,
@@ -1114,7 +1126,7 @@ void MagicPortalsLayer::unloadEmitters(entt::registry& registry) {
 }
 
 void MagicPortalsLayer::stepEmitter(entt::registry& registry, Emitter& emitter, double elapsedMs,
-                                   const Particles::Random& random, bool pooled) {
+                                   const Particles::Random& random, bool pooled, double scaleAfterStep) {
     using namespace Supersonic;
     const Particles::System& system = emitter.system;
     // What becomes of the quad of a particle this frame does not draw. A level's
@@ -1142,6 +1154,13 @@ void MagicPortalsLayer::stepEmitter(entt::registry& registry, Emitter& emitter, 
         entt::entity& quad = emitter.quads[static_cast<std::size_t>(i)];
         if (Particles::Step(system, particle, i, pool, emitter.owner, elapsedMs, emitter.killed, random)) {
             ++emitter.active;
+        }
+        // An ETHEntity::Scale made after this update and before the draw: the
+        // live particle's size and velocity (PARTICLE::Scale,
+        // ETHParticleManager.h:160-164), so it is drawn at the new size.
+        if (scaleAfterStep != 1.0) {
+            particle.size *= scaleAfterStep;
+            particle.velocityPx *= scaleAfterStep;
         }
         if (!Particles::Drawn(system, particle, emitter.killed)) {
             put_away(quad);
@@ -1176,6 +1195,9 @@ void MagicPortalsLayer::stepEmitter(entt::registry& registry, Emitter& emitter, 
         placeSprite(registry, quad, particle.atPx, Particles::QuadPx(particle), emitter.z,
                     Particles::WorldRotation(particle));
     }
+    // And the system, which the next update resets and renews from
+    // (ETHParticleManager.cpp:444-451, ETHParticleSystem.cpp:27-40).
+    if (scaleAfterStep != 1.0) Particles::Scale(emitter.system, scaleAfterStep);
 }
 
 void MagicPortalsLayer::updateEmitters(entt::registry& registry, float deltaTime) {
@@ -1233,7 +1255,24 @@ void MagicPortalsLayer::updateEmitters(entt::registry& registry, float deltaTime
                 emitter.killed = m_level.dragon.systemKilled;
             }
         }
-        stepEmitter(registry, emitter, elapsedMs, random, false);
+        // 4-19'S KEY, WHICH THE LANDING SHRINKS (cutscenes.json rocket_landing):
+        // Scale(0.9) every frame from the door's, and ETHEntity::Scale(float) scales
+        // the entity's systems with it (ETHEntity.cpp:591-599, through
+        // ETHSpriteEntity.cpp:512-518), so its sparkles shrink to nothing with the
+        // picture rather than glowing on in the doorway (step 123's deviation 1).
+        // After this frame's step and before the draw: the key is a dynamic entity
+        // with a callback, updated with its particles in UpdateAlwaysActiveEntities,
+        // and rocket_landing a static one whose callback runs after, in
+        // UpdateCurrentFrameEntities (ETHScene.cpp:467-488). As many calls as the
+        // landing has made since this emitter last took one, on the same clock
+        // as the picture's keyScale.
+        double scaleAfterStep = 1.0;
+        if (m_landing.running && emitter.sprite >= 0 && emitter.sprite == m_landingKeySprite) {
+            for (; emitter.scalingsTaken < m_landing.keyScalings; ++emitter.scalingsTaken) {
+                scaleAfterStep *= m_cutsceneRules.landing.keyScalePerFrame;
+            }
+        }
+        stepEmitter(registry, emitter, elapsedMs, random, false, scaleAfterStep);
     }
 }
 
@@ -1271,6 +1310,11 @@ std::vector<MagicPortalsLayer::EmitterReport> MagicPortalsLayer::EmitterReports(
         report.active = emitter.active;
         report.drawn = static_cast<int>(
             std::count_if(emitter.quads.begin(), emitter.quads.end(), [](entt::entity q) { return q != entt::null; }));
+        for (std::size_t p = 0; p < emitter.particles.size() && p < emitter.quads.size(); ++p) {
+            if (emitter.quads[p] != entt::null) {
+                report.largestDrawnSize = std::max(report.largestDrawnSize, emitter.particles[p].size);
+            }
+        }
         if (emitter.sprite >= 0 && emitter.sprite < static_cast<int>(m_sprites.size())) {
             const DrawnSprite& owner = m_sprites[static_cast<std::size_t>(emitter.sprite)];
             report.node = owner.sprite.node;
@@ -5054,7 +5098,8 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             ownerPx += m_launch.pose.bridgeOffsetPx;
         }
         // And the key the landing's SeekEntity('key') finds: Scale(0.9) a frame about
-        // its own point, and its alpha that scale (#185-227).
+        // its own point, and its alpha that scale (#185-227). Its systems shrink with
+        // it in updateEmitters.
         if (drawnIndex == m_landingKeySprite && m_landing.running) {
             centrePx = ownerPx + (centrePx - ownerPx) * m_landing.keyScale;
             sizePx *= m_landing.keyScale;
@@ -9376,10 +9421,15 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         // hidden player neither finishes nor dies again.
         if (m_finishing) {
             // Already in the door: the level keeps running behind the effect,
-            // as the original's does, and the score comes when the beat is up.
+            // as the original's does, and the screen comes when the beat is up
+            // (the medal was saved on the door's tick, recordWin).
             m_finishClockMs += dtMs;
             m_padEndByte = LevelEnd::PadDecayByte(m_levelEndRules, m_padEndByte, 1);
-            if (m_screen == Screen::None && m_finishClockMs >= m_wonDelayMs) clearLevel(registry);
+            // The original does not go straight on: once gameWonDelay is up,
+            // checkGameEnd makes the LevelFinishedLayer writeScore built on the
+            // door's frame current - the medal the play earned, and buttons to
+            // play it again, go on, or pick another.
+            if (m_screen == Screen::None && m_finishClockMs >= m_wonDelayMs) openFinished(registry);
         } else if (m_dying) {
             // Killed, and the lost screen not up yet: the level goes on running
             // behind it exactly as it does behind the door's effect.
@@ -9415,6 +9465,8 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             // Said with the tick, so a capture can be dated from the door.
             SUPERSONIC_LOG_INFO("Magic Portals") << "door reached on tick " << m_ticks << ", pads at "
                                                  << m_padEndByte << std::endl;
+            // And writeScore, on this same tick (checkGameEnd #75).
+            recordWin();
         } else if (m_level.hazards.playerDied) {
             // DYING, which is not the same moment as the lost screen, and was
             // the whole of this branch before: death was an instant retry, so

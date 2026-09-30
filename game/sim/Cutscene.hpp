@@ -154,6 +154,7 @@ struct Landing {
     double elapsedMs = 0.0; // the door's endElapsedTime, added to only while below 12500
     double bias = 0.0;      // this update's
     double keyScale = 1.0;  // what Scale(0.9) has done to the key, a frame at a time
+    int keyScalings = 0;    // how many times it has: the layer scales the key's systems by as many
 };
 
 struct LandingStep {

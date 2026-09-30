@@ -376,6 +376,7 @@ public:
         int count = 0;       // the pool
         int active = 0;      // GetNumActiveParticles
         int drawn = 0;       // particles with a quad this frame
+        double largestDrawnSize = 0.0; // the largest of those, in units
         bool anyReleased = false;
         glm::dvec2 newestBornPx{0.0}; // the released particle with the youngest life
         double newestAgeMs = 0.0;     // and its age: 0 when it began this frame
@@ -1437,8 +1438,13 @@ private:
     // drawn this frame - kept and made invisible for an effect's emitter, which
     // spawns and spends particles by the dozen, destroyed for a level's, as step
     // 59 built them and the suites count them.
+    //
+    // `scaleAfterStep` is an ETHEntity::Scale another entity's callback makes this
+    // frame, after the owner's own update stepped its particles and before the
+    // draw (ETHScene.cpp:467-488): each particle is stepped on the old system, then
+    // its size and velocity scaled, then drawn; the system is scaled last.
     void stepEmitter(entt::registry& registry, Emitter& emitter, double elapsedMs, const Particles::Random& random,
-                     bool pooled);
+                     bool pooled, double scaleAfterStep = 1.0);
     // A number in [from, to) from the layer's OWN generator.
     double particleRandom(double from, double to);
     // And from the one the EFFECTS draw on (00_order K8): every non-placement
@@ -1636,8 +1642,9 @@ private:
     // select on the chapter's page, and GameFinishedPopup over it after the last
     // chapter's last level.
     void goTo(entt::registry& registry, int next);
-    // The exit reached: recorded, and on to the next level.
-    void clearLevel(entt::registry& registry);
+    // The exit reached: the medal computed and saved on the door's own tick, as
+    // checkGameEnd's writeScore does it; the screen comes later (openFinished).
+    void recordWin();
 
     float viewportAspect(const entt::registry& registry) const;
     void placeCamera(entt::registry& registry);
@@ -2048,6 +2055,9 @@ private:
         // ETHParticleManager::GetNumActiveParticles as of this frame's update: what a
         // light and a halo take the share of.
         int active = 0;
+        // How many of 4-19's landing's Scale(0.9) calls on its owner it has taken:
+        // the key's, whose ETHEntity::Scale scales its systems too (updateEmitters).
+        int scalingsTaken = 0;
         std::vector<Particles::Particle> particles;
         std::vector<entt::entity> quads; // one per particle, null while it is not drawn
         // What its quads are tagged with, so a level's particles and a spawned
