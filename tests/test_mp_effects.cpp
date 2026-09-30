@@ -1068,14 +1068,15 @@ void TheWallStoneAndDoorRowsAreTheDecodedCalls() {
     CHECK_MSG(rules.doorLiftOpenSizeY == -0.5 && rules.doorLiftCloseSizeY == 0.5,
               "half the door's height up as it opens, down as it closes: " + Num(rules.doorLiftOpenSizeY) + ", " +
                   Num(rules.doorLiftCloseSizeY));
-    // 3-15's door, 128 high, shut at (288, 176) eth_z -2 and raised 126 by the port.
+    // 3-15's door, 128 high, shut at (288, 176) eth_z -2 and raised 0.8 x 128 = 102.4
+    // (movers.json `door`, planning step 133).
     const Effects::Spawn opening = Effects::DoorLiftDust(rules, true, glm::dvec2(288.0, 176.0), -2.0, 128.0, kFactor);
     const Effects::Spawn closing =
-        Effects::DoorLiftDust(rules, false, glm::dvec2(288.0, 176.0 - 126.0), -2.0, 128.0, kFactor);
+        Effects::DoorLiftDust(rules, false, glm::dvec2(288.0, 176.0 - 102.4), -2.0, 128.0, kFactor);
     CHECK_MSG(opening.entity == "door_lift_particles.ent" && opening.atPx == glm::dvec2(288.0, 112.0) &&
                   opening.z == -2.0 && opening.zScaled && opening.angleDeg == 0.0f && opening.scale == 1.0,
               "opening: at its top edge, on its depth: " + At(opening.atPx) + " z " + Num(opening.z));
-    CHECK_MSG(closing.atPx == glm::dvec2(288.0, 50.0 + 64.0) && closing.z == -2.0,
+    CHECK_MSG(closing.atPx == glm::dvec2(288.0, (176.0 - 102.4) + 64.0) && closing.z == -2.0,
               "closing: at the raised door's bottom edge: " + At(closing.atPx));
     std::printf("  11.1: a -90 wall's dust turned %s, its line %s; 2217 x%s; the door's dust %s and %s\n",
                 Num(lying.angleDeg).c_str(), At(top).c_str(), Num(big.scale).c_str(), At(opening.atPx).c_str(),

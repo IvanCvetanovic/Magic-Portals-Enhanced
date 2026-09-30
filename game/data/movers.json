@@ -3,8 +3,8 @@
     "The Magic Portals port's movers: the two numbers the Godot project keeps in behaviours.gd",
     "rather than in its data, moved here so they can be retuned without touching code",
     "(Enhanced's own CLAUDE.md rule 1). Both of those are the Godot project's guesses, carried.",
-    "`button` is not: it is decoded, and it is read by sim/Puzzle rather than sim/Mover.",
-    "See docs/planning/2026-09-11-magic-portals-remaster.md, steps 4 and 78."
+    "`button` and `door` are not: they are decoded, and they are read by sim/Puzzle rather than",
+    "sim/Mover. See docs/planning/2026-09-11-magic-portals-remaster.md, steps 4, 78 and 133."
   ],
 
   "oscillation": {
@@ -63,5 +63,45 @@
     ],
     "sink_units": 6.0,
     "ease_rad": 1.5707963705062866
+  },
+
+  "door": {
+    "_note": [
+      "A lift door (door_lift.ent), as ETHCallback_door_lift runs it: it rises 0.8 of its own",
+      "height, eased by smoothEnd over its node's `stride` milliseconds, and it has a status -",
+      "0 shut, 1 opening, 2 open, -1 closing. Its switch opens it only from shut and closes it",
+      "only from fully raised, so one press lifts it all the way and a release lowers it all",
+      "the way. A door closing onto the player kills it. Planning step 133. `ease_rad` is the",
+      "button's (PIb, smoothEnd): the interpolator is the same PositionInterpolator."
+    ],
+    "_source": [
+      "ETHCallback_door_lift (android_game.bin 411544..414041), read in step 133:",
+      "  #44-87    openPos = originalPos + multiply(vector2(0, -GetSize().y x 0.8), rotateZ(angle)):",
+      "            #70 MULIf 0.8f, the 0 pushed last so it is x; every one of the 46 placements has",
+      "            angle 0, so it is straight up",
+      "  #100-109  PositionInterpolator(currentPos, currentPos, stride, false): smoothEnd, as the",
+      "            button's (InterpolationTimer::InterpolationTimer 18322 #5-13)",
+      "  #282-328  at originalPos: startEarthquake(4, 0) if status is not 0, then status 0",
+      "  #330-440  switch active and status 0: reset(originalPos, openPos, stride), status 1",
+      "  #442-471  at openPos: status 2",
+      "  #473-586  switch not active and status 2: reset(openPos, originalPos, stride), status -1",
+      "  #587-633  oldPos, update(), newPos, SetPositionXY(newPos): the move comes after the",
+      "            status reads, which read currentPos - where the LAST frame put it",
+      "GetSize() is GetCurrentSize(): the sprite's frame size times the entity's scale",
+      "(ETHScriptObjRegister.generic.cpp:222, :358; ETHSpriteEntity.cpp:652-683). door_lift.ent's",
+      "sprite is metal_door.png, 32 x 128, at scale 1, and no placement scales it (step 133's",
+      "census, out/parity/program/LD/census.py: 46 doors on 37 levels, none scaled or turned).",
+      "So the rise is 0.8 x 128 = 102.4 units.",
+      "",
+      "ETHBeginContactCallback_door_lift (414041..414627): on a contact beginning with an",
+      "entity whose `isCharacter` is set - only GameCharacter's constructor sets it (#39-56), and",
+      "the one character built is MainCharacter, the player - while `status` is -1 (#41-54),",
+      "`doorHalfSize` = GetSize() x 0.55 (#21-32, vector2::opMul), and the character's",
+      "GetPositionXY() below doorPos.y + doorHalfSize.y (#55-65, TP) and strictly inside",
+      "doorPos.x -+ doorHalfSize.x (#70-96, TP and TS), it sets the character's hp to 0 (#98-108)."
+    ],
+    "rise_share": 0.8,
+    "size_units": [32.0, 128.0],
+    "crush_share": 0.55
   }
 }

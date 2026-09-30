@@ -309,6 +309,14 @@ use them, zero mismatches across 46 buttons and 46 doors, never more than one bu
 `(level, idx)`. Not a latch: the original counts touching entities and has both begin- and
 end-contact callbacks, so a plate releases the instant the last body leaves.
 
+**DECODED** (`ETHCallback_door_lift`, planning step 133). **The door it opens is the latch.**
+It rises 0.8 × its height (102.4 u for `metal_door.png`'s 128), eased by smoothEnd over its
+`stride`, and a status (0 shut, 1 opening, 2 open, −1 closing) lets its button start a rise
+only from shut and a fall only from fully raised: a one-frame press lifts it all the way,
+and a release lowers it all the way once it is up. A door closing onto the player kills it
+(`ETHBeginContactCallback_door_lift`: the player's centre more than 0.55 × the door's height
+below the door's centre and within 0.55 × its width across).
+
 Keys pair with keyholes and locked doors **by colour** (yellow 33 / blue 6 / red 2 per
 role, identical multisets per level) — **never by proximity**, since a keyhole and its
 door can sit 200–340 px apart.

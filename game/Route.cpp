@@ -354,8 +354,9 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
     }
     // A switched door's travel, and where each lift is: what a route waits on.
     for (const auto& door : level->channels.doors) {
-        std::printf("\n          door %s %s %.3f", door.name.c_str(), door.motion.opening ? "opening" : "closing",
-                    door.motion.progress);
+        // Its status, ETHCallback_door_lift's: -1 closing, 0 shut, 1 opening, 2 open.
+        std::printf("\n          door %s status %d %.3f", door.name.c_str(), static_cast<int>(door.motion.status),
+                    static_cast<double>(door.motion.progress));
         if (registry.valid(door.entity)) {
             const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(door.entity).position);
             std::printf(" at (%.1f, %.1f)", at.x, at.y);

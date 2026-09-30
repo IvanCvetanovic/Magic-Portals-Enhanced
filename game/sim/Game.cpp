@@ -271,6 +271,10 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
 
 void BeforeStep(const Data& data, entt::registry& registry, Level& level, float direction, float dt) {
     level.channels.Tick(registry, dt);
+    // A closing lift door's crush, judged where the doors now stand and where the
+    // last step left the player: the contact the original's next step begins
+    // (Puzzle::Channels::Crush). Its death is folded in with the others, below.
+    level.channels.Crush(registry, level.player);
     level.movers.Tick(registry, dt);
     // The bobbing slabs, beside the platforms and for the same reason: what sets
     // a body's position belongs before the step, what judges one after it.
@@ -851,6 +855,10 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     if (level.fields.playerKilled && !level.hazards.playerDied) {
         level.hazards.playerDied = true;
         level.hazards.killedBy = level.fields.killedBy;
+    }
+    if (level.channels.playerKilled && !level.hazards.playerDied) {
+        level.hazards.playerDied = true;
+        level.hazards.killedBy = level.channels.killedBy;
     }
 }
 

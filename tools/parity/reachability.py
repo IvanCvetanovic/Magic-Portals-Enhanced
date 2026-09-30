@@ -98,7 +98,10 @@ class Breaker:
 FREE_ROLES = {
     "lift": "game/sim/Mover.cpp: a lift runs between its two markers",
     "moving_platform": "game/sim/Mover.cpp: the one live moving platform",
-    "switched_door": "game/sim/Game.cpp: a door_lift opens while its button is held",
+    "switched_door": (
+        "game/sim/Mover.cpp: a door_lift rises all the way from one press of its button and "
+        "falls only from fully raised (step 133)"
+    ),
     "locked_door": "game/sim/Keys.cpp: a locked door goes when its key reaches the keyhole",
     "hinge": "game/sim/Hinge.cpp: a seesaw or a spinning platform turns on its joint",
 }

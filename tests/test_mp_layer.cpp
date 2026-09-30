@@ -6150,9 +6150,11 @@ void ASwitchedDoorShakesTheViewAsItGoes() {
         for (const auto& door : played.channels.doors) n += door.motion.opening ? 0 : 1;
         return n;
     };
+    // Landed: the callback sees the door home a frame after it gets there, and
+    // shakes then (#282-315), which is what the door counts (Mover::Door::landings).
     const QuakeCount shut = [](const PlayedLevel& played) {
         int n = 0;
-        for (const auto& door : played.channels.doors) n += !door.motion.opening && door.motion.progress <= 0.0f ? 1 : 0;
+        for (const auto& door : played.channels.doors) n += door.motion.landings;
         return n;
     };
     checkQuakeRow(layer, registry, ticks, tickUntilUp(layer, registry, ticks, 600, opening), "3-15 door_opening", 4.0, true);
@@ -15390,7 +15392,7 @@ void AStoneADespawnerTakesLeavesItsPuff() {
     layer.OnDetach(registry);
 }
 
-// 3-15 (level14b) left to run: step 76's knight on button_1666 opens a switched
+// 3-15 (level14b) left to run: step 76's knight on button_1656 opens a switched
 // door and later lets it close (step 101's ticks). On each turn nothing is added
 // on the tick; on the frame one door_lift_particles at the door's point where the
 // tick BEGAN - the watch's progress, not the one BeforeStep has just stepped -

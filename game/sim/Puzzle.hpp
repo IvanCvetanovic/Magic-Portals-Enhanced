@@ -1,14 +1,20 @@
 #pragma once
 
 // A level's buttons and the doors they open: behaviours.gd's Switch (:179-206)
-// and LevelRuntime._wire_channels (level_runtime.gd:184-200).
+// and LevelRuntime._wire_channels (level_runtime.gd:184-200), and since planning
+// step 133 the doors as ETHCallback_door_lift runs them (Mover::Door).
 //
 // A button is pressed while any dynamic body is on its trigger. It keeps a count,
-// and it is not a latch. When it changes it sets every door on its channel,
-// because button `idx` and door_lift `switchIdx` are one numbering. As through the
-// Godot project's EventBus, the last change wins. So of two buttons on one channel, the
-// door follows whichever changed last rather than whichever is held. level30 has
-// one button per channel.
+// and it is not a latch: that is its 'active'. A door reads ONE button, the first
+// whose `idx` is its `switchIdx` (seekEntity('button', SwitchChooser(switchIdx)),
+// #139-156), every frame, and its own status machine decides what that does to
+// it: a door opens only from shut and closes only from fully raised. Every one of
+// the 46 doors has exactly one button on its channel (step 133's census).
+//
+// AND A CLOSING DOOR CRUSHES THE PLAYER (ETHBeginContactCallback_door_lift): on the
+// tick the player begins to touch a door whose status is closing, with its centre
+// below the door's centre by more than 0.55 of the door's height and within 0.55
+// of its width either side, the player dies (Crush).
 //
 // AND A PRESSED BUTTON SINKS (movers.json `button`, decoded in D10). It slides
 // `sink_units` down over its node's `stride` milliseconds, eased by sin(PIb * x),
@@ -38,10 +44,12 @@
 
 namespace MagicPortals::Puzzle {
 
-// The port's button numbers, game/data/movers.json `button`. Decoded, not guessed.
+// The port's button and door numbers, game/data/movers.json `button` and `door`.
+// Decoded, not guessed.
 struct Rules {
     double sinkPx = 0.0;  // scale(6), in the level's units, down
     double easeRad = 0.0; // PIb: smoothEnd is sin(bias * this)
+    Mover::DoorRules door;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -80,15 +88,32 @@ struct SwitchedDoor {
     int channel = -1;
     entt::entity entity = entt::null;
     Mover::Door motion;
+    int button = -1;              // its switch, an index into Channels::buttons; -1 for none
+    bool playerTouching = false;  // as of the last Crush, to find a contact's beginning
 };
 
 struct Channels {
     std::vector<Button> buttons;
     std::vector<SwitchedDoor> doors;
+    Mover::DoorRules doorRules;
 
-    // One tick, before the physics step. Every button counts what is on it, a
-    // button that changed sets its channel's doors, and every door travels.
+    // A closing door's kill (Crush), as the other killers report one.
+    bool playerKilled = false;
+    std::string killedBy;
+
+    // One tick, before the physics step. Every button counts what is on it, and
+    // every door runs its status machine on its own button and travels.
     void Tick(entt::registry& registry, float dt);
+
+    // ETHBeginContactCallback_door_lift, right after Tick has moved the doors and
+    // before the step moves the player: a contact begins in the original's next
+    // step with the door where this frame's callback put it, under this frame's
+    // status, and the player where the last step left it. A door the player
+    // begins to overlap while it is closing, with the player's centre more than
+    // crushShare x its height below its centre and strictly within crushShare x
+    // its width of it across, kills it. The player's centre is its capsule's, 22
+    // over the feet where the original's entity point stands 18.1 (Keys says so).
+    void Crush(entt::registry& registry, entt::entity player);
 
     // Whether any button on the channel is pressed.
     bool Pressed(int channel) const;
@@ -96,9 +121,9 @@ struct Channels {
     const SwitchedDoor* FindDoor(const std::string& name) const;
 };
 
-// Every switch and switched_door in a built level. False, with `error`, when a
-// button has no idx or no stride, a door has no switchIdx or stride, or a door was
-// not built. A button's own body may be missing without refusing the level: then
+// Every switch and switched_door in a built level, each door on the first button
+// of its channel. False, with `error`, when a button has no idx or no stride, a
+// door has no switchIdx or stride, or a door was not built. A button's own body may be missing without refusing the level: then
 // only its trigger sinks, and there is no picture to follow it.
 bool Wire(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built, const Rules& rules,
           Channels& out, std::string& error);

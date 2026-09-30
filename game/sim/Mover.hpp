@@ -24,27 +24,68 @@ namespace MagicPortals::Mover {
 // velocity that gets it there in `dt`: (target - where it is) / dt.
 void MoveKinematic(entt::registry& registry, entt::entity entity, const glm::vec3& target, float dt);
 
-// A switched door, behaviours.gd's Mover.gated (:140-148, :170-176): it opens by
-// rising its own height, 126 px, over `stride` milliseconds, and closes the same
-// way. Reversed mid-travel it resumes from where it is rather than snapping.
-inline constexpr double kDoorRisePx = 126.0;
+// A lift door (door_lift.ent), as ETHCallback_door_lift runs it (movers.json
+// `door`, planning step 133). Until then the port ran the Godot project's
+// Mover.gated: 126 px at one speed, turned wherever its channel turned it.
+//
+// It rises 0.8 of its own height over its node's `stride` milliseconds, eased by
+// smoothEnd, and a status says where it is in that: shut, opening, open, closing.
+// Its switch starts a rise only from shut and a fall only from fully raised, and
+// nothing stops a leg once it has started. So a button pressed for one tick lifts
+// the door all the way, and one let go lowers it all the way - but only once it
+// has finished rising.
+enum class DoorStatus : int { Closing = -1, Shut = 0, Opening = 1, Open = 2 };
 
-struct Door {
-    glm::vec3 closed{0.0f}; // world metres, where the level places it
-    glm::vec3 open{0.0f};
-    float durationS = 1.0f;
-    float progress = 0.0f; // 0 closed, 1 open
-    bool opening = false;
+// The door's numbers, movers.json `door`, decoded.
+struct DoorRules {
+    double riseShare = 0.0;      // of its height: openPos is 0.8 x GetSize().y above originalPos
+    glm::dvec2 sizeUnits{0.0};   // GetSize(): metal_door.png at scale 1
+    double crushShare = 0.0;     // ETHBeginContactCallback_door_lift's doorHalfSize, GetSize() x 0.55
+    double easeRad = 0.0;        // PIb: smoothEnd is sin(bias x this), the button's
 
-    // One step of travel, and the body moved there (MoveKinematic).
-    void Tick(entt::registry& registry, entt::entity entity, float dt);
+    double RisePx() const { return riseShare * sizeUnits.y; }
 };
 
-// A door as the level places it: closed where the node stands, opening upward by
-// kDoorRisePx over its metadata/stride milliseconds - a bare number with no
-// `speed`, so a duration, by behaviours.gd's stride rule. False, with `error`,
+struct Door {
+    // originalPos and openPos, in the level's pixels (+y down) and in world metres.
+    glm::dvec2 closedPx{0.0};
+    glm::dvec2 openPx{0.0};
+    glm::vec3 closed{0.0f};
+    glm::vec3 open{0.0f};
+    double strideMs = 0.0;
+    double easeRad = 0.0;
+
+    // The PositionInterpolator: m_a, m_b and m_elapsedTime. Built on the level's
+    // first frame as (originalPos, originalPos), so it holds the door where it is.
+    glm::dvec2 fromPx{0.0};
+    glm::dvec2 toPx{0.0};
+    double elapsedMs = 0.0;
+
+    // currentPos: where the last tick put it, which is what this tick's status reads.
+    glm::dvec2 atPx{0.0};
+    DoorStatus status = DoorStatus::Shut;
+
+    // What the layer and the suites watch. `progress` is the share of the rise it
+    // stands at, 0 shut and 1 fully raised. `opening` is the leg it last started,
+    // so it flips exactly when the status machine starts one (#389, #530).
+    // `landings` counts its returns to shut from a fall (#310-315's shake).
+    float progress = 0.0f;
+    bool opening = false;
+    int landings = 0;
+
+    // PositionInterpolator::getCurrentPos: m_b once the clock is past the stride,
+    // a + (b - a) x sin(PIb x clamp(t / stride, 0, 1)) before it.
+    glm::dvec2 InterpolatedPx() const;
+
+    // One frame of ETHCallback_door_lift (#210-633) with its switch `active` or not,
+    // and the body moved where it puts it (MoveKinematic).
+    void Tick(entt::registry& registry, entt::entity entity, bool active, float dt);
+};
+
+// A door as the level places it: shut where the node stands, opening straight up
+// by rules.RisePx() over its metadata/stride milliseconds. False, with `error`,
 // when the node has no stride.
-bool DoorFromNode(const Tscn::Node& node, Door& out, std::string& error);
+bool DoorFromNode(const Tscn::Node& node, const DoorRules& rules, Door& out, std::string& error);
 
 // The port's own mover numbers, game/data/movers.json: two of the
 // Godot project's guesses, which it keeps in behaviours.gd rather than in its data.

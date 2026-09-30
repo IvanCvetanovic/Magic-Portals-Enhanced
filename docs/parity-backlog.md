@@ -66,7 +66,8 @@ suites a change touches once each, and report what stayed blocked.
       (P0) moved the engine pin to `a733ca0` and re-took the sweep: 128 of 128 byte-identical, so the baseline
       stands.* *Step 131 (P1, clamp-to-edge) moves the outer half-texel of every picture whose opposite borders differ,
       so the standing baseline becomes `out/parity/program/P1/clamp/after/sweep` (the same bytes as
-      `P1/clamp/fix1/sweep`); every earlier byte-identical baseline is stale.*
+      `P1/clamp/fix1/sweep`); every earlier byte-identical baseline is stale.* *Step 133 (LD, the lift door) re-took
+      the sweep: 128 of 128 byte-identical to it, so it stands.*
 - [x] **`test_mp_launchers` and `test_mp_keys` have not run on the merged binaries** (step 112). The merge relinked
       both; Smart App Control refused each twice (the first launch or the ctest, then the one relink), and the merge's
       independent check did not launch them. Their last runs: `test_mp_launchers` 105 on track B (step 109; 98 on
@@ -1465,7 +1466,11 @@ work no step of §7 owns, and the owner's calls:
       closes) and 4-19's (the row "4-19's route rides the port's shot and lift door"), re-pins `test_mp_play`'s
       `kDoorRisePx` checks and `ALiftDoorLeavesItsDustAsItOpensAndCloses`, and adds 4-21's route (the candidate: a
       portal beyond the raised door, one on the player). Routes that pass through a wall broken by touch: 3-12 and 3-14
-      (step 127).*
+      (step 127).* *The lift-door clause is built in step 133 (LD): 102.4 u eased by smoothEnd, the status machine,
+      and a closing door crushes the player (`ETHBeginContactCallback_door_lift`); 4-21 is won and the six routes are
+      re-verified on their old ticks (section 6, B7). `kDoorRisePx` is gone and `test_mp_play`'s door checks are re-pinned
+      on 102.4; `ALiftDoorLeavesItsDustAsItOpensAndCloses` is NOT re-pinned (its comment only; section 6's row). The
+      other three clauses stay open.*
 - [ ] **Order 11.1, recorded, and tidy** (step 109): the wall's angle is the converter's 1.5708 rad (-90.00021 deg, 0.0002
       u over the half line); static callbacks add their dust only while their bucket is drawn in the original
       (deviation 6, with steps 78-80's rows); 2-32's claw's `wall_destroy` at angle 90 has no owner in 00_order section 7;
@@ -1476,7 +1481,8 @@ work no step of §7 owns, and the owner's calls:
       round has 128 and the same frame - and lines 5-6 call the wall "the level's only way to the rocket", unproven
       (the row "4-19's way under the key's room"); and `game/sim/Game.cpp` 488-489 still send a reader to
       `RedKey.hpp` for the wall "a frame later" (step 118's withdrawn deviation 3; its verifier found both). The
-      comments wait for an edit that recompiles them anyway.
+      comments wait for an edit that recompiles them anyway. *Step 133 fixed the `button_1666` / `button_1656` name
+      in the dust test's comment; the rest stays.*
 - [ ] **Order 11.2, THE OWNER'S TO RULE: the fire signal's orbit** (step 110, deviation 1; GAMEPLAY, applied): clockwise
       from above and added on its torch (decoded #42-108; L1: 296-300 deg/s at 48-54 px), where the port had it
       counter-clockwise from a full radius to the torch's left. In the original this is the picture alone; it changes
@@ -1578,7 +1584,12 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   4-04, 4-05, 4-09, 4-10, 4-12, 4-13, 4-14, 4-20, 4-21, 4-22, 4-23, 4-24, 4-26, 4-27, 4-28. Twelve carry a recorded
   cause: 1-17 (a pocket sealed to shots until its crates are cleared), 2-06 and 4-14 (G6), 2-10, 2-11, 2-16, 2-17
   and 2-19 (G8), 2-21 and 2-24 (B4), 4-21 (the lift door's latch, B7), 4-28 (no route found under R1; G8 or the
-  minion burn, not proven unwinnable). No step has recorded an attempt at the other 46. Open until all 128.)*
+  minion burn, not proven unwinnable). No step has recorded an attempt at the other 46. **Step 133 (LD, the lift
+  door) adds 4-21** (`level20c`, tick 587, by the door's latch; B7): **71 of 128** won by a route `test_mp_routes`
+  replays (218 checks, 0 failures), chapter 4: 17. It re-authors 2-18 (1963 -> 1965) and 4-31 (997 -> 1167), and 2-07
+  and 4-29 move to 1008 and 1501. The 57 not won lose 4-21, and eleven of them carry a recorded cause. Eleven of the
+  57 hold a lift door, whose win the latch and the crush now shape with no route to show it either way: 1-13, 1-18,
+  1-26, 1-31, 2-17, 2-24, 2-29, 3-05, 3-16, 4-22, 4-24. Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1589,7 +1600,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   Steps 125-127 (track C) and the merge (step 128): 108 reachable, 20 opened, 0 sealed, 0 differ from the pin,
   which no wave-1 step after 118 rewrote. That is no evidence for R1, R2 or R17: the flood models no no-portal
   zone, so a zone that grew or went cannot move a verdict (step 127, deviation 4; the Tests row "The reachability
-  flood is optimistic"). The routes are their evidence.)*
+  flood is optimistic"). The routes are their evidence. Step 133 (LD): 108 / 20 / 0, 0 differ. The flood treats every
+  lift door as open (`FREE_ROLES` `switched_door`), so it sees neither the latch nor the crush; that step's evidence is
+  its routes.)*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1644,6 +1657,8 @@ it was to carry is not built: the engine now has one per texture (`a915514`), an
 that re-takes every baseline, left for its own step (the Tests row "2-32's claw draws a line").* *(7) is completed by step
 131 (P1): the engine's clamp chosen per material (`710bffc`, reviewed by the other game's session before its push) and
 the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp line and the sky's edge rows are gone.*
+*(1) is done by step 133 (LD): the lift door as `ETHCallback_door_lift` runs it, and a closing door crushes the player;
+4-21 is won (tick 587) and 1-14, 1-15, 1-16, 1-21, 1-32 and 4-19 are re-verified on their old ticks (B7).*
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [ ] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -1709,13 +1724,20 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
       the stone and the original's tap-time ray ends 10 u inside a teleportable body and would kill it (R23; the route
       wins without the kill); the static callback runs only while the agent's bucket is drawn (not modelled); a shot
       fired from within 22.4 kills at once (G4's row).
-- [ ] **B7. 4-21 at risk: R2** - the well's port-only zone (248 px) covers the button, the wall and the door. KNOWN.
+- [x] **B7. 4-21 at risk: R2** - the well's port-only zone (248 px) covers the button, the wall and the door. KNOWN.
       *The port-only zone is gone (step 125, R2), and 4-21 (`level20c`) is still not won.* The cause is now the port's
       lift door, which has no latch: portal resets over `button_1723` raise `door_lift_1721` 5.6 px at most (y 106 to
       100.4, 16 ticks a pair), against more than 15 px for a shot line under it and 43 px to walk under. The
       original's door latches (`ETHCallback_door_lift` #330-546), so one press opens it fully. Blocked on the "Order
       11.1, GAMEPLAY rows for the owner" row (the lift door's rise and status machine, step 109 deviation 3), which is
-      decided for the original and needs only a step spec that names it; that step adds 4-21's route.
+      decided for the original and needs only a step spec that names it; that step adds 4-21's route. *Built in step
+      133 (LD)*: `Mover::Door` runs `ETHCallback_door_lift` #1-638 (a rise of 0.8 x 128 = 102.4 u eased by smoothEnd;
+      opened only from shut, closed only from fully raised, a press during the fall landing it and rising again) and
+      `Channels::Crush` its begin-contact callback #1-117 (a door closing onto the player kills it). GAMEPLAY, all 46
+      lift doors on 37 levels. **Won by a route: 4-21** (`level20c`), tick 587: two taps and the walk, no DEV flag; the
+      drift over `button_1723` (218-222, again about 229-233) lifts `door_lift_1721` all the way over its 6000 ms and
+      the player passes under it (490-575). Replayed by `test_mp_routes` and in the window (`LD/verify1`) on the same
+      tick.
 
 **Majors with no row above** (VERIFIED unless marked).
 - [ ] **G1. Knights never see, shoot or destroy portals** (`ETHCallback_minion` L87616: 120 deg cone + occlusion ray,
@@ -1895,7 +1917,8 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
       `tools\parity\play_build.bat` builds `build-play\` without validation for playing. GAMEPLAY: none); tutorial
       helpers (1-21's camera hint, the tap-away hands); the beholder's death explosion; `fire32`,
       `antiportal_explosion` (*built in step 126*), `carranca_destroy`, `small_explosion_no_light`; the closing lift door
-      crushes nothing; `death_area` kills only the player in a 16 px box; no teleport while a platform sits in a portal;
+      crushes nothing (*built in step 133*: it kills the player it closes on, the one character); `death_area`
+      kills only the player in a 16 px box; no teleport while a platform sits in a portal;
       stale notes (`end_delay` - *corrected in step 123*, `Camera.hpp:6-10`, `entity_roles.json`'s cosmetic `arrows`
       (its `red_key_state` a role of its own since step 118, and its `rocket_launch` / `_landing` note rewritten in step
       123); `Turrets.hpp:17-22`'s and `diamonds.json`'s `_fireball_note` were corrected in step 114). And, from step
@@ -1926,6 +1949,8 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       - so their steps' evidence that no door was newly sealed is their routes and scripted checks
       (`R1/fix2/check_3_15.txt`, `check_4_14.txt`, `check_2_26.txt`, `check_2_31b.txt`, `check_2_31c.txt`). 3-13 and
       4-21 now rest on that: 3-13 is won (step 126), 4-21 is not (B7). A tools step gives the flood a zone term.
+      *4-21 is won by step 133's route (tick 587). The flood also treats every lift door as open, so it cannot see
+      that step's latch or crush either.*
 - [x] **`--route` without `--saves` writes the player's own save** when the run goes past the level's end: say so in
       its `--help` line, or give it a throwaway saves directory (code; the next step touching `main.cpp`). Step 113's
       runs left gold for 1-02 and 1-32 in `%APPDATA%/Magic Portals/scores.json` - the owner deletes it for a fresh
@@ -2189,7 +2214,33 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
 - [ ] **4-19's route rides the port's shot and lift door** (step 118): its third to fifth taps put a shot under a door that
       the crate on the button holds up for 15 ticks, and turns back as soon as it is let go (step 109's row); the step that
       builds G4 or the door's open-from-shut rule re-authors them. The original's route (F17 r5) opened a portal inside
-      a crate, which the port's shot, failing on a crate, cannot.
+      a crate, which the port's shot, failing on a crate, cannot. *Step 133 built the door's open-from-shut rule: the
+      crate's 15-tick press now raises `door_lift_2498` all the way (to 25.6) and it falls from there on 113 (98
+      before, from 65); the route wins on its old tick 581 unchanged. The shot's half (G4) stays.*
+- [ ] **Step 133's recorded deviations** (the lift door, 1-6). (1) The crush's point is the player's capsule centre,
+      22 over the feet, where the original's entity point stands 18.1 over; under a falling door either is far below
+      the 70.4 the callback asks. (2) A contact begins on the first tick of an overlap, with no Box2D skin. (3) The
+      door's clock is the fixed step in milliseconds (a float step summed in double), where the original adds whole
+      milliseconds a frame (section 2's PORT-WIDE clock row). (4) `awakeEntitiesAround` is not modelled. (5) The door's
+      callback runs off screen, where the original's static callback runs only while its bucket is drawn (00_order
+      8.12c; section 2's bucket-visibility rows, "Order 10.3, gameplay rows" and "Order 13.1, the off-screen kill").
+      The latch makes it matter more: a door pressed off screen now starts a whole rise. **3-15's `door_lift_1677`**
+      (a knight on `button_1656`, tick 290) is fully raised by f420 with its bottom above the view (y -6.4): the
+      original's callback may stop there and leave it up, where the port lowers it on tick 443; no route depends on
+      it, and any door that leaves the view while raised is the same case. 4-21's door stays on screen through its
+      press (camera (424, 128)). (6) `test_mp_play`'s floor stays 171 (it runs 223): the next step that relinks the
+      runner anyway raises it.
+- [ ] **2-18's re-authored kill threads about 0.4 px** (step 133, left for the owner): `level17a.json`'s shot toward
+      (54, 72) passes about 0.4 px under the raised `door_lift_1146`'s bottom (56.6) and about 0.3 px over the barrel's
+      left corner (120.7, 65.0), 21.6 px from the agent (R17's 22.4). Deterministic, won on 1965, and the geometry's (no
+      line clears the door's corner, the barrel's corner and the agent's 22.4 each by more than about 0.5 px), but maybe
+      not how the original is played; its reflector (`reflect_agent_1180`) is unused. Whichever step next touches the
+      shot (G4), the door or the player's jump (G10) re-verifies 2-18 first.
+- [ ] **`ALiftDoorLeavesItsDustAsItOpensAndCloses` does not pin the rise** (step 133's verifier): it compares the dust
+      against mix(closed, open, the watch's progress), so it passes at any rise; its print shows the closing dust at
+      (430, -6.4), which is 32 - 102.4 + 64. The 102.4 itself is pinned in `test_mp_play` (`DoorsTakeTheirStrideFromTheLevel`,
+      `ADoorRisesEasedAndLatches`, `ACrateOnAButtonOpensItsDoor`). The next step that relinks `test_mp.exe` anyway adds
+      an absolute check that the closing dust sits at y 32 - RisePx() + 64.
 
 - [ ] **Wave 1's routes lean on the port where the original is not shown** (step 127, deviation 8; step 125, deviation
       3), each for the step that builds the row to re-verify: body-overlap traversal, where the original tests a point

@@ -1,9 +1,10 @@
 {
   "_about": [
     "1-14: right off the ledge to the floor, left onto button_772 and stay there: door_lift_774 rises",
-    "while the button is held. Through the open door, a portal on the far side; one just ahead of the",
-    "player; right held, in and out beyond the door, which closes behind as the button comes up, and on",
-    "to the exit. Won on tick 240 (step 113)."
+    "all the way (700 ms; since step 133 it latches, as the original's does). Through the open door, a",
+    "portal on the far side; one just ahead of the player; right held, in and out beyond the door, which",
+    "falls from fully raised behind as the button comes up, and on to the exit. Won on tick 240 (step",
+    "113, and again in step 133)."
   ],
   "level": "level13",
   "win_by": 300,

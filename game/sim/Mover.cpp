@@ -6,6 +6,7 @@
 #include "sim/Units.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 
@@ -18,13 +19,52 @@ void MoveKinematic(entt::registry& registry, entt::entity entity, const glm::vec
     transform.position = target;
 }
 
-void Door::Tick(entt::registry& registry, entt::entity entity, float dt) {
-    const float step = dt / durationS;
-    progress = std::clamp(progress + (opening ? step : -step), 0.0f, 1.0f);
-    MoveKinematic(registry, entity, glm::mix(closed, open, progress), dt);
+glm::dvec2 Door::InterpolatedPx() const {
+    // getCurrentPos (20104 #3-18): m_b when m_elapsedTime > m_time; getBias clamps
+    // the fraction before the filter (18855 #9-31). As the button reads it
+    // (Puzzle::Button::DepthPx), on the port's millisecond clock.
+    if (strideMs <= 0.0 || elapsedMs > strideMs) return toPx;
+    const double bias = std::sin(easeRad * std::clamp(elapsedMs / strideMs, 0.0, 1.0));
+    return fromPx + (toPx - fromPx) * bias;
 }
 
-bool DoorFromNode(const Tscn::Node& node, Door& out, std::string& error) {
+void Door::Tick(entt::registry& registry, entt::entity entity, bool active, float dt) {
+    // Every status read is of currentPos, where the last frame's SetPositionXY left
+    // it (#1-6), so each arrival is seen a frame after it happens.
+    if (atPx == closedPx) {
+        // #282-328: back shut. The shake is the layer's, off `landings`.
+        if (status != DoorStatus::Shut) ++landings;
+        status = DoorStatus::Shut;
+    }
+    if (active && status == DoorStatus::Shut) {
+        // #330-400: reset(originalPos, openPos, stride), status 1.
+        fromPx = closedPx;
+        toPx = openPx;
+        elapsedMs = 0.0;
+        status = DoorStatus::Opening;
+        opening = true;
+    }
+    // #442-471. Not an else: a door that arrived last frame is open on this one,
+    // and #473 can start its fall at once.
+    if (atPx == openPx) status = DoorStatus::Open;
+    if (!active && status == DoorStatus::Open) {
+        // #473-541: reset(openPos, originalPos, stride), status -1.
+        fromPx = openPx;
+        toPx = closedPx;
+        elapsedMs = 0.0;
+        status = DoorStatus::Closing;
+        opening = false;
+    }
+    // #587-624: update() - InterpolationTimer adds the frame's milliseconds - and
+    // SetPositionXY(getCurrentPos()).
+    elapsedMs += static_cast<double>(dt) * 1000.0;
+    atPx = InterpolatedPx();
+    const double rise = closedPx.y - openPx.y;
+    progress = rise != 0.0 ? static_cast<float>((closedPx.y - atPx.y) / rise) : 0.0f;
+    MoveKinematic(registry, entity, Units::ToWorld(atPx.x, atPx.y), dt);
+}
+
+bool DoorFromNode(const Tscn::Node& node, const DoorRules& rules, Door& out, std::string& error) {
     const Tscn::Value* stride = node.Meta("stride");
     double milliseconds = 0.0;
     if (stride == nullptr || !stride->AsNumber(milliseconds)) {
@@ -38,11 +78,17 @@ bool DoorFromNode(const Tscn::Node& node, Door& out, std::string& error) {
     }
 
     out = Door{};
-    out.closed = Units::ToWorld(at.x, at.y);
-    // Up the screen, which is -y in the Godot project's pixels (behaviours.gd:145).
-    out.open = Units::ToWorld(at.x, at.y - kDoorRisePx);
-    // Floored at 10 ms, as behaviours.gd floors it (:147).
-    out.durationS = static_cast<float>(std::max(milliseconds / 1000.0, 0.01));
+    out.closedPx = at;
+    // Up the screen, which is -y in the level's pixels. The script turns the rise
+    // by the door's angle; no placement is turned (movers.json `door`).
+    out.openPx = glm::dvec2(at.x, at.y - rules.RisePx());
+    out.closed = Units::ToWorld(out.closedPx.x, out.closedPx.y);
+    out.open = Units::ToWorld(out.openPx.x, out.openPx.y);
+    out.strideMs = milliseconds;
+    out.easeRad = rules.easeRad;
+    out.fromPx = at;
+    out.toPx = at;
+    out.atPx = at;
     return true;
 }
 

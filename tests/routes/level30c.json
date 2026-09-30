@@ -1,29 +1,34 @@
 {
   "_about": [
-    "4-31 (R1 fix 1): the key and button_2110 lie inside antiportal_2085 (scale 3, 96 px at 32 x scale),",
-    "behind door_lift_2111, which only that button raises; every portal here is 98.5 px or more from the",
-    "ring's centre (the launch exit at (252, 40) is the nearest). Right off the anchor to the lower",
-    "floor; a shot lights the torch (tick 106) and the light wall goes (196). On button_2105",
-    "door_lift_2104 rises; a portal through it at (200, 150) and one on the player: into the lower",
-    "middle. A portal on the left ledge at (150, 20) and one on the player. A portal at (252, 40) and one",
-    "at (192, 98) below the ledge's edge: right off the edge, into the low portal and out of the high one",
-    "moving up and right, over the gap where the light wall stood, onto the upper platform and the key",
-    "(604). Left off the platform down the gap to the floor; a portal on the block beside the keyhole at",
-    "(288, 168) and one on the player; right into the shaft: the key opens the keyhole (840) and the",
-    "yellow door goes (929). A portal at (250, 120) and one on the player out of the shaft; left into the",
-    "door. Won on tick 997. Leans on G10 (air control) and G4 (shot speed); the knight never moves from",
-    "its post."
+    "4-31 (R1 fix 1; re-authored in step 133): the key and button_2110 lie inside antiportal_2085 (scale",
+    "3, 96 px at 32 x scale), behind door_lift_2111, which only that button raises; every portal here is",
+    "98.5 px or more from the ring's centre (the launch exit at (252, 40) is the nearest). Right off the",
+    "anchor to the lower floor; a shot lights the torch (tick 106) and the light wall goes (196). On",
+    "button_2105 door_lift_2104 rises; a portal through it at (200, 150) and one on the player: into the",
+    "lower middle. A portal on the left ledge at (150, 20) and one on the player. A portal at (252, 40)",
+    "and one at (192, 98) below the ledge's edge: right off the edge, into the low portal and out of the",
+    "high one moving up and right, over the gap where the light wall stood, onto the upper platform.",
+    "STEP 133: door_lift_2104 now latches as the original's does. The player's few ticks on button_2105",
+    "raise it all the way (6000 ms, to tick 578), and it falls only from there, so on tick 600 its top",
+    "still stands above the upper platform at x 337-367 and stops the player at x 327.3. The player",
+    "waits there until the falling door's top is below its feet (tick 770), then walks right over it to",
+    "the key (785); everything after is the old route 170 ticks later. Left off the platform down the gap",
+    "to the floor; a portal on the block beside the keyhole at (288, 168) and one on the player; right",
+    "into the shaft: the key opens the keyhole and the yellow door goes. A portal at (250, 120) and one",
+    "on the player out of the shaft; left into the door. Won on tick 1167. Leans on G10 (air control) and",
+    "G4 (shot speed); the knight never moves from its post."
   ],
   "level": "level30c",
-  "win_by": 1100,
+  "win_by": 1270,
   "holds": [
     {"walk": "right", "from": 1, "to": 60},
     {"walk": "left", "from": 150, "to": 222},
     {"walk": "right", "from": 545, "to": 620},
-    {"walk": "left", "from": 640, "to": 700},
-    {"walk": "right", "from": 730, "to": 760},
-    {"walk": "right", "from": 830, "to": 850},
-    {"walk": "left", "from": 925, "to": 1200}
+    {"walk": "right", "from": 770, "to": 800},
+    {"walk": "left", "from": 810, "to": 870},
+    {"walk": "right", "from": 900, "to": 930},
+    {"walk": "right", "from": 1000, "to": 1020},
+    {"walk": "left", "from": 1095, "to": 1370}
   ],
   "taps": [
     {"tick": 90, "at": [464, 148]},
@@ -33,9 +38,9 @@
     {"tick": 470, "at": [200, 202.3]},
     {"tick": 505, "at": [252, 40]},
     {"tick": 530, "at": [192, 98]},
-    {"tick": 780, "at": [288, 168]},
-    {"tick": 805, "at": [261.8, 202.4]},
-    {"tick": 880, "at": [250, 120]},
-    {"tick": 905, "at": [327.3, 202.3]}
+    {"tick": 950, "at": [288, 168]},
+    {"tick": 975, "at": [261.8, 202.4]},
+    {"tick": 1050, "at": [250, 120]},
+    {"tick": 1075, "at": [327.3, 202.3]}
   ]
 }

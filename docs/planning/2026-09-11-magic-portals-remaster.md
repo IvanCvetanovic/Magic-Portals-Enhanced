@@ -24883,3 +24883,129 @@ prints the new `--data` line. A pair image `compare.py` writes from now on label
   configured again. The 15 path occurrences above, `origin`'s URL and the auto-memory's paths need updating after it.
 - **The identifiers and keys** listed above. Renaming them is a code and data change for a step of its own.
 - The close role writes the `DEVLOG.md` entry; this step does not touch `DEVLOG.md`. Committed, not pushed.
+
+## Step 133 - the lift door as the original runs it: 0.8 of its height, eased, latched by its status, and a closing door crushes the player (built)
+
+**THE PROGRAM'S "Order 11.1, GAMEPLAY rows for the owner" (its lift-door clause) AND B7**, decided for the original by
+the 2026-09-29 rulings. The port's door (`Mover::Door`) was the Godot project's `Mover.gated`: 126 u at one speed,
+turned wherever its channel turned it, and it crushed nothing. The evidence is under `out/parity/program/LD/`
+(`impl.md`, `census.py`, `before/`, `after/`, `routes/`).
+**GAMEPLAY: YES, on all 46 lift doors of 37 levels.** (1) A door rises 102.4 u, not 126. (2) It rises and falls
+eased by smoothEnd, not at one speed. (3) One press lifts it all the way and it cannot be turned back on the way
+up; a release lowers it all the way, and only once it is fully raised; pressed again as it falls, it lands and
+then rises again. (4) A door closing onto the player kills it. (5) A door reads the first button of its channel
+(every channel has exactly one). Changed: `game/sim/Mover.*`, `game/sim/Puzzle.*`, `game/sim/Game.*`,
+`game/MagicPortalsLayer.*`, `game/Route.cpp`, `game/data/movers.json` (a new `door` block), `tests/test_mp_play.cpp`,
+`tests/test_mp_layer.cpp`, `tests/test_mp_effects.cpp`, eight routes under `tests/routes/` (one new, two re-authored, five in their text only),
+`docs/original-gameplay.md` (section 6.3) and this record. No converter change, no format finding, engine
+untouched at `710bffc`.
+
+**BLOCKERS, checked first: none.** The listing is `all_functions.txt` `48fe65ce`. The doors' data is in the converted
+levels (`census.py`: 46 `door_lift` nodes on 37 levels, none scaled or turned, each channel with exactly one button,
+strides 300-16000 ms).
+
+**THE DECODE** (`ETHCallback_door_lift`, 411544..414041, every frame; read under 00_order 8.0's rules):
+- First frame (#7-209): `originalPos` = the door's place; `openPos` = originalPos + multiply(vector2(0,
+  -GetSize().y x 0.8), rotateZ(angle)) (#44-99; the 0 is pushed last, so it is x); `PositionInterpolator(currentPos,
+  currentPos, stride, false)` (#100-126), whose timer defaults to smoothEnd (`InterpolationTimer` 18322 #5-13); its
+  switch is `seekEntity('button', SwitchChooser(switchIdx))`, the first button whose `idx` matches (#127-199).
+  `GetSize()` is `GetCurrentSize()`, the sprite's frame size times the entity's scale
+  (`ETHScriptObjRegister.generic.cpp:222`, `:358`; `ETHSpriteEntity.cpp:652-683`): `metal_door.png` is 32 x 128,
+  so the rise is **102.4 u**.
+- Every frame, reading `currentPos`, where the LAST frame's `SetPositionXY` put it (#1-6):
+  - #282-328: at originalPos, `startEarthquake(4, 0)` if `status` is not 0, then `status` 0.
+  - #330-440: switch active and `status` 0: `reset(originalPos, openPos, stride)`, `playDoorOpenSound`, `status`
+    1, `door_lift_particles` and `startEarthquake(4, 0)`.
+  - #442-471: at openPos, `status` 2 (not an else: a door that arrived last frame can start down on this one).
+  - #473-586: switch not active and `status` 2: `reset(openPos, originalPos, stride)`, `status` -1,
+    `playDoorCloseSound`, the dust and the shake.
+  - #587-633: `update()` (the frame's milliseconds), `SetPositionXY(getCurrentPos())`, `awakeEntitiesAround` if it
+    moved.
+- `ETHBeginContactCallback_door_lift` (414041..414627): on a contact beginning with an entity whose `isCharacter`
+  is set, while `status` is -1 (#41-54), with `doorHalfSize` = GetSize() x 0.55 (#21-32), the other's
+  GetPositionXY() below doorPos.y + doorHalfSize.y (#55-65, TP) and strictly within doorPos.x -+ doorHalfSize.x
+  (#70-96, TP / TS): `SetInt('hp', 0)` (#98-108). Only `GameCharacter::GameCharacter` sets `isCharacter` (#39-56),
+  and the one character the script builds is `MainCharacter`: **the player, not the knights.**
+- **Footage agrees on the rise**: F6 (2-12, `door_lift_1042`, stride 4500) fits the decoded 288 px (102.4 u x
+  2.8125) x sin(pi/2 x t / 4.5 s) with rms 2.26 px, the start time alone fitted (`footage/F6.md`; the first 2 s
+  only). The latch and the crush are the decode's: no clip shows them.
+
+**THE PORT.**
+- **`Mover::Door`** is the status machine above, in that order, on the port's millisecond clock (the button's,
+  `dt x 1000`). `DoorStatus` {-1, 0, 1, 2}; `closedPx`/`openPx` are originalPos/openPos; the interpolator is
+  `fromPx`/`toPx`/`elapsedMs`, and `InterpolatedPx()` is `getCurrentPos` (m_b once the clock is past the stride,
+  else a + (b - a) x sin(PIb x t / stride), as `Puzzle::Button::DepthPx`). `atPx` is currentPos, compared exactly.
+  `progress` (the share of the rise), `opening` (the leg last started) and `landings` (returns to shut from a fall)
+  are what the layer, the route trace and the suites read. `kDoorRisePx` is gone.
+- **`movers.json` `door`**: `rise_share` 0.8, `size_units` [32, 128], `crush_share` 0.55, decoded, with the citations
+  above; `ease_rad` is the button's. `Puzzle::Rules::door` carries them.
+- **`Puzzle::Channels`**: each door reads ONE button, the first of its channel in the level's order (`button`), and
+  runs its machine every tick with that button's `pressed`. The old "a button that changed sets its channel's doors,
+  the last change wins" is gone. **`Channels::Crush`**, called by `Game::BeforeStep` right after `Channels::Tick`,
+  judges the contact the original's next step would begin: the door where this tick put it, under this tick's
+  status, against the player where the last step left it. A contact begins on the first tick the player's capsule
+  overlaps the door's box (`SwitchedDoor::playerTouching` keeps the last tick's). Its kill is folded into
+  `hazards.playerDied` with the others (`killedBy` the door), so it dies as any hp death does: blood, no cue of its
+  own.
+- **The layer**: the dust and the opening and closing shakes and sounds still follow `opening`'s flips, which now
+  come only at the two starts, so the dust is always at the shut door's top edge or the raised door's bottom edge.
+  The landing shake follows `landings`, raised on the frame the callback sees the door home, a tick after it gets
+  there (the old watch shook on the arrival tick), and before a rise that frame may start. The sound's speed reads
+  `strideMs`.
+- **The route trace** prints each door's status and progress.
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings | **passes.** `port_build.bat`, 154 steps (step 132 re-ran CMake, so every unit recompiled), **0 warnings, 0 errors** (`build2.log`). The first attempt stopped on `C1060 compiler is out of heap space` in the engine's units, at the default parallelism beside two other trees' builds; `--parallel 3` built it. `MagicPortals.exe` relinked once for Smart App Control (below): `44243d35`; `test_mp.exe` `a89a2e71` |
+| 1-01 at f420 before anything else | byte-identical to `P1/clamp/after/sweep` | **passes**: `4b85352e` both (`check101/`) |
+| The rise, eased | 102.4 u on smoothEnd over the stride | **passes** (`test_mp_play` `ADoorRisesEasedAndLatches`): `door_lift_976` (stride 1000) against 192 - 102.4 x sin(PIb x t / 1000) within the check's 0.001 px on every tick of its rise; the first pressed tick already 2.68 u up |
+| The latch | opens only from shut, closes only from fully raised | **passes**: a one-tick press, released on the next tick, raises 976 all the way and turns it for home on tick 61 or 62 (the check's window: the arrival is seen a tick late); pressed again through the fall, it lands and rises from shut on one tick with 1 landing and no rise before. On all 26 door routes' traces every fall starts from fully raised (`after/door_events.txt`: 20 falls, all 20 from closed - 102.4; step 131's build gave 25 on the same routes, 16 of them turned part-way, `before/door_events.txt`) |
+| The crush | a closing door kills the player under it; not what it grazes; not a contact that began before it closed | **passes**: under 976's middle the player dies on the tick of the first touch (tick 24 of the fall, the door at y 149.79); 20 px off-centre it is touched and spared; a contact begun while the door was open is not a crush when it closes on it; on the whole of level30 (`Game::Tick`) the player held under the falling door dies on tick 24, `killedBy` `door_lift_976`, not by falling |
+| The suites | the runner once; the suites the change touches pass | **passes** (`after/allmode.log`, one launch): 47 suites, 46 passed, **14,377 checks** against step 131's 14,361: `test_mp_play` 207 -> **223** (the 16 new), every other count equal. The one failure was `test_mp_routes` (2 routes, below), fixed by re-authoring them (data only); `test_mp_routes` then ran alone: **218 checks, 0 failures**. On the final files the verifier ran the whole runner once: **47 of 47 suites, 14,380 checks** (`verify1/runner_all.log`). `test_mp_layer` 3,245 (the 3-15 dust now at the raised door's bottom edge, y -6.4 where it was -30; its landing shake on the same tick 563), `test_mp_effects` 706 |
+| 4-21 won by play | a route, no DEV flag | **passes: `tests/routes/level20c.json`, won on tick 587.** Step 125's first two portals break the wall with the stone; the player walks off the platform and drifts over the button for five ticks (218-222, and again about 229-233), which now lifts door_lift_1721 all the way (6000 ms, to tick 577); held right, the player bobs against the door's face under the well's pull, drifts under the rising door (ticks 490-575) and reaches the exit; the door starts down on 578, behind the player. B7's cause is gone |
+| Re-verified | 1-14, 1-15, 1-16, 1-21, 1-32, 4-19 still won | **passes, each on the same tick as before**: 240, 504, 237, 625, 2858, 581. 1-21's shot still threads `door_lift_831` as it closes (now from -38.4, fully raised); 4-19's door, pressed for 15 ticks, now rises all the way (to 25.6) and falls from there on 113 (98 before, from 65) |
+| Route regression | every route still wins; one the change breaks is re-authored with its reason; none deleted | **passes: 71 of 71 won** (`after/test_mp_routes.txt`; again on the final route files, the same ticks, 218 checks, `after/test_mp_routes_final.txt`). **Re-authored, 2**: **2-18** (1963 -> **1965**): the kill line from (247.7, 37.7) to (54, 76) passed under the old door's bottom at 33; the original's rise leaves it at 56.6, and the line meets it. The exit portal moves 13 px down, (255, 83), tapped from 1840 (from 1833 that flatter shot ends inside antiportal_1138's ring), so the player is at (247.7, 50.8) on 1892 (the trace's one decimal); the kill toward (54, 72) passes about 0.4 px under the door and about 0.3 px over the barrel's left corner (each +-0.05), 21.6 px from the agent; the door-room portal goes to (60, 20). **4-31** (997 -> **1167**): a few ticks on button_2105 now latch door_lift_2104 up to tick 578, and the falling door's top still stands above the upper platform on 600, stopping the player at x 327.3; the player waits for it (770) and everything after is 170 ticks later (`win_by` 1100 -> 1270). **Moved, not broken, 2**: **4-29** 1519 -> **1501** (the knight's passing press on 1066 latches the door, so its key opens the keyhole on 1217, not 1353); **2-07** 1007 -> **1008** (the latched door is still rising as the player passes under it; the old one had turned back and grazed its head, `v +45` on 960). Every other route on its old tick. No route trace shows a death (`after/door_routes_trace10.txt`) |
+| Reachability | no door newly sealed | **passes**: `reachability.py --check`, 128 levels, 108 reachable, 20 opened, 0 sealed, 0 differ (`reachability.txt`). The flood treats every lift door as open, so it cannot see this step either way; the routes are the evidence |
+| The 128-level f420 sweep | every changed level explained against `P1/clamp/after/sweep` | **passes: 128 of 128 byte-identical** to `P1/clamp/after/sweep` (`after/compare_vs_P1clamp.txt`), as predicted: the same command line and saves (`40bfef3a` before and after), `MagicPortals.exe` `44243d35`, 128 rc 0, validation active in 128 logs and silent. The one door that moves before f420 with no input is 3-15's `door_lift_1677` (a knight on `button_1656`, tick 290 in both builds). By f420 (tick 419) it has finished its 2000 ms rise in both: the picture's bottom edge (`metal_door.png`, 128 high on the door's centre) at y -6.4 now and -30 before, the collider's at -7.4 and -31, all above the view's top (y 0); its dust (y -32) and its shake (ticks 291-306) are the same in both logs |
+
+**SMART APP CONTROL: 1 refusal.** `MagicPortals.exe` `aea518e0` was refused on its first launch (rc 126, the 1-01
+check); deleted and relinked once, `44243d35` ran (129 launches: the 1-01 check and the sweep). `test_mp.exe`
+`a89a2e71`: 10 launches (the runner, the route drafts and traces, `test_mp_routes` twice), 0 refused; step 131's
+`1a0d73c5` twice for the before values. `MagicPortalsSpike.exe` `b65f3968` linked, never launched (`sac_log.txt`).
+
+**RECORDED DEVIATIONS.**
+1. **The crush's point is the capsule's centre**, 22 over the feet, where the original's entity point stands 18.1
+   over (Keys' reading). Under a falling door either is far below 0.55 x 128 = 70.4 under the door's centre, so no
+   case the test or a route meets turns on it.
+2. **A contact begins on the first tick of an overlap**, with no Box2D skin: the port's own test (`Trigger::Overlaps`,
+   strict), as every other contact the port models.
+3. **The port's clock is its fixed step in milliseconds** (`dt x 1000`, a float step summed in double), where the
+   original adds whole milliseconds a frame; as the button's.
+4. **`awakeEntitiesAround` is not modelled**: the port's bodies near a moving door are not put to sleep and woken.
+5. **The door's callback runs off screen**, where the original's static callback runs only while its bucket is drawn
+   (00_order 8.12c; the backlog's "Order 10.3, gameplay rows" and the bucket-visibility rows). Unchanged here; the
+   latch makes it matter more, since a door pressed off screen now starts a whole rise.
+6. **`test_mp_play`'s floor stays 171** (it ran 207 before and 223 now). Raising it would relink `test_mp.exe`
+   for a number no gate reads.
+
+**LEFT FOR THE OWNER.**
+- 2-18's kill line is a window of about 0.4 px between the raised door's bottom and the barrel's corner:
+  deterministic in the port, and the geometry's (no line clears the door's corner, the barrel's corner and the
+  agent's 22.4 each by more than about 0.5 px), but it may not be how the original is played; its reflector
+  (`reflect_agent_1180`) is unused and how the original reaches the agent is not shown.
+- Nothing crushes a knight, a crate or a stone: they are not characters. A door falling on a crate pushes it.
+- The doors' sounds (`door_opened`, `door_closed`) now start only with a leg, as the callback plays them.
+
+**THE VERIFIER AND THE COMMIT (text only).** The verifier passed every gate (`LD/verify1.json`: 0 refusals, nothing
+relinked, the whole runner 47 of 47) and listed six low problems. The commit applies the ones that are text and changes
+no behaviour: this record's suites and 4-21 rows (the final whole runner; the second press, about 229-233), the
+`_about` of `tests/routes/level20c.json` (the same press) and of `level17a.json` (`button_1148` raises the door all the
+way from the crate's press, where it said the button "holds it up only while" the crate sits there), and the
+`switched_door` note in `tools/parity/reachability.py`'s `FREE_ROLES` (it named `Game.cpp` and a door open "while its
+button is held"; the flood reads only the keys: `--check` 128 levels, 108 / 20 / 0, 0 differ, rc 0; ruff clean; the
+parity tests 19 passed). Both route files load equal to their replayed versions in every key but `_about`. No file
+compiled into an executable changed after the gates were measured (every changed `.cpp` and `.hpp` is older than
+`test_mp.exe` `a89a2e71` and `MagicPortals.exe` `44243d35`), so nothing was rebuilt or launched. The other findings
+are open rows in `docs/parity-backlog.md` section 6, which this commit also annotates: the dust test's absolute
+re-pin (at its next relink), 2-18's 0.4 px window, deviation 5 with 3-15's door leaving the view, and the 11 lift-door
+levels with no route (1-13, 1-18, 1-26, 1-31, 2-17, 2-24, 2-29, 3-05, 3-16, 4-22, 4-24).

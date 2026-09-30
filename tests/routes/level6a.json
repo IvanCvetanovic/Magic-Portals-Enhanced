@@ -5,7 +5,9 @@
     "platform's end; it rolls down the ramp and the shaft and stops on the floor in carranca_891's",
     "lane, where it stops every fireball (planning step 114). Back onto the lift at the top, off its",
     "far side to the floor, under the lift and the platform onto button_937, and left under",
-    "door_lift_936 once it has risen. Won on tick 1007 (step 114)."
+    "door_lift_936 once it has risen. Won on tick 1007 (step 114); on 1008 since step 133, whose",
+    "latching door is still rising as the player passes under it, where the port's old door had turned",
+    "back when the player stepped off the button and grazed its head on the way down."
   ],
   "level": "level6a",
   "win_by": 1070,

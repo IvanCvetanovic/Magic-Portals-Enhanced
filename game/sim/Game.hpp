@@ -73,7 +73,7 @@ struct Data {
     Portals::Rules portals;       // Enhanced's portals.json, with the port's transit.json
     Motion::Rules motion;         // and motions.json: linearMotion's own arithmetic
     Mover::Rules movers;          // the port's own movers.json
-    Puzzle::Rules puzzle;         // and its `button` block, which sim/Puzzle reads
+    Puzzle::Rules puzzle;         // and its `button` and `door` blocks, which sim/Puzzle reads
     Demolish::Rules demolish;     // and demolish.json
     Launchers::Rules launchers;   // and launchers.json
     Shot::Rules shot;             // and shot.json

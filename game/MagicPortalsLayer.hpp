@@ -2939,6 +2939,7 @@ private:
         bool valid = false;
         std::vector<char> opening;
         std::vector<float> progress;
+        std::vector<int> landings;
     };
     DoorWatch m_doorWatch;
     // What the last frame moved and where each thing stood before it, so the

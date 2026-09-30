@@ -125,49 +125,124 @@ void TheMoversAreKinematic() {
 
 void DoorsTakeTheirStrideFromTheLevel() {
     // Off level30.tscn: door_lift_976 at (592, 192) with stride "1000", 977 at
-    // (632, 74) and 978 at (600, 74) with stride "3000".
+    // (632, 74) and 978 at (600, 74) with stride "3000". And off movers.json
+    // `door` (ETHCallback_door_lift #44-87): 0.8 of metal_door.png's 128 up.
+    const Mover::DoorRules& rules = g_data.puzzle.door;
+    CHECK_MSG(rules.riseShare == 0.8 && rules.sizeUnits == glm::dvec2(32.0, 128.0) && rules.crushShare == 0.55 &&
+                  rules.easeRad == 1.5707963705062866,
+              "movers.json door: 0.8 of 32 x 128, crushing within 0.55 of it, on the button's PIb");
+    CHECK_MSG(std::fabs(rules.RisePx() - 102.4) < 1e-12, "a rise of 102.4 units: " + std::to_string(rules.RisePx()));
     const struct {
         const char* name;
         double x;
         double y;
-        float seconds;
+        double strideMs;
     } doors[] = {
-        {"door_lift_976", 592.0, 192.0, 1.0f},
-        {"door_lift_977", 632.0, 74.0, 3.0f},
-        {"door_lift_978", 600.0, 74.0, 3.0f},
+        {"door_lift_976", 592.0, 192.0, 1000.0},
+        {"door_lift_977", 632.0, 74.0, 3000.0},
+        {"door_lift_978", 600.0, 74.0, 3000.0},
     };
     for (const auto& expected : doors) {
         Mover::Door door;
         std::string error;
         const Tscn::Node* node = g_level30.FindNode(expected.name);
-        CHECK_MSG(node != nullptr && Mover::DoorFromNode(*node, door, error), std::string(expected.name) + ": " + error);
-        CHECK_NEAR(door.durationS, expected.seconds);
-        CHECK_MSG(door.closed == Units::ToWorld(expected.x, expected.y) &&
-                      door.open == Units::ToWorld(expected.x, expected.y - Mover::kDoorRisePx),
-                  std::string(expected.name) + " closes where it stands and opens 126 px above");
+        CHECK_MSG(node != nullptr && Mover::DoorFromNode(*node, rules, door, error),
+                  std::string(expected.name) + ": " + error);
+        CHECK_EQ(door.strideMs, expected.strideMs);
+        CHECK_MSG(door.closedPx == glm::dvec2(expected.x, expected.y) &&
+                      door.openPx == glm::dvec2(expected.x, expected.y - rules.RisePx()) &&
+                      door.closed == Units::ToWorld(expected.x, expected.y) &&
+                      door.open == Units::ToWorld(expected.x, expected.y - rules.RisePx()) &&
+                      door.atPx == door.closedPx && door.status == Mover::DoorStatus::Shut,
+                  std::string(expected.name) + " stands shut where it is placed and opens 102.4 above");
     }
+}
+
+// door_lift_976 built on its own, with a switch the test holds: every tick is the
+// door's status machine and its move, and nothing else.
+struct LoneDoor {
+    entt::registry registry;
+    entt::entity entity = entt::null;
+    Mover::Door motion;
+
+    bool Build(std::string& error) {
+        UseRemakeGravity(registry);
+        LevelBuilder::Built built;
+        entity = LevelBuilder::BuildEntity(g_level30, "door_lift_976", registry, PortOptions(), built, error);
+        return entity != entt::null &&
+               Mover::DoorFromNode(*g_level30.FindNode("door_lift_976"), g_data.puzzle.door, motion, error);
+    }
+    void Tick(bool active) { motion.Tick(registry, entity, active, kStep); }
+    double YPx() const { return Units::ToPixels(registry.get<TransformComponent>(entity).position).y; }
+};
+
+void ADoorRisesEasedAndLatches() {
+    // ETHCallback_door_lift #330-633: a switch active at status 0 starts the whole
+    // rise (reset(originalPos, openPos, stride), status 1), which smoothEnd eases:
+    // y = 192 - 102.4 x sin(PIb x t / 1000). Nothing in the callback stops a leg.
+    LoneDoor door;
+    std::string error;
+    CHECK_MSG(door.Build(error), error);
+    if (door.entity == entt::null) return;
+    const auto want = [](double ms) {
+        return 192.0 - 102.4 * std::sin(1.5707963705062866 * std::min(ms / 1000.0, 1.0));
+    };
+    door.Tick(true);
+    const double firstMs = static_cast<double>(kStep) * 1000.0;
+    CHECK_MSG(door.motion.status == Mover::DoorStatus::Opening && door.motion.opening &&
+                  std::fabs(door.YPx() - want(firstMs)) < 1e-3,
+              "pressed at shut: it starts to rise on that tick, eased, to y " + std::to_string(door.YPx()) +
+                  " against " + std::to_string(want(firstMs)));
+    // Let go on the next tick, a tick into the rise: it rises on regardless.
+    int turnedOn = -1;
+    double worst = 0.0;
+    for (int tick = 2; tick <= 90 && turnedOn < 0; ++tick) {
+        door.Tick(false);
+        if (door.motion.status == Mover::DoorStatus::Closing) {
+            turnedOn = tick;
+        } else {
+            worst = std::max(worst, std::fabs(door.YPx() - want(firstMs * tick)));
+        }
+    }
+    CHECK_MSG(worst < 1e-3, "the whole rise on smoothEnd, worst " + std::to_string(worst) + " px off it");
+    // It stands at openPos from the tick its clock passes 1000 ms, the callback
+    // sees that on the next (#442-471) and, the switch being up, starts the fall
+    // on that same frame (#473-541).
+    CHECK_MSG(turnedOn == 61 || turnedOn == 62,
+              "a one-tick press opened it all the way, and it turned for home on tick " + std::to_string(turnedOn));
+    // Pressed again while it falls: it falls on, lands, and rises again from shut
+    // on the frame the callback sees it home (#282-440), counting one landing.
+    int landedOn = -1;
+    int risingOn = -1;
+    bool early = false;
+    for (int tick = 1; tick <= 90 && risingOn < 0; ++tick) {
+        door.Tick(true);
+        if (landedOn < 0 && door.motion.landings == 1) landedOn = tick;
+        if (door.motion.status == Mover::DoorStatus::Opening) {
+            risingOn = tick;
+            early = landedOn != tick;
+        }
+    }
+    CHECK_MSG(landedOn > 55 && landedOn == risingOn && !early && door.motion.landings == 1,
+              "held through the fall, it lands on tick " + std::to_string(landedOn) + " and rises from shut on " +
+                  std::to_string(risingOn));
 }
 
 void ACrateRidesADoorUpAndDown() {
     // The mover helper's reason for being: a door moved by MoveKinematic writes
     // its velocity, so what stands on it is carried (F1). door_lift_976 on its
     // own - in the level it rises into the space under 977 and 978, which would
-    // crush its rider and measure the level instead of the door - with level30's
+    // squeeze its rider and measure the level instead of the door - with level30's
     // small crate on top.
-    entt::registry registry;
-    UseRemakeGravity(registry);
-    LevelBuilder::Built built;
+    LoneDoor door;
     std::string error;
-    const entt::entity door =
-        LevelBuilder::BuildEntity(g_level30, "door_lift_976", registry, PortOptions(), built, error);
-    CHECK_MSG(door != entt::null, error);
-    if (door == entt::null) return;
-    Mover::Door motion;
-    CHECK_MSG(Mover::DoorFromNode(*g_level30.FindNode("door_lift_976"), motion, error), error);
+    CHECK_MSG(door.Build(error), error);
+    if (door.entity == entt::null) return;
+    entt::registry& registry = door.registry;
 
-    const auto& box = registry.get<BoxColliderComponent>(door);
+    const auto& box = registry.get<BoxColliderComponent>(door.entity);
     const auto doorTop = [&] {
-        return registry.get<TransformComponent>(door).position.y + box.center.y + box.size.y * 0.5f;
+        return registry.get<TransformComponent>(door.entity).position.y + box.center.y + box.size.y * 0.5f;
     };
 
     const glm::dvec2 sizePx = CrateSmallSizePx();
@@ -175,7 +250,7 @@ void ACrateRidesADoorUpAndDown() {
     const float half = static_cast<float>(Units::ToMetres(sizePx.y) * 0.5);
     const entt::entity crate = registry.create();
     registry.emplace<TransformComponent>(crate).position =
-        glm::vec3(registry.get<TransformComponent>(door).position.x + box.center.x, doorTop() + half, 0.0f);
+        glm::vec3(registry.get<TransformComponent>(door.entity).position.x + box.center.x, doorTop() + half, 0.0f);
     auto& collider = registry.emplace<BoxColliderComponent>(crate);
     collider.size = glm::vec3(Units::ToMetres(sizePx.x), Units::ToMetres(sizePx.y),
                               static_cast<float>(LevelBuilder::kBodyDepthMetres));
@@ -190,50 +265,170 @@ void ACrateRidesADoorUpAndDown() {
     const auto gapPx = [&] { return static_cast<double>(crateY() - half - doorTop()) * Units::kPixelsPerMetre; };
     // The mover first, then the step - the order the app runs a layer's tick
     // against the next physics step.
-    const auto step = [&] {
-        motion.Tick(registry, door, kStep);
+    const auto step = [&](bool active) {
+        door.Tick(active);
         PhysicsSystem::Update(registry, kStep);
     };
 
-    for (int i = 0; i < 30; ++i) step(); // settle, closed
+    for (int i = 0; i < 30; ++i) step(false); // settle, shut
     const float startY = crateY();
 
-    // Up. The door starts and stops dead - behaviours.gd lerps it at one speed -
-    // so while it moves the crate has to ride it, and when it stops the crate,
-    // still rising at the door's speed, flies on by v^2/2g and comes back down
-    // onto it. That flight is the proof it was carried: a crate the door merely
-    // shoved along would have no speed of its own to fly with.
-    motion.opening = true;
+    // Up. smoothEnd starts the door at its fastest and slows it to nothing at the
+    // top, so the crate rides it the whole way and has no speed left to fly on.
     double worstGap = 0.0;
-    for (int i = 0; i < 600 && motion.progress < 1.0f; ++i) {
-        step();
+    for (int i = 0; i < 600 && door.motion.progress < 1.0f; ++i) {
+        step(true);
         worstGap = std::max(worstGap, std::fabs(gapPx()));
     }
-    CHECK_MSG(motion.progress == 1.0f, "the door finished opening");
+    CHECK_MSG(door.motion.progress == 1.0f, "the door finished opening");
     CHECK_MSG(worstGap < 2.0, "the crate rode the door up: worst gap " + std::to_string(worstGap) + " px");
-
-    const double speedPx = Mover::kDoorRisePx / motion.durationS;
-    const double flightPx = speedPx * speedPx / (2.0 * Units::kRemakeWorldGravityPx);
     double highestGap = 0.0;
     for (int i = 0; i < 90; ++i) {
-        step();
+        step(true);
         highestGap = std::max(highestGap, gapPx());
     }
-    CHECK_MSG(std::fabs(highestGap - flightPx) < 3.0,
-              "and flew on when it stopped: " + std::to_string(highestGap) + " px, where v^2/2g says " +
-                  std::to_string(flightPx));
     const double risePx = static_cast<double>(crateY() - startY) * Units::kPixelsPerMetre;
-    CHECK_MSG(std::fabs(risePx - Mover::kDoorRisePx) < 2.0 && std::fabs(gapPx()) < 2.0,
-              "then came to rest on it: " + std::to_string(risePx) + " px up of 126, gap " +
-                  std::to_string(gapPx()) + " px");
+    CHECK_MSG(highestGap < 2.0 && std::fabs(risePx - g_data.puzzle.door.RisePx()) < 2.0 && std::fabs(gapPx()) < 2.0,
+              "and came to rest on it with no flight: " + std::to_string(risePx) + " px up of 102.4, highest gap " +
+                  std::to_string(highestGap) + " px");
 
-    motion.opening = false;
-    for (int i = 0; i < 100; ++i) step();
+    for (int i = 0; i < 120; ++i) step(false);
     const double backPx = static_cast<double>(crateY() - startY) * Units::kPixelsPerMetre;
-    CHECK_MSG(motion.progress == 0.0f, "and closed again");
+    CHECK_MSG(door.motion.progress == 0.0f && door.motion.status == Mover::DoorStatus::Shut, "and closed again");
     CHECK_MSG(std::fabs(backPx) < 2.0 && std::fabs(gapPx()) < 2.0,
               "bringing the crate back down onto it: " + std::to_string(backPx) + " px from where it started, gap " +
                   std::to_string(gapPx()) + " px");
+}
+
+// door_lift_976 again, now in a Channels with a button a body presses, and the
+// player's capsule put where a case wants it. Nothing steps the physics, so the
+// player stays exactly there: this is ETHBeginContactCallback_door_lift's rule on
+// its own. Game's folding of it is checked on the whole level below.
+struct CrushRig {
+    entt::registry registry;
+    Puzzle::Channels channels;
+    entt::entity presser = entt::null;
+    entt::entity player = entt::null;
+
+    bool Build(const glm::dvec2& playerPx, std::string& error) {
+        UseRemakeGravity(registry);
+        LevelBuilder::Built built;
+        Puzzle::SwitchedDoor door;
+        door.name = "door_lift_976";
+        door.channel = 0;
+        door.button = 0;
+        door.entity = LevelBuilder::BuildEntity(g_level30, door.name, registry, PortOptions(), built, error);
+        if (door.entity == entt::null ||
+            !Mover::DoorFromNode(*g_level30.FindNode(door.name), g_data.puzzle.door, door.motion, error)) {
+            return false;
+        }
+        channels.doorRules = g_data.puzzle.door;
+        channels.doors.push_back(door);
+        Puzzle::Button button;
+        button.name = "button";
+        button.channel = 0;
+        button.box.centre = glm::vec2(Units::ToWorld(-500.0, -500.0));
+        button.box.half = glm::vec2(Units::ToMetres(8.0));
+        button.restCentre = button.box.centre;
+        button.sinkPx = g_data.puzzle.sinkPx;
+        button.easeRad = g_data.puzzle.easeRad;
+        button.strideMs = 300.0;
+        channels.buttons.push_back(button);
+        presser = registry.create();
+        registry.emplace<TransformComponent>(presser).position = Units::ToWorld(1000.0, 1000.0);
+        registry.emplace<BoxColliderComponent>(presser).size =
+            glm::vec3(Units::ToMetres(16.0), Units::ToMetres(16.0), Units::ToMetres(16.0));
+        registry.emplace<RigidBodyComponent>(presser);
+        player = Player::Spawn(registry, playerPx, g_tuning);
+        return player != entt::null;
+    }
+    void Press(bool on) {
+        registry.get<TransformComponent>(presser).position =
+            on ? Units::ToWorld(-500.0, -500.0) : Units::ToWorld(1000.0, 1000.0);
+    }
+    void Tick() {
+        channels.Tick(registry, kStep);
+        channels.Crush(registry, player);
+    }
+    const Puzzle::SwitchedDoor& Door() const { return channels.doors.front(); }
+};
+
+void AClosingDoorCrushesThePlayerUnderIt() {
+    // A 44 px player standing on the shut door's floor line, its feet at 255 and
+    // its centre at 233, under door_lift_976's middle (x 592). The door opens (102.4
+    // up, its bottom at 152.6), the switch lets go, and on its way down its bottom
+    // reaches the capsule's top at 211 with the door's centre at about 148: 233 is
+    // below 148 + 70.4, and 0 is within 17.6 across. So it dies on the tick the two
+    // first overlap.
+    CrushRig rig;
+    std::string error;
+    CHECK_MSG(rig.Build(glm::dvec2(592.0, 233.0), error), error);
+    if (rig.player == entt::null) return;
+    rig.Press(true);
+    for (int tick = 0; tick < 70; ++tick) rig.Tick();
+    CHECK_MSG(rig.Door().motion.status == Mover::DoorStatus::Open && !rig.Door().playerTouching &&
+                  !rig.channels.playerKilled,
+              "raised clear of the player, who is untouched");
+    rig.Press(false);
+    int killedOn = -1;
+    int touchedOn = -1;
+    double doorYAtKill = 0.0;
+    for (int tick = 1; tick <= 80 && killedOn < 0; ++tick) {
+        rig.Tick();
+        if (touchedOn < 0 && rig.Door().playerTouching) touchedOn = tick;
+        if (rig.channels.playerKilled) {
+            killedOn = tick;
+            doorYAtKill = rig.Door().motion.atPx.y;
+        }
+    }
+    std::printf("  crush: door_lift_976 closing onto the player: first touch on tick %d, killed on %d, the door at y "
+                "%.2f\n",
+                touchedOn, killedOn, doorYAtKill);
+    CHECK_MSG(killedOn > 0 && killedOn == touchedOn && rig.channels.killedBy == "door_lift_976" &&
+                  rig.Door().motion.status == Mover::DoorStatus::Closing && doorYAtKill > 140.0 &&
+                  doorYAtKill < 156.0,
+              "killed by door_lift_976 on the tick it first touches, the door at y " + std::to_string(doorYAtKill));
+}
+
+void AClosingDoorSparesWhatItOnlyGrazes() {
+    // Beside the door's middle by 20: the capsule (10 either side) still reaches
+    // under the door's 15, but its centre is outside 0.55 x 32 = 17.6 across.
+    {
+        CrushRig rig;
+        std::string error;
+        CHECK_MSG(rig.Build(glm::dvec2(612.0, 233.0), error), error);
+        if (rig.player == entt::null) return;
+        rig.Press(true);
+        for (int tick = 0; tick < 70; ++tick) rig.Tick();
+        rig.Press(false);
+        bool touched = false;
+        for (int tick = 0; tick < 80; ++tick) {
+            rig.Tick();
+            touched = touched || rig.Door().playerTouching;
+        }
+        CHECK_MSG(touched && !rig.channels.playerKilled,
+                  "a player 20 off the door's middle is touched by its fall and not killed");
+    }
+    // A contact that began while the door was not closing is not a crush when the
+    // door then closes on it (BeginContact fires once): the player is put where
+    // the raised door's bottom already overlaps its head, and the switch let go.
+    {
+        CrushRig rig;
+        std::string error;
+        CHECK_MSG(rig.Build(glm::dvec2(592.0, 1000.0), error), error);
+        if (rig.player == entt::null) return;
+        rig.Press(true);
+        for (int tick = 0; tick < 70; ++tick) rig.Tick();
+        rig.registry.get<TransformComponent>(rig.player).position = Units::ToWorld(592.0, 170.0);
+        rig.Tick();
+        CHECK_MSG(rig.Door().playerTouching && rig.Door().motion.status == Mover::DoorStatus::Open &&
+                      !rig.channels.playerKilled,
+                  "a player whose head is under the raised door's bottom touches it while it is open");
+        rig.Press(false);
+        for (int tick = 0; tick < 80; ++tick) rig.Tick();
+        CHECK_MSG(!rig.channels.playerKilled && rig.Door().motion.status != Mover::DoorStatus::Open,
+                  "and is not killed as it closes on the same contact");
+    }
 }
 
 // ---- The player -------------------------------------------------------------
@@ -416,8 +611,12 @@ void Level30sButtonsAreWiredToItsDoors() {
     } doors[] = {{"door_lift_976", 0}, {"door_lift_978", 1}, {"door_lift_977", 2}};
     for (const auto& expected : doors) {
         const Puzzle::SwitchedDoor* door = play.channels.FindDoor(expected.name);
-        CHECK_MSG(door != nullptr && door->channel == expected.channel,
-                  std::string(expected.name) + " is on channel " + std::to_string(expected.channel));
+        // Its one switch: the first button of its channel (seekEntity, #139-156).
+        const bool switched = door != nullptr && door->button >= 0 &&
+                              play.channels.buttons[static_cast<std::size_t>(door->button)].channel == expected.channel;
+        CHECK_MSG(door != nullptr && door->channel == expected.channel && switched,
+                  std::string(expected.name) + " is on channel " + std::to_string(expected.channel) +
+                      ", read from that channel's button");
     }
     // What Trigger::Overlaps can see: every dynamic body in the level has a box,
     // sphere or capsule. The crates have boxes and the player a capsule.
@@ -497,7 +696,7 @@ void ACrateOnAButtonOpensItsDoor() {
               "channel 0 pressed at tick " + std::to_string(pressedAt) + " after the drop; the Godot project took 8");
     CHECK_MSG(held, "and held every tick after");
     const double doorY = BodyPx(play, "door_lift_976").y;
-    CHECK_MSG(std::fabs(doorY - (192.0 - Mover::kDoorRisePx)) < 0.5,
+    CHECK_MSG(std::fabs(doorY - (192.0 - g_data.puzzle.door.RisePx())) < 0.5,
               "door_lift_976 open, at y " + std::to_string(doorY) + " px");
     CHECK_MSG(DoorShut(play, "door_lift_977") && DoorShut(play, "door_lift_978") && !play.channels.Pressed(1) &&
                   !play.channels.Pressed(2),
@@ -508,6 +707,37 @@ void ACrateOnAButtonOpensItsDoor() {
     CHECK_MSG(!play.channels.Pressed(0), "with the crate gone, the plate lets go the next tick");
     for (int tick = 0; tick < 70; ++tick) Tick(play, 0.0f);
     CHECK_MSG(DoorShut(play, "door_lift_976"), "and door_lift_976 comes back down");
+}
+
+void PutPlayer(Play& play, const glm::dvec2& atPx);
+
+void AClosingDoorKillsThePlayerInTheLevel() {
+    // Game's half of the crush: the channels' kill is a death as any other killer's.
+    // level30's small crate on button_975 raises door_lift_976; the player is then
+    // held under the raised door's middle, feet on its floor line (y 255), as a
+    // hold would keep it; the crate goes, and the falling door kills it.
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    PutBody(play, "crate_small_ent_973", glm::dvec2(94.0, 190.0));
+    for (int tick = 0; tick < 90; ++tick) Tick(play, 0.0f);
+    const Puzzle::SwitchedDoor* door = play.channels.FindDoor("door_lift_976");
+    CHECK_MSG(door != nullptr && door->motion.status == Mover::DoorStatus::Open, "door_lift_976 raised by the crate");
+    if (door == nullptr) return;
+    const glm::dvec2 under(592.0, 255.0 - g_tuning.heightPx * 0.5);
+    play.registry.destroy(play.built.entities.at("crate_small_ent_973"));
+    int diedOn = -1;
+    for (int tick = 1; tick <= 90 && diedOn < 0; ++tick) {
+        PutPlayer(play, under);
+        Tick(play, 0.0f);
+        if (play.hazards.playerDied) diedOn = tick;
+    }
+    std::printf("  crush in level30: the player under door_lift_976 died on tick %d of its fall, by %s\n", diedOn,
+                play.hazards.killedBy.c_str());
+    CHECK_MSG(diedOn > 0 && play.hazards.killedBy == "door_lift_976" && !play.hazards.diedByFalling &&
+                  play.channels.playerKilled,
+              "the player dies under the falling door, killed by door_lift_976");
 }
 
 void ThePlayerPressesAButtonAndItLetsGo() {
@@ -1346,12 +1576,16 @@ void runTests() {
     Level30HasTheRolesItsPuzzleNeeds();
     TheMoversAreKinematic();
     DoorsTakeTheirStrideFromTheLevel();
+    ADoorRisesEasedAndLatches();
     ACrateRidesADoorUpAndDown();
+    AClosingDoorCrushesThePlayerUnderIt();
+    AClosingDoorSparesWhatItOnlyGrazes();
     ThePlayerLandsOnLevel30();
     ThePlayerWalksAcrossTheSeam();
     Level30sButtonsAreWiredToItsDoors();
     NothingStaticPressesAButton();
     ACrateOnAButtonOpensItsDoor();
+    AClosingDoorKillsThePlayerInTheLevel();
     ThePlayerPressesAButtonAndItLetsGo();
     Level30sButtonsCarryTheSinkTheDataGives();
     APressedButtonSinksSixUnitsOverItsStride();

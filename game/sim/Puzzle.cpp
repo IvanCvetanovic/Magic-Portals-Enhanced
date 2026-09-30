@@ -96,9 +96,6 @@ void Channels::Tick(entt::registry& registry, float dt) {
             button.slideFromPx = pressed ? 0.0 : button.sinkPx;
             button.slideToPx = pressed ? button.sinkPx : 0.0;
             button.slideMs = 0.0;
-            for (SwitchedDoor& door : doors) {
-                if (door.channel == button.channel) door.motion.opening = pressed;
-            }
         }
         // ETHCallback_button every frame: interpolator.update() and then
         // SetPositionXY(getCurrentPos()). The contact callback zeroed the clock
@@ -109,7 +106,44 @@ void Channels::Tick(entt::registry& registry, float dt) {
         button.sunkPx = button.DepthPx();
         Place(registry, button);
     }
-    for (SwitchedDoor& door : doors) door.motion.Tick(registry, door.entity, dt);
+    // The buttons' contact callbacks run inside the physics step and the doors'
+    // callbacks after it, so a door reads its button as the tick left it.
+    for (SwitchedDoor& door : doors) {
+        const bool active = door.button >= 0 && static_cast<std::size_t>(door.button) < buttons.size() &&
+                            buttons[static_cast<std::size_t>(door.button)].pressed;
+        door.motion.Tick(registry, door.entity, active, dt);
+    }
+}
+
+void Channels::Crush(entt::registry& registry, entt::entity player) {
+    const bool there = player != entt::null && registry.valid(player) &&
+                       registry.all_of<Supersonic::TransformComponent>(player);
+    const glm::dvec2 half = doorRules.sizeUnits * doorRules.crushShare;
+    for (SwitchedDoor& door : doors) {
+        bool touching = false;
+        if (there && door.entity != entt::null && registry.valid(door.entity)) {
+            const auto* transform = registry.try_get<Supersonic::TransformComponent>(door.entity);
+            const auto* box = registry.try_get<Supersonic::BoxColliderComponent>(door.entity);
+            if (transform != nullptr && box != nullptr) {
+                const Trigger::Box doorBox{glm::vec2(transform->position.x + box->center.x,
+                                                     transform->position.y + box->center.y),
+                                           glm::vec2(box->size.x * 0.5f, box->size.y * 0.5f)};
+                touching = Trigger::Overlaps(registry, player, doorBox);
+            }
+        }
+        // BeginContact: the first tick of an overlap, whatever the status then.
+        const bool began = touching && !door.playerTouching;
+        door.playerTouching = touching;
+        if (!began || playerKilled || door.motion.status != Mover::DoorStatus::Closing) continue;
+        // #13-96, in the level's pixels (+y down): doorPos is where the last
+        // callback put the door, and "below" is the larger y.
+        const glm::dvec2 doorPx = door.motion.atPx;
+        const glm::dvec2 otherPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(player).position);
+        if (otherPx.y > doorPx.y + half.y && otherPx.x > doorPx.x - half.x && otherPx.x < doorPx.x + half.x) {
+            playerKilled = true;
+            killedBy = door.name;
+        }
+    }
 }
 
 bool Channels::Pressed(int channel) const {
@@ -160,6 +194,25 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     };
     Rules read;
     if (!number("sink_units", read.sinkPx) || !number("ease_rad", read.easeRad)) return false;
+    // `door`: its rise, its size and its crush, on the button's ease.
+    const auto doorNumber = [&](const char* key, double& to) {
+        if (!root.Has("door") || !root["door"].IsObject() || !root["door"].Has(key) || !root["door"][key].IsNumber()) {
+            error = path + ": door." + std::string(key) + " is missing or not a number";
+            return false;
+        }
+        to = root["door"][key].AsNumber();
+        return true;
+    };
+    if (!doorNumber("rise_share", read.door.riseShare) || !doorNumber("crush_share", read.door.crushShare)) {
+        return false;
+    }
+    const Json::Array& size = root["door"]["size_units"].AsArray();
+    if (size.size() != 2 || !size[0].IsNumber() || !size[1].IsNumber()) {
+        error = path + ": door.size_units is not two numbers";
+        return false;
+    }
+    read.door.sizeUnits = glm::dvec2(size[0].AsNumber(), size[1].AsNumber());
+    read.door.easeRad = read.easeRad;
     out = read;
     return true;
 }
@@ -167,6 +220,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 bool Wire(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built, const Rules& rules,
           Channels& out, std::string& error) {
     out = Channels{};
+    out.doorRules = rules.door;
     for (const Tscn::Node& node : scene.nodes) {
         if (node.parent != ".") continue;
         const std::string role = Roles::RoleOf(roles, node);
@@ -192,7 +246,7 @@ bool Wire(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
             SwitchedDoor door;
             door.name = node.name;
             if (!ChannelOf(node, "switchIdx", door.channel, error)) return false;
-            if (!Mover::DoorFromNode(node, door.motion, error)) return false;
+            if (!Mover::DoorFromNode(node, rules.door, door.motion, error)) return false;
             const auto found = built.entities.find(node.name);
             if (found == built.entities.end()) {
                 error = node.name + " was not built";
@@ -200,6 +254,14 @@ bool Wire(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
             }
             door.entity = found->second;
             out.doors.push_back(door);
+        }
+    }
+    // Each door's switch: the first button on its channel, in the level's order.
+    for (SwitchedDoor& door : out.doors) {
+        for (std::size_t i = 0; i < out.buttons.size(); ++i) {
+            if (out.buttons[i].channel != door.channel) continue;
+            door.button = static_cast<int>(i);
+            break;
         }
     }
     return true;

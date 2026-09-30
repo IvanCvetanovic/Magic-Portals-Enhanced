@@ -8679,15 +8679,17 @@ void MagicPortalsLayer::latchDoors() {
     for (const Puzzle::SwitchedDoor& door : m_level.channels.doors) {
         now.opening.push_back(door.motion.opening ? char{1} : char{0});
         now.progress.push_back(door.motion.progress);
+        now.landings.push_back(door.motion.landings);
     }
     // ETHCallback_door_lift's door_lift_particles as a door starts to open (#434)
     // or to close (#580), each just before its startEarthquake(4, 0): at the
     // door's GetPosition() where the frame BEGAN - SetPositionXY comes at #624 -
     // which is where the last tick left it, not where this tick's BeforeStep has
     // already moved it, less or plus half its own drawn height (GetSize().y, the
-    // picture's units times its entity scale), on its eth_z. The port's door turns
-    // wherever its channel turns it (Mover::Door), so its dust goes where it is
-    // then. A door with no picture (a level drawn as boxes) adds none.
+    // picture's units times its entity scale), on its eth_z. A door starts a leg
+    // only from shut or from fully raised (Mover::Door, planning step 133), so
+    // this is the shut door's top edge or the raised door's bottom edge. A door
+    // with no picture (a level drawn as boxes) adds none.
     const auto dust = [this](std::size_t i, bool opening, float fromProgress) {
         const Puzzle::SwitchedDoor& door = m_level.channels.doors[i];
         const auto drawn = std::find_if(m_sprites.begin(), m_sprites.end(),
@@ -8705,12 +8707,13 @@ void MagicPortalsLayer::latchDoors() {
     };
     if (m_doorWatch.valid && now.opening.size() == m_doorWatch.opening.size()) {
         for (std::size_t i = 0; i < now.opening.size(); ++i) {
+            // Back shut from a fall, which the callback sees on the frame after the
+            // door gets there (#282-315), and before it can start to rise again on
+            // that same frame (#330-440).
+            for (int n = m_doorWatch.landings[i]; n < now.landings[i]; ++n) QueueQuake(Earthquake::Call::DoorLanded);
             if (now.opening[i] != m_doorWatch.opening[i]) {
                 dust(i, now.opening[i] != 0, m_doorWatch.progress[i]);
                 QueueQuake(now.opening[i] != 0 ? Earthquake::Call::DoorOpening : Earthquake::Call::DoorClosing);
-            } else if (now.opening[i] == 0 && m_doorWatch.progress[i] > 0.0f && now.progress[i] <= 0.0f) {
-                // Back where the level put it: it lands shut.
-                QueueQuake(Earthquake::Call::DoorLanded);
             }
         }
     }
@@ -9014,7 +9017,7 @@ void MagicPortalsLayer::latchSimSounds() {
                                   : m_watch.doorsOpening.size();
     for (std::size_t i = 0; i < doors; ++i) {
         if (now.doorsOpening[i] == m_watch.doorsOpening[i]) continue;
-        const double strideMs = static_cast<double>(m_level.channels.doors[i].motion.durationS) * 1000.0;
+        const double strideMs = m_level.channels.doors[i].motion.strideMs;
         latch(now.doorsOpening[i] != 0 ? "door_opened" : "door_closed", strideMs);
     }
     // And a lift each time it turns, which is each end of its run.
