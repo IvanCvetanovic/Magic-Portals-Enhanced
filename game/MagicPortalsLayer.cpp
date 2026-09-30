@@ -251,6 +251,29 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "medals not loaded: " << why << std::endl;
     }
 
+    // And the two switches, as main sets the saved volume before anything plays
+    // (#103-108) and getState reads the music's. From the same directory, so a
+    // suite's bare layer reads and writes nothing and starts with both on - the
+    // defaults sounds.json carries, which a table that will not read leaves at
+    // Defaults' own, said once.
+    {
+        Switches::Defaults defaults;
+        if (std::string why; !Switches::LoadDefaults(m_paths.portData + "/sounds.json", defaults, why)) {
+            SUPERSONIC_LOG_ERROR("Magic Portals") << "switch defaults not read: " << why << std::endl;
+        }
+        if (std::string why; !m_switches.Open(m_paths.saveDir, defaults, why)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "switches not read, the defaults kept: " << why << std::endl;
+        }
+        m_soundOn = m_switches.SoundOn();
+        m_musicOn = m_switches.MusicOn();
+        if (m_switches.Persists()) {
+            SUPERSONIC_LOG_INFO("Magic Portals")
+                << "switches: sound " << (m_soundOn ? "on" : "off") << ", music " << (m_musicOn ? "on" : "off")
+                << (m_switches.FromFile() ? " (read from " : " (the defaults; a toggle saves them to ")
+                << m_switches.Path() << ")" << std::endl;
+        }
+    }
+
     // The original's achievements (sim/Achievements.hpp). They are not this
     // repository's, so a machine without the remake's out/ has none: the dashboard
     // then draws no rows, and this says why, once. Not a reason to refuse the start.
@@ -8898,8 +8921,10 @@ void MagicPortalsLayer::musicResume() {
 
 void MagicPortalsLayer::switchedSound() {
     // GlobalSoundSwitch::manageSoundSwitch -> GlobalVolumeManager::saveVolume
-    // (28964..29196) #33-47 -> turnGlobalVolumeOff (pauseMusic) or
-    // turnGlobalVolumeOn, which resumes only while the music switch is on.
+    // (28964..29196): the volume written (#3-15), then #33-47
+    // turnGlobalVolumeOff (pauseMusic) or turnGlobalVolumeOn, which resumes only
+    // while the music switch is on.
+    saveSwitches();
     if (!m_soundOn) {
         musicStop();
     } else if (m_musicOn) {
@@ -8908,12 +8933,22 @@ void MagicPortalsLayer::switchedSound() {
 }
 
 void MagicPortalsLayer::switchedMusic() {
-    // MusicSwitchManager::saveMusicState (29772..30017) #36-52 -> the listener's
-    // turnMusicOff (pauseMusic) or turnMusicOn (resumeMusic).
+    // MusicSwitchManager::saveMusicState (29772..30017): the state written
+    // (#3-18), then #36-52 the listener's turnMusicOff (pauseMusic) or
+    // turnMusicOn (resumeMusic).
+    saveSwitches();
     if (m_musicOn) {
         musicResume();
     } else {
         musicStop();
+    }
+}
+
+void MagicPortalsLayer::saveSwitches() {
+    m_switches.SetSound(m_soundOn);
+    m_switches.SetMusic(m_musicOn);
+    if (std::string why; !m_switches.Save(why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "switches not saved: " << why << std::endl;
     }
 }
 

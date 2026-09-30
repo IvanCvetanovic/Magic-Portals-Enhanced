@@ -58,6 +58,7 @@ add_library(MagicPortalsSim STATIC
     Sky.cpp
     Sounds.cpp
     Sprites.cpp
+    Switches.cpp
     Tiers.cpp
     Trigger.cpp
     Torch.cpp

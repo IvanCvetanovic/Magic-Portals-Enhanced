@@ -45,10 +45,12 @@ add_mp_test(test_mp_play SKIPS_WITH_77)
 # levels and the remake's role table, so it skips with 77 when they are absent.
 add_mp_test(test_mp_turrets SKIPS_WITH_77)
 
-# The medals, kept between runs. Pure sim: a temporary directory and no window.
-# The ONE Magic Portals suite that touches a filesystem, and it touches only its
-# own scratch directory - the layer suites all build bare, which is what
-# Paths::saveDir being empty by default buys.
+# The medals and the sound and music switches, kept between runs. Pure sim: a
+# temporary directory and no window. The Magic Portals suite that touches a
+# filesystem, and it touches only its own scratch directory - the layer suites
+# build bare, which is what Paths::saveDir being empty by default buys. One layer
+# case gives a save directory, its own (test_mp_layer's
+# TheSwitchesAreKeptBetweenRuns, planning step 155).
 add_mp_test(test_mp_scores)
 # Every converted level started as the port starts one: the remaster's inventory.
 add_mp_test(test_mp_start SKIPS_WITH_77)

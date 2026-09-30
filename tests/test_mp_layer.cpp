@@ -58,6 +58,7 @@
 #include "sim/Particles.hpp"
 #include "sim/MenuState.hpp"
 #include "sim/Pause.hpp"
+#include "sim/Switches.hpp"
 #include "sim/Popup.hpp"
 #include "sim/Selector.hpp"
 #include "sim/Sky.hpp"
@@ -7939,6 +7940,136 @@ void ThePausesButtonsGoWhereTheOriginalsGo() {
                   layer.SimLevel() == nullptr,
               "back to levels opens the grid");
     CHECK_EQ(MenuButtonsOfKind(layer, MagicPortalsLayer::MenuButton::Kind::Level), 32);
+}
+
+// The two switches are kept between runs, as the original's saveVolume and
+// saveMusicState keep them (planning step 155). A layer given a save directory
+// reads them at attach and writes them on a toggle and never otherwise; the next
+// layer over that directory starts as the player left them - its pause showing
+// sound_mute and no music switch, no track heard, and the sound back on bringing
+// the music switch in afresh with the level's track. The main menu's switches
+// write the same file. The one layer case that writes a save, into a directory
+// of its own, emptied first and last.
+void TheSwitchesAreKeptBetweenRuns() {
+    if (!OriginalArtIsThere("TheSwitchesAreKeptBetweenRuns")) return;
+    namespace Pause = MagicPortals::Pause;
+    namespace Switches = MagicPortals::Switches;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-switches";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    const std::filesystem::path file = dir / Switches::kFileName;
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = dir.string();
+
+    // What the file says, read as the next run would read it.
+    const auto saved = [&dir](bool& sound, bool& music) {
+        Switches::Store store;
+        std::string why;
+        const bool read = store.Open(dir.string(), Switches::Defaults{}, why) && store.FromFile();
+        sound = store.SoundOn();
+        music = store.MusicOn();
+        return read;
+    };
+    const auto openPause = [](MagicPortalsLayer& layer, entt::registry& registry) {
+        for (int tick = 0; tick < 90; ++tick) tickWith(layer, registry, kRest, {}, {});
+        const bool paused = TapThePauseControl(layer, registry) && layer.Paused();
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        return paused;
+    };
+
+    // The first run: a fresh save, both on, and nothing written until a switch is.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level4");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CHECK_MSG(layer.SoundOn() && layer.MusicOn(), "a fresh save starts with both switches on");
+        CHECK(openPause(layer, registry));
+        CHECK_MSG(!std::filesystem::exists(file, ec), "nothing is written before a switch is pressed");
+        CHECK(TapPauseButton(layer, registry, Pause::Button::Sound));
+        bool sound = true;
+        bool music = false;
+        CHECK_MSG(saved(sound, music) && !sound && music, "the sound switch saves the sound off, the music on");
+        layer.OnDetach(registry);
+    }
+
+    // The second: as the player left it.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level4");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CHECK_MSG(!layer.SoundOn() && layer.MusicOn(), "the next run starts with the sound off");
+        CHECK_MSG(layer.WantedTrack().empty(), "and no track heard");
+        CHECK(openPause(layer, registry));
+        {
+            const std::vector<ScreenOverlay::Quad> quads = HudFrame(registry, layer);
+            CHECK_MSG(IndexOfImage(quads, layer.PauseRules().soundOffSprite) >= 0, "its pause shows sound_mute");
+            CHECK_MSG(IndexOfImage(quads, layer.PauseRules().music.sprite) < 0 &&
+                          IndexOfImage(quads, layer.PauseRules().musicOffSprite) < 0,
+                      "and no music switch");
+        }
+        CHECK_MSG(!layer.PressPause(registry, Pause::Button::Music) && layer.MusicOn(),
+                  "which cannot be pressed");
+        CHECK(TapPauseButton(layer, registry, Pause::Button::Sound));
+        CHECK(layer.SoundOn());
+        CHECK_MSG(IndexOfImage(HudFrame(registry, layer), layer.PauseRules().music.sprite) < 0,
+                  "the sound back on: the music switch comes in afresh");
+        for (int tick = 0; tick < 43; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(IndexOfImage(HudFrame(registry, layer), layer.PauseRules().music.sprite) >= 0,
+                  "and is there once it has entered");
+        CHECK_MSG(layer.WantedTrack() == "game", "and the level's track plays");
+        CHECK(TapPauseButton(layer, registry, Pause::Button::Music));
+        bool sound = false;
+        bool music = true;
+        CHECK_MSG(saved(sound, music) && sound && !music, "the music switch saves the music off, the sound on");
+        layer.OnDetach(registry);
+    }
+
+    // The third: the music off.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level4");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CHECK_MSG(layer.SoundOn() && !layer.MusicOn() && layer.WantedTrack().empty(),
+                  "a run after the music was switched off starts silent, with the sound on");
+        layer.OnDetach(registry);
+    }
+
+    // And the main menu: it starts as the pause left it, and its switch saves.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty() || !TickToTheMainMenu(layer, registry)) {
+            CHECK_MSG(false, "no main menu: " + layer.LoadError());
+            return;
+        }
+        CHECK_MSG(layer.MainMenuSwitches().soundOn && !layer.MainMenuSwitches().musicOn,
+                  "the main menu's switches start as the last run left them");
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK(layer.PressMainMenu(registry, MagicPortals::MainMenu::Button::Sound));
+        bool sound = true;
+        bool music = true;
+        CHECK_MSG(saved(sound, music) && !sound && !music, "and the main menu's sound switch saves");
+        layer.OnDetach(registry);
+    }
+    std::filesystem::remove_all(dir, ec);
 }
 
 void SkipOnALevelAlreadyFinished() {
@@ -16102,6 +16233,7 @@ void runTests() {
     TheTutorialPopupStopsALevelAsItLoads();
     AHelpBlockOpensItsPopupAndTheLevelTakesUpWhereItStopped();
     ThePausesButtonsGoWhereTheOriginalsGo();
+    TheSwitchesAreKeptBetweenRuns();
     SkipOnALevelAlreadyFinished();
     TheDoorCutsTheHudAndTheLevelRunsOnUnderTheMedal();
     ADeathDismissesTheHudAndTheLostScreenComesIn();

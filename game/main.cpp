@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -26,6 +27,31 @@
 
 #include "LevelVisit.hpp"
 #include "MagicPortalsLayer.hpp"
+
+namespace {
+
+// The diagnostics file, and the previous run's beside it, both in the temp
+// directory.
+constexpr const char* kLogFile = "magicportals.log";
+constexpr const char* kPreviousLogFile = "magicportals.prev.log";
+
+// The last run's log moved to `previous`, replacing the one before. Renamed
+// first; copied where the rename is refused, as Windows refuses it while
+// another running copy of the game still holds the file open.
+void KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::path& previous) {
+    std::error_code ec;
+    if (!std::filesystem::exists(log, ec) || ec) return;
+    std::filesystem::rename(log, previous, ec);
+    if (!ec) return;
+    std::error_code copyError;
+    std::filesystem::copy_file(log, previous, std::filesystem::copy_options::overwrite_existing, copyError);
+    if (copyError) {
+        std::cerr << "[Magic Portals] the last run's log was not kept in " << previous.string() << ": "
+                  << copyError.message() << std::endl;
+    }
+}
+
+} // namespace
 
 int main(int argc, char** argv) {
     // --level, --levels, --art, --data and --saves are the game's own flags. LaunchOptions
@@ -342,8 +368,10 @@ int main(int argc, char** argv) {
                   << "  --levels <dir>    the converted levels (default " << paths.levels << ")\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
                   << "  --data <dir>      the remake's data directory (default " << paths.data << ")\n"
-                  << "  --saves <dir>     DEV: keep the medals (scores.json) here instead of the user's\n"
-                  << "                    data directory - for a capture that needs a medal recorded\n"
+                  << "  --saves <dir>     DEV: keep the medals (scores.json) and the sound and music\n"
+                  << "                    switches (audio.json) here instead of the user's data\n"
+                  << "                    directory - for a capture that needs a medal recorded, or\n"
+                  << "                    that presses a switch without changing the player's\n"
                   << "  --press <what>@<tick>\n"
                   << "                    DEV: press the pause control (pause), one of the pause's\n"
                   << "                    buttons (levels, resume, skip, achievements, sound, music) or\n"
@@ -389,7 +417,12 @@ int main(int argc, char** argv) {
     // matters: a shipped game gets WIN32_EXECUTABLE and has no console at all,
     // so without this its diagnostics go nowhere. That is no use at all when
     // the thing being chased only happens while somebody else is playing.
-    const std::filesystem::path logPath = std::filesystem::temp_directory_path() / "magicportals.log";
+    const std::filesystem::path logPath = std::filesystem::temp_directory_path() / kLogFile;
+    // THE LAST RUN'S LOG, KEPT. SetFileSink opens its file truncated
+    // (engine/src/core/Log.cpp:90), so a crash's log was gone the moment the
+    // game was started again to see whether it happens twice. One run back is
+    // kept beside it; a failure here costs that copy, never the start.
+    KeepPreviousLog(logPath, std::filesystem::temp_directory_path() / kPreviousLogFile);
     if (Supersonic::Log::SetFileSink(logPath.string())) {
         std::cout << "[Magic Portals] logging to " << logPath.string() << std::endl;
     }

@@ -321,7 +321,20 @@ before it opens anything, so it runs from any directory — and a relative path 
 of its flags resolves inside `engine/`. Give the path flags below absolute paths.
 
 With no `--level` the game opens as the original does: loading screen, then main menu.
-`--level level0` starts straight in 1-01. Diagnostics also go to `%TEMP%\magicportals.log`.
+`--level level0` starts straight in 1-01. Diagnostics also go to `%TEMP%\magicportals.log`,
+and each launch first moves the last run's to `%TEMP%\magicportals.prev.log`: after a crash,
+the crashed run's log is still there once the game has been started again (one run back).
+
+The medals and the sound and music switches are kept between runs, as the original keeps
+them, in `%APPDATA%\Magic Portals\` (`scores.json`, and `audio.json` from the first press of
+a switch). `--saves <dir>` moves both, for a run that must not touch the player's.
+
+**To play, build `build-play\`:** `tools\parity\play_build.bat`, then
+`build-play\game\MagicPortals.exe`. It is the same game on the same data (the first run
+copies `build\`'s data paths), built without Vulkan validation, whose layers check every call the
+renderer makes, so its log says `Vulkan validation layers: NOT LOADED`, as it should. It builds the
+game only; `build\` stays the validated build the suites and parity captures run on. It
+configures once - if `build\`'s data paths move, delete `build-play\` and run it again.
 
 | Input | Action |
 |---|---|
@@ -367,7 +380,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--drag <x,y>:<x,y>@<tick>-<release>` | DEV: a touch that moves evenly from the first pixel to the second |
 | `--place <x>,<y>@<tick>` | DEV: put the player at the level's pixel `(x, y)` after that tick's physics step, to film what a door opens; never a win route; pass `--saves` with it, since a win records a medal |
 | `--press <what>@<tick>` | DEV: press `pause`, a pause button (`levels`, `resume`, `skip`, `achievements`, `sound`, `music`), or `back` on a menu |
-| `--saves <dir>` | DEV: keep the medals (`scores.json`) here instead of the user's data directory, for a capture that needs a medal recorded |
+| `--saves <dir>` | DEV: keep the medals (`scores.json`) and the sound and music switches (`audio.json`) here instead of the user's data directory, for a capture that needs a medal recorded or presses a switch; without it a capture reads the player's switches, which its pause and menus show |
 | `--levels <dir>` | read the converted levels from here instead of the configured path |
 | `--art <dir>` | the directory the levels' art paths resolve against (default: the one above the levels) |
 | `--data <dir>` | read the remake's `data/` from here instead of the configured path |

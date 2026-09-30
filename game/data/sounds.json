@@ -261,6 +261,27 @@
     }
   },
 
+  "switches": {
+    "_source": [
+      "DECODED (all_functions.txt; 00_order 8.0 rule 1: SetV1's vN operand is the constant N).",
+      "Both switches are saved on every toggle and read back at the next start, into one enml file,",
+      "GetExternalStoragePath() + 'ethf.user.data' (UserDataManager::saveValue, bytes 26913..27308;",
+      "the global's initialiser, 306085..306159), under the entity 'audio':",
+      "  sound: GlobalSoundSwitch::manageSoundSwitch (32340..32535) #11-39 SetGlobalVolume 1 or 0, then",
+      "    GlobalVolumeManager::saveVolume(GetGlobalVolume()) (28964..29196) #3-15, saveFloat",
+      "    'globalVolume'. main (309790..310306) #103-108 SetGlobalVolume(loadVolume()) at start;",
+      "    loadVolume (29196..29314) #3 loadFloat's default is 1f. The switch shows off exactly when",
+      "    that volume is 0 (GlobalSoundSwitch::GlobalSoundSwitch, 30305..30617, #25-39).",
+      "  music: GlobalMusicSwitch::manageMusicSwitch (33225..33409) #11-30 saveMusicState(true or",
+      "    false) (29772..30017) #6-18, saveBoolean 'musicEnabled'; getState (29688..29772) reads it",
+      "    once, through loadMusicState (30017..30165) #7-20, loadBoolean's default SetV1 1 = true.",
+      "Nothing is written at start: only the two toggles save. The port keeps the same two values under",
+      "the same names in its own audio.json beside scores.json (sim/Switches.hpp; planning step 155)."
+    ],
+    "global_volume_default": 1.0,
+    "music_enabled_default": true
+  },
+
   "_events_note": [
     "What the port can see happen, and the hook it plays. The port watches its own",
     "simulation across a tick - a portal placed, a shot fired, a crystal collected -",

@@ -21804,3 +21804,115 @@ and R25 untouched. Camera dragging: not touched.
   `dragon.json`, `art.json`, `effects.json`, `sounds.json`, `game/sim/Cutscene.hpp`, `game/sim/Earthquake.hpp`,
   `game/MagicPortalsLayer.{hpp,cpp}`, `tests/CMakeLists.txt`, `tests/test_mp_cutscene.cpp`,
   `tests/test_mp_camera.cpp` and `tests/test_mp_layer.cpp`.
+
+## Step 155 - for the owner's testing: the sound and music switches kept between runs, the last run's log kept, and a build to play without validation (built)
+
+**TRACK B: the program's S1** (`docs/parity-backlog.md` section 6, "Smaller": "sound switches not saved; the log
+erased at each launch"; the 2026-09-29 audit's `check_ship.md` 11, 15 and 21, `check_screens.md` 7,
+`audio_inventory.md` 18). Built in the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, on step 154's `e2277b8`),
+whose build reads the frozen level data in `out/snap_w1`; numbered in track B's range, and the merge renumbers it.
+Changed: `game/sim/Switches.{hpp,cpp}` (new: `Defaults`, `LoadDefaults`, `Store`), `game/sim/CMakeLists.txt`,
+`game/data/sounds.json` (`switches`: the decode and its two defaults), `game/MagicPortalsLayer.{hpp,cpp}` (`m_switches`,
+read at attach; `switchedSound` / `switchedMusic` save through `saveSwitches`), `game/main.cpp` (`KeepPreviousLog`, and
+`--saves`' help), `tools/parity/play_build.bat` (new), `.gitignore` (`build-play/`), `README.md` (*Run it* and the
+`--saves` row), `tests/test_mp_scores.cpp`, `tests/test_mp_layer.cpp`, `tests/CMakeLists.txt` (a comment). No engine
+change (the pin stays `4bfcf67`; `engine/src/core/Log.cpp:90` is left truncating, and the game moves the old file
+aside before it opens the new one), no converter change, no format finding (script behaviour).
+**GAMEPLAY: NONE.** What changes is what is kept between runs - the two switches and one run's log - and a second
+build directory. Not a gameplay step, so the program's winnability gate does not apply; no route is added. Lines
+7235 and 7364 of this record (step 50's "Both hold for the session ... **Not persisted**" and "**Not built:** the
+switches' saving") are corrected here, not rewritten.
+
+**BLOCKERS, checked first: none.** The spec's three parts each lie in the port: the switches are the layer's
+(`m_soundOn` / `m_musicOn`, `MagicPortalsLayer.hpp`), the log's path and `Log::SetFileSink` call are `game/main.cpp`'s
+(the truncation itself is the engine's `Log.cpp:90`, and needs no change), and the build directory is a script.
+
+**WHAT THE ORIGINAL DOES** (listing `all_functions.txt`, md5 `48fe65ce...`; `00_order.md` 8.0 rule 1: `SetV1`'s `vN`
+operand is the constant N; `sounds.json` `switches` cites every instruction).
+- **The sound switch.** `GlobalSoundSwitch::manageSoundSwitch` (bytes 32340..32535) #11-24: `SetGlobalVolume(1)` when
+  switched on, `SetGlobalVolume(0)` off; #34-39 `GlobalVolumeManager::saveVolume(GetGlobalVolume())` (28964..29196),
+  which #3-15 `saveFloat('audio', 'globalVolume', volume)` and then #33-47 calls the listener. `main`
+  (309790..310306) #103-108 `SetGlobalVolume(loadVolume())` before anything plays; `loadVolume` (29196..29314) #3
+  `loadFloat`'s default is 1. `GlobalSoundSwitch::GlobalSoundSwitch` (30305..30617) #25-39 shows the switch off
+  exactly when `GetGlobalVolume() == 0`.
+- **The music switch.** `GlobalMusicSwitch::manageMusicSwitch` (33225..33409) #11-30
+  `MusicSwitchManager::saveMusicState(true / false)` (29772..30017): #3-4 `m_state`, #6-18 `saveBoolean('audio',
+  'musicEnabled', state)`, #36-52 the listener. `getState` (29688..29772) loads once, lazily, through
+  `loadMusicState` (30017..30165), whose #7 default is `SetV1 1`: true.
+- **Where.** `UserDataManager::saveValue` (26913..27308): `GetExternalStoragePath() + 'ethf.user.data'` (the global's
+  initialiser, 306085..306159), parsed, the one value added, the whole written back. `loadValue` (27308..27785)
+  returns the default for a value the file lacks. Nothing writes at start: only the two toggles save.
+
+**THE CHANGE.**
+1. **`sim/Switches`**: `LoadDefaults` reads `sounds.json` `switches` (`global_volume_default` 1.0,
+   `music_enabled_default` true; refused without both); `Store` keeps `globalVolume` and `musicEnabled` under
+   `audio` in `<saveDir>/audio.json` - the original's names, in the port's own JSON beside `scores.json`
+   (`Scores.hpp` says why not the enml). Memory-only for an empty directory (every bare suite layer); value by
+   value the default where the file says nothing; `SoundOn` is `globalVolume != 0`; `SetSound` writes 1 or 0;
+   `Save` through a temporary and a rename, as `Scores::Store::Save`. Unlike `scores.json`, a file that will not
+   parse is reported, the defaults kept, and written over at the next toggle: it holds nothing but the switches,
+   and `saveValue` does the same.
+2. **The layer.** `OnAttach` opens the store from `Paths::saveDir` after the medals and sets `m_soundOn` /
+   `m_musicOn` from it, logging `switches: sound on|off, music on|off (read from <file>)` or `(the defaults; a
+   toggle saves them to <file>)` when there is a save directory. `switchedSound` and `switchedMusic` - the port's
+   `saveVolume` and `saveMusicState`, reached from the pause's and the main menu's switches - save first, then act
+   as before. Nothing else writes the file; nothing writes it at start.
+3. **The log.** `main` moves `%TEMP%\magicportals.log` to `magicportals.prev.log` (replacing it) before
+   `SetFileSink` truncates it: renamed, or copied where Windows refuses the rename because another running copy holds
+   the file open; a failure costs that copy, never the start.
+4. **`tools/parity/play_build.bat`**: `build-play\` - port_build.bat's configure (MSVC, Ninja, Release, glslc) with
+   `SUPERSONIC_ENABLE_VALIDATION=OFF`, `MAGICPORTALS_BUILD_TESTS=OFF`, and the `SUPERSONIC_MAGICPORTALS_*` entries
+   copied from `build\CMakeCache.txt` (the defaults without one); configured once, then `--target MagicPortals` by
+   default. `build/` in `.gitignore` matches a directory named exactly `build`, so `build-play/` is added.
+   `build\`'s configuration is not touched. README's *Run it* says how to play, where the previous log is, and that
+   the switches are kept; `--saves` (help and README) now keeps both files.
+
+**THE GATES.** After = `MagicPortals.exe` `fb381ed0`; before = step 154's committed build (`ca1d67f2`) and its sweep
+(`program/P2/after/sweep`, 128 of 128 matching its `capture.txt`). Everything under `out/parity/program/S1/`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** at `build2.log`. `build1.log` (59 steps: 6 compiles - `Switches.cpp`, the layer, `main.cpp`, `LevelVisit.cpp`, `test_mp_scores`, `test_mp_layer` - and 48 executables relinked on the sim library) had one, C4244 on the new `test_mp_scores` line that fed a double to `CHECK_NEAR`'s floats, fixed (exact compare); `build3` and `build4` are single relinks after refusals, 0 warnings |
+| `build/`'s configuration | unchanged | cache `7e4e14d6` | **passes**: `7e4e14d6`, `diff` against the copy taken first empty (the two CMakeLists edits re-ran CMake; nothing in the cache moved): validation ON, the five snapshot paths |
+| (1) The switches, unit | defaults 1 / true from `sounds.json`; memory-only writes nothing; a fresh folder writes nothing until a toggle; the file keeps `audio.globalVolume` 0/1 and `musicEnabled`; a reopen reads them; a missing value is its default; a volume not 0 is on; an unreadable file reported and written over; a table without both defaults refused | not built | **passes** (`test_mp_scores` 63 checks; 32 before by count of the old source - no earlier run of it is recorded) |
+| (1) The switches, layer | a layer on a save directory: both on, nothing written before a press; the pause's sound switch saves off; the next layer starts with the sound off and no track, its pause shows `sound_mute` and no music switch, Music cannot be pressed; the sound back on brings the music switch in afresh and plays `game`; the music off is saved and the next layer starts silent with the sound on; the main menu starts as the pause left it and its sound switch saves | session only | **passes** (`test_mp_layer` 3195 checks, 3173 + 22, in its own temp directory, removed after) |
+| (1) The switches, exe | run 1 (`--saves` a scratch folder) presses pause at 90 and sound at 150; run 2 on the same folder presses pause only: `sound off` read; its pause without the music switch; its f200 the same as run 1's | - | **passes** (`gate/`): run 1 logs `sound on, music on (the defaults ...)` and leaves `audio.json` `globalVolume 0, musicEnabled true`; run 2 logs `switches: sound off, music on (read from .../audio.json)`; at f120 run 1 draws `sound_high` and `music_on`, run 2 `sound_mute` and no music switch (`gate/switch_crops.png`); f200 `06bc7695` in both (0 px differ), f80 `da8b9225` in both (before the pause) |
+| (1) Nothing written at start; the owner's save | `%APPDATA%\Magic Portals` as found after every run of this step | `scores.json` `40bfef3a`, no `audio.json` | **passes**: `scores.json` `40bfef3a`, no `audio.json`, after the suites, the gate, the play run and the sweep (`owner_save_after.txt`) |
+| (2) The last run's log kept | a private `TMP` holding a dummy log and a dummy `prev`: after run 1 `prev` is the dummy log; after run 2 `prev` is run 1's log byte for byte | truncated at each launch | **passes**: both runs' own `logging to` line names the private temp; after run 1 `prev` `86875885` (the dummy log, which replaced the dummy `prev` `9e0499bd`), log `1d7e8d84`; after run 2 `prev` `1d7e8d84` (= run 1's, copied before run 2), log `016f7f7b`. verify1 (`S1/verify1/gate`, 4 launches) retook it and ran the copy fallback: its run C was launched with the log held open (`gate/hold_log.py`: shared read and write, no delete; a probe rename refused, WinError 32), and `prev` was still run B's log byte for byte, no "not kept" message, C's own log written fresh |
+| (3) The play build | configured from `build\`'s paths, validation OFF, no suites; 0 warnings; the exe says NOT LOADED; its frame the validated build's | none | **passes** (`play_build1.log`, 198 steps, 0 warnings, the 11 `D9025` notes of the vendored /W0 files): the five `SUPERSONIC_MAGICPORTALS_*` lines identical to `build\`'s, `GLSL_COMPILER`, build type and generator too; only `SUPERSONIC_ENABLE_VALIDATION` OFF and `MAGICPORTALS_BUILD_TESTS` OFF differ; `build-play/game/MagicPortals.exe` `6d7c4bb1`, the only exe; its first launch ran (1-05, f420): `Vulkan validation layers: NOT LOADED`, png `0ffb2e37` = P2's sweep's 1-05. Frame pacing is NOT measured; the run's own profiler (medians over 420 frames, `play/1-05_level4.log` against `after/sweep/1-05_level4.log`) records Scene Record **0.44 ms** against the validated build's **1.02 ms** and Frame Prepare 0.19 against 0.24 ms, both builds waiting about 14.4-14.8 ms a frame on the 60 Hz swap: on this level the validation cost is inside the frame. The play run's 19.31 s of wall time (`play/capture.txt`, against about 8.5 s a level in the sweep) is not in its frames (INFERRED: the first launch of a freshly linked exe): its frame-1 worsts are of the sweep's size (Resource Sync 50.3 against 54.9 ms, Game Layers 80.8 against 74.2 ms). The script's header comment was reworded after this run (comments only). Its other branches were run by verify1 on two scratch copies of a repository (the script byte for byte, an empty `engine/CMakeLists.txt`, a `project(NONE)` that prints what CMake got: `S1/verify1/playfake1`, `playfake2`): with a copy of `build\`'s cache, validation OFF, tests OFF, Release, the SDK's glslc and the five snapshot paths exactly; with no cache, the five empty (the project's defaults), OFF and OFF; arguments (`-- -n -v`) on the configured copy skip the configure and pass through (`ninja: no work to do`, rc 0). Its message line, which printed "the data paths from build\:" over nothing when there was no cache, was reworded at the commit (text only) and the three runs retaken on fresh copies (`S1/commit_check/`): only that line differs |
+| (3) `.gitignore` | `build-play/` ignored | not covered (`build/` matches only `build`) | **passes**: `git check-ignore -v` gives `.gitignore:54:build-play/` |
+| (4) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no input line; one defaults `switches:` line per log; 128 of 128 byte-identical to `P2/after/sweep` (written before the sweep: a sweep presses nothing and the switches change no picture) | `P2/after/sweep` | **passes: 128 of 128 byte-identical** (`compare_sweep.txt`; 01:32-01:51 on `fb381ed0`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines (P2's 128 match theirs); no input line (the 3 event lines - 2-12's and 2-32's deaths without input, 2-32's knight - are P2's same 3); one `switches: sound on, music on (the defaults; a toggle saves them to ...\Magic Portals\audio.json)` line in each of the 128 logs, none read a file, no switch warning. The logs otherwise equal P2's but for the png path and the timings, and 2-32's, which P2 captured before its save repair with a medal plaque loaded: it equals P2's re-run after the repair (`log_diff.txt`) |
+| Winnability | routes and the reachability check, for a gameplay step | - | **not applicable: no gameplay change.** This tree has no route harness (W.1 is not an ancestor of `w1-b`) |
+
+**SUITES**, run directly, once each: `test_mp_scores` **63** checks, 0 failures (32 before, by count of the old source: no earlier run is recorded); `test_mp_sounds`
+**107**, 0 failures (unchanged; it reads `sounds.json`); `test_mp_layer` **3195**, 0 failures (3173 at step 154; the
+new case). The other 43 suites were relinked (the sim library gained `Switches.obj`) with their code and their inputs
+unchanged: not run, to spare Smart App Control launches.
+
+**SMART APP CONTROL: 2 refusals** (`S1/sac_refusals.txt`): `test_mp_layer` (its first launch; deleted, relinked once,
+`50edcd9c`, then run) and `MagicPortals.exe` `b8f779e1` (the gate's first launch; deleted, relinked once, `fb381ed0`,
+then the gate, the sweep). `test_mp_scores`, `test_mp_sounds` and `build-play`'s `MagicPortals.exe` ran first time.
+
+**RECORDED DEVIATIONS AND DECISIONS.**
+1. **The file is the port's own**, `audio.json` beside `scores.json`, not the original's `ethf.user.data` enml:
+   the same two values under the original's entity and value names. A `globalVolume` that is not 0 or 1 cannot be
+   written by the port and reads as on, as the original's switch reads it.
+2. **A capture now reads the player's switches.** A run without `--saves` reads `%APPDATA%\Magic Portals\audio.json`,
+   so a pause or menu capture shows the switches the player left - as the medal plaque already reads the player's
+   medals. A capture that presses `sound` or `music` must pass `--saves`, or it changes the player's save (README's
+   row says so). The sweeps press nothing and draw no pause, so their pictures do not depend on it (gate 4).
+3. **One run of log back**, not more: `magicportals.prev.log` is replaced at each launch. Two copies of the game
+   started together still share the one file, as before.
+
+**RULINGS APPLIED.** The standing direction that the original decides: the switches are saved on the toggle and
+read at the start, as the listing does. R1, R2, R17 and R23 are not this step's; R24 and R25 untouched. Camera
+dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- `build-play\` is configured once; if `build\`'s data paths move (a fresh `build\`, a moved `out\`), delete
+  `build-play\` and run `play_build.bat` again. The main checkout's `build\` uses the repository's own `out\`, so its
+  play build does too.
+- For the close role: `docs/parity-backlog.md` section 6's "Smaller" row (the switches and the log), and the
+  `DEVLOG.md` entry.
+- For the merge's renumbering: "step 155" is written in `game/data/sounds.json` (`switches._source`),
+  `game/MagicPortalsLayer.hpp`, `tests/CMakeLists.txt`, `tests/test_mp_layer.cpp` and `tests/test_mp_scores.cpp`.

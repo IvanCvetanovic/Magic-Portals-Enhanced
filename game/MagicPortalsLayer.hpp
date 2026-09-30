@@ -52,6 +52,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Sky.hpp"
 #include "sim/Sounds.hpp"
 #include "sim/Sprites.hpp"
+#include "sim/Switches.hpp"
 #include "sim/Tiers.hpp"
 
 namespace MagicPortals {
@@ -172,7 +173,8 @@ public:
         // ctest working directory and reading each other's - order-dependent
         // failure that reads as a flake.
         //
-        // Only the shipped binary passes one, from UserDataDirectory.
+        // Only the shipped binary passes one, from UserDataDirectory. The sound
+        // and music switches are kept there too (audio.json, sim/Switches.hpp).
         std::string saveDir;
     };
 
@@ -1149,7 +1151,7 @@ public:
     // The two switches, and the music switch's clock on this pause.
     Pause::Switches PauseSwitches() const;
     // Whether the game makes a sound at all, and plays its music: the pause's
-    // two switches, which hold for the session.
+    // two switches, kept between runs where Paths::saveDir is given.
     bool SoundOn() const { return m_soundOn; }
     bool MusicOn() const { return m_musicOn; }
     // Press one of the pause's buttons, as a tap on it does. False when it led
@@ -2267,8 +2269,12 @@ private:
     // A switch's toggle, as its listener (the AudioManager) takes it: off is
     // pauseMusic; the sound back on resumes only with the music on, the music
     // back on always (turnGlobalVolumeOn / turnMusicOn, bytes 186452..186631).
+    // Each saves the switches first, as saveVolume and saveMusicState write the
+    // value before they call the listener.
     void switchedSound();
     void switchedMusic();
+    // The switches as they stand, into audio.json (sim/Switches.hpp).
+    void saveSwitches();
     // Game::preLoop #485-509: the level's track, the boss's, or pauseMusic.
     void startLevelMusic(int index);
     // The calls the bosses' callbacks make, read off the tick's level.
@@ -2754,10 +2760,11 @@ private:
     // (`updated`), the plaque's alpha.
     void tickPlaqueDismissal(bool updated);
     // The switches: GlobalSoundSwitch sets the global volume, GlobalMusicSwitch
-    // the music. Held for the session only - the original saves the volume
-    // (GlobalVolumeManager::saveVolume), which the port does not yet.
+    // the music. Read from m_switches at attach, and saved into it on every
+    // toggle, as saveVolume and saveMusicState save them (planning step 155).
     bool m_soundOn{true};
     bool m_musicOn{true};
+    Switches::Store m_switches;
     // Game time stood still this level, for LevelFrameMs.
     double m_stoppedMs{0.0};
     // Each pause picture's file resolved to the hd art once per level; empty
