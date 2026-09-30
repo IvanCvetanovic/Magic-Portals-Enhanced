@@ -63,13 +63,15 @@ suites a change touches once each, and report what stayed blocked.
       (`merge_w1/verify1.json`) passed every gate and re-took the sweep byte-identical. Engine pin `4bfcf67`,
       unmoved. Worktrees `Magic-Portals-Remake-w1b` and `-w1c` and both branches removed. **The standing sweep
       baseline is `out/parity/program/merge_w1/sweep`.** Section 6's "Wave 1" paragraph has the steps.
-- [ ] **`test_mp_launchers` and `test_mp_keys` have not run on the merged binaries** (step 112). The merge relinked
+- [x] **`test_mp_launchers` and `test_mp_keys` have not run on the merged binaries** (step 112). The merge relinked
       both; Smart App Control refused each twice (the first launch or the ctest, then the one relink), and the merge's
       independent check did not launch them. Their last runs: `test_mp_launchers` 105 on track B (step 109; 98 on
       track A at step 95) and `test_mp_keys` 124 on track A (step 98; track B did not run it), 0 failures each. Next:
       the next step that relinks them launches each once and records the count. *Step 118 ran `test_mp_keys` (169) on
       track A; both are again among the 17 suites NOT RUN on wave 1's merged code (step 128, the row "17 suites" in
-      section 6's Tests).*
+      section 6's Tests).* *Closed by step 129 (T.2), on wave 1's merged code in the one runner `test_mp.exe`
+      (`6c5f2626`), each in the one-process run and under ctest, the same count in both: `test_mp_launchers` 105 and
+      `test_mp_keys` 169, 0 failures, first launch, 0 refusals.*
 - [ ] Planning doc Step 45 (G3) still reports pre-amendment verdicts; add a note citing `design_port.md` §10 (gate
       amendments) and relabel the two attribution rows as the gates.
 - [ ] `test_mp_launchers`: add a refusal case for a missing/bad throwable emissive.
@@ -1628,7 +1630,9 @@ done; (5) G2, then G1 and G9, each re-verifying its route list above; G4 and G10
 step 123's two MEDIUM rows (the medal saved at the door; 4-19's key sparkles) before the owner plays the three
 cutscene levels; (7) the engine pin-bump step, on its own with a 128-level byte-identity sweep, carrying a
 clamp-to-edge sampler for 2-32's claw lines (the Tests row) - it re-takes every baseline; (8) the 17 suites not run on
-the merged code, each once, as the first step that links them.
+the merged code, each once, as the first step that links them. *(8) is done by step 129 (T.2): the suites are one
+runner, `test_mp.exe`, so a relink makes one new executable, not 47. All 47 ran on the merged code with 0 failures,
+once in one process and once under ctest (48 of 48, 0 Not Run), with 0 Smart App Control refusals.*
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [ ] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2101,7 +2105,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       corner bands (70 past one side and 40 past the other reaches in the original, not in the port). Fix: that test in
       `BlastReaches`, a test point there, and `test_mp_ghost.cpp:671`'s "a sphere against a box, not a box" reworded.
       Behaviour: its own step. 3-32's route's blasts lie past one side only, unaffected.
-- [ ] **22 suites include step 117's changed headers and have not run on its code** (step 117's verifier): boss,
+- [x] **22 suites include step 117's changed headers and have not run on its code** (step 117's verifier): boss,
       bounce, demolish, diamonds, dragon, fields, fire, hazards, hinge, keys, launchers, minions, movers, play, shot,
       start, statics, timed, torch, turrets, wells, zerog (`test_mp_*`), and every suite links the changed
       `MagicPortalsSim`. All 36 affected objects compile with 0 warnings (the verifier's compile-only check); the next
@@ -2122,6 +2126,24 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       ten no track changed), their code merged without a conflict, the sweep started all 128 levels, and
       `test_mp_camera`'s table matches `earthquake.json`, the enum and `kKeys` row by row (the verifier's static check).
       Next: the next step that links them runs each once and records its count; no ctest loop.*
+      *Closed by step 129 (T.2).* The suites are one runner, `test_mp.exe` (`6c5f2626`). Its one link ran on its first
+      launch, with 0 refusals. It ran every suite on the merged code, once in one process and once under ctest (48 of
+      48 passed, 0 Not Run), with 0 failures and the same count in both, 47 of 47. The 17: camera 214, geometry 64,
+      scores 63, start 753, hazards 43, fire 94, hinge 28, bounce 189, wells 321, darkdragon 259, keys 169, diamonds
+      134, launchers 105, lighting 548, sky 630, tiers 527, select 112. Every suite has now run on step 117's and step
+      118's code, and the other 30 are at step 128's counts. What the row left, `ghost.json`'s unread
+      `body.radius_px`, is the next row.
+- [ ] **`ghost.json`'s unread `body.radius_px` can go** (step 117 kept it, and its `_radius_px_not_read` note, "because
+      a binary built before that step still requires the key"). Since step 129 every suite is one binary built after
+      step 117 and run on the merged code, and `MagicPortals.exe` `755b8a9d` is step 128's. Removing the key is a data
+      change: the step that does it runs `test_mp_ghost` and whichever suites read the table, once each.
+- [ ] **`test_mp` alone counts every exit 77 as skipped, marked or not** (step 129, deviation 3; its verifier's LOW
+      finding). ctest gives `SKIP_RETURN_CODE 77` only to the suites whose `add_mp_test` line carries `SKIPS_WITH_77`,
+      so an unmarked suite's 77 is FAILED under ctest. In the one-process tally it is "skipped", and the run exits 0.
+      The path was reviewed, not exercised: on the owner's machine every data path exists, so no suite returns 77.
+      Fix (code, the next step that touches `tests/test_mp.cpp`): hand the runner the marks (a list generated from
+      `add_mp_test`) or report an unmarked 77 as FAILED. A fresh-clone run, without `out/`, exercises the path. Until
+      then ctest's verdict is the one that counts.
 
 - [x] **Step 118's sweep and window replay NOT RUN** (Smart App Control refused `MagicPortals.exe` `57630962`, `e78d335b`
       and `f5aacc1f`; both relinks spent). *Run by its verifier* on `cbdb4004` (a link-only relink): the sweep 127 of 128

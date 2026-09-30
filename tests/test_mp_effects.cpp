@@ -13,6 +13,7 @@
 // never skips.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Earthquake.hpp"
 #include "sim/Effects.hpp"
@@ -1423,7 +1424,7 @@ void ARowMissingAFactIsRefused() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_effects") {
     TheRowsAreTheDecodedCalls();
     TheEyeSideIsTheCellTheCharacterIsDrawnOn();
     TheEyesAreAddedOnTheCharacter();

@@ -12,6 +12,7 @@
 // so this runs anywhere and never skips.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Hud.hpp"
 #include "sim/LevelEnd.hpp"
@@ -827,4 +828,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_popup", 100)
+MP_TEST_MAIN("test_mp_popup", 100)

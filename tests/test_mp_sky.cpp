@@ -32,6 +32,7 @@
 // with 77.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Motion.hpp"
 #include "sim/Roles.hpp"
@@ -851,7 +852,7 @@ void EveryLevelsSpaceSky() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_sky") {
     TheRulesAreSkyJsons();
     AStillSkyIsTheViewsCentreWhereverTheCameraIs();
     TheSkyIsAsTallAsTheView();

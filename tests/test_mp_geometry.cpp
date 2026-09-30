@@ -12,6 +12,7 @@
 // landing check leans on - no statics, nothing to land on.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "core/Components.hpp"
 #include "core/ConvexHullCache.hpp"
@@ -333,4 +334,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_geometry", 55)
+MP_TEST_MAIN("test_mp_geometry", 55)

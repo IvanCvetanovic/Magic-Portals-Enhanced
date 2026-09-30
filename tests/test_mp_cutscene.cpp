@@ -21,6 +21,7 @@
 // only the port's own committed data and always runs.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "core/Components.hpp"
 #include "sim/Cutscene.hpp"
@@ -366,4 +367,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_cutscene", 60)
+MP_TEST_MAIN("test_mp_cutscene", 60)

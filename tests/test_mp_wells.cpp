@@ -18,6 +18,7 @@
 // where it looked, when they are absent.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "core/Components.hpp"
 #include "sim/Game.hpp"
@@ -608,7 +609,7 @@ void runTests() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_wells") {
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {

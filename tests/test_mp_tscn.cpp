@@ -10,6 +10,7 @@
 // line it must be caught on and a word the error must contain.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Tscn.hpp"
 
@@ -334,4 +335,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_tscn", 160)
+MP_TEST_MAIN("test_mp_tscn", 160)

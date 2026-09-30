@@ -38,7 +38,7 @@ endif()
 add_executable(MagicPortals
     main.cpp
     LevelVisit.cpp   # DEV: --visit-levels, never pushed without it
-    Route.cpp        # DEV: --route, never pushed without it; test_mp_routes compiles it too
+    Route.cpp        # DEV: --route, never pushed without it; test_mp compiles it too, for test_mp_routes
 )
 
 target_link_libraries(MagicPortals PRIVATE MagicPortalsGame)

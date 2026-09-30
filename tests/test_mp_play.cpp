@@ -7,6 +7,7 @@
 // roles, strides, positions - and what it judges by threshold is physics.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "core/Components.hpp"
 #include "core/PhysicsSettings.hpp"
@@ -1378,7 +1379,7 @@ void runTests() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_play") {
     std::error_code ec;
     const std::string roles = kData + "/entity_roles.json";
     if (!std::filesystem::is_directory(kLevels, ec) || !std::filesystem::is_regular_file(roles, ec) ||

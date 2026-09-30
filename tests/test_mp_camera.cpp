@@ -13,6 +13,7 @@
 // (sim/Impacts), on shapes and a registry of its own.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "core/Components.hpp"
 #include "sim/Camera.hpp"
@@ -818,4 +819,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_camera", 80)
+MP_TEST_MAIN("test_mp_camera", 80)

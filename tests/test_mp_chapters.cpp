@@ -11,6 +11,7 @@
 // saying where it looked, when they are absent.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Chapters.hpp"
 
@@ -104,7 +105,7 @@ void runTests() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_chapters") {
     std::error_code ec;
     if (!std::filesystem::is_regular_file(kChapters, ec) || !std::filesystem::is_directory(kLevels, ec)) {
         std::printf("test_mp_chapters: SKIPPED - needs chapters.json at %s\n"

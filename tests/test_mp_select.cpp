@@ -4,6 +4,7 @@
 // capture of the original, at 2.8125 px a unit.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Chapters.hpp"
 #include "sim/Hud.hpp"
@@ -387,4 +388,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_select", 100)
+MP_TEST_MAIN("test_mp_select", 100)

@@ -1,10 +1,23 @@
 # The port's suites, verified against the Godot remake and the original.
 #
-# Each suite is one .cpp built by the engine's own rule, supersonic_add_test
-# (engine/cmake/SupersonicTesting.cmake): the test harness, SupersonicCore and
-# the GLM configuration its interface carries, /W4, and add_test under the
-# suite's own name, so ctest runs it from build/tests. The engine's suites are
-# built by the same function in the engine's own build and are not built here.
+# Each suite is one .cpp, and all of them are built into ONE executable, test_mp
+# (test_mp.cpp): `test_mp <suite>` runs one suite as its own executable did - its
+# output, its summary line, its exit code - and `test_mp` alone runs every suite.
+# Each suite keeps its own ctest entry under its own name, `test_mp <suite>`, run
+# from build/tests as before. MpSuite.hpp is how a suite's main registers.
+#
+# A deliberate departure from the engine's rule, supersonic_add_test
+# (engine/cmake/SupersonicTesting.cmake), which makes one executable per suite,
+# and which the port followed until planning step 129. The reason is Windows
+# Smart App Control on the owner's machine: it refuses the first launch of a share
+# of freshly linked, unsigned executables, and every refusal is a notification to
+# the owner. Every suite links MagicPortalsSim, so a change to a widely included
+# header relinked all 47 (wave 1's merge alone drew 41 refusals). One executable
+# makes a relink one new binary. What the rule gives a suite is kept on test_mp by
+# hand, below: the harness, SupersonicCore and the GLM configuration its interface
+# carries, and /W4. That copy is what the engine's rule exists to avoid, so if
+# supersonic_add_test changes, this block follows it. The engine's own suites are
+# built by that rule in the engine's own build and are not built here.
 #
 # Magic Portals, from the Godot remake. The weakest oracle of the three: the
 # remake's harnesses assert behaviour over Godot's 2D solver, which is not being
@@ -14,8 +27,9 @@
 # SKIPS_WITH_77 marks a suite that reads the converted levels - this repository's
 # gitignored out/, which a fresh clone does not have - some of them chapters.json
 # or the remake's data as well, so on a build machine they can simply be absent.
-# Such a suite exits 77 before its first check, printing the path it looked in,
-# and ctest reports it SKIPPED: never a pass. But ctest knows 77 only from the
+# Such a suite returns 77 before its first check, printing the path it looked in;
+# test_mp exits with it, and ctest reports it SKIPPED: never a pass. (`test_mp`
+# over every suite counts a 77 as skipped too.) But ctest knows 77 only from the
 # test's SKIP_RETURN_CODE, and without it the same exit is a FAIL. The mark sits
 # on the suite's own line because a separate list of names is what nine suites
 # were added without, so a fresh clone would report them failed. A misspelt mark
@@ -23,13 +37,25 @@
 # (OFF, NO, 0, IGNORE...) gets through. A suite that skips only a part of itself
 # and still returns its summary takes no mark: that part is skipped without the
 # data, and never with 77.
+#
+# The layer (MagicPortalsGame) and game/Route.cpp are linked for every suite now,
+# where only test_mp_layer and test_mp_routes had them: the static library adds
+# only what a suite calls, and only the routes suite calls Route.cpp.
+add_executable(test_mp test_mp.cpp ${CMAKE_SOURCE_DIR}/game/Route.cpp)
+target_link_libraries(test_mp PRIVATE Supersonic::TestHarness SupersonicCore MagicPortalsSim MagicPortalsGame)
+if (MSVC)
+    target_compile_options(test_mp PRIVATE /W4)
+else()
+    target_compile_options(test_mp PRIVATE -Wall -Wextra)
+endif()
+
 function(add_mp_test name)
     cmake_parse_arguments(PARSE_ARGV 1 MP "SKIPS_WITH_77" "" "")
     if (MP_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "add_mp_test(${name}): unknown argument ${MP_UNPARSED_ARGUMENTS}")
     endif()
-    supersonic_add_test(${name})
-    target_link_libraries(${name} PRIVATE MagicPortalsSim)
+    target_sources(test_mp PRIVATE ${name}.cpp)
+    add_test(NAME ${name} COMMAND test_mp ${name})
     if (MP_SKIPS_WITH_77)
         set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
     endif()
@@ -190,17 +216,18 @@ add_mp_test(test_mp_select)
 # The layer, attached to a bare registry: no window, no Vulkan. It drives taps
 # through the camera, and plays level30 from the spawn to the exit.
 add_mp_test(test_mp_layer SKIPS_WITH_77)
-target_link_libraries(test_mp_layer PRIVATE MagicPortalsGame)
 
 # Every level a win route plays from its start to its door (game/Route.hpp): the
 # routes are tests/routes/<level>.json, found at run time, so a route is added
 # without touching the suite. Played through the layer on the DEV schedule main's
-# --route uses; Route.cpp is compiled in here and into MagicPortals rather than put
-# in MagicPortalsGame, so no other suite is relinked for it.
+# --route uses. Route.cpp is compiled into test_mp (above) and into MagicPortals
+# rather than put in MagicPortalsGame; that kept the other suites from relinking
+# when it changed, which one executable no longer needs, and moving it would
+# relink the game for nothing (step 129 left it). The routes' directory is this
+# one source file's definition, so moving it recompiles one suite.
 add_mp_test(test_mp_routes SKIPS_WITH_77)
-target_sources(test_mp_routes PRIVATE ${CMAKE_SOURCE_DIR}/game/Route.cpp)
-target_link_libraries(test_mp_routes PRIVATE MagicPortalsGame)
-target_compile_definitions(test_mp_routes PRIVATE MAGICPORTALS_ROUTES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/routes")
+set_property(SOURCE test_mp_routes.cpp APPEND PROPERTY
+             COMPILE_DEFINITIONS "MAGICPORTALS_ROUTES_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/routes\"")
 
 # And the static check beside it: no level's door sealed off in the port, rerun over the
 # converted levels this build reads and compared with tools/parity/reachability.json. It is

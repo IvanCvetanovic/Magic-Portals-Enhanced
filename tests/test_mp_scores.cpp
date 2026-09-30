@@ -21,6 +21,7 @@
 // directory and no window.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Scores.hpp"
 #include "sim/Switches.hpp"
@@ -276,4 +277,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_scores", 50)
+MP_TEST_MAIN("test_mp_scores", 50)

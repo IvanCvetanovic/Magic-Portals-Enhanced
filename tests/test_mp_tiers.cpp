@@ -22,6 +22,7 @@
 // is skipped without them, never with 77.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Sprites.hpp"
 #include "sim/Tiers.hpp"
@@ -414,7 +415,7 @@ void EveryOriginalImageDrawsTheTierItsNameFinds() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_tiers") {
     TheRulesAreTiersJsons();
     AMalformedTiersFileIsRefused();
     FullhdIsTriedBeforeHd();

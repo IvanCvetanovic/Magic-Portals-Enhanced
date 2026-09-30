@@ -11,6 +11,7 @@
 // repository, and is skipped, saying where it looked, when they are absent.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "core/AudioClip.hpp"
 
@@ -3709,7 +3710,7 @@ void AShockRingWithoutItsNumbersIsRefused() {
             "a span below 0");
 }
 
-int main() {
+MP_SUITE_MAIN("test_mp_sprites") {
     AnImageSaysItsSizeInItsHeader();
     AnythingElseIsRefusedByName();
     AJpegSaysItsSizeInItsFrameHeader();

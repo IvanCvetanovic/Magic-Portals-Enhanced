@@ -13,6 +13,7 @@
 // is pinned here the same way, against the remake's ui2 spec.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "core/BitmapFont.hpp"
 
@@ -932,4 +933,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_hud", 100)
+MP_TEST_MAIN("test_mp_hud", 100)

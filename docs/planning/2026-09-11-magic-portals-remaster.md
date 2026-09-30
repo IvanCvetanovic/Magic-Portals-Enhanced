@@ -24169,3 +24169,180 @@ dragging is untouched.
 - **Track B's `--help` text for `--saves` stops mid-sentence** ("...without changing the player's"; `game/main.cpp`,
   step 124). It predates the merge and was left as committed.
 - **The standing sweep baseline is now this step's** `out/parity/program/merge_w1/sweep/`, for all three tracks.
+
+## Step 129 - the port's suites in one runner: test_mp, which runs one named suite as its own executable did or every suite in one process, so a relink makes one new executable instead of 47 (built)
+
+**THE PROGRAM'S T.2.** Smart App Control refuses the first launch of a share of freshly linked, unsigned executables
+on the owner's machine, and every refusal is a notification to him. Every suite linked `MagicPortalsSim`, so a change
+to a widely included header relinked all of them: wave 1's merge alone drew 41 refusals (step 128), the wave 83. The
+suites are now one executable, `build/tests/test_mp.exe`. There are 47 suites, not the 45 the spec counted. Changed:
+`tests/MpSuite.hpp` (new: the registration), `tests/test_mp.cpp` (new: the runner), `tests/CMakeLists.txt`, the 47
+`tests/test_mp_*.cpp` (two lines each; `test_mp_routes.cpp` also its usage line and one comment), `README.md` (step
+8, the routes command, the Smart App Control paragraph and the layout table), and a comment in `game/CMakeLists.txt`.
+No engine change (the pin stays `4bfcf67`), no converter change, no format finding.
+**GAMEPLAY: NONE.** No game source is touched. `MagicPortals.exe` is not relinked. No check is added, removed or
+changed. Not a gameplay step, so the program's winnability gate does not apply; no route is added.
+
+**BLOCKERS, checked first: none.** Every suite's `main` is either TestHarness's `TEST_MAIN` (13) or its own
+`int main()` (33) or `int main(int argc, char** argv)` (`test_mp_routes`). Every suite keeps its helpers in an
+anonymous namespace, except `test_mp_sprites`, whose functions after line 2178 are at global scope. No other suite
+defines those names at global scope, so they do not collide. The linker checks this: it would refuse a second
+definition. No suite changes process state that would leak into the next suite in one process: none calls
+`current_path`, `SetCurrentDirectory`, `_putenv`, `srand`, `locale::global`, `freopen` or a log sink, and a grep
+of the port's sources finds no mutable static or global. The harness's `g_checks` and `g_failures` are `inline`
+globals, one pair for the whole process, so the runner resets them before each suite.
+
+**THE CHANGE.**
+1. **`tests/MpSuite.hpp`.** A suite's `main` becomes a function with internal linkage, registered under the suite's
+   ctest name before `main` runs: `MP_TEST_MAIN(suite, minChecks)` replaces `TEST_MAIN`; `MP_SUITE_MAIN(suite) {`
+   replaces `int main() {`; `MP_SUITE_MAIN_ARGS(suite, argc, argv) {` replaces the routes suite's. The body after it
+   is the suite's own, unchanged: the same checks, the same floors, the same summary line, the same 77. The registry
+   is a function-local static, so the order in which the suites' objects initialise does not matter. A suite that
+   still defines `main` stops the link. A suite registered under the wrong name fails its ctest entry.
+2. **`tests/test_mp.cpp`**, the runner:
+   - `test_mp <suite> [args...]` runs one suite with argv = its name and then its own arguments, and exits with what
+     the suite returns: 0, 1, or 77 to skip. The `test_mp_` prefix may be dropped.
+   - `test_mp` alone runs every suite in one process, in name order. Before each one it zeroes the harness's two
+     counters and prints `--- <suite>`. It ends with `test_mp: N suites, P passed, S skipped, F failed` and a
+     `FAILED` line for each failure, and exits 1 on any failure (77 counts as skipped).
+   - `test_mp --list` names the suites.
+   - A suite that throws is reported as a FAIL, not an abort.
+   - Two suites registered under one name stop the runner.
+3. **`tests/CMakeLists.txt`.** `add_executable(test_mp test_mp.cpp game/Route.cpp)` is linked against
+   `Supersonic::TestHarness`, `SupersonicCore`, `MagicPortalsSim` and `MagicPortalsGame`, at `/W4` (`-Wall -Wextra`
+   elsewhere). `add_mp_test(name [SKIPS_WITH_77])` keeps its signature and every call site, in the same order. It now
+   does three things: `target_sources(test_mp PRIVATE name.cpp)`, `add_test(NAME name COMMAND test_mp name)` (no
+   working directory, so `build/tests` as before), and the same `SKIP_RETURN_CODE 77`.
+   - `test_mp_layer`'s `MagicPortalsGame` and `test_mp_routes`' `Route.cpp` are on the one target now.
+   - `MAGICPORTALS_ROUTES_DIR` is a compile definition of `test_mp_routes.cpp` alone, set as a source property.
+   - `parity_reachability` is unchanged.
+   - The file's head says why there is one executable and what it copies from the engine's rule.
+4. **The suites**: `#include "MpSuite.hpp"` after `TestHarness.hpp`, and the one entry-point line. `test_mp_routes` also
+   prints its usage as `test_mp test_mp_routes [--only ...]`, and its header comment names that command: 96
+   insertions and 49 deletions over the 47 files.
+5. **Docs.**
+   - `README.md` step 8 now says how to run one suite, all of them, or `--list`, and why there is one executable.
+   - The route-writing command is now `build/tests/test_mp.exe test_mp_routes --only level8 --trace 10`.
+   - The Smart App Control paragraph names `test_mp.exe <suite>`, and the layout table names the runner.
+   - `game/CMakeLists.txt`'s comment on `Route.cpp` names `test_mp`.
+   - Nothing in `tools/` named a suite's executable.
+   - The records (this document, the backlog, `DEVLOG.md`) keep the names each step used, as history.
+   - `CLAUDE.md` line 250 still says `build/tests/test_mp_<suite>.exe`. It is the owner's file and is left for him
+     (below).
+6. **The 47 old `build/tests/test_mp_<suite>.exe`** were deleted from `build/` after the new build: their targets
+   are gone, and Ninja would have left them to be run by anyone following the old instruction. Their md5s are kept in
+   `out/parity/program/T.2/old_suite_exes_md5.txt`.
+
+**THE ENGINE'S CONVENTION, AND THIS DEPARTURE FROM IT.**
+- **The convention.**
+  - The engine gives a game `supersonic_add_test(name)`: "one suite from `<name>.cpp` ... the harness,
+    `SupersonicCore`, `/W4` ... and `add_test`" (`engine/README.md:236`, `engine/AGENTS.md:57-66`,
+    `engine/cmake/SupersonicTesting.cmake:11-45`).
+  - The harness says "Each test binary is a plain executable that returns non-zero on failure, which is all CTest
+    needs" (`engine/tests/TestHarness.hpp:5-7`).
+  - `engine/CONTRIBUTING.md` asks for a test with each fix and zero warnings at `/W4`.
+- **What the port now does.** One binary holds all 47 suites. Each ctest entry is still a plain process that returns
+  non-zero on failure and 77 to skip. The suites are built at the same `/W4` and are held to the same GLM
+  configuration through `SupersonicCore`'s interface.
+- **The reason.** Smart App Control, above. Each first launch of a freshly linked executable can be refused and
+  notify the owner, and the number of executables a change relinks is the number of first launches.
+- **The cost.**
+  - `supersonic_add_test` is no longer called. Its three settings (harness, `SupersonicCore`, `/W4`) are copied onto
+    `test_mp` by hand. That copy is what the engine's function exists to prevent, so a change to
+    `SupersonicTesting.cmake` has to be carried here; the file's head comment says so.
+  - Any change to any suite, or to anything a suite links, relinks the one executable.
+  - Run without an argument, the suites share one process. ctest keeps them apart; `test_mp` alone does not, and a
+    crash there stops the rest.
+- **Not an engine gap.** The engine's rule is right for the engine, and nothing in the engine was changed.
+
+**THE GATES.** Everything is under `out/parity/program/T.2/`.
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | **passes: 0 warnings.** `build1.log` (`--target test_mp`): CMake re-ran, then 49 compiles (the 47 suites, `test_mp.cpp`, `Route.cpp`) and one link, `test_mp.exe` `6c5f2626`. `build2.log`, the full build: `ninja: no work to do` |
+| `MagicPortals.exe` untouched | not relinked, or byte-identical | **passes: not relinked.** `755b8a9d`, written 2026-09-30 05:45:57, before and after (`md5_before.txt`). `MagicPortalsSpike.exe` `bef4d2be` the same |
+| ctest's names | `ctest -N` lists the same tests as before | **passes**: `ctest_N_before.txt` and `ctest_N_after.txt` are identical: 48 tests, the same numbers and names in the same order. 29 carry `SKIP_RETURN_CODE 77`, as before (the 28 `SKIPS_WITH_77` and `parity_reachability`). Each suite's command is `build/tests/test_mp.exe "<suite>"` in `build/tests` |
+| The runner over every suite, once | per suite, the count of its last recorded run; 0 failures | **passes** (`allmode.log`, `compare_allmode.txt`; the first launch of `test_mp.exe`, 43 s): `test_mp: 47 suites, 47 passed, 0 skipped, 0 failed`, rc 0, 14,359 checks. **The 30 suites step 128 ran on the merged code: 30 of 30 print step 128's count exactly.** The 17 it did not run are new counts on the merged code (below) |
+| The full ctest | once | **passes** (`ctest_full.log`, `LastTest.log`): **48 of 48 passed, 0 failed, 0 Not Run, 0 skipped**, 43 s. `parity_reachability`: 128 levels, 20 opened, 108 reachable, 0 differ from `reachability.json`. **Every suite's count in its own process equals its count in the one-process run: 47 of 47** (`compare_all.txt`), so sharing a process changed no suite's result |
+| The runner's interface | one suite by name with its arguments; the suite's own exit code | **passes** (`interface.txt`, 4 more launches of the same binary): `--list` 47 names, rc 0; `test_mp nosuch` rc 2 with the message; `test_mp test_mp_routes --bogus` prints the suite's usage and returns its 2; `test_mp routes --only level8` wins 1-09 on tick 345 (win_by 420), `test_mp_routes: 4 checks, 0 failures`, rc 0. The 77 is the suite's return value handed to the exit: on this machine every data path exists, so no suite skipped |
+| No game change | none | **passes**: no file under `game/` changed but one comment in `game/CMakeLists.txt`; `MagicPortals.exe` above |
+
+**THE SUITES, one process and ctest, 0 failures everywhere.**
+- **The 30 step 128 ran, each equal to step 128's count:** `tscn` 204, `levels` 129, `portal` 37, `play` 207,
+  `turrets` 96, `statics` 106, `timed` 84, `movers` 146, `minions` 288, `ghost` 183, `zerog` 88, `dragon` 230,
+  `fields` 63, `shot` 181, `boss` 133, `sprites` 1575, `motion` 169, `effects` 706, `sounds` 107, `hud` 417,
+  `cutscene` 151, `popup` 200, `frontdoor` 194, `layer` 3243, `routes` 215, `chapters` 43, `demolish` 162, `torch`
+  134, `levelend` 226, `info` 389.
+- **The 17 NOT RUN on the merged code (step 128, deviation 1), recorded here as new.** Each is followed by its last
+  count in this record, from the step that last ran it:
+  - `camera` 214 (213 at step 123; step 126 added the `agent_killed` row to its table and could not run it);
+  - `geometry` 64 (no count in this record; the spike doc gave 61);
+  - `scores` 63 (124), `start` 753 (118), `hazards` 43 (90), `fire` 94 (116), `hinge` 28 (90);
+  - `bounce` 189 (90), `wells` 321 (125), `darkdragon` 259 (117), `keys` 169 (118), `diamonds` 134 (114);
+  - `launchers` 105 (109), `lighting` 548 (112), `sky` 630 (122), `tiers` 527 (112), `select` 112 (56).
+
+  All 47 suites have now run on the merged code. That closes step 128's deviation 1 and the backlog's "17 suites
+  have not run" row.
+
+**SMART APP CONTROL: 0 refusals.** One executable was linked: `test_mp.exe` `6c5f2626`. It ran on its first launch.
+In total it was launched 52 times: once over every suite, 47 times under ctest and 4 times for the interface check.
+`MagicPortals.exe` was neither relinked nor launched. The full ctest ran once.
+
+**VERIFIED, PASSED** (`T.2/verify1.json`, on the same `test_mp.exe` `6c5f2626` and `MagicPortals.exe` `755b8a9d`,
+head `9299a40`, engine `4bfcf67`; no fix round; 0 refusals). The verifier recompiled all 49 of `test_mp`'s translation
+units at `/W4` with the build's own commands into scratch objects, linking nothing: 0 warnings, 0 errors, and no source
+newer than `test_mp.exe`. `ctest -N` gives the same 48 names in the same order as a list derived from `9299a40`, each
+suite's command `test_mp.exe <suite>` in `build/tests`, 29 `SKIP_RETURN_CODE 77`, and every `add_mp_test` line
+byte-identical to `9299a40`'s. Its own runs, once each:
+- `test_mp.exe` alone: rc 0, 40 s, 47 suites passed, 14,359 checks. The 30 of step 128 at step 128's counts; the
+  17 new at the counts above.
+- The full ctest: 48 of 48 passed, 0 Not Run, 43 s; `parity_reachability` 108 / 20 / 0, 0 differ. Every suite's count
+  in its own process equals the one-process count, 47 of 47. The output bodies are byte-identical to the one-process
+  run's, 47 of 47, and to step 128's ctest log for the 26 it ran (25 suites and the reachability check).
+
+It read the 47 suites' diffs as entry points only: 145 changed lines, the 47 includes, the 47 entry-point lines (13
+`TEST_MAIN`, 33 `main()`, one `main(argc, argv)`) and the routes suite's usage line and comment, each registered under
+its file's name. `dumpbin` over the 48 objects finds no global-scope type or function of one suite's defined by
+another's (only the CRT's inlines), no static initialiser that matters, and no `exit()` or `abort()` in a suite. Smart
+App Control's CodeIntegrity log has no event of any id after step 128's 41 blocks; the verifier launched `test_mp.exe`
+51 times. Its three problems, all LOW, and what the commit did:
+1. **`test_mp` alone counts every 77 as skipped, whether or not its suite carries `SKIPS_WITH_77`.** ctest keeps the
+   per-suite rule. This is a code fix, so the commit records it as deviation 3 and the backlog's Tests row.
+2. **The 77 path was reviewed, not exercised.** Every data path exists on this machine. Recorded as deviation 3 and
+   in the same row: a fresh clone's run exercises it.
+3. **Stale text outside the step's edits.** `README.md`'s "27 of the 44 suites" is recounted at the commit:
+   **28 of the 47** carry `SKIPS_WITH_77`, the same 28 step 8 names. `CLAUDE.md:250` is the owner's (below).
+
+**THE COMMIT changed text only.** It edits one `README.md` line, this record and `docs/parity-backlog.md`. The build is
+current at the commit: `port_build.bat` gives "ninja: no work to do" with 0 warnings (`T.2/commit_build.log`), and
+`test_mp.exe` `6c5f2626` and `MagicPortals.exe` `755b8a9d` are unchanged. Nothing was launched.
+
+**RECORDED DEVIATIONS.**
+1. **One executable instead of one per suite**, against the engine's `supersonic_add_test` convention: above, with
+   its reason and its cost.
+2. **`test_mp` with no argument runs every suite in one process.** Each suite's counters are reset, and this run's
+   counts equal ctest's one-process-per-suite counts, 47 of 47. But two suites now share process state that
+   separate executables never shared: the engine's globals, the heap, and anything a suite leaves behind. ctest
+   remains the isolated run. If a count ever differs between the two, `test_mp <suite>` alone is the reference.
+3. **`test_mp` with no argument does not hold the `SKIPS_WITH_77` marks** (verify1's LOW finding). It counts any
+   suite's 77 as skipped. ctest counts an unmarked suite's 77 as FAILED, because only the `add_mp_test` line gives it
+   `SKIP_RETURN_CODE`. So the one-process tally can read "skipped" where ctest reads failed, and then exits 0. It
+   never counts that suite as passed. On this machine no suite returned 77, so the path was reviewed and not run. ctest is the run whose verdict counts.
+   The fix, the marks handed to the runner or an unmarked 77 reported as FAILED, is code and is left for the next step
+   that touches `test_mp.cpp` (the backlog's Tests row).
+
+**LEFT FOR THE OWNER.**
+- **`CLAUDE.md` line 250** (*Workflow rules for the agent*, 2): "`build/tests/test_mp_<suite>.exe`" should read
+  "`build/tests/test_mp.exe test_mp_<suite>`" (one runner since step 129). That file is his. Until it changes, the
+  old path fails loudly, because the old executables are deleted.
+
+**LEFT FOR LATER.**
+- **Done in the commit, in `docs/parity-backlog.md`:**
+  - section 0's `test_mp_launchers` and `test_mp_keys` row and the Tests row "22 suites ... 17 suites have not run on
+    the merged code" are ticked, with this step's counts;
+  - section 6's item (8) of "What the next wave should take" is annotated as done;
+  - the Tests row for deviation 3 is added;
+  - the unread `body.radius_px` in `ghost.json`, which step 117 kept for binaries not yet relinked, becomes its own
+    row. Every suite is now relinked and has run. Removing the key is a data change, left for a step that runs the
+    suites.
+- The close role writes the `DEVLOG.md` entry.

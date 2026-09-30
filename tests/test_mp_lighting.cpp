@@ -30,6 +30,7 @@
 // sprite.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Lighting.hpp"
 #include "sim/Particles.hpp"
@@ -961,7 +962,7 @@ void LevelsCarryWhatTheConverterReported() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_lighting") {
     TheScriptsAmbientIsReadAndFollowsTheTorch();
     EveryKeyIsReadAndEveryAbsenceIsTheDefault();
     AnythingElseIsRefusedNamingTheLine();

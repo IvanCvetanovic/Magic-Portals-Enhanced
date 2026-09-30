@@ -14,6 +14,7 @@
 // made up, and the suite never skips.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Achievements.hpp"
 #include "sim/Chapters.hpp"
@@ -808,4 +809,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_info", 150)
+MP_TEST_MAIN("test_mp_info", 150)

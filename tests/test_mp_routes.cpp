@@ -12,7 +12,7 @@
 // fired nothing or was refused, and no tap on a point the view did not show.
 //
 // For writing a route, the same binary replays one and says what it did:
-//   test_mp_routes --only <level or file> [--trace <every n ticks>]
+//   test_mp test_mp_routes --only <level or file> [--trace <every n ticks>]
 // prints the player, the camera, the shots and the portals every n ticks and on
 // every tap's tick, and stops at the first problem. The planning record's step 113
 // has the route format, and out/parity/program/W.1/ the attempts behind the seeds.
@@ -20,6 +20,7 @@
 // No window and no Vulkan. Skipped with 77 without the converted levels.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "MagicPortalsLayer.hpp"
 #include "Route.hpp"
@@ -207,7 +208,7 @@ void RunRoutes(const Options& options) {
 
 } // namespace
 
-int main(int argc, char** argv) {
+MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
     Options options;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -216,7 +217,7 @@ int main(int argc, char** argv) {
         } else if (arg == "--trace" && i + 1 < argc) {
             options.trace = std::max(1, std::atoi(argv[++i]));
         } else {
-            std::printf("test_mp_routes [--only <level or route file>]... [--trace <every n ticks>]\n");
+            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>]\n");
             return 2;
         }
     }

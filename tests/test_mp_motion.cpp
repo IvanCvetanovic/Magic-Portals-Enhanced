@@ -37,6 +37,7 @@
 // from outside this repository, and is skipped without them, never with 77.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Motion.hpp"
 #include "sim/Roles.hpp"
@@ -786,7 +787,7 @@ void EveryLevelsPlacedPictures() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_motion") {
     TheRulesAreMotionsJsons();
     TheDoorsRowIsGameLoops();
     TheFirstCallStepsBeforeTheOffsetIsRead();

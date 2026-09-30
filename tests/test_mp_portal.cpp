@@ -12,6 +12,7 @@
 // port plays it from its transit.json, and that file is pinned here.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Portal.hpp"
 
@@ -170,4 +171,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_portal", 35)
+MP_TEST_MAIN("test_mp_portal", 35)

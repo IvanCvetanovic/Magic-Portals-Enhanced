@@ -11,6 +11,7 @@
 // Pure: no window, no registry, no level, and only the port's own committed data.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Hud.hpp"
 #include "sim/Loading.hpp"
@@ -521,4 +522,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_frontdoor", 150)
+MP_TEST_MAIN("test_mp_frontdoor", 150)

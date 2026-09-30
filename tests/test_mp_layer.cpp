@@ -28,6 +28,7 @@
 // 60 Hz, so this suite does the same.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "MagicPortalsLayer.hpp"
 
@@ -16581,7 +16582,7 @@ void runTests() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_layer") {
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec) || !std::filesystem::is_regular_file(kChapters, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec) ||

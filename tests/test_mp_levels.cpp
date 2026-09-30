@@ -19,6 +19,7 @@
 // level that loads with a platform missing.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "core/ConvexHullCache.hpp"
 #include "sim/Prism.hpp"
@@ -357,7 +358,7 @@ void runTests() {
 
 } // namespace
 
-int main() {
+MP_SUITE_MAIN("test_mp_levels") {
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec)) {
         std::printf("test_mp_levels: SKIPPED - no converted levels at %s\n"

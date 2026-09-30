@@ -14,6 +14,7 @@
 // game that plays button.mp3.
 
 #include "TestHarness.hpp"
+#include "MpSuite.hpp"
 
 #include "sim/Sounds.hpp"
 
@@ -304,4 +305,4 @@ void runTests() {
 
 } // namespace
 
-TEST_MAIN("test_mp_sounds", 45)
+MP_TEST_MAIN("test_mp_sounds", 45)

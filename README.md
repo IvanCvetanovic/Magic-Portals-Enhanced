@@ -66,7 +66,7 @@ ctest --test-dir build
 Configure and build in a shell with MSVC's environment (an x64 Native Tools prompt, or after
 `vcvars64.bat`); `tools\parity\port_build.bat` does both steps on the owner's machine. It
 compiles from a fresh clone, but it plays nothing until the original's levels are converted
-locally, and 27 of the 44 suites skip without them: *Local setup* below, steps 5-8.
+locally, and 28 of the 47 suites skip without them: *Local setup* below, steps 5-8.
 
 ## How it fits together
 
@@ -97,7 +97,7 @@ through CMake cache paths baked in when `build/` is configured (steps 5 and 7 be
 CMakeLists.txt     the build: engine/ as a subproject, then game/ and tests/
 engine/            Supersonic-Engine, a git submodule pinned to one commit
 game/              the port: main.cpp, MagicPortalsLayer, LevelVisit, sim/, spike/, and data/ (its own JSON)
-tests/             the port's test_mp_* suites; tests/routes/ the win routes test_mp_routes replays
+tests/             the port's test_mp_* suites, in one runner (test_mp); tests/routes/ the win routes test_mp_routes replays
 data/              the remake's gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
 tools/converter/   ethanon2godot — Python 3; .esc/.ent → out/levels, chapters.json, entity art, lightmaps
 tools/asbc/        AngelScript bytecode reader; achievements.py writes out/data/achievements.json
@@ -286,7 +286,7 @@ arguments given. On any other machine, run the two lines above instead.
 On Windows 11, Smart App Control sometimes blocks a freshly linked exe ("An Application
 Control policy has blocked this file"). Deleting the exe and relinking gets past it. Each
 blocked launch raises a Windows notification, so relink and relaunch once rather than in a
-retry loop, and run only the suites a change touches.
+retry loop, and run only the suites a change touches (`build/tests/test_mp.exe <suite>`, step 8).
 
 **8. Run the port's tests.** From this repository's root, after a full build:
 
@@ -295,7 +295,12 @@ ctest --test-dir build
 ```
 
 These are the `test_mp_*` suites (a multi-config generator such as Visual Studio also needs
-`-C Release`). Convert the levels (step 3) before running them. Without the converted levels:
+`-C Release`). All of them are built into one executable, `build/tests/test_mp.exe`, so a
+change that relinks them makes one new exe for Smart App Control, not one per suite. ctest runs
+each suite in its own process, as `test_mp.exe <suite>`, under the suite's own name. Run by
+hand, `build/tests/test_mp.exe test_mp_<suite>` runs one suite (the `test_mp_` may be dropped),
+`build/tests/test_mp.exe` runs them all in one process and ends with a tally, and `--list` names
+them. Convert the levels (step 3) before running them. Without the converted levels:
 
 - 28 suites (`levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
   `hazards`, `demolish`, `launchers`, `shot`, `boss`, `layer`, `zerog`, `bounce`, `wells`,
@@ -311,11 +316,11 @@ These are the `test_mp_*` suites (a multi-config generator such as Visual Studio
 **Winning the levels.** `test_mp_routes` replays every file in `tests/routes/`: a level won by
 play from its start to its door - walks held over spans of ticks, taps at points of the level,
 and the tick by which the level must be won (`game/Route.hpp` has the format). A route is added
-by adding its file; the suite finds it. For writing one, the same binary replays a single route
+by adding its file; the suite finds it. For writing one, the same suite replays a single route
 and prints what it did every n ticks and on every tap:
 
 ```bash
-build/tests/test_mp_routes.exe --only level8 --trace 10
+build/tests/test_mp.exe test_mp_routes --only level8 --trace 10
 ```
 
 and `--route <absolute path>` replays one in the game's window (the flags below); give it
