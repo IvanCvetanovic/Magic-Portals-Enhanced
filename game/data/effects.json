@@ -5,7 +5,7 @@
     "at what scale. The call site's facts only: what the entity itself is (its sprite, its particle",
     "systems, its light, its own <Scale>) is read from the original's .ent at run time by",
     "Art::LoadEnt and never copied here, since hand copies of the fifty-odd files would drift.",
-    "Decoded from android_game.bin through the remake's asbc listing (out/parity/asbc/",
+    "Decoded from android_game.bin through Enhanced's asbc listing (out/parity/asbc/",
     "all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0). Step 82 of",
     "docs/planning/2026-09-11-magic-portals-remaster.md (the visuals plan's 6.2, system_7 7a-1).",
     "",
@@ -1166,7 +1166,7 @@
   "_torches_trail_roundabout": [
     "WHAT A TORCH, ITS LIGHT WALL, A WEIGHTLESS PLAYER AND A GRAVITY WELL ADD - the visuals plan's 11.2 (00_order",
     "section 7 as section 8.13's 11.2 row amends it; system_7 7f-5 and systems_3_4 3e; decode D3 section 5 and",
-    "D3_check), drawn from planning step 110. All from the remake's out/parity/asbc/all_functions.txt, md5",
+    "D3_check), drawn from planning step 110. All from Enhanced's out/parity/asbc/all_functions.txt, md5",
     "48fe65ce8baea16b94ed84d8d7be84b0. Lighting a torch, ETHCallback_light_off (ETHCallback_light_off.angelscript,",
     "bytes 467198..467878), on the frame hasProjectileAround(GetPositionXY(), 24, 1) (#47-67) finds a shot or a",
     "fireball, in its order: light_from_projectile and light_on_sparkles at its own GetPosition() (#69-101), the",

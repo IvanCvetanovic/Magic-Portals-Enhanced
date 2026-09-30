@@ -1,9 +1,9 @@
 // Timed crystals: the inline `crystal` with a `time`, which goes that long after
-// the level starts (the remake's TimedCollectible, behaviours.gd:209-230).
+// the level starts (the Godot project's TimedCollectible, behaviours.gd:209-230).
 //
 // What the files say is pinned: which crystals are timed and for how long,
 // chapter 1's eight of them. What happens is judged by threshold, a few ticks
-// either side of the time, since a tick is 1/60 s. The exit switch the remake
+// either side of the time, since a tick is 1/60 s. The exit switch the Godot project
 // marks UNVERIFIED is run both ways, because a gone crystal counts against it.
 //
 // And the clock the original shows on the dial behind each (art.json timer,
@@ -11,7 +11,7 @@
 // as the time runs out, and the shrink once it is up. Pure arithmetic on the
 // port's committed data, and on Goals' own clock.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -143,7 +143,7 @@ void ThePlayerCollectsItFirst() {
 void AGoneCrystalStillCountsAgainstTheExit() {
     // With the UNVERIFIED switch off, the exit opens anyway. With it on, a
     // crystal that went can never be collected, so the exit stays shut: the
-    // remake's crystals_remaining never drops for one. The switch is portals.json's,
+    // Godot project's crystals_remaining never drops for one. The switch is portals.json's,
     // so this is what it would mean, not a claim about the original.
     for (const bool gated : {false, true}) {
         Run run;
@@ -342,7 +342,7 @@ MP_SUITE_MAIN("test_mp_timed") {
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_timed: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's data at %s.\n"
+                    "  and Enhanced's data at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), kData.c_str());

@@ -234,7 +234,7 @@ void ItPullsInwardAndFadesToNothingAtTheRim() {
     CHECK(fromRight.x < 0.0f);
     CHECK(::test::nearly(fromRight.y, 0.0f));
 
-    // A body BELOW it - a larger y in the remake's pixels, which count down - is
+    // A body BELOW it - a larger y in the port's pixels, which count down - is
     // pulled UP, which is +y in the engine's metres. The sign trap again.
     const glm::vec3 fromBelow = GravityWell::Pull(well, rules, glm::dvec2(100.0, 150.0), true, kStep);
     CHECK(fromBelow.y > 0.0f);
@@ -614,7 +614,7 @@ MP_SUITE_MAIN("test_mp_wells") {
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_wells: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's data at %s.\n"
+                    "  and Enhanced's data at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), kData.c_str());

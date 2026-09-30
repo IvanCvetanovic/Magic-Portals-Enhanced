@@ -7,7 +7,7 @@
 //
 // Pure, like sim/MainMenu.hpp: every picture is a function of the view's size,
 // the state's clock, the scroll and whether the back button is held. The layer
-// keeps the scroll between ticks and steps it once a tick (the remake's ui3 spec
+// keeps the scroll between ticks and steps it once a tick (Enhanced's ui3 spec
 // 8.1, P1), and draws these pieces through the screen overlay.
 
 #include <string>

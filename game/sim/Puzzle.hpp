@@ -6,7 +6,7 @@
 // A button is pressed while any dynamic body is on its trigger. It keeps a count,
 // and it is not a latch. When it changes it sets every door on its channel,
 // because button `idx` and door_lift `switchIdx` are one numbering. As through the
-// remake's EventBus, the last change wins. So of two buttons on one channel, the
+// Godot project's EventBus, the last change wins. So of two buttons on one channel, the
 // door follows whichever changed last rather than whichever is held. level30 has
 // one button per channel.
 //

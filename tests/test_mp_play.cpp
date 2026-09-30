@@ -1,7 +1,7 @@
 // The port's behaviours, on level30: the acceptance items of
 // docs/planning/2026-09-10-magic-portals-port.md, one at a time as they land.
 //
-// Reads the converted level and the remake's own data from outside this
+// Reads the converted level and Enhanced's own data from outside this
 // repository (SUPERSONIC_MAGICPORTALS_LEVELS and _DATA), and skips, saying where
 // it looked, when either is absent. What it pins exactly is what the files say -
 // roles, strides, positions - and what it judges by threshold is physics.
@@ -42,7 +42,7 @@ const std::string kLevels = MAGICPORTALS_LEVELS_DIR;
 const std::string kData = MAGICPORTALS_DATA_DIR;
 constexpr float kStep = 1.0f / 60.0f;
 
-// Read once: level30 and the remake's data, as Game::LoadData reads them for the
+// Read once: level30 and Enhanced's data, as Game::LoadData reads them for the
 // layer. The short names are the suite's own.
 Game::Data g_data;
 const Tscn::Scene& g_level30 = g_data.scene;
@@ -62,7 +62,7 @@ LevelBuilder::Options PortOptions() {
     return options;
 }
 
-// The port's world: the remake's gravity, 980 px/s^2 (Units.hpp says why).
+// The port's world: the Godot project's gravity, 980 px/s^2 (Units.hpp says why).
 void UseRemakeGravity(entt::registry& registry) {
     Game::UseRemakeGravity(registry);
 }
@@ -103,7 +103,7 @@ void Level30HasTheRolesItsPuzzleNeeds() {
 // ---- Movers -----------------------------------------------------------------
 
 void TheMoversAreKinematic() {
-    // The remake turns every moving role into an AnimatableBody2D so it carries
+    // The Godot project turns every moving role into an AnimatableBody2D so it carries
     // riders (level_runtime.gd:24-27, :166-181); the port makes it a kinematic
     // body for the same reason. level30's movers are its three door_lifts, which
     // leaves 12 of the spike's 15 statics static.
@@ -257,7 +257,7 @@ glm::dvec2 PlayerPx(Play& play) {
     return Units::ToPixels(play.registry.get<TransformComponent>(play.player).position);
 }
 
-// The top of one of level30's polygon platforms, in the remake's pixels.
+// The top of one of level30's polygon platforms, in the port's pixels.
 double PlatformTopPx(const std::string& entity) {
     const Tscn::Node* node = g_level30.FindNode(entity);
     const Tscn::Node* shape = g_level30.FindNode(entity + "/Body/Shape");
@@ -282,7 +282,7 @@ int LandingTick(Play& play) {
 }
 
 void ThePlayerLandsOnLevel30() {
-    // The remake's own check (verify_gameplay.gd:259): the player comes to rest
+    // The Godot project's own check (verify_gameplay.gd:259): the player comes to rest
     // on geometry. It spawns with its feet a pixel into platform_ent_895, as the
     // level places it, and settles on the top - and with every static taken
     // away it must not, which is what makes the first half mean something.
@@ -389,7 +389,7 @@ void Level30sButtonsAreWiredToItsDoors() {
     //   button_982 idx 2 at (256, 60);
     // - door_lift_976 is switchIdx 0, 978 is 1, and 977 is 2.
     // None of the buttons has a trigger_size, so each is pressed through the
-    // remake's 16 px fallback at its node.
+    // Godot project's 16 px fallback at its node.
     Play play;
     std::string error;
     CHECK_MSG(StartLevel30(play, true, error), error);
@@ -432,7 +432,7 @@ void Level30sButtonsAreWiredToItsDoors() {
 }
 
 void NothingStaticPressesAButton() {
-    // The remake, probed. Each of level30's button triggers reaches 4 px into the
+    // The Godot project, probed. Each of level30's button triggers reaches 4 px into the
     // static beneath it, yet in 120 frames with nothing dynamic nearby none is
     // pressed and no door moves. So the geometry is checked here first: what
     // keeps the buttons up must be the rule that only dynamic bodies press, not a
@@ -471,7 +471,7 @@ void NothingStaticPressesAButton() {
 
 void ACrateOnAButtonOpensItsDoor() {
     // The probe's control, ported. level30's small crate, 30 px like the probe's,
-    // is dropped at (94, 190) onto button_975. In the remake, channel 0 was
+    // is dropped at (94, 190) onto button_975. In the Godot project, channel 0 was
     // pressed 8 frames after the drop, and door_lift_976 rose its full 126 px
     // while 977 and 978 stayed shut. Here it is the whole level, with all three
     // doors present.
@@ -494,7 +494,7 @@ void ACrateOnAButtonOpensItsDoor() {
         if (pressedAt > 0 && !pressed) held = false;
     }
     CHECK_MSG(pressedAt >= 5 && pressedAt <= 11,
-              "channel 0 pressed at tick " + std::to_string(pressedAt) + " after the drop; the remake took 8");
+              "channel 0 pressed at tick " + std::to_string(pressedAt) + " after the drop; the Godot project took 8");
     CHECK_MSG(held, "and held every tick after");
     const double doorY = BodyPx(play, "door_lift_976").y;
     CHECK_MSG(std::fabs(doorY - (192.0 - Mover::kDoorRisePx)) < 0.5,
@@ -511,7 +511,7 @@ void ACrateOnAButtonOpensItsDoor() {
 }
 
 void ThePlayerPressesAButtonAndItLetsGo() {
-    // A button counts the player too, since in the remake a CharacterBody2D is not
+    // A button counts the player too, since in the Godot project a CharacterBody2D is not
     // a static, and it lets go when the player walks off. From the spawn the
     // player walks left onto button_975, stands on it, and walks back off.
     //
@@ -813,7 +813,7 @@ void Level30sCrystalsAndExitAreWhereItPutsThem() {
 
 void OnlyThePlayerCollects() {
     // level30 has the case itself: crate_ent_968 stands on crystal_ent_999 and
-    // crystal_ent_1001 from the first frame. In the remake only the player
+    // crystal_ent_1001 from the first frame. In the Godot project only the player
     // triggers a crystal, so after two seconds both are still there. The crate is
     // checked to cover them, so what keeps them is the rule, not a gap.
     Play play;
@@ -848,7 +848,7 @@ void ThePlayerCollectsACrystal() {
 
 void TheExitReportsTheEntry() {
     // From under crystal_ent_998 the player walks right into the exit. With the
-    // switch off, the remake's default, the entry completes the level with
+    // switch off, the Godot project's default, the entry completes the level with
     // crystals still out.
     //
     // Standing on platform_ent_966 the capsule's core spans the trigger's height,
@@ -876,7 +876,7 @@ void AClosedExitWaitsForANewEntry() {
     // The switch on. The player stands in the exit with one crystal out, so the
     // entry reports and does not complete. Then the last crystal goes. The test
     // takes it, since reaching it needs portals. Still the level does not
-    // complete, because the remake completes on an entry, not on standing there.
+    // complete, because the Godot project completes on an entry, not on standing there.
     // The player walks out and back in, and the level completes.
     Play play;
     std::string error;
@@ -991,7 +991,7 @@ void ANoPortalZoneRefusesATap() {
 
 // The two radii are decoded, and they are NOT the same number.
 //
-// The port carried one - the remake's collision_radius_px, which its own
+// The port carried one - the Godot project's collision_radius_px, which its own
 // portals.json marks _guess and annotates "value unknown" - and used it both for
 // a placed portal's trigger and for the circle an antiportal refuses a tap in.
 // They are unrelated:
@@ -1004,7 +1004,7 @@ void ANoPortalZoneRefusesATap() {
 //     AntiPortalManager's constructor scales every field by 0.5 over the node's
 //     own scale, so the radius is 32 times the node's scale.
 //
-// The port played the remake's 16 until step 127 (R1), every no-portal field
+// The port played the Godot project's 16 until step 127 (R1), every no-portal field
 // half the original's on the 52 levels that carry one. placement.json holds the
 // derivation.
 //
@@ -1042,7 +1042,7 @@ void ThePlacementRadiiAreDecodedAndDistinct() {
 // PortalManager keeps two Timers and a manager is built per level, so both start
 // at zero: update skips the whole tap path while gameTimer is below
 // FIRST_PORTAL_MIN_TIME (300), and managePortalInsertion takes a tap only when
-// lastPortalTimer is above NEXT_PORTAL_MIN_TIME (400). The remake carried 0.0 s
+// lastPortalTimer is above NEXT_PORTAL_MIN_TIME (400). The Godot project carried 0.0 s
 // and 0.25 s and admits inventing them.
 //
 // So the FIRST tap of a level waits on the larger of the two - 400 ms, not 300 -
@@ -1386,7 +1386,7 @@ MP_SUITE_MAIN("test_mp_play") {
         !std::filesystem::is_regular_file(kData + "/player.json", ec) ||
         !std::filesystem::is_regular_file(kData + "/portals.json", ec)) {
         std::printf("test_mp_play: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's role table and player.json at %s.\n"
+                    "  and Enhanced's role table and player.json at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), roles.c_str());

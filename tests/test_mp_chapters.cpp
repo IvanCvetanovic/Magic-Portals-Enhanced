@@ -4,7 +4,7 @@
 // 32 levels, named as the converter names the files, each with a file in the
 // levels directory, and the golden scores the file spells. A golden score of 0
 // is a real threshold, "finish using no portals", not "unknown". Eight levels
-// ship it, counted with grep: the remake's docs/original-gameplay.md section 3
+// ship it, counted with grep: Enhanced's docs/original-gameplay.md section 3
 // says seven, and the file says eight.
 //
 // Reads chapters.json and the levels from outside this repository, and skips,

@@ -2,7 +2,7 @@
   "_about": [
     "What the port's lighting reads that no level file carries. Levels carry their own ambient,",
     "emissive and lightmaps as metadata/eth_* keys (sim/Lighting.hpp); this is what the ORIGINAL'S",
-    "SCRIPT sets over them. The remake's out/parity/specs/lighting/design_port.md, section 5.9, and",
+    "SCRIPT sets over them. Enhanced's out/parity/specs/lighting/design_port.md, section 5.9, and",
     "docs/planning/2026-09-11-magic-portals-remaster.md, step 45 (the design's G3).",
     "",
     "Only what a built step reads is here: the two ambient lights the script sets (G3, step 45), and",
@@ -36,7 +36,7 @@
   "normal_map_green_down": {
     "_source": [
       "Decoded, not tested for. The original's light shader, hPixelLightDiff.ps (shaders.h:1261-1304 in",
-      "the shipped library; the remake's engine_math.md 4.5), decodes a normal-map texel c as",
+      "the shipped library; Enhanced's engine_math.md 4.5), decodes a normal-map texel c as",
       "-(2 (c - 0.5)) and dots it with (P - L) in Ethanon's world, whose y points DOWN the screen. So a",
       "green above one half faces down the image, where the port's world is y-up: the engine flips it",
       "(MaterialComponent::Sprite2DLight::normalYDown). The port's torch pass on the player (step 49)",
@@ -51,7 +51,7 @@
       "particle ratio (ETHRenderEntity.cpp:354-388), is multiplied by. Ethanon has no such factor: 1 is",
       "its formula. The design leaves the number to the halo gate (design_port.md 5.5 and 8), and the",
       "gate says one is needed: at 1 the port reads 8.94 of 255 on 1-01's LM_E<1_halo blocks against",
-      "the original (asked 6.0), and the remake's fit, drawn with 1x art at the brightness the port drew",
+      "the original (asked 6.0), and Enhanced's fit, drawn with 1x art at the brightness the port drew",
       "(its torch's flame 10 of 12 live at frame 420), reads 8.88 there, so it is the brightness and",
       "not the art. The fit finds x0.5 of the formula's maximum on the arch with the strongest halo",
       "signal in both 1-01 and 1-09 (fit.md 6)."
@@ -79,7 +79,7 @@
   "framebuffer_rgb565": {
     "_source": [
       "The original asks Android for a 5/6/5 surface and draws into it without dithering: GL2JNIView.java:94",
-      "and ConfigChooser.java:48-67 in the shipped APK (the remake's engine_math.md 0.2). The remake's fit",
+      "and ConfigChooser.java:48-67 in the shipped APK (Enhanced's engine_math.md 0.2). Enhanced's fit",
       "of its pixels scores 0.28 of 255 on dark sprites with the 5/6/5 step and 0.62 without (fit.md 9).",
       "The engine quantises the composite (RenderSettings::OutputQuantize::Rgb565); the screen overlay",
       "drawn after it - the HUD, the pause, the menus - is not quantised."

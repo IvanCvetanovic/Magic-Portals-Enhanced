@@ -1,7 +1,7 @@
 #pragma once
 
 // Launchers: entity_launcher, which drops a rolling stone into levels 23, 24
-// and 25 of chapter 1 on a timer. The remake's Launcher only announces what it
+// and 25 of chapter 1 on a timer. The Godot project's Launcher only announces what it
 // would throw (hazards.gd:416-455), because its converter emits levels, not
 // entities a game could spawn. The port builds the body itself.
 //
@@ -14,7 +14,7 @@
 //   that demolishes and travels. So a thrown stone breaks walls (Demolish) and
 //   goes through portals (Portals), as a placed one does. The caller hands each
 //   new body to both.
-// - A launcher's min/max is a cull box, which is the remake's reading
+// - A launcher's min/max is a cull box, which is the Godot project's reading
 //   (entity_roles.json). A thrown body whose centre leaves the box is removed.
 //   So is one that touches an entity launchers.json names as a despawner: that
 //   is destroyier.ent, in the box the port gives it as a hazard (Hazards.hpp).

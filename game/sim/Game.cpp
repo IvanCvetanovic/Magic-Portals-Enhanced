@@ -70,7 +70,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Player::LoadTuning(dataDirectory + "/player.json", read.tuning, error)) return false;
     if (!Goals::LoadRules(dataDirectory + "/portals.json", read.goals, error)) return false;
     if (!Portals::LoadRules(dataDirectory + "/portals.json", read.portals, error)) return false;
-    // The remake's portals.json marks its transit block a guess. The port plays
+    // Enhanced's portals.json marks its transit block a guess. The port plays
     // the original's rule, decoded, from its own transit.json.
     if (!Portal::LoadTransit(portDataDirectory + "/transit.json", read.portals.transit, error)) return false;
     // And over its guessed collision_radius_px, the two decoded radii: a
@@ -85,7 +85,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     read.portals.motion = read.motion;
     if (!Mover::LoadRules(portDataDirectory + "/movers.json", read.movers, error)) return false;
     // The same file, its `button` block: a button's sink is not a mover's swing,
-    // and its numbers are decoded where the other two are the remake's guesses.
+    // and its numbers are decoded where the other two are the Godot project's guesses.
     if (!Puzzle::LoadRules(portDataDirectory + "/movers.json", read.puzzle, error)) return false;
     if (!Demolish::LoadRules(portDataDirectory + "/demolish.json", read.demolish, error)) return false;
     if (!Launchers::LoadRules(portDataDirectory + "/launchers.json", read.launchers, error)) return false;
@@ -110,7 +110,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Zerog::LoadRules(portDataDirectory + "/zerog.json", read.zerog, error)) return false;
     if (!Bounce::LoadRules(portDataDirectory + "/bounce.json", read.bounce, error)) return false;
     if (!GravityWell::LoadRules(portDataDirectory + "/gravitywell.json", read.wells, error)) return false;
-    // And what the remake's role table calls a hazard but the original does not.
+    // And what Enhanced's role table calls a hazard but the original does not.
     if (!Hazards::LoadRules(portDataDirectory + "/hazards.json", read.hazards, error)) return false;
     // The entities a boss adds that no level places (sim/Restock): read beside the
     // level, whose root lighting the table's scene takes, and built by no one until
@@ -470,7 +470,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // Each is offered at its entity point, which the key measures from and trails
     // (Carry::Carrier). A minion's is its body's centre less EntityAboveCentrePx,
     // the point its patrol arrives by. The player's is left at its capsule's
-    // centre: that body is the remake's 20 x 44, whose centre stands 22 over the
+    // centre: that body is the Godot project's 20 x 44, whose centre stands 22 over the
     // feet where the original's entity stands 18.1 (dark_mage.ent's compound is
     // minion.ent's), a deviation of the player's body and not decided here.
     {

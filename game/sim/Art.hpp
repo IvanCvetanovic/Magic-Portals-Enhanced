@@ -22,7 +22,7 @@
 // the .ent's and required where a default would be a guess: static and
 // applyLight on every picture, and a light's every number.
 //
-// The images are the original's, read from the extracted APK beside the remake
+// The images are the original's, read from the extracted APK beside the port
 // (MAGICPORTALS_ORIGINAL_DIR) and never committed.
 
 #include <optional>

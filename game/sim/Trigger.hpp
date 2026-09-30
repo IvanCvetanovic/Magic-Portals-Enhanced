@@ -19,9 +19,9 @@
 
 namespace MagicPortals::Trigger {
 
-// The remake's box for a role entity with no metadata/trigger_size
+// The Godot project's box for a role entity with no metadata/trigger_size
 // (level_runtime.gd:29-31). level30's buttons have none, so theirs is this. The
-// 26x16 Area2D the converter gives them is never read by the remake.
+// 26x16 Area2D the converter gives them is never read by the Godot project.
 inline constexpr double kFallbackSizePx = 16.0;
 
 // An axis-aligned box in the plane, in world metres.
@@ -51,7 +51,7 @@ bool Overlaps(entt::registry& registry, entt::entity entity, const Box& box);
 bool Overlaps(entt::registry& registry, entt::entity entity, const Circle& circle);
 
 // How many dynamic bodies overlap the box: rigid bodies that are not kinematic.
-// This is what presses a button. The remake was probed, and its triggers report a
+// This is what presses a button. The Godot project was probed, and its triggers report a
 // crate dropped on a button but not the floor under each of level30's three. The
 // original's Box2D pairs a sensor only with a dynamic body.
 int DynamicBodiesIn(entt::registry& registry, const Box& box);

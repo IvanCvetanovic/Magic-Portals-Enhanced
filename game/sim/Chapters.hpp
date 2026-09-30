@@ -1,16 +1,16 @@
 #pragma once
 
 // The game's level order: the converter's chapters.json, its reading of the
-// original's goldenScores.enml (the remake's README, step 3). Four worlds of 32
+// original's goldenScores.enml (Enhanced's README, step 3). Four worlds of 32
 // levels, world by world, each level with its golden score.
 //
 // The golden score is a maximum portal count: finish the level with that many
 // portals or fewer. 0 is a real threshold, "finish using no portals", and seven
-// levels ship it (docs/original-gameplay.md section 3). The remake treats -1 as
+// levels ship it (docs/original-gameplay.md section 3). The Godot project treats -1 as
 // unknown; no level in the file has it.
 //
-// chapters.json is converter output, so it lives beside the levels in the
-// remake's gitignored out/ and is read from there (SUPERSONIC_MAGICPORTALS_CHAPTERS).
+// chapters.json is converter output, so it lives beside the levels in
+// Enhanced's gitignored out/ and is read from there (SUPERSONIC_MAGICPORTALS_CHAPTERS).
 
 #include <string>
 #include <vector>
@@ -31,7 +31,7 @@ struct Table {
     int Find(const std::string& name) const;
 
     // The level after `at` in the same world, or -1 at the world's end: the
-    // remake's advance_level (level_manager.gd:128-134), which leaves what a
+    // Godot project's advance_level (level_manager.gd:128-134), which leaves what a
     // finished chapter means to its caller.
     int Next(int at) const;
 

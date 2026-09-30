@@ -17,7 +17,7 @@ WHICH NUMBERS. ``app.enml``, read the way ``ETHAppEnmlFile`` reads it: construct
 game's: fullhd density 4 and thresholds 720 / 1080. The shipped file sets 480 / 600 and density 2
 for both tiers.
 
-WHICH SCREEN. The original re-derives the choice from the device's screen height. The remake fixes
+WHICH SCREEN. The original re-derives the choice from the device's screen height. Enhanced fixes
 it at 720 px, where every library frame of the original was measured (owner ruling R12), and the
 port resolves the file itself (route B, ruling R13): the converter copies the tier files beside the
 1x copies and ``out/levels`` does not change.

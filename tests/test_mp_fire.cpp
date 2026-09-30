@@ -1,29 +1,29 @@
 // Fire agents, burning crates and barrel bombs.
 //
-// What is pinned here is the DECODE, and it disagrees with the remake in every
+// What is pinned here is the DECODE, and it disagrees with the Godot project in every
 // number. Fire.hpp cites where each comes from; the three that a test can tell
 // apart are:
 //
-//   reach   32, the fire agent's GetSize().x, centre to centre. The remake reads
+//   reach   32, the fire agent's GetSize().x, centre to centre. The Godot project reads
 //           the entity's 38 x 38 collision box and halves it to 24, so a crate
-//           28 px away burns in the original and does not in the remake. That
+//           28 px away burns in the original and does not in the Godot project. That
 //           exact distance is tested, because it is the only one that separates
 //           the two readings.
-//   burn    1000 ms before a crate is taken away; the remake invents 2000.
-//   blast   80 px, against real colliders; the remake invents 96.
+//   burn    1000 ms before a crate is taken away; the Godot project invents 2000.
+//   blast   80 px, against real colliders; the Godot project invents 96.
 //
 // And one thing that is not a number: fire kills the player, a blast does not.
 // The blast's filter is isBreakableOrExplosiveOrBurnable, which excludes
 // characters, and no main_char placement carries any of those flags - so although
 // the bomb passes killPlayer true, the player is never in the grabbed set. Both
-// directions are tested, because that asymmetry is exactly what a remake smooths
+// directions are tested, because that asymmetry is exactly what a port smooths
 // away without noticing.
 //
 // And what a blast breaks (planning step 115): the breakable walls it reaches with
 // a clear line, on its own tick, through Demolish - and nothing else of what the
 // original's grab sets `destroy` on.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -106,11 +106,11 @@ void TheDecodedNumbersAreNotTheRemakesGuesses() {
     CHECK_MSG(Fire::LoadRules(kPortData + "/fire.json", rules, error), kPortData + "/fire.json: " + error);
 
     CHECK_MSG(::test::nearly(static_cast<float>(rules.reachPx), 32.0f),
-              "a fire agent reaches its sprite's 32, not the remake's halved collision box of 24");
+              "a fire agent reaches its sprite's 32, not the Godot project's halved collision box of 24");
     CHECK_MSG(::test::nearly(static_cast<float>(rules.burnMs), 1000.0f),
-              "BURN_TIME is 1000 ms, not the remake's invented 2000");
+              "BURN_TIME is 1000 ms, not the Godot project's invented 2000");
     CHECK_MSG(::test::nearly(static_cast<float>(rules.blastPx), 80.0f),
-              "a blast grabs at 80, not the remake's invented 96");
+              "a blast grabs at 80, not the Godot project's invented 96");
 
     // Only a crate fades and goes: manageBurnable's one caller is crateCallback.
     // A shock_agent carries the burnable flag and must NOT be in this list, or
@@ -228,8 +228,8 @@ void ABarrelsBodyIsItsScaledBox() {
     std::printf("  %s: %d barrel bodies at 28.6 x 37.7\n", kBombLevel, scaled);
 }
 
-// THE test that separates the decode from the remake's reading: 28 px is inside
-// the original's 32 and outside the remake's 24.
+// THE test that separates the decode from the Godot project's reading: 28 px is inside
+// the original's 32 and outside the Godot project's 24.
 void AFireAgentReachesItsSpritesWidth() {
     Run run;
     if (!Begin(kFireLevel, run)) return;
@@ -246,7 +246,7 @@ void AFireAgentReachesItsSpritesWidth() {
     Tick(run);
     const Fire::Burnable* inReach = run.level.fire.FindBurnable(name);
     CHECK_MSG(inReach != nullptr && inReach->burned,
-              "a crate 28 px away burns, which the remake's halved 24 would not reach");
+              "a crate 28 px away burns, which the Godot project's halved 24 would not reach");
 
     // And beyond it, nothing. A fresh level, because the first one is alight.
     Run beyond;
@@ -509,7 +509,7 @@ MP_SUITE_MAIN("test_mp_fire") {
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
-        std::printf("test_mp_fire SKIPPED - needs the converted levels at %s and the remake's data at %s\n",
+        std::printf("test_mp_fire SKIPPED - needs the converted levels at %s and Enhanced's data at %s\n",
                     kLevels.c_str(), kData.c_str());
         return 77;
     }

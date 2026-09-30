@@ -1,9 +1,9 @@
-// The original's lighting, as the remake's converter carries it: sim/Lighting.
+// The original's lighting, as Enhanced's converter carries it: sim/Lighting.
 //
 // The converter writes every lighting input a level file holds - the scene's
 // ambient and light intensity, each entity's depth, flags, emissive, colour,
 // normal map, baked lightmap and light - as quoted metadata/eth_* strings, and
-// copies the files they name beside the art (the remake's b572fec). Nothing
+// copies the files they name beside the art (Enhanced's b572fec). Nothing
 // draws them yet; out/parity/specs/lighting/design_port.md step G1 is only that
 // the port reads them, strictly, and that what it reads is what the converter
 // reported.

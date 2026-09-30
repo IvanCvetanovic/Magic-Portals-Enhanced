@@ -24796,3 +24796,90 @@ points, and both are settled here without a code change:
   checks, 0 failures (gate 4d). The engine commit is reviewed by the other game's session - `test_materials`, the
   engine's ctest and that game's suites under Linux - before it is pushed; this commit is pushed after it.
 
+## Step 132 - the project's name: Magic Portals Enhanced, in the wording only (renamed)
+
+**THE OWNER (2026-09-30):** "change the wording from Remake to 'Enhanced', since we are not remaking it from
+scratch. I will also change the repo name to use Enhanced instead." The project is now **Magic Portals Enhanced**.
+This step changes words and nothing else: no identifier, no JSON key, no number, no path, no record. The evidence is
+under `out/parity/program/enhanced_wording/` (`rename.md`, `check_code.py` and its output, `compile.log`).
+**GAMEPLAY: NONE.** Nothing the port or its tests execute changed, except 39 listed string literals (below).
+
+**THE WORDS.** The old word meant five things, and each became one wording, never mixed:
+- **the Godot project**: the retired Godot 4 project of 2026-08 to 2026-09-19 - its GDScript, its physics, its
+  readings of the data, its pixels where its own citation or pronoun follows, and the numbers it guessed or invented
+  (including those in `data/actors.json` and `data/hazards.json`, which the port does not read). "The Godot remake"
+  became "the Godot project", the name `CLAUDE.md` and `docs/ethanon-formats.md` already used.
+- **Enhanced's**: this repository as a place (its `out/`, `tools/`, docs, specs, fits, commits such as `b572fec`,
+  planning steps, converter), and `data/` with the three tables the port reads from it (`entity_roles.json` - the
+  role table - `player.json` and `portals.json`). Never "the port's data", which means `game/data/`.
+- **the port's pixels / space**: the pixel space, +y down, against the engine's metres.
+- **a port**: the generic "a remake" (five places, such as "what a port smooths away" and "a port locks it too").
+- **Magic Portals Enhanced**: where the project is named or described. `CLAUDE.md`'s "This is a *remake*, not an
+  emulator or a repack" became "This is an *enhanced version*, rebuilt on a new engine, not an emulator or a repack".
+  **One deliberate meaning change:** `CLAUDE.md`'s first sentence dropped "ground-up" ("A ground-up remake" became
+  "An enhanced version"), because the owner's reason is that it is not rebuilt from scratch.
+
+**CHANGED: 476 occurrences in 138 files**, every line in place (478 lines changed; eight of them only lose or change
+the article before a word the next line now starts with). `CLAUDE.md`, `README.md`, `MILESTONE_1.md`,
+`docs/parity.md`, `docs/original-gameplay.md`, `docs/ethanon-formats.md` and `docs/parity-backlog.md`; the four
+`CMakeLists.txt`; 94 C++ files under `game/` and `tests/` (comments, the `--help` line for `--data`, and the
+suites' skip and failure messages); five Python files under `tools/` (docstrings, and `compare.py`'s pair label);
+28 JSON files under `game/data/` and `data/` (note strings only).
+
+**LEFT, 400 occurrences, and why:**
+- **Records, 338**: `DEVLOG.md` (19), this record's existing steps and its introduction (258), and the two earlier
+  planning records `2026-09-10-magic-portals-port.md` (41) and `2026-09-10-magic-portals-spike.md` (20). This step's
+  own text adds its own.
+- **Paths and URLs, 15**: `Magic-Portals-Remake`, the local folder and the GitHub repository, in `CLAUDE.md`,
+  `README.md` (the clone URL), `docs/parity.md`, `docs/ethanon-formats.md`, the backlog's specs path, worktree
+  names and play-build folder, and `tests/test_mp_levels.cpp` (a comment and the `<Magic-Portals-Remake>` placeholder in its skip message). They keep
+  the name until the owner renames the folder and the repository.
+- **Identifiers and keys, 38**: `Units::kRemakeWorldGravityPx`, `Game::UseRemakeGravity` (and the suite's own
+  `UseRemakeGravity`), `remakeRadiusPx`, the test functions `TheRemakesReadingBreaksOnlyWhatIsFlagged`,
+  `TheDecodedNumbersAreNotTheRemakesGuesses`, `theWalkIsTheDecodedSpeedNotTheRemakesGuess` and
+  `MoversJsonCarriesTheRemakesGuesses`; the JSON keys `_remake_*_not_applied` (seven) and
+  `_counts_not_matching_the_remake`, with the notes that quote those names; `compare.py`'s argparse positional
+  `remake` (`args.remake`), so its `--help` usage line still says "remake".
+- **Legal, 7**: `CLAUDE.md`'s "Legal basis" rows ("Remaking the game", "Reusing the original assets in the remake",
+  "Shipping the remake") and `docs/permission.md` (four), which state or ask what the grant covers.
+- **Not about the project, 2**: the backlog's "`updateEmitters` remakes 2-32's dragon's pool" and "the pool is
+  remade".
+- The engine submodule, untouched.
+
+**THE PROOF** (`check_code.py`, against HEAD, with a self-test that fails on a changed number, a renamed identifier,
+an unlisted literal, a changed JSON number, a renamed JSON key and a changed argparse name):
+- C++ (94 files, 564,850 tokens), CMake (4) and Python (5): with comments and docstrings stripped, the token streams
+  are equal except **39 listed string literals, each used once**: `main.cpp`'s `--data` help line; the
+  `SUPERSONIC_MAGICPORTALS_DATA` cache help string; `compare.py`'s `"REMAKE"` label, now `"ENHANCED"`; 27 lines
+  of the suites' skip messages (`test_mp_levels`' convert hint and `test_mp_play`'s role-table line among them); and
+  nine failure messages (`test_mp_fire` 4, `test_mp_keys` 2, `test_mp_minions`, `test_mp_turrets`, `test_mp_play`).
+- JSON (28 files): every key, key order, type, list length, number, bool and null unchanged; 108 strings changed,
+  all under note keys (`_about`, `_note`, `_source`, `_measured` and ten more, each starting with `_`). No code
+  reads any of them: the five mentions found, in three files (`tools/asbc/achievements.py` three times,
+  `tools/parity/reachability.py`, `tests/test_mp_tiers.cpp`), are writers and a fixture. The role reader reads only
+  `names`, and since every type and length is unchanged, a loader that walks an object meets the same shape.
+- Every reworded file keeps its line count (the record only gains step 132 at its end), so no `__LINE__` and no
+  `file:line` citation moved.
+- **Compile only**: the 80 translation units the change touches (the 54 changed `.cpp` files, and for each changed
+  header its own `.cpp` or a unit that includes it), each once with `build/`'s own command line from
+  `ninja -t compdb` (taken before any edit), objects and PDB moved to the scratch directory, nothing linked: rc 0,
+  **0 warnings, 0 errors**. Nothing under `build/` was written.
+- Converter: `pytest -q` 110 passed, `ruff check .` clean. `py_compile` of the three other Python files clean.
+
+**WHAT THE NEXT BUILD DOES.** Four `CMakeLists.txt` changed, so `port_build.bat` re-runs CMake (the
+`SUPERSONIC_MAGICPORTALS_DATA` cache entry's help text may change in `build/CMakeCache.txt`; its value does not), and
+every translation unit that includes a changed file recompiles, so `MagicPortals.exe`, `test_mp.exe` and
+`MagicPortalsSpike.exe` relink with new md5s: a first launch each for Smart App Control. On a passing run the test
+output is expected unchanged: the changed literals print only on a skip or a failure, and no line moved. Not run
+here. `MagicPortals.exe --help`
+prints the new `--data` line. A pair image `compare.py` writes from now on labels its lower half ENHANCED.
+
+**LEFT FOR THE OWNER.**
+- **The name and the grant.** `docs/permission.md` still carries its "PASTE THE ACTUAL GRANT HERE" block, and its
+  open question "Trademark / naming: TBD - may the remake be called 'Magic Portals'?" is the one "Magic Portals
+  Enhanced" falls under. Its wording was not touched.
+- **The folder and repository rename.** Renaming `C:\Users\icvet\Desktop\Magic-Portals-Remake` breaks `build/`:
+  its `CMakeCache.txt` bakes absolute paths (the five `SUPERSONIC_MAGICPORTALS_*` inputs), so `build/` has to be
+  configured again. The 15 path occurrences above, `origin`'s URL and the auto-memory's paths need updating after it.
+- **The identifiers and keys** listed above. Renaming them is a code and data change for a step of its own.
+- The close role writes the `DEVLOG.md` entry; this step does not touch `DEVLOG.md`. Committed, not pushed.

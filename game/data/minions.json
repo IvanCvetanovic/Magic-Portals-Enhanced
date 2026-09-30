@@ -1,7 +1,7 @@
 {
   "_about": [
     "The minions of worlds 3 and 4, decoded from android_game.bin. Every number here is",
-    "READ, not guessed; where the remake's data/actors.json guesses a different one it",
+    "READ, not guessed; where the Godot project's data/actors.json guesses a different one it",
     "is carried beside as _remake_*_not_applied so the disagreement stays visible.",
     "",
     "Census, counted over all 128 converted levels against the role table's three names",
@@ -197,7 +197,7 @@
     "call site pushes 0.5 - a 120 degree cone - and then GetClosestContact for occlusion,",
     "ignoring 'ghost_minion.ent;minion.ent;dark_mage.ent'.",
     "",
-    "There is NO sight RANGE anywhere in it. The remake's sight_range_px: 220 is invented,",
+    "There is NO sight RANGE anywhere in it. The Godot project's sight_range_px: 220 is invented,",
     "and marked _guess: true in its own file. What bounds the cone is the bucket walk, not",
     "a radius. Building it as a radius would be a different mechanic wearing the same name.",
     "",
@@ -247,7 +247,7 @@
       "the return when that is false. The destroy, the earthquake, playMinionFallSound and",
       "the skull.ent it drops are all inside that branch.",
       "",
-      "The remake's entity_roles.json files enemy_killer under `hazard`, beside",
+      "Enhanced's entity_roles.json files enemy_killer under `hazard`, beside",
       "death_area.ent and lava, so the port used to kill the PLAYER on it. It is sensor=0",
       "and converts to a solid StaticBody2D - a floor to stand on. data/hazards.json takes",
       "it back out of the hazards; this module is what acts on it.",

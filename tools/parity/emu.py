@@ -1,6 +1,6 @@
 """Drive the ORIGINAL Magic Portals running in the Android emulator, over adb.
 
-Why this exists: the remake is tuned by comparing its frames against the original's, and
+Why this exists: the port is tuned by comparing its frames against the original's, and
 the original only runs inside an API 30 x86 emulator (its one native library is 32-bit
 ARM; only that image translates it). See docs/parity.md for the full setup.
 

@@ -1,7 +1,7 @@
 {
   "_about": [
     "The Magic Portals port's launchers: what an entity_launcher throws, what removes a",
-    "thrown body, and when the first is thrown. The remake's launcher only announces what",
+    "thrown body, and when the first is thrown. The Godot project's launcher only announces what",
     "it would throw (hazards.gd:416-455), so these are the port's. See",
     "docs/planning/2026-09-11-magic-portals-remaster.md, step 7."
   ],
@@ -25,7 +25,7 @@
 
   "despawners": {
     "_note": [
-      "Entities whose box removes a thrown body on contact. destroyier.ent is the remake's",
+      "Entities whose box removes a thrown body on contact. destroyier.ent is the Godot project's",
       "reading (hazards.gd:420-422): an invisible sensor under a launcher's drop, which the",
       "owner confirmed on 11 September also kills the player. Its box is the one the port",
       "gives it as a hazard."
@@ -35,7 +35,7 @@
 
   "first_throw": {
     "_note": [
-      "How many strides after a level starts the first body is thrown. The remake's",
+      "How many strides after a level starts the first body is thrown. The Godot project's",
       "launcher waits one (hazards.gd:435). The original has a LAUNCH_TIME constant, whose",
       "value is not decoded."
     ],

@@ -1,6 +1,6 @@
 #pragma once
 
-// Rolling stones, and what they break: the remake's Demolisher
+// Rolling stones, and what they break: the Godot project's Demolisher
 // (hazards.gd:97-120), with one rule the owner settled.
 //
 // - A stone (role demolisher) breaks whatever breakable thing it touches.
@@ -9,9 +9,9 @@
 //   and the player may stand beside one (level 1-9 spawns the player 58 px from
 //   one).
 // - What is breakable: an entity whose metadata/breakable is set, which is all
-//   the remake reads, or one whose name demolish.json lists. Eight
+//   the Godot project reads, or one whose name demolish.json lists. Eight
 //   breakable_wall placements carry no flag, and that is in the original's own
-//   scene data, so in the remake a stone cannot break them. The owner played the
+//   scene data, so in the Godot project a stone cannot break them. The owner played the
 //   original and confirmed, on 11 September, that stones broke those walls.
 //   demolish.json says so beside the list.
 // - Touching is judged as the port judges its triggers (Trigger.hpp), in its
@@ -23,7 +23,7 @@
 // - Quarter turns only. A breakable turned by any other angle is refused,
 //   because its box would not be its shape. Every breakable in the game is
 //   turned by 0 or by a quarter turn.
-// - What the remake's launcher would throw is step 7. Levels 23 and 24 have a
+// - What the Godot project's launcher would throw is step 7. Levels 23 and 24 have a
 //   breakable wall and no stone until then.
 //
 // THE ONE OWNER OF A BREAKABLE'S BREAKING (planning step 115). Whatever takes a

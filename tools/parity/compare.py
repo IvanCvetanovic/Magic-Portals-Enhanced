@@ -1,11 +1,11 @@
-"""Compare one original frame with one remake frame.
+"""Compare one original frame with one port frame.
 
-    tools/parity/.venv/Scripts/python tools/parity/compare.py <original.png> <remake.png> <out_prefix>
+    tools/parity/.venv/Scripts/python tools/parity/compare.py <original.png> <port.png> <out_prefix>
 
-Writes `<out_prefix>_pair.png` (original above remake, labelled), `<out_prefix>_overlay.png`
+Writes `<out_prefix>_pair.png` (original above port, labelled), `<out_prefix>_overlay.png`
 (50/50 blend at full resolution) and prints numbers:
 
-  offset_px   global translation of the remake relative to the original, by phase
+  offset_px   global translation of the port frame relative to the original, by phase
               correlation over edge maps — a camera or layout shift shows up here first
   edge_iou    overlap of the two edge maps after nothing is shifted, 0..1
   mean_abs    mean absolute grey-level difference, 0..255
@@ -74,7 +74,7 @@ def main() -> None:
     pair.paste(original.resize(half), (0, 0))
     pair.paste(remake.resize(half), (0, half[1]))
     draw = ImageDraw.Draw(pair)
-    for label, y in (("ORIGINAL", 0), ("REMAKE", half[1])):
+    for label, y in (("ORIGINAL", 0), ("ENHANCED", half[1])):
         draw.rectangle((0, y, 80, y + 16), fill="black")
         draw.text((4, y + 2), label, fill="yellow")
     pair.save(args.out_prefix.with_name(args.out_prefix.name + "_pair.png"))

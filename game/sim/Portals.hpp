@@ -52,7 +52,7 @@ struct Rules {
     int defaultMaxPortals = 0; // owner-confirmed, despite its block's _guess
 
     // TWO RADII, because the original has two and they are unrelated. The port
-    // carried one - the remake's collision_radius_px, a guess of 16 - and used
+    // carried one - the Godot project's collision_radius_px, a guess of 16 - and used
     // it for both, which made every no-portal field a quarter of its size.
     // Both of these are decoded, from the port's own placement.json.
     //
@@ -70,7 +70,7 @@ struct Rules {
     std::string antiportalEntity;
     double antiportalManagerScale = 0.0;
 
-    // How long a tap is refused for, in milliseconds, both decoded. The remake
+    // How long a tap is refused for, in milliseconds, both decoded. The Godot project
     // carries 0.0 s and 0.25 s and says of them "the names are real; the numbers
     // are invented".
     //
@@ -134,7 +134,7 @@ struct Rules {
     AgentRules agent;
 };
 
-// The remake's portals.json: its placement, consumption and transit objects.
+// Enhanced's portals.json: its placement, consumption and transit objects.
 // Its collision_radius_px is read and checked so a malformed file is still
 // refused, but nothing plays by it - LoadPlacement replaces it.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -250,7 +250,7 @@ struct Static {
 
 // A projectile blocker: anti_projectile_wall.ent, an invisible box a portal shot
 // dies in (ETHCallback_anti_projectile_wall). Its box is its trigger_size, as
-// the remake's ProjectileBlocker reads it. The player walks through it.
+// the Godot project's ProjectileBlocker reads it. The player walks through it.
 struct Blocker {
     std::string name;
     Trigger::Box box;

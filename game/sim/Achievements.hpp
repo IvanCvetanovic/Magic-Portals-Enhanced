@@ -1,11 +1,11 @@
 #pragma once
 
-// The original's achievements, as the remake's gitignored achievements.json holds
+// The original's achievements, as Enhanced's gitignored achievements.json holds
 // them, and what the port's save unlocks of them.
 //
 // THE CONTENT IS NOT THIS REPOSITORY'S. The 82 titles, descriptions, icons and
 // points - and the secret achievement's words - are Asantee-authored. They are
-// extracted by the remake's tools/asbc/achievements.py from the decode into its
+// extracted by Enhanced's tools/asbc/achievements.py from the decode into its
 // out/data/, beside chapters.json, and read from there at run time the way the
 // levels are (SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS). Nothing here names one, and
 // no suite embeds one: the suites build their own lists. Without the file the

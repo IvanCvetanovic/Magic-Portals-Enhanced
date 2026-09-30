@@ -1,7 +1,7 @@
 {
   "_about": [
     "The shock diamond: the pickup a character carries, and the minion that dies to it.",
-    "Decoded from android_game.bin, ETHCallback_shock_diamond. Where the remake's own data",
+    "Decoded from android_game.bin, ETHCallback_shock_diamond. Where the Godot project's own data",
     "guesses differently it is carried beside as _remake_*_not_applied, as keys.json does.",
     "",
     "SELECTED BY ENTITY NAME, NOT BY ROLE. entity_roles.json files shock_diamond.ent and",
@@ -34,7 +34,7 @@
     "reaim_ms": 20.0,
     "stride_ms": 60.0,
     "_note": [
-      "range_px is the root of squaredRange. The remake gives each placement a",
+      "range_px is the root of squaredRange. The Godot project gives each placement a",
       "metadata/trigger_size of 28 x 24 and presumably takes a pickup on overlapping it; the",
       "original polls a RADIUS of 30 px and never tests a box.",
       "",

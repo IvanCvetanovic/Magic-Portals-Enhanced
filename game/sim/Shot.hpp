@@ -47,7 +47,7 @@ struct Hit {
 };
 
 // The first solid body the segment from `fromPx` to `toPx` meets, in the
-// remake's pixels, other than `ignore`. None when it meets nothing. A segment
+// port's pixels, other than `ignore`. None when it meets nothing. A segment
 // that starts inside a body meets it at once.
 std::optional<Hit> FirstBody(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
                              entt::entity ignore);

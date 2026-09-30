@@ -118,7 +118,7 @@ void TheRecoilPushesAwayFromWhereYouAimed() {
     CHECK(::test::nearly(pushedLeft.x, -1.4f));
     CHECK(::test::nearly(pushedLeft.y, 0.0f));
 
-    // Aimed BELOW - a larger y in the remake's pixels, which count down - so
+    // Aimed BELOW - a larger y in the port's pixels, which count down - so
     // pushed UP, which is a positive y in the engine's metres. This is the one
     // the sign error would hide in, and it is why it has its own check.
     const glm::vec3 pushedUp = Zerog::Impulse(player, glm::dvec2(100.0, 200.0), mps);
@@ -196,7 +196,7 @@ void NothingFallsInThere() {
     // whole of this test. These levels place the player overlapping what is under
     // it; the solver pushes it out once and then stops. Measured across three
     // seconds that reads as drift. Measured over the two seconds AFTER it, it is
-    // nothing at all, which a fall never is: at the remake's 980 px/s^2, three
+    // nothing at all, which a fall never is: at the Godot project's 980 px/s^2, three
     // seconds is some 4400 px.
     const glm::dvec2 from = WhereIs(registry, level.player);
     for (int tick = 0; tick < 60; ++tick) Game::Tick(data, registry, level, 0.0f, kStep);
@@ -456,7 +456,7 @@ MP_SUITE_MAIN("test_mp_zerog") {
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_zerog: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's data at %s.\n"
+                    "  and Enhanced's data at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), kData.c_str());

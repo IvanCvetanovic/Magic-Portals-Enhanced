@@ -3,7 +3,7 @@
 //
 // sim/Credits.hpp, sim/Dashboard.hpp, sim/Achievements.hpp and sim/Locking.hpp turn
 // the port's ui.json and the save into rectangles, alphas, words and a scroll, and
-// this pins them against the remake's ui3 spec (sections 3 and 4, acceptance 7.3
+// this pins them against Enhanced's ui3 spec (sections 3 and 4, acceptance 7.3
 // and 7.4). Every position is stated in the pixels of a 1280x720 capture of the
 // original, at 2.8125 px a design unit, so a number here holds against static.md
 // and motion.md as they are.

@@ -223,7 +223,7 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
                     " radians, and only quarter turns are ported";
             return false;
         }
-        // Turned in the remake's pixels, +y down: a quarter turn takes (x, y) to
+        // Turned in the port's pixels, +y down: a quarter turn takes (x, y) to
         // (-y, x).
         const int turns = ((static_cast<int>(nearest) % 4) + 4) % 4;
         for (int i = 0; i < turns; ++i) {

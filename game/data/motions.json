@@ -1,9 +1,9 @@
 {
   "_about": [
     "The small motions the original's scripts give an entity: linearMotion, and the callbacks that",
-    "call it. Decoded from android_game.bin through the remake's asbc listing",
+    "call it. Decoded from android_game.bin through Enhanced's asbc listing",
     "(out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0). The visuals plan's",
-    "step 3.2 (the remake's out/parity/visuals/briefs/00_order.md section 7; systems_9_10.md 10b), planning",
+    "step 3.2 (Enhanced's out/parity/visuals/briefs/00_order.md section 7; systems_9_10.md 10b), planning",
     "step 69 of docs/planning/2026-09-11-magic-portals-remaster.md; `placed` is step 3.3 (systems_9_10.md 10a), planning",
     "step 70. Read by sim/Motion.",
     "",

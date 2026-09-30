@@ -4,9 +4,9 @@
 //
 // The original lights a sprite per pixel as
 //   clamp(texel * colour * min(1, ambient + emissive) + lightmap) + one term per live light,
-// every value an 8-bit encoded one, and halos added on top. The remake's
+// every value an 8-bit encoded one, and halos added on top. Enhanced's
 // converter carries every input of that which a level file holds as quoted
-// metadata/eth_* strings (the remake's docs/ethanon-formats.md, the 2026-09-14
+// metadata/eth_* strings (Enhanced's docs/ethanon-formats.md, the 2026-09-14
 // lighting block, holds the mapping and its engine citations), and copies the
 // files they name - lightmaps, normal maps, halo bitmaps - beside the art. This
 // reads them. It draws nothing: what the port does with them is
@@ -36,7 +36,7 @@
 // node the key would be read and never drawn, and it is refused instead (step 91).
 //
 // An absent key is the ENGINE'S default, which is decoded rather than guessed
-// (the defaults below, each cited in the remake's docs). The one exception is
+// (the defaults below, each cited in Enhanced's docs). The one exception is
 // the root pair: every level file has a <SceneProperties>, so a root without
 // both keys is refused rather than given ambient (1,1,1) and intensity 2.
 //
@@ -133,7 +133,7 @@ struct Rules {
     glm::dvec3 torchLitAmbient{0.0}; // what a lit torch sets
     // The normal maps' green channel points DOWN the image: hPixelLightDiff.ps
     // decodes a texel as -(2 (c - 0.5)) against a light vector in Ethanon's y-down
-    // world (the remake's engine_math.md 4.5).
+    // world (Enhanced's engine_math.md 4.5).
     bool normalMapGreenDown = true;
     // What every halo's formula colour is multiplied by. 1 is the formula itself;
     // the value in the file is a _guess the design leaves to the halo gate
@@ -243,8 +243,8 @@ glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darke
 
 // What a sprite's colour is multiplied by before anything is added:
 // min(1, ambient + emissive), per channel (ETHRenderEntity.cpp:113-117), for
-// every sprite whether or not it applies light, and whatever its blend. The
-// remake's fit holds it to 0.28 of 255 over 1,359 unlit blocks (fit.md 4).
+// every sprite whether or not it applies light, and whatever its blend.
+// Enhanced's fit holds it to 0.28 of 255 over 1,359 unlit blocks (fit.md 4).
 glm::dvec3 AmbientTerm(const glm::dvec3& ambient, const glm::dvec3& emissive);
 
 } // namespace MagicPortals::Lighting

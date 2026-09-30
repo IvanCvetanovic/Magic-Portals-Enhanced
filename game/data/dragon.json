@@ -27,7 +27,7 @@
       "`properties` node carries metadata/auto_camera = \"dragon.ent\"; no other .tscn in all",
       "128 has the key at all. Game::Game branches on it (bytes 110437..111736, ins 100-117):",
       "a non-empty autoCamera builds AutoCameraController(name) as the level's",
-      "cameraController instead of the ordinary one. Neither this port nor the remake's",
+      "cameraController instead of the ordinary one. Neither this port nor the Godot project's",
       "GDScript honoured it, so level31a's camera followed the PLAYER.",
       "",
       "AutoCameraController::update (bytes 234777..234985) is three lines:",

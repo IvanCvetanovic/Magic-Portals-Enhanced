@@ -2,12 +2,12 @@
 
 // The portal traversal, as arithmetic.
 //
-// portal_system.gd's _teleport (230-263), reproduced in the remake's own space
+// portal_system.gd's _teleport (230-263), reproduced in the Godot project's own space
 // - pixels, +y down, radians clockwise on screen - so a Godot answer worked by
 // hand can be checked against it directly. What is reproduced is STRUCTURE:
 // the traveller keeps its velocity turned through the exit's rotation minus the
 // entry's, scaled, and comes out along that velocity, clear of the exit. The
-// NUMBERS the remake feeds it - the mode, the scale, the offset, the lockout -
+// NUMBERS the Godot project feeds it - the mode, the scale, the offset, the lockout -
 // are every one marked _guess in its portals.json, so they arrive as data
 // (Transit) and no test pins them.
 //
@@ -30,7 +30,7 @@ namespace MagicPortals::Portal {
 struct Transit {
     // "reset" zeroes the velocity, "rotate_to_exit" turns it, and "invert" turns
     // it back as the original does. Anything else keeps it as it was - including
-    // "clamp", which portals.json offers as an option and the remake's match
+    // "clamp", which portals.json offers as an option and the Godot project's match
     // statement has no arm for.
     std::string momentumMode;
     double exitSpeedScale = 0.0;
@@ -38,7 +38,7 @@ struct Transit {
     double reentryLockoutS = 0.0;
 };
 
-// Reads the "transit" object of the remake's portals.json. Every field must be
+// Reads the "transit" object of Enhanced's portals.json. Every field must be
 // there: a missing one is an error, not a default, because the defaults would
 // be guesses written into code.
 bool LoadTransit(const std::string& path, Transit& out, std::string& error);
@@ -49,7 +49,7 @@ glm::dvec2 ExitVelocity(const glm::dvec2& velocity, double entryRotation, double
                         const Transit& transit, bool character = false);
 
 // portal_system.gd:249-252: out along the exit velocity, or straight down (+y,
-// the remake's down) for a traveller that arrives still.
+// the Godot project's down) for a traveller that arrives still.
 glm::dvec2 ExitPosition(const glm::dvec2& exitPortal, const glm::dvec2& exitVelocity,
                         const Transit& transit);
 

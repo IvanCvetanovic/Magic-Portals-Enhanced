@@ -1,6 +1,6 @@
 // Hazards: what kills the player, and where.
 //
-// Pinned exactly, because the files and the remake's code say it: chapter 1's
+// Pinned exactly, because the files and the Godot project's code say it: chapter 1's
 // four hazards and their boxes. None carries a trigger_size, so each kills in
 // LevelRuntime's 16 px fallback box at its node, not in the shape the converter
 // gives it (Hazards.hpp). What happens is judged on the tick: the player dies
@@ -8,7 +8,7 @@
 // but its box does not. Only the player can die - Hazards::State::Tick is given
 // the player and nothing else - so that is not tested here.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -133,7 +133,7 @@ void TheLevelsEdgeIsADeathToo() {
         glm::dvec2 at;
         bool dies;
     };
-    // +y is DOWN in the remake's pixels (Units::ToWorld negates it), so falling
+    // +y is DOWN in the port's pixels (Units::ToWorld negates it), so falling
     // into a pit is y PAST the marker - which is the case the owner found.
     const Case cases[] = {
         {"down the pit, past the margin", {256.0, 400.0}, true},
@@ -173,7 +173,7 @@ MP_SUITE_MAIN("test_mp_hazards") {
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_hazards: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's data at %s.\n"
+                    "  and Enhanced's data at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), kData.c_str());

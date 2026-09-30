@@ -4,7 +4,7 @@
 // and PortalLevelSelector, both LevelSelectors over one PageManager - as ui.json's
 // `selector` block and the arithmetic of their loops: the pager's slide, finger
 // and rubber band, the background's pan, the forward arrow's fade, the page
-// counter, and every tile with its lock, number, medal and words (the remake's
+// counter, and every tile with its lock, number, medal and words (Enhanced's
 // ui3 spec sections 0.5, 5 and 6).
 //
 // Pure, like sim/Dashboard.hpp: every picture is a function of the view, the

@@ -16,12 +16,12 @@
 // with the sentinel 999999999 is therefore a stationary guard, and needs no
 // special case anywhere - it is just a dwell nothing will outlast.
 //
-// What the port takes from the decode rather than from the remake's guesses:
+// What the port takes from the decode rather than from the Godot project's guesses:
 //
 // - Speed is the literal 1.3, scaled, times elapsedTime / the physics step. The
 //   game fixes that step: AverageFPSRateManager sets 1/30 s and calls
 //   SetFixedTimeStep(true), so the divisor is 33.3333 ms and the walk is
-//   33.3333 ms worth of 1.3 px - 39 px/s. The remake's actors.json guesses 60,
+//   33.3333 ms worth of 1.3 px - 39 px/s. The Godot project's actors.json guesses 60,
 //   and says so (_guess: true).
 // - Arrival is 8 px. The wider 16 px test - minDist * 2 - is NOT a second gate
 //   on every walk: the original computes it only for a minion with exactly one
@@ -40,7 +40,7 @@
 //   where the port's tick is fixed.
 //
 // enemy_killer lives here rather than in Hazards, and that is a correction.
-// The remake's role table files it under `hazard`, beside death_area.ent and
+// Enhanced's role table files it under `hazard`, beside death_area.ent and
 // lava, which would kill the PLAYER on contact. Its callback does no such thing:
 // ETHBeginContactCallback_enemy_killer (android_game.bin, bytes 436701..437083)
 // is 69 instructions that open with isMinion(other) and jump straight to the
@@ -52,8 +52,8 @@
 //
 // Its box is the shape the level gives it (LevelBuilder::ShapeBoundsPx), not the
 // 16 px fallback Trigger::FromNode would hand back. A hazard's box is the
-// remake's, because the port matches the remake where the remake is what a
-// player meets; this floor is not in the remake's path at all, and a kill floor
+// Godot project's, because the port matches the Godot project where the Godot project is what a
+// player meets; this floor is not in the Godot project's path at all, and a kill floor
 // shrunk to 16 px would miss everything that fell past it.
 //
 // NOT built here, and deliberately: sight, shooting, and a minion being
@@ -113,7 +113,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
 struct Waypoint {
     std::string name;          // the node's name, waypointName + index
-    glm::dvec2 atPx{0.0, 0.0}; // where it stands, in the remake's pixels
+    glm::dvec2 atPx{0.0, 0.0}; // where it stands, in the port's pixels
     double holdMs = 0.0;       // the dwell on ARRIVING here
 };
 
@@ -241,7 +241,7 @@ struct State {
     const Minion* FindMinion(const std::string& name) const;
 
     // What the decoded literal works out to, per second: 39, not the 60 the
-    // remake guesses.
+    // Godot project guesses.
     double SpeedPxPerSecond() const;
 };
 

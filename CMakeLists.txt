@@ -7,7 +7,7 @@
 #             the executable and the level30 measurement tool.
 #   tests/    the port's suites, test_mp_*.
 #
-# What the port reads at run time is this repository's own: data/ (the remake's
+# What the port reads at run time is this repository's own: data/ (Enhanced's
 # tables), game/data/ (the port's), and the gitignored out/ and reference/ that
 # the converter and the original's APK fill. game/sim/CMakeLists.txt has the
 # paths, each a cache variable that one -D moves.

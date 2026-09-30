@@ -13,10 +13,10 @@
 // round it. These cases would sit in test_mp_shot beside the shot's other ends;
 // they are here because Smart App Control refused both of step 126's links of
 // test_mp_shot, and a suite that is launched anyway costs no second refusal. The numbers behind
-// the speeds - movers.json's rate scale and lift speed - are the remake's
+// the speeds - movers.json's rate scale and lift speed - are the Godot project's
 // guesses, carried as data, so the thresholds are computed from them.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -580,7 +580,7 @@ MP_SUITE_MAIN("test_mp_movers") {
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_movers: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's data at %s.\n"
+                    "  and Enhanced's data at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), kData.c_str());

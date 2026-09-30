@@ -4,7 +4,7 @@
 
 WHY THIS EXISTS
 ---------------
-The main menu's Achievements dashboard (the remake's ui3 spec, section 4) draws 82 rows
+The main menu's Achievements dashboard (Enhanced's ui3 spec, section 4) draws 82 rows
 whose titles, descriptions, icons and points are ASANTEE-AUTHORED CONTENT. They may not be
 committed to this repository or to the engine's (CLAUDE.md's hard rule; the owner's ruling
 for the dashboard). So they are not written into any committed data file: this tool reads

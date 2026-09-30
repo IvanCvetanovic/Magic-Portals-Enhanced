@@ -1,6 +1,6 @@
 # Magic Portals — how the original behaves
 
-Design reference for the remake. **Separate from `ethanon-formats.md` on purpose:** that
+Design reference for Magic Portals Enhanced. **Separate from `ethanon-formats.md` on purpose:** that
 file documents Ethanon's *file formats*, this one documents *this game's* behaviour.
 
 CLAUDE.md: Ethanon gameplay logic "is **not** converted — it is read as design reference
@@ -49,7 +49,7 @@ evidence of four-way player movement.
 **ABSENCE.** `jumpForth` is the **only** jump-related identifier in the entire binary.
 
 **OWNER (2026-08-05).** Ivan confirms the original had only move-left and move-right, plus
-screen taps for portals. **There is no jump**, and the remake now ships with it disabled
+screen taps for portals. **There is no jump**, and Enhanced now ships with it disabled
 (`player.json` → `jump.enabled: false`). Three independent sources agree — a decoded enum,
 an exhaustive absence, and testimony — which makes this the best-established fact in this
 document.
@@ -82,7 +82,7 @@ text — "Finish level 1-20 with 8 portals or less" is a running total across th
 not a simultaneous cap.
 
 ⚠ **Not covered by this testimony, still open:** whether `portal_static` entities are also
-consumed. The remake assumes **they persist** — the name says static, the engine has a
+consumed. Enhanced assumes **they persist** — the name says static, the engine has a
 dedicated `teleportToFirstStaticPortal`, and level 1-1 would become unsolvable after two
 uses if its four static portals vanished. Reasoned, not confirmed.
 
@@ -184,7 +184,7 @@ Modelled as a data switch (`portals.json` → `level.exit_requires_all_crystals`
 
 **IDENTIFIER.** `DoorLockedChooser`, and an achievement "Close all doors before finishing" —
 doors have locked states, and `door_lift` entities carry `switchIdx`/`idx` custom data
-pairing them with `button` entities. Not implemented in the remake yet.
+pairing them with `button` entities. Not implemented in Enhanced yet.
 
 **IDENTIFIER.** `death_area.ent` kills on contact (`ETHBeginContactCallback_death_area`,
 `sensor=1`). Only one placement in chapter 1; far more in later worlds.

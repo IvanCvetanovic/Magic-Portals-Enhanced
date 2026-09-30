@@ -1,16 +1,16 @@
-// Carrancas: the wall gargoyles that spit fireballs, which the remake's role
+// Carrancas: the wall gargoyles that spit fireballs, which Enhanced's role
 // table calls turrets.
 //
-// What is pinned here is the DECODE, not the remake's reading of it, and the two
+// What is pinned here is the DECODE, not the Godot project's reading of it, and the two
 // differ in one place that matters. carrancaCallback seeds elapsedTime from the
 // node's startStride, gathers each frame, fires when it passes the node's stride
 // and resets to zero - so level0a's carranca, whose startStride is 0 and whose
-// stride is 1500, first fires a stride in. The remake treats startStride as an
+// stride is 1500, first fires a stride in. The Godot project treats startStride as an
 // initial delay and fires at once (hazards.gd:346-349). A test that only counted
 // fireballs would pass either way, so the FIRST one is timed here.
 //
 // The fireball's own numbers are its .ent's: 130 px/s and a circle of radius 9.6
-// (16 x 16, shape 2, at its <Scale> 1.2). The remake's hazards.json invents
+// (16 x 16, shape 2, at its <Scale> 1.2). The Godot project's hazards.json invents
 // 180 px/s and marks itself _guess; the original states it, so the port does not
 // inherit the guess.
 //
@@ -20,7 +20,7 @@
 // a crate it burns, a barrel it sets off. Until step 114 the port read "sensor"
 // as "nothing stops it" and its fireballs flew through walls to the level's edge.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -135,7 +135,7 @@ void TheFirstShotComesAStrideIn() {
     }
     CHECK_MSG(soonestMs > 0.0, "no carranca fires before the level has begun");
 
-    // NOT at once. This is the whole difference from the remake's reading, and
+    // NOT at once. This is the whole difference from the Godot project's reading, and
     // a test that only counted fireballs would not see it.
     Tick(run);
     CHECK_MSG(run.level.turrets.fireballs.empty(), "nothing is spat on the first tick");
@@ -641,7 +641,7 @@ void TheReaderRefusesWhatWouldBeSilent() {
     // The port's own file reads.
     CHECK_MSG(Turrets::LoadRules(kPortData + "/turrets.json", rules, error), kPortData + "/turrets.json: " + error);
     CHECK_MSG(::test::nearly(static_cast<float>(rules.speedPx), 130.0f),
-              "fireball.ent's speed is 130, not the remake's invented 180");
+              "fireball.ent's speed is 130, not the Godot project's invented 180");
     CHECK_MSG(::test::nearly(static_cast<float>(rules.radiusPx), 9.6f),
               "and its body is a circle of (16 + 16) / 4 x 1.2 = 9.6, shape 2 at its <Scale>");
 
@@ -700,7 +700,7 @@ MP_SUITE_MAIN("test_mp_turrets") {
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
-        std::printf("test_mp_turrets SKIPPED - needs the converted levels at %s and the remake's data at %s\n",
+        std::printf("test_mp_turrets SKIPPED - needs the converted levels at %s and Enhanced's data at %s\n",
                     kLevels.c_str(), kData.c_str());
         return 77;
     }

@@ -3,7 +3,7 @@
 // The loading screen the original opens with - LoadingScreen - as ui.json's
 // `loading` block and the arithmetic of its loop.
 //
-// OWNER RULING R4 (the remake's ui3 spec 8.2): built as the original, before the
+// OWNER RULING R4 (Enhanced's ui3 spec 8.2): built as the original, before the
 // main menu. The original loads resource.list's textures two a frame while its
 // character walks to a portal, then holds 1000 ms of frame time and sets the
 // menu state. The port loads nothing there - its textures load as they are

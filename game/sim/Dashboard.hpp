@@ -11,7 +11,7 @@
 // unlocks of it, laid out once as the dashboard opens. Every picture is then a
 // function of the board, the view, the state's clock, the layer's clock (the
 // "new!" label reads the wall clock) and a State the layer keeps between ticks and
-// steps once a tick (the remake's ui3 spec 8.1, P1).
+// steps once a tick (Enhanced's ui3 spec 8.1, P1).
 //
 // Units are design units on the VIEW, (0, 0) its top-left, +y down.
 

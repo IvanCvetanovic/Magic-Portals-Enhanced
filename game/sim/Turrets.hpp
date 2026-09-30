@@ -1,7 +1,7 @@
 #pragma once
 
 // Carrancas: the wall-mounted stone gargoyles that spit fireballs along their
-// own (dirX, dirY), which the remake's role table calls `turret`.
+// own (dirX, dirY), which Enhanced's role table calls `turret`.
 //
 // WHY THIS EXISTS. Nineteen of chapter 2's levels carry one, and ten of them -
 // level0a through level8a and level24a - carry nothing else the port cannot

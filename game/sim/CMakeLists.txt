@@ -1,4 +1,4 @@
-# Magic Portals' simulation side, ported from the Godot remake.
+# Magic Portals' simulation side, ported from the Godot project.
 #
 # A library rather than part of an executable, and unconditional, for the reason
 # Wolf Brigade's and HUSK's are: the tests link it. Deliberately free of the
@@ -87,13 +87,13 @@ get_filename_component(_magicPortalsRepo "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABS
 set(SUPERSONIC_MAGICPORTALS_LEVELS "${_magicPortalsRepo}/out/levels"
     CACHE PATH "The converted levels (out/levels in this repository)")
 
-# And the remake's own data - its entity_roles.json, portals.json and
-# player.json in data/, which are the remake's authored files rather than the
+# And Enhanced's own data - its entity_roles.json, portals.json and
+# player.json in data/, which are Enhanced's authored files rather than the
 # original's. The tests read the role table and pin what it says of a level
 # (test_mp_play); the numbers in portals.json and player.json are marked _guess
 # there, so they are carried as data and nothing pins them.
 set(SUPERSONIC_MAGICPORTALS_DATA "${_magicPortalsRepo}/data"
-    CACHE PATH "The remake's data directory (data in this repository)")
+    CACHE PATH "Enhanced's data directory (data in this repository)")
 
 # And the level order, chapters.json: the converter's reading of the original's
 # goldenScores.enml, written beside the levels in the same gitignored out/.

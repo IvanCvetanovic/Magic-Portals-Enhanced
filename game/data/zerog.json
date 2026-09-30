@@ -56,7 +56,7 @@
       "wrapper wraps the world's gravity as scale(10), and Units.hpp already has that 10",
       "decoded as Box2D's DEFAULT_GRAVITY in metres per second squared - so the 1.4 is metres",
       "per second too, and the engine's velocities already are. 70 px/s at kPixelsPerMetre 50,",
-      "for anyone reading it beside the remake's pixel numbers (its walk is a guessed 160).",
+      "for anyone reading it beside the Godot project's pixel numbers (its walk is a guessed 160).",
       "",
       "A DIVERGENCE, RECORDED RATHER THAN MATCHED. Because m_scaleFactor is screen height over",
       "480, the original's recoil got STRONGER on a taller screen - 1.4 at 480, 3.15 at 1080.",

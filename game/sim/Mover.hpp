@@ -47,7 +47,7 @@ struct Door {
 bool DoorFromNode(const Tscn::Node& node, Door& out, std::string& error);
 
 // The port's own mover numbers, game/data/movers.json: two of the
-// remake's guesses, which it keeps in behaviours.gd rather than in its data.
+// Godot project's guesses, which it keeps in behaviours.gd rather than in its data.
 struct Rules {
     double oscillationRateScale = 0.0; // RATE_SCALE_K, _guess
     double liftSpeedPx = 0.0;          // speed_px_s's default, _guess
@@ -58,12 +58,12 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error);
 // A swing about where the level places something, behaviours.gd's OSCILLATE
 // profile (:158-164), along an axis, by half its stride either way:
 //   offset = sin(rateScale * speed * t) * stride / 2.
-// `speed` is a frequency, not a velocity, by the remake's reading of the data.
+// `speed` is a frequency, not a velocity, by the Godot project's reading of the data.
 // It starts at the level's place, t = 0. Moving platforms swing vertically, and
 // patrolling no-portal zones on the axis their `direction` names.
 struct Oscillation {
     glm::dvec2 originPx{0.0};
-    glm::dvec2 axis{0.0, 1.0}; // in the remake's pixels, +y down: its Vector2.DOWN
+    glm::dvec2 axis{0.0, 1.0}; // in the Godot project's pixels, +y down: its Vector2.DOWN
     double stridePx = 0.0;
     double speed = 0.0;
     double rateScale = 0.0;
@@ -73,7 +73,7 @@ struct Oscillation {
 };
 
 // From a node's position, speed and stride. False, with `error`, when it has no
-// speed or no stride: the remake falls back to literals, the port does not
+// speed or no stride: the Godot project falls back to literals, the port does not
 // invent them.
 bool OscillationFromNode(const Tscn::Node& node, const glm::dvec2& axis, double rateScale, Oscillation& out,
                          std::string& error);

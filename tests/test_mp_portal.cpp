@@ -3,9 +3,9 @@
 // portal_system.gd:230-263 turns a traveller's velocity through the exit's
 // rotation minus the entry's, scales it, and puts the traveller out along it,
 // clear of the exit. That is structure, and it is pinned here. The numbers the
-// remake feeds it - mode, scale, offset, lockout - are every one marked _guess
+// Godot project feeds it - mode, scale, offset, lockout - are every one marked _guess
 // in its portals.json, so each Transit below is written for the test and none
-// is the remake's.
+// is the Godot project's.
 //
 // The original's own rule is decoded (step 11a): "invert", which turns a body
 // back and a character back in y only, and puts it at the exit itself. The
@@ -47,7 +47,7 @@ std::string Show(const glm::dvec2& v) {
     return "(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ")";
 }
 
-// In the remake's space +y is down, so a positive rotation is clockwise on
+// In the Godot project's space +y is down, so a positive rotation is clockwise on
 // screen: a quarter turn takes "moving right" to "moving down".
 void TurnsThroughTheDifference() {
     const Portal::Transit t = Make("rotate_to_exit", 1.0, 10.0);
@@ -67,7 +67,7 @@ void TurnsThroughTheDifference() {
 void ModesAndScale() {
     CHECK(Near(Portal::ExitVelocity({30, -40}, 0.0, kQuarter, Make("reset", 3.0, 10.0)), 0, 0));
     CHECK(Near(Portal::ExitVelocity({30, -40}, 0.0, kQuarter, Make("preserve", 1.0, 10.0)), 30, -40));
-    // portals.json offers "clamp"; the remake's match has no arm for it, so it
+    // portals.json offers "clamp"; the Godot project's match has no arm for it, so it
     // falls to the default and keeps the velocity - as does anything unknown.
     CHECK(Near(Portal::ExitVelocity({30, -40}, 0.0, kQuarter, Make("clamp", 1.0, 10.0)), 30, -40));
     CHECK(Near(Portal::ExitVelocity({30, -40}, 0.0, kQuarter, Make("", 1.0, 10.0)), 30, -40));
@@ -80,7 +80,7 @@ void ComesOutAlongItsVelocity() {
     const Portal::Transit t = Make("rotate_to_exit", 1.0, 10.0);
     CHECK(Near(Portal::ExitPosition({500, 60}, {0, 100}, t), 500, 70));
     CHECK(Near(Portal::ExitPosition({500, 60}, {30, -40}, t), 506, 52));
-    // Arriving still, it comes out straight down - +y, the remake's down.
+    // Arriving still, it comes out straight down - +y, the Godot project's down.
     CHECK(Near(Portal::ExitPosition({500, 60}, {0, 0}, t), 500, 70));
     // Godot's is_zero_approx is per component, under 1e-5: below it is still,
     // just above it is a direction.
@@ -108,7 +108,7 @@ void InvertTurnsTravellersBack() {
     CHECK(Near(Portal::ExitPosition({500, 60}, {0, 0}, t), 500, 60));
 }
 
-// The port's transit.json is the original's rule. Its lockout is the remake's
+// The port's transit.json is the original's rule. Its lockout is the Godot project's
 // guess, and is not pinned.
 void ThePortsTransitIsTheOriginals() {
     Portal::Transit transit;

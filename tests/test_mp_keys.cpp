@@ -1,16 +1,16 @@
 // Keys, the keyholes they open, and the locked doors that go with them.
 //
 // What is pinned here is the DECODE. Keys.hpp cites where each number comes from;
-// the ones a test can tell apart from the remake's guesses are:
+// the ones a test can tell apart from the Godot project's guesses are:
 //
 //   range   ONE range of 26 px, serving both being picked up and opening a
-//           keyhole. The remake invents two - pickup_range_px and
+//           keyhole. The Godot project invents two - pickup_range_px and
 //           unlock_range_px - and guesses 40 for each, so a key 28 px from the
-//           player is taken in the remake and not in the original. That exact
+//           player is taken in the Godot project and not in the original. That exact
 //           distance is tested in both directions.
 //   pickup  a distance poll rather than a contact, and anything that is a
 //           character OR a minion can take one. A minion carrying a key is
-//           therefore tested, because it is the kind of thing a remake drops
+//           therefore tested, because it is the kind of thing a port drops
 //           without noticing. Both the poll and the trail run from the
 //           carrier's ENTITY point, which for a minion is not its body's
 //           centre, and that is tested too.
@@ -24,7 +24,7 @@
 // two yellow keyholes sit 57 px from their own doors and 216 px or more from each
 // other's.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -96,7 +96,7 @@ void theOneRangeServesBothTests() {
 
     const Keys::Rules& rules = run.level.keys.rules;
     CHECK(::test::nearly(static_cast<float>(rules.rangePx), 26.0f));
-    CHECK_MSG(rules.rangePx < 40.0, "the remake's 40 px is not what is played");
+    CHECK_MSG(rules.rangePx < 40.0, "the Godot project's 40 px is not what is played");
     CHECK(::test::nearly(static_cast<float>(rules.leashPx), 40.0f));
     CHECK(::test::nearly(static_cast<float>(rules.fadeStartMs), 1000.0f));
     CHECK(::test::nearly(static_cast<float>(rules.fadeMs), 500.0f));
@@ -127,7 +127,7 @@ void theOneRangeServesBothTests() {
 // offset is tried, the distance the module really measured is read back, and the
 // decision is pinned against THAT. What pins the number itself is the pair of
 // brackets at the end: a key taken from beyond 20 px is not a tiny range, and one
-// left lying while the player stood inside 40 is not the remake's guess.
+// left lying while the player stood inside 40 is not the Godot project's guess.
 void aKeyIsTakenAtTwentySixPixels() {
     const struct Case {
         double atPx;
@@ -176,7 +176,7 @@ void aKeyIsTakenAtTwentySixPixels() {
     }
 
     CHECK_MSG(tookBeyondTwenty, "a key is taken from beyond 20 px");
-    CHECK_MSG(leftInsideForty, "and left lying from inside 40, which the remake's guess would have taken");
+    CHECK_MSG(leftInsideForty, "and left lying from inside 40, which the Godot project's guess would have taken");
 }
 
 // Anything that is a character OR a minion takes one, and level7b has both: a
@@ -562,7 +562,7 @@ MP_SUITE_MAIN("test_mp_keys") {
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
-        std::printf("test_mp_keys SKIPPED - needs the converted levels at %s and the remake's data at %s\n",
+        std::printf("test_mp_keys SKIPPED - needs the converted levels at %s and Enhanced's data at %s\n",
                     kLevels.c_str(), kData.c_str());
         return 77;
     }

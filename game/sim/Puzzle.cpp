@@ -13,7 +13,7 @@ namespace MagicPortals::Puzzle {
 
 namespace {
 
-// A channel number off metadata. The remake reads a missing one as -1, a channel
+// A channel number off metadata. The Godot project reads a missing one as -1, a channel
 // nothing else is on; the port refuses it rather than invent one.
 bool ChannelOf(const Tscn::Node& node, const char* key, int& out, std::string& error) {
     const Tscn::Value* value = node.Meta(key);
@@ -37,7 +37,7 @@ bool StrideOf(const Tscn::Node& node, double& out, std::string& error) {
     return true;
 }
 
-// Where the level puts a node, in the remake's pixels.
+// Where the level puts a node, in the port's pixels.
 glm::dvec2 PositionOf(const Tscn::Node& node) {
     const Tscn::Value* value = node.Find("position");
     if (value == nullptr || value->kind != Tscn::Value::Kind::Vector2) return glm::dvec2(0.0);
@@ -45,7 +45,7 @@ glm::dvec2 PositionOf(const Tscn::Node& node) {
 }
 
 // The sink applied: the trigger box and the built body both, since the original
-// moves one point (R21). +y is down in the remake's pixels and up in the engine's
+// moves one point (R21). +y is down in the port's pixels and up in the engine's
 // metres, so a sink subtracts.
 void Place(entt::registry& registry, Button& button) {
     const float depth = Units::ToMetres(button.sunkPx);

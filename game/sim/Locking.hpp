@@ -4,7 +4,7 @@
 // original's isWorldUnlocked, isLevelUnlocked and computeWorldAccomplishment over
 // the port's own medals.
 //
-// OWNER RULING R3 (the remake's ui3 spec 8.2): locking as the original, from the
+// OWNER RULING R3 (Enhanced's ui3 spec 8.2): locking as the original, from the
 // port's save. The achievements dashboard is the first reader - its lock icons and
 // what a tap on a row opens (spec 4.3) - and chapter select and the level grid are
 // to read the same functions (spec 5.4, 6.4). A named --level still opens any

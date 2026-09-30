@@ -3,7 +3,7 @@
 // Pinned exactly, because the files say it: chapter 1's stones and breakable
 // walls, which of the walls the level flags and which break by name, and each
 // wall's box. Breaking by name is the owner's testimony, carried in
-// demolish.json, so the remake's reading - the flag alone - is run too. What
+// demolish.json, so the Godot project's reading - the flag alone - is run too. What
 // happens is judged on the tick:
 //   - a stone thrown at a wall breaks it and takes its body away, and nothing
 //     else;
@@ -12,7 +12,7 @@
 // The contact margin is a guess carried as data, so the edge is found about
 // whatever margin the data holds rather than at a number pinned here.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -47,7 +47,7 @@ struct Run {
     Game::Level level;
 };
 
-// byName false is the remake's reading: only what the level flags breaks.
+// byName false is the Godot project's reading: only what the level flags breaks.
 bool Begin(const std::string& levelName, Run& run, bool byName = true) {
     std::string error;
     bool ok = Game::LoadData(kLevels + "/" + levelName + ".tscn", kData,
@@ -73,7 +73,7 @@ bool Begin(const std::string& levelName, Run& run, bool byName = true) {
 
 void Tick(Run& run, float direction = 0.0f) { Game::Tick(run.data, run.registry, run.level, direction, kStep); }
 
-// A body put down at a point in the remake's pixels, moving at a velocity in them.
+// A body put down at a point in the port's pixels, moving at a velocity in them.
 void Put(Run& run, entt::entity body, const glm::dvec2& atPx, const glm::dvec2& velocityPx = glm::dvec2(0.0)) {
     auto& transform = run.registry.get<TransformComponent>(body);
     const glm::vec3 at = Units::ToWorld(atPx.x, atPx.y);
@@ -451,7 +451,7 @@ MP_SUITE_MAIN("test_mp_demolish") {
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_demolish: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's data at %s.\n"
+                    "  and Enhanced's data at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), kData.c_str());

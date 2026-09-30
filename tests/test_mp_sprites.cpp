@@ -1,4 +1,4 @@
-// A level's own art: the sprites the remake's converter wrote, as sim/Sprites
+// A level's own art: the sprites Enhanced's converter wrote, as sim/Sprites
 // reads them.
 //
 // What the converter decides is pinned exactly: which texture each entity node
@@ -933,7 +933,7 @@ void TheTimerIsTimerEnt() {
     CHECK_MSG(timer.alpha == 0.5 && timer.zOffset == -2, "SetAlpha(0.5f), 2 behind its crystal");
 }
 
-// Without the timer the port would draw no dial - or the remake's fade, which the
+// Without the timer the port would draw no dial - or the Godot project's fade, which the
 // original never had.
 void ATimerWithoutItsClockIsRefused() {
     std::ifstream file(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", std::ios::binary);

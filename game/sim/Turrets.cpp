@@ -104,9 +104,9 @@ std::vector<Fireball> State::Fire(float dt) {
 
         Fireball made;
         made.name = turret.name + "#" + std::to_string(++turret.fired);
-        // At the carranca's own position. The remake spawns one 24 px along the
+        // At the carranca's own position. The Godot project spawns one 24 px along the
         // direction (hazards.gd:365); addFireball uses GetPositionXY and nothing
-        // else, so that offset is the remake's own.
+        // else, so that offset is the Godot project's own.
         made.atPx = turret.atPx;
         made.velocityPx = turret.directionPx * rules.speedPx;
         fireballs.push_back(made);
@@ -187,7 +187,7 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
             turret.body = found->second;
         }
 
-        // The remake's defaults for a node that names neither (hazards.gd:340-344).
+        // The Godot project's defaults for a node that names neither (hazards.gd:340-344).
         glm::dvec2 direction(Meta(node, "dirX", -1.0), Meta(node, "dirY", 0.0));
         if (direction.x == 0.0 && direction.y == 0.0) direction = glm::dvec2(-1.0, 0.0);
         const double length = std::sqrt(direction.x * direction.x + direction.y * direction.y);

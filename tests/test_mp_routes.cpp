@@ -225,7 +225,7 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
     if (!std::filesystem::is_directory(kLevels, ec) || !std::filesystem::is_regular_file(kChapters, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_routes: SKIPPED - needs the converted levels at %s,\n"
-                    "  chapters.json at %s and the remake's data at %s.\n",
+                    "  chapters.json at %s and Enhanced's data at %s.\n",
                     kLevels.c_str(), kChapters.c_str(), kData.c_str());
         return 77;
     }

@@ -67,16 +67,16 @@ namespace MagicPortals {
 //    tick, set on the engine's clock. The app steps physics before each
 //    OnFixedUpdate, so the layer runs Game::AfterStep then Game::BeforeStep.
 //    That is the suites' tick, with the app's step between the halves.
-//  - Input is read on the tick. Left and right held are the remake's two-button
+//  - Input is read on the tick. Left and right held are the Godot project's two-button
 //    pad, and a tap fires a portal shot at the point in the level under it. There
 //    is one tap per tick at most, so a frame cannot spend the budget twice in one
 //    step. R retries and N skips, on the tick as well.
 //  - The levels come in chapters.json's order. Reaching the exit loads the next
-//    level of the world at once, as the remake advances (main.gd:161-168). Retry
+//    level of the world at once, as the Godot project advances (main.gd:161-168). Retry
 //    is instant: the level is rebuilt from what was read when it loaded, and the
 //    disk is not touched (level_manager.gd:5-13). A level the port refuses says
-//    why, and N skips it, the remake's own development shortcut. At a world's end
-//    the remake opens its menu; the port has none yet, so it says the chapter is
+//    why, and N skips it, the Godot project's own development shortcut. At a world's end
+//    the Godot project opens its menu; the port has none yet, so it says the chapter is
 //    complete.
 //  - The camera is orthographic and follows the player, as the owner remembers
 //    it: Camera::Follow, moved on the tick and drawn between ticks. It shows
@@ -116,7 +116,7 @@ namespace MagicPortals {
 //    drops.
 class MagicPortalsLayer final : public Supersonic::EngineLayer {
 public:
-    // The port's tick: the remake's physics runs at Godot's default 60 Hz.
+    // The port's tick: the Godot project's physics runs at Godot's default 60 Hz.
     static constexpr float kTick = 1.0f / 60.0f;
 
     // The actions this layer binds at attach, named so tests and a recording
@@ -141,8 +141,8 @@ public:
     // visible. This says which.
     static constexpr const char* kDump = "mp.dump";
 
-    // Where the port reads from. The defaults are where the build was told the
-    // remake's files are, and the port's own data beside its source.
+    // Where the port reads from. The defaults are where the build was told
+    // Enhanced's files are, and the port's own data beside its source.
     struct Paths {
         std::string levels = MAGICPORTALS_LEVELS_DIR;
         std::string chapters = MAGICPORTALS_CHAPTERS_FILE;
@@ -179,7 +179,7 @@ public:
     };
 
     // The last level cleared: the portals spent against its golden score, which
-    // is what the remake records (level_manager.gd:116-121).
+    // is what the Godot project records (level_manager.gd:116-121).
     struct Cleared {
         std::string name;
         std::string label;
@@ -200,14 +200,14 @@ public:
     // WorldSelector, LevelSelector, CreditsScreen and ScoreDashboard. Each opens
     // under its own black (menu_state.fade) and presses its buttons as
     // Button::update does (menu_state.press). The loading screen and the main menu
-    // are the remake's ui3 spec section 2 (sim/Loading.hpp, sim/MainMenu.hpp),
+    // are Enhanced's ui3 spec section 2 (sim/Loading.hpp, sim/MainMenu.hpp),
     // credits and the achievements dashboard its sections 3 and 4
     // (sim/Credits.hpp, sim/Dashboard.hpp), all drawn by EmitMenu; chapter select
     // and the grid are still the port's own layout of the original's art, which
     // ui3 sections 5 and 6 are to replace.
     // `Finished` and `Dead` are the odd two: each sits OVER the level it ended,
     // which stays loaded, drawn AND RUNNING - neither screen stops game time
-    // (the remake's ui2 spec, D7) - and both are drawn through the screen
+    // (Enhanced's ui2 spec, D7) - and both are drawn through the screen
     // overlay on the view, as the pause is (sim/LevelEnd.hpp). Everything that
     // treats a screen as "the level is gone" has to name both.
     enum class Screen { None, Loading, Main, Worlds, Levels, Credits, Achievements, Finished, Dead };
@@ -1025,7 +1025,7 @@ public:
     std::vector<PlacedReport> PlacedReports() const;
 
     // A screen point (Input's coordinates) as the point in the level under it,
-    // in the remake's pixels. False when there is no viewport or camera.
+    // in the port's pixels. False when there is no viewport or camera.
     bool ScreenToLevelPx(const entt::registry& registry, const glm::vec2& screenPoint, glm::dvec2& outPx) const;
     // The same from a point already inside the viewport, which is what a touch
     // carries: a scheduled tap has no cursor to read.

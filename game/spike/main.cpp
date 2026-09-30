@@ -17,9 +17,9 @@
 //
 // Built with -DSUPERSONIC_BUILD_MAGICPORTALS=ON. The level is read from outside
 // the repository (SUPERSONIC_MAGICPORTALS_LEVELS); the player's size and the
-// portal numbers come from the remake's own player.json and portals.json
+// portal numbers come from Enhanced's own player.json and portals.json
 // (SUPERSONIC_MAGICPORTALS_DATA) - read, never copied into code, because the
-// remake marks every one of them _guess.
+// Godot project marks every one of them _guess.
 //
 // Everything runs at the original's scale and gravity (Units.hpp): 50 px to the
 // metre and 10 m/s^2, overriding the engine's 9.81 through PhysicsSettings.
@@ -65,7 +65,7 @@ constexpr double kRestTolerancePx = 1.0;
 constexpr double kPortalToleranceMs = 1e-4; // m/s
 
 // How hard the spike pushes things along the floor. A choice of the spike's,
-// not the remake's walk speed - that is 160 px/s, and marked _guess.
+// not the Godot project's walk speed - that is 160 px/s, and marked _guess.
 constexpr float kDriveSpeed = 1.0f; // m/s, 50 px/s
 
 struct Paths {
@@ -150,7 +150,7 @@ glm::dvec2 PositionPx(const Tscn::Node& node) {
     return glm::dvec2(v->numbers[0], v->numbers[1]);
 }
 
-// The top of a polygon body, in the remake's pixels (+y down).
+// The top of a polygon body, in the port's pixels (+y down).
 double TopPx(const Tscn::Scene& scene, const std::string& entity) {
     const Tscn::Node* node = scene.FindNode(entity);
     const Tscn::Node* shape = scene.FindNode(entity + "/Body/Shape");
@@ -197,7 +197,7 @@ entt::entity Entity(const LevelBuilder::Built& built, const std::string& name) {
 }
 
 // The spike's player is an INSTRUMENT, not the port's answer: a dynamic capsule
-// with rotation frozen, the size of the remake's player.json body. The remake's
+// with rotation frozen, the size of Enhanced's player.json body. The Godot project's
 // player is a kinematic CharacterBody2D and the engine has no character
 // controller; which body the port uses is decided by these numbers.
 entt::entity AddPlayer(entt::registry& registry, const glm::dvec2& atPx, const PlayerBody& body, bool kinematic,

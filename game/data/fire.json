@@ -1,7 +1,7 @@
 {
   "_about": [
     "Fire agents, burning and barrel bombs, DECODED from the original rather than",
-    "taken from the remake's hazards.json, which marks all three _guess and gets",
+    "taken from the Godot project's hazards.json, which marks all three _guess and gets",
     "every one of them wrong. Fire.hpp cites the byte offsets.",
     "",
     "Constants inside the original pass through SGlobalScale::scale() before they",
@@ -18,7 +18,7 @@
       "is what GetSize registers to, and the engine hands it to IsPointOnSprite as",
       "the sprite's extent; GetCollisionBox is a separate method.",
       "",
-      "The remake reads the .ent's 38 x 38 <Collision> instead and halves it to 24",
+      "The Godot project reads the .ent's 38 x 38 <Collision> instead and halves it to 24",
       "(hazards.json _guess). That box is not what GetSize returns, and the entity's",
       "shape is 0 - it has no physics body at all."
     ],
@@ -37,7 +37,7 @@
       "BURN_TIME, the global the carranca script sets to 1000. A burning crate",
       "fades to black and to nothing over this time and is then removed; the",
       "removal is the puzzle, since burning a crate deletes a platform or a",
-      "blocker. The remake invents 2000 and marks it _guess.",
+      "blocker. The Godot project invents 2000 and marks it _guess.",
       "",
       "fade_names is the whole of it: burn() only sets the `burned` flag, and the",
       "fade-and-remove lives in manageBurnable, whose ONE caller is crateCallback.",
@@ -65,7 +65,7 @@
     "_note": [
       "explode builds an EntityGrabber of radius 80 and tests it against each",
       "candidate's REAL collider - circle against circle, or sphere against a box",
-      "in the box's own frame - skipping anything with no physics body. The remake",
+      "in the box's own frame - skipping anything with no physics body. The Godot project",
       "invents 96 and marks it _guess.",
       "",
       "kills_player is FALSE and that is the original's own answer, not a",
@@ -74,7 +74,7 @@
       "those three flags - so although barrel_bomb passes killPlayer true, the",
       "player is never in the grabbed set. Fire kills the player; a blast does not.",
       "test_mp_fire pins both directions, because this is the kind of asymmetry a",
-      "remake smooths away without noticing."
+      "port smooths away without noticing."
     ],
     "radius_px": 80.0,
     "_remake_radius_px_not_applied": 96.0,

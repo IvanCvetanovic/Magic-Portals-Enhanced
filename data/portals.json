@@ -112,7 +112,7 @@
       "has a dedicated teleportToFirstStaticPortal, and level 1-1 would be unsolvable after",
       "two uses if its four static portals vanished. Flip this if playtesting disagrees.",
       "",
-      "on_cap_recycle_oldest is a GUESS: when already at two placed portals, this remake",
+      "on_cap_recycle_oldest is a GUESS: when already at two placed portals, this project",
       "replaces the oldest rather than refusing. The original may instead refuse (it has a",
       "playPortalFailedSound) or clear both."
     ],

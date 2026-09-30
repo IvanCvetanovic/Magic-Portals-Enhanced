@@ -147,7 +147,7 @@ void ReadsEveryForm() {
 }
 
 // The converter quotes the original's custom data ("3000") and writes the eight
-// joint_* keys bare (-1.5). The remake's meta_float goes through String() and so
+// joint_* keys bare (-1.5). The Godot project's meta_float goes through String() and so
 // reads only the first; this reads both, and refuses anything that is not
 // wholly a number.
 void MetadataReadsBothSpellings() {

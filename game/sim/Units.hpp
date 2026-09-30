@@ -1,9 +1,9 @@
 #pragma once
 
-// The remake's pixels, and the engine's metres.
+// The port's pixels, and the engine's metres.
 //
 // 50 px to the metre, which is the original's own scale: Ethanon hands Box2D
-// every position divided by DEFAULT_SCALE = 50 (the remake's
+// every position divided by DEFAULT_SCALE = 50 (Enhanced's
 // docs/ethanon-formats.md:856, citing ETHPhysicsSimulator.cpp:27). The engine's
 // solver is tuned in metres, so at this scale its constants land where the
 // original's Box2D did.
@@ -20,13 +20,13 @@ inline constexpr double kPixelsPerMetre = 50.0;
 
 // Box2D's DEFAULT_GRAVITY, (0, 10) in its units per second squared with +y down
 // (ETHPhysicsSimulator.cpp:26, same citation). Decoded, not guessed - unlike the
-// remake's 1200 px/s^2 player gravity, which its own player.json marks _guess.
+// Godot project's 1200 px/s^2 player gravity, which its own player.json marks _guess.
 inline constexpr double kGravity = 10.0;
 
-// The remake's world gravity, which is what its bodies fall at: Godot 4's
-// physics/2d/default_gravity, since the remake's project.godot sets none. The
-// port plays like the remake, so its world runs at this; the spike measured the
-// solver against the original, and runs at kGravity. The remake's player falls
+// The Godot project's world gravity, which is what its bodies fall at: Godot 4's
+// physics/2d/default_gravity, since the Godot project's project.godot sets none. The
+// port plays like the Godot project, so its world runs at this; the spike measured the
+// solver against the original, and runs at kGravity. The Godot project's player falls
 // at its own player.json gravity, not at either.
 inline constexpr double kRemakeWorldGravityPx = 980.0;
 
@@ -34,7 +34,7 @@ inline float ToMetres(double px) {
     return static_cast<float>(px / kPixelsPerMetre);
 }
 
-// A point in the remake's space (px, +y down) as a point in the engine's plane.
+// A point in the port's space (px, +y down) as a point in the engine's plane.
 inline glm::vec3 ToWorld(double xPx, double yPx) {
     return glm::vec3(ToMetres(xPx), ToMetres(-yPx), 0.0f);
 }

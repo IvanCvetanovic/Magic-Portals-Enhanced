@@ -1,22 +1,22 @@
 #pragma once
 
-// The camera the port plays with: the remake's follow (main.gd:123-137), and
-// two things the original has that the remake leaves out.
+// The camera the port plays with: the Godot project's follow (main.gd:123-137), and
+// two things the original has that the Godot project leaves out.
 //
 // - It starts at the level's camera_start and eases toward the player, closing
 //   dt / follow_lag_s of the gap each tick. Before it moves it holds for
 //   hold_time_s: the original has cameraHoldTime and cameraHoldElapsedTime, and
 //   camera_start sits near a level's exit, so the hold shows the goal before the
 //   camera goes to the player. Both numbers are portals.json's camera block,
-//   and both are _guess. The remake reads neither the hold nor the limits.
-// - It eases per tick, where the remake eases per frame, so a tap resolved on
+//   and both are _guess. The Godot project reads neither the hold nor the limits.
+// - It eases per tick, where the Godot project eases per frame, so a tap resolved on
 //   the tick meets the camera a replay meets. InterpolatedCameraComponent draws
 //   it between ticks.
 // - The view never shows past (0, 0) or the level_bounds marker. That is
-//   clampCameraPos in the original, and the marker's own role note. The remake's
+//   clampCameraPos in the original, and the marker's own role note. The Godot project's
 //   camera has no limits, so this is the port's, from the data.
 //
-// camera_start is taken as the view's centre, as the remake takes it. Ethanon
+// camera_start is taken as the view's centre, as the Godot project takes it. Ethanon
 // places its own camera by the top-left corner, but read either way the view is
 // nearly the same once held inside the level: every camera_start sits at or near
 // y 0, and near a level's far end.

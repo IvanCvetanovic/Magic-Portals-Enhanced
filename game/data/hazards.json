@@ -1,9 +1,9 @@
 {
   "_about": [
-    "What the remake's role table calls a hazard but the original does not.",
+    "What Enhanced's role table calls a hazard but the original does not.",
     "",
-    "The port reads the remake's entity_roles.json for its roles, and that table is the",
-    "remake's design decision rather than the converter's. In one place it is wrong about",
+    "The port reads Enhanced's entity_roles.json for its roles, and that table is the",
+    "Godot project's design decision rather than the converter's. In one place it is wrong about",
     "the original: enemy_killer sits under `hazard` beside death_area.ent, destroyier.ent",
     "and lava, all of which kill the player on contact.",
     "",

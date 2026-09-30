@@ -64,7 +64,7 @@ void State::Tick(entt::registry& registry, entt::entity player, float dt) {
         playerInExit = inExit;
     }
     // Then the timed crystals run down (behaviours.gd:219-225). One with no time
-    // left to begin with never goes, as in the remake.
+    // left to begin with never goes, as in the Godot project.
     for (Crystal& crystal : crystals) {
         if (!crystal.timed || crystal.collected || crystal.expired || crystal.leftS <= 0.0) continue;
         crystal.leftS -= dt;

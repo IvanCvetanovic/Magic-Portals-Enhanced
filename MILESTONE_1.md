@@ -87,7 +87,7 @@ encoded as a named, tunable value in `data/portals.json`.
 | 3.10 | Sound + VFX timing relative to the transit (lead-in? on arrival?) | Video with audio | `sfx_lead_s` |
 
 **Feel acceptance (subjective but recorded):** side-by-side video of the original and the
-remake performing the same portal transit, at the same playback speed. Ivan signs off, or
+port performing the same portal transit, at the same playback speed. Ivan signs off, or
 lists what's off and it gets retuned. Do this **before** building the rest of chapter 1 —
 if the mechanic is wrong, level content built on top of it is wasted work.
 
@@ -156,7 +156,7 @@ Hygiene:
 - [ ] `docs/ethanon-formats.md` updated with anything new learned, with citations
 - [ ] `DEVLOG.md` entries appended per session
 
-> ⚠ **2026-09-19 — Godot items superseded by the move to Supersonic.** The remake is now the
+> ⚠ **2026-09-19 — Godot items superseded by the move to Supersonic.** Magic Portals Enhanced is now the
 > port on the Supersonic Engine (`CLAUDE.md` → "What this is"), and the Godot project was
 > removed. The `godot --headless` hygiene item above is replaced by `CLAUDE.md` → Workflow
 > rules 2: the converter's pytest and ruff; for the port, `tools/parity/port_build.bat` with

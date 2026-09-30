@@ -132,7 +132,7 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
         }
         if (role != Roles::kHazard) continue;
 
-        // The role table is the remake's design decision, and in this one place it
+        // The role table is the Godot project's design decision, and in this one place it
         // is wrong about the original: what it lists here kills nothing. Taken out
         // by entity name rather than by node name, since the converter makes the
         // node names unique per placement.

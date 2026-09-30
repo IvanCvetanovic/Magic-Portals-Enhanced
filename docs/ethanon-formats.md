@@ -189,7 +189,7 @@ disagrees with the bytecode (*"18 portals or less"* vs bytecode `22`; *"at least
   not determine the Android viewport at all.** Anything treating 1136×640, 640 or 512 as "the"
   virtual resolution is unsupported.
 - **Orientation IS settled: locked landscape** (`AndroidManifest` `screenOrientation=0`) — so
-  a remake locks it too. (The retired Godot project had `window/handheld/orientation=4`,
+  a port locks it too. (The retired Godot project had `window/handheld/orientation=4`,
   Sensor Landscape, which should have been `0`; that project was removed on 2026-09-19.)
 - Best-supported viewport inference is a **~512-tall landscape design space**, from `.esc`
   geometry (ymin −64 in 92 of 133 levels, modal ymax 384, median vertical span 448) agreeing
@@ -240,7 +240,7 @@ shipped `app.enml` sets `minScreenHeightForHdVersion = 480`, `minScreenHeightFor
 go 455×256 → 1024×512, i.e. **512×256 world units, wider than the 1× file**. Measured, not assumed: a
 pixel fit of the running original (`out/parity/specs/lighting/fit.md`, local) matches
 `fullhd/arch_with_base_blur.png` and `fullhd/sky.png` but `hd/STONE03A4x10_contrast.png` in the same
-frame, and forcing 1× everywhere worsens the fit on every sprite class. A remake drawing the 1× files at
+frame, and forcing 1× everywhere worsens the fit on every sprite class. A port drawing the 1× files at
 2.8125× is visibly softer than the original, and one using the 1× skies draws them 11% too narrow.
 
 **Progress is `scores.enml` in global external storage, and medals gate chapters.** File:
@@ -1661,7 +1661,7 @@ Both are skipped unless `spriteCut.x > 1 || spriteCut.y > 1`.
 `ETHParticleManager::MirrorX/Y` (`:453-471`) also negates each live particle's `dir` and `pos`.
 If the game mirrors entities, replicate by negating these fields — **not** by setting a node `scale.x = -1`.
 
-**The live count a light reads, and an added entity's first frames** (the remake's planning step 96, fix round 1).
+**The live count a light reads, and an added entity's first frames** (Enhanced's planning step 96, fix round 1).
 `GetNumActiveParticles` is `m_nActiveParticles`, which `CreateParticleSystem` sets to `nParticles` for an `allAtOnce`
 system and to 0 otherwise (`ETHParticleManager.cpp:110-117`), and which every `UpdateParticleSystem` resets to 0 and
 counts BEFORE it releases or advances anything (`:199`, `:209-213`; release `:219-230`): the particles released and of
@@ -1758,7 +1758,7 @@ finalColor = particle.color * Vector4(finalAmbient, 1);
 Cross-tab over 54 shipped systems: `(1,1,1)`+ADD 38 (inert), **`(0,0,0)`+PIXEL 14 (LIVE)**, `(1,1,1)`+PIXEL 1,
 `(0,0,0)`+ADD 1. So it cannot be dropped — 14 systems genuinely darken with scene ambient.
 
-**`AM_MODULATE` particles read neither the ambient nor any alpha when they blend** (the remake's planning step 96).
+**`AM_MODULATE` particles read neither the ambient nor any alpha when they blend** (Enhanced's planning step 96).
 `finalAmbient` stays `(1,1,1)` for them (the test above names only `AM_PIXEL` and `AM_ALPHA_TEST`), and the GLES2
 blend is `glBlendFunc(GL_ZERO, GL_SRC_COLOR)` (`gs2d/src/Video/GLES2/GLES2Video.cpp:796-799`): the target is multiplied
 by `texel.rgb × particle.color.rgb` and nothing else. The colour's alpha only decides whether a particle is drawn at all,

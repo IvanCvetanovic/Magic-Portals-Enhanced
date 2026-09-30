@@ -22,7 +22,7 @@
 
 namespace MagicPortals::Prism {
 
-// OBJ text for the prism of `polygonPx` - x0, y0, x1, y1, ... in the remake's
+// OBJ text for the prism of `polygonPx` - x0, y0, x1, y1, ... in the port's
 // pixels, local to its body - `depthMetres` deep. Empty, with `error` set, for
 // anything that is not a convex polygon of at least three points.
 std::string ObjText(const std::vector<double>& polygonPx, double depthMetres, std::string& error);

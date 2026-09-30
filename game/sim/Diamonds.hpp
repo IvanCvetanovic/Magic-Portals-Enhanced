@@ -67,7 +67,7 @@
 // places none at all, which makes picking that one up a one-way choice.
 //
 // Not built, and recorded in data/diamonds.json: the alpha, the idle pulse, the
-// sounds, the remake's 28 x 24 trigger box that the original does not use, and
+// sounds, the Godot project's 28 x 24 trigger box that the original does not use, and
 // the drop the original does on shallLeave. The earthquakes and the effect
 // entities are the layer's, read from each diamond's owner and `gone`, `struck`
 // and the two per-tick records below (earthquake.json, effects.json).

@@ -1,7 +1,7 @@
 #pragma once
 
 // Keys, keyholes and the locked doors they open - chapter 3's largest mechanism,
-// and one the remake pairs by colour rather than by proximity.
+// and one the Godot project pairs by colour rather than by proximity.
 //
 // Three roles, and only one of them is solid. door_locked.ent is shape=1,
 // static=1, a 30 x 126 collider: the thing the player cannot walk through.
@@ -16,7 +16,7 @@
 //   squaredRange = scale(26)^2 and each frame scans getSurroundingEntities for
 //   anything that isCharacter OR isMinion and does not shallLeave, taking the
 //   first within that range as its owner. So a MINION can carry a key. The
-//   remake's actors.json guesses 40 px and marks it _guess.
+//   Godot project's actors.json guesses 40 px and marks it _guess.
 // - CARRYING re-finds the owner by id, trails it through an interpolator
 //   (followUp, re-aimed every 20 ms and interpolated over 60), and snaps with
 //   forceFollowUpPosition when it falls further than scale(40) behind. Nothing

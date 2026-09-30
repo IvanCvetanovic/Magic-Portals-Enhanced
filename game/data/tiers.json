@@ -4,7 +4,7 @@
     "original keeps an hd/ and a fullhd/ folder beside some image folders and, per file,",
     "draws the tier file when it exists, at texels / density units. The port fixes the",
     "choice the original makes at a 720 px screen. Step 61 of",
-    "docs/planning/2026-09-11-magic-portals-remaster.md (the remake's",
+    "docs/planning/2026-09-11-magic-portals-remaster.md (Enhanced's",
     "out/parity/visuals/briefs/00_order.md step 0.2, system_6.md section 4.1)."
   ],
 

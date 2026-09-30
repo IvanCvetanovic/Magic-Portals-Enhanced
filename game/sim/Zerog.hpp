@@ -29,7 +29,7 @@
 // itself. The SAME wrapper wraps the world's gravity as scale(10), and that 10
 // is Box2D's own DEFAULT_GRAVITY in metres per second squared - so the 1.4 is
 // metres per second too, and the engine's velocities already are. 70 px/s, for
-// anyone reading it against the remake's pixel numbers.
+// anyone reading it against the port's pixel numbers.
 //
 // (That the original's recoil therefore got STRONGER on a taller screen is a
 // resolution bug, not a mechanic. The port takes the reference value; zerog.json
@@ -56,7 +56,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error);
 // where the shot was aimed back to the player, times the recoil. You are pushed
 // AWAY from where you tapped.
 //
-// Turned over in y, because the remake's pixels count down and the engine's
+// Turned over in y, because the port's pixels count down and the engine's
 // metres count up. The magnitude is carried straight through for the reason
 // above: it is already metres per second.
 //

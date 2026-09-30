@@ -1,13 +1,13 @@
 #pragma once
 
-// A reader for the scenes the remake's converter writes - and only those.
+// A reader for the scenes Enhanced's converter writes - and only those.
 //
-// Magic Portals' levels exist as Godot 4 text scenes: the remake's
+// Magic Portals' levels exist as Godot 4 text scenes: Enhanced's
 // tools/converter decodes the original's .esc files and writes one .tscn per
 // level. The port reads those files rather than a format of its own, for two
-// reasons. The remake's repository is an oracle here, not a workspace, so its
+// reasons. Enhanced's repository is an oracle here, not a workspace, so its
 // converter does not get a second emitter. And the converter is itself under
-// test by the remake's verify_gameplay; a level that came out wrong through a
+// test by the Godot project's verify_gameplay; a level that came out wrong through a
 // new emitter could not be told apart from a level the port got wrong.
 //
 // It is a SUBSET reader, and strict about it. Everything the converter writes
@@ -31,7 +31,7 @@
 //                ExtResource("id"), SubResource("id")
 //
 // Metadata arrives in two spellings. The converter quotes the original's custom
-// data ("3000", "1") and writes the eight joint_* keys bare (-1.5). The remake's
+// data ("3000", "1") and writes the eight joint_* keys bare (-1.5). The Godot project's
 // own reader, meta_float in behaviours.gd, goes through String() and so fits
 // only the first; Value::AsNumber reads both, and test_mp_tscn pins that it does.
 

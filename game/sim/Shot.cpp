@@ -22,7 +22,7 @@ using Supersonic::TransformComponent;
 
 namespace {
 
-// The remake's pixels as the plane's metres, +y up, in double.
+// The port's pixels as the plane's metres, +y up, in double.
 dvec2 Metres(const dvec2& px) { return dvec2(px.x, -px.y) / Units::kPixelsPerMetre; }
 
 double Cross(const dvec2& a, const dvec2& b) { return a.x * b.y - a.y * b.x; }

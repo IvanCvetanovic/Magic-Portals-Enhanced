@@ -4,7 +4,7 @@
 // built together because the original writes them as one mechanism: a flag on an
 // entity, set by whatever reaches it, read back by that entity's own callback.
 //
-// Decoded from the original's AngelScript rather than taken from the remake, and
+// Decoded from the original's AngelScript rather than taken from the Godot project, and
 // the two differ in every number that matters. Byte offsets into android_game.bin
 // are given so the reading can be checked; no disassembly is reproduced here.
 //
@@ -18,7 +18,7 @@
 //   to IsPointOnSprite as the sprite's extent (ETHBucketManager.cpp:289) and to
 //   ComputeAbsoluteOrigin as its origin (ETHScene.cpp:375), and GetCollisionBox
 //   is a separate method - so for fire_agent.png at 32 x 32, SpriteCut 1 x 1 and
-//   Scale 1.0 the reach is 32. The remake's hazards.json reads the entity's
+//   Scale 1.0 the reach is 32. The Godot project's hazards.json reads the entity's
 //   38 x 38 <Collision> instead and halves it to 24, marked _guess; that box is
 //   not what GetSize returns, and the .ent's shape is 0 - no body at all.
 //   (ETHCallback_fire_agent, bytes 350254..351485.)

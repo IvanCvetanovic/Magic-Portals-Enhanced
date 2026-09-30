@@ -2,11 +2,11 @@
 // waypoints, and taken by the floor that kills them and nothing else.
 //
 // What is pinned here is the DECODE. Minions.hpp cites where each number comes
-// from; the ones a test can tell apart from the remake's guesses are:
+// from; the ones a test can tell apart from the Godot project's guesses are:
 //
 //   speed    1.3 px per physics step, and the game FIXES that step at 1/30 s
 //            (AverageFPSRateManager calls SetFixedTimeStep(true) with 0.0333333),
-//            so the walk is 39 px/s. The remake's actors.json guesses 60 and
+//            so the walk is 39 px/s. The Godot project's actors.json guesses 60 and
 //            marks it _guess: true.
 //   arrival  8 px to advance, but 16 px to stop - minDist and minDist * 2 are
 //            two separate tests in the original. Collapsing them into one
@@ -20,7 +20,7 @@
 //            A lone waypoint carrying the 999999999 sentinel is a stationary
 //            guard, and needs no special case: it is a wait nothing outlasts.
 //
-// And one thing that is not a number: enemy_killer kills no player. The remake's
+// And one thing that is not a number: enemy_killer kills no player. Enhanced's
 // role table files it under `hazard` beside death_area.ent and lava, which would
 // kill the player on contact in all 44 levels that carry one.
 // ETHBeginContactCallback_enemy_killer is 69 instructions that open with
@@ -37,7 +37,7 @@
 // patrolling wayA0 <-> wayA1 (both holding 4000), a guard on a lone wayB0 with
 // the sentinel, and a 768 x 128 enemy_killer floor.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -119,7 +119,7 @@ double PixelX(entt::registry& registry, entt::entity body) {
     return Units::ToPixels(registry.get<TransformComponent>(body).position).x;
 }
 
-// 1.3 px per 33.3333 ms is 39 px/s, and the remake's guess is 60.
+// 1.3 px per 33.3333 ms is 39 px/s, and the Godot project's guess is 60.
 void theWalkIsTheDecodedSpeedNotTheRemakesGuess() {
     Run run;
     if (!Begin(kLevel, run)) return;
@@ -128,7 +128,7 @@ void theWalkIsTheDecodedSpeedNotTheRemakesGuess() {
     CHECK(::test::nearly(static_cast<float>(rules.speedPxPerStep), 1.3f));
     CHECK(::test::nearly(static_cast<float>(rules.stepMs), 33.3333f, 1e-3f));
     CHECK(::test::nearly(static_cast<float>(run.level.minions.SpeedPxPerSecond()), 39.0f, 1e-2f));
-    CHECK_MSG(run.level.minions.SpeedPxPerSecond() < 60.0, "the remake's 60 px/s is not what is played");
+    CHECK_MSG(run.level.minions.SpeedPxPerSecond() < 60.0, "the Godot project's 60 px/s is not what is played");
 
     // Two thresholds, not one: it advances inside 8 px and stops inside 16.
     CHECK(::test::nearly(static_cast<float>(rules.arrivePx), 8.0f));
@@ -836,7 +836,7 @@ MP_SUITE_MAIN("test_mp_minions") {
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
-        std::printf("test_mp_minions SKIPPED - needs the converted levels at %s and the remake's data at %s\n",
+        std::printf("test_mp_minions SKIPPED - needs the converted levels at %s and Enhanced's data at %s\n",
                     kLevels.c_str(), kData.c_str());
         return 77;
     }

@@ -141,7 +141,7 @@
     "deletes_entity_id": 1430,
     "_source": [
       "THE OWNER'S STANDING RULING R4 (in favour of what the original does): the ghost appears after the",
-      "black knight dies. ETHCallback_ghost_minion (bytes 451487..451999, the remake's out/parity/asbc/",
+      "black knight dies. ETHCallback_ghost_minion (bytes 451487..451999, Enhanced's out/parity/asbc/",
       "all_functions.txt, md5 48fe65ce; decode/D8.md section 2 and 4, D8_check.md): #1-6 currentPos =",
       "GetPosition() before the minion's own callback runs; #25 ETHCallback_minion, whose only DeleteEntity",
       "(#1478-1504) follows isDestroyed - a killer floor, a strike or a burn all end there; #35-40 once",

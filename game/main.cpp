@@ -1,7 +1,7 @@
-// Magic Portals on the Supersonic Engine: the Godot remake's levels, in the
+// Magic Portals on the Supersonic Engine: the Godot project's levels, in the
 // original's order, as the port plays them.
 //
-// The levels, their order, their art and the remake's data are read from
+// The levels, their order, their art and Enhanced's data are read from
 // outside this repository, from where the build was told they are
 // (SUPERSONIC_MAGICPORTALS_LEVELS, _CHAPTERS and _DATA; the art beside the
 // levels), or from --levels, --art and --data. Drawn with the levels' own art
@@ -412,7 +412,7 @@ int main(int argc, char** argv) {
                   << "                    the game opens its menu.\n"
                   << "  --levels <dir>    the converted levels (default " << paths.levels << ")\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
-                  << "  --data <dir>      the remake's data directory (default " << paths.data << ")\n"
+                  << "  --data <dir>      Enhanced's data directory (default " << paths.data << ")\n"
                   << "  --saves <dir>     DEV: keep the medals (scores.json) and the sound and music\n"
                   << "                    switches (audio.json) here instead of the user's data\n"
                   << "                    directory - for a capture that needs a medal recorded, or\n"

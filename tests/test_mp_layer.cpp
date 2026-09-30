@@ -1,6 +1,6 @@
 // Magic Portals' layer: the seam between the port and the picture.
 //
-// test_mp_play holds the port to the remake on level30, through Game::Tick.
+// test_mp_play holds the port to the Godot project on level30, through Game::Tick.
 // What this suite holds is the layer's side:
 //  - it plays at the port's 60 Hz on the engine's clock, and runs the suites'
 //    tick with the app's physics step between the two halves;
@@ -308,7 +308,7 @@ std::string ShowRect(const Hud::Rect& rect);
 // ---- One level --------------------------------------------------------------
 
 void TheLayerPlaysLevel30() {
-    // Attached to a bare registry, the layer loads level30 and the remake's data
+    // Attached to a bare registry, the layer loads level30 and Enhanced's data
     // from where the build says they are. It builds the level as test_mp_play
     // does, and plays at 60 Hz.
     entt::registry registry;
@@ -333,7 +333,7 @@ void ATapLandsWhereItPoints() {
     // the view shows x 0..455. MagicPortalsLayer::loadLevel says why.
     //
     // Its centre shows at the viewport's, the level's top is up the screen -
-    // screen y grows down, as the remake's does, where the engine's grows up -
+    // screen y grows down, as the Godot project's does, where the engine's grows up -
     // and a tap at a point on the screen is read on the tick, back through
     // ScreenPointToRay. Its shot flies from the player, and a portal opens where
     // it points. A tap whose shot meets a crate on the way opens nothing and
@@ -8683,7 +8683,7 @@ void EveryTimedCrystalHasADialBehindIt() {
 
 void ATimedCrystalCountsDownOnItsDialAndNeverFades() {
     // REPLACES step 45's ATimedCrystalFadesInItsAlphaAlone, deliberately: that pin
-    // held the remake's guessed fade, 0.4 + 0.6 |sin(12 t)| over the last 2 s,
+    // held the Godot project's guessed fade, 0.4 + 0.6 |sin(12 t)| over the last 2 s,
     // which the original does not have. 1-27 (level26): crystal_1264 goes at 10 s.
     if (!OriginalArtIsThere("ATimedCrystalCountsDownOnItsDialAndNeverFades")) return;
     const MagicPortals::Art::Timer timer = TimerRules();
@@ -16606,7 +16606,7 @@ MP_SUITE_MAIN("test_mp_layer") {
         !std::filesystem::is_regular_file(kData + "/player.json", ec) ||
         !std::filesystem::is_regular_file(kData + "/portals.json", ec)) {
         std::printf("test_mp_layer: SKIPPED - needs the converted levels at %s,\n"
-                    "  chapters.json at %s and the remake's data at %s.\n"
+                    "  chapters.json at %s and Enhanced's data at %s.\n"
                     "  All live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=..., _CHAPTERS=... and _DATA=...\n",
                     kLevels.c_str(), kChapters.c_str(), kData.c_str());

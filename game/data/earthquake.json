@@ -2,7 +2,7 @@
   "_about": [
     "The original's earthquake: EarthquakeGenerator, the one camera shake that every",
     "startEarthquake call in the script feeds, and every call site whose event the port's",
-    "simulation already has. Decoded from android_game.bin through the remake's asbc listing",
+    "simulation already has. Decoded from android_game.bin through Enhanced's asbc listing",
     "(out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0) by the visuals",
     "run's decode D11 and its independent check D11_check (which wins where they differ), and",
     "measured on the original's footage (L1 4-29, F14 3-16, F16 4-32). Step 101 of",

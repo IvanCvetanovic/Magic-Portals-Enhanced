@@ -2,8 +2,8 @@
 // every menu state shares - its black, its buttons' press, bounce and blink.
 //
 // sim/MenuState.hpp, sim/MainMenu.hpp and sim/Loading.hpp turn the port's ui.json
-// into rectangles, alphas and timelines, and this pins both halves against the
-// remake's ui3 spec (sections 0.3-0.7 and 2, acceptance 7.1 and 7.2). Every
+// into rectangles, alphas and timelines, and this pins both halves against
+// Enhanced's ui3 spec (sections 0.3-0.7 and 2, acceptance 7.1 and 7.2). Every
 // position is stated in the pixels of a 1280x720 capture of the original, at
 // 2.8125 px a design unit, so a number here can be held against static.md or
 // motion.md without converting anything back.

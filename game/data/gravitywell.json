@@ -19,7 +19,7 @@
     "`antiportal`. It exists only in the callback. AND IT REFUSES NO PORTAL, though it is an",
     "antiportal.ent: it is renamed `gravity_area` as it is added (ETHScene.cpp:264-266), after",
     "AntiPortalManager's constructor has gathered its fields by name (104925..105343 #16-35,",
-    "the remake's out/parity/visuals/briefs/00_order.md section 8.4), so the original never",
+    "Enhanced's out/parity/visuals/briefs/00_order.md section 8.4), so the original never",
     "tests a tap against it. 00_order R2, decided for the original; the port's no-portal zone",
     "round each well, radius - 12, went in the remaster doc's step 125."
   ],
@@ -93,7 +93,7 @@
       "first tick, and a port reading the .tscn alone would draw five levels with a well and",
       "nothing round it.",
       "",
-      "ETHCallback_gravity_agent (bytes 458374..459326, the remake's out/parity/asbc/",
+      "ETHCallback_gravity_agent (bytes 458374..459326, Enhanced's out/parity/asbc/",
       "all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0). Ins 0-12 read",
       "CheckCustomData('area_created') and jump past all of this when it is already set; ins",
       "13-25 set it, so what follows runs ONCE, on the agent's first frame:",
@@ -147,7 +147,7 @@
       "the units of hd/white_ring.png's own step: 4-17 (0.253, 0.527, 0.305) and (0.253,",
       "0.527, 0.288); 4-28 (0.248, 0.492, 0.235); the four 4-18 wells 0.213-0.253 red,",
       "0.45-0.57 green, 0.18-0.31 blue. The decode is (0.25, 0.5, 0.25).",
-      "(systems_3_4.md 4c, the remake's out/parity/visuals/briefs.)"
+      "(systems_3_4.md 4c, Enhanced's out/parity/visuals/briefs.)"
     ],
     "sprite": "white_ring.png",
     "additive": true,
@@ -161,8 +161,8 @@
   "roundabout": {
     "_source": [
       "THE LAPS A BODY RUNS ROUND A WELL, and the turn a lap gives the agent's own picture: the",
-      "visuals plan's 11.2 (the remake's out/parity/visuals/briefs/00_order.md section 7 as section",
-      "8.13 amends it, decode D3 section 5 and its check). From the remake's",
+      "visuals plan's 11.2 (Enhanced's out/parity/visuals/briefs/00_order.md section 7 as section",
+      "8.13 amends it, decode D3 section 5 and its check). From Enhanced's",
       "out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
       "  computeRoundabout, bytes 459694..461443, whose only caller is ETHCallback_gravity_area",
       "  #184-197, for every body the well pulls: (area, body, forceDir = normalize(area - body),",

@@ -6,7 +6,7 @@
 // It walks levels in one process and checks that the engine hands material
 // descriptor sets back to its pool when a level lets go of its textures. That
 // cannot be tested any other way: no suite can construct a TextureRegistry,
-// because it needs a device (the remake's design_port.md, step E0).
+// because it needs a device (Enhanced's design_port.md, step E0).
 //
 // What it watches. Since step 47 (the lighting design's G4) every lightmapped
 // sprite draws its lightmap as the overlay of its own material, so it holds a

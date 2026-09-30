@@ -36,7 +36,7 @@ struct Frame {
           c(Supersonic::DetMath::cos(transform.rotation.z)),
           s(Supersonic::DetMath::sin(transform.rotation.z)) {}
 
-    // A point in the entity's frame, metres, to the remake's pixels.
+    // A point in the entity's frame, metres, to the port's pixels.
     dvec2 Px(const dvec2& local) const {
         const dvec2 world = origin + dvec2(c * local.x - s * local.y, s * local.x + c * local.y);
         return dvec2(world.x, -world.y) * Units::kPixelsPerMetre;

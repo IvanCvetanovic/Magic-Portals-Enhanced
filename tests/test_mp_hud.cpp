@@ -10,7 +10,7 @@
 // Pure: no window, no registry, no level. ui.json is the port's own and
 // committed, so this runs anywhere; the caption's layout is tested on a font it
 // writes, never on the original's. The pause screen that sim/Pause.hpp lays out
-// is pinned here the same way, against the remake's ui2 spec.
+// is pinned here the same way, against Enhanced's ui2 spec.
 
 #include "TestHarness.hpp"
 #include "MpSuite.hpp"
@@ -542,7 +542,7 @@ void WhatIsRefused() {
 
 // ---- the pause screen (sim/Pause.hpp, sim/UiLayer.hpp) ----------------------
 //
-// Held against the remake's out/parity/specs/ui2/spec.md section 2: its decoded
+// Held against Enhanced's out/parity/specs/ui2/spec.md section 2: its decoded
 // top-left corners at 1280x720, and the measured ones beside them from
 // pause_fresh_1-1.png and pause_gold_1-4.png (pause_finished.md section 1.1).
 

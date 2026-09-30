@@ -370,7 +370,7 @@
     "red_key_state": {
       "_note": [
         "4-19's red halo on the red key (level18c places the one in the game, on key_2701's",
-        "point). NOT scenery: ETHCallback_red_key_state (the remake's out/parity/asbc/",
+        "point). NOT scenery: ETHCallback_red_key_state (Enhanced's out/parity/asbc/",
         "all_functions.txt L97171) plays playRedKeyGotSound once the key in its bucket is",
         "taken (#224-277), fades its own colour and the level's ambient light to nothing over",
         "6000 ms (#88-178), and then destroys SeekEntity('breakable_wall') (#190-220) - the",

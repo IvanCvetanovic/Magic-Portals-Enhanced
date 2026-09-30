@@ -1,4 +1,4 @@
-# The port's suites, verified against the Godot remake and the original.
+# The port's suites, verified against the Godot project and the original.
 #
 # Each suite is one .cpp, and all of them are built into ONE executable, test_mp
 # (test_mp.cpp): `test_mp <suite>` runs one suite as its own executable did - its
@@ -19,14 +19,14 @@
 # supersonic_add_test changes, this block follows it. The engine's own suites are
 # built by that rule in the engine's own build and are not built here.
 #
-# Magic Portals, from the Godot remake. The weakest oracle of the three: the
-# remake's harnesses assert behaviour over Godot's 2D solver, which is not being
+# Magic Portals, from the Godot project. The weakest oracle of the three: the
+# Godot project's harnesses assert behaviour over Godot's 2D solver, which is not being
 # reimplemented, so only what the converter and the role table decide is pinned
 # exactly. The acceptance rule is in docs/planning/2026-09-10-magic-portals-spike.md.
 #
 # SKIPS_WITH_77 marks a suite that reads the converted levels - this repository's
 # gitignored out/, which a fresh clone does not have - some of them chapters.json
-# or the remake's data as well, so on a build machine they can simply be absent.
+# or Enhanced's data as well, so on a build machine they can simply be absent.
 # Such a suite returns 77 before its first check, printing the path it looked in;
 # test_mp exits with it, and ctest reports it SKIPPED: never a pass. (`test_mp`
 # over every suite counts a 77 as skipped too.) But ctest knows 77 only from the
@@ -68,7 +68,7 @@ add_mp_test(test_mp_portal)
 add_mp_test(test_mp_play SKIPS_WITH_77)
 
 # The carrancas of chapter 2, and the fireballs they spit. Reads the converted
-# levels and the remake's role table, so it skips with 77 when they are absent.
+# levels and Enhanced's role table, so it skips with 77 when they are absent.
 add_mp_test(test_mp_turrets SKIPS_WITH_77)
 
 # The medals and the sound and music switches, kept between runs. Pure sim: a
@@ -182,7 +182,7 @@ add_mp_test(test_mp_sounds)
 add_mp_test(test_mp_hud)
 
 # How a level ends: the finished and lost screens and the HUD going - ui.json's
-# level_end and sim/LevelEnd's arithmetic, pinned against the remake's ui2 spec.
+# level_end and sim/LevelEnd's arithmetic, pinned against Enhanced's ui2 spec.
 # Pure, reading only the port's own committed data, so it never skips.
 add_mp_test(test_mp_levelend)
 
@@ -195,19 +195,19 @@ add_mp_test(test_mp_cutscene)
 
 # The tutorial and help popups: ui.json's popups and sim/Popup's arithmetic - the
 # framework, every class's waypoint loops, the close button's bounce and blink -
-# pinned against the remake's ui2 spec, section 5. Pure, and it never skips.
+# pinned against Enhanced's ui2 spec, section 5. Pure, and it never skips.
 add_mp_test(test_mp_popup)
 
 # The front door: the loading screen, the main menu, and the black, press, bounce
 # and blink every menu state shares - ui.json's menu_state, main_menu and loading
-# and sim/MenuState, sim/MainMenu and sim/Loading, pinned against the remake's ui3
+# and sim/MenuState, sim/MainMenu and sim/Loading, pinned against Enhanced's ui3
 # spec, sections 0 and 2. Pure, reading only the port's own committed data, so it
 # never skips.
 add_mp_test(test_mp_frontdoor)
 
 # Credits and the achievements dashboard, and what the save has opened: ui.json's
 # credits, dashboard and locking with sim/Credits, sim/Dashboard, sim/Achievements and
-# sim/Locking, pinned against the remake's ui3 spec, sections 3 and 4. Pure, and it
+# sim/Locking, pinned against Enhanced's ui3 spec, sections 3 and 4. Pure, and it
 # reads only the port's own committed data - its achievement lists are its own, never
 # the original's - so it never skips.
 add_mp_test(test_mp_info)

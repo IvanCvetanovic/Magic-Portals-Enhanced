@@ -1,4 +1,4 @@
-# Magic Portals - the Godot remake, on the engine.
+# Magic Portals - the Godot project, on the engine.
 #
 #   sim/              the port's logic: the level reader and builder, the portal
 #                     arithmetic, the player, buttons, doors, crystals and portals,

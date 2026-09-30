@@ -1,19 +1,19 @@
-# MAGIC PORTALS — Remake
+# MAGIC PORTALS — Enhanced
 
 ## What this is
 
-A ground-up remake of **Magic Portals** — a 2D mobile puzzle-platformer originally
+An enhanced version of **Magic Portals** — a 2D mobile puzzle-platformer originally
 published by **Asantee Games** and delisted in 2025. The original was built on the
 **Ethanon Engine** (Asantee's own 2D engine, MIT-licensed).
 
-**The remake is the Magic Portals port on Ivan's own Supersonic Engine** (C++20, Vulkan,
+**Magic Portals Enhanced is the Magic Portals port on Ivan's own Supersonic Engine** (C++20, Vulkan,
 EnTT), and it lives here: `game/` (the port), `tests/` (its `test_mp_*` suites) and the
 top-level `CMakeLists.txt`, built against the engine at `engine/` — a git submodule of
 `https://github.com/IvanCvetanovic/Supersonic-Engine.git` pinned to a commit, "SE" below.
 The port moved here from SE's `games/magicportals` on 2026-09-19, with its history. Its
 record, every step with its gates, is `docs/planning/2026-09-11-magic-portals-remaster.md`.
 Around it, this repository is the port's data source and parity rig: the converter
-(`tools/converter`), the remake's gameplay tables (`data/*.json`), the AngelScript bytecode
+(`tools/converter`), Enhanced's gameplay tables (`data/*.json`), the AngelScript bytecode
 reader (`tools/asbc`), the parity tools (`tools/parity`) and the docs. The Godot 4 project
 that first lived in `game/` stopped being the target on 2026-09-14 and was removed on
 2026-09-19. `C:\Users\icvet\Desktop\Game-Engine` is **not** Ivan's engine: never touch it.
@@ -28,7 +28,7 @@ that first lived in `game/` stopped being the target on 2026-09-14 and was remov
 - All 128 levels convert, and all 128 start and play on the port. The remaining work is
   parity with the original: `docs/parity-backlog.md`, in order.
 
-This is a *remake*, not an emulator or a repack. Ethanon's runtime is not being ported;
+This is an *enhanced version*, rebuilt on a new engine, not an emulator or a repack. Ethanon's runtime is not being ported;
 its **file formats** are being decoded so that level and entity data can be *translated*.
 The converter writes each level as a `.tscn` text scene, the format the port's own reader
 (`game/sim/Tscn.cpp`) parses. The gameplay is rebuilt in C++ in the port and measured
@@ -101,7 +101,7 @@ the record is incomplete: say so and stop rather than assuming scope.**
         │
         │  .esc / .ent  →  out/levels/*.tscn, out/data/chapters.json, out/assets/
         ▼
-  game/                    the actual remake (C++20, hand-written gameplay) on engine/;
+  game/                    Magic Portals Enhanced itself (C++20, hand-written gameplay) on engine/;
                            reads out/, data/ and reference/extracted/assets/ where they are
 ```
 
@@ -165,7 +165,7 @@ engine/                Supersonic Engine, git submodule pinned to a commit; neve
 game/                  the port: main.cpp, MagicPortalsLayer, LevelVisit, sim/, spike/, data/
   data/                the port's own JSON: decoded, measured or authored numbers, with provenance
 tests/                 the port's test_mp_* suites and their registration
-data/                  the remake's gameplay JSON, committed; the port reads it in place (_DATA above)
+data/                  Enhanced's gameplay JSON, committed; the port reads it in place (_DATA above)
 tools/converter/       ethanon2godot — Python 3, src layout, venv-friendly
 tools/asbc/            AngelScript bytecode reader; achievements.py → out/data/achievements.json
 tools/parity/          emulator driver, reference-library capture, frame comparison, port_build.bat
@@ -189,7 +189,7 @@ says how.
 ## Architecture rules (this repository)
 
 1. **Data-driven, with provenance.** Gameplay numbers live in JSON, never in code:
-   `data/*.json` for the remake's tables, `game/data/*.json` for the port's own. A
+   `data/*.json` for Enhanced's tables, `game/data/*.json` for the port's own. A
    designer must be able to retune without touching code. Every number says where it came
    from — decoded (with its citation), measured on the original (with the capture), or
    guessed and marked (`"_guess": true` beside it, as `player.json` does). No silent

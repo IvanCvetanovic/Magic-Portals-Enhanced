@@ -1,10 +1,10 @@
-# Magic Portals — Remake
+# Magic Portals — Enhanced
 
-A remake of **Magic Portals**, a 2D mobile puzzle-platformer originally published by
+An enhanced version of **Magic Portals**, a 2D mobile puzzle-platformer originally published by
 **Asantee Games** and delisted in 2025, running on the **Supersonic Engine**. This
 repository holds the game itself — the port, in `game/`, built against the engine as a git
 submodule at `engine/` — together with the data pipeline that decodes the original's files
-and converts its levels, the parity tools that compare the remake with the original, and
+and converts its levels, the parity tools that compare the port with the original, and
 the docs.
 
 ## Permission
@@ -82,7 +82,7 @@ locally, and 28 of the 47 suites skip without them: *Local setup* below, steps 5
   out/data/chapters.json
   out/assets/  entity art, lightmaps
         │
-        │               data/*.json   (the remake's tables, committed)
+        │               data/*.json   (Enhanced's tables, committed)
         │               │
         ▼               ▼
   game/  (the port, built on engine/)   ◄── reference/extracted/assets, read directly
@@ -98,7 +98,7 @@ CMakeLists.txt     the build: engine/ as a subproject, then game/ and tests/
 engine/            Supersonic-Engine, a git submodule pinned to one commit
 game/              the port: main.cpp, MagicPortalsLayer, LevelVisit, sim/, spike/, and data/ (its own JSON)
 tests/             the port's test_mp_* suites, in one runner (test_mp); tests/routes/ the win routes test_mp_routes replays
-data/              the remake's gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
+data/              Enhanced's gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
 tools/converter/   ethanon2godot — Python 3; .esc/.ent → out/levels, chapters.json, entity art, lightmaps
 tools/asbc/        AngelScript bytecode reader; achievements.py writes out/data/achievements.json
 tools/parity/      emulator driver, reference-library capture, frame comparison, the reachability
@@ -410,7 +410,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--saves <dir>` | DEV: keep the medals (`scores.json`) and the sound and music switches (`audio.json`) here instead of the user's data directory, for a capture that needs a medal recorded or presses a switch; without it a capture reads the player's switches, which its pause and menus show |
 | `--levels <dir>` | read the converted levels from here instead of the configured path |
 | `--art <dir>` | the directory the levels' art paths resolve against (default: the one above the levels) |
-| `--data <dir>` | read the remake's `data/` from here instead of the configured path |
+| `--data <dir>` | read Enhanced's `data/` from here instead of the configured path |
 | `--light-masks-off` | DEV: draw lights and halos but let no light reach a sprite |
 | `--visit-levels <lightmapped\|all\|name,...>` | DEV: visit these levels in one process; the run fails unless the engine's material descriptor sets return to its pool |
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |
@@ -450,7 +450,7 @@ docstring:
 - `capture_original.py`, `capture_screens.py` — build the reference library, verifying each
   screen (`markers.py`) before tapping;
 - `locate.py` — finds where, and at what scale, a sprite is drawn in a frame;
-- `compare.py` — one original frame against one remake frame: offset, edge overlap, mean
+- `compare.py` — one original frame against one port frame: offset, edge overlap, mean
   absolute difference, a pair image and an overlay;
 - `frames.py` — turns a screen recording into frames and contact sheets;
 - `reachability.py` — whether each converted level's door can be reached in the port, pinned in

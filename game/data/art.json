@@ -2,7 +2,7 @@
   "_about": [
     "What the port draws for what no level pictures - the portals a shot opens, the shot,",
     "the player, chapter 1's boss with its spikes, and the minions - as the original's own entities draw",
-    "them. Their images are read from the extracted APK beside the remake and never",
+    "them. Their images are read from the extracted APK beside the port and never",
     "committed. See docs/planning/2026-09-11-magic-portals-remaster.md, steps 9c, 9d and 11b.",
     "",
     "Each carries its .ent's <EmissiveColor>, because the original dims every sprite it draws",
@@ -57,7 +57,7 @@
       "projectile.ent: <Entity static=0 applyLight=0>, no <Normal>, and <Particles /> empty, so neither its",
       "light nor its halo is scaled by a particle ratio. <Light active=1 static=0 range=70 haloBrightness=0.65",
       "haloSize=50> with <Position x=0 y=0 z=-12>, <Color r=0.6 g=0.6 b=1>, <HaloBitmap>halo.bmp</HaloBitmap>",
-      "(the remake's data_inventory.md, 'projectile.ent'). These are the file's numbers; the script's",
+      "(Enhanced's data_inventory.md, 'projectile.ent'). These are the file's numbers; the script's",
       "Scale(0.8) below scales the light's offset and range and the halo's size when they are drawn",
       "(Lighting::OwnerScaled). A live light: it reaches every sprite that applies light, static ones",
       "included."
@@ -148,14 +148,14 @@
     "_lighting": [
       "dark_mage.ent: <Entity static=0 applyLight=1>, <Normal>normalmap_77.png</Normal>, no <Light>. Not",
       "static, so every light reaches it, a static torch's included (ETHEntitySpriteRenderer.cpp:70),",
-      "which the remake's fit measured on the original walking past 1-1's torch (fit.md 7.1). Its",
+      "which Enhanced's fit measured on the original walking past 1-1's torch (fit.md 7.1). Its",
       "lighting height is its depth, z below, in the level's units (step 76; before it, the marker's eth_z)."
     ],
     "columns": 4,
     "rows": 4,
     "initial_direction": 2,
     "_initial_direction": [
-      "DECODED (the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce): GameCharacter::GameCharacter",
+      "DECODED (Enhanced's out/parity/asbc/all_functions.txt, md5 48fe65ce): GameCharacter::GameCharacter",
       "(bytes 119493..119839) instructions 39-41 set direction = 2, MOVING_RIGHT. The row a character",
       "stands on IS its direction: SideScrollerCharacter::updateFrame (bytes 130241..130614) instructions",
       "88-102, every update with no walk, SetFrame(idleColumn, findFinalDirection(direction)), which is",
@@ -164,12 +164,12 @@
       "replaced by the first update, and Ethanon's .ent reader has no startFrame read at all",
       "(ETHEntityProperties.cpp reads type, static, shape, blendMode at :228-236; the clone names",
       "startFrame only in its editor). MEASURED: the original stands on frame 8 in all 54 lit levels",
-      "where the player is located (the remake's visuals/briefs/systems_3_4.md 3a)."
+      "where the player is located (Enhanced's visuals/briefs/systems_3_4.md 3a)."
     ],
     "pivot_px": [0, 2],
     "z": {
       "_source": [
-        "DECODED (the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce): GameCharacter::GameCharacter",
+        "DECODED (Enhanced's out/parity/asbc/all_functions.txt, md5 48fe65ce): GameCharacter::GameCharacter",
         "(bytes 119493..119839) instructions 10-24 are AddScaledEntity(entityName, vector3(pos, 4f),",
         "g_scale.getScale()): a call pushes its last argument first, so the 4f of instruction 15 is z, and",
         "only the marker's x and y are taken. AddEntity keeps that position as given (Ethanon",
@@ -184,7 +184,7 @@
       "_note": [
         "Which row of the sheet walks which way: derived, not testimony. The original's",
         "DIRECTION enum decodes to MOVING_DOWN 0, MOVING_LEFT 1, MOVING_RIGHT 2, MOVING_UP 3",
-        "(the remake's tools/asbc), and Ethanon's own sample picks a character's row by its",
+        "(Enhanced's tools/asbc), and Ethanon's own sample picks a character's row by its",
         "direction and its column by a frame timer (Sample-project/main.angelscript:102). The",
         "sheet's row 1 faces left and row 2 right. The owner confirmed on 11 September that the",
         "character turns as it walks; not which rows do it. DECODED since: updateFrame calls",
@@ -197,7 +197,7 @@
     },
     "push": {
       "_source": [
-        "DECODED (the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce). THE ROW:",
+        "DECODED (Enhanced's out/parity/asbc/all_functions.txt, md5 48fe65ce). THE ROW:",
         "SideScrollerCharacter::findFinalDirection (bytes 131207..131341) instructions 3-19 return",
         "`pushing ? (direction == 1 ? 0 : 3) : direction` (the 1, MOVING_LEFT, is the CMPIu immediate",
         "read as its vK operand, INFERRED as every such immediate is): pushing left draws row 0, pushing",
@@ -254,7 +254,7 @@
         "loading screen's character keeps the same 90 ms (ui.json character.stride_ms). On the 18",
         "no_gravity levels the same timer also turns while the player stands: no_gravity_motion.",
         "MEASURED: 0.369 s a cycle of four, 92 ms a column, over 7 cycles of rec11 walking right",
-        "(the remake's specs/visuals/scripted.md section 1.4)."
+        "(Enhanced's specs/visuals/scripted.md section 1.4)."
       ],
       "stride_ms": 90,
       "idle_column": 0
@@ -270,8 +270,8 @@
       "frame and loads no normal map, and the listing calls no SetNormal: the suit is lit through",
       "dark_mage.ent's normalmap_77.png, never normalmaps/dark_mage_in_space_nm.png. Its 1x file is",
       "160 x 224 like magic_portals_hd.png, so the pivot and the 40 x 56 frame are unchanged.",
-      "MEASURED: the original's library stills of all 18 draw the suit, of 4-01 the normal sheet (the",
-      "remake's visuals/briefs/systems_3_4.md 3b)."
+      "MEASURED: the original's library stills of all 18 draw the suit, of 4-01 the normal sheet (in",
+      "Enhanced's visuals/briefs/systems_3_4.md 3b)."
     ],
     "no_gravity_motion": {
       "_source": [
@@ -356,7 +356,7 @@
   "static_portal": {
     "_source": [
       "A PLACED entity the level pictures, but drawn as its script redraws it: ETHCallback_portal_static",
-      "(Portal.angelscript, bytecode bytes 360571..361404, the remake's out/parity/asbc/all_functions.txt).",
+      "(Portal.angelscript, bytecode bytes 360571..361404, Enhanced's out/parity/asbc/all_functions.txt).",
       "Once, guarded by the uint 'scaled' (ops 1-12, JNZ -> 80 once it is set, ops 17-29 set it):",
       "  ops 14-16  thisEntity.Scale(0.8f). ETHEntity::Scale(float) scales the entity AND every particle",
       "             system it carries (ETHEntity.cpp:591-599 -> ETHSpriteEntity.cpp:512-518 ->",
@@ -385,7 +385,7 @@
   "antiportal": {
     "_source": [
       "The ring the levels place round a no-portal field, redrawn every frame by its own callback:",
-      "ETHCallback_antiportal (AntiPortalManager.angelscript, bytecode bytes 335020..335206, the remake's",
+      "ETHCallback_antiportal (AntiPortalManager.angelscript, bytecode bytes 335020..335206, Enhanced's",
       "out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0). A callback is named for the",
       "entity less its .ent (ETHASUtil.cpp:63-67), so both spellings of the 71 placements run it:",
       "  ins 1-25   blinkColor(thisEntity, _portalColorA, _portalColorB, 300). A call pushes its last argument",
@@ -472,7 +472,7 @@
       "The dial the original adds behind every timed crystal (35 in 20 levels: every inline crystal with a",
       "uint `time`). The original's timer.ent: Sprite timer.png (128 x 64, no hd or fullhd twin), SpriteCut",
       "4 x 2, blendMode 0, static 0, applyLight 0, PivotAdjust (0, 0), Scale 1, no <Light>, no particles.",
-      "Cell 0 shows eight wedges and cell 7 one. The script is in the remake's out/parity/asbc/all_functions.txt",
+      "Cell 0 shows eight wedges and cell 7 one. The script is in Enhanced's out/parity/asbc/all_functions.txt",
       "(md5 48fe65ce...), ETHCallback_crystal.angelscript:",
       "  addTimerToCrystal, bytes 424766..425217, called by ETHCallback_crystal when `time` is set:",
       "    ins 2-5     g_scale.getScale(), the scale AddEntity gives it: 1 in the port's units",
@@ -568,9 +568,9 @@
   "door": {
     "_source": [
       "The level's exit door on the levels whose `properties` entity carries `shadowless_door`, and the glow",
-      "the script hangs behind it. The visuals plan's step 13.2 (the remake's",
+      "the script hangs behind it. The visuals plan's step 13.2 (Enhanced's",
       "out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.13, and decode/D5.md with its check), planning",
-      "step 79. From the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
+      "step 79. From Enhanced's out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
       "  Game::readProperties, Game.angelscript bytes 116676..118260, called by Game::preLoop ins 33 - BEFORE",
       "  g_scale.scaleEntities() at ins 37, so everything it writes is scaled once with the level's own nodes:",
       "    ins 223-237  Game.door = SeekEntity('door.ent'); ins 268-283, when that is null, SeekEntity('door')",
@@ -635,8 +635,8 @@
   "light_wall_ghost": {
     "_source": [
       "THE GHOST OF THE WALL A LIT TORCH TAKES AWAY: dashed_door.ent, named `light_wall_ghost`. The visuals",
-      "plan's step 13.4 (the remake's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.13, and",
-      "decode/D5.md section 3 with its check), planning step 80. From the remake's",
+      "plan's step 13.4 (Enhanced's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.13, and",
+      "decode/D5.md section 3 with its check), planning step 80. From Enhanced's",
       "out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
       "  seekLightWallToDestroy, bytes 469393..469772, called by ETHCallback_light_off ins 147:",
       "    ins 1-20   SeekEntity('light_wall.ent'); return when there is none",
@@ -731,7 +731,7 @@
   "minion": {
     "_source": [
       "The minions and knights of worlds 3 and 4 (sim/Minions), as minion.ent draws them and",
-      "ETHCallback_minion frames them (the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce; its",
+      "ETHCallback_minion frames them (Enhanced's out/parity/asbc/all_functions.txt, md5 48fe65ce; its",
       "visuals/briefs/system_5.md 5a and decode/D2.md, with 00_order 8.3 and 8.13). minion.ent: Sprite",
       "minion.png, SpriteCut 4 x 4, blendMode 0, PivotAdjust (0, 4), EmissiveColor (1, 1, 1), static 0,",
       "applyLight 0, no <Normal>, no <Light>, no particles. The original draws its hd/ twin, 310 x 434 at",
@@ -868,9 +868,9 @@
   "black_bar": {
     "_source": [
       "THE FOUR BLACK BARS ROUND THE SCENE: black_bar.ent, added four times by Game::manageSceneBounds. The",
-      "visuals plan's step 13.3 (the remake's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.13, and",
+      "visuals plan's step 13.3 (Enhanced's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.13, and",
       "decode/D5.md section 2 with D5_check.md, which wins where they differ; decode/D11.md section 2 for what",
-      "the earthquake shows of them), planning step 102. From the remake's out/parity/asbc/all_functions.txt,",
+      "the earthquake shows of them), planning step 102. From Enhanced's out/parity/asbc/all_functions.txt,",
       "md5 48fe65ce8baea16b94ed84d8d7be84b0:",
       "  Game::manageSceneBounds, bytes 118788..119489, 176 instructions and NO jump, called unconditionally by",
       "  Game::preLoop ins 40 - after g_scale.scaleEntities() at ins 37 and before the camera controller",
@@ -930,8 +930,8 @@
   "shock_ring": {
     "_source": [
       "THE RING A SHOCK AGENT ADDS ROUND ITSELF: shock_area.ent, which no level file places. The visuals plan's",
-      "step 13.1 (the remake's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.7, 8.13 and 8.14, and",
-      "decode/D6.md with D6_check.md, which wins where they differ), planning step 111. From the remake's",
+      "step 13.1 (Enhanced's out/parity/visuals/briefs/00_order.md sections 4, 7 and 8.7, 8.13 and 8.14, and",
+      "decode/D6.md with D6_check.md, which wins where they differ), planning step 111. From Enhanced's",
       "out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
       "  ETHCallback_shock_agent, bytes 446781..448212, once (#1-12 the areaAdded guard, set at #114-123):",
       "    #13-29     radius = g_scale.scale(GetFloat('areaRadius')); #31 diameter = radius x 2 (MULIf 2f)",
@@ -995,7 +995,7 @@
   "fire_agent": {
     "_source": [
       "A PLACED entity whose picture its script sets: ETHCallback_fire_agent (MiscCallbacks.angelscript,",
-      "bytecode bytes 350254..351485, the remake's out/parity/asbc/all_functions.txt, md5",
+      "bytecode bytes 350254..351485, Enhanced's out/parity/asbc/all_functions.txt, md5",
       "48fe65ce8baea16b94ed84d8d7be84b0) #1-7 is STR 'fire_agent.png' and ETHEntity::SetSprite, the first thing",
       "it does on EVERY update, whatever <Sprite> the level saved for the instance. A callback is named for the",
       "entity less its .ent (ETHASUtil.cpp:63-67), so both spellings run it: 22 placements on 20 levels, 20 of",

@@ -1,4 +1,4 @@
-// The tutorial and help popups, as numbers (sim/Popup.hpp), against the remake's ui2
+// The tutorial and help popups, as numbers (sim/Popup.hpp), against Enhanced's ui2
 // spec, section 5 and its acceptance rows A-H1..A-H13; and the two HUD rules the
 // popups over 1-02 and 1-03 bring with them (Hud::PlaqueAlphaFrom,
 // LevelEnd::HudEntered).

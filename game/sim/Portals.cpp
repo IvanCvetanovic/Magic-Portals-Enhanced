@@ -20,7 +20,7 @@ using Supersonic::TransformComponent;
 
 namespace {
 
-// portal_system.gd:230-261, in the remake's space: pixels, +y down. Placed
+// portal_system.gd:230-261, in the Godot project's space: pixels, +y down. Placed
 // portals are never turned, so rotate_to_exit would turn through nothing here.
 // The port plays the original's invert (transit.json): the traveller comes out
 // at the exit itself, turned back, and the player in y only.
@@ -86,7 +86,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     };
 
     double maxPortals = 0.0;
-    // READ AND CHECKED, then dropped. The remake marks its placement block
+    // READ AND CHECKED, then dropped. The Godot project marks its placement block
     // _guess and its own _radius_note says the value was unknown; the decoded
     // radii come from the port's placement.json instead (LoadPlacement). It is
     // still required here so a malformed portals.json is refused rather than
@@ -141,7 +141,7 @@ bool LoadPlacement(const std::string& path, Rules& out, std::string& error) {
     }
     const double firstMs = cooldowns["first_ms"].AsNumber(-1.0);
     const double nextMs = cooldowns["next_ms"].AsNumber(-1.0);
-    // Zero is allowed - it means no cooldown at all, which is what the remake
+    // Zero is allowed - it means no cooldown at all, which is what the Godot project
     // carried for the first one - but a negative is a file saying nothing
     // sensible.
     if (firstMs < 0.0 || nextMs < 0.0) {
@@ -873,7 +873,7 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         const std::string role = Roles::RoleOf(roles, node);
         if (role == Roles::kStaticPortal) {
             // portal_system.gd:79-87. An inactive one is not a portal, and one with
-            // no index cannot be named, so the remake passes both over.
+            // no index cannot be named, so the Godot project passes both over.
             double active = 1.0;
             if (const Tscn::Value* value = node.Meta("active"); value != nullptr && !value->AsNumber(active)) {
                 error = node.name + "'s active is not a number";
@@ -931,7 +931,7 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
             }
             reflector.centrePx = glm::dvec2(position->numbers[0], position->numbers[1]);
             // One placement in the game gives no plane (level26a's); it takes
-            // shot.json's default, the remake's reading.
+            // shot.json's default, the Godot project's reading.
             reflector.vertical = plane != nullptr ? plane->text == "vertical" : shot.defaultPlaneVertical;
             out.reflectors.push_back(reflector);
             continue;

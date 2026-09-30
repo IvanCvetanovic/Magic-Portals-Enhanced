@@ -1,6 +1,6 @@
 #pragma once
 
-// A level's own art: every Sprite2D the remake's converter wrote, as the port
+// A level's own art: every Sprite2D Enhanced's converter wrote, as the port
 // draws it.
 //
 // The converter gives each entity node that has a picture one Sprite2D child,

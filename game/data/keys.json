@@ -1,6 +1,6 @@
 {
   "_about": [
-    "Keys, keyholes and locked doors, decoded from android_game.bin. Where the remake's",
+    "Keys, keyholes and locked doors, decoded from android_game.bin. Where the Godot project's",
     "data/actors.json guesses a different number it is carried beside as",
     "_remake_*_not_applied so the disagreement stays visible.",
     "",
@@ -40,7 +40,7 @@
       "position here rather than a body: key.ent is density 0 with no custom data but color."
     ],
     "_carrier_point": [
-      "DECODED (the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce): ETHCallback_key",
+      "DECODED (Enhanced's out/parity/asbc/all_functions.txt, md5 48fe65ce): ETHCallback_key",
       "measures the pickup from the carrier's GetPositionXY (ins 744-753, squaredDistance against",
       "squaredRange) and leads the key to that same GetPositionXY (ins 932-957 the scale(40)",
       "leash and forceFollowUpPosition, 959-976 followUp): the carrier's ENTITY point, not the",
@@ -87,7 +87,7 @@
 
   "red_key_state": {
     "_source": [
-      "ETHCallback_red_key_state (the remake's out/parity/asbc/all_functions.txt L97171, md5",
+      "ETHCallback_red_key_state (Enhanced's out/parity/asbc/all_functions.txt L97171, md5",
       "48fe65ce8baea16b94ed84d8d7be84b0), the callback of red_key_state.ent - level18c places the",
       "one in the game, red_key_state_ent_2754 at (440, 128), on key_2701's own point. A call",
       "pushes its last argument first (00_order 8.0 rule 3).",

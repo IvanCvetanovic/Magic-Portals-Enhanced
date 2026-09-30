@@ -238,7 +238,7 @@ struct State {
     int fired = 0;
     int crushed = 0;
 
-    // The camera's TOP-LEFT corner, in the remake's pixels: a hard lock to the
+    // The camera's TOP-LEFT corner, in the port's pixels: a hard lock to the
     // dragon's x, clamped into the level, with y at 0. AutoCameraController.
     glm::dvec2 CameraLeftPx() const;
 

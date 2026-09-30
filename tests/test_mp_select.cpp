@@ -1,5 +1,5 @@
 // Chapter select and the level grid, as numbers: sim/Selector.hpp over the port's
-// ui.json and a save, pinned against the remake's ui3 spec (sections 0.5, 5 and 6,
+// ui.json and a save, pinned against Enhanced's ui3 spec (sections 0.5, 5 and 6,
 // acceptance 7.5 and 7.6). Every position is stated in the pixels of a 1280x720
 // capture of the original, at 2.8125 px a unit.
 

@@ -1,11 +1,11 @@
 #pragma once
 
-// The player: a dynamic capsule, steered the way the remake steers its
-// CharacterBody2D (player.gd:89-111), by the numbers in the remake's player.json.
+// The player: a dynamic capsule, steered the way the Godot project steers its
+// CharacterBody2D (player.gd:89-111), by the numbers in Enhanced's player.json.
 //
 // Dynamic rather than kinematic because the spike measured F2: a kinematic body
 // trips no trigger. Rotation frozen and locked to the plane (S1). Every number is
-// carried as data and never pinned - the remake marks each one _guess.
+// carried as data and never pinned - the Godot project marks each one _guess.
 //
 // Two places it cannot be player.gd line for line, both because a dynamic body is
 // not a CharacterBody2D:
@@ -55,7 +55,7 @@ bool Grounded(entt::registry& registry, entt::entity player, const Tuning& tunin
 // velocity it sets, which detectPushing aims its ray along. On the ground the
 // walk, `direction` times the walk speed, across the body's vertical velocity;
 // off it the body's own x velocity times `airShare`, across the same. In the
-// remake's pixels a second, +y down. Asked BEFORE Steer, of the velocity the
+// port's pixels a second, +y down. Asked BEFORE Steer, of the velocity the
 // physics step left, as applyForces reads it before it sets its own.
 glm::dvec2 PushAim(entt::registry& registry, entt::entity player, const Tuning& tuning, float direction,
                    double airShare);
@@ -69,7 +69,7 @@ bool Pushing(entt::registry& registry, entt::entity player, const glm::dvec2& ai
              const glm::dvec2& offsetPx);
 
 // One tick of steering, before the physics step. `direction` is -1, 0 or 1: the
-// remake's two-button pad (docs/original-gameplay.md section 1).
+// Godot project's two-button pad (docs/original-gameplay.md section 1).
 void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, float direction, float dt);
 
 } // namespace MagicPortals::Player

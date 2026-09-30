@@ -1,17 +1,17 @@
 #pragma once
 
-// The remake's role table: what each of the original's entity names does.
+// Enhanced's role table: what each of the original's entity names does.
 //
-// entity_roles.json (the remake's data/) maps every EntityName the original
+// entity_roles.json (Enhanced's data/) maps every EntityName the original
 // writes onto one gameplay role - `door.ent` is the exit, `door_lift` a switched
-// door, `button` a pressure plate. The mapping is the remake's design decision,
-// not the converter's, which is why it lives in the remake's data rather than in
+// door, `button` a pressure plate. The mapping is the Godot project's design decision,
+// not the converter's, which is why it lives in the Godot project's data rather than in
 // the levels; its LevelRuntime reads it the same way (level_runtime.gd:63-78).
 // The port reads the file at run time from SUPERSONIC_MAGICPORTALS_DATA rather
 // than copying it.
 //
-// Stricter than the remake in one place: a name listed under two DIFFERENT roles
-// is refused. The remake flattens the table so the last role read wins, and its
+// Stricter than the Godot project in one place: a name listed under two DIFFERENT roles
+// is refused. The Godot project flattens the table so the last role read wins, and its
 // own note in the file says that is how no_portal_sign.ent once went missing. A
 // name listed twice under the same role (up_down_arrow.ent is) is harmless.
 
@@ -104,7 +104,7 @@ inline constexpr const char* kGravityWell = "gravity_well";
 inline constexpr const char* kRedKeyState = "red_key_state";
 
 // Roles whose body moves and has to carry what stands on it, so the builder makes
-// them kinematic rather than static: the remake's MOVING_ROLES
+// them kinematic rather than static: the Godot project's MOVING_ROLES
 // (level_runtime.gd:27), which it turns into AnimatableBody2D for the same reason.
 bool Moves(const std::string& role);
 

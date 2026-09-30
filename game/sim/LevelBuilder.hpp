@@ -2,7 +2,7 @@
 
 // A converted level, as bodies in an engine registry.
 //
-// What the remake's scene tree gives Godot's 2D physics, given to the engine's
+// What the Godot project's scene tree gives Godot's 2D physics, given to the engine's
 // 3D solver instead, one entity per body:
 //
 //   StaticBody2D + rectangle   a box collider and no rigid body
@@ -15,9 +15,9 @@
 // shape's own offset (30 of them, all on carranca and wood_piece_small) goes
 // into the collider - a box's or sphere's centre, or the prism's points.
 //
-// Given the role table, it also does the one thing the remake's LevelRuntime
+// Given the role table, it also does the one thing the Godot project's LevelRuntime
 // does to a body: a StaticBody2D whose role moves (Roles::Moves) becomes a
-// kinematic body, as the remake makes it an AnimatableBody2D, so it can carry
+// kinematic body, as the Godot project makes it an AnimatableBody2D, so it can carry
 // what stands on it. Without the table - the spike - every StaticBody2D stays
 // static. The rest of LevelRuntime (triggers, behaviours) is the caller's.
 
@@ -43,13 +43,13 @@ namespace MagicPortals::LevelBuilder {
 inline constexpr double kStaticDepthMetres = 2.0;
 inline constexpr double kBodyDepthMetres = 1.0;
 
-// Rigid bodies get Godot's PhysicsMaterial defaults, which is what the remake's
+// Rigid bodies get Godot's PhysicsMaterial defaults, which is what the Godot project's
 // RigidBody2D crates run with: friction 1, bounce 0. Its movers, AnimatableBody2D
 // with no material either, get the same.
 inline constexpr float kBodyFriction = 1.0f;
 inline constexpr float kBodyRestitution = 0.0f;
 
-// Statics get the same, through PhysicsMaterialComponent: the remake's
+// Statics get the same, through PhysicsMaterialComponent: the Godot project's
 // StaticBody2D floors carry no material either, so they run on Godot's defaults.
 // Left without one they would take the engine's fallback for a collider with no
 // rigid body - bounce 0.3, grip 0.4 - and every landing would come back up.
@@ -102,7 +102,7 @@ bool Build(const Tscn::Scene& scene, entt::registry& registry, const Options& op
 entt::entity BuildEntity(const Tscn::Scene& scene, const std::string& nodeName, entt::registry& registry,
                          const Options& options, Built& out, std::string& error);
 
-// The box an entity's body takes up, in the remake's pixels, relative to its
+// The box an entity's body takes up, in the port's pixels, relative to its
 // node and before the node's rotation: a rectangle's size, a circle's diameter,
 // or a polygon's bounds, centred where the shape's own offset puts it. False for
 // a node with no Body/Shape.

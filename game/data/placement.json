@@ -1,6 +1,6 @@
 {
   "_about": [
-    "Where a portal may be placed, and how big it is. The remake's portals.json has a",
+    "Where a portal may be placed, and how big it is. Enhanced's portals.json has a",
     "'placement' block and marks it _guess, saying so outright: its _radius_note reads",
     "'Binary has g_portalCollisionRadius / portalCollisionRadius; value unknown.' These",
     "are the decoded answers, and they replace that block's radius the way transit.json",
@@ -74,7 +74,7 @@
   "cooldowns": {
     "_source": [
       "PortalManager's constructor sets FIRST_PORTAL_MIN_TIME = 300 and",
-      "NEXT_PORTAL_MIN_TIME = 400 (bytes 137xxx, instructions 134-140). The remake's",
+      "NEXT_PORTAL_MIN_TIME = 400 (bytes 137xxx, instructions 134-140). Enhanced's",
       "portals.json carries 0.0 s and 0.25 s and admits them: 'The names are real; the",
       "numbers are invented.' These are the real ones, in milliseconds.",
       "",
@@ -170,7 +170,7 @@
       "  r = entity.GetSize().x * 0.5",
       "  return squaredDistance(entity.GetPositionXY(), p) < r * r",
       "so the radius is half the FIELD ENTITY'S OWN SIZE, not a constant. Followed into",
-      "the Ethanon source, which the remake's own rules call the only trustworthy spec:",
+      "the Ethanon source, which Enhanced's own rules call the only trustworthy spec:",
       "",
       "  - the script's GetSize binds to ETHScriptEntity::GetCurrentSize",
       "    (ETHScriptObjRegister.generic.cpp:222 and :358). There is no GetSize member;",
@@ -187,7 +187,7 @@
       "half of that, a RADIUS OF 32 x scale. An earlier reading of this block took",
       "128 x 0.5 = 64 x scale for the radius: it missed the manager's Scale(0.5) and was",
       "2x too big (64 x scale is the ring's diameter, never its radius). Footage F3",
-      "refutes it as it refutes the remake's 16 (`_measured` below)."
+      "refutes it as it refutes the Godot project's 16 (`_measured` below)."
     ],
 
     "manager": {
@@ -212,7 +212,7 @@
         "DrawnSprite::scale, the static portal's 0.8 channel)."
       ],
       "_measured": [
-        "footage F3 (the remake's out/parity/footage/F3.md 6.1), 1-7 (level6)",
+        "footage F3 (Enhanced's out/parity/footage/F3.md 6.1), 1-7 (level6)",
         "antiportal_687, scale 3: the original's drawn red disc edge fits at 268.1 px",
         "(s.d. 0.8 px over 26 rays) = 95.3 u = 31.8 x scale, 536 px = 190.7 u across",
         "against 64 x 3 = 192. The same clip brackets the refusal at (267, 273] px =",
@@ -228,7 +228,7 @@
       "standing ruling: what the original does). white_ring.png's 128 x the manager's",
       "Scale(0.5) x isPointInAntiPortalField's 0.5 (`_source`), in units per unit of the",
       "node's own `scale`, which Portals::State::Holds multiplies it by. The port played the",
-      "remake's guess of 16 here, half the original's field, until step 127.",
+      "Godot project's guess of 16 here, half the original's field, until step 127.",
       "",
       "Every field is ONE circle, drawn and played: the ring the layer draws, 128 x",
       "manager.scale x the node's scale across, is twice this radius x the node's scale.",
@@ -239,7 +239,7 @@
       "so it refuses no tap the antiportal does not."
     ],
     "_measured": [
-      "Footage F3 (the remake's out/parity/footage/F3.md sections 2 and 6.1), 1-7 (level6),",
+      "Footage F3 (Enhanced's out/parity/footage/F3.md sections 2 and 6.1), 1-7 (level6),",
       "antiportal_687 at (288, 192), scale 3, the player still at the spawn and every ray",
       "clear: taps 35.6, 78.7, 93.9 and 94.9 u from its centre were refused (red_waves",
       "each time), taps 97.1 and 98.1 u were accepted and opened a portal. The refusal",

@@ -4,7 +4,7 @@
     "level may set for it, and the three cutscenes that fill that delay - 4-01's rocket launch,",
     "4-19's landing and 2-32's dragon knight (the program's P2; planning step 123). Read by",
     "sim/Cutscene and played by the layer. Every number is DECODED from the original's script",
-    "(the remake's out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0;",
+    "(Enhanced's out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0;",
     "arguments pushed last-first, 00_order 8.0) and checked against footage F17 where F17 shows",
     "it (out/parity/footage/F17.md). All of it runs after the win: nothing here reaches",
     "Game::Level's play, only the time before the medal and the pictures behind it.",

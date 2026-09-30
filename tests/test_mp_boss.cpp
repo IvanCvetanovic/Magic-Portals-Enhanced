@@ -20,7 +20,7 @@
 // a falling rock and one under the beholder, three times, then the button and the
 // exit.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -111,7 +111,7 @@ Boss::State::Turn TickRig(Rig& rig, const std::vector<entt::entity>& stones = {}
     return rig.boss.Tick(rig.registry, rig.player, stones, kStep);
 }
 
-// A rolling stone at a point, moving at a velocity in the remake's pixels (+y down).
+// A rolling stone at a point, moving at a velocity in the port's pixels (+y down).
 entt::entity Stone(Rig& rig, const glm::dvec2& atPx, const glm::dvec2& velocityPx) {
     const entt::entity stone =
         LevelBuilder::BuildRigidCircle(rig.registry, "test_stone", atPx, 30.0, LevelBuilder::Options{});
@@ -683,7 +683,7 @@ MP_SUITE_MAIN("test_mp_boss") {
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_boss: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's data at %s.\n"
+                    "  and Enhanced's data at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), kData.c_str());

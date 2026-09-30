@@ -58,8 +58,8 @@ struct Key {
     Place place;
 };
 
-// The whole vocabulary, as the converter wrote it on 14 September 2026 (the
-// remake's b572fec), and eth_particles, which it writes since planning step 90.
+// The whole vocabulary, as the converter wrote it on 14 September 2026 (at
+// Enhanced's b572fec), and eth_particles, which it writes since planning step 90.
 // A key not listed here is refused, never skipped: a lighting input the
 // port silently ignored would be a level drawn wrong with nothing saying why.
 constexpr Key kKeys[] = {

@@ -1,8 +1,8 @@
 {
   "_about": [
-    "The Magic Portals port's movers: the two numbers the remake keeps in behaviours.gd",
+    "The Magic Portals port's movers: the two numbers the Godot project keeps in behaviours.gd",
     "rather than in its data, moved here so they can be retuned without touching code",
-    "(the remake's own CLAUDE.md rule 1). Both of those are the remake's guesses, carried.",
+    "(Enhanced's own CLAUDE.md rule 1). Both of those are the Godot project's guesses, carried.",
     "`button` is not: it is decoded, and it is read by sim/Puzzle rather than sim/Mover.",
     "See docs/planning/2026-09-11-magic-portals-remaster.md, steps 4 and 78."
   ],
@@ -13,7 +13,7 @@
       "patrolling no-portal zone - swings by sin(rate_scale * speed * t) * stride / 2 about",
       "where the level places it. `speed` is a frequency: across the moving_platform",
       "placements speed x stride clusters in a narrow band while each alone varies widely.",
-      "The absolute scale is the remake's guess; the bytecode constant is not decoded."
+      "The absolute scale is the Godot project's guess; the bytecode constant is not decoded."
     ],
     "_guess": true,
     "rate_scale": 2.0

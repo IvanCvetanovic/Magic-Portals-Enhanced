@@ -2,7 +2,7 @@
 
 // The particle systems an .ent carries: what makes the original's scenery move.
 //
-// Nothing in a converted level moves. The remake's converter writes a level's
+// Nothing in a converted level moves. Enhanced's converter writes a level's
 // sprites and drops the rest of each entity, so the port draws a still picture
 // of a game whose crystals sparkle, whose torches burn and whose portals turn.
 // The motion is not sprite animation - it is a PARTICLE SYSTEM held in each

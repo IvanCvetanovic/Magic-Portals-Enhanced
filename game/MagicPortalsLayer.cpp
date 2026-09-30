@@ -70,7 +70,7 @@ const glm::vec3 kHazardColour(1.00f, 0.25f, 0.10f);
 // The level's art, one slot per sprite from the back: flat quads a hair apart,
 // in the order Godot draws the canvas (Sprites.hpp), all of it behind the
 // markers. The player takes the slot after the last sprite at z_index 0 or
-// below, which is where the remake's player - added to the level after its
+// below, which is where the Godot project's player - added to the level after its
 // nodes, at z_index 0 - is drawn. A thrown stone goes just behind it.
 constexpr float kSpriteBackZ = -1.5f;
 constexpr float kSpriteSlotZ = 0.004f;
@@ -138,7 +138,7 @@ bool PositionOf(const Tscn::Node* node, glm::dvec2& out) {
 // in its art was multiplied and blended on the encoded bytes, and an additive
 // sum clipped at 255. Through the engine's default chain (sRGB decode, bloom,
 // Reinhard, encode) a white texel stopped at 186 and 1-1's torch flame at
-// (197, 158, 127), where the original's is (253, 252, 159). The remake's fit of
+// (197, 158, 127), where the original's is (253, 252, 159). Enhanced's fit of
 // the original's pixels settles which arithmetic it was (its lighting
 // design_port.md section 0, fit.md section 4): blending in linear light scores
 // 13.59 of 255 over 1,359 unlit blocks against 0.28 on encoded values, and
@@ -275,7 +275,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     }
 
     // The original's achievements (sim/Achievements.hpp). They are not this
-    // repository's, so a machine without the remake's out/ has none: the dashboard
+    // repository's, so a machine without Enhanced's out/ has none: the dashboard
     // then draws no rows, and this says why, once. Not a reason to refuse the start.
     if (std::string why; Achievements::Load(m_paths.achievements, m_achievements, why)) {
         m_achievementsLoaded = true;
@@ -3745,7 +3745,7 @@ entt::entity MagicPortalsLayer::makeSprite(entt::registry& registry, const char*
     registry.emplace<TransformComponent>(e);
     registry.emplace<MeshComponent>(e).primitiveType = "Quad";
     auto& material = registry.emplace<MaterialComponent>(e);
-    // Unlit, as the remake draws its canvas: the engine's PBR lights never reach
+    // Unlit, as the Godot project draws its canvas: the engine's PBR lights never reach
     // it. What lights a level sprite is its 2D record, written by tint.
     material.unlit = true;
     material.transparent = true;
@@ -5603,7 +5603,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
         glm::dvec2 centrePx, sizePx;
         boxPx(crystal.box, centrePx, sizePx);
         placeBox(registry, m_crystals[i], centrePx, glm::dvec2(14.0), kMarkerZ, kMarkerDepth, 0.785398f);
-        // A timed crystal's box does not blink either: the remake's guessed fade
+        // A timed crystal's box does not blink either: the Godot project's guessed fade
         // is gone with its picture's (syncSprites), and a box has no dial.
         registry.get<MaterialComponent>(m_crystals[i]).albedoColor = glm::vec4(kCrystalColour, 1.0f);
     }
@@ -5704,7 +5704,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
         placeBox(registry, m_agents[i], agents[i].CentreNowPx(), glm::dvec2(sizePx), kZoneZ, kZoneDepth, 0.0f);
     }
 
-    // Hazards, at the box that kills: the remake's trigger, not the shape the
+    // Hazards, at the box that kills: the Godot project's trigger, not the shape the
     // converter gives them (Hazards.hpp).
     const std::vector<Hazards::Hazard>& hazards = m_level.hazards.hazards;
     for (std::size_t i = 0; i < m_hazards.size() && i < hazards.size(); ++i) {
@@ -5765,7 +5765,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
 //
 // The original draws every sprite as texel x colour x min(1, ambient + emissive)
 // before it adds anything (ETHRenderEntity.cpp:113-117), whatever its blend and
-// whether or not it applies light: pass 1 of every draw. The remake's fit of the
+// whether or not it applies light: pass 1 of every draw. Enhanced's fit of the
 // original's pixels holds that to 0.28 of 255 over 1,359 blocks of sprites
 // without a lightmap, where drawing them full bright is 45.30 (fit.md 4). With the
 // scene holding display values (SceneRendering), the multiply lands on the bytes,
@@ -6018,7 +6018,7 @@ void MagicPortalsLayer::tint(entt::registry& registry, entt::entity quad, const 
 // (ETHRenderEntity.cpp:354-388), x lighting.json's scale, with no ambient and no
 // intensity, so it is not on the 2D sprite path at all. Drawn a quarter slot in
 // front of its owner's picture: over what is behind the owner (the arches and sky
-// of 1-1, which the remake's fit finds it adds over), under what is in front of
+// of 1-1, which Enhanced's fit finds it adds over), under what is in front of
 // it (1-1's wall04, where it finds none), and behind the owner's particles, which
 // Ethanon draws after the halo at the same depth.
 //
@@ -9370,7 +9370,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         latchSimQuakes();
         // ...and the moment the exit reports, the beat before the medal; the
         // moment the player dies, the beat before the lost screen. Should both
-        // come on one tick, reaching the exit wins: the remake's order of two
+        // come on one tick, reaching the exit wins: the Godot project's order of two
         // triggers in a frame is not defined. And once either has begun, the
         // other cannot: the level runs on behind the beat and the screen, and a
         // hidden player neither finishes nor dies again.

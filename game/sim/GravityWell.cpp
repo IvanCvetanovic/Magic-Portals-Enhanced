@@ -187,7 +187,7 @@ glm::vec3 Pull(const Well& well, const Rules& rules, const glm::dvec2& bodyPx, b
     const double fpsFix = (static_cast<double>(dt) * 1000.0) / rules.referenceFrameMs;
     const double force = bias * strength * fpsFix;
 
-    // Turned over in y: the remake's pixels count down, the engine's metres up.
+    // Turned over in y: the port's pixels count down, the engine's metres up.
     // The magnitude is already metres per second - gravitywell.json says why it
     // needs no conversion, as the portal recoil does not.
     return glm::vec3(static_cast<float>(direction.x * force), static_cast<float>(-direction.y * force), 0.0f);

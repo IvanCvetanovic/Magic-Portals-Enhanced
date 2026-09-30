@@ -39,7 +39,7 @@ bool DoorFromNode(const Tscn::Node& node, Door& out, std::string& error) {
 
     out = Door{};
     out.closed = Units::ToWorld(at.x, at.y);
-    // Up the screen, which is -y in the remake's pixels (behaviours.gd:145).
+    // Up the screen, which is -y in the Godot project's pixels (behaviours.gd:145).
     out.open = Units::ToWorld(at.x, at.y - kDoorRisePx);
     // Floored at 10 ms, as behaviours.gd floors it (:147).
     out.durationS = static_cast<float>(std::max(milliseconds / 1000.0, 0.01));

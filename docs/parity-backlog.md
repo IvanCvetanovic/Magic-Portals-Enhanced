@@ -174,7 +174,7 @@ batch 5's run and filed last here.
 | 3.1 | timer dial, no fade | committed | `0be2725` | 68 |
 | 3.2 | crystal and key bob, `sim/Motion` | committed | `5ba5b86` | 69 |
 | 3.3 | sway, alpha 0.55, dashed-circle spin | committed | `a32d356` | 70 |
-| 3.4 | the button sinks six units under what stands on it | committed with four recorded deviations, no gate row unmet (6.0 u wanted, 5.957 measured; 4.24 wanted at 150 ms, 4.285 measured): 6 `.esc` units are taken as 6 port units (the 0.976 ratio would make the original's own sink 5.86 u, and `movers.json` says not to tighten the gates on it); the >= 300 ms row rests on a box capture, because 1-31's floor picture buries the button at full press; the bucket-visibility clock is not built (D10 records it as mechanism only); the port's sensor is still the remake's 16 px fallback against the original's 26 x 16. §8.13's "a button branch in `syncSprites`" is **superseded by R21**, which moves the body the picture already hangs on. **Gate level substituted**: level2a's button cannot be stood on (walled spawn pocket, reached only with portals), so 1-31 `level30`'s `button_975` is measured instead - same node y 220 over a floor whose top is 224. **Sweep baseline**: `5.2/verify1/sweep` still stands, EXCEPT `3-15 level14b`, now `7a3553fa` - a knight of step 76 stands on `button_1666` and sinks it. The PORT-WIDE interpolation row below was found verifying this step | `0f0142a` | 78 |
+| 3.4 | the button sinks six units under what stands on it | committed with four recorded deviations, no gate row unmet (6.0 u wanted, 5.957 measured; 4.24 wanted at 150 ms, 4.285 measured): 6 `.esc` units are taken as 6 port units (the 0.976 ratio would make the original's own sink 5.86 u, and `movers.json` says not to tighten the gates on it); the >= 300 ms row rests on a box capture, because 1-31's floor picture buries the button at full press; the bucket-visibility clock is not built (D10 records it as mechanism only); the port's sensor is still the Godot project's 16 px fallback against the original's 26 x 16. §8.13's "a button branch in `syncSprites`" is **superseded by R21**, which moves the body the picture already hangs on. **Gate level substituted**: level2a's button cannot be stood on (walled spawn pocket, reached only with portals), so 1-31 `level30`'s `button_975` is measured instead - same node y 220 over a floor whose top is 224. **Sweep baseline**: `5.2/verify1/sweep` still stands, EXCEPT `3-15 level14b`, now `7a3553fa` - a knight of step 76 stands on `button_1666` and sinks it. The PORT-WIDE interpolation row below was found verifying this step | `0f0142a` | 78 |
 | 4.1 | antiportal drawn at 64×scale | committed with one recorded deviation (the 2-26 edge scan), closed by 4.2 | `bbb3c78` | 71 |
 | 4.2 | blink and spin | committed with five recorded deviations (the four "Step 72" rows and the PORT-WIDE clock row below) | `5ae1b6d`, `5a544ac` | 72 |
 | 4.3 | gravity-well green ring | committed with two recorded deviations, neither a failing gate row: the `test_mp_wells` gate is met across two suites, and the ring exists from the first frame | `6949cc3` | 73 |
@@ -631,7 +631,7 @@ work no step of §7 owns, and the owner's calls:
       shoulder the original draws, with a residual of 3.9-5.0 u in height where the error was 21.0-24.6 u.
       `test_mp_keys` pins the point (124 checks).
 - [ ] **Step 76 deviation, the player's carrier point**: the player is offered to keys and shock diamonds at its
-      capsule's centre, **22 u over its feet** (`data/player.json`'s 20 x 44 body, the remake's guess), where the
+      capsule's centre, **22 u over its feet** (`data/player.json`'s 20 x 44 body, the Godot project's guess), where the
       original's entity point stands **18.1** over them (`dark_mage.ent`'s compound, `ETHCompoundShape.cpp:66-69`).
       So a key or a diamond the player carries rides 3.9 u low, and both its 26 and the diamond's 30 are polled from
       3.9 u low. Not applied here: the capsule is the player's body to settle, not the carry's. Next: the player's
@@ -1416,7 +1416,7 @@ work no step of §7 owns, and the owner's calls:
       effects runtime - such a picture first drawn on its tick + 1 at age 0, with a test; beside 11.3's "what
       `GameStateController` adds draws a frame early".
 - [ ] **Order 10.2, the pickup rule** (step 106, deviation 3; GAMEPLAY no batch owns): the port takes a crystal when the
-      player's body overlaps its trigger box (Goals, the remake's rule); `MainCharacter::crystalPicker` takes it when the
+      player's body overlaps its trigger box (Goals, the Godot project's rule); `MainCharacter::crystalPicker` takes it when the
       character's point is within `squaredRange` of the crystal's point shifted `scale(14)` either way (#111-177). The
       burst follows whichever takes it. Next: the owner.
 - [ ] **Order 10.2 deviations, and tidy** (step 106): the expiry tick is the port's (Goals' `leftS` reaching 0 against
@@ -2204,7 +2204,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       platform re-verifies it; if the original's platform does not yield, 3-19 becomes a finding. (Authored without B1,
       whose blast can take `breakable_wall_1556` there, it wins on the merged build with B1 on the same tick.)
 - [ ] **3-13's crate** (step 126): pushed too far it slides over the 64 px gap and jams under the column (the port's
-      crate and its friction are the remake's); the route releases it in time. Not measured against the original.
+      crate and its friction are the Godot project's); the route releases it in time. Not measured against the original.
 - [x] **2-32's claw draws a line beside the dragon** (the owner's report, 2026-09-29; `out/parity/program/dragon_lines/`
       `investigation.md` and its skeptic's `check.md`, cause CONFIRMED): `dragon_claw.png`'s opaque left column (the
       arm, rows 10-40) is wrapped onto the quad's right edge by the engine's REPEAT sampler (`VulkanImage.hpp:82`'s

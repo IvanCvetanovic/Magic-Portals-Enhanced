@@ -1,7 +1,7 @@
-# Parity rig — the original next to the remake
+# Parity rig — the original next to the port
 
 How to run the original Magic Portals in an emulator, capture any screen of it, capture the same
-screen of the remake, and compare them. Set up 2026-09-14; every step below was run, not assumed.
+screen of the port, and compare them. Set up 2026-09-14; every step below was run, not assumed.
 
 **Everything captured from the original is Asantee-origin imagery.** It lives under `out/parity/`
 (gitignored) and nowhere else — not in a commit, not in `DEVLOG.md`, not in anything published.
@@ -78,9 +78,9 @@ gates chapters; see `docs/ethanon-formats.md`, 2026-09-14 block.
 
 Saves for specific states are kept in `out/parity/saves/`. Force-stop the app before pushing one.
 
-## 4. Capturing the remake
+## 4. Capturing the port
 
-The remake being compared is the Supersonic port. `README.md` → *Local setup* steps 5-7 configure and
+The game being compared is the Supersonic port. `README.md` → *Local setup* steps 5-7 configure and
 build it, and → *Capture flags* has the capture command and lists the flags a capture uses (`--help`
 prints every flag). §7 below is the owner's layout: `tools\parity\port_build.bat` configures (the first
 time) and builds this repository's `build/`.
@@ -127,7 +127,7 @@ restart button, because 3-25's corner fire can wash out either one.
 
 ## 7. The game being compared is the Supersonic port
 
-Ivan moved the remake to his own engine, Supersonic-Engine. The port lived in that repository's
+Ivan moved the project to his own engine, Supersonic-Engine. The port lived in that repository's
 `games/magicportals` until 2026-09-19 and lives here since, in `game/`, built against the engine as a
 submodule at `engine/`. It reads this repo's converter output and `data/`. Converter, data and port
 fixes all land here; an engine fix lands in the engine's repository, and `engine/` then moves to it.

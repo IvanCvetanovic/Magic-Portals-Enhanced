@@ -2,7 +2,7 @@
   "_about": [
     "The Magic Portals port's portal shot. The owner said on 11 September that a tap fires a",
     "shot from the character toward the tap, and the portal opens where it arrives. A wall, a",
-    "crate or a stone on the way stops it, and a shot that fails costs nothing. The remake",
+    "crate or a stone on the way stops it, and a shot that fails costs nothing. The Godot project",
     "opens a portal at the tap at once, so this is the port's. See",
     "docs/planning/2026-09-11-magic-portals-remaster.md, step 8."
   ],
@@ -31,7 +31,7 @@
     "max_reflections": 1,
     "_default_plane": [
       "The plane of a reflector whose level gives none. One placement in the game does:",
-      "level26a's reflect_agent_ent_961. reflect_agent.ent carries no default, and the remake",
+      "level26a's reflect_agent_ent_961. reflect_agent.ent carries no default, and the Godot project",
       "reads a missing plane as vertical (behaviours.gd:246), so the port does too."
     ],
     "default_plane": "vertical"

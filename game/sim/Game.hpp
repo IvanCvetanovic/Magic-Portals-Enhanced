@@ -59,8 +59,8 @@
 
 namespace MagicPortals::Game {
 
-// What a level needs from outside the port: the converted level and the
-// remake's own data. Read once and shared.
+// What a level needs from outside the port: the converted level and
+// Enhanced's own data. Read once and shared.
 struct Data {
     Tscn::Scene scene;
     // The port's template table (templates.json, sim/Restock): the entities a boss
@@ -70,7 +70,7 @@ struct Data {
     Roles::Table roles;
     Player::Tuning tuning;
     Goals::Rules goals;
-    Portals::Rules portals;       // the remake's portals.json, with the port's transit.json
+    Portals::Rules portals;       // Enhanced's portals.json, with the port's transit.json
     Motion::Rules motion;         // and motions.json: linearMotion's own arithmetic
     Mover::Rules movers;          // the port's own movers.json
     Puzzle::Rules puzzle;         // and its `button` block, which sim/Puzzle reads
@@ -98,7 +98,7 @@ struct Data {
     std::filesystem::path prisms; // where LevelBuilder writes the platforms' prisms
 };
 
-// A converted level (.tscn), the remake's data directory with its
+// A converted level (.tscn), Enhanced's data directory with its
 // entity_roles.json, player.json and portals.json, and the port's own data with
 // its movers.json, demolish.json, launchers.json, shot.json, transit.json and boss.json. False, with
 // `error`, when any of them is missing or malformed.
@@ -106,7 +106,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
               const std::filesystem::path& prismDirectory, Data& out, std::string& error,
               const std::string& portDataDirectory = MAGICPORTALS_PORT_DATA_DIR);
 
-// The remake's world gravity, 980 px/s^2, as the registry's PhysicsSettings.
+// The Godot project's world gravity, 980 px/s^2, as the registry's PhysicsSettings.
 // Units.hpp says why it is that value.
 void UseRemakeGravity(entt::registry& registry);
 
@@ -182,7 +182,7 @@ struct Level {
     entt::entity player = entt::null;
 };
 
-// Puts the level into the registry: the remake's gravity, the bodies built with
+// Puts the level into the registry: the Godot project's gravity, the bodies built with
 // the role table, and the player at the level's player_spawn. Then its buttons,
 // doors, crystals, exit and portals are found. withStatics false leaves the
 // statics out, which is the landing check's mutation. That leaves out the doors

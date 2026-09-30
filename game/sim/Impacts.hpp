@@ -37,7 +37,7 @@ enum class Kind { Player, Stone, Minion };
 struct Watched {
     entt::entity body = entt::null;
     Kind kind = Kind::Player;
-    // The original's entity point against the body's centre, in the remake's
+    // The original's entity point against the body's centre, in the port's
     // pixels (+y down): a minion's stands above its circle (minions.json
     // body.entity_above_feet_px). The stone's and minion's rows aim at it.
     glm::dvec2 pointOffsetPx{0.0};
@@ -49,7 +49,7 @@ struct Watched {
     glm::dvec2 spawnDropPx{0.0};
 };
 
-// A collider in the plane, in the remake's pixels (+y down): a convex core of one
+// A collider in the plane, in the port's pixels (+y down): a convex core of one
 // point (a sphere), two (a capsule's segment) or more (a box's corners, a hull's
 // outline), grown by a radius.
 struct Shape {

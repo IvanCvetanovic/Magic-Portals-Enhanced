@@ -1,5 +1,5 @@
 // How a level ends, as numbers: the finished and lost screens and the HUD going
-// (sim/LevelEnd.hpp), against the remake's ui2 spec, sections 3 and 4.
+// (sim/LevelEnd.hpp), against Enhanced's ui2 spec, sections 3 and 4.
 //
 // Every expectation below is stated in the units it was MEASURED in where it was
 // measured - screen pixels of a 1280x720 capture of the original, at 2.8125 px a

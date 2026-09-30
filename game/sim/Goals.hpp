@@ -5,7 +5,7 @@
 // (:161-165).
 //
 // - Only the player triggers them. Crates get pushed through crystals, and in the
-//   remake they must neither collect them nor finish the level.
+//   Godot project they must neither collect them nor finish the level.
 // - Both fire on entry, as an Area2D's body_entered does, not while the player is
 //   inside. A crystal is collected once, the tick the player first overlaps it,
 //   and the exit reports every time the player comes into it.
@@ -13,12 +13,12 @@
 //   portals.json's level.exit_requires_all_crystals asks for every crystal first.
 //   So with that switch on, a player already standing in the exit when the last
 //   crystal goes does not finish. It has to leave and come back in, as in the
-//   remake.
+//   Godot project.
 // - A crystal the level times goes that long after the level starts, as the
-//   remake's TimedCollectible frees it (behaviours.gd:209-230). Only the inline
+//   Godot project's TimedCollectible frees it (behaviours.gd:209-230). Only the inline
 //   `crystal` carries a `time`, 3.9 to 25 s in the data; `crystal.ent` never
 //   does. A gone crystal cannot be collected, and it still counts against the
-//   exit's switch, as in the remake, whose crystals_remaining never drops for
+//   exit's switch, as in the Godot project, whose crystals_remaining never drops for
 //   one. Within a tick a crystal is collected before its time runs down, as
 //   Godot runs a frame's physics before its _process.
 
@@ -33,10 +33,10 @@
 
 namespace MagicPortals::Goals {
 
-// The "level" object of the remake's portals.json. Its one switch is marked
+// The "level" object of Enhanced's portals.json. Its one switch is marked
 // UNVERIFIED there, not _guess: nobody knows whether the original gates its exit
 // on the crystals at all. So it is carried as data, and the tests run it both
-// ways. A missing key is an error, where the remake falls back to false.
+// ways. A missing key is an error, where the Godot project falls back to false.
 struct Rules {
     bool exitRequiresAllCrystals = false;
 };
@@ -65,7 +65,7 @@ struct State {
     bool ExitOpen() const;
 
     // One tick, after the physics step, covering what the player has come into,
-    // then how long the timed crystals have left. The remake does not define the
+    // then how long the timed crystals have left. The Godot project does not define the
     // order of two triggers in one frame. Crystals go first here, so an entry on
     // the tick the last crystal goes finds the exit open.
     void Tick(entt::registry& registry, entt::entity player, float dt);

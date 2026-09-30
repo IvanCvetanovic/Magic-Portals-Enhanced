@@ -1,7 +1,7 @@
 """ethanon2godot — Ethanon Engine project data -> Godot 4 scenes.
 
 Reads the original game's Ethanon data (scenes, entity definitions, config) and
-emits Godot 4 ``.tscn`` files for the Magic Portals remake.
+emits Godot 4 ``.tscn`` files for Magic Portals Enhanced.
 
 Scope note: this converts *data*, not *code*. Ethanon gameplay logic lives in
 AngelScript and is deliberately not translated — it is read as design reference

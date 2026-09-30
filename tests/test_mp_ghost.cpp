@@ -33,7 +33,7 @@
 //               lock, and the key is yellow because key.ent's own custom data
 //               says so - not because level31b's keyhole is.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -955,7 +955,7 @@ MP_SUITE_MAIN("test_mp_ghost") {
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
-        std::printf("test_mp_ghost SKIPPED - needs the converted levels at %s and the remake's data at %s\n",
+        std::printf("test_mp_ghost SKIPPED - needs the converted levels at %s and Enhanced's data at %s\n",
                     kLevels.c_str(), kData.c_str());
         return 77;
     }

@@ -1,7 +1,7 @@
 // The converted levels, read whole.
 //
-// These are the remake's 128 levels as its converter wrote them to
-// Magic-Portals-Remake/out/levels, at the remake's b572fec: 79af319's files
+// These are Enhanced's 128 levels as its converter wrote them to
+// Magic-Portals-Remake/out/levels, at Enhanced's b572fec: 79af319's files
 // (whose game/assets/levels copy is byte-identical to them) with the lighting
 // keys inserted and not one other byte changed. They are the original game's
 // level data and are NOT in this repository - main() skips, and says where it
@@ -161,7 +161,7 @@ void Level30() {
         CHECK_MSG(rect && rect->type == "RectangleShape2D" && Is(rect->Find("size"), Kind::Vector2, {c.w, c.h}), c.node);
     }
 
-    // The three door lifts: static in the file, made movers by the remake's
+    // The three door lifts: static in the file, made movers by the Godot project's
     // LevelRuntime, keyed to buttons by switchIdx. Quoted numbers, both keys.
     struct Lift {
         const char* node;
@@ -294,7 +294,7 @@ void AllLevels() {
     // Metadata by spelling. The 80 bare numbers are the ten hinges' eight
     // joint_* keys, and nothing else is written bare.
     //
-    // The strings were 5,700 until the remake's b572fec, whose converter writes
+    // The strings were 5,700 until Enhanced's b572fec, whose converter writes
     // the original's lighting as metadata/eth_* strings. The levels were
     // regenerated with it on 14 September 2026 and every file came out as the
     // one before plus those lines: 5,700 + 11,234 = 16,934, the converter's own
@@ -363,7 +363,7 @@ MP_SUITE_MAIN("test_mp_levels") {
     if (!std::filesystem::is_directory(kLevels, ec)) {
         std::printf("test_mp_levels: SKIPPED - no converted levels at %s\n"
                     "  They are the original game's data and live outside this repository. Convert\n"
-                    "  them with the remake's tools/converter, or configure with\n"
+                    "  them with Enhanced's tools/converter, or configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=<Magic-Portals-Remake>/out/levels\n",
                     kLevels.c_str());
         return 77;

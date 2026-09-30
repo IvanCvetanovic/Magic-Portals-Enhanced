@@ -14,7 +14,7 @@
 // why, a level that starts lands, and each chapter's counts of levels that start
 // and that play do not fall. The floors are raised as roles land.
 //
-// Reads the converted levels and the remake's data from outside this repository,
+// Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
 #include "TestHarness.hpp"
@@ -279,7 +279,7 @@ Tiers::Rules TheTiers() {
 // or not it starts. The totals are the converter's, pinned.
 //
 // And the tier each placement is drawn from (step 66): the converter copies the
-// hd and fullhd files beside the 1x ones (the remake's entity_tiers.json), and a
+// hd and fullhd files beside the 1x ones (Enhanced's entity_tiers.json), and a
 // missing copy draws its images at 1x with no other sign, so the split is pinned
 // here - 2,248 hd, 146 fullhd, 489 1x placements of 66 textures, 38 / 7 / 21.
 //
@@ -299,7 +299,7 @@ void EveryLevelsArtReads() {
     int resized = 0;  // placements whose units are not their 1x file's size
     int unsized = 0;  // tier placements whose 1x file cannot be sized
     int scaled = 0;   // placements drawn at a scale other than 1
-    // The converter's record of the same choice (the remake's out/assets/entity_tiers.json,
+    // The converter's record of the same choice (Enhanced's out/assets/entity_tiers.json,
     // step 65), made from app.enml rather than tiers.json: the two sets of numbers are
     // checked against each other here, placement by placement.
     const std::string manifestPath = kLevels + "/../assets/entity_tiers.json";
@@ -397,7 +397,7 @@ void EveryLevelsArtReads() {
 // Every level's lighting, read as the layer will read it (Lighting.hpp). Nothing
 // draws it yet, and a level whose lighting the reader refuses still starts and
 // plays - so, as for the art, every level is read here and the totals are the
-// converter's own report for the four worlds (the remake's b572fec), pinned.
+// converter's own report for the four worlds (Enhanced's b572fec), pinned.
 // test_mp_lighting pins what individual levels say.
 void EveryLevelsLightingReads() {
     const Tiers::Rules tiers = TheTiers();
@@ -527,7 +527,7 @@ MP_SUITE_MAIN("test_mp_start") {
     if (!std::filesystem::is_directory(kLevels, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
         std::printf("test_mp_start: SKIPPED - needs the converted levels at %s\n"
-                    "  and the remake's data at %s.\n"
+                    "  and Enhanced's data at %s.\n"
                     "  Both live outside this repository; configure with\n"
                     "  -DSUPERSONIC_MAGICPORTALS_LEVELS=... and -DSUPERSONIC_MAGICPORTALS_DATA=...\n",
                     kLevels.c_str(), kData.c_str());
