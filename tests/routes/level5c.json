@@ -1,0 +1,15 @@
+{
+  "_about": [
+    "4-06, weightless (step 172, R1: antiportal_2101's 32 x 6 = 192 px holds the whole corridor the",
+    "player starts in, so no portal opens there). One tap behind the player at (60, 144): the shot dies",
+    "in the field, and its recoil pushes the player right at 70 u/s, down the middle of the corridor, out",
+    "past its end and into the door. Won on tick 330 (step 172)."
+  ],
+  "level": "level5c",
+  "win_by": 390,
+  "holds": [
+  ],
+  "taps": [
+    {"tick": 30, "at": [60, 144]}
+  ]
+}

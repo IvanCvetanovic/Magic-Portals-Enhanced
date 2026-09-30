@@ -1,0 +1,19 @@
+{
+  "_about": [
+    "4-11, weightless (step 172, R1: antiportal_ent_2250's 32 x 2 = 64 px lies under the hanging wall,",
+    "between the player's cell and the door). A tap up-left at the ceiling block (200, 5): its recoil",
+    "carries the player down-right onto spinning_platform_2132, which turns under it, and down past it",
+    "and the hanging wall's foot. From under the wall a portal in the door at (448, 150); its recoil",
+    "carries the player back left, and one on the player at (288, 166): into the door. Won on tick 248",
+    "(step 172)."
+  ],
+  "level": "level10c",
+  "win_by": 310,
+  "holds": [
+  ],
+  "taps": [
+    {"tick": 30, "at": [200, 5]},
+    {"tick": 222, "at": [448, 150]},
+    {"tick": 246, "at": [288.0, 166.0]}
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "_about": [
+    "1-28 (step 172, R1: antiportal_711's 32 x 4 = 128 px holds the shelf and its crates, and",
+    "antiportal_712's 288 px the whole room behind door_lift_710). Left onto lift_ent_694 at its bottom",
+    "and up with it; right onto the shelf, pushing crate_ent_707 slowly right until crate_small_ent_708,",
+    "held by the block over it, drops off its back and slides left along the shelf. Left again: the",
+    "small crate goes off the shelf's end onto the lift. Left onto the lift at its top, beside the",
+    "crate, and down with both; right off at the bottom to x 197. A portal at (88, 175) on the crate's",
+    "way down the lift column and one over button_709 at (160, 195): the crate comes down through the",
+    "first onto the button, the door rises, and right into the door. The port runs the lift on its own",
+    "(G2, not built). Won on tick 968 (step 172)."
+  ],
+  "level": "level27",
+  "win_by": 1030,
+  "holds": [
+    {"walk": "left", "from": 100, "to": 140},
+    {"walk": "right", "from": 190, "to": 400},
+    {"walk": "left", "from": 420, "to": 445},
+    {"walk": "left", "from": 585, "to": 610},
+    {"walk": "right", "from": 768, "to": 798},
+    {"walk": "right", "from": 900, "to": 1030}
+  ],
+  "taps": [
+    {"tick": 818, "at": [88, 175]},
+    {"tick": 842, "at": [160, 195]}
+  ]
+}

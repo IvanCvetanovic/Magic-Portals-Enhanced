@@ -1,0 +1,19 @@
+{
+  "_about": [
+    "1-07 (step 172, R1: antiportal_687's 32 x 3 = 96 px holds the pit and both its edges, and the",
+    "projectile blocker kills any shot across it low). Right to x 87, clear of the low block over the",
+    "spawn; a portal over the left end of the hanging structure at (140, 60) and one on the player,",
+    "who comes out walking. Right along the structure's top, off its right end over the pit and the",
+    "blocker, down onto the far platform and into the door. Won on tick 180 (step 172)."
+  ],
+  "level": "level6",
+  "win_by": 240,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 18},
+    {"walk": "right", "from": 65, "to": 240}
+  ],
+  "taps": [
+    {"tick": 30, "at": [140, 60]},
+    {"tick": 60, "at": [87.0, 202.3]}
+  ]
+}

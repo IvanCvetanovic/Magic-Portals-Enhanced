@@ -1,0 +1,36 @@
+{
+  "_about": [
+    "3-27 (R1 fix 1): antiportal_2084 (scale 3, 96 px at 32 x scale) holds the keyhole, the yellow door",
+    "and the exit, and the key lies 48 px inside shock_agent_2048's 74 px ring, where the player dies but",
+    "a knight does not; every portal here is 116 px or more from the ring's centre. Left off the top",
+    "platform onto the middle one while knight B holds at wayB1. A portal in the key's pocket at (80,",
+    "185) and one at the knight's post (232.4, 186): the knight goes into the pocket and takes the key",
+    "(tick 622; a minion carries a key). A portal on the pillar and one on the player; from the pillar a",
+    "portal on the middle platform at (200, 180) and one over the knight, stuck against the pillar at",
+    "(89.4, 199): out it comes with the key and walks back to wayB0. A portal between the top platform",
+    "and the small block at (275, 120) and one on the player: the shock diamond is taken; left off the",
+    "block, and at the knight the diamond strikes it (tick 948) and the key drops and is taken. A portal",
+    "at (270, 120) and one walked into at (190, 186.3): out moving right, over the block and down by the",
+    "keyhole (unlocked 1045, the door gone 1132); right into the door. Won on tick 1166. Leans on G1 (the",
+    "knight never sees or shoots), G10 and G4."
+  ],
+  "level": "level26b",
+  "win_by": 1250,
+  "holds": [
+    {"walk": "left", "from": 490, "to": 528},
+    {"walk": "left", "from": 900, "to": 948},
+    {"walk": "right", "from": 1000, "to": 1300}
+  ],
+  "taps": [
+    {"tick": 580, "at": [80, 185]},
+    {"tick": 605, "at": [232.4, 186]},
+    {"tick": 640, "at": [108, 160]},
+    {"tick": 665, "at": [148.5, 186.3]},
+    {"tick": 795, "at": [200, 180]},
+    {"tick": 820, "at": [89.4, 199]},
+    {"tick": 850, "at": [275, 120]},
+    {"tick": 875, "at": [108, 170.3]},
+    {"tick": 975, "at": [270, 120]},
+    {"tick": 1005, "at": [190, 186.3]}
+  ]
+}

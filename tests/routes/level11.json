@@ -1,26 +1,33 @@
 {
   "_about": [
-    "1-12 (step 171). A portal over the left platform's end at (300, 160), one on the player. A portal",
-    "on the block by the gap at (416, 155), under the stub and over the block's top, one on the player.",
-    "A portal on the ramp at (600, 190), under the hanging column, one on the player; it slides slowly",
-    "down the slope. A shot at the top of the view, (644.4, 2), comes within 16 of reflect_agent_675",
-    "(638, 26), whose plane is horizontal, and lands mirrored over the post at (644.4, 80.9): one on the",
-    "player, down onto the post, right off it into the door. anti_portal_agent_ent_599 is passed, not",
-    "killed: the route needs none of antiportal_574. Won on tick 286 (step 171)."
+    "1-12, re-routed for antiportal_574's 32 x 2.5 = 80 px (step 172, R1), which holds the block by the",
+    "gap (step 171's portals there are refused). A portal over the left platform's end at (300, 160),",
+    "one on the player. A portal on the floor between the stub and the block at (380, 205), 87 px from",
+    "the ring's centre, one on the player. From there a shot up past the block's corner toward",
+    "(459.8, 36.7) comes within 16 of reflect_agent_623 (422, 115), horizontal, and its mirrored leg",
+    "passes 21 px from anti_portal_agent_ent_599 (464, 184): the agent and antiportal_574 go (tick ~165).",
+    "A portal on the block at (410, 150), one on the player. A portal on the ramp at (600, 190), under",
+    "the hanging column, one on the player; it slides slowly down the slope. A shot at the top of the",
+    "view, (644.4, 2), comes within 16 of reflect_agent_675 (638, 26) and lands mirrored over the post",
+    "at (644.4, 80.9): one on the player, down onto the post, right off it into the door. Won on tick",
+    "368 (step 172)."
   ],
   "level": "level11",
-  "win_by": 340,
+  "win_by": 430,
   "holds": [
-    {"walk": "right", "from": 260, "to": 340}
+    {"walk": "right", "from": 340, "to": 430}
   ],
   "taps": [
     {"tick": 30, "at": [300, 160]},
     {"tick": 60, "at": [73, 202.3]},
-    {"tick": 90, "at": [416, 155]},
+    {"tick": 90, "at": [380, 205]},
     {"tick": 120, "at": [300, 202.3]},
-    {"tick": 150, "at": [600, 190]},
-    {"tick": 180, "at": [416, 150.3]},
-    {"tick": 210, "at": [644.4, 2]},
-    {"tick": 240, "at": [593.2, 185.7]}
+    {"tick": 150, "at": [459.8, 36.7]},
+    {"tick": 180, "at": [410, 150]},
+    {"tick": 210, "at": [380, 202.3]},
+    {"tick": 240, "at": [600, 190]},
+    {"tick": 270, "at": [410, 150.3]},
+    {"tick": 300, "at": [644.4, 2]},
+    {"tick": 330, "at": [593.2, 185.7]}
   ]
 }

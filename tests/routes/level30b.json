@@ -1,0 +1,41 @@
+{
+  "_about": [
+    "3-31 (R1 fix 1): antiportal_2436 (scale 5, 160 px at 32 x scale) holds the keyhole, the yellow door",
+    "and the exit room, and its agent sits inside crate_2355; the keyhole also lies inside",
+    "shock_agent_ent_2441's 94 px ring. Every portal before the agent dies is 199 px or more from the",
+    "ring's centre. A portal on the gutter block at (384, 118) and one on the player:",
+    "fire_diamond_ent_2199 is taken. From the lower platform's left edge three taps become fireballs",
+    "(tick 190, 270, 360): the first destroys the shock agent and its ring, the second burns the crate,",
+    "the third burns knight B, whose key drops on the left platform. Right under the gutter block (the",
+    "port's 44 px body squeezes through its 42 px pocket; the original's mage, dark_mage.ent's compound,",
+    "is 36.2 tall): the diamond is drained (514) and taps open portals again. A portal by the key and one",
+    "on the player: the key is taken (577). Right to the ledge's end, a portal over the single block at",
+    "(392, 340) and one on the player; from the block a shot at (224, 456) passes",
+    "anti_portal_agent_ent_2430, now bare, and kills it and its ring (727). A portal by the keyhole at",
+    "(195, 450) and one on the player: the key opens it (765) and the yellow door goes (851); left into",
+    "the door. Won on tick 886. Leans on G1 (the knight never sees or shoots), G10 and G4."
+  ],
+  "level": "level30b",
+  "win_by": 980,
+  "holds": [
+    {"walk": "left", "from": 90, "to": 104},
+    {"walk": "left", "from": 150, "to": 155},
+    {"walk": "right", "from": 470, "to": 512},
+    {"walk": "right", "from": 590, "to": 615},
+    {"walk": "left", "from": 830, "to": 1000}
+  ],
+  "taps": [
+    {"tick": 30, "at": [384, 118]},
+    {"tick": 62, "at": [122, 90.3]},
+    {"tick": 190, "at": [281.3, 330]},
+    {"tick": 270, "at": [281.3, 330]},
+    {"tick": 360, "at": [160, 240]},
+    {"tick": 540, "at": [101.7, 228]},
+    {"tick": 575, "at": [399.9, 235.5]},
+    {"tick": 640, "at": [392, 340]},
+    {"tick": 670, "at": [169, 234.3]},
+    {"tick": 710, "at": [224, 456]},
+    {"tick": 735, "at": [195, 450]},
+    {"tick": 760, "at": [384.3, 364.9]}
+  ]
+}

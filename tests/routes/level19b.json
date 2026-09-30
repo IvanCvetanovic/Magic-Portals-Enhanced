@@ -1,0 +1,33 @@
+{
+  "_about": [
+    "3-20 (R1 fix 1): antiportal_1601 (scale 5.5, 176 px at 32 x scale) holds the knight's whole walk,",
+    "the key it carries and the shock diamond, so every portal here is placed outside it (the nearest,",
+    "187 px). Right off the ledge, short, onto the floor left of destroyier_ent_1666; a portal at (305,",
+    "200) and one on the player carry it over the destroyier; right under the anchor to",
+    "shock_diamond_ent_1633 (tick 165). Back left to the floor seam (256); a portal high at (258, 40),",
+    "and one at (280, 204) walked into: out of the high one moving right, over the spinning platform's",
+    "end onto the anchor, where the diamond strikes the knight (tick 323) and the key is taken. Left off",
+    "the anchor: a portal at (185, 130) and one on the player falling off the tilting platform at (272,",
+    "150); down by the keyhole, the yellow door goes, and left into the door. Won on tick 516. Leans on",
+    "the port's 16 px destroyier box (Hazards.hpp: the original's sensor is the whole 128 x 16 shape,",
+    "which the player stands on here), G1 (the knight never sees or shoots), G10 (air control) and G4",
+    "(shot speed)."
+  ],
+  "level": "level19b",
+  "win_by": 580,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 42},
+    {"walk": "right", "from": 125, "to": 168},
+    {"walk": "left", "from": 175, "to": 236},
+    {"walk": "right", "from": 270, "to": 326},
+    {"walk": "left", "from": 335, "to": 600}
+  ],
+  "taps": [
+    {"tick": 90, "at": [305, 200]},
+    {"tick": 120, "at": [211.9, 202.3]},
+    {"tick": 255, "at": [258, 40]},
+    {"tick": 280, "at": [280, 204]},
+    {"tick": 335, "at": [185, 130]},
+    {"tick": 363, "at": [272, 150]}
+  ]
+}

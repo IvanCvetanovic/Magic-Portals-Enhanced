@@ -1127,7 +1127,11 @@ void AnAntiportalIsDrawnAtHalfItsNodesScale() {
     const MagicPortals::Portals::Rules& rules = layer.SimLevel()->portals.rules;
     CHECK_MSG(rules.antiportalEntity == "antiportal", "the manager collects antiportal: " + rules.antiportalEntity);
     CHECK_NEAR(static_cast<float>(rules.antiportalManagerScale), 0.5f);
-    CHECK_NEAR(static_cast<float>(rules.antiportalRadiusPx), 16.0f); // the circle the port plays is not this step's
+    // The circle a tap is refused in is half the ring: 32 x scale, played since
+    // step 172 (R1), and 128 x the manager's 0.5 x 0.5 by the decode.
+    CHECK_NEAR(static_cast<float>(rules.antiportalRadiusPx), 32.0f);
+    const double halfTheRing = 128.0 * rules.antiportalManagerScale * 0.5;
+    CHECK_NEAR(static_cast<float>(rules.antiportalRadiusPx), static_cast<float>(halfTheRing));
     CloseTheLevelStartPopup(layer, registry);
     tickWith(layer, registry, kRest, {}, {});
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -1162,15 +1166,17 @@ void AnAntiportalIsDrawnAtHalfItsNodesScale() {
         CHECK_MSG(seen.found == 1, std::string(seen.image) + " drawn once at (" + std::to_string(seen.atPx.x) + ", " +
                                        std::to_string(seen.atPx.y) + "): " + std::to_string(seen.found));
     }
-    // The zones' boxes stay the circle the port plays, 16 x scale: the ring and the
-    // box differ until the refusal radius is the original's.
+    // The zones' boxes are the circle the port plays, 32 x scale since step 172
+    // (R1): the square round it is the ring's own 64 x scale across, one circle
+    // drawn and played.
     int boxesOnTheRule = 0;
     for (auto [entity, tag, transform] : registry.view<TagComponent, TransformComponent>().each()) {
         (void)entity;
         if (tag.tag != "Magic Portals No-Portal Zone") continue;
         const glm::dvec2 at = MagicPortals::Units::ToPixels(transform.position);
         if (glm::distance(at, glm::dvec2(180.0, 140.0)) < 0.5 &&
-            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(16.0 * 1.8 * 2.0)) < 1e-5f) {
+            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(32.0 * 1.8 * 2.0)) < 1e-5f &&
+            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(64.0 * 1.8)) < 1e-5f) {
             ++boxesOnTheRule;
         }
     }
@@ -12263,8 +12269,8 @@ void AShotIntoA17WallEndsInPortalFail() {
 }
 
 // Gate 2: "a 1-7 antiportal tap gives _in_antiportal at z 0". A tap 28 units
-// from antiportal_687, inside the 16 x 3 = 48 units the port plays (R1 is not
-// built), with a clear ray: red_waves (A) and red_cross at the tap, and on the
+// from antiportal_687, inside its 32 x 3 = 96 units (R1, played since step 172),
+// with a clear ray: red_waves (A) and red_cross at the tap, and on the
 // shot's arrival the red end at z 0 and the shake of 5, before the update.
 void AnAntiportalTapOn17EndsRedAtZeroAndShakes() {
     if (!OriginalArtIsThere("AnAntiportalTapOn17EndsRedAtZeroAndShakes")) return;

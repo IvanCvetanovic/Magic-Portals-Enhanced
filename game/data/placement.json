@@ -182,9 +182,12 @@
       "    `scale` custom data, and the scene-wide pass that calls it scales every",
       "    entity that does not carry `scalable = 0`. No antiportal carries one.",
       "",
-      "128 * 0.5 = 64, times the node's own scale, as this block first read it. THAT",
-      "MISSED ONE CALL, and every number after it is 2x too big: see `manager` below.",
-      "The field is 32 x scale and the ring is drawn 64 x scale across."
+      "GetSize().x is that 128 x the node's `scale` x the manager's Scale(0.5) (`manager`",
+      "below): the ring is 64 x scale units ACROSS, and the circle a tap is refused in is",
+      "half of that, a RADIUS OF 32 x scale. An earlier reading of this block took",
+      "128 x 0.5 = 64 x scale for the radius: it missed the manager's Scale(0.5) and was",
+      "2x too big (64 x scale is the ring's diameter, never its radius). Footage F3",
+      "refutes it as it refutes the remake's 16 (`_measured` below)."
     ],
 
     "manager": {
@@ -219,22 +222,35 @@
       "scale": 0.5
     },
 
-    "radius_px": 16.0,
-    "_radius_note": [
-      "THE REMAKE'S GUESS, STILL PLAYED. The owner's standing ruling R1 (the remake's",
-      "out/parity/visuals/briefs/00_order.md section 6) takes the original's 32 x scale,",
-      "which the decode (`manager`) and F3's taps both give; a later step plays it.",
-      "Until then this file keeps the port's number and records the other one.",
+    "radius_px": 32.0,
+    "_radius_source": [
+      "DECODED, AND PLAYED since the remaster record's step 172 (00_order R1, the owner's",
+      "standing ruling: what the original does). white_ring.png's 128 x the manager's",
+      "Scale(0.5) x isPointInAntiPortalField's 0.5 (`_source`), in units per unit of the",
+      "node's own `scale`, which Portals::State::Holds multiplies it by. The port played the",
+      "remake's guess of 16 here, half the original's field, until step 172.",
       "",
-      "This note used to argue against 64 x scale: level6's projectile blocker",
-      "anti_projectile_wall_ent_743 at (313, 185) would sit entirely inside a 192 u",
-      "field. At the decoded 96 u its corners are inside too (farthest 91.1 u), but the",
-      "blocker is not pointless: F3 (6.3) shows it kills a shot aimed PAST the field's",
-      "right edge, which the field alone allows. test_mp_shot's blocker case lands",
-      "its shot at (380, 150), 101 u from the field's centre: outside at 16 x 3 and at",
-      "32 x 3."
+      "Every field is ONE circle, drawn and played: the ring the layer draws, 128 x",
+      "manager.scale x the node's scale across, is twice this radius x the node's scale.",
+      "A `no_portal` node is in the port's no_portal_zone role and is tested with this",
+      "radius too, though AntiPortalManager gathers only antiportal and antiportal.ent",
+      "(`manager`). The game places one, 1-07's no_portal_705 at (232, 194): its 32 u lies",
+      "wholly inside antiportal_687's 96 u field (56 u between the centres, 56 + 32 < 96),",
+      "so it refuses no tap the antiportal does not."
     ],
-    "_decoded_radius_px_not_applied": 32.0,
+    "_measured": [
+      "Footage F3 (the remake's out/parity/footage/F3.md sections 2 and 6.1), 1-7 (level6),",
+      "antiportal_687 at (288, 192), scale 3, the player still at the spawn and every ray",
+      "clear: taps 35.6, 78.7, 93.9 and 94.9 u from its centre were refused (red_waves",
+      "each time), taps 97.1 and 98.1 u were accepted and opened a portal. The refusal",
+      "edge lies in (94.9, 97.1] u = (31.64, 32.36] x scale; 32 x 3 = 96. The 16 x 3 = 48",
+      "the port played is refuted by the refusals at 78.7-94.9 u.",
+      "",
+      "The same level's projectile blocker anti_projectile_wall_ent_743 at (313, 185) has",
+      "its corners inside the 96 u field (farthest 91.1 u), but F3 (6.3) shows it kills a",
+      "shot aimed PAST the field's right edge, which the field alone allows: test_mp_shot's",
+      "blocker case lands its shot at (380, 150), 101 u from the field's centre, outside it."
+    ],
 
     "_destroyed": [
       "A destroyed antiportal refuses nothing: isPointInAntiPortalField (bytes 334800..335020)",

@@ -1,0 +1,25 @@
+{
+  "_about": [
+    "4-07, weightless (step 172, R1: antiportal_2166's 32 x 3 = 96 px holds the player's start). A shot",
+    "at anti_portal_agent_ent_2167 kills it and the ring (tick ~38); its recoil carries the player down-",
+    "left against the left block, over button_2108, and door_lift_2109 rises. A portal at (110, 160) and",
+    "one beside crate_ent_2161's left face at (286, 175), through the raised door: the crate comes out",
+    "over both buttons and door_lift_2168 rises too. A tap down at the bouncer (74, 240) and one up at",
+    "(74, 20): their recoils lift the player 45 px and stop it, over the crate. A portal in the door at",
+    "(454, 172), through both raised doors and past shock_agent_ent_2170's 52 px, and one on the player",
+    "where its recoil has carried it: into the door. Won on tick 347 (step 172)."
+  ],
+  "level": "level6c",
+  "win_by": 410,
+  "holds": [
+  ],
+  "taps": [
+    {"tick": 30, "at": [210, 128]},
+    {"tick": 150, "at": [110, 160]},
+    {"tick": 175, "at": [286, 175]},
+    {"tick": 230, "at": [74, 240]},
+    {"tick": 266, "at": [74, 20]},
+    {"tick": 300, "at": [454, 172]},
+    {"tick": 345, "at": [21.5, 113.5]}
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "_about": [
+    "3-22 (R1 fix 1): the key floats at (490, 106), 44 px from antiportal_1673's centre (scale 4.5, 144",
+    "px at 32 x scale), so no portal opens near it; every portal here is 168 px or more from the ring. A",
+    "portal at (170, 40) and one on the player: onto the left platform, and left onto the lone block. A",
+    "portal at (200, 140) and one against rolling_stone_1679 at (258, 205) send the stone off the level,",
+    "so it no longer chocks the seesaw. When knight B stands at wayB1 on the seesaw's right arm (its 10 s",
+    "hold), a portal at (285, 105) and one below the block's right edge at (143.1, 225): the player falls",
+    "into the low one, rises out of the high one, falls back onto the seesaw's left end and flings the",
+    "knight up past the key, which it takes (tick 500; a minion carries a key, ETHCallback_key). Back to",
+    "the block (portals at (100, 120) and on the player). The knight carries the key to wayB0 past the",
+    "keyhole, which opens (tick 1133) and the yellow door goes (1181). As it walks back, the same drop",
+    "tips the seesaw again and the knight walks into the gap it leaves and falls to the killer floor",
+    "(1367); right over the seesaw, along the floor and into the door. Won on tick 1509. Leans on the",
+    "port's traversal by body overlap for the stone (its centre is 38 px from that portal), G1 (the",
+    "knight never sees or shoots), G10 and G4."
+  ],
+  "level": "level21b",
+  "win_by": 1600,
+  "holds": [
+    {"walk": "left", "from": 80, "to": 110},
+    {"walk": "right", "from": 400, "to": 418},
+    {"walk": "right", "from": 1215, "to": 1229},
+    {"walk": "right", "from": 1340, "to": 1700}
+  ],
+  "taps": [
+    {"tick": 30, "at": [170, 40]},
+    {"tick": 55, "at": [388, 34.3]},
+    {"tick": 140, "at": [200, 140]},
+    {"tick": 165, "at": [258, 205]},
+    {"tick": 380, "at": [285, 105]},
+    {"tick": 426, "at": [139.8, 225]},
+    {"tick": 515, "at": [100, 120]},
+    {"tick": 540, "at": [282.3, 200.6]},
+    {"tick": 1190, "at": [285, 105]},
+    {"tick": 1236, "at": [143.1, 225]}
+  ]
+}

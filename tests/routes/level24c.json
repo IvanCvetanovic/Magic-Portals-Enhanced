@@ -1,0 +1,31 @@
+{
+  "_about": [
+    "4-25 (step 172, R1: the yellow key's pocket lies wholly inside antiportal_1813's 32 x 2.4 = 77 px,",
+    "where at 16 x scale its corners were outside, so it is entered through door_lift_1798). A portal",
+    "over button_1796 at (80, 200) and one beside crate_small_no_emissive_ent_1797 at (275, 48): the",
+    "crate drops onto the button and the door lift rises. A portal at the upper platform's end (198, 90)",
+    "and one on the player; left along it through the raised door lift, taking the key (tick ~215), and",
+    "back right to its end. A portal by the keyhole at (300, 200) and one on the player: the key opens",
+    "the yellow door. When it is gone a shot at (380, 48) passes through the corner gap between",
+    "square_platform_22_1814 and the pillar; one on the player, who comes out over the pillar, falls off",
+    "its far side and walks into the door. Knight B never sees or shoots (G1, not built). Won on tick 492",
+    "(step 172)."
+  ],
+  "level": "level24c",
+  "win_by": 560,
+  "holds": [
+    {"walk": "left", "from": 145, "to": 213},
+    {"walk": "right", "from": 222, "to": 279},
+    {"walk": "right", "from": 462, "to": 560}
+  ],
+  "taps": [
+    {"tick": 30, "at": [80, 200]},
+    {"tick": 55, "at": [275, 48]},
+    {"tick": 100, "at": [198, 90]},
+    {"tick": 125, "at": [270.0, 202.3]},
+    {"tick": 300, "at": [300, 200]},
+    {"tick": 325, "at": [181.0, 90.3]},
+    {"tick": 430, "at": [380, 48]},
+    {"tick": 455, "at": [300, 202.3]}
+  ]
+}

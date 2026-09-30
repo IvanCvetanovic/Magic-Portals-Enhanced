@@ -1,0 +1,22 @@
+{
+  "_about": [
+    "4-01, won as footage F17 wins it (out/parity/footage/F17.md 1.1): left against the locked pillar",
+    "(152.7, 140.3); a shot at (450.1, 85.0) passes 16 u from anti_portal_agent_ent_2107 (418, 108) and",
+    "kills it, and antiportal_2108 (scale 4, 128 px at 32 x scale) goes with it (tick ~140). A portal",
+    "at (200, 146), right of the player, and one at (372, 98), over the block the ring covered; right",
+    "into the first, out of the second onto the block, and on over the bridge into the rocket's door.",
+    "Won on tick 351 (step 172, R1: the old port-only way round the ring, a portal at (490, 60), is",
+    "inside the field while the agent lives)."
+  ],
+  "level": "level0c",
+  "win_by": 410,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 96},
+    {"walk": "right", "from": 200, "to": 410}
+  ],
+  "taps": [
+    {"tick": 110, "at": [450.1, 85.0]},
+    {"tick": 150, "at": [200, 146]},
+    {"tick": 185, "at": [372, 98]}
+  ]
+}

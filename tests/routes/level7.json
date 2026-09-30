@@ -1,17 +1,25 @@
 {
   "_about": [
-    "1-08: a portal over the left end of the door's ledge - under the pillar and just outside",
-    "antiportal_539's reach (4.7 x 16 = 75 px about (616, 71)) - and one just ahead of the player on",
-    "the floor; right held, out onto the ledge and into the door. The crate and its hint are not used.",
-    "Won on tick 102 (step 113)."
+    "1-08, with the crate onto the dashed square, as the level's hint shows it. Step 113's route opened",
+    "a portal over the door's ledge just outside antiportal_539's old 16 x 4.7 = 75 px; at 32 x scale",
+    "(150 px, step 172, R1) the whole ledge is inside the field. A portal over the shelf at (320, 60)",
+    "and one on the player; left along the shelf and off its end, behind the crate. From the shelf a",
+    "portal at (472, 142), under the hanging pillar and 160 px from the ring's centre. Right, pushing",
+    "the crate until single_block_plat_ent_743 stops it at x 483 under the pillar, its top level with",
+    "the ledge; one on the player, who comes out on the crate and walks right onto the ledge and into",
+    "the door. Won on tick 422 (step 172)."
   ],
   "level": "level7",
-  "win_by": 160,
+  "win_by": 480,
   "holds": [
-    {"walk": "right", "from": 75, "to": 160}
+    {"walk": "left", "from": 70, "to": 130},
+    {"walk": "right", "from": 140, "to": 330},
+    {"walk": "right", "from": 360, "to": 480}
   ],
   "taps": [
-    {"tick": 30, "at": [565, 138]},
-    {"tick": 65, "at": [420, 205]}
+    {"tick": 30, "at": [320, 60]},
+    {"tick": 60, "at": [395.0, 202.3]},
+    {"tick": 95, "at": [472, 142]},
+    {"tick": 350, "at": [444.5, 202.3]}
   ]
 }

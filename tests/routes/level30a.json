@@ -1,0 +1,32 @@
+{
+  "_about": [
+    "2-31 (R1 fix 2): antiportal_958 (258, 132), scale 6, refuses within 192 px at 32 x scale, which",
+    "holds everything from x 66 to 450 at the ring's height; anti_portal_agent_ent_990 (294, 112) is",
+    "boxed in by platform_960, double_block_961 and single_block_1013, and fix 1's scan found no shot to",
+    "it from outside the ring - but a shot may leave from inside a field (fix2/check_2_31b.txt: 1,347",
+    "free points). A portal at (450, 30) on single_block_987 (217 px from the ring's centre) and one on",
+    "the player: up onto the blocks' tops; left along them to the very end of double_block_961 (centre x",
+    "279.8, sliding slowly off it); a shot from there toward (264.8, 180) passes about 1 px left of the",
+    "block's corner and 21.6 px from the agent (R17's 22.4) and kills it (187); the ring goes. A portal",
+    "at (198, 205) under platform_960 and one on the player, before he slides off into fire_agent_963's",
+    "flame (262): onto single_block_1010; a portal at (60, 90) over the door's ledge and one on the",
+    "player: into the door. Won on tick 298. Leans on two shots passing through fire_agent_963's flame",
+    "(13.8 and 2.2 px from it), which the original snuffs and the port does not (fire.json",
+    "_burn_projectile_not_built): the step that builds that re-verifies 2-31, and if the original snuffs",
+    "them 2-31 is a finding again; the stance on the block's corner (the port's capsule); G10; G4."
+  ],
+  "level": "level30a",
+  "win_by": 360,
+  "holds": [
+    {"walk": "left", "from": 100, "to": 163}
+  ],
+  "taps": [
+    {"tick": 30, "at": [450, 30]},
+    {"tick": 64, "at": [696, 228]},
+    {"tick": 180, "at": [264.8, 180]},
+    {"tick": 204, "at": [198, 205]},
+    {"tick": 228, "at": [275.5, 44.3]},
+    {"tick": 260, "at": [60, 90]},
+    {"tick": 290, "at": [198, 220]}
+  ]
+}

@@ -345,8 +345,8 @@ void TheAgentsNumbersAreTheDecodedOnes() {
 void AnAgentKillsAShotStillInFlightAndItsRing() {
     Rig rig;
     if (!MakeRig(rig)) return;
-    // Before: the bare ring (48 px) and the spelled one (16 px) both refuse.
-    CHECK(rig.state.InField(glm::dvec2(300.0, 230.0)));
+    // Before: the bare ring (96 px) and the spelled one (32 px) both refuse.
+    CHECK(rig.state.InField(glm::dvec2(300.0, 240.0)));
     CHECK(rig.state.InField(glm::dvec2(300.0, 210.0)));
     CHECK(rig.state.Shoot(rig.registry, glm::dvec2(500.0, 200.0)));
     std::vector<Portals::AgentKill> kills;
@@ -379,9 +379,9 @@ void AnAgentKillsAShotStillInFlightAndItsRing() {
     rig.state.Tick(rig.registry, kStep);
     CHECK(rig.state.agentKills.empty());
     // Where the bare ring was, a portal may open; the spelled one still refuses.
-    CHECK(!rig.state.InField(glm::dvec2(300.0, 230.0)));
+    CHECK(!rig.state.InField(glm::dvec2(300.0, 240.0)));
     CHECK(rig.state.InField(glm::dvec2(300.0, 210.0)));
-    CHECK(rig.state.TryPlace(glm::dvec2(300.0, 230.0)));
+    CHECK(rig.state.TryPlace(glm::dvec2(300.0, 240.0)));
     std::printf("  an agent killed a shot on its tick %d at %s and took %s\n", killedOn, Px(kill.shotPx).c_str(),
                 kill.ring.c_str());
 }
@@ -448,7 +448,7 @@ void TheRingIsSoughtInTheAgentsBucketThenItsNeighbours() {
     rig.state.zones.clear();
     Portals::NoPortalZone ring;
     ring.entity = "antiportal";
-    ring.scale = 10.0; // 160 px at the port's radius
+    ring.scale = 10.0; // 320 px at the port's radius
     // The agent at (250, 250), in bucket (0, 0). Rings holding it: one in bucket
     // (1, 0) to its right, one in bucket (0, 1) below, one in its own.
     ring.name = "right";
@@ -470,7 +470,7 @@ void TheRingIsSoughtInTheAgentsBucketThenItsNeighbours() {
     ring.name = "two off";
     ring.centrePx = glm::dvec2(600.0, 250.0); // bucket (2, 0)
     rig.state.zones.push_back(ring);
-    ring.scale = 1.0;
+    ring.scale = 0.5; // 16 px, the agent 20 px off
     ring.name = "too small";
     ring.centrePx = glm::dvec2(230.0, 250.0);
     rig.state.zones.push_back(ring);
@@ -488,6 +488,11 @@ void F17sShotKillsTheAgentOn401() {
     Portals::State& portals = run.level.portals;
     const glm::dvec2 second(372.0, 98.0);
     CHECK_MSG(portals.InField(second), "F17's second portal is inside antiportal_2108 before the kill");
+    // The port-only way round the agent the audit found under the old 16 x 4 = 64:
+    // a portal at (490, 60), 68 px from the ring's centre, inside the original's
+    // 32 x 4 = 128 (R1, step 172) while the agent lives.
+    const glm::dvec2 aroundIt(490.0, 60.0);
+    CHECK_MSG(portals.InField(aroundIt), "(490, 60) is inside antiportal_2108 at 32 x scale");
     auto& transform = run.registry.get<TransformComponent>(run.level.player);
     const glm::vec3 at = Units::ToWorld(153.0, 146.0);
     transform.position = glm::vec3(at.x, at.y, transform.position.z);
@@ -506,9 +511,51 @@ void F17sShotKillsTheAgentOn401() {
     CHECK_EQ(portals.shotsFailed, 0);
     CHECK(portals.placed.empty());
     CHECK_MSG(!portals.InField(second), "and after it, it is not");
+    CHECK_MSG(!portals.InField(aroundIt), "nor (490, 60)");
     CHECK(portals.TryPlace(second));
     std::printf("  4-01, F17's shot: %s killed at %s, %s deleted\n", kills[0].agent.c_str(),
                 Px(kills[0].shotPx).c_str(), kills[0].ring.c_str());
+}
+
+// ---- An antiportal refuses at 32 x scale (step 172, R1) ---------------------------
+//
+// FOOTAGE F3 (out/parity/footage/F3.md sections 2 and 6.1), 1-7 (level6): the
+// player at the spawn, every ray clear, antiportal_687 at (288, 192), scale 3.
+// The original refused taps 35.6, 78.7, 93.9 and 94.9 u from its centre and
+// accepted 97.1 and 98.1: an edge in (31.64, 32.36] x scale. The port plays
+// 32 x 3 = 96; its old 16 x 3 = 48 accepted the last three refusals.
+void F3sTapsBracketTheFieldOn107() {
+    Run run;
+    if (!Begin("level6", run)) return;
+    Portals::State& portals = run.level.portals;
+    const Portals::NoPortalZone* ring = portals.FindZone("antiportal_687");
+    CHECK(ring != nullptr);
+    if (ring == nullptr) return;
+    CHECK(ring->centrePx == glm::dvec2(288.0, 192.0) && ring->scale == 3.0 && ring->entity == "antiportal");
+    CHECK_NEAR(static_cast<float>(portals.rules.antiportalRadiusPx * ring->scale), 96.0f);
+    const glm::dvec2 refused[] = {{252.44, 192.0}, {213.33, 216.89}, {194.13, 192.0}, {193.07, 192.0}};
+    for (const glm::dvec2& tap : refused) {
+        CHECK_MSG(portals.InField(tap) && portals.Holds(*ring, tap),
+                  "F3 refused " + Px(tap) + ", " + std::to_string(glm::distance(tap, ring->centrePx)) + " u off");
+        CHECK(!portals.TryPlace(tap));
+    }
+    const glm::dvec2 accepted[] = {{190.93, 192.0}, {189.87, 192.0}};
+    for (const glm::dvec2& tap : accepted) {
+        CHECK_MSG(!portals.InField(tap),
+                  "F3 accepted " + Px(tap) + ", " + std::to_string(glm::distance(tap, ring->centrePx)) + " u off");
+        CHECK(portals.TryPlace(tap));
+    }
+    CHECK_EQ(portals.portalsUsed, 2);
+    // The port's one no_portal zone, no_portal_705 at (232, 194): not the
+    // manager's, but tested at the same radius x its scale of 1 - and all of it
+    // inside antiportal_687's field, so it refuses nothing the ring does not.
+    const Portals::NoPortalZone* sign = portals.FindZone("no_portal_705");
+    CHECK(sign != nullptr);
+    if (sign != nullptr) {
+        CHECK(sign->scale == 1.0);
+        CHECK(glm::distance(sign->centrePx, ring->centrePx) + portals.rules.antiportalRadiusPx * sign->scale <
+              portals.rules.antiportalRadiusPx * ring->scale);
+    }
 }
 
 void runTests() {
@@ -522,6 +569,7 @@ void runTests() {
     AnAgentRefusesNothingAndLetsAWideShotBy();
     TheRingIsSoughtInTheAgentsBucketThenItsNeighbours();
     F17sShotKillsTheAgentOn401();
+    F3sTapsBracketTheFieldOn107();
 }
 
 } // namespace

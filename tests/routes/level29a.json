@@ -1,0 +1,23 @@
+{
+  "_about": [
+    "2-30 (R1 fix 2; found by R1's second verifier): antiportal_917 (68, 127), scale 5, refuses within",
+    "160 px at 32 x scale, which holds the door, fire_agent_ent_918 and the seesaw's left end. Walk left",
+    "onto the seesaw to just past its pivot (x about 242); a portal over the seesaw's right end at (370,",
+    "130), 302 px from the ring's centre, and one at the rolling stone's left at (245, 40), 197 px: the",
+    "stone goes through and drops onto the right arm, which holds the plank down. Walk left up the plank",
+    "and off its raised left end, over the flame and into the door. Won on tick 267. Leans on the port's",
+    "traversal by body overlap (the stone's centre 39 px from the portal it goes through, as 3-22's stone",
+    "and 2-32's crate), the port's seesaw and stone masses (not measured against the original), G10 (the",
+    "walk is held through the fall) and G4 (shot speed)."
+  ],
+  "level": "level29a",
+  "win_by": 330,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 70},
+    {"walk": "left", "from": 200, "to": 330}
+  ],
+  "taps": [
+    {"tick": 90, "at": [370, 130]},
+    {"tick": 130, "at": [245, 40]}
+  ]
+}

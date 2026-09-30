@@ -1,0 +1,15 @@
+{
+  "_about": [
+    "4-02, weightless (step 172, R1: antiportal_2074's 32 x 2 = 64 px lies far from the door). A portal",
+    "in the door at (344, 120); its recoil pushes the player left at 70 u/s, and one on the player where",
+    "it has drifted to, (109.1, 148.7): through it into the door. Won on tick 57 (step 172)."
+  ],
+  "level": "level1c",
+  "win_by": 120,
+  "holds": [
+  ],
+  "taps": [
+    {"tick": 30, "at": [344, 120]},
+    {"tick": 55, "at": [109.1, 148.7]}
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "_about": [
+    "4-29 (R1 fix 2): antiportal_1995 (576, 24), scale 5, refuses within 160 px at 32 x scale, which",
+    "holds button_2037, door_lift_2038, the keyhole's cell and the door; the knights' corridor below (y",
+    "208, 184 px or more from the centre) is free. A shot lights the torch (40) and the light wall goes",
+    "(130). A portal at (400, 60) over the upper platform (180 px from the ring's centre), from the start",
+    "ledge; right off the ledge into the corridor, where knight B pushes the player right under the upper",
+    "platform; a portal at (640, 205) in knight A's path (192 px) while it walks right toward wayA1: it",
+    "walks in with the key (866) and drops onto the upper platform, walks right toward its waypoint's x,",
+    "presses button_2037 in passing and waits against door_lift_2038. Left behind knight B to x 337; a",
+    "portal at (400, 80) (185 px) and one at (365, 204) that the player walks into: up onto the upper",
+    "platform, right onto button_2037 behind the knight. The lift rises, the knight goes under it, its",
+    "key opens keyhole_ent_1943 (1353) and door_locked_ent_1939 goes (1401); the player stays on the",
+    "button until the lift is well up (1435), then right under it and behind the knight into the door.",
+    "Won on tick 1519. Leans on G1 (the knights never see or shoot), the port's patrol (a knight lifted",
+    "off its floor never comes within 8 px of its waypoint and walks on toward that waypoint's x), the",
+    "port's door lift (126 px over its stride, 8000 ms), the port's traversal by body overlap (the knight",
+    "walks into a portal whose centre is at the knight's head), G10 and G4 (shot speed)."
+  ],
+  "level": "level28c",
+  "win_by": 1700,
+  "holds": [
+    {"walk": "right", "from": 470, "to": 590},
+    {"walk": "left", "from": 925, "to": 1125},
+    {"walk": "right", "from": 1170, "to": 1222},
+    {"walk": "right", "from": 1435, "to": 1800}
+  ],
+  "taps": [
+    {"tick": 30, "at": [88, 50]},
+    {"tick": 300, "at": [400, 60]},
+    {"tick": 800, "at": [640, 205]},
+    {"tick": 1128, "at": [400, 80]},
+    {"tick": 1152, "at": [365, 202]}
+  ]
+}

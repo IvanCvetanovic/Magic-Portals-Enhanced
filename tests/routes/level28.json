@@ -1,0 +1,28 @@
+{
+  "_about": [
+    "1-29 (step 172, R1: antiportal_791's 32 x 4 = 128 px holds the lift's column and everything",
+    "left of door_lift_774). Right to x 450; a portal over button_772 at (258, 190) and one beside",
+    "crate_small_ent_792's right face at (455, 78): the crate comes down onto the button and the door",
+    "lift rises. A portal at (200, 165), over the crate, and one on the player; left through the",
+    "raised door lift and against lift_ent_796 as it comes down, onto it at its bottom and up. From the",
+    "lift a portal at (350, 150) and one beside the crate at (232, 209): the crate leaves the button",
+    "and the door lift, which blocks the upper floor while it is raised, comes down. Down and up with",
+    "the lift once more (the port runs it on its own: G2, not built), and at its top right onto the",
+    "upper floor and into the door. Won on tick 487 (step 172)."
+  ],
+  "level": "level28",
+  "win_by": 550,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 40},
+    {"walk": "left", "from": 222, "to": 265},
+    {"walk": "right", "from": 445, "to": 550}
+  ],
+  "taps": [
+    {"tick": 60, "at": [258, 190]},
+    {"tick": 90, "at": [455, 78]},
+    {"tick": 120, "at": [200, 165]},
+    {"tick": 150, "at": [450.7, 202.3]},
+    {"tick": 268, "at": [350, 150]},
+    {"tick": 296, "at": [232, 209]}
+  ]
+}

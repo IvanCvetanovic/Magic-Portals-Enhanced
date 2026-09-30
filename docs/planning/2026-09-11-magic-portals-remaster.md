@@ -21538,3 +21538,354 @@ without).
 - The backlog (`docs/parity-backlog.md`) is not edited here: the close role ticks B6 and G7 (R17 built; 3-13 won),
   notes 1-23's agent under R23 and the three R1-dependent routes beside 4-28's, raises the route count to 20
   (1-10 and the other five of this step), and adds the first-tick kill beside G4.
+
+## Step 172 - an antiportal refuses at 32 x scale, as the original: the field is half the ring the manager draws, one circle drawn and played, and the levels it changes re-routed or recorded (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w1c`, branch `w1-c`, on step 171's `596862e`), the program's R1**
+(`docs/parity-backlog.md`: the "System 4 antiportals" row and the R1 entry of the rulings list; 00_order's R1). Its
+build reads the frozen level data in `out/snap_w1`; numbered in track C's range, and the merge renumbers it. Changed:
+`game/data/placement.json` (`antiportal.radius_px` 16 -> 32 and its notes), `tests/test_mp_layer.cpp`,
+`tests/test_mp_movers.cpp`, `tests/test_mp_play.cpp`, and `tests/routes/`: new routes, re-routes and one removal (the
+lists below). No sim or layer code changed: every field test reads `Rules::antiportalRadiusPx` from the file at run
+time (`Portals::State::Holds`), so no binary but the three edited suites was relinked. No engine change (the pin stays
+`4bfcf67`), no converter change, no format finding.
+
+**GAMEPLAY CHANGED (R1, as the original does).** On the 52 levels that place the 71 antiportals (both spellings), a
+portal is refused within 32 x the node's `scale` of each live ring, where the port refused within 16 x scale: every
+field has twice the radius and four times the area. The ring the layer draws (128 x the manager's 0.5 x scale across)
+is now exactly the circle that is played. `play_changes.py` counts, on the reachability check's 4 px grid, the free
+cells inside the level that are newly refused: all 52 levels have some (from 201 cells on 4-30 to 5,830 on 3-13).
+
+**AND IT LEAVES A LEVEL UNWON ON THIS BUILD.** R1 closes one port-only way, and it is shown: 4-28's step-170 route
+portalled inside the original's field and is refused three times at 32 x scale. No new route was found, which does not
+prove 4-28 unwinnable (deviation 1). One more level has no route, and it is not R1's: 4-14 (G6; deviation 2). Seven
+levels this step first recorded as "no route found" were won later: 2-18 (fix round 1's own draft), 2-30 (found by the
+second verifier), 3-14 (the reflected kill: G9 is not needed), 4-29 (the torch and the knight: G1 is not needed), 2-26
+(a shot through the slot from the moving platform's edge: R7 is not needed), 2-31 (the agent shot from inside its own
+ring, from the end of the blocks over it; the route passes two shots through a fire agent's flame, which the original
+snuffs and the port does not: deviation 6) and 3-15 (found by the third verifier: a portal pair spanning the level's
+halves puts the player on the seesaw; deviation 3). The static reachability check cannot see any of this: its flood
+models no no-portal zone (step 113, deviation 3), so its unchanged verdicts are not evidence that no door is newly
+sealed; the routes and the scripted checks below are (deviation 4).
+
+**BLOCKERS, checked first.** R1 is decided for the original (the 2026-09-29 rulings). The decode is in the file:
+`isPointInAntiPortalField` (bytes 334800..335020) takes half `GetSize().x`, and `AntiPortalManager`'s constructor
+(104925..105343 #83-92) calls `Scale(0.5)` on every field it gathers, over the node's `scale` (`placement.json`
+`antiportal.manager`), so the radius is 128 x 0.5 x 0.5 = 32 units per unit of scale. R17, which B6 asked to land
+before or with R1 because R1 alone closed 4-01's only route, is committed (step 171). Step 113's reachability check
+and `test_mp_routes` are in the tree. Nothing unmet.
+
+**MEASURED.** Footage F3 (`out/parity/footage/F3.md` sections 2 and 6.1), 1-7, `antiportal_687` at (288, 192), scale 3,
+every ray clear: taps 35.6, 78.7, 93.9 and 94.9 u from its centre refused (red_waves each time), 97.1 and 98.1 u
+accepted - an edge in (31.64, 32.36] x scale; the drawn disc's edge fits at 31.8 x scale. The port's old 16 x 3 = 48
+accepted the last three refusals. F17 (4-01) is won with the agent killed first.
+
+**WHAT CHANGED.**
+- `placement.json` `antiportal`: `radius_px` 32 with a `_radius_source` (decoded and played since this step: 128 x the
+  manager's 0.5 x `isPointInAntiPortalField`'s 0.5) and a `_measured` (F3's bracket, and the level6 blocker note). The
+  `_source`'s last lines, which still read "128 * 0.5 = 64 ... every number after it is 2x too big", now say what 64 is:
+  the ring's diameter, never its radius (00_order R1's "placement.json's note of 64 is wrong by 2x"). The key
+  `_decoded_radius_px_not_applied` is gone. `_not_modelled` (the original's strict `<` against the port's `<=`) stays:
+  it decides only a tap exactly on the edge, and changing it is a `Portals.cpp` change and a relink of every binary.
+- **1-07's `no_portal_705`** (a `no_portal` node: a 16 u zone the original does not have, step 103's deviation 3) is
+  tested at the same radius x its scale of 1, so it grows to 32 u - and at 56 u from `antiportal_687`'s centre,
+  56 + 32 < 96, it now lies wholly inside the ring's field and refuses no tap the ring does not (`test_mp_movers` pins
+  the containment). It stays in the zone role.
+- The pictures need nothing: the tap-time prediction reads the same field test (`State::InField`), so a tap between
+  the two radii now shows `red_cross` and `red_waves` and ends in `portal_fail_in_antiportal`, as F3 shows it; the
+  layer's debug zone boxes (drawn only without art) are the ring's size.
+
+**THE SUITES' CHANGES**, each run once on its new link: `test_mp_movers` **146 checks, 0 failures** (124): the rig's
+rings re-pinned at 96 and 32 px, the bucket-order case's "too small" ring made 16 px, F17's case also asserts the
+audit's port-only tap (490, 60), 68 px from `antiportal_2108`, inside the field while the agent lives and outside after,
+and the new `F3sTapsBracketTheFieldOn107`: `antiportal_687` holds F3's four refused taps (`InField`, `Holds`,
+`TryPlace` refused) and not its two accepted ones (placed, `portalsUsed` 2), at 32 x 3 = 96, and `no_portal_705` lies
+inside it. `test_mp_play` **207, 0 failures** (205): `ThePlacementRadiiAreDecodedAndDistinct` pins 32 and
+radius = 128 x manager scale x 0.5; `ANoPortalZoneRefusesATap` also refuses the old 16 x scale edge. `test_mp_layer`
+**2922, 0 failures** (2921): the ring case pins 32 and its half-ring identity, and the zone box is the ring's own
+64 x 1.8 across; the 1-07 in-field tap's comment reads 96. Before editing, the approved binaries on the new data:
+`test_mp_shot` 181/0 (no pin moves: its blocker case lands 101 u from the ring), `test_mp_movers` 4 failures and
+`test_mp_layer` 2 (the pins above).
+
+**THE ROUTES** (`tests/routes/`, replayed by `test_mp_routes`; drafts, traces and maps in the gitignored
+`out/parity/program/R1/drafts/` and `maps/`). At 32 x scale, before re-routing, 15 of step 171's 20 won and 1-08, 1-11,
+1-12, 1-23 and 4-28 did not (`probe/routes_at32_existing.txt`).
+
+| Route | Won on tick | How (the antiportal that shaped it) |
+|---|---|---|
+| 4-01 `level0c` (new) | 351 | F17's inputs: left to the pillar, the shot kills `anti_portal_agent_ent_2107` and `antiportal_2108` (128 px) goes; portals at (200, 146) and (372, 98), right onto the block and into the rocket |
+| 1-08 `level7` (re-routed) | 422 | `antiportal_539` (150 px) holds the whole ledge: over the shelf, the crate pushed under the pillar onto the dashed square, a portal on the crate, onto the ledge |
+| 1-11 `level10` (re-routed) | 431 | `antiportal_709` (192 px) holds the spawn island: a portal in the gap 193.3 px from its centre, out of the ledge's portal moving up; both agents shot |
+| 1-12 `level11` (re-routed) | 368 | `antiportal_574` (80 px) holds the block: its agent killed by a shot reflected off `reflect_agent_623` |
+| 1-23 `level22` (re-routed) | 466 | `antiportal_878` (182 px): the player falls against `rolling_stone_ent_877` and pushes it off its pillar, then kills the agent it covered, from 14.8 px |
+| 1-07 `level6` (new) | 180 | over the hanging structure and off its end past the pit and the blocker |
+| 1-27 `level26` (new) | 549 | the crate through a portal onto the button, then the right lift up to the ledge `antiportal_1194` covers |
+| 1-28 `level27` (new) | 968 | the small crate knocked off the shelf onto the lift, sent through a portal on the lift's column onto the button |
+| 1-29 `level28` (new) | 487 | the small crate onto the button, through the raised door onto the lift, the crate sent off again so the door drops |
+| 3-02 `level1b` (new) | 352 | walked down the platforms (`antiportal_1728`, 192 px, holds the door) |
+| 3-03 `level2b` (new) | 449 | three portal hops, then a fall into a gap portal out of a high one moving up, over the gap onto the door's platform |
+| 3-07 `level6b` (new) | 699 | knight A, whose walk ends inside `antiportal_1213`'s 144 px, sent onto the ledge by a portal its turn reaches (146 px out) |
+| 3-09 `level8b` (new) | 645 | the key at `antiportal_1504`'s centre taken on an arc out of a portal 69 px from it |
+| 3-12 `level11b` (new) | 636 | the agent shot; the crate portalled from under the stone; the stone portalled against the breakable wall; key, keyhole |
+| 4-02 `level1c` (new) | 57 | a portal in the door and one on the drifted player |
+| 4-06 `level5c` (new) | 330 | one shot's recoil down the corridor `antiportal_2101` fills |
+| 4-07 `level6c` (new) | 347 | the agent shot; the crate portalled over both buttons; two recoils lift the player; a portal in the door |
+| 4-08 `level7c` (new) | 106 | recoils between two shock rings; the agent shot; a portal in the door it stood on |
+| 4-11 `level10c` (new) | 248 | a recoil down past the spinning platform; a portal in the door from under the hanging wall |
+| 4-15 `level14c` (new) | 306 | a recoil over the shock ring to the key; portals to the keyhole and, 67 px from `antiportal_2359`, the door |
+| 4-25 `level24c` (new) | 492 | the crate onto the button, the key's pocket (wholly in `antiportal_1813`'s 77 px) through the raised door lift, a shot through the corner gap into the door's room |
+| 3-29 `level28b` (new) | 582 | the fire diamond taken; a tap at the knight carrying the key becomes a fireball along the floor that burns it; the key, the ramp, the keyhole |
+| 3-19 `level18b` (new) | 3207 | into the key's pocket from above (a portal 121 px from `antiportal_1555`, whose 109 px holds the pocket's floor); out by pushing `spinning_platform_1554` the one way its joint's limits allow - about 1.3 px of the player's way per 100 ticks, through on tick ~2800 (the port's hinge; not measured against the original) |
+| 3-20 `level19b` (new, fix 1) | 516 | `antiportal_1601` (176 px) holds the knight's walk, the key and the shock diamond: portals over the destroyier to the diamond, a fall-launch out of a high portal onto the anchor, where the diamond strikes the knight; the key back past the keyhole |
+| 3-22 `level21b` (new, fix 1) | 1509 | the key floats inside `antiportal_1673` (144 px): the stone that chocks the seesaw sent off the level, a drop onto the seesaw's high end flings knight B past the key, which it takes (a minion carries a key) and carries past the keyhole; a second tip drops it into the gap |
+| 3-27 `level26b` (new, fix 1) | 1166 | the key lies inside a shock ring that kills only the player: knight B portalled into the pocket and out again with the key, the shock diamond strikes it, and a flight through the gap over the small block to the keyhole, which `antiportal_2084` (96 px) holds |
+| 3-31 `level30b` (new, fix 1) | 886 | the fire diamond's fireballs destroy the shock agent, burn the crate over `anti_portal_agent_ent_2430` and burn knight B; the diamond drained under the gutter; the bared agent shot and its 160 px ring gone; portals to the key and the keyhole |
+| 4-30 `level29c` (new, fix 1) | 1590 | the torch lit; the shock diamond carried round over the ceiling platform to knight B at its post inside `antiportal_ent_2005` (64 px); the key back to the keyhole |
+| 4-31 `level30c` (new, fix 1) | 997 | the torch lit; a button-raised lift into the middle; a fall-launch over the light wall's gap onto the platform with the key (inside `antiportal_2085`, 96 px); down to the keyhole |
+| 2-15 `level14a` (new, fix 1) | 616 | the button that raises the door's lift lies inside `antiportal_ent_1082` (64 px) and in a carranca's lane: a barrel portalled into the lane as a shield, the button held while the lift rises, under it to the door |
+| 2-23 `level22a` (new, fix 1) | 773 | the start pocket lies inside `antiportal_1207` (96 px): the carrancas burn the crates, a shot up a 5 px gap lifts the player, a portal past the fire agent to the door |
+| 2-25 `level24a` (new, fix 1) | 459 | both buttons in turn, a portal through each raised door lift, the lift up to the bridge (`antiportal_ent_1128`, 64 px, holds the lift) |
+| 2-18 `level17a` (new, fix 1) | 1963 | `antiportal_1138` (115.2 px) holds `block00_1141` and the lift's foot, `antiportal_1237` (124.8 px) the door room, whose agent can be shot only from high over the upper floor with `door_lift_1146` raised: the crate portalled onto `button_1148` from the lift's foot (the lift's 175-tick shuttle and the carranca's 3000 ms stride drift 5 ticks a cycle, and the crate burns 60 ticks after the next fireball reaches it: the route waits for a foot where the rest fits before the door drops), a fall-launch off `single_block_1208` to (247.7, 33), the agent shot over the barrel, a portal into the door room while the door is still up |
+| 2-32 `level31a` (new, fix 1) | 2577 | the dragon chase along the low blocks, under the fireballs' 10 degree band; `anti_portal_agent_1179` shot and its 128 px ring gone; the crate under the wall portalled off; the plank knocked over as a ramp to the bridge |
+| 2-30 `level29a` (new, fix 2; found by the second verifier) | 267 | `antiportal_917` (160 px) holds the door, the fire agent and the seesaw's left end: walk left to the pivot, a portal over the seesaw's right end (302 px from the ring) and one at the rolling stone's left (197 px) drop the stone onto the right arm, up the plank and off its raised end over the flame into the door |
+| 3-14 `level13b` (new, fix 2) | 1095 | the blue key's pocket lies wholly in `antiportal_1335` (160 px): out of a high portal, falling past (250, 144) with the camera at its top, a tap at (59.4, 5) under the ceiling comes off `reflect_agent_1336` (horizontal) toward (59.4, 115) and kills `anti_portal_agent_1334` (tick 94), its ring gone; the blue key; `door_locked_1229` goes; the rolling stone portalled onto `breakable_wall_1200` breaks it and rolls into the pit; the crate onto `button_1344` (`door_lift_1242` up), the stone onto `button_1343` (`door_lift_1342` up); down through the yellow key, the yellow keyhole, into the door |
+| 2-26 `level25a` (new, fix 2) | 827 | the door's region is walled off but for the 18 px slot under `wall04_no_emissive_ent_958`: onto `moving_platform_942`, the agent shot from its top (337) and `antiportal_955` (115.2 px) gone; a portal over `wall04_no_emissive_ent_952` into the middle, steered past `fire_agent_961` onto `moving_platform_960`; from its very left edge at its lowest (centre (396.4, 157.2)) a shot through the slot about 1 px under the wall and 2 px over the platform opens a portal at (530, 196), clear of the death area's full sensor; through it and into the door |
+| 2-31 `level30a` (new, fix 2) | 298 | `antiportal_958` (192 px) holds x 66 to 450 at the ring's height and `anti_portal_agent_ent_990` sits boxed in under `double_block_961`: a portal on `single_block_987`'s top (217 px) and one on the player, left along the blocks' tops to the very end of `double_block_961` (centre x 279.8); from there a shot down past the block's corner passes 21.6 px from the agent and kills it (187), the ring gone; a portal under `platform_960` onto `single_block_1010` before he slides off into `fire_agent_963`'s flame, and one over the door's ledge |
+| 4-29 `level28c` (new, fix 2) | 1519 | `antiportal_1995` (160 px) holds the button, the lift, the keyhole's cell and the door; the knights' corridor is free: the torch lit (the light wall goes), knight A with the key portalled from its walk (192 px) onto the upper platform, where it walks toward its waypoint's x and waits at `door_lift_2038`; the player up behind it onto `button_2037`: the lift rises, the knight's key opens the keyhole, the locked door goes, and the player follows the knight into the door |
+| 3-15 `level14b` (new, verify3; added at the commit) | 1018 | the key's half on foot (x 335 to 452.6) lies wholly in `antiportal_1673` (96 px) and the key in `antiportal_1683` (128 px): knight B portalled onto `button_1666` holds the floor gate while the player crosses (fix round 2's base); a portal at (470, 100) over the seesaw's left end (110 px from `antiportal_1673`), back through the gate and a portal on the player in the start half at (256.1, 204.3): out onto the seesaw, right along it and off its end onto the floor outside both rings; portals at (829, 28) (130 px from `antiportal_1683`) and (760, 202), walked into; while he falls, one at (728, 191) under the key (129 px) and one on the falling player at (813.4, 148): out moving up at about 520 px/s, the key on tick 799 (the window's log), the seesaw's end, the keyhole, the door |
+
+**`test_mp_routes`: 55 routes, 170 checks, 0 failures** (`out/parity/program/R1/commit/test_mp_routes.txt`, the
+commit's one full run on `1185f257`, after 3-15's route was added; 20 routes, 65 checks before the step; 38 and 119 in
+its first round, `test_mp_routes_run4.txt`; 49 and 152 after fix round 1, `fix1/test_mp_routes_full2.txt`; 54 and 167
+after fix round 2, `fix2/test_mp_routes_full3.txt`, its third full run, after 2-31's route; the first two,
+`test_mp_routes_full.txt` and `_full2.txt`, 52 / 161 and 53 / 164; 54 and 167 again in verify3's full run): the 15
+unchanged routes at their step-171 ticks, the 4 re-routed and the 36 new ones as above; the other 54 at exactly
+verify3's ticks, and 3-15 on 1018, as in verify3's `--only` replay (`verify3/routes_found/level14b_replay.txt`).
+
+**NOT WON (findings).** 4-28 is R1's (step 170's route shown refused; no new route found) and 4-14 is G6's; each
+says what it would need (INFERRED where marked). 3-15, recorded here by fix round 2, is won by verify3's route (the
+table above; deviation 3). Fix round 2 routed five that were recorded here - 2-30, 3-14 (the G9 finding was wrong: the
+port's reflector sends a tap just under the ceiling to within 22.4 of the agent), 4-29 (the torch is built, and the
+knight carries its key through the lift the player holds up; G1 is not needed) and 2-26 (fix round 1 tested the
+moving platform's stances away from its edge; `fix2/check_2_26.txt` finds 1,415 free points that see the door's
+region through the slot, and at the platform's lowest the stances with their centre at x 384 to 396.5 among them) and
+2-31 (fix round 1's scan counted only shooters outside the ring; a kill shot may leave from inside a field, and
+`fix2/check_2_31b.txt` finds 1,347 free points with a clear line to within 22.4 px of the agent, `check_2_31c.txt` the
+ones on the end of `double_block_961`'s top).
+- **4-28 `level27c`** (R1's: step 170's route shown refused; no route found; NOT proven unwinnable) - won at step 170
+  by a route with three taps inside the original's 192 px of `antiportal_1940`.
+  The yellow key's only carrier is the knight, which walks only toward x 22 / 172 and out-pushes the player (measured,
+  `drafts/f1`: held right against it, the player is driven left at about 8 px/s); every point within 26 px of the
+  keyhole, and every portal that could drop the knight past it, lies inside the field. verify3's probe
+  (`verify3/d/w1`): the knight keeps walking toward its waypoint's x even while `gravity_agent_1915` pulls it. The
+  original's own way burns the knight at the fire agent (`minions.json` `_burnable_breakable_not_wired`) or turns a
+  shot into a fireball (G8). No round has tried the blind spot that won 3-15: portal pairs placed at different times
+  and places, and floors reached only through one. Deviation 1: the step that builds the minion burn or G8 re-attacks
+  4-28, blind spot included; 4-28 is not a proven blocker.
+- **4-14 `level13c`** (not R1's; would need G6) - `shock_agent_2285` (areaRadius 90) stands on the door, which is also
+  51.2 px from `antiportal_2284` (inside at 80 as well). `out/parity/program/R1/fix2/check_4_14.txt`: a player centre
+  that overlaps the door's trigger (8 x 57 at (0, 20)) is at most 64 px from the ring's centre, so every door contact is
+  a death (`fix2/d/l13c_b.txt`: recoiled toward the door, killed at 89 px on tick 84); the level's one fire source,
+  `carranca_ent_2287`, fires left along y 196 and passes the agent at 100.2 px (a fireball touches it within 41.3).
+  Only a fireball removes a shock agent, and the port's fireballs do not take portals (`Turrets.hpp`, not built):
+  `fix2/cap/l13c/grid_f130_220.png`, on `a64d3c25`, shows the carranca's fireball fly through a portal placed in its
+  lane at (330, 196) and on to the left, unmoved. Needs G6.
+
+**THE REST OF THE 52.** Six have routes on main that this tree does not (2-02, 2-04, 2-09, 2-12, 4-16, 4-32;
+`main_routes_check.txt`): none taps inside a 32 x scale field but 2-09's, whose taps on ticks 1265 and 1290 lie 42 and
+47 px from `antiportal_1096` (64 px) - `out/parity/program/R1/merge_fixes/level8a.json` adds one tap on tick 1238 that
+kills `anti_portal_agent_ent_1095` first (won on tick 1319 on this build). Replayed here, main's 2-02 wins (528) and
+main's 2-04 dies to a carranca's fireball at 333 - G5's (this tree has no G5), not R1's. In all, 44 of the 52 are won by a
+route in this tree, 6 on main, and 2 have findings (4-28, R1's; 4-14, G6's); none has neither.
+
+**THE ROUTES LEAN ON UNBUILT ROWS** (the steps that build them re-verify): G2 (lifts running on their own) for 1-27,
+1-28 and 1-29; G1 (knights never see or shoot) for 3-02, 3-03, 3-07, 3-09, 3-12, 3-19, 3-29 and 4-25; G10 (the air control) for
+every route that steers in the air; G4 (the shot's speed) for every route's tap spacing; 1-11's gap portal sits 1.3 px
+outside `antiportal_709`'s 192 px; 1-23's kill is a shot fired 14.8 px from the agent, which the port kills at once -
+the original's shot jumps 24 u along its aim first and would still pass within 22.4 of it (INFERRED from the geometry;
+step 171's LEFT FOR LATER). The port's traversal is a body overlap with the portal's 14 px circle, not the original's point test
+(`placement.json` `portal._source`: `doTeleporting` reads the traveller's `GetPositionXY`): drafts show the player
+going through at 22 px from a portal's centre (4-28), knight A at about 19 px (3-07), and crates through portals opened
+6 to 13 px off their faces with their centres over 30 px away. 1-27, 1-28, 1-29, 3-07, 3-12, 4-07 and 4-25 (and main's
+2-04) depend on it; the step that aligns traversal with the original re-verifies them. 3-12's stone breaks its wall by being portalled half a pixel into it, which the port's
+"any touch" breaks and the original's speed test (`ETHBeginContactCallback_breakable_wall`, faster than scale(1.5))
+might not (11.1's row). Fix round 1's routes add: 3-20 stands and lands on the floor over `destroyier_ent_1666`
+inside the original's full 128 x 16 sensor, which the port shrinks to a 16 px box (`Hazards.hpp`); 3-22, 2-15 and 2-32
+move a stone, a barrel and a crate by body overlap with a portal (their centres 38, 22.5 and 39 px from it); 3-31
+squeezes the port's 44 px body through the 42 px pocket under the gutter block (the original's mage, `dark_mage.ent`'s
+compound, is 36.2 px tall: R25's other half); 2-25's shot on tick 320 passes 20 px from `reflect_agent_1127` (the port
+catches at 16; R23) and its lift's run is the port's (G2), as is 2-18's; 2-18 also moves its crate by body overlap (the
+crate enters the second portal as it opens; one already sitting in the first does not go), takes the player into its
+launch portal with his centre about 37 px from it (the original's 14 px point test would take him in lower and faster,
+to a higher apex and another kill line), sends him through a portal opened on him (10 px), puts a portal 1.3 px outside
+`antiportal_1138`'s 115.2 px, and kills its agent with a shot that passes 20.3 px from it (R17's 22.4) and 2.1 px over
+the settled barrel's corner (`out/parity/program/R1/fix1/kill_2_18.txt`); G1 for 3-20, 3-22, 3-27, 3-31 and
+4-30; R19's lagged aim for 2-32; and 2-15, 2-18, 2-23, 2-25 and 2-32 ride the carrancas' and the dragon's timing on a
+build without G5, so the merge re-runs them (G5 ends each fireball on the first solid thing, which here only ends it
+sooner - in 2-18 at the closed door lift, before the crate goes up; none of the five places a breakable wall, so B1
+cannot matter). Fix round 2's routes add: 2-30 moves its stone by body overlap (its centre 39 px from the portal) and
+rests on the port's seesaw and stone masses, which nobody measured; 3-14 kills its agent with the port's reflector
+(`shot.json`'s 16 px catch and its mirror-to-the-tap, both guesses; the original's reflected leg, `ETHCallback_reflect_agent`
+#148-195, is at least as long, so the same tap would carry the shot past the agent there too - INFERRED), takes its tap
+at y 5 only while the camera sits at the level's top, moves the crate and the stone by body overlap (25.8 and 42.3 px),
+and breaks `breakable_wall_1200` by the stone's touch (the original tests its speed, 11.1's row); 4-29 rests on G1 (the
+knights never see or shoot), on the port's patrol (a knight lifted off its floor never comes within 8 px of its
+waypoint and walks on toward that waypoint's x, `Minions.cpp:268-328`), on the port's door lift (126 px over its
+8000 ms stride) and on the player pushing the knight the last few pixels into the door; 2-26 opens its first portal
+1.3 px outside `antiportal_955`'s 115.2 px (fix round 1's draft), stands the player on `moving_platform_960`'s corner
+(his centre 2.4 px in from its end, the port's capsule; R25 leaves the character's shape with the owner), and fires
+through the slot at the port's lowest swing (+-35: R7's +-70 would make it easier, the player then level with the
+slot) about 1 px under the wall; 2-31 fires two shots through `fire_agent_963`'s flame (13.8 and 2.2 px from it) -
+the original's fire agent snuffs a flying shot and the port's does not (`fire.json` `_burn_projectile_not_built`), so
+in the original both would die there and the route would not exist: the step that builds the snuffing re-verifies
+2-31, which then goes back to a finding unless another way is found - stands the player on `double_block_961`'s
+corner (his centre 1.8 px in, sliding off at about 0.05 px a tick) and kills with a shot passing about 1 px from the
+block's corner and 21.6 px from the agent (R17's 22.4); all five lean on G10 and G4. verify3's 3-15 route adds: body
+overlap (the player enters (760, 202) with his centre about 25 px off), an exit 6 px into `wall_low_emissive_1688` that
+physics pushes him out of, a portal opened on a falling player, knight B wedged on `button_1666` (G1, through fix round
+2's base), the port's seesaw, G10, and G4 (at the original's 200 u/s the (728, 191) shot would still be flying on tick
+784).
+
+**GATES.**
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | **passes: 0 warnings** (`build1_tests.log`: `--target test_mp_movers test_mp_layer test_mp_play`; 3 objects compiled, 3 links, nothing else stale). Fix rounds 1 and 2 changed no source and built nothing. verify3 re-measured: `port_build.bat` "ninja: no work to do", and the three suites compiled to scratch objects with their own command lines at /W4, 0 warnings (`verify3/compile3.log`). The commit built nothing: no source changed after verify3's build, only a route file |
+| The radius | 32 x scale, decoded; F3's bracket | **passes**: `test_mp_play` 207, `test_mp_movers` 146, `test_mp_layer` 2922, 0 failures (above) |
+| The note of 64 | corrected | **passes**: `placement.json` `antiportal._source` and `_radius_source` |
+| 4-01 won by play | a route | **passes: won on tick 351** (F17's inputs) |
+| A route for every antiportal level whose play this changes | all 52 (`play_changes.txt`), each a route or an exact reason | **met at the commit: 44 won by a route in this tree** (19 new and 4 re-routed in the first round, 11 new in fix round 1, 5 new in fix round 2, 1 found by verify3 and added at the commit, 4 unchanged), **6 on main** (2-09 with the merge fix), **2 with findings** (4-28, R1's: step 170's route shown refused, no route found, not proven unwinnable; 4-14, G6's, with a scan and traced attempts behind it), **none with neither**. The first round left 13 with neither (verify1); fix round 1 recorded 2-30 as a finding the second verifier won, 3-14 and 4-29 on reasoning alone, 2-26 on stances alone and 2-31 on shooters outside the ring alone (verify2), and all five are won; fix round 2 recorded 3-15 as a finding, and verify3 won it (deviation 3) |
+| `test_mp_routes` | every route wins | **passes: 55 routes, 170 checks, 0 failures** (`out/parity/program/R1/commit/test_mp_routes.txt`, on `1185f257`, the commit's one full run; 3-15 on 1018, the other 54 at verify3's ticks). Before it: 54 / 167 in fix round 2's third full run (`fix2/test_mp_routes_full3.txt`) and in verify3's; fix round 2's earlier full runs 52 / 161 and 53 / 164; the 49 earlier routes at fix round 1's ticks in all three; 38 / 119 in the first round |
+| The radius, played in the window | F3's taps on 1-07; 4-01's route | **passes** (verify1's captures): `out/parity/program/R1/verify1/cap107` - F3's two taps on the node's ring, 93.87 u out refused (`red_cross`, `red_waves`, `portal_fail_in_antiportal`) and 97.07 u out accepted, at F3's own screen positions (546, 540) and (537, 540); `verify1/cap401` - 4-01's route won in the window on tick 351. Fix round 2 on `a64d3c25`: `fix2/cap/l13b` (3-14 won on 1095, its agent killed on 94), `fix2/cap/l28c` (4-29 won on 1519), `fix2/cap/l25a` (2-26 won on 827, the slot shot on 768) and `fix2/cap/l30a` (2-31 won on 298, its agent killed on 187), each with only its scheduled taps and validation ACTIVE and silent; `fix2/cap/l13c` (4-14's fireball through a portal, unmoved). verify3 on `a64d3c25`: `verify3/cap107`, a new angle on 1-07 - (200, 168), 91.2 u out, refused (`red_cross`, `red_waves`, `portal_fail_in_antiportal`, the shake of 5) and (190, 172), 100.0 u out, accepted; `verify3/cap315` - 3-15 won on 1018, the key on 799, only its 10 scheduled taps, validation ACTIVE |
+| Reachability | no door newly sealed | **108 reachable, 11 opened, 9 sealed, 0 differ** (`reach_check.txt`; fix rounds 1 and 2 changed no level data or rule) - **but the check cannot see zones** (step 113, deviation 3): the routes show R1 closes 4-28's step-170 way (deviation 4). verify3 re-ran it: the same, the tool and its pin unchanged |
+| The sweep | 128 levels at f420; every changed level explained against `R17/after/sweep` | **passes: 128 of 128 byte-identical** to `R17/after/sweep` (`out/parity/program/R1/after/sweep`, on `a64d3c25`, step 171's binary: the change is data read at run time; `compare_R1.txt`): no level taps at f420, so no field is ever tested, and the zone boxes that grew are hidden with art (deviation 5). Fix rounds 1 and 2 and the commit changed only route files and this record, and `MagicPortals.exe` reads no route, so the sweep stands; verify3 re-took it, 128 of 128 byte-identical again (`verify3/compare_v3.txt`). 128 rc=0, validation ACTIVE in 128 logs and silent; every PNG equals its log's md5 (and R17's 128 theirs); art from `out/snap_w1` in 128 logs; no unscheduled input |
+
+**THE SUITES**, run directly, once each on the binaries this step leaves: `test_mp_movers` 146, `test_mp_play` 207,
+`test_mp_layer` 2922, `test_mp_routes` 170 (the full set of 55, the commit's one full run; 167 on fix round 2's third
+full run and on verify3's, 161 and 164 on fix round 2's first two, 152 on fix round 1's 49 and 119 on the first round's
+38; the `--only` authoring replays on the same approved binary are not the gate), 0 failures; and, before the edits,
+`test_mp_shot` 181, 0 failures, on its approved binary with the new data. verify3 re-ran `test_mp_play`,
+`test_mp_movers`, `test_mp_layer` and `test_mp_shot` once each on the same binaries: the same counts, 0 failures. Not launched: the other 41 suites, none relinked (no library source changed). A grep of `tests/` for
+the 52 antiportal levels and for `TryPlace(`, `Shoot(`, `InField(` and taps (`suite_grep.txt`): of the suites that
+fire, place or test a field on one, `test_mp_boss`, `test_mp_demolish`, `test_mp_wells` shoot on levels without a
+ring, `test_mp_darkdragon` places at (300, 200) and (360, 200) on 4-32, 290 px from its ring (144), `test_mp_zerog`
+checks only the recoil at the tap on 4-02, and `test_mp_diamonds` shoots on 3-29 to (312, 112), converted a frame
+later, and to (62, 160), 310 px from the ring (160).
+
+**SMART APP CONTROL: 0 refusals, in every round and every verification.** The three verifiers relinked nothing and
+launched only approved, unchanged binaries: 136, 143 and 144 launches (verify3: 4 suites once each, `test_mp_routes` 10,
+`MagicPortals.exe` 130); the commit launched `test_mp_routes` (`1185f257`) once. Fix round 1 relinked nothing: its authoring replays and two full runs
+used `test_mp_routes` (`1185f257`), and three window checks used `MagicPortals.exe` (`a64d3c25`), both step 171's
+approved binaries. Fix round 2 relinked nothing either: its authoring and finding traces and three full runs on
+`test_mp_routes` (`1185f257`), six window runs on `MagicPortals.exe` (`a64d3c25`). The three relinked suites (`test_mp_movers` `002be7ca`, `test_mp_play` `247e6671`,
+`test_mp_layer` `58cf84b4`) ran on their first launch; `test_mp_routes` (`1185f257`), `test_mp_shot` (`129d9046`) and
+`MagicPortals.exe` (`a64d3c25`, the sweep) are step 171's approved binaries, unchanged.
+
+**VERIFIED IN THREE ROUNDS, COMMITTED WITH RECORDED DEVIATIONS** (`out/parity/program/R1/verify1.json`,
+`verify2.json`, `verify3.json`; the disposition `R1/deviations.md`, owner-delegated). verify3 re-derived the decode
+before reading the code, re-measured the build's warnings, re-ran the four radius suites, the full `test_mp_routes`,
+the reachability check and the f420 sweep, and played R1 in the window on a new angle; every row passed but the route
+gate and this record, both for one reason: 3-15, recorded here as unwon, was won by its route. The commit added that
+route (deviation 3) and re-ran `test_mp_routes` once: 55 / 170, 0 failures.
+
+**RECORDED DEVIATIONS** (gate, required vs measured, cause, owning follow-up).
+1. **4-28 (`level27c`) is not won on this build.** Gate: a route for every antiportal level R1 changes, and every route
+   still wins. Required: a route from 4-28's start to its door. Measured: step 170's route is refused three times at
+   32 x scale, so its file is removed (the old copy: `out/parity/program/R1/drafts/f1/level27c_step170.json`); no new
+   route was found: the yellow key's only carrier is the knight, which walks only toward x 22 / 172 and out-pushes the
+   player at about 8 px/s (`drafts/f1`); every point within 26 px of the keyhole, and every drop point past it, lies
+   inside `antiportal_1940`'s 192 px; verify3's probe (`verify3/d/w1`) shows the knight keeps walking toward its
+   waypoint's x even while `gravity_agent_1915` pulls it. It is "no route found; step 170's route shown refused at
+   32 x scale", NOT a proof that 4-28 cannot be won: seven "no route" findings in this step were later won (2-18, 2-30,
+   3-14, 4-29, 2-26, 2-31, 3-15), and verify3 named the blind spot nobody has tried here - portal pairs placed at
+   different times and places, and floors reached only through one. Cause: R1 closes a port-only way; the original's
+   own way needs a mechanism the port does not build, the fire agent burning a minion (`minions.json`
+   `_burnable_breakable_not_wired`) or G8 (a shot through a fire agent's flame becomes a fireball). 4-28 had no route
+   at track C's baseline (step 170 added it, its own deviation 2 naming R1's step as the owner), and main has none.
+   Owner: G8, and a row of its own for the minion burn at the fire agent beside G8 (the close role adds it); whichever
+   step builds either re-attacks 4-28, blind spot included, and re-adds its route. 4-28 is not to be logged as a proven
+   blocker.
+2. **4-14 (`level13c`) is not won; it is G6's, not R1's.** Gate: the same route gate. Measured (`fix2/check_4_14.txt`):
+   every player centre that touches the door is at most 64 px from `shock_agent_2285` (areaRadius 90); the carranca's
+   lane passes the agent at 100.2 px, where contact needs 41.3; `fix2/cap/l13c` shows the fireball fly through a portal
+   in its lane, unmoved; the door is 51.2 px from `antiportal_2284`, inside the ring at 80 and at 160. Cause: fireballs
+   do not take portals (G6); the level was unwon before R1 too. Owner: G6's step routes 4-14.
+3. **3-15 (`level14b`) was recorded as unwon, and it is won** (verify3's two failing rows). Gate: the route gate, and
+   "the planning doc matches what was measured". Measured: fix round 2 recorded 3-15 as NOT WON (no portal on the
+   player in the key's half; tallies 43 here / 6 on main / 3 findings); verify3's route
+   (`verify3/routes_found/level14b.json`, md5 `6e3bc55b85e5863b33f4effad7dda040`) wins it on tick 1018 in
+   `test_mp_routes --only` (`1185f257`, 4 checks, 0 failures) and in the window (`verify3/cap315` on `a64d3c25`: 10
+   scheduled taps only, validation ACTIVE, the key on tick 799); every tap is outside every ring (nearest 110.0 / 96 and
+   129.2 / 128). Cause: fix round 2 never tried a portal pair spanning the level's halves - the seventh finding of this
+   step overturned. Done at the commit: the route copied to `tests/routes/level14b.json` (md5 unchanged), this record
+   corrected (the route table, 44 here / 6 on main / 2 findings, the gate rows), and the full `test_mp_routes` re-run
+   once: 55 routes, 170 checks, 0 failures, 3-15 on 1018 and the other 54 at verify3's ticks.
+4. **The reachability gate is vacuous for R1.** Required: no door newly sealed. Measured: 108 / 11 / 9, 0 differ.
+   Cause: the flood has no zone term (step 113, deviation 3). The evidence that no door R1 touches is sealed by the port
+   alone is the routes and fix round 2's `check_3_15.txt`, `check_4_14.txt`, `check_2_26.txt`, `check_2_31b.txt` and
+   `check_2_31c.txt`. Owner: backlog section 6's Tests row "The reachability flood is optimistic (step 113, deviation
+   3)": a tools step gives it a zone term.
+5. **The f420 sweep is also vacuous for R1.** Required: 128 levels at f420, every change explained. Measured: 128 of
+   128 byte-identical to `R17/after/sweep` (and again in verify3's). Why it proves little: no level taps by f420, and the
+   zone boxes that grew are hidden under art; the routes and verify3's `cap107` carry the evidence. Owner: none needed;
+   recorded so that the byte-identity is not read as "R1 changes nothing".
+6. **2-31's route (`level30a`) is itself a port-only way.** Required: a route that wins as the original plays.
+   Measured: two of its shots pass through `fire_agent_963`'s flame, at 13.8 and 2.2 px; the original snuffs a shot
+   there (`fire.json` `_burn_projectile_not_built`). Cause: the unbuilt snuffing. Owner: the step that builds the
+   snuffing re-verifies 2-31; unless another way is found, 2-31 goes back to a finding. 2-31 is not to be counted as
+   won "as the original plays".
+7. **3-19's route (`level18b`) rests on an unmeasured hinge creep.** Measured: `spinning_platform_1554` is pushed for
+   about 2,600 ticks; the route wins on tick 3207 against a win_by of 3270. Owner: the step that measures the spinning
+   platform re-verifies 3-19; if the original's platform does not yield, 3-19 becomes a finding.
+8. **Routes lean on unbuilt rows** (disclosed above; not a failure). G1: 3-02, 3-03, 3-07, 3-09, 3-12, 3-19, 3-20,
+   3-22, 3-27, 3-29, 3-31, 4-25, 4-30, 4-29, and 3-15 (knight B wedged on `button_1666`). G2: 1-27, 1-28, 1-29, 2-18 and
+   2-25. G10 and G4: every route. Body-overlap traversal (not the original's point test): 1-27, 1-28, 1-29, 3-07, 3-12,
+   4-07, 4-25, 2-15, 2-18, 2-30, 2-32, 3-14, 3-22 and 3-15 (entered about 25 px off). The wall broken by touch (11.1):
+   3-12 and 3-14. The reflector guesses (G9 / R23): 3-14 and 2-25. Owner: each row's step re-verifies the routes named
+   against it.
+9. **Tidy items carried into LEFT FOR LATER.** Stale comments in `game/sim/Portals.hpp:61-63, 66-69, 149-150, 463-466`
+   and `game/MagicPortalsLayer.cpp:5141-5143`, not edited because a comment-only header edit relinks every binary; the
+   strict `<` at the field's edge (`placement.json` `_not_modelled`); `no_portal_705` stays a port-only zone, wholly
+   inside `antiportal_687`'s field and pinned by `test_mp_movers`. Owner: the next step that edits `Portals.hpp` or
+   `Portals.cpp` for code; for `no_portal_705`, the step that takes the zone role off `no_portal` nodes.
+10. **Merge hazards.** Main's 2-09 route (`level8a.json`) is refused at 32 x scale (taps on ticks 1265 and 1290): the
+    merge takes `out/parity/program/R1/merge_fixes/level8a.json`, which adds a tap on tick 1238 that kills
+    `anti_portal_agent_ent_1095` (won on tick 1319 on w1c). `main_routes_check.txt` checked main's other five
+    antiportal routes (2-02, 2-04, 2-12, 4-16, 4-32) at their tap points only, not at the shots' end points, where the
+    refusal is tested (verify1's low #4). The carranca and dragon routes here (2-15, 2-18, 2-23, 2-25, 2-32) were
+    authored without G5 and B1. Owner: the merge role re-runs every route on the merged build.
+
+**RULINGS APPLIED.** R1 (built: as the original). R17 as step 171 built it (the agent kills that 4-01, 1-11, 1-12,
+1-23, 3-12, 4-07 and 4-08 now need); R2 as step 170; R23 unbuilt; R24 and R25 untouched; camera dragging untouched.
+
+**LEFT FOR THE OWNER.**
+- 4-28 (deviation 1): no route found and step 170's route shown refused; not proven unwinnable. The fire agent's burn
+  of a minion is unwired by an old row, and the original's own 4-28 needs it or G8; decided for the original by the
+  2026-09-29 rulings once a step names it.
+- The findings above, each a missing mechanism or a closure shown, not a tuned-away gate: R7 (the moving platforms' swing)
+  would widen 2-26's slot shot, and the flame's snuffing of a shot (`fire.json` `_burn_projectile_not_built`) would
+  close 2-31's route as it stands (deviation 6); G6 (a fireball through a portal) would reopen 4-14's way.
+
+**LEFT FOR LATER.**
+- For the merge: re-run 2-15, 2-18, 2-23, 2-25 and 2-32 on the build with G5 and B1 (authored here, where fireballs cross walls
+  and a blast breaks nothing); each leans on no fireball crossing a wall, and none places a breakable wall.
+- For the merge: `out/parity/program/R1/merge_fixes/level8a.json` (main's 2-09 route with the agent killed first);
+  main's 2-04 route needs G5; re-run every route on the merged build (the chapter-3 and -4 routes here were authored
+  without G5 and B1). `main_routes_check.txt` tested main's antiportal routes at their tap points, not at the shots'
+  end points (deviation 10).
+- Stale comments, left to spare relinks (no comment-only edit; the next step that edits these files for code fixes
+  them): `game/sim/Portals.hpp:61-63` ("half of white_ring.png's 128 px frame", which misses the manager's 0.5),
+  `:66-69` ("What the port plays is still antiportalRadiusPx; only the picture reads these"), `:149-150` ("A tap within
+  collision_radius_px times its scale is refused (portal_system.gd:136-146)", the remake's name, not the port's
+  `radius_px`) and `:463-466` ("R1 is not built"); and `game/MagicPortalsLayer.cpp:5141-5143` ("The circle the port
+  PLAYS, which is not the ring's half until the refusal radius is the original's").
+- The original's strict `<` at the field's edge (`placement.json` `_not_modelled`).
+- `no_portal_705` stays a port-only zone, wholly inside `antiportal_687`'s field (deviation 9): the step that takes
+  the zone role off `no_portal` nodes removes it.
+- 3-19's route rests on an unmeasured hinge creep (above): the step that measures the spinning platform re-verifies it,
+  and if the original's platform does not yield, 3-19 becomes a finding.
+- The backlog (`docs/parity-backlog.md`) is not edited here: the close role ticks the "System 4 antiportals" row and
+  R1's entry of the rulings list, records 4-28 unwon as "no route found; not proven unwinnable" (deviation 1: its
+  owners G8 and a new row beside it for the minion burn at the fire agent), records 4-14 under G6, notes that 2-31's
+  route passes shots through a flame the original snuffs and that 3-19's rests on the hinge creep, and raises the route
+  count to 55.

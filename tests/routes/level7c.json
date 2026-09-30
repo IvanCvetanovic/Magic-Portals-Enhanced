@@ -1,0 +1,21 @@
+{
+  "_about": [
+    "4-08, weightless (step 172, R1: the door stands on anti_portal_agent_ent_2126, at the centre of",
+    "antiportal_2123's 32 x 3 = 96 px). A tap at the left edge (4, 116) (a portal opens there, harmless):",
+    "its recoil carries the player right at 70 u/s. A shot at the agent (328, 128) passes through",
+    "shock_agent_2121 and kills it with the ring (tick ~72), and its recoil stops the player at x 158,",
+    "clear of both shock rings. A portal in the door at (328, 134), whose recoil carries the player back",
+    "left, and one on the player at (130.3, 108.6), right of shock_agent_ent_2122's 64 px: into the door.",
+    "Won on tick 106 (step 172)."
+  ],
+  "level": "level7c",
+  "win_by": 170,
+  "holds": [
+  ],
+  "taps": [
+    {"tick": 30, "at": [4, 116]},
+    {"tick": 54, "at": [328, 128]},
+    {"tick": 80, "at": [328, 134]},
+    {"tick": 104, "at": [130.3, 108.6]}
+  ]
+}
