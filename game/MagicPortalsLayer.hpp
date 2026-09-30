@@ -1045,6 +1045,33 @@ public:
         float arrowAlpha = 0.0f;
     };
     HintReport HintState() const;
+
+    // THE HANDLES (handle.json, sim/Handle.hpp), for the suites, as the last tick
+    // left them: each handle's picture - where it is drawn, its alpha and its size -
+    // each follower's picture and its light's owner point, and 2-20's lesson hand.
+    struct HandleReport {
+        std::string node;
+        bool drawn = false;
+        glm::dvec2 centrePx{0.0};
+        glm::dvec2 sizePx{0.0};
+        float alpha = 0.0f;
+    };
+    std::vector<HandleReport> HandleReports() const;
+    struct FollowerReport {
+        std::string node;
+        bool drawn = false;
+        glm::dvec2 centrePx{0.0};
+        glm::dvec2 ownerPx{0.0};
+    };
+    std::vector<FollowerReport> FollowerReports() const;
+    struct LessonReport {
+        bool placed = false;
+        Handle::Lesson lesson;
+        bool drawn = false;
+        glm::dvec2 centrePx{0.0};
+        float alpha = 0.0f;
+    };
+    LessonReport LessonState() const;
     const Hint::Rules& HintRules() const { return m_hintRules; }
     const Camera::Rules& CameraRules() const { return m_cameraRules; }
     // Whether the camera is being held where a drag left it (camera.json `drag`).
@@ -1312,7 +1339,7 @@ private:
     // eclipse.
     enum class SpaceRole { None, Sky, Spiral, Planet, Eclipse };
     // 1-21's two lesson pictures (sim/Hint.hpp).
-    enum class HintRole { None, Hand, Arrow };
+    enum class HintRole { None, Hand, Arrow, Lesson };
 
     // One of the level's sprites as a textured quad, and what it follows: the
     // crystal, static portal or no-portal zone it pictures, or else its node's
@@ -1368,8 +1395,14 @@ private:
         bool antiportal{false}; // ETHCallback_antiportal blinks and turns it (art.json)
         int placed{-1};       // in m_placed: a picture its own callback sways, fades or turns
         // 1-21's hand or arrow (sim/Hint.hpp): moved, faded, pulsed and deleted by
-        // m_hintHand's or m_hintArrow's callback.
+        // m_hintHand's or m_hintArrow's callback; or 2-20's lesson hand, by m_lesson's.
         HintRole hint{HintRole::None};
+        // A draggable handle, in m_level.handles.handles: drawn where it is dragged,
+        // at its callback's alpha and bounce; or a fire agent or reflector that
+        // follows one, in m_level.handles.followers: picture, light and particles
+        // where it has got to (sim/Handle.hpp).
+        int handle{-1};
+        int follower{-1};
         // Chapter 4's torch, in torch.lights: its picture goes on the tick after the
         // torch is lit, as the original's entity deletes itself (m_torchWatch).
         int torch{-1};
@@ -1734,6 +1767,18 @@ private:
     Hint::Arrow m_hintArrow;
     bool m_hintHandPlaced{false};
     bool m_hintArrowPlaced{false};
+
+    // 2-20'S LESSON (handle.json `lesson`): hand_waypoint0's callback, and the
+    // handle it watches (in m_level.handles.handles; -1 none).
+    Handle::Lesson m_lesson;
+    int m_lessonHandle{-1};
+    // The handles' reading of the touch (ETHCallback_arrows): getRelativeHitPos,
+    // the point of the level it went down on through the camera the tick after it
+    // went down left - the portal manager sets it after the camera on the HIT
+    // frame. Empty from a release until the next DOWN tick.
+    std::optional<glm::dvec2> m_handleHitPx;
+    // The tick's length, for what readInput hands a callback's clock.
+    double m_tickMs{0.0};
 
     Game::Data m_data;
     int m_dataIndex{-1}; // whose level m_data holds, so a retry reuses it

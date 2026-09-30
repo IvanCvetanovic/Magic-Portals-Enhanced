@@ -174,8 +174,9 @@ void Follow::Tick(const Rules& rules, const glm::dvec2& playerPx, const glm::dve
     if (unlocks.teleported) holdElapsedMs = drag.holdMs;
     // CameraController::update #3-10: the hold's clock first.
     holdElapsedMs += dt * 1000.0;
-    // #12-13 dragMoveCamera. The move is (0, 0) on any tick but a DOWN one (#17-36).
-    if (touch.down && (touch.moveUnits.x != 0.0 || touch.moveUnits.y != 0.0)) {
+    // #12-13 dragMoveCamera: nothing while a handle moves (#3-7, shouldLockCamera).
+    // The move is (0, 0) on any tick but a DOWN one (#17-36).
+    if (!touch.locked && touch.down && (touch.moveUnits.x != 0.0 || touch.moveUnits.y != 0.0)) {
         // GetCameraPos() + screen / 2 (#94-119): the view as the last tick left it.
         const glm::dvec2 shownPx = centrePx;
         // #38-39 clampVirtualCamPos.

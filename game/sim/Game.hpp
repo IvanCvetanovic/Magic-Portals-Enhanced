@@ -34,6 +34,7 @@
 #include "sim/Ghost.hpp"
 #include "sim/Goals.hpp"
 #include "sim/GravityWell.hpp"
+#include "sim/Handle.hpp"
 #include "sim/Hazards.hpp"
 #include "sim/Hinge.hpp"
 #include "sim/Launchers.hpp"
@@ -94,6 +95,7 @@ struct Data {
     Zerog::Rules zerog;           // and zerog.json
     Bounce::Rules bounce;         // and bounce.json
     GravityWell::Rules wells;     // and gravitywell.json
+    Handle::Rules handle;         // and handle.json: the draggable handle and what follows it
     Hazards::Rules hazards;       // and hazards.json, which is what the role table got wrong
     std::filesystem::path prisms; // where LevelBuilder writes the platforms' prisms
 };
@@ -126,6 +128,11 @@ struct Level {
     Boss::State boss;
     Turrets::State turrets;
     Fire::State fire;
+    // The draggable handles (arrows.ent) and the fire agents and reflector that
+    // follow them (Handle.hpp): dragged by the layer's touch, followed after the
+    // fire has burned (AfterStep), each follower writing its point into fire.agents
+    // or portals.reflectors.
+    Handle::State handles;
     // Attached when the level is built and then left to the solver: Hinge.hpp
     // says why this one has no tick.
     Hinge::State hinge;

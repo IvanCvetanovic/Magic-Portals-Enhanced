@@ -24,6 +24,8 @@
 
 #include <glm/glm.hpp>
 
+#include "core/Json.hpp"
+
 #include "sim/Art.hpp"
 #include "sim/Ease.hpp"
 
@@ -33,7 +35,17 @@ struct Waypoint {
     glm::dvec2 atUnits{0.0}; // scale(vector2): from the hand's first place, in the level's units
     double ms = 0.0;         // how long the move to the next one takes
     Ease::Filter filter = Ease::Filter::Linear;
+    // Its FloatColor's alpha, which getCurrentPoint mixes into the next one's as it
+    // mixes the point. 1-21's four are all FloatColor(-1), alpha 1; 2-20's handle
+    // lesson (handle.json `lesson`) fades in and out on its first and last.
+    double alpha = 1.0;
 };
+
+// A list of waypoints as a callback adds them, read strictly from a JSON array:
+// each needs at_units (two numbers), ms (not below 0) and a filter Ease names, and
+// `alpha` (0 to 1) where `withAlpha` - 1 otherwise. False with `error` naming `where`.
+bool ParseWaypoints(const Supersonic::Json::Value& list, bool withAlpha, const std::string& where,
+                    std::vector<Waypoint>& out, std::string& error);
 
 struct Rules {
     std::string handEntity;  // without .ent: its callback is ETHCallback_ + that name
@@ -55,17 +67,29 @@ struct Rules {
 // From camera.json's hint block, strictly.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
-// The hand's callback: its life, and its repeating WaypointManager (a FrameTimer
-// that steps at most ONE waypoint a call, its first call starting again at
-// waypoint 0 with no time).
-struct Hand {
-    double lifeMs = 0.0;
-    bool gone = false; // DeleteEntity: past the rules' life
+// A repeating WaypointManager (ETHFramework/WaypointManager.angelscript
+// 40760..42634): a FrameTimer that steps at most ONE waypoint a call, its first call
+// starting again at waypoint 0 with no time, and back to the first after the last.
+// 1-21's hand runs one (Hand, below) and so does 2-20's handle lesson (sim/Handle).
+struct Round {
     int first = 0;
     int last = 0;
     int frame = 0;
     double timeMs = 0.0;
     double strideMs = 0.0;
+
+    // WaypointManager::update, `frameMs` into the call.
+    void Tick(const std::vector<Waypoint>& points, double frameMs);
+    // getCurrentPoint's point: this waypoint mixed into the next by its filter.
+    glm::dvec2 OffsetUnits(const std::vector<Waypoint>& points) const;
+    // And its colour's alpha, mixed the same way.
+    double Alpha(const std::vector<Waypoint>& points) const;
+};
+
+// The hand's callback: its life, and its repeating WaypointManager.
+struct Hand : Round {
+    double lifeMs = 0.0;
+    bool gone = false; // DeleteEntity: past the rules' life
 
     // One call, `frameMs` into it.
     void Tick(const Rules& rules, double frameMs);

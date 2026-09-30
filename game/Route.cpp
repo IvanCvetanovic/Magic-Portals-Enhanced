@@ -36,6 +36,7 @@ constexpr const char* kTick = "tick";
 constexpr const char* kRelease = "release";
 constexpr const char* kAt = "at";
 constexpr const char* kShot = "shot";
+constexpr const char* kDragTo = "to";
 } // namespace Key
 
 constexpr const char* kLeft = "left";
@@ -164,7 +165,7 @@ bool Load(const std::string& path, Plan& out, std::string& error) {
         for (const Json::Value& entry : root[Key::kTaps].AsArray()) {
             const std::string where = path + ": taps[" + std::to_string(index++) + "]";
             if (!entry.IsObject() ||
-                !OnlyKeys(entry, {Key::kTick, Key::kRelease, Key::kAt, Key::kShot}, where, error)) {
+                !OnlyKeys(entry, {Key::kTick, Key::kRelease, Key::kAt, Key::kShot, Key::kDragTo}, where, error)) {
                 if (error.empty()) error = where + ": not an object";
                 return false;
             }
@@ -188,6 +189,25 @@ bool Load(const std::string& path, Plan& out, std::string& error) {
                     return false;
                 }
                 tap.shot = entry[Key::kShot].AsBool();
+            }
+            if (entry.Has(Key::kDragTo)) {
+                const Json::Value& to = entry[Key::kDragTo];
+                if (!to.IsArray() || to.AsArray().size() != 2 || !to.AsArray()[0].IsNumber() ||
+                    !to.AsArray()[1].IsNumber()) {
+                    error = where + ": \"to\" is not a point [x, y] of the level";
+                    return false;
+                }
+                tap.toPx = glm::dvec2(to.AsArray()[0].AsNumber(), to.AsArray()[1].AsNumber());
+                // Held on at least one tick after it goes down, which is where it moves,
+                // and a drag fires nothing: the file says both.
+                if (tap.releaseTick < tap.tick + 2) {
+                    error = where + ": a drag is let go at least two ticks after it goes down (\"release\")";
+                    return false;
+                }
+                if (tap.shot) {
+                    error = where + ": a drag fires no shot; say \"shot\": false";
+                    return false;
+                }
             }
             plan.taps.push_back(tap);
         }
@@ -266,6 +286,23 @@ void Driver::schedule(MagicPortalsLayer& layer, int tick) {
             continue;
         }
         m_fingers[i] = fraction;
+        if (tap.toPx) {
+            // A drag: the finger moves on the screen from `at` to `to` over the ticks
+            // it is held, both put on the view through this camera. The layer's drag
+            // reaches its end on the release tick, which moves nothing (gs2d zeroes a
+            // RELEASE frame's move), so it is given the point one held tick further on,
+            // and lies on `to` on the last held tick.
+            const glm::dvec2 toFraction = (*tap.toPx - corner) / view;
+            if (!(toFraction.x > 0.0 && toFraction.x < 1.0 && toFraction.y > 0.0 && toFraction.y < 1.0)) {
+                problem("the drag down on tick " + std::to_string(tap.tick) + " to " + Px(*tap.toPx) +
+                        " leaves the view, which shows " + Px(corner) + " to " + Px(corner + view));
+                continue;
+            }
+            const double held = static_cast<double>(tap.releaseTick - tap.tick);
+            const glm::dvec2 end = fraction + (toFraction - fraction) * (held / (held - 1.0));
+            layer.ScheduleDevDrag(tap.tick, fraction, end, tap.releaseTick);
+            continue;
+        }
         layer.ScheduleDevTap(tap.tick, fraction, tap.releaseTick);
     }
 }
@@ -493,6 +530,15 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         if (minion.gone || !registry.valid(minion.body)) continue;
         const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(minion.body).position);
         std::printf("\n          minion %s (%.1f, %.1f)", minion.name.c_str(), at.x, at.y);
+    }
+    // The draggable handles and what follows them (step 152): where each is, and
+    // whether a touch holds it this tick.
+    for (const auto& handle : level->handles.handles) {
+        std::printf("\n          handle %s (%.1f, %.1f)%s", handle.node.c_str(), handle.atPx.x, handle.atPx.y,
+                    handle.moving ? " HELD" : "");
+    }
+    for (const auto& follower : level->handles.followers) {
+        std::printf("\n          follower %s (%.1f, %.1f)", follower.node.c_str(), follower.atPx.x, follower.atPx.y);
     }
     std::printf("\n");
 }

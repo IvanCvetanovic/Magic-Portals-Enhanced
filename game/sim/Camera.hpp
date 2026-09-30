@@ -92,6 +92,11 @@ struct Feel {
     glm::dvec2 moveUnits{0.0}; // GetTouchMove: from the last tick's place, on a DOWN tick; else 0
     bool onPad = false;        // its place this tick is on a walk pad (getTargetButton != 0)
     double maxMoveUnits = 0.0; // getMaxMoveLength, as the last tick left it
+    // shouldLockCamera: a draggable handle (arrows.ent) is moving this tick, as its
+    // callback - always active, so before the camera in the frame - left it
+    // (sim/Handle). Then dragMoveCamera does nothing at all (#3-7): no pan, and no
+    // hold judged. The follow still waits while the touch is held (hasAnyTouch).
+    bool locked = false;
 };
 
 // One tick of the record, given the tick's edges, where the touch is (in the view's

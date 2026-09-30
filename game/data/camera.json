@@ -53,7 +53,7 @@
       "sends through a portal.",
       "",
       "CameraController::dragMoveCamera (108505..109260), for every touch t: #3-7 nothing while",
-      "shouldLockCamera() (an arrows.ent handle being moved; no port level has one working yet, B4);",
+      "shouldLockCamera() (an arrows.ent handle being moved: Camera::Feel locked, handle.json, step 152);",
       "#17-36 only where GetTouchMove(t) != (0, 0); #38-39 clampVirtualCamPos(); #41-63 the pan when",
       "GetTouchPos(t) is on no pad AND length(move) < 100 (CMPIf 100f, TS: strictly less, a BARE screen-px",
       "literal, max_frame_move_screen_px); #66-80 setVirtualCameraPos(virtualCameraPos - move x 2)",
@@ -105,7 +105,7 @@
     "_source": [
       "1-21 (level20) is the one level that places hand_waypoint1 (at (99, 369), turned -0.6981) and",
       "up_down_arrow.ent (at (100, 394), static): the census of the 128 converted levels. level19a (2-20)",
-      "places hand_waypoint0, the handle's lesson, which is B4's.",
+      "places hand_waypoint0, the handle's lesson (handle.json lesson, step 152).",
       "",
       "ETHCallback_hand_waypoint1 (ETHCallback_hand_waypoint.angelscript, 368220..369697). FIRST CALL",
       "(no 'originalPos' yet, #1-12): #14-27 originalPos = its position; #29-32 WaypointManager(repeat",

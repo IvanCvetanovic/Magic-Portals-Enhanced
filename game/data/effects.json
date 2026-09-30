@@ -700,6 +700,24 @@
     ]
   },
 
+  "smoke_vanish": {
+    "entity": "smoke_vanish.ent",
+    "offset_units": [0, -32],
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_hand_waypoint0 (ETHCallback_hand_waypoint.angelscript, 366560..368220) #385-432, on the frame",
+      "2-20's handle is first held (handle.json lesson): AddScaledEntity('smoke_vanish.ent', GetPosition() -",
+      "vector3(0, g_scale.scale(32), 0), g_scale.getScale()) - the vector3's arguments pushed last-first",
+      "(00_order 8.0 rule 3), so scale(32) is its y: the hand's own point 32 units up the screen and its own",
+      "depth (OnEntity), unturned (AddScaledEntity's 0f), at the script's own size; then #433-441",
+      "DeleteEntity(thisEntity). The one fixed offset besides levelFinishedEffect's. ITS .ent: no sprite,",
+      "static 0; white_explosion.png cut 4 x 3, 2 particles all at once, repeat 1, life 700 +- 155, size 67,",
+      "growth 0.5, max 250, white. Temporary. Drawn from the remaster record's step 152; no footage shows it."
+    ]
+  },
+
   "_crystals": [
     "WHAT A CRYSTAL LEAVES WHERE IT WAS - the visuals plan's 10.2 (00_order section 7; system_7 7f-1), drawn from",
     "planning step 106. Two call sites in ETHCallback_crystal.angelscript, each an AddScaledEntity at the",

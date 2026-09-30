@@ -16676,6 +16676,87 @@ void TheKnightWalksIntoTheDoorAfter2_32() {
     layer.OnDetach(registry);
 }
 
+// 2-20'S HANDLE (handle.json, planning step 152): a finger that goes down on
+// arrows.ent and stays down drags it one for one on the screen, whole while held and
+// faint at rest; the camera's finger is locked meanwhile (shouldLockCamera) and the
+// held touch stops its follow, the drag fires nothing, the flame eases after the
+// handle - picture and light - and the lesson hand goes, with smoke_vanish 32 above
+// it, on the first held tick.
+void TwoTwentyDragsTheHandle() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level19a");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    for (int tick = 0; tick < 90; ++tick) tickWith(layer, registry, kRest, {}, {});
+    std::vector<MagicPortalsLayer::HandleReport> handles = layer.HandleReports();
+    CHECK_MSG(handles.size() == 1u, "2-20 draws one handle");
+    if (handles.size() != 1u) return;
+    CHECK_MSG(handles[0].drawn && std::fabs(handles[0].alpha - 0.3f) < 1e-6f,
+              "at rest it is drawn at 0.3: " + std::to_string(handles[0].alpha));
+    MagicPortalsLayer::LessonReport lesson = layer.LessonState();
+    CHECK_MSG(lesson.placed && lesson.drawn && !lesson.lesson.gone, "and its lesson hand is there");
+    const glm::dvec2 start = layer.SimLevel()->handles.handles.front().atPx;
+    CHECK(start == glm::dvec2(162.0, 192.0));
+    const int shotsBefore = layer.SimLevel()->portals.shotsFired;
+
+    // Down on the handle's point, 100 right and 50 up the screen over ten ticks,
+    // nine of them held: the handle goes 9/10 of it.
+    const glm::dvec2 view = layer.ViewPx();
+    const glm::dvec2 corner = layer.CameraCentrePx() - view * 0.5;
+    const glm::dvec2 from = (start - corner) / view;
+    const glm::dvec2 to = from + glm::dvec2(100.0, -50.0) / view;
+    layer.ScheduleDevDrag(1, from, to, 11);
+    tickWith(layer, registry, kRest, {}, {}); // down
+    const glm::dvec2 cameraAtDown = layer.CameraCentrePx();
+    tickWith(layer, registry, kRest, {}, {}); // the first held tick
+    handles = layer.HandleReports();
+    CHECK_MSG(std::fabs(handles[0].alpha - 1.0f) < 1e-6f, "held, it is drawn whole");
+    lesson = layer.LessonState();
+    CHECK_MSG(lesson.lesson.gone && !lesson.drawn, "the lesson hand goes the tick the handle is first held");
+    // Where its last call put it, which it keeps once deleted.
+    const glm::dvec2 lessonAt = lesson.lesson.AtPx(layer.SimLevel()->handles.rules);
+    // What the tick queued, a frame adds.
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto smoke = EffectsOf(layer, "smoke_vanish.ent");
+    CHECK_MSG(smoke.size() == 1u, "with one smoke_vanish: " + std::to_string(smoke.size()));
+    if (smoke.size() == 1u) {
+        CHECK_MSG(glm::length(smoke[0].atPx - (lessonAt + glm::dvec2(0.0, -32.0))) < 1e-6,
+                  "32 above where the hand was: " + Point(smoke[0].atPx) + " against " + Point(lessonAt));
+    }
+    bool still = layer.CameraCentrePx() == cameraAtDown;
+    for (int tick = 0; tick < 8; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        still = still && layer.CameraCentrePx() == cameraAtDown;
+    }
+    CHECK_MSG(still, "the view neither pans nor follows while the handle is held");
+    tickWith(layer, registry, kRest, {}, {}); // up
+    const glm::dvec2 dragged = layer.SimLevel()->handles.handles.front().atPx;
+    CHECK_MSG(glm::length(dragged - (start + glm::dvec2(90.0, -45.0))) < 1e-6,
+              "the handle went with the finger, one for one: " + Point(dragged));
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == shotsBefore, "and the drag fired nothing");
+    handles = layer.HandleReports();
+    CHECK_MSG(std::fabs(handles[0].alpha - 0.3f) < 1e-6f, "let go, faint again");
+    CHECK_MSG(glm::length(handles[0].centrePx - dragged) < 1e-9, "and drawn where it was left");
+
+    // The flame follows: two seconds on it stands on the handle, its light's owner
+    // with it.
+    for (int tick = 0; tick < 120; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const std::vector<MagicPortalsLayer::FollowerReport> followers = layer.FollowerReports();
+    CHECK_MSG(followers.size() == 1u, "one follower drawn");
+    if (followers.size() == 1u) {
+        const glm::dvec2 agent = layer.SimLevel()->handles.followers.front().atPx;
+        CHECK_MSG(glm::length(agent - dragged) < 1.0, "the flame eased after it: " + Point(agent));
+        CHECK_MSG(glm::length(followers[0].ownerPx - agent) < 1e-9, "its picture's owner, which its light and flame "
+                                                                    "hang off, is where it is");
+    }
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -16741,6 +16822,7 @@ void runTests() {
     AShotLeavesOnTheReleaseOfATouchThatStayedWithinEighteen();
     AFingerDragsTheCameraAtTwiceItsMoveAndFiresNothing();
     OneTwentyOneTeachesTheDrag();
+    TwoTwentyDragsTheHandle();
     Level8FromTheSpawnWithTapsAndWalking();
     LevelsFollowInOrderAndRetryIsInstant();
     NSkipsToTheNextLevel();

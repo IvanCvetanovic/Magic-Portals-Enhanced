@@ -85,24 +85,41 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": hint.arrow_bounce_from and _to must each be two numbers";
         return false;
     }
-    if (!hint.Has("hand_waypoints") || !hint["hand_waypoints"].IsArray() ||
-        hint["hand_waypoints"].AsArray().empty()) {
-        error = path + ": hint.hand_waypoints is missing or empty";
+    // 1-21's four are all FloatColor(-1): no alpha is written, and each is 1.
+    if (!hint.Has("hand_waypoints") ||
+        !ParseWaypoints(hint["hand_waypoints"], false, path + ": hint.hand_waypoints", read.handWaypoints, error)) {
+        if (error.empty()) error = path + ": hint.hand_waypoints is missing";
         return false;
     }
-    for (const Json::Value& item : hint["hand_waypoints"].AsArray()) {
+    out = read;
+    return true;
+}
+
+bool ParseWaypoints(const Json::Value& list, bool withAlpha, const std::string& where, std::vector<Waypoint>& out,
+                    std::string& error) {
+    out.clear();
+    if (!list.IsArray() || list.AsArray().empty()) {
+        error = where + " is not a list of waypoints";
+        return false;
+    }
+    for (const Json::Value& item : list.AsArray()) {
         Waypoint waypoint;
         if (!item.IsObject() || !Pair(item["at_units"], waypoint.atUnits) || !item["ms"].IsNumber() ||
             item["ms"].AsNumber() < 0.0 || !item["filter"].IsString() ||
             !Ease::ParseFilter(item["filter"].AsString(), waypoint.filter)) {
-            error = path + ": each of hint.hand_waypoints needs at_units (two numbers), ms (not below 0) and a "
-                           "filter Ease names";
+            error = where + ": each waypoint needs at_units (two numbers), ms (not below 0) and a filter Ease names";
             return false;
         }
         waypoint.ms = item["ms"].AsNumber();
-        read.handWaypoints.push_back(waypoint);
+        if (withAlpha) {
+            if (!item["alpha"].IsNumber() || item["alpha"].AsNumber() < 0.0 || item["alpha"].AsNumber() > 1.0) {
+                error = where + ": each waypoint needs its colour's alpha, 0 to 1";
+                return false;
+            }
+            waypoint.alpha = item["alpha"].AsNumber();
+        }
+        out.push_back(waypoint);
     }
-    out = read;
     return true;
 }
 
@@ -115,13 +132,17 @@ void Hand::Tick(const Rules& rules, double frameMs) {
         gone = true;
         return;
     }
-    // #309-310 WaypointManager::update: FrameTimer::set(0, count - 1, this waypoint's
-    // time, repeat) (23254..23650) - #3-4 the stride, #6-11 the time added, #13-43 a
-    // changed first or last starts again at first with no time, else #45-76 ONE
-    // frame once the time reaches the stride, the stride taken off, and past last
-    // this REPEATING manager goes back to first with the rest kept (#64-68) - then
-    // setCurrentStride(the new waypoint's time).
-    const std::vector<Waypoint>& points = rules.handWaypoints;
+    // #309-310 WaypointManager::update.
+    Round::Tick(rules.handWaypoints, frameMs);
+}
+
+void Round::Tick(const std::vector<Waypoint>& points, double frameMs) {
+    // FrameTimer::set(0, count - 1, this waypoint's time, repeat) (23254..23650) -
+    // #3-4 the stride, #6-11 the time added, #13-43 a changed first or last starts
+    // again at first with no time, else #45-76 ONE frame once the time reaches the
+    // stride, the stride taken off, and past last this REPEATING manager goes back
+    // to first with the rest kept (#64-68) - then setCurrentStride(the new
+    // waypoint's time).
     if (points.empty()) return;
     const int wantLast = static_cast<int>(points.size()) - 1;
     strideMs = points[static_cast<std::size_t>(frame)].ms;
@@ -139,8 +160,9 @@ void Hand::Tick(const Rules& rules, double frameMs) {
     strideMs = points[static_cast<std::size_t>(frame)].ms;
 }
 
-glm::dvec2 Hand::OffsetUnits(const Rules& rules) const {
-    const std::vector<Waypoint>& points = rules.handWaypoints;
+glm::dvec2 Hand::OffsetUnits(const Rules& rules) const { return Round::OffsetUnits(rules.handWaypoints); }
+
+glm::dvec2 Round::OffsetUnits(const std::vector<Waypoint>& points) const {
     if (points.empty()) return glm::dvec2(0.0);
     // getCurrentPoint (41513..42094): #3-28 the next waypoint - the first again after
     // the last, as it repeats - and #54-123 THIS waypoint's filter of the raw bias,
@@ -150,6 +172,16 @@ glm::dvec2 Hand::OffsetUnits(const Rules& rules) const {
     const double bias = std::min(strideMs, timeMs) / std::max(strideMs, 1.0);
     const double f = Ease::Apply(current.filter, bias);
     return current.atUnits + (next.atUnits - current.atUnits) * f;
+}
+
+double Round::Alpha(const std::vector<Waypoint>& points) const {
+    if (points.empty()) return 1.0;
+    // #82-101: the colours interpolated by the same filtered bias.
+    const Waypoint& current = points[static_cast<std::size_t>(frame)];
+    const Waypoint& next = points[static_cast<std::size_t>(frame == last ? first : frame + 1)];
+    const double bias = std::min(strideMs, timeMs) / std::max(strideMs, 1.0);
+    const double f = Ease::Apply(current.filter, bias);
+    return current.alpha + (next.alpha - current.alpha) * f;
 }
 
 double Hand::Alpha(const Rules& rules) const {

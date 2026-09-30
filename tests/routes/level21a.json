@@ -1,0 +1,24 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "2-22 (planning step 152): the door room's one way in is plugged by crate_no_emissive_1129 (burnable, not",
+    "teleportable), and fire_agent_1086 waits 142 below it on its handle. Drag 1 (10-31) takes the handle straight up",
+    "to the crate; the flame burns it (gone on ~112). Drag 2 (115-136) takes the flame to (40, 100), clear of every",
+    "shot and of the player's way. Left along the floor to x 30, ahead of the carranca's fireballs (the floor crates",
+    "take the first two); a portal floating at (160, 86) under the corridor's ceiling, shot up through the burnt",
+    "crate's gap, and one on the player's head (the left walk pad covers his feet on the screen); down onto the",
+    "platform and right to the door. Won on tick 274."
+  ],
+  "level": "level21a",
+  "win_by": 350,
+  "holds": [
+    {"walk": "left", "from": 40, "to": 120},
+    {"walk": "right", "from": 240, "to": 330}
+  ],
+  "taps": [
+    {"tick": 10, "release": 31, "at": [160, 256], "to": [160, 114], "shot": false},
+    {"tick": 115, "release": 136, "at": [160, 114], "to": [40, 100], "shot": false},
+    {"tick": 145, "at": [160, 86]},
+    {"tick": 225, "at": [30, 248]}
+  ]
+}

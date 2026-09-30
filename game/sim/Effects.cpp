@@ -266,7 +266,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "wall_destroy_light_wall", read.wallDestroyLightWall, why) ||
         !ReadRule(root, "movement_trail", read.movementTrail, why) ||
         !ReadRule(root, "roundabout_effect", read.roundabout, why) ||
-        !ReadRule(root, "antiportal_explosion", read.antiportalExplosion, why)) {
+        !ReadRule(root, "antiportal_explosion", read.antiportalExplosion, why) ||
+        !ReadRule(root, "smoke_vanish", read.smokeVanish, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -408,15 +409,17 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"portal_death_at_signal", &read.portalDeathAtSignal},
                      {"movement_trail", &read.movementTrail},
                      {"roundabout_effect", &read.roundabout},
-                     {"antiportal_explosion", &read.antiportalExplosion}};
+                     {"antiportal_explosion", &read.antiportalExplosion},
+                     {"smoke_vanish", &read.smokeVanish}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
             return false;
         }
     }
-    // And the fixed offset is levelFinishedEffect's alone: no other call adds one,
-    // so a pair on any other row is a fact nobody decoded.
+    // And a fixed offset is levelFinishedEffect's and 2-20's lesson hand's alone (its
+    // smoke_vanish, 32 up): no other call adds one, so a pair on any other row is a
+    // fact nobody decoded.
     const struct {
         const char* name;
         const Rule* rule;
@@ -513,7 +516,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                     {"portal_death_at_signal", &read.portalDeathAtSignal},
                     {"movement_trail", &read.movementTrail},
                     {"roundabout_effect", &read.roundabout},
-                    {"antiportal_explosion", &read.antiportalExplosion}};
+                    {"antiportal_explosion", &read.antiportalExplosion},
+                    {"smoke_vanish", &read.smokeVanish}};
     for (const auto& row : unturned) {
         if (row.rule->angleDeg != 0.0) {
             error = path + ": " + row.name + " is added by AddScaledEntity, whose angle is 0";

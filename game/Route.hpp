@@ -39,11 +39,20 @@
 // the file names: the driver says by how much (the aim's drift), and does not
 // correct for it, as a player's finger does not.
 //
+// A DRAG (step 152) is a tap with `to`: down on `at` on `tick`, moved at an even pace
+// to lie on `to` on the last tick it is held - the tick before `release`, which is at
+// least two ticks after `tick` - and let go there. Both points are the level's, put on
+// the view through the camera the down tick reads, as a tap's is; the finger moves ON
+// THE SCREEN, so what it drags - 2-20's handle, which follows the finger one for one -
+// goes from `at` to `to` whatever the camera does meanwhile. A drag strays more than
+// scale(18) and fires nothing (step 150), and the file says so: `"shot": false`.
+//
 // The driver also checks each tick for what a route must not do: a shot tap that
 // fires nothing on its release or is refused, or is aimed anywhere but under the
 // finger; a death; leaving the level. Each is a problem, and a route with a problem
 // has failed.
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -71,8 +80,10 @@ struct Tap {
     glm::dvec2 atPx{0.0}; // the level's pixels, +y down, as the .tscn places things
     // It fires the portal shot, on its release. False: a touch that must fire nothing
     // - the one that closes 1-02's and 1-03's tutorial as they load, which goes down
-    // on the popup and comes up under it.
+    // on the popup and comes up under it, and every drag.
     bool shot = true;
+    // A drag: where the finger lies on its last held tick (the level's pixels).
+    std::optional<glm::dvec2> toPx;
 };
 
 struct Plan {
@@ -89,7 +100,8 @@ bool ReleasesOn(const Plan& plan, int tick);
 
 // Reads a route file. False with `error` saying what is wrong with it: a key the
 // format does not have (other than a "_" comment), a tick below 1, two taps down at
-// once, a walk that is neither left nor right.
+// once, a walk that is neither left nor right, a drag held less than a tick or said
+// to fire a shot.
 bool Load(const std::string& path, Plan& out, std::string& error);
 
 // How near the point under its finger a shot tap's shot must be aimed: that point of

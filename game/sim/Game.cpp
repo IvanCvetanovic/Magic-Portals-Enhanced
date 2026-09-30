@@ -110,6 +110,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Zerog::LoadRules(portDataDirectory + "/zerog.json", read.zerog, error)) return false;
     if (!Bounce::LoadRules(portDataDirectory + "/bounce.json", read.bounce, error)) return false;
     if (!GravityWell::LoadRules(portDataDirectory + "/gravitywell.json", read.wells, error)) return false;
+    if (!Handle::LoadRules(portDataDirectory + "/handle.json", read.handle, error)) return false;
     // And what Enhanced's role table calls a hazard but the original does not.
     if (!Hazards::LoadRules(portDataDirectory + "/hazards.json", read.hazards, error)) return false;
     // The entities a boss adds that no level places (sim/Restock): read beside the
@@ -230,6 +231,17 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
                        out.portals, error)) {
         return false;
     }
+    // The handles and their followers, each follower bound to the fire agent or the
+    // reflector its node is - found above, by node - which it moves.
+    if (!Handle::Find(data.scene, data.handle, out.handles, error)) return false;
+    for (Handle::Follower& follower : out.handles.followers) {
+        for (std::size_t i = 0; i < out.fire.agents.size(); ++i) {
+            if (out.fire.agents[i].name == follower.node) follower.fireAgent = static_cast<int>(i);
+        }
+        for (std::size_t i = 0; i < out.portals.reflectors.size(); ++i) {
+            if (out.portals.reflectors[i].name == follower.node) follower.reflector = static_cast<int>(i);
+        }
+    }
 
     // And what a tap does to the player who fired it, which in these levels is
     // the whole of how they move. Set here rather than found by Portals, because
@@ -346,6 +358,19 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // which move things. What it takes away goes through Forget as a thrown body
     // does: a crate is teleportable, so a burning one can be in portals.travellers.
     for (const entt::entity gone : level.fire.Tick(registry, level.player, dt)) Forget(level, gone);
+    // doFollow: ETHCallback_fire_agent calls it after its burn loop, so a flame burns
+    // where the last tick left it and then moves; ETHCallback_reflect_agent calls it
+    // first, so a reflector moves before it turns a shot (Portals::Tick, below).
+    // followUp's dontPause counts the frame's time (handle.json follow).
+    level.handles.Follow(static_cast<double>(dt) * 1000.0);
+    for (const Handle::Follower& follower : level.handles.followers) {
+        if (follower.fireAgent >= 0 && follower.fireAgent < static_cast<int>(level.fire.agents.size())) {
+            level.fire.agents[static_cast<std::size_t>(follower.fireAgent)].atPx = follower.atPx;
+        }
+        if (follower.reflector >= 0 && follower.reflector < static_cast<int>(level.portals.reflectors.size())) {
+            level.portals.reflectors[static_cast<std::size_t>(follower.reflector)].centrePx = follower.atPx;
+        }
+    }
     // What each blast grabbed with a clear line has its `destroy` set (explode,
     // listing L67590, #111-122), and a breakable wall's own callback reads that and
     // deletes it (ETHCallback_breakable_wall, L68771, #1-86) ON THE SAME FRAME: the

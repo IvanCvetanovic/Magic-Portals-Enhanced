@@ -25292,3 +25292,226 @@ the player, as he chose (the original pans in from camera_start). R1, R2, R17 an
   aim point compared).
 - Deviation 7: set the pads' "moving" from each walk key held (left, right and their alternates), not from the summed
   direction - one line in `readInput`, with a camera case for both keys held.
+
+## Step 152 - the draggable handle as the original: a finger that goes down on arrows.ent drags it one for one, the flame or reflector that names it eases after it, the camera's finger is locked while it moves, and 2-20's hand teaches it; 2-20, 2-21, 2-22 and 2-24 won by routes (built)
+
+**TRACK B (the worktree `Magic-Portals-Remake-w2b`, branch `w2-b`, after step 151 `93eb2a1`), the program's AR**
+(`docs/parity-backlog.md` section 6's B4 row; step 151's deviation 3 and LEFT FOR LATER "B4's handle ... and 2-20's
+`hand_waypoint0` lesson"; the audit's `check_script.md` row 3 and `check_assets.md` items 1 and 6). Its build reads the
+frozen level data in `out/snap_w2`; numbered in track B's range, and the merge renumbers it. Changed:
+`game/data/handle.json` (new: `handle`, `follow`, `lesson`), `game/data/effects.json` (`smoke_vanish`),
+`game/data/camera.json` (two notes), `data/entity_roles.json` (a `handle` role for `arrows` / `arrows.ent`, taken out of
+`scenery_hint`, and the `scenery_fx` note), `game/sim/Handle.{hpp,cpp}` (new) and `game/sim/CMakeLists.txt`,
+`game/sim/Hint.{hpp,cpp}` (`Round`, the WaypointManager 1-21's hand and 2-20's lesson share; a waypoint's `alpha`;
+`ParseWaypoints`), `game/sim/Camera.{hpp,cpp}` (`Feel::locked`), `game/sim/Effects.{hpp,cpp}` (`smokeVanish`),
+`game/sim/Game.{hpp,cpp}` (`Data::handle`, `Level::handles`, the followers bound in `Start` and moved in `AfterStep`),
+`game/sim/Roles.{hpp,cpp}` (`kHandle`), `game/sim/Fire.{hpp,cpp}` (comments only), `game/MagicPortalsLayer.{hpp,cpp}`
+(the handles' reading of the touch in `readInput`, the lock, the pictures, 2-20's lesson, `HandleReports`,
+`FollowerReports`, `LessonState`, the resets), `game/Route.{hpp,cpp}` (a drag in a route; the trace prints the handles
+and their followers), `tests/test_mp_handle.cpp` (new) and `tests/CMakeLists.txt`, `tests/test_mp_camera.cpp`,
+`tests/test_mp_layer.cpp`, and four new routes, `tests/routes/level19a.json`, `level20a.json`, `level21a.json` and
+`level23a.json`. No engine change (the pin stays `710bffc`), no converter change (the converter already writes
+`metadata/follow`: the six followers carry it in `out/snap_w2`), no format finding (the decode is of the script;
+`handle.json` holds it). Evidence under the gitignored `out/parity/program/AR/`.
+
+**GAMEPLAY CHANGED (as the original does; B4).** On the six levels that place a handle - 2-20, 2-21, 2-22, 2-23, 2-24
+(a fire agent follows it) and 2-27 (a reflector does):
+- a touch that goes down on the handle's picture and stays down drags it with the finger, one for one on the screen,
+  at most 64 units a tick; a tap (down one tick, up the next) never moves it, so no route written before this step
+  plays differently (all 70 win on their ticks with their drift unchanged);
+- the fire agent or reflector that names the handle in `follow` eases after it - aimed again from where it has got to
+  every 100 ms while the handle is elsewhere, each aim 600 ms of smoothEnd - so a flame can now be brought to a crate
+  or a barrel, and burns and kills wherever it is (a player it comes within 32 of dies); a reflector turns shots where
+  it has been brought;
+- while a handle is held the camera's finger pans nothing and judges no hold (`shouldLockCamera`); the held touch still
+  stops the follow (`hasAnyTouch`, step 151);
+- a drag on the handle of more than scale(18) fires no shot (step 150's rule); a tap on it fires one, as the original
+  (by the code: a tap has no held tick, so the handle never moves and step 150's release fires; no case taps a handle).
+And, picture only: the handle is drawn at 0.3 at rest and whole while held, pulsing (1.1, 1) <-> (1, 1.1) every 300
+ms; 2-20's hand runs its lesson - fade in on the handle, press 25 down, drag 70 right, fade out, 3200 ms a round - and
+goes, with `smoke_vanish` 32 above it, the first tick the handle is held.
+
+**BLOCKERS, checked first.** None unmet. Release-to-fire (step 150, `7aee28b`) and the camera drag (step 151,
+`93eb2a1`) are in the tree, so a drag already fires nothing and the camera's finger has a lock to take; B1's blast
+(step 115) is in this worktree (branched after wave 1); the converter already carries `follow`; the decode is in the
+listing (md5 `48fe65ce...`) and `reference/ethanon`; W.1's reachability check and `test_mp_routes` (70 routes) are
+there; no engine change is needed.
+
+**WHAT THE ORIGINAL DOES** (the listing; `handle.json` `_source` blocks have every citation).
+- `ETHCallback_arrows` (L67305, 340811..341745), every frame; `arrows.ent` is `static="0"` with a callback, so ALWAYS
+  ACTIVE: it runs in `ETHScene::Update`'s first walk, before the scene's script (the camera, the portal manager) and
+  before the static callbacks (`Scene/ETHScene.cpp:467-482`). #4-16 `moving` 0; for touches 0 and 1 (#177 `CMPIu v6[t],
+  v2` is the immediate 2): #21-86 on `GSKS_HIT`, if `isPointInRect(GetTouchPos + GetCameraPos, GetPositionXY,
+  GetSize, V2_HALF)` (319410..319788: the rect of the entity's size centred on its point, both edges in),
+  `SetVector2('onHitPos' + t, GetPositionXY)`; #89-141 on `GSKS_DOWN`, if `isPointInRect(getRelativeHitPos(t),
+  GetVector2('onHitPos' + t), GetSize, V2_HALF)` - `TouchInputManager::update` #86-104 sets `relativeHitPos` on the HIT
+  frame to the touch + `GetCameraPos()`, after this callback - then #143-160 `AddToPositionXY(capVector(GetTouchMove(t),
+  scale(64)))` and #161-173 `moving` 1, on every such frame, moved or not. #179-200 `moving` 0 -> `SetAlpha(0.3)`, else
+  `SetAlpha(1)`: FAINT AT REST (the program's spec words it "alpha 0.3 while moving"; the bytecode, `check_assets.md`
+  and the library's 2-20 stills all read it the other way). #201-220 `bounce(this, (1.1, 1), (1, 1.1), 300)`, whose
+  `SetScale` is also what `GetSize` returns to the next frame's test.
+- `doFollow` (L67201, 340369..340811): `follow` names an entity; `seekNeighbourEntity`, else `SeekEntity`, by that name;
+  `followUp(this, its point, 600, 100, true)` (utilEntityEffect 328407..329130, the same arithmetic as
+  `ghost_appear_effect`'s chase: `Effects::FollowUp`). `ETHCallback_fire_agent` calls it at #274-280, after its burn loop;
+  `ETHCallback_reflect_agent` at #1-6, before it turns a shot.
+- `CameraController::shouldLockCamera` (108274..108505): any handle the constructor gathered (#101-114) with `moving` !=
+  0; `dragMoveCamera` #3-7 returns at once while it is.
+- `ETHCallback_hand_waypoint0` (366560..368220): a repeating WaypointManager of six waypoints, with their colours'
+  alpha (`FloatColor(uint)`, 86246..86521: a is the top byte, so `16777215` is alpha 0 and `-1` alpha 1), position and
+  alpha mixed by each waypoint's filter (`getCurrentPoint` #82-101); no life; `seekNeighbourEntity('arrows.ent')`, and
+  when its `moving` is set, `AddScaledEntity('smoke_vanish.ent', GetPosition() - vector3(0, scale(32), 0), getScale())`
+  and `DeleteEntity`.
+- **The census** (`test_mp_handle`): six handles in 128 levels, one each on 2-20 to 2-24 and 2-27, each on the point of
+  the one node that follows it (five `fire_agent`, one `reflect_agent.ent`); no other entity carries `follow`; 2-20 alone
+  places `hand_waypoint0`. **No footage shows a handle dragged** (`footage/INDEX.md`), so the drag's numbers are the
+  decode's; the rest alpha and the lesson are measured on the library's stills (gate 7).
+
+**THE CHANGE.**
+- `game/data/handle.json`: `handle` (the entity `arrows`; `size_units` 64 x 64, arrows.png's own; 64 a frame; alpha 0.3
+  / 1; the bounce), `follow` (the datum, its two callers, 600 / 100 / dontPause) and `lesson` (2-20's hand, its six
+  waypoints with their alpha). `Handle::LoadRules` reads it strictly.
+- `sim/Handle`: `State::Drag` is `ETHCallback_arrows` for the one pointer (`Touch`: HIT, DOWN, the touch's level point,
+  the relative hit point, the move); `Rest` a tick no touch is read on; `AnyMoving` is `shouldLockCamera`; `Follow` is
+  `doFollow` for every follower, each bound by `Game::Start` to the fire agent or reflector its node is. `Lesson` is the
+  hand's callback on `Hint::Round`, the WaypointManager 1-21's hand now shares (its fields and arithmetic unchanged:
+  `test_mp_camera`'s 1-21 case and 1-21's frame are unchanged).
+- `Game::AfterStep` moves the followers right after `fire.Tick` (a flame burns where the last tick left it, then moves)
+  and before `portals.Tick` (a reflector moves, then turns a shot), writing `fire.agents[i].atPx` and
+  `portals.reflectors[i].centrePx`.
+- The layer: `readInput`, right after the camera's `Track` and before anything takes the touch, reads it for the
+  handles as the always-active callback reads `ETHInput` raw - its level point through the camera the last tick left,
+  and the point it went down on through the camera the tick after it went down left - drags, and sets
+  `Camera::Feel::locked`; the door's and a death's ticks `Rest` (pulsing on), the pause `Rest`s with no time. The
+  handle's picture follows it at its alpha and bounce; a follower's picture, flame, halo and light follow it (its
+  `ownerPx`); 2-20's hand runs its round in `advanceMotions`, after the handles, and on the tick its handle is held adds
+  `smoke_vanish` (effects.json) 32 above itself and goes.
+- `Route`: a tap with `to` is a DRAG - down on `at`, lying on `to` on its last held tick (the release tick moves
+  nothing), let go on `release` (at least two ticks on), and `"shot": false`. The driver puts both points on the view
+  through the down tick's camera; the finger moves on the screen, so a handle it holds goes from `at` to `to`.
+
+**THE GATES.** Before = step 151's committed build and records (`CD/`: `test_mp.exe` `1f4be6c7`, `MagicPortals.exe`
+`d5e1a379`, `CD/after/sweep`, `CD/allmode.log`, `CD/routes_allmode_lines.txt`); after = this step's build
+(`MagicPortals.exe` `18d190b3`, `test_mp.exe` `c003eaae`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in all five builds at `--parallel 4` (`AR/build1_sim.log` the sim library, 38 steps; `build2.log` 44 steps, which linked `MagicPortals.exe` `18d190b3` and `test_mp.exe`; `build3_tests.log`, `build4_relink.log`, `build5_tests.log`, the runner's relinks for two test fixes and one refusal): no line with "warning" in any |
+| (1) The drag | a touch down on the handle and held drags it one for one, 64 units a tick at most, `moving` on every held tick, moved or not; a touch that went down off it takes nothing; a tap moves nothing | the handle scenery, still | **passes**: `test_mp_handle` `ADragIsTheCallbacksArithmetic` (the hit remembered; (+5, -3) moves it (+5, -3); held still: moving, not moved; 100 capped to 64; a touch gone down off it and slid over it takes nothing; up: at rest) and `TheRectAndTheCap` (both edges in, a hair past out; capVector); in the layer, `TwoTwentyDragsTheHandle`: a scheduled drag of (100, -50) screen units, nine of ten ticks held, takes 2-20's handle (90, -45) within 1e-6, and fires nothing |
+| (2) Alpha and pulse | 0.3 at rest, 1 held; (1.1, 1) <-> (1, 1.1) 300 ms, and the hit rect with it | drawn whole and still | **passes**: `ADragIsTheCallbacksArithmetic` (0.3 / 1 / 0.3; (1, 1.1) at 300 ms within 1e-3; the rect (64, 70.4)); `TwoTwentyDragsTheHandle` (drawn 0.3 at rest, 1 on the first held tick, 0.3 again after, and where it was left); the after-sweep draws all six at 0.3 (gate 11) |
+| (3) The follow | `followUp(600, 100)`: a flame or reflector eases after its handle, never past it; a handle never dragged moves nothing | fixed | **passes**: `AFollowerEasesAfterItsHandle` (120 ticks still under a still handle; after a jump of 100: the first tick smoothEnd of 1/36 of the stride within 1e-3, never passing, still more than 15 short at 0.5 s, within 1 u at 2 s, 0.05 at 3 s); `OnTwoTwentyTheFlameIsDraggedOntoTheCrates` (300 untouched ticks: the flame at (162, 192) and nothing lit; dragged to (345, 105): within 1 u 2 s later, both crates burnt and gone, the player alive); `OnTwoTwentySevenTheReflectorFollows` (the reflector to (260, 176) within 0.5, the level's other, fixed agent unmoved); in the layer, the flame within 1 u of the handle 2 s after the drag and its picture's owner point (its light and flame) on it within 1e-9 |
+| (4) The camera's lock | while a handle moves: no pan, no hold; the follow waits on the held touch | a drag on the handle panned the view | **passes**: `test_mp_camera` `AMovingHandleLocksTheFinger` (180 units of finger with `locked`: the view not moved a bit; let go: it follows at once, held by nothing); in the layer, the view identical on all nine held ticks of the drag |
+| (5) 2-20's lesson | the six decoded waypoints with their alpha, 3200 ms a round; gone with `smoke_vanish` 32 above it on the first held tick | still, whole, forever | **passes**: `TheLessonIsTheDecodedRound` (unseen on its first call, whole 100 ms on, 70 right and 25 down at most, back at its first waypoint 3200 ms on within 3 ticks, gone once on a held tick); `TwoTwentyDragsTheHandle` (gone and undrawn on the first held tick; one `smoke_vanish.ent`, 32 above its last point within 1e-6) |
+| (6) The census | six handles, each on the point of the one node that follows it; `follow` read on no other entity; the lesson on 2-20 alone | not read | **passes** (`TheSixHandlesAndWhatFollowsThem`, the 128 converted levels): 2-20 to 2-24 `fire_agent_1086`, 2-27 `reflect_agent_ent_961`, each on its handle's point; 0 other nodes carry `follow`; `hand_waypoint0` on level19a alone |
+| (7) Against the original's stills | the handle faint at rest; the lesson hand on the decoded round | - | **passes** (`AR/stills/`): the handle's triangles read 0.44 / 0.46 on `2-20_h2.8` / `_h6.3` (left, right, bottom; `measure_arrows.txt`) by a reading that gives the port's 1 as 1.00 and its 0.3 as 0.41 (the flame's light lifts the core): faint, not whole. The hand, by a masked template of the before frame's glove: `h0.3` (+17.42, +21.33) u, `h2.8` (0, +9.24), `h6.3` (0, +17.42), each on the decoded round within 0.07 u (1540, 779 and 1065 ms into it: the drag leg, the press, the press), and 2439 / 286 ms apart mod 3200 against the stills' 2500 / 3500 (300): **61 and 14 ms off** (`measure_hand.txt`) |
+| (8) The spec's routes | 2-20, 2-21, 2-22, 2-23, 2-24 and 2-27 won by play | 2-23 won (step 127, tick 773); the others none | **2-20, 2-21, 2-22, 2-24 won by new routes** (below), **2-23 by its step-127 route**, unchanged (773). **2-27: NOT MET** - it needs G8, not built here (LEFT FOR THE OWNER) |
+| (9) Every route still wins | `test_mp_routes`: every route won; one a GAMEPLAY change breaks re-authored with its reason, none deleted | 70 won, 215 checks | **passes: 74 of 74 won, 227 checks, 0 failures**; the 70 older route lines (win tick, shots, drift) identical to step 151's (`AR/routes_allmode_lines.txt` against `CD/routes_allmode_lines.txt`): a tap never holds a handle. None re-authored, none deleted |
+| (10) Reachability | no door newly sealed | 108 / 20 / 0 | **passes: 108 reachable, 20 opened, 0 sealed, 0 differ** from `reachability.json` (`AR/reach_check.txt`; the worktree's `tools/parity/reachability.py`, whose ROOT is the worktree, so it read this step's `data/entity_roles.json` with the `handle` role - arrows.ent has no body, so no verdict could move) |
+| (11) The after-sweep | 122 of 128 byte-identical to `CD/after/sweep`, and the six handle levels explained | `CD/after/sweep` | **passes: 122 of 128 byte-identical** (`AR/after/sweep` on `18d190b3`; setup_B's checker, `AR/compare_after.txt`): 128 rc=0, validation ACTIVE in 128 logs and silent, every PNG whole and on its logged md5, 128 logs read `out/snap_w2` and none the live `out/`, no tap or `portal_launch` line; the saves seed `40bfef3a` before and after. **The six that differ are 2-20, 2-21, 2-22, 2-23, 2-24 and 2-27, every pixel inside the handle's picture** (its centre +- 35.2 units, the bounce's reach; `AR/diff_levels.txt`: 10,865 to 11,396 px each) **and, on 2-20, the lesson hand's round** (15,863 px: 12,290 the handle's, 3,573 the hand's); 0 px anywhere else |
+| (12) In the window | a drag route won on the suite's tick | - | **passes** (`AR/window/`): `--route` 2-20 `won on tick 344`, 2 shots, 0 px drift, "the handle lesson goes on tick 11"; 2-24 `won on tick 722`, 6 shots; each a frame every 30 ticks (the handle whole while held, the flame behind it, the crates gone by f150); validation ACTIVE and silent; the DEV tap lines are the routes' own |
+| (13) The runner once | every suite | 47 passed, 14,473 checks (step 151) | **passes: 48 suites, 48 passed, 0 failed, 15,047 checks** (`AR/allmode.log`): `test_mp_handle` 544 (new), `test_mp_camera` 280 -> 282, `test_mp_layer` 3,280 -> 3,296, `test_mp_routes` 215 -> 227, every other count equal |
+
+**THE ROUTES** (`tests/routes/`, each opening with the `"_step150"` note: written in the release meaning). Every one
+keeps every shot more than 32 units from the flame, since G8 (a shot through a fire agent's flame becoming a fireball) is
+not built and the routes are to stay the original's play once it is; and the flame never comes within 32 of the player.
+MEASURED (`AR/flame/shot_flame.txt`, each route traced every tick on `c003eaae`): each shot followed from the player's
+centre toward its tap at `shot.json`'s 600 u/s, tick by tick while it flies, against the follower's traced point - the
+nearest approach of any shot to the flame is **95.6 u on 2-20, 71.8 on 2-21, 67.8 on 2-22 and 38.2 on 2-24** (its fifth
+tap, released on 181, against the flame parked at (150, 20): a static margin, whatever speed G4 gives the shot).
+
+| Level | Route | Won on | What it does |
+|---|---|---|---|
+| 2-20 `level19a` | 2 drags, 2 shots | **344** | the flame onto the two crates, then lifted clear; a portal through their gap into the door room and one on the player |
+| 2-21 `level20a` | 4 drags, 8 shots | **815** | the flame burns the barrel's plug; into the pocket; the barrel sent to the niche by the wall; the flame onto it (the wall breaks on 478); out, and into the door room |
+| 2-22 `level21a` | 2 drags, 2 shots | **274** | the flame up onto the corridor's crate, then away; a portal under the corridor's ceiling from the floor's far left, and one on the player's head |
+| 2-23 `level22a` | step 127's | 773 | unchanged: its handle is never touched |
+| 2-24 `level23a` | 4 drags, 6 shots | **722** | two barrels moved off the chain; the pair by the wall set off alone (wall 1141, ~275); a third barrel sent onto the button (the lift door opens); the rest set off (wall 1131, ~590); down the hole and under the door |
+| 2-27 `level26a` | - | not won | G8 (LEFT FOR THE OWNER) |
+
+The suite's lines (`AR/allmode.log`): 2-20 344 (2 shots, drift 0.000), 2-21 815 (8, 0.016), 2-22 274 (2, 0.000), 2-24 722
+(6, 0.000). The four files and their `_about` lines say each step, tick by tick.
+
+**SMART APP CONTROL: 1 refusal.** `test_mp.exe` `a7a91dd8` (the first test fix's relink) was refused on its first
+launch ("Permission denied"); deleted and relinked once (`fcae4278`), it ran; the second test fix's relink (`c003eaae`)
+ran the first time. `test_mp.exe` `6af73cc6` (the first build) and `MagicPortals.exe` `18d190b3` ran the first time:
+the runner for the first suite runs and the route drafts, the game for the 128 sweep captures and the 2 window runs.
+`MagicPortalsSpike.exe` was not rebuilt (never a target here): the next full build relinks it. No ctest.
+
+**VERIFIED, PASSED** (`AR/verify1.json`, on the same `test_mp.exe` `c003eaae` and `MagicPortals.exe` `18d190b3`, head
+`93eb2a1`, engine `710bffc`; no fix round; 0 refusals). The verifier re-derived the decode from the listing before
+reading the code, and the code follows it, the rest alpha included. Its no-op `port_build.bat`: 0 warnings, both
+executables unchanged (only `MagicPortalsSpike.exe` relinked, `3447dab9`, never launched). Its own runs, once each: the
+runner with no argument, 48 suites passed, 15,047 checks, every suite's count equal to the one above; `test_mp_routes`
+74 of 74, the 70 older lines identical to step 151's; reachability 108 / 20 / 0, 0 differ; all four new routes in the
+window (2-20 344, 2-21 815, 2-22 274, 2-24 722; validation silent; the DEV taps the routes' own); its own 128-level
+sweep md5-identical to `AR/after/sweep` on 128 of 128, and 122 of 128 to `CD/after/sweep`, every differing pixel within
+35.2 units of the handle's centre (found by matching `arrows.png` on the before frame) plus 3,457 px of 2-20's lesson hand
+(verify1's count). Its findings, two medium and four low, are text here, none a behaviour change: 2-27 and 2-24's door
+(LEFT FOR THE OWNER / LATER), the drag routes' shot margins against G8's reach, the first drags played in the opening
+caption, the two claims by the code only, and the program spec's inverted alpha (the backlog's wording).
+
+**RULINGS APPLIED.** B4 decided for the original under the 2026-09-29 rulings. The camera's finger (step 151) keeps its
+switch; `drag_pan_enabled` false turns off the camera's drag and leaves the handle working - the handle and `follow` are
+level data, not the camera (the audit's note on the 2026-09-11 ruling). By the code, not by a case: `Camera::Track`
+takes no rules, and `Handle::State::Drag` reads only the tick's `Touch`, so the switch reaches neither. R1, R2, R17 and
+R23 untouched; R24 and R25 as they are. G8 and B7 (the lift door's latch) are not built here and no route leans on
+either.
+
+**RECORDED DEVIATIONS.**
+1. **One pointer.** The callback reads touches 0 and 1 (#177); the port has the one pointer, so a second finger dragging
+   a handle while the first walks is not played.
+2. **A follower moves every tick.** `fire_agent.ent` and `reflect_agent.ent` are `static="1"`: the original runs their
+   callbacks - and so `doFollow` - only while their bucket is on the view (00_order 8.12c); the port moves them every
+   tick, as it runs every static callback it builds. A flame dragged off the screen goes on following here.
+3. **The handle is read only in play.** Under a popup or the pause, and from the door or a death on, the port reads no
+   touch, so no handle is held there; the original's always-active callback reads the input every frame. Followers and
+   the pulse run on the level's ticks: nothing moves under a pause or popup, where `followUp`'s dontPause clock would
+   run on.
+4. **Half a tick apart.** The drag is read in `readInput` and the follow runs in the next tick's `AfterStep` (the port's
+   "same sequence, begun half a tick later", `Game.hpp`), where the original drags and follows in one frame: a follower
+   starts one tick later than the original's.
+5. **A click shorter than a tick holds nothing.** As for the camera's record (step 151), a press and a release on one
+   tick are no `GSKS_HIT` for the handle.
+6. **2-20's small crate falls off the big one** in the port before f420 (the before and after frames both), where the
+   original's stills show it resting on the big crate's corner: a physics divergence this step does not cause; the route
+   burns both crates on tick ~70, before it falls.
+7. **2-24's lift door rises into the upper room.** The port's `door_lift_1145` rises its whole height (no latch, B7;
+   main's step 5ee1c66 makes it 0.8 of it) through the platform above and pushes what stands on it: in a draft, barrel
+   1135 up to the ceiling. The route sends 1135 to the button before the door rises and walks the player left of it
+   first; the original's 0.8 rise would stand 68 units above that platform as well.
+
+**LEFT FOR THE OWNER / LATER.**
+- **2-27 (level26a) is not won** (a finding, not a tuned-away gate). Its door room is closed by
+  `crate_no_emissive_1000` and `_1001`, both burnable and NOT teleportable; the only fire on the level is
+  `fire_agent_ent_974`, fixed at (235, 123), 63 units from the nearer crate (reach 32), and it names no handle; there
+  is no carranca and no fire diamond; the room's only other opening is a slit of about 2 units between the ceiling
+  block and the crates' tops (verify1). The one fire that can reach them is a portal shot turned into a fireball by
+  that flame - G8 (`ETHCallback_fire_agent` #254-265 `burnProjectile`), not built in this tree - and the handle's
+  reflector (`reflect_agent_ent_961`, which now follows its handle) is what aims such a shot at the crates.
+  `reachability.json` reads 2-27 `reachable` because the flood passes dynamic bodies (crates), which is no route. Its
+  route (`tests/routes/level26a.json`: drag the handle to place the reflector, then a shot through the flame turned onto
+  crates 1000 / 1001) belongs to G8's step or the merge; B4 stays open for 2-27 until it wins.
+- The backlog is not edited here: the close role ticks B4 (2-20, 2-21, 2-22, 2-24 won; 2-23 still won by step 127's
+  route; 2-27 open, a G8 finding), step 151's deviation 3 and LEFT FOR LATER item, and the audit's `check_script.md`
+  row 3 and `check_assets.md` items 1 and 6. The program's B4 text says "alpha 0.3 while moving"; the tick words it as
+  built: faint (0.3) at rest, whole while held.
+- **Merge notes.** Main's G8 is now committed (`fdc100d`, after this step was measured): it changes `Fire.{hpp,cpp}`,
+  `Portals.{hpp,cpp}`, `Game.cpp`, `MagicPortalsLayer.cpp`, `Route.cpp`, `fire.json` and `tests/routes/level22a.json`
+  (2-23's route, which this step leaves to step 127). This step touches `Fire.hpp` and `Fire.cpp` for two comments only
+  ("never moves" was wrong), and G8's flame test must read `Fire::Agent::atPx` each tick, which now moves. The four new
+  routes carry the `"_step150"` note, so `migrate_routes.py` leaves them alone.
+  - Main's lift door latch (`5ee1c66`) changes 2-24's door, and 2-24's route leans on this tree's unlatched door (its
+    `_about`): the merge replays it (`test_mp.exe test_mp_routes --only level23a --trace 30`) on the merged build; if it
+    no longer wins, its door-walk ticks are re-authored and the reason recorded (the barrel still holds the button; the
+    latch would also hold it).
+  - G8 turns a shot that passes within its reach of a flame into a fireball. The four drag routes keep every shot more
+    than 32 units from the parked flame, but 2-24's is the nearest (38.2 units, and 45.2): with G8 merged, all four are
+    replayed, and a flame that burns a route's shot is parked further from that shot's line.
+- `test_mp_handle` reads every converted level for its census: a converter change that moves a handle or a follower
+  fails it first.
+- Untested, by the code only (verify1): a tap on a handle fires its shot; `drag_pan_enabled` false leaves the handle
+  working. A `test_mp_layer` case for each is left to the next step that relinks the runner (neither needs a relink here
+  to be true, only to be pinned).
+- The first drag of 2-20, 2-21, 2-22 and 2-24 plays in the level's black opening caption (ticks 10-31; verify1's f30
+  frames are the "Part N" card), where the port reads input and no player sees the handle; older routes tap early too.
+  Not a winnability matter: when one of these routes is next touched, its first drag starts after the caption fades
+  (about tick 90).

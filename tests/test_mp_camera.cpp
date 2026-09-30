@@ -300,6 +300,30 @@ void AHeldTouchStopsTheFollow() {
     CHECK_MSG(follow.centrePx.x > onPad.x, "and let go, it follows on the tick it comes up");
 }
 
+// shouldLockCamera (planning step 152): while a handle is moving, dragMoveCamera
+// does nothing at all - no pan, and no hold judged - and the follow still waits on
+// the held touch (hasAnyTouch).
+void AMovingHandleLocksTheFinger() {
+    const Camera::Rules rules = Decoded();
+    Camera::Follow follow;
+    follow.Start(rules, kMiddle, kView, kWide);
+    const glm::dvec2 player = kMiddle + glm::dvec2(300.0, 100.0);
+    Camera::TouchRecord record;
+    follow.Tick(rules, player, kView, kWide, kTickS, Touch(record, true, true, {100.0, 100.0}), {});
+    const glm::dvec2 atDown = follow.centrePx;
+    glm::dvec2 finger(100.0, 100.0);
+    for (int tick = 0; tick < 30; ++tick) {
+        finger += glm::dvec2(-6.0, 0.0);
+        Camera::Feel feel = Touch(record, false, true, finger);
+        feel.locked = true;
+        follow.Tick(rules, player, kView, kWide, kTickS, feel, {});
+    }
+    CHECK_MSG(follow.centrePx == atDown, "a finger dragging a handle 180 away pans nothing and the view waits");
+    // Let go: no hold was judged, so the follow takes it on the tick it comes up.
+    follow.Tick(rules, player, kView, kWide, kTickS, Touch(record, false, false, finger), {});
+    CHECK_MSG(follow.centrePx.x > atDown.x && !follow.Held(rules), "and it follows at once, held by nothing");
+}
+
 // A drag of `ticks` held ticks, `perTick` a tick, from `at` - down, held, up - on a
 // camera whose player stands at `player`; the tick it comes up is the last.
 void Drag(const Camera::Rules& rules, Camera::Follow& follow, const glm::dvec2& player, glm::dvec2 at,
@@ -1203,6 +1227,7 @@ void runTests() {
     TheCamerasTouchIsTheEnginesInput();
     ADragPansTheViewAtTwiceItsMove();
     AHeldTouchStopsTheFollow();
+    AMovingHandleLocksTheFinger();
     ADragAwayHoldsTheViewFourSeconds();
     AFastDragBackTowardThePlayerLetsItGo();
     AWalkOrATeleportLetsTheHoldGo();
