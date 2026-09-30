@@ -4164,6 +4164,10 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         for (std::size_t f = 0; f < m_level.handles.followers.size(); ++f) {
             if (m_level.handles.followers[f].node == sprite.node) drawn.follower = static_cast<int>(f);
         }
+        // A lift (movers.json `lift`): its callback blinks it, both spellings.
+        for (std::size_t l = 0; l < m_level.movers.lifts.size(); ++l) {
+            if (m_level.movers.lifts[l].name == sprite.node) drawn.lift = static_cast<int>(l);
+        }
         // AN ANTIPORTAL IS DRAWN AT HALF ITS NODE'S SCALE (placement.json
         // antiportal.manager): Game::preLoop scales the entity by its node's `scale`
         // and AntiPortalManager's constructor then calls Scale(0.5) on every entity
@@ -6015,6 +6019,14 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         if (drawn.antiportal) {
             colour = glm::vec4(glm::vec3(m_artRules.antiportal.ColourAt(m_levelAgeMs)), colour.a);
         }
+        // A LIFT'S BLINK (movers.json lift.blink): ETHCallback_lift #368-393, every
+        // frame whatever the lift is doing, on the same clock as the ring's. Its
+        // emissive 1 keeps min(1, ambient + emissive) whole, so the grey shows as is.
+        if (drawn.lift >= 0) {
+            const Mover::Rules& movers = m_data.movers;
+            const Art::Blink blink{movers.liftBlinkFrom, movers.liftBlinkTo, movers.liftBlinkStrideMs};
+            colour = glm::vec4(glm::vec3(blink.At(m_levelAgeMs)), colour.a);
+        }
         // 4-19'S RED KEY STATE, faded with the ambient once its key is taken:
         // SetColor(GetVector3('color') x bias) every frame (#140-159), rgb only.
         // Its emissive 1 keeps min(1, ambient + emissive) whole, so the halo fades
@@ -7390,13 +7402,10 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // whether the pads walk the player - ScreenPad::isMoving, which a walk key sets
     // as the pad does (arrowKeysMove) and which no_gravity levels never set, as the
     // original skips the pad's update there. The camera's tick takes both.
-    {
-        const glm::dvec2 view = ViewPx();
-        const bool onPad = touch.over && (Hud::OnPad(m_hudRules, Hud::Side::Left, view, m_levelAgeMs, touch.atView) ||
-                                          Hud::OnPad(m_hudRules, Hud::Side::Right, view, m_levelAgeMs, touch.atView));
-        m_cameraFeel = Camera::Track(m_cameraTouch, touch.pressed, touch.held, touch.over, touch.atView, onPad);
-        m_cameraPadMoving = !m_level.noGravity && direction != 0.0f;
-    }
+    const bool onPad = touch.over && (Hud::OnPad(m_hudRules, Hud::Side::Left, ViewPx(), m_levelAgeMs, touch.atView) ||
+                                      Hud::OnPad(m_hudRules, Hud::Side::Right, ViewPx(), m_levelAgeMs, touch.atView));
+    m_cameraFeel = Camera::Track(m_cameraTouch, touch.pressed, touch.held, touch.over, touch.atView, onPad);
+    m_cameraPadMoving = !m_level.noGravity && direction != 0.0f;
     // AND THE HANDLES' (handle.json, sim/Handle.hpp), whatever takes the touch below:
     // ETHCallback_arrows reads ETHInput raw too, and runs before the camera in the
     // frame (arrows.ent is always active). Its GetTouchPos + GetCameraPos is the
@@ -7417,17 +7426,36 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         m_level.handles.Drag(handleTouch, m_tickMs);
         m_cameraFeel.locked = m_level.handles.AnyMoving();
     }
+    // AND THE LIFTS' (movers.json `lift`, sim/Mover.hpp), whatever takes the touch
+    // below: ETHCallback_lift asks getTouchStateInRect, which reads the engine's own
+    // touch state and not the manager's enabled one. On the frame a touch goes down
+    // inside a lift's picture, off the walk pads (ScreenPad::isValidPoint), it sends
+    // that lift and disables every touch - so the shot that touch would fire on its
+    // release is never fired (the manager's getTouchState reads 0 until it is up).
+    // Through the camera the last tick left, as the shot's point; the lift moves on
+    // this tick's step, as the callback moves it on the frame it is sent.
+    bool liftTook = false;
+    if (touch.pressed && touch.over && !onPad) {
+        const glm::dvec2 corner = m_follow.centrePx - ViewPx() * 0.5;
+        liftTook = m_level.movers.Press(corner + touch.atView) > 0;
+    }
     // AND THE TOUCH A SHOT IS FIRED BY, followed before anything below reads it,
     // as PortalManager::update runs TouchInputManager::update before either tap
     // path (placement.json `release`). On the tick a touch comes up, every reader
     // takes the last point it was HELD at - getReleasePos, which the original's
     // controls, help blocks and shot all read on that frame - not where it came up.
-    const Portals::TouchRelease release =
+    Portals::TouchRelease release =
         Portals::TrackTouch(m_shotTouch, touch.pressed, touch.held, touch.released, touch.over, touch.atView,
                             touch.atPx);
     if (release.released) {
         touch.atView = release.atView;
         touch.atPx = release.atPx;
+    }
+    // A touch a lift took is followed no further: it fires no shot when it comes
+    // up, on a later tick or on this one (a press and a release inside one tick).
+    if (liftTook) {
+        m_shotTouch = Portals::TouchTrack{};
+        release = Portals::TouchRelease{};
     }
     const ControlButton* under = controlUnderPointer(touch);
     const bool held = touch.held;
@@ -9229,10 +9257,7 @@ void MagicPortalsLayer::latchSimSounds() {
     for (const Puzzle::SwitchedDoor& door : m_level.channels.doors) {
         now.doorsOpening.push_back(door.motion.opening ? char{1} : char{0});
     }
-    now.liftsForward.reserve(m_level.movers.lifts.size());
-    for (const Mover::Lift& lift : m_level.movers.lifts) {
-        now.liftsForward.push_back(lift.motion.forward ? char{1} : char{0});
-    }
+    for (const Mover::Lift& lift : m_level.movers.lifts) now.liftsSent += lift.motion.sends;
 
     // The first tick of a level sets the mark rather than playing against a
     // zeroed one: otherwise a level that begins with two static portals and a
@@ -9283,13 +9308,9 @@ void MagicPortalsLayer::latchSimSounds() {
         const double strideMs = static_cast<double>(m_level.channels.doors[i].motion.durationS) * 1000.0;
         latch(now.doorsOpening[i] != 0 ? "door_opened" : "door_closed", strideMs);
     }
-    // And a lift each time it turns, which is each end of its run.
-    const std::size_t lifts = now.liftsForward.size() < m_watch.liftsForward.size()
-                                  ? now.liftsForward.size()
-                                  : m_watch.liftsForward.size();
-    for (std::size_t i = 0; i < lifts; ++i) {
-        if (now.liftsForward[i] != m_watch.liftsForward[i]) latch("lift_turned");
-    }
+    // And a lift each time a touch sends it: ETHCallback_lift #259-262 calls
+    // playElevatorSound right after sendLiftToOtherPoint, and nothing on arrival.
+    for (int i = m_watch.liftsSent; i < now.liftsSent; ++i) latch("lift_sent");
 
     m_watch = std::move(now);
 }

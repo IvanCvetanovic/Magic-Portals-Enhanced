@@ -320,7 +320,13 @@
     "door_opened": "playDoorOpenSound",
     "door_closed": "playDoorCloseSound",
     "button_pressed": "",
-    "lift_turned": "playElevatorSound",
+    "_note_lift_sent": [
+      "A LIFT SENT BY A TOUCH (planning step 153; movers.json `lift`): ETHCallback_lift (listing",
+      "L83504) #258-262 calls sendLiftToOtherPoint and then playElevatorSound on the frame a touch goes",
+      "down inside its picture, once per lift sent, and nothing plays when it arrives. Until step 153",
+      "the port's self-running lift played it at every turn (`lift_turned`)."
+    ],
+    "lift_sent": "playElevatorSound",
 
     "wall_broken": "playDemolitionSound",
     "_note_red_key_got": [

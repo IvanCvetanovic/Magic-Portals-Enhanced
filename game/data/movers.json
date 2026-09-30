@@ -1,10 +1,10 @@
 {
   "_about": [
-    "The Magic Portals port's movers: the two numbers the Godot project keeps in behaviours.gd",
-    "rather than in its data, moved here so they can be retuned without touching code",
-    "(Enhanced's own CLAUDE.md rule 1). Both of those are the Godot project's guesses, carried.",
-    "`button` is not: it is decoded, and it is read by sim/Puzzle rather than sim/Mover.",
-    "See docs/planning/2026-09-11-magic-portals-remaster.md, steps 4 and 78."
+    "The Magic Portals port's movers. `oscillation` is the Godot project's guess, carried from",
+    "behaviours.gd so it can be retuned without touching code (Enhanced's own CLAUDE.md rule 1).",
+    "`lift` and `button` are decoded; `button` is read by sim/Puzzle rather than sim/Mover.",
+    "See docs/planning/2026-09-11-magic-portals-remaster.md, steps 4, 78 and 153 (`lift`, which",
+    "replaced the Godot project's self-running shuttle and its guessed 120 px/s)."
   ],
 
   "oscillation": {
@@ -20,12 +20,49 @@
   },
 
   "lift": {
-    "_note": [
-      "speed_px_s's default (behaviours.gd:93, 137). No lift in chapter 1 carries a speed",
-      "of its own, so every one of them runs at this."
-    ],
-    "_guess": true,
-    "speed_px_s": 120.0
+    "speed_units_per_s": 60.0,
+    "size_units": [64.0, 32.0],
+    "blink": { "from": [0.6, 0.6, 0.6], "to": [1.0, 1.0, 1.0], "stride_ms": 300.0 },
+    "_source": [
+      "ETHCallback_lift (ETHCallback_lift.angelscript, listing L83504, bytes 409098..410697) and",
+      "sendLiftToOtherPoint (the same file, L83903, 410697..411544), in Enhanced's",
+      "out/parity/asbc/all_functions.txt (md5 48fe65ce8baea16b94ed84d8d7be84b0; 00_order 8.0: a call",
+      "pushes its last argument first). lift.ent (entities/lift.ent) is static=1, so the callback runs",
+      "only while the lift's bucket is on the view (00_order 8.12c). Both spellings, lift and lift.ent,",
+      "run it (ETHASUtil.cpp:63-67); entity_roles.json gives both the role `lift`.",
+      "THE FIRST FRAME (#1-176, while the entity has no 'dest'): the entities its strings 'a' and 'b' name",
+      "are found (SeekEntity) and their points kept as 'a' and 'b'; the lift is PUT ON 'a' (#84-90",
+      "SetPositionXY(a)); 'dest' = 'origin' = a; 'squaredDistance' = |b - a|^2; 'nonTeleportable' 1; and",
+      "both markers are deleted. So it starts at rest on its marker a (in all 14 placements the node",
+      "already stands there: test_mp_movers' census).",
+      "EVERY FRAME, NOT PAUSED (#177-262): getTouchStateInRect(GetPositionXY() - GetCameraPos(), GetSize(),",
+      "vector2(0.5, 0.5), touchPos) (TouchInputManager 159915..160369: the first touch whose RAW state is",
+      "not up and whose point lies in the rect of the entity's size centred on its point, both edges in,",
+      "isPointInRect) == 1, GSKS_HIT (KeyStateManager.h:31) - the frame a touch goes down on it - and",
+      "_screenPad.isValidPoint(touchPos) (149925..150004: not on a walk pad). Then every touch is",
+      "disabled (#234-251, disableTouch for t < GetMaxTouchCount: TouchInputManager::getTouchState reads",
+      "0 until the touch is up again, 161450..161662 and update #155-165), so the portal manager fires",
+      "nothing on its release; sendLiftToOtherPoint(this) (#258, its only caller) and",
+      "g_audioManager.playElevatorSound() (#262: PlaySample(g_sfxNames[13]), elevator.mp3; sounds.json).",
+      "sendLiftToOtherPoint: at 'a' (vector2 opEquals on its point) -> 'dest' b, 'origin' a; else at 'b'",
+      "-> 'dest' a, 'origin' b; ELSE, anywhere between -> 'origin' b, 'dest' a: a tap on a moving lift",
+      "sends it back toward a whichever way it was going. Then 'dir' = normalize(dest - its point).",
+      "THE MOVE (#263-321): while 'dest' != its point, AddToPositionXY(scaledUnitsPerSecond(dir x speed))",
+      "with the local speed SET TO THE LITERAL 60 (#286 SetV4 1114636288 = 60f) - scaledUnitsPerSecond",
+      "(STimeManager 8363..8483 and 8284..8363) is unitsPerSecond x getScale(), 60 of the level's units a",
+      "second (speed_units_per_s). The callback reads NO 'speed' datum: 2-02's lift_789 carries speed 120,",
+      "which nothing in the listing reads, so every lift runs at 60. Then (#322-367) when",
+      "squaredDistance(origin, its point) >= 'squaredDistance' it is put on 'dest': it arrives exactly,",
+      "and stays until the next tap. Nothing plays on arrival.",
+      "THE BLINK (#368-393), every frame whatever it is doing: blinkColor(this, _blinkColorA, _blinkColorB,",
+      "300) - the file's globals (309213..309306, 309324..309383) are vector3(0.6, 0.6, 0.6) and vector3(1,",
+      "1, 1) - so 0.6 grey at 0 ms, white at 300, grey at 600 (blinkColor: art.json antiportal's _source,",
+      "utilEntityEffect 326140..326616; its clock blinkElapsedTime from the first call). lift.ent's",
+      "emissive (1, 1, 1) keeps min(1, ambient + emissive) whole, so the full swing shows.",
+      "size_units: GetSize() is the sprite's frame times its scale: lift.png is 64 x 32 with no hd twin,",
+      "lift.ent SpriteCut 1 x 1 and Scale 1, and no level node scales or turns a lift (its collision box",
+      "is 62 x 32; the touch is tested against the picture's rect)."
+    ]
   },
 
   "button": {

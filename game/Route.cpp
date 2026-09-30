@@ -423,6 +423,9 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         if (!registry.valid(lift.entity)) continue;
         const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(lift.entity).position);
         std::printf("\n          lift %s (%.1f, %.1f)", lift.name.c_str(), at.x, at.y);
+        // Where it is going, or where it waits for a touch (step 153).
+        std::printf(" %s (%.1f, %.1f)", lift.motion.Moving() ? "to" : "at rest", lift.motion.destPx.x,
+                    lift.motion.destPx.y);
     }
     // The fire (step 114): every fireball in the air, where one went off this
     // tick, what is burning or gone, and the bombs.

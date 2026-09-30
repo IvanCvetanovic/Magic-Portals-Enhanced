@@ -25515,3 +25515,205 @@ either.
   frames are the "Part N" card), where the port reads input and no player sees the handle; older routes tap early too.
   Not a winnability matter: when one of these routes is next touched, its first drag starts after the caption fades
   (about tick 90).
+
+## Step 153 - a lift waits on its first marker until a touch inside it sends it: at 60 units a second to the other marker and back again only when touched, the touch taken so it fires no shot, the elevator sound on the send, and the blink it always had; 1-27, 1-28, 1-29, 2-02, 2-07, 2-09, 2-18, 2-25 and 3-31 re-routed, 3-08 and 3-10 won by new routes (built)
+
+**TRACK B (the worktree `Magic-Portals-Remake-w2b`, branch `w2-b`, after step 152 `0e76e6d`), the program's G2**
+(`docs/parity-backlog.md` section 6's G2 row; the rows "Routes that ride the port's self-running lifts (G2)" and "2-06's
+fire lane ends on the self-running lift"). Its build reads the frozen level data in `out/snap_w2`; numbered in track B's
+range, and the merge renumbers it. Changed: `game/data/movers.json` (`lift`: decoded, the Godot project's guessed
+120 px/s gone), `game/data/sounds.json` (`lift_sent` for `lift_turned`), `game/sim/Mover.{hpp,cpp}` (`Travel` for the
+old `Shuttle`, `Movers::Press`, `Rules` read strictly), `game/MagicPortalsLayer.{hpp,cpp}` (the lifts' reading of the
+touch in `readInput`, the blink in `syncLighting`, the sound watch), `game/Route.cpp` (the trace says where a lift is
+going or that it waits), `tests/test_mp_movers.cpp`, `tests/test_mp_layer.cpp`, `tests/test_mp_turrets.cpp` (2-06's
+lane pinned), nine routes re-authored (`tests/routes/level26`, `level27`, `level28`, `level1a`, `level6a`, `level8a`,
+`level17a`, `level24a`, `level30b`) and two added (`level7b`, `level9b`). No engine change (the pin stays `710bffc`), no
+converter change (every lift already carries `a` and `b`, and their markers are in `out/snap_w2`), no format finding
+(the decode is of the script; `movers.json` holds it). Evidence under the gitignored `out/parity/program/G2/`.
+
+**GAMEPLAY CHANGED (as the original does; G2).** On the 13 levels that place a lift (14 lifts: 1-27 has two):
+- a lift no longer runs on its own: it stands on its marker `a` from the first tick and waits there;
+- a touch that goes down inside its picture (lift.png's 64 x 32 units, both edges in), off the walk pads, sends it -
+  from `a` to `b`, from `b` back to `a`, and from anywhere between back to `a` whichever way it was going - at 60
+  units a second (half the Godot project's guessed 120), and it stops on the far marker and waits for the next touch;
+- that touch is taken: it fires no portal shot when it comes up, whatever it did meanwhile (step 150's release rule
+  never sees it); the camera's finger and a handle read it as before, as both read the engine's touch raw;
+- 2-02's `lift_789` carries a `speed` of 120 that the original's callback never reads: it runs at 60 like the rest;
+- the elevator sound plays once per send, on the tick after it (the sound watch's tick), and nothing on arrival - it
+  used to clank at both ends of every run.
+And, picture only: a lift blinks from 0.6 grey to white and back, 300 ms a leg, on the level's age, as it always did in
+the original (the port drew it white and still).
+
+**BLOCKERS, checked first.** None unmet. The decode is in the listing (md5 `48fe65ce...`) and `reference/ethanon`;
+release-to-fire (step 150) is in the tree, so a touch's shot has one place to be refused; W.1's reachability check and
+`test_mp_routes` (74 routes) are there; no engine change is needed; the lifts' markers are in the converted levels.
+
+**WHAT THE ORIGINAL DOES** (the listing; `movers.json` `lift._source` has every citation).
+- `ETHCallback_lift` (L83504, 409098..410697). `lift.ent` is `static="1"` (entities/lift.ent), so it runs only while
+  its bucket is on the view (00_order 8.12c). First frame (#1-176, no `dest` yet): the entities named by its strings
+  `a` and `b` are sought, their points kept, the lift PUT ON `a` (#84-90), `dest` = `origin` = `a`, `squaredDistance`
+  = |b - a|^2, `nonTeleportable` 1, and both markers deleted.
+- Every frame, not paused (#177-262): `getTouchStateInRect(GetPositionXY() - GetCameraPos(), GetSize(), (0.5, 0.5),
+  touchPos)` (TouchInputManager 159915..160369: the first touch whose raw engine state is not up and whose point lies
+  in the rect, both edges in) `== 1` (GSKS_HIT, KeyStateManager.h:31) and `_screenPad.isValidPoint(touchPos)`
+  (149925..150004: not on a walk pad) -> `disableTouch(t)` for every touch (#234-251; `getTouchState` then reads 0
+  until the touch is up, 161450..161662 and `update` #155-165, so the portal manager fires nothing on its release),
+  `sendLiftToOtherPoint(this)` (#258, its only caller) and `playElevatorSound()` (#262: sample 13, elevator.mp3).
+- `sendLiftToOtherPoint` (L83903, 410697..411544): at `a` -> `dest` b, `origin` a; else at `b` -> `dest` a, `origin`
+  b; else -> `origin` b, `dest` a. Then `dir` = normalize(dest - its point).
+- The move (#263-367): while `dest` is not its point, `AddToPositionXY(scaledUnitsPerSecond(dir x speed))` with the
+  local `speed` set to the literal 60 (#286) - 60 of the level's units a second; then, when `squaredDistance(origin,
+  its point) >= squaredDistance`, it is put on `dest`. No `speed` datum is read anywhere in the callback.
+- The blink (#368-393), every frame: `blinkColor(this, _blinkColorA, _blinkColorB, 300)` with the file's globals
+  (0.6, 0.6, 0.6) and (1, 1, 1) (309213..309383).
+- **The census** (`test_mp_movers`): 14 lifts on 13 levels, both spellings, each node already on its marker `a`
+  (1-27 x2, 1-28, 1-29, 2-02, 2-06, 2-07, 2-09, 2-18, 2-25, 3-08, 3-10, 3-23, 3-31). **No footage shows a lift sent**
+  (`footage/INDEX.md`), so the send's numbers are the decode's; where a lift stands untouched is measured on the
+  library's stills (gate 7).
+
+**THE CHANGE.**
+- `game/data/movers.json` `lift`: `speed_units_per_s` 60, `size_units` [64, 32], `blink` (0.6)^3 -> (1)^3 over 300 ms,
+  with the `_source`; `Mover::LoadRules` reads them strictly (the `_guess` 120 and its key are gone).
+- `sim/Mover`: `Travel` is the callback's state (`a`, `b`, the point, `dest`, `origin`, `dir`, the leg squared, the
+  speed, and `sends`); `Wire` puts each lift on `a` at rest and reads no node `speed`; `Travel::Send` is
+  `sendLiftToOtherPoint`, `Advance` the move and its snap, `Holds` `isPointInRect`; `Movers::Press(point)` sends every
+  lift whose picture holds the point (each lift's callback tests the touch for itself). Every test of where a lift is
+  reads this double state, never its body's float round trip.
+- The layer: `readInput`, with the handles and before anything takes the touch, sends the lifts on the tick a touch
+  goes down over the game and off the pads, its point through the camera the last tick left (the shot's); a touch a
+  lift took is followed no further - `m_shotTouch` and the tick's release cleared, so it fires nothing on its release,
+  even inside the same tick. The lift moves on the same tick's `BeforeStep`, as the callback moves it on the frame it
+  sends it. `syncLighting` writes a lift's picture's rgb from the blink on the level's age (the antiportal's clock).
+  The sound watch counts sends (`lift_sent`, `playElevatorSound`); `lift_turned` is gone.
+
+**THE GATES.** Before = step 152's committed build and records (`AR/`: `test_mp.exe` `c003eaae`, `MagicPortals.exe`
+`18d190b3`, `AR/after/sweep`, `AR/allmode.log`, `AR/routes_allmode_lines.txt`); after = this step's build
+(`MagicPortals.exe` `e3524f32`, `test_mp.exe` `a813236c`, then `b9231bd2` after one test fix).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in both builds at `--parallel 4` (`G2/build1.log`, 44 steps, `--target MagicPortals test_mp`: `MagicPortals.exe` `e3524f32`, `test_mp.exe` `a813236c`; `build2_tests.log`, 3 steps, the layer case's fix: `test_mp.exe` `b9231bd2`): no line with "warning" in either |
+| (1) The lift waits | on its marker `a` from the first tick, at rest, until touched | runs from the first tick | **passes**: `test_mp_movers` `TheFourteenLiftsWaitOnTheirMarkers` (every lift on `a`, `dest` and `origin` `a`, 0 sends, its node's body on `a` within 1e-3) and `ALiftWaitsOnItsMarkerUntilSentAndStopsAtTheOther` (600 untouched ticks on `a`, the body's velocity 0); in the layer, 120 untouched ticks on `a` |
+| (2) The touch sends it and fires nothing | a press inside the picture, off the pads, sends every lift it lies in; its release fires no shot; a touch elsewhere still fires | a tap on a lift fired a portal | **passes**: `ATouchInsideALiftsPictureSendsIt` (both corners of the 64 x 32 rect in, 0.001 past either edge out, a touch over two lifts sends both); `test_mp_layer` `OneTwentyEightsLiftIsSentByATouchAndFiresNothing` (a touch 10 right of 1-28's lift's centre sends it toward `b` and moves it 60 x 1/60 units on that very tick within 1e-9; its release fires nothing, and 200 ticks later still nothing; a touch off it fires its shot and leaves the lift where it is) |
+| (3) 60 a second, and the stop | 60 units a second on every lift; put on the far marker, waits; back only when touched | 120 guessed; turned at each end | **passes**: 1-28's 128-unit leg in 128 ticks (128.00 by the speed), each tick 60 x 1/60 within 1e-6, 300 ticks on `b`, sent again on `a` a leg later; the census: all 14 at 60, and 2-02's `speed` 120 read by nothing |
+| (4) `sendLiftToOtherPoint` | a -> b, b -> a, between -> a measured from b | - | **passes**: `ATouchOnAMovingLiftSendsItBackToItsMarkerA` (40 ticks up then touched: `dest` a, `origin` b, `dir` toward a within 1e-12, on `a` when the distance says within a tick; on its way down to `a` a touch changes neither; 5 sends counted) |
+| (5) The sound | `playElevatorSound` once per send, nothing on arrival | `lift_turned` at every turn | **passes** (layer): 0 `lift_sent` in 120 untouched ticks, 1 on the release's tick (the watch latches a tick's events at the next tick's start - the case's first run checked the send's own tick and failed; the check moved, the runner relinked once), still 1 after the lift has stood on `b` 200 ticks; `sounds.json` maps `lift_sent` to `playElevatorSound`, and `lift_turned` is gone |
+| (6) The blink | (0.6, 0.6, 0.6) -> (1, 1, 1), 300 ms a leg, on the level's age, rgb only | white, still | **passes** (layer): 120 ticks, every tick's lift quad red = the blink within 1e-6, green = blue = red, alpha 1, reaching 0.6 and 1 |
+| (7) Against the original's stills | the untouched lift on its marker `a` | - | **passes where the stills show a lift** (`G2/stills_lift.py`, `stills_lift.txt`: lift.png at 2.8125 px a unit, masked `TM_CCOEFF_NORMED`, clear at 0.8 or more - a clear lift scores 0.81-0.999, the best of anything else about 0.47): **28 of 28** clear stills (1-27's `lift_ent_1122` 4 of 6, 1-28, 2-06, 2-07 and 3-23 6 of 6) put the lift within 0 px of the port's after-frame lift, or within the still's own whole-frame offset against the port's frame (2-06 t4.5 5 px, the frame dy +5.1; 2-07 8-15 px, the frame dy -9.5 / -9.7, by phase correlation), and 163-375 px from where step 152's self-running lift stood at f420. The other 8 levels show no clear lift to the match in either port frame or any still (under a walk pad, off the view or at its edge); by eye (verify1, `sbs_202.png`) 2-02's t4.5 and t8.0 stills do show `lift_789` on `a` beside the left pad, where this step's f420 has it and step 152's did not - the match misses it beside the pad |
+| (8) The spec's routes | every lift level with a route re-authored with a touch and still won; routes for the others where possible | 9 routes ride the self-running lifts | **9 of 9 re-authored and won; 3-08 and 3-10 won by new routes; 2-06 and 3-23 not won** (findings, LEFT FOR THE OWNER) |
+| (9) Every route still wins | `test_mp_routes`: every route won; one this change breaks re-authored with its reason; none deleted | 74 won, 227 checks | **passes: 76 of 76 won, 233 checks, 0 failures** (`G2/suite_routes_final.txt`); before the re-authoring the build failed exactly the nine (18 failures, `suite_routes_1.txt`); the 65 others win on step 152's ticks with the same shots and drift (their lines identical), none deleted |
+| (10) Reachability | no door newly sealed | 108 / 20 / 0 | **passes: 108 reachable, 20 opened, 0 sealed, 0 differ** from `reachability.json` (`G2/reach_check.txt`; the flood passes a lift's body as before, `FREE_ROLES`) |
+| (11) The after-sweep | 118 of 128 byte-identical to `AR/after/sweep`; the 10 explained | `AR/after/sweep` | **passes: 118 of 128 byte-identical** (`G2/after/sweep` on `e3524f32`; setup_B's checker, `G2/compare_after.txt`): 128 rc=0, validation ACTIVE in 128 logs and silent, every PNG whole and on its logged md5, 128 logs on `out/snap_w2` and none on the live `out/`, no tap or `portal_launch` line, the saves seed `40bfef3a` before and after. **The 10** (`G2/diff_levels.txt`): 1-27, 1-28, 2-07 and 3-23, every differing pixel inside the lift's picture at its old or new place (31,856 to 32,303 px); 1-29 and 3-10, the lift's old picture and its picture on `a` under the left walk pad (16,082 and 6,214 px at x 20-199, y 630-719 / 685-719); 2-09 and 2-18, a sliver of the lift at the view's edge (1,718 px at x 0-19; 3,522 px at x 1260-1279); 2-06, the lift (32,361 px) and 3,029 px of `carranca_ent_827`'s fireball, which now flies on to the left wall (gate 13); 2-02, 144,161 px across the frame: the lift on `a` under the left pad, and the three carrancas' fireballs, their lights and sparks, which the self-running lift no longer stops (the upper-left block now lit). 2-25, 3-08 and 3-31 are identical: their lift is off the view at f420 |
+| (12) In the window | lift routes won on the suite's tick | - | **passes** (`G2/window/`): `--route` 1-28 `won on tick 1088`, 3-10 1085, 2-02 568; a frame every 30 ticks (1-28's f210 rides the lift up the column); validation ACTIVE and silent; the DEV taps the routes' own |
+| (13) 2-06's lane | pinned: `carranca_ent_827`'s first fireball ends on the left wall | printed only (it went off on the lift at x 192.3, tick 200) | **passes**: `test_mp_turrets` 20 of 20 static lanes MATCH (fired on 119, went off on 285 at (8.17, 202.00) against the lane's 9.5) |
+| (14) The runner once | every suite | 48 passed, 15,047 checks (step 152) | **passes: 48 suites, 48 passed, 0 failed, 15,169 checks** (`G2/allmode.log`, `b9231bd2`): `test_mp_movers` 146 -> 252, `test_mp_layer` 3,296 -> 3,312, every other count equal (`test_mp_routes` 227: that run preceded the two new routes; with them 233, gate 9) |
+
+**THE ROUTES** (`tests/routes/`, each opening with the `"_step150"` note; a touch on a lift is `"shot": false`, which the
+driver checks fires nothing). Each `_about` says the route step by step, with the step-153 reason.
+
+| Level | Touches, shots | Won on (step 152) | What it does |
+|---|---|---|---|
+| 1-27 `level26` | 2, 2 | **660** (549) | down with `lift_ent_1122`, under the hanging wall on foot, the crate onto the button, up with `lift_1186` onto the ledge |
+| 1-28 `level27` | 3, 2 | **1088** (968) | up; the small crate onto the waiting lift; down with it; a portal in the column and one over the button; up again, and the crate rides into the first |
+| 1-29 `level28` | 1, 6 | **589** (487) | the crate onto the button and off it again from the lift's foot, then up and into the door |
+| 2-02 `level1a` | 1, 0 | **568** (528) | one send at tick 160 (mod 240) crosses the three carrancas' lanes between their fireballs (the window of sends, about 90-229, reasoned from the lanes, not measured) |
+| 2-07 `level6a` | 1, 0 | **1126** (1007) | up; the stone pushed into the fire lane; back over the waiting lift to the button and the door |
+| 2-09 `level8a` | 2, 15 | **1552** (1319) | up to the button; the lift sent down first and the player falls onto it on its way; then the old pairs |
+| 2-18 `level17a` | 3, 11 | **1194** (1963) | up, the button's portal, down; waits at the foot for the carranca's phase (the crate lands just after a fireball dies on the door); up, and the old ending |
+| 2-25 `level24a` | 1, 8 | **510** (459) | onto the waiting lift out of the fire lane, up to the bridge |
+| 3-31 `level30b` | 2, 12 | **1248** (1046) | down to the single block's level for the two fireballs, back up, then the old ending |
+| 3-08 `level7b` (new) | 4, 10 (golden 10) | **1643** | knight C walks off the floor into the column the lift has left; knight B portalled out over the empty column; the key; down, along the corridor, over the octagon and onto the keyhole's floor |
+| 3-10 `level9b` (new) | 4, 4 (golden 4) | **1085** | up; the stone portalled onto the breakable wall while knight B walks on it with the key; down; the knight portalled to the keyhole; the lift sent up under it, and it walks off into the pit |
+| 2-06 `level5a` | - | not won | G6 (LEFT FOR THE OWNER) |
+| 3-23 `level22b` | - | not won | the minion burn (LEFT FOR THE OWNER) |
+
+The suite's lines (`G2/suite_routes_final.txt`): as above, every drift at most 1.75 px.
+
+**SMART APP CONTROL: 0 refusals.** `test_mp.exe` `a813236c` (the first build) and `b9231bd2` (the layer case's fix)
+and `MagicPortals.exe` `e3524f32` each ran the first time: the runner for the four touched suites, the route drafts
+(`--only <file>`, no relink), the runner once with no argument and the route suite twice; the game for the 128 sweep
+captures and the 3 window runs. `MagicPortalsSpike.exe` was not rebuilt (never a target here). No ctest.
+
+**VERIFIED, PASSED** (`G2/verify1.json`, on the same `test_mp.exe` `b9231bd2` and `MagicPortals.exe` `e3524f32`, head
+`0e76e6d`, engine `710bffc`; no fix round; 0 refusals). The verifier re-derived the decode from the listing before
+reading the code, and the code follows it (the pause guard equivalent: `fixedTick` returns before `readInput` under
+the pause or a popup). Its `port_build.bat`: "no work to do"; the 7 changed translation units recompiled with the
+build's flags into scratch objects, no relink: 0 warnings. Its census: 14 lifts on 13 levels, each exactly on its `a`,
+only 2-02's carrying a `speed` (read by nothing). Its own runs, once each: the runner with no argument, 48 suites
+passed, 15,175 checks (the 15,169 above plus 3-08's and 3-10's 6 route checks); `test_mp_routes` 76 of 76, the 65
+untouched lines identical to step 152's; a tick-by-tick trace of the 11 lift routes, 22 sends on exactly the 22
+`"shot": false` taps and none without one; reachability 108 / 20 / 0, 0 differ; the three window routes (1-28 1088,
+3-10 1085, 2-02 568; validation silent), `elevator.mp3` loaded right after the first send in each log, never before;
+its own 128-level sweep md5-identical to `G2/after/sweep` on 128 of 128 and 118 of 128 to `AR/after/sweep`, the same
+10 differing. Its three findings, all low, are text here, none a behaviour change: 2-09's route does not lean on
+deviation 1 (corrected there and in `level8a.json`'s `_about`), 2-02's lift matched by eye in gate 7, and the pad
+exclusion by the code only (LEFT FOR LATER).
+
+**RULINGS APPLIED.** G2 decided for the original under the 2026-09-29 rulings (the lift's touch, speed, stop and
+sound as the listing has them). R1, R2, R17 and R23 untouched; R24 and R25 as they are. The camera's switch
+(`drag_pan_enabled`, step 151) is not the lift's: the lift reads the touch whatever the camera does, as the original's.
+
+**RECORDED DEVIATIONS.**
+1. **A lift moves every tick.** `lift.ent` is static: the original runs its callback - the touch, the move and the
+   blink - only while its bucket is on the view, so a lift sent and then left off the screen stops where it is until it
+   is seen again, and its blink starts when it is first seen. The port moves and blinks every lift every tick from the
+   level's first (as it runs every static callback it builds, step 152 deviation 2, and the antiportal's blink).
+   No route here leans on it: across the 11 lift routes no lift moves while wholly outside the view (verify1,
+   `lift_sends.py`). 2-09's, the nearest, sends its lift down from the top while the player stands on the button: the
+   camera holds at y 128 (the view 0-256) while the lift goes from y 102 to 243 (ticks 880-1020), its picture's bottom
+   at most 3 units past the view's, and then the camera follows the falling player (verify1, `lift_view_209.txt`).
+2. **One pointer.** `getTouchStateInRect` scans every touch; the port has the one pointer.
+3. **The camera a tick apart.** The original tests the touch through `GetCameraPos()` as the static callback runs,
+   after the frame's camera update; the port through the camera the last tick left, as the shot is aimed. With the
+   camera at rest - every lift touch of every route - the two are the same. The shaken camera stays out of it (the
+   "Order Q.1, the original's other readers of the SHAKEN camera" row already lists the lift's hit test).
+4. **Riders.** The original moves a static body with `SetPositionXY` and wakes what is near (`awakeEntitiesAround`);
+   the port moves a kinematic body with the velocity that gets it there (`MoveKinematic`), which carries a rider. How a
+   player or a crate sits on a moving lift is the port's physics, unchanged here.
+5. **The frame clock.** 60 units a second on the port's 1/60 s tick is 1 unit a tick; the original's
+   `unitsPerSecond` reads floored frame milliseconds (16 at 60 Hz, 0.96 units a frame) - the port-wide clock row
+   (`art.json` antiportal `_source`, step 72).
+6. **The sound a tick late.** `playElevatorSound` is called in the frame of the send; the port's sound watch latches
+   what a tick did at the start of the next, as it does every simulation sound.
+7. **A touch on a control or a help block over a lift** sends the lift and works the control too, as the lift's raw read
+   would in the original. By the code only; no case plays it.
+
+**LEFT FOR THE OWNER / LATER.**
+- **3-23 (`level22b`) is not won** (a finding, not a tuned-away gate). Each key is carried by a knight: knight A
+  (`minion_spawn_1944`) takes the yellow key on the upper platform and patrols it (x 300-434), knight C
+  (`minion_spawn_1959`) the blue key on the right floor (x 443-568). The yellow keyhole (402, 206) lies behind the yellow
+  door, under the platform: seen only from the right floor, which the player reaches only across the platform past knight
+  A, and from where knight A's platform is out of sight; knight C holds 38 units short of the blue keyhole and patrols
+  across the only way to the exit. In this tree nothing takes a key from a living knight on ground the player can
+  reach. **Main's step `fdc100d` (G8) builds the flame's burn of a minion on 3-23** (`fire_agent_ent_2002` at (182, 150),
+  the key staying where its knight burned): 3-23's route belongs after the merge. NOT proven unwinnable.
+- **2-06 (`level5a`) is not won**: G6, as before (the backlog's 2-06 row). The lift now waits at (160, 112), so the
+  carranca's lane reaches the left wall (gate 13); the burnable, non-teleportable crate sealing the door's pocket is
+  still reachable only by a fireball a portal pair carries.
+- **1-27's two `hand_tap` hints** stand on its lifts' touch points; the original deletes each, with `smoke_vanish`, on a
+  release within scale(30) of it (`motions.json` `hand_tap` `_source`, "System 7's, not built here"). The port leaves
+  them drawn after the lift is touched.
+- **A holding knight stays in the air when its floor breaks**: in a 3-10 draft, knight B holding at `wayB1` on
+  `breakable_wall_1316` stood at (277, 128) for about 830 ticks after the stone broke the wall, and fell only when its
+  15 s hold ended. The original's minion would presumably fall at once (its body woken by the break); not measured, and
+  not this step's. The route breaks the wall while the knight walks.
+- **3-08's and 3-10's routes send a knight off a floor's end into a pit** (knight C and B on 3-08, B on 3-10). The
+  original's knight walks the same way: `ETHCallback_minion` (L87616) moves it toward its waypoint's x with no floor
+  probe (its one ray, #943 `GetClosestContact`, is the sight line; `cantReach` is only ever written 0, #1000), and
+  `ETHBeginContactCallback_enemy_killer` ends it. Both routes lean on G1 (no knight sees or shoots the player):
+  whether they stay the original's play once G1 is built is G1's step to replay.
+- **The pad exclusion is by the code only** (verify1): no case plays a press on a walk pad over a lift (`readInput`'s
+  `!onPad`, `ScreenPad::isValidPoint`). At rest no lift's 64 x 32 rect overlaps a pad's 64-unit hit circle (1-29's only
+  at its corner), so no route or sweep sees it today. The next step that links `test_mp_layer` or `test_mp_movers` adds
+  the case: a touch inside a lift's rect and strictly inside a pad's circle walks the player and leaves the lift at
+  rest with 0 sends; one just outside the circle sends it. Deviation 7's control and help-block case is the same kind.
+- The backlog is not edited here: the close role ticks G2, the rows "Routes that ride the port's self-running lifts
+  (G2)" and "2-06's fire lane ends on the self-running lift", and adds 3-08 and 3-10 to the won list.
+- **Merge notes.** Main's `5ee1c66` (the lift door's latch) edits `game/data/movers.json` and `game/sim/Mover.{hpp,cpp}`,
+  as this step does: the two blocks are separate (`door` there, `lift` here) and both keep. Main re-authored 2-18 and
+  moved 2-07 for the latch, on the self-running lift; this step re-authors both for the waiting lift: the merge keeps
+  this step's files and replays them on the merged build (the latch changes `door_lift_1146`, `_936`, `_710`, `_774`
+  and `_1007` on 2-18, 2-07, 1-28, 1-29 and 2-09), re-timing any that the latch breaks. Main's `fdc100d` (G8) turns a
+  shot through a fire agent's flame into a fireball: of the routes touched here only 2-18 has a fire agent
+  (`fire_agent_ent_1139` at (210, 304)), and its new shots pass 50 units or more from it (reasoned, not measured).
+  `tests/test_mp_turrets.cpp`'s pinned lane list gains 2-06's row here (19 -> 20).

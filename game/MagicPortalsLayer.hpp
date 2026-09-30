@@ -1403,6 +1403,9 @@ private:
         // where it has got to (sim/Handle.hpp).
         int handle{-1};
         int follower{-1};
+        // A lift, in m_level.movers.lifts: ETHCallback_lift blinks its colour every
+        // frame (movers.json lift.blink), whatever it is doing.
+        int lift{-1};
         // Chapter 4's torch, in torch.lights: its picture goes on the tick after the
         // torch is lit, as the original's entity deletes itself (m_torchWatch).
         int torch{-1};
@@ -2417,10 +2420,10 @@ private:
         bool bossGone = false;
         bool bossButtonRaised = false;
         bool redKeyTaken = false; // 4-19's red key state saw its key taken
+        int liftsSent = 0;        // touches that sent a lift, summed over the lifts
         // char rather than bool: std::vector<bool> is not a container of bools,
         // and these are only ever compared with the last tick's.
         std::vector<char> doorsOpening;
-        std::vector<char> liftsForward;
     };
 
     // One event the tick saw, with what playing it needs to know.

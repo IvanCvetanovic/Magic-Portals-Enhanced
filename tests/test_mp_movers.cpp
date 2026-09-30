@@ -2,19 +2,20 @@
 // anti-portal agents that patrol.
 //
 // Pinned exactly, because the files say it: which of chapter 1's levels have
-// which, where each stands, its speed, its stride and its end markers. Judged by
-// threshold: a platform swings by its stride with the velocity that gets it
-// there, a lift reaches its far marker when its speed says, and a patrolling
-// agent swings on its axis and refuses no tap itself - the ring it stands in
-// does (the remaster record's step 126).
+// which, where each stands, its speed, its stride and its end markers, and the
+// game's fourteen lifts. Judged by threshold: a platform swings by its stride with
+// the velocity that gets it there, a lift waits on its marker a until a touch sends
+// it and reaches the other when 60 units a second says (the record's step 153), and
+// a patrolling agent swings on its axis and refuses no tap itself - the ring it
+// stands in does (the remaster record's step 126).
 //
 // AND WHAT BECOMES OF AN AGENT (step 126, R17): a portal shot still in flight
 // that comes within 0.7 x its size kills it and itself, and takes the one ring
 // round it. These cases would sit in test_mp_shot beside the shot's other ends;
 // they are here because Smart App Control refused both of step 126's links of
-// test_mp_shot, and a suite that is launched anyway costs no second refusal. The numbers behind
-// the speeds - movers.json's rate scale and lift speed - are the Godot project's
-// guesses, carried as data, so the thresholds are computed from them.
+// test_mp_shot, and a suite that is launched anyway costs no second refusal. The number behind
+// the swings - movers.json's rate scale - is the Godot project's guess, carried as
+// data, so the thresholds are computed from it; the lift's are decoded and pinned.
 //
 // Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
@@ -26,13 +27,17 @@
 #include "sim/Game.hpp"
 #include "sim/Mover.hpp"
 #include "sim/Portals.hpp"
+#include "sim/Roles.hpp"
+#include "sim/Tscn.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <iterator>
 #include <limits>
+#include <set>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -80,13 +85,20 @@ std::string Px(const glm::dvec2& p) {
 
 // ---- What the levels say ------------------------------------------------------
 
-void MoversJsonCarriesTheRemakesGuesses() {
+void MoversJsonCarriesTheSwingsGuessAndTheDecodedLift() {
     Mover::Rules rules;
     std::string error;
     CHECK_MSG(Mover::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/movers.json", rules, error), error);
-    // Guesses, carried and not pinned: only that there is one of each.
+    // The swing is a guess, carried and not pinned: only that there is one.
     CHECK(rules.oscillationRateScale > 0.0);
-    CHECK(rules.liftSpeedPx > 0.0);
+    // The lift is decoded (planning step 153; movers.json lift._source): the literal
+    // 60 at ETHCallback_lift #286, lift.png's 64 x 32, and blinkColor's two globals
+    // and stride.
+    CHECK_MSG(rules.liftSpeedUnitsPerS == 60.0, "a lift runs at the callback's 60 units a second");
+    CHECK_MSG(rules.liftSizeUnits == glm::dvec2(64.0, 32.0), "and is touched inside lift.png's 64 x 32");
+    CHECK_MSG(rules.liftBlinkFrom == glm::dvec3(0.6) && rules.liftBlinkTo == glm::dvec3(1.0) &&
+                  rules.liftBlinkStrideMs == 300.0,
+              "and blinks 0.6 grey to white and back, 300 ms a leg");
 }
 
 void ChapterOnesMovers() {
@@ -143,27 +155,95 @@ void ChapterOnesMovers() {
             }
         }
     }
-    struct Shuttles {
+}
+
+// THE GAME'S FOURTEEN LIFTS (planning step 153): every lift in the 128 converted
+// levels, both spellings, with the markers it names, read off the level files. Each
+// is wired on its marker a, at rest there, at movers.json's 60 and lift.png's size -
+// 2-02's lift_789 carries a `speed` of 120 that ETHCallback_lift never reads - and
+// each node already stands on its marker a, so the first frame's SetPositionXY(a)
+// moves none of them.
+void TheFourteenLiftsWaitOnTheirMarkers() {
+    struct Placed {
         const char* level;
         const char* lift;
         glm::dvec2 a;
         glm::dvec2 b;
     };
-    const Shuttles lifts[] = {
-        {"level26", "lift_1186", {544.0, 240.0}, {544.0, 144.0}},
-        {"level26", "lift_ent_1122", {96.0, 80.0}, {96.0, 240.0}},
-        {"level27", "lift_ent_694", {96.0, 240.0}, {96.0, 112.0}},
-        {"level28", "lift_ent_796", {96.0, 240.0}, {96.0, 112.0}},
+    const Placed placed[] = {
+        {"level26", "lift_1186", {544.0, 240.0}, {544.0, 144.0}},  // 1-27
+        {"level26", "lift_ent_1122", {96.0, 80.0}, {96.0, 240.0}}, // 1-27
+        {"level27", "lift_ent_694", {96.0, 240.0}, {96.0, 112.0}}, // 1-28
+        {"level28", "lift_ent_796", {96.0, 240.0}, {96.0, 112.0}}, // 1-29
+        {"level1a", "lift_789", {96.0, 368.0}, {96.0, 94.0}},      // 2-02
+        {"level5a", "lift_ent_832", {160.0, 112.0}, {160.0, 240.0}}, // 2-06
+        {"level6a", "lift_ent_883", {352.0, 256.0}, {352.0, 80.0}},  // 2-07
+        {"level8a", "lift_ent_1016", {32.0, 435.0}, {32.0, 102.0}},  // 2-09
+        {"level17a", "lift_ent_1142", {480.0, 283.0}, {480.0, 108.0}}, // 2-18
+        {"level24a", "lift_ent_1137", {608.0, 240.0}, {608.0, 161.0}}, // 2-25
+        {"level7b", "lift_ent_1532", {96.0, 240.0}, {96.0, 144.0}},    // 3-08
+        {"level9b", "lift_ent_1318", {96.0, 320.0}, {96.0, 160.0}},    // 3-10
+        {"level22b", "lift_ent_1935", {96.0, 240.0}, {96.0, 162.0}},   // 3-23
+        {"level30b", "lift_ent_2438", {480.0, 272.0}, {480.0, 400.0}}, // 3-31
     };
-    for (const Shuttles& expected : lifts) {
+    // The census, off the files: a node whose entity is lift or lift.ent.
+    int levels = 0;
+    int lifts = 0;
+    int unlisted = 0;
+    std::set<std::string> liftLevels;
+    std::error_code ec;
+    for (const auto& file : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (file.path().extension() != ".tscn") continue;
+        Tscn::Scene scene;
+        std::string error;
+        if (!Tscn::Load(file.path().string(), scene, error)) continue;
+        ++levels;
+        const std::string level = file.path().stem().string();
+        for (const Tscn::Node& node : scene.nodes) {
+            const std::string entity = Roles::EntityName(node);
+            if (node.parent != "." || (entity != "lift" && entity != "lift.ent")) continue;
+            ++lifts;
+            liftLevels.insert(level);
+            const bool listed = std::any_of(std::begin(placed), std::end(placed), [&](const Placed& p) {
+                return level == p.level && node.name == p.lift;
+            });
+            if (!listed) ++unlisted;
+        }
+    }
+    CHECK_MSG(levels == 128, "the 128 converted levels read: " + std::to_string(levels));
+    CHECK_MSG(lifts == 14 && liftLevels.size() == 13u && unlisted == 0,
+              "14 lifts on 13 levels, each one listed here: " + std::to_string(lifts) + " on " +
+                  std::to_string(liftLevels.size()) + ", " + std::to_string(unlisted) + " unlisted");
+
+    for (const Placed& expected : placed) {
         Run run;
         if (!Begin(expected.level, run)) continue;
         const Mover::Lift* lift = run.level.movers.FindLift(expected.lift);
         CHECK_MSG(lift != nullptr, std::string(expected.level) + " has " + expected.lift);
         if (lift == nullptr) continue;
-        CHECK_MSG(lift->motion.aPx == expected.a && lift->motion.bPx == expected.b && lift->motion.atPx == expected.a,
-                  std::string(expected.lift) + " runs " + Px(lift->motion.aPx) + " to " + Px(lift->motion.bPx));
-        CHECK(lift->motion.speedPx == run.data.movers.liftSpeedPx);
+        const Mover::Travel& motion = lift->motion;
+        CHECK_MSG(motion.aPx == expected.a && motion.bPx == expected.b,
+                  std::string(expected.lift) + " runs " + Px(motion.aPx) + " to " + Px(motion.bPx));
+        CHECK_MSG(motion.atPx == expected.a && motion.destPx == expected.a && motion.originPx == expected.a &&
+                      !motion.Moving() && motion.sends == 0,
+                  std::string(expected.lift) + " waits on its marker a");
+        CHECK_MSG(glm::distance(BodyPx(run, lift->entity), expected.a) < 1e-3,
+                  std::string(expected.lift) + "'s node stands on its a");
+        CHECK_MSG(motion.legSquared == glm::dot(expected.b - expected.a, expected.b - expected.a),
+                  std::string(expected.lift) + "'s leg");
+        CHECK_MSG(motion.speedPx == 60.0 && lift->sizeUnits == glm::dvec2(64.0, 32.0),
+                  std::string(expected.lift) + " at 60 a second, touched inside 64 x 32");
+    }
+    // 2-02's node says 120; nothing reads it.
+    Run run;
+    if (Begin("level1a", run)) {
+        const Tscn::Node* node = run.data.scene.FindNode("lift_789");
+        double speed = 0.0;
+        CHECK_MSG(node != nullptr && node->Meta("speed") != nullptr && node->Meta("speed")->AsNumber(speed) &&
+                      speed == 120.0,
+                  "2-02's lift_789 carries a speed of 120");
+        const Mover::Lift* lift = run.level.movers.FindLift("lift_789");
+        CHECK_MSG(lift != nullptr && lift->motion.speedPx == 60.0, "and runs at 60, as every lift does");
     }
 }
 
@@ -201,27 +281,136 @@ void APlatformSwingsByItsStride() {
     CHECK(velocity);
 }
 
-void ALiftGoesToItsFarMarkerAndBack() {
+// A LIFT WAITS UNTIL A TOUCH SENDS IT (ETHCallback_lift; planning step 153): at rest
+// on its marker a, its body still, for as long as nothing touches it; sent, at 60
+// units a second to b, put on b exactly and at rest there; sent again, back to a.
+void ALiftWaitsOnItsMarkerUntilSentAndStopsAtTheOther() {
     Run run;
     if (!Begin("level27", run) || run.level.movers.lifts.empty()) return;
-    const Mover::Lift& lift = run.level.movers.lifts.front();
+    Mover::Lift& lift = run.level.movers.lifts.front();
     const glm::dvec2 a = lift.motion.aPx;
     const glm::dvec2 b = lift.motion.bPx;
-    const double legTicks = glm::distance(a, b) / lift.motion.speedPx / kStep;
+    // 600 ticks untouched: on a, the body there and still.
+    bool resting = true;
+    for (int tick = 0; tick < 600; ++tick) {
+        Tick(run);
+        const glm::vec3 v = run.registry.get<RigidBodyComponent>(lift.entity).velocity;
+        resting = resting && lift.motion.atPx == a && !lift.motion.Moving() &&
+                  glm::distance(BodyPx(run, lift.entity), a) < 1e-3 && glm::length(v) == 0.0f;
+    }
+    CHECK_MSG(resting, "untouched, the lift stays on its marker a for 600 ticks, its body still");
+
+    // Sent: toward b, from a.
+    lift.motion.Send();
+    CHECK_MSG(lift.motion.destPx == b && lift.motion.originPx == a && lift.motion.sends == 1 &&
+                  glm::length(lift.motion.dir - glm::normalize(b - a)) < 1e-12,
+              "sent from a, it goes to b, measured from a");
+    const double legTicks = glm::distance(a, b) / 60.0 / kStep;
     int atB = -1;
-    int backAtA = -1;
     bool where = true;
-    for (int tick = 1; tick <= static_cast<int>(legTicks * 3.0) && backAtA < 0; ++tick) {
+    bool speed = true;
+    for (int tick = 1; tick <= static_cast<int>(legTicks * 2.0) && atB < 0; ++tick) {
+        const glm::dvec2 before = lift.motion.atPx;
         Tick(run);
         where = where && glm::distance(BodyPx(run, lift.entity), lift.motion.atPx) < 0.01;
-        if (atB < 0 && lift.motion.atPx == b) atB = tick;
-        if (atB > 0 && backAtA < 0 && lift.motion.atPx == a) backAtA = tick;
+        if (lift.motion.atPx == b) {
+            atB = tick;
+        } else {
+            speed = speed && std::fabs(glm::distance(before, lift.motion.atPx) - 60.0 * kStep) < 1e-6;
+        }
     }
-    std::printf("  level27's lift: at its far marker after %d ticks and back after %d, for %.1f a leg\n", atB, backAtA,
+    std::printf("  level27's lift: sent, on its marker b after %d ticks, for %.2f a leg at 60 units a second\n", atB,
                 legTicks);
-    CHECK_MSG(atB > 0 && std::fabs(atB - legTicks) <= 1.0, "at b when its speed says");
-    CHECK_MSG(backAtA > 0 && std::fabs(backAtA - 2.0 * legTicks) <= 2.0, "and back at a");
+    CHECK_MSG(atB > 0 && std::fabs(atB - legTicks) <= 1.0, "on b when 60 units a second says");
+    CHECK_MSG(speed, "each tick 60 x 1/60 units along its way");
     CHECK(where);
+    // And it stays there: no turn, no second leg.
+    bool stays = true;
+    for (int tick = 0; tick < 300; ++tick) {
+        Tick(run);
+        stays = stays && lift.motion.atPx == b && !lift.motion.Moving() &&
+                glm::distance(BodyPx(run, lift.entity), b) < 1e-3;
+    }
+    CHECK_MSG(stays, "at b it stays for 300 ticks");
+
+    // Sent again: back to a, measured from b.
+    lift.motion.Send();
+    CHECK_MSG(lift.motion.destPx == a && lift.motion.originPx == b && lift.motion.sends == 2,
+              "sent from b, it goes back to a, measured from b");
+    int atA = -1;
+    for (int tick = 1; tick <= static_cast<int>(legTicks * 2.0) && atA < 0; ++tick) {
+        Tick(run);
+        if (lift.motion.atPx == a) atA = tick;
+    }
+    CHECK_MSG(atA > 0 && std::fabs(atA - legTicks) <= 1.0, "on a a leg later: " + std::to_string(atA));
+}
+
+// sendLiftToOtherPoint's third branch: a touch on a lift that is on neither marker
+// sends it back to a, measured from b, whichever way it was going - so a lift on
+// its way up is turned round, and one on its way down goes on down.
+void ATouchOnAMovingLiftSendsItBackToItsMarkerA() {
+    Run run;
+    if (!Begin("level27", run) || run.level.movers.lifts.empty()) return;
+    Mover::Lift& lift = run.level.movers.lifts.front();
+    const glm::dvec2 a = lift.motion.aPx;
+    const glm::dvec2 b = lift.motion.bPx;
+    lift.motion.Send();
+    for (int tick = 0; tick < 40; ++tick) Tick(run);
+    const glm::dvec2 midway = lift.motion.atPx;
+    CHECK_MSG(lift.motion.Moving() && midway != a && midway != b, "40 ticks on it is between its markers");
+    lift.motion.Send();
+    CHECK_MSG(lift.motion.destPx == a && lift.motion.originPx == b &&
+                  glm::length(lift.motion.dir - glm::normalize(a - midway)) < 1e-12,
+              "a touch there turns it back to a, measured from b");
+    int back = -1;
+    for (int tick = 1; tick <= 200 && back < 0; ++tick) {
+        Tick(run);
+        if (lift.motion.atPx == a) back = tick;
+    }
+    const double ticks = glm::distance(midway, a) / 60.0 / kStep;
+    CHECK_MSG(back > 0 && std::fabs(back - ticks) <= 1.0,
+              "and puts it on a when it has come as far from b as a is: " + std::to_string(back));
+
+    // On its way down from b, a touch changes nothing: it was going to a already.
+    lift.motion.Send();
+    for (int tick = 0; tick < 200 && lift.motion.Moving(); ++tick) Tick(run);
+    CHECK(lift.motion.atPx == b);
+    lift.motion.Send();
+    for (int tick = 0; tick < 30; ++tick) Tick(run);
+    const glm::dvec2 dir = lift.motion.dir;
+    lift.motion.Send();
+    CHECK_MSG(lift.motion.destPx == a && lift.motion.originPx == b && glm::length(lift.motion.dir - dir) < 1e-12,
+              "on its way down to a, a touch sends it on to a");
+    CHECK(lift.motion.sends == 5);
+}
+
+// The touch: isPointInRect on the lift's point and its picture's size, both edges
+// in; every lift whose picture holds it is sent, and a touch anywhere else sends
+// none.
+void ATouchInsideALiftsPictureSendsIt() {
+    Mover::Movers movers;
+    Mover::Lift lift;
+    lift.name = "lift_test";
+    lift.sizeUnits = glm::dvec2(64.0, 32.0);
+    lift.motion.aPx = glm::dvec2(100.0, 200.0);
+    lift.motion.bPx = glm::dvec2(100.0, 100.0);
+    lift.motion.atPx = lift.motion.aPx;
+    lift.motion.destPx = lift.motion.aPx;
+    lift.motion.originPx = lift.motion.aPx;
+    lift.motion.legSquared = 100.0 * 100.0;
+    lift.motion.speedPx = 60.0;
+    movers.lifts.push_back(lift);
+    const glm::dvec2 at = lift.motion.aPx;
+    CHECK_MSG(movers.Press(at + glm::dvec2(-32.0, -16.0)) == 1, "the rect's corner is in");
+    CHECK_MSG(movers.Press(at + glm::dvec2(32.0, 16.0)) == 1, "and its far corner");
+    CHECK_MSG(movers.Press(at + glm::dvec2(32.001, 0.0)) == 0 && movers.Press(at + glm::dvec2(0.0, -16.001)) == 0,
+              "a hair past either edge is out");
+    CHECK_MSG(movers.lifts.front().motion.sends == 2, "two touches sent it, the misses none");
+    // A second lift over the same point is sent by the same touch.
+    Mover::Lift other = lift;
+    other.name = "lift_other";
+    movers.lifts.push_back(other);
+    CHECK_MSG(movers.Press(at) == 2, "a touch over two lifts sends both");
 }
 
 void APatrollingAgentSwingsAndRefusesNothing() {
@@ -560,10 +749,13 @@ void F3sTapsBracketTheFieldOn107() {
 }
 
 void runTests() {
-    MoversJsonCarriesTheRemakesGuesses();
+    MoversJsonCarriesTheSwingsGuessAndTheDecodedLift();
     ChapterOnesMovers();
+    TheFourteenLiftsWaitOnTheirMarkers();
     APlatformSwingsByItsStride();
-    ALiftGoesToItsFarMarkerAndBack();
+    ALiftWaitsOnItsMarkerUntilSentAndStopsAtTheOther();
+    ATouchOnAMovingLiftSendsItBackToItsMarkerA();
+    ATouchInsideALiftsPictureSendsIt();
     APatrollingAgentSwingsAndRefusesNothing();
     TheAgentsNumbersAreTheDecodedOnes();
     AnAgentKillsAShotStillInFlightAndItsRing();

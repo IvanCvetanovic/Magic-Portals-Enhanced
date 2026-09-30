@@ -16757,6 +16757,109 @@ void TwoTwentyDragsTheHandle() {
     layer.OnDetach(registry);
 }
 
+// A LIFT WAITS UNTIL A TOUCH SENDS IT, AND THAT TOUCH FIRES NOTHING (movers.json
+// `lift`; planning step 153). 1-28 (level27) places lift_ent_694 on its marker a at
+// (96, 240). Untouched it stays there, blinking 0.6 grey to white on the level's
+// age; a touch down on its picture sends it on that tick (ETHCallback_lift moves it
+// in the frame it is sent), disables the touch so its release fires no shot, and
+// latches one lift_sent (playElevatorSound) - and nothing when it stops on b; a touch
+// off it fires as any does.
+void OneTwentyEightsLiftIsSentByATouchAndFiresNothing() {
+    namespace Mover = MagicPortals::Mover;
+    Mover::Rules movers;
+    std::string moversError;
+    CHECK_MSG(Mover::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/movers.json", movers, moversError),
+              moversError);
+    const MagicPortals::Art::Blink blink{movers.liftBlinkFrom, movers.liftBlinkTo, movers.liftBlinkStrideMs};
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level27");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || layer.SimLevel() == nullptr) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CloseTheLevelStartPopup(layer, registry);
+    const Mover::Lift* theLift = layer.SimLevel()->movers.FindLift("lift_ent_694");
+    CHECK_MSG(theLift != nullptr, "1-28 places lift_ent_694");
+    if (theLift == nullptr) return;
+    const glm::dvec2 a(96.0, 240.0);
+    const glm::dvec2 b(96.0, 112.0);
+    const auto liftSent = [&layer]() {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return std::count(sounds.begin(), sounds.end(), "lift_sent");
+    };
+
+    // Its picture, by lift.png's name (not door_lift.png) and where it stands.
+    const auto liftQuad = [&registry](const glm::dvec2& atPx) {
+        entt::entity found = entt::null;
+        for (auto [entity, tag, material, transform] :
+             registry.view<TagComponent, MaterialComponent, TransformComponent>().each()) {
+            if (tag.tag != "Magic Portals Sprite") continue;
+            if (std::filesystem::path(material.albedoTexturePath).filename() != "lift.png") continue;
+            if (glm::distance(MagicPortals::Units::ToPixels(transform.position), atPx) > 0.5) continue;
+            found = entity;
+        }
+        return found;
+    };
+    // 120 ticks untouched: on a, and every tick's picture the blink's grey.
+    int wrong = 0;
+    double lows = 2.0;
+    double highs = 0.0;
+    bool waits = true;
+    for (int tick = 0; tick < 120; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        waits = waits && theLift->motion.atPx == a && !theLift->motion.Moving();
+        const entt::entity quad = liftQuad(a);
+        const glm::dvec3 want = blink.At(layer.LevelAgeMs());
+        if (quad == entt::null) {
+            ++wrong;
+            continue;
+        }
+        const glm::vec4 got = registry.get<MaterialComponent>(quad).albedoColor;
+        if (std::fabs(got.r - static_cast<float>(want.x)) > 1e-6f || got.g != got.r || got.b != got.r ||
+            got.a != 1.0f) {
+            ++wrong;
+        }
+        lows = std::min(lows, want.x);
+        highs = std::max(highs, want.x);
+    }
+    CHECK_MSG(waits, "untouched for 120 ticks, the lift waits on its marker a");
+    CHECK_MSG(wrong == 0, "its picture is the blink's grey on every tick: " + std::to_string(wrong) + " wrong");
+    CHECK_MSG(lows < 0.6 + 1e-3 && highs > 1.0 - 1e-3,
+              "reaching both ends, 0.6 and 1: " + std::to_string(lows) + " to " + std::to_string(highs));
+    CHECK_MSG(liftSent() == 0, "and no lift_sent while nothing sends it");
+
+    // A touch down on it, and up the next tick where it went down.
+    CHECK_MSG(onScreen(registry, a), "1-28's view shows the lift");
+    const glm::vec2 pixel = screenOf(registry, a + glm::dvec2(10.0, -4.0));
+    const int shotsBefore = layer.SimLevel()->portals.shotsFired;
+    tap(layer, registry, pixel);
+    CHECK_MSG(theLift->motion.Moving() && theLift->motion.destPx == b && theLift->motion.sends == 1,
+              "the touch sends it toward b");
+    CHECK_MSG(std::fabs(glm::distance(theLift->motion.atPx, a) - 60.0 * static_cast<double>(MagicPortalsLayer::kTick)) <
+                  1e-9,
+              "and it moves on the tick it is sent: " + Point(theLift->motion.atPx));
+    lift(layer, registry, pixel);
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == shotsBefore && !layer.SimLevel()->portals.flight,
+              "its release fires no shot");
+    // What a tick did is latched at the start of the next (latchSimSounds, after the
+    // app's physics step), so the send shows on the release's tick.
+    CHECK_MSG(liftSent() == 1, "with one lift_sent");
+    for (int tick = 0; tick < 200; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(theLift->motion.atPx == b && !theLift->motion.Moving(), "it stops on b and stays");
+    CHECK_MSG(liftSent() == 1, "and nothing more plays when it arrives");
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == shotsBefore, "no shot left in all that time");
+
+    // A touch off it fires, as any touch does, and sends nothing.
+    const glm::dvec2 elsewhere = layer.CameraCentrePx() + glm::dvec2(60.0, -40.0);
+    shoot(layer, registry, screenOf(registry, elsewhere));
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == shotsBefore + 1, "a touch off the lift fires its shot");
+    CHECK_MSG(theLift->motion.sends == 1 && theLift->motion.atPx == b, "and the lift is left where it is");
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -16823,6 +16926,7 @@ void runTests() {
     AFingerDragsTheCameraAtTwiceItsMoveAndFiresNothing();
     OneTwentyOneTeachesTheDrag();
     TwoTwentyDragsTheHandle();
+    OneTwentyEightsLiftIsSentByATouchAndFiresNothing();
     Level8FromTheSpawnWithTapsAndWalking();
     LevelsFollowInOrderAndRetryIsInstant();
     NSkipsToTheNextLevel();
