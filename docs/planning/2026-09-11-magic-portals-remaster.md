@@ -24883,3 +24883,216 @@ prints the new `--data` line. A pair image `compare.py` writes from now on label
   configured again. The 15 path occurrences above, `origin`'s URL and the auto-memory's paths need updating after it.
 - **The identifiers and keys** listed above. Renaming them is a code and data change for a step of its own.
 - The close role writes the `DEVLOG.md` entry; this step does not touch `DEVLOG.md`. Committed, not pushed.
+
+## Step 150 - a portal shot leaves when the touch comes up, and only from a touch that strayed no more than scale(18): the one pointer's touch followed tick by tick, a scheduled tap down on its tick and up on the next, and every route's taps a tick earlier (built)
+
+**TRACK B (the worktree `Magic-Portals-Remake-w2b`, branch `w2-b`, from `fd80e82`, step 132), the program's RF**
+(`docs/parity-backlog.md` section 6's "Release-to-fire" row, and step 100's LEFT FOR LATER item "When the original
+fires, on touch-down or touch-up"). Its build reads the frozen level data in `out/snap_w2`; numbered in track B's
+range, and the merge renumbers it. Changed: `game/data/placement.json` (a `release` block), `game/sim/Portals.{hpp,cpp}`
+(`Rules::releaseMaxMoveUnits`, `TouchTrack`, `TrackTouch`, `RequestsPortal`), `game/MagicPortalsLayer.{hpp,cpp}`
+(`m_shotTouch`; `readInput`, `popupTick`, `unloadLevel`'s and `openPause`'s resets; comments), `game/Route.{hpp,cpp}`
+(the driver judges a tap on its release), `game/main.cpp` (comments and `--help` text), `tests/test_mp_play.cpp`,
+`tests/test_mp_layer.cpp`, `tests/test_mp_routes.cpp`, and all 70 files in `tests/routes/` (64 with shot taps moved
+a tick earlier, all 70 marked `_step150`). No engine change
+(the pin stays `710bffc`), no converter change, no format finding (the decode is of the script; `placement.json`
+holds it). Evidence under the gitignored `out/parity/program/RF/`.
+
+**GAMEPLAY CHANGED (as the original does; the input's timing).** A portal shot now leaves on the tick the touch comes
+UP, never on the tick it goes down, and only if the touch never strayed more than 18 units of the 256-unit view
+(scale(18)) from where it went down; it is aimed at the last point the touch was HELD at, through the camera of the
+release tick. So:
+- a tap fires one tick later than it did (a player's click fires when the button is let go);
+- a touch held down fires nothing until it is let go, and one dragged more than 18 units fires nothing at all;
+- the first-portal gate (300 ms) and the 400 ms between taps, the controls' and the pads' test, and the budget-0
+  red waves are all judged on the release tick, at the release point;
+- a touch that went down on restart, pause or clear-portals fires nothing when it comes up.
+Nothing else moves: `Portals::State::Shoot` and everything after it are untouched.
+
+**BLOCKERS, checked first.** None unmet. The decode is in the listing (`out/parity/asbc/all_functions.txt`, md5
+`48fe65ce...`) and in `reference/ethanon` (`KeyStateManager.{h,cpp}`); step 100 made a scheduled tap the tick's one
+touch, read once by `readInput`; W.1's reachability check and `test_mp_routes` are in the tree (70 routes). No
+engine change is needed.
+
+**WHAT THE ORIGINAL DOES** (the listing; `placement.json` `release._source` has every citation).
+- `hasPortalRequestInput` (Portal.angelscript, 353953..354113): `getTouchState(t, ignoreStatus)` `CMPIi 3` (#1-9), and
+  anything but 3 returns false. 3 is `GSKS_RELEASE` (`KeyStateManager.h:33`), which `KeyStateManager::Update`
+  (`KeyStateManager.cpp:33-57`) gives on the one frame after the last held one: `GSKS_HIT` on the first held frame,
+  `GSKS_DOWN` on the rest. Then #10-22: `getMaxMoveLength(t)` `CMPf` `scale(18)`, `TNP` - true when the move is at
+  most scale(18), so 18 itself fires.
+- `TouchInputManager::update` (159141..159915), every frame: on `HIT` #60-104 `maxMoveLength[t] = 0` and `hitPos[t]`
+  the touch; on `HIT` or `DOWN` #105-117 `lastTouchPos[t]` the touch and #118-152 `maxMoveLength[t] = max(...,
+  distance(hitPos[t], touch))`. The move is the farthest the touch has been from where it went down, not its path;
+  the release frame adds nothing.
+- `PortalManager::managePortalInsertion` (143178..144166) #16-25 asks `hasPortalRequestInput(t, false)` of each touch,
+  and #26-41 aims at `getReleasePos(t)` (161662..161825: `lastTouchPos[t]`) plus `GetCameraPos()` on the release
+  frame (`getAbsolutePos`, 316167..316280). The 400 ms gate (#43-53), the pads' `ScreenPad::isValidPoint` (#54-62)
+  and `PortalManager::isValidPoint` (142200..142281: not `UILayerManager::isPointInButton`, #66-71) are asked of that
+  point on that frame. `blockPortalEffects` (budget 0; 137862..138545 #35-60) asks the same.
+- `PortalManager::update` (138545..139692) runs `g_touchManager.update` first (#3-4), then asks whether game time is
+  stopped (#16-19): the touch is followed under a popup, and a release there fires nothing.
+- `getTouchState` (161450..161662) answers 0 for a touch a help block or a lift disabled (`touchEnabled`, set true
+  again once the touch is up, `update` #155-166), so neither fires on its release.
+- The HUD's `Button::update` (15892..16865) acts on the release too (step 53's reading, `m_lastDownPos`).
+- **Footage agrees**: F14, F15 and F16, each in its section 1, fire on touch-up (monkey down, up 0.10-0.11 s later).
+
+**THE CHANGE.**
+- `placement.json` `release.max_move_units` 18, required by `Portals::LoadPlacement` (above zero), as
+  `Rules::releaseMaxMoveUnits`: units of the view, which is 256 tall (`view.json`), where `scale()` is
+  screenHeight / 256 (00_order 8.0 rule 5) - so the bound is the same in a window of any size.
+- `Portals::TrackTouch` is `TouchInputManager::update` for the one pointer: a press (re)starts the record (hit, last,
+  move 0); a held tick moves its last point and keeps the farthest move; the release tick returns the record
+  (`TouchRelease`: the last held point, in view units and viewport pixels, and the move) and ends it. A press and a
+  release on one tick are a touch down and up there. A pointer off the game, or a touch seen up without its release,
+  is forgotten. `RequestsPortal` is `hasPortalRequestInput`: released and the move at most the rule.
+- `MagicPortalsLayer::readInput` tracks the tick's touch right after `touchThisTick`, before the controls, a help
+  block or the shot read it. On a release tick every reader takes the last HELD point (`getReleasePos`): the controls
+  (`controlUnderPointer`), a help block and the shot. The shot is fired only where `RequestsPortal` says, at that
+  point mapped through the camera this tick reads (`ViewportToLevelPx`, unchanged). Where the old code fired on
+  `touch.pressed`, nothing fires.
+- `popupTick` tracks the touch too, as the original's manager runs under a stop: a touch that closes a popup and
+  comes up under it fires nothing (the routes' two popup closers do exactly that); one held until the level has
+  resumed fires on its release (by the code; no case exercises it).
+- The touch is forgotten as a level unloads (a restart) and as the pause opens, and a press that restart, pause or
+  clear-portals takes spends it (RECORDED DEVIATIONS 1): the port's corner controls act on the press, and clear hides
+  itself as it clears, so without this its touch would come up on nothing and fire into the corner.
+- A scheduled tap (`ScheduleDevTap`, main's `--tap`) is unchanged as input: down on its tick, held where it went
+  down, up on its release tick (the next unless given). It now fires on that up. `--tap 247,141@60` fires on 61. A
+  scheduled drag (`ScheduleDevDrag`, `--drag`) is judged the same way; its last held point is the one before `to`.
+- **The route format is unchanged, and its meaning is stated:** `tick` is the tick the touch goes down, `release`
+  the tick it comes up (the next unless the file says later), and the shot leaves on the release. `Route::Driver`
+  judges a tap on its release tick (`ReleasesOn`; the traces print "TAP" there). It puts the finger down on the point
+  of the view that shows `at` on the down tick (the camera the tick before left), as before, and it stays put ON THE
+  SCREEN: the shot is aimed at whatever of the level is under it through the release tick's camera. The check is
+  that the shot was aimed there, within `kTapTolerancePx` 0.05 (the layer's own mapping); how far that is from `at`
+  - the aim's drift, the camera having moved while the finger was down - is reported (`Driver::Aims`,
+  `MaxDriftPx`; each route's suite line, the `--route` exit line and each "TAP" trace line), and not corrected: a
+  finger does not lead the scroll.
+- **The routes migrated** (`out/parity/program/RF/scripts/migrate_routes.py`): every shot tap's `tick` one less, so it
+  goes down a tick before the tick it used to fire on and comes up, and fires, on that tick. 424 taps in 64 files;
+  nothing else in any file changed, which the script checks by parsing old and new (the same keys and values but the
+  tick, no `release` added, no tap down before tick 1, each up before the next goes down). The two `"shot": false`
+  taps that close 1-02's and 1-03's tutorial on tick 1 close it on the down and stay. 6 routes have no shot tap.
+  **Once per file:** every one of the 70 now opens with a `"_step150"` note (a `_` key, which `Route::Load` never
+  reads), and the script leaves a file that carries it alone and gives it to each file it moves; the 70 were marked
+  with its `--mark-only` after the move, and its `--check-only` then reads 70 skipped, 0 moved. It was proved on the
+  70 files as they were before the step (a copy): 424 moved, the result equal to this tree's but for the two
+  re-authored taps, and a second run moved nothing. The seven routes that now win on another tick (below) say so in
+  a last `_about` line. Two routes were re-authored, each with its reason in its `_about`:
+  - **2-09 (`level8a`)**: its fifth tap, `(420, 450)`, put down on tick 999 while the player falls and the camera
+    follows 1.3 px a tick, lay on the right walk pad's edge (view `(420, 203.0)`) and walked the player instead of
+    firing ("fired nothing on its release"). It goes down at `(420, 448.7)` and the camera's tick carries its shot to
+    `(420, 450)` on 1000, as before. Won on 1319, as before.
+  - **2-32 (`level31a`)**: the tap on `(1952, 165)` went down on 2216, 0.4 u inside the view's right edge; on 2215 the
+    point is 0.34 u past it ("off the view"). It goes down at `(1951.25, 165)` and the view's 0.75 u a tick to the
+    right carries its shot to `(1952, 165)` on 2216. Won on 2577, as before.
+
+**THE GATES.** Before = the committed build (`test_mp.exe` `fa7080af`, `MagicPortals.exe` `1b54863c`, track B's setup;
+`base_w2B/sweep`) and the step-131 records; after = this step's build (`MagicPortals.exe` `4c17c2ae`, `test_mp.exe`
+`2bbd2dbd`). Before the change, the committed runner replayed the 70 routes once with a trace of every tick
+(`RF/before/routes_trace.txt`: 215 checks, 0 failures, 70 won) - the "before" of the route gate and the cameras the
+drift was measured from (`RF/before/drift.txt`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings**, 40 steps at `--parallel 4` (`RF/build1.log`: no line with "warning" at all), which relinked `MagicPortals.exe` and `test_mp.exe`; and `MagicPortalsSpike` built after (`RF/build2_spike.log`, a relink, 0 warnings), never launched |
+| (1) The shot leaves on the release | nothing on the down; the shot on the up, from the same point for a real press and a scheduled tap, in 1280x720 and 960x540 | fired on the down (step 100) | **passes**: `AScheduledTapFiresTheShotARealPressFires`: 0 shots after the down in all four runs, 1 after the up, the scheduled tap's shot from the press's point (1e-9) toward its point (1e-3), each portal within 0.5 px of (250, 150) |
+| (2) At most scale(18), in any window | 17.9 fires, 18.1 does not; a real touch and a scheduled drag; 18 itself fires | no bound | **passes**: `AShotLeavesOnTheReleaseOfATouchThatStayedWithinEighteen` (12 checks): 1280x720 and 960x540, a real touch held a tick 17.9 / 18.1 u away and a scheduled drag of 35.8 / 36.2 u in two ticks - 17.9 fires, 18.1 fires nothing, none on the down; exactly 18 fires in `test_mp_play`'s `ATouchFiresOnItsReleaseWithinEighteenUnits`, in doubles (18.5 does not; the move is the farthest, not the last) |
+| (3) Aimed at the last point held | not at where the pointer is on the release tick | - | **passes**: the real touch lets go 60 u lower and the drag at `to`; both shots go toward the held point, (267.9, 150), within 0.5 px |
+| (4) One pointer path | a scheduled tap is a real touch; a control spends it | step 100's | **passes**: gate 1; `AScheduledTapOnAControlIsSpentOnIt`: restart pressed both ways restarts (age 0) and fires nothing, on the down and on the up; `AClearPortalsButtonComesWithAPortal`: clear pressed and let go fires nothing into the corner it cleared |
+| (5) Every route still wins | `test_mp_routes`, 70 won; any a GAMEPLAY change breaks re-authored with its reason, none deleted | 70 won, 215 checks | **passes: 70 of 70 won, 215 checks, 0 failures** (`RF/allmode.log`; alone, `RF/routes_taps_trace.txt`, and on the marked files `RF/suite_routes_final.txt`, the same 70 lines). On the migration alone 68 won: 2-09 and 2-32 failed (above) and were re-authored. **63 win on their before tick; 7 on another**, each by its shots' drift (below) |
+| (6) Reachability | no door newly sealed | 108 / 20 / 0 | **passes: 108 reachable, 20 opened, 0 sealed, 0 differ** from `reachability.json` (`RF/reach_check.txt`; the flood reads no input) |
+| (7) The after-sweep | 128 of 128 byte-identical to `base_w2B/sweep` (no input is scheduled) | `base_w2B/sweep` | **passes: 128 of 128 byte-identical** to `base_w2B/sweep` (`RF/after/sweep` on `4c17c2ae`; setup_B's checker, `RF/compare_after.txt`): 128 rc=0, validation ACTIVE in 128 logs and silent, every PNG whole and on its logged md5, 128 logs read `out/snap_w2` and none the live `out/`, no `portal_launch` or tap line; the saves seed `40bfef3a` before and after. The sweep schedules no input, so no level changed and none is to explain |
+| (8) `--tap` in the window | 4-29's torch (step 100's gate 2b) lit a tick later | wall going on tick 71 (step 100) | **passes** (`RF/window/tap_l28c.log`): `--tap 247,141@60` goes down on 60 at (87.8222, 50.1333) units and up on 61, and the wall goes on tick **72**; at f240 (`d0316001`) the torch is lit, the dashed ghost stands where the wall stood and the signal orbits |
+| (9) `--route` in the window | the two re-authored routes won on the suite's ticks | - | **passes** (`RF/window/`): 2-09 `door reached on tick 1319`, 15 shots, drift at most 2 px; 2-32 `door reached on tick 2577`, 25 shots, 0.75 px - the suite's ticks and counts; the DEV tap lines are the routes' own (15 and 25 downs, each up the next tick); validation ACTIVE and silent. The 2-09 window was found minimised (not by this role) about ten minutes in and had stalled there; restored without focus (`ShowWindow` `SW_SHOWNOACTIVATE`, on its own window), it ran on. The run is `--fixed-step`, so its ticks are unchanged |
+| (10) The runner once | every suite | 47 passed, 14,361 checks (step 131) | **passes: 47 suites, 47 passed, 0 failed, 14,388 checks** (`RF/allmode.log`): `test_mp_layer` 3,245 -> 3,261 and `test_mp_play` 207 -> 218, every other count equal |
+
+**THE AIM'S DRIFT** (gate 5; `RF/routes_taps_trace.txt`). Of the 424 shots the routes fire, 235 are aimed exactly at
+their point (under 0.0005 px: the camera stood still on the down tick), 114 drift more than 0.05 px, 59 more than
+0.5, 25 more than 1 and 6 more than 2; the largest is 2.577 px (1-08's first shot, the player walking in). The seven
+routes that win on another tick, with their shots that drifted more than 0.01 px:
+
+| Route | Won on (before -> after) | Shots that drifted (release tick: px) |
+|---|---|---|
+| 1-08 `level7` | 422 -> 423 | 95: 2.577, 350: 0.010 |
+| 3-03 `level2b` | 449 -> 448 | 150: 0.017, 230: 0.020, 320: 0.085 |
+| 3-20 `level19b` | 516 -> 518 | 255: 0.291, 280: 1.039, 363: 1.482 |
+| 4-16 `level15c` | 774 -> 764 | 200: 0.715, 224: 0.246, 248: 0.082 |
+| 4-18 `level17c` | 125 -> 127 | 90: 0.195, 117: 1.137 |
+| 4-19 `level18c` | 581 -> 582 | 54: 1.129, 78: 0.102, 102: 1.119, 126: 0.079 |
+| 4-29 `level28c` | 1519 -> 1520 | 800: 0.306, 1128: 0.773, 1152: 0.021 |
+
+Every shot still fires on the tick it fired on before. The before trace's cameras, printed to 0.1 px, had put the
+camera's step over each shot's new down tick at 0.0 for 309 of the 424 and at 2.6 px at most (`RF/before/drift.txt`).
+
+**THE SUITES**, run directly on the binaries this step leaves: `test_mp_play` **218**, 0 failures (207: +11,
+`ATouchFiresOnItsReleaseWithinEighteenUnits`); `test_mp_routes` **215**, 0 failures (215; 70 won); `test_mp_layer`
+**3,261**, 0 failures (3,245: +16 - the new case's 12, gate 1's 2, the control's 1, clear's 1); and the whole runner
+once (gate 10). In `test_mp_layer` the 38 calls that fire a shot through the layer tap with `shoot` (down, then up the
+next tick) where they used `tap` (the down alone), and `++ticks` after one is `ticks += 2`; `tap` stays the down
+alone for the menus', the popups' and the controls' cases, which let go themselves. Where a case times one tap
+against another (`ATapWhileAShotFliesShowsTheHourglass`, `ABudgetZeroTapByTheSignMakesRedWavesAndAShake`), the ticks
+between them are one fewer, so the releases stand where the old downs stood, and the clock and the quake are read
+between the down and the up; 3-32's ghost fight (`TheGhostComesWithItsKnightsDeath`) lets its fireball tap go.
+
+**SMART APP CONTROL: 0 refusals.** One build, which relinked `test_mp.exe` (`2bbd2dbd`) and `MagicPortals.exe`
+(`4c17c2ae`). Each ran first time: the runner 9 times (`test_mp_play`, `test_mp_routes` three times whole and three
+times `--only`, `test_mp_layer`, the whole runner); `MagicPortals.exe` the 128 sweep captures and the 3 window runs.
+The committed runner (`fa7080af`, never launched before) ran once for the before trace. `MagicPortalsSpike.exe` was
+relinked and never launched. No delete, no retry, no ctest.
+
+**RULINGS APPLIED.** The "Release-to-fire" row, decided for the original by the 2026-09-29 rulings: built as the
+decode reads it. R1, R2 and R17 (built by wave 1) are untouched and their routes still win. R23 (the tap-time ray and
+the hourglass's restart of the 400 ms clock) stays unbuilt, R24 and R25 as they are, and camera dragging is not
+built: it belongs, with its `camera.json` switch, to the step that owns it.
+
+**RECORDED DEVIATIONS.**
+1. **The corner controls act on the press, and a touch one took is spent.** The original's `Button::update` acts on
+   the release, which is then on the button and fires nothing (`PortalManager::isValidPoint`); the port's restart,
+   pause and clear act on the down (step 100 kept that) and forget the touch. Where the two part: a touch that goes
+   down on a corner button and is dragged off it before it comes up presses nothing in the original and, within 18
+   u, fires a shot; the port pressed the button on the down and fires nothing. The walk pads (held, not edges) spend
+   nothing: a touch that went down on one and comes up off it, within 18 u, fires, as the original's pad test reads
+   only the release point. Owner: a step that moves the corner controls to the release (LEFT FOR LATER).
+2. **Under the pause the touch is not followed.** The pause's buttons read the mouse alone (step 100's LEFT FOR
+   LATER) and act on the down, so the touch is forgotten as the pause opens and a touch that comes up under it or
+   after it fires nothing. The original follows it through its pause (`PortalManager::update` #3-4); whether a touch
+   that went down on Resume and came up in play fires there turns on its pause buttons acting on the release (the
+   `Button` above: INFERRED, not played).
+3. **A down and an up on one tick fire.** A real click shorter than a tick reaches the port as both edges at once,
+   and the port fires there, a touch that never moved. The original's `KeyStateManager` samples each frame, so a touch
+   down and up between two frames is never `HIT` and fires nothing (INFERRED from `Update`; not measurable on the
+   rig). Kept so that a fast click is not lost at the port's 60 Hz tick; a scheduled tap never does it.
+4. **The routes' shots drift** (above): up to 2.577 px from the files' points on this build, by design; 7 routes win
+   on another tick. None was re-authored to cancel it, only the two that failed.
+
+**LEFT FOR LATER.**
+- The backlog is not edited here: the close role ticks section 6's "Release-to-fire" row and closes step 100's
+  touch-down-or-up item (resolved: touch-up, decoded and footage-confirmed).
+- **The camera drag and the handle drag** (next in this track) build on `Portals::TouchTrack` and the one pointer:
+  a drag over scale(18) is exactly the touch this step stops firing. `TouchInputManager::update` also keeps
+  `touchMoveSum` (#167-177), which this step does not read; what the pan and the handle read is their decodes'.
+- **The corner controls on the release** (deviation 1), and the pause's and end screens' buttons on the one pointer
+  path (step 100's row): each its own step.
+- A lift disables the touch that taps it (`ETHCallback_lift` #240) and the tutorial hand vanishes on a release within
+  scale(30) (`ETHCallback_hand_tap`, `hasPortalRequestInput(t, true)`): G2 and System 7's, not built.
+- **Merge hazard:** a route written on another track with the old meaning (the shot on the down) fires a tick late
+  on this build. Run `out/parity/program/RF/scripts/migrate_routes.py` over the merged `tests/routes/` once the other
+  tracks' files are in: it moves only the files without the `"_step150"` note - the old meaning - and marks them,
+  and leaves the marked ones alone, so running it again is safe. Then replay. A route written after the merge, on
+  this meaning, needs no move: it takes the note by hand (or `--mark-only`). The script lives only in the main
+  checkout's gitignored `out/`, not in the repository. Main has since committed `5ee1c66` (the lift door), which
+  adds `tests/routes/level20c.json` and changes `level13`, `level17a`, `level18c`, `level28c`, `level2a`, `level30c`
+  and `level6a` - all seven changed here too - and track C's worktree may carry more. A file both tracks changed
+  conflicts on every tick line: take the other track's version (the old meaning, no note), run the script on it, and
+  re-apply this step's own change to that file on top (its `_about` line; for 2-09 and 2-32, the re-authored tap) - a
+  merged file that kept the note over old ticks would be skipped and fire a tick late. `level18c` (4-19) and
+  `level28c` (4-29) are two of the seven that win on another tick: their `_about` ticks were measured on `fd80e82`'s
+  files and are re-measured on the merged build.
+- **Untested: a touch held through a popup.** `popupTick` follows the touch, so one that goes down under a popup, is
+  held while the popup closes and comes up in play within 18 u should fire on its release, and one let
+  go while the popup is still up should not. Only the second is exercised (the routes' two popup closers); a
+  `test_mp_layer` case for both is left to a later step.
+- **The bound is in view units.** `TrackTouch` measures the move in units of the view, so 18 of them are scale(18)
+  (screenHeight / 256) only while `view.json` `height_px` stays 256 (marked `_inferred` there); `test_mp_layer`'s
+  `unitPx` (window height / 256) pins it, and a retune of the view's height would fail that case first.

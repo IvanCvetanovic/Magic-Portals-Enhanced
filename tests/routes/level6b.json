@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-07 (step 127, R1: antiportal_1213's 32 x 4.5 = 144 px holds the door and the end of the floor",
     "before it, where knight A patrols). Left along the top, off the ledge's end and down to the floor,",
@@ -16,9 +17,9 @@
     {"walk": "right", "from": 655, "to": 900}
   ],
   "taps": [
-    {"tick": 300, "at": [230, 200]},
-    {"tick": 330, "at": [282, 310]},
-    {"tick": 620, "at": [275, 298]},
-    {"tick": 645, "at": [81.0, 298.3]}
+    {"tick": 299, "at": [230, 200]},
+    {"tick": 329, "at": [282, 310]},
+    {"tick": 619, "at": [275, 298]},
+    {"tick": 644, "at": [81.0, 298.3]}
   ]
 }

@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-29 (step 127, R1: antiportal_ent_2204's 32 x 5 = 160 px holds the middle of the level, where",
     "knight B carries the yellow key). A portal over the left block at (140, 100) and one on the player;",
@@ -17,8 +18,8 @@
     {"walk": "right", "from": 300, "to": 640}
   ],
   "taps": [
-    {"tick": 30, "at": [140, 100]},
-    {"tick": 55, "at": [62, 202.3]},
-    {"tick": 205, "at": [399, 212]}
+    {"tick": 29, "at": [140, 100]},
+    {"tick": 54, "at": [62, 202.3]},
+    {"tick": 204, "at": [399, 212]}
   ]
 }

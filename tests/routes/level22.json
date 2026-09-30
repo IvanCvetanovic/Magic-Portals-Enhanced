@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-23, re-routed for antiportal_878's 32 x 5.7 = 182.4 px (step 127, R1): it holds the right floor",
     "and the upper platform, where step 126's portals were. Left to x 47; a portal over the hanging",
@@ -20,12 +21,12 @@
     {"walk": "right", "from": 440, "to": 530}
   ],
   "taps": [
-    {"tick": 110, "at": [150, 80]},
-    {"tick": 140, "at": [47.0, 202.3]},
-    {"tick": 300, "at": [545, 190]},
-    {"tick": 330, "at": [545, 190]},
-    {"tick": 360, "at": [392.6, 162.3]},
-    {"tick": 390, "at": [618, 50]},
-    {"tick": 420, "at": [545.0, 202.3]}
+    {"tick": 109, "at": [150, 80]},
+    {"tick": 139, "at": [47.0, 202.3]},
+    {"tick": 299, "at": [545, 190]},
+    {"tick": 329, "at": [545, 190]},
+    {"tick": 359, "at": [392.6, 162.3]},
+    {"tick": 389, "at": [618, 50]},
+    {"tick": 419, "at": [545.0, 202.3]}
   ]
 }

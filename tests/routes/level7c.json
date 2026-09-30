@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-08, weightless (step 127, R1: the door stands on anti_portal_agent_ent_2126, at the centre of",
     "antiportal_2123's 32 x 3 = 96 px). A tap at the left edge (4, 116) (a portal opens there, harmless):",
@@ -13,9 +14,9 @@
   "holds": [
   ],
   "taps": [
-    {"tick": 30, "at": [4, 116]},
-    {"tick": 54, "at": [328, 128]},
-    {"tick": 80, "at": [328, 134]},
-    {"tick": 104, "at": [130.3, 108.6]}
+    {"tick": 29, "at": [4, 116]},
+    {"tick": 53, "at": [328, 128]},
+    {"tick": 79, "at": [328, 134]},
+    {"tick": 103, "at": [130.3, 108.6]}
   ]
 }

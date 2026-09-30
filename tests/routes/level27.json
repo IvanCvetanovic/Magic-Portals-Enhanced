@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-28 (step 127, R1: antiportal_711's 32 x 4 = 128 px holds the shelf and its crates, and",
     "antiportal_712's 288 px the whole room behind door_lift_710). Left onto lift_ent_694 at its bottom",
@@ -21,7 +22,7 @@
     {"walk": "right", "from": 900, "to": 1030}
   ],
   "taps": [
-    {"tick": 818, "at": [88, 175]},
-    {"tick": 842, "at": [160, 195]}
+    {"tick": 817, "at": [88, 175]},
+    {"tick": 841, "at": [160, 195]}
   ]
 }

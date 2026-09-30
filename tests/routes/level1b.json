@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-02, walked (step 127, R1: antiportal_1728's 32 x 6 = 192 px holds the door and everything",
     "round it, so no portal opens there). Right along the top platform, off its end onto the knights'",

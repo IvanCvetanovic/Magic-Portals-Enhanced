@@ -12,24 +12,37 @@
 // It is played through the DEV schedule main's --tap and --hold already use
 // (MagicPortalsLayer::ScheduleDevTap / ScheduleDevHold), which step 100 made a real
 // press: a scheduled tap is the tick's touch, read once by readInput and handed to
-// the controls, a help block or the shot exactly as a press at that point would be.
+// the controls, a help block or the shot exactly as a touch at that point would be.
 // So test_mp_routes, which replays every route headless, and main's --route, which
 // replays one in the real window, drive the layer by the same calls on the same
 // ticks, and the one can be checked against the other by its log's "door reached
 // on tick N".
 //
+// A TAP IS A TOUCH DOWN AND UP, AND ITS SHOT LEAVES ON THE UP (step 150): down on
+// `tick`, held still, up on `release` - the tick after unless the file says later -
+// and the shot fired on the release tick, as the original fires (placement.json
+// `release`). Until step 150 the shot left on the down; every route then written
+// was moved one tick earlier by that step, so each of its shots still leaves on the
+// tick it always did.
+//
 // A TAP IS GIVEN AS A POINT OF THE LEVEL, not of the screen: the camera that turns
 // one into the other is followed, eased and held, and a route written in screen
-// pixels would move whenever the camera's numbers did. The driver turns it into a
-// point of the view one tick ahead, after tick N-1, from the camera that tick left
-// - which is the camera tick N's input is read against, because the layer moves
-// the camera only after readInput (stepLevel). A point the view does not show on
-// its tick is not tapped: a player can only touch what the screen shows, and the
-// route fails there.
+// pixels would move whenever the camera's numbers did. The driver puts the finger
+// down on the point of the view that shows it on the down tick, turned after tick
+// N-1 from the camera that tick left - which is the camera tick N's input is read
+// against, because the layer moves the camera only after readInput (stepLevel). A
+// point the view does not show on its tick is not tapped: a player can only touch
+// what the screen shows, and the route fails there. The finger then stays where it
+// is ON THE SCREEN, and the shot is aimed at whatever of the level is under it
+// through the camera the release tick reads - the original's getReleasePos plus
+// GetCameraPos(). Where the camera moved in between, that is not quite the point
+// the file names: the driver says by how much (the aim's drift), and does not
+// correct for it, as a player's finger does not.
 //
 // The driver also checks each tick for what a route must not do: a shot tap that
-// fires nothing or is refused, or lands anywhere but its point; a death; leaving
-// the level. Each is a problem, and a route with a problem has failed.
+// fires nothing on its release or is refused, or is aimed anywhere but under the
+// finger; a death; leaving the level. Each is a problem, and a route with a problem
+// has failed.
 
 #include <string>
 #include <vector>
@@ -50,13 +63,15 @@ struct Hold {
     float direction = 0.0f; // -1 left, 1 right
 };
 
-// A touch down at a point of the level on `tick`, up on `releaseTick`.
+// A touch down at a point of the level on `tick`, up on `releaseTick`, where the
+// shot leaves.
 struct Tap {
     int tick = 0;
     int releaseTick = 0;  // the tick after `tick` unless the file says later
     glm::dvec2 atPx{0.0}; // the level's pixels, +y down, as the .tscn places things
-    // It fires the portal shot. False: a touch that must fire nothing - the one that
-    // closes 1-02's and 1-03's tutorial as they load.
+    // It fires the portal shot, on its release. False: a touch that must fire nothing
+    // - the one that closes 1-02's and 1-03's tutorial as they load, which goes down
+    // on the popup and comes up under it.
     bool shot = true;
 };
 
@@ -68,13 +83,18 @@ struct Plan {
     std::vector<Tap> taps; // by tick, each up before the next goes down
 };
 
+// Whether a tap of the plan comes up on `tick`: the tick its shot leaves on, which a
+// trace prints.
+bool ReleasesOn(const Plan& plan, int tick);
+
 // Reads a route file. False with `error` saying what is wrong with it: a key the
 // format does not have (other than a "_" comment), a tick below 1, two taps down at
 // once, a walk that is neither left nor right.
 bool Load(const std::string& path, Plan& out, std::string& error);
 
-// How near its point a shot tap's shot must be aimed. The point goes to a fraction of
-// the view here and back through the viewport's float pixels and the camera's float
+// How near the point under its finger a shot tap's shot must be aimed: that point of
+// the view, through the camera the release tick reads. It goes to a fraction of the
+// view here and back through the viewport's float pixels and the camera's float
 // metres in the layer (ViewportToLevelPx), which costs thousandths of a pixel; a tap
 // read a tick late is caught by the tick, not by this.
 inline constexpr double kTapTolerancePx = 0.05;
@@ -94,6 +114,15 @@ public:
     int WonTick() const { return m_wonTick; }
     // Shots the route's taps fired, as the level counted them.
     int Shots() const { return m_shots; }
+    // Each of those shots: its release tick, and its aim's drift - how far the point
+    // under the finger was, through the release tick's camera, from the point the
+    // file names, the camera having moved while the finger was down.
+    struct Aim {
+        int tick = 0;
+        double driftPx = 0.0;
+    };
+    const std::vector<Aim>& Aims() const { return m_aims; }
+    double MaxDriftPx() const;
     const std::vector<std::string>& Problems() const { return m_problems; }
     // Won, failed, or past win_by: nothing more to drive.
     bool Finished() const { return m_wonTick > 0 || !m_problems.empty() || m_ticks >= m_plan.winBy; }
@@ -107,7 +136,7 @@ private:
 
     Record record(const MagicPortalsLayer& layer) const;
     void schedule(MagicPortalsLayer& layer, int tick);
-    void check(const MagicPortalsLayer& layer, const Tap& tap);
+    void check(const MagicPortalsLayer& layer, const Tap& tap, std::size_t index);
     void problem(const std::string& what);
 
     Plan m_plan;
@@ -116,6 +145,13 @@ private:
     int m_wonTick = 0;
     int m_shots = 0;
     Record m_before; // the level's shot record as the last tick left it
+    // The camera's centre as the last tick left it: the camera the next tick's input
+    // is read against, so a finger put down or lifted on that tick is read through it.
+    glm::dvec2 m_camera{0.0};
+    // Where each tap's finger went down, as a fraction of the view: set when it is
+    // scheduled, read when it comes up.
+    std::vector<glm::dvec2> m_fingers;
+    std::vector<Aim> m_aims;
     std::vector<std::string> m_problems;
 };
 

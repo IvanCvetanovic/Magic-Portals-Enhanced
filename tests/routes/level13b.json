@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-14 (R1 fix 2): the blue key's pocket lies wholly inside antiportal_1335 (64, 132), scale 5, 160 px",
     "at 32 x scale, with anti_portal_agent_1334 swinging at its centre. A portal at (250, 50) (203 px",
@@ -32,22 +33,22 @@
     {"walk": "left", "from": 870, "to": 1200}
   ],
   "taps": [
-    {"tick": 24, "at": [250, 50]},
-    {"tick": 48, "at": [284, 160]},
-    {"tick": 72, "at": [59.4, 5]},
-    {"tick": 96, "at": [45, 50]},
-    {"tick": 120, "at": [250, 160]},
-    {"tick": 152, "at": [250, 20]},
-    {"tick": 186, "at": [26, 158]},
-    {"tick": 360, "at": [280, 120]},
-    {"tick": 384, "at": [476, 112]},
-    {"tick": 600, "at": [465, 390]},
-    {"tick": 624, "at": [175, 262]},
-    {"tick": 670, "at": [330, 262]},
-    {"tick": 700, "at": [246.4, 414]},
-    {"tick": 760, "at": [470, 265]},
-    {"tick": 790, "at": [217, 408]},
-    {"tick": 820, "at": [432, 236]},
-    {"tick": 844, "at": [330, 284]}
+    {"tick": 23, "at": [250, 50]},
+    {"tick": 47, "at": [284, 160]},
+    {"tick": 71, "at": [59.4, 5]},
+    {"tick": 95, "at": [45, 50]},
+    {"tick": 119, "at": [250, 160]},
+    {"tick": 151, "at": [250, 20]},
+    {"tick": 185, "at": [26, 158]},
+    {"tick": 359, "at": [280, 120]},
+    {"tick": 383, "at": [476, 112]},
+    {"tick": 599, "at": [465, 390]},
+    {"tick": 623, "at": [175, 262]},
+    {"tick": 669, "at": [330, 262]},
+    {"tick": 699, "at": [246.4, 414]},
+    {"tick": 759, "at": [470, 265]},
+    {"tick": 789, "at": [217, 408]},
+    {"tick": 819, "at": [432, 236]},
+    {"tick": 843, "at": [330, 284]}
   ]
 }

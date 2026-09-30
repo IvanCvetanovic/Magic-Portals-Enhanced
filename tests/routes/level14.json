@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-15: walking only - the level grants no portal (max_portals 0). Right held: the player pushes",
     "crate_ent_654 along the corridor into static portal_static_582, which puts it in the room above,",

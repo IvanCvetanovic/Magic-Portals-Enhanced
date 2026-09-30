@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-12 (step 127, R1). Right off the spawn block to the floor; a shot at anti_portal_agent_ent_1377",
     "(196, 164) kills it (tick ~88) and antiportal_1376 (99 px) goes with it. A portal at (100, 200) and",
@@ -19,14 +20,14 @@
     {"walk": "right", "from": 570, "to": 700}
   ],
   "taps": [
-    {"tick": 70, "at": [196, 164]},
-    {"tick": 100, "at": [100, 200]},
-    {"tick": 125, "at": [125, 113]},
-    {"tick": 290, "at": [120, 150]},
-    {"tick": 315, "at": [83.1, 234.3]},
-    {"tick": 345, "at": [320, 140]},
-    {"tick": 370, "at": [30, 188]},
-    {"tick": 400, "at": [410, 140]},
-    {"tick": 435, "at": [117.8, 205.0]}
+    {"tick": 69, "at": [196, 164]},
+    {"tick": 99, "at": [100, 200]},
+    {"tick": 124, "at": [125, 113]},
+    {"tick": 289, "at": [120, 150]},
+    {"tick": 314, "at": [83.1, 234.3]},
+    {"tick": 344, "at": [320, 140]},
+    {"tick": 369, "at": [30, 188]},
+    {"tick": 399, "at": [410, 140]},
+    {"tick": 434, "at": [117.8, 205.0]}
   ]
 }

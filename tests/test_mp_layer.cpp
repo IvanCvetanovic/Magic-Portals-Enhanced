@@ -167,8 +167,30 @@ void press(MagicPortalsLayer& layer, entt::registry& registry, const char* actio
     tickWith(layer, registry, kRest, {action}, {action});
 }
 
+// A touch DOWN at the pointer, on one tick: what presses a control, a menu's or a
+// popup's button, or closes a popup. It fires no shot (planning step 150): a shot
+// leaves on a touch's release, which `lift` gives and `shoot` gives with it.
 void tap(MagicPortalsLayer& layer, entt::registry& registry, const glm::vec2& pointer) {
     tickWith(layer, registry, pointer, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+}
+
+// The touch comes UP, the tick after `tap`, where it was: the tick a shot leaves on.
+void lift(MagicPortalsLayer& layer, entt::registry& registry, const glm::vec2& pointer) {
+    PhysicsSystem::Update(registry, MagicPortalsLayer::kTick);
+    Input::TickInput input;
+    input.mousePosition = pointer;
+    input.released = {MagicPortalsLayer::kTap};
+    Input::BeginReplayedTick(input);
+    layer.OnFixedUpdate(registry, MagicPortalsLayer::kTick);
+    Input::EndReplayedTick();
+}
+
+// A finger's tap in a level: down on one tick, up on the next where it went down,
+// and the shot on the up (placement.json `release`). Two ticks where a press alone
+// was one before step 150; after it, as after that press, the shot has just left.
+void shoot(MagicPortalsLayer& layer, entt::registry& registry, const glm::vec2& pointer) {
+    tap(layer, registry, pointer);
+    lift(layer, registry, pointer);
 }
 
 // Ticks until the shot a tap fired has landed or failed, AND until another tap
@@ -382,7 +404,7 @@ void ATapLandsWhereItPoints() {
     // runs into it and opens nothing.
     const glm::dvec2 blocked(352.0, 192.0);
     CHECK_MSG(onScreen(registry, blocked), Point(blocked) + " is on screen");
-    tap(layer, registry, screenOf(registry, blocked));
+    shoot(layer, registry, screenOf(registry, blocked));
     landShot(layer, registry);
     CHECK(layer.SimLevel()->portals.placed.empty());
     CHECK_MSG(lastFailure(layer) == "crate_969", "the shot stopped at " + lastFailure(layer));
@@ -404,7 +426,7 @@ void ATapLandsWhereItPoints() {
     const glm::dvec2 aims[] = {glm::dvec2(250.0, 150.0), glm::dvec2(300.0, 170.0)};
     for (const glm::dvec2& aim : aims) {
         CHECK_MSG(onScreen(registry, aim), Point(aim) + " is on screen");
-        tap(layer, registry, screenOf(registry, aim));
+        shoot(layer, registry, screenOf(registry, aim));
         landShot(layer, registry);
     }
     const auto& placed = layer.SimLevel()->portals.placed;
@@ -422,15 +444,17 @@ void ATapLandsWhereItPoints() {
     layer.OnDetach(registry);
 }
 
-// A TAP A CAPTURE SCHEDULES IS A PRESS AT THAT POINT (planning step 100).
+// A TAP A CAPTURE SCHEDULES IS A TOUCH AT THAT POINT (planning step 100), down on
+// its tick and up on the next, and the shot leaves on the up (step 150).
 //
 // level30 places no help block, which is the case the backlog found inert: a
 // scheduled --tap there once fired nothing, because the shot read the mouse and
 // only a help block read the tick's touch. Four runs of it, ticked alike: in a
 // 1280x720 window and in a 960x540 one, one run pressed at a pixel as a player
-// presses, through Input's replay path, and one handed the same pixel as
-// ScheduleDevTap's fraction of the view, with the pointer at rest and nothing
-// pressed. All four fire from the player toward the point ATapLandsWhereItPoints
+// presses, through Input's replay path, and let go there on the next tick, and one
+// handed the same pixel as ScheduleDevTap's fraction of the view, with the pointer
+// at rest and nothing pressed. None fires on the tick it goes down; all four fire
+// on the tick they come up, from the player toward the point ATapLandsWhereItPoints
 // aims at, and open a portal there. The 960x540 pair pins the tap's pixels: a
 // scheduled tap reached the shot in 1280x720's pixels whatever the window, which
 // in a 960x540 one aimed it a third further from the view's corner.
@@ -438,6 +462,7 @@ void AScheduledTapFiresTheShotARealPressFires() {
     struct Fired {
         bool loaded{false};
         bool noHelpBlock{false};
+        int shotsOnTheDown{-1};
         int shots{0};
         glm::dvec2 fromPx{0.0};
         glm::dvec2 toPx{0.0};
@@ -458,11 +483,16 @@ void AScheduledTapFiresTheShotARealPressFires() {
         // screenOf is 1280x720's, and the view is the same 16:9 in either window.
         const glm::vec2 pixel = screenOf(registry, aim) * (window / glm::vec2(1280.0f, 720.0f));
         if (scheduled) {
-            // Due at once: a scheduled tap is taken on the first tick at or after its own.
+            // Due at once: a scheduled tap is taken on the first tick at or after its
+            // own, and comes up on the next.
             layer.ScheduleDevTap(1, glm::dvec2(pixel) / glm::dvec2(window));
+            tickWith(layer, registry, kRest, {}, {});
+            fired.shotsOnTheDown = layer.SimLevel()->portals.shotsFired;
             tickWith(layer, registry, kRest, {}, {});
         } else {
             tap(layer, registry, pixel);
+            fired.shotsOnTheDown = layer.SimLevel()->portals.shotsFired;
+            lift(layer, registry, pixel);
         }
         const auto& portals = layer.SimLevel()->portals;
         fired.shots = portals.shotsFired;
@@ -485,6 +515,8 @@ void AScheduledTapFiresTheShotARealPressFires() {
             return;
         }
         CHECK_MSG(pressed.noHelpBlock && scheduled.noHelpBlock, "level30 places no help block");
+        CHECK_MSG(pressed.shotsOnTheDown == 0 && scheduled.shotsOnTheDown == 0,
+                  "neither fires on the tick it goes down" + in);
         CHECK_MSG(pressed.shots == 1 && glm::length(pressed.toPx - aim) < 0.5,
                   "a real press fires the shot at " + Point(aim) + in + ": " + std::to_string(pressed.shots) +
                       " fired, toward " + Point(pressed.toPx));
@@ -512,6 +544,7 @@ void AScheduledTapOnAControlIsSpentOnIt() {
         double ageBefore{0.0};
         double ageAfter{-1.0};
         int shots{-1};
+        int shotsOnTheUp{-1};
     };
     const auto run = [](bool scheduled) {
         Spent spent;
@@ -535,6 +568,14 @@ void AScheduledTapOnAControlIsSpentOnIt() {
         }
         spent.ageAfter = layer.LevelAgeMs();
         spent.shots = layer.SimLevel() != nullptr ? layer.SimLevel()->portals.shotsFired : -1;
+        // And it comes up, where it went down, in the level it restarted: a touch
+        // that went down on a control fires nothing when it comes up (step 150).
+        if (scheduled) {
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            lift(layer, registry, pixel);
+        }
+        spent.shotsOnTheUp = layer.SimLevel() != nullptr ? layer.SimLevel()->portals.shotsFired : -1;
         layer.OnDetach(registry);
         return spent;
     };
@@ -547,6 +588,85 @@ void AScheduledTapOnAControlIsSpentOnIt() {
     CHECK_MSG(scheduled.ageBefore == pressed.ageBefore && scheduled.ageAfter == 0.0 && scheduled.shots == 0,
               "and so does a scheduled tap there: age " + std::to_string(scheduled.ageAfter) + ", " +
                   std::to_string(scheduled.shots) + " fired");
+    CHECK_MSG(pressed.shotsOnTheUp == 0 && scheduled.shotsOnTheUp == 0,
+              "and neither fires when it comes up: " + std::to_string(pressed.shotsOnTheUp) + " and " +
+                  std::to_string(scheduled.shotsOnTheUp) + " fired");
+}
+
+// A SHOT LEAVES ON THE RELEASE, and only a touch that strayed no more than
+// scale(18) from where it went down fires one (placement.json `release`, planning
+// step 150). On level30, the camera still at the level's left edge, in a 1280x720
+// window and in a 960x540 one: a real touch down at ATapLandsWhereItPoints'
+// landing aim fires nothing on the tick it goes down; held a tick 17.9 units to its
+// right, it fires on the tick it comes up - toward where it was HELD, not where the
+// pointer is on the release tick (getReleasePos) - and held 18.1 units away it fires
+// nothing at all. A scheduled drag, the one pointer path's moving finger, is judged
+// the same way: 35.8 units in two ticks has strayed 17.9 on the tick before its
+// release and fires there, and 36.2 fires nothing. (Exactly 18 firing is
+// test_mp_play's, in doubles; here the pixels are floats.)
+void AShotLeavesOnTheReleaseOfATouchThatStayedWithinEighteen() {
+    const glm::dvec2 aim(250.0, 150.0);
+    struct Run {
+        bool loaded{false};
+        int shotsOnTheDown{-1};
+        int shots{-1};
+        glm::dvec2 toPx{0.0};
+    };
+    const auto run = [&aim](const glm::vec2& window, bool drag, double strayUnits) {
+        Run out;
+        entt::registry registry;
+        publishViewport(registry, window);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) return out;
+        out.loaded = true;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        waitForFirstTap(layer, registry);
+        const glm::vec2 from = screenOf(registry, aim) * (window / glm::vec2(1280.0f, 720.0f));
+        const float unitPx = window.y / 256.0f; // the view is 256 units tall
+        const glm::vec2 held = from + glm::vec2(static_cast<float>(strayUnits) * unitPx, 0.0f);
+        if (drag) {
+            // Down at `from`, halfway on the next tick, at `to` on the release tick: the
+            // last point it is held at is the halfway one.
+            const glm::vec2 to = from + (held - from) * 2.0f;
+            layer.ScheduleDevDrag(1, glm::dvec2(from) / glm::dvec2(window), glm::dvec2(to) / glm::dvec2(window), 3);
+            tickWith(layer, registry, kRest, {}, {});
+            out.shotsOnTheDown = layer.SimLevel()->portals.shotsFired;
+            tickWith(layer, registry, kRest, {}, {});
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            tap(layer, registry, from);
+            out.shotsOnTheDown = layer.SimLevel()->portals.shotsFired;
+            tickWith(layer, registry, held, {MagicPortalsLayer::kTap}, {});
+            // Let go somewhere else again: the release tick's own place is not read.
+            lift(layer, registry, from + glm::vec2(0.0f, 60.0f * unitPx));
+        }
+        out.shots = layer.SimLevel()->portals.shotsFired;
+        if (layer.SimLevel()->portals.flight) out.toPx = layer.SimLevel()->portals.flight->toPx;
+        layer.OnDetach(registry);
+        return out;
+    };
+    for (const glm::vec2& window : {glm::vec2(1280.0f, 720.0f), glm::vec2(960.0f, 540.0f)}) {
+        for (const bool drag : {false, true}) {
+            const std::string how = std::string(drag ? "a scheduled drag" : "a real touch") + " in a " +
+                                    std::to_string(static_cast<int>(window.x)) + "x" +
+                                    std::to_string(static_cast<int>(window.y)) + " window";
+            const Run within = run(window, drag, 17.9);
+            const Run beyond = run(window, drag, 18.1);
+            if (!within.loaded || !beyond.loaded) {
+                CHECK_MSG(false, "level30 loads");
+                return;
+            }
+            CHECK_MSG(within.shotsOnTheDown == 0 && beyond.shotsOnTheDown == 0,
+                      how + ": nothing fires on the tick it goes down");
+            const glm::dvec2 wanted = aim + glm::dvec2(17.9, 0.0);
+            CHECK_MSG(within.shots == 1 && glm::length(within.toPx - wanted) < 0.5,
+                      how + " that strayed 17.9 units fires when it comes up, toward where it was held, " +
+                          Point(wanted) + ": " + std::to_string(within.shots) + " fired, toward " + Point(within.toPx));
+            CHECK_MSG(beyond.shots == 0, how + " that strayed 18.1 units fires nothing: " +
+                                             std::to_string(beyond.shots) + " fired");
+        }
+    }
 }
 
 void Level8FromTheSpawnWithTapsAndWalking() {
@@ -590,11 +710,11 @@ void Level8FromTheSpawnWithTapsAndWalking() {
         ++waited;
     }
     CHECK_MSG(onScreen(registry, far), "the spot over the stone comes into view");
-    tap(layer, registry, screenOf(registry, far));
+    shoot(layer, registry, screenOf(registry, far));
     landShot(layer, registry);
     const glm::dvec2 near = playerPx(registry, layer) + glm::dvec2(40.0, 0.0);
     CHECK_MSG(onScreen(registry, near), Point(near) + " is on screen");
-    tap(layer, registry, screenOf(registry, near));
+    shoot(layer, registry, screenOf(registry, near));
     landShot(layer, registry);
     const MagicPortals::Game::Level* level = layer.SimLevel();
     CHECK_MSG(level != nullptr && level->portals.placed.size() == 2u,
@@ -690,7 +810,7 @@ void LevelsFollowInOrderAndRetryIsInstant() {
     waitForFirstTap(layer, registry);
     const glm::dvec2 aim = spawn + glm::dvec2(0.0, -48.0);
     CHECK_MSG(onScreen(registry, aim), Point(aim) + " is on screen");
-    tap(layer, registry, screenOf(registry, aim));
+    shoot(layer, registry, screenOf(registry, aim));
     landShot(layer, registry);
     CHECK_MSG(layer.SimLevel()->portals.portalsUsed == 1, "the shot stopped at " + lastFailure(layer));
     for (int tick = 0; tick < 20; ++tick) tickWith(layer, registry, kRest, {}, {});
@@ -1766,7 +1886,7 @@ void APortalAndAShotAreTheOriginals() {
     waitForFirstTap(layer, registry);
     const glm::dvec2 target = playerPx(registry, layer) + glm::dvec2(0.0, -48.0);
     CHECK(onScreen(registry, target));
-    tap(layer, registry, screenOf(registry, target));
+    shoot(layer, registry, screenOf(registry, target));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     CHECK_EQ(Tagged(registry, "Magic Portals Shot Sprite"), 1);
     bool shotIsTheOriginal = false;
@@ -1854,7 +1974,7 @@ void TheShotsCellsRunOnOneTimer() {
     MagicPortals::Art::FrameTimer mirror;
     const double tickMs = static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
     const auto fly = [&](const std::string& which) {
-        tap(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
+        shoot(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
         CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), which + " fired: " + lastFailure(layer));
         std::vector<int> drawn;
         std::vector<int> want;
@@ -1901,7 +2021,7 @@ void WithoutTheOriginalThePortalIsABox() {
     if (layer.SimLevel() == nullptr) return;
     CHECK_MSG(!layer.PopupOpen(), "a popup whose card and button cannot be read is not raised to stop the level");
     waitForFirstTap(layer, registry);
-    tap(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
+    shoot(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
     CHECK_EQ(Tagged(registry, "Magic Portals Shot Sprite"), 0);
     landShot(layer, registry);
     CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1, "it landed: " + lastFailure(layer));
@@ -7040,8 +7160,8 @@ void TheDarkDragonsLevelShakesTheView() {
         quakeTickWith(layer, registry, ticks);
     }
     CHECK_MSG(onScreen(registry, torchPx), "4-32's torch comes into view from " + Point(playerPx(registry, layer)));
-    tap(layer, registry, screenOf(registry, torchPx));
-    ++ticks;
+    shoot(layer, registry, screenOf(registry, torchPx));
+    ticks += 2;
     tickUntilUp(layer, registry, ticks, 400, [](const PlayedLevel& played) { return played.torch.lit; });
     CHECK_MSG(layer.SimLevel()->torch.lit > 0, "the shot lit the torch; the last shot: " + lastFailure(layer));
     if (layer.SimLevel()->torch.lit == 0) return;
@@ -7343,7 +7463,7 @@ void AClearPortalsButtonComesWithAPortal() {
 
     // ATapLandsWhereItPoints' first landing aim.
     const glm::dvec2 aim(250.0, 150.0);
-    tap(layer, registry, screenOf(registry, aim));
+    shoot(layer, registry, screenOf(registry, aim));
     landShot(layer, registry);
     CHECK_EQ(layer.SimLevel()->portals.placed.size(), std::size_t{1});
     CHECK_EQ(layer.SimLevel()->portals.portalsUsed, 1);
@@ -7361,7 +7481,9 @@ void AClearPortalsButtonComesWithAPortal() {
     // A tap on it: the portal goes, the count it cost comes back - it never
     // carried anything - and no shot is fired into the corner under it.
     const int fired = layer.SimLevel()->portals.shotsFired;
-    tap(layer, registry, ScreenOfView(layer, clear.Centre()));
+    const MagicPortals::Portals::Tap tapBefore = layer.SimLevel()->portals.lastTap;
+    const glm::vec2 onClear = ScreenOfView(layer, clear.Centre());
+    tap(layer, registry, onClear);
     CHECK_MSG(layer.SimLevel()->portals.placed.empty(), "pressing it clears the placed portals");
     CHECK_MSG(layer.SimLevel()->portals.portalsUsed == 0,
               "and gives back the one that carried nothing: " +
@@ -7370,7 +7492,13 @@ void AClearPortalsButtonComesWithAPortal() {
     const std::vector<std::string> sounds = layer.LatchedSounds();
     CHECK_MSG(std::find(sounds.begin(), sounds.end(), "portal_spent") != sounds.end(),
               "with playPortalKilledSound");
-    tickWith(layer, registry, kRest, {}, {});
+    // The touch comes up where it went down, on the corner the button has just left,
+    // and fires nothing there: the button spent the whole touch (planning step 150).
+    lift(layer, registry, onClear);
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == fired && !layer.SimLevel()->portals.flight &&
+                  layer.SimLevel()->portals.lastTap.atPx == tapBefore.atPx &&
+                  layer.SimLevel()->portals.lastTap.reason == tapBefore.reason,
+              "and its release, off the button it cleared away, fires no shot into the corner");
     CHECK_MSG(!layer.ControlRect(MagicPortalsLayer::Control::Clear, clear) &&
                   IndexOfImage(HudFrame(registry, layer), file) < 0,
               "and with no portal left the button goes");
@@ -8522,7 +8650,7 @@ void AShotIsDimmedAndADarkLevelIsDark() {
         if (layer.SimLevel() != nullptr) {
             CloseTheLevelStartPopup(layer, registry);
             waitForFirstTap(layer, registry);
-            tap(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
+            shoot(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
             CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
             const std::vector<glm::vec4> shot = ColoursOf(registry, "Magic Portals Shot Sprite", "projectile.png");
             CHECK_MSG(AllAre(shot, 0.95f, 0.90f, 1.0f), "the shot, dimmed on the channels it is not emissive on: " +
@@ -10091,7 +10219,7 @@ void ALitTorchLeavesAGhostWhereItsWallStood() {
     // entity is added - and that frame cannot draw it, because the original adds
     // it after the list of what to draw was made.
     const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
-    tap(layer, registry, screenOf(registry, torchPx));
+    shoot(layer, registry, screenOf(registry, torchPx));
     int ticks = 0;
     while (ticks < 240 && !layer.SimLevel()->torch.lights[0].lit) {
         tickWith(layer, registry, kRest, {}, {});
@@ -10191,7 +10319,7 @@ void ALitTorchLeavesAGhostWhereItsWallStood() {
     // tick, and a torch lit again gets a fresh entity with both clocks at zero.
     landShot(layer, registry);
     CHECK_MSG(layer.SimLevel()->torch.signal.present, "a lit torch leaves an orbiting fire signal");
-    tap(layer, registry, screenOf(registry, layer.SimLevel()->torch.signal.atPx));
+    shoot(layer, registry, screenOf(registry, layer.SimLevel()->torch.signal.atPx));
     int back = 0;
     while (back < 240 && layer.SimLevel()->torch.wallsBack == 0) {
         tickWith(layer, registry, kRest, {}, {});
@@ -10205,7 +10333,7 @@ void ALitTorchLeavesAGhostWhereItsWallStood() {
     CHECK_MSG(gone.angleDeg == 0.0 && gone.pulseMs == 0.0, "with its clocks back at zero for the next one");
 
     landShot(layer, registry);
-    tap(layer, registry, screenOf(registry, torchPx));
+    shoot(layer, registry, screenOf(registry, torchPx));
     int again = 0;
     while (again < 240 && layer.SimLevel()->torch.lit < 2) {
         tickWith(layer, registry, kRest, {}, {});
@@ -10258,7 +10386,7 @@ void ALitTorchBakesTheLevelAtRunTime() {
     CHECK(litTorches().empty());
 
     const glm::dvec2 torchPx = layer.SimLevel()->torch.lights[0].atPx;
-    tap(layer, registry, screenOf(registry, torchPx));
+    shoot(layer, registry, screenOf(registry, torchPx));
     for (int tick = 0; tick < 240 && !layer.SimLevel()->torch.lights[0].lit; ++tick) {
         tickWith(layer, registry, kRest, {}, {});
     }
@@ -10322,7 +10450,7 @@ void AShotCarriesItsOwnLight() {
     CHECK_EQ(LightsOf(registry).size(), std::size_t{2});
     CHECK_EQ(Tagged(registry, "Magic Portals Shot Light"), 0);
 
-    tap(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
+    shoot(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     if (!layer.SimLevel()->portals.flight) return;
     CHECK_EQ(LightsOf(registry).size(), std::size_t{3});
@@ -10843,7 +10971,7 @@ void TheTableIsTheFractionTheLayerDrawsAt() {
     // fires one.
     const glm::dvec2 target = playerPx(registry, layer) + glm::dvec2(0.0, -48.0);
     CHECK(onScreen(registry, target));
-    tap(layer, registry, screenOf(registry, target));
+    shoot(layer, registry, screenOf(registry, target));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick); // the halo is the frame's
     float shotZ = 0.0f;
@@ -11470,7 +11598,7 @@ void APortalThePlayerOpenedIsTheEntityInsertPortalAdds() {
     // ATapLandsWhereItPoints' two landing aims, one at a time.
     const glm::dvec2 aims[] = {glm::dvec2(250.0, 150.0), glm::dvec2(300.0, 170.0)};
     const int spawnedBefore = layer.EffectsSpawned();
-    tap(layer, registry, screenOf(registry, aims[0]));
+    shoot(layer, registry, screenOf(registry, aims[0]));
     landShot(layer, registry);
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     CHECK_EQ(layer.SimLevel()->portals.placed.size(), std::size_t{1});
@@ -11509,7 +11637,7 @@ void APortalThePlayerOpenedIsTheEntityInsertPortalAdds() {
                   std::to_string(first.colour.g) + ", " + std::to_string(first.colour.b));
 
     // A SECOND PORTAL COLOURS THE PAIR red then blue, by the ORDER OF THE ARRAY.
-    tap(layer, registry, screenOf(registry, aims[1]));
+    shoot(layer, registry, screenOf(registry, aims[1]));
     landShot(layer, registry);
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     CHECK_EQ(layer.SimLevel()->portals.placed.size(), std::size_t{2});
@@ -11529,7 +11657,7 @@ void APortalThePlayerOpenedIsTheEntityInsertPortalAdds() {
     const int firstId = bodies[0].id;
     const glm::dvec2 stood = bodies[0].atPx;
     const int releasedAtKill = bodies[0].released;
-    tap(layer, registry, screenOf(registry, glm::dvec2(280.0, 160.0)));
+    shoot(layer, registry, screenOf(registry, glm::dvec2(280.0, 160.0)));
     landShot(layer, registry);
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     const MagicPortalsLayer::EffectReport dying = ByIdIn(layer.EffectReports(), firstId);
@@ -11620,7 +11748,7 @@ void AClearedPairPopsInTheManagersOrder() {
     // A PAIR, red then blue.
     const glm::dvec2 aims[] = {glm::dvec2(250.0, 150.0), glm::dvec2(300.0, 170.0)};
     for (const glm::dvec2& aim : aims) {
-        tap(layer, registry, screenOf(registry, aim));
+        shoot(layer, registry, screenOf(registry, aim));
         landShot(layer, registry);
     }
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -11664,7 +11792,7 @@ void AClearedPairPopsInTheManagersOrder() {
     // count it is charged against has been given back. It is opened while both
     // of the cleared ones are still fading - one frame of their 400 ms has run.
     const int spawnedBefore = layer.EffectsSpawned();
-    tap(layer, registry, screenOf(registry, glm::dvec2(280.0, 160.0)));
+    shoot(layer, registry, screenOf(registry, glm::dvec2(280.0, 160.0)));
     landShot(layer, registry);
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     CHECK_EQ(layer.SimLevel()->portals.placed.size(), std::size_t{1});
@@ -12802,7 +12930,12 @@ void TheGhostComesWithItsKnightsDeath() {
             }
             PutBodyAt(registry, level.player, pocket);
             const glm::dvec2 aim(440.0, 202.0);
-            frame(screenOf(registry, aim), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+            const glm::vec2 onAim = screenOf(registry, aim);
+            frame(onAim, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+            // Up where it went down on the next tick, where the fireball leaves (step 150).
+            PutBodyAt(registry, level.player, pocket);
+            lift(layer, registry, onAim);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
             for (int tick = 0; tick < 240 && level.ghost.hits == hitsBefore; ++tick) {
                 PutBodyAt(registry, level.player, pocket);
                 step();
@@ -12992,7 +13125,7 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
         PutBodyAt(registry, level.player, floor);
         step();
     }
-    tap(layer, registry, screenOf(registry, level.torch.lights.front().atPx));
+    shoot(layer, registry, screenOf(registry, level.torch.lights.front().atPx));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     for (int tick = 0; tick < 240 && !level.torch.lights.front().lit; ++tick) step();
     CHECK_MSG(level.torch.lights.front().lit, "a shot from the floor lit 4-32's torch: " + lastFailure(layer));
@@ -13260,8 +13393,8 @@ void AShotIntoA17WallEndsInPortalFail() {
     if (!ReadyToShoot(layer, registry, ticks)) return;
     const glm::dvec2 wall(160.0, 112.0);
     CHECK(onScreen(registry, wall));
-    tap(layer, registry, screenOf(registry, wall));
-    ++ticks;
+    shoot(layer, registry, screenOf(registry, wall));
+    ticks += 2;
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     if (!layer.SimLevel()->portals.flight) return;
     const glm::dvec2 from = layer.SimLevel()->portals.flight->fromPx;
@@ -13324,8 +13457,8 @@ void AnAntiportalTapOn17EndsRedAtZeroAndShakes() {
     int ticks = 0;
     if (!ReadyToShoot(layer, registry, ticks)) return;
     const glm::dvec2 inField(259.911, 194.844);
-    tap(layer, registry, screenOf(registry, inField));
-    ++ticks;
+    shoot(layer, registry, screenOf(registry, inField));
+    ticks += 2;
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     if (!layer.SimLevel()->portals.flight) return;
     const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
@@ -13381,8 +13514,8 @@ void TheBlockerKillsF3sLongShotRedAndShakesAfter() {
     layer.OnAttach(registry);
     int ticks = 0;
     if (!ReadyToShoot(layer, registry, ticks)) return;
-    tap(layer, registry, screenOf(registry, glm::dvec2(391.111, 160.0)));
-    ++ticks;
+    shoot(layer, registry, screenOf(registry, glm::dvec2(391.111, 160.0)));
+    ticks += 2;
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     if (!layer.SimLevel()->portals.flight) return;
     const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
@@ -13464,8 +13597,8 @@ void AShotKillsF17sAgentWithItsBurstShakeAndSound() {
     CHECK_MSG(std::fabs(stood.x - 153.0) < 1.0, "against the pillar: " + Point(stood));
     const glm::dvec2 aim(450.1, 85.0);
     CHECK_MSG(onScreen(registry, aim), "F17's tap is on the screen");
-    tap(layer, registry, screenOf(registry, aim));
-    ++ticks;
+    shoot(layer, registry, screenOf(registry, aim));
+    ticks += 2;
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     if (!layer.SimLevel()->portals.flight) return;
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -13514,28 +13647,32 @@ void ATapWhileAShotFliesShowsTheHourglass() {
     layer.OnAttach(registry);
     int ticks = 0;
     if (!ReadyToShoot(layer, registry, ticks)) return;
-    tap(layer, registry, screenOf(registry, glm::dvec2(440.889, 60.444)));
+    shoot(layer, registry, screenOf(registry, glm::dvec2(440.889, 60.444)));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the long shot fired: " + lastFailure(layer));
-    // Ten ticks on - inside the 400 ms - a tap draws nothing at all.
-    for (int i = 0; i < 9; ++i) {
+    // Ten ticks on - inside the 400 ms - a tap draws nothing at all. Each tap below
+    // goes down the tick before the one it comes up on, so it is the RELEASES that
+    // are ten and thirty ticks after the first (planning step 150).
+    for (int i = 0; i < 8; ++i) {
         tickWith(layer, registry, kRest, {}, {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     }
     const glm::dvec2 aside(106.667, 106.667);
-    tap(layer, registry, screenOf(registry, aside));
+    shoot(layer, registry, screenOf(registry, aside));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     CHECK_MSG(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Cooldown &&
                   EffectsOf(layer, "hourglass.ent").empty(),
               "within 400 ms: silent");
     // Twenty more: past it, the shot still flying.
-    for (int i = 0; i < 19; ++i) {
+    for (int i = 0; i < 18; ++i) {
         tickWith(layer, registry, kRest, {}, {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     }
+    const glm::vec2 onAside = screenOf(registry, aside);
+    tap(layer, registry, onAside);
     CHECK(layer.SimLevel()->portals.flight.has_value());
     const double clockBefore = layer.SimLevel()->portals.sinceTapMs;
-    tap(layer, registry, screenOf(registry, aside));
+    lift(layer, registry, onAside);
     const double clockAfter = layer.SimLevel()->portals.sinceTapMs;
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     CHECK(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::InFlight);
@@ -13565,9 +13702,13 @@ void ABudgetZeroTapByTheSignMakesRedWavesAndAShake() {
         CHECK(layer.SimLevel()->portals.budget == 0 && layer.SimLevel()->portals.noPortalSign == sign);
         for (int i = 0; i < 2; ++i) {
             const glm::dvec2 at = layer.CameraCentrePx() + glm::dvec2(0.0, i == 0 ? -60.0 : -30.0);
+            // Down, then the quake as the release's tick finds it, then up: the shot's
+            // tick is the release's (planning step 150).
+            const glm::vec2 onAt = screenOf(registry, at);
+            tap(layer, registry, onAt);
             QuakeTick seen;
             seen.was = layer.Quake();
-            tap(layer, registry, screenOf(registry, at));
+            lift(layer, registry, onAt);
             seen.now = layer.Quake();
             seen.offsetUnits = layer.QuakeOffsetUnits();
             layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -13578,8 +13719,9 @@ void ABudgetZeroTapByTheSignMakesRedWavesAndAShake() {
             } else {
                 CHECK_MSG(seen.now.amplitudePx == seen.was.amplitudePx, "1-01: no shake");
             }
-            // Ten ticks between the two taps: under 400 ms, which this path never asks.
-            for (int t = 0; t < 9; ++t) {
+            // Ten ticks between the two taps' releases: under 400 ms, which this path
+            // never asks. The next goes down on the ninth.
+            for (int t = 0; t < 8; ++t) {
                 tickWith(layer, registry, kRest, {}, {});
                 layer.OnUpdate(registry, MagicPortalsLayer::kTick);
             }
@@ -13644,7 +13786,7 @@ void OnLevel22aTheShotIsBehindThePlatformAtOne() {
     int ticks = 0;
     if (!ReadyToShoot(layer, registry, ticks)) return;
     const glm::dvec2 up = playerPx(registry, layer) + glm::dvec2(0.0, -40.0);
-    tap(layer, registry, screenOf(registry, up));
+    shoot(layer, registry, screenOf(registry, up));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     const entt::entity shot = FirstTagged(registry, "Magic Portals Shot Sprite");
@@ -13667,7 +13809,7 @@ void TheShotLeavesFromBehindThePlayer() {
     layer.OnAttach(registry);
     int ticks = 0;
     if (!ReadyToShoot(layer, registry, ticks)) return;
-    tap(layer, registry, screenOf(registry, glm::dvec2(440.889, 60.444)));
+    shoot(layer, registry, screenOf(registry, glm::dvec2(440.889, 60.444)));
     int frames = 0;
     for (int i = 0; i < 6 && layer.SimLevel()->portals.flight; ++i) {
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -13704,7 +13846,7 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
     const glm::dvec2 from = playerPx(registry, layer);
     const glm::dvec2 aim = from + (mirror - from) * 1.5;
     CHECK(onScreen(registry, aim));
-    tap(layer, registry, screenOf(registry, aim));
+    shoot(layer, registry, screenOf(registry, aim));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     int turnTick = -1;
@@ -13777,7 +13919,7 @@ void AFireDiamondTapsMarkIsTheLeftoverByte() {
         aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
     }
     CHECK(onScreen(registry, aim));
-    tap(layer, registry, screenOf(registry, aim));
+    shoot(layer, registry, screenOf(registry, aim));
     CHECK_MSG(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Fired &&
                   layer.SimLevel()->portals.flight.has_value(),
               "the tap fired: " + lastFailure(layer));
@@ -14504,7 +14646,7 @@ void AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs() {
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         aim = playerPx(registry, layer) + glm::dvec2(60.0, -50.0);
     }
-    tap(layer, registry, screenOf(registry, aim));
+    shoot(layer, registry, screenOf(registry, aim));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     const int converted = layer.SimLevel()->turrets.converted;
@@ -14583,7 +14725,7 @@ void AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds() {
     const glm::dvec2 aim = agentAt + glm::dvec2(60.0, 0.0);
     CHECK_MSG(onScreen(registry, aim), "the tap is on screen");
     PutPlayerAt(registry, layer, standAt);
-    tap(layer, registry, screenOf(registry, aim));
+    shoot(layer, registry, screenOf(registry, aim));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     bool gone = false;
@@ -15279,8 +15421,8 @@ void The432WallsDustIsTwiceTheSize() {
     for (int waited = 0; waited < 600 && (waited < 60 || !onScreen(registry, torchPx)); ++waited) {
         quakeTickWith(layer, registry, ticks);
     }
-    tap(layer, registry, screenOf(registry, torchPx));
-    ++ticks;
+    shoot(layer, registry, screenOf(registry, torchPx));
+    ticks += 2;
     tickUntilUp(layer, registry, ticks, 400, [](const PlayedLevel& played) { return played.torch.lit; });
     CHECK_MSG(layer.SimLevel()->torch.lit > 0, "4-32: the shot lit the torch; the last shot: " + lastFailure(layer));
     if (layer.SimLevel()->torch.lit == 0) return;
@@ -16463,6 +16605,7 @@ void runTests() {
     ATapLandsWhereItPoints();
     AScheduledTapFiresTheShotARealPressFires();
     AScheduledTapOnAControlIsSpentOnIt();
+    AShotLeavesOnTheReleaseOfATouchThatStayedWithinEighteen();
     Level8FromTheSpawnWithTapsAndWalking();
     LevelsFollowInOrderAndRetryIsInstant();
     NSkipsToTheNextLevel();

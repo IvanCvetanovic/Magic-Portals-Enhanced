@@ -1195,14 +1195,18 @@ public:
     // block, wherever the camera has it on that tick. The popups and the menu
     // states read it: it opens a help block's popup, closes one that is up, and
     // presses a menu's buttons as a touch does. During play it is the tick's touch
-    // readInput hands on, so it works a HUD control, presses a help block or fires
-    // the shot exactly as a real press at that point of the view would. The pause
-    // and the end screens still read the mouse alone; the pause's buttons have
-    // ScheduleDevPress.
+    // readInput hands on, so it works a HUD control, presses a help block or - on
+    // its RELEASE, as the original fires (placement.json `release`) - fires the
+    // shot, exactly as a real touch down and up at that point of the view would.
+    // It never moves, so it always fires if nothing takes it; a drag (below) that
+    // strays more than scale(18) does not. The pause and the end screens still
+    // read the mouse alone; the pause's buttons have ScheduleDevPress.
     void ScheduleDevTap(int tick, std::optional<glm::dvec2> viewFraction, int releaseTick = 0);
     // DEV ONLY: a drag - a touch down at `from` on tick `tick`, moved at an even pace
     // to reach `to` on `releaseTick`, and released there. Both are fractions of the
     // view. The credits' and the dashboard's scroll captures need a finger that moves.
+    // In a level, its release fires a shot only if it strayed no more than scale(18),
+    // aimed where it was on the tick before its release (getReleasePos).
     void ScheduleDevDrag(int tick, const glm::dvec2& from, const glm::dvec2& to, int releaseTick);
 
     // DEV ONLY: press one of these on the layer's tick `tick` (1 the first
@@ -2735,6 +2739,13 @@ private:
         double maxMovePx{0.0};
     };
     HelpTouch m_helpTouch;
+    // THE TOUCH A SHOT IS FIRED BY (Portals::TouchTrack): where the pointer went
+    // down, where it was last held and how far it strayed, followed by readInput
+    // and, under a popup, by popupTick, as TouchInputManager::update follows it
+    // whether or not the game is stopped. A shot leaves on its release. Forgotten
+    // as a level loads and as the pause opens, whose buttons the port presses on
+    // the way down: a touch that went down on Resume must not fire when it comes up.
+    Portals::TouchTrack m_shotTouch;
     // The plaque's dismissal, on GameLayer's clock (the level's age), once the
     // frame clock has passed its dismissAfterMs; negative before.
     double m_plaqueDismissAgeMs{-1.0};

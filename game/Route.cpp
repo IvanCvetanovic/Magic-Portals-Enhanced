@@ -208,9 +208,19 @@ bool Load(const std::string& path, Plan& out, std::string& error) {
     return true;
 }
 
+bool ReleasesOn(const Plan& plan, int tick) {
+    return std::any_of(plan.taps.begin(), plan.taps.end(), [tick](const Tap& tap) { return tap.releaseTick == tick; });
+}
+
 // ---- the driver ---------------------------------------------------------------
 
-Driver::Driver(Plan plan) : m_plan(std::move(plan)) {}
+Driver::Driver(Plan plan) : m_plan(std::move(plan)) { m_fingers.assign(m_plan.taps.size(), glm::dvec2(-1.0)); }
+
+double Driver::MaxDriftPx() const {
+    double most = 0.0;
+    for (const Aim& aim : m_aims) most = std::max(most, aim.driftPx);
+    return most;
+}
 
 Driver::Record Driver::record(const MagicPortalsLayer& layer) const {
     Record out;
@@ -237,11 +247,13 @@ void Driver::Begin(MagicPortalsLayer& layer) {
     }
     for (const Hold& hold : m_plan.holds) layer.ScheduleDevHold(hold.from, hold.to, hold.direction);
     m_before = record(layer);
+    m_camera = layer.CameraCentrePx();
     schedule(layer, m_ticks + 1);
 }
 
 void Driver::schedule(MagicPortalsLayer& layer, int tick) {
-    for (const Tap& tap : m_plan.taps) {
+    for (std::size_t i = 0; i < m_plan.taps.size(); ++i) {
+        const Tap& tap = m_plan.taps[i];
         if (tap.tick != tick) continue;
         // The view as this tick leaves it is the view the next tick's input is read
         // against: the camera moves after readInput (MagicPortalsLayer::stepLevel).
@@ -253,12 +265,14 @@ void Driver::schedule(MagicPortalsLayer& layer, int tick) {
                     " is off the view, which shows " + Px(corner) + " to " + Px(corner + view));
             continue;
         }
+        m_fingers[i] = fraction;
         layer.ScheduleDevTap(tap.tick, fraction, tap.releaseTick);
     }
 }
 
-void Driver::check(const MagicPortalsLayer& layer, const Tap& tap) {
-    const std::string which = "the tap on tick " + std::to_string(tap.tick) + " at " + Px(tap.atPx);
+void Driver::check(const MagicPortalsLayer& layer, const Tap& tap, std::size_t index) {
+    const std::string which = "the tap down on tick " + std::to_string(tap.tick) + " and up on " +
+                              std::to_string(tap.releaseTick) + " at " + Px(tap.atPx);
     const Game::Level* level = layer.SimLevel();
     if (level == nullptr) {
         problem(which + " has no level to land in");
@@ -272,14 +286,19 @@ void Driver::check(const MagicPortalsLayer& layer, const Tap& tap) {
         if (shoot) problem(which + " was to fire nothing, and fired a shot");
         return;
     }
+    // Where the finger is on the view, through the camera this tick read - the one
+    // the last tick left - is what the shot is aimed at.
+    const glm::dvec2 view = layer.ViewPx();
+    const glm::dvec2 under = m_camera - view * 0.5 + m_fingers[index] * view;
     if (!shoot) {
-        problem(which + " fired nothing: a control, a help block, a popup or a pause took it");
+        problem(which + " fired nothing on its release: a control, a help block, a popup or a pause took it");
     } else if (portals.lastTap.reason != Portals::TapReason::Fired) {
         problem(which + " was refused: " + ReasonName(portals.lastTap.reason));
-    } else if (glm::length(portals.lastTap.atPx - tap.atPx) > kTapTolerancePx) {
-        problem(which + " was aimed at " + Px(portals.lastTap.atPx));
+    } else if (glm::length(portals.lastTap.atPx - under) > kTapTolerancePx) {
+        problem(which + " was aimed at " + Px(portals.lastTap.atPx) + ", not under the finger at " + Px(under));
     } else {
         ++m_shots;
+        m_aims.push_back(Aim{tap.releaseTick, glm::length(under - tap.atPx)});
     }
 }
 
@@ -294,8 +313,9 @@ void Driver::AfterTick(MagicPortalsLayer& layer) {
         problem("the player died on tick " + std::to_string(m_ticks));
         return;
     }
-    for (const Tap& tap : m_plan.taps) {
-        if (tap.tick == m_ticks) check(layer, tap);
+    // A tap is judged on the tick it comes up, where its shot leaves.
+    for (std::size_t i = 0; i < m_plan.taps.size(); ++i) {
+        if (m_plan.taps[i].releaseTick == m_ticks) check(layer, m_plan.taps[i], i);
     }
     const Game::Level* level = layer.SimLevel();
     if (level != nullptr && level->goals.completed) {
@@ -309,6 +329,7 @@ void Driver::AfterTick(MagicPortalsLayer& layer) {
         return;
     }
     m_before = record(layer);
+    m_camera = layer.CameraCentrePx();
     schedule(layer, m_ticks + 1);
 }
 
@@ -490,9 +511,8 @@ void ReplayLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta) {
     m_driver.AfterTick(m_game);
     if (m_traceEvery <= 0 || m_traced) return;
     const int tick = m_game.LayerTicks();
-    const std::vector<Tap>& taps = m_driver.Planned().taps;
-    const bool tapped =
-        std::any_of(taps.begin(), taps.end(), [tick](const Tap& tap) { return tap.tick == tick; });
+    // On the tick a tap comes up: the shot has just left.
+    const bool tapped = ReleasesOn(m_driver.Planned(), tick);
     if (m_driver.Finished() && !wasFinished) {
         m_traced = true;
         Trace(m_game, registry, m_driver.WonTick() > 0 ? "WON" : "END");
@@ -511,7 +531,7 @@ void ReplayLayer::OnDetach(entt::registry& registry) {
     std::cout << "[Magic Portals] route " << plan.file << ": ";
     if (m_driver.WonTick() > 0) {
         std::cout << plan.level << " won on tick " << m_driver.WonTick() << " (win_by " << plan.winBy << "), "
-                  << m_driver.Shots() << " shot(s)";
+                  << m_driver.Shots() << " shot(s), the aim's drift at most " << m_driver.MaxDriftPx() << " px";
     } else if (!m_driver.Problems().empty()) {
         std::cout << plan.level << " FAILED: " << m_driver.Problems().front();
     } else {

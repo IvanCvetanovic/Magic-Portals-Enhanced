@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-23 (R1 fix 1): the player starts inside antiportal_1207 (scale 3, 96 px at 32 x scale), boxed in",
     "by three small crates under the middle platform, with a carranca at each end of the floor; every",
@@ -19,9 +20,9 @@
     {"walk": "left", "from": 732, "to": 850}
   ],
   "taps": [
-    {"tick": 612, "at": [99.5, 100]},
-    {"tick": 640, "at": [98.7, 266.3]},
-    {"tick": 700, "at": [345, 186]},
-    {"tick": 728, "at": [106.7, 186.4]}
+    {"tick": 611, "at": [99.5, 100]},
+    {"tick": 639, "at": [98.7, 266.3]},
+    {"tick": 699, "at": [345, 186]},
+    {"tick": 727, "at": [106.7, 186.4]}
   ]
 }

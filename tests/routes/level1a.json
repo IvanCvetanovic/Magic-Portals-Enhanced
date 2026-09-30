@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-02, walking only. lift_789 runs on its own in the port (the backlog's G2: the original's idles",
     "at marker a until a tap sends it), so this route waits for it: right onto it as it comes back",

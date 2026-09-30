@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-10, won by killing both anti-portal agents (step 126, R17). From the spawn a shot at",
     "anti_portal_agent_ent_599 (384, 108) kills it over the block and antiportal_574 (scale 4.5) goes",
@@ -15,11 +16,11 @@
     {"walk": "right", "from": 290, "to": 350}
   ],
   "taps": [
-    {"tick": 30, "at": [384, 108]},
-    {"tick": 70, "at": [384, 150]},
-    {"tick": 110, "at": [127, 204]},
-    {"tick": 200, "at": [690, 140]},
-    {"tick": 230, "at": [690, 140]},
-    {"tick": 260, "at": [525.4, 202.3]}
+    {"tick": 29, "at": [384, 108]},
+    {"tick": 69, "at": [384, 150]},
+    {"tick": 109, "at": [127, 204]},
+    {"tick": 199, "at": [690, 140]},
+    {"tick": 229, "at": [690, 140]},
+    {"tick": 259, "at": [525.4, 202.3]}
   ]
 }

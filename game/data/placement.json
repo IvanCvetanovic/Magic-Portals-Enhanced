@@ -116,6 +116,38 @@
     "next_ms": 400.0
   },
 
+  "release": {
+    "_source": [
+      "A SHOT IS FIRED WHEN A TOUCH COMES UP, and only a touch that stayed within scale(18) of where it",
+      "went down (the remaster record's step 150).",
+      "  hasPortalRequestInput (Portal.angelscript, bytes 353953..354113) #1-9: getTouchState(t, ignoreStatus)",
+      "    CMPIi 3, and anything but 3 returns false. 3 is GSKS_RELEASE (reference/ethanon",
+      "    toolkit/Source/src/gs2d/src/Input/KeyStateManager.h:33), and KeyStateManager::Update",
+      "    (KeyStateManager.cpp:33-57) gives it on the ONE frame after the last one the touch was held:",
+      "    GSKS_HIT on the first held frame, GSKS_DOWN on the rest, GSKS_RELEASE on the first frame up.",
+      "  #10-22: then getMaxMoveLength(t) CMPf scale(18), TNP: true when the move is AT MOST scale(18).",
+      "  TouchInputManager::update (bytes 159141..159915), every frame: on GSKS_HIT (#60-104)",
+      "    maxMoveLength[t] = 0 and hitPos[t] = the touch; on HIT or DOWN (#41-50) lastTouchPos[t] = the",
+      "    touch (#105-117) and maxMoveLength[t] = max(maxMoveLength[t], distance(hitPos[t], touch))",
+      "    (#118-152). So the move is the FARTHEST the touch has been from where it went down, over the",
+      "    frames it was held, not the length of its path; the release frame adds nothing.",
+      "  managePortalInsertion (PortalManager.angelscript, bytes 143178..144166) #16-25 asks",
+      "    hasPortalRequestInput(t, false) of every touch, and #26-41 aims at getReleasePos(t)",
+      "    (bytes 161662..161825: lastTouchPos[t], the last point the touch was HELD at) plus",
+      "    GetCameraPos() on the release frame (getAbsolutePos, bytes 316167..316280). The two gates",
+      "    (cooldowns above), the pads' and the buttons' tests (ScreenPad::isValidPoint,",
+      "    PortalManager::isValidPoint -> UILayerManager::isPointInButton) are all asked of that release",
+      "    point on that frame. blockPortalEffects (budget 0, no_budget below) #35-60 asks the same.",
+      "  getTouchState (bytes 161450..161662) answers GSKS_UP for a touch a help block or a lift disabled",
+      "    (touchEnabled false, set true again once the touch is up), so neither fires on its release.",
+      "scale() is the script's SGlobalScale, screenHeight / 256 (00_order 8.0 rule 5), and the port's view",
+      "is 256 units tall (view.json), so scale(18) is 18 units of the view, in a window of any size.",
+      "FOOTAGE agrees: F14, F15 and F16, each in its section 1 ('the shot fires on touch-up'; monkey touch",
+      "down, then up 0.10-0.11 s later)."
+    ],
+    "max_move_units": 18.0
+  },
+
   "final_pos": {
     "_source": [
       "WHAT THE ORIGINAL WORKS OUT AT THE TAP: computePortalFinalPos, the global (PortalManager.angelscript,",

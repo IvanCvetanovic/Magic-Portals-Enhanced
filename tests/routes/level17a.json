@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-18 (R1 fix 1): antiportal_1138 (scale 3.6, 115.2 px at 32 x scale) covers block00_1141 and the",
     "lift's foot, and antiportal_1237 (scale 3.9, 124.8 px) covers the door room with",
@@ -35,16 +36,16 @@
     {"walk": "left", "from": 1843, "to": 1880}
   ],
   "taps": [
-    {"tick": 40, "at": [32, 236]},
-    {"tick": 70, "at": [150, 306]},
-    {"tick": 115, "at": [348, 268]},
-    {"tick": 145, "at": [80, 306]},
-    {"tick": 1670, "at": [320, 125]},
-    {"tick": 1757, "at": [68, 258]},
-    {"tick": 1833, "at": [255, 70]},
-    {"tick": 1868, "at": [365, 146]},
-    {"tick": 1892, "at": [54, 76]},
-    {"tick": 1916, "at": [60, 30]},
-    {"tick": 1940, "at": [248, 146]}
+    {"tick": 39, "at": [32, 236]},
+    {"tick": 69, "at": [150, 306]},
+    {"tick": 114, "at": [348, 268]},
+    {"tick": 144, "at": [80, 306]},
+    {"tick": 1669, "at": [320, 125]},
+    {"tick": 1756, "at": [68, 258]},
+    {"tick": 1832, "at": [255, 70]},
+    {"tick": 1867, "at": [365, 146]},
+    {"tick": 1891, "at": [54, 76]},
+    {"tick": 1915, "at": [60, 30]},
+    {"tick": 1939, "at": [248, 146]}
   ]
 }

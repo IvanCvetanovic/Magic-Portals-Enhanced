@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-27 (R1 fix 1): antiportal_2084 (scale 3, 96 px at 32 x scale) holds the keyhole, the yellow door",
     "and the exit, and the key lies 48 px inside shock_agent_2048's 74 px ring, where the player dies but",
@@ -22,15 +23,15 @@
     {"walk": "right", "from": 1000, "to": 1300}
   ],
   "taps": [
-    {"tick": 580, "at": [80, 185]},
-    {"tick": 605, "at": [232.4, 186]},
-    {"tick": 640, "at": [108, 160]},
-    {"tick": 665, "at": [148.5, 186.3]},
-    {"tick": 795, "at": [200, 180]},
-    {"tick": 820, "at": [89.4, 199]},
-    {"tick": 850, "at": [275, 120]},
-    {"tick": 875, "at": [108, 170.3]},
-    {"tick": 975, "at": [270, 120]},
-    {"tick": 1005, "at": [190, 186.3]}
+    {"tick": 579, "at": [80, 185]},
+    {"tick": 604, "at": [232.4, 186]},
+    {"tick": 639, "at": [108, 160]},
+    {"tick": 664, "at": [148.5, 186.3]},
+    {"tick": 794, "at": [200, 180]},
+    {"tick": 819, "at": [89.4, 199]},
+    {"tick": 849, "at": [275, 120]},
+    {"tick": 874, "at": [108, 170.3]},
+    {"tick": 974, "at": [270, 120]},
+    {"tick": 1004, "at": [190, 186.3]}
   ]
 }

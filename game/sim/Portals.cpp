@@ -151,6 +151,16 @@ bool LoadPlacement(const std::string& path, Rules& out, std::string& error) {
     out.firstPortalMinMs = firstMs;
     out.nextPortalMinMs = nextMs;
 
+    // WHEN A TOUCH FIRES: on its release, within scale(18). Required, and above zero:
+    // zero would let only a touch that never moved at all fire, which no file says.
+    const Json::Value& release = root["release"];
+    if (!release.IsObject() || !release["max_move_units"].IsNumber() ||
+        !(release["max_move_units"].AsNumber(0.0) > 0.0)) {
+        error = path + ": release.max_move_units is a number above zero";
+        return false;
+    }
+    out.releaseMaxMoveUnits = release["max_move_units"].AsNumber(0.0);
+
     // HOW LONG A PORTAL LASTS, and how it hovers while it does: ETHCallback_portal's
     // own two arms, both required. Zero perish is legal and means "never", which is
     // what a suite that wants a portal to stay for a long run asks for.
@@ -349,6 +359,44 @@ bool State::TryPlace(const glm::dvec2& atPx) {
     placed.push_back(portal);
     ++portalsUsed;
     return true;
+}
+
+TouchRelease TrackTouch(TouchTrack& track, bool pressed, bool held, bool released, bool over,
+                        const glm::dvec2& atView, const glm::dvec2& atPx) {
+    TouchRelease out;
+    // A pointer that left the game is not a touch the game can follow: whatever it
+    // does out there is not measured, so it fires nothing when it comes back.
+    if (!over) {
+        track = TouchTrack{};
+        return out;
+    }
+    if (pressed) {
+        // GSKS_HIT: maxMoveLength 0, hitPos and lastTouchPos the touch.
+        track = TouchTrack{true, atView, atView, atPx, 0.0};
+    } else if (track.down && held) {
+        // GSKS_DOWN: lastTouchPos the touch, and the farthest from hitPos kept.
+        track.lastView = atView;
+        track.lastPx = atPx;
+        track.maxMoveUnits = std::max(track.maxMoveUnits, glm::length(atView - track.hitView));
+    }
+    if (track.down && released) {
+        // GSKS_RELEASE: nothing updated on this frame; the record is what it was.
+        out.released = true;
+        out.atView = track.lastView;
+        out.atPx = track.lastPx;
+        out.maxMoveUnits = track.maxMoveUnits;
+        track = TouchTrack{};
+    } else if (track.down && !held) {
+        // Up, and this record never saw it come up (a tick nobody tracked took the
+        // release): it is over, and fires nothing.
+        track = TouchTrack{};
+    }
+    return out;
+}
+
+bool RequestsPortal(const Rules& rules, const TouchRelease& release) {
+    // #19-20 CMPf maxMoveLength, scale(18); TNP: at most, so a move of exactly 18 fires.
+    return release.released && release.maxMoveUnits <= rules.releaseMaxMoveUnits;
 }
 
 bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx) {

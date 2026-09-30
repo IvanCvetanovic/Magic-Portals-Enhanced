@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-01, won as footage F17 wins it (out/parity/footage/F17.md 1.1): left against the locked pillar",
     "(152.7, 140.3); a shot at (450.1, 85.0) passes 16 u from anti_portal_agent_ent_2107 (418, 108) and",
@@ -15,8 +16,8 @@
     {"walk": "right", "from": 200, "to": 410}
   ],
   "taps": [
-    {"tick": 110, "at": [450.1, 85.0]},
-    {"tick": 150, "at": [200, 146]},
-    {"tick": 185, "at": [372, 98]}
+    {"tick": 109, "at": [450.1, 85.0]},
+    {"tick": 149, "at": [200, 146]},
+    {"tick": 184, "at": [372, 98]}
   ]
 }

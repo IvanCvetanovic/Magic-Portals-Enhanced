@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-21, won by killing the anti-portal agent (step 126, R17). Right to x 278; a shot at (250, 300)",
     "passes within 22.4 of anti_portal_agent_ent_824 (244, 300) and kills it with antiportal_822 (tick",
@@ -21,14 +22,14 @@
     {"walk": "right", "from": 580, "to": 690}
   ],
   "taps": [
-    {"tick": 50, "at": [250, 300]},
-    {"tick": 80, "at": [250, 300]},
-    {"tick": 110, "at": [277.7, 458.3]},
-    {"tick": 200, "at": [242, 200]},
-    {"tick": 230, "at": [246, 330]},
-    {"tick": 420, "at": [230, 142]},
-    {"tick": 450, "at": [205, 243]},
-    {"tick": 516, "at": [330, 100]},
-    {"tick": 562, "at": [215, 322.2]}
+    {"tick": 49, "at": [250, 300]},
+    {"tick": 79, "at": [250, 300]},
+    {"tick": 109, "at": [277.7, 458.3]},
+    {"tick": 199, "at": [242, 200]},
+    {"tick": 229, "at": [246, 330]},
+    {"tick": 419, "at": [230, 142]},
+    {"tick": 449, "at": [205, 243]},
+    {"tick": 515, "at": [330, 100]},
+    {"tick": 561, "at": [215, 322.2]}
   ]
 }

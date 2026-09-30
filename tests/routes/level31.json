@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-32, the beholder, as the owner beat it (test_mp_boss Level31IsWonAsTheOwnerWonIt) with real",
     "shots in place of placed portals. Three rounds: it comes over the player and shuts its eye; the",
@@ -20,11 +21,11 @@
     {"walk": "right", "from": 2800, "to": 2960}
   ],
   "taps": [
-    {"tick": 640, "at": [316.6, 150]},
-    {"tick": 680, "at": [197, 100]},
-    {"tick": 1370, "at": [216.7, 136]},
-    {"tick": 1399, "at": [97, 100]},
-    {"tick": 2050, "at": [119.2, 145]},
-    {"tick": 2089, "at": [198, 100]}
+    {"tick": 639, "at": [316.6, 150]},
+    {"tick": 679, "at": [197, 100]},
+    {"tick": 1369, "at": [216.7, 136]},
+    {"tick": 1398, "at": [97, 100]},
+    {"tick": 2049, "at": [119.2, 145]},
+    {"tick": 2088, "at": [198, 100]}
   ]
 }

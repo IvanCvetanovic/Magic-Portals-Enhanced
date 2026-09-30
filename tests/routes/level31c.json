@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-32, the dark dragon, won by three burns from barrels its own fireballs set off (planning step 116).",
     "Left off the ledge to the seam at x 255.4 on the floor, where the dragon sees the player; tap 1 lights",
@@ -26,13 +27,13 @@
     {"walk": "right", "from": 3100, "to": 3480}
   ],
   "taps": [
-    {"tick": 215, "at": [210, 34]},
-    {"tick": 1120, "at": [171.4, 143.7]},
-    {"tick": 1175, "at": [405, 64]},
-    {"tick": 1790, "at": [171.4, 143.7]},
-    {"tick": 1838, "at": [405, 64]},
-    {"tick": 2390, "at": [171.4, 143.7]},
-    {"tick": 2429, "at": [405, 64]},
-    {"tick": 2500, "at": [210, 34]}
+    {"tick": 214, "at": [210, 34]},
+    {"tick": 1119, "at": [171.4, 143.7]},
+    {"tick": 1174, "at": [405, 64]},
+    {"tick": 1789, "at": [171.4, 143.7]},
+    {"tick": 1837, "at": [405, 64]},
+    {"tick": 2389, "at": [171.4, 143.7]},
+    {"tick": 2428, "at": [405, 64]},
+    {"tick": 2499, "at": [210, 34]}
   ]
 }

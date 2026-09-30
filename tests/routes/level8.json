@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-09: test_mp_layer's Level8FromTheSpawnWithTapsAndWalking as a route. Right onto the slope and",
     "let go; a shot over the stone to (30, 30), one just ahead of the player; right held again. The",
@@ -12,7 +13,7 @@
     {"walk": "right", "from": 110, "to": 420}
   ],
   "taps": [
-    {"tick": 60, "at": [30, 30]},
-    {"tick": 100, "at": [240, 118]}
+    {"tick": 59, "at": [30, 30]},
+    {"tick": 99, "at": [240, 118]}
   ]
 }

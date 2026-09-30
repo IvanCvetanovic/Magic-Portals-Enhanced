@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-07, walking only (max_portals 0). Onto lift_ent_883 as it comes back to its marker a (the",
     "port runs it on its own: G2), up, and left along the top, pushing rolling_stone_890 off the",

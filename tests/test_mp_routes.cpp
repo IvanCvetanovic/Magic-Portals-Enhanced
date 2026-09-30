@@ -7,14 +7,18 @@
 // the layer as the game does: attached to a bare registry, the app's physics step
 // before each of its ticks, its frame after, the pointer published over a 1280x720
 // viewport, and the route's input fed through the same DEV schedule main's --route
-// and --tap use, which step 100 made a real press. A route passes when goals.completed
-// is set - the player in the open door - by its win_by, with no death, no tap that
-// fired nothing or was refused, and no tap on a point the view did not show.
+// and --tap use, which step 100 made a real press: each tap down on its tick and up
+// on its release, where its shot leaves (step 150). A route passes when
+// goals.completed is set - the player in the open door - by its win_by, with no
+// death, no tap that fired nothing on its release or was refused, and no tap on a
+// point the view did not show. Each route's line gives its shots' largest aim drift:
+// how far the point under a finger was from the point the file names, where the
+// camera moved while the finger was down (Route.hpp).
 //
 // For writing a route, the same binary replays one and says what it did:
 //   test_mp test_mp_routes --only <level or file> [--trace <every n ticks>]
 // prints the player, the camera, the shots and the portals every n ticks and on
-// every tap's tick, and stops at the first problem. The planning record's step 113
+// the tick every tap comes up, and stops at the first problem. The planning record's step 113
 // has the route format, and out/parity/program/W.1/ the attempts behind the seeds.
 //
 // No window and no Vulkan. Skipped with 77 without the converted levels.
@@ -102,6 +106,7 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
 struct Outcome {
     int wonTick = 0;
     int shots = 0;
+    double driftPx = 0.0;
     std::vector<std::string> problems;
 };
 
@@ -117,12 +122,15 @@ Outcome Play(const Route::Plan& plan, const Options& options) {
         Frame(layer, driver, registry);
         if (options.trace <= 0) continue;
         const int tick = layer.LayerTicks();
-        const bool tapped = std::any_of(plan.taps.begin(), plan.taps.end(),
-                                        [&](const Route::Tap& tap) { return tap.tick == tick; });
+        // The tick a tap comes up on, where its shot has just left.
+        const bool tapped = Route::ReleasesOn(plan, tick);
         const MagicPortals::Game::Level* level = layer.SimLevel();
         const int failed = level != nullptr ? level->portals.shotsFailed : lastFailed;
         if (tapped) {
             Trace(layer, registry, "TAP");
+            if (!driver.Aims().empty() && driver.Aims().back().tick == tick) {
+                std::printf("          the aim's drift %.3f px\n", driver.Aims().back().driftPx);
+            }
         } else if (failed != lastFailed && lastFailed >= 0) {
             Trace(layer, registry, "FAIL");
         } else if (tick % options.trace == 0 || driver.Finished()) {
@@ -133,6 +141,7 @@ Outcome Play(const Route::Plan& plan, const Options& options) {
     Outcome out;
     out.wonTick = driver.WonTick();
     out.shots = driver.Shots();
+    out.driftPx = driver.MaxDriftPx();
     out.problems = driver.Problems();
     layer.OnDetach(registry);
     return out;
@@ -193,8 +202,9 @@ void RunRoutes(const Options& options) {
         const std::string label = Label(chapters, plan.level);
         const Outcome outcome = Play(plan, options);
         if (outcome.wonTick > 0) {
-            std::printf("  %s %s: won on tick %d (win_by %d), %d shot(s)\n", label.c_str(), plan.level.c_str(),
-                        outcome.wonTick, plan.winBy, outcome.shots);
+            std::printf("  %s %s: won on tick %d (win_by %d), %d shot(s), the aim's drift at most %.3f px\n",
+                        label.c_str(), plan.level.c_str(), outcome.wonTick, plan.winBy, outcome.shots,
+                        outcome.driftPx);
         } else {
             std::printf("  %s %s: NOT WON\n", label.c_str(), plan.level.c_str());
         }

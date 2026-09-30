@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-30 (R1 fix 2; found by R1's second verifier): antiportal_917 (68, 127), scale 5, refuses within",
     "160 px at 32 x scale, which holds the door, fire_agent_ent_918 and the seesaw's left end. Walk left",
@@ -17,7 +18,7 @@
     {"walk": "left", "from": 200, "to": 330}
   ],
   "taps": [
-    {"tick": 90, "at": [370, 130]},
-    {"tick": 130, "at": [245, 40]}
+    {"tick": 89, "at": [370, 130]},
+    {"tick": 129, "at": [245, 40]}
   ]
 }

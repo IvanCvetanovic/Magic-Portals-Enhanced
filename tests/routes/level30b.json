@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-31, re-routed by step 128 (the merge): step 127's route shot its first two fireballs from the",
     "right platform's left edge, and since step 114 (G5) a fireball dies on the first solid it touches,",
@@ -31,17 +32,17 @@
     {"walk": "left", "from": 990, "to": 1160}
   ],
   "taps": [
-    {"tick": 30, "at": [384, 118]},
-    {"tick": 62, "at": [122, 90.3]},
-    {"tick": 314, "at": [113.3, 241.6]},
-    {"tick": 490, "at": [224, 384]},
-    {"tick": 520, "at": [224, 421]},
-    {"tick": 705, "at": [101.7, 228]},
-    {"tick": 735, "at": [376.9, 235.5]},
-    {"tick": 800, "at": [392, 340]},
-    {"tick": 830, "at": [169, 234.3]},
-    {"tick": 870, "at": [224, 456]},
-    {"tick": 895, "at": [195, 450]},
-    {"tick": 920, "at": [384.3, 364.9]}
+    {"tick": 29, "at": [384, 118]},
+    {"tick": 61, "at": [122, 90.3]},
+    {"tick": 313, "at": [113.3, 241.6]},
+    {"tick": 489, "at": [224, 384]},
+    {"tick": 519, "at": [224, 421]},
+    {"tick": 704, "at": [101.7, 228]},
+    {"tick": 734, "at": [376.9, 235.5]},
+    {"tick": 799, "at": [392, 340]},
+    {"tick": 829, "at": [169, 234.3]},
+    {"tick": 869, "at": [224, 456]},
+    {"tick": 894, "at": [195, 450]},
+    {"tick": 919, "at": [384.3, 364.9]}
   ]
 }

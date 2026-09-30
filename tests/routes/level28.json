@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-29 (step 127, R1: antiportal_791's 32 x 4 = 128 px holds the lift's column and everything",
     "left of door_lift_774). Right to x 450; a portal over button_772 at (258, 190) and one beside",
@@ -18,11 +19,11 @@
     {"walk": "right", "from": 445, "to": 550}
   ],
   "taps": [
-    {"tick": 60, "at": [258, 190]},
-    {"tick": 90, "at": [455, 78]},
-    {"tick": 120, "at": [200, 165]},
-    {"tick": 150, "at": [450.7, 202.3]},
-    {"tick": 268, "at": [350, 150]},
-    {"tick": 296, "at": [232, 209]}
+    {"tick": 59, "at": [258, 190]},
+    {"tick": 89, "at": [455, 78]},
+    {"tick": 119, "at": [200, 165]},
+    {"tick": 149, "at": [450.7, 202.3]},
+    {"tick": 267, "at": [350, 150]},
+    {"tick": 295, "at": [232, 209]}
   ]
 }

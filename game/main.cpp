@@ -98,8 +98,10 @@ int main(int argc, char** argv) {
     // 1280x720 window (the spec's own coordinates), whatever the window's size.
     // `--tap 640,475@300-315` holds it from tick 300 and releases it on 315: the
     // menus' captures need a button held, to see its press tint, then released.
-    // In play it goes where a real press goes (MagicPortalsLayer::readInput): a
-    // HUD control, a help block, or the portal shot - a torch lit by a capture.
+    // In play it goes where a real touch goes (MagicPortalsLayer::readInput): a
+    // HUD control, a help block, or the portal shot - a torch lit by a capture. The
+    // shot leaves on the RELEASE, as the original's does (placement.json `release`):
+    // `--tap 247,141@60` goes down on tick 60, comes up on 61, and fires on 61.
     struct Tap {
         int tick = 0;
         int releaseTick = 0;
@@ -426,19 +428,22 @@ int main(int argc, char** argv) {
                   << "                    DEV: a touch down on the game's tick <tick> and up on the next\n"
                   << "                    (or held there until <release>), on the level's first help block\n"
                   << "                    or at pixel x,y of 1280x720, for a capture that opens or closes a\n"
-                  << "                    popup, presses a menu's button or, in play, does what a press\n"
-                  << "                    there does: a HUD control, a help block or a portal shot;\n"
-                  << "                    repeatable\n"
+                  << "                    popup, presses a menu's button or, in play, does what a touch\n"
+                  << "                    there does: a HUD control, a help block or a portal shot, which\n"
+                  << "                    leaves on the release tick; repeatable\n"
                   << "  --drag <x,y>:<x,y>@<tick>-<release>\n"
                   << "                    DEV: a touch down at the first pixel of 1280x720 on <tick>,\n"
                   << "                    moved evenly to the second and let go there on <release>, for a\n"
-                  << "                    capture that scrolls the credits or the achievements; repeatable\n"
+                  << "                    capture that scrolls the credits or the achievements (in play,\n"
+                  << "                    its release fires no shot once it has moved over scale(18));\n"
+                  << "                    repeatable\n"
                   << "  --hold <left|right>@<from>-<to>\n"
                   << "                    DEV: hold a walk from the game's tick <from> to <to>, for a\n"
                   << "                    capture that walks into a door or a hazard; repeatable\n"
                   << "  --route <file>    DEV: replay a win route (tests/routes/<level>.json, given\n"
                   << "                    absolute) in the window: its walks and its taps at points of the\n"
-                  << "                    level, on the ticks it names; says on exit whether it won. Give\n"
+                  << "                    level, down and up on the ticks it names (a shot on the up);\n"
+                  << "                    says on exit whether it won. Give\n"
                   << "                    --saves <absolute dir> too: a run that goes on past the level's\n"
                   << "                    end records its medal, in the player's own save without it\n"
                   << "  --route-trace <n> DEV: with --route, print the route's trace every n ticks, on\n"

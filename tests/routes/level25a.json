@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-26 (R1 fix 2): antiportal_955 (236, 16), scale 3.6, refuses within 115.2 px at 32 x scale round",
     "anti_portal_agent_ent_956; the door's region is walled off by wall04_no_emissive_ent_958 except the",
@@ -23,12 +24,12 @@
     {"walk": "right", "from": 805, "to": 1000}
   ],
   "taps": [
-    {"tick": 30, "at": [212, 130]},
-    {"tick": 60, "at": [65, 138.3]},
-    {"tick": 330, "at": [252, 5]},
-    {"tick": 512, "at": [378, 3]},
-    {"tick": 536, "at": [214.2, 100]},
-    {"tick": 768, "at": [530, 196]},
-    {"tick": 792, "at": [394, 153]}
+    {"tick": 29, "at": [212, 130]},
+    {"tick": 59, "at": [65, 138.3]},
+    {"tick": 329, "at": [252, 5]},
+    {"tick": 511, "at": [378, 3]},
+    {"tick": 535, "at": [214.2, 100]},
+    {"tick": 767, "at": [530, 196]},
+    {"tick": 791, "at": [394, 153]}
   ]
 }

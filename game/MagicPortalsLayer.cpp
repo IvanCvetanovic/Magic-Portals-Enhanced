@@ -685,6 +685,9 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_frozen = Frozen{};
     m_helpBlocks.clear();
     m_helpTouch = HelpTouch{};
+    // And the touch a shot waits on: a press that restarted the level fires
+    // nothing in the new one when it comes up.
+    m_shotTouch = Portals::TouchTrack{};
     // The particles the level's entities were emitting go with them; a retry
     // would otherwise pile a second pool on the first. So do its lights, and the
     // shot's, and everything the script added while it ran.
@@ -7180,7 +7183,19 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // real cursor rests - so a scheduled tap reaches each of the three exactly
     // as a real press at the same point does. Reading it twice would press and
     // release a scheduled tap inside one tick.
-    const Touch touch = touchThisTick(registry);
+    Touch touch = touchThisTick(registry);
+    // AND THE TOUCH A SHOT IS FIRED BY, followed before anything below reads it,
+    // as PortalManager::update runs TouchInputManager::update before either tap
+    // path (placement.json `release`). On the tick a touch comes up, every reader
+    // takes the last point it was HELD at - getReleasePos, which the original's
+    // controls, help blocks and shot all read on that frame - not where it came up.
+    const Portals::TouchRelease release =
+        Portals::TrackTouch(m_shotTouch, touch.pressed, touch.held, touch.released, touch.over, touch.atView,
+                            touch.atPx);
+    if (release.released) {
+        touch.atView = release.atView;
+        touch.atPx = release.atPx;
+    }
     const ControlButton* under = controlUnderPointer(touch);
     const bool held = touch.held;
     const bool pressed = touch.pressed;
@@ -7192,7 +7207,9 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     if (under == nullptr && helpBlockInput(registry, touch)) return direction;
 
     if (under != nullptr) {
-        switch (under->kind) {
+        // Read before the switch: a restart unloads the controls `under` points into.
+        const Control kind = under->kind;
+        switch (kind) {
         // HELD, not tapped: a walk button is leaned on, and IsDown is what a
         // replayed tick feeds (Input.hpp lists it among the queries a replay
         // diverts), so the suites can drive these exactly as they drive a key.
@@ -7223,13 +7240,27 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // walk arrow also fires a portal into the floor beneath it every time
         // the cooldown allows - the control would work and quietly cost the
         // player their portal budget.
+        //
+        // And a corner control spends the whole touch on the way down: these act on
+        // the press here, where the original's Button acts on the release, which is
+        // then on the button and fires nothing (PortalManager::isValidPoint). Clear
+        // hides itself as it clears, so without this its touch would come up on
+        // nothing and fire into the corner.
+        if (pressed && kind != Control::Left && kind != Control::Right) m_shotTouch = Portals::TouchTrack{};
         return direction;
     }
 
     // A pointer over a panel or another window is not the game's - and a tap a
     // capture scheduled owns the pointer whatever the real cursor is doing, which
     // is what lets a --tap open a portal (the same seam --hold walks by).
-    if (touch.over && touch.pressed) {
+    //
+    // THE SHOT LEAVES ON THE RELEASE (hasPortalRequestInput): on the tick a touch
+    // that went down in the level comes up, if it strayed no more than scale(18)
+    // from where it went down, toward the last point it was held at, through the
+    // camera this tick reads. Its tick is the release's, so the first-portal gate
+    // and the 400 ms between taps are judged there; a touch that goes down and
+    // stays down fires nothing, and neither does one dragged further than that.
+    if (touch.over && Portals::RequestsPortal(m_level.portals.rules, release)) {
         glm::dvec2 atPx(0.0);
         if (ViewportToLevelPx(registry, glm::vec2(touch.atPx), atPx)) {
             m_level.portals.Shoot(registry, atPx);
@@ -9612,6 +9643,10 @@ void MagicPortalsLayer::openPause(entt::registry& registry) {
     m_pause.level.savedMedal = m_scores.Get(entry.world, entry.index);
     m_pause.level.goldenScore = entry.goldenScore;
     m_pause.level.index = entry.index;
+    // The touch a shot waits on is forgotten: the pause's buttons act on the way
+    // down, so one that went down on Resume would otherwise fire a shot where it
+    // came up, back in the level (the port's own divergence, not the original's).
+    m_shotTouch = Portals::TouchTrack{};
 
     // GAME TIME STOPS (STimeManager::pause).
     freezeWorld(registry);
@@ -9895,6 +9930,13 @@ bool MagicPortalsLayer::popupTick(entt::registry& registry, float fixedDelta) {
     // the close button, or the back key. The touch is spent on the popup and
     // reaches nothing under it.
     const Touch touch = touchThisTick(registry);
+    // The touch a shot is fired by is followed under the popup as well:
+    // PortalManager::update runs TouchInputManager::update before it asks whether
+    // game time is stopped. So a touch that closed the popup and comes up while it
+    // is still up fires nothing (the level is stopped on that frame), and one held
+    // until the level has resumed fires on its release, as the original's does.
+    (void)Portals::TrackTouch(m_shotTouch, touch.pressed, touch.held, touch.released, touch.over, touch.atView,
+                              touch.atPx);
     const bool touched = TouchClosesPopup(m_popupRules, *m_popup.cls, m_popup.state, ViewPx(), touch.pressed,
                                           touch.released, touch.over, touch.atView, m_popup.downOnClose);
     if (touched || Input::TickWasPressed(kBack)) ClosePopup();

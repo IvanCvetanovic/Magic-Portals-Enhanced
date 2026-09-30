@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-16, weightless (planning step 115): every tap also pushes the player 70 u/s away from it.",
     "barrel_bomb_ent_2396 is sent through a pair (taps 1-2) to float at (226, 130), between the",
@@ -8,23 +9,25 @@
     "take key_ent_2406 (tick 232) and send the player left along the floor through the lower gap",
     "to keyhole_ent_2392 (unlocked on tick 378; door_locked_ent_2391 goes on 467). Taps 8-12 bring",
     "the player back out, up past the platform's end and left through the upper gap to the door.",
-    "Won on tick 774."
+    "Won on tick 774.",
+    "Step 150 (a shot leaves on the release): won on tick 764; the shots up on 200 and 224 are aimed",
+    "0.715 and 0.246 px off their points (the camera moved while the finger was down)."
   ],
   "level": "level15c",
   "win_by": 840,
   "holds": [],
   "taps": [
-    {"tick": 30, "at": [226, 128]},
-    {"tick": 55, "at": [300, 98]},
-    {"tick": 80, "at": [369.8, 53.7]},
-    {"tick": 104, "at": [334.8, 15.3]},
-    {"tick": 200, "at": [226, 130]},
-    {"tick": 224, "at": [277.6, 217.3]},
-    {"tick": 248, "at": [303.5, 214.1]},
-    {"tick": 440, "at": [20, 204]},
-    {"tick": 590, "at": [245.9, 180.2]},
-    {"tick": 614, "at": [216.1, 213.2]},
-    {"tick": 699, "at": [237.3, 63]},
-    {"tick": 723, "at": [225, 67.2]}
+    {"tick": 29, "at": [226, 128]},
+    {"tick": 54, "at": [300, 98]},
+    {"tick": 79, "at": [369.8, 53.7]},
+    {"tick": 103, "at": [334.8, 15.3]},
+    {"tick": 199, "at": [226, 130]},
+    {"tick": 223, "at": [277.6, 217.3]},
+    {"tick": 247, "at": [303.5, 214.1]},
+    {"tick": 439, "at": [20, 204]},
+    {"tick": 589, "at": [245.9, 180.2]},
+    {"tick": 613, "at": [216.1, 213.2]},
+    {"tick": 698, "at": [237.3, 63]},
+    {"tick": 722, "at": [225, 67.2]}
   ]
 }

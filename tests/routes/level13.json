@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-14: right off the ledge to the floor, left onto button_772 and stay there: door_lift_774 rises",
     "while the button is held. Through the open door, a portal on the far side; one just ahead of the",
@@ -13,7 +14,7 @@
     {"walk": "right", "from": 185, "to": 300}
   ],
   "taps": [
-    {"tick": 140, "at": [330, 195]},
-    {"tick": 175, "at": [118, 205]}
+    {"tick": 139, "at": [330, 195]},
+    {"tick": 174, "at": [118, 205]}
   ]
 }

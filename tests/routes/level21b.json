@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-22 (R1 fix 1): the key floats at (490, 106), 44 px from antiportal_1673's centre (scale 4.5, 144",
     "px at 32 x scale), so no portal opens near it; every portal here is 168 px or more from the ring. A",
@@ -24,15 +25,15 @@
     {"walk": "right", "from": 1340, "to": 1700}
   ],
   "taps": [
-    {"tick": 30, "at": [170, 40]},
-    {"tick": 55, "at": [388, 34.3]},
-    {"tick": 140, "at": [200, 140]},
-    {"tick": 165, "at": [258, 205]},
-    {"tick": 380, "at": [285, 105]},
-    {"tick": 426, "at": [139.8, 225]},
-    {"tick": 515, "at": [100, 120]},
-    {"tick": 540, "at": [282.3, 200.6]},
-    {"tick": 1190, "at": [285, 105]},
-    {"tick": 1236, "at": [143.1, 225]}
+    {"tick": 29, "at": [170, 40]},
+    {"tick": 54, "at": [388, 34.3]},
+    {"tick": 139, "at": [200, 140]},
+    {"tick": 164, "at": [258, 205]},
+    {"tick": 379, "at": [285, 105]},
+    {"tick": 425, "at": [139.8, 225]},
+    {"tick": 514, "at": [100, 120]},
+    {"tick": 539, "at": [282.3, 200.6]},
+    {"tick": 1189, "at": [285, 105]},
+    {"tick": 1235, "at": [143.1, 225]}
   ]
 }

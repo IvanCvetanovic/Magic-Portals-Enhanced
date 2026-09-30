@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-03 (step 127, R1: antiportal_1018's 32 x 3.8 = 122 px holds the door's platform and the gap before",
     "it). A portal over block00_low_emissive_ent_981 at (330, 120) and one on the player; right onto the",
@@ -7,7 +8,9 @@
     "in the gap at (880, 200), 158 px from the ring's centre: right off the block's end, falling into the",
     "low one and out of the high one moving up (the character's velocity turned up, as",
     "invertLinearVelocity does), over the gap onto the door's platform and into the door. The knight",
-    "never sees or shoots (G1, not built). Won on tick 449 (step 127)."
+    "never sees or shoots (G1, not built). Won on tick 449 (step 127).",
+    "Step 150 (a shot leaves on the release): won on tick 448; the shot up on 320 is aimed 0.085 px",
+    "off its point (the camera moved while the finger was down)."
   ],
   "level": "level2b",
   "win_by": 510,
@@ -17,13 +20,13 @@
     {"walk": "right", "from": 370, "to": 510}
   ],
   "taps": [
-    {"tick": 30, "at": [330, 120]},
-    {"tick": 60, "at": [110, 90.3]},
-    {"tick": 150, "at": [600, 70]},
-    {"tick": 180, "at": [416, 145.1]},
-    {"tick": 230, "at": [760, 125]},
-    {"tick": 260, "at": [600, 68.3]},
-    {"tick": 320, "at": [806, 70]},
-    {"tick": 345, "at": [880, 200]}
+    {"tick": 29, "at": [330, 120]},
+    {"tick": 59, "at": [110, 90.3]},
+    {"tick": 149, "at": [600, 70]},
+    {"tick": 179, "at": [416, 145.1]},
+    {"tick": 229, "at": [760, 125]},
+    {"tick": 259, "at": [600, 68.3]},
+    {"tick": 319, "at": [806, 70]},
+    {"tick": 344, "at": [880, 200]}
   ]
 }

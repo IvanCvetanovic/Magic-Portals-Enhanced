@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-11, weightless (step 127, R1: antiportal_ent_2250's 32 x 2 = 64 px lies under the hanging wall,",
     "between the player's cell and the door). A tap up-left at the ceiling block (200, 5): its recoil",
@@ -12,8 +13,8 @@
   "holds": [
   ],
   "taps": [
-    {"tick": 30, "at": [200, 5]},
-    {"tick": 222, "at": [448, 150]},
-    {"tick": 246, "at": [288.0, 166.0]}
+    {"tick": 29, "at": [200, 5]},
+    {"tick": 221, "at": [448, 150]},
+    {"tick": 245, "at": [288.0, 166.0]}
   ]
 }

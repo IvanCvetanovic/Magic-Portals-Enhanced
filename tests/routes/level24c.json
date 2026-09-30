@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 150): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-25 (step 127, R1: the yellow key's pocket lies wholly inside antiportal_1813's 32 x 2.4 = 77 px,",
     "where at 16 x scale its corners were outside, so it is entered through door_lift_1798). A portal",
@@ -19,13 +20,13 @@
     {"walk": "right", "from": 462, "to": 560}
   ],
   "taps": [
-    {"tick": 30, "at": [80, 200]},
-    {"tick": 55, "at": [275, 48]},
-    {"tick": 100, "at": [198, 90]},
-    {"tick": 125, "at": [270.0, 202.3]},
-    {"tick": 300, "at": [300, 200]},
-    {"tick": 325, "at": [181.0, 90.3]},
-    {"tick": 430, "at": [380, 48]},
-    {"tick": 455, "at": [300, 202.3]}
+    {"tick": 29, "at": [80, 200]},
+    {"tick": 54, "at": [275, 48]},
+    {"tick": 99, "at": [198, 90]},
+    {"tick": 124, "at": [270.0, 202.3]},
+    {"tick": 299, "at": [300, 200]},
+    {"tick": 324, "at": [181.0, 90.3]},
+    {"tick": 429, "at": [380, 48]},
+    {"tick": 454, "at": [300, 202.3]}
   ]
 }
