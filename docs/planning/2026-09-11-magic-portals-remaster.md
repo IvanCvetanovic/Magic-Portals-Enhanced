@@ -24346,3 +24346,116 @@ current at the commit: `port_build.bat` gives "ninja: no work to do" with 0 warn
     row. Every suite is now relinked and has run. Removing the key is a data change, left for a step that runs the
     suites.
 - The close role writes the `DEVLOG.md` entry.
+
+## Step 130 - the engine pin moved to the engine's main, `4bfcf67` to `a733ca0`: twenty commits of another game's opt-in work, and all 128 levels byte-identical (built)
+
+**THE PROGRAM'S P0**, section 6's item (7) of "What the next wave should take": the pin-bump step, on its own, proved
+by a 128-level byte-identity sweep. The submodule `engine/` moves from `4bfcf67` ("The games moved to their own
+repositories") to `a733ca0`. That is the engine's `origin/main` as fetched at 08:11 on 2026-09-30. The fetch itself
+moved the remote ref `6cb4036..a733ca0`, because another game's session (a Penumbra port on this machine) is still
+pushing. The target is frozen at that hash, and anything the engine's `main` takes after it is for the next bump.
+Changed: `engine` (the submodule's commit) and this record. No file under `game/`, `tests/`, `tools/` or `data/`
+changed. No converter change, no data change, no format finding. The evidence is under `out/parity/program/P0/`.
+**GAMEPLAY: NONE.** No game source is touched, and every check, route and frame measured below is unchanged. Not a
+gameplay step, so the program's winnability gate does not apply; no route is added.
+
+**BLOCKERS, checked first: none.**
+- The engine's working tree was clean at `4bfcf67`, and the engine has no submodules of its own.
+- The move is a fast-forward: `git -C engine log --oneline a733ca0..4bfcf67` is empty.
+- The submodule is checked out detached at `a733ca0`. Its local `main` branch is left where it was.
+
+**THE TWENTY COMMITS** (`git -C engine log --oneline 4bfcf67..a733ca0`: 18 commits and 2 merges on the engine's
+`apple-port` branch; `P0/engine_commits.txt`). Each says that a game which does not opt in keeps its desktop
+behaviour. What each could have reached in this port, and what answers it:
+
+| Commit | What it adds | What the port could see | Answered by |
+|---|---|---|---|
+| `abb9e8a` | Ogg Vorbis, decoded by stb_vorbis | a new `.ogg` branch in `AudioClip::Load`; the port's tables name 119 sounds, all `.mp3`, and the original's assets hold no `.ogg` | `test_mp_sounds` 107, unchanged; no audio was measured (below) |
+| `a516b7c`, `29dbb3e`, `a733ca0` | a game can change its window while it runs (`WindowControl`), fullscreen at a display mode, a window fitted to its monitor, the highest refresh rate | `SupersonicApp` makes a `NativeWindowControl` and calls `ApplyPending` every frame; `--fullscreen` and `--windowed` are new flags. The port asks for none of it, and `GameManifest::fitWindowToMonitor` defaults to 0 | the sweep, at `--window 1280x720` as before |
+| `f30df7c`, `b999491` | a 2D sprite that stands up, a highlight from a gloss map | the fragment shader and its committed `frag.spv` (the port uses it as committed), a `glossMap` at set 1 binding 4 (a 1x1 white default), new push-constant flag bits; `AcquireMaterialSet`'s four-id form, which `LevelVisit.cpp` calls, is kept | the sweep; the build |
+| `4507d99`, `6cb4036` (and the merge `eae6e9f`) | 2D light: a baked highlight eye, the light pass's alpha test, shadows that take away only their own light; the descriptor pool sized from the layout | `shader.frag` and `frag.spv` again; the light buffer's three header words, padding before; a `Shadow2DBuffer` at set 0 binding 13 | the sweep: every sprite on every level goes through this shader |
+| `9c8be4f`, `b71cfe1`, `d3d8222`, `3c23b99`, `6714643`, `8740384` (and the merge `546506b`) | Android, macOS and iOS backends; a safe-area query | behind `SUPERSONIC_PLATFORM_*`, `SUPERSONIC_AUDIO_*`, `SUPERSONIC_WINDOW_GLFW` and `__APPLE__`; on Windows, `SafeArea.cpp` and the window's backend seam compile | the build |
+| `a915514` | `UploadRGBA` takes an address mode, `eRepeat` by default | every existing caller keeps repeat | the sweep |
+| `bb57197`, `11f0358` | `UICanvas`: a stack placed in pixels; the layout pass tested at 4K and 720p | no source under `game/` names `UICanvas` | the build; the sweep |
+| `087067e` | `Json`: an object's keys in document order, beside the map | the port reads `Json` everywhere; the map and its order are unchanged | every suite's count and output |
+
+**THE CHANGE.** `git -C engine checkout --detach a733ca0`, then `tools\parity\port_build.bat` on `build/`.
+- CMake re-ran. `build/CMakeCache.txt` gains one entry, `SUPERSONIC_MOLTENVK_LIBRARY:FILEPATH=` (empty; Apple only),
+  and nothing else changed (`P0/cmakecache_diff.txt`).
+- `build.ninja` still names three executables: `MagicPortals.exe`, `MagicPortalsSpike.exe` and `test_mp.exe`.
+- `ctest -N` is identical before and after: 48 tests.
+
+**THE GATES.** Everything is under `out/parity/program/P0/`.
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja, validation on | **passes: 0 compiler or linker warnings** (`build1.log`, 177 steps, rc 0). The engine's changed sources recompiled and `SupersonicCore.lib` relinked. So did `MagicPortalsSim.lib` and `MagicPortalsGame.lib`, and three executables linked: `MagicPortals.exe` `12e0dce6` (was `755b8a9d`), `test_mp.exe` `b910e3e4` (was `6c5f2626`) and `MagicPortalsSpike.exe` `d4884658` (was `bef4d2be`; not launched). The two lines that contain "warning" are the `D9025` notes of the engine's vendored `/W0` files, the kind this record has always counted apart from warnings (step 124's play build: 11). One is `ScreenCapture.cpp`, as at `4bfcf67`. The other is `StbVorbisImplementation.cpp`, the new commit `abb9e8a`'s stb_vorbis unit, put under the same `/W0` in the engine's `VENDORED_SOURCES`. No engine code warns. `build2.log`, the same command again: `ninja: no work to do`, and the three md5s unchanged. The independent check's fresh configure and full build, with `port_build.bat`'s configure line into a scratch tree (`verify1/fresh_build.log`, 258 steps, rc 0, its executables never launched): 0 compiler or linker warnings and 12 `D9025` notes, step 124's 11 and `StbVorbisImplementation.cpp` |
+| The runner over every suite, once | every suite's count unchanged, 0 failures | **passes** (`allmode.log`, the first launch of `test_mp.exe` `b910e3e4`, 45 s, rc 0): `test_mp: 47 suites, 47 passed, 0 skipped, 0 failed`, **14,359 checks, each of the 47 counts equal to step 129's** (`compare_counts.txt`). The whole output is byte-identical to step 129's `T.2/allmode.log` (md5 `045bf11d`, 19,672 lines) |
+| `test_mp_routes` | 70 routes won | **passes** (`test_mp_routes.txt`, `test_mp.exe test_mp_routes`, 8 s, rc 0): **70 won**, 215 checks, 0 failures, each on step 128's tick (`routes_won.txt` sorted equals `merge_w1/routes_won_final.txt`). The whole output is byte-identical to `merge_w1/test_mp_routes_final.txt` (md5 `412894c4`) |
+| Reachability | ctest `parity_reachability`: 0 differ | **passes** (`reachability_ctest.txt`): 128 levels, 108 reachable, 20 opened, 0 sealed, 0 differ from `reachability.json` |
+| The 128-level f420 sweep | 128 of 128 byte-identical to `merge_w1/sweep`, validation active and silent | **passes** (`after/capture.txt`, `compare_sweep.txt`; `MagicPortals.exe` `12e0dce6`, 08:19 to 08:37). The command line is `merge_w1`'s: `--window 1280x720 --fixed-step --frames 420 --saves`, with a copy of the same `scores.json` (`40bfef3a`, unchanged after the sweep). **128 of 128 rc 0, and 128 of 128 byte-identical to `merge_w1/sweep`**. Before the comparison, each png in both sweeps was checked against the md5 its capture logged: 128 of 128 each. Validation: `Vulkan validation layers: ACTIVE` in 128 of 128 logs, and no validation message in any. With paths and the profiler's timings taken out, the logs differ only in the pipeline cache: its size in `Reusing N bytes` (127 logs), and two `Saved` lines on 1-01, the first run after the shader changed (`log_diff.txt`) |
+| No game change | none | **passes**: `git status` shows ` M engine` and this record. `MagicPortals.exe` relinked only because `SupersonicCore.lib` did |
+
+**SMART APP CONTROL: 0 refusals** (no exit 126 anywhere; the CodeIntegrity log has no event of any id from the
+build's start at 08:13 to 08:39, after the sweep, and its latest events are step 128's at 06:00; `sac_check.txt`).
+Three executables were linked. `test_mp.exe` `b910e3e4` ran on its first launch and was launched twice in all: over
+every suite, then `test_mp_routes`. `MagicPortals.exe` `12e0dce6` ran on its first launch and was launched 128 times,
+once per level of the sweep. `MagicPortalsSpike.exe` was linked and never launched. The reachability check is Python
+and launches no executable.
+
+**VERIFIED, PASSED** (`P0/verify1.json`, 08:46 to 09:13, on the same `test_mp.exe` `b910e3e4` and
+`MagicPortals.exe` `12e0dce6`, head `e1826f3`, engine `a733ca0`; no fix round; 0 refusals). The verifier read the pin
+first: `a733ca0` is the engine's `refs/heads/main` by a read-only `ls-remote` at 08:47 and again at 09:12, `4bfcf67`
+is its ancestor, and the 20 commits equal `P0/engine_commits.txt`. It configured and built the tree afresh into a
+scratch directory and launched nothing it linked (the Build row). Its own runs, once each, on `build/`:
+- `test_mp.exe` alone: rc 0, 43 s, 47 suites passed, 14,359 checks, the output byte-identical to step 129's
+  (`045bf11d`).
+- `test_mp.exe test_mp_routes`: rc 0, 70 won, 215 checks, the output byte-identical to `merge_w1`'s (`412894c4`).
+- ctest `parity_reachability`: 108 / 20 / 0, 0 differ.
+- Its own 128-level f420 sweep (08:53 to 09:11, the same saves, `40bfef3a` unchanged after): 128 of 128 rc 0, every
+  png whole in all three sweeps (signature, `IEND` last, its logged md5), and 128 of 128 byte-identical across
+  `merge_w1/sweep`, `P0/after/sweep` and its own. No frame is uniform, and 1-05, 2-32, 3-20 and 4-24 were looked at.
+  Validation is active in every log of each sweep, and no log carries a message, counting every `[Validation]` line
+  but the two Steam `loader_get_json` lines.
+
+Its two problems, both LOW and both text, and what the commit did:
+1. **This step's prose wrapping** (the SMART APP CONTROL paragraph was one 298-character line, and the audio bullet
+   below broke short). Rewrapped at the commit.
+2. **The Build row described the incremental build only.** The row now also gives the fresh full build's figure:
+   0 warnings and 12 `D9025` notes.
+
+**THE COMMIT changed text only.** It edits this record and `docs/parity-backlog.md`, and it commits the submodule's
+new commit. The build is current at the commit: `port_build.bat` gives "ninja: no work to do" with 0 warnings
+(`P0/commit_build.log`), and `test_mp.exe` `b910e3e4` and `MagicPortals.exe` `12e0dce6` are unchanged. Nothing was
+launched.
+
+**WHAT THE SWEEP DOES NOT COVER.**
+- **Audio.** A frame carries no sound. The engine's Windows audio path is unchanged: the new backends are
+  `SUPERSONIC_AUDIO_AAUDIO` and `SUPERSONIC_AUDIO_COREAUDIO`, and the port loads no `.ogg`, so the one desktop audio
+  change, `AudioClip::LoadOgg`, is never reached. `test_mp_sounds`' 107 checks are the only audio evidence, and they
+  test the port's sound table, not the mixer's output.
+- **The window features.** Fullscreen, display modes, a fitted window and the refresh-rate choice are not asked for,
+  so they are not run. The sweep proves only that not asking changes nothing.
+- **Android, macOS and iOS.** None of that code compiles here.
+
+**RECORDED DEVIATIONS.**
+1. **One `D9025` note more than a build of `4bfcf67` would print**: a full build prints 12, where step 124's printed
+   11. Its source is `StbVorbisImplementation.cpp`, which the engine vendors under `/W0`, as it does ImGui, VMA,
+   tinygltf and `ScreenCapture.cpp`. It is a notice that `/W0` overrides `/W4` on that file, not a warning in code.
+   The record counts it with the other `D9025` notes and apart from warnings.
+
+**LEFT FOR LATER.**
+- **2-32's claw lines (the backlog's Tests row) are now an engine gap closed and a port step not yet built.**
+  `a915514` gives `TextureRegistry::UploadRGBA` a trailing `vk::SamplerAddressMode` (default `eRepeat`). That is a
+  per-texture clamp-to-edge. The row's `check.md` option A proposed one per material; per texture does the same job.
+  The port opting its sprites and overlay quads in is a game change, which this step excludes. That later step
+  re-takes every byte-identical baseline. Note that `ReplaceRGBA` rebuilds a texture with the defaults, so a replaced
+  texture goes back to repeat (`TextureRegistry.hpp`'s comment on `UploadRGBA`).
+- **Done in the commit, in `docs/parity-backlog.md`:**
+  - section 6's item (7) of "What the next wave should take" is annotated as done in part: the pin moved in step 130,
+    128 of 128 byte-identical, and the clamp it was to carry is not built;
+  - the Tests row "2-32's claw draws a line beside the dragon" stays open, annotated: the engine side exists since
+    `a915514`, and what is left is the port's step, which re-takes every baseline;
+  - section 0's "standing sweep baseline" stays `merge_w1/sweep`, and its wave-1 row says so. `P0/after/sweep` is
+    byte for byte the same 128 files on the new pin.
+- The close role writes the `DEVLOG.md` entry.

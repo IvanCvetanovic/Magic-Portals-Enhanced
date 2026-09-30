@@ -62,7 +62,9 @@ suites a change touches once each, and report what stayed blocked.
       Run**, and 30 suites ran on the merged code in all. **41 Smart App Control refusals.** An independent check
       (`merge_w1/verify1.json`) passed every gate and re-took the sweep byte-identical. Engine pin `4bfcf67`,
       unmoved. Worktrees `Magic-Portals-Remake-w1b` and `-w1c` and both branches removed. **The standing sweep
-      baseline is `out/parity/program/merge_w1/sweep`.** Section 6's "Wave 1" paragraph has the steps.
+      baseline is `out/parity/program/merge_w1/sweep`.** Section 6's "Wave 1" paragraph has the steps. *Step 130
+      (P0) moved the engine pin to `a733ca0` and re-took the sweep: 128 of 128 byte-identical, so the baseline
+      stands.*
 - [x] **`test_mp_launchers` and `test_mp_keys` have not run on the merged binaries** (step 112). The merge relinked
       both; Smart App Control refused each twice (the first launch or the ctest, then the one relink), and the merge's
       independent check did not launch them. Their last runs: `test_mp_launchers` 105 on track B (step 109; 98 on
@@ -1632,7 +1634,12 @@ cutscene levels; (7) the engine pin-bump step, on its own with a 128-level byte-
 clamp-to-edge sampler for 2-32's claw lines (the Tests row) - it re-takes every baseline; (8) the 17 suites not run on
 the merged code, each once, as the first step that links them. *(8) is done by step 129 (T.2): the suites are one
 runner, `test_mp.exe`, so a relink makes one new executable, not 47. All 47 ran on the merged code with 0 failures,
-once in one process and once under ctest (48 of 48, 0 Not Run), with 0 Smart App Control refusals.*
+once in one process and once under ctest (48 of 48, 0 Not Run), with 0 Smart App Control refusals.* *(7) is done in
+part by step 130 (P0): `engine/` moved from `4bfcf67` to `a733ca0`, the engine's `main` (a fast-forward of 20 commits,
+another game's opt-in work), and all 128 levels are byte-identical to `merge_w1/sweep` at f420, with every suite's
+count and output, the 70 routes and reachability 108 / 20 / 0 unchanged, and 0 Smart App Control refusals. The clamp
+it was to carry is not built: the engine now has one per texture (`a915514`), and the port opting in is a game change
+that re-takes every baseline, left for its own step (the Tests row "2-32's claw draws a line").*
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [ ] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2206,7 +2213,13 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       one, chosen per material (the check's option A; the default stays REPEAT), then the port opts its sprites and
       overlay quads in - so it belongs in the pin-bump step, and it moves the outer half-texel of every texture whose
       opposite borders differ, so every byte-identical baseline is re-taken after it. Its gates are in `check.md`
-      ("The fix I would build", section 3).
+      ("The fix I would build", section 3). *Step 130 (P0) moved the pin to `a733ca0`, whose `a915514` gives
+      `TextureRegistry::UploadRGBA` a trailing `vk::SamplerAddressMode` (default `eRepeat`): a clamp chosen per
+      texture where the check's option A proposed one per material, and it does the same job. The engine side is
+      done. The pin-bump step carried no clamp, because opting in is a game change and would have broken its
+      byte-identity proof, so "it belongs in the pin-bump step" no longer holds. What is left is a port step: the port
+      opts its sprites and overlay quads in, and re-takes every byte-identical baseline. Caution: `ReplaceRGBA`
+      rebuilds a texture with the defaults, so a replaced texture goes back to repeat.*
 
 **Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
 1-01, 1-02 and 1-32, two of them from step 113's automated runs. *Wave 1*: step 123's three cutscene captures ran
