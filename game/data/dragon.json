@@ -366,8 +366,10 @@
 
   "knight": {
     "_note": [
-      "A VICTORY CUTSCENE, AND THE PORT CLAIMS IT AS PLAYED WITHOUT BUILDING IT. Said here",
-      "plainly, because this is the one claim in this step that is not backed by a mechanism.",
+      "A VICTORY CUTSCENE, BUILT BY PLANNING STEP 123 (the program's P2): sim/Cutscene and",
+      "cutscenes.json dragon_knight play the knight from the tick the level is finished, and the",
+      "level's end_delay of 6600 ms holds the medal while it walks in. What follows is the note",
+      "this row carried while it was claimed and not built, kept for the claim's ground.",
       "",
       "ETHCallback_dragon_knight_spawn (386175..386379) does nothing at all until",
       "GameStateController::isFinished - the port's Goals::State::completed - and then adds a",
@@ -392,9 +394,9 @@
   },
 
   "not_built": [
-    "Every sound: playDragonAppearSound at elapsedTime > 2000, playDragonTakeOffSound and",
-    "the boss-music stop at take-off, playDemolitionSound on each crush, playFireballSound.",
-    "sounds.json already names the family.",
+    "Every sound: playDragonAppearSound at elapsedTime > 2000, playDragonTakeOffSound,",
+    "playDemolitionSound on each crush, playFireballSound. sounds.json already names the",
+    "family. (The boss-music stop at take-off IS built: the layer's latchMusic, planning step 121.)",
     "The pictures still missing: wall_destroy.ent's puff, red_suck_effect.ent, and the",
     "minion.png the callback preloads on its first tick and never uses in this callback.",
     "The dragon's own cell, its angle, its particle windows and the claw's picture are built",
@@ -404,6 +406,6 @@
     "position - both of its tests are against the camera - but the picture is drawn now, so",
     "this became visible with step 77 and is the one thing the claw draws that is not the",
     "original's curve. smoothBeginning is not decoded anywhere in this port.",
-    "The knight, above."
+    "The knight is built since planning step 123 (cutscenes.json dragon_knight)."
   ]
 }

@@ -49,6 +49,9 @@ reference/
 # root. Unanchored, like reference/ and out/: a build/ at any depth is
 # generated. The engine at engine/ is a submodule and keeps its own ignores.
 build/
+# And the build to PLAY, without Vulkan validation (tools/parity/play_build.bat).
+# `build/` above matches a directory named exactly build, not this one.
+build-play/
 
 # --- Python converter ----------------------------------------------------
 .venv/

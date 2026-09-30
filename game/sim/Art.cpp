@@ -283,6 +283,42 @@ glm::dvec3 Antiportal::ColourAt(double elapsedMs) const {
     return from + (to - from) * bias;
 }
 
+glm::dvec3 Blink::At(double elapsedMs) const {
+    if (!(strideMs > 0.0)) return from;
+    // blinkColor's ins 55-75, which blinkEmissive repeats instruction for
+    // instruction: the leg, the way it runs, how far along it is. The clock, and
+    // how far it strays from the original's floored one, is the caller's
+    // (art.json non_teleportable _clock, antiportal's _source).
+    const double ms = std::max(0.0, elapsedMs);
+    const double legs = std::floor(ms / strideMs);
+    double bias = (ms - legs * strideMs) / strideMs;
+    if (std::fmod(legs, 2.0) == 1.0) bias = 1.0 - bias;
+    return from + (to - from) * bias;
+}
+
+bool KeyColour::Paints(const std::string& bareEntity) const {
+    return std::find(entities.begin(), entities.end(), bareEntity) != entities.end();
+}
+
+std::string KeyColour::SpriteFor(const std::string& entityName, const std::string& hue) const {
+    // GetEntityName() + suffix (setKeyColor #26-46, #88-108): the name as the level
+    // spells it, so a .ent spelling would name a file that is not there.
+    for (const auto& [named, suffix] : sprites) {
+        if (named == hue) return entityName + suffix;
+    }
+    return {};
+}
+
+NonTeleportable::Blinks NonTeleportable::For(const std::string& bareEntity, bool teleportable) const {
+    // manageNonTeleportable #1-10 leaves a teleportable crate alone; #23-24 picks
+    // the emissive for a zeroEmissive caller and the colour for the rest.
+    if (teleportable) return Blinks::Nothing;
+    for (const auto& [entity, zeroEmissive] : callbacks) {
+        if (entity == bareEntity) return zeroEmissive ? Blinks::Emissive : Blinks::Colour;
+    }
+    return Blinks::Nothing;
+}
+
 int Timer::FrameAt(double elapsedMs, double timeMs) const {
     if (!(timeMs > 0.0)) return frames - 1;
     // uTOf, DIVf, MULIf 8f and fTOi (ETHCallback_timer ins 233-239), then
@@ -814,6 +850,80 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     ring.spinDegPerS = ringEntry["spin_deg_per_s"].AsNumber();
     ring.jitterFrom = ringJitter["from"].AsNumber();
     ring.jitterSpan = ringJitter["span"].AsNumber();
+
+    // What three callbacks do to pictures the levels place. None has a default:
+    // without them the port draws what the level saved - the anti-portal agent's
+    // face on 20 of 22 fire agents, every key and door yellow, every crate still.
+    // An entity is named as its callback is, without the .ent; a file by its name
+    // alone, since SetSprite looks for it in the entity directory.
+    const auto plainName = [](const Json::Value& value) {
+        return value.IsString() && !value.AsString("").empty() && value.AsString("").find('.') == std::string::npos;
+    };
+    const auto plainFile = [](const Json::Value& value) {
+        return value.IsString() && !value.AsString("").empty() &&
+               value.AsString("").find_first_of("/\\") == std::string::npos;
+    };
+    const Json::Value& fireEntry = root["fire_agent"];
+    if (!fireEntry.IsObject() || !plainName(fireEntry["entity"]) || !plainFile(fireEntry["sprite"])) {
+        error = path + ": fire_agent needs an entity, a name without a dot, and a sprite, a file name without a folder";
+        return false;
+    }
+    read.fireAgent.entity = fireEntry["entity"].AsString("");
+    read.fireAgent.sprite = fireEntry["sprite"].AsString("");
+
+    KeyColour& keys = read.keyColour;
+    const Json::Value& keyEntry = root["key_colour"];
+    bool keysOk = keyEntry.IsObject() && !keyEntry["entities"].AsArray().empty() && keyEntry["datum"].IsString() &&
+                  !keyEntry["datum"].AsString("").empty() && !keyEntry["sprites"].AsObject().empty() &&
+                  Emissive(keyEntry["colour"], keys.colour);
+    if (keysOk) {
+        for (const Json::Value& entity : keyEntry["entities"].AsArray()) {
+            keysOk = keysOk && plainName(entity);
+            keys.entities.push_back(entity.AsString(""));
+        }
+        for (const auto& [colour, suffix] : keyEntry["sprites"].AsObject()) {
+            keysOk = keysOk && !colour.empty() && plainFile(suffix);
+            keys.sprites.emplace_back(colour, suffix.AsString(""));
+        }
+    }
+    if (!keysOk) {
+        error = path + ": key_colour needs entities, names without a dot, a datum, sprites giving each colour a "
+                       "suffix without a folder, and a colour of three numbers none below 0";
+        return false;
+    }
+    keys.datum = keyEntry["datum"].AsString("");
+
+    NonTeleportable& crates = read.nonTeleportable;
+    const Json::Value& crateEntry = root["non_teleportable"];
+    const Json::Value& crateColour = crateEntry["colour"];
+    const Json::Value& crateEmissive = crateEntry["emissive"];
+    bool cratesOk = crateEntry.IsObject() && !crateEntry["callbacks"].AsArray().empty() &&
+                    crateEntry["datum"].IsString() && !crateEntry["datum"].AsString("").empty() &&
+                    Finite(crateEntry["stride_ms"]) && crateEntry["stride_ms"].AsNumber() > 0.0 &&
+                    Emissive(crateColour["from"], crates.colour.from) && Emissive(crateColour["to"], crates.colour.to) &&
+                    Emissive(crateEmissive["from"], crates.emissive.from) &&
+                    Emissive(crateEmissive["to"], crates.emissive.to);
+    if (cratesOk) {
+        for (const Json::Value& entry : crateEntry["callbacks"].AsArray()) {
+            const std::string entity = entry["entity"].AsString("");
+            const bool twice = std::any_of(crates.callbacks.begin(), crates.callbacks.end(),
+                                           [&entity](const auto& known) { return known.first == entity; });
+            if (!entry.IsObject() || !plainName(entry["entity"]) || !entry["zero_emissive"].IsBool() || twice) {
+                cratesOk = false;
+                break;
+            }
+            crates.callbacks.emplace_back(entity, entry["zero_emissive"].AsBool());
+        }
+    }
+    if (!cratesOk) {
+        error = path + ": non_teleportable needs callbacks, each an entity named once without a dot and its "
+                       "zero_emissive, a datum, a stride_ms above 0, and colour and emissive, each with a from and "
+                       "a to of three numbers none below 0";
+        return false;
+    }
+    crates.datum = crateEntry["datum"].AsString("");
+    crates.colour.strideMs = crateEntry["stride_ms"].AsNumber();
+    crates.emissive.strideMs = crates.colour.strideMs;
     out = std::move(read);
     return true;
 }

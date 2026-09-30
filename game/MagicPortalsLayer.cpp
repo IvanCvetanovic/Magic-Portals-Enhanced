@@ -47,6 +47,15 @@ constexpr float kCameraDistance = 20.0f;
 // view is 455 px wide.
 constexpr float kDefaultAspect = 16.0f / 9.0f;
 
+// sounds.json's tracks, by the calls that ask for them: playMenuMusic,
+// playGameMusic(false) and playGameMusic(true), which is getBossMusicName's.
+constexpr const char* kMenuTrack = "menu";
+constexpr const char* kGameTrack = "game";
+constexpr const char* kBossTrack = "boss";
+// The `properties` datum that silences a level: Game::readProperties (bytes
+// 116676..118260) #166-181 sets noMusic on its presence (CheckCustomData).
+constexpr const char* kNoMusicFlag = "no_music";
+
 // Markers - buttons, crystals, the exit, portals - stand in front of the bodies.
 constexpr float kMarkerZ = 0.5f;
 constexpr float kMarkerDepth = 0.1f;
@@ -242,6 +251,29 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "medals not loaded: " << why << std::endl;
     }
 
+    // And the two switches, as main sets the saved volume before anything plays
+    // (#103-108) and getState reads the music's. From the same directory, so a
+    // suite's bare layer reads and writes nothing and starts with both on - the
+    // defaults sounds.json carries, which a table that will not read leaves at
+    // Defaults' own, said once.
+    {
+        Switches::Defaults defaults;
+        if (std::string why; !Switches::LoadDefaults(m_paths.portData + "/sounds.json", defaults, why)) {
+            SUPERSONIC_LOG_ERROR("Magic Portals") << "switch defaults not read: " << why << std::endl;
+        }
+        if (std::string why; !m_switches.Open(m_paths.saveDir, defaults, why)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "switches not read, the defaults kept: " << why << std::endl;
+        }
+        m_soundOn = m_switches.SoundOn();
+        m_musicOn = m_switches.MusicOn();
+        if (m_switches.Persists()) {
+            SUPERSONIC_LOG_INFO("Magic Portals")
+                << "switches: sound " << (m_soundOn ? "on" : "off") << ", music " << (m_musicOn ? "on" : "off")
+                << (m_switches.FromFile() ? " (read from " : " (the defaults; a toggle saves them to ")
+                << m_switches.Path() << ")" << std::endl;
+        }
+    }
+
     // The original's achievements (sim/Achievements.hpp). They are not this
     // repository's, so a machine without the remake's out/ has none: the dashboard
     // then draws no rows, and this says why, once. Not a reason to refuse the start.
@@ -258,10 +290,12 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Camera::LoadViewHeight(m_paths.portData + "/view.json", m_viewHeightPx, error) &&
                       Art::LoadRules(m_paths.portData + "/art.json", m_artRules, error) &&
                       Sky::LoadRules(m_paths.portData + "/sky.json", m_skyRules, error) &&
+                      Sky::LoadSpaceRules(m_paths.portData + "/sky.json", m_spaceRules, error) &&
                       Tiers::LoadRules(m_paths.portData + "/tiers.json", m_tierRules, error) &&
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
                       Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
                       Earthquake::LoadRules(m_paths.portData + "/earthquake.json", m_quakeRules, error) &&
+                      Cutscene::LoadRules(m_paths.portData + "/cutscenes.json", m_cutsceneRules, error) &&
                       Hud::LoadRules(m_paths.portData + "/ui.json", m_hudRules, error) &&
                       Pause::LoadRules(m_paths.portData + "/ui.json", m_pauseRules, error) &&
                       LevelEnd::LoadRules(m_paths.portData + "/ui.json", m_levelEndRules, error) &&
@@ -399,7 +433,6 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // they are: a retry does not touch the disk (level_manager.gd:5-13).
     unloadLevel(registry, m_loaded && index == m_current);
     m_current = index;
-    m_chapterComplete = false;
     m_loadError.clear();
     // Every level begins here - the first one, a retry, a skip, and going on
     // from a medal all come through - so this is the one place the finish beat
@@ -412,6 +445,21 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // open already dying and put the lost screen up 1400 ms in.
     m_dying = false;
     m_dyingClockMs = 0.0;
+    // And the cutscenes that play in the beat: a retry plays its level's again
+    // from the start, and a level without one plays none (planning step 123).
+    m_wonDelayMs = m_levelEndRules.wonDelayMs;
+    m_launchPlaced = false;
+    m_landingPlaced = false;
+    m_launch = Cutscene::Launch{};
+    m_landing = Cutscene::Landing{};
+    m_knight = Cutscene::Knight{};
+    m_launchStartedTick = -1;
+    m_landingStartedTick = -1;
+    m_launchQuakes = 0;
+    m_knightSpawnedTick = -1;
+    m_knightEnteredTick = -1;
+    m_knightEnteredAtPx = glm::dvec2(0.0);
+    m_cameraTargetPx = glm::dvec2(0.0);
     // And the screen either raises, with its counters, and the HUD's last byte.
     m_end = EndScreen{};
     m_padEndByte = 0;
@@ -481,7 +529,28 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
         PositionOf(FirstOfRole(m_data, Roles::kPlayerSpawn), cameraStartPx);
     }
 
+    // WHAT IT PLAYS BETWEEN ITS DOOR AND ITS MEDAL (cutscenes.json): its end_delay,
+    // and which of the three cutscenes it places - each by its entity, as the
+    // original's callbacks are, and none by the level's name.
+    if (const std::optional<double> delay = Cutscene::EndDelayMs(m_cutsceneRules, m_data.scene)) {
+        m_wonDelayMs = *delay;
+        SUPERSONIC_LOG_INFO("Magic Portals") << entry.name << " sets end_delay " << m_wonDelayMs
+                                             << " ms from its door to its medal" << std::endl;
+    }
+    m_launchPlaced = Cutscene::Places(m_data.scene, m_cutsceneRules.launch.entity);
+    m_landingPlaced = Cutscene::Places(m_data.scene, m_cutsceneRules.landing.entity);
+    if (std::string why; !Cutscene::FindKnight(m_cutsceneRules, m_data.scene, m_knight, why)) {
+        // Played without its knight rather than refused: it is presentation after
+        // the level is finished, and the level plays the same without it.
+        SUPERSONIC_LOG_WARN("Magic Portals") << entry.name << " plays no knight: " << why << std::endl;
+        m_knight = Cutscene::Knight{};
+    }
+
     m_loaded = true;
+    // Its music, as Game::preLoop starts it - a retry and a skip included, each a
+    // fresh Game state - and the bosses' calls watched from nothing.
+    m_musicWatch = MusicWatch{};
+    startLevelMusic(index);
     // The lightmaps this level names, held until it goes. The same list again
     // after a retry, which kept the last one.
     m_heldLightmaps.clear();
@@ -597,6 +666,13 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_ghost = GhostQuad{};
     m_ghostAppearQueued = false;
     m_darkDragonQueued = false;
+    // 2-32's knight, its picture and the body its spawn added: neither belongs to
+    // the level's Built. Its aura is the effects runtime's, which goes below.
+    destroy(m_knightQuad);
+    destroy(m_knight.body);
+    m_knightAuraQueued = false;
+    m_bridgeSprite = -1;
+    m_landingKeySprite = -1;
     // The walk arrows and the corner buttons go with the level they were built
     // for, and so does what the level opened with.
     unloadControls();
@@ -692,9 +768,17 @@ void MagicPortalsLayer::goTo(entt::registry& registry, int next) {
         loadLevel(registry, next);
         return;
     }
-    unloadLevel(registry);
-    m_loadError.clear();
-    m_chapterComplete = true;
+    // goToNextLevel (LevelFinishedLayer bytes 408734..409098): a chapter's last
+    // level goes to WorldSelector, never on to the next chapter's first level, and
+    // chapter select opens on the page of the chapter just played (its preLoop
+    // #6-21). After the last chapter's last level it opens GameFinishedPopup over
+    // it (#68-72, preLoop #69-101). Read before openMenu, which forgets the level.
+    const int at = m_current;
+    const bool finished = m_chapters.FinishesTheGame(at);
+    if (at >= 0) m_menuWorld = m_chapters.levels[static_cast<std::size_t>(at)].world;
+    openMenu(registry, Screen::Worlds);
+    if (!finished) return;
+    if (const Popup::Class* cls = m_popupRules.FindClass(m_popupRules.gameFinished)) openMenuPopup(*cls);
 }
 
 // Defined below. Declared here because clearLevel records the FINAL medal and
@@ -1160,6 +1244,7 @@ std::vector<MagicPortalsLayer::PictureReport> MagicPortalsLayer::PictureReports(
         report.zIndex = drawn.sprite.zIndex;
         report.lookZ = drawn.lookZ;
         report.z = drawn.z;
+        report.quad = drawn.quad;
         reports.push_back(std::move(report));
     }
     return reports;
@@ -1393,6 +1478,14 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
         // ETHCallback_light_wall's DeleteEntity at the end of its 1500 ms.
         if (!m_level.torch.wall.present || m_level.torch.wall.gone) return false;
         return true; // it does not move
+    case EffectOwner::Kind::Knight:
+        // 2-32's knight where its PICTURE stands this frame, back out through its
+        // pivot, as a minion's (Kind::Minion). Its DeleteEntity in the door takes
+        // its aura with it.
+        if (m_knightQuad == entt::null || !registry.valid(m_knightQuad)) return false;
+        atPx = Units::ToPixels(registry.get<TransformComponent>(m_knightQuad).position) +
+               m_cutsceneRules.knight.pivotPx + owner.offsetPx;
+        return true;
     }
     return false;
 }
@@ -2481,6 +2574,9 @@ void MagicPortalsLayer::unloadMenuDrawables(entt::registry& registry) {
 void MagicPortalsLayer::unloadMenu(entt::registry& registry) {
     unloadMenuDrawables(registry);
     m_menuButtons.clear();
+    // A popup over a menu state goes with the state.
+    m_menuPopup = MenuPopupScreen{};
+    m_selectorLayerFromMs = 0.0;
 }
 
 void MagicPortalsLayer::openFinished(entt::registry& registry) {
@@ -2526,14 +2622,23 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
     unloadLevel(registry);
     m_loaded = false;
     m_current = -1;
-    m_chapterComplete = false;
     m_loadError.clear();
     // A STATE CHANGE opens under a black of its own, with every clock from
     // nothing (BaseState::preLoop). Another page of the same grid is not one.
     const bool changed = screen != m_screen;
-    if (changed) beginMenuState();
+    if (changed) {
+        beginMenuState();
+        // A popup over the last state goes with it; a new one is the caller's.
+        m_menuPopup = MenuPopupScreen{};
+        m_selectorLayerFromMs = 0.0;
+    }
     m_screen = screen;
     m_aspect = viewportAspect(registry);
+    // PortalMainMenu::preLoop #368 playMenuMusic: the ONE state that changes the
+    // track. Chapter and level select, credits and the dashboard call no music
+    // hook, so what played before them - a level's track, or the silence of a
+    // no_music level or a beaten boss - goes on under them.
+    if (changed && screen == Screen::Main) musicPlay(kMenuTrack);
     if (changed && screen == Screen::Credits) {
         // CreditsScreenLayer's constructor: the strip's top on the bottom edge.
         m_credits = Credits::Start(MenuBoxPx());
@@ -2725,7 +2830,121 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, float fixedDelta) {
         return;
     }
 
-    if (m_screen == Screen::Worlds || m_screen == Screen::Levels) selectorInput(registry);
+    if (m_screen == Screen::Worlds || m_screen == Screen::Levels) {
+        if (m_menuPopup.open) {
+            menuPopupTick(registry, fixedDelta);
+        } else {
+            selectorInput(registry);
+        }
+    }
+}
+
+void MagicPortalsLayer::openMenuPopup(const Popup::Class& cls) {
+    // Its pictures, resolved as buildControls resolves a level's popups' - which
+    // went with the level (unloadControls): there is none under a menu state.
+    for (const std::string* file : {&cls.card.sprite, &cls.closeButton.sprite}) {
+        if (m_popupImages.find(*file) != m_popupImages.end()) continue;
+        const std::string path = originalAsset(*file);
+        m_popupImages[*file] = imageSizePx(path).y > 0.0 ? path : std::string();
+    }
+    // As openPopup: one whose card or close button cannot be read is said once and
+    // not raised, rather than standing the chapter select still under nothing.
+    const auto drawable = [this](const std::string& file) {
+        const auto found = m_popupImages.find(file);
+        return found != m_popupImages.end() && !found->second.empty();
+    };
+    if (!drawable(cls.card.sprite) || !drawable(cls.closeButton.sprite)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "popup " << cls.name << " not raised: its card or close button "
+                                             << "could not be read" << std::endl;
+        return;
+    }
+    // Raised in the state's preLoop, so its clock is the state's: zero on the
+    // state's first tick. Popup::Popup pauses g_timeManager, which nothing on a
+    // menu state reads.
+    m_menuPopup = MenuPopupScreen{};
+    m_menuPopup.open = true;
+    m_menuPopup.cls = &cls;
+    m_menuPopup.state = Popup::Start(cls);
+    m_menuTouch = MenuTouch{};
+    m_selectorDown = Selector::Hit{};
+    m_selectorHeld = Selector::Hit{};
+    SUPERSONIC_LOG_INFO("Magic Portals") << "popup " << cls.name << " opened over the menu on tick " << m_ticks
+                                         << std::endl;
+}
+
+namespace {
+
+// Popup::hasReceivedCloseCommand's touch half: where the class taps to close, a
+// touch down anywhere; else a press of 'close', which Button::update makes of a
+// release inside the button whose touch went down inside it (bytes 15892..16865).
+// The back key is the caller's.
+bool TouchClosesPopup(const Popup::Rules& rules, const Popup::Class& cls, const Popup::Open& open,
+                      const glm::dvec2& view, bool pressed, bool released, bool over, const glm::dvec2& at,
+                      bool& downOnClose) {
+    if (Popup::Closing(open)) {
+        downOnClose = false;
+        return false;
+    }
+    if (cls.tapScreenToClose && pressed && over) return true;
+    const Hud::Rect button = Popup::CloseButtonRect(rules, cls, open, view);
+    if (pressed) downOnClose = over && button.Contains(at);
+    if (!released) return false;
+    const bool press = downOnClose && over && button.Contains(at);
+    downOnClose = false;
+    return press;
+}
+
+} // namespace
+
+void MagicPortalsLayer::menuPopupTick(entt::registry& registry, float fixedDelta) {
+    using Supersonic::Input;
+    // LevelSelector::loop reads the back key whatever layer is current: the state
+    // goes, on the next tick as ever, and the popup with it.
+    if (Input::TickWasPressed(kBack) || devPressDue(DevPress::Back)) {
+        m_menuPopup.downOnClose = false;
+        m_pendingMenu.kind = PendingMenu::Kind::Screen;
+        m_pendingMenu.screen = m_screen == Screen::Levels ? Screen::Worlds : Screen::Main;
+        return;
+    }
+    // UI frame time from the state's first tick, which is the popup's zero. The
+    // PageManager is not the current layer, so its clock stands (SelectorLayerMs).
+    const double dtMs = m_menuClock.ticks > 0 ? static_cast<double>(fixedDelta) * 1000.0 : 0.0;
+    Popup::Tick(*m_menuPopup.cls, m_menuPopup.state, dtMs);
+    // Read once a tick: a scheduled tap steps as it is read.
+    const Touch touch = touchThisTick(registry);
+    const bool fingerDown = (touch.pressed || touch.held) && !touch.released;
+    // The pager's slide goes on under it: PageManager::draw decays it, through
+    // Swyper::getOffset (bytes 21658..21861), which reads touch 0's state itself -
+    // no decay while a finger is down (KS_HIT or KS_DOWN), wherever it is. The
+    // swyper's own touch is not tracked meanwhile, so `touching` is put back after.
+    // Its update's fadeForwardArrows does not run, so the arrow's fade is put back.
+    const int forward = m_selectorState.forwardAlphaByte;
+    const bool touching = m_selectorState.touching;
+    m_selectorState.touching = fingerDown;
+    Selector::Step(m_selectorRules, m_selectorBoard, m_selectorState);
+    m_selectorState.touching = touching;
+    m_selectorState.forwardAlphaByte = forward;
+
+    Popup::Open& open = m_menuPopup.state;
+    const bool closes = TouchClosesPopup(m_popupRules, *m_menuPopup.cls, open, MenuBoxPx(), touch.pressed,
+                                         touch.released, touch.over, touch.atView, m_menuPopup.downOnClose);
+    // Button::update #206-233, in UILayer::update before the close is read: while
+    // the touch that went down on the button is on it, 0xFFCCCCCC. A release is not
+    // held, so the press that closes leaves it untinted for the dismissal.
+    if (!Popup::Closing(open)) {
+        const Hud::Rect button = Popup::CloseButtonRect(m_popupRules, *m_menuPopup.cls, open, MenuBoxPx());
+        open.closeTinted = fingerDown && m_menuPopup.downOnClose && touch.over && button.Contains(touch.atView);
+    }
+    if (closes) {
+        Popup::Close(open);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "popup closed over the menu on tick " << m_ticks << std::endl;
+    }
+    // Popup::update: once everything is dismissed, the last layer is current
+    // again, and the PageManager is updated from the next tick.
+    if (!Popup::Gone(m_popupRules, m_menuPopup.state)) return;
+    m_menuPopup = MenuPopupScreen{};
+    m_selectorLayerFromMs = m_menuClock.ms + static_cast<double>(fixedDelta) * 1000.0;
+    SUPERSONIC_LOG_INFO("Magic Portals") << "popup gone over the menu on tick " << m_ticks << std::endl;
 }
 
 void MagicPortalsLayer::beginMenuState() {
@@ -2856,7 +3075,7 @@ void MagicPortalsLayer::selectorInput(entt::registry& registry) {
     if (touch.pressed) {
         MenuState::TouchDown(m_menuTouch.touch, touch.atView);
         m_selectorDown =
-            Selector::HitAt(rules, m_selectorBoard, m_selectorState, view, m_menuClock.ms, touch.atView);
+            Selector::HitAt(rules, m_selectorBoard, m_selectorState, view, SelectorLayerMs(), touch.atView);
         Selector::TouchDown(m_selectorState, touch.atView.x);
     }
     if (touch.held || touch.released) {
@@ -2864,7 +3083,7 @@ void MagicPortalsLayer::selectorInput(entt::registry& registry) {
         Selector::TouchMove(m_selectorState, touch.atView.x, view.x);
     }
     const Selector::Hit on = touch.over ? Selector::HitAt(rules, m_selectorBoard, m_selectorState, view,
-                                                          m_menuClock.ms, touch.atView)
+                                                          SelectorLayerMs(), touch.atView)
                                         : Selector::Hit{};
     const bool inside = m_selectorDown.control != Selector::Control::None && same(on, m_selectorDown);
     m_selectorHeld = inside && touch.held && !touch.released ? m_selectorDown : Selector::Hit{};
@@ -3100,6 +3319,7 @@ bool MagicPortalsLayer::PressMainMenu(entt::registry& registry, MainMenu::Button
         } else {
             m_mainMusicAddedMs = dismissing ? m_mainMusicDismissedMs + dismissMs : now;
         }
+        switchedSound();
         latch("menu_button");
         return true;
     }
@@ -3109,6 +3329,7 @@ bool MagicPortalsLayer::PressMainMenu(entt::registry& registry, MainMenu::Button
                              m_menuClock.ms - m_mainMusicDismissedMs < m_mainMenuRules.layer.buttonDismissMs);
         if (!shown) return false;
         m_musicOn = !m_musicOn;
+        switchedMusic();
         latch("menu_button");
         return true;
     }
@@ -3228,11 +3449,12 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
         return;
     }
     if (m_screen == Screen::Worlds || m_screen == Screen::Levels) {
-        // Every picture and word in the original's order (sim/Selector.hpp), then the
-        // state's black.
+        // Every picture and word in the original's order (sim/Selector.hpp), then a
+        // popup over it, then the state's black. The layer's own entrance and bounces
+        // run on the PageManager's clock, which a popup over it stands still.
         for (const Selector::Piece& piece :
-             Selector::Pieces(m_selectorRules, m_selectorBoard, m_selectorState, view, m_menuClock.ms, m_layerClockMs,
-                              m_selectorHeld.control, m_selectorHeld.item)) {
+             Selector::Pieces(m_selectorRules, m_selectorBoard, m_selectorState, view, SelectorLayerMs(),
+                              m_layerClockMs, m_selectorHeld.control, m_selectorHeld.item)) {
             const glm::vec4 colour(glm::vec3(piece.rgbBytes) / 255.0f, static_cast<float>(piece.alphaByte) / 255.0f);
             if (piece.kind == Selector::Kind::Sprite) {
                 const std::string& image = menuPicture(piece.file);
@@ -3250,6 +3472,11 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                 add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], colour, glyph.uvOffset,
                     glyph.uvOffset + glyph.uvScale);
             }
+        }
+        // UILayerManager::draw draws the popup's layer after the PageManager's, and
+        // so over the tiles and the page counter; BaseState's black over it all.
+        if (m_menuPopup.open && m_menuPopup.cls != nullptr) {
+            emitPopup(overlay, view, *m_menuPopup.cls, m_menuPopup.state);
         }
     }
     add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
@@ -3430,7 +3657,8 @@ void MagicPortalsLayer::buildDrawables(entt::registry& registry) {
     m_minions.clear();
     m_minionSheet.clear();
     m_minionCut = Tiers::Cut{};
-    if (!m_level.minions.minions.empty() || m_level.ghost.present) {
+    // And 2-32's knight, dragon_knight.ent on the same sheet (cutscenes.json).
+    if (!m_level.minions.minions.empty() || m_level.ghost.present || m_knight.placed) {
         const Art::Minion& art = m_artRules.minion;
         const Sprites::Image& sheet = drawnImage(originalImage(art.sprite));
         std::string why;
@@ -3589,12 +3817,15 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     m_artError.clear();
     m_sign = NoPortalSign{};
     m_sky = Sky::Controller{};
+    m_space = Sky::Space{};
     m_dragonSprite = -1;
     m_clawSprite = -1;
     m_dragonCut = Tiers::Cut{};
     m_doorSprite = -1;
     m_doorBgSprite = -1;
     m_doorHighlight = -1;
+    m_bridgeSprite = -1;
+    m_landingKeySprite = -1;
     // From the constant start angle Game::loop passes, not from the level's phase
     // stream: nothing here draws a phase (00_order K8), so no crystal's or key's
     // moves because a door bobs.
@@ -3673,6 +3904,30 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "the sky is drawn where the level put it: " << why << std::endl;
         m_sky = Sky::Controller{};
     }
+    // AND ON A SPACE LEVEL, SPACESKY (sim/Sky.hpp, sky.json space_sky): the space
+    // sky, the spiral, the planet and the eclipse, each moved from the camera every
+    // frame. The spiral is scaled to the diagonal of the screen as it is now - the
+    // constructor's GetScreenSize - which is read here, where m_aspect may still be
+    // the last level's. Its constructor's linearMotion call steps the planet by the
+    // frame before the level's first update, taken as one tick.
+    {
+        const glm::dvec2 view(m_viewHeightPx * static_cast<double>(viewportAspect(registry)), m_viewHeightPx);
+        if (std::string why;
+            !Sky::BuildSpace(m_spaceRules, m_skyRules, m_motionRules, m_data.scene, view,
+                             static_cast<double>(kTick) * 1000.0, m_space, why)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "the space sky is drawn where the level put it: " << why
+                                                 << std::endl;
+            m_space = Sky::Space{};
+        } else if (m_space.running) {
+            SUPERSONIC_LOG_INFO("Magic Portals")
+                << "space sky: " << (m_space.skyNode.empty() ? "no sky" : m_space.skyNode) << ", "
+                << (m_space.spiralNode.empty() ? std::string("no spiral")
+                                               : m_space.spiralNode + " " + std::to_string(m_space.spiralSidePx) +
+                                                     " u colour " + std::to_string(m_space.spiralColour))
+                << ", " << (m_space.planetNode.empty() ? "no planet" : m_space.planetNode) << ", "
+                << (m_space.eclipseNode.empty() ? "no eclipse" : m_space.eclipseNode) << std::endl;
+        }
+    }
     // THE PLAYER'S SLOT: after every sprite at or below its depth, which it was
     // added after (R10, art.json character.z). At 4 / 2.8125 = 1.42 in the level's
     // units that is after the nodes at eth_z 1 or below: one more than the slot after
@@ -3724,6 +3979,43 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             return node != nullptr && BareEntityName(*node) == m_artRules.door.entity;
         }();
         if (isDoor && !shadowlessTexture.empty()) sprite.texture = shadowlessTexture;
+        // A FIRE AGENT, AND A BLUE OR RED KEY, KEYHOLE OR LOCKED DOOR, ARE DRAWN
+        // FROM THE FILE THEIR SCRIPTS SET (art.json fire_agent, key_colour):
+        // ETHCallback_fire_agent's SetSprite on every update and setKeyColor's once,
+        // each before the entity is first drawn, so the picture the level saved is
+        // never seen. Matched by the callback's name, the entity less its .ent, and
+        // never by the saved file: an anti_portal_agent keeps its own face. The file
+        // is found as SetSprite finds it, through the tiers; one of other units, or
+        // one that cannot be read, leaves the saved picture and says so.
+        std::string scripted;
+        bool keyPainted = false;
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
+            const std::string bare = BareEntityName(*node);
+            if (bare == m_artRules.fireAgent.entity) {
+                scripted = m_artRules.fireAgent.sprite;
+            } else if (m_artRules.keyColour.Paints(bare)) {
+                const Tscn::Value* colour = node->Meta(m_artRules.keyColour.datum);
+                scripted = m_artRules.keyColour.SpriteFor(
+                    Roles::EntityName(*node),
+                    colour != nullptr && colour->kind == Tscn::Value::Kind::String ? colour->text : std::string());
+                keyPainted = !scripted.empty();
+            }
+        }
+        if (!scripted.empty()) {
+            const Sprites::Image& image = drawnImage(originalImage(scripted));
+            if (image.units.x <= 0 || image.units.y <= 0 ||
+                image.units != Tiers::Units(sprite.texels, sprite.density)) {
+                SUPERSONIC_LOG_WARN("Magic Portals")
+                    << sprite.node << " keeps the picture its level saved: " << image.path
+                    << (image.units.x <= 0 || image.units.y <= 0 ? " could not be read" : " is not its size")
+                    << std::endl;
+            } else {
+                sprite.texture = image.path;
+                sprite.tier = image.tier;
+                sprite.density = image.density;
+                sprite.texels = image.texels;
+            }
+        }
         DrawnSprite drawn;
         drawn.quad = makeSprite(registry, "Magic Portals Sprite", sprite.texture, sprite.additive);
         // The player's slot is kept free.
@@ -3739,6 +4031,18 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             if (node != nullptr && BareEntityName(*node) == m_artRules.door.backgroundEntity) {
                 m_doorBgSprite = static_cast<int>(m_sprites.size());
                 drawn.doorBob = m_doorBobRuns;
+            }
+        }
+        // THE CUTSCENES' OTHER PICTURES (cutscenes.json), each the first node of its
+        // exact name, as its callback's SeekEntity finds it: 4-01's rocket_bridge and
+        // the key 4-19's landing shrinks.
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
+            const std::string name = Roles::EntityName(*node);
+            if (m_bridgeSprite < 0 && m_launchPlaced && name == m_cutsceneRules.launch.bridge) {
+                m_bridgeSprite = static_cast<int>(m_sprites.size());
+            }
+            if (m_landingKeySprite < 0 && m_landingPlaced && name == m_cutsceneRules.landing.key) {
+                m_landingKeySprite = static_cast<int>(m_sprites.size());
             }
         }
         // Its instance colour and emissive, as its node gives them. A node the
@@ -3784,6 +4088,25 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         if (m_level.redKey.present && sprite.node == m_level.redKey.name) {
             drawn.redKeyState = true;
             drawn.colour = glm::vec4(glm::vec3(m_level.redKey.rules.colour), drawn.colour.a);
+        }
+        // setKeyColor's SetColor(V3_ONE) after its swap: the rgb, the alpha kept.
+        if (keyPainted) drawn.colour = glm::vec4(glm::vec3(m_artRules.keyColour.colour), drawn.colour.a);
+        // A CRATE NO PORTAL CARRIES BLINKS RED (art.json non_teleportable):
+        // manageNonTeleportable, which crateCallback runs first, for a crate whose
+        // teleportable datum is 0 or absent - GetUInt reads an absent one as 0, as
+        // Portals reads it - and not burned. Which of the two it blinks is its
+        // callback's; syncLighting writes it every tick over the node's own.
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
+            double datum = 0.0;
+            const Tscn::Value* flag = node->Meta(m_artRules.nonTeleportable.datum);
+            const bool teleportable = flag != nullptr && flag->AsNumber(datum) && datum != 0.0;
+            drawn.blinks = m_artRules.nonTeleportable.For(BareEntityName(*node), teleportable);
+            if (drawn.blinks != Art::NonTeleportable::Blinks::Nothing) {
+                const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
+                for (std::size_t b = 0; b < burnables.size(); ++b) {
+                    if (burnables[b].name == sprite.node) drawn.burnable = static_cast<int>(b);
+                }
+            }
         }
         drawn.ownerPx = sprite.atPx;
         drawn.centrePx = Sprites::CentrePx(sprite);
@@ -3883,6 +4206,17 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             }
             drawn.satellite = m_sky.hasSatellite && m_sky.satelliteNode == sprite.node;
         }
+        if (m_space.running) {
+            if (sprite.node == m_space.skyNode) drawn.space = SpaceRole::Sky;
+            if (sprite.node == m_space.spiralNode) drawn.space = SpaceRole::Spiral;
+            if (sprite.node == m_space.planetNode) drawn.space = SpaceRole::Planet;
+            if (sprite.node == m_space.eclipseNode) drawn.space = SpaceRole::Eclipse;
+            // SpaceSky's SetColor(c, c, c) on the spiral, once: the rgb, over the look's,
+            // with its alpha kept (ETHEntity.cpp:493-498).
+            if (drawn.space == SpaceRole::Spiral) {
+                drawn.colour = glm::vec4(glm::vec3(static_cast<float>(m_space.spiralColour)), drawn.colour.a);
+            }
+        }
         if (const auto body = m_level.built.entities.find(sprite.node); body != m_level.built.entities.end()) {
             drawn.body = body->second;
             // Bodies move on the tick and are drawn between ticks, as their boxes are.
@@ -3892,7 +4226,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             // Carried on the tick, as a body is moved, and drawn between ticks.
             registry.emplace_or_replace<InterpolatedTransformComponent>(drawn.quad);
         }
-        if (drawn.sky >= 0 || drawn.satellite) {
+        if (drawn.sky >= 0 || drawn.satellite || drawn.space != SpaceRole::None) {
             // Placed on the tick from the camera the tick left, and drawn between
             // ticks as the camera is: both interpolate with the same alpha, so
             // the sky keeps its place on the screen on the frames between.
@@ -3947,6 +4281,9 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     // where the original draws the marker's minion in front (2 > 0): a tie the
     // between-slot table of the visuals plan's 6.3 (00_order K13) is to order.
     m_minionZ = slotAfter(m_artRules.LevelDepth(m_artRules.minion.z), Slot::Minion);
+    // 2-32's knight, at the depth its spawn's GetPosition() gives AddScaledEntity:
+    // level31a's node at 0 (cutscenes.json dragon_knight._z), behind the player.
+    m_knightZ = slotAfter(0.0, Slot::Minion);
     // The anchor as Ghost::Find takes it: by entity name, the last such node.
     m_escortLookZ = 0.0;
     for (const Tscn::Node& node : m_data.scene.nodes) {
@@ -4501,6 +4838,41 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         } else if (drawn.satellite) {
             ownerPx = Sky::SatellitePx(m_sky, m_follow.centrePx, ViewPx());
             centrePx += ownerPx - sprite.atPx;
+        } else if (drawn.space != SpaceRole::None) {
+            // Where SpaceSky::update puts its entity from this tick's camera, whatever
+            // the level said, the picture hanging off it by its own offset: the planet's
+            // 60 u up, the eclipse's 30. The spiral is the square scaleToSize made and
+            // turned by what AddToAngle has added, about its own point (its pivot is 0).
+            const glm::dvec2 view = ViewPx();
+            switch (drawn.space) {
+            case SpaceRole::Sky:
+                ownerPx = Sky::SpaceSkyPx(m_spaceRules, m_follow.centrePx, view);
+                break;
+            case SpaceRole::Spiral: {
+                ownerPx = Sky::SpiralPx(m_spaceRules, m_follow.centrePx, view);
+                sizePx = glm::dvec2(m_space.spiralSidePx);
+                const double turnedRad = m_space.spiralTurn.turnedDeg * 3.14159265358979323846 / 180.0;
+                rotation = Units::ToWorldRotation(sprite.rotation - turnedRad);
+                ownerAngleDeg += m_space.spiralTurn.turnedDeg;
+                // 4-19's landing dims it (cutscenes.json rocket_landing #413-455): the
+                // colour its first frame kept, SpaceSky's c, times the brightness.
+                if (m_landing.running) {
+                    const double dimmed =
+                        m_space.spiralColour * Cutscene::SpiralBrightness(m_cutsceneRules, m_landing.bias);
+                    drawn.colour = glm::vec4(glm::vec3(static_cast<float>(dimmed)), drawn.colour.a);
+                }
+                break;
+            }
+            case SpaceRole::Planet:
+                ownerPx = Sky::PlanetPx(m_spaceRules, m_space, m_follow.centrePx, view);
+                break;
+            case SpaceRole::Eclipse:
+                ownerPx = Sky::EclipsePx(m_spaceRules, m_space, m_follow.centrePx, view);
+                break;
+            case SpaceRole::None:
+                break;
+            }
+            centrePx += ownerPx - sprite.atPx;
         } else if (drawn.crystal >= 0) {
             // A timed crystal does not fade: the original goes at its time, and
             // counts it down on the dial behind it (syncTimers).
@@ -4635,6 +5007,31 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             centrePx += bob;
             ownerPx += bob;
         }
+        // AND WHERE A WIN CUTSCENE HAS PUT IT (cutscenes.json): 4-01's rocket door
+        // and bridge where rocket_launch set them, and 4-19's door at the originalPos
+        // rocket_landing writes, which the bob above rides on. Picture and systems
+        // together - the exhaust hangs off the door's point. Only the pictures: the
+        // exit's sensor and the bridge's box stay where the level put them, as the
+        // bob leaves the sensor, and nothing after the win walks on either.
+        const int drawnIndex = static_cast<int>(&drawn - m_sprites.data());
+        if (drawnIndex == m_doorSprite) {
+            glm::dvec2 moved(0.0);
+            if (m_launch.running) moved = m_launch.pose.doorOffsetPx;
+            if (m_landing.running) moved = Cutscene::LandingDoorOffsetPx(m_cutsceneRules, m_landing.bias);
+            centrePx += moved;
+            ownerPx += moved;
+        }
+        if (drawnIndex == m_bridgeSprite && m_launch.running) {
+            centrePx += m_launch.pose.bridgeOffsetPx;
+            ownerPx += m_launch.pose.bridgeOffsetPx;
+        }
+        // And the key the landing's SeekEntity('key') finds: Scale(0.9) a frame about
+        // its own point, and its alpha that scale (#185-227).
+        if (drawnIndex == m_landingKeySprite && m_landing.running) {
+            centrePx = ownerPx + (centrePx - ownerPx) * m_landing.keyScale;
+            sizePx *= m_landing.keyScale;
+            drawn.fade = static_cast<float>(std::clamp(m_landing.keyScale, 0.0, 1.0));
+        }
         // A TORCH THE LEVEL PLACED goes on the tick after a shot lights it, its
         // picture and its spark with it: its callback's `delete` branch deletes the
         // entity then (the visuals plan's 11.2). The torch a put-out adds back is a
@@ -4761,6 +5158,22 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
     // angle because the original steps all three in that one loop with that one
     // frame. It runs whether or not the level has a glow or a background to bob.
     if (m_doorBobRuns) Motion::Advance(m_motionRules, m_doorBob, frameMs);
+    // AND SPACESKY'S UPDATE on a space level (sky.json space_sky), from the camera
+    // this tick left: the planet's linearMotion step, the spiral's AddToAngle and
+    // the eclipse's y, before the pictures are placed from them.
+    Sky::AdvanceSpace(m_motionRules, m_space, m_follow.centrePx, ViewPx(), frameMs);
+    // And 4-19's landing, a static callback after SpaceSky's update in the frame, over
+    // the eclipse's y: from its own height below the view's bottom up to it, as
+    // smoothEnd(bias) (cutscenes.json rocket_landing #343-411). Its x stays SpaceSky's.
+    if (m_landing.running && !m_space.eclipseNode.empty()) {
+        double eclipseHeightPx = 0.0;
+        for (const DrawnSprite& drawn : m_sprites) {
+            if (drawn.space == SpaceRole::Eclipse) eclipseHeightPx = drawn.sprite.sizePx.y * drawn.scale;
+        }
+        const glm::dvec2 view = ViewPx();
+        m_space.eclipseYPx = Cutscene::LandingEclipseYPx(m_cutsceneRules, m_landing.bias,
+                                                         (m_follow.centrePx - view * 0.5).y, view.y, eclipseHeightPx);
+    }
     // A key no node pictures bobs as a level key does: ETHCallback_key while no one
     // carries it and it has not found its keyhole.
     for (DroppedKey& dropped : m_droppedKeys) {
@@ -5135,6 +5548,7 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
 
     syncBoss(registry);
     syncMinions(registry);
+    syncKnight(registry);
     syncGhost(registry);
     syncTurrets(registry);
 
@@ -5363,7 +5777,7 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
 
     const bool runtimeBake = m_lit && Lighting::RuntimeBake(m_level.torch);
     static const std::string noLightmap;
-    for (const DrawnSprite& drawn : m_sprites) {
+    for (DrawnSprite& drawn : m_sprites) {
         Receiver receiver;
         receiver.applyLight = drawn.applyLight;
         receiver.isStatic = drawn.isStatic;
@@ -5386,7 +5800,28 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         if (drawn.redKeyState) {
             colour = glm::vec4(glm::vec3(m_level.redKey.rules.colour * m_level.redKey.bias), colour.a);
         }
-        tint(registry, drawn.quad, colour, drawn.emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
+        // A CRATE NO PORTAL CARRIES (art.json non_teleportable), on the same clock:
+        // blinkColor writes the rgb as the ring's does, blinkEmissive the emissive
+        // min(1, ambient + emissive) takes. Once its crate is burned the script stops
+        // writing either: manageBurnable takes the colour from 1 (its fade is not
+        // drawn, so the node's white stands), and the emissive keeps its last blink.
+        glm::dvec3 emissive = drawn.emissive;
+        if (drawn.blinks != Art::NonTeleportable::Blinks::Nothing) {
+            const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
+            const bool burned = drawn.burnable >= 0 && static_cast<std::size_t>(drawn.burnable) < burnables.size() &&
+                                burnables[static_cast<std::size_t>(drawn.burnable)].burned;
+            if (!burned) {
+                drawn.blinkMs = m_levelAgeMs;
+                drawn.blinked = true;
+            }
+            const Art::NonTeleportable& crates = m_artRules.nonTeleportable;
+            if (drawn.blinks == Art::NonTeleportable::Blinks::Colour && !burned) {
+                colour = glm::vec4(glm::vec3(crates.colour.At(drawn.blinkMs)), colour.a);
+            } else if (drawn.blinks == Art::NonTeleportable::Blinks::Emissive && drawn.blinked) {
+                emissive = crates.emissive.At(drawn.blinkMs);
+            }
+        }
+        tint(registry, drawn.quad, colour, emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
     }
     // What no level places, with its .ent's emissive (art.json, launchers.json).
     // None has a lightmap: a bake belongs to an entity the level file placed.
@@ -5457,6 +5892,13 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         const glm::dvec3 emissive = blind ? glm::dvec3(0.0) : (minion.black ? minionArt.blackEmissive : minionArt.emissive);
         const glm::vec4 colour = minion.black ? glm::vec4(glm::vec3(minionArt.blackColour), 1.0f) : white;
         tint(registry, minion.quad, colour, emissive, {}, receiverOf(minionArt, minion.lookZ));
+    }
+    // 2-32's knight: SetColor(V3_ZERO) in its first run and dragon_knight.ent's own
+    // emissive 0, applyLight 0 as minion.ent (cutscenes.json dragon_knight).
+    if (m_knightQuad != entt::null) {
+        const Cutscene::Rules::Knight& knight = m_cutsceneRules.knight;
+        tint(registry, m_knightQuad, glm::vec4(glm::vec3(knight.colour), 1.0f), knight.emissive, {},
+             receiverOf(minionArt, 0.0));
     }
     // CHAPTER 3'S BOSS at the colour and the alpha its callback wrote this tick
     // (SetColor, SetAlpha), which the sprite path weights its texels by as it does
@@ -6115,12 +6557,10 @@ void MagicPortalsLayer::updateHud(entt::registry& registry) {
     } else if (m_current < 0) {
         status = "Magic Portals could not start: " + m_loadError;
     } else {
+        // A chapter's end is chapter select now (goTo), which is a menu state; only a
+        // level the port refused is left with no level and no menu.
         const Chapters::Level& entry = m_chapters.levels[static_cast<std::size_t>(m_current)];
-        if (m_chapterComplete) {
-            status = "Chapter " + Count(entry.world + 1) + " complete";
-        } else if (!m_loaded) {
-            status = Chapters::Label(entry) + " is not playable yet: " + m_loadError;
-        }
+        if (!m_loaded) status = Chapters::Label(entry) + " is not playable yet: " + m_loadError;
         // A level being played says NOTHING. The original draws no text over a
         // level at all - no level number, no portal or crystal count - and that
         // is measured rather than remembered: across the settled frames of 41
@@ -6132,8 +6572,11 @@ void MagicPortalsLayer::updateHud(entt::registry& registry) {
 
     std::string result;
     // Nothing over a level, the finished and lost screens included: those draw
-    // the original's own count and medal over it.
-    if (m_lastCleared && !m_loaded) {
+    // the original's own count and medal over it. Nor over a menu state (ui3 spec
+    // D7) - chapter select after a chapter's last level, the grid after the list
+    // button - which this line was written before, for the black a chapter's end
+    // used to leave.
+    if (m_lastCleared && !m_loaded && !menuStateUp()) {
         const Cleared& c = *m_lastCleared;
         result = c.label + " cleared with " + Count(c.portalsUsed) + (c.portalsUsed == 1 ? " portal" : " portals") +
                  (c.crystalsTotal > 0 ? ", " + Count(c.crystals) + "/" + Count(c.crystalsTotal) + " crystals" : "") +
@@ -6388,6 +6831,40 @@ void MagicPortalsLayer::tickNoPortalSign(double dtMs) {
     m_sign.onView.min = m_sign.follow.at - m_sign.sizeUnits * 0.5 - corner;
 }
 
+void MagicPortalsLayer::emitPopup(Supersonic::ScreenOverlay& overlay, const glm::dvec2& view,
+                                  const Popup::Class& cls, const Popup::Open& open) const {
+    using Supersonic::ScreenOverlay;
+    // The pieces are sim/Popup's: the dim, the card, the close button, then the
+    // class's own draw() - turned sprites turned in the view's square units, which
+    // the overlay is told in fractions of this view's shape.
+    const float aspect = static_cast<float>(view.x / view.y);
+    for (const Popup::Piece& piece : Popup::Pieces(m_popupRules, cls, open, view)) {
+        const glm::vec4 colour(glm::vec3(piece.rgb), static_cast<float>(piece.alphaByte) / 255.0f);
+        if (colour.a <= 0.0f) continue;
+        ScreenOverlay::Quad quad;
+        quad.min = glm::vec2(piece.rect.min / view);
+        quad.max = glm::vec2(piece.rect.Max() / view);
+        quad.uvMin = glm::vec2(piece.uvMin);
+        quad.uvMax = glm::vec2(piece.uvMax);
+        quad.color = colour;
+        if (piece.element == Popup::Element::Dim) {
+            // eth_framework_square.png is opaque white in every texel, so tinted
+            // black it is exactly a plain black: no texture.
+            quad.uvMin = glm::vec2(0.0f);
+            quad.uvMax = glm::vec2(1.0f);
+            overlay.Add(std::move(quad));
+            continue;
+        }
+        const auto image = m_popupImages.find(piece.sprite);
+        if (image == m_popupImages.end() || image->second.empty()) continue;
+        quad.texture = image->second;
+        if (piece.angleDeg != 0.0) {
+            quad.basis = ScreenOverlay::Rotation(glm::radians(static_cast<float>(piece.angleDeg)), aspect);
+        }
+        overlay.Add(std::move(quad));
+    }
+}
+
 void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     using Supersonic::ScreenOverlay;
     auto* const* slot = registry.ctx().find<ScreenOverlay*>();
@@ -6521,31 +6998,7 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     //     pieces are sim/Popup's: the dim, the card, the close button, then the
     //     class's own draw() - turned sprites turned in the view's square units,
     //     which the overlay is told in fractions of this view's shape.
-    if (m_popup.open && m_popup.cls != nullptr) {
-        const float aspect = static_cast<float>(view.x / view.y);
-        for (const Popup::Piece& piece : Popup::Pieces(m_popupRules, *m_popup.cls, m_popup.state, view)) {
-            const glm::vec4 colour(glm::vec3(piece.rgb), static_cast<float>(piece.alphaByte) / 255.0f);
-            if (piece.element == Popup::Element::Dim) {
-                // eth_framework_square.png is opaque white in every texel, so tinted
-                // black it is exactly a plain black.
-                add(piece.rect, std::string(), colour);
-                continue;
-            }
-            const auto image = m_popupImages.find(piece.sprite);
-            if (image == m_popupImages.end() || image->second.empty() || colour.a <= 0.0f) continue;
-            ScreenOverlay::Quad quad;
-            quad.min = glm::vec2(piece.rect.min / view);
-            quad.max = glm::vec2(piece.rect.Max() / view);
-            quad.uvMin = glm::vec2(piece.uvMin);
-            quad.uvMax = glm::vec2(piece.uvMax);
-            quad.color = colour;
-            quad.texture = image->second;
-            if (piece.angleDeg != 0.0) {
-                quad.basis = ScreenOverlay::Rotation(glm::radians(static_cast<float>(piece.angleDeg)), aspect);
-            }
-            overlay.Add(std::move(quad));
-        }
-    }
+    if (m_popup.open && m_popup.cls != nullptr) emitPopup(overlay, view, *m_popup.cls, m_popup.state);
 
     // 4b. The finished or the lost screen, when one is up: the CURRENT UI layer
     //     over the running level and whatever the HUD has left, and under the
@@ -6712,7 +7165,7 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // And these are EDGES: held down, a reset would restart the level every
         // tick for as long as the button was pressed.
         case Control::Reset:
-            if (pressed && m_current >= 0 && !m_chapterComplete) loadLevel(registry, m_current);
+            if (pressed && m_current >= 0) loadLevel(registry, m_current);
             break;
         // GameLayer's menu button calls GameState::showMenuPopup (bytes
         // 98935..99036): the pause, over this level, rather than out of it.
@@ -6985,8 +7438,8 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
     // places draws a number more or less for them.
     //
     // A minion.ent carries none, so nothing is added for the 61 other markers or
-    // an escort. dragon_knight.ent carries the same system, and comes only after
-    // 2-32 is won, which the port does not build.
+    // an escort. dragon_knight.ent carries the same system, and comes only once
+    // 2-32 is finished: syncKnight queues its own (planning step 123).
     matchMinions();
     for (std::size_t i = 0; i < m_minions.size() && i < m_level.minions.minions.size(); ++i) {
         MinionQuad& drawn = m_minions[i];
@@ -7644,6 +8097,152 @@ void MagicPortalsLayer::latchDeathEffects(entt::registry& registry) {
     m_effectQueue.push_back(effectAdd(Effects::Blood(m_effectRules, characterPx, m_playerZ)));
 }
 
+// ---- THE WIN CUTSCENES (the program's P2, planning step 123) ----------------------
+//
+// cutscenes.json holds the decode; sim/Cutscene the arithmetic. From the tick the
+// level ends, once a tick and behind the finished screen as well (the level goes
+// on running under it, spec D7):
+//   - rocket_launch and rocket_landing while the level is WON, from the door's own
+//     tick - both are static entities, whose callbacks run after the game state
+//     that decided it - each playing its track on its first update;
+//   - dragon_knight_spawn once it is FINISHED, a death as well as the door, on the
+//     same tick; the knight it adds updates from the next, a dynamic entity's
+//     callback, and goes into the door as the player does: levelFinishedEffect's
+//     suck and sparkles and the door's sound.
+void MagicPortalsLayer::stepCutscenes(entt::registry& registry, double frameMs) {
+    if (m_finishing && m_launchPlaced) {
+        const Cutscene::LaunchStep step = Cutscene::StepLaunch(m_cutsceneRules, m_launch, frameMs);
+        if (step.started) {
+            m_launchStartedTick = m_ticks;
+            musicPlay(m_cutsceneRules.launch.track.c_str());
+            SUPERSONIC_LOG_INFO("Magic Portals") << "rocket_launch from tick " << m_ticks << std::endl;
+        }
+        if (step.quake) {
+            ++m_launchQuakes;
+            QueueQuake(Earthquake::Call::RocketLaunch);
+        }
+    }
+    if (m_finishing && m_landingPlaced) {
+        const Cutscene::LandingStep step = Cutscene::StepLanding(m_cutsceneRules, m_landing, frameMs);
+        if (step.started) {
+            m_landingStartedTick = m_ticks;
+            musicPlay(m_cutsceneRules.landing.track.c_str());
+            SUPERSONIC_LOG_INFO("Magic Portals") << "rocket_landing from tick " << m_ticks << std::endl;
+        }
+    }
+    if (!m_knight.placed) return;
+    if (!m_knight.spawned) {
+        if (Cutscene::SpawnKnight(m_cutsceneRules, m_data.minions, registry, m_knight) != entt::null) {
+            m_knightSpawnedTick = m_ticks;
+            SUPERSONIC_LOG_INFO("Magic Portals") << "dragon_knight added at " << m_knight.spawnPx.x << ","
+                                                 << m_knight.spawnPx.y << " on tick " << m_ticks << std::endl;
+        }
+        return;
+    }
+    if (m_knight.gone) return;
+    Cutscene::StepKnight(m_cutsceneRules, m_data.minions, registry, m_knight, frameMs);
+    if (!m_knight.entered) return;
+    // levelFinishedEffect(its point, its point + scale(16, -16)): the suck 16 below
+    // that door point, the sparkles at the knight, playFinalDoorSound.
+    m_knightEnteredTick = m_ticks;
+    m_knightEnteredAtPx = m_knight.enteredAtPx;
+    m_effectQueue.push_back(effectAdd(
+        Effects::FinishSuck(m_effectRules, m_knight.enteredAtPx + m_cutsceneRules.knight.finishOffsetPx)));
+    m_effectQueue.push_back(effectAdd(Effects::FinishSparkles(m_effectRules, m_knight.enteredAtPx)));
+    latch("level_finished");
+    SUPERSONIC_LOG_INFO("Magic Portals") << "dragon_knight went in at " << m_knight.enteredAtPx.x << ","
+                                         << m_knight.enteredAtPx.y << " on tick " << m_ticks << std::endl;
+}
+
+void MagicPortalsLayer::syncKnight(entt::registry& registry) {
+    using namespace Supersonic;
+    const bool standing = m_knight.spawned && !m_knight.gone && m_knight.body != entt::null &&
+                          registry.valid(m_knight.body) && registry.all_of<TransformComponent>(m_knight.body);
+    if (!standing || !m_artReady || m_minionSheet.empty()) {
+        if (m_knightQuad != entt::null && registry.valid(m_knightQuad)) registry.destroy(m_knightQuad);
+        m_knightQuad = entt::null;
+        return;
+    }
+    if (m_knightQuad == entt::null) {
+        m_knightQuad = makeSprite(registry, "Magic Portals Knight", m_minionSheet, m_artRules.minion.additive);
+        // It falls and walks on the tick and is drawn between ticks, as a minion.
+        registry.emplace<InterpolatedTransformComponent>(m_knightQuad);
+    }
+    // minion.png's sheet as the minions', on its own pivot (0, 0): the picture's
+    // centre is its entity point.
+    const glm::dvec2 entityPx = Cutscene::KnightEntityPx(m_data.minions, registry, m_knight);
+    m_knightCentrePx = entityPx - m_cutsceneRules.knight.pivotPx;
+    placeSprite(registry, m_knightQuad, m_knightCentrePx, glm::dvec2(m_minionCut.frameUnits), m_knightZ, 0.0f);
+    auto& material = registry.get<MaterialComponent>(m_knightQuad);
+    material.uvScale = glm::vec2(m_minionCut.uvScale);
+    material.uvOffset = glm::vec2(Tiers::UvOffset(m_minionCut, m_knight.column, m_knight.row));
+    // dragon_knight.ent's 24 black_portal_particle.png at alphaMode 4, added with
+    // it: queued once, carried by its picture (Kind::Knight), at the spawn's depth.
+    if (!m_knightAuraQueued) {
+        EffectSpawn add;
+        add.entity = m_cutsceneRules.knight.entity;
+        add.atPx = entityPx;
+        add.zUnits = 0.0;
+        add.follow.kind = EffectOwner::Kind::Knight;
+        add.picture = false;
+        add.alwaysActive = true;
+        m_effectQueue.push_back(add);
+        m_knightAuraQueued = true;
+    }
+}
+
+glm::dvec2 MagicPortalsLayer::doorPointPx() const {
+    if (m_doorSprite < 0 || m_doorSprite >= static_cast<int>(m_sprites.size())) return glm::dvec2(0.0);
+    const DrawnSprite& door = m_sprites[static_cast<std::size_t>(m_doorSprite)];
+    glm::dvec2 atPx = door.sprite.atPx;
+    if (door.doorBob) atPx += Motion::OffsetPx(m_doorBob);
+    if (m_launch.running) atPx += m_launch.pose.doorOffsetPx;
+    if (m_landing.running) atPx += Cutscene::LandingDoorOffsetPx(m_cutsceneRules, m_landing.bias);
+    return atPx;
+}
+
+MagicPortalsLayer::CutsceneReport MagicPortalsLayer::CutscenePicture(entt::registry& registry) const {
+    CutsceneReport report;
+    report.wonDelayMs = m_wonDelayMs;
+    report.launchPlaced = m_launchPlaced;
+    report.landingPlaced = m_landingPlaced;
+    report.launch = m_launch;
+    report.landing = m_landing;
+    report.launchStartedTick = m_launchStartedTick;
+    report.landingStartedTick = m_landingStartedTick;
+    report.quakes = m_launchQuakes;
+    const auto at = [this](int index) -> const DrawnSprite* {
+        return index >= 0 && index < static_cast<int>(m_sprites.size()) ? &m_sprites[static_cast<std::size_t>(index)]
+                                                                          : nullptr;
+    };
+    if (const DrawnSprite* door = at(m_doorSprite); door != nullptr) {
+        report.doorAtPx = door->ownerPx;
+        report.doorCentrePx = door->centrePx;
+    }
+    if (const DrawnSprite* bridge = at(m_bridgeSprite); bridge != nullptr) {
+        report.bridgeQuad = bridge->quad;
+        report.bridgeCentrePx = bridge->centrePx;
+        if (bridge->body != entt::null && registry.valid(bridge->body)) {
+            report.bridgeRestPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(bridge->body).position);
+        }
+    }
+    report.keyScale = m_landing.running && at(m_landingKeySprite) != nullptr ? m_landing.keyScale : 1.0;
+    for (const DrawnSprite& drawn : m_sprites) {
+        if (drawn.space == SpaceRole::Eclipse) report.eclipseAtPx = drawn.ownerPx;
+        if (drawn.space == SpaceRole::Spiral) report.spiralColour = drawn.colour;
+    }
+    report.cameraTargetPx = m_cameraTargetPx;
+    report.knight = m_knight;
+    report.knightAtPx = Cutscene::KnightEntityPx(m_data.minions, registry, m_knight);
+    report.knightQuad = m_knightQuad;
+    report.knightCentrePx = m_knightCentrePx;
+    report.knightAuraQueued = m_knightAuraQueued;
+    report.knightSpawnedTick = m_knightSpawnedTick;
+    report.knightEnteredTick = m_knightEnteredTick;
+    report.knightEnteredAtPx = m_knightEnteredAtPx;
+    return report;
+}
+
 
 // CHAPTER 4'S TORCHES, THEIR SIGNAL AND THEIR WALL (the visuals plan's 11.2;
 // effects.json _torches_trail_roundabout; sim/Torch). Per torch, on the tick its
@@ -8262,7 +8861,13 @@ void MagicPortalsLayer::shakeView(entt::registry& registry) {
     // generator has moved it (Game::preLoop #281-287 against #272-279), so they
     // go with the camera and stay where they were on the screen.
     for (const DrawnSprite& drawn : m_sprites) {
-        if ((drawn.sky < 0 && !drawn.satellite) || drawn.quad == entt::null || !registry.valid(drawn.quad)) continue;
+        // SpaceSky's four with them, from the same GetCameraPos: the eclipse's y as
+        // well, whose frame adds the shaken corner's y (sim/Sky.hpp) - drawn here, and
+        // not kept, as step 122 records.
+        if ((drawn.sky < 0 && !drawn.satellite && drawn.space == SpaceRole::None) || drawn.quad == entt::null ||
+            !registry.valid(drawn.quad)) {
+            continue;
+        }
         if (auto* transform = registry.try_get<TransformComponent>(drawn.quad)) {
             m_quakeDrawn.quads.emplace_back(drawn.quad, transform->position.y);
             transform->position.y += dy;
@@ -8416,30 +9021,132 @@ void MagicPortalsLayer::playLatched(entt::registry& registry, float deltaTime) {
 }
 
 std::string MagicPortalsLayer::WantedTrack() const {
-    // Which track belongs to what is on screen. The medal screen keeps the
-    // level loaded, so it falls into the level's own branch and the music does
-    // not stop underneath it.
-    std::string wanted;
-    if (!m_soundOn || !m_musicOn) {
-        // Either switch off: no music at all.
-    } else if (m_screen == Screen::Main || m_screen == Screen::Worlds || m_screen == Screen::Levels ||
-               m_screen == Screen::Credits || m_screen == Screen::Achievements) {
-        // The menu's track goes on under credits and the dashboard, which play none.
-        wanted = "menu";
-    } else if (m_loaded) {
-        // Game.angelscript starts playGameMusic(isBossFight); the port's boss
-        // levels are the ones that built a beholder. And chapter 3's ghost starts
-        // playGameMusic(bossFight = true) from its init block (#320-324), once the
-        // black knight's death has added it (R4), and its DEATH arm stops that
-        // sample (#1224-1243) and starts nothing: the level is silent after it.
-        const Ghost::State& ghost = m_level.ghost;
-        if (ghost.present && ghost.initialised) {
-            wanted = ghost.gone || ghost.phase == Ghost::Phase::Death ? "" : "boss";
-        } else {
-            wanted = m_level.boss.beholder.has_value() ? "boss" : "game";
-        }
+    // NOT what is on screen: what the original's calls have left (m_music), and
+    // heard only with both switches on - either off is pauseMusic, and the one
+    // that comes back on resumes currentTrack (switchedSound, switchedMusic).
+    if (!m_soundOn || !m_musicOn || m_music.stopped) return std::string();
+    return m_music.current;
+}
+
+void MagicPortalsLayer::noteMusic() {
+    const std::string wanted = WantedTrack();
+    if (wanted == m_musicNoted) return;
+    m_musicNoted = wanted;
+    SUPERSONIC_LOG_INFO("Magic Portals") << "music: " << (wanted.empty() ? std::string("none") : wanted)
+                                         << " from tick " << m_ticks << std::endl;
+}
+
+void MagicPortalsLayer::musicPlay(const char* track) {
+    // AudioManager::playMusic (bytes 195443..195631): currentTrack first (#3-8),
+    // then - only with the music switch on (#10-18) - LoadMusic, LoopSample,
+    // SetSampleVolume and PlaySample. The one MediaPlayer keeps a track it is
+    // already playing and stops any other first (MediaStreamManager.java:90-104),
+    // which is updateMusic leaving the voice alone while WantedTrack holds. With a
+    // switch off nothing is heard, and the switch's resume plays this.
+    m_music.current = track;
+    m_music.stopped = false;
+    noteMusic();
+}
+
+void MagicPortalsLayer::musicStop() {
+    // pauseMusic (186631..186849): StopSample(currentTrack). And a boss's
+    // StopSample(getBossMusicName()), guarded by SampleExists. Both reach
+    // MediaStreamManager.stop(), which stops the player whatever it plays
+    // (MediaStreamListener.java:55-56, MediaStreamManager.java:64-68).
+    // currentTrack is left as it was, for a resume.
+    m_music.stopped = true;
+    noteMusic();
+}
+
+void MagicPortalsLayer::musicResume() {
+    // resumeMusic (186849..187005): LoadMusic, LoopSample and PlaySample of
+    // currentTrack, whatever had stopped it - a no_music level, a boss's death.
+    m_music.stopped = false;
+    noteMusic();
+}
+
+void MagicPortalsLayer::switchedSound() {
+    // GlobalSoundSwitch::manageSoundSwitch -> GlobalVolumeManager::saveVolume
+    // (28964..29196): the volume written (#3-15), then #33-47
+    // turnGlobalVolumeOff (pauseMusic) or turnGlobalVolumeOn, which resumes only
+    // while the music switch is on.
+    saveSwitches();
+    if (!m_soundOn) {
+        musicStop();
+    } else if (m_musicOn) {
+        musicResume();
     }
-    return wanted;
+}
+
+void MagicPortalsLayer::switchedMusic() {
+    // MusicSwitchManager::saveMusicState (29772..30017): the state written
+    // (#3-18), then #36-52 the listener's turnMusicOff (pauseMusic) or
+    // turnMusicOn (resumeMusic).
+    saveSwitches();
+    if (m_musicOn) {
+        musicResume();
+    } else {
+        musicStop();
+    }
+}
+
+void MagicPortalsLayer::saveSwitches() {
+    m_switches.SetSound(m_soundOn);
+    m_switches.SetMusic(m_musicOn);
+    if (std::string why; !m_switches.Save(why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "switches not saved: " << why << std::endl;
+    }
+}
+
+void MagicPortalsLayer::startLevelMusic(int index) {
+    // Game::preLoop (112536..114414) #485-509: isBossFight = m_levelIndex == 31
+    // (#485-491, CMPIu v31 the constant), then playGameMusic(isBossFight) unless
+    // noMusic, which calls turnMusicOff instead - pauseMusic: the track that was
+    // playing stops and stays currentTrack. 31 is the last level of a world of 32,
+    // and every world in chapters.json has 32, so the chapters table says it: the
+    // world's last level. Boss or not, 3-32 and 4-32 also set no_music, and so
+    // open silent until their boss starts the track.
+    const Tscn::Node* properties = FirstOfRole(m_data, Roles::kLevelProperties);
+    if (properties != nullptr && properties->Meta(kNoMusicFlag) != nullptr) {
+        musicStop();
+        return;
+    }
+    musicPlay(m_chapters.Next(index) < 0 ? kBossTrack : kGameTrack);
+}
+
+void MagicPortalsLayer::latchMusic() {
+    if (!m_loaded) return;
+    MusicWatch now;
+    // Chapter 3's ghost: playGameMusic(bossFight = true) from its init block
+    // (ETHCallback_ghost #320-324), once; and its DEATH arm's StopSample
+    // (#1210-1243, `CMPIu v26, v4`: the constant 4, DEATH), on every update it
+    // plays until the ghost is gone.
+    const Ghost::State& ghost = m_level.ghost;
+    now.ghostInitialised = ghost.present && ghost.initialised;
+    if (now.ghostInitialised && !m_musicWatch.ghostInitialised) musicPlay(kBossTrack);
+    if (ghost.present && ghost.phase == Ghost::Phase::Death && !ghost.gone) musicStop();
+    // Chapter 1's beholder: BEHOLDER_STATE_DEAD's StopSample (ETHCallback_beholder
+    // #1139-1159), on every update while it is dead and not yet gone. The
+    // beholder is never cleared from the level (its optional stays set), so this
+    // is read off its phase.
+    if (m_level.boss.beholder.has_value() && m_level.boss.beholder->phase == Boss::Phase::Dead &&
+        !m_level.boss.beholder->gone) {
+        musicStop();
+    }
+    // 2-32's dragon: the take-off's StopSample (ETHCallback_dragon #409-431, inside
+    // `if (!tookOff)`), once.
+    now.dragonTookOff = m_level.dragon.present && m_level.dragon.tookOff;
+    if (now.dragonTookOff && !m_musicWatch.dragonTookOff) musicStop();
+    // 4-32's dark dragon: playGameMusic(true) as its spawn adds it
+    // (ETHCallback_dark_dragon_spawn #103-118), and its death's StopSample
+    // (ETHCallback_dark_dragon #1958-2012), once, on the way into DYING
+    // (`hp <= 0 && state != 4`).
+    const DarkDragon::State& dark = m_level.darkDragon;
+    now.darkDragonSummoned = dark.present && dark.summoned;
+    now.darkDragonDying = now.darkDragonSummoned && dark.phase == DarkDragon::Phase::Dying;
+    if (now.darkDragonSummoned && !m_musicWatch.darkDragonSummoned) musicPlay(kBossTrack);
+    if (now.darkDragonDying && !m_musicWatch.darkDragonDying) musicStop();
+    m_musicWatch = now;
 }
 
 void MagicPortalsLayer::updateMusic(entt::registry& registry) {
@@ -8539,9 +9246,9 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
     // The bodies' boxes over the art, or not: the picture only.
     if (Input::TickWasPressed(kBoxes)) m_showBoxes = !m_showBoxes;
     if (!overLevel) {
-        // Out of a level that is not being played - one the port refused, or a
-        // chapter's end, which otherwise has nowhere to go - to its grid. A level
-        // being played takes the back key as the pause (readInput).
+        // Out of a level that is not being played - one the port refused, which
+        // otherwise has nowhere to go - to its grid. A level being played takes the
+        // back key as the pause (readInput).
         if (m_current >= 0 && !m_loaded && Input::TickWasPressed(kBack)) {
             m_menuWorld = m_chapters.levels[static_cast<std::size_t>(m_current)].world;
             openMenu(registry, Screen::Levels);
@@ -8549,9 +9256,15 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             return;
         }
         // Skip and retry first, so the tick that asks plays the level it lands on.
+        // A skip from a chapter's last level is goToNextLevel's chapter select,
+        // whose first tick is the next.
         if (m_current >= 0 && Input::TickWasPressed(kSkip)) {
             goTo(registry, m_chapters.Next(m_current));
-        } else if (m_current >= 0 && !m_chapterComplete && Input::TickWasPressed(kRetry)) {
+            if (menuStateUp()) {
+                updateHud(registry);
+                return;
+            }
+        } else if (m_current >= 0 && Input::TickWasPressed(kRetry)) {
             loadLevel(registry, m_current);
         }
         // A level that raised its tutorial as it loaded stops HERE, as one loaded
@@ -8572,6 +9285,19 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             m_level.darkDragon.burned = true;
             SUPERSONIC_LOG_INFO("Magic Portals") << "DEV burn of the dark dragon on tick " << m_ticks << std::endl;
         }
+        // DEV ONLY: the player put where a capture asked, for this tick's AfterStep
+        // to judge - a door opened for the camera, never a route.
+        for (const auto& [tick, atPx] : m_devPlaces) {
+            if (tick != m_ticks || m_level.player == entt::null || !registry.valid(m_level.player)) continue;
+            auto& transform = registry.get<Supersonic::TransformComponent>(m_level.player);
+            const glm::vec3 world = Units::ToWorld(atPx.x, atPx.y);
+            transform.position = glm::vec3(world.x, world.y, transform.position.z);
+            if (auto* rigid = registry.try_get<Supersonic::RigidBodyComponent>(m_level.player)) {
+                rigid->velocity = glm::vec3(0.0f);
+            }
+            SUPERSONIC_LOG_INFO("Magic Portals") << "DEV place of the player at " << atPx.x << "," << atPx.y
+                                                 << " on tick " << m_ticks << std::endl;
+        }
         // The app has just stepped physics. The pairs it has just brought
         // together first, read before anything after the step moves or breaks a
         // body - Box2D calls a begin-contact callback inside the step itself.
@@ -8582,6 +9308,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
         latchSimSounds();
+        latchMusic();
         latchSimEffects(registry, fixedDelta);
         latchSimQuakes();
         // ...and the moment the exit reports, the beat before the medal; the
@@ -8595,7 +9322,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             // as the original's does, and the score comes when the beat is up.
             m_finishClockMs += dtMs;
             m_padEndByte = LevelEnd::PadDecayByte(m_levelEndRules, m_padEndByte, 1);
-            if (m_screen == Screen::None && m_finishClockMs >= m_levelEndRules.wonDelayMs) clearLevel(registry);
+            if (m_screen == Screen::None && m_finishClockMs >= m_wonDelayMs) clearLevel(registry);
         } else if (m_dying) {
             // Killed, and the lost screen not up yet: the level goes on running
             // behind it exactly as it does behind the door's effect.
@@ -8666,6 +9393,10 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             SUPERSONIC_LOG_INFO("Magic Portals") << "player died on tick " << m_ticks << ", pads at "
                                                  << m_padEndByte << std::endl;
         }
+        // AND THE WIN CUTSCENES' CALLBACKS, from the tick the level ends: static
+        // entities' callbacks, run after the game state that decided it, so from
+        // the door's own tick (cutscenes.json).
+        if (m_finishing || m_dying) stepCutscenes(registry, dtMs);
     }
     if (m_loaded) {
         // The level is a tick older. BEFORE the input, because the pads slide
@@ -8720,6 +9451,9 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     // the camera the sim takes from outside.
     m_level.dragon.viewWidthPx = ViewPx().x;
     Game::BeforeStep(m_data, registry, m_level, direction, fixedDelta);
+    // The dragon's callback runs HERE, before the step, and the other bosses'
+    // after it (AfterStep): its take-off's stop is read on its own tick.
+    latchMusic();
     if (m_level.dragon.present) {
         // level31a is the ONE level in all 128 that sets auto_camera, and it
         // sets it to dragon.ent. AutoCameraController::update is a hard lock
@@ -8732,9 +9466,14 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
             Camera::Clamp(glm::dvec2(m_level.dragon.atPx.x + view.x * 0.5, view.y * 0.5), view, m_boundsPx);
         m_follow.holdLeftS = 0.0;
     } else {
-        const glm::dvec2 playerPx =
-            Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
-        m_follow.Tick(m_cameraRules, playerPx, ViewPx(), m_boundsPx, fixedDelta);
+        glm::dvec2 targetPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
+        // 4-19's landing sets the character on the door every frame (cutscenes.json
+        // rocket_landing #335-341), and the camera follows the character. The port
+        // gives the camera that point and leaves the hidden body where it went in:
+        // a body teleported through the floor each tick would push what it met.
+        if (m_landing.running && m_doorSprite >= 0) targetPx = doorPointPx();
+        m_cameraTargetPx = targetPx;
+        m_follow.Tick(m_cameraRules, targetPx, ViewPx(), m_boundsPx, fixedDelta);
     }
     placeCamera(registry);
     layOutControls();
@@ -9094,11 +9833,14 @@ bool MagicPortalsLayer::popupTick(entt::registry& registry, float fixedDelta) {
     m_aspect = viewportAspect(registry);
     layOutControls();
 
-    // Popup::hasReceivedCloseCommand: a touch DOWN anywhere, the close button
-    // included, or the back key. The touch is spent on the close and reaches
-    // nothing under the popup.
+    // Popup::hasReceivedCloseCommand: for a HelpPopup - every class a level raises
+    // - a touch DOWN anywhere, the close button included; for any popup a press of
+    // the close button, or the back key. The touch is spent on the popup and
+    // reaches nothing under it.
     const Touch touch = touchThisTick(registry);
-    if ((touch.pressed && touch.over) || Input::TickWasPressed(kBack)) ClosePopup();
+    const bool touched = TouchClosesPopup(m_popupRules, *m_popup.cls, m_popup.state, ViewPx(), touch.pressed,
+                                          touch.released, touch.over, touch.atView, m_popup.downOnClose);
+    if (touched || Input::TickWasPressed(kBack)) ClosePopup();
 
     // Popup::update: once every sprite and the button are dismissed, the last layer
     // is current again and game time resumes - on this tick.
@@ -9145,6 +9887,8 @@ void MagicPortalsLayer::ScheduleDevHold(int from, int to, float direction) {
 }
 
 void MagicPortalsLayer::ScheduleDevBurn(int tick) { m_devBurns.push_back(tick); }
+
+void MagicPortalsLayer::ScheduleDevPlace(int tick, const glm::dvec2& atPx) { m_devPlaces.emplace_back(tick, atPx); }
 
 // ---- how a level ends ------------------------------------------------------------
 
@@ -9294,6 +10038,7 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
         } else {
             m_pause.musicAddedMs = dismissing ? m_pause.musicDismissedMs + dismissMs : now;
         }
+        switchedSound();
         latch("menu_button");
         return true;
     }
@@ -9304,6 +10049,7 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
                              m_pause.clockMs - switches.musicDismissedMs < m_pauseRules.layer.buttonDismissMs);
         if (!shown) return false;
         m_musicOn = !m_musicOn;
+        switchedMusic();
         latch("menu_button");
         return true;
     }

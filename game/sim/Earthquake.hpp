@@ -77,6 +77,9 @@ enum class Call : std::size_t {
     PlayerImpact,
     StoneImpact,
     MinionImpact,
+    // 4-01's rocket launch (D11 row 30; the program's P2, planning step 123): a static
+    // callback's startEarthquake(3, 0), re-armed past 100 ms for the launch's first 6 s.
+    RocketLaunch,
     Count
 };
 

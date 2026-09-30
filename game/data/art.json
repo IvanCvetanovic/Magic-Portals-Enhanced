@@ -835,9 +835,10 @@
       "colour": [0.0, 0.0, 0.0],
       "emissive": [0.0, 0.0, 0.0]
     },
-    "_dragon_knight_not_drawn": [
-      "dragon_knight.ent (the same sheet) is spawned by dragon_knight_spawn only after 2-32 is won (step 34),",
-      "and never shows. Its row, for the record (D2_check.md): ETHCallback_dragon_knight ins 507-581 take",
+    "_dragon_knight": [
+      "dragon_knight.ent (the same sheet) is spawned by dragon_knight_spawn only once 2-32 is finished, and",
+      "is drawn since planning step 123 by the layer's syncKnight on this cut, at its own PivotAdjust (0, 0),",
+      "black, with its aura (cutscenes.json dragon_knight). Its row (D2_check.md): ETHCallback_dragon_knight ins 507-581 take",
       "findCharacterDirection(getAngle(GetLinearVelocity()), true) BEFORE this update's SetLinearVelocity:",
       "the previous update's velocity x < 0 is row 1, anything else row 2"
     ]
@@ -989,5 +990,108 @@
     "_spin_deg_per_s": "ETHCallback_shock_area #17-25, AddToAngle(unitsPerSecond(20)): degrees (GLES2Sprite.cpp:268-270), counter-clockwise on the screen, from angle 0; unitsPerSecond's step (bytes 8045..8162, its divisor 1000.0 exactly, D6_check section 4) is capped at motions.json's frame_cap_ms and is 0 under a pause, so the turn stands still there",
     "jitter": {"from": 0.993, "span": 0.014},
     "_jitter": "ETHCallback_shock_area #53-66: SetScale(base x (0.993 + randF(0.014))), randF(n) uniform on [0, n] inclusive, drawn every frame, paused or not. The port draws it from its effects' stream (m_effectRandom, 00_order K8): the placement stream is untouched. +-0.2 to +-0.74 u at the rings' radii of 28 to 105"
+  },
+
+  "fire_agent": {
+    "_source": [
+      "A PLACED entity whose picture its script sets: ETHCallback_fire_agent (MiscCallbacks.angelscript,",
+      "bytecode bytes 350254..351485, the remake's out/parity/asbc/all_functions.txt, md5",
+      "48fe65ce8baea16b94ed84d8d7be84b0) #1-7 is STR 'fire_agent.png' and ETHEntity::SetSprite, the first thing",
+      "it does on EVERY update, whatever <Sprite> the level saved for the instance. A callback is named for the",
+      "entity less its .ent (ETHASUtil.cpp:63-67), so both spellings run it: 22 placements on 20 levels, 20 of",
+      "them saved with anti_portal_agent.png (the red face of the element that kills shots) and two, level11c's",
+      "fire_agent_2236 and level27c's fire_agent_ent_1919, with fire_agent.png already. SetSprite",
+      "(ETHSpriteEntity.cpp:177-200) finds the file in the entity directory through the density tiers, as every",
+      "image is found, and cuts it by the entity's SpriteCut, 1 x 1: fire_agent.png and anti_portal_agent.png are",
+      "both 32 x 32 (hd 64 x 64), so the picture changes and its size does not. fire_agent.ent is static=1, so the",
+      "callback runs on the frames its bucket is drawn, and a static callback's change is drawn in the same frame",
+      "(00_order 8.0 rule 6): the saved face is never seen. The port swaps the file when it builds the level's",
+      "pictures, and refuses the swap, keeping the saved picture and saying so, for a file of other units.",
+      "The library's 2-20_h6.3 shows the orange ball where the port's f420 showed the red face (audit",
+      "2026-09-29, check_assets.md item 2)."
+    ],
+    "_not_built": [
+      "The same callback's #282-300, bounce(this, vector2(1.02, 1.02), vector2(0.98, 0.98), 300): the agent's",
+      "sprite pulses 1.02 -> 0.98 -> 1.02, 300 ms a leg, on bounce's blinkElapsedTime. Found here, not built:",
+      "not this step's (planning step 120, LEFT FOR THE OWNER)."
+    ],
+    "entity": "fire_agent",
+    "sprite": "fire_agent.png"
+  },
+
+  "key_colour": {
+    "_source": [
+      "setKeyColor (ETHCallback_key.angelscript, bytecode bytes 437964..438490) repaints a key, a keyhole and a",
+      "locked door by its string datum 'color': #1-24 'blue' -> #25-48 SetSprite(GetEntityName() + '_blue.png')",
+      "and #49-60 SetColor(V3_ONE); #62-86 'red' -> #87-110 SetSprite(GetEntityName() + '_red.png') and #111-122",
+      "SetColor(V3_ONE); any other colour keeps its picture; #123-135 SetUInt('painted', 1) either way. Its three",
+      "callers each run it before the entity is first drawn: ETHCallback_key #117 (the block #1-12 enters while it",
+      "has no 'speed', its first update),",
+      "ETHCallback_keyhole #1-32 (while it has no 'elapsedTime') and ETHCallback_door_locked #1-19 (while it is not",
+      "'painted'). GetEntityName is the name as the level spells it (ETHEntity.cpp:309-312), so a placement spelled",
+      "key.ent would ask for key.ent_blue.png, which does not exist; none of the 24 blue or red pieces is spelled",
+      "so (test_mp_sprites pins it). key_blue.png, key_red.png, keyhole_blue.png, keyhole_red.png,",
+      "door_locked_blue.png and door_locked_red.png all ship in entities/, each with an hd twin of twice its",
+      "texels, the same size as the yellow file: 3-13, 3-14, 3-17, 3-21, 3-23 and 3-30 hold a yellow set and a",
+      "blue one, 4-01 a red keyhole and door, 4-19 a red key, 4-20 a red set. SetColor writes m_v4Color's rgb and",
+      "keeps its alpha (ETHEntity.cpp:493-498); no placement carries an eth_color, so white changes nothing drawn",
+      "today and is written as the script writes it. The sim already pairs them by this same datum",
+      "(Keys.cpp:141). The library's 3-13_h6.3 shows the blue keyhole, key and door where the port drew gold."
+    ],
+    "entities": ["key", "keyhole", "door_locked"],
+    "datum": "color",
+    "sprites": { "blue": "_blue.png", "red": "_red.png" },
+    "colour": [1.0, 1.0, 1.0]
+  },
+
+  "non_teleportable": {
+    "_source": [
+      "crateCallback (ETHCallback_crate.angelscript, bytecode bytes 421145..421695) #1-7 calls",
+      "manageNonTeleportable(thisEntity, zeroEmissive) (MiscCallbacks.angelscript, bytes 343765..344140) before",
+      "anything else. Its callers pass zeroEmissive as a constant (00_order 8.0 rule 1: SetV1 v1, v0 is 0 and",
+      "SetV1 v1, v1 is 1): ETHCallback_crate, _crate_small and _wood_piece_small pass 0, ETHCallback_crate_no_emissive",
+      "and _crate_small_no_emissive pass 1 (bytes 423812..424324). crate_low_emissive has no callback.",
+      "manageNonTeleportable: #1-10 unless isTeleportable, #11-21 unless isBurned (the uint 'burned', bytes",
+      "419817..419918), then #23-49 with zeroEmissive blinkEmissive(this, vector3(0.5, 0, 0), V3_ZERO, 600) and",
+      "#50-73 without it blinkColor(this, vector3(1, 0.3, 0.3), V3_ONE, 600). A call pushes its last argument first",
+      "(00_order 8.0 rule 3): #26 and #51 push the stride 600, then colorB (V3_ZERO / V3_ONE), then colorA, and",
+      "a vector3's own constructor takes z first, so #35-37 (0, 0, 0.5) is x 0.5 and #60-62 (0.3, 0.3, 1) is",
+      "(1, 0.3, 0.3): red both ways. isTeleportable (bytes 343470..343661) is GetUInt('teleportable') != 0, and",
+      "its second test, 'nonTeleportable', answers 0 too, so a crate with the datum absent is not teleportable;",
+      "Portals.cpp:871-873 reads the same datum the same way. blinkColor and blinkEmissive",
+      "(utilEntityEffect.angelscript, bytes 326140..327057) are one triangle: the entity's uint",
+      "'blinkElapsedTime' from 0, gaining the frame's time, and colorA + (colorB - colorA) x bias, bias the",
+      "remainder of a 600 ms leg over 600, turned back on odd legs (art.json antiportal has the listing). So",
+      "the colour runs (1, 0.3, 0.3) -> white -> (1, 0.3, 0.3) over 1200 ms, and the emissive (0.5, 0, 0) ->",
+      "0 -> (0.5, 0, 0). SetColor writes m_v4Color's rgb (ETHEntity.cpp:493-498), SetEmissiveColor the",
+      "emissive (:482-485), and the sprite is drawn at min(1, ambient + emissive) x m_v4Color per channel",
+      "(ETHRenderEntity.cpp:113-117). Once burned the blink stops: manageBurnable (bytes 420664..421145) then",
+      "writes the colour, not the emissive, which keeps the blink's last value.",
+      "CENSUS over the 128 levels: 23 crateCallback placements with the datum 0 or absent, on 15 levels (1-30,",
+      "1-31, 2-01, 2-06, 2-08, 2-09, 2-10, 2-11, 2-20, 2-21, 2-22, 2-23, 2-27, 3-31, 4-12): 15 blink their",
+      "emissive and 8 their colour. The audit counted 22 by the datum 0; the 23rd is level7a's",
+      "crate_small_no_emissive_826, whose level spells the datum 'telepotable', so 'teleportable' is absent and",
+      "GetUInt reads 0. The library's 2-20_h6.3 shows the crates red-brown where the port drew them brown."
+    ],
+    "_clock": "The blink's clock is the level's age, the one art.json antiportal's runs on (a pause holds it), held from the tick the crate is burned. 19 of the 23 crates are dynamic, so their callback runs from the level's first frame; four are static=1, whose callback the original runs only while their bucket is drawn, and the port runs their blink from the first tick all the same (planning step 120, deviation 2); the port's clock is not floored to whole milliseconds a frame, which is the same recorded divergence as the antiportal's (planning step 72).",
+    "_not_built": [
+      "crateCallback's own blink after it, #38-121: a TELEPORTABLE crate that is not burned, when its callback",
+      "passes zeroEmissive or it carries the uint 'blink', blinks its emissive too: from (0.2, 0.2, 0.2) to 0",
+      "over 600 ms (#71-93), or with 'blink' from (1 - GetAmbientLight()) to 0 over 200 ms (#96-121). And",
+      "manageBurnable's fade of a burning crate: SetColor(bias) and SetAlpha(bias), bias 1 - burnTime/1000,",
+      "then DeleteEntity (#41-117); the port takes a burnt crate away whole. Found here, not built: not this",
+      "step's (planning step 120, LEFT FOR THE OWNER)."
+    ],
+    "callbacks": [
+      { "entity": "crate", "zero_emissive": false },
+      { "entity": "crate_small", "zero_emissive": false },
+      { "entity": "wood_piece_small", "zero_emissive": false },
+      { "entity": "crate_no_emissive", "zero_emissive": true },
+      { "entity": "crate_small_no_emissive", "zero_emissive": true }
+    ],
+    "datum": "teleportable",
+    "stride_ms": 600.0,
+    "colour": { "from": [1.0, 0.3, 0.3], "to": [1.0, 1.0, 1.0] },
+    "emissive": { "from": [0.5, 0.0, 0.0], "to": [0.0, 0.0, 0.0] }
   }
 }

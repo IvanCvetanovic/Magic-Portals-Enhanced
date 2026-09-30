@@ -46,7 +46,7 @@
 // was. The sight gate is unaffected: it is still a segment to the LIVE player.
 //
 // NOT BUILT, and recorded in data/dragon.json: the sounds, the claw's easing
-// curves (nothing reads the claw's position), and the knight - which is a
+// curves (nothing reads the claw's position). The knight is sim/Cutscene's - a
 // cutscene that runs only after the level is won.
 
 #include "sim/Follower.hpp"

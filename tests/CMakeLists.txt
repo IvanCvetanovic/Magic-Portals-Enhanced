@@ -45,10 +45,12 @@ add_mp_test(test_mp_play SKIPS_WITH_77)
 # levels and the remake's role table, so it skips with 77 when they are absent.
 add_mp_test(test_mp_turrets SKIPS_WITH_77)
 
-# The medals, kept between runs. Pure sim: a temporary directory and no window.
-# The ONE Magic Portals suite that touches a filesystem, and it touches only its
-# own scratch directory - the layer suites all build bare, which is what
-# Paths::saveDir being empty by default buys.
+# The medals and the sound and music switches, kept between runs. Pure sim: a
+# temporary directory and no window. The Magic Portals suite that touches a
+# filesystem, and it touches only its own scratch directory - the layer suites
+# build bare, which is what Paths::saveDir being empty by default buys. One layer
+# case gives a save directory, its own (test_mp_layer's
+# TheSwitchesAreKeptBetweenRuns, planning step 124).
 add_mp_test(test_mp_scores)
 # Every converted level started as the port starts one: the remaster's inventory.
 add_mp_test(test_mp_start SKIPS_WITH_77)
@@ -157,6 +159,13 @@ add_mp_test(test_mp_hud)
 # level_end and sim/LevelEnd's arithmetic, pinned against the remake's ui2 spec.
 # Pure, reading only the port's own committed data, so it never skips.
 add_mp_test(test_mp_levelend)
+
+# The win cutscenes and the delay before the medal (planning step 123):
+# cutscenes.json and sim/Cutscene - 4-01's launch, 4-19's landing, 2-32's knight
+# and end_delay. The arithmetic reads only the port's own committed data; the
+# census and the knight read the converted levels and are skipped without them,
+# never with 77.
+add_mp_test(test_mp_cutscene)
 
 # The tutorial and help popups: ui.json's popups and sim/Popup's arithmetic - the
 # framework, every class's waypoint loops, the close button's bounce and blink -

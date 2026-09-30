@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <filesystem>
@@ -15,6 +16,10 @@
 #include "core/Components.hpp"
 #include "core/EngineLayer.hpp"
 
+namespace Supersonic {
+class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to it (emitPopup)
+}
+
 #include <random>
 
 #include "core/AudioEngine.hpp"
@@ -24,6 +29,7 @@
 #include "sim/Camera.hpp"
 #include "sim/Chapters.hpp"
 #include "sim/Credits.hpp"
+#include "sim/Cutscene.hpp"
 #include "sim/Dashboard.hpp"
 #include "sim/Earthquake.hpp"
 #include "sim/Effects.hpp"
@@ -46,6 +52,7 @@
 #include "sim/Sky.hpp"
 #include "sim/Sounds.hpp"
 #include "sim/Sprites.hpp"
+#include "sim/Switches.hpp"
 #include "sim/Tiers.hpp"
 
 namespace MagicPortals {
@@ -166,7 +173,8 @@ public:
         // ctest working directory and reading each other's - order-dependent
         // failure that reads as a flake.
         //
-        // Only the shipped binary passes one, from UserDataDirectory.
+        // Only the shipped binary passes one, from UserDataDirectory. The sound
+        // and music switches are kept there too (audio.json, sim/Switches.hpp).
         std::string saveDir;
     };
 
@@ -273,8 +281,6 @@ public:
     // The entry in chapters.json being shown, or null when nothing could start.
     const Chapters::Level* Current() const;
 
-    bool ChapterComplete() const { return m_chapterComplete; }
-
     // The menu, when one is up.
     Screen MenuScreen() const { return m_screen; }
     const std::vector<MenuButton>& MenuButtons() const { return m_menuButtons; }
@@ -314,6 +320,9 @@ public:
     // The level's camera-pinned sky (sim/Sky.hpp), as the level's art built it:
     // not running on a space level, or where the art was not read.
     const Sky::Controller& SkyController() const { return m_sky; }
+    // And the space levels' (sim/Sky.hpp SpaceSky): not running off them.
+    const Sky::Space& SpaceController() const { return m_space; }
+    const Sky::SpaceRules& SpaceSkyRules() const { return m_spaceRules; }
 
     // THE EARTHQUAKE (sim/Earthquake.hpp, earthquake.json): the original's one
     // camera shake. The generator as the last tick left it, and the move it gave
@@ -380,6 +389,7 @@ public:
         int zIndex = 0;     // its node's z_index, which orders the slots
         double lookZ = 0.0; // its node's eth_z, unrounded
         float z = 0.0f;     // its slot's z, where its quad is drawn
+        entt::entity quad{entt::null}; // that quad; null once the picture is gone
     };
     std::vector<PictureReport> PictureReports() const;
 
@@ -607,6 +617,10 @@ public:
             LitTorch,
             UnlitTorch,
             LightWall,
+            // 2-32's knight, the dragon_knight.ent its spawn adds once the level is
+            // finished, where its PICTURE is drawn this frame (m_knightQuad), as a
+            // minion's: its aura (planning step 123).
+            Knight,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -822,8 +836,9 @@ public:
         double lookZ = 0.0;        // its depth in the level's units
     };
     GhostReport GhostDrawing() const;
-    // Which of sounds.json's tracks the screen and the level ask for now, whether or
-    // not a device plays it: the menu's, the level's, the boss's, or none.
+    // Which of sounds.json's tracks the original would be playing now, whether or
+    // not a device plays it: AudioManager.currentTrack, unless its one player has
+    // been stopped since that track was asked for or a switch is off. "" for none.
     std::string WantedTrack() const;
 
     // 2-32's dragon and its claw (dragon.json), for the suites: as the last tick
@@ -868,6 +883,39 @@ public:
         bool glowAdditive = false;
     };
     DoorReport DoorPicture() const;
+
+    // THE WIN CUTSCENES (sim/Cutscene.hpp, cutscenes.json; planning step 123), as the
+    // last tick left them: the delay before the medal, 4-01's rocket and bridge,
+    // 4-19's landing - the door, the key, the eclipse, the spiral and the camera's
+    // target - and 2-32's knight.
+    struct CutsceneReport {
+        double wonDelayMs = 0.0;       // the level's end_delay, or level_end's 1400
+        bool launchPlaced = false;     // the level places rocket_launch
+        bool landingPlaced = false;    // and rocket_landing
+        Cutscene::Launch launch;
+        Cutscene::Landing landing;
+        int launchStartedTick = -1;    // the layer's tick its first update ran on
+        int landingStartedTick = -1;
+        int quakes = 0;                // rocket_launch's startEarthquake calls
+        glm::dvec2 doorAtPx{0.0};      // the door's entity point as drawn: node, bob and cutscene
+        glm::dvec2 doorCentrePx{0.0};  // and its picture's centre
+        entt::entity bridgeQuad{entt::null};
+        glm::dvec2 bridgeCentrePx{0.0};
+        glm::dvec2 bridgeRestPx{0.0};  // where the level's body holds it
+        double keyScale = 1.0;         // the landing's key: its size and alpha
+        glm::dvec2 eclipseAtPx{0.0};   // its entity point as drawn
+        glm::vec4 spiralColour{1.0f};  // the spiral's drawn colour
+        glm::dvec2 cameraTargetPx{0.0}; // what the follow was given this tick
+        Cutscene::Knight knight;
+        glm::dvec2 knightAtPx{0.0};    // its entity point
+        entt::entity knightQuad{entt::null};
+        glm::dvec2 knightCentrePx{0.0};
+        bool knightAuraQueued = false;
+        int knightSpawnedTick = -1;
+        int knightEnteredTick = -1;
+        glm::dvec2 knightEnteredAtPx{0.0};
+    };
+    CutsceneReport CutscenePicture(entt::registry& registry) const;
 
     // The ghost of the wall a lit torch takes away (art.json `light_wall_ghost`,
     // sim/Torch): dashed_door.ent, added at the wall's own point and angle on the
@@ -1047,6 +1095,16 @@ public:
     const Chapters::Table& ChapterTable() const { return m_chapters; }
     const Selector::Board& SelectorBoard() const { return m_selectorBoard; }
     const Selector::State& SelectorState() const { return m_selectorState; }
+    // A popup over a menu state: GameFinishedPopup, which chapter select raises
+    // after the last level of the last chapter (planning step 119). Null when none
+    // is up. It is the current UI layer, so the PageManager under it is not updated
+    // (UILayerManager::update): its title and arrows neither enter nor bounce, and
+    // take no touch, until the popup is gone; SelectorLayerMs is that layer's clock.
+    const Popup::Class* MenuPopupClass() const { return m_menuPopup.open ? m_menuPopup.cls : nullptr; }
+    const Popup::Open* MenuPopup() const { return m_menuPopup.open ? &m_menuPopup.state : nullptr; }
+    double SelectorLayerMs() const {
+        return m_menuPopup.open ? 0.0 : std::max(0.0, m_menuClock.ms - m_selectorLayerFromMs);
+    }
     // The credits' strip as the last tick left it.
     const Credits::Scroll& CreditsScroll() const { return m_credits; }
     // Whether the credits' back button is held down inside: the press tint.
@@ -1093,7 +1151,7 @@ public:
     // The two switches, and the music switch's clock on this pause.
     Pause::Switches PauseSwitches() const;
     // Whether the game makes a sound at all, and plays its music: the pause's
-    // two switches, which hold for the session.
+    // two switches, kept between runs where Paths::saveDir is given.
     bool SoundOn() const { return m_soundOn; }
     bool MusicOn() const { return m_musicOn; }
     // Press one of the pause's buttons, as a tap on it does. False when it led
@@ -1167,6 +1225,12 @@ public:
     // and its white death are captures the visuals plan asks for. Ignored on a
     // tick the dragon is not there to burn.
     void ScheduleDevBurn(int tick);
+    // DEV ONLY: the player's body put at a point of the level, its velocity zeroed,
+    // on the layer's tick `tick`, after that tick's physics step and before what
+    // judges where the step left it - so a capture can open a level's door and film
+    // what comes after (planning step 123's cutscenes). A capture aid, never a route:
+    // a win it makes is not a win a player made. Ignored with no level loaded.
+    void ScheduleDevPlace(int tick, const glm::dvec2& atPx);
     // The layer's own tick count, which every DEV schedule above is written in: 1 on
     // the first OnFixedUpdate.
     int LayerTicks() const { return m_ticks; }
@@ -1179,6 +1243,9 @@ public:
     const LevelEnd::Rules& LevelEndRules() const { return m_levelEndRules; }
     // Whether the door was reached, or the player killed, on this level.
     bool Finishing() const { return m_finishing; }
+    // The door to the medal on this level: its end_delay's time where it places one
+    // (Cutscene::EndDelayMs), level_end's won_delay_ms otherwise.
+    double WonDelayMs() const { return m_wonDelayMs; }
     bool Dying() const { return m_dying; }
     // Game time since the door or the death: what the beat is counted in.
     double EndedMs() const { return m_dying ? m_dyingClockMs : m_finishClockMs; }
@@ -1210,6 +1277,10 @@ private:
         entt::entity quad{entt::null};
         glm::dvec3 emissive{0.0}; // the thrown .ent's, from launchers.json
     };
+
+    // SpaceSky's four (sim/Sky.hpp): the space sky, the spiral, the planet and the
+    // eclipse.
+    enum class SpaceRole { None, Sky, Spiral, Planet, Eclipse };
 
     // One of the level's sprites as a textured quad, and what it follows: the
     // crystal, static portal or no-portal zone it pictures, or else its node's
@@ -1258,6 +1329,8 @@ private:
         int zone{-1};         // in portals.zones
         int sky{-1};          // in m_sky.skies: pinned to the camera, not where the level put it
         bool satellite{false}; // m_sky's satellite, pinned the same way
+        // Which of SpaceSky's four it is, each moved from the camera every frame.
+        SpaceRole space{SpaceRole::None};
         int motion{-1};       // in m_motions: a crystal or key its script bobs
         bool antiportal{false}; // ETHCallback_antiportal blinks and turns it (art.json)
         int placed{-1};       // in m_placed: a picture its own callback sways, fades or turns
@@ -1277,6 +1350,14 @@ private:
         // Game::loop bobs it on a `no_gravity` level: the exit door, the black
         // behind it, and the glow added behind that (m_doorBob, art.json `door`).
         bool doorBob{false};
+        // A crate manageNonTeleportable blinks (art.json non_teleportable): which of
+        // its two it writes; the crate's place in fire.burnables, whose `burned`
+        // stops it (-1: nothing burns it); and the level's age it last blinked at,
+        // which a burnt crate's emissive keeps.
+        Art::NonTeleportable::Blinks blinks{Art::NonTeleportable::Blinks::Nothing};
+        int burnable{-1};
+        bool blinked{false};
+        double blinkMs{0.0};
     };
     // A placed picture's callback (motions.json `placed`): its row, its
     // linearMotion when it has one, and its turn.
@@ -1314,6 +1395,12 @@ private:
     // Chapter select and the grid: a touch on a tile or an arrow, the finger on
     // the pager, the back key, and one tick of the pager.
     void selectorInput(entt::registry& registry);
+    // A popup of `cls` over the menu state that is up (chapter select's
+    // GameFinishedPopup), its clock at the state's.
+    void openMenuPopup(const Popup::Class& cls);
+    // One tick of it, in selectorInput's place while it is up: its close, and the
+    // pager's slide, which PageManager::draw decays and no layer switch stops.
+    void menuPopupTick(entt::registry& registry, float fixedDelta);
     // The credits' touch and the strip's tick (CreditsScreenLayer::update).
     void creditsInput(entt::registry& registry, float fixedDelta);
     // The dashboard's touch, wheel and tick (ScoreDashboard::loop, DashboardLayer).
@@ -1392,6 +1479,17 @@ private:
     // while the body still stands where it went.
     void latchFinishEffects(entt::registry& registry);
     void latchDeathEffects(entt::registry& registry);
+    // THE WIN CUTSCENES' CALLBACKS, once a tick from the tick the level ends: the
+    // launch and the landing while it is won, the knight's spawn once it is
+    // finished and the knight's own update from the tick after (Cutscene.hpp). Their
+    // tracks, their shake and the knight's door come from here; what they move is
+    // placed by syncSprites, advanceMotions and syncKnight.
+    void stepCutscenes(entt::registry& registry, double frameMs);
+    // 2-32's knight: minion.png on its own cut, black, at its body.
+    void syncKnight(entt::registry& registry);
+    // Where the door's entity is this tick: its node, the zero-g bob and the
+    // cutscene's offset - the point the landing puts the character on.
+    glm::dvec2 doorPointPx() const;
     // The view's top-left corner and its size, on the level's axis - the
     // original's GetCameraPos() and GetScreenSize(), which the skull is held
     // inside - as the last tick left the follow.
@@ -1533,7 +1631,9 @@ private:
     bool loadLevel(entt::registry& registry, int index);
     // `keepLightmaps` for a retry, which draws the same level again at once.
     void unloadLevel(entt::registry& registry, bool keepLightmaps = false);
-    // The level at `next`, or the chapter's end when it is -1.
+    // The level at `next`, or, when it is -1, goToNextLevel's chapter end: chapter
+    // select on the chapter's page, and GameFinishedPopup over it after the last
+    // chapter's last level.
     void goTo(entt::registry& registry, int next);
     // The exit reached: recorded, and on to the next level.
     void clearLevel(entt::registry& registry);
@@ -1573,7 +1673,6 @@ private:
 
     Chapters::Table m_chapters;
     int m_current{-1}; // the entry in m_chapters being shown
-    bool m_chapterComplete{false};
     std::optional<Cleared> m_lastCleared;
     int m_deaths{0};
 
@@ -1621,6 +1720,9 @@ private:
     Sky::Rules m_skyRules;                  // the port's sky.json
     Tiers::Rules m_tierRules;               // the port's tiers.json: which file of a level's image is drawn
     Sky::Controller m_sky;                  // the level's StaticSky, built with its sprites
+    Sky::SpaceRules m_spaceRules;           // the port's sky.json, space_sky
+    Sky::Space m_space;                     // the level's SpaceSky, on the 19 space_bg levels
+    Cutscene::Rules m_cutsceneRules;        // the port's cutscenes.json
     Motion::Rules m_motionRules;            // the port's motions.json
     Effects::Rules m_effectRules;           // the port's effects.json: the calls that add an entity
     // One per crystal and key whose picture is drawn, in the level's drawing order
@@ -2163,9 +2265,29 @@ private:
     // What the simulation did this tick, against what it looked like last.
     void latchSimSounds();
     void playLatched(entt::registry& registry, float deltaTime);
-    // The track the game should be playing now - the menu's, the level's, or
-    // its boss's - started and stopped as that changes.
+    // WantedTrack on the device: started and stopped as it changes.
     void updateMusic(entt::registry& registry);
+    // The original's music calls, on the state below: AudioManager::playMusic
+    // (currentTrack, and the player going), a stop of its one player
+    // (pauseMusic, and a boss's StopSample(getBossMusicName())) and resumeMusic.
+    void musicPlay(const char* track);
+    void musicStop();
+    void musicResume();
+    // A switch's toggle, as its listener (the AudioManager) takes it: off is
+    // pauseMusic; the sound back on resumes only with the music on, the music
+    // back on always (turnGlobalVolumeOn / turnMusicOn, bytes 186452..186631).
+    // Each saves the switches first, as saveVolume and saveMusicState write the
+    // value before they call the listener.
+    void switchedSound();
+    void switchedMusic();
+    // The switches as they stand, into audio.json (sim/Switches.hpp).
+    void saveSwitches();
+    // Game::preLoop #485-509: the level's track, the boss's, or pauseMusic.
+    void startLevelMusic(int index);
+    // The calls the bosses' callbacks make, read off the tick's level.
+    void latchMusic();
+    // The log's line, each time WantedTrack changes: a run's log says what played.
+    void noteMusic();
     void stopMusic(entt::registry& registry);
     double soundRandom(double from, double to);
     // A hook's sample speed as the engine's pitch: a number it states, a draw
@@ -2230,6 +2352,24 @@ private:
     // the engine's is one process-global stream every other drawer shares, and
     // a run has to sound the same twice.
     std::mt19937 m_soundRandom{20260913u};
+    // THE ORIGINAL'S MUSIC, as its scripts leave it and with or without a device:
+    // AudioManager.currentTrack, and whether the one MediaPlayer has been stopped
+    // since (MediaStreamManager.java: one player; a stop stops whatever it plays).
+    struct Music {
+        std::string current;  // the last playMusic's track, "" as the AudioManager starts it
+        bool stopped = false; // stopped since, until a playMusic or a resumeMusic
+    };
+    Music m_music;
+    // What the level looked like on the last tick, for the calls made once.
+    // Reset with each level, to the fresh level's values: nothing is set yet.
+    struct MusicWatch {
+        bool ghostInitialised = false;
+        bool dragonTookOff = false;
+        bool darkDragonSummoned = false;
+        bool darkDragonDying = false;
+    };
+    MusicWatch m_musicWatch;
+    std::string m_musicNoted{"-"}; // WantedTrack as the log last had it
     std::string m_track; // which of sounds.json's tracks is playing, or empty
     // A looping voice is never "finished", so ReapFinishedVoices leaves it
     // alone for ever: the layer holds this and stops it itself, or menu to
@@ -2300,6 +2440,19 @@ private:
     Selector::State m_selectorState;
     Selector::Hit m_selectorDown; // what a touch went down on
     Selector::Hit m_selectorHeld; // and is still inside, drawn at the press tint
+    // The popup over chapter select, and whether the touch that is down went down
+    // on its close button (Button::update's press is a release inside after that).
+    struct MenuPopupScreen {
+        bool open{false};
+        const Popup::Class* cls{nullptr};
+        Popup::Open state;
+        bool downOnClose{false};
+    };
+    MenuPopupScreen m_menuPopup;
+    // Where on the state's clock the PageManager's own reads zero: the state's
+    // first tick, or the tick after a popup over it was gone - its first update,
+    // as a state's first tick is its own.
+    double m_selectorLayerFromMs{0.0};
     Locking::Rules m_lockingRules;
     // The original's achievements, read once at attach from Paths::achievements.
     Achievements::Content m_achievements;
@@ -2374,15 +2527,43 @@ private:
     //
     // gameWonDelay is 1400 ms (ui.json's level_end.beats, decoded): the
     // constructor writes 1400 to gameLostDelay and copies the same register into
-    // gameWonDelay. A level may override it - the constructor's later arm reads a
-    // `delay` entity's `time` - but NO LEVEL IN THE GAME PLACES ONE, checked
-    // across all 128, so the override is recorded here and not built.
+    // gameWonDelay. A level may override it - the constructor's #143-175 read an
+    // `end_delay` entity's `time` - and THREE LEVELS DO: 4-01 5000, 4-19 14500 and
+    // 2-32 6600, each the level of a cutscene that fills it (m_wonDelayMs,
+    // cutscenes.json; planning step 123). An earlier note here said no level placed
+    // one; the converted levels carry the three as `metadata/time`.
     //
     // This port showed the medal and played both sounds on the tick the exit
     // reported, with the character still standing in the doorway walking on the
     // spot. That is what the owner saw.
     bool m_finishing = false;      // gone into the door, not yet scored
     double m_finishClockMs = 0.0;  // how long since
+    // The level's own gameWonDelay: level_end's, or its end_delay's (cutscenes.json).
+    double m_wonDelayMs = 0.0;
+
+    // THE WIN CUTSCENES (planning step 123). Each is played where its level places
+    // its entity; what they move are pictures, never Game::Level - but for the
+    // knight, a body the spawn adds only once the level is finished.
+    bool m_launchPlaced = false;
+    bool m_landingPlaced = false;
+    Cutscene::Launch m_launch;
+    Cutscene::Landing m_landing;
+    Cutscene::Knight m_knight;
+    int m_launchStartedTick = -1;
+    int m_landingStartedTick = -1;
+    int m_launchQuakes = 0;
+    int m_knightSpawnedTick = -1;
+    int m_knightEnteredTick = -1;
+    glm::dvec2 m_knightEnteredAtPx{0.0};
+    int m_bridgeSprite = -1;       // in m_sprites: the rocket_bridge SeekEntity finds
+    int m_landingKeySprite = -1;   // and the key the landing's SeekEntity('key') finds
+    glm::dvec2 m_cameraTargetPx{0.0};
+    // The knight's picture: minion.png as m_minionCut cuts it, black, and its aura
+    // queued once through the effects runtime (EffectOwner::Kind::Knight).
+    entt::entity m_knightQuad{entt::null};
+    glm::dvec2 m_knightCentrePx{0.0};
+    float m_knightZ{0.5f};
+    bool m_knightAuraQueued = false;
 
     // AND THE SAME BEAT BEFORE THE LOST SCREEN, which this port had none of:
     // death was an instant retry, so a player who walked into level5's
@@ -2529,6 +2710,9 @@ private:
         // (BeforeStep): true for a popup a tap raised mid-tick, as a pause is; false
         // for one raised as the level loads, whose first tick has not begun.
         bool stepOnResume{false};
+        // Whether the touch that is down went down on the close button: what a
+        // press of it is made of for a class that does not tap to close.
+        bool downOnClose{false};
     };
     PopupScreen m_popup;
     // Each popup picture's file resolved once per level, the hd twin where one
@@ -2572,6 +2756,10 @@ private:
     // One tick under a popup. True when it resumed the level on this tick and the
     // level owes the rest of its tick.
     bool popupTick(entt::registry& registry, float fixedDelta);
+    // A popup's pieces (sim/Popup) into the screen overlay on a view of `view`
+    // design units: the level's, from EmitHud, and chapter select's, from EmitMenu.
+    void emitPopup(Supersonic::ScreenOverlay& overlay, const glm::dvec2& view, const Popup::Class& cls,
+                   const Popup::Open& open) const;
     // The help blocks the level places, read as it loads.
     void findHelpBlocks();
     // A tap on a help block, read with the rest of the level's input: true when it
@@ -2586,10 +2774,11 @@ private:
     // (`updated`), the plaque's alpha.
     void tickPlaqueDismissal(bool updated);
     // The switches: GlobalSoundSwitch sets the global volume, GlobalMusicSwitch
-    // the music. Held for the session only - the original saves the volume
-    // (GlobalVolumeManager::saveVolume), which the port does not yet.
+    // the music. Read from m_switches at attach, and saved into it on every
+    // toggle, as saveVolume and saveMusicState save them (planning step 124).
     bool m_soundOn{true};
     bool m_musicOn{true};
+    Switches::Store m_switches;
     // Game time stood still this level, for LevelFrameMs.
     double m_stoppedMs{0.0};
     // Each pause picture's file resolved to the hd art once per level; empty
@@ -2620,6 +2809,7 @@ private:
     };
     std::vector<DevTap> m_devTaps;
     std::vector<int> m_devBurns;
+    std::vector<std::pair<int, glm::dvec2>> m_devPlaces;
     int m_ticks{0};
 
     void buildControls();

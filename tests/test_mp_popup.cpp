@@ -193,6 +193,162 @@ void TheFileSaysWhatWasDecoded() {
                       ring->waypoints[0].alphaByte == 96,
                   "the ring's decoded ARGB(96, 0xA0, 0, 0) (U13)");
     }
+
+    // Planning step 119: GameFinishedPopup, which chapter select opens after 4-32
+    // (goToNextLevel, WorldSelector::preLoop #69-101). A Popup and not a HelpPopup:
+    // its own card, the close button at DEFAULT_EXIT_BUTTON_POS (0.92, 0.88), no tap
+    // to close, nothing drawn after the framework (the Facebook button omitted).
+    CHECK(rules.gameFinished == "GameFinishedPopup");
+    const Popup::Class* finished = rules.FindClass(rules.gameFinished);
+    CHECK_MSG(finished != nullptr && finished->card.sprite == "sprites/game_finished.png" &&
+                  finished->card.sizeUnits == glm::dvec2(340.0, 256.0) && finished->card.atScreen == glm::dvec2(0.5) &&
+                  finished->card.origin == glm::dvec2(0.5),
+              "its card is game_finished.png, 340 x 256 u about the screen's centre");
+    CHECK_MSG(finished != nullptr && finished->closeButton.sprite == "sprites/popup_close_button.png" &&
+                  finished->closeButton.atScreen == glm::dvec2(0.92, 0.88) &&
+                  finished->closeButton.sizeUnits == glm::dvec2(64.0) && finished->closeButton.origin == glm::dvec2(0.5),
+              "its close button at DEFAULT_EXIT_BUTTON_POS (0.92, 0.88), 64 u");
+    CHECK_MSG(finished != nullptr && !finished->tapScreenToClose && finished->items.empty() && finished->loopMs == 0.0,
+              "no tap to close, nothing of its own drawn, no loop");
+    // Nothing calls setButtonHighlightEffects on its button (only HelpPopup's
+    // constructor does, #29-43): Button::Button's ONE bounce and blink.
+    CHECK_MSG(finished != nullptr && !finished->closeButtonHighlight, "its close button is not highlighted");
+    // And every other class is a HelpPopup: it taps to close, its button at (0.92, 0.5),
+    // bounced and blinked.
+    int helpPopups = 0;
+    for (const Popup::Class& cls : rules.classes) {
+        if (cls.name == rules.gameFinished) continue;
+        ++helpPopups;
+        CHECK_MSG(cls.tapScreenToClose && cls.closeButtonHighlight &&
+                      cls.closeButton.atScreen == glm::dvec2(0.92, 0.5) &&
+                      cls.closeButton.sprite == rules.closeButton.sprite,
+                  cls.name + " is a HelpPopup");
+    }
+    CHECK_EQ(helpPopups, 8);
+    // Button::update's 0xFFCCCCCC, read from the menu's press (the same Button).
+    CHECK_EQ(rules.pressTintByte, 204);
+}
+
+void GameFinishedSitsWhereItsConstructorPutsIt() {
+    const Popup::Rules rules = Load();
+    const Popup::Class* cls = rules.FindClass(rules.gameFinished);
+    if (cls == nullptr) return;
+    // Settled, 1.6 s in: the framework's dim, the card at the view's centre, and the
+    // button home at (0.92, 0.88) of 1280 x 720 = (1177.6, 633.6) px - and nothing else.
+    const Popup::Open open = Run(*cls, 1600.0);
+    const std::vector<Popup::Piece> pieces = Popup::Pieces(rules, *cls, open, kView720);
+    CHECK_EQ(static_cast<int>(pieces.size()), 3);
+    const Popup::Piece* dim = Find(pieces, "dim");
+    const Popup::Piece* card = Find(pieces, "card");
+    const Popup::Piece* close = Find(pieces, "close");
+    CHECK_MSG(dim != nullptr && dim->alphaByte == 150 && dim->rect.size == kView720, "the dim at 150");
+    CHECK_MSG(card != nullptr && card->sprite == "sprites/game_finished.png" && card->alphaByte == 255 &&
+                  AtPx(card->rect.Centre(), 640.0, 360.0, 1e-6) && AtPx(card->rect.size, 956.25, 720.0, 1e-6),
+              "the card 956.25 x 720 px about (640, 360): " + (card != nullptr ? Px(card->rect.min) : std::string("none")));
+    CHECK_MSG(close != nullptr && AtPx(close->rect.Centre(), 1177.6, 633.6, 1e-6) && close->alphaByte == 255,
+              "the button centred (1177.6, 633.6) px: " + (close != nullptr ? Px(close->rect.Centre()) : std::string()));
+    // Its press rectangle is the button's own 64 u, not the bounce, at the anchor.
+    const Hud::Rect press = Popup::CloseButtonRect(rules, *cls, open, kView720);
+    CHECK_MSG(AtPx(press.Centre(), 1177.6, 633.6, 1e-6) && press.size == glm::dvec2(64.0), Px(press.min));
+    // The entrance: it starts 32 u out along the line from the screen's centre through
+    // its home (UIButton's initPos), at alpha 0, and is home at 700 ms.
+    const glm::dvec2 home = glm::dvec2(0.92, 0.88) * kView720;
+    const glm::dvec2 out = glm::normalize(home - kView720 * 0.5) * 32.0;
+    const Popup::CloseButtonState first = Popup::CloseButtonAt(rules, *cls, Popup::Start(*cls), kView720);
+    CHECK_MSG(first.alphaByte == 0 && Near(glm::length(first.anchor - (home + out)), 0.0, 1e-9),
+              "at 0 ms 32 u out, at " + Px(first.anchor));
+    // 700 ms exactly (42 ticks of 1000 / 60 fall a hair short of it in doubles).
+    Popup::Open entered = Popup::Start(*cls);
+    entered.clockMs = 700.0;
+    const Popup::CloseButtonState settled = Popup::CloseButtonAt(rules, *cls, entered, kView720);
+    CHECK_MSG(settled.alphaByte == 255 && Near(glm::length(settled.anchor - home), 0.0, 1e-9), Px(settled.anchor));
+    // The rules' own button is still HelpPopup's: the old overload answers for it.
+    CHECK_MSG(Near(Popup::CloseButtonAt(rules, entered, kView720).anchor.y, 0.5 * kView720.y, 1e-9),
+              "CloseButtonAt without a class is HelpPopup's (0.92, 0.5)");
+
+    // Its button stands still: nothing calls setButtonHighlightEffects on it, so
+    // Button::Button's ONE bounce and blink - scale 1 and brightness 1 at every
+    // clock, over more than two of HelpPopup's 400 ms strides and six of its 150 ms
+    // blinks, drawn at its own 64 u and white. A HelpPopup's, at the same clocks, swings.
+    const Popup::Class* help = nullptr;
+    for (const Popup::Class& one : rules.classes) {
+        if (one.name != rules.gameFinished && help == nullptr) help = &one;
+    }
+    bool still = true;
+    std::string moved;
+    double helpMin = 2.0;
+    double helpMax = 0.0;
+    double helpDimmest = 2.0;
+    for (double ms = 700.0; ms <= 1700.0 + 1e-9; ms += 25.0) {
+        Popup::Open at = Popup::Start(*cls);
+        at.clockMs = ms;
+        const Popup::CloseButtonState state = Popup::CloseButtonAt(rules, *cls, at, kView720);
+        const std::vector<Popup::Piece> drawn = Popup::Pieces(rules, *cls, at, kView720);
+        const Popup::Piece* button = Find(drawn, "close");
+        if (state.scale != glm::dvec2(1.0) || state.brightness != 1.0 || state.tint != 1.0 || button == nullptr ||
+            button->rect.size != glm::dvec2(64.0) || button->rgb != glm::dvec3(1.0)) {
+            still = false;
+            if (moved.empty()) moved = "at " + Num(ms) + " ms: scale " + Num(state.scale.x) + " x " +
+                                       Num(state.scale.y) + ", brightness " + Num(state.brightness);
+        }
+        if (help != nullptr) {
+            Popup::Open helpAt = Popup::Start(*help);
+            helpAt.clockMs = ms;
+            const Popup::CloseButtonState swing = Popup::CloseButtonAt(rules, *help, helpAt, kView720);
+            helpMin = std::min(helpMin, swing.scale.x);
+            helpMax = std::max(helpMax, swing.scale.x);
+            helpDimmest = std::min(helpDimmest, swing.brightness);
+        }
+    }
+    CHECK_MSG(still, "GameFinishedPopup's button still from 700 to 1700 ms: " + moved);
+    CHECK_MSG(help != nullptr && Near(helpMin, 0.97, 1e-9) && Near(helpMax, 1.03, 1e-9) &&
+                  Near(helpDimmest, 0.95, 1e-9),
+              "a HelpPopup's still bounces 0.97..1.03 and blinks to 0.95: " + Num(helpMin) + ".." + Num(helpMax) +
+                  ", " + Num(helpDimmest));
+
+    // Held on it: Button::update's 0xFFCCCCCC into the rgb (204 / 255), its size and
+    // place as they were; and kept through the dismissal when the close found it
+    // held (the back key while the finger is on it), as UIButton::update stops
+    // calling Button::update then.
+    Popup::Open held = Run(*cls, 1600.0);
+    held.closeTinted = true;
+    const Popup::CloseButtonState heldState = Popup::CloseButtonAt(rules, *cls, held, kView720);
+    CHECK_MSG(Near(heldState.tint, 204.0 / 255.0, 1e-12) && heldState.brightness == 1.0 &&
+                  heldState.scale == glm::dvec2(1.0),
+              "held: tint " + Num(heldState.tint));
+    {
+        const std::vector<Popup::Piece> drawn = Popup::Pieces(rules, *cls, held, kView720);
+        const Popup::Piece* button = Find(drawn, "close");
+        CHECK_MSG(button != nullptr && glm::length(button->rgb - glm::dvec3(204.0 / 255.0)) < 1e-12 &&
+                      button->rect.size == glm::dvec2(64.0) && AtPx(button->rect.Centre(), 1177.6, 633.6, 1e-6),
+                  "held: drawn at 204 / 255, 64 u, in its place");
+    }
+    Popup::Close(held);
+    for (int tick = 0; tick < 20; ++tick) Popup::Tick(*cls, held, kTickMs);
+    {
+        const std::vector<Popup::Piece> drawn = Popup::Pieces(rules, *cls, held, kView720);
+        const Popup::Piece* button = Find(drawn, "close");
+        CHECK_MSG(button != nullptr && glm::length(button->rgb - glm::dvec3(204.0 / 255.0)) < 1e-12,
+                  "closed while held: the tint kept through the dismissal");
+    }
+    // Not held, it is white through the dismissal (the press that closes is a release).
+    Popup::Open released = Run(*cls, 1600.0);
+    Popup::Close(released);
+    for (int tick = 0; tick < 20; ++tick) Popup::Tick(*cls, released, kTickMs);
+    {
+        const std::vector<Popup::Piece> drawn = Popup::Pieces(rules, *cls, released, kView720);
+        const Popup::Piece* button = Find(drawn, "close");
+        CHECK_MSG(button != nullptr && button->rgb == glm::dvec3(1.0) && button->rect.size == glm::dvec2(64.0),
+                  "closed by a release: white and 64 u through the dismissal");
+    }
+
+    // Closed, everything goes in the framework's 1000 ms.
+    Popup::Open closing = Run(*cls, 1600.0);
+    Popup::Close(closing);
+    for (int tick = 0; tick < 59; ++tick) Popup::Tick(*cls, closing, kTickMs);
+    CHECK_MSG(!Popup::Gone(rules, closing), "not gone at 59 ticks");
+    Popup::Tick(*cls, closing, kTickMs);
+    CHECK_MSG(Popup::Gone(rules, closing), "gone at 60 ticks, 1000 ms");
 }
 
 void TheFrameworkSitsWhereTheCapturesShowIt() {
@@ -645,11 +801,21 @@ void WhatIsRefused() {
     refused("popup_filter.json", "\"filter\": \"smooth_beginning\"", "\"filter\": \"smoothBeginning\"", "filter");
     refused("popup_move.json", "\"max_move_px\": 12", "\"max_move_px\": 0", "max_move_px");
     refused("popup_sheet.json", "\"frame\": 0", "\"frame\": 4", "sheet.frame");
+    refused("popup_finished.json", "\"popup\": \"GameFinishedPopup\"", "\"popup\": \"GameFinishedPopups\"",
+            "GameFinishedPopups");
+    refused("popup_taps.json", "\"tap_screen_to_close\": false", "\"tap_screen_to_close\": 0",
+            "tap_screen_to_close");
+    refused("popup_highlights.json", "\"close_button_highlight\": false", "\"close_button_highlight\": 0",
+            "close_button_highlight");
+    refused("popup_help_highlights.json", "\"on_help_popups\": true", "\"on_help_popups\": 1", "on_help_popups");
+    refused("popup_press_tint.json", "\"tint_byte\": 204", "\"tint_byte\": 256", "menu_state.press.tint_byte");
+    refused("popup_help_taps.json", "\"help_popup\": true", "\"help_popup\": 1", "help_popup");
 }
 
 void runTests() {
     TheFileSaysWhatWasDecoded();
     TheFrameworkSitsWhereTheCapturesShowIt();
+    GameFinishedSitsWhereItsConstructorPutsIt();
     TheEntranceAndTheDismissalAreUISpriteAndUIButton();
     TheButtonBouncesAndBlinks();
     TheLoopsStepAsAFrameTimerDoes();

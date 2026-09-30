@@ -84,6 +84,16 @@ void NextStaysInItsWorld() {
     CHECK(Chapters::Label(g_table.levels[0]) == "1-1");
     CHECK(Chapters::Label(g_table.levels[32]) == "2-1");
     CHECK(Chapters::Label(g_table.levels[127]) == "4-32");
+    // ScoreManager::isLastLevel(levelIdx): the last level of the LAST world only -
+    // the one after which chapter select opens GameFinishedPopup (planning step 119).
+    int finishing = 0;
+    for (int at = -1; at <= static_cast<int>(g_table.levels.size()); ++at) {
+        if (g_table.FinishesTheGame(at)) ++finishing;
+    }
+    CHECK_EQ(finishing, 1);
+    CHECK(g_table.FinishesTheGame(127));
+    CHECK(!g_table.FinishesTheGame(31) && !g_table.FinishesTheGame(63) && !g_table.FinishesTheGame(95));
+    CHECK(!g_table.FinishesTheGame(126) && !g_table.FinishesTheGame(-1) && !g_table.FinishesTheGame(128));
 }
 
 void runTests() {

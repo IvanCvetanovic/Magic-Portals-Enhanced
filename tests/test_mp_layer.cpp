@@ -54,11 +54,14 @@
 #include "sim/Lighting.hpp"
 #include "sim/Loading.hpp"
 #include "sim/MainMenu.hpp"
+#include "sim/Motion.hpp"
 #include "sim/Particles.hpp"
 #include "sim/MenuState.hpp"
 #include "sim/Pause.hpp"
+#include "sim/Switches.hpp"
 #include "sim/Popup.hpp"
 #include "sim/Selector.hpp"
+#include "sim/Sky.hpp"
 #include "sim/UiLayer.hpp"
 #include "sim/Units.hpp"
 
@@ -296,6 +299,10 @@ int CountImage(const std::vector<ScreenOverlay::Quad>& quads, const std::string&
 int CountCaption(const std::vector<ScreenOverlay::Quad>& quads, const std::string& font);
 glm::vec2 ScreenOfView(const MagicPortalsLayer& layer, const glm::dvec2& onView);
 bool NearD(double a, double b, double eps);
+std::vector<int> BlackIndices(const std::vector<ScreenOverlay::Quad>& quads);
+Hud::Rect OnView(const MagicPortalsLayer& layer, const ScreenOverlay::Quad& quad);
+bool SameRect(const Hud::Rect& a, const Hud::Rect& b, double eps);
+std::string ShowRect(const Hud::Rect& rect);
 
 // ---- One level --------------------------------------------------------------
 
@@ -959,20 +966,35 @@ void ARetryTakesTheThrownStonesAway() {
     layer.OnDetach(registry);
 }
 
+// A chapter's last level goes to chapter select, on the page of the chapter just
+// played, and never on to the next chapter's first level (goToNextLevel,
+// WorldSelector::preLoop #6-21; planning step 119). It used to leave a black
+// "Chapter N complete" line that only Esc left. N here; the medal screen's go-on
+// and the pause's Skip press the same Next (TheGameFinishedCardComesUpAfter4_32).
 void TheChapterEnds() {
-    entt::registry registry;
-    publishViewport(registry);
-    MagicPortalsLayer layer(TestPaths(), "level31");
-    layer.OnAttach(registry);
-    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
-    CHECK(!layer.ChapterComplete());
-    press(layer, registry, MagicPortalsLayer::kSkip);
-    CHECK(layer.ChapterComplete());
-    CHECK(layer.SimLevel() == nullptr);
-    // Nothing to retry at a chapter's end.
-    press(layer, registry, MagicPortalsLayer::kRetry);
-    CHECK(layer.ChapterComplete());
-    layer.OnDetach(registry);
+    using Screen = MagicPortalsLayer::Screen;
+    const struct {
+        const char* level;
+        int page; // two chapters to a page
+    } ends[] = {{"level31", 0}, {"level31a", 0}, {"level31b", 1}};
+    for (const auto& end : ends) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), end.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        press(layer, registry, MagicPortalsLayer::kSkip);
+        CHECK_MSG(layer.MenuScreen() == Screen::Worlds && layer.SimLevel() == nullptr && layer.Current() == nullptr,
+                  std::string(end.level) + ": N from a chapter's last level is chapter select");
+        CHECK_MSG(layer.SelectorState().page == end.page,
+                  std::string(end.level) + ": on its chapter's page, " + std::to_string(layer.SelectorState().page));
+        CHECK_MSG(layer.MenuPopupClass() == nullptr, std::string(end.level) + ": and no card, not being 4-32");
+        // Chapter select is a menu state: the state's first tick is the next, and
+        // R retries nothing there.
+        press(layer, registry, MagicPortalsLayer::kRetry);
+        CHECK(layer.MenuScreen() == Screen::Worlds && layer.MenuStateTicks() == 0);
+        layer.OnDetach(registry);
+    }
 }
 
 void AStartThatIsNoLevelSaysSo() {
@@ -1291,6 +1313,283 @@ void AnAntiportalBlinksRedAndTurnsAndAPauseHoldsBoth() {
     CHECK_MSG(std::fabs(after.r - heldColour.r) <= 2.5f * perTick,
               "two ticks' worth on, not 40: " + std::to_string(after.r - heldColour.r));
     CHECK_MSG(rotationOf(ring762) > heldTurn, "and the turn goes on too");
+}
+
+// The quad a level's node is drawn with, by the layer's own report; null once its
+// picture is gone.
+entt::entity QuadOfNode(const MagicPortalsLayer& layer, const std::string& node) {
+    for (const MagicPortalsLayer::PictureReport& report : layer.PictureReports()) {
+        if (report.node == node) return report.quad;
+    }
+    return entt::null;
+}
+
+// A FIRE AGENT WEARS ITS OWN FACE (art.json fire_agent): ETHCallback_fire_agent
+// sets fire_agent.png on every update, whatever the level saved. 2-20 (level19a)
+// saved fire_agent_1086 with anti_portal_agent.png. 1-12 (level11)'s
+// anti_portal_agent_ent_599 is another entity, with another callback, and keeps
+// its own face.
+void AFireAgentWearsItsOwnFace() {
+    if (!OriginalArtIsThere("AFireAgentWearsItsOwnFace")) return;
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level19a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity agent = QuadOfNode(layer, "fire_agent_1086");
+        CHECK_MSG(agent != entt::null, "2-20 draws fire_agent_1086");
+        if (agent == entt::null) return;
+        const auto& material = registry.get<MaterialComponent>(agent);
+        const auto& transform = registry.get<TransformComponent>(agent);
+        CHECK_MSG(EndsWith(material.albedoTexturePath, "/fire_agent.png"),
+                  "drawn from fire_agent.png: " + material.albedoTexturePath);
+        CHECK_MSG(material.albedoTexturePath.find(MAGICPORTALS_ORIGINAL_DIR) == 0,
+                  "found as SetSprite finds it, in the original's entities: " + material.albedoTexturePath);
+        const float size = MagicPortals::Units::ToMetres(32.0);
+        CHECK_MSG(std::fabs(transform.scale.x - size) < 1e-6f && std::fabs(transform.scale.y - size) < 1e-6f,
+                  "at the saved file's 32 units, which are fire_agent.png's too");
+        CHECK_MSG(material.albedoColor == glm::vec4(1.0f), "in the colour the level gave it");
+        int faces = 0;
+        for (auto [entity, tag, drawn] : registry.view<TagComponent, MaterialComponent>().each()) {
+            (void)entity;
+            if (tag.tag == "Magic Portals Sprite" && EndsWith(drawn.albedoTexturePath, "/anti_portal_agent.png")) {
+                ++faces;
+            }
+        }
+        CHECK_MSG(faces == 0, "and no picture of 2-20 is the anti-portal agent's: " + std::to_string(faces));
+        layer.OnDetach(registry);
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level11");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity agent = QuadOfNode(layer, "anti_portal_agent_ent_599");
+        CHECK_MSG(agent != entt::null &&
+                      EndsWith(registry.get<MaterialComponent>(agent).albedoTexturePath, "/anti_portal_agent.png"),
+                  "1-12's anti_portal_agent_ent_599 keeps its face");
+        layer.OnDetach(registry);
+    }
+}
+
+// BLUE AND RED KEYS, KEYHOLES AND DOORS ARE THEIR COLOURS (art.json key_colour):
+// setKeyColor swaps a blue or red one's picture for <its entity name>_blue.png or
+// _red.png and writes its colour white; a yellow one keeps its picture. 3-13
+// (level12b) holds a yellow set, spelled with .ent, and a blue one; 4-20 (level19c)
+// a red set.
+void BlueAndRedKeysKeyholesAndDoorsAreTheirColours() {
+    if (!OriginalArtIsThere("BlueAndRedKeysKeyholesAndDoorsAreTheirColours")) return;
+    struct Piece {
+        const char* node;
+        const char* file;
+        double widthUnits;
+        double heightUnits;
+    };
+    const auto check = [](const char* level, const std::vector<Piece>& pieces) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        for (const Piece& piece : pieces) {
+            const entt::entity quad = QuadOfNode(layer, piece.node);
+            CHECK_MSG(quad != entt::null, std::string(level) + " draws " + piece.node);
+            if (quad == entt::null) continue;
+            const auto& material = registry.get<MaterialComponent>(quad);
+            const auto& transform = registry.get<TransformComponent>(quad);
+            CHECK_MSG(EndsWith(material.albedoTexturePath, std::string("/") + piece.file),
+                      std::string(level) + " " + piece.node + " is " + piece.file + ": " + material.albedoTexturePath);
+            CHECK_MSG(glm::vec3(material.albedoColor) == glm::vec3(1.0f) && material.albedoColor.a == 1.0f,
+                      std::string(level) + " " + piece.node + " is drawn white");
+            CHECK_MSG(std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(piece.widthUnits)) < 1e-6f &&
+                          std::fabs(transform.scale.y - MagicPortals::Units::ToMetres(piece.heightUnits)) < 1e-6f,
+                      std::string(level) + " " + piece.node + " keeps its size");
+        }
+        layer.OnDetach(registry);
+    };
+    check("level12b", {{"key_1529", "key_blue.png", 32.0, 32.0},
+                       {"keyhole_1538", "keyhole_blue.png", 32.0, 32.0},
+                       {"door_locked_1537", "door_locked_blue.png", 32.0, 128.0},
+                       {"key_ent_1246", "key.png", 32.0, 32.0},
+                       {"keyhole_ent_1197", "keyhole.png", 32.0, 32.0},
+                       {"door_locked_ent_1196", "door_locked.png", 32.0, 128.0}});
+    check("level19c", {{"key_1335", "key_red.png", 32.0, 32.0},
+                       {"keyhole_1338", "keyhole_red.png", 32.0, 32.0},
+                       {"door_locked_1343", "door_locked_red.png", 32.0, 128.0}});
+}
+
+// A CRATE NO PORTAL CARRIES BLINKS RED (art.json non_teleportable):
+// manageNonTeleportable writes its colour, or for a _no_emissive crate its
+// emissive, every tick from the level's age, until the crate is burned.
+//  - 1-30 (level29): crate_902, crate_small_898 and wood_piece_small_901 carry
+//    teleportable 0 and blink their colour; crate_small_ent_897 carries 1 and does not.
+//  - 2-20 (level19a): crate_no_emissive_1128 and crate_small_no_emissive_ent_1129
+//    blink their emissive; put the small one in the fire agent's reach and it burns,
+//    and its emissive then keeps its last blink while the big one goes on.
+//  - 2-08 (level7a): crate_small_no_emissive_826, whose level spells the datum
+//    'telepotable', blinks as GetUInt reads it (0); _ent_854 carries 1 and does not.
+void ACrateNoPortalCarriesBlinksRed() {
+    if (!OriginalArtIsThere("ACrateNoPortalCarriesBlinksRed")) return;
+    namespace Art = MagicPortals::Art;
+    namespace Lighting = MagicPortals::Lighting;
+    Art::Rules art;
+    std::string artError;
+    CHECK_MSG(Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", art, artError), artError);
+    const Art::NonTeleportable& crates = art.nonTeleportable;
+    const auto ambientWith = [](const MagicPortalsLayer& layer, const glm::dvec3& emissive) {
+        return glm::vec3(Lighting::AmbientTerm(layer.AmbientNow(), emissive));
+    };
+    const auto near = [](const glm::vec3& a, const glm::vec3& b) { return glm::length(a - b) < 1e-5f; };
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level29");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const std::vector<std::string> blinking = {"crate_902", "crate_small_898", "wood_piece_small_901"};
+        const entt::entity still = QuadOfNode(layer, "crate_small_ent_897");
+        CHECK_MSG(still != entt::null, "1-30 draws crate_small_ent_897");
+        int wrong = 0;
+        int stillWrong = 0;
+        float lowest = 1.0f;
+        float highest = 0.0f;
+        for (int tick = 0; tick < 80; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const glm::vec3 want(crates.colour.At(layer.LevelAgeMs()));
+            for (const std::string& node : blinking) {
+                const entt::entity quad = QuadOfNode(layer, node);
+                if (quad == entt::null) {
+                    ++wrong;
+                    continue;
+                }
+                const auto& material = registry.get<MaterialComponent>(quad);
+                // Its node's emissive 1 makes min(1, ambient + 1) whole: the blink alone.
+                if (!near(glm::vec3(material.albedoColor), want) || material.albedoColor.a != 1.0f ||
+                    !near(material.sprite2D.ambient, glm::vec3(1.0f))) {
+                    ++wrong;
+                }
+                lowest = std::min(lowest, material.albedoColor.g);
+                highest = std::max(highest, material.albedoColor.g);
+            }
+            if (still != entt::null && registry.get<MaterialComponent>(still).albedoColor != glm::vec4(1.0f)) {
+                ++stillWrong;
+            }
+        }
+        CHECK_MSG(wrong == 0, "each of the three is blinkColor's colour at the level's age: " + std::to_string(wrong) +
+                                  " wrong");
+        CHECK_MSG(lowest < 0.32f && highest > 0.98f,
+                  "over 80 ticks from (1, 0.3, 0.3) to white: green " + std::to_string(lowest) + " to " +
+                      std::to_string(highest));
+        CHECK_MSG(stillWrong == 0, "and the teleportable one is left white");
+        layer.OnDetach(registry);
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level19a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity big = QuadOfNode(layer, "crate_no_emissive_1128");
+        const entt::entity small = QuadOfNode(layer, "crate_small_no_emissive_ent_1129");
+        CHECK_MSG(big != entt::null && small != entt::null, "2-20 draws both crates");
+        if (big == entt::null || small == entt::null) return;
+        int wrong = 0;
+        for (int tick = 0; tick < 40; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const glm::vec3 want = ambientWith(layer, crates.emissive.At(layer.LevelAgeMs()));
+            for (const entt::entity quad : {big, small}) {
+                const auto& material = registry.get<MaterialComponent>(quad);
+                if (!near(material.sprite2D.ambient, want) || material.albedoColor != glm::vec4(1.0f)) ++wrong;
+            }
+        }
+        CHECK_MSG(wrong == 0, "both are blinkEmissive's (0.5, 0, 0) to 0 over the level's ambient, their colour "
+                              "white: " + std::to_string(wrong) + " wrong");
+
+        // Into the fire agent's reach (fire_agent_1086 at (162, 192), 32 units),
+        // which burns it on the tick after.
+        const auto& burnables = layer.SimLevel()->fire.burnables;
+        const auto burnable = std::find_if(burnables.begin(), burnables.end(), [](const auto& b) {
+            return b.name == "crate_small_no_emissive_ent_1129";
+        });
+        const auto body = layer.SimLevel()->built.entities.find("crate_small_no_emissive_ent_1129");
+        CHECK_MSG(burnable != burnables.end() && body != layer.SimLevel()->built.entities.end(),
+                  "the small crate is burnable and has a body");
+        if (burnable == burnables.end() || body == layer.SimLevel()->built.entities.end()) return;
+        const std::size_t index = static_cast<std::size_t>(burnable - burnables.begin());
+        auto& at = registry.get<TransformComponent>(body->second);
+        const glm::vec3 world = MagicPortals::Units::ToWorld(162.0, 200.0);
+        at.position = glm::vec3(world.x, world.y, at.position.z);
+        int ticks = 0;
+        glm::vec3 lastBlink = registry.get<MaterialComponent>(small).sprite2D.ambient;
+        while (!layer.SimLevel()->fire.burnables[index].burned && ticks < 30) {
+            lastBlink = registry.get<MaterialComponent>(small).sprite2D.ambient;
+            tickWith(layer, registry, kRest, {}, {});
+            ++ticks;
+        }
+        CHECK_MSG(layer.SimLevel()->fire.burnables[index].burned,
+                  "the fire agent burns it, " + std::to_string(ticks) + " ticks on");
+        int held = 0;
+        int bigStill = 0;
+        int drawnTicks = 0;
+        glm::vec3 bigBefore = registry.get<MaterialComponent>(big).sprite2D.ambient;
+        for (int tick = 0; tick < 30; ++tick) {
+            if (!registry.valid(small) || QuadOfNode(layer, "crate_small_no_emissive_ent_1129") != small) break;
+            ++drawnTicks;
+            const auto& material = registry.get<MaterialComponent>(small);
+            if (!near(material.sprite2D.ambient, lastBlink) || material.albedoColor != glm::vec4(1.0f)) ++held;
+            tickWith(layer, registry, kRest, {}, {});
+            const glm::vec3 bigNow = registry.get<MaterialComponent>(big).sprite2D.ambient;
+            if (bigNow == bigBefore) ++bigStill;
+            bigBefore = bigNow;
+        }
+        CHECK_MSG(drawnTicks >= 20, "the burning crate is drawn on: " + std::to_string(drawnTicks) + " ticks");
+        CHECK_MSG(held == 0, "a burnt crate's emissive keeps its last blink, its colour white: " +
+                                 std::to_string(held) + " ticks off");
+        CHECK_MSG(bigStill <= 1, "while the unburnt one blinks on: " + std::to_string(bigStill) + " still ticks");
+        layer.OnDetach(registry);
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level7a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity misspelt = QuadOfNode(layer, "crate_small_no_emissive_826");
+        const entt::entity carried = QuadOfNode(layer, "crate_small_no_emissive_ent_854");
+        CHECK_MSG(misspelt != entt::null && carried != entt::null, "2-08 draws both crates");
+        if (misspelt == entt::null || carried == entt::null) return;
+        int wrong = 0;
+        for (int tick = 0; tick < 40; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            if (!near(registry.get<MaterialComponent>(misspelt).sprite2D.ambient,
+                      ambientWith(layer, crates.emissive.At(layer.LevelAgeMs()))) ||
+                !near(registry.get<MaterialComponent>(carried).sprite2D.ambient, ambientWith(layer, glm::dvec3(0.0)))) {
+                ++wrong;
+            }
+        }
+        CHECK_MSG(wrong == 0, "826 blinks, 854 does not: " + std::to_string(wrong) + " ticks wrong");
+        layer.OnDetach(registry);
+    }
 }
 
 void AnAntiportalSpelledWithEntIsDrawnTheSame() {
@@ -2725,6 +3024,226 @@ void ATileRefusesATouchThatTravelled() {
     CHECK_MSG(layer.MenuScreen() == Screen::Levels, "dragged 40 u: it acts");
 }
 
+// After 4-32 alone, chapter select opens GameFinishedPopup over itself
+// (goToNextLevel #68-72, WorldSelector::preLoop #69-101; planning step 119). It is
+// the current UI layer, so the PageManager under it is not updated: the title and
+// the arrows, which enter on its updates, are not drawn until it is gone. Only a
+// press of its close button - down on it and up on it - or the back key closes it.
+void TheGameFinishedCardComesUpAfter4_32() {
+    if (!OriginalArtIsThere("TheGameFinishedCardComesUpAfter4_32")) return;
+    namespace Popup = MagicPortals::Popup;
+    using Screen = MagicPortalsLayer::Screen;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const auto goOn = [](MagicPortalsLayer& layer, entt::registry& registry) {
+        // The medal screen's go-on, as endScreenTick and the pause's Skip press it.
+        MagicPortalsLayer::MenuButton next;
+        next.kind = Kind::Next;
+        return layer.PressMenu(registry, next);
+    };
+    {
+        // 3-32 by the same button: its chapter's page, and no card.
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level31b");
+        layer.OnAttach(registry);
+        CHECK_MSG(goOn(layer, registry) && layer.MenuScreen() == Screen::Worlds && layer.SelectorState().page == 1 &&
+                      layer.MenuPopupClass() == nullptr,
+                  "3-32's go-on: chapter select on page 2, no card");
+        layer.OnDetach(registry);
+    }
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31c");
+    layer.OnAttach(registry);
+    if (layer.SimLevel() == nullptr) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    CHECK(goOn(layer, registry));
+    CHECK_MSG(layer.MenuScreen() == Screen::Worlds && layer.SelectorState().page == 1,
+              "4-32's go-on: chapter select on chapter 4's page");
+    const Popup::Class* cls = layer.MenuPopupClass();
+    CHECK_MSG(cls != nullptr && cls->name == "GameFinishedPopup", "and GameFinishedPopup over it");
+    if (cls == nullptr) return;
+    const Popup::Rules& rules = layer.PopupRules();
+    // The state's first tick is the popup's zero.
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK(layer.MenuStateMs() == 0.0 && layer.MenuPopup() != nullptr && layer.MenuPopup()->clockMs == 0.0);
+    // 1.6 s in (96 ticks after the first).
+    for (int tick = 0; tick < 96; ++tick) tickWith(layer, registry, kRest, {}, {});
+    // (A tick is the float kTick, so 96 of them are 1600 ms to 1e-4.)
+    CHECK_MSG(NearD(layer.MenuPopup()->clockMs, 1600.0, 1e-3) && layer.SelectorLayerMs() == 0.0,
+              "the popup's clock runs and the PageManager's stands");
+    {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const int icon = IndexOfImage(frame, "world_icon3.png");
+        const int counter = IndexOfImage(frame, "page_numbers.png");
+        const int card = IndexOfImage(frame, "game_finished.png");
+        const int close = IndexOfImage(frame, "popup_close_button.png");
+        const std::vector<int> blacks = BlackIndices(frame);
+        CHECK_MSG(icon >= 0 && counter > icon && card > counter && close > card,
+                  "the tiles and the counter, then the card, then its button");
+        // The state's black is over by 1.6 s (700 ms), so the dim is the one black.
+        CHECK_MSG(blacks.size() == 1 && blacks[0] > counter && blacks[0] < card,
+                  "the dim between the page and the card: " + std::to_string(blacks.size()) + " black(s)");
+        if (blacks.size() == 1) {
+            const ScreenOverlay::Quad& dim = frame[static_cast<std::size_t>(blacks[0])];
+            CHECK_MSG(NearD(dim.color.a, 150.0 / 255.0, 1e-6), "the dim at 150 of 255");
+        }
+        CHECK_MSG(IndexOfImage(frame, "select_chapter.png") < 0 && IndexOfImage(frame, "level_select_forward.png") < 0,
+                  "the title and the arrows not drawn: the PageManager has had no update");
+        if (card >= 0) {
+            const Hud::Rect onView = OnView(layer, frame[static_cast<std::size_t>(card)]);
+            CHECK_MSG(SameRect(onView, Hud::Rect{layer.ViewPx() * 0.5 - glm::dvec2(170.0, 128.0),
+                                                 glm::dvec2(340.0, 256.0)},
+                               1e-3),
+                      "the card 340 x 256 u about the view's centre: " + ShowRect(onView));
+            CHECK_MSG(EndsWith(frame[static_cast<std::size_t>(card)].texture, "/sprites/hd/game_finished.png"),
+                      "drawn with its hd twin");
+        }
+        if (close >= 0) {
+            const Hud::Rect onView = OnView(layer, frame[static_cast<std::size_t>(close)]);
+            CHECK_MSG(glm::length(onView.Centre() - layer.ViewPx() * glm::dvec2(0.92, 0.88)) < 1e-3,
+                      "its button at DEFAULT_EXIT_BUTTON_POS: " + ShowRect(onView));
+        }
+    }
+    // Its button stands still (no setButtonHighlightEffects: Button::Button's ONE
+    // bounce and blink): 64 u and white now, and 200 ms on - half a HelpPopup
+    // stride, where that bounce is at its widest - and 400 ms on.
+    const auto closeQuad = [&registry, &layer]() {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const int close = IndexOfImage(frame, "popup_close_button.png");
+        return close >= 0 ? frame[static_cast<std::size_t>(close)] : ScreenOverlay::Quad{};
+    };
+    const Hud::Rect still{layer.ViewPx() * glm::dvec2(0.92, 0.88) - glm::dvec2(32.0), glm::dvec2(64.0)};
+    for (int step = 0; step < 3; ++step) {
+        if (step > 0) {
+            for (int tick = 0; tick < 12; ++tick) tickWith(layer, registry, kRest, {}, {});
+        }
+        const ScreenOverlay::Quad quad = closeQuad();
+        const Hud::Rect onView = OnView(layer, quad);
+        CHECK_MSG(SameRect(onView, still, 1e-3) && quad.color.r == 1.0f && quad.color.g == 1.0f &&
+                      quad.color.b == 1.0f,
+                  "the button still, 64 u and white, " + std::to_string(200 * step) + " ms on: " + ShowRect(onView) +
+                      " rgb " + std::to_string(quad.color.r));
+    }
+    const Hud::Rect button = Popup::CloseButtonRect(rules, *cls, *layer.MenuPopup(), layer.ViewPx());
+    const glm::vec2 onButton = ScreenOfView(layer, button.Centre());
+    const glm::vec2 onCard = ScreenOfView(layer, layer.ViewPx() * 0.5);
+    // A touch on the card is not a close: it is not a HelpPopup.
+    tap(layer, registry, onCard);
+    CHECK_MSG(!layer.MenuPopup()->closeTinted, "a touch on the card does not tint the button");
+    releaseWith(layer, registry, onCard);
+    CHECK_MSG(!Popup::Closing(*layer.MenuPopup()), "a tap on the card does not close it");
+    // Nor is one down on the button and let go off it, nor the down alone. While the
+    // touch that went down on it is on it, it is drawn at Button::update's
+    // 0xFFCCCCCC (#206-233); off it, white; back on, tinted again.
+    tap(layer, registry, onButton);
+    CHECK_MSG(!Popup::Closing(*layer.MenuPopup()), "the touch down on the button is not the press");
+    {
+        const ScreenOverlay::Quad quad = closeQuad();
+        CHECK_MSG(layer.MenuPopup()->closeTinted && NearD(quad.color.r, 204.0 / 255.0, 1e-6) &&
+                      NearD(quad.color.b, 204.0 / 255.0, 1e-6) && quad.color.a == 1.0f &&
+                      SameRect(OnView(layer, quad), still, 1e-3),
+                  "down on the button: drawn at 204 / 255, " + std::to_string(quad.color.r));
+    }
+    tickWith(layer, registry, onButton, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.MenuPopup()->closeTinted, "held on it: still tinted");
+    tickWith(layer, registry, onCard, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(!layer.MenuPopup()->closeTinted && closeQuad().color.r == 1.0f, "held off it: white");
+    tickWith(layer, registry, onButton, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.MenuPopup()->closeTinted, "back on it, still held: tinted again");
+    // Off it again before the release, so the last held place is off it too.
+    tickWith(layer, registry, onCard, {MagicPortalsLayer::kTap}, {});
+    releaseWith(layer, registry, onCard);
+    CHECK_MSG(!Popup::Closing(*layer.MenuPopup()), "let go off the button: no press");
+    CHECK_MSG(!layer.MenuPopup()->closeTinted, "and let go, white");
+    // Nor does a touch reach the page under it: the tiles take none.
+    const MagicPortalsLayer::MenuButton* chapter = MenuButtonOf(layer, Kind::World, 3);
+    if (chapter != nullptr) {
+        const glm::vec2 onTile = ScreenOfView(layer, chapter->centrePx);
+        tap(layer, registry, onTile);
+        releaseWith(layer, registry, onTile);
+        tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(layer.MenuScreen() == Screen::Worlds, "a tap on chapter 4's icon under it does nothing");
+    }
+    // Down on it and up on it: the press, and the close.
+    tap(layer, registry, onButton);
+    releaseWith(layer, registry, onButton);
+    CHECK_MSG(layer.MenuPopup() != nullptr && Popup::Closing(*layer.MenuPopup()), "a press of the button closes it");
+    // The release that presses it is not a hold: it leaves white, and stays so.
+    CHECK_MSG(layer.MenuPopup() != nullptr && !layer.MenuPopup()->closeTinted && closeQuad().color.r == 1.0f,
+              "the press leaves it untinted");
+    int ticks = 0;
+    bool white = true;
+    while (layer.MenuPopup() != nullptr && ticks < 120) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++ticks;
+        const ScreenOverlay::Quad quad = closeQuad();
+        if (layer.MenuPopup() != nullptr && !quad.texture.empty() && quad.color.r != 1.0f) white = false;
+    }
+    CHECK_MSG(white, "white through the dismissal");
+    CHECK_MSG(ticks == 60, "gone 60 ticks (1000 ms) after the close: " + std::to_string(ticks));
+    CHECK_MSG(layer.MenuScreen() == Screen::Worlds && layer.SelectorLayerMs() == 0.0,
+              "chapter select stays, its layer's clock still at zero");
+    // The PageManager is updated from the next tick: the title and arrows enter
+    // from nothing, 700 ms long, as a state's first tick has them.
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.SelectorLayerMs() == 0.0 &&
+                  IndexOfImage(MenuFrame(registry, layer), "select_chapter.png") < 0,
+              "its first update: the title at alpha 0");
+    for (int tick = 0; tick < 42; ++tick) tickWith(layer, registry, kRest, {}, {});
+    {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const int title = IndexOfImage(frame, "select_chapter.png");
+        CHECK_MSG(NearD(layer.SelectorLayerMs(), 700.0, 1e-3) && title >= 0 &&
+                      frame[static_cast<std::size_t>(std::max(title, 0))].color.a > 0.999f,
+                  "700 ms on, the title whole: " + std::to_string(layer.SelectorLayerMs()) + " ms");
+        CHECK_MSG(IndexOfImage(frame, "game_finished.png") < 0 && BlackIndices(frame).empty(), "and no card, no dim");
+    }
+
+    // The back key with the card up is the main menu, the card going with the state
+    // (LevelSelector::loop reads it whatever layer is current).
+    entt::registry again;
+    publishViewport(again);
+    MagicPortalsLayer back(TestPaths(), "level31c");
+    back.OnAttach(again);
+    CHECK(goOn(back, again) && back.MenuPopupClass() != nullptr);
+    for (int tick = 0; tick < 10; ++tick) tickWith(back, again, kRest, {}, {});
+    pressBack(back, again);
+    tickWith(back, again, kRest, {}, {});
+    CHECK_MSG(back.MenuScreen() == Screen::Main && back.MenuPopupClass() == nullptr,
+              "the back key over the card: the main menu, and the card gone");
+    back.OnDetach(again);
+
+    // The pager's slide to chapter 4's page goes on under the card, but not while a
+    // finger is down, wherever it is: Swyper::getOffset (bytes 21658..21861) decays
+    // only at KS_UP or KS_RELEASE. The swyper tracks no touch meanwhile, so it is
+    // left not touching.
+    entt::registry sliding;
+    publishViewport(sliding);
+    MagicPortalsLayer slide(TestPaths(), "level31c");
+    slide.OnAttach(sliding);
+    CHECK(goOn(slide, sliding) && slide.MenuPopupClass() != nullptr);
+    tickWith(slide, sliding, kRest, {}, {});
+    const double moving = slide.SelectorState().offset;
+    const glm::vec2 onItsCard = ScreenOfView(slide, slide.ViewPx() * 0.5);
+    tap(slide, sliding, onItsCard);
+    const double down = slide.SelectorState().offset;
+    for (int tick = 0; tick < 5; ++tick) tickWith(slide, sliding, onItsCard, {MagicPortalsLayer::kTap}, {});
+    const double held = slide.SelectorState().offset;
+    releaseWith(slide, sliding, onItsCard);
+    const double let = slide.SelectorState().offset;
+    CHECK_MSG(std::fabs(moving) > 0.1, "the page still sliding a tick in: " + std::to_string(moving));
+    CHECK_MSG(down == moving && held == moving,
+              "no decay with a finger down: " + std::to_string(moving) + " -> " + std::to_string(down) + " -> " +
+                  std::to_string(held));
+    CHECK_MSG(std::fabs(let) < std::fabs(moving) && !slide.SelectorState().touching,
+              "it decays again at the release, and the swyper is not left touching: " + std::to_string(let));
+    slide.OnDetach(sliding);
+    layer.OnDetach(registry);
+}
+
 // ---- the medal a finished level earns -----------------------------------------
 
 // Finishing a level puts the medal screen up over it, rather than going
@@ -2780,6 +3299,21 @@ void FinishingALevelShowsTheMedal() {
     CHECK(layer.MenuScreen() == Screen::None);
     CHECK_MSG(IsAt(layer, "level1"), std::string("it went on to ") +
                                          (layer.Current() != nullptr ? layer.Current()->name : "none"));
+
+    // And a menu state after it says nothing of the level cleared (ui3 spec D7): the
+    // port's old "cleared with" line was for the black a chapter's end left, and is
+    // not written over the grid or chapter select (planning step 119).
+    MagicPortalsLayer::MenuButton list;
+    list.kind = Kind::List;
+    layer.PressMenu(registry, list);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK(layer.MenuScreen() == Screen::Levels && layer.LastCleared().has_value());
+    int spoken = 0;
+    for (auto [entity, text] : registry.view<UITextComponent>().each()) {
+        (void)entity;
+        if (!text.text.empty()) ++spoken;
+    }
+    CHECK_MSG(spoken == 0, "no text over the grid after a clear: " + std::to_string(spoken) + " line(s)");
 }
 
 // ---- the entities' particles --------------------------------------------------
@@ -4851,6 +5385,167 @@ void TheSkyStaysOnTheViewAsTheCameraMoves() {
     CHECK_EQ(ticksOff, 0);
     CHECK_EQ(framesOff, 0);
     layer.OnDetach(registry);
+}
+
+// SPACESKY (sim/Sky.hpp, step 122) on 4-03, level2c, which opens on its player with
+// the camera's centre at x 284.4, the level's right edge - 28.4 u right of the 256
+// the level puts all three at. The space sky is the view's centre, and the spiral
+// and the planet's point its bottom-centre, on every tick and on every frame drawn
+// between ticks; the spiral is the view's diagonal wide, coloured 0.7 and turned
+// 1.7 degrees a second clockwise; the planet hangs 60 u above its point by its
+// pivot, with its bob; and all three go with a shaken camera. Drawn where the
+// level put them - (256, 128) and (256, 256), a 256 u spiral - every check fails.
+// Then 4-19, level18c, the one eclipse: across at the view's centre, and down at
+// its own 320 (drawn 30 u up), which the corner's y of 0 leaves where it is.
+void TheSpaceSkyStaysOnTheViewAsTheCameraMoves() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level2c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    const MagicPortals::Sky::Space& space = layer.SpaceController();
+    CHECK_MSG(space.running && space.skyNode == "space_sky_2061" && space.spiralNode == "spiral_2062" &&
+                  space.planetNode == "planet_bg_ent_2074" && space.eclipseNode.empty(),
+              "level2c builds SpaceSky: its space sky, spiral and planet, and no eclipse");
+    CHECK_MSG(!layer.SkyController().running, "and no StaticSky");
+    const auto quadOf = [&registry](const std::string& file) {
+        entt::entity quad = entt::null;
+        for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+            if (tag.tag == "Magic Portals Sprite" && material.albedoTexturePath.find(file) != std::string::npos) {
+                quad = entity;
+            }
+        }
+        return quad;
+    };
+    const entt::entity sky = quadOf("/space_bg.png");
+    const entt::entity spiral = quadOf("/spiral.png");
+    const entt::entity planet = quadOf("/planet_bg.png");
+    CHECK(sky != entt::null && spiral != entt::null && planet != entt::null);
+    if (sky == entt::null || spiral == entt::null || planet == entt::null) return;
+    for (const entt::entity quad : {sky, spiral, planet}) {
+        CHECK_MSG(registry.all_of<InterpolatedTransformComponent>(quad), "interpolated, as the camera is");
+    }
+    const glm::dvec2 view = layer.ViewPx();
+    const double diagonal = glm::length(view);
+    CHECK_MSG(std::fabs(space.spiralSidePx - diagonal) < 1e-9 && std::fabs(diagonal - 522.2) < 0.05,
+              "the spiral's side is the view's diagonal: " + std::to_string(space.spiralSidePx));
+    const glm::vec3 spiralScale = registry.get<TransformComponent>(spiral).scale;
+    CHECK_MSG(std::fabs(spiralScale.x - MagicPortals::Units::ToMetres(diagonal)) < 1e-4f &&
+                  spiralScale.x == spiralScale.y,
+              "and so is its quad: " + std::to_string(spiralScale.x) + " x " + std::to_string(spiralScale.y) + " m");
+    const glm::vec4 colour = registry.get<MaterialComponent>(spiral).albedoColor;
+    CHECK_MSG(colour.r == 0.7f && colour.g == 0.7f && colour.b == 0.7f,
+              "SetColor(0.7, 0.7, 0.7): " + std::to_string(colour.r));
+
+    // Offsets from the camera, in the world's metres (y up): the bottom-centre is
+    // half a view below the centre, and the planet's picture 60 u above that.
+    const float half = MagicPortals::Units::ToMetres(view.y * 0.5);
+    const auto offset = [&registry](entt::entity quad, const glm::vec3& camera) {
+        const glm::vec3 at = registry.get<TransformComponent>(quad).position;
+        return glm::vec2(at.x - camera.x, at.y - camera.y);
+    };
+    const auto near = [](const glm::vec2& a, const glm::vec2& b) {
+        return std::fabs(a.x - b.x) <= 1e-5f && std::fabs(a.y - b.y) <= 1e-5f;
+    };
+    const double startX = layer.CameraCentrePx().x;
+    CHECK_MSG(std::fabs(startX - 256.0) > 20.0, "the camera is not where the level put the sky: " + std::to_string(startX));
+    int ticksOff = 0, framesOff = 0, frames = 0, planetOff = 0;
+    for (int tick = 0; tick < 240; ++tick) {
+        InterpolationSystem::BeginTick(registry);
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight},
+                 tick == 0 ? std::vector<std::string>{MagicPortalsLayer::kRight} : std::vector<std::string>{});
+        InterpolationSystem::EndTick(registry);
+        if (layer.MenuScreen() != MagicPortalsLayer::Screen::None) break;
+        const glm::vec3 camera = registry.get<CameraComponent>(primaryCamera(registry)).position;
+        if (!near(offset(sky, camera), {0.0f, 0.0f}) || !near(offset(spiral, camera), {0.0f, -half})) ++ticksOff;
+        // The planet's point is the bottom-centre plus its bob; its picture 60 u up.
+        const double bob = MagicPortals::Motion::OffsetPx(space.planetBob).y;
+        const glm::vec2 planetWant(0.0f, -half + MagicPortals::Units::ToMetres(60.0 - bob));
+        if (!near(offset(planet, camera), planetWant)) ++planetOff;
+        for (int f = 1; f <= 4; ++f) {
+            InterpolationSystem::Apply(registry, static_cast<float>(f) / 4.0f);
+            ++frames;
+            const glm::vec3 drawn = registry.get<CameraComponent>(primaryCamera(registry)).position;
+            if (!near(offset(sky, drawn), {0.0f, 0.0f}) || !near(offset(spiral, drawn), {0.0f, -half})) ++framesOff;
+        }
+    }
+    const double turned = layer.SpaceController().spiralTurn.turnedDeg;
+    std::printf("  level2c: camera %.1f -> %.1f px; sky or spiral off on %d tick(s) and %d of %d frame(s), planet off "
+                "on %d tick(s); spiral turned %.3f deg\n",
+                startX, layer.CameraCentrePx().x, ticksOff, framesOff, frames, planetOff, turned);
+    CHECK_EQ(ticksOff, 0);
+    CHECK_EQ(framesOff, 0);
+    CHECK_EQ(planetOff, 0);
+    // 240 ticks at -1.7 degrees a second (the tick is the float 1/60), and the quad
+    // turned by it: clockwise on the screen, a negative turn about the world's +z.
+    CHECK_MSG(std::fabs(turned - (-1.7 * 4.0)) < 1e-5, "turned " + std::to_string(turned) + " degrees");
+    InterpolationSystem::Apply(registry, 1.0f);
+    const float spun = registry.get<TransformComponent>(spiral).rotation.z;
+    CHECK_MSG(std::fabs(spun - static_cast<float>(-6.8 * 3.14159265358979323846 / 180.0)) < 1e-5f,
+              "the quad's turn: " + std::to_string(spun) + " rad");
+
+    // THE SHAKE: a tremble moves the drawn camera, and all three with it (to a float's
+    // rounding: each quad adds the same metres to a different y).
+    layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
+    bool held = true;
+    int trembles = 0;
+    float worst = 0.0f;
+    for (int tick = 0; tick < 12; ++tick) {
+        InterpolationSystem::BeginTick(registry);
+        tickWith(layer, registry, kRest, {}, {});
+        InterpolationSystem::EndTick(registry);
+        InterpolationSystem::Apply(registry, 1.0f);
+        const float cameraY = registry.get<CameraComponent>(primaryCamera(registry)).position.y;
+        const float skyY = registry.get<TransformComponent>(sky).position.y;
+        const float spiralY = registry.get<TransformComponent>(spiral).position.y;
+        const float planetY = registry.get<TransformComponent>(planet).position.y;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const float move = registry.get<CameraComponent>(primaryCamera(registry)).position.y - cameraY;
+        if (move != 0.0f) ++trembles;
+        for (const auto& [quad, before] : {std::pair{sky, skyY}, std::pair{spiral, spiralY}, std::pair{planet, planetY}}) {
+            const float off = std::fabs(registry.get<TransformComponent>(quad).position.y - (before + move));
+            worst = std::max(worst, off);
+            held = held && off <= 1e-5f;
+        }
+    }
+    CHECK_MSG(trembles >= 2, "the light wall's call trembled: " + std::to_string(trembles));
+    CHECK_MSG(held, "the space sky, the spiral and the planet go with the shaken camera; worst " + std::to_string(worst));
+    layer.OnDetach(registry);
+
+    entt::registry eclipseRegistry;
+    publishViewport(eclipseRegistry);
+    MagicPortalsLayer eclipseLevel(TestPaths(), "level18c");
+    eclipseLevel.OnAttach(eclipseRegistry);
+    if (!eclipseLevel.LoadError().empty() || !eclipseLevel.ArtError().empty()) {
+        CHECK_MSG(false, eclipseLevel.LoadError() + eclipseLevel.ArtError());
+        return;
+    }
+    CHECK(eclipseLevel.SpaceController().eclipseNode == "eclipse_ent_2583");
+    entt::entity eclipse = entt::null;
+    for (auto [entity, tag, material] : eclipseRegistry.view<TagComponent, MaterialComponent>().each()) {
+        if (tag.tag == "Magic Portals Sprite" && material.albedoTexturePath.find("/eclipse.png") != std::string::npos) {
+            eclipse = entity;
+        }
+    }
+    CHECK(eclipse != entt::null);
+    if (eclipse == entt::null) return;
+    bool pinned = true;
+    for (int tick = 0; tick < 60; ++tick) {
+        tickWith(eclipseLevel, eclipseRegistry, kRest, {}, {});
+        const glm::dvec2 centre = eclipseLevel.CameraCentrePx();
+        const glm::vec3 want = MagicPortals::Units::ToWorld(centre.x, 320.0 - 30.0);
+        const glm::vec3 at = eclipseRegistry.get<TransformComponent>(eclipse).position;
+        pinned = pinned && std::fabs(at.x - want.x) <= 1e-5f && std::fabs(at.y - want.y) <= 1e-5f &&
+                 eclipseLevel.SpaceController().eclipseYPx == 320.0;
+    }
+    CHECK_MSG(std::fabs(eclipseLevel.CameraCentrePx().x - 256.0) > 1.0 && eclipseLevel.CameraCentrePx().y == 128.0,
+              "4-19's camera is off the level's 256 across, and its corner at y 0: " +
+                  Point(eclipseLevel.CameraCentrePx()));
+    CHECK_MSG(pinned, "the eclipse across the view's centre and at its own 320 on every tick");
+    eclipseLevel.OnDetach(eclipseRegistry);
 }
 
 // ---- THE EARTHQUAKE (planning step 101) ------------------------------------------
@@ -7410,6 +8105,136 @@ void ThePausesButtonsGoWhereTheOriginalsGo() {
                   layer.SimLevel() == nullptr,
               "back to levels opens the grid");
     CHECK_EQ(MenuButtonsOfKind(layer, MagicPortalsLayer::MenuButton::Kind::Level), 32);
+}
+
+// The two switches are kept between runs, as the original's saveVolume and
+// saveMusicState keep them (planning step 124). A layer given a save directory
+// reads them at attach and writes them on a toggle and never otherwise; the next
+// layer over that directory starts as the player left them - its pause showing
+// sound_mute and no music switch, no track heard, and the sound back on bringing
+// the music switch in afresh with the level's track. The main menu's switches
+// write the same file. The one layer case that writes a save, into a directory
+// of its own, emptied first and last.
+void TheSwitchesAreKeptBetweenRuns() {
+    if (!OriginalArtIsThere("TheSwitchesAreKeptBetweenRuns")) return;
+    namespace Pause = MagicPortals::Pause;
+    namespace Switches = MagicPortals::Switches;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-switches";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    const std::filesystem::path file = dir / Switches::kFileName;
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = dir.string();
+
+    // What the file says, read as the next run would read it.
+    const auto saved = [&dir](bool& sound, bool& music) {
+        Switches::Store store;
+        std::string why;
+        const bool read = store.Open(dir.string(), Switches::Defaults{}, why) && store.FromFile();
+        sound = store.SoundOn();
+        music = store.MusicOn();
+        return read;
+    };
+    const auto openPause = [](MagicPortalsLayer& layer, entt::registry& registry) {
+        for (int tick = 0; tick < 90; ++tick) tickWith(layer, registry, kRest, {}, {});
+        const bool paused = TapThePauseControl(layer, registry) && layer.Paused();
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        return paused;
+    };
+
+    // The first run: a fresh save, both on, and nothing written until a switch is.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level4");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CHECK_MSG(layer.SoundOn() && layer.MusicOn(), "a fresh save starts with both switches on");
+        CHECK(openPause(layer, registry));
+        CHECK_MSG(!std::filesystem::exists(file, ec), "nothing is written before a switch is pressed");
+        CHECK(TapPauseButton(layer, registry, Pause::Button::Sound));
+        bool sound = true;
+        bool music = false;
+        CHECK_MSG(saved(sound, music) && !sound && music, "the sound switch saves the sound off, the music on");
+        layer.OnDetach(registry);
+    }
+
+    // The second: as the player left it.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level4");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CHECK_MSG(!layer.SoundOn() && layer.MusicOn(), "the next run starts with the sound off");
+        CHECK_MSG(layer.WantedTrack().empty(), "and no track heard");
+        CHECK(openPause(layer, registry));
+        {
+            const std::vector<ScreenOverlay::Quad> quads = HudFrame(registry, layer);
+            CHECK_MSG(IndexOfImage(quads, layer.PauseRules().soundOffSprite) >= 0, "its pause shows sound_mute");
+            CHECK_MSG(IndexOfImage(quads, layer.PauseRules().music.sprite) < 0 &&
+                          IndexOfImage(quads, layer.PauseRules().musicOffSprite) < 0,
+                      "and no music switch");
+        }
+        CHECK_MSG(!layer.PressPause(registry, Pause::Button::Music) && layer.MusicOn(),
+                  "which cannot be pressed");
+        CHECK(TapPauseButton(layer, registry, Pause::Button::Sound));
+        CHECK(layer.SoundOn());
+        CHECK_MSG(IndexOfImage(HudFrame(registry, layer), layer.PauseRules().music.sprite) < 0,
+                  "the sound back on: the music switch comes in afresh");
+        for (int tick = 0; tick < 43; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(IndexOfImage(HudFrame(registry, layer), layer.PauseRules().music.sprite) >= 0,
+                  "and is there once it has entered");
+        CHECK_MSG(layer.WantedTrack() == "game", "and the level's track plays");
+        CHECK(TapPauseButton(layer, registry, Pause::Button::Music));
+        bool sound = false;
+        bool music = true;
+        CHECK_MSG(saved(sound, music) && sound && !music, "the music switch saves the music off, the sound on");
+        layer.OnDetach(registry);
+    }
+
+    // The third: the music off.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level4");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CHECK_MSG(layer.SoundOn() && !layer.MusicOn() && layer.WantedTrack().empty(),
+                  "a run after the music was switched off starts silent, with the sound on");
+        layer.OnDetach(registry);
+    }
+
+    // And the main menu: it starts as the pause left it, and its switch saves.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty() || !TickToTheMainMenu(layer, registry)) {
+            CHECK_MSG(false, "no main menu: " + layer.LoadError());
+            return;
+        }
+        CHECK_MSG(layer.MainMenuSwitches().soundOn && !layer.MainMenuSwitches().musicOn,
+                  "the main menu's switches start as the last run left them");
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK(layer.PressMainMenu(registry, MagicPortals::MainMenu::Button::Sound));
+        bool sound = true;
+        bool music = true;
+        CHECK_MSG(saved(sound, music) && !sound && !music, "and the main menu's sound switch saves");
+        layer.OnDetach(registry);
+    }
+    std::filesystem::remove_all(dir, ec);
 }
 
 void SkipOnALevelAlreadyFinished() {
@@ -11807,12 +12632,13 @@ void TheGhostComesWithItsKnightsDeath() {
         return found;
     };
 
-    // BEFORE: a second of the level, and no ghost, no puffs, the level's own music.
+    // BEFORE: a second of the level, and no ghost, no puffs, and no music: level31b
+    // sets no_music, so Game::preLoop's turnMusicOff (#493-509) is all it gets.
     for (int tick = 0; tick < 60; ++tick) step();
     CHECK_MSG(layer.GhostDrawing().present && !layer.GhostDrawing().spawned && !layer.GhostDrawing().drawn &&
                   Tagged(registry, "Magic Portals Ghost") == 0,
               "level31b has a ghost_pos and no ghost while its knight lives");
-    CHECK_MSG(layer.WantedTrack() == "game", "and the level's own music: " + layer.WantedTrack());
+    CHECK_MSG(layer.WantedTrack().empty(), "and no_music: silent, not the level's track: '" + layer.WantedTrack() + "'");
     CHECK_MSG(effectsNamed("ghost_appear_effect.ent").empty(), "and no puffs");
 
     // THE KNIGHT DIES: onto the level's killer floor, where the frame after ends it.
@@ -11862,7 +12688,7 @@ void TheGhostComesWithItsKnightsDeath() {
     CHECK_MSG(added.z > door && added.z < deepestAtZero && added.z < layer.PlayerSlotZ(),
               "behind the z-0 art " + std::to_string(deepestAtZero) + " and the player, in front of the locked door " +
                   std::to_string(door) + ": " + std::to_string(added.z));
-    CHECK_MSG(layer.WantedTrack() == "game", "its init has not run: the level's music still");
+    CHECK_MSG(layer.WantedTrack().empty(), "its init has not run: still silent");
 
     // ITS FIRST CALLBACK: black at alpha 0.667, the boss's music, and the puffs.
     step();
@@ -12147,12 +12973,20 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
     for (int tick = 0; tick < 240 && !level.torch.lights.front().lit; ++tick) step();
     CHECK_MSG(level.torch.lights.front().lit, "a shot from the floor lit 4-32's torch: " + lastFailure(layer));
     if (!level.torch.lights.front().lit) return;
+    // THE MUSIC (planning step 121): level31c sets no_music, so it is silent until
+    // the spawn adds the dragon and calls playGameMusic(true) (#103-118).
+    CHECK_MSG(layer.WantedTrack().empty(), "no_music: silent until the summon: '" + layer.WantedTrack() + "'");
     int drawnEarly = 0;
+    int musicEarly = 0;
     for (int tick = 0; tick < 900 && !dragon.alive; ++tick) {
         step();
         if (!dragon.alive && dragonEffect().has_value()) ++drawnEarly;
+        if (!dragon.alive && !layer.WantedTrack().empty()) ++musicEarly;
     }
     CHECK_MSG(dragon.alive && drawnEarly == 0, "nothing of it before the summon, then the summon");
+    CHECK_MSG(musicEarly == 0 && layer.WantedTrack() == "boss",
+              "and the boss's track from the summon's tick, none before: '" + layer.WantedTrack() + "', " +
+                  std::to_string(musicEarly) + " early");
     if (!dragon.alive) return;
 
     // THE SUMMON'S FRAME: AddScaledEntity's entity before its first update.
@@ -12292,12 +13126,16 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
     CHECK_MSG(bright && glm::distance(bright->emissive, glm::dvec3(0.45)) < 1e-6, "then three times its own");
 
     // TWO MORE, and its death: WHITE.
+    CHECK_MSG(layer.WantedTrack() == "boss", "a wound leaves the boss's track playing");
     for (int round = 0; round < 2; ++round) {
         for (int tick = 0; tick < 400 && dragon.phase != Phase::Fighting; ++tick) step();
+        if (round == 1) CHECK_MSG(layer.WantedTrack() == "boss", "the boss's track up to the killing burn");
         layer.ScheduleDevBurn(layer.LayerTicks() + 1);
         step();
     }
     CHECK_MSG(dragon.phase == Phase::Dying && dragon.hp == 0, "the third burn kills it");
+    // Its death's StopSample (#1958-2012), on the way into DYING, on that tick.
+    CHECK_MSG(layer.WantedTrack().empty(), "and its death stops the track: '" + layer.WantedTrack() + "'");
     step();
     const std::optional<MagicPortalsLayer::EffectReport> dying = dragonEffect();
     CHECK_MSG(dying && dying->emissive == glm::dvec3(1.0), "dying, white");
@@ -12307,6 +13145,7 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
     }
     for (int tick = 0; tick < 700 && !dragon.gone; ++tick) step();
     CHECK_MSG(dragon.gone && !dragonEffect().has_value(), "it has gone, and its picture and its mouth");
+    CHECK_MSG(layer.WantedTrack().empty(), "and nothing starts the music again");
     step();
     std::vector<MagicPortalsLayer::EffectReport> keys;
     for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
@@ -14890,7 +15729,574 @@ void AShockRingsJitterIsTheEffectsStreamsAlone() {
     b.OnDetach(withEffect);
 }
 
+// ---- The music as the original plays it (the program's P7, planning step 121) ----
+//
+// WantedTrack is AudioManager.currentTrack and its one MediaPlayer as the
+// original's calls leave them, with or without a device: Game::preLoop's
+// playGameMusic(isBossFight) or, on a no_music level, turnMusicOff (#485-509);
+// PortalMainMenu::preLoop's playMenuMusic (#368), and no call at all on chapter or
+// level select; the bosses' own starts and stops; and a switch turned back on
+// resuming currentTrack (resumeMusic).
+
+// The data the rule reads: the four levels whose `properties` carry no_music, and
+// every world 32 levels long, so that m_levelIndex == 31 is each world's last.
+void FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight() {
+    std::vector<std::string> silent;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (entry.path().extension() != ".tscn") continue;
+        std::ifstream in(entry.path(), std::ios::binary);
+        std::ostringstream text;
+        text << in.rdbuf();
+        if (text.str().find("metadata/no_music = ") != std::string::npos) silent.push_back(entry.path().stem().string());
+    }
+    std::sort(silent.begin(), silent.end());
+    const std::vector<std::string> four{"level0c", "level18c", "level31b", "level31c"};
+    CHECK_MSG(silent == four, "no_music on 4-01, 4-19, 3-32 and 4-32 only: " + std::to_string(silent.size()) + " levels");
+    MagicPortals::Chapters::Table chapters;
+    std::string error;
+    CHECK_MSG(MagicPortals::Chapters::Load(kChapters, chapters, error), error);
+    std::array<int, 4> perWorld{};
+    for (const MagicPortals::Chapters::Level& level : chapters.levels) {
+        if (level.world >= 0 && level.world < 4) ++perWorld[static_cast<std::size_t>(level.world)];
+    }
+    CHECK_MSG(chapters.levels.size() == 128 && perWorld == (std::array<int, 4>{32, 32, 32, 32}),
+              "four worlds of 32: index 31 is each world's last");
+    int lasts = 0;
+    for (std::size_t at = 0; at < chapters.levels.size(); ++at) {
+        if (chapters.Next(static_cast<int>(at)) >= 0) continue;
+        ++lasts;
+        CHECK_MSG(chapters.levels[at].index == 31, chapters.levels[at].name + " ends its world at index " +
+                                                       std::to_string(chapters.levels[at].index));
+    }
+    CHECK_EQ(lasts, 4);
+}
+
+// Game::preLoop on each kind of level, as it loads.
+void EachLevelOpensOnTheTrackItsPreLoopAsksFor() {
+    const struct Case {
+        const char* level;
+        const char* label;
+        const char* track;
+    } cases[] = {
+        {"level0", "1-01", "game"},  {"level30", "1-31", "game"},  {"level31", "1-32", "boss"},
+        {"level0a", "2-01", "game"}, {"level31a", "2-32", "boss"}, {"level30b", "3-31", "game"},
+        {"level31b", "3-32", ""},    {"level0c", "4-01", ""},      {"level17c", "4-18", "game"},
+        {"level18c", "4-19", ""},    {"level30c", "4-31", "game"}, {"level31c", "4-32", ""},
+    };
+    for (const Case& one : cases) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), one.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, std::string(one.level) + ": " + layer.LoadError());
+        CHECK_MSG(layer.WantedTrack() == one.track, std::string(one.label) + " (" + one.level + ") opens on '" +
+                                                        one.track + "', not '" + layer.WantedTrack() + "'");
+        layer.OnDetach(registry);
+    }
+}
+
+// Back out of a level to the main menu, one Back at a time; the screens it passed.
+void BackUntilTheMainMenu(MagicPortalsLayer& layer, entt::registry& registry, std::vector<std::string>& heard) {
+    using Screen = MagicPortalsLayer::Screen;
+    MagicPortalsLayer::MenuButton back;
+    back.kind = MagicPortalsLayer::MenuButton::Kind::Back;
+    for (int press = 0; press < 12 && layer.MenuScreen() != Screen::Main; ++press) {
+        const Screen before = layer.MenuScreen();
+        if (!layer.PressMenu(registry, back)) break;
+        if (layer.MenuScreen() != before) {
+            heard.push_back(std::string(layer.MenuScreen() == Screen::Worlds ? "worlds" : "main") + ":" +
+                            layer.WantedTrack());
+        }
+    }
+}
+
+// The level's track goes on under the medal, the level grid and chapter select;
+// the main menu is the one state that changes it; a level picked from the grid
+// starts its own.
+void TheLevelsTrackCarriesIntoTheSelectors() {
+    if (!OriginalArtIsThere("TheLevelsTrackCarriesIntoTheSelectors")) return;
+    using Screen = MagicPortalsLayer::Screen;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    CHECK_MSG(layer.WantedTrack() == "game", "1-01's own track: " + layer.WantedTrack());
+    for (int tick = 0; tick < 600 && layer.MenuScreen() != Screen::Finished; ++tick) {
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, {});
+    }
+    CHECK_MSG(layer.MenuScreen() == Screen::Finished && layer.WantedTrack() == "game",
+              "and under its medal: " + layer.WantedTrack());
+    MagicPortalsLayer::MenuButton list;
+    list.kind = Kind::List;
+    CHECK(layer.PressMenu(registry, list));
+    CHECK_MSG(layer.MenuScreen() == Screen::Levels && layer.WantedTrack() == "game",
+              "the level grid carries it (the port used to switch to the menu's here): '" + layer.WantedTrack() + "'");
+    std::vector<std::string> heard;
+    BackUntilTheMainMenu(layer, registry, heard);
+    CHECK_MSG(heard == (std::vector<std::string>{"worlds:game", "main:menu"}),
+              "chapter select still the level's, the main menu its own: " +
+                  (heard.empty() ? std::string("nothing") : heard.front() + " / " + heard.back()));
+    const MagicPortalsLayer::MenuButton* play = MenuButtonOf(layer, Kind::Play);
+    if (play == nullptr) {
+        CHECK_MSG(false, "the main menu has no play button");
+        return;
+    }
+    layer.PressMenu(registry, *play);
+    CHECK_MSG(layer.MenuScreen() == Screen::Worlds && layer.WantedTrack() == "menu", "chapter select from the menu: the menu's");
+    const MagicPortalsLayer::MenuButton* world = MenuButtonOf(layer, Kind::World, 0);
+    if (world == nullptr) {
+        CHECK_MSG(false, "chapter select has no world button");
+        return;
+    }
+    layer.PressMenu(registry, *world);
+    CHECK_MSG(layer.MenuScreen() == Screen::Levels && layer.WantedTrack() == "menu", "and the grid under it");
+    const MagicPortalsLayer::MenuButton* first = MenuButtonOf(layer, Kind::Level, 0);
+    if (first == nullptr) {
+        CHECK_MSG(false, "the grid has no level button");
+        return;
+    }
+    layer.PressMenu(registry, *first);
+    CHECK_MSG(IsAt(layer, "level0") && layer.WantedTrack() == "game", "and 1-01 picked from it starts its own");
+    layer.OnDetach(registry);
+}
+
+// A no_music level's silence carries into the grid and chapter select just the
+// same, a retry is silent again, and only the main menu brings a track back.
+void ANoMusicLevelsSilenceCarriesIntoTheSelectors() {
+    using Screen = MagicPortalsLayer::Screen;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    CHECK_MSG(layer.WantedTrack().empty(), "4-01 opens silent: '" + layer.WantedTrack() + "'");
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CHECK_MSG(IsAt(layer, "level0c") && layer.WantedTrack().empty(), "and a retry of it is silent again");
+    MagicPortalsLayer::MenuButton list;
+    list.kind = MagicPortalsLayer::MenuButton::Kind::List;
+    CHECK(layer.PressMenu(registry, list));
+    CHECK_MSG(layer.MenuScreen() == Screen::Levels && layer.WantedTrack().empty(), "the grid after it is silent");
+    std::vector<std::string> heard;
+    BackUntilTheMainMenu(layer, registry, heard);
+    CHECK_MSG(heard == (std::vector<std::string>{"worlds:", "main:menu"}),
+              "chapter select silent too, and the main menu's track at the main menu");
+    layer.OnDetach(registry);
+}
+
+// turnMusicOff on a no_music level is pauseMusic: the track stops and stays
+// currentTrack. A switch turned off and on again resumes it - the original's, and
+// it sounds like a bug: 4-19 reached by a skip from 4-18 plays 4-18's track again.
+// The sound switch resumes only while the music switch is on.
+void ASwitchBackOnResumesTheTrackANoMusicLevelStopped() {
+    if (!OriginalArtIsThere("ASwitchBackOnResumesTheTrackANoMusicLevelStopped")) return;
+    namespace Pause = MagicPortals::Pause;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level17c");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    CHECK_MSG(layer.WantedTrack() == "game", "4-18's own track");
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+    press(layer, registry, MagicPortalsLayer::kSkip);
+    CHECK_MSG(IsAt(layer, "level18c") && layer.WantedTrack().empty(), "4-19 skipped to: silent");
+    const auto pauseIt = [&layer, &registry]() {
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+        press(layer, registry, MagicPortalsLayer::kBack);
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        return layer.Paused();
+    };
+    CHECK_MSG(pauseIt(), "the pause over 4-19");
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Music) && !layer.MusicOn() && layer.WantedTrack().empty(),
+              "the music switch off");
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Music) && layer.MusicOn() && layer.WantedTrack() == "game",
+              "and on again: resumeMusic plays currentTrack, 4-18's: '" + layer.WantedTrack() + "'");
+
+    // Stopped again by a retry, then the sound switch.
+    CHECK(layer.PressPause(registry, Pause::Button::Resume));
+    for (int tick = 0; tick < 60 && layer.Paused(); ++tick) tickWith(layer, registry, kRest, {}, {});
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CHECK_MSG(IsAt(layer, "level18c") && layer.WantedTrack().empty(), "a retry: turnMusicOff again");
+    CHECK_MSG(pauseIt(), "the pause again");
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Sound) && !layer.SoundOn() && layer.WantedTrack().empty(),
+              "the sound switch off");
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Sound) && layer.SoundOn() && layer.WantedTrack() == "game",
+              "and on again with the music on: turnGlobalVolumeOn resumes it");
+    // With the music off, the sound back on resumes nothing; the music back on does.
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK(layer.PressPause(registry, Pause::Button::Music) && !layer.MusicOn());
+    CHECK(layer.PressPause(registry, Pause::Button::Sound) && !layer.SoundOn());
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Sound) && layer.SoundOn() && layer.WantedTrack().empty(),
+              "the sound back on with the music off: nothing");
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.PressPause(registry, Pause::Button::Music) && layer.MusicOn() && layer.WantedTrack() == "game",
+              "the music back on: resumed");
+    layer.OnDetach(registry);
+}
+
+// 1-32: the boss's track from its load, on through the fight, stopped while the
+// beholder is dead (ETHCallback_beholder #1139-1159, every update in
+// BEHOLDER_STATE_DEAD) and silent after it has gone - the port used to play on,
+// its beholder never cleared. Each rock it drops is put rising into its eye, the
+// three hits TheBeholderHurtShakesTheView's one is.
+void TheBeholdersDeathStopsItsTrack() {
+    using MagicPortals::Boss::Phase;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr || !layer.SimLevel()->boss.beholder.has_value()) return;
+    CHECK_MSG(layer.WantedTrack() == "boss", "1-32 opens on the boss's track: " + layer.WantedTrack());
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    const MagicPortals::Boss::Beholder& beholder = *level.boss.beholder;
+    const auto step = [&layer, &registry]() {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    };
+    int thrown = 0;
+    int shoved = 0;
+    int offWhileAlive = 0;
+    int ticks = 0;
+    for (; ticks < 12000 && beholder.phase != Phase::Dead; ++ticks) {
+        step();
+        if (beholder.phase != Phase::Dead && layer.WantedTrack() != "boss") ++offWhileAlive;
+        if (beholder.rocksThrown > thrown && !level.boss.rocks.empty()) {
+            thrown = beholder.rocksThrown;
+            const entt::entity rock = level.boss.rocks.back().body;
+            if (!registry.valid(rock)) continue;
+            const glm::vec3 inside = MagicPortals::Units::ToWorld(beholder.atPx.x, beholder.atPx.y + 10.0);
+            auto& at = registry.get<TransformComponent>(rock);
+            at.position = glm::vec3(inside.x, inside.y, at.position.z);
+            registry.get<RigidBodyComponent>(rock).velocity =
+                glm::vec3(0.0f, MagicPortals::Units::ToMetres(200.0), 0.0f);
+            ++shoved;
+        }
+    }
+    CHECK_MSG(beholder.phase == Phase::Dead && beholder.hits == 3,
+              "three rocks rising into it kill it: " + std::to_string(beholder.hits) + " hits of " +
+                  std::to_string(shoved) + " rocks put, " + std::to_string(ticks) + " ticks");
+    CHECK_MSG(offWhileAlive == 0, "the boss's track through the whole fight: " + std::to_string(offWhileAlive) +
+                                      " ticks without it");
+    CHECK_MSG(layer.WantedTrack().empty(), "dead: stopped on that tick: '" + layer.WantedTrack() + "'");
+    int heard = 0;
+    for (int tick = 0; tick < 400 && !beholder.gone; ++tick) {
+        step();
+        if (!layer.WantedTrack().empty()) ++heard;
+    }
+    for (int tick = 0; tick < 60; ++tick) {
+        step();
+        if (!layer.WantedTrack().empty()) ++heard;
+    }
+    CHECK_MSG(beholder.gone && level.boss.buttonRaised && heard == 0,
+              "silent through its death and after it has gone, its button raised: " + std::to_string(heard) +
+                  " ticks with a track");
+    std::printf("  1-32: the beholder dead on tick %d after %d rocks; the track stopped with it\n", ticks, shoved);
+    // A retry is a fresh Game::preLoop: playGameMusic(true) starts the stopped track again.
+    MagicPortalsLayer::MenuButton retry;
+    retry.kind = MagicPortalsLayer::MenuButton::Kind::Retry;
+    CHECK(layer.PressMenu(registry, retry));
+    CHECK_MSG(IsAt(layer, "level31") && layer.WantedTrack() == "boss", "a retry: the boss's track again");
+    layer.OnDetach(registry);
+}
+
+// 2-32: the boss's track from its load (isBossFight: the world's last level), and
+// the take-off's StopSample (ETHCallback_dragon #409-431), once, as it climbs away
+// past take_off - about 51.6 s in.
+void TheDragonsTakeOffStopsTheBossTrack() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr || !layer.SimLevel()->dragon.present) return;
+    CHECK_MSG(layer.WantedTrack() == "boss", "2-32 opens on the boss's track (it played the level's): " +
+                                                 layer.WantedTrack());
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Dragon::State& dragon = layer.SimLevel()->dragon;
+    int offBefore = 0;
+    int ticks = 0;
+    for (; ticks < 4000 && !dragon.tookOff; ++ticks) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (!dragon.tookOff && layer.WantedTrack() != "boss") ++offBefore;
+    }
+    CHECK_MSG(dragon.tookOff && offBefore == 0, "the boss's track until the take-off, on tick " + std::to_string(ticks));
+    CHECK_MSG(layer.WantedTrack().empty(), "and none from its tick: '" + layer.WantedTrack() + "'");
+    int heard = 0;
+    for (int tick = 0; tick < 120; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        if (!layer.WantedTrack().empty()) ++heard;
+    }
+    CHECK_MSG(heard == 0, "nor after it: " + std::to_string(heard));
+    std::printf("  2-32: the dragon took off on tick %d, and the boss's track stopped with it\n", ticks);
+    layer.OnDetach(registry);
+}
+
+// ---- the win cutscenes (planning step 123) ---------------------------------------
+
+// Puts the player's body in the level's exit and ticks until the layer says the door
+// was reached. Returns the layer's tick it was reached on, or -1.
+int ReachTheDoor(MagicPortalsLayer& layer, entt::registry& registry, const glm::dvec2& exitPx) {
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 10 && !layer.Finishing(); ++tick) {
+        PutPlayerAt(registry, layer, exitPx);
+        auto& rigid = registry.get<RigidBodyComponent>(layer.SimLevel()->player);
+        rigid.velocity = glm::vec3(0.0f);
+        tickWith(layer, registry, kRest, {}, {});
+    }
+    CHECK_MSG(layer.Finishing(), "the door was reached");
+    return layer.Finishing() ? layer.LayerTicks() : -1;
+}
+
+// The restart button of the finished or the lost screen, as a player presses it:
+// over either screen R is not read, the screen's buttons are.
+bool RestartFromTheScreen(MagicPortalsLayer& layer, entt::registry& registry) {
+    for (const MagicPortalsLayer::MenuButton& button : layer.MenuButtons()) {
+        if (button.kind != MagicPortalsLayer::MenuButton::Kind::Retry) continue;
+        layer.PressMenu(registry, button); // by value: pressing clears the list
+        return true;
+    }
+    CHECK_MSG(false, "the screen has a restart button");
+    return false;
+}
+
+// A level with no end_delay keeps level_end's 1400 ms and plays no cutscene.
+void ALevelWithoutAnEndDelayKeepsTheBeat() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK(layer.WonDelayMs() == 1400.0 && layer.LevelEndRules().wonDelayMs == 1400.0);
+    const MagicPortalsLayer::CutsceneReport report = layer.CutscenePicture(registry);
+    CHECK(!report.launchPlaced && !report.landingPlaced && !report.knight.placed);
+    layer.OnDetach(registry);
+}
+
+// 4-01 (level0c): rocket_launch from the door's own tick - the rocket door up
+// (0, -390) over 7600 ms, the bridge left without a clamp, a shake every 6th tick
+// for 6 s, the rocket's track - and the medal 5000 ms after the door, the launch
+// running on under it. Only pictures move: the bridge's box stays.
+void TheRocketLaunchesAfter4_01sDoor() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK(layer.WonDelayMs() == 5000.0);
+    MagicPortalsLayer::CutsceneReport before = layer.CutscenePicture(registry);
+    CHECK(before.launchPlaced && !before.landingPlaced && !before.knight.placed);
+    CHECK_MSG(before.bridgeQuad != entt::null, "the rocket_bridge is drawn");
+    const glm::dvec2 doorRest = before.doorCentrePx;
+    const glm::dvec2 bridgeRest = before.bridgeCentrePx;
+    CHECK(layer.WantedTrack().empty()); // no_music
+
+    const int door = ReachTheDoor(layer, registry, glm::dvec2(757.0, 140.0));
+    if (door < 0) return;
+    MagicPortalsLayer::CutsceneReport now = layer.CutscenePicture(registry);
+    CHECK_EQ(now.launchStartedTick, door);
+    CHECK(now.launch.running && now.launch.elapsedMs > 16.0 && now.launch.elapsedMs < 17.0);
+    CHECK_MSG(layer.WantedTrack() == "rocket", layer.WantedTrack());
+
+    int screenAt = -1;
+    for (int tick = door + 1; tick <= door + 460; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (screenAt < 0 && layer.MenuScreen() == MagicPortalsLayer::Screen::Finished) screenAt = tick;
+        if (tick == door + 228) {
+            // 3800 ms: the bridge at its -32, the door at -390 x smoothBeginning(0.5).
+            now = layer.CutscenePicture(registry);
+            const double t = now.launch.elapsedMs;
+            CHECK_MSG(std::fabs(now.bridgeCentrePx.x - bridgeRest.x - now.launch.pose.bridgeOffsetPx.x) < 1e-6 &&
+                          std::fabs(now.launch.pose.bridgeOffsetPx.x + 32.0 * (1.0 - std::cos(t / 3800.0 * 1.5707963))) <
+                              1e-3,
+                      Point(now.bridgeCentrePx) + " at " + std::to_string(t));
+            CHECK_MSG(std::fabs(now.doorCentrePx.y - doorRest.y - now.launch.pose.doorOffsetPx.y) < 1e-6 &&
+                          now.launch.pose.doorOffsetPx.y < -100.0,
+                      Point(now.doorCentrePx));
+            // The box the level built for it has not moved.
+            CHECK_MSG(glm::length(now.bridgeRestPx - glm::dvec2(716.0, 178.0)) < 0.5, Point(now.bridgeRestPx));
+        }
+    }
+    CHECK_MSG(screenAt == door + 300, "the medal " + std::to_string(screenAt - door) + " ticks after the door");
+    now = layer.CutscenePicture(registry);
+    // Behind the medal the launch went on and stopped at its last pose below 7600,
+    // the 455th update's at 7583.3 ms: the door 388.7 up of its 390, the bridge past
+    // -63.9 of its unclamped -64.
+    const double last = 455.0 * static_cast<double>(MagicPortalsLayer::kTick) * 1000.0;
+    CHECK_MSG(std::fabs(now.launch.pose.doorOffsetPx.y + 390.0 * (1.0 - std::cos(last / 7600.0 * 1.5707963))) < 1e-3 &&
+                  now.launch.pose.doorOffsetPx.y < -388.0,
+              Point(now.launch.pose.doorOffsetPx));
+    CHECK_MSG(now.launch.pose.bridgeOffsetPx.x < -63.9 && now.launch.pose.bridgeOffsetPx.x > -64.0,
+              Point(now.launch.pose.bridgeOffsetPx));
+    CHECK_MSG(std::fabs(now.doorCentrePx.y - doorRest.y - now.launch.pose.doorOffsetPx.y) < 1e-6,
+              Point(now.doorCentrePx));
+    // startEarthquake(3, 0) each time the counter passes 100 below 6000 ms. The
+    // port's tick is 16.6666675 ms, so six of them are 100.000005 and pass it: 59
+    // calls, the last on the 354th update (the original's frame time is a whole
+    // number of ms, 16 at 60 fps, which passes it after seven: the port-wide clock
+    // question the owner holds).
+    CHECK_EQ(now.quakes, 59);
+    CHECK_MSG(layer.WantedTrack() == "rocket", layer.WantedTrack());
+    std::printf("  4-01: door on tick %d, medal %d ticks later, rocket at %s, bridge %s, %d shakes\n", door,
+                screenAt - door, Point(now.launch.pose.doorOffsetPx).c_str(),
+                Point(now.launch.pose.bridgeOffsetPx).c_str(), now.quakes);
+
+    // A restart forgets it: the rocket and the bridge back where the level put them.
+    if (!RestartFromTheScreen(layer, registry)) return;
+    tickWith(layer, registry, kRest, {}, {});
+    now = layer.CutscenePicture(registry);
+    CHECK(!now.launch.running && now.launchStartedTick < 0 && now.quakes == 0);
+    CHECK_MSG(glm::length(now.doorCentrePx - doorRest) < 1e-6 && glm::length(now.bridgeCentrePx - bridgeRest) < 1e-6,
+              Point(now.doorCentrePx) + " " + Point(now.bridgeCentrePx));
+    layer.OnDetach(registry);
+}
+
+// 4-19 (level18c): rocket_landing from the door's tick - the rocket door down
+// (256, 400) over 12500 ms on its bob, the camera on it, the key shrinking, the
+// eclipse up to the view's bottom, the spiral dimmed to a tenth, back_home - and
+// the medal 14500 ms after the door.
+void TheRocketLandsAfter4_19sDoor() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level18c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK(layer.WonDelayMs() == 14500.0);
+    const MagicPortalsLayer::CutsceneReport before = layer.CutscenePicture(registry);
+    CHECK(!before.launchPlaced && before.landingPlaced && !before.knight.placed);
+    const glm::vec4 spiralBefore = before.spiralColour;
+
+    const int door = ReachTheDoor(layer, registry, glm::dvec2(590.0, 134.0));
+    if (door < 0) return;
+    CHECK_EQ(layer.CutscenePicture(registry).landingStartedTick, door);
+    CHECK_MSG(layer.WantedTrack() == "back_home", layer.WantedTrack());
+    int screenAt = -1;
+    double keyAtTen = 0.0;
+    for (int tick = door + 1; tick <= door + 880; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (screenAt < 0 && layer.MenuScreen() == MagicPortalsLayer::Screen::Finished) screenAt = tick;
+        if (tick == door + 10) keyAtTen = layer.CutscenePicture(registry).keyScale;
+    }
+    CHECK_MSG(screenAt == door + 870, "the medal " + std::to_string(screenAt - door) + " ticks after the door");
+    CHECK_MSG(std::fabs(keyAtTen - std::pow(0.9, 11.0)) < 1e-9, std::to_string(keyAtTen));
+    const MagicPortalsLayer::CutsceneReport now = layer.CutscenePicture(registry);
+    CHECK(now.landing.elapsedMs >= 12500.0 && now.landing.elapsedMs < 12500.0 + 17.0);
+    const MagicPortalsLayer::DoorReport doorNow = layer.DoorPicture();
+    // The door's point: its node (590, 128), its bob, and the landing's (256, 400).
+    const glm::dvec2 expected = glm::dvec2(590.0, 128.0) + doorNow.offsetPx + glm::dvec2(256.0, 400.0);
+    CHECK_MSG(glm::length(now.doorAtPx - expected) < 0.01, Point(now.doorAtPx) + " against " + Point(expected));
+    // The camera was given that point, and the eclipse is at the view's bottom, 0
+    // below its corner's 256.
+    CHECK_MSG(glm::length(now.cameraTargetPx - now.doorAtPx) < 1.0, Point(now.cameraTargetPx));
+    const glm::dvec2 corner = layer.CameraCentrePx() - layer.ViewPx() * 0.5;
+    CHECK_MSG(std::fabs(now.eclipseAtPx.y - (corner.y + layer.ViewPx().y)) < 0.01,
+              Point(now.eclipseAtPx) + " against the view's bottom " + std::to_string(corner.y + layer.ViewPx().y));
+    CHECK_MSG(std::fabs(now.spiralColour.r - spiralBefore.r * 0.1f) < 1e-4f && spiralBefore.r > 0.5f,
+              std::to_string(now.spiralColour.r) + " from " + std::to_string(spiralBefore.r));
+    std::printf("  4-19: door on tick %d, medal %d ticks later, door at %s, eclipse at %s, spiral %.3f\n", door,
+                screenAt - door, Point(now.doorAtPx).c_str(), Point(now.eclipseAtPx).c_str(),
+                static_cast<double>(now.spiralColour.r));
+    layer.OnDetach(registry);
+}
+
+// 2-32 (level31a): the knight its spawn adds on the door's tick walks in before the
+// medal, 6600 ms after the door, with the door's own effect and sound; black, on
+// minion.png's cut, its aura carried. A death adds it too, and a retry takes it.
+void TheKnightWalksIntoTheDoorAfter2_32() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK(layer.WonDelayMs() == 6600.0);
+    CHECK(layer.CutscenePicture(registry).knight.placed);
+
+    const int door = ReachTheDoor(layer, registry, glm::dvec2(2554.0, 181.0));
+    if (door < 0) return;
+    MagicPortalsLayer::CutsceneReport now = layer.CutscenePicture(registry);
+    CHECK_EQ(now.knightSpawnedTick, door);
+    CHECK(now.knight.body != entt::null);
+    const auto doorSounds = [&layer] {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string("level_finished")));
+    };
+    const int soundsAtDoor = doorSounds();
+    int screenAt = -1;
+    bool drawn = false;
+    bool walkedRight = false;
+    for (int tick = door + 1; tick <= door + 400; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        now = layer.CutscenePicture(registry);
+        if (now.knightQuad != entt::null) drawn = true;
+        if (now.knight.walked && now.knight.row == 2) walkedRight = true;
+        if (screenAt < 0 && layer.MenuScreen() == MagicPortalsLayer::Screen::Finished) screenAt = tick;
+    }
+    CHECK_MSG(screenAt == door + 396, "the medal " + std::to_string(screenAt - door) + " ticks after the door");
+    CHECK(drawn && walkedRight && now.knightAuraQueued);
+    CHECK_MSG(now.knightEnteredTick > door && now.knightEnteredTick < door + 396,
+              "in on tick " + std::to_string(now.knightEnteredTick));
+    CHECK_MSG(glm::length(now.knightEnteredAtPx - glm::dvec2(2548.0, 175.0)) < 16.0, Point(now.knightEnteredAtPx));
+    CHECK(now.knight.gone && now.knightQuad == entt::null);
+    CHECK_EQ(Tagged(registry, "Magic Portals Knight"), 0);
+    CHECK_EQ(doorSounds(), soundsAtDoor + 1);
+    std::printf("  2-32: door on tick %d, the knight in %d ticks later at %s, the medal %d ticks after the door\n", door,
+                now.knightEnteredTick - door, Point(now.knightEnteredAtPx).c_str(), screenAt - door);
+
+    // Killed instead: isFinished is the death too, so the spawn adds it on that tick,
+    // and the lost screen keeps its own 1400 ms.
+    if (!RestartFromTheScreen(layer, registry)) return;
+    CHECK(!layer.Finishing() && !layer.Dying());
+    now = layer.CutscenePicture(registry);
+    CHECK(now.knightSpawnedTick < 0 && now.knight.body == entt::null && !now.knight.spawned);
+    auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+    const glm::vec3 below = MagicPortals::Units::ToWorld(300.0, 600.0);
+    transform.position = glm::vec3(below.x, below.y, transform.position.z);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK(layer.Dying());
+    now = layer.CutscenePicture(registry);
+    CHECK_EQ(now.knightSpawnedTick, layer.LayerTicks());
+    for (int tick = 0; tick < 84; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Dead, "the lost screen at its own 1400 ms");
+    CHECK_MSG(Tagged(registry, "Magic Portals Knight") == 1, "with the knight falling behind it");
+    // A restart from there takes the knight, its body and its picture.
+    if (!RestartFromTheScreen(layer, registry)) return;
+    tickWith(layer, registry, kRest, {}, {});
+    now = layer.CutscenePicture(registry);
+    CHECK(!now.knight.spawned && now.knight.body == entt::null && now.knightQuad == entt::null);
+    CHECK_EQ(Tagged(registry, "Magic Portals Knight"), 0);
+    layer.OnDetach(registry);
+}
+
 void runTests() {
+    FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
+    EachLevelOpensOnTheTrackItsPreLoopAsksFor();
+    TheLevelsTrackCarriesIntoTheSelectors();
+    ANoMusicLevelsSilenceCarriesIntoTheSelectors();
+    ASwitchBackOnResumesTheTrackANoMusicLevelStopped();
+    TheBeholdersDeathStopsItsTrack();
+    TheDragonsTakeOffStopsTheBossTrack();
     TheLayerPlaysLevel30();
     TheShakeMovesTheDrawnCameraAndTheSkyWithIt();
     AShakeDrawnOutsideTheEngineLoopDoesNotPileUp();
@@ -14956,6 +16362,9 @@ void runTests() {
     AnAntiportalSpelledWithEntIsDrawnTheSame();
     AGravityWellWearsAGreenRing();
     AnAntiportalBlinksRedAndTurnsAndAPauseHoldsBoth();
+    AFireAgentWearsItsOwnFace();
+    BlueAndRedKeysKeyholesAndDoorsAreTheirColours();
+    ACrateNoPortalCarriesBlinksRed();
     WithoutTheArtTheLevelIsBoxes();
     APortalAndAShotAreTheOriginals();
     TheShotsCellsRunOnOneTimer();
@@ -14980,6 +16389,7 @@ void runTests() {
     TheBackKeyOnTheMainMenuQuits();
     TheMainMenusSwitchesAndCornerButtons();
     ATileRefusesATouchThatTravelled();
+    TheGameFinishedCardComesUpAfter4_32();
     ALevelsEntitiesEmit();
     ParticlesGoWithTheirLevel();
     TheTorchAndThePortalsEmitAsTheOriginalDoes();
@@ -15001,6 +16411,7 @@ void runTests() {
     TheHudIsTheOriginals();
     TheHudStaysOnTheViewAsTheCameraMoves();
     TheSkyStaysOnTheViewAsTheCameraMoves();
+    TheSpaceSkyStaysOnTheViewAsTheCameraMoves();
     AClearPortalsButtonComesWithAPortal();
     APlaqueForALevelWithAMedal();
     TheTutorialRingsAndAWeightlessLevelHasNoPads();
@@ -15010,6 +16421,7 @@ void runTests() {
     TheTutorialPopupStopsALevelAsItLoads();
     AHelpBlockOpensItsPopupAndTheLevelTakesUpWhereItStopped();
     ThePausesButtonsGoWhereTheOriginalsGo();
+    TheSwitchesAreKeptBetweenRuns();
     SkipOnALevelAlreadyFinished();
     TheDoorCutsTheHudAndTheLevelRunsOnUnderTheMedal();
     ADeathDismissesTheHudAndTheLostScreenComesIn();
@@ -15066,6 +16478,10 @@ void runTests() {
     AShockRingTurnsOnGameTimeAndJittersEveryFrame();
     AMovingShockRingIsWhereItsFieldIs();
     AShockRingsJitterIsTheEffectsStreamsAlone();
+    ALevelWithoutAnEndDelayKeepsTheBeat();
+    TheRocketLaunchesAfter4_01sDoor();
+    TheRocketLandsAfter4_19sDoor();
+    TheKnightWalksIntoTheDoorAfter2_32();
 }
 
 } // namespace

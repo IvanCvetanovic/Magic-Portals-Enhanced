@@ -12,9 +12,9 @@
 // screen's centre on every level measured, whatever the camera had done.
 //
 // WHAT IS BUILT, and when. Game::preLoop builds StaticSky on every level whose
-// `properties` does not set `space_bg`; the 19 that do build SpaceSky, which is
-// not ported (sky.json says what it would take). StaticSky finds every entity
-// named `sky` or `sky.ent` and one named `satellite`.
+// `properties` does not set `space_bg`; the 19 that do (4-01 to 4-19) build
+// SpaceSky instead, at the end of this file. StaticSky finds every entity named
+// `sky` or `sky.ent` and one named `satellite`.
 //
 // THE ARITHMETIC, per sky t, in the level's own pixels (sky.json's _units):
 //   scale        view height / picture height, once, at build
@@ -33,6 +33,7 @@
 // Renderer-free, and free of the registry: the camera is passed in, and what
 // comes back is where to draw. The layer places the quads.
 
+#include "sim/Motion.hpp"
 #include "sim/Sprites.hpp"
 #include "sim/Tscn.hpp"
 
@@ -108,5 +109,85 @@ glm::dvec2 SatellitePx(const Controller& sky, const glm::dvec2& viewCentrePx, co
 // original places each sky and only then moves its scrollPos, so a frame draws
 // the scroll the previous one left. Nothing on a still sky.
 void Advance(const Rules& rules, Controller& sky, double dtS);
+
+// ---- SpaceSky ---------------------------------------------------------------
+//
+// The sky of the 19 space levels (sky.json space_sky; planning step 122). Four
+// entities, each found by its exact name and each optional, all moved from the
+// camera every frame:
+//   space sky   camera corner + view x (0.5, 0.5), at its own size
+//   spiral      camera corner + view x (0.5, 1), the bottom-centre, a square as
+//               wide as the view's diagonal, coloured c (its `alpha`, else 0.7)
+//               and turned 1.7 degrees a second clockwise
+//   planet      the bottom-centre plus its linearMotion's bob: 1 u up and down,
+//               0.5 radians a second, from PI
+//   eclipse     x at the view's centre; y its OWN y plus the camera corner's y,
+//               added every frame
+// Positions are the ENTITIES' points, as the original sets them; each picture
+// hangs off its point by its own offset (the planet's 60 u up, the eclipse's 30).
+
+// The port's sky.json, space_sky.
+struct SpaceRules {
+    std::string planetName;            // planet_bg.ent
+    std::string spiralName;            // spiral
+    std::string skyName;               // space_sky
+    std::string eclipseName;           // eclipse.ent
+    double spiralDiagonalScale = 0.0;  // 1: the side is the view's diagonal times this
+    glm::dvec2 spiralPitch{0.0};       // (0.5, 1) of the view from its corner
+    double spiralTurnDegPerS = 0.0;    // -1.7: Ethanon's degrees, counter-clockwise positive
+    std::string spiralColourKey;       // alpha: the spiral's own float, its rgb when present
+    double spiralColourDefault = 0.0;  // 0.7
+    glm::dvec2 skyPitch{0.0};          // V2_HALF
+    glm::dvec2 planetPitch{0.0};       // (0.5, 1)
+    Motion::Row planet;                // speed 0.5, stride 1, vertical, axis 0, start PI
+    double eclipsePitchX = 0.0;        // 0.5
+};
+
+bool LoadSpaceRules(const std::string& path, SpaceRules& out, std::string& error);
+
+// SpaceSky as its constructor leaves it, and what its update carries between
+// frames: the spiral's turn, the planet's angle and the eclipse's y.
+struct Space {
+    // True on a level whose first `properties` carries `space_bg` at all. The
+    // node names are empty for an entity SeekEntity would not find.
+    bool running = false;
+    std::string skyNode;
+    std::string spiralNode;
+    std::string planetNode;
+    std::string eclipseNode;
+    double spiralSidePx = 0.0;   // scaleToSize's side, in the level's pixels
+    double spiralColour = 1.0;   // SetColor(c, c, c): the rgb, the alpha kept
+    Motion::Turn spiralTurn;     // what AddToAngle has added to the level's angle
+    Motion::Linear planetBob;    // the planet's linearMotion, first called by the constructor
+    double eclipseYPx = 0.0;     // the eclipse entity's y, which update adds the corner's y to
+};
+
+// SpaceSky's constructor over a level's scene. `viewPx` is the view in the
+// level's pixels, whose diagonal the spiral is scaled to. `constructorFrameMs` is
+// the frame its first linearMotion call steps the planet by: the frame before the
+// level's first update, which the port takes to be one tick (sky.json). A level
+// without space_bg builds nothing and says so with running false. False, with
+// `error`, only for a spiral whose `alpha` is there and not a number.
+bool BuildSpace(const SpaceRules& rules, const Rules& skyRules, const Motion::Rules& motion,
+                const Tscn::Scene& scene, const glm::dvec2& viewPx, double constructorFrameMs, Space& out,
+                std::string& error);
+
+// The half of one SpaceSky::update that carries over, over a frame of `frameMs`:
+// the planet's linearMotion step and the spiral's AddToAngle (both
+// unitsPerSecond's, capped at motions.json's frame cap), and the eclipse's y plus
+// the corner's y of the camera this frame reads. Run before the frame is placed,
+// on every tick: a paused level runs none, which is the original's m_factor 0 for
+// the first two, and its camera does not move for the third.
+void AdvanceSpace(const Motion::Rules& motion, Space& space, const glm::dvec2& viewCentrePx, const glm::dvec2& viewPx,
+                  double frameMs);
+
+// Where update puts each entity's point this frame, in the level's pixels, from
+// the camera as it is drawn.
+glm::dvec2 SpaceSkyPx(const SpaceRules& rules, const glm::dvec2& viewCentrePx, const glm::dvec2& viewPx);
+glm::dvec2 SpiralPx(const SpaceRules& rules, const glm::dvec2& viewCentrePx, const glm::dvec2& viewPx);
+glm::dvec2 PlanetPx(const SpaceRules& rules, const Space& space, const glm::dvec2& viewCentrePx,
+                    const glm::dvec2& viewPx);
+glm::dvec2 EclipsePx(const SpaceRules& rules, const Space& space, const glm::dvec2& viewCentrePx,
+                     const glm::dvec2& viewPx);
 
 } // namespace MagicPortals::Sky

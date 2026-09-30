@@ -22249,3 +22249,1011 @@ commit relinked and launched nothing):
   recorded, and tidy" row, beside the two already filed.
 - the picture and deviation 4 can carry its numbers: the picture row (67 x 112 px against 66-68 x 114-121) and
   deviation 4 (no clamp or smoothing in the original's frame time).
+
+## Step 119 - a chapter's last level goes to chapter select on its chapter's page, and after 4-32 chapter select opens GameFinishedPopup (built)
+
+**TRACK B: the program's P1** (`docs/parity-backlog.md` section 6, P1; the 2026-09-29 audit's P1, `check_screens.md`
+1 and `screens_inventory.md` 1). Built in the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, from `29669c3`),
+whose build reads the frozen level data in `out/snap_w1`; numbered in track B's range, and the merge renumbers it.
+Changed: `game/data/ui.json` (`popups`: `tap_screen_to_close`, `highlight.on_help_popups`, `game_finished`, the
+`GameFinishedPopup` class), `game/sim/Popup.{hpp,cpp}` (a class's own close button, tap-to-close and highlight, an
+empty `draw`, `Rules::gameFinished` and `pressTintByte`, `Open::closeTinted`, `CloseButtonAt` with a class,
+`CloseButtonRect`), `game/sim/Chapters.{hpp,cpp}` (`Table::FinishesTheGame`),
+`game/MagicPortalsLayer.{hpp,cpp}` (the chapter end, the popup over a menu state, `emitPopup`, the dead end and its
+`ChapterComplete` removed), `tests/test_mp_{popup,chapters,layer}.cpp`. No engine change (the pin stays `4bfcf67`), no
+converter change, no format finding. **GAMEPLAY: NONE** - which screen follows a chapter's last level, and a card
+over it. Not a gameplay step, so the program's winnability gate (routes, reachability) does not apply; no route is
+added.
+
+**BLOCKERS, checked first.** The spec needs the popup framework (step 52) and chapter select (steps 54, 56); both
+stand. Nothing unmet. No footage or spec of the card exists (`out/parity/specs`, `footage/INDEX.md`, the library's
+`screens/`): the card is decoded, and the framework it is drawn with is the one the help popups measured.
+
+**WHAT THE ORIGINAL DOES** (listing md5 `48fe65ce...`; arguments pushed last-first, as `00_order.md` 8.0 reads them).
+- **`goToNextLevel`** (LevelFinishedLayer bytes 408734..409098; L83417), what the medal screen's go-on and the
+  pause's Skip call: `!isLastLevel(g_currentWorld, level)` (#1-9) goes on to the next level; a chapter's last level
+  goes to `WorldSelector(showGameFinishedPopup, showLastFreeLevelPopup)` (#44-82), never to the next chapter's first
+  level. `showGameFinishedPopup` = `isLastLevel(level)` (#68-72; ScoreManager bytes 164804..164948): the chapter's
+  last level AND `g_currentWorld == m_numWorlds - 1`. `showLastFreeLevelPopup` is the free build's (`isFree`): false.
+- **`WorldSelector::preLoop`** (168793..169733): `LevelSelector::preLoop` (ItemSelector's adds the PageManager, makes
+  it current, `setButtonsSound`); #6-21 `setCurrentPage(pageOf(g_currentWorld))`; #69-101 `openPopup(
+  GameFinishedPopup(layerManager, currentLayer.getName()))`.
+- **`GameFinishedPopup`** (203115..203758): `Popup::Popup` with `sprites/game_finished.png` and
+  `sprites/popup_close_button.png` at `DEFAULT_EXIT_BUTTON_POS` = (0.92, 0.88) (Popup.angelscript's initialiser,
+  306188..306239); #121 `addFacebookButton`. No `draw()` of its own. A Popup, not a HelpPopup: `tapScreenToClose`
+  stays false (Popup::Popup #167-170), so `hasReceivedCloseCommand` (73196..73437) takes only a press of 'close' -
+  Button::update (15892..16865): a release inside whose touch went down inside - or the back key. The press is
+  silent: the layer is added after `setButtonsSound`.
+- **Its close button stands still.** Only HelpPopup's constructor calls `setButtonHighlightEffects` on its 'close'
+  (204244..204540, #29-43); GameFinishedPopup's calls `Popup::Popup` and `addFacebookButton`, which highlights
+  'facebook' alone (370197..370609, #62-73), and neither `Popup::Popup` nor `UILayer::addButton` highlights. So the
+  button keeps `Button::Button`'s `setBounce(V2_ONE, V2_ONE, 300)` and `setBlink(V3_ONE, V3_ONE, 300)` (11444..12579,
+  #141-183): scale and brightness one. While the touch that went down on it is on it, `Button::update` (#206-233) sets
+  `m_color` 0xFFCCCCCC, multiplied into the rgb by `Button::draw` (15237..15660); a release is not held, so the press
+  that closes it leaves it white, and `UIButton::update` (76911..77152) stops calling `Button::update` once it is
+  dismissed, so the colour it had at the close stays (`UIButton::setColor`, 31747..31953, keeps the rgb).
+- **Under it**, `UILayerManager::update` (78899..79028) updates only the current layer, and
+  `PageManager::isAlwaysActive` is false. So the PageManager - its buttons' entrance (UIButton's ctor `setColor(0)`,
+  76108..76681; the InterpolationTimer steps per update, 18750..18855), their bounce, `Page::update`,
+  `fadeForwardArrows`, the finger - stands still until the popup is gone; the pager's decay is in
+  `PageManager::draw` and goes on - through `Swyper::getOffset` (21658..21861), which multiplies by 0.92 only while
+  touch 0 is `KS_UP` or `KS_RELEASE` (0 and 3; gs2d `KeyStateManager.h:30-33`), so not while a finger is down
+  anywhere. The popup's layer is drawn after the PageManager's (over the tiles and the page
+  counter), BaseState's black over all. `LevelSelector::loop` (103865..103991) reads the back key whatever layer is
+  current: the main menu.
+
+**THE CHANGE.**
+1. **`ui.json`**: `popups.tap_screen_to_close.help_popup` true (HelpPopup's: every class but one);
+   `popups.highlight.on_help_popups` true (HelpPopup's `setButtonHighlightEffects`); `popups.game_finished.popup`
+   "GameFinishedPopup"; the class: its `card` (340 x 256 u; the hd twin, 680 x 512, is what is drawn), its
+   `close_button` at (0.92, 0.88), `tap_screen_to_close` false, `close_button_highlight` false, `draw` []. Each with
+   `_source`; the card's placement NOT MEASURED (no footage). The press tint is read from `menu_state.press.tint_byte`
+   (204, decoded and measured for the same Button), not written twice.
+2. **`sim/Popup`**: `Class::closeButton` (the rules' by default), `Class::tapScreenToClose` and
+   `Class::closeButtonHighlight` (off: scale and brightness exactly 1 at every clock); `draw` may be empty;
+   `Rules::gameFinished`, refused unless it names a class; `Rules::pressTintByte`; `Open::closeTinted`, the press tint
+   as the button's last update left it (the caller sets it while the popup is not closing), folded into the close
+   piece's rgb through `CloseButtonState::tint`; `CloseButtonAt(rules, cls, ...)` (the old overload stays HelpPopup's)
+   and `CloseButtonRect` (Button::isPointInButton: the button's own size at its anchor, no bounce).
+3. **`Chapters::Table::FinishesTheGame(at)`**: the last level of the last world.
+4. **The layer.** `goTo(-1)` - N, the medal screen's go-on and the pause's Skip all reach it - sets `m_menuWorld` to
+   the level's chapter, opens `Screen::Worlds` (whose opening page is that chapter's, `Selector::OpeningPage`), and
+   after 4-32 raises the class `game_finished` names over it (`openMenuPopup`, which resolves its two pictures
+   itself: a level's popup pictures go with the level). While it is up, `menuPopupTick` takes the tick in
+   `selectorInput`'s place: the back key (main menu, next tick, as ever), the popup's clock (the state's), the pager's
+   `Step` with the forward arrow's fade put back and its decay held while a finger is down (`touching` set from the
+   tick's touch for the call and put back after, so the swyper is never left touching), `TouchClosesPopup`
+   (tap-to-close where the class says so, else down and up on the button), and the press tint (`closeTinted`: the
+   touch that went down on the button is down and on it). `SelectorLayerMs()` is the PageManager's clock: 0 while a
+   popup is up, from 0 again on the tick after it is gone; `Selector::Pieces` and `HitAt` read it. `EmitMenu` draws
+   the popup after the selector's
+   pieces and before the state's black through `emitPopup`, which is EmitHud's popup drawing moved out whole (the
+   level's popups draw through it unchanged: the sweep's 1-02 and 1-03 frames, popup up at f420, are byte-identical).
+   The level's `popupTick` closes through `TouchClosesPopup` too - the same for every class a level raises. The
+   "Chapter N complete" line, `m_chapterComplete` and `ChapterComplete()` are gone, and the "N-NN cleared with" line
+   is no longer written over a menu state (ui3 spec D7; it was written for that black).
+
+**FIX ROUND 1** (the verifier's `P1/verify1.json`, all four problems real). (1, medium) The close button bounced and
+blinked as a HelpPopup's; the decode has it still: `close_button_highlight` false (gate 3b). (2, low) It took no press
+tint while held: `closeTinted` over a menu state (gate 3c). (3, low) The pager's slide decayed under a held finger:
+held now (gate 5b). (4, low) The gate table's button row assumed HelpPopup's bounce: replaced by 3b. Still
+**GAMEPLAY: NONE**.
+
+**VERIFIED A SECOND TIME, PASSED** (`P1/verify2.json`, on the same `43c6401e` and suite binaries): every gate, the
+decode re-derived first. Its three lows, at commit, in text only: (1) row 5b claimed no capture could hold a finger
+down; the verifier's held series does, and backs rows 5b and 3c now; (2) no unit pins D7 on the chapter-end path:
+row 8 says so, and it is under LEFT FOR LATER (a test change, not made at commit); (3) the card's own "Like us on
+facebook!" gap: under LEFT FOR THE OWNER.
+
+**THE GATES.** After = this step's `MagicPortals.exe` `43c6401e` (fix round 1, `P1/fix1/`); rows measured only on the
+first round's `b47f9e25` (`P1/after/`) say so, and why the fix cannot move them. Before = the baseline build
+`845820ad` (`29669c3`, whose sweep is `program/base_w1B/sweep`). Captures, scripts and measurements:
+`out/parity/program/P1/` (`cap.sh`, `capture_sweep.sh`, `card_gate.py`, `compare_sweep.sh`; `before/`, `after/`) and
+`P1/fix1/` (`cap.sh`, `still_gate.py`, `capture_sweep.sh`, `compare_sweep.sh`; `series_4-32/`, `sweep/`). The flows
+are driven by the pause's Skip (`--press pause@60 --press skip@120`) on the all-gold save (`ui1/saves_gold`, copied
+per run): it presses the same `PressMenu(Next)` the medal screen's go-on does, which a scheduled `--tap` cannot reach
+(below).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1.log` to `build4.log`, and `build2_objs.log`: `test_mp_info`'s and `test_mp_select`'s objects, the other two that include `Chapters.hpp`, compiled, not linked; fix round 1: `fix1/build1.log`, `--target MagicPortals test_mp_popup test_mp_layer`, every object that includes `Popup.hpp` or `MagicPortalsLayer.hpp` recompiled - `Popup`, `MagicPortalsLayer`, `main`, `LevelVisit`, `test_mp_popup`, `test_mp_layer` - 0 warnings; `fix1/build2_relink.log`, `build3_relink.log` the two relinks after refusals) |
+| (1) 1-32's end | chapter select on chapter 1's page, no card | **the dead end**: every pixel 0 (`before/skip_1-32.png` `3153e740`), only Esc out | **passes**: chapter select, page 1, 100 % gold on chapters 1-2, no card (`after/skip_1-32.png` `11730124`, on `b47f9e25`: fix round 1 changes only what a popup over a menu state draws and does, and none is up here) |
+| (2) Each chapter's page | the chapter just played | the dead end | **passes** (unit, `TheChapterEnds`): N from 1-32, 2-32 and 3-32 opens chapter select on pages 1, 1 and 2, no card; R there retries nothing |
+| (3) 4-32's end | chapter select on page 2 with GameFinishedPopup | the same black (`before/skip_4-32.png` `3153e740`) | **passes**: page 2 and the card (`after/series_4-32/`, every 10th frame). The card: TM_CCOEFF_NORMED **0.9993** at TL **(162, 0)** px against the decoded (161.875, 0), 956 x 720 px (f200, f230). Retaken on `43c6401e` (`fix1/series_4-32/`, `still_gate.json`): f10 to f120 and f290 to f420 and the final png (`64a0e49d`) byte-identical to the first round's; f130 to f280 differ only within x 1121..1279, y 576..719 - the button's own box along its entrance, its stillness and its dismissal - so the card's measurement stands |
+| (3b) The close button, as decoded | centre (1177.6, 633.6) px, 64 u = 180 px, STILL: scale 1, brightness 1 (no `setButtonHighlightEffects`) | - | **passes** (fix round 1): f190 to f200 to f210 to f220 to f230, **0** changed px in the button's region (x 1077..1278, y 533..720) and 0 elsewhere; the hd picture fitted with sx, sy free (0.94..1.06): **(1.00, 1.00)** on f190 to f230, TL **(1088, 544)** against the decoded (1087.6, 543.6), score 0.9821. The first round's (`b47f9e25`, verify1): 9642 to 12973 px per 10 frames, (sx, sy) swinging 0.97..1.03 in antiphase - HelpPopup's bounce, now off for this class. Unit: scale and brightness exactly 1 every 25 ms from 700 to 1700 ms, 64 u and white; a HelpPopup's still 0.97..1.03 and 0.95 |
+| (3c) The press tint | 0xFFCCCCCC (204 / 255) while the touch that went down on the button is on it; white after the release that presses it | - | **passes** (fix round 1): f240, the tick of the tap down on the button, draws its opaque texels at **0.800** of f230's mean (64.149 / 80.190), the decoded 204 / 255 = 0.800, and changes nothing outside its box (7813 px inside). The verifier's held series (`P1/verify2/cap/seriesB`, gate 5b's arguments; opaque texels' mean over the untinted frame's): the held press **0.7999** on f240 to f265 and **1.0000** on f270, its release; the drag down on the button 0.7999 at f210, 1.0000 once off it (f215, f220, f225). Unit: down on it tinted; held on it tinted; held off it white; back on it tinted; the press (down and up on it) leaves it white through the dismissal. `test_mp_popup` also pins the sim's own rule that a tint set before a close stays through the dismissal - no menu path closes it while held (the back key leaves the state, card and all, on the next tick); it is the hook for the HelpPopup item under LEFT FOR LATER |
+| (4) The close | a press of the button (down and up on it) or the back key; a tap elsewhere is not one | none | **passes**: the log - a tap on the card at 200/201 does nothing, down/up on the button at 240/241 closes it on 241, gone on **301 (60 ticks, 1000 ms)** (the same on `43c6401e`'s series log); `--press back@220`: the main menu (`after/skip_4-32_back.png`, `b47f9e25`: its final frame has no popup, and the back key's path is unchanged). Unit (`TheGameFinishedCardComesUpAfter4_32`): a card tap, a down alone and a down-on/up-off are no press; a tap on chapter 4's icon under it does nothing |
+| (5) The PageManager under it | title and arrows not drawn while it is up; they enter after it is gone | none | **passes**: f200 has no title or arrows; f330 has them entering (the tick after 301 is their 0); f420 whole (on `43c6401e`: f200 identical to the first round's outside the button's box, f330 and f420 identical whole). Unit: absent from the frame at 1.6 s with `SelectorLayerMs` 0, alpha 0 on the first tick after, whole 700 ms on |
+| (5b) The pager's slide under it | decays under the card (PageManager::draw), not while a finger is down (Swyper::getOffset) | - | **passes** (unit, fix round 1): a tick after 4-32's go-on the offset is still well off 0; a touch down on the card and 5 ticks held leave it exactly as it was, the release decays it again, and the swyper is not left touching. **Captured** by the verifier on `43c6401e` (`P1/verify2/cap/seriesB`, every 5th frame, `series_gate.txt`), with held taps (`--tap <x>,<y>@<tick>-<release tick>`, `--drag`): `--tap 640,360@122-200 --drag 1178,634:640,360@210-225 --tap 1178,634@240-270`. Held on the card: f185 to f190 to f195 **0** px changed, and f190 differs from the unheld series' (`seriesA`) by 368,059 px, 225,557 of them outside the card's columns (the background camera the offset moves); the release: f195 to f200 **360,530** px. The drag's hold: f215 to f220 0 px, its release f220 to f225 334,796 px. The held press: f240 to f245 0 px |
+| (6) Against footage or a spec of the card | match | - | **NOT RUN: none exists**. Placement DECODED; the dim (150), the entrance and the dismissal are the framework's, measured on the help popups (the same Popup::Popup) |
+| (7) The 128-level f420 sweep | every change explained; none expected (no `--level` path changes) | `base_w1B/sweep` | **passes: 128 of 128 byte-identical** to `base_w1B/sweep`, paired by name (`compare_sweep.txt`): 128 rc 0, validation ACTIVE in 128 logs and silent, every png matching its log line, 0 unscheduled input lines. 1-02 and 1-03 (their popup up at f420) are among them: `emitPopup` draws the level's popups as EmitHud did. Retaken on `43c6401e` (`fix1/sweep`, `fix1/compare_sweep.txt`), fix round 1 having changed the shared popup code (`CloseButtonOf`, `Pieces`): **128 of 128 byte-identical** to `P1/after/sweep` and to `base_w1B/sweep`, 128 rc 0, validation ACTIVE in 128 logs and silent, every png matching its log line, 0 unscheduled input lines. **Sweep baseline**: `program/P1/after/sweep` (and `P1/fix1/sweep`, the same bytes) |
+| (8) No text over a menu state after a clear | D7 | the "cleared with" line set over the grid (by the code) | **passes** (unit, `FinishingALevelShowsTheMedal`): 0 lines after the list button. The chapter-end path (N, the pause's Skip, the medal screen's go-on) is checked by reading the code only: `updateHud` leaves the status empty while `menuStateUp()`, and the "cleared with" line is gated by `!menuStateUp()` (no unit pins it: LEFT FOR LATER). `--screenshot` does not capture the engine's UI text (the dead end's own line is not in its black png), so no capture shows either |
+| (9) Winnability | - | - | **N/A**: no gameplay change |
+
+**SUITES**, run directly: `test_mp_popup` **200** (`3e5c492e`; 156 per the record: `TheFileSaysWhatWasDecoded`'s
+class pins, the new `GameFinishedSitsWhereItsConstructorPutsIt` with its stillness and press-tint checks, six
+refusals), `test_mp_chapters` **43** (39; `e3c80107`, the first round's: fix round 1 touches none of its sources or
+headers), `test_mp_layer` **2953** (`fcf8e1c6`; 2901 at step 112: `TheChapterEnds` rewritten, the new
+`TheGameFinishedCardComesUpAfter4_32` with the button's stillness, its press tint and the pager held under a finger,
+the D7 check), 0 failures each on the builds that stand. The first round's stood at 186 and 2938. Earlier runs: `test_mp_popup` once at 1 failure (the test's own 42 ticks fall a hair
+short of 700 ms; set to 700 exactly); `test_mp_layer` once at 1 failure - a real one: the card was not raised, its
+pictures having gone with the level (fixed in `openMenuPopup`) - and once at 4 (the test's own: the float tick's
+1e-4, and the state's black over by 1.6 s). No full ctest: `MagicPortalsSim` changed, so the other 42 suites and
+`MagicPortalsSpike` link a new library and are not relinked here; of their sources only `test_mp_info` and
+`test_mp_select` include a changed header, and both compiled at 0 warnings. The merge's build relinks them.
+`Popup::LoadRules` now refuses a `ui.json` with no `tap_screen_to_close`, `game_finished`, `highlight.on_help_popups`
+or `menu_state.press.tint_byte`: its only callers are the
+layer and `test_mp_popup` (the deps scan: only `test_mp_{popup,layer}` include `Popup.hpp`), both run. The suites that
+text-replace `ui.json` (`test_mp_{hud,levelend,frontdoor,info,select}`, and every string literal of `effects`,
+`sprites`, `popup` and `layer`): 801 of their literals are in the old file, and each one's first occurrence is the
+same line in the new one (`needles.py`) - grep-clean, not run (stale-linked; Smart App Control). Retaken on fix round
+1's file (`fix1/needles.txt`): 803 found, 11 whose first occurrence now has different text within 80 characters, none
+a moved needle - `"menu_state"` and `tint_byte` (`test_mp_frontdoor` finds `"tint_byte": 204` after the quoted
+`"menu_state"` key, both still the first of their kind; the bare `tint_byte` is the word its refusal's message is
+checked for, first met now in the new `_source`'s unquoted `menu_state.press.tint_byte`), `closed by` (`test_mp_sprites`' own `.ent` refusal text) and `level1c` (a level's name in `test_mp_popup` and
+`test_mp_layer`, both run). `--visit-levels`
+(`LevelVisit.cpp`) enters each level by its grid button, never by N, so no chapter end is in its walk.
+
+**SMART APP CONTROL: 0 refusals in the first round, 2 in fix round 1.** Launches: `MagicPortals.exe` `845820ad` 3
+(the before captures), `b47f9e25` 131 (the 1-32 and back-key flows, the 4-32 series, 128 sweep captures) - `143b83fb`,
+the first build's, was never launched; `test_mp_popup` `d1f02a22` and `df1e1b5d`, `test_mp_chapters` `e3c80107`,
+`test_mp_layer` `74bf4b41`, `0efc0c68` and `938cfeb3`, once each. Fix round 1: `MagicPortals.exe` `afa75607`
+**refused** (exit 126) and `c745a7f7` **refused** after a delete and relink; `43c6401e`, the second and last relink,
+ran - the 4-32 series and the 128-level sweep (129 launches); `test_mp_popup` `3e5c492e` and `test_mp_layer`
+`fcf8e1c6` once each, not refused. The verifier (`P1/verify2`) ran `43c6401e` 134 times (a 128-level sweep, 128 of
+128 byte-identical to `P1/after/sweep`, and 6 flows) and the three suites once each: 0 refusals.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **The Facebook button** (#121) is omitted, by the owner's dead-services ruling (ui3 spec 9).
+2. **`g_timeManager`**: Popup::Popup pauses it; nothing on a menu state reads it, so the port does not.
+3. **The first update after the popup** reads 0 on the PageManager's clock, as a state's first tick reads 0 on its
+   own - the port's convention for a UI layer's first update.
+4. **A level's popups close through the same test** (`TouchClosesPopup`): every class a level raises taps to close,
+   so nothing a level shows changes (the sweep's 1-02 and 1-03).
+5. **The release is judged where the pointer is let go**, as the first round had it; `Button::update` judges it at
+   `m_lastDownPos` (#102-129), the touch's place on its last held tick (#44-59, #189-204). The two differ only for a
+   pointer that moves in the very tick it is let go.
+6. **The press tint is set only over a menu state** (fix round 1). A level's popups are HelpPopups, closed by the
+   touch down itself, so over a level the tint would only ever be the one the close freezes (below, for later).
+
+**RULINGS APPLIED.** The standing direction that the original decides; the dead-services ruling (the Facebook
+button). R1, R2, R17 and R23 are not this step's; R24 and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Footage of the card**: none. On the emulator rig (`docs/parity.md`) with the all-gold save: 4-32, pause, Skip -
+  the original's chapter select opens on page 2 with the card; a capture settles its placement and whether the title
+  and arrows are hidden under it as decoded (gate 5).
+- **The card's own art asks for the Facebook button it no longer has**: `game_finished.png` reads "Well done! Stay
+  tuned for more / Like us ... on facebook!", and the gap after "Like us" is where the constructor puts the button
+  (#48-90: `V2_HALF + g_scale.scale(vector2(-30, 9)) / screenSize`, about (556, 385) px; #121 `addFacebookButton`).
+  Omitting it by the dead-services ruling (decision 1) leaves that hole in the card's text. The ruling stands unless
+  the owner says otherwise.
+- **The pause's and the medal screen's buttons act on the press** (`pauseTick` and `endScreenTick` read
+  `TickWasPressed`), where Button::update presses on the release inside; this step's close button acts on the
+  release. Pre-existing, not changed here. The same two read the input directly, so a scheduled `--tap` does not
+  reach them (step 100's real press stops at `touchThisTick`): this step's flows are captured through the pause's
+  Skip instead.
+- **The level-end flow's own capture** (a win on an x-32, then go-on) needs a route to each boss's door: the
+  program's routes (W.1) can drive it once they stand on this track.
+- **A HelpPopup tapped on its own close button fades out tinted** in the original: the touch down's
+  `Button::update` (#206-233) tints it in `UILayer::update`, the same tick's `hasReceivedCloseCommand` dismisses it,
+  and `UIButton::update` (76911..77152) calls `Button::update` no more, so `UIButton::setColor` (31747..31953) keeps
+  the 204 / 255 rgb through the fade. Not built here (the level's popups, outside P1's spec, and no footage checks
+  it); `Open::closeTinted` is the hook - set it in the level's `popupTick` before the close.
+- **D7 on the chapter-end path has no unit** (the verifier's): `TheChapterEnds` (after N) and
+  `TheGameFinishedCardComesUpAfter4_32` (after the go-on) should count the non-empty `UITextComponent` texts and pin
+  0, as `FinishingALevelShowsTheMedal` does after the list button. Not added here: a test change relinks
+  `test_mp_layer` (Smart App Control), and the code is right today (gate 8).
+- For the close role: `docs/parity-backlog.md` section 6's P1 row is this step's to tick (not edited here).
+- For the merge's renumbering: "step 119" is written in `ui.json` (`popups._about`, `game_finished._source`),
+  `game/MagicPortalsLayer.hpp` (a comment) and `tests/test_mp_{popup,chapters,layer}.cpp`.
+
+## Step 120 - the fire agent wears its own face, blue and red keys, keyholes and doors are their colours, and a crate no portal carries blinks red (built)
+
+**TRACK B: the program's P3 and P4** (`docs/parity-backlog.md` section 6, P3 and P4; the 2026-09-29 audit's P3 and P4,
+`check_assets.md` items 2 and 4). Built in the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, on step 119's
+`e1dab6e`), whose build reads the frozen level data in `out/snap_w1`; numbered in track B's range, and the merge
+renumbers it. Changed: `game/data/art.json` (three new entries, `fire_agent`, `key_colour`, `non_teleportable`, appended
+after `shock_ring`), `game/data/keys.json` (the `_not_built` note on `setKeyColor`), `game/sim/Art.{hpp,cpp}`
+(`FireAgent`, `KeyColour`, `Blink`, `NonTeleportable`, their loading), `game/MagicPortalsLayer.{hpp,cpp}` (`buildSprites`
+swaps the two scripts' files and sets up the crate's blink; `syncLighting` writes the blink; `PictureReport::quad`),
+`tests/test_mp_{sprites,layer}.cpp`. No engine change (the pin stays `4bfcf67`), no converter change, no format finding
+(all three are script behaviour, recorded in `art.json`). **GAMEPLAY: NONE** - pictures only; the sim's keys, fire,
+crates and portals are untouched. Not a gameplay step, so the program's winnability gate (routes, reachability) does
+not apply; no route is added.
+
+**BLOCKERS, checked first: none.** `fire_agent.png` ships with an hd twin (`entities/`, `entities/hd/`); so do
+`key_blue.png`, `key_red.png`, `keyhole_blue.png`, `keyhole_red.png`, `door_locked_blue.png` and `door_locked_red.png`,
+each the size of its yellow file (32 x 32 or 32 x 128, hd twice). The sim already pairs keys by the same datum
+(`Keys.cpp:141`) and burns crates (`Fire::Burnable::burned`); the blink runtime and its clock are the antiportal's
+(step 72).
+
+**WHAT THE ORIGINAL DOES** (listing md5 `48fe65ce...`; arguments pushed last-first, `00_order.md` 8.0 rule 3; a
+`SetV1` operand is a constant, rule 1).
+- **`ETHCallback_fire_agent`** (MiscCallbacks bytes 350254..351485) #1-7: `SetSprite('fire_agent.png')`, first thing,
+  on every update. Named for the entity less its .ent (`ETHASUtil.cpp:63-67`): 22 placements on 20 levels, 20 saved
+  with `anti_portal_agent.png` (the scene keeps each instance's own `<Sprite>`), two (`level11c`, `level27c`) with
+  `fire_agent.png` already. `SetSprite` (`ETHSpriteEntity.cpp:177-200`) finds the file through the density tiers and
+  cuts it 1 x 1; `fire_agent.ent` is static, and a static callback's change is drawn the same frame (8.0 rule 6, which
+  the D10 check proved for a position; for SetSprite it is INFERRED), so the saved face is never seen.
+- **`setKeyColor`** (ETHCallback_key bytes 437964..438490): `GetString('color')` 'blue' ->
+  `SetSprite(GetEntityName() + '_blue.png')` and `SetColor(V3_ONE)` (#1-60); 'red' -> `_red.png` and `SetColor(V3_ONE)`
+  (#62-122); anything else keeps its picture; `SetUInt('painted', 1)` (#123-135). Called before each is first drawn:
+  `ETHCallback_key` #117 (the first update's block), `ETHCallback_keyhole` #1-32, `ETHCallback_door_locked` #1-19.
+  `GetEntityName` is the name as the level spells it (`ETHEntity.cpp:309-312`): none of the 24 blue or red pieces is
+  spelled with its .ent.
+- **`manageNonTeleportable`** (MiscCallbacks bytes 343765..344140), `crateCallback`'s first call (#1-7): for a crate
+  `!isTeleportable` (`GetUInt('teleportable') != 0`, bytes 343470..343661; its `nonTeleportable` test answers 0 too)
+  and `!isBurned` (#11-21): with `zeroEmissive` `blinkEmissive(this, vector3(0.5, 0, 0), V3_ZERO, 600)` (#23-49), else
+  `blinkColor(this, vector3(1, 0.3, 0.3), V3_ONE, 600)` (#50-73) - a vector3's constructor takes z first, so both are
+  red. `ETHCallback_crate`, `_crate_small`, `_wood_piece_small` pass 0; `_crate_no_emissive` and
+  `_crate_small_no_emissive` pass 1 (bytes 423812..424324); `crate_low_emissive` has no callback. The blink
+  (utilEntityEffect bytes 326140..327057) is the antiportal's triangle: `colorA + (colorB - colorA) x bias` over 600 ms
+  legs, turned back on odd legs, on the entity's own `blinkElapsedTime`. Drawn at min(1, ambient + emissive) x colour
+  (`ETHRenderEntity.cpp:113-117`). Once burned `manageBurnable` writes the colour and not the emissive.
+
+**THE CHANGE.**
+1. **`art.json`**, three entries, each with its `_source`: `fire_agent` (entity `fire_agent`, sprite `fire_agent.png`);
+   `key_colour` (entities `key`, `keyhole`, `door_locked`, datum `color`, sprites `blue` -> `_blue.png` and `red` ->
+   `_red.png`, colour white); `non_teleportable` (the five `crateCallback` callers with their `zero_emissive`, datum
+   `teleportable`, stride 600 ms, colour (1, 0.3, 0.3) -> white, emissive (0.5, 0, 0) -> 0, and `_clock`). None has a
+   default: `Art::LoadRules` refuses the file without them (`fire_agent needs`, `key_colour needs`,
+   `non_teleportable needs`). `keys.json`'s `_not_built` no longer lists `setKeyColor`.
+2. **`sim/Art`**: `FireAgent`; `KeyColour::Paints` (by the callback's name) and `SpriteFor(entityName, hue)` (the name
+   as the level spells it plus the suffix, "" for a colour it leaves alone); `Blink::At` (blinkColor's ins 55-75, the
+   antiportal's math; `Antiportal` itself untouched); `NonTeleportable::For(bareEntity, teleportable)` -> `Nothing`,
+   `Colour` or `Emissive`.
+3. **The layer.** `buildSprites`: before the quad is made, a fire agent's or a blue or red key piece's texture is
+   swapped for `drawnImage(originalImage(file))`, the file SetSprite finds through the tiers, when its units are the
+   saved file's (else it keeps the saved picture and says so; never on the 128 levels); a repainted piece's rgb is set
+   white after its look, as `setKeyColor`'s `SetColor` does; a crate's `blinks` is set from its datum (absent or 0: not
+   teleportable, as `Portals.cpp:871-873` reads it) with its place in `fire.burnables`. `syncLighting` writes the blink
+   every tick over the node's own, from the level's age (a pause holds it, as the antiportal's): the colour branch into
+   the rgb, the emissive branch into the emissive that `min(1, ambient + emissive)` takes; once burned, neither - the
+   colour stands at the node's white (manageBurnable's fade from 1 is not drawn) and the emissive keeps its last
+   blink. `PictureReport::quad` lets a suite find a node's quad.
+
+**THE GATES.** After = `MagicPortals.exe` `5ff43623` (this step's build); before = step 119's committed `43c6401e`
+and its sweep (`program/P1/fix1/sweep`, 128 of 128 matching its `sweep_capture.txt`). Captures, scripts and
+measurements: `out/parity/program/P34/` (`capture_sweep.sh` -> `after/sweep/`, `compare_sweep.py`, `visibility.py`,
+`fire_gate.py`, `key_gate.py`, `cap_series.sh` -> `series/`, `crate_gate.py`; each with its `.txt` or `.json`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build2.log`, `--target MagicPortals test_mp_layer test_mp_sprites test_mp_minions test_mp_timed test_mp_zerog`: `Art.cpp` and every includer of `Art.hpp` recompiled). `build1.log`'s one C4458 (`SpriteFor`'s parameter `colour` hid `KeyColour::colour`) is fixed by naming it `hue`; `build3` relinks `test_mp_minions` only |
+| (1) The fire agent's own face | every fire agent drawn from `fire_agent.png` at 32 u; an `anti_portal_agent` untouched | 20 of 22 drawn as `anti_portal_agent.png` | **passes.** Unit (`AFireAgentWearsItsOwnFace`): 2-20's `fire_agent_1086` from the original's `fire_agent.png`, 32 u, white, and no `anti_portal_agent.png` quad on 2-20; 1-12's `anti_portal_agent_ent_599` keeps its face. Census (`test_mp_sprites`): 22 on 20 levels, 20 saved as the anti-portal agent. Sweep: the 16 whole agents in view (15 levels) and the 2 cut by the view's edge (2-27, 2-30) change, each within its own 94-95 px |
+| (1b) Against the library stills | the original's face is `fire_agent.png`'s; the after's G/R nearer the original's than the before's | the red face: G/R 0.371-0.650 | **passes 19 of 19 readings** (14 levels' h6.3, and t8.0 where it exists; `fire_gate.txt`): the original fits `fire_agent.png` every time (masked CCOEFF 0.598-0.851, the anti-portal face 0.436-0.763), G/R 0.596-0.898; the after 0.667-0.889. 2-20's agent is under the library's tutorial hand (best score 0.356): not read |
+| (1c) Control | the two saved with `fire_agent.png` already, both in view at f420, unchanged | - | **passes**: 4-28 (`level27c`) byte-identical (`b2cadc5d`); 4-12 (`level11c`) changes in its crate alone. Drawing the original's copy of the same file moves no pixel |
+| (2) Blue and red keys, keyholes and doors | a blue or red piece drawn from its `_blue` or `_red` file, white, at its size; yellow unchanged | all 24 gold | **passes.** Unit (`BlueAndRedKeysKeyholesAndDoorsAreTheirColours`): 3-13's blue key, keyhole and door and its three yellow (`.ent`-spelled) ones, 4-20's red set: each its file, white, 32 x 32 or 32 x 128 u. Census: 24 pieces on 9 levels (18 blue on 6, 6 red on 3), none spelled with its .ent, every file shipped at the saved one's size |
+| (2b) Against the library stills | the swapped file fits the original better than the saved one; the after's mean colour nearer the original's | gold | **passes 9 of 9 readings** on the 8 whole pieces in view (`key_gate.txt`): 3-13 door and keyhole, 3-14 door and keyhole, 3-21 door, 4-01 door and keyhole, 4-19 key (h6.3, t8.0). 3-13's door: original BGR (65.0, 55.3, 51.1), after (63.8, 54.8, 50.2), before (50.7, 64.1, 68.2); 4-01's keyhole: original (75.6, 74.6, 188.0), after (69.0, 69.3, 189.5), before (126.2, 174.0, 189.4). 4-19's key fits `key_red.png` (3784 against 10191) but its colour is swamped by the halo behind it (LEFT FOR LATER) |
+| (3) The crate's blink, unit | each tick the blink at the level's age; a teleportable crate untouched; a burnt one's emissive held; the misspelt datum blinks | - | **passes** (`ACrateNoPortalCarriesBlinksRed`): 1-30's three colour-branch crates for 80 ticks (green 0.30 to 1.00) and `crate_small_ent_897` white; 2-20's two emissive-branch crates for 40 ticks, then the small one, put in the fire agent's reach and burnt, keeps its last emissive while the big one blinks on; 2-08's `crate_small_no_emissive_826` blinks and `_ent_854` does not. Census: 23 on 15 levels, 15 emissive, 8 colour, one with no datum |
+| (3b) The frames read as the decode | colour: R x 1, G and B x one c; emissive: R up, G and B x 1 | - | **passes on all 12 changed crate levels** (`crate_gate.txt`, per pixel, after over before, medians): the colour branch (1-30, 1-31, 4-12) R **1.000**, G **0.529**, B **0.510** (one c at f420, in 8 bits); the emissive branch (2-01, 2-06, 2-10, 2-11, 2-20, 2-21, 2-22, 2-23, 2-27) G **1.000**, B **1.000**, R 1.29-3.06 |
+| (3c) One period | a triangle of two 600 ms legs, the before at its zero end | - | **passes** on 2-20's big crate, which stands still (`series/`, f420..f492 every 6 ticks, R/G): 4.27, 5.02, **5.74**, 5.02, 4.27, 3.53, 2.79, 2.03, **1.31**, 2.03, 2.79, 3.53, 4.27 - the top at f432 and the bottom at f468 (36 ticks, 600 ms), equal to the before's 1.310, and f492 equal to f420 |
+| (3d) Against the library stills | the original's crates' R/G inside the port's range, +-10 % | brown | **passes 24 of 24**: 1-30's three crates in its six stills, 1.39 to 4.51, inside the colour branch's [1.288, 4.293] (the before's R/G, and it over the decode's 0.3); 2-20's two in its three stills, 2.65 to 3.57, inside the measured [1.310, 5.745] |
+| (4) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no unscheduled input; every change one of the three scripts' pictures; every expected level left unchanged explained | `P1/fix1/sweep` | **passes** (`compare_sweep.txt`, `visibility.txt`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines; 0 unscheduled input lines. **29 changed, 99 byte-identical**; every changed level is one of the censuses' 34 (0 unexpected), each diff component the size of an affected picture (1-30's five touching crates make one; 4-01's door differs in its two coloured edge strips). The 5 unchanged: 3-30's set, 2-31's two agents and 3-31's crate are outside the view (the camera model - the player's node, clamped inside the level - agrees with the measured corner to 0.1 u on all 14 levels where an agent measures it); 2-08's two crates and 2-09's one are burnt by the carrancas' fireballs before f420 (`series/`: red, then gone by f390 and f240). Partly in view: 3-13's blue key at the view's edge; 3-17's and 3-21's blue keys carried by a knight and 4-20's red one by the player (its node 5 u from `main_char`'s), each drawn behind its carrier, 109 to 702 px showing. Out of view at f420 and in the library's stills, so gated by the unit and the census alone: 3-23's blue key, keyhole and door (its one change is its fire agent) and 4-20's red keyhole and door |
+| (5) Winnability | - | - | **N/A**: no gameplay change. Neither was run here: this tree, on step 119's `e1dab6e`, has no `tests/routes/`, no `test_mp_routes` and no reachability tool (W.1's `37c4ece` is not an ancestor of `w1-b`) |
+
+**SUITES**, run directly once each, 0 failures: `test_mp_sprites` **1575** (1354 at step 112: the rules, 19
+refusals, and the census over the 128 levels), `test_mp_layer` **3017** (2953 at step 119: the three new cases),
+`test_mp_timed` **84** and `test_mp_zerog` **88** (as at step 111). **NOT RUN: `test_mp_minions`** (Smart App
+Control: refused, deleted and relinked once, refused again). It reads `art.json` through `Art::LoadRules` only to
+compare its minion entry with `minions.json`, which this step does not touch; the same `LoadRules` on the same file
+passes in the four suites that ran. The other 40 suites and `MagicPortalsSpike` link the changed `MagicPortalsSim`
+and are not relinked here (none includes `Art.hpp` or the layer's header); the merge's build relinks them. The
+suites that text-replace `art.json`: 481 of their literals are in the old file, each one's first occurrence where it
+was (the new entries are appended; two context-only differences, the word `untouched` at the old file's end).
+
+**SMART APP CONTROL: 2 refusals**, both `test_mp_minions` (`231a1fe8`, then `6cd559a9` after the one relink).
+Launches: `MagicPortals.exe` `5ff43623` 132 (the sweep's 128, four series), `test_mp_sprites` `2f4c2ba0`,
+`test_mp_layer` `1c04cd0d`, `test_mp_timed` `765131ea` and `test_mp_zerog` `581c6dcd` once each.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **23 crates, not the audit's 22**: level7a's `crate_small_no_emissive_826` spells its datum `telepotable`, so
+   `teleportable` is absent and `GetUInt` reads 0 - the original blinks it, and the port's portals already refuse it.
+   Checked at the source: `level7a.esc`'s entity 826 holds its properties inline (no `<FileName>` anywhere in the
+   file; `<CustomData>` burnable 1, telepotable 0), and an inline entity is read from its own element alone into a
+   zeroed entity (`ETHEntity.cpp:60-71`, `ETHEntityProperties.cpp:202-221`, `:411`), so `crate_small_no_emissive.ent`'s
+   `teleportable` 1 is never read.
+2. **The blink's clock** is the level's age, the antiportal's (step 72): not floored to whole milliseconds a frame,
+   and from the level's first tick, for all 23. 19 of them are dynamic, and the original is INFERRED to run their
+   callback from the first frame too. Four are `static="1"` in their scenes - 2-09's `crate_no_emissive_1004`
+   (`level8a`), 2-11's `crate_no_emissive_937` (`level10a`), 2-23's `crate_no_emissive_1206` (`level22a`) and 4-12's
+   `crate_2233` (`level11c`) - and a static entity's callback runs only while its bucket is drawn (00_order 8.12c), so
+   the original's blink on those four stands still while they are out of view and the port's runs on (LEFT FOR LATER).
+3. **A burnt crate's colour stands at the node's white**: manageBurnable's fade to black is not drawn (below), and
+   its first value is 1.
+4. **A piece spelled with its .ent** would ask for `key.ent_blue.png`, which does not exist, and the original would
+   draw no picture; none of the 24 is so spelled (pinned), and the port would keep the saved picture and say so.
+
+**RULINGS APPLIED.** The standing direction that the original decides. R1, R2, R17 and R23 are not this step's; R24
+and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER** (found here, each decoded, none built).
+- **The fire agent's pulse**: `ETHCallback_fire_agent` #282-300, `bounce(this, vector2(1.02, 1.02), vector2(0.98,
+  0.98), 300)` - the agent's picture swings 1.02 -> 0.98 -> 1.02, 300 ms a leg (`art.json` `fire_agent._not_built`).
+- **The teleportable crate's own blink**: `crateCallback` #38-121 - a teleportable, unburnt crate whose callback passes
+  zeroEmissive (the `_no_emissive` crates) blinks its emissive (0.2, 0.2, 0.2) -> 0 over 600 ms (#71-93), and one with
+  the uint `blink` (1 - GetAmbientLight()) -> 0 over 200 ms (#96-121); on the dark levels this lights every crate a
+  portal carries (`art.json` `non_teleportable._not_built`).
+- **A burning crate's fade**: `manageBurnable` #41-117, `SetColor(bias)` and `SetAlpha(bias)`, bias
+  1 - burnTime / 1000, then `DeleteEntity`; the port takes a burnt crate away whole at 1000 ms.
+- **4-19's halo**: `red_key_state.ent` (blend 1, `portal_halo.png`) at the red key's point is drawn white in the port;
+  the library's stills show it red. Its callback is B5's (`ETHCallback_red_key_state`), not this step's.
+- **The four static crates' clock** (deviation 2): 2-09's, 2-11's, 2-23's and 4-12's crate are `static="1"`, so
+  the original runs their blink only on the frames their bucket is drawn (00_order 8.12c,
+  `ETHActiveEntityHandler.cpp:70-92`); the port's runs from the level's first tick whether they are seen or not. Their
+  phase on screen is 00_order section 5's bucket-limited callback clock (the visible-bucket margin not read), not
+  decodable from stills; 2-09's is burnt before f420 in the port.
+- For the close role: `docs/parity-backlog.md` section 6's P3 and P4 rows are this step's to tick (not edited here),
+  and the five items above want rows.
+- For the merge's renumbering: "step 120" is written in `art.json` (`fire_agent._not_built`,
+  `non_teleportable._not_built`, `non_teleportable._clock`) and `keys.json` (`_not_built`).
+
+## Step 121 - the music as the original plays it: four levels open silent, 2-32 opens on the boss's track, a boss's death or take-off stops it, 4-32's dragon starts it, and the level's track carries into the selectors (built)
+
+**TRACK B: the program's P7** (`docs/parity-backlog.md` section 6, P7; the 2026-09-29 audit's P7 and
+`audio_inventory.md` section 3 and findings 10-11). Built in the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, on
+step 120's `105ca1c`), whose build reads the frozen level data in `out/snap_w1`; numbered in track B's range, and the
+merge renumbers it. Changed: `game/MagicPortalsLayer.{hpp,cpp}` (the music state `m_music`, its calls `musicPlay`,
+`musicStop`, `musicResume`, `startLevelMusic`, `latchMusic`, `switchedSound`, `switchedMusic`, the log line
+`noteMusic`; `WantedTrack` rewritten; `openMenu`, `loadLevel`, the tick after `AfterStep`, `stepLevel` after
+`BeforeStep` and the four switch presses call them), `game/data/{sounds,ghost,dragon,darkdragon}.json` (notes only),
+`tests/test_mp_layer.cpp`. No engine change (the pin stays `4bfcf67`), no converter change (it already carries
+`no_music`), no format finding. **GAMEPLAY: NONE** - the music only: the state lives in the layer, is read by
+`updateMusic` on the frame, and nothing of it reaches `Game::Level` or the state hash. Not a gameplay step, so the
+program's winnability gate (routes, reachability) does not apply; no route is added.
+
+**BLOCKERS, checked first: none.** The converter already writes `metadata/no_music = "1"` on the `properties` node of
+exactly `level31b`, `level0c`, `level18c` and `level31c`. The sim already has every moment the calls hang on:
+`Boss::Phase::Dead` and `gone`, `Dragon::State::tookOff`, `DarkDragon::State::summoned` and `Phase::Dying`,
+`Ghost::State::initialised`, `Phase::Death` and `gone`. The engine plays and stops a voice as it did (`updateMusic`).
+
+**WHAT THE ORIGINAL DOES** (listing md5 `48fe65ce...`; `00_order.md` 8.0: a `SetV1`/`CMPIu` operand is a constant,
+arguments pushed last-first). Every call of every music function is listed in `P7/music_calls.txt`.
+- **`AudioManager::playMusic`** (bytes 195443..195631): `currentTrack = name` (#3-8), then, only while the music switch
+  is on (#10-18), LoadMusic, LoopSample, SetSampleVolume and PlaySample (#19-36). `currentTrack` starts '' (the
+  constructor, #64-66). Android has ONE MediaPlayer (`MediaStreamManager.java`): `play` keeps a track that is its
+  current file and playing and stops any other first (:90-104), and does nothing while `globalVolume x volume <= 0`
+  (:95-96); `stop` stops it whatever it plays (:64-68) - `StopMusic`'s `stop_music` ignores the name
+  (`MediaStreamListener.java:55-56`).
+- **`pauseMusic`** (186631..186849): StopSample(currentTrack) when it is set and loaded; `currentTrack` is kept.
+  **`resumeMusic`** (186849..187005): LoadMusic, LoopSample, PlaySample of `currentTrack`. `turnMusicOff`,
+  `turnGlobalVolumeOff` are pauseMusic; `turnMusicOn` is resumeMusic; `turnGlobalVolumeOn` (186562..186631) resumes only
+  while the music switch is on. The AudioManager is both switches' listener (`AudioManager::update` #3-19), called on
+  each toggle (`MusicSwitchManager::saveMusicState` #36-52, `GlobalVolumeManager::saveVolume` #33-47).
+- **`Game::preLoop`** (112536..114414) #485-509: `isBossFight = m_levelIndex == 31` (#485-491); unless `noMusic`,
+  `playGameMusic(isBossFight)` (195988..196194: `running_with_wolves_loop_b` at 0.6 or `finding_wonderland_60_loop` at
+  0.7, both looping); with it, `turnMusicOff` (#506-509). `noMusic` is `CheckCustomData('no_music')` on the
+  `properties` entity, presence alone (`Game::readProperties` 116676..118260 #166-181, called at #33). A retry, a skip
+  and "next" are each a fresh Game state.
+- **`PortalMainMenu::preLoop` #368 `playMenuMusic`** is its only caller. Chapter and level select
+  (`createLevelSelectState`, `WorldSelector`), the credits, the dashboard, the pause and the finished and lost layers
+  call no music function, so a level's track - or its silence - goes on under them.
+- **The bosses.** `ETHCallback_ghost` #320-324 `playGameMusic(true)` in its init block; #1210-1243
+  `StopSample(getBossMusicName())` in its DEATH arm (`CMPIu v26, v4`: the constant 4), every update. `ETHCallback_beholder`
+  #1139-1159 the same StopSample in BEHOLDER_STATE_DEAD (3), every update until it is deleted. `ETHCallback_dragon`
+  #409-431 the StopSample inside `if (!tookOff)`, once, as it climbs past `take_off`. `ETHCallback_dark_dragon_spawn`
+  #103-118: AddScaledEntity('dark_dragon.ent'), breakDarkDragonWall, `playGameMusic(true)`. `ETHCallback_dark_dragon`
+  #1958-2012: `hp <= 0 && state != 4` -> state 4, then the StopSample and playDarkDragonDeathSound, once. Each
+  StopSample is behind `SampleExists(boss)`.
+- Not the port's: `AudioManager::onResume` (the app back from the background, `onResume` in main.angelscript) also
+  resumes `currentTrack`; the desktop has no such event. `playRocketMusic` (`ETHCallback_rocket_launch` #174) and
+  `playBackHomeMusic` (`ETHCallback_rocket_landing` #183) are 4-01's and 4-19's won cutscenes: P2's.
+
+**THE CHANGE.**
+1. **The state** (`MagicPortalsLayer::Music`): `current`, the original's `currentTrack` (a key of `sounds.json`'s
+   `music`: `menu`, `game`, `boss`; "" at start), and `stopped`, the one player stopped since that track was asked for.
+   `WantedTrack()` is `current` with both switches on and not `stopped`, else "" - no longer derived from the screen.
+   `updateMusic` is unchanged: it starts and stops the voice as `WantedTrack` changes, so a track asked for again while
+   it plays goes on (`mayKeepSong`), and one asked for after a stop starts from its beginning.
+2. **The calls**: `musicPlay(track)` (playMusic: `current`, and not stopped), `musicStop()` (pauseMusic and a boss's
+   StopSample), `musicResume()`. `openMenu` into `Screen::Main` (a state change) plays `menu`; nothing else in the menus
+   does. `loadLevel`, once a level is up, runs `startLevelMusic`: `no_music` on the first `properties` node (presence)
+   stops; else `boss` on a world's last level (`Chapters::Table::Next(at) < 0`), `game` otherwise. `latchMusic`, after
+   `AfterStep` and again after `BeforeStep` (the dragon's callback runs there), plays `boss` on the ghost's
+   `initialised` and the dark dragon's `summoned` turning true, stops on the dragon's `tookOff` and the dark dragon's
+   DYING turning true, and stops on every tick the ghost is in DEATH or the beholder in DEAD and not yet gone. Its
+   watch is reset with each level.
+3. **The switches**: a toggle to off stops; the music switch back on resumes; the sound switch back on resumes only
+   with the music switch on.
+4. **The log**: `music: <track or none> from tick N` each time `WantedTrack` changes, so every run's log says what
+   played (gate 1 reads it off the sweep).
+5. **Notes**: `sounds.json` `_music_note` (it said the music plays unconditionally), `ghost.json` `_not_built` (it
+   said no level's `no_music` is honoured), `dragon.json` and `darkdragon.json` `not_built` (the stops and the start).
+
+**THE GATES.** After = `MagicPortals.exe` `35bab8e6` and `test_mp_layer` `5ab36265` (this step's second build; the
+first, `106fea28` / `f996e795`, read the dragon's take-off a tick late - below). Before = step 120's committed `5ff43623`
+and its sweep `program/P34/after/sweep`. Captures, scripts and measurements: `out/parity/program/P7/`
+(`capture_sweep.sh` -> `after/sweep/`, `compare_sweep.py`; `cap.sh` -> `flows/`; `needles.py`; `music_calls.txt`;
+`footage_handlers.txt`; each with its `.txt` or `.json`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1.log`, `build2.log`, `--target MagicPortals test_mp_layer`: `MagicPortalsLayer.cpp`, `main.cpp`, `LevelVisit.cpp`, `test_mp_layer.cpp` compiled - every includer of the layer's header) |
+| (1) The track each level opens on, all 128, on the exe | `boss` on 1-32 and 2-32; none on 3-32, 4-01, 4-19, 4-32; `game` on the other 122 | by the old `WantedTrack` (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`; its exe logged no track): `boss` on 1-32 alone (a beholder built), `game` on the other 127 | **passes** (`compare_sweep.txt`): each of the 128 sweep logs has exactly one `music:` line, from tick 0 - `boss` 2 (1-32, 2-32), none 4 (3-32, 4-01, 4-19, 4-32), `game` 122; 0 otherwise |
+| (2) The same, unit, and the data it reads | as (1); `no_music` on exactly four levels; every world 32 long | - | **passes** (`EachLevelOpensOnTheTrackItsPreLoopAsksFor`, 12 levels: 1-01, 1-31, 1-32, 2-01, 2-32, 3-31, 3-32, 4-01, 4-18, 4-19, 4-31, 4-32; `FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight`: `no_music` in `level0c`, `level18c`, `level31b`, `level31c` only, 4 x 32 levels, each world's last at index 31) |
+| (3) The level's track in the selectors | the level's track under the medal, the level grid and chapter select; `menu` only from the main menu; a level picked from the grid starts its own | `menu` on Worlds and Levels (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`) | **passes.** Unit (`TheLevelsTrackCarriesIntoTheSelectors`): 1-01 won - `game` under the medal, on the grid and on chapter select; `menu` at the main menu, on chapter select and the grid after it; `game` again on 1-01 picked from it. Exe (`flows/f1_1-01_carry.log`, fresh save, 400 frames, pause@120, levels@180, back@240, back@300, each press logged as taken; png `e32aed7d`): `music: game from tick 0`, then `music: menu from tick 301` and no line between; the frame is the main menu |
+| (4) A `no_music` level's silence in the selectors | none on the level, its retry, the grid and chapter select; `menu` at the main menu | `menu` on the grid, and 4-01 opened on `game` (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`) | **passes.** Unit (`ANoMusicLevelsSilenceCarriesIntoTheSelectors`, 4-01). Exe (`flows/f2_4-01_silence.log`, fresh save, 400 frames, the same presses; png `e32aed7d`, the same main menu): `music: none from tick 0`, `music: menu from tick 301`, nothing between |
+| (5) 1-32: the beholder's death | `boss` through the fight; none from the tick it is DEAD, through its going and after; `boss` again on a retry | `boss` through the death and the medal screen: `105ca1c:game/MagicPortalsLayer.cpp:8495-8520` asks only `beholder.has_value()`, never cleared (`Boss.cpp:476`) | **passes** (`TheBeholdersDeathStopsItsTrack`): three dropped rocks put rising into its eye kill it on tick 2115; `boss` on every tick before, none from that tick, none through its going (the button raised) and 60 ticks after; a retry `boss` |
+| (6) 2-32: `isBossFight` and the take-off | `boss` from the load; none from the take-off's tick | `game` from the load, and on through the take-off (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`: no beholder) | **passes** (`TheDragonsTakeOffStopsTheBossTrack`): `boss` from tick 0 to the take-off on tick 3100 (51.7 s), none from that tick and 120 after. The first build stopped it on tick 3101: the dragon ticks in `BeforeStep`, after the tick's `latchMusic` - fixed by a second `latchMusic` after `BeforeStep` |
+| (7) 3-32: `no_music`, then the ghost | none from the load and after the knight's death; `boss` from the ghost's init; none from its death | `game` from the load - MEASURED: step 120's `test_mp_layer` (`1c04cd0d`, `P34/test_mp_layer.txt`, 3017 checks, 0 failures) passed this case's old `WantedTrack() == "game"` at 1 s and once the ghost is added | **passes** (`TheGhostComesWithItsKnightsDeath`, its two changed checks and its unchanged two): none at 1 s and once the ghost is added, `boss` on its first callback, none once it has gone |
+| (8) 4-32: `no_music`, then the dark dragon | none from the load until the summon; `boss` from the summon's tick; none from its death | `game` from the load; never `boss` (`105ca1c:game/MagicPortalsLayer.cpp:8495-8520`: the dark dragon is not read) | **passes** (`TheDarkDragonIsDrawnAsItsCallbackLeavesIt`): none once the torch is lit and on every tick to the summon (0 ticks early), `boss` on the summon's tick, through the three wounds, none on the tick the third burn kills it and after it has gone |
+| (9) The switches | off: none; the music switch back on resumes `currentTrack`; the sound switch back on resumes it only with the music on - also where a `no_music` level had stopped it | a switch back on played what the screen asked for | **passes.** Unit (`ASwitchBackOnResumesTheTrackANoMusicLevelStopped`): 4-18 `game`, a skip to 4-19 none; music off none, on `game`; a retry none; sound off none, on `game`; music off, sound off, sound on: none; music on: `game`. Exe (`flows/f3_4-18_skip_resume.log`, gold save, 400 frames, png `0adfe692`, pause@60, skip@120, pause@200, music@260, music@300): `game from tick 0`, `none from tick 120`, `game from tick 300` |
+| (10) Against the original heard | - | - | **NOT RUN: no recording of the original has sound** - the 22 clips in `footage/` (`footage_handlers.txt`), and all 78 mp4s under it (the independent check), carry a video track and no `soun` handler. The step is the decode's; the audit found nothing that needs listening |
+| (11) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no unscheduled input; no picture changes (music only) | `P34/after/sweep` | **passes** (`compare_sweep.txt`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines; 0 unscheduled input lines; **128 of 128 byte-identical** to `P34/after/sweep`. The pngs cannot show music: gate 1 reads the same logs |
+| (12) Winnability | - | - | **N/A**: no gameplay change. Neither check exists in this tree (W.1's `37c4ece` is not an ancestor of `w1-b`: no `tests/routes/`, no `test_mp_routes`, no reachability tool) |
+
+**SUITES**, run directly: `test_mp_layer` **3095**, 0 failures (`5ab36265`; 3017 at step 120: the seven new cases and
+the changed checks in `TheGhostComesWithItsKnightsDeath` and `TheDarkDragonIsDrawnAsItsCallbackLeavesIt`). Its first
+run on `f996e795` (3095 checks, 1 failure) was a real one: the dragon ticks in `BeforeStep`, after the tick's
+`latchMusic`, so the take-off's stop came a tick late (tick 3101 for the dragon's 3100); `latchMusic` now also runs
+after `BeforeStep`. No other suite links `MagicPortalsGame` or includes the layer's header, and no sim source changed,
+so no other suite is relinked. The four JSON files changed only in notes their loaders do not read: the one suite that
+text-replaces one of them (`test_mp_darkdragon`, `darkdragon.json`) has 28 literals in it, each one's first occurrence
+where it was (`needles.txt`); `test_mp_sounds`, `test_mp_dragon` and `test_mp_ghost` read theirs through `LoadRules`
+alone - not run (not relinked).
+
+**SMART APP CONTROL: 0 refusals.** Launches: `test_mp_layer` `f996e795` and `5ab36265` once each; `MagicPortals.exe` `35bab8e6` 131 times (the sweep's 128, three flows); the first build's `106fea28` was never launched.
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **`isBossFight` is read from the chapters table**: the original's literal `m_levelIndex == 31`, which is each
+   world's last level because every world in `chapters.json` has 32 (pinned by
+   `FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight`). Putting 31 in `sounds.json` would take a `Sounds.cpp` parse
+   and relink all 45 suites for one number the table already holds.
+2. **`no_music` is named in the layer** (`kNoMusicFlag`), as `Game.cpp` names `darkest`: a property name, not a number,
+   cited to `Game::readProperties` #166-181.
+3. **The calls are made on the tick whose callback makes them** and heard within that same 60 Hz frame:
+   `updateMusic` runs in `OnUpdate`, after the frame's fixed ticks - the frame the original's callback runs in.
+4. **`SampleExists(boss)`** is not modelled. It is false only while the boss track has never been loaded, which needs
+   the music switch off since the session began; then nothing plays, and whichever switch comes back on resumes
+   `currentTrack` in both games (and on a still-dead beholder or a dying ghost the next update stops it again in
+   both). No sequence of the shipped game tells the two apart.
+
+**RULINGS APPLIED.** The standing direction that the original decides; nothing here was an owner's ruling. R1, R2,
+R17 and R23 are not this step's; R24 and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **It sounds like a bug and it is the original's**: a switch turned back on resumes `currentTrack` even where the
+  game had stopped it. 4-19 reached by a skip from 4-18 opens silent, but the music switch off and on again in its
+  pause plays 4-18's track; after 1-32's beholder or 3-32's ghost has gone, the same brings the boss's track back.
+  Built as the original does (gate 9); the owner may prefer silence to stay silence.
+- **The rocket's and the landing's tracks** (`playRocketMusic`, `playBackHomeMusic`) come with 4-01's and 4-19's won
+  cutscenes, which the port has not got: the program's P2.
+- **Listening**: no footage carries sound (none of the 78 mp4s under `footage/` has a sound track), so the tracks'
+  loudness against the effects is not compared; the audit found nothing else that needs an ear.
+- **Not pinned by a test** (the independent check's finding): the track under the lost screen (a death, then a
+  retry) and on the chapter-end path (1-32 and 2-32 finished into chapter select; 4-32 into it with
+  `GameFinishedPopup`). It holds by construction - `WantedTrack` no longer reads the screen, and only `openMenu` into
+  `Screen::Main` plays `menu` - but no `test_mp_layer` case checks it. A test, so not added at the commit.
+- For the close role: `docs/parity-backlog.md` section 6's P7 row is this step's to tick (not edited here), and the
+  audit's "menu music plays after a level" known-everywhere line goes with it.
+- For the merge's renumbering: "step 121" is written in `sounds.json` (`_music_note`), `ghost.json` (`_not_built`),
+  `dragon.json` and `darkdragon.json` (`not_built`), and `tests/test_mp_layer.cpp` (a comment).
+
+## Step 122 - SpaceSky on the 19 space levels: the space sky at the view's centre, the spiral at its bottom-centre as wide as its diagonal and turning, the planet pinned there and bobbing, the eclipse across at the centre (built)
+
+**TRACK B: the program's P5** (`docs/parity-backlog.md` section 6, P5; `sky.json`'s `space_sky._not_ported`). Built in
+the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, on step 121's `1656d8f`), whose build reads the frozen level
+data in `out/snap_w1`; numbered in track B's range, and the merge renumbers it. Changed: `game/data/sky.json` (the
+`space_sky` block, decoded, in place of `_not_ported`), `game/sim/Sky.{hpp,cpp}` (`SpaceRules`, `LoadSpaceRules`,
+`Space`, `BuildSpace`, `AdvanceSpace`, `SpaceSkyPx`, `SpiralPx`, `PlanetPx`, `EclipsePx`),
+`game/MagicPortalsLayer.{hpp,cpp}` (`SpaceRole` on a drawn sprite, `m_spaceRules`, `m_space`; `buildSprites` builds it and colours the spiral,
+`syncSprites` places, sizes and turns the four, `advanceMotions` steps them, `shakeView` moves them with the camera;
+a `space sky:` log line), `tests/test_mp_{sky,layer}.cpp`. No engine change (the pin stays `4bfcf67`), no converter
+change (the four entities and `alpha` are already in the converted levels), no format finding (script behaviour,
+recorded in `sky.json`). **GAMEPLAY: NONE** - pictures only: the four are scenery with no body, nothing of them reaches
+`Game::Level` or the state hash. Not a gameplay step, so the program's winnability gate does not apply; no route is
+added (this tree has no `tests/routes/`, `test_mp_routes` or reachability tool: W.1 is not an ancestor of `w1-b`).
+
+**BLOCKERS, checked first: none.** `sky.json` named the two helpers still to read, `linearMotion`
+(utilEntityEffect.angelscript, bytes 327527..328407) and `scaleToSize` (329349..329538); both are in the listing and
+are read below. The port already has `linearMotion` (`sim/Motion`, `motions.json`) and AddToAngle's turn
+(`Motion::Turn`); the four pictures are already drawn, from their tiers, at their depths. Nothing else seeks them:
+the listing's only other reads of `'spiral'` and `'eclipse.ent'` are `ETHCallback_rocket_landing` (L96705), whose body
+runs only once `isGameWon` (#1-3) - 4-19's landing cutscene, the backlog's P2.
+
+**WHAT THE ORIGINAL DOES** (listing `all_functions.txt`, md5 `48fe65ce...`; arguments pushed last-first and a `SetV1`
+operand a constant, `00_order.md` 8.0 rules 1 and 3). `Game::preLoop` #148-182 builds `SpaceSky()` instead of
+`StaticSky` when the first `properties` carries `space_bg` at all (step 58).
+- **`SpaceSky::SpaceSky`** (Sky.angelscript bytes 156379..157122, L30669-30871): `SeekEntity` - an exact `==` on the
+  name (`ETHBucketManager.cpp:394-407`) - `'planet_bg.ent'`, `'spiral'`, `'space_sky'`, `'eclipse.ent'` (#1-63). The
+  spiral (#65-142): `size = GetScreenSize().length() x 1f`, `scaleToSize(m_spiral, vector2(size, size))`; then
+  `c = 0.7f`, or `GetFloat('alpha')` when `CheckCustomData('alpha') != 0`, and `SetColor(vector3(c, c, c))`.
+  `scaleToSize` (L64873-64902) is `Scale(vector2(size.x / GetSize().x, size.y / GetSize().y))` and `ETHEntity::Scale`
+  multiplies the scale (`ETHEntity.cpp:581-589`): a square as wide as the screen's diagonal whatever the picture; the
+  view's diagonal in the level's units, 522.2 u at 16:9. `SetColor(vector3)` writes the rgb and keeps the alpha
+  (`ETHEntity.cpp:493-498`). The planet (#143-199): `SetFloat('speed', 0.5)`, `SetFloat('stride', 1)`,
+  `linearMotion(m_planet, true, 0, PI)` - vertical, axis 0, start angle the float PI (3.141592654f, `GameMath.h:38`,
+  registered at `ETHScriptObjRegister.cpp:512-515`).
+- **`SpaceSky::update`** (157259..158171, L30886-31104), every frame, from `camPos = GetCameraPos()` (the screen's
+  corner) and `screenSize`: the planet's `originalPos = vector3(camPos + screenSize x (0.5, 1), its z)` and
+  `linearMotion(m_planet, true, 0, 0)` (#15-81) - its point the view's bottom-centre plus `cos(angle) x 1 u`, the
+  angle 0.5 rad/s from PI, a turn taken off once past 2 PI; the sky `SetPositionXY(camPos + screenSize x V2_HALF)`
+  (#83-119; `V2_HALF` is `vector2(0.5f, 0.5f)`, ETHFramework/Constants.angelscript bytes 304963..305014, L60203-60209);
+  the spiral `SetPositionXY(camPos + screenSize x (0.5, 1))` and `AddToAngle(unitsPerSecond(-1.7))` (#121-165) - 1.7
+  degrees a second clockwise, capped at 200 ms a frame, still under a pause; the eclipse `SetPosition(vector3(camPos,
+  0) + vector3(screenSize.x x 0.5, pos.y, pos.z))` with `pos` its own position (#167-218) - across at the view's
+  centre, and down its OWN y plus the corner's y, added every frame. `SpaceSky::draw` is empty.
+- **Census** (the 19 `space_bg` levels, level0c-level18c, 4-01..4-19): a space sky and a spiral on each; a planet on
+  18 (all but 4-01); an eclipse on one (4-19, 320 u down, 64 u tall at scale 2, drawn 30 u up - 2 u below the view);
+  one spiral with `alpha`, 4-01's, 0.6. 4-19's view is the level's whole 256 u, so its corner's y is 0 on every frame
+  and the eclipse holds.
+
+**MEASURED ON THE ORIGINAL** (`P5/fit_spiral.py` -> `fit_original.txt`, `fit_original_4-01.txt`,
+`fit_original_summary.txt`): each library still (h0.3, h2.8, h6.3 of the 19) is fitted with the space sky pinned at
+the centre plus `fullhd/spiral.png` added at its colour (blendMode 1, AM_ADD) as a square of side S at (cx, cy) turned
+by theta, free in all four; the pose kept is the one where the most pixels agree within 12 (as step 58's
+`where_orig_sky.py`). 4-01's `space_sky` instance draws `satellite_sky.png`, the other 18 `space_bg.png`. **57 of 57**
+frames fit the spiral at **side 1468.6 px** - `|1280 x 720|` - and at **(640, 720)**, the bottom-centre (56 exactly;
+4-17's h6.3 at (641, 719)), with 224,296 to 459,262 more pixels agreeing than without it on the 18 (4-01, whose
+space shows through a castle window: 81,965 to 90,145); the angle **-3.1 to -5.3** at h0.3, **-7.2 to -9.4** at
+h2.8, **-13.1 to -15.3** at h6.3, so **-1.650 to -1.683 deg/s** over h0.3 -> h6.3 on all 19 levels (the fit's step
+is 0.1 deg over 6 s): 1.0-2.9 % under the decoded 1.7 (the verifier's refit -1.650..-1.695, mean -1.674, about
+1.5 %). A candidate cause, not checked: Ethanon hands scripts the frame's time cut to whole milliseconds
+(`ETHEngine.cpp:147`, `static_cast<unsigned long>(lastFrameDeltaTimeMS)`), so every `unitsPerSecond` motion runs a
+little slow - by how much depends on the emulator's frame time, never measured (about 4 % at a steady 60 Hz, 1 % at
+30 Hz); the stills' own timing is uncertain by about as much. The port keeps the decoded -1.7 (at f420 the two differ
+by at most 0.2 deg). The planet's opaque pixels
+fit at **x 640** on 54 of 54 frames and y **550-554** (its point at 720 less 60 u, 551.25, and the bob's +-2.8 px:
+550 at h0.3, 552-554 later, as cos rises from PI); the sky alone at **(640, 360)** on 51 of the 54 (4-19's walls and
+bubbles leave 22,763-23,785 sky pixels, fitted at (638-640, 362-365)). 4-19's eclipse is in none of its frames.
+
+**THE CHANGE.**
+1. **`sky.json` `space_sky`**: `planet_name`, `spiral_name`, `sky_name`, `eclipse_name`, `spiral_diagonal_scale` 1,
+   `spiral_pitch` (0.5, 1), `spiral_turn_deg_per_s` -1.7, `spiral_colour_key` `alpha`, `spiral_colour_default` 0.7,
+   `sky_pitch` (0.5, 0.5), `planet_pitch` (0.5, 1), `planet_speed` 0.5, `planet_stride` 1, `planet_vertical`,
+   `planet_axis_deg` 0, `planet_start_angle_rad` the float PI, `planet_update_start_angle_rad` 0 (read by no call:
+   the constructor's is the first), `eclipse_pitch_x` 0.5; `_source` cites each, `_inferred` states the
+   constructor's one-tick step and its bound, `_measured` the original's fit below. `LoadSpaceRules` refuses the file
+   without the block, and a spiral of no size or no colour.
+2. **`sim/Sky`**: `BuildSpace` (the constructor: the four by exact name, each optional; the spiral's side from the
+   view's diagonal and its colour from `alpha`, refused if that is not a number; the planet's `Motion::Linear` from its
+   row, with the constructor's first call stepped by one tick), `AdvanceSpace` (update's carry: the planet's step, the
+   spiral's `Motion::Turn`, the eclipse's y plus the corner's y), and the four points from the camera.
+3. **The layer.** `buildSprites` builds `m_space` beside `m_sky` (the view from `viewportAspect`, as `m_aspect` may be
+   the last level's there), tags the four sprites, sets the spiral's rgb after its look, and interpolates their quads
+   as the sky's. `syncSprites` places each at its point plus its own offset (the planet's 60 u, the eclipse's 30), the
+   spiral at its side and turned as the placed pictures are (`Motion::Turn` folds at +-360 deg, about every 212 s;
+   the engine interpolates rotation along the shortest arc, `engine/src/core/InterpolationSystem.cpp:31-52`, so the
+   fold draws no spin between ticks). `advanceMotions` runs `AdvanceSpace` with the tick's camera, before the pictures
+   are placed. `shakeView` moves all four with the shaken camera, as the sky.
+
+**THE GATES.** After = `MagicPortals.exe` `95c71847` (this step's build; the sweep ran on `sky.json` before its
+`_inferred` and `_measured` notes and the commit's sentence on the turn rate in `_measured`, which no loader reads); before = step 121's committed `35bab8e6` and its sweep
+(`program/P7/after/sweep`, 128 of 128 matching its `capture.txt`). Everything under `out/parity/program/P5/`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1_exe.log` `--target MagicPortals`: `Sky.cpp`, the layer, `main.cpp`, `LevelVisit.cpp`; `build2_suites.log` `--target test_mp_sky test_mp_layer`; `build3_layer.log`; `build4_layer_relink.log`, the one relink after a refusal) |
+| (1) The decode on the original | the spiral's centre (640, 720) +-1 px, side 1468.6 px, turning -1.7 deg/s; the sky's centre (640, 360) where enough sky shows to fit it alone, and else the combined fit (sky pinned at the centre plus the spiral); the planet's x 640 and y 551.25 +- 2.8 | - (the original's frames) | **passes** (`fit_original*.txt`): 57 of 57 stills at side 1468.6 and (640, 720) (one at (641, 719)); -1.650 to -1.683 deg/s on all 19 levels (1.0-2.9 % under the decoded 1.7: a candidate cause above, not checked); the planet at x 640 on 54 of 54, y 550-554. The sky alone at (640, 360) on the 51 stills of 4-02..4-18; on 4-01 (its space seen only through a window) and 4-19 (walls and bubbles, 23 k sky pixels) the sky-alone fit is uninformative - 4-01 (602-681, 378), 4-19 (638-640, 362-365) - and both pass on the combined fit (4-01: 174,491-177,033 px against 86,888-92,526 without the spiral; 4-19: 304,596-307,145 against 24,152-26,204) |
+| (2) The port's frames read as the original's | the same fit on the f420 captures: spiral (640, 720) +-1, side 1468.6, angle -11.9 +- 0.2 (7.0 s at -1.7, 4-01's included); sky (640, 360) as in (1); planet (640, 553.9) (720 + cos(PI + 0.5 x 421/60 - 2 PI) x 2.8125 - 168.75) | spiral: no fit at the decoded pose on any level (it scores below no spiral at all on 19 of 19: 28,169-123,438 px against 99,384-341,739); 256 u (720 px) at the level's (256, 256). Sky (598-682, 354-378), planet x 560-720 (both at 640 only on 4-11, whose camera sits at the level's 256) | **passes on 19 of 19** (`fit_port_after.txt`; before `fit_port_before.txt`): spiral side 1468.6, centre (640, 720) on 14 and (641, 720) or (639, 720) on 5, angle -11.9 on 14, -11.8 on 4, -12.0 on 4-01; sky alone (640, 360) on the 17 of 4-02..4-18, and uninformative where the original's is - 4-01 (606, 378), 4-19 (638, 365) - which pass on the combined fit (4-01 170,335 px against 89,022 without the spiral; 4-19 327,527 against 25,385); planet (640, 554) on 18 of 18 |
+| (3) Against the library stills | the after frame agrees with the original's h6.3 more than the before on each of the 19 | 7,211,027 px over the 19 (11.7-77.8 % a frame) | **passes 19 of 19** (`agree_original.txt`, within 12 on every channel): 12,219,929 px (49.8-91.0 %); gains +121,266 to +397,492 a level; 4-01's window (x 405-850, y 150-610) **33.0 % -> 83.0 %**. The two are different instants (f420 = 7.0 s against about 8.4 s, the spiral 2.4 deg apart) with different players, so neither reaches the whole frame |
+| (4) The audit's 4-03 | the spiral fills the frame as the original's | a 256 u swirl at the level's (256, 256): screen (560, 720), 720 px | **passes**: 1468.6 px at (640, 720), -11.9 deg; 613,614 px agree with the model against 181,194 without the spiral (the original's h6.3: 604,940 against 176,730) |
+| (5) Unit, the sim | the rules and refusals, the build, the pins under three cameras, the turn and bob over 420 ticks, the cap and a paused frame, the eclipse's sum, the census | 380 checks | **passes: `test_mp_sky` 630 checks, 0 failures** (dd8dd612; the same on each of its four runs, the last at the commit on the final tree). Census: 19 SpaceSky (level0c-level18c), 19 space skies, 19 spirals, 18 planets (not level0c), 1 eclipse (level18c), 1 tinted spiral (level0c, 0.6) |
+| (6) Unit, the layer | 4-03's three pinned on every tick and on each of the frames between for 240 ticks; the spiral's side, colour 0.7 and turn; the shake; 4-19's eclipse across at the centre and at 320 for 60 ticks | 3095 checks | **passes: `test_mp_layer` 3116 checks, 0 failures** (ad278a2e; the same on each of its four runs, the last at the commit on the final tree): 0 of 240 ticks and 0 of 960 frames off, the planet off on 0 ticks, turned -6.800 deg in 240 ticks, 3 trembles held. **But 4-03's camera holds at 284.4 px through the 240 ticks** (`level2c: camera 284.4 -> 284.4 px`): the level opens with it at its right edge and a hold does not walk a space level's robot (the verifier's `--hold left@1-300` on 4-03 and 4-19), so only the shake moves it and the pin between ticks under a MOVING camera is not exercised by this case, whatever its name (`TheSpaceSkyStaysOnTheViewAsTheCameraMoves`) says. What covers it: `test_mp_sky` pins the four under three cameras, and the static sky's case pans (`level30: camera 227.6 -> 324.0 px`, 0 of 960 frames off) through the same interpolated placement |
+| (7) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no unscheduled input; the 19 space levels change and the other 109 are byte-identical | `P7/after/sweep` | **passes** (`compare_sweep.txt`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines; 0 unscheduled input lines. **19 changed - exactly 4-01..4-19 - and 109 byte-identical.** Every one of the 19 logs `space sky:` with its four as the census says (the spiral 522.170591 u, colour 0.6 on 4-01 and 0.7 on 18). The 128 logs match the before's but for the profiler's averages, the `Wrote` line, the `space sky:` line, the space pictures' `on` lines and, on 12 of the 19 and no other level, the render profiler's `Shadow passes saved`: `18 (worst 18)` -> `14 (worst 18)` on 4-03, 4-04, 4-05, 4-07, 4-09, 4-10, 4-11, 4-13, 4-17, 4-18 and 4-19, and on 4-08 only the worst, `14 (worst 14)` -> `14 (worst 18)`. Most likely, not checked: the turning spiral and the bobbing planet now change every tick, and with them the cascade passes' signature over the shadow casters, so the four passes are re-recorded more often (`engine/src/renderer/VulkanRenderer.cpp:1631-1641`) - render cost only, no picture or tick of it |
+| (8) Winnability | - | - | **N/A**: no gameplay change; this tree has no routes or reachability tool |
+
+**SUITES**, run directly: `test_mp_sky` **630** checks, 0 failures (380 before: the space rules and their refusals,
+the build, the pins under three cameras, 420 ticks of turn and bob, the frame cap and a paused frame, the eclipse's
+sum, the census over the 128 levels). `test_mp_layer` **3116**, 0 failures (3095 at step 121: 4-03's space sky, spiral
+and planet on every tick and every frame between for 240 ticks, the spiral's side, colour and turn, the shake, and
+4-19's eclipse). Its first run (the build before `ad278a2e`'s) had 3 failures in the new case's own expectations -
+4-03 opens with its camera at the level's right edge, so it cannot pan right (the case now checks only that the
+camera is off the level's 256, which it is from the start: the camera then holds at 284.4 px, so the case pins the
+four under a still camera and a shake, not a pan - gate 6); a turn compared to 1e-9 that the float tick leaves at 3e-7; a shake compared with `==` on
+three y's rounding differently - none in the port. The other 43 suites link the changed `MagicPortalsSim` and are not
+relinked or run: none includes `Sky.hpp` (only the layer, `test_mp_layer` and `test_mp_sky` do); the merge's build
+relinks them.
+
+**SMART APP CONTROL: 1 refusal**: `test_mp_layer` `ee6ad78c` (the build after the case's three expectations were
+fixed; `Permission denied`, exit 126), deleted and relinked once to `ad278a2e`, which ran. Launches: `MagicPortals.exe`
+`95c71847` 128 (the sweep); `test_mp_sky` `dd8dd612` four times (its first run, and after each of the three
+text-only additions to `sky.json`, `_about`'s line, `space_sky`'s `_inferred` and `_measured`, and the commit's
+sentence on the turn rate, which no loader reads); `test_mp_layer` once from its first build (md5 not taken; the 3
+failures) and `ad278a2e` four times (after the relink, and after each of the three). The verifier's launches are its
+own (`P5/verify1`).
+
+**VERIFIED, PASSED** (`P5/verify1.json`, on the same `95c71847`, `dd8dd612` and `ad278a2e`, head `1656d8f`, engine
+`4bfcf67`; no fix round). The verifier read the decode from the listing before the code, and the code matches it; it
+compiled the six changed translation units with the tree's own commands (0 warnings; no relink); `test_mp_sky` 630 and
+`test_mp_layer` 3116, 0 failures, once each; its own 128-level sweep (`P5/verify1/sweep`: 128 rc 0, validation
+silent, 128 of 128 pngs matching their logs, no unscheduled input) is byte-identical to this step's on all 128, and
+against the before changes exactly 4-01..4-19. Its own fit on the original's 57 stills: the global best at side
+1468.6, (640, 720) on 19 of 19 h6.3; 57 of 57 at side 1466.6-1471.1, x 639.5-640.5, y 719.0-720.75; the planet at x
+640, y 552-553 on 18 of 18 h6.3. On the port's f420: side 1468.6-1470.6, x 639.88-640.38, y 719.75-720.50, angle
+-11.84 to -11.88; 19 of 19 closer to the original's h6.3 than before (mean difference 10.6-39.3 -> 3.0-11.6). Its
+three problems, all low, are recorded here as text at the commit, no behaviour changed: 4-03's camera does not pan in
+the layer case (gate 6), the turn rate's gap to the decode (MEASURED ON THE ORIGINAL), and the shadow counter in the
+logs (gate 7).
+
+**RECORDED DEVIATIONS AND DECISIONS** (none is a gate row NOT MET).
+1. **The eclipse's y under a shake.** The original's update adds the corner's y as `GetCameraPos` has it after the
+   earthquake, so a tremble's move stays in the eclipse's y; the port's tick camera stays at rest under a shake (step
+   101), so its eclipse takes the rest corner's y every tick and, on a tremble frame, moves with the drawn camera as
+   the sky does - that frame is the original's, but the tremble is not kept. A forth is always down and its back takes
+   off the saved value exactly (`Earthquake.hpp`), so the kept sum is never negative: the original's eclipse can only
+   go further below the view. On 4-19, the one eclipse, it starts 2 u below: no frame differs.
+2. **The constructor's step.** Its `linearMotion` call steps the planet by the frame before the level's first update,
+   which no capture shows; the port takes one tick (16.67 ms). At most 200 ms (the cap) would move the phase 0.1 rad,
+   under 0.005 u at cos's floor. INFERRED.
+3. **The spiral's side is fixed at load**, from the window's shape then, as the constructor reads `GetScreenSize` once;
+   a window resized mid-level keeps it.
+
+**RULINGS APPLIED.** The standing direction that the original decides. R1, R2, R17 and R23 are not this step's; R24
+and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **P2's landing** (`ETHCallback_rocket_landing`, once 4-19 is won) moves the eclipse to the view's bottom-centre and
+  brightens the spiral over 12.5 s; `SpaceSky::update` goes on adding the corner's y under it, and a camera that moves
+  in that cutscene would carry the eclipse off, as the original's would. Not built (P2).
+- **The original's timed motions may run slow** (the verifier's finding): the spiral turns 1.0-2.9 % under its decoded
+  1.7 deg/s on the stills, and Ethanon's whole-millisecond frame time is a candidate cause that would reach every
+  `unitsPerSecond` motion. The port keeps the decoded rates; a frame-time change would be cross-cutting and needs the
+  emulator's frame time measured first. The owner's call.
+- **Not pinned by a test** (the verifier's finding): the space pictures between ticks under a PANNING camera. The
+  layer case's camera holds at 284.4 px (gate 6); the static sky's case pans through the same placement. A test, so
+  not added at the commit.
+- **Render cost** (the verifier's finding): the space levels' shadow cascades are re-recorded more often (gate 7).
+  Keeping the sky's bodiless quads out of the shadow casters would be a later step; not built.
+- For the close role: `docs/parity-backlog.md` section 6's P5 row is this step's to tick (not edited here).
+- For the merge's renumbering: "step 122" is written in `sky.json` (`_about` and `space_sky._source`) and in comments
+  in `game/sim/Sky.hpp`, `game/MagicPortalsLayer.cpp`, `tests/test_mp_sky.cpp` and `tests/test_mp_layer.cpp`.
+
+## Step 123 - the win cutscenes: 4-01's rocket launch, 4-19's landing, 2-32's dragon knight, and the end_delay each level sets before its medal (built)
+
+**TRACK B: the program's P2** (`docs/parity-backlog.md` section 6, P2; the audit's P2). Built in the worktree
+`Magic-Portals-Remake-w1b` (branch `w1-b`, on step 122's `691d6de`), whose build reads the frozen level data in
+`out/snap_w1`; numbered in track B's range, and the merge renumbers it. Changed: `game/data/cutscenes.json` (new: the
+decode), `game/sim/Cutscene.{hpp,cpp}` (new: `LoadRules`, `EndDelayMs`, `Places`, `LaunchAt`/`StepLaunch`,
+`LandingBias`/`LandingDoorOffsetPx`/`LandingEclipseYPx`/`SpiralBrightness`/`StepLanding`, `FindKnight`/`SpawnKnight`/
+`StepKnight`/`KnightEntityPx`), `game/sim/Earthquake.{hpp,cpp}` and `earthquake.json` (the `rocket_launch` row, D11 row
+30), `game/MagicPortalsLayer.{hpp,cpp}` (the level's `m_wonDelayMs`, `stepCutscenes`, `syncKnight`, `doorPointPx`,
+`CutscenePicture`, `EffectOwner::Kind::Knight`, the DEV `ScheduleDevPlace`), `game/main.cpp` (the DEV `--place`),
+`game/sim/CMakeLists.txt`, `tests/CMakeLists.txt`, `tests/test_mp_cutscene.cpp` (new), `tests/test_mp_{layer,camera}.cpp`,
+and the notes this makes stale or that were wrong: `ui.json` `level_end.beats` and the header's beat note ("no level
+places an end_delay": three do), `dragon.json` `knight`, `art.json` `_dragon_knight`, `effects.json` `finish`,
+`sounds.json` `_music_note`, `earthquake.json` `_not_wired`, `Dragon.hpp` (and, at the commit, the remake's
+`data/entity_roles.json` `scenery_fx` note and README's capture flags, `--place`). Line 7648 of this record ("Not built: a
+scene `end_delay` override of the 1400 ms. No level places one.") is corrected here, not rewritten: three levels
+place one. No engine change (the pin stays `4bfcf67`), no converter change (`end_delay`'s `time`, the three cutscene
+entities and the waypoints' `hold` are already in the converted levels), no format finding (script behaviour).
+
+**GAMEPLAY: the time from the door to the medal on three levels, and nothing before the door.** 4-01's medal comes
+5000 ms after its door (was 1400), 4-19's 14500 and 2-32's 6600; the lost screen keeps its 1400 everywhere (the
+constructor overrides only `gameWonDelay`). Everything else is after the level is won or lost: pictures, a track, a
+shake, and 2-32's knight - the one body, added only once the level is finished and kept out of `Minions`, whose list
+the achievements count. No door can be sealed by it. **The program's winnability gate cannot be run in this tree**:
+W.1 is not an ancestor of `w1-b` (no `tests/routes/`, `test_mp_routes` or reachability tool), so no route is added.
+The captures below reach the three doors with a DEV place (`--place`), a capture aid and never a route. Recorded
+for the merge: this tree has no route to 4-19's door (B5, the red key's wall, is not built here) and 4-01's intended
+route goes through the anti-portal agent (R1/R17/B6, not built here).
+
+**BLOCKERS, checked first: none.** The converter already writes `metadata/time` on the three `end_delay` nodes
+(level0c 5000, level18c 14500, level31a 6600), `rocket_launch`, `rocket_landing`, `rocket_bridge`, `eclipse.ent`,
+`spiral`, `key`, `dragon_knight_spawn` and `waypoint0` (`hold` 800) / `waypoint1`. The music (step 121) and SpaceSky
+(step 122) are in this tree; F17 is the footage.
+
+**WHAT THE ORIGINAL DOES** (listing `all_functions.txt`, md5 `48fe65ce...`; arguments pushed last-first, `00_order.md`
+8.0; `cutscenes.json` cites every instruction).
+- **The delay.** `GameStateController::GameStateController` (bytes 121296..122160) #24-29 writes 1400 to
+  `gameLostDelay` and copies it into `gameWonDelay`; #143-175 `SeekEntity('end_delay')` and, where found,
+  `gameWonDelay = GetUInt('time')`. Census over the 128: exactly 3, each the level of one cutscene.
+- **4-01, `ETHCallback_rocket_launch`** (462571..464080; `rocket_launch` is `static="1"` in `level0c.esc`, so -
+  INFERRED, not decoded - its callback runs after the game state in the frame and starts on the door's own frame). Once `isGameWon`: its first
+  frame keeps the door's and the bridge's starts, destinies start + `scale(0, -390)` and `scale(-32, 0)`, and plays
+  `playRocketMusic`; every frame `endElapsedTime` and `eqCounter` += the frame time; past `eqCounter > 100` and while
+  `endElapsedTime < 6000`, `eqCounter = 0` and `startEarthquake(3, 0)`; while `endElapsedTime < 7600` the door at
+  `interpolate(start, destiny, smoothBeginning(t / 7600))` and the bridge at `smoothBeginning(t / 3800)` - `interpolate`
+  has no clamp, so the bridge goes on to -64 at 7600.
+- **4-19, `ETHCallback_rocket_landing`** (464080..466030; `static="1"`). Once `isGameWon`: the first frame keeps the
+  door's start, destiny + `scale(256, 400)`, the spiral's colour, and plays `playBackHomeMusic`; every frame
+  `SeekEntity('key')`'s `Scale(0.9)` and `SetAlpha(its scale)`; `endElapsedTime` += the frame time only while below
+  12500; `bias = smoothBeginning(t / 12500)`; the door's `originalPos` - not its position: on this zero-g level
+  `Game::loop`'s `linearMotion` puts it there plus its bob - at `interpolate(start, destiny, bias)`; the character
+  (`dark_mage.ent`) on the door's position; the eclipse from `GetCameraPos() + GetScreenSize() x (0.5, 1)` plus its own
+  height (`GetSize` = `GetCurrentSize`, frame x scale, `ETHSpriteEntity.cpp:652-682`: 64 u) up to it by
+  `smoothEnd(bias)`; the spiral at its kept colour x `max(0, min(interpolate(2, 0.1, smoothEnd(bias)), 1))` - whole
+  until about 6.9 s, a tenth at 12.5. `startAngle`/`destinyAngle` are stored and read by nothing.
+- **2-32, `ETHCallback_dragon_knight_spawn`** (386175..386379; `static="1"`): once `isFinished` - `gameFinished`, which
+  a DEATH sets too - `AddScaledEntity('dragon_knight.ent', its position)` and it deletes itself.
+  **`ETHCallback_dragon_knight`** (386379..388631), from the next frame (INFERRED, deviation 3): within `scale(16)` of `waypoint<dest>` it takes
+  the next, adopting the hold of the one reached; finding no next it deletes itself and calls
+  `levelFinishedEffect(its point, its point + scale(16, -16))` (the suck, the sparkles, `playFinalDoorSound`). It is
+  driven only once it has started and outlasted its hold - so from its spawn it falls undriven to waypoint0 - at
+  `(+-1 x scale(1.7) x frame / GetCurrentPhysicsTimeStepMS, its y velocity)` (the minions' 33.3333 ms step,
+  `minions.json`: 51 px/s), framed `timer.set(0, 3, 120, true)` on row 1 after a leftward step, else 2.
+  `dragon_knight.ent`: `minion.png` 4 x 4, `startFrame` 4, `PivotAdjust (0, 0)` (minion.ent's is (0, 4)), emissive 0,
+  `applyLight` 0, minion.ent's `<Collision>`, and the black knight's 24-particle aura. The knight at 51 px/s enters
+  about 4.9 s after the door, inside 2-32's 6600 - a reading of the minions' speed that the designer's delay agrees
+  with; read as Box2D metres a second (the unit the impact rows read velocity in) it would walk for about 11.5 s and
+  the medal would come first.
+
+**THE CHANGE.**
+1. **`cutscenes.json`** (the decode above, every number cited) and **`sim/Cutscene`**: the delay, the three paths as
+   pure functions and each callback's clock as a small state (`Launch`, `Landing`), and the knight over the registry
+   (`Knight`: its spawn at its entity point on `minion.ent`'s circle, rotation locked, and its update before the
+   physics step, as `Minions::Tick`).
+2. **The layer.** `loadLevel` reads the level's delay (`m_wonDelayMs`, and a `sets end_delay` log line), which of the
+   three it places, and its knight. From the tick the level ends, `stepCutscenes` runs the launch and the landing
+   while it is won, from the door's own tick, each playing its track on its first update and the launch queueing its
+   shake; and the knight's spawn once it is finished - the door's tick or the death's - and its update from the next.
+   The knight goes in with the door's suck, sparkles and sound. What moves is drawn: `syncSprites` adds the launch's
+   offsets to the door (its exhaust with it) and the bridge, the landing's to the door on its bob, shrinks and fades
+   the key and dims the spiral; `advanceMotions` sets the eclipse's y after SpaceSky's; the camera is given the
+   door's point during the landing, where the original moves the character. `syncKnight` draws the knight on
+   `m_minionCut`, black, and queues its aura once (`EffectOwner::Kind::Knight`). The exit's sensor, the bridge's box
+   and the hidden player's body stay where they were. The medal comes at `m_wonDelayMs`, and a restart or any unload
+   forgets all of it and destroys the knight's body and picture.
+3. **`earthquake.json` `rocket_launch`**: intensity 3, `after_update` (a static callback).
+4. **DEV `--place <x>,<y>@<tick>`** (`ScheduleDevPlace`): the player's body put at a level point after that tick's
+   physics step, for a capture to open a door. Never a route.
+
+**THE GATES.** After = `MagicPortals.exe` `ca1d67f2`; before = step 122's committed build and its sweep
+(`program/P5/after/sweep`, 128 of 128 matching its `capture.txt`). Everything under `out/parity/program/P2/`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build1.log` full, 88 steps, 50 links; `build4.log` after the test and minion-sheet fixes; three single-target relinks after refusals, `build2`, `build3`, `build5`) |
+| (1) The delay, unit | 3 of 128 levels place `end_delay`: 5000 / 14500 / 6600, each with its cutscene entity and no other level with one | - | **passes** (`test_mp_cutscene`: 128 levels, the three, `rocket_launch` only on level0c, `rocket_landing` only on level18c, `dragon_knight_spawn` only on level31a) |
+| (2) The delay, layer | medal 300 / 870 / 396 ticks after the door (5000 / 14500 / 6600 ms at 16.667); 1400 elsewhere; the lost screen 1400 on 2-32 | 84 on all three | **passes** (`test_mp_layer`: 300, 870, 396; level0 1400; 2-32's death: lost screen at 84) |
+| (3) The delay, exe, against F17 | the finish at the decoded delay after the door, within a tick (F17's 5.10 / 14.65 s are the decode run 1-1.5 % long on the emulator's clock) | - | **passes**: `cap/c401` door tick 60, finished screen tick 360 (5.000 s); `cap/c419` 60 -> 930 (14.500 s); `cap/c232` 2900 -> 3296 (6.600 s) |
+| (4) 4-01's rise and bridge against F17 r1 | F17's own readings, relative to its #244, within its fits' rms: rise 88.5 / 126.2 / 181.0 / 215.5 u at 3.422 / 4.094 / 4.936 / 5.456 s, bridge -32.4 / -40.5 / -48.0 u at 3.981 / 4.611 / 5.293 s | the rocket and bridge do not move | **passes: 7 of 7 read, 6 within F17's fits' rms and the seventh explained** (`measure_c401.txt`, F17's templates on the port's frames; frame offset fitted, f0 61.0, rms 2.06 u over 46 frames): rise **88.6 / 126.6 / 181.5 u** (within 0.5 u), bridge **-32.33 / -40.57 u** (within 0.07 u). The 5.456 s and 5.293 s points, behind the port's medal (up at 5.000 s, where F17's is still faint), were first recorded here as not read; the verifier read them through the medal's translucent veil (`verify1/measure401_v1.py`, templates cut from the port's own frames, so its numbers for the same points differ from these: rise 87.68 / 125.50 / 180.09 / **217.07** u, bridge -32.50 / -40.72 / **-48.70** u). 217.07 is 1.57 u from F17's 215.5 (rms 4.25); -48.70 is 0.70 u from F17's -48.0, outside the bridge fit's 0.29 u, but 0.27 u from the decode's -48.43, and F17's own point is 0.43 u off its fit |
+| (5) 4-01's shake and exhaust against F17 r1 | +-3 px vertical from the launch; the cyan plume growing as the nozzle rises | none | **passes**: block y 550 x44, 547 x10, 554 x3 (F17 550 x71, 553 x24, 547 x20); plume 997 px at 0.9 s -> 4,410 (1.5 s) -> 11,529 (2.4 s) -> 12-15 k by 3.2-3.8 s (F17 23 -> 824 -> 4,097 -> 10,646, 12-15 k by #300-340). 59 calls (unit): see deviation 2 |
+| (6) 4-19's landing against F17 r5 | the porthole on F17's fit (138.1 + 1125 x smoothBeginning(t / 12.5), rms 2.9 px); the spiral band whole to about 7 s and flat from about 12.6 s; the eclipse's top at rest 610 px | none | **passes** (`measure_c419.txt`; tolerance: F17's own fit rms, 2.9 px): measured the same way on both sides (`verify1/porthole_both_v1.py`, a template from each side's first frame after the entry, on F17's r5 and on the port's), the port's porthole is **+0.51 px** from F17's on average, rms **3.06 px**, max 8.8 px over 40 frames at 0.2-7.4 s - the rms of a frame-by-frame difference of two paths that each carry their own bob, so of the size of F17's own 2.9 px scatter about its fit, not a claim to be inside it. First recorded here as +3.49 px against F17's fit (rms 4.20, max 7.5; 2.33 px about that mean) and put down to the two bobs' phases at the win (`measure_c419_offset.txt`, `measure_c419_prewin.txt`); the verifier found the 3.49 a reference mismatch - the port's template point set against the fit's anchor - and not the bobs. The x path: deviation 5. Swirl band 39.8 -> 29.9 (ratio 0.751; F17 40.2 -> 28.8, 0.716), its steep fall from 6.98-7.18 s, flat 29.9 from 12.0 s; eclipse top at rest **610 px** from 12.2 s (606-609 as the medal's veil comes in), 643 / 627 / 616 px at 9.2 / 10.2 / 11.2 s against F17's fit's 643.1 / 626.9 / 615.7 |
+| (7) 2-32's knight | falls, 800 ms at waypoint0, walks right at 51 px/s, in within 16 of waypoint1 before 6600 ms; black on the minion sheet with its aura; the door's effect and sound; spawned by a death too; a restart takes it | not built | **passes**: unit (`test_mp_cutscene`) at waypoint0 on tick 37, walks from 85 (48 ticks), in on 291 (4.85 s) at (2532.6, 174.2), 50.86 px/s, row 2 only; layer (`test_mp_layer`) in 291 ticks after the door, one more `level_finished`, aura queued, no picture left; exe `cap/c232` (door placed on tick 2900: knight added 2900, in 3191, medal 3296) and `cap/c232_death` (a fireball killed the placed player on tick 2943: knight added 2943, in 3234). No footage of the knight exists (F7 is the dragon) |
+| (8) Music | `rocket` from 4-01's door, `back_home` from 4-19's | silent (`no_music`) | **passes**: `music: rocket from tick 60`, `music: back_home from tick 60` (exe logs); `WantedTrack` in `test_mp_layer` |
+| (9) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no input line; 128 of 128 byte-identical (the expectation written before the sweep: no level is won or lost without input) | `P5/after/sweep` | **NOT MET as written: 127 of 128 identical; the one change explained, and the expectation was wrong** (`compare_sweep.txt`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines (and the before's 128 match theirs); no input line. The logs' `sets end_delay` lines: exactly 4-01 5000, 4-19 14500, 2-32 6600. **2-32 changed**: its player dies on tick 285 with no input, as it did before (a fireball; so does 2-12's on tick 180, unchanged), and a death now adds the knight (`dragon_knight added ... on tick 285`, the decode's `isFinished`), off screen at x 2358. The sim is the same - the logs' death, fireball and earthquake lines are identical - and the 21,351 changed pixels (max 59, x 18-280, y 248-426) are the dragon's next fireball at its mouth and its glow: the knight's 24-particle aura draws from the effects' stream (00_order K8), so the fireball fired after it takes different draws. Re-run after the save repair (`after/rerun`, no medal plaque): byte-identical to the sweep's (`c38e39e2`), so the plaque the captures' medal added did not reach f420 |
+| (10) Winnability | routes and the reachability check | - | **routes NOT RUN**: this tree has no route harness (W.1 is not an ancestor); the change is after the door and seals nothing. **Reachability measured by the verifier** out of tree (W.1's tool at `37c4ece` over this tree's data and `snap_w1`, `verify1/reachability_w1b_snap.txt`): 108 reachable / 11 opened / 9 sealed, 0 verdicts different from W.1's pin; 4-01, 4-19 and 2-32 reachable |
+
+**SUITES**, run directly: `test_mp_cutscene` **151** checks, 0 failures (new; its first build was refused, and its
+first run on the relink failed one check of its own - a per-tick peak speed of 54.3 px/s where the gate is the mean,
+50.86 - fixed in the test). `test_mp_layer` **3173**, 0 failures (3116 at step 122; the four new cases; its first run
+had 11 failures in the new cases' own expectations - 51 shakes where the port's clock gives 59, R pressed over the
+medal where only its buttons act, and the knight undrawn on 2-32 because the minion sheet was cut only on levels with
+minions, which is fixed in the layer). `test_mp_camera` **213** (212; the new row). `test_mp_effects` **706**,
+`test_mp_sounds` **107**, `test_mp_dragon` **230**, `test_mp_levelend` **226**, each 0 failures and unchanged: the
+suites that read the JSON whose notes changed (`test_mp_layer` loads all of them through the layer). Not run: the
+other suites reading `art.json`, `ui.json` or `dragon.json` (`_`-notes only; no loader reads them).
+
+**SMART APP CONTROL: 3 refusals** (`P2/sac_refusals.txt`): `test_mp_cutscene` `1893a660`, `test_mp_camera` `a115f687`,
+`test_mp_effects` `17e35421`, each deleted and relinked once and then run. `MagicPortals.exe` `ca1d67f2` ran without a
+refusal: 4 captures, the 128 of the sweep and one re-run of 2-32.
+
+**AN INCIDENT, REPAIRED.** The three cutscene captures were run without `--saves`, so their DEV-placed wins wrote
+medals into the user's own save (`%APPDATA%/Magic Portals/scores.json`): 4-01 and 4-19 bronze, 2-32 gold. Found from
+the sweep's 2-32 log (its level-start plaque loaded a medal that step 122's sweep did not), the three entries were
+removed and the file otherwise left as found (1-01, 1-02, 1-32 gold, none of them this step's; the copy as found is
+`P2/user_scores_after_captures.json`). The sweep's 2-32 ran before the repair and was run again after it (gate 9).
+A later capture that wins a level passes `--saves`.
+
+**VERIFIED, PASSED** (`P2/verify1.json`, on the same `ca1d67f2`, `7952aee3`, `8a1c1218` and `92507938`, head
+`691d6de`, engine `4bfcf67`; no fix round; 0 refusals). The verifier re-derived the rule from the listing before
+reading the code, and the code matches it; it compiled the seven changed translation units with the tree's own
+commands (0 warnings, `build/` untouched); `test_mp_cutscene` 151, `test_mp_layer` 3173, `test_mp_camera` 213,
+`test_mp_effects` 706, `test_mp_sounds` 107, `test_mp_dragon` 230 and `test_mp_levelend` 226, 0 failures, once each;
+its captures are byte-identical to this step's (`v401` and `v419` 80 of 80 frames, `v232` 36 of 36 from f2880); its
+own 128-level sweep is byte-identical to this step's on all 128 (to P5's on 127, 2-32 as gate 9 explains); W.1's
+reachability tool, run out of tree, changes no verdict (gate 10). The owner's save kept its md5 through every run of
+the verifier's, each with `--saves`. Its seven problems: the record's words (gates 4 and 6), the 4-19 camera's x
+(deviation 5) and the stale or loose words are applied here as text at the commit - `effects.json` `finish` (the
+knight comes once the level is finished, a death too), the 4-01 layer case's comment (a shake every 6th tick),
+`cutscenes.json`'s frame-order claims marked INFERRED (as here), `--place` in README's capture flags, and
+`entity_roles.json`'s note on `rocket_launch` / `_landing`; no behaviour changed. The medal saved late (MEDIUM), the
+landing key's sparkles (MEDIUM) and the eclipse's edge line (LOW) would change behaviour: recorded below, not applied.
+At the commit the comment's edit rebuilt `test_mp_layer` alone (one compile, one link, 0 warnings; `MagicPortals.exe`
+and the other suites unchanged), and Smart App Control refused it twice (`92598628`, then `6de34ef4` after one delete
+and relink): **`test_mp_layer` NOT RUN at the commit**; its 3173 checks, 0 failures, stand on `8a1c1218`, whose code
+differs by that comment only. The edited notes load: `test_mp_cutscene` 151 (`cutscenes.json`, `entity_roles.json`)
+and `test_mp_effects` 706 (`effects.json`), 0 failures, on their verified binaries.
+
+**RECORDED DEVIATIONS AND DECISIONS** (gate 9 is NOT MET as written, and explained; gate 10's routes NOT RUN; gate 4 reads its 7 points, one 0.70 u off F17 and explained; the rest pass).
+1. **Pictures, not bodies** (as the door's bob, `motions.json` `door._not_built`): the rocket's sensor and the
+   bridge's box stay where the level put them, and on 4-19 the camera is given the door's point while the hidden
+   player's body stays in the doorway. So the key the player carries stays there too while it shrinks to nothing -
+   0.9 a frame, gone in about half a second, while the rocket has moved under 1 u. The key's own sparkles are not
+   shrunk with it (`ETHEntity::Scale` scales its systems, `ETHEntity.cpp:591-599`; the port's placed emitters take
+   their scale once). What that looks like (the verifier's MEDIUM problem, `verify1/cap/v419`): the key's picture is
+   whole at f60 and gone from f72, but its two white `sparkles.bmp` systems glow on at its point in f72, f84, f120,
+   f180, f300 and f420, until the camera leaves them; in a real play the key trails the hidden body left in the
+   doorway, near which the camera clamps (the scene's right, 968 u), so the glow would hang there for all 14.5 s and
+   under the medal. Not changed: LEFT FOR THE OWNER below.
+2. **The shake's re-arm on the port's clock**: six ticks of 16.6666675 ms are 100.000005 and pass `> 100`, so the port
+   shakes every sixth tick, 59 times; the original's frame time is whole milliseconds (16 at 60 fps) and passes it
+   after seven. The port-wide clock is the owner's open question; the amplitude, 2.95 px, is F17's +-3.
+3. **The knight's timing** is INFERRED to the tick: added on the door's (or death's) tick by a static callback, first
+   updated on the next (an added dynamic entity). Its body's ENTITY point is put on the spawn, where `Minions` puts a
+   minion's centre on its marker.
+4. **The knight after a death** plays behind the lost screen, as `isFinished` says, door sound and all.
+5. **4-19's camera x follows the rocket more tightly than F17's** (the verifier's finding, LOW; a measured residual,
+   not changed): the porthole's x in the port stays at 636-643 px, the view centred on the door's point, where F17's
+   goes 650 -> 671 px over 1.0-7.4 s (a mean of -17 px, std 9, growing to -28); the y path matches (gate 6).
+   INFERRED: the original's camera follows the character its callback moves every frame, and that follow lags more.
+
+**RULINGS APPLIED.** The standing direction that the original decides. R1, R2, R17 and R23 are not this step's; R24
+and R25 untouched. Camera dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **The medal is saved later than the original saves it.** `checkGameEnd` #75 calls `writeScore` - `setScore` - on
+  the door's frame; the port records the medal when the screen comes up (`clearLevel`). With 5000-14500 ms before it on
+  three levels, the keyboard's N or R in that time (the only input the port reads there) leaves without the medal.
+  Not changed here. The verifier rates it MEDIUM: closing the window in that time loses it too, on 4-19 for 14.5 s,
+  and a mouse-only player cannot press anything then. Its fix: record and save the medal on the door's tick
+  (`m_scores.Record` and `Save` moved from `clearLevel` into the `goals.completed` branch, the screen still at
+  `m_wonDelayMs`), with a layer case - the door, R 60 ticks later, the save holds the medal. Persistence, not play,
+  but a behaviour change: not applied at the commit.
+- **4-19's key sparkles** (deviation 1; the verifier's MEDIUM problem): scale the landing key's emitters by its scale
+  every tick, as `ETHEntity::Scale` scales an entity's systems, or at the least stop drawing them once the key is
+  under a pixel; gated on `verify1/cap/v419` showing no sparkle at the key's point from f72. Not applied (behaviour).
+- **A dark 2-3 px line along the eclipse's quad top edge** on 4-19, from about 6 s in to the medal and under it (the
+  verifier's LOW problem; y 545-547 px at rest, x about 220-1045, row mean 62 -> 42 -> 54 in
+  `verify1/cap/v419/v419_f912.png`; absent from F17 r5 #630, `verify1/dev/eclipse_line_f17_vs_port.png`).
+  `eclipse.png`'s bottom row is opaque across texels ~60-200 and its top row transparent, and the sampler wraps the one
+  onto the other; first visible with this step (step 122 kept the eclipse 2 u below the view). Fix: clamp the
+  eclipse's sampling or inset its UVs by half a texel (the port sets the material's uv itself; no engine change),
+  gated on rows 545-547 matching their neighbours. Not applied (behaviour).
+- 4-19's lighting in the cutscene differs from F17 because `red_key_state`'s 6 s fade (B5) is not built in this tree;
+  so do the breakable wall still standing and the rocket hull lit.
+- For the close role: `docs/parity-backlog.md` section 6's P2 row, and the "Smaller" row's stale `end_delay` note.
+- For the merge's renumbering: "step 123" is written in `cutscenes.json` (`_about`, `dragon_knight._source`), `earthquake.json`, `ui.json`,
+  `dragon.json`, `art.json`, `effects.json`, `sounds.json`, `game/sim/Cutscene.hpp`, `game/sim/Earthquake.hpp`,
+  `game/MagicPortalsLayer.{hpp,cpp}`, `tests/CMakeLists.txt`, `tests/test_mp_cutscene.cpp`,
+  `tests/test_mp_camera.cpp` and `tests/test_mp_layer.cpp`.
+
+## Step 124 - for the owner's testing: the sound and music switches kept between runs, the last run's log kept, and a build to play without validation (built)
+
+**TRACK B: the program's S1** (`docs/parity-backlog.md` section 6, "Smaller": "sound switches not saved; the log
+erased at each launch"; the 2026-09-29 audit's `check_ship.md` 11, 15 and 21, `check_screens.md` 7,
+`audio_inventory.md` 18). Built in the worktree `Magic-Portals-Remake-w1b` (branch `w1-b`, on step 123's `e2277b8`),
+whose build reads the frozen level data in `out/snap_w1`; numbered in track B's range, and the merge renumbers it.
+Changed: `game/sim/Switches.{hpp,cpp}` (new: `Defaults`, `LoadDefaults`, `Store`), `game/sim/CMakeLists.txt`,
+`game/data/sounds.json` (`switches`: the decode and its two defaults), `game/MagicPortalsLayer.{hpp,cpp}` (`m_switches`,
+read at attach; `switchedSound` / `switchedMusic` save through `saveSwitches`), `game/main.cpp` (`KeepPreviousLog`, and
+`--saves`' help), `tools/parity/play_build.bat` (new), `.gitignore` (`build-play/`), `README.md` (*Run it* and the
+`--saves` row), `tests/test_mp_scores.cpp`, `tests/test_mp_layer.cpp`, `tests/CMakeLists.txt` (a comment). No engine
+change (the pin stays `4bfcf67`; `engine/src/core/Log.cpp:90` is left truncating, and the game moves the old file
+aside before it opens the new one), no converter change, no format finding (script behaviour).
+**GAMEPLAY: NONE.** What changes is what is kept between runs - the two switches and one run's log - and a second
+build directory. Not a gameplay step, so the program's winnability gate does not apply; no route is added. Lines
+7235 and 7364 of this record (step 50's "Both hold for the session ... **Not persisted**" and "**Not built:** the
+switches' saving") are corrected here, not rewritten.
+
+**BLOCKERS, checked first: none.** The spec's three parts each lie in the port: the switches are the layer's
+(`m_soundOn` / `m_musicOn`, `MagicPortalsLayer.hpp`), the log's path and `Log::SetFileSink` call are `game/main.cpp`'s
+(the truncation itself is the engine's `Log.cpp:90`, and needs no change), and the build directory is a script.
+
+**WHAT THE ORIGINAL DOES** (listing `all_functions.txt`, md5 `48fe65ce...`; `00_order.md` 8.0 rule 1: `SetV1`'s `vN`
+operand is the constant N; `sounds.json` `switches` cites every instruction).
+- **The sound switch.** `GlobalSoundSwitch::manageSoundSwitch` (bytes 32340..32535) #11-24: `SetGlobalVolume(1)` when
+  switched on, `SetGlobalVolume(0)` off; #34-39 `GlobalVolumeManager::saveVolume(GetGlobalVolume())` (28964..29196),
+  which #3-15 `saveFloat('audio', 'globalVolume', volume)` and then #33-47 calls the listener. `main`
+  (309790..310306) #103-108 `SetGlobalVolume(loadVolume())` before anything plays; `loadVolume` (29196..29314) #3
+  `loadFloat`'s default is 1. `GlobalSoundSwitch::GlobalSoundSwitch` (30305..30617) #25-39 shows the switch off
+  exactly when `GetGlobalVolume() == 0`.
+- **The music switch.** `GlobalMusicSwitch::manageMusicSwitch` (33225..33409) #11-30
+  `MusicSwitchManager::saveMusicState(true / false)` (29772..30017): #3-4 `m_state`, #6-18 `saveBoolean('audio',
+  'musicEnabled', state)`, #36-52 the listener. `getState` (29688..29772) loads once, lazily, through
+  `loadMusicState` (30017..30165), whose #7 default is `SetV1 1`: true.
+- **Where.** `UserDataManager::saveValue` (26913..27308): `GetExternalStoragePath() + 'ethf.user.data'` (the global's
+  initialiser, 306085..306159), parsed, the one value added, the whole written back. `loadValue` (27308..27785)
+  returns the default for a value the file lacks. Nothing writes at start: only the two toggles save.
+
+**THE CHANGE.**
+1. **`sim/Switches`**: `LoadDefaults` reads `sounds.json` `switches` (`global_volume_default` 1.0,
+   `music_enabled_default` true; refused without both); `Store` keeps `globalVolume` and `musicEnabled` under
+   `audio` in `<saveDir>/audio.json` - the original's names, in the port's own JSON beside `scores.json`
+   (`Scores.hpp` says why not the enml). Memory-only for an empty directory (every bare suite layer); value by
+   value the default where the file says nothing; `SoundOn` is `globalVolume != 0`; `SetSound` writes 1 or 0;
+   `Save` through a temporary and a rename, as `Scores::Store::Save`. Unlike `scores.json`, a file that will not
+   parse is reported, the defaults kept, and written over at the next toggle: it holds nothing but the switches,
+   and `saveValue` does the same.
+2. **The layer.** `OnAttach` opens the store from `Paths::saveDir` after the medals and sets `m_soundOn` /
+   `m_musicOn` from it, logging `switches: sound on|off, music on|off (read from <file>)` or `(the defaults; a
+   toggle saves them to <file>)` when there is a save directory. `switchedSound` and `switchedMusic` - the port's
+   `saveVolume` and `saveMusicState`, reached from the pause's and the main menu's switches - save first, then act
+   as before. Nothing else writes the file; nothing writes it at start.
+3. **The log.** `main` moves `%TEMP%\magicportals.log` to `magicportals.prev.log` (replacing it) before
+   `SetFileSink` truncates it: renamed, or copied where Windows refuses the rename because another running copy holds
+   the file open; a failure costs that copy, never the start.
+4. **`tools/parity/play_build.bat`**: `build-play\` - port_build.bat's configure (MSVC, Ninja, Release, glslc) with
+   `SUPERSONIC_ENABLE_VALIDATION=OFF`, `MAGICPORTALS_BUILD_TESTS=OFF`, and the `SUPERSONIC_MAGICPORTALS_*` entries
+   copied from `build\CMakeCache.txt` (the defaults without one); configured once, then `--target MagicPortals` by
+   default. `build/` in `.gitignore` matches a directory named exactly `build`, so `build-play/` is added.
+   `build\`'s configuration is not touched. README's *Run it* says how to play, where the previous log is, and that
+   the switches are kept; `--saves` (help and README) now keeps both files.
+
+**THE GATES.** After = `MagicPortals.exe` `fb381ed0`; before = step 123's committed build (`ca1d67f2`) and its sweep
+(`program/P2/after/sweep`, 128 of 128 matching its `capture.txt`). Everything under `out/parity/program/S1/`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** at `build2.log`. `build1.log` (59 steps: 6 compiles - `Switches.cpp`, the layer, `main.cpp`, `LevelVisit.cpp`, `test_mp_scores`, `test_mp_layer` - and 48 executables relinked on the sim library) had one, C4244 on the new `test_mp_scores` line that fed a double to `CHECK_NEAR`'s floats, fixed (exact compare); `build3` and `build4` are single relinks after refusals, 0 warnings |
+| `build/`'s configuration | unchanged | cache `7e4e14d6` | **passes**: `7e4e14d6`, `diff` against the copy taken first empty (the two CMakeLists edits re-ran CMake; nothing in the cache moved): validation ON, the five snapshot paths |
+| (1) The switches, unit | defaults 1 / true from `sounds.json`; memory-only writes nothing; a fresh folder writes nothing until a toggle; the file keeps `audio.globalVolume` 0/1 and `musicEnabled`; a reopen reads them; a missing value is its default; a volume not 0 is on; an unreadable file reported and written over; a table without both defaults refused | not built | **passes** (`test_mp_scores` 63 checks; 32 before by count of the old source - no earlier run of it is recorded) |
+| (1) The switches, layer | a layer on a save directory: both on, nothing written before a press; the pause's sound switch saves off; the next layer starts with the sound off and no track, its pause shows `sound_mute` and no music switch, Music cannot be pressed; the sound back on brings the music switch in afresh and plays `game`; the music off is saved and the next layer starts silent with the sound on; the main menu starts as the pause left it and its sound switch saves | session only | **passes** (`test_mp_layer` 3195 checks, 3173 + 22, in its own temp directory, removed after) |
+| (1) The switches, exe | run 1 (`--saves` a scratch folder) presses pause at 90 and sound at 150; run 2 on the same folder presses pause only: `sound off` read; its pause without the music switch; its f200 the same as run 1's | - | **passes** (`gate/`): run 1 logs `sound on, music on (the defaults ...)` and leaves `audio.json` `globalVolume 0, musicEnabled true`; run 2 logs `switches: sound off, music on (read from .../audio.json)`; at f120 run 1 draws `sound_high` and `music_on`, run 2 `sound_mute` and no music switch (`gate/switch_crops.png`); f200 `06bc7695` in both (0 px differ), f80 `da8b9225` in both (before the pause) |
+| (1) Nothing written at start; the owner's save | `%APPDATA%\Magic Portals` as found after every run of this step | `scores.json` `40bfef3a`, no `audio.json` | **passes**: `scores.json` `40bfef3a`, no `audio.json`, after the suites, the gate, the play run and the sweep (`owner_save_after.txt`) |
+| (2) The last run's log kept | a private `TMP` holding a dummy log and a dummy `prev`: after run 1 `prev` is the dummy log; after run 2 `prev` is run 1's log byte for byte | truncated at each launch | **passes**: both runs' own `logging to` line names the private temp; after run 1 `prev` `86875885` (the dummy log, which replaced the dummy `prev` `9e0499bd`), log `1d7e8d84`; after run 2 `prev` `1d7e8d84` (= run 1's, copied before run 2), log `016f7f7b`. verify1 (`S1/verify1/gate`, 4 launches) retook it and ran the copy fallback: its run C was launched with the log held open (`gate/hold_log.py`: shared read and write, no delete; a probe rename refused, WinError 32), and `prev` was still run B's log byte for byte, no "not kept" message, C's own log written fresh |
+| (3) The play build | configured from `build\`'s paths, validation OFF, no suites; 0 warnings; the exe says NOT LOADED; its frame the validated build's | none | **passes** (`play_build1.log`, 198 steps, 0 warnings, the 11 `D9025` notes of the vendored /W0 files): the five `SUPERSONIC_MAGICPORTALS_*` lines identical to `build\`'s, `GLSL_COMPILER`, build type and generator too; only `SUPERSONIC_ENABLE_VALIDATION` OFF and `MAGICPORTALS_BUILD_TESTS` OFF differ; `build-play/game/MagicPortals.exe` `6d7c4bb1`, the only exe; its first launch ran (1-05, f420): `Vulkan validation layers: NOT LOADED`, png `0ffb2e37` = P2's sweep's 1-05. Frame pacing is NOT measured; the run's own profiler (medians over 420 frames, `play/1-05_level4.log` against `after/sweep/1-05_level4.log`) records Scene Record **0.44 ms** against the validated build's **1.02 ms** and Frame Prepare 0.19 against 0.24 ms, both builds waiting about 14.4-14.8 ms a frame on the 60 Hz swap: on this level the validation cost is inside the frame. The play run's 19.31 s of wall time (`play/capture.txt`, against about 8.5 s a level in the sweep) is not in its frames (INFERRED: the first launch of a freshly linked exe): its frame-1 worsts are of the sweep's size (Resource Sync 50.3 against 54.9 ms, Game Layers 80.8 against 74.2 ms). The script's header comment was reworded after this run (comments only). Its other branches were run by verify1 on two scratch copies of a repository (the script byte for byte, an empty `engine/CMakeLists.txt`, a `project(NONE)` that prints what CMake got: `S1/verify1/playfake1`, `playfake2`): with a copy of `build\`'s cache, validation OFF, tests OFF, Release, the SDK's glslc and the five snapshot paths exactly; with no cache, the five empty (the project's defaults), OFF and OFF; arguments (`-- -n -v`) on the configured copy skip the configure and pass through (`ninja: no work to do`, rc 0). Its message line, which printed "the data paths from build\:" over nothing when there was no cache, was reworded at the commit (text only) and the three runs retaken on fresh copies (`S1/commit_check/`): only that line differs |
+| (3) `.gitignore` | `build-play/` ignored | not covered (`build/` matches only `build`) | **passes**: `git check-ignore -v` gives `.gitignore:54:build-play/` |
+| (4) The 128-level f420 sweep | 128 rc 0, validation silent, pngs matching their logs, no input line; one defaults `switches:` line per log; 128 of 128 byte-identical to `P2/after/sweep` (written before the sweep: a sweep presses nothing and the switches change no picture) | `P2/after/sweep` | **passes: 128 of 128 byte-identical** (`compare_sweep.txt`; 01:32-01:51 on `fb381ed0`): 128 rc 0; validation ACTIVE in 128 logs, 0 with a message; 128 of 128 pngs match their log lines (P2's 128 match theirs); no input line (the 3 event lines - 2-12's and 2-32's deaths without input, 2-32's knight - are P2's same 3); one `switches: sound on, music on (the defaults; a toggle saves them to ...\Magic Portals\audio.json)` line in each of the 128 logs, none read a file, no switch warning. The logs otherwise equal P2's but for the png path and the timings, and 2-32's, which P2 captured before its save repair with a medal plaque loaded: it equals P2's re-run after the repair (`log_diff.txt`) |
+| Winnability | routes and the reachability check, for a gameplay step | - | **not applicable: no gameplay change.** This tree has no route harness (W.1 is not an ancestor of `w1-b`) |
+
+**SUITES**, run directly, once each: `test_mp_scores` **63** checks, 0 failures (32 before, by count of the old source: no earlier run is recorded); `test_mp_sounds`
+**107**, 0 failures (unchanged; it reads `sounds.json`); `test_mp_layer` **3195**, 0 failures (3173 at step 123; the
+new case). The other 43 suites were relinked (the sim library gained `Switches.obj`) with their code and their inputs
+unchanged: not run, to spare Smart App Control launches.
+
+**SMART APP CONTROL: 2 refusals** (`S1/sac_refusals.txt`): `test_mp_layer` (its first launch; deleted, relinked once,
+`50edcd9c`, then run) and `MagicPortals.exe` `b8f779e1` (the gate's first launch; deleted, relinked once, `fb381ed0`,
+then the gate, the sweep). `test_mp_scores`, `test_mp_sounds` and `build-play`'s `MagicPortals.exe` ran first time.
+
+**RECORDED DEVIATIONS AND DECISIONS.**
+1. **The file is the port's own**, `audio.json` beside `scores.json`, not the original's `ethf.user.data` enml:
+   the same two values under the original's entity and value names. A `globalVolume` that is not 0 or 1 cannot be
+   written by the port and reads as on, as the original's switch reads it.
+2. **A capture now reads the player's switches.** A run without `--saves` reads `%APPDATA%\Magic Portals\audio.json`,
+   so a pause or menu capture shows the switches the player left - as the medal plaque already reads the player's
+   medals. A capture that presses `sound` or `music` must pass `--saves`, or it changes the player's save (README's
+   row says so). The sweeps press nothing and draw no pause, so their pictures do not depend on it (gate 4).
+3. **One run of log back**, not more: `magicportals.prev.log` is replaced at each launch. Two copies of the game
+   started together still share the one file, as before.
+
+**RULINGS APPLIED.** The standing direction that the original decides: the switches are saved on the toggle and
+read at the start, as the listing does. R1, R2, R17 and R23 are not this step's; R24 and R25 untouched. Camera
+dragging: not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- `build-play\` is configured once; if `build\`'s data paths move (a fresh `build\`, a moved `out\`), delete
+  `build-play\` and run `play_build.bat` again. The main checkout's `build\` uses the repository's own `out\`, so its
+  play build does too.
+- For the close role: `docs/parity-backlog.md` section 6's "Smaller" row (the switches and the log), and the
+  `DEVLOG.md` entry.
+- For the merge's renumbering: "step 124" is written in `game/data/sounds.json` (`switches._source`),
+  `game/MagicPortalsLayer.hpp`, `tests/CMakeLists.txt`, `tests/test_mp_layer.cpp` and `tests/test_mp_scores.cpp`.
+
+## Step 128 - wave 1's three tracks merged: track B's 119 to 124 and track C's 125 to 127 after track A's 113 to 118, one earthquake table, one route trace, and every track's routes replayed on the merged build (built)
+
+**MERGE NOTE (2026-09-30: `w1-b`, then `w1-c`, into `main`, after step 118).** The program's wave 1 (the owner's
+"proceed with improvements until the only thing left is my testing"; `docs/parity-backlog.md` section 6) ran on three
+tracks at once. Track A was MPR `main`: steps 113 to 118 (W.1, G5, B1, B3, G11, B5), pushed, `e276018`. Track B was
+the branch `w1-b` in the worktree `Magic-Portals-Remake-w1b`, made from `29669c3` - before step 113, so it never had
+the route harness - reading the frozen levels `out/snap_w1`: P1, P3 and P4, P7, P5, P2 and S1, written as steps 150 to
+155 so the tracks would not collide, `cc8be2e`. Track C was the branch `w1-c` in `Magic-Portals-Remake-w1c`, made from
+`37c4ece` (step 113), on the same frozen levels: R2, R17 and R1, written as steps 170 to 172, `3e51904`. Neither
+branch took `main` or the other. They are merged in two commits, `w1-b` first, and renumbered here in the order each
+track committed them. On MPR `main`, `build/`. No file under `engine/`: all three trees were pinned at `4bfcf67` and
+none moved it.
+
+**The commit bodies keep the numbers they were written with, so the map is load-bearing:**
+
+| Old | New | Track | Program row | Commit |
+|---|---|---|---|---|
+| 150 | 119 | B | P1 | `e1dab6e` |
+| 151 | 120 | B | P3, P4 | `105ca1c` |
+| 152 | 121 | B | P7 | `1656d8f` |
+| 153 | 122 | B | P5 | `691d6de` |
+| 154 | 123 | B | P2 | `e2277b8` |
+| 155 | 124 | B | S1 | `cc8be2e` |
+
+**THE FIRST MERGE, `w1-b`** (44 files, three conflicted), each conflict resolved by keeping both behaviours:
+- **This document's tail**, where both appended: track A's 113 to 118, then track B's, renumbered.
+- **`game/MagicPortalsLayer.cpp`, `buildSprites`**: track A's 4-19 red key state (its colour and `redKeyState`, step
+  118) and track B's key colour and crate blink (step 120) were written at the same place, after the static portal's
+  tint. Both kept, the red key state first; they touch different sprites.
+- **`game/MagicPortalsLayer.cpp`, the tint loop**: track A's red key fade (the colour times `bias`) and track B's crate
+  blink (which also writes the emissive, so its `tint` call passes `emissive`). Both kept, the red key's colour first,
+  then the blink; one `tint` call, track B's.
+- **`data/entity_roles.json`**, the `scenery_fx` note: track B's rocket_launch / _landing line (the win cutscenes'
+  anchors, step 123) and track A's line that red_key_state.ent is its own role since step 118.
+
+**88 places** give track B's new numbers: 33 in this document (the six headings and 27 references) and 55 outside it,
+each a "planning step" in a comment, a JSON note or a suite's comment (`MagicPortalsLayer.{hpp,cpp}`, `Cutscene.hpp`,
+`Earthquake.hpp`, `Sky.hpp`, `art.json`, `cutscenes.json`, `darkdragon.json`, `dragon.json`, `earthquake.json`,
+`effects.json`, `ghost.json`, `keys.json`, `sky.json`, `sounds.json`, `ui.json`, `tests/CMakeLists.txt` and
+`test_mp_{camera,chapters,cutscene,layer,popup,scores,sky}.cpp`). Only a number after "step" or "steps" was changed;
+no reference was split across a line, and the numbers 150 to 155 left in track B's text are measurements (a dim of
+150, 151 checks, a 151 ms stride). Step 112's "steps 120 to 131" are that earlier merge's old numbers and were left.
+
+The first merge was built alone, before the second (`out/parity/program/merge_w1/build1_m1.log`): 112 steps, **0
+warnings**, 51 links; nothing was launched on it. Its gates are the second merge's, below.

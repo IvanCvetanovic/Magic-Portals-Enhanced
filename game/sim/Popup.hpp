@@ -1,7 +1,8 @@
 #pragma once
 
 // The tutorial and help popups the original raises over a level - ETHFramework's
-// Popup, the game's HelpPopup and its LevelHelp*Popup classes - as ui.json's
+// Popup, the game's HelpPopup and its LevelHelp*Popup classes - and the
+// GameFinishedPopup chapter select raises after the game's last level, as ui.json's
 // `popups` block and the arithmetic that turns it into rectangles, alphas, turns
 // and texture frames.
 //
@@ -71,9 +72,16 @@ struct Item {
 
 struct Class {
     std::string name;
-    UiLayer::Placed card;   // the popup sprite: help_popup.png, or a class's own
+    UiLayer::Placed card;        // the popup sprite: help_popup.png, or a class's own
+    UiLayer::Placed closeButton; // HelpPopup's at (0.92, 0.5), or a class's own exitButtonPos
+    // Popup::hasReceivedCloseCommand's first test: a touch down anywhere closes it.
+    // HelpPopup sets it; GameFinishedPopup, a Popup and nothing more, does not.
+    bool tapScreenToClose = true;
+    // Whether setButtonHighlightEffects bounces and blinks its close button:
+    // HelpPopup's constructor does; a button nothing highlights stands still.
+    bool closeButtonHighlight = true;
     double loopMs = 0.0;    // what every track's waypoints add up to
-    std::vector<Item> items;
+    std::vector<Item> items; // may be empty: a class that draws nothing after the framework
 };
 
 // What opens a popup on a level: the scene, as chapters.json names it, and the
@@ -101,7 +109,15 @@ struct Rules {
         double blinkStrideMs = 0.0;
     } highlight;
 
+    // Button::update's m_color while the touch that went down on a button is held
+    // on it: menu_state.press.tint_byte, the same Button's.
+    int pressTintByte = 255;
+
     std::vector<Opener> levelStart;
+
+    // The class chapter select opens after the last level of the last chapter
+    // (goToNextLevel, WorldSelector::preLoop #69-101).
+    std::string gameFinished;
 
     struct HelpBlock {
         std::string entity;
@@ -155,6 +171,10 @@ struct Open {
     std::string className;
     double clockMs = 0.0;     // UI frame time since it was created
     double closedAtMs = -1.0; // when the close came, on that clock; negative until it does
+    // Button::update's press tint on the close button, as its last update left it:
+    // the caller's to set while the popup is not closing, and kept from the close
+    // on, when UIButton::update stops calling Button::update.
+    bool closeTinted = false;
     std::vector<Loop> tracks; // one per item, a static's unused
     std::vector<Loop> sheets; // one per item, only an animated sheet's used
 };
@@ -200,14 +220,24 @@ std::vector<Piece> Pieces(const Rules& rules, const Class& cls, const Open& open
 // The close button, `ms` into the popup, as Button::draw sizes and colours it:
 // the entrance's alpha byte (or the dismissal's), where its anchor is, the
 // bounce's scale and the blink's brightness - both frozen from the close on, when
-// UIButton::update stops calling Button::update.
+// UIButton::update stops calling Button::update - and the press tint (Open's
+// closeTinted), multiplied into the rgb with the blink.
 struct CloseButtonState {
     int alphaByte = 0;
     glm::dvec2 anchor{0.0};
     glm::dvec2 scale{1.0};
     double brightness = 1.0;
+    double tint = 1.0;
 };
 CloseButtonState CloseButtonAt(const Rules& rules, const Open& open, const glm::dvec2& viewUnits);
+// The same for a class's own button: HelpPopup's is the rules', the other the class's,
+// bounced and blinked only where the class's closeButtonHighlight says.
+CloseButtonState CloseButtonAt(const Rules& rules, const Class& cls, const Open& open, const glm::dvec2& viewUnits);
+
+// Where a touch presses the close button: Button::isPointInButton, the button's
+// own size (the bounce is only drawn) at the anchor its entrance or dismissal has
+// reached (UIButton::update writes m_pos from the interpolator).
+Hud::Rect CloseButtonRect(const Rules& rules, const Class& cls, const Open& open, const glm::dvec2& viewUnits);
 
 // A help block's touch rectangle on the view: the entity's collision box, scaled,
 // centred on the entity's place less the camera's top-left.

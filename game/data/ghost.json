@@ -357,9 +357,9 @@
 
   "_not_built": [
     "The noise: all five ghost sounds, the appear sound among them (ETHCallback_ghost_minion #92-94).",
-    "playGameMusic(bossFight = true) IS built (the layer's updateMusic, from the ghost's init, #320-324;",
-    "DEATH's StopSample #1224-1243 leaves the level silent). level31b's no_music (Game::readProperties",
-    "#166-181), which leaves the level silent until then, is not: the port honours no level's no_music.",
+    "playGameMusic(bossFight = true) IS built (the layer's latchMusic, from the ghost's init, #320-324;",
+    "DEATH's StopSample #1224-1243 leaves the level silent), and so is level31b's no_music",
+    "(Game::readProperties #166-181), which leaves the level silent until then (planning step 121).",
     "",
     "The scattered explosions (DAMAGE and DEATH's overTimeEntityAdder) and the death blast's 2.0.",
     "",

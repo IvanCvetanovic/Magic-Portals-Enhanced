@@ -13,6 +13,7 @@ add_library(MagicPortalsSim STATIC
     Carry.cpp
     Chapters.cpp
     Credits.cpp
+    Cutscene.cpp
     Selector.cpp
     Dashboard.cpp
     Demolish.cpp
@@ -59,6 +60,7 @@ add_library(MagicPortalsSim STATIC
     Sky.cpp
     Sounds.cpp
     Sprites.cpp
+    Switches.cpp
     Tiers.cpp
     Trigger.cpp
     Torch.cpp

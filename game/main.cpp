@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -27,6 +28,31 @@
 #include "LevelVisit.hpp"
 #include "MagicPortalsLayer.hpp"
 #include "Route.hpp"
+
+namespace {
+
+// The diagnostics file, and the previous run's beside it, both in the temp
+// directory.
+constexpr const char* kLogFile = "magicportals.log";
+constexpr const char* kPreviousLogFile = "magicportals.prev.log";
+
+// The last run's log moved to `previous`, replacing the one before. Renamed
+// first; copied where the rename is refused, as Windows refuses it while
+// another running copy of the game still holds the file open.
+void KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::path& previous) {
+    std::error_code ec;
+    if (!std::filesystem::exists(log, ec) || ec) return;
+    std::filesystem::rename(log, previous, ec);
+    if (!ec) return;
+    std::error_code copyError;
+    std::filesystem::copy_file(log, previous, std::filesystem::copy_options::overwrite_existing, copyError);
+    if (copyError) {
+        std::cerr << "[Magic Portals] the last run's log was not kept in " << previous.string() << ": "
+                  << copyError.message() << std::endl;
+    }
+}
+
+} // namespace
 
 int main(int argc, char** argv) {
     // --level, --levels, --art, --data and --saves are the game's own flags. LaunchOptions
@@ -95,6 +121,9 @@ int main(int argc, char** argv) {
     // its reach burns it: its wound's flash and its white death are captures no
     // scripted input reaches (MagicPortalsLayer::ScheduleDevBurn).
     std::vector<int> burns;
+    // DEV ONLY: the player put at a point of the level on a stated tick
+    // (MagicPortalsLayer::ScheduleDevPlace), to film what a door opens: never a route.
+    std::vector<std::pair<int, glm::dvec2>> places;
     // DEV ONLY: no 2D light reaches any sprite (MagicPortalsLayer::ForceLightMasksOff),
     // for a capture to be compared with the same capture lit.
     bool lightMasksOff = false;
@@ -238,6 +267,39 @@ int main(int argc, char** argv) {
             burns.push_back(tick);
             continue;
         }
+        if (arg == "--place") {
+            // <x>,<y>@<tick>: the level's own pixels, the layer's tick.
+            const std::string value = i + 1 < argc ? argv[++i] : "";
+            const std::size_t comma = value.find(',');
+            const std::size_t at = value.find('@');
+            bool ok = comma != std::string::npos && at != std::string::npos && comma < at;
+            double x = 0.0;
+            double y = 0.0;
+            int tick = 0;
+            if (ok) {
+                try {
+                    std::size_t used = 0;
+                    const std::string xs = value.substr(0, comma);
+                    const std::string ys = value.substr(comma + 1, at - comma - 1);
+                    const std::string ts = value.substr(at + 1);
+                    x = std::stod(xs, &used);
+                    ok = used == xs.size();
+                    y = std::stod(ys, &used);
+                    ok = ok && used == ys.size();
+                    tick = std::stoi(ts, &used);
+                    ok = ok && used == ts.size();
+                } catch (const std::exception&) {
+                    ok = false;
+                }
+            }
+            if (!ok || tick < 1) {
+                std::cerr << "--place wants <x>,<y>@<tick> (the level's pixels, tick at least 1), got '" << value
+                          << "'\n";
+                return EXIT_FAILURE;
+            }
+            places.emplace_back(tick, glm::dvec2(x, y));
+            continue;
+        }
         if (arg == "--press") {
             if (i + 1 >= argc) {
                 std::cerr << "--press needs a value, e.g. pause@120\n";
@@ -351,8 +413,10 @@ int main(int argc, char** argv) {
                   << "  --levels <dir>    the converted levels (default " << paths.levels << ")\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
                   << "  --data <dir>      the remake's data directory (default " << paths.data << ")\n"
-                  << "  --saves <dir>     DEV: keep the medals (scores.json) here instead of the user's\n"
-                  << "                    data directory - for a capture that needs a medal recorded\n"
+                  << "  --saves <dir>     DEV: keep the medals (scores.json) and the sound and music\n"
+                  << "                    switches (audio.json) here instead of the user's data\n"
+                  << "                    directory - for a capture that needs a medal recorded, or\n"
+                  << "                    that presses a switch without changing the player's\n"
                   << "  --press <what>@<tick>\n"
                   << "                    DEV: press the pause control (pause), one of the pause's\n"
                   << "                    buttons (levels, resume, skip, achievements, sound, music) or\n"
@@ -382,6 +446,9 @@ int main(int argc, char** argv) {
                   << "  --burn-dragon <tick>\n"
                   << "                    DEV: burn 4-32's dark dragon on the game's tick <tick>, as a\n"
                   << "                    barrel's blast in its reach does; repeatable\n"
+                  << "  --place <x>,<y>@<tick>\n"
+                  << "                    DEV: put the player at the level's pixel (x, y) on the game's\n"
+                  << "                    tick <tick>, to film what a door opens; never a route; repeatable\n"
                   << "  --visit-levels <lightmapped|all|name,...>\n"
                   << "                    DEV: visit these levels in one process, taking the material set\n"
                   << "                    of every lightmapped sprite, which the level drops on leaving; the\n"
@@ -402,7 +469,12 @@ int main(int argc, char** argv) {
     // matters: a shipped game gets WIN32_EXECUTABLE and has no console at all,
     // so without this its diagnostics go nowhere. That is no use at all when
     // the thing being chased only happens while somebody else is playing.
-    const std::filesystem::path logPath = std::filesystem::temp_directory_path() / "magicportals.log";
+    const std::filesystem::path logPath = std::filesystem::temp_directory_path() / kLogFile;
+    // THE LAST RUN'S LOG, KEPT. SetFileSink opens its file truncated
+    // (engine/src/core/Log.cpp:90), so a crash's log was gone the moment the
+    // game was started again to see whether it happens twice. One run back is
+    // kept beside it; a failure here costs that copy, never the start.
+    KeepPreviousLog(logPath, std::filesystem::temp_directory_path() / kPreviousLogFile);
     if (Supersonic::Log::SetFileSink(logPath.string())) {
         std::cout << "[Magic Portals] logging to " << logPath.string() << std::endl;
     }
@@ -460,6 +532,7 @@ int main(int argc, char** argv) {
         for (const auto& [tick, press] : presses) game->ScheduleDevPress(tick, press);
         for (const Hold& hold : holds) game->ScheduleDevHold(hold.from, hold.to, hold.direction);
         for (const int burn : burns) game->ScheduleDevBurn(burn);
+        for (const auto& [tick, atPx] : places) game->ScheduleDevPlace(tick, atPx);
         for (const Tap& tap : taps) game->ScheduleDevTap(tap.tick, tap.fraction, tap.releaseTick);
         for (const Drag& drag : drags) game->ScheduleDevDrag(drag.tick, drag.from, drag.to, drag.releaseTick);
         MagicPortals::MagicPortalsLayer& gameLayer = *game;
