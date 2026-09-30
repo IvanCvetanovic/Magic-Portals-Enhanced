@@ -214,7 +214,9 @@ bool LevelVisitLayer::measure(entt::registry& registry, const Visit& visit, bool
     // whether the layer's sprites had loaded every one.
     const std::size_t texturesBefore = textures.Size();
     std::set<std::string> drawnLightmaps;
-    std::set<std::array<uint32_t, 4>> keys;
+    // The four maps and the wrap: the renderer takes the set a sprite's material
+    // reads clamped (makeSprite), and one asked for the other way is another set.
+    std::set<std::pair<std::array<uint32_t, 4>, bool>> keys;
     for (auto [entity, material, renderable] : registry.view<MaterialComponent, RenderableComponent>().each()) {
         (void)entity;
         if (material.overlayTexturePath.empty()) continue;
@@ -230,8 +232,9 @@ bool LevelVisitLayer::measure(entt::registry& registry, const Visit& visit, bool
             fail(visit.name + ": " + material.overlayTexturePath + " is drawn under an id its path does not have");
             continue;
         }
-        keys.insert({renderable.albedoTextureID, renderable.normalTextureID, renderable.ormTextureID,
-                     renderable.overlayTextureID});
+        keys.insert({{renderable.albedoTextureID, renderable.normalTextureID, renderable.ormTextureID,
+                      renderable.overlayTextureID},
+                     material.clampToEdge});
     }
     if (textures.Size() != texturesBefore) {
         fail(visit.name + ": a lightmap a sprite names had not been loaded by the layer's sprites");
@@ -247,9 +250,11 @@ bool LevelVisitLayer::measure(entt::registry& registry, const Visit& visit, bool
     // comes into view. One already in the cache is one the renderer has drawn.
     std::size_t drawn = 0;
     std::size_t taken = 0;
-    for (const std::array<uint32_t, 4>& key : keys) {
+    for (const auto& [key, clampToEdge] : keys) {
         const std::size_t before = textures.MaterialSetCount();
-        const vk::DescriptorSet set = textures.AcquireMaterialSet(key[0], key[1], key[2], key[3]);
+        // No gloss map named: white, what the four-id form binds.
+        const vk::DescriptorSet set = textures.AcquireMaterialSet(key[0], key[1], key[2], key[3],
+                                                                  textures.GetWhiteTexture(), clampToEdge);
         if (!set || set == fallback) {
             fail(visit.name + ": a lightmapped sprite got no material set of its own (pool exhausted)");
             continue;

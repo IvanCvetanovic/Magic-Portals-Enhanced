@@ -3359,6 +3359,7 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
         quad.uvMax = glm::vec2(uvMax);
         quad.color = colour;
         quad.texture = image;
+        quad.clampToEdge = true; // as makeSprite's pictures, and for its reason
         overlay.Add(std::move(quad));
     };
     const auto write = [&](const std::string& fontName, const std::string& words, const glm::dvec2& centre,
@@ -3750,6 +3751,14 @@ entt::entity MagicPortalsLayer::makeSprite(entt::registry& registry, const char*
     material.transparent = true;
     material.blend = additive ? MaterialComponent::BlendMode::Additive : MaterialComponent::BlendMode::Alpha;
     material.albedoTexturePath = texture;
+    // Every map read clamped to its edges, as the original reads every texture it
+    // loads: GLES2Texture::LoadTexture creates it through SOIL without
+    // SOIL_FLAG_TEXTURE_REPEATS, so SOIL sets GL_CLAMP_TO_EDGE (GLES2Texture.cpp:306,
+    // soil/SOIL.c:1341-1360). Under the engine's repeat, a quad's edge takes half a
+    // texel of the picture's opposite edge: 2-32's claw drew its arm as a line down
+    // its right edge, 2-01's ramp a dark line along its top. The normal map and the
+    // lightmap are this material's too, and the original clamps them alike.
+    material.clampToEdge = true;
     registry.emplace<RenderableComponent>(e).castsShadow = false;
     return e;
 }
@@ -6876,6 +6885,7 @@ void MagicPortalsLayer::emitPopup(Supersonic::ScreenOverlay& overlay, const glm:
         quad.uvMin = glm::vec2(piece.uvMin);
         quad.uvMax = glm::vec2(piece.uvMax);
         quad.color = colour;
+        quad.clampToEdge = true; // as makeSprite's pictures, and for its reason
         if (piece.element == Popup::Element::Dim) {
             // eth_framework_square.png is opaque white in every texel, so tinted
             // black it is exactly a plain black: no texture.
@@ -6919,6 +6929,7 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
         quad.uvMax = glm::vec2(uvMax);
         quad.color = colour;
         quad.texture = image;
+        quad.clampToEdge = true; // as makeSprite's pictures, and for its reason
         overlay.Add(std::move(quad));
     };
     const auto white = [](double alpha) { return glm::vec4(1.0f, 1.0f, 1.0f, static_cast<float>(alpha)); };

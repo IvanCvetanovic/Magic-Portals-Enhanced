@@ -64,7 +64,9 @@ suites a change touches once each, and report what stayed blocked.
       unmoved. Worktrees `Magic-Portals-Remake-w1b` and `-w1c` and both branches removed. **The standing sweep
       baseline is `out/parity/program/merge_w1/sweep`.** Section 6's "Wave 1" paragraph has the steps. *Step 130
       (P0) moved the engine pin to `a733ca0` and re-took the sweep: 128 of 128 byte-identical, so the baseline
-      stands.*
+      stands.* *Step 131 (P1, clamp-to-edge) moves the outer half-texel of every picture whose opposite borders differ,
+      so the standing baseline becomes `out/parity/program/P1/clamp/after/sweep` (the same bytes as
+      `P1/clamp/fix1/sweep`); every earlier byte-identical baseline is stale.*
 - [x] **`test_mp_launchers` and `test_mp_keys` have not run on the merged binaries** (step 112). The merge relinked
       both; Smart App Control refused each twice (the first launch or the ctest, then the one relink), and the merge's
       independent check did not launch them. Their last runs: `test_mp_launchers` 105 on track B (step 109; 98 on
@@ -1639,7 +1641,9 @@ part by step 130 (P0): `engine/` moved from `4bfcf67` to `a733ca0`, the engine's
 another game's opt-in work), and all 128 levels are byte-identical to `merge_w1/sweep` at f420, with every suite's
 count and output, the 70 routes and reachability 108 / 20 / 0 unchanged, and 0 Smart App Control refusals. The clamp
 it was to carry is not built: the engine now has one per texture (`a915514`), and the port opting in is a game change
-that re-takes every baseline, left for its own step (the Tests row "2-32's claw draws a line").*
+that re-takes every baseline, left for its own step (the Tests row "2-32's claw draws a line").* *(7) is completed by step
+131 (P1): the engine's clamp chosen per material (`710bffc`, reviewed by the other game's session before its push) and
+the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp line and the sky's edge rows are gone.*
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [ ] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2201,7 +2205,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       whose blast can take `breakable_wall_1556` there, it wins on the merged build with B1 on the same tick.)
 - [ ] **3-13's crate** (step 126): pushed too far it slides over the 64 px gap and jams under the column (the port's
       crate and its friction are the remake's); the route releases it in time. Not measured against the original.
-- [ ] **2-32's claw draws a line beside the dragon** (the owner's report, 2026-09-29; `out/parity/program/dragon_lines/`
+- [x] **2-32's claw draws a line beside the dragon** (the owner's report, 2026-09-29; `out/parity/program/dragon_lines/`
       `investigation.md` and its skeptic's `check.md`, cause CONFIRMED): `dragon_claw.png`'s opaque left column (the
       arm, rows 10-40) is wrapped onto the quad's right edge by the engine's REPEAT sampler (`VulkanImage.hpp:82`'s
       default; `TextureRegistry.cpp:211` passes no address mode) - a dark line about 1.4 px wide and 87 px long, f396-f443
@@ -2239,3 +2243,14 @@ speed; the pause's Achievements button on every level; 4-02's easter-egg popup; 
 the hole the omitted Facebook button leaves in GameFinishedPopup's art (step 119); a music switch turned back on
 resuming the track the game had stopped, as the original does (step 121); whether the original's timed motions run
 1-3 % slow on whole-millisecond frames, which would reach every `unitsPerSecond` motion (step 122).
+      *Closed by step 131 (P1), 2026-09-30*: engine `710bffc` (`MaterialComponent::clampToEdge` and
+      `ScreenOverlay::Quad::clampToEdge`, off by default; a material's default keeps each texture's own sampler, so an
+      image uploaded clamped stays clamped - pinned in `test_materials`, 442 checks on Linux) and the port opting in on
+      every sprite and overlay quad. Measured: the claw strip gone on f396-f443 (the same exe draws the unchanged claw
+      and the arm-cleared claw byte-identical over 450 frames); 2-01's row 461 71.5 -> 86.8 grey (the original 88.5);
+      2-32's sky edge rows flat (+2.05 / -1.78 -> -0.03 / -0.04). The dark dragon's normal map clamps too, as the
+      original's does (deviation 8, accepted as the original).
+- [ ] **The screen's left and right columns draw dark** (found with the claw's lines, 2026-09-30; `dragon_lines/check.md`):
+      the leftmost column about 0.65x its neighbour, the rightmost about 0.91x, from a level's first frame; the original
+      is flat. Not the wrap (clamping leaves them): one untested model is a sky 1279.69 px wide over 1280 with 4x MSAA
+      showing the black clear at the edges. Next: its own step, measured against the library frames.

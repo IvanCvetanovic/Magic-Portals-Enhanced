@@ -1023,6 +1023,7 @@ void TheLevelsArtIsDrawn() {
     CHECK_EQ(Tagged(registry, "Magic Portals Sprite"), 23);
 
     bool drawnAsArt = true;
+    bool clamped = true;
     bool skyFound = false;
     float skyZ = 0.0f;
     float farthest = 1e9f;
@@ -1040,6 +1041,7 @@ void TheLevelsArtIsDrawn() {
             !std::filesystem::is_regular_file(material.albedoTexturePath, ec)) {
             drawnAsArt = false;
         }
+        if (!material.clampToEdge) clamped = false;
         if (material.albedoTexturePath.find("icy_sky.png") != std::string::npos) {
             skyFound = true;
             skyZ = transform.position.z;
@@ -1049,6 +1051,9 @@ void TheLevelsArtIsDrawn() {
         if (transform.position.z < farthest) farthest = transform.position.z;
     }
     CHECK_MSG(drawnAsArt, "each unlit, mixed (premultiplied) as level8 says, with an image that is there");
+    // Read clamped to its edges, as the original reads every texture (makeSprite):
+    // under repeat a sprite's border took half a texel of its opposite edge.
+    CHECK_MSG(clamped, "each read clamped to its edges");
     CHECK_MSG(skyFound && skyZ == farthest, "the sky is the farthest back");
     // Its image is the fullhd icy_sky.png the original draws (tiers.json, step 66):
     // 1024 x 512 texels at density 2, 512 x 256 units, one screen tall at scale 1.
@@ -4976,6 +4981,18 @@ void TheMedalScreenIsTheOriginals() {
     // The count, "0", in Matura128_shadow after the medal; no golden plaque on gold.
     CHECK_MSG(CountCaption(frame, "Matura128_shadow.fnt") == 1, "the counter is one glyph");
     CHECK(IndexOfImage(frame, "golden_score_plaque.png") < 0);
+    // Every picture of the screen read clamped to its edges, as the original reads
+    // every texture it loads (makeSprite's note): a plaque's or a glyph's border
+    // takes its own texels, never the far side's.
+    int textured = 0;
+    bool allClamped = true;
+    for (const ScreenOverlay::Quad& quad : frame) {
+        if (quad.texture.empty()) continue;
+        ++textured;
+        allClamped = allClamped && quad.clampToEdge;
+    }
+    CHECK_MSG(textured > 0 && allClamped,
+              "every textured quad of the screen reads clamped: " + std::to_string(textured) + " quads");
     // Restart and pause went at the door, and the pads have faded out.
     CHECK(IndexOfImage(frame, layer.HudRules().restart.sprite) < 0 && IndexOfImage(frame, layer.HudRules().pause.sprite) < 0);
 

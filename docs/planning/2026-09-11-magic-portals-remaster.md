@@ -24459,3 +24459,340 @@ launched.
   - section 0's "standing sweep baseline" stays `merge_w1/sweep`, and its wave-1 row says so. `P0/after/sweep` is
     byte for byte the same 128 files on the new pin.
 - The close role writes the `DEVLOG.md` entry.
+
+## Step 131 - clamp-to-edge sampling for the port's pictures, as the original samples them: 2-32's claw line, 2-01's ramp line and the lightmap seams gone (built)
+
+**THE PROGRAM'S P1.** The owner reported lines round 2-32's dragon arms. The cause was found and checked
+independently (`out/parity/program/dragon_lines/investigation.md`, `check.md`). The engine samples every file it loads
+with REPEAT (at `a733ca0`: `Acquire` calls `UploadRGBA` with no address mode, `TextureRegistry.cpp:282`, so it takes
+the default `eRepeat`, `TextureRegistry.hpp:74`, down to `CreateSampler`, `VulkanImage.hpp:82`). Where a pixel centre
+falls between texels, the bilinear filter then takes half a texel of the picture's OPPOSITE edge. `dragon_claw.png`'s
+opaque column 0 (the arm, rows 10-40) came out as a line down the claw quad's right edge on f396-f443.
+`hd/ramp_left_contrast.png`'s opaque bottom row came out as a line along 2-01's ramp top, at y 461. The sky's rows
+drew the frame's first and last rows. The original clamps every texture it loads: `GLES2Texture.cpp:306` goes
+through SOIL without `SOIL_FLAG_TEXTURE_REPEATS` (`soil/SOIL.c:1341-1360`, `GL_CLAMP_TO_EDGE`), and it clamps
+explicitly at `:166-167`, `:375-376` and `:443-444`.
+Changed: `engine` (a new commit), `game/MagicPortalsLayer.cpp`, `game/LevelVisit.cpp`, `tests/test_mp_layer.cpp` and
+this record. No converter change, no data change, no format finding. The evidence is under
+`out/parity/program/P1/clamp/`. The name collides with wave 1's row P1 (step 119), whose evidence fills
+`program/P1/`, so nothing of this step's was written beside it. Its report `P1/impl.md` was copied first, byte for
+byte (`07264fb9`), to `P1/impl_step119_w1b.md`.
+**GAMEPLAY: NONE.** It changes pictures only. Every suite's output is unchanged, apart from `test_mp_layer`'s two new
+checks, and `test_mp_routes`' output is byte-identical to step 128's. Not a gameplay step, so the program's
+winnability gate does not apply; no route is added.
+
+**BLOCKERS, checked first: none.** The engine's working tree was clean at `a733ca0`, the pin (step 130).
+`git -C engine checkout main` and `pull --ff-only` fast-forwarded its local `main` to `origin/main`, which was still
+`a733ca0` at 09:36. The fetch moved nothing, so this step's before/after pair carries this change alone. Fix round 1
+fetched again at 11:44: `origin/main` had moved to `5de6310` ("Licence: MIT No Attribution (MIT-0)"), which changes
+`CONTRIBUTING.md`, `LICENSE` and `README.md` and no file the build reads. The commit was rebased onto it (below).
+
+**THE ENGINE CHANGE** (engine commit `584ef91` on the engine's `main`, "Materials: clamp-to-edge as a material's
+choice - a second sampler over the same image"; NOT pushed; the pin moves `a733ca0` -> `584ef91`. It was `d1aad56` on
+`a733ca0` until fix round 1 rebased it onto `origin/main`'s `5de6310`, the same patch byte for byte). `a915514` (step
+130) gave `UploadRGBA` an address mode per image. A file loaded by path cannot use it: one image serves every
+material that names the path, and a tiling floor needs repeat. So the choice belongs to the material.
+- **`MaterialComponent::clampToEdge`** (default false) reads every map of the material clamped: albedo, normal, ORM,
+  overlay and gloss. **`ScreenOverlay::Quad::clampToEdge`** does the same for a HUD picture. `ComponentCodec` writes
+  `"ClampToEdge": true` only when it is set, so a scene that never clamps saves the bytes it saved before.
+- **One image, two samplers.** `VulkanImage::GetSampler(addressMode)` returns the image's own sampler when asked for
+  its own wrap. Otherwise it makes a twin on the first request, identical but for the wrap (the filter, anisotropy
+  and `maxLod` are copied through one `makeSampler`), and destroys it with the image. `GetAddressMode()` says which
+  wrap is the image's own. Nothing is uploaded twice.
+- **The texture cache key and `Invalidate` are untouched**: `srgb:` / `data:` by path, as before. **The material SET's
+  cache key carries the flag** (`MaterialSets::Key`: the five ids and the wrap). One descriptor holds one sampler, so
+  the same maps read both ways are two sets. `TakeNaming` searches `IdsOf(key)`, never the flag, so an invalidated
+  image takes its sets both ways. `fallbackSet`'s key is the unclamped one. The spec's "no cache-key change" is read
+  as the texture key, the investigation's option B that the check turned down.
+- **The default is the texture's OWN sampler, never a shared repeat one**, as agreed with the other game's session,
+  which uploads with `eClampToEdge` and relies on it: `MaterialSets::WrapFor(own, clampToEdge)` returns
+  `clampToEdge ? eClampToEdge : own`. `TextureRegistry::AcquireMaterialSet` takes a trailing `bool clampToEdge = false`,
+  so the four- and five-id callers read as before.
+- **`RenderSystem`** carries the flag on `OpaqueDraw` and `TransparentDraw`. It is appended LAST, the rule both structs
+  state, and read from the material at the gather every frame. It is not resolved onto `RenderableComponent`: that
+  resolve reruns only when a path changes. Both draw passes and the alpha-cut shadow casters pass it. The screen
+  overlay passes `quad.clampToEdge`.
+- **The test** (`tests/test_materials.cpp`, +23 checks; the floor rises by as many, 365 -> 388). Fix round 2 ran it on
+  Linux in WSL, where Smart App Control does not reach: **442 checks, 0 failures**, against its parent's 419; the
+  MSVC binary is still refused and has not run (gate 4). It follows the suite's convention: the registry needs a
+  device, so what it DECIDES is pinned.
+  - (a) `WrapFor(eClampToEdge, false)` is clamp: an image uploaded clamped keeps its clamp under a default material.
+  - (b) `WrapFor(eRepeat, false)` is repeat: a file-loaded image keeps repeat under a default material.
+  - (c) the flag gives clamp for a repeat, clamp or mirrored image.
+  - The flag defaults off on the material, the quad and both draw records.
+  - The two-wrap key: two entries, each found under its own wrap. A clamped key is never searched as id 1.
+    `TakeNaming` drops both wraps of a dead id and nothing else.
+  - The codec: the key is absent when unset, written when set, and round-trips.
+  - At compile time, `AcquireMaterialSet(..., true)` exists (`TakesTheWrap`).
+  - That the bound sampler really clamps is the port's frames' to prove (below).
+
+**THE PORT CHANGE.** `makeSprite` sets `material.clampToEdge = true`, the one textured-material site; `makeBox` draws
+the untextured 1x1 white. `EmitMenu`'s and `EmitHud`'s `add` and `emitPopup` set `quad.clampToEdge = true` on every
+overlay quad. Nothing in the port samples outside 0..1: every `uvScale` and `uvOffset` written in `game/` at HEAD is a
+cell cut and its origin, the glyph rects lie inside their page, and `LevelEnd`'s veil samples inside its texture.
+`LevelVisit` asks for each lightmapped sprite's set as the renderer takes it: the four ids, white gloss, and the
+material's flag. Otherwise the walk would count a second, unclamped set per sprite. `test_mp_layer` 3,243 -> 3,245
+checks: level8's 23 sprites each read clamped, and every textured quad of the level-finished screen reads clamped.
+
+**TWO STAGES, AS THE SPEC ASKS: normal maps and lightmaps measured before they were included.**
+- **Stage A, a measurement build and never committed.** The flag reached binding 0 alone, through
+  `WrapFor(..., clampToEdge && i == 0)`. Build: `--target MagicPortals`, `MagicPortals.exe` `1841f759`, 145 steps,
+  0 warnings. The sweep `stageA/sweep`: 128 rc=0, validation active in 128 logs, silent.
+- **Stage B, the build above.** Stage B against stage A isolates the maps. **57 levels byte-identical, 71 changed: all
+  67 lightmapped levels** (every one of them), **plus 4 levels without a lightmap**, through their normal maps:
+  2-07, 2-09, 2-13, 2-14, at 17-215 px, up to 2 px wide, peak 17.
+  - The lightmap bands are up to 6 px wide (a 6 x 6 square fits on 12 levels). That is the investigation's bound:
+    half a lightmap texel is about 2.8 px, and two abutting sprites' bands meet. Peak 91 grey.
+  - They move toward the original. 1-01's lit wall at x 717-719 (rows 90-175): P0 and stage A dip 103 -> 82.8 -> 104,
+    a dark seam where the two walls' lightmaps each take the other side's edge. This step steps 104.9 -> 101.6. The
+    original `1-01_h6.3` steps 130.6 -> 127.8 at the same place, with no dip
+    (`crops/lightmap_1-01_original_stageA_after.png`).
+  - Over the maps' changed pixels on the 71 levels, against the library's h6.3 still, the port is nearer the
+    original on 56 and farther on 15 (mean error 9.34 -> 7.55 grey; `toward_original.txt`). Fourteen of the 15
+    change 17-471 px each. Between the still and f420 lie 0.7 s of flickering lights and moving things, which were
+    not checked one by one. The fifteenth is 1-02 (4,529 px), whose popup is up at f420 and not in the still.
+  - **So they are included.** The original clamps its lightmaps and normal maps too, through the same
+    `GLES2Texture` load.
+
+**THE GATES.** Before = P0's build (step 130, `MagicPortals.exe` `12e0dce6`, still `build/` when this step began), run
+first and once per series. After = this step's `MagicPortals.exe` `bb5b03a4`, `test_mp.exe` `cea3db10`. Fix round
+1's rebase rebuilt them from the same sources as `d54944b0` and `1a0d73c5` (RECORDED DEVIATIONS 7), and every gate
+taken on an executable was taken again on those, with the same bytes (STEP 131'S FIX ROUND, below).
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja, validation on | **passes.** `port_build.bat`: stage A 145 steps and stage B 39, 0 warnings (stage A's 2 `D9025` notes are the vendored `/W0` files `StbVorbisImplementation.cpp` and `ScreenCapture.cpp`). A fresh configure and full build of this tree into a scratch dir, `port_build.bat`'s configure line (`fresh_build.log`, 258 steps, rc 0, nothing launched): **0 warnings, 12 `D9025` notes**, the same 12 as step 130's fresh build. The engine's own suites build in a separate top-level tree with the editor and the script plugin OFF, so no `Shaders` target and no `.spv` in `engine/` touched (`engine_build.bat`, `engine_build_all.bat`): **all 57 engine suites compile and link with 0 warnings** (`engine_build_all.log`, 107 steps; none launched but `test_materials`). The first attempt failed to compile, on a brace-init `Key{ids, false}` inside `CHECK(...)` (C4002, then C3329); it was parenthesised and rebuilt clean. `build/` is current at the engine commit: a second `port_build.bat` gives "ninja: no work to do". Fix round 1, on the rebased engine `584ef91`: the rebase rewrote the commit's 12 files, so `port_build.bat` ran 121 steps, among them 114 compiles (52 of them the engine's), 3 library links and the three executables' links, **0 warnings** (`fix1/port_build_rebased.log`); `test_materials.cpp`'s object compiled at `584ef91` in the engine's own tree, **0 warnings**, its `static_assert` holding, not linked (`fix1/engine_test_obj.log`) |
+| (1) Same-exe control on the fixed build | level31a, `--hold right@220-242`, 450 frames: the claw unchanged against `dragon_claw.png` with column 0 cleared (`--art`, the checker's method), byte-identical on all 450 | **passes: 0 of 450 frames differ** (md5 per frame; `gate1.txt`). The art copies are under `P1/clamp/art/`, and the cleared claw is `6de5cccd`, the checker's own. `after/base` against `after/ctrl` is 0 of 450 too, so the `--art` copy is faithful. On P0's exe the same pair differs on 48 frames, **f396-f443** (`before/`), as the check found |
+| (2a) The claw strip, P0 against this step | gone on f396-f443 | **passes** (`gate2_claw.txt`, `gate_claw.json`). The strip is where P0's ctrl and clear0 differ: 6,043 px over 48 frames, at most 2 px per row, peak 24-45 grey. **Every one of them changed. 6,022 equal P0's clamp-equivalent claw (clear0) byte for byte.** The other 21 (f441-f443) lie on screen columns 0-1, where the line reaches the frame's edge and the sky's own left edge changed under it. f429-f443, the hand swung off screen: this step's run against the claw made fully transparent (`noclaw`) differs by **0 px on each of the 15 frames**, so no claw pixel is left on screen. f402: 92 px at x 265-266, mean grey 63.2 -> 78.7. f432: 147 px, 62.6 -> 79.2 (`crops/claw_f402_*`, `claw_f432_*`). Every other change over the 450 frames is at most 2 px wide |
+| (2b) 2-01's row 461 | back to the original's level (the check's 85.8 / original 87.3, luma) | **passes** (`gate2_rows.txt`). Row 461, x 200-920, f420: **P0 71.47 grey / 70.41 luma -> 86.77 / 85.68**, the check's 85.8. That is exactly the ramp with its bottom row cleared on P0's exe (86.77 / 85.68, `dragon_lines/run_2-01`). The original `2-01_h2.8` reads 88.49 / 87.18. The 1.7 left is the whole neighbourhood's offset: rows 459-463 read 88.55 87.94 **86.77** 85.45 84.02 here, against the original's 90.06 89.53 88.49 87.23 86.03. So row 461 is on its neighbours' line again (`crops/ramp_2-01_original_P0_after.png`) |
+| (2c) 2-32's sky, top and bottom rows | flat, as the original | **passes.** f420, whole-row mean grey, and the edge row's excess over the line through its two neighbours. Rows 0-2: **P0 39.12 37.01 36.96 (+2.05) -> 37.04 37.01 36.95 (-0.03)**. Rows 719-717: **P0 42.12 43.86 43.83 (-1.78) -> 43.85 43.85 43.82 (-0.04)**. The original `2-32_h6.3` reads -0.01 and -0.03 (h0.3 and h2.8, brighter states: -0.6 and -0.1) |
+| (3) The 128-level f420 sweep | every changed level explained as edge pixels only, with a count per level | **passes** (`after/compare_P0_vs_after.txt`, `after/sweep_table.txt`). The same command line as P0's (`--window 1280x720 --fixed-step --frames 420 --saves`, `40bfef3a` before and after). 128 rc=0; validation active in 128 logs and silent; each png matches the md5 its capture logged, whole (signature, `IEND` last), in both sweeps. **128 of 128 changed, 541,090 px in all, 220,974 of them on the frame's outer rows and columns.** `sweep_table.txt` gives each level's count, split into albedo (P0 -> stage A) and maps (stage A -> this step). Width, measured as the largest square that fits inside a level's change: 2 px on 71 levels, 3-6 on 57. Every level wider than 2 px is lightmapped (the maps' bands above), except 4-21. In the albedo stage alone, three levels are wider than 2 px, and each is a quad-edge line that disappears: 4-21, a 3 px vertical line on a green field's edge; 1-28 and 3-13, an anti-aliased slanted line on a turned red quad (`tmp_1-28_crop.png`, `tmp_3-13.png`, `tmp_4-21.png`). The investigation's subset test is empty: every level loads at least one texture whose opposite borders differ (`borders_P0.json`: 128 of 128), so all 128 may change. **Toward the original**: over the changed pixels, against each level's h6.3 still, this step is nearer the original on 125 of 128. Mean error 12.24 -> 6.82 grey; of the 122 levels whose whole frame is within 12 grey of the original's, 121 are nearer. The 3 farther: 1-02 and 1-03 (a popup at f420, not in the still) and 2-32 (the dragon has moved since 6.3 s) |
+| (4) Suites | the runner once, with counts; the engine test separately; `test_mp_routes` 70 won; reachability | **The runner passes** (`after/allmode.log`, `test_mp.exe` `cea3db10`, its first launch, 87 s, rc 0): `test_mp: 47 suites, 47 passed, 0 skipped, 0 failed`, **14,361 checks**. Step 130 had 14,359: `test_mp_layer` 3,243 -> 3,245, the two new checks, and every other count equal. The whole output differs from step 130's only on that line (`allmode_vs_P0.diff`). **`test_mp_routes` passes**: 70 won, 215 checks, 0 failures, and the output is byte-identical to step 128's and 130's (`412894c4`). **Reachability passes**: ctest `parity_reachability`, 128 levels, 108 reachable, 20 opened, 0 sealed, 0 differ. **The engine test is NOT RUN**: Smart App Control refused `test_materials.exe` `d08d1e73`, then again after one delete and relink (`3c73004e`). Its checks compiled, the `static_assert`s held, and it has not executed on this machine (RECORDED DEVIATIONS 1). Its (a) to (c) are pinned as `WrapFor`'s decisions, which is what a suite with no device reaches; that the `VkSampler` bound really clamps is proved by the port's frames (gates 1 and 2), never by an engine suite. Fix round 1, on `1a0d73c5`, one launch, 88 s, rc 0: the whole output **byte-identical to `after/allmode.log`** (47 suites, 14,361 checks; `test_mp_routes` 215 checks, 70 won; `fix1/allmode.log`), and reachability again 108 / 20, 0 differ. The engine test is still NOT RUN: the relink the rule allows was spent, and nothing of it was launched again. **Fix round 2 ran it on Linux** (Ubuntu 24.04 in WSL, GCC 13.3, the engine's CI Linux leg's configure: Ninja, Release, tests ON, editor, script plugin and Wayland OFF; a fresh clone of the submodule's git dir, since `584ef91` is not pushed; `fix2/wsl/`): **`test_materials` 442 checks, 0 failures, rc 0 at `584ef91`, against 419 at its parent `5de6310`: the 23 new checks, above the floor of 388.** `test_screenoverlay` 57, `test_serialize` 479 and `test_draworder` 104, the suites that touch the changed structs, pass with the same counts at both. GCC's `-Wall -Wextra` gives the same 22 warnings at both (line numbers aside), from the same six translation units, all in vendored `entt` and `stb` code; none from a changed line, none from `test_materials.cpp`. The MSVC binary itself has still never run (RECORDED DEVIATIONS 1) |
+| (5) The cut sheets | byte-identical where their borders are transparent | **met for the player's, the minions', the ghost's, the timer's and 2-32's dragon's sheets (every albedo, and the player's and the dark mage's normal map). NOT met as written for 4-32's dark dragon**, frame-checked in fix round 2: `dragon_normal.png`'s borders are not alike, so the gate's premise does not hold for it, and the dragon changes at its spike tips where its art meets the sheet's edge, at most 98 px a frame, measured and bounded below. Accepting that is the owner's call (RECORDED DEVIATIONS 8). **The albedo**, on the files the port loads (`borders_P0.json`): each sheet's left column equals its right texel for texel (RGBA), and its top row its bottom row; every border texel has alpha 0. That holds for `hd/magic_portals_hd.png` `0a05c297` (the player), `hd/dark_mage_in_space.png` `93b45aaf`, `hd/minion.png` `07850c28` (minion, knight, ghost minion), `hd/ghost.png` `52c660c0`, `timer.png` `7836dd52` and `dragon_boss.png` `f71a0153`. So REPEAT and CLAMP read each sheet's ALBEDO alike at every coordinate. All are drawn magnified (`tiers.json`: hd at density 2, so 1.4 px a texel; `timer.png` and `dragon_boss.png` at 1, 2.8 px), so level 0 alone is read. The claw, as a control, has 31 rows that differ. **The normal maps, which this step clamps too** (verify1's `sheets.txt`, `sheets2.txt`): the minion, ghost and timer sheets have none. The player and the dark mage are lit through `normalmap_77.png`, 128 x 128 over 320 x 448. The two wraps read it differently only within half a normal texel of its edge, 1.25 albedo texels across and 1.75 down, and there the albedo reads columns 0-1 and rows 0-2 and their opposites, alpha 0 in every cell: nothing drawn there can change. `dragon_boss.png` is lit through `dragon_normal.png`, 256 x 256 over 452 x 360, whose opposite borders differ (column 0 against 255 by up to 121, median 74). Its band is 0.88 albedo texels, where the albedo blends column 0 (alpha 0) with column 1, opaque on 186 rows (alpha up to 244 at a weight of at most 0.38, so about 93), and on the right column 450, opaque on 2 rows (alpha 170); its bottom rows reach alpha 10 at most, at a weight of about 0.2, so about 2. **So a 1 px column along the sheet's outer left edge, its right edge on 2 rows, and faintly its bottom edge (alpha about 2) can change where the dragon is lit**, toward the original, which clamps its normal maps too. **The frames.** 2-32's dragon is a level node, and `--art` reaches its art. Its footprint is where this step's run differs from the head made fully transparent (`nohead`): on screen in 405 frames (f46-f450). Inside it, P0 against this step changed **0 of the head's own pixels** (`gate5_head2.txt`), and the footprint's left edge is at x 0 on all 405 frames, so the sheet's left edge is never on screen there (verify1's `head_extent.txt`). What changed inside it is 12,039 px on the frame's outer rows and columns (the sky's edge, under the head's anti-aliased border), 344 px of the claw's strip drawn over it, and 11,685 px of the fireballs' square quad outlines, 1 px wide, peak 9, on f180-f281, f415 and f419-f450 (`tmp_head_f200.png`, `tmp_head_f440.png`). 4-32's summoned dark dragon is drawn by the effects' runtime from the original's asset tree (`originalImage`, `MagicPortalsLayer.cpp:3787`; its normal map through `effectReceiver`, `:1926`), which `--art` does not reach: fix round 1 played 4-32's route with `dragon_normal.png` inverted whole in an `--art` copy, and none of 348 frames moved (`fix1/darkdragon/`). So it has not been frame-checked, and verify1's f420 footprint of 0 px for it, taken the same way, does not place it off screen. The player's, minions', ghost's and timer's sheets come from the same tree (RECORDED DEVIATIONS 3). **Fix round 2 measured the dark dragon** on a scratch build whose original tree is a copy under `out/` (`fix2/build_orig`, `MagicPortals.exe` `6f0c48e1`, the same sources and cache as `build/` but `SUPERSONIC_MAGICPORTALS_ORIGINAL`; the copy md5-equal to `reference/extracted/assets` on 3,115 files, and `reference/` never written). 4-32's route, every 10th frame to f3480, fix1's command line: the copy as it is draws **byte-identical to `d54944b0` on 348 of 348 frames**; `dragon_normal.png` inverted whole changes 130 frames (f690-f2510, the lit dragon on screen: the control that the copy is read); `dragon_boss.png` made transparent gives the dragon's footprint (229 frames). **Its four outer lines inverted (1,020 texels) change 92 of the 348 frames (f890-f2510), 7,412 px in all, 3-98 a frame, in 261 blobs (median 18 px, largest 75, a 6 x 6 square at most): 6,878 of them inside the dragon's footprint and the other 534 within 1 px of it.** The blobs are the dragon's spike tips where its art meets the sheet's edge (`fix2/crop_edge_*`, three frames viewed). The two wraps differ only where a sample falls within half a normal texel of the map's edge, where both read these outer lines alone, so the dark dragon's change from P0 lies within those pixels (the lines' reach is 1.5 texels, the wrap's 0.5): edge pixels, where the dragon is lit. That it moves toward the original is inferred from the sampling mode (the original clamps its normal maps too), not measured: no frame of the original's 4-32 was compared. The exact P0 difference would need a repeat build; it was not made (`fix2/cmp_darkdragon2.txt`, `blobs_edge.txt`) |
+| The menus | none required; the overlay quads opt in too | measured (`menu_compare.txt`), the game's own start with the gold saves, every 60th frame to f600, P0 against this step. Every frame changed, 2,316-2,837 px, peak 16-25. The changes are the frame's edges and the buttons' borders (i, sound, music, Achievements), and no 3 x 3 square fits (`tmp_menu_diff.png`) |
+| The level walk | `--visit-levels lightmapped --visit-passes 2`, never pushed without it (`game/CMakeLists.txt`) | **passes** (`after/visit_levels.log`, with a copy of the gold saves): rc 0 in 20 s, 134 visits, 1,460 lightmap sets, 1,100 of them drawn before the measure, peak 109 in the pool (1,024 the cap; no walk was run on P0's build, so this is not a before/after), 0 failures, validation active and silent |
+
+**SMART APP CONTROL: 2 refusals, both `test_materials.exe`** (`sac_log.txt`). `sac_check.txt` holds the CodeIntegrity log
+from 09:30 to 10:40: two 3077 blocks, at 10:08:20 and 10:08:32, and nothing else refused.
+- P0's `MagicPortals.exe` `12e0dce6`: 4 launches (the three claw series and the menu).
+- Stage A `1841f759`: 128 launches (its sweep), 0 refused.
+- `bb5b03a4`: 135 launches (five claw series, the menu, 128 in the sweep, the walk), 0 refused.
+- `test_mp.exe` `cea3db10`: 2 launches, 0 refused.
+- Linked and never launched: `MagicPortalsSpike.exe` `576ad234`; the engine's other 56 suites; the fresh build's
+  executables; and `test_materials.exe` as relinked after a comment fix.
+- Fix round 1: **0 refusals**. The CodeIntegrity log from 11:40 to 12:20 holds no event (`fix1/sac_check.txt`; the
+  same query finds the two 10:08 blocks). `MagicPortals.exe` `d54944b0`: 135 launches (a probe, 128 in the sweep,
+  two claw series, three route runs, the walk). `test_mp.exe` `1a0d73c5`: 1. Linked and never launched:
+  `MagicPortalsSpike.exe` `a1f9280e`. `test_materials.exe` was not relinked; only its object was compiled.
+- Fix round 2: **0 refusals**. The CodeIntegrity log from 13:05 to 13:28 holds no event (`fix2/sac_check.txt`; the
+  same query finds the two 10:08 blocks). One new executable, the scratch `MagicPortals.exe` `6f0c48e1`
+  (`fix2/build_orig`, built for the dark dragon's measurement alone): 4 launches, 0 refused. `build/`'s executables
+  were neither relinked nor launched. `test_materials.exe` was neither relinked nor launched: the suite ran as a
+  Linux binary in WSL, which Smart App Control does not govern.
+
+**WHAT THIS DOES NOT COVER.**
+- **The left and right screen columns** (the check's separate cause): not this step. Across the sweep, column 0 is now
+  0.997 of column 1 (median; P0 0.857) and column 1279 is 0.969 of column 1278 (P0 0.883). On 2-32 the columns are
+  still dark, at 0.743 and 0.749 (P0 0.631 and 0.916; the original 1.000). Both sides are now alike, near the check's
+  x0.75 model: the sky's 1279.69 px leaves an MSAA sample uncovered (`columns.txt`). That needs its own step.
+- **Menus and cards past the title screen** were not captured. They are the same `add` and `emitPopup` paths as the
+  frames above.
+- **The engine's own scenes** (3D, the editor) were not run: the editor is not built here. Their default is the
+  texture's own sampler, and on the path they take that binds the same `VkSampler` as before.
+
+**RECORDED DEVIATIONS.**
+1. **The engine test ran on Linux, not as the MSVC binary** (gate 4's engine half). `test_materials` was built with
+   its 23 new checks, and Smart App Control refused the Windows binary twice, the relink included, so that binary is
+   NOT RUN. Fix round 2 built the suite from the same commit with GCC 13.3 in WSL and ran it once: 442 checks, 0
+   failures (its parent 419). The MSVC build of it compiles with 0 warnings; its run on Windows waits for the owner
+   to let a relink through, or for the engine's CI (manual dispatch, after the push), whose Windows leg runs it.
+2. **The report's path collides** with wave 1's P1 (above). The orchestrator's `P1/impl.md` is written, and the old
+   one is kept as `P1/impl_step119_w1b.md`, md5 checked.
+3. **Gate 5's frame half covers 2-32's dragon and 4-32's dark dragon** (the latter in fix round 2, on a scratch
+   build). The player's, minions', ghost's and timer's sheets come from the original's asset tree, which `--art`
+   cannot override. They are gated by the texel analysis, which is exact for them (opposite borders alike texel for
+   texel, alpha 0, and `normalmap_77`'s band over alpha 0 alone), and by the sweep: no change anywhere is a
+   character's interior.
+4. **The spec's "no cache-key change"** is kept for the texture key and `Invalidate`. The material-set key had to take
+   the flag (above).
+5. **Beyond the spec**: the flag is saved by `ComponentCodec`, the engine's rule for authored component data
+   (`CONTRIBUTING.md`, Serialization). It covers every map, not the albedo alone, because stage B's measurement
+   showed the maps' seams too, and they move toward the original. The shadow casters pass it as well.
+6. **One `VkSampler` more per image read both ways.** It is kept with the image, and 1,048,576 is this device's
+   `maxSamplerAllocationCount`. The walk above holds every lightmap of the game twice over.
+7. **Fix round 1's rebase relinked everything.** `git rebase` checks the base out and then applies the commit again,
+   so the commit's 12 files were written anew, byte-identical and with new times, and the build took them as
+   changed. `bb5b03a4`, `cea3db10` and `576ad234` were replaced by `d54944b0`, `1a0d73c5` and `a1f9280e`, built from
+   the same sources. The dry run first (`ninja -n`) could not show it: it stops at CMake's glob re-check. The rebuilt
+   executables were then shown to draw and test the same (the fix round's table): the sweep byte-identical on 128 of
+   128, both claw series on 450 of 450, the walk's lines and the runner's whole output identical.
+8. **4-32's dark dragon is not byte-identical, and its change is bounded, not measured exactly** (gate 5). Its art is
+   read from the original's tree, which `--art` cannot reach, so fix round 2 built a second executable whose
+   original tree is a copy under `out/` (swapping a file in `reference/`, which every role reads, stayed ruled out).
+   There, inverting `dragon_normal.png`'s four outer lines moves 92 of 348 sampled frames, at most 98 px a frame, at
+   the dragon's spike tips where its art meets the sheet's edge: the texel analysis's prediction, on screen. The
+   wrap's own change lies within those pixels. Its exact size needs a repeat-wrap build of the same sources, another
+   new executable for Smart App Control, which was not made.
+
+**STEP 131'S FIX ROUND (2026-09-30), AFTER THE VERIFIER FAILED IT** (`out/parity/program/P1/verify1.json`). The
+verifier re-measured every gate and failed the step on one high problem, two medium ones and one low one. No source
+changed in this round. The engine commit was rebased, the gates on executables were taken again, and this record
+was corrected. The evidence is under `out/parity/program/P1/clamp/fix1/`, and the report is `P1/fix1.md`; wave 1's
+`P1/fix1.md` was kept byte for byte first, as `P1/fix1_step119_w1b.md` (`f9d1fef8`).
+1. **The engine test has never run (high, true; not closed).** Smart App Control refused `test_materials.exe`
+   twice in the build round, the one relink the rule allows included, so it is NOT RUN, and this round launched
+   nothing of it. Its object compiles at `584ef91` with 0 warnings. It runs when the owner lets the binary through,
+   or on the engine's CI after the push. **Until then gate 4's engine half is unmet, and that blocks the step's
+   pass.** It is not a code defect.
+2. **Gate 5 for the dark dragon (medium, true).** `dragon_normal.png`'s band can change a 1 px column where the
+   dragon is lit, which the row's "alike at every coordinate" denied. The row is rewritten (gate 5 above).
+   - A measurement was tried on the same executable: 4-32's win route, every 10th frame to f3480, with
+     `dragon_normal.png`'s four outer lines inverted (1,020 texels, nothing else; `fix1/make_normal_art.txt`),
+     and with the whole map inverted as the positive control.
+   - The route won on tick 3421 in all three runs, validation silent, and **the three were byte-identical on all
+     348 frames**, the whole-map inversion included (`fix1/darkdragon/cmp_darkdragon.txt`).
+   - So the dark dragon's maps are not read from `--art`'s tree: the effects' runtime reads the original's
+     (`originalImage`, `MagicPortalsLayer.cpp:3787`; `effectReceiver`, `:1926`). The bound stays unmeasured and is
+     recorded (RECORDED DEVIATIONS 8).
+   - verify1's f420 footprint of 0 px, taken the same way, says nothing of where the dragon is: at f1500 it is on
+     screen, cut by the frame's left edge (`fix1/darkdragon/ctrl/f_f1500.png`).
+   - The three identical runs do show the route deterministic on `d54944b0`.
+3. **The engine's `origin/main` had moved (medium, true).** It was at `5de6310`, a licence commit that changes
+   `CONTRIBUTING.md`, `LICENSE` and `README.md` only.
+   - The commit was rebased onto it as `584ef91`, its patch byte-identical to `d1aad56`'s (`fix1/rebase.txt`).
+     Author and committer are IvanCvetanovic, there are no trailers, and it is not pushed. The pin moves
+     `a733ca0` -> `584ef91`.
+   - The rebase rewrote the commit's 12 files, and the port rebuilt and relinked (RECORDED DEVIATIONS 7). So every
+     gate on an executable was taken again, on the rebuilt ones.
+4. **The engine test pins decisions, not the device path (low, true).** Now said in gate 4's row: (a) to (c) are
+   `WrapFor`'s decisions; that the bound sampler clamps is the frames' to prove.
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| Build on the rebased engine | 0 warnings | **passes**: `port_build.bat` 121 steps (114 compiles, 52 of them the engine's; 3 library links and 3 executable links), 0 warnings (`fix1/port_build_rebased.log`); `test_materials.cpp`'s object at `584ef91` in the engine's own tree, 0 warnings, not linked (`fix1/engine_test_obj.log`) |
+| The rebuilt `MagicPortals.exe` draws as the step's | the step's frames, byte for byte | **passes**: `d54944b0`'s 128-level f420 sweep (`fix1/sweep`, `capture_sweep.sh` unchanged, the saves `40bfef3a` before and after) is **byte-identical to `after/sweep` on 128 of 128**. 128 rc 0, validation ACTIVE in 128 logs and silent, every png whole and on its logged md5 (`fix1/compare_sweep.txt`). So gates 2b, 2c and 3 stand on it as measured |
+| Gate 1 and the claw, on the rebuilt exe | 450 of 450 | **passes**: `fix1/ctrl` and `fix1/clear0` are each byte-identical to `after/ctrl` and `after/clear0` on 450 of 450 frames, and to each other on 450 of 450 (`fix1/compare_claw.txt`; the duplicate pngs deleted, their md5 lists kept). So gates 1 and 2a stand on it |
+| The walk | as the step's | **passes**: rc 0 in 21 s, 134 visits, 1,460 sets, 1,100 of them drawn before the measure, peak 109, 0 failures, validation ACTIVE and silent. Every `[LevelVisit]` line is identical to `after/visit_levels.log` (`fix1/visit_levels.log`; the gold saves `09268640`, unchanged) |
+| The runner, once | counts | **passes**: `1a0d73c5`, 88 s, rc 0, the output **byte-identical to `after/allmode.log`**: 47 suites, 14,361 checks, `test_mp_layer` 3,245, `test_mp_routes` 215 checks with 70 won |
+| Reachability | 0 differ | **passes**: 128 levels, 108 reachable, 20 opened, 0 differ (`fix1/reachability_ctest.txt`) |
+| The engine test | run once | **NOT RUN** (item 1) |
+| The dark dragon's edge | bounded | **not measured**: the `--art` control is blind to it (item 2); recorded |
+| Smart App Control | refusals counted | **0 this round** |
+
+**STEP 131'S FIX ROUND 2 (2026-09-30), AFTER THE VERIFIER FAILED IT AGAIN** (`out/parity/program/P1/verify2.json`).
+The verifier passed every gate but two: the engine test had never run (high), and the dark dragon was not
+frame-checked (medium); and it found two low problems. No source changed in this round, the engine commit is
+untouched, and `build/` was neither rebuilt nor launched. The evidence is under `out/parity/program/P1/clamp/fix2/`,
+and the report is `P1/fix2.md`.
+1. **The engine test had never run (high, true). Run on Linux.** The Windows binary stays refused, and the rule
+   allows no further relink. Linux binaries under WSL are not Windows executables, so Smart App Control does not
+   govern them. The engine's CI has a Linux leg (GCC, Release), and this machine's Ubuntu 24.04 in WSL has its packages
+   and GCC 13.3. An earlier GCC build and ctest of the engine exist there (`~/ss-gcc`, 2026-09-10).
+   - **The method** (`fix2/wsl/engine_linux.sh`): the submodule's git dir (`.git/modules/engine`, which holds the
+     unpushed `584ef91`) is cloned into a new directory in the WSL home, `~/mp-p1-fix2`. Nothing is installed, and
+     no other tree there is touched.
+   - **The configure** is the CI Linux leg's: Ninja, Release, `SUPERSONIC_BUILD_TESTS=ON`, the editor and the script
+     plugin OFF, and `GLFW_BUILD_WAYLAND=OFF`, with 4 jobs.
+   - **The build**: `test_materials`, `test_screenoverlay`, `test_serialize` and `test_draworder`, first at the
+     parent `5de6310` and then at `584ef91` in the same tree.
+   - **The runs**: each suite through `ctest -R` (the engine's documented runner, AGENTS.md), once per commit, with
+     `DISPLAY` and `WAYLAND_DISPLAY` unset.
+   - **The result: `test_materials` 419 -> 442 checks, 0 failures at both.** That is the 23 new checks, above the
+     floor of 388, and (a), (b) and (c) are among them.
+   - The other three suites pass with the same counts at both commits.
+   - GCC's `-Wall -Wextra` gives 22 warnings at each commit: the same 22, from the same six translation units, all
+     in vendored `entt` and `stb` headers. None comes from a changed line or from `test_materials.cpp`, so the CI's
+     Linux leg gains no warning.
+   - What stays open: the MSVC binary has not run. It compiles with 0 warnings (fix round 1), and its logic is the
+     same code.
+2. **Gate 5 not established for the dark dragon (medium, true). Measured, with one new executable.**
+   - **The build.** `fix2/build_orig.bat` is `port_build.bat`'s configure line, with the build dir moved and one
+     change: `SUPERSONIC_MAGICPORTALS_ORIGINAL` points at `fix2/orig/assets`, a copy of `reference/extracted/assets`,
+     md5-equal on 3,115 files. Nothing else differs from `build/`'s cache (`fix2/cache_diff.txt`). It built
+     `--target MagicPortals` only: 206 steps, 0 warnings (12 `D9025`), giving `6f0c48e1`.
+   - **The runs.** 4-32's route was played with fix1's command line, every 10th frame to f3480. Before each run, the
+     variant's file was put into the copy; after it, the pristine file was put back, both md5-checked
+     (`darkdragon/*/art.txt`). All four runs won on tick 3421, rc 0, with validation ACTIVE and silent, and the saves
+     `40bfef3a` unchanged.
+   - **The results** (`fix2/cmp_darkdragon2.txt`, `blobs_edge.txt`, crops `fix2/crop_edge_*`), in the gate 5 row
+     above:
+     - ctrl = `d54944b0` on 348 of 348 frames;
+     - full inversion: 130 frames differ;
+     - edge: 92 frames and 7,412 px, in blobs at the spike tips (crops of three frames viewed);
+     - footprint: 229 frames.
+   - **So gate 5 is not met as written for the dark dragon: its premise does not hold.** Its albedo borders are
+     transparent, but its normal map's borders are not alike. It changes at the sheet's edge where lit, within the
+     bound measured; toward the original by inference from the sampling mode, not by a frame of the original's
+     4-32. Accepting it is the owner's call.
+   - **The exact P0 difference** would need a repeat-wrap build of the same sources, and it was not made
+     (RECORDED DEVIATIONS 8).
+3. **Stale citation (low, true). Fixed.** The opening paragraph now cites the file-load wrap at `a733ca0`:
+   `TextureRegistry.cpp:282` (`Acquire` calls `UploadRGBA` with no address mode), `TextureRegistry.hpp:74` (the
+   default `eRepeat`) and `VulkanImage.hpp:82`. Each line was read at `a733ca0` first.
+4. **The engine commit's message says the test has not run (low, true). Left for the commit role.** The instruction
+   was not to commit, and a message-only amend is a commit. Its replacement text is in `P1/fix2.md` and in LEFT FOR
+   LATER.
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| The engine test | `test_materials` run once: (a), (b) and (c), and the count against the floor | **passes, on Linux**: 442 checks, 0 failures, rc 0 at `584ef91` (419 at `5de6310`; floor 388), GCC 13.3 in WSL (`fix2/wsl/run_584ef91_test_materials.log`). Nothing new from GCC's warnings. **The MSVC binary: NOT RUN** (Smart App Control; no relink left) |
+| The engine suites beside it | none required | `test_screenoverlay` 57, `test_serialize` 479, `test_draworder` 104: pass with equal counts at both commits |
+| The scratch build | 0 warnings, only the original tree changed | **passes**: 206 steps, 0 warnings, 12 `D9025` notes. Its cache differs from `build/`'s in `SUPERSONIC_MAGICPORTALS_ORIGINAL` alone |
+| It draws as `build/`'s | 4-32's route, byte for byte | **passes**: 348 of 348 frames md5-equal to fix1's `d54944b0` ctrl |
+| The dark dragon (gate 5) | byte-identical where its borders are transparent, or its change explained | **NOT met as written: measured, not byte-identical; the owner's call (deviation 8).** Its normal map's outer lines reach 92 of 348 sampled frames, 3-98 px a frame, 7,412 px in all, in blobs 6 px thick at most, at the spike tips where the art meets the sheet's edge. 6,878 of those px are inside the dragon's footprint, and the other 534 lie within 1 px of it. The wrap's change lies within them. The whole map inverted (the control) moves 130 frames |
+| Record | the citation fixed; step 131 updated; LF; no DEVLOG | done |
+| Smart App Control | refusals counted | **0 this round**. `6f0c48e1` was launched 4 times, and nothing else was launched |
+
+**LEFT FOR LATER.**
+- **The engine commit `584ef91` is not pushed** (the spec's PUSH). The MPR commit records the pin with `git add
+  engine`, and the push of the engine's `main` has to come before or with the MPR push, or the pin names a commit no
+  clone can fetch. The other game's session is still pushing to the engine's `origin/main`; fix round 1 found it at
+  `5de6310` and rebased onto it. If it moves again before `584ef91` is pushed, the commit is rebased once more and
+  takes a new hash, and the pin and this record change with it. **A rebase rewrites the commit's 12 files, so the
+  port rebuilds and relinks all three executables** (RECORDED DEVIATIONS 7): new files for Smart App Control, and
+  every gate on an executable to be taken again as fix round 1 took them. (`584ef91` is `d1aad56` rebased, and
+  `d1aad56` was `6f9d729` with its message corrected before any push.)
+- **The engine test's MSVC binary** (`test_materials`, floor 388) has run on Linux only (442 checks, fix round 2). It
+  runs on Windows once the owner lets a relink through, or on the engine's CI after the push (its Windows leg runs
+  every suite).
+- **The engine commit's message** still says the test "has not run here, and its count is unmeasured". Before the
+  push, amend the MESSAGE only (`git -C engine commit --amend`, nothing staged; no file is rewritten, so nothing
+  relinks). Replace its sentence "On this machine Windows Smart App Control refused test_materials.exe twice, so it
+  has not run here, and its count is unmeasured." with: "On Windows, Smart App Control refused test_materials.exe
+  twice, so the MSVC binary has not run; built with GCC 13.3 on Linux, the suite runs 442 checks with no failures,
+  against its parent's 419." The hash changes, and the pin (`git add engine`) and this record's `584ef91` follow it.
+- **4-32's dark dragon, if its exact change is wanted**: a repeat-wrap build of the same sources, beside
+  `fix2/build_orig`, played on the same route. It is another new executable for Smart App Control.
+- **Scratch trees to delete once the step is committed**: `out/parity/program/P1/clamp/fix2/build_orig` (about
+  0.4 GB) and `fix2/orig` (the original's copy, never to be committed; under the gitignored `out/`), and
+  `~/mp-p1-fix2` in WSL's Ubuntu 24.04 (the engine clone and its Linux build).
+- **For the commit, in `docs/parity-backlog.md`:**
+  - the Tests row "2-32's claw draws a line beside the dragon" closes: built here, with the claw, the ramp and the sky
+    rows measured;
+  - section 6's item (7) is completed by this step;
+  - section 0's standing sweep baseline becomes `out/parity/program/P1/clamp/after/sweep` (`P1/clamp/fix1/sweep`
+    is the same bytes, on `d54944b0`): every level changed, so
+    `merge_w1/sweep` no longer stands for a byte-identity gate;
+  - the columns note goes to its own row.
+- **Every byte-identical baseline taken before this step is stale**: `merge_w1/sweep`, `P0/after/sweep`, and every
+  series. The next step's non-regression gates read `P1/clamp/after/sweep`.
+- The close role writes the `DEVLOG.md` entry.
+
+**THE COMMIT (2026-09-30).** The run shelved the step after its third verification (`P1/verify3.json`) on two
+points, and both are settled here without a code change:
+- **Gate 5 (deviation 8) is decided as the original does, the owner's standing ruling.** The original loads every
+  texture through SOIL with `GL_CLAMP_TO_EDGE` (`GLES2Texture.cpp:306`; `soil/SOIL.c:1341-1360`), normal maps
+  included, so the dark dragon's normal map clamping at its sheet's edge is the original's sampling, not a regression.
+  The gate reads, amended: byte-identical where the albedo borders are transparent AND the normal map's band lies
+  over alpha 0 - which the player, the minions, the ghost and the timer meet. The 7,412 px on 92 of 348 frames at the
+  spike tips are recorded as measured (verify3: 15 of the 534 outside the footprint lie 2-3 px from it, not within
+  1 px); the exact change from P0 is not measured.
+- **The engine commit is rebased.** The other game's session rewrote the engine's `origin/main` (`5de6310` ->
+  `889f020`, a message-only change with an identical tree), so `584ef91` was cherry-picked onto `889f020` - its tree
+  identical - and its message amended as LEFT FOR LATER asked (the test built with GCC 13.3 on Linux, 442 checks, 0
+  failures): **`710bffc`**, which this commit pins. The files the port builds are the ones every gate was measured on,
+  so nothing was rebuilt or relaunched here.
+- verify3 re-took gates 1-4 on `d54944b0` and ran `test_materials` itself under WSL (Ubuntu 24.04, GCC 13.3): 442
+  checks, 0 failures (gate 4d). The engine commit is reviewed by the other game's session - `test_materials`, the
+  engine's ctest and that game's suites under Linux - before it is pushed; this commit is pushed after it.
+
