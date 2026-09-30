@@ -2513,3 +2513,129 @@ list - unowned effects, the earthquake's follow-ups, R1 / R2 / R23 (decided, unb
 **Inferred mood:** a guess from the facts - a long, heavy two-day push that finished the plan it set out to finish,
 with no engine change and no lost work; the cost was 53 Smart App Control notifications (eleven of them in one step),
 a string of verifiers failing records that then had to be rewritten, and one implementer lost to a login expiry.
+
+### 2026-09-29 14:51 - Session 21: the program's wave 1
+
+*Written 2026-09-30 at the close, from the planning records (steps 113-128 of
+`docs/planning/2026-09-11-magic-portals-remaster.md`), each step's role reports under the gitignored
+`out/parity/program/<id>/` (`impl.md`, `commit.md`, `deviations.md`), the merge's `merge_w1/` folder and git - not from
+a transcript. I did not run the wave: I checked the repository, wrote the backlog rows and this entry, and committed
+the two files. Every number below is one a step records or git shows; where a figure is assembled from several
+records rather than observed by me, it says so. The wave went from its first commit (`37c4ece`, 2026-09-29 14:51) to
+the second merge commit (`187b41b`, 2026-09-30 06:25), pushed by the finalize role that morning.*
+
+**Built:**
+- **The owner's direction of 2026-09-29, "proceed with improvements until the only thing left is my testing", turned
+  into a program** (backlog section 6: every level won by a replayed route, no door sealed by the port, every blocker
+  and major built as the original does, the final comparison), and its first wave ran on three tracks at once.
+- **Track A on `main`, steps 113-118:** W.1, the reachability flood (`tools/parity/reachability.py`, ctest
+  `parity_reachability`) and the route harness (`tests/routes/`, replayed by `test_mp_routes`, and `--route` in the
+  window); G5, a fireball dies on the first solid thing it touches; B1, a barrel's blast breaks the walls it grabs; B3,
+  4-32's barrel restock and the lava; G11, 3-32's ghost as the original fights it; B5, 4-19's red key, its fade and
+  its wall.
+- **Track B in the worktree `w1b`, written 150-155, renumbered 119-124:** P1, a chapter's last level returns to
+  chapter select and 4-32 opens GameFinishedPopup; P3/P4, the fire agent's own face, blue and red keys, keyholes and
+  doors, the non-teleportable crate's red blink; P7, the music as the original plays it; P5, SpaceSky on the 19 space
+  levels; P2, the three win cutscenes and each level's end_delay; S1, for the owner's testing - the sound switches
+  kept, the last run's log kept, and `play_build.bat` for a build without validation.
+- **Track C in the worktree `w1c`, written 170-172, renumbered 125-127:** R2, a gravity well refuses no portal and
+  stops no shot; R17, a shot kills an anti-portal agent and its ring; R1, an antiportal refuses at 32 x scale.
+- **The merge, step 128** (`5e13f54` for `w1-b`, `187b41b` for `w1-c`): five conflicts, each kept both behaviours;
+  one earthquake table of 32 rows (track B's `rocket_launch` and track C's `agent_killed` both new); one route trace;
+  229 renumbered step references. Pushed; both worktrees and both branches removed.
+- **70 of 128 levels are now won by a route a suite replays**, from none before the wave: chapter 1 20, chapter 2 19,
+  chapter 3 15, chapter 4 16.
+
+**GAMEPLAY changed in nine steps**, each as the original does: 114 (every fireball level; 2-09's crate burns only while
+its button is held), 115 (the blast's walls: nine chapter-2 levels and 4-16, possibly 3-19, 4-10 and 2-29), 116 (4-32),
+117 (3-32), 118 (4-19), 123 (only the time from the door to the medal on 4-01, 4-19 and 2-32), 125 (5 well levels),
+126 (17 agent levels), 127 (52 antiportal levels). Track B's other five changed pictures, sound and saving only. R24,
+R25 and camera dragging were not touched.
+
+**Broke / dead ends:**
+- **Smart App Control: 83 refused launches, so 83 notifications for Ivan.** Assembled from the records, not observed
+  by me: track A 21 (113 4, 114 5, 115 7, 116 0, 117 1, 118 4), track B 12 (119 2, 120 2, 121 0, 122 1, 123 5, 124 2),
+  track C 7 (125 1, 126 6, 127 0), track C's setup 2, the merge 41 (3 on named suites, 1 after a relink, 21 in its one
+  ctest, 16 more after one relink each). Not recorded: step 122's verifier. The finalize role and the claw-lines check
+  launched without a refusal. No loop: each refusal cost at most the relinks the rule allows.
+- **17 suites have never run on the merged code**: camera, geometry, scores, start, hazards, fire, hinge, bounce,
+  wells, darkdragon, keys, diamonds, launchers, lighting, sky, tiers, select - each refused on its first launch and
+  again after its one relink at the merge. The merge's ctest read 26 of 47 passed, 0 failed, 21 Not Run.
+- **Two routes broke where tracks met, and only the merge could find it.** Track A's 2-09 route was refused under
+  track C's R1 (its last pair lay inside the grown field): one tap more kills the agent first and wins on the same tick.
+  Track C's 3-31 died because track A's G5 spent its first fireballs on a platform corner the route had flown them
+  through: re-routed, and the new route rides the port's self-running lift (G2), a lean the old one did not have.
+- **Track B had no harness.** Its worktree was cut from `29669c3`, before W.1 was committed, so none of its steps could
+  replay a route or run the reachability check; P2's three win levels were left to the merge, where all three are won
+  by routes (4-01, 4-19, 2-32).
+- **Records wrong at first, and put right before their commits**: step 114 first called 2-09 unwinnable without B6
+  (it was won by a fix round); step 118's first bucket size, 91.02, was a misread (128); step 127 recorded 3-15 as
+  unwon until its third verifier won it, the seventh of that step's "no route found" findings overturned (with 2-18,
+  2-30, 3-14, 4-29, 2-26, 2-31).
+- **4-28 lost its route.** Step 125 won it by a way R1 then closed; step 127 found no other, and records it as "no
+  route found, not proven unwinnable": the original's way needs G8 or the fire agent's burn of a minion, neither built.
+  4-14 has no route either (G6), and 4-21 none (the port's lift door has no latch: a press lifts it 5.6 px).
+- **Step 123's captures wrote into Ivan's own save**: three DEV-placed wins without `--saves` left 4-01 and 4-19
+  bronze and 2-32 gold in `%APPDATA%/Magic Portals/scores.json`. The three entries were removed that night; the file's
+  md5 has been `40bfef3a` since, through the merge's sweep.
+- **The play build went with its worktree.** `build-play\` existed only in `w1b`; the main checkout has none until
+  `play_build.bat` is run there.
+- **An owner report the wave could not fix**: 2-32's "weird lines around the dragon's arms" are the claw sheet's arm
+  column wrapped onto the quad's far edge by the engine's REPEAT sampler, where the original clamps (confirmed by an
+  independent check). The fix is an engine change, which this program forbids until its own pin-bump step; recorded
+  as a backlog row.
+
+**Decision:**
+- **The backlog rows are closed only where a committed step closed them**: B6 (with the audit's G7), P1, P2, P3, P4,
+  P5, P7, section 2's "System 4 antiportals" (R1) and "Gravity wells, the refusal (R2)", the "Order 12.2 finding,
+  `no_music`" row, and `test_mp_dragon`'s NOT RUN row (230 at the merge); section 0 gains the wave's merge. B7 stays
+  open, rewritten onto the lift door. The Smaller row keeps its open items, with the switches, the log,
+  `antiportal_explosion` and the `end_delay` note marked built.
+- **Track B's and C's row texts were rewritten against the merged tree, not pasted**: written in worktrees without
+  the other tracks, several were stale - S1's Smaller row would have dropped track A's notes, P2's "no harness" is no
+  longer true, P7's missing rocket tracks came with P2, step 120's white 4-19 halo was built red by step 118, and
+  step 120's "2-09's crate is burnt before f420" is false on the merged build, where G5 keeps it standing.
+- **Three won levels are counted as won, not as the original's way**: 2-31 (two shots through a flame the original
+  snuffs), 3-19 (an unmeasured hinge creep) and 3-31 (the self-running lift). Every route also leans on G4 and G10.
+- New open rows for every recorded deviation and finding without a home: steps 119-123's leftovers, the fire agent's
+  burn of a minion beside G8, the routes' leans, 3-19's hinge, 3-13's crate, the claw's lines, and the 17 suites (on
+  the step-117 suites row, not a duplicate). Ivan's calls gain three.
+- **Nothing built, launched or captured by me**: git, grep, reads and the two text files. 0 Smart App Control launches.
+- The engine pin stays `4bfcf67`. The claw-lines fix, and whatever else wants the engine, waits for a pin-bump step
+  with its own 128-level byte-identity sweep.
+
+**Assets check:** yes - `git status --short`, run after appending this entry, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/`. The forbidden-extension grep (`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|
+par|fnt|apk`, plus `^out/` and `^reference/`) over `git diff --cached --name-only` printed nothing before the commit.
+Over every file the wave changed (`29669c3..187b41b`), CLAUDE.md's list prints nothing; with `tscn` added it prints
+seven files, `tools/parity/tests/fixtures/*.tscn` - step 113's hand-authored reachability fixtures (250 lines of our
+own, its record says so and I read one), not converter output.
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** 17 commits `29669c3..187b41b` (15 steps and 2 merge commits), 175 files, +18,865 / -802; the planning
+doc 20,956 -> 24,171 lines. Routes: 70 files under `tests/routes/`, `test_mp_routes` 70 of 70 won, 215 checks, 0
+failures (26 from track A, 44 from track C). Reachability: 108 reachable, 20 opened, 0 sealed, 0 differ (from step
+115 on; 108 / 11 / 9 before it). The merge's 30 suites run on the merged code, 0 failures each, among them
+`test_mp_layer` 3243 (2901 at the wave's start), `test_mp_sprites` 1575, `test_mp_effects` 706, `test_mp_hud` 417,
+`test_mp_info` 389, `test_mp_minions` 288, `test_mp_dragon` 230, `test_mp_levelend` 226, `test_mp_play` 207,
+`test_mp_tscn` 204, `test_mp_popup` 200, `test_mp_ghost` 183, `test_mp_shot` 181, `test_mp_cutscene` 151 (new). The
+128-level f420 sweep on `MagicPortals.exe` `755b8a9d`: 128 of 128 rc=0, validation active and silent; the 70 levels no
+track moved equal to the base, the 37 only track B moved equal to B, 11 of the 13 only track A moved equal to A (2-08
+and 2-09: B's blink on the crates only A's G5 leaves standing), and the 8 both moved attributed; re-taken
+byte-identical by the merge's verifier. Build 0 warnings (MSVC /W4). Smart App Control: 83 refused launches,
+assembled from the records. Engine: `4bfcf67`, unchanged. The owner's save: `40bfef3a`. Of section 6: blockers B3,
+B5 and B6 done, B1 built with five levels open, B2, B4 and B7 open; majors G5 and G11 done; presentation P1-P5 and P7
+done, P6 and P8 open.
+
+**Inferred mood:** a guess from the facts - the biggest single push toward a playable remake yet: three tracks, nine
+gameplay rules brought to the original's, and 70 levels shown winnable where none were, with no engine change and no
+lost work. The cost was 83 Smart App Control notifications, nearly half of them in one merge, 17 suites still unrun,
+a night's captures written into Ivan's own save, and an owner-reported glitch that has to wait for the engine.

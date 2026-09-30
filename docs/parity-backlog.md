@@ -1,6 +1,6 @@
 # Magic Portals parity — backlog
 
-State at 2026-09-29 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
+State at 2026-09-30 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
 match the original, in the order it should be done. Every spec named here lives under
 `Magic-Portals-Remake/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
 
@@ -52,11 +52,24 @@ suites a change touches once each, and report what stayed blocked.
       tracks, which is on the engine's `origin/main` history but no longer its tip (`6cb4036`, another game's backend
       and renderer work); no engine gap came up, so nothing was bumped. Worktree `Magic-Portals-Remake-vis4` and branch
       `visuals-d` removed. **The standing sweep baseline is `merge_d/sweep`.**
+- [x] Merge the program's wave 1 (branches `w1-b` and `w1-c`) into MPR `main` — done 2026-09-30 (`5e13f54` for
+      `w1-b`, `187b41b` for `w1-c`; pushed, `origin/main` = `187b41b`). Track B's steps 150-155 became 119-124 and
+      track C's 170-172 became 125-127 (the branches' own commit messages keep the old numbers); the merge note is
+      planning step 128, whose table is the map. Five conflicts, each resolved keeping both behaviours; one
+      earthquake table (32 rows) and one route trace. `test_mp_routes` 70 routes, 215 checks, 0 failures after two
+      route fixes (2-09 one tap more, 3-31 re-routed); reachability 108 / 20 / 0, 0 differ; the 128-level f420 sweep
+      128 of 128 rc=0, every change attributed to a track; the full ctest once, **26 of 47 passed, 0 failed, 21 Not
+      Run**, and 30 suites ran on the merged code in all. **41 Smart App Control refusals.** An independent check
+      (`merge_w1/verify1.json`) passed every gate and re-took the sweep byte-identical. Engine pin `4bfcf67`,
+      unmoved. Worktrees `Magic-Portals-Remake-w1b` and `-w1c` and both branches removed. **The standing sweep
+      baseline is `out/parity/program/merge_w1/sweep`.** Section 6's "Wave 1" paragraph has the steps.
 - [ ] **`test_mp_launchers` and `test_mp_keys` have not run on the merged binaries** (step 112). The merge relinked
       both; Smart App Control refused each twice (the first launch or the ctest, then the one relink), and the merge's
       independent check did not launch them. Their last runs: `test_mp_launchers` 105 on track B (step 109; 98 on
       track A at step 95) and `test_mp_keys` 124 on track A (step 98; track B did not run it), 0 failures each. Next:
-      the next step that relinks them launches each once and records the count.
+      the next step that relinks them launches each once and records the count. *Step 118 ran `test_mp_keys` (169) on
+      track A; both are again among the 17 suites NOT RUN on wave 1's merged code (step 128, the row "17 suites" in
+      section 6's Tests).*
 - [ ] Planning doc Step 45 (G3) still reports pre-amendment verdicts; add a note citing `design_port.md` §10 (gate
       amendments) and relabel the two attribution rows as the gates.
 - [ ] `test_mp_launchers`: add a refusal case for a missing/bad throwable emissive.
@@ -245,7 +258,8 @@ work no step of §7 owns, and the owner's calls:
   controller or a tap is drawn a tick early (`portal_mark`, `red_cross`, `crystal_pick`; the "Order 10.1b" row), and
   what `GameStateController` adds a frame early (the "Order 11.3" row) - one runtime step could take both.
 - **Pictures the original adds that no step owns** (each in its row below): `shock_agent`'s `small_explosion.ent`
-  (10.4); `antiportal_explosion.ent` (8.13's unowned row, which also needs R23's in-flight kill); `fire32.ent` on a
+  (10.4); `antiportal_explosion.ent` (8.13's unowned row, which also needs R23's in-flight kill; *built in step 126
+  with R17's kill*); `fire32.ent` on a
   burning character (11.3) and on the burned knight (12.2); 2-32's claw's `wall_destroy` (11.1); a boss-dropped key's
   `key_pick` (the merge); the key's fly-in into its keyhole (10.3); the carried shock diamond at alpha 0.1 (10.4); the
   shock agent's pulse (13.1); the unlit torch's spin (11.2); the dark dragon's scattered `small_explosion_no_light`,
@@ -253,7 +267,8 @@ work no step of §7 owns, and the owner's calls:
   sounds 10.4, 11.2, 12.1, 12.2 and 13.1 name.
 - **The earthquake's follow-ups**: Q.1's gate 4 NOT MET (F16's +-10 opening; the owner accepts it or C52 is settled);
   whether the generator resets at a load; the shaken-camera readers the port keeps at rest, the skull among them
-  (Q.1's deviation 6 and the merge's finding); D11 rows 3, 13, 21, 30 and 10 / 8's kill unwired, row 9 dead on 3-20;
+  (Q.1's deviation 6 and the merge's finding); D11 rows 3, 13, 21, 30 and 10 / 8's kill unwired (*rows 3 and 30
+  wired in wave 1: `agent_killed` in step 126, `rocket_launch` in step 123*), row 9 dead on 3-20;
   `beholder_death`, `ghost_death` and `dark_dragon_death` wired but driven by no case; `Impacts::kRecentSteps` still
   a number in code.
 - **Gameplay rulings decided for what the original does, and not built** (no batch owns them; they were kept out of
@@ -264,6 +279,8 @@ work no step of §7 owns, and the owner's calls:
   the zero-g recoil aimed at finalPos. 10.1's pictures now show each of these wherever it bites (the "Order 10.1"
   rows). **R22** - how to re-baseline 1-01's static portal 582's ring excess (1.62x, its pulsing part 3.02x), which no
   script lever explains - is a gate choice for System 2's follow-up (the "Step 59" row), also unbuilt.
+  *Wave 1 of the program built three of them, each as the original does: R2 in step 125, R17 (the anti-portal agent's
+  kill, one of R23's in-flight kills) in step 126, R1 in step 127. R23's other items and R22 are still unbuilt.*
 - **The owner's calls still open**: **R24 and R25**, applied by step 76, still the owner's to rule (the "Step 76, THE
   OWNER'S TO RULE" row; the player's point is R25's other half, and 7.3, 10.1, 10.1b and 10.4 each record it again);
   **the two PORT-WIDE rows** - the script clock the original floors to whole milliseconds, and every body's picture
@@ -525,13 +542,21 @@ work no step of §7 owns, and the owner's calls:
       suites until it is fixed. Next: carry the scheduled tap's `Touch` into the shot and call `touchThisTick` during
       play on a level with no help block - a change to `readInput`, the path every level's play goes through, so its
       own step with its own re-capture.
-- [ ] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 71**; the red blink (0.2 → 0.4 → 0.2
+- [x] System 4 antiportals: drawn 64×scale u (not a flat 128 u) — **built, SE step 71**; the red blink (0.2 → 0.4 → 0.2
       on 300 ms legs) and the 10°/s turn — **built, SE step 72** (order 4.2), with the five deviations above. What is
       left of the system: the refusal radius stays 16×scale in the port against the decoded **32×scale**
       (128 u × the manager's `Scale(0.5)` × the node's scale, halved; footage F3 brackets the original's
       refusal at (31.6, 32.4]×scale). Ruled R1 — what the original does — but no step in 00_order §7
-      plays it yet.
-- [ ] **Gravity wells, the refusal (R2)** — the green ring is **built, SE step 73** (order 4.3, `6949cc3`, made as
+      plays it yet. ***R1 built in step 127*** (program wave 1, track C, `3e51904`): an antiportal refuses a portal
+      within 32 x its node's scale (`isPointInAntiPortalField`'s half `GetSize().x` over the manager's `Scale(0.5)`;
+      F3's bracket (31.64, 32.36] x scale; the window on 1-07: 91.2 u refused, 100.0 u accepted), and the drawn ring
+      is the played circle. `placement.json`'s "note of 64" corrected: 64 is the diameter. GAMEPLAY on the 52 levels
+      that place the 71 antiportals. 44 of them won by new or re-authored routes in the step, 6 by track A's; 4-28
+      and 4-14 not won (section 6, Tests). The f420 sweep 128 of 128 byte-identical (no level taps by f420). Left:
+      the strict `<` at the edge (`placement.json` `_not_modelled`), `no_portal_705` a port-only zone inside
+      `antiportal_687`'s field, and stale comments (`game/sim/Portals.hpp:61-63, 66-69, 149-150, 463-466`,
+      `game/MagicPortalsLayer.cpp:5141-5143`) for the next code edit of those files.
+- [x] **Gravity wells, the refusal (R2)** — the green ring is **built, SE step 73** (order 4.3, `6949cc3`, made as
       step 85 on `visuals-b`; drawn from `hd/white_ring.png` since step 74); the gameplay half is not. Decided for the
       original: its well refuses no portal and its shot does not die on one. `'gravity_area'` is in exactly two functions of the listing (`ETHCallback_gravity_agent` ins 29,
       `checkForLevelAchievements` ins 1542), and `AntiPortalManager` fills its `fields` from `Game::preLoop` before
@@ -539,6 +564,13 @@ work no step of §7 owns, and the owner's calls:
       `Portals::State::zones`, and `test_mp_wells.cpp:312-313` assert it. 00_order §6 lists it as a gameplay hand-off
       in no batch. Next: drop the well zone, let a shot pass, flip the two assertions, with its own captures. It
       cannot move the ring: the picture is sized by `Well::RingSizePx` and the zone is derived from it.
+      ***Built in step 125*** (program wave 1, track C, `ce65260`): a portal opens anywhere inside a well's ring, and
+      the shot flies through a well's agent (`FirstBodyPassing`). GAMEPLAY on the 5 well levels (10 wells), as the
+      original does. Won by routes: 4-17 (tick 127), 4-18 (125); 4-28's route of that step was later refused by R1
+      (step 127). 4-21 stays unwon, on the lift door (section 6, B7). The f420 sweep 128 of 128 byte-identical. Left
+      (tidy, each a relink): `AShotFliesThroughAWell` pins `shotPasses` on one well of ten; `NoPortalZone::radiusPx`
+      is set by nothing; `gravitywell.json`'s `zone.shrink_px` is the ring's number under the zone's name;
+      `Portals::State::Tick` copies `shotPasses` every tick a shot flies.
 - [ ] **Latent, found verifying SE step 73 (85 on `visuals-b`): `buildLights` counts a between-slot picture as a
       slot.** Its branch for
       a light with no picture of its own (`MagicPortalsLayer.cpp:3406`) counts every `m_sprites` entry at or below the
@@ -1149,11 +1181,13 @@ work no step of §7 owns, and the owner's calls:
       to its body, 38.4 x 41.7 at the add's scale, INFERRED); the ghost puts the barrel back itself (the row below).
       A blast in any arm leaves `burned` set, counted on the next SHOOTING update (pinned for a blast now, not a
       fireball). GAMEPLAY, 3-32 only. **Won by a route: 3-32**, tick 2724.
-- [ ] **Order 12.2 finding, `no_music` and `isBossFight`** (step 98). `Game::preLoop` #485-509 plays
+- [x] **Order 12.2 finding, `no_music` and `isBossFight`** (step 98). `Game::preLoop` #485-509 plays
       `playGameMusic(m_levelIndex == 31)` unless the level's properties carry `no_music` (`readProperties` #166-181): the
       original is silent at load on level0c, level18c, level31b and level31c, and plays the boss's music from load on
       2-32. The port plays "game" on all of them (and "boss" on 1-32); step 98 switches 3-32 to the boss's music from the
-      ghost's init and to silence from its DEATH. Audio only. Next: the sound's owner.
+      ghost's init and to silence from its DEATH. Audio only. Next: the sound's owner. *Built in step 121 (section 6's
+      P7): silent at load on the four, `boss` from load on 2-32 (and 1-32), each world's last level read from the
+      chapters table.*
 - [ ] **Order 12.2, not built** (step 98, deviation 6): the ghost's and its shot's sounds (the shot's
       `startEarthquake(10)`, #331-333, is `earthquake.json`'s `enemy_shot_end` since the merge, step 112); the DAMAGE
       and DEATH explosions and the death blast's 2.0; `ghost.ent`'s static box, which fails a
@@ -1308,10 +1342,14 @@ work no step of §7 owns, and the owner's calls:
       (`shaker`, placed by no level); row 21 (a burned carranca) and row 30 (4-01's rocket), systems the port lacks; row 9
       on 3-20, whose placed stone the port never culls. And three wired rows no case drives: `beholder_death`,
       `ghost_death`, `dark_dragon_death` (a boss beaten). Next: their owners; a boss-win case for the three.
+      *Wave 1 wired two: row 3 as `agent_killed` (intensity 20, after_update; step 126, R17) and row 30 as
+      `rocket_launch` (3, after_update, re-armed past 100 ms; step 123, 4-01's win). One table of 32 rows since the
+      merge (step 128), 28 of them wired. Rows 8's other half, 9, 10, 13 and 21 remain.*
 - [ ] **Order Q.1 deviations, recorded** (step 101; none a gate failure): the 50 px cap and the 1 px stop taken at R12's
       720 px screen (deviation 2; a 1080 px phone's cap is 11.85 u); the light wall goes on its own tick, the original's
       with its first spike (5); two calls on one side of one tick in the port's order (8); the fireball's 5 a frame early,
-      with its explosion (9); `SpaceSky` not ported, so the 19 `space_bg` levels shake their whole background (10); no
+      with its explosion (9); `SpaceSky` not ported, so the 19 `space_bg` levels shake their whole background (10;
+      *closed by step 122*: `shakeView` moves the space sky, spiral, planet and eclipse with the shaken camera); no
       vibration (11); F6's barrel on 2-12 not reproduced, because the port's blast takes no wall away (12; gameplay,
       `Fire.hpp`, nine chapter-2 levels - *closed by step 115*: the wall goes on the blast's tick and 2-12 trembles as
       F6's, at most 9.84 px); a static callback's call not limited to visible buckets (14). And the merge's:
@@ -1331,7 +1369,10 @@ work no step of §7 owns, and the owner's calls:
       the port's - antiportals at 16 x scale (R1; 71 placements in 52 levels), wells (R2; 10 in 5) and
       `anti_portal_agent`s (R17; 21 in 17) as fields, and 1-07's `no_portal_705`; the in-flight kills the port does not
       play (an `anti_portal_agent`, a `fire_agent`'s flame). The pictures are right for the port's play; each difference
-      is R23's, R1's, R2's or R17's gameplay. Next: those rulings built.
+      is R23's, R1's, R2's or R17's gameplay. Next: those rulings built. *Wave 1 built R2 (step 125), R17 (126, the
+      agent's in-flight kill) and R1 (127): the fields are now the original's for antiportals, wells and agents. Open
+      for R23: the hourglass's clock, the sensor and teleportable-body disagreements, the head-height retry, the
+      reflected shot at a wall, and the flame's in-flight snuff (G8's `burnProjectile`); and `no_portal_705`.*
 - [ ] **Order 10.1 deviations, recorded** (step 103, 5-10): no vibration; the fire-diamond tap's mark follows the
       leftover byte of `absTouchPos.x`, which the port's camera cannot reproduce (D3's unsettled item); the ghost's mark
       at the player's body centre (R25); `red_cross` looks UNDER `red_waves` in F3 where the add order puts it over (an
@@ -1409,7 +1450,16 @@ work no step of §7 owns, and the owner's calls:
       (`explode` #111-122; `Fire.hpp:52-56`, nine chapter-2 levels - *the walls built in step 115*, B1), and 4-19's
       `red_key_state` destroys `breakable_wall_2756` 6000 ms after its key is destroyed (recorded nowhere else; *built in
       step 118*, B5 - its key TAKEN, the destroyed being the state's own datum). Next:
-      the owner.
+      the owner. *Program wave 1 (steps 125-127): the lift door's latch now blocks a level - 4-21 cannot be won in the
+      port (a portal reset over `button_1723` raises `door_lift_1721` 5.6 px at most, against more than 15 px for a
+      shot line and 43 px to walk under; section 6, B7). Decided for the original by the 2026-09-29 rulings (11.1's
+      four), so it needs only a step spec that names it: the door as `ETHCallback_door_lift` #330-546 runs it (0.8 x h
+      eased by smoothEnd, opened only from shut, closed only from fully raised), 46 lift doors on 37 levels. That step
+      re-verifies the routes of 1-14, 1-15, 1-16, 1-32 and 1-21 (step 126: its shot threads `door_lift_831` as it
+      closes) and 4-19's (the row "4-19's route rides the port's shot and lift door"), re-pins `test_mp_play`'s
+      `kDoorRisePx` checks and `ALiftDoorLeavesItsDustAsItOpensAndCloses`, and adds 4-21's route (the candidate: a
+      portal beyond the raised door, one on the player). Routes that pass through a wall broken by touch: 3-12 and 3-14
+      (step 127).*
 - [ ] **Order 11.1, recorded, and tidy** (step 109): the wall's angle is the converter's 1.5708 rad (-90.00021 deg, 0.0002
       u over the half line); static callbacks add their dust only while their bucket is drawn in the original
       (deviation 6, with steps 78-80's rows); 2-32's claw's `wall_destroy` at angle 90 has no owner in 00_order section 7;
@@ -1506,18 +1556,79 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   suite, 23 with the window's. Step 116 adds 4-32, and its `test_mp_routes` run replays all 24 on the window's ticks:
   24 of 128 replayed by the suite. Step 117 adds 3-32: 25 of 128, all replayed by the suite. Step 118 adds 4-19, through
   the red key and its wall, replayed by the suite on tick 581 and in the window (its verifier's, `cbdb4004`): 26 of 128.
-  Open until all 128.)*
+  Track C, on its own branch: step 125 adds 4-17, 4-18 and 4-28; step 126 adds 1-10, 1-11, 1-12, 1-21, 1-23 and 3-13;
+  step 127 adds 36 (4-01, 1-07, 1-27, 1-28, 1-29, 2-15, 2-18, 2-23, 2-25, 2-26, 2-30, 2-31, 2-32, 3-02, 3-03, 3-07,
+  3-09, 3-12, 3-14, 3-15, 3-19, 3-20, 3-22, 3-27, 3-29, 3-31, 4-02, 4-06, 4-07, 4-08, 4-11, 4-15, 4-25, 4-29, 4-30,
+  4-31), re-routes 1-08, 1-11, 1-12 and 1-23, and removes 4-28's (refused under R1). Track B's steps 119-124 add none.
+  **Step 128's merge: 70 of 128 won by a route `test_mp_routes` replays on the merged build** (215 checks, 0
+  failures; main's 26 and track C's 44), after two route fixes: 2-09 one tap more (it kills
+  `anti_portal_agent_ent_1095` first, R1 having refused the old last pair; won on the same tick 1319) and 3-31
+  re-routed (G5 spent its first fireballs on a platform corner; won on 1046). Chapter 1: 20 won, chapter 2: 19,
+  chapter 3: 15, chapter 4: 16. Three of the 70 are not yet ways the original is shown to play: 2-31 (two shots
+  through a fire agent's flame, which the original snuffs: G8), 3-19 (an unmeasured hinge creep) and 3-31 (the port's
+  self-running lift, G2); and every route leans on G4 and G10. **The 58 not won:** 1-06, 1-13, 1-17, 1-18, 1-19,
+  1-20, 1-22, 1-24, 1-25, 1-26, 1-30, 1-31; 2-06, 2-10, 2-11, 2-16, 2-17, 2-19, 2-20, 2-21, 2-22, 2-24, 2-27, 2-28,
+  2-29; 3-01, 3-04, 3-05, 3-06, 3-08, 3-10, 3-11, 3-16, 3-17, 3-18, 3-21, 3-23, 3-24, 3-25, 3-26, 3-28, 3-30; 4-03,
+  4-04, 4-05, 4-09, 4-10, 4-12, 4-13, 4-14, 4-20, 4-21, 4-22, 4-23, 4-24, 4-26, 4-27, 4-28. Twelve carry a recorded
+  cause: 1-17 (a pocket sealed to shots until its crates are cleared), 2-06 and 4-14 (G6), 2-10, 2-11, 2-16, 2-17
+  and 2-19 (G8), 2-21 and 2-24 (B4), 4-21 (the lift door's latch, B7), 4-28 (no route found under R1; G8 or the
+  minion burn, not proven unwinnable). No step has recorded an attempt at the other 46. Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
   108 reachable, 20 opened, 0 sealed. The flood is optimistic about barrels (a barrel and any fire on the level opens
   a wall), so five of the nine read opened with no port route yet: G8's and B4's rows. Open until those are won.
   Step 118 adds the `red_key` breaker (4-19's wall); no verdict moves: 4-19 reads `reachable` by a way under the key's
-  room that a point takes and the player would have to clear a crate for - the row "4-19's way under the key's room".)*
+  room that a point takes and the player would have to clear a crate for - the row "4-19's way under the key's room".
+  Steps 125-127 (track C) and the merge (step 128): 108 reachable, 20 opened, 0 sealed, 0 differ from the pin,
+  which no wave-1 step after 118 rewrote. That is no evidence for R1, R2 or R17: the flood models no no-portal
+  zone, so a zone that grew or went cannot move a verdict (step 127, deviation 4; the Tests row "The reachability
+  flood is optimistic"). The routes are their evidence.)*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
 - The owner's open calls are listed in one place.
+
+**Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
+113-118), B in the worktree `w1b` (written 150-155, renumbered 119-124) and C in `w1c` (170-172, renumbered 125-127),
+merged in step 128 and pushed (`187b41b`). The engine pin stayed `4bfcf67`; no converter change, so `out/levels`,
+`out/assets` and `out/data` are the ones the wave started from. "Deviations" are each step's own RECORDED DEVIATIONS.
+
+| Step | Row | Track | Commit | Outcome | GAMEPLAY | Routes added |
+|---|---|---|---|---|---|---|
+| 113 | W.1 | A | `37c4ece` | built: `reachability.py` (ctest `parity_reachability`) and `test_mp_routes`; 3 deviations | none | 11: 1-01 to 1-05, 1-08, 1-09, 1-14, 1-15, 1-16, 1-32 |
+| 114 | G5 | A | `cf52da3` | built, deviations recorded; a fix round won 2-09 | **yes**: a fireball dies on the first solid body it touches (every fireball level; 2-09's crate burns only while its button is held) | 8: 2-01 to 2-05, 2-07, 2-08, 2-09 |
+| 115 | B1 | A | `0ab9609` | built; B2 a finding (not cleared) | **yes**: a barrel's blast breaks the walls it grabs (nine chapter-2 levels and 4-16; possibly 3-19, 4-10, 2-29) | 4: 2-12, 2-13, 2-14, 4-16 |
+| 116 | B3 | A | `f72d4e3` | built, 4 deviations | **yes**, 4-32 only: the barrel restock and the lava | 1: 4-32 |
+| 117 | G11 | A | `fe656cf` | built, 6 deviations | **yes**, 3-32 only: fire passes the ghost, a blast burns it, its barrel restock | 1: 3-32 |
+| 118 | B5 | A | `e276018` | built, deviations 1, 2, 4-6 | **yes**, 4-19 only: the red key's fade and wall | 1: 4-19 |
+| 119 | P1 | B | `e1dab6e` | built, no gate row unmet | none | - |
+| 120 | P3, P4 | B | `105ca1c` | built, no gate row unmet | none (pictures) | - |
+| 121 | P7 | B | `1656d8f` | built, no gate row unmet | none (music) | - |
+| 122 | P5 | B | `691d6de` | built, no gate row unmet | none (scenery) | - |
+| 123 | P2 | B | `e2277b8` | built; gate 9 NOT MET as written and explained (2-32's knight), gate 10's routes not run in the worktree | **yes, narrowly**: the door-to-medal time on 4-01, 4-19, 2-32 (5000 / 14500 / 6600 ms) | - |
+| 124 | S1 | B | `cc8be2e` | built | none | - |
+| 125 | R2 | C | `ce65260` | built with 4 deviations; 4-21 not won (the lift door) | **yes**: a well refuses no portal and stops no shot (5 levels) | 3: 4-17, 4-18, 4-28 (the last removed in 127) |
+| 126 | R17 | C | `596862e` | built with 4 deviations | **yes**: a shot kills an anti-portal agent and its ring (17 levels, 21 agents) | 6: 1-10, 1-11, 1-12, 1-21, 1-23, 3-13 |
+| 127 | R1 | C | `3e51904` | built with 10 deviations; 4-28 and 4-14 not won | **yes**: an antiportal refuses at 32 x scale (52 levels, 71 rings) | 36 (the list above); 4 re-routed; 4-28's removed |
+| 128 | merge | - | `5e13f54`, `187b41b` | 70 of 70 routes won; 17 suites not run (Smart App Control) | none of its own | 2-09 one tap more; 3-31 re-routed |
+
+**Routes**: 70 of 128 won by a route `test_mp_routes` replays on the merged build (26 before track C's, 44 from it).
+**Reachability**: 108 reachable, 11 opened, 9 sealed (B1's nine) at step 113 and on tracks B and C, which lacked
+step 115; 108 / 20 / 0 from step 115's barrel breaker to the merge, 0 differ from the pin. No step sealed a door the
+flood can see, and the flood cannot see zones (the Tests row). **Smart App Control**: 81 refused launches recorded by
+the steps and the merge (A 21, B 12, C 7, the merge 41), plus 2 at track C's setup - 83 notifications, assembled from
+the records (step 122's verifier recorded no count).
+
+**What the next wave should take**, in this order: (1) the lift door's latch (the "Order 11.1, GAMEPLAY rows for the
+owner" row; B7): it wins 4-21 and re-verifies 1-14, 1-15, 1-16, 1-21, 1-32 and 4-19; (2) G8 and the fire agent's burn
+of a minion: 2-10, 2-11, 2-16, 2-17, 2-19, 4-28, and 2-31 re-verified; (3) G6: 2-06, 4-14, and 2-03 re-authored;
+(4) routes for the 46 levels no step has tried, chapter by chapter, which is most of what is left of the definition of
+done; (5) G2, then G1 and G9, each re-verifying its route list above; G4 and G10 last, as they re-play every route; (6)
+step 123's two MEDIUM rows (the medal saved at the door; 4-19's key sparkles) before the owner plays the three
+cutscene levels; (7) the engine pin-bump step, on its own with a 128-level byte-identity sweep, carrying a
+clamp-to-edge sampler for 2-32's claw lines (the Tests row) - it re-takes every baseline; (8) the 17 suites not run on
+the merged code, each once, as the first step that links them.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [ ] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -1540,7 +1651,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       and 2-10 and 2-11 (G8: 2-10's crates stand 133 u from its fire agent and cannot be sent through a portal, 2-11's
       static crate 206 u). Measured with a save of chapter 1 gold (a fixture) and every chapter-2 route's medal: 2-13
       to 2-15 open behind 2-12, 2-07, 2-11 and 2-12 locked, chapter 2 at 23 % (`out/parity/program/B1/b2/`). Open
-      until G6 and G8 let those three be won.
+      until G6 and G8 let those three be won. *Unchanged by wave 1*: track C's chapter-2 routes (2-15, 2-18, 2-23,
+      2-25, 2-26, 2-30, 2-31, 2-32) lie behind 2-06, 2-10 and 2-11 in the menus' order, and none of those three has a
+      route. Not re-measured.
 - [x] **B3. 4-32 cannot be won** - the barrel restock (`addEntityIfItCantBeFound('barrel_bomb')`, `ETHCallback_dark_dragon`
       ins 997-1064) and the lava's explode contact (`ETHBeginContactCallback_lava` L68416 #21-30) must land together,
       or a missed barrel softlocks. KNOWN ("Order 12.1, not built"). *Built in step 116*, both: after every shot at the
@@ -1556,7 +1669,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       and the level has one barrel; on 2-24 one barrel in the fixed agent's zone sets off all seven (measured, ticks
       68-72), leaving nothing to hold `button_1144` in front of the door (that the player alone cannot then pass the
       door lift is reasoned from the geometry, not played; a barrel kept out of the chain to weigh the button, which
-      works in the original too, was not tried - so 2-24's attribution to B4 is partly reasoned).
+      works in the original too, was not tried - so 2-24's attribution to B4 is partly reasoned). *Step 127 wins 2-23
+      by a route without the handle (tick 773; replayed on the merged build); 2-20, 2-22 and 2-27 have no recorded
+      attempt.*
 - [x] **B5. 4-19 at risk: the red key breaks the wall** - `ETHCallback_red_key_state` (L97171): the key carried ->
       its sound, a 6000 ms fade of light and ambient, then `SeekEntity('breakable_wall')` destroyed (F17 #216). Nothing
       reads `red_key_state`. (The "Order 11.1" row says "destroyed"; the trigger is the key carried.) *Built in step 118*
@@ -1568,21 +1683,47 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       only. **Won by a route: 4-19**, tick 581 (the key 129, the wall 489), replayed by `test_mp_routes` and in the window
       (`MagicPortals.exe` `cbdb4004`); the after-sweep 127 of 128 byte-identical, 4-19 its halo. Its bucket is 128 level
       units, `Game::start`'s own (fix round 1; the first record's 91.02 was the four-string `LoadScene` misread).
-- [ ] **B6. 3-13 at risk: an anti-portal agent should die to a shot**, taking its ring with it
+- [x] **B6. 3-13 at risk: an anti-portal agent should die to a shot**, taking its ring with it
       (`ETHCallback_anti_portal_agent` L66304 #109-187, `deleteAntiPortalInThisBucket`); the port keeps it a permanent
-      zone (R17). 21 agents on 17 levels. Build before or with R1, which alone closes 4-01's route.
+      zone (R17). 21 agents on 17 levels. Build before or with R1, which alone closes 4-01's route. (The audit's G7
+      is this row.) *Built in step 126* (program wave 1, track C, `596862e`; R17): the agent is a role of its own and
+      no zone; a portal shot in flight within 0.7 x 32 = 22.4 px kills it and deletes the one bare `antiportal` ring
+      round it (the bucket search), with `antiportal_explosion`, a shake of 20 and `playExplosionSound(true)`.
+      GAMEPLAY on the 17 agent levels (21 agents). **Won by a route: 3-13**, tick 1027 (the kill on 350); with it 1-10,
+      1-11, 1-12, 1-21 and 1-23. R1 followed in step 127, and 4-01 is won by that step's route (tick 351). Left: 1-23's agent sits inside `rolling_stone_ent_877` (r 30 > 22.4), where the port's shot dies on
+      the stone and the original's tap-time ray ends 10 u inside a teleportable body and would kill it (R23; the route
+      wins without the kill); the static callback runs only while the agent's bucket is drawn (not modelled); a shot
+      fired from within 22.4 kills at once (G4's row).
 - [ ] **B7. 4-21 at risk: R2** - the well's port-only zone (248 px) covers the button, the wall and the door. KNOWN.
+      *The port-only zone is gone (step 125, R2), and 4-21 (`level20c`) is still not won.* The cause is now the port's
+      lift door, which has no latch: portal resets over `button_1723` raise `door_lift_1721` 5.6 px at most (y 106 to
+      100.4, 16 ticks a pair), against more than 15 px for a shot line under it and 43 px to walk under. The
+      original's door latches (`ETHCallback_door_lift` #330-546), so one press opens it fully. Blocked on the "Order
+      11.1, GAMEPLAY rows for the owner" row (the lift door's rise and status machine, step 109 deviation 3), which is
+      decided for the original and needs only a step spec that names it; that step adds 4-21's route.
 
 **Majors with no row above** (VERIFIED unless marked).
 - [ ] **G1. Knights never see, shoot or destroy portals** (`ETHCallback_minion` L87616: 120 deg cone + occlusion ray,
       `addEnemyShoot` every 2000 ms, `killPortal` within scale(16), `!`/`?` marks, `cantReach`, the six darkest levels
-      see only while a torch is lit). 34 levels play easier; `anti_sight_wall` has no purpose.
+      see only while a torch is lit). 34 levels play easier; `anti_sight_wall` has no purpose. *Routes that lean on it
+      (wave 1), which its step re-verifies*: 3-02, 3-03, 3-07, 3-09, 3-12, 3-15 (knight B wedged on `button_1666`),
+      3-19, 3-20, 3-22, 3-27, 3-29, 3-31, 4-25, 4-29, 4-30 (step 127).
 - [ ] **G2. Lifts run on their own**; the original's idle at marker `a`, and a tap inside their rect sends them at
-      60 u/s (`ETHCallback_lift` L83504, `sendLiftToOtherPoint`) and fires no portal. 14 lifts on 13 levels.
+      60 u/s (`ETHCallback_lift` L83504, `sendLiftToOtherPoint`) and fires no portal. 14 lifts on 13 levels. *Routes
+      that ride the self-running lifts, which its step re-authors*: 2-02, 2-07, 2-09 (step 114; the Tests row), 1-27,
+      1-28, 1-29, 2-18, 2-25 (step 127) and 3-31 (the merge's re-route rides `lift_ent_2438`; step 128, deviation 2).
 - [ ] **G3. Moving platforms swing half as far at twice the rate** (R7: `linearMotion` cos(angle) x stride from
-      +stride; the port sin(2 x speed x t) x stride / 2). 15 platforms on 11 levels, 3 patrolling agents.
+      +stride; the port sin(2 x speed x t) x stride / 2). 15 platforms on 11 levels, 3 patrolling agents. *Routes that
+      lean on it (wave 1)*: 1-11 (step 126: the kill of `anti_portal_agent_599` works at any point of the port's half
+      swing and is phase-dependent under the original's; its door-block shot to (740, 108) passes 0.6 px from the
+      lowest point of `anti_portal_agent_639`'s original swing, where it would kill that agent and open nothing) and
+      2-26 (step 127: a shot through the slot from the moving platform's edge; the full swing would widen it).
 - [ ] **G4. The portal shot flies 600 u/s against 200** (`ETHCallback_projectile` L71109 #113-125, with a 24 u jump
-      on its first frame, #29-55).
+      on its first frame, #29-55). *Every route leans on it* (with G10), and 2-14's, 4-19's and 4-32's are tick-exact
+      on it (their rows). *And a first-tick kill* (step 126): a shot fired from within 22.4 u of an anti-portal agent
+      kills it at once, even a self-tap that arrives on its first tick, where the original's projectile jumps 24 u out on
+      its first frame and one that arrives on that frame is never in flight (`placement.json`
+      `anti_portal_agent._not_modelled`). No route and no suite fires from there.
 - [x] **G5. Fireballs pass walls and closed doors** (`ETHBeginContactCallback_fireball` L85862 #152 dies on anything
       solid that is not a carranca, a sensor or a spared character). On 2-12 the player dies at the spawn (tick 180).
       *Built in step 114*: the fireball's body is fireball.ent's circle, radius 9.6; every solid body it touches spends
@@ -1590,16 +1731,37 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       stopping on the closed door. Routes for 2-01 to 2-09 but 2-06 (row below). GAMEPLAY: 2-09's crate now burns
       only while `button_1022` is held as a fireball passes, the original's rule - until step 114 the port's fire burned
       `crate_no_emissive_1004` through the closed `door_lift_1007` on tick 167 with no input.
-- [ ] **G6. Fireballs never pass through portals** (`mayTeleport` lets one through once; the pair survives).
+- [ ] **G6. Fireballs never pass through portals** (`mayTeleport` lets one through once; the pair survives). *A
+      blocker for 2-06 (step 114) and for 4-14 (step 127, deviation 2)*: every player centre that touches 4-14's door
+      is at most 64 px from `shock_agent_2285` (areaRadius 90), and the carranca's lane passes the agent at 100.2 px
+      where contact needs 41.3; a fireball flies through a portal in its lane unmoved (`R1/fix2/cap/l13c`). G6's step
+      routes 2-06 and 4-14, and re-authors 2-03's route (it hops each fireball through a portal pair).
 - [ ] **G8. A shot through a fire agent's flame becomes a fireball** (`ETHCallback_fire_agent` #254-265
       `burnProjectile`); the port's shot flies on. 20 levels. **A blocker since step 115**: no port route for 2-16
       (the ledge shadows the wall and the pit barrels from the fire agent's zone), 2-17 (its second wall 87 u from the
       zone, `door_lift_1111` between) and 2-19 (108 u), nor for 2-10 and 2-11 (B2). The search was direct ignition and
       one hop through barrels where the level places them; relays through barrels moved first were not searched.
+      *Wave 1*: **4-28 is not won** (step 127, deviation 1): step 125's route was refused three times under R1 and no
+      new route was found - the yellow key's only carrier is the knight, which walks only toward x 22 / 172 and
+      out-pushes the player at about 8 px/s, and every point within 26 px of the keyhole lies inside
+      `antiportal_1940`'s 192 px. NOT proven unwinnable (seven such findings in that step were later won; the blind
+      spot untried: portal pairs placed at different times and places, floors reached only through one). The
+      original's own way needs G8 or the minion burn (the row below). And **2-31's route passes two shots through
+      `fire_agent_963`'s flame** (13.8 and 2.2 px; step 127, deviation 6), which the original snuffs (`fire.json`
+      `_burn_projectile_not_built`): 2-31 is won in the port but not as the original plays it, and G8's step
+      re-verifies it (unless another way is found, it goes back to a finding).
+- [ ] **The fire agent burns a minion** (new, step 125 deviation 2 and step 127 deviation 1; beside G8): the
+      original's fire agent burns a burnable minion in its flame, which the port does not wire (`minions.json`
+      `_burnable_breakable_not_wired`). With G8 it is the original's way through 4-28 (the knight that carries the
+      yellow key). Whichever step builds either re-attacks 4-28, blind spot included, and re-adds its route.
 - [ ] **G9. The reflector catches within `size.x` (32) and its leg is `min(|caster - agent|, remaining)`**
       (`ETHCallback_reflect_agent` L69063 #56-84, #148-196); the port's 16 is a guess and it mirrors the whole rest.
+      *Routes that lean on the port's 16 (wave 1)*: 1-12 (the landing over the post is `reflect_agent_675`'s), 1-21
+      (the high portal (230, 142) 24 u from `reflect_agent_826`, the bounce's shot leaving 26 u from it), 1-23 (the
+      shot to (150, 80) 29.9 u from `reflect_agent_826`) - all inside 32 (step 126) - and 3-14, 2-25 (step 127).
 - [ ] **G10. The player moves as the decode says** - `speed 3`, `SetGravityScale(2)`, velocity set outright, in the
-      air `vel.x x min(1, 0.86 x fps/60)`; the port's `move_toward` numbers are Godot-era guesses.
+      air `vel.x x min(1, 0.86 x fps/60)`; the port's `move_toward` numbers are Godot-era guesses. *Every route leans on
+      it* (with G4); its step re-plays all 70.
 - [x] **G11. 3-32's ghost can be killed only through a rule the original lacks** (the audit's G11; KNOWN as "Order 12.2,
       THE OWNER'S TO RULE: fire against the ghost"). *Built in step 117*: a fireball passes through the ghost, a
       barrel's blast burns it, and the ghost puts the barrel back itself on every beat (the two "Order 12.2" rows and
@@ -1612,27 +1774,121 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       (`hasPortalRequestInput`); the port fires on press.
 
 **Presentation** (VERIFIED unless marked).
-- [ ] **P1. A chapter's last level ends on a dead "Chapter N complete" line** (only Esc leaves); the original goes to
-      the chapter select, and after 4-32 opens `GameFinishedPopup`.
-- [ ] **P2. The win cutscenes**: 4-01's rocket launch, 4-19's landing, 2-32's dragon knight, with `end_delay` (5000 /
-      14500 / 6600 ms) and their music; the port holds a flat 1400 ms.
-- [ ] **P3. 20 of 22 fire agents wear the anti-portal agent's face** (`ETHCallback_fire_agent` #1-7 sets
-      `fire_agent.png` every update).
-- [ ] **P4. Blue and red keys, keyholes and doors draw yellow** (`setKeyColor` L90240 swaps to `_blue`/`_red`
-      sprites); the non-teleportable crate's red pulse (`manageNonTeleportable`, 600 ms) is not drawn.
-- [ ] **P5. SpaceSky** (spiral, planet, eclipse) on the 19 space levels. KNOWN only as a cause.
+- [x] **P1. A chapter's last level ends on a dead "Chapter N complete" line** (only Esc leaves); the original goes to
+      the chapter select, and after 4-32 opens `GameFinishedPopup`. **Built in step 119** (program wave 1, track B,
+      `e1dab6e`): N, the pause's Skip and the medal screen's go-on open chapter select on the chapter's page (1-32 and
+      2-32 page 1, 3-32 page 2); after 4-32, page 2 with GameFinishedPopup (the card's top-left at (162, 0) px as
+      decoded, its close button at (0.92, 0.88), a 204 / 255 press tint, closed only by a press or the back key, the
+      PageManager still under it). The 128-level sweep byte-identical. GAMEPLAY: none.
+- [ ] **Left by step 119**: no footage of the card (on the rig with the all-gold save: 4-32, pause, Skip - a capture
+      settles its placement and whether the title and arrows hide under it); `TheChapterEnds` and
+      `TheGameFinishedCardComesUpAfter4_32` pin no D7 count (the chapter-end path holds by the code today); the pause's
+      and the medal screen's buttons act on the press where `Button::update` acts on the release inside (pre-existing),
+      and read the input directly, so a scheduled `--tap` does not reach them; a HelpPopup tapped on its own close
+      button fades out tinted in the original (`Open::closeTinted` is the hook; not built); the level-end flow's own
+      capture (a win on an x-32, then the go-on) can now be driven by the routes of 1-32, 2-32, 3-32 and 4-32. **For the
+      owner**: the card's art reads "Like us ... on facebook!", and the Facebook button the dead-services ruling omits
+      (#121) leaves a hole after "Like us" (about (556, 385) px).
+- [x] **P2. The win cutscenes**: 4-01's rocket launch, 4-19's landing, 2-32's dragon knight, with `end_delay` (5000 /
+      14500 / 6600 ms) and their music; the port holds a flat 1400 ms. **Built in step 123** (program wave 1, track B,
+      `e2277b8`): the medal comes at the level's end_delay after the door (`GameStateController` #143-175; the lost
+      screen keeps 1400), measured 5.000 / 14.500 / 6.600 s (F17 5.10 / 14.65 s on a 1-1.5 % long clock).
+      `ETHCallback_rocket_launch`: the door up (0, -390) by smoothBeginning(t / 7600), the bridge (-32, 0) by
+      smoothBeginning(t / 3800) unclamped, `startEarthquake(3, 0)` (59 calls, +-2.95 px), the rocket's track; 7 of 7
+      F17 points read. `ETHCallback_rocket_landing`: the door's originalPos (256, 400) by smoothBeginning(t / 12500),
+      the eclipse up to rest at 610 px, the spiral to 0.1, the key x 0.9 a frame, `back_home`. The dragon knight: added
+      once 2-32 is finished (a death too), falls, holds 800 ms, walks in 4.85 s after the door at 51 px/s, with the
+      door's suck, sparkles and sound. **GAMEPLAY: the door-to-medal time on those three levels only.** All three are
+      won by routes on the merged build (step 128: 4-01 351, 4-19 581, 2-32 2577); the step captured each cutscene
+      after a DEV-placed win (`--place`), and none has been captured after a route's win.
+- [ ] **Left by step 123** (the verifier's severities): **(MEDIUM) the medal is saved when the screen comes up, not on
+      the door's frame** (`checkGameEnd` #75 `writeScore`): R, N or closing the window in the 5-14.5 s beat loses it - on
+      4-19 for 14.5 s, and a mouse-only player cannot press anything then. Fix: `m_scores.Record` and `Save` into the
+      `goals.completed` branch, with a layer case. **(MEDIUM) 4-19's key sparkles are not shrunk with the key**: its
+      two `sparkles.bmp` systems glow on at its point after the picture is gone (from f72), and in real play they would
+      hang in the doorway for all 14.5 s and under the medal. Fix: scale the key's emitters as `ETHEntity::Scale` does
+      (`ETHEntity.cpp:591-599`). **(LOW) a dark 2-3 px line along the eclipse's quad top edge** on 4-19 from about 6 s
+      (y 545-547 px; absent from F17 r5 #630): the sampler wraps `eclipse.png`'s opaque bottom row onto its top - the
+      same REPEAT cause as the claw's lines (the row "2-32's claw draws a line" under Tests). (LOW) 4-19's camera x
+      follows the rocket more tightly than F17 (the porthole at 636-643 px against F17's 650 -> 671, mean -17 px;
+      INFERRED: the original's follow lags more). The shake re-arms every sixth tick on the port's clock where whole
+      milliseconds give seven (the PORT-WIDE clock row). The knight's add and first update are INFERRED to the tick; the
+      record's ~11.5 s for the knight's walk read in Box2D m/s wants its derivation (`ETHPhysicsController.cpp:150`
+      multiplies by the global scale). **New on the merged build**: 4-19's landing now plays under step 118's 6 s red-key
+      fade with the wall broken, which step 123's worktree lacked; it has not been compared with F17 since the merge.
+- [x] **P3. 20 of 22 fire agents wear the anti-portal agent's face** (`ETHCallback_fire_agent` #1-7 sets
+      `fire_agent.png` every update). **Built in step 120** (program wave 1, track B, `105ca1c`): every fire agent is
+      drawn from `fire_agent.png` - 22 on 20 levels; on the stills 19 of 19 readings fit. GAMEPLAY: none.
+- [x] **P4. Blue and red keys, keyholes and doors draw yellow** (`setKeyColor` L90240 swaps to `_blue`/`_red`
+      sprites); the non-teleportable crate's red pulse (`manageNonTeleportable`, 600 ms) is not drawn. **Built in step
+      120**: 24 blue or red pieces on 9 levels drawn from their `_blue` / `_red` files, white (9 of 9 readings fit); 23
+      blinking crates on 15 levels, not the audit's 22 (level7a's `crate_small_no_emissive_826` spells `telepotable`),
+      colour (1, 0.3, 0.3) <-> white and emissive (0.5, 0, 0) <-> 0 on 600 ms legs (24 of 24 readings fit). On the
+      merged build G5 (step 114) keeps 2-08's two crates and 2-09's `crate_no_emissive_1004` standing at f420, so the
+      blink shows there (step 128's sweep attribution). (Step 120's fifth finding, 4-19's halo drawn white, was B5's:
+      step 118 draws it red and stretched.)
+- [ ] **Found by step 120, decoded, not built**: the fire agent's pulse (`ETHCallback_fire_agent` #282-300,
+      `bounce(1.02 -> 0.98, 300 ms)`; the port draws it still); the teleportable crate's own blink (`crateCallback`
+      #38-121: an unburnt `_no_emissive` crate's emissive (0.2, 0.2, 0.2) -> 0 over 600 ms, one with the uint `blink`
+      (1 - ambient) -> 0 over 200 ms - on the dark levels it lights every crate a portal carries); a burning crate's
+      fade (`manageBurnable` #41-117: `SetColor(bias)` and `SetAlpha(bias)`, bias 1 - burnTime / 1000, then
+      `DeleteEntity`; the port takes a burnt crate away whole at 1000 ms); and the four static crates' blink clock
+      (2-09's, 2-11's, 2-23's and 4-12's crates are `static="1"`, so the original blinks them only while their bucket
+      is drawn, 00_order 8.12c; the port from the level's first tick - the bucket-limited clock, not decodable from
+      stills).
+- [x] **P5. SpaceSky** (spiral, planet, eclipse) on the 19 space levels. KNOWN only as a cause. **Built in step 122**
+      (program wave 1, track B, `691d6de`), as `SpaceSky` (Sky.angelscript L30669-31104): the space sky at the view's
+      centre at its own size; the spiral at the view's bottom-centre, a square as wide as the view's diagonal, coloured
+      0.7 (4-01's `alpha` 0.6) and turned -1.7 deg/s; the planet's point at the bottom-centre with linearMotion's 1 u
+      bob from PI at 0.5 rad/s; the eclipse across at the centre and down its own y plus the corner's. Measured on the
+      original's 57 stills: spiral (640, 720), side 1468.6 px, -1.65..-1.68 deg/s; planet x 640. 19 levels change,
+      109 identical. GAMEPLAY: none.
+- [ ] **Left by step 122**: the spiral turns 1.0-2.9 % under its decoded 1.7 deg/s on the stills, and Ethanon's
+      whole-millisecond frame time (`ETHEngine.cpp:147`) is a candidate cause that would reach every timed motion - a
+      cross-cutting frame-time question for the owner, needing the emulator's frame time measured first; the space
+      pictures between ticks under a PANNING camera are pinned by no test (4-03's case never pans); the space levels'
+      shadow cascades are re-recorded more often (`Shadow passes saved` 18 -> 14 on 11 levels, and 4-08's worst):
+      render cost only, keeping the sky's bodiless quads out of the shadow casters is not built; the eclipse's y takes
+      the rest corner's y under a shake where the original keeps the tremble (deviation 1; no 4-19 frame differs); the
+      spiral's side is fixed at load (a window resized mid-level keeps it, as the original).
 - [ ] **P6. The sound pass**: the landing thump, keys, crates, stones, blasts and fireball impacts, the timed crystal's
       alert, the bosses' cues; `playExplosionSound` plays ONE sample chosen by its argument, and
       `test_mp_sounds.cpp:193` pins the misdecode "both".
-- [ ] **P7. Music**: `no_music` levels, boss tracks starting and stopping, the level's track kept in the selectors.
+- [x] **P7. Music**: `no_music` levels, boss tracks starting and stopping, the level's track kept in the selectors.
+      **Built in step 121** (program wave 1, track B, `1656d8f`), as `Game::preLoop` #485-509: `no_music` (presence,
+      `readProperties` #166-181) opens level0c, level18c, level31b and level31c silent; each world's last level opens on
+      `boss` (1-32 and 2-32), the rest on `game`. `PortalMainMenu::preLoop` is the only `playMenuMusic`, so the level's
+      track - or its silence - carries under the medal, the grid, chapter select and the pause (the audit's "menu music
+      plays after a level" goes with it). The ghost's init and the dark dragon's summon play `boss`; the beholder's DEAD,
+      the ghost's DEATH, the dragon's take-off and the dark dragon's DYING stop it. The rocket's and the landing's
+      tracks came with step 123's cutscenes. Measured: the 128-level sweep logs boss 2, none 4, game 122; the
+      beholder's stop on tick 2115, the dragon's on 3100; sweep 128 of 128 byte-identical. GAMEPLAY: none.
+- [ ] **Left by step 121**: **for the owner** - a switch turned back on resumes `currentTrack` even where the game had
+      stopped it (4-19 reached by a skip from 4-18 opens silent, but the music switch off and on in its pause plays
+      4-18's track; after a boss has gone, the same brings its track back): the original's behaviour, built; the owner
+      may prefer silence to stay silence. Not heard against the original (none of the 78 mp4s under `footage/` has a
+      sound track). The track under the lost screen and on the chapter-end path is pinned by no test (it holds by
+      construction).
 - [ ] **P8. Achievements**: about 60 conditions in `checkForLevelAchievements` (27 of 82 can unlock today), the saved
-      set, the "Achievement unlocked!" card, the "This level is locked!" card, the AchievementsPopup.
-- [ ] **Smaller**: sound switches not saved; the log erased at each launch; tutorial helpers (1-21's camera hint,
-      the tap-away hands); the beholder's death explosion; `fire32`, `antiportal_explosion`, `carranca_destroy`,
-      `small_explosion_no_light`; the closing lift door crushes nothing; `death_area` kills only the player in a 16 px
-      box; no teleport while a platform sits in a portal; stale notes (`end_delay`, `Camera.hpp:6-10`,
-      `entity_roles.json`'s cosmetic `arrows` (its `red_key_state` a role of its own since step 118); `Turrets.hpp:17-22`'s
-      and `diamonds.json`'s `_fireball_note` were corrected in step 114).
+      set, the "Achievement unlocked!" card, the "This level is locked!" card, the AchievementsPopup. *Step 126*:
+      achievement 10, "Red Agent spare" (1-10, `checkForLevelAchievements` #190-222), counts
+      `'anti_portal_agent;anti_portal_agent.ent'` and dispatches while an agent is left - meaningful now agents can die;
+      the step that wires the level achievements counts the live agents, not the placed ones.
+- [ ] **Smaller**: sound switches not saved; the log erased at each launch (*both built in step 124*, program wave
+      1, track B, `cc8be2e`: both switches saved on each toggle and read at the start as the original does, in
+      `audio.json` beside `scores.json`; the previous run's log kept as `magicportals.prev.log`; and
+      `tools\parity\play_build.bat` builds `build-play\` without validation for playing. GAMEPLAY: none); tutorial
+      helpers (1-21's camera hint, the tap-away hands); the beholder's death explosion; `fire32`,
+      `antiportal_explosion` (*built in step 126*), `carranca_destroy`, `small_explosion_no_light`; the closing lift door
+      crushes nothing; `death_area` kills only the player in a 16 px box; no teleport while a platform sits in a portal;
+      stale notes (`end_delay` - *corrected in step 123*, `Camera.hpp:6-10`, `entity_roles.json`'s cosmetic `arrows`
+      (its `red_key_state` a role of its own since step 118, and its `rocket_launch` / `_landing` note rewritten in step
+      123); `Turrets.hpp:17-22`'s and `diamonds.json`'s `_fireball_note` were corrected in step 114). And, from step
+      124: `--saves`'s `--help` line stops mid-sentence ("...without changing the player's", `game/main.cpp:416-419`) -
+      the next step that edits `main.cpp` finishes it; and a capture without `--saves` now reads the owner's
+      `%APPDATA%\Magic Portals\audio.json` (step 124, deviation 2), so a capture that presses `sound` or `music` must
+      pass `--saves` - the hermetic sweep pattern is `out/parity/program/merge_w1/capture_merge_w1.sh` (every run given
+      `--saves`, a scratch copy of `scores.json`), not `visuals/merge_c/capture_merge_c.sh`, which passes none.
 
 **Tests.** Step 113 built both: the audit's flood is `tools/parity/reachability.py` (the port's own rules read from
 `data/` and `game/data/`, verdicts pinned, ctest `parity_reachability`), and `test_mp_routes` replays every route in
@@ -1640,7 +1896,7 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
 step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `barrel` row, the nine to opened).
 - [ ] **No route yet for 1-07, 1-10, 1-17** (step 113 left them: 1-17 tried headless, the pocket sealed to shots
       until its crates are cleared; 1-07 and 1-10 read from their maps only). Puzzles needing authoring time, no port
-      defect seen.
+      defect seen. *1-10 won by step 126's route (tick 292) and 1-07 by step 127's (180); 1-17 remains.*
 - [ ] **Ruff in `tools/parity` is scoped by an `include` list** (step 113, deviation 1): a new script is not checked
       until listed. Fix: `extend-exclude` naming the old capture scripts in place of `include`.
 - [ ] **`test_mp_routes` runs `OnUpdate` every tick** as the app does under `--fixed-step`, where `test_mp_layer`
@@ -1650,7 +1906,11 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       are settled only by their routes (4-19's and 4-32's are won; 4-19's flood path is the row "4-19's way under the
       key's room", step 118). *And about barrels* (step 115, deviation 1): a barrel and any fire on the
       level open a wall, whether or not that fire can set the barrel off within the wall's reach - so 2-16, 2-17,
-      2-19, 2-21 and 2-24 read opened with no port route (B1's row).
+      2-19, 2-21 and 2-24 read opened with no port route (B1's row). *And about zones* (step 127, deviation 4): with no
+      no-portal zone term the check was vacuous for R1, R2 and R17 - its verdicts could not move whatever a zone did
+      - so their steps' evidence that no door was newly sealed is their routes and scripted checks
+      (`R1/fix2/check_3_15.txt`, `check_4_14.txt`, `check_2_26.txt`, `check_2_31b.txt`, `check_2_31c.txt`). 3-13 and
+      4-21 now rest on that: 3-13 is won (step 126), 4-21 is not (B7). A tools step gives the flood a zone term.
 - [x] **`--route` without `--saves` writes the player's own save** when the run goes past the level's end: say so in
       its `--help` line, or give it a throwaway saves directory (code; the next step touching `main.cpp`). Step 113's
       runs left gold for 1-02 and 1-32 in `%APPDATA%/Magic Portals/scores.json` - the owner deletes it for a fresh
@@ -1671,14 +1931,20 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       pattern) does not exist in the port: the fire room and the pocket lie under the button's platform or behind
       `block00_no_emissive_ent_1008`, so a tap into either from the button ends on the platform (the fix round's probe:
       both taps end on `single_block_plat_no_emissive_ent_1021`), and one pair at a time, spent by its first crossing,
-      cannot both bring the player to the button and wait at the door.
+      cannot both bring the player to the button and wait at the door. *Re-authored at the merge (step 128)*: under R1
+      (step 127) the route's taps on ticks 1265 and 1290 were refused, so one tap more on tick 1238 at (226, 208) shoots
+      `anti_portal_agent_ent_1095`, which dies on 1244 with its ring, as the original's player does; won on tick 1319,
+      the same tick as before (15 shots).
 - [ ] **Routes that ride the port's self-running lifts (G2)**: 2-02 (`level1a`) and 2-07 (`level6a`) board their lift
       as it comes back on its own, and 2-09 (`level8a`) rides `lift_ent_1016` up to the button and down from it on the
       lift's own clock; G2's step re-authors all three. 2-03 (`level2a`) hops each fireball through a portal
-      pair, which G6 would carry the fire through: G6's step re-authors it.
-- [ ] **`test_mp_dragon` NOT RUN in step 114** (Smart App Control refused it twice); the next step that links it runs
+      pair, which G6 would carry the fire through: G6's step re-authors it. *Wave 1 adds* 1-27, 1-28, 1-29, 2-18 and
+      2-25 (step 127) and 3-31 (step 128: the merge's re-route rides `lift_ent_2438`, where the old route leaned on
+      G1, G10 and G4); nine routes in all for G2's step.
+- [x] **`test_mp_dragon` NOT RUN in step 114** (Smart App Control refused it twice); the next step that links it runs
       it. (`test_mp_routes`, refused twice in the step, was relinked by its verifier and ran: 59 / 0, 18 of 18; the fix
-      round's run, with 2-09, 62 checks, 0 failures, 19 of 19 won.)
+      round's run, with 2-09, 62 checks, 0 failures, 19 of 19 won.) *Run at the merge (step 128) on the merged code:
+      230 checks, 0 failures.*
 - [x] **4-32's torch shot under G5's rule is not played** (step 114): the dark dragon's fireball at the torch
       (`Game.cpp:702-714`) now dies on any solid body in its way; `light_off` stands at (210, 34) beside
       `single_block_plat_no_emissive_ent_2278`, and `test_mp_darkdragon` checks only the shot's origin and aim. Static
@@ -1760,6 +2026,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       goes through its pair before the fireball reaches the portal (G6 would otherwise carry the fireball to the
       barrel's side); the wound-end torch shots do not touch it (it never goes left of x 192 before the key, and the
       torch is lit at the end under either rule, so its last tap puts it out and brings the light wall back).
+      *Step 128 replays it with R1 built: won on tick 3421, as before.*
 - [ ] **The restock's pictures** (step 116; 3-32's too since step 117, deviation 5, at `barrel_spawn` and
       `fire_diamond_spawn`, with `playGhostItemAppearSound`): `addEntityAtSpawnPoint` adds `ghost_utility_spawn.ent` (explosion.JPG and
       onda.png bursts) at `barrel_spawn` with each barrel, and sets the new barrel's `minEmissive` to (1, 1, 1), the
@@ -1846,6 +2113,15 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       diamonds, dragon, fields, fire, geometry, ghost, hazards, hinge, launchers, lighting, minions, motion, movers,
       play, shot, sky, sprites, statics, timed, torch, turrets, wells, zerog), and all 41 it did not run link its sim
       (its record, THE SUITES): the next build relinks all 41, up to 41 first launches.
+      *Wave 1's merge (step 128) relinked every suite, and 30 of the 47 ran on the merged code with 0 failures (among
+      them boss, demolish, dragon, fields, ghost, minions, movers, play, shot, statics, timed, torch, turrets and zerog).
+      **17 suites have not run on the merged code**: camera, geometry, scores, start, hazards, fire, hinge, bounce,
+      wells, darkdragon, keys, diamonds, launchers, lighting, sky, tiers and select (`test_mp_*`) - each refused by
+      Smart App Control on its first launch and again after its one relink (step 128, deviation 1). Partial cover: the
+      track that changed each ran it on its own code (track A fire, darkdragon, keys; B sky, scores; C wells; the other
+      ten no track changed), their code merged without a conflict, the sweep started all 128 levels, and
+      `test_mp_camera`'s table matches `earthquake.json`, the enum and `kKeys` row by row (the verifier's static check).
+      Next: the next step that links them runs each once and records its count; no ctest loop.*
 
 - [x] **Step 118's sweep and window replay NOT RUN** (Smart App Control refused `MagicPortals.exe` `57630962`, `e78d335b`
       and `f5aacc1f`; both relinks spent). *Run by its verifier* on `cbdb4004` (a link-only relink): the sweep 127 of 128
@@ -1882,12 +2158,49 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       builds G4 or the door's open-from-shut rule re-authors them. The original's route (F17 r5) opened a portal inside
       a crate, which the port's shot, failing on a crate, cannot.
 
+- [ ] **Wave 1's routes lean on the port where the original is not shown** (step 127, deviation 8; step 125, deviation
+      3), each for the step that builds the row to re-verify: body-overlap traversal, where the original tests a point
+      (1-27, 1-28, 1-29, 2-15, 2-18, 2-30, 2-32, 3-07, 3-12, 3-14, 3-15 - entered about 25 px off - 3-22, 4-07, 4-25);
+      the wall broken by touch (11.1's rows: 3-12, 3-14); an exit 6 px into `wall_low_emissive_1688` pushed out by
+      physics and a portal opened on a falling player (3-15); a portal opened on the player itself (4-18; and 4-28's
+      removed route) - that the original opens it is read from the decode (its ray starts 8 units out along a
+      zero-length aim and meets nothing), not measured: the owner's testing and the final comparison settle it. G1,
+      G2, G3, G9, G4 and G10 have their own lists above.
+- [ ] **3-19's route rests on an unmeasured hinge creep** (step 127, deviation 7): `spinning_platform_1554` is pushed
+      for about 2,600 ticks and the route wins on 3207 against a win_by of 3270. The step that measures the spinning
+      platform re-verifies it; if the original's platform does not yield, 3-19 becomes a finding. (Authored without B1,
+      whose blast can take `breakable_wall_1556` there, it wins on the merged build with B1 on the same tick.)
+- [ ] **3-13's crate** (step 126): pushed too far it slides over the 64 px gap and jams under the column (the port's
+      crate and its friction are the remake's); the route releases it in time. Not measured against the original.
+- [ ] **2-32's claw draws a line beside the dragon** (the owner's report, 2026-09-29; `out/parity/program/dragon_lines/`
+      `investigation.md` and its skeptic's `check.md`, cause CONFIRMED): `dragon_claw.png`'s opaque left column (the
+      arm, rows 10-40) is wrapped onto the quad's right edge by the engine's REPEAT sampler (`VulkanImage.hpp:82`'s
+      default; `TextureRegistry.cpp:211` passes no address mode) - a dark line about 1.4 px wide and 87 px long, f396-f443
+      on 2-32 (24-45 grey undimmed). The original clamps (`GLES2Texture.cpp:306` through SOIL's `GL_CLAMP_TO_EDGE`, and
+      `:166-167`, `:375-376`). The same cause darkens 2-01's ramp (row 461: port 70.6, bottom row cleared 85.8, the
+      original 87.3), the sky's first and last screen rows on 2-32 (+3.8 / -4.5 grey where the original is flat) and step
+      123's eclipse edge line on 4-19; the left and right screen columns (0.65-0.71 and 0.91 of their neighbours) are
+      partly this and partly an untested MSAA edge. **Needs an engine change**: a clamp-to-edge sampler beside the REPEAT
+      one, chosen per material (the check's option A; the default stays REPEAT), then the port opts its sprites and
+      overlay quads in - so it belongs in the pin-bump step, and it moves the outer half-texel of every texture whose
+      opposite borders differ, so every byte-identical baseline is re-taken after it. Its gates are in `check.md`
+      ("The fix I would build", section 3).
+
 **Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
-1-01, 1-02 and 1-32, two of them from step 113's automated runs.
+1-01, 1-02 and 1-32, two of them from step 113's automated runs. *Wave 1*: step 123's three cutscene captures ran
+without `--saves` and wrote 4-01 and 4-19 bronze and 2-32 gold into that file; exactly those three entries were
+removed the same night (md5 `40bfef3a` since, unchanged through the merge's 128-level sweep, which ran on a scratch
+copy). The play build (`build-play\`, step 124) was in the `w1b` worktree and went with it: run
+`tools\parity\play_build.bat` in `C:\Users\icvet\Desktop\Magic-Portals-Remake` to build one from the merged code. On
+4-01, 4-19 and 2-32 the medal is saved when the medal screen comes up, 5, 14.5 and 6.6 s after the door (step 123's
+MEDIUM row): quitting in that time loses the medal.
 
 **The owner's calls** (gathered here; each decided as the original does unless he says otherwise): the grant in
 `docs/permission.md` (gates handing a build to anyone else); camera dragging (his 2026-09-11 ruling "no dragging"
 against the decode's 2x-swipe pan on 127 of 128 levels); R24/R25; step 110's fire-signal orbit and the put-out test at
 the ball; the port-wide floored clock and the picture a tick behind; 12.1's summon clock; 11.3's death before the door;
 10.2's pickup rule and 10.3's carriers; 11.1's four; Q.2's spawn point; 13.1's off-screen kill; the zero-g recoil
-speed; the pause's Achievements button on every level; 4-02's easter-egg popup; target platforms.
+speed; the pause's Achievements button on every level; 4-02's easter-egg popup; target platforms. *Added by wave 1*:
+the hole the omitted Facebook button leaves in GameFinishedPopup's art (step 119); a music switch turned back on
+resuming the track the game had stopped, as the original does (step 121); whether the original's timed motions run
+1-3 % slow on whole-millisecond frames, which would reach every `unitsPerSecond` motion (step 122).
