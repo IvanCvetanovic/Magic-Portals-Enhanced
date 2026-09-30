@@ -287,6 +287,8 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     std::string error;
     const bool read = Chapters::Load(m_paths.chapters, m_chapters, error) &&
                       Camera::LoadRules(m_paths.data + "/portals.json", m_cameraRules, error) &&
+                      Camera::LoadDrag(m_paths.portData + "/camera.json", m_cameraRules, error) &&
+                      Hint::LoadRules(m_paths.portData + "/camera.json", m_hintRules, error) &&
                       Camera::LoadViewHeight(m_paths.portData + "/view.json", m_viewHeightPx, error) &&
                       Art::LoadRules(m_paths.portData + "/art.json", m_artRules, error) &&
                       Sky::LoadRules(m_paths.portData + "/sky.json", m_skyRules, error) &&
@@ -572,22 +574,20 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     m_aspect = viewportAspect(registry);
     // THE LEVEL OPENS ON THE PLAYER, by the owner's choice.
     //
-    // The original holds on camera_start - which sits near a level's exit - for
-    // cameraHoldTime and then eases to the player, and this port did the same:
-    // Camera.hpp decodes it and Camera::Follow still carries the hold, which
-    // test_mp_camera pins. But both of its numbers are _guess in portals.json,
-    // and shown a level the owner asked for the camera to begin already framed
-    // on the character rather than pan in from the goal.
-    //
-    // So the hold is not removed from the camera, only unused here: Start takes
-    // the player's own place, and what hold_time_s would have run is zeroed. A
-    // level that wants the establishing look back needs only this line.
+    // The original puts its camera on camera_start - which sits near a level's
+    // exit (Game::readCameraStartPos) - and eases to the player from its first
+    // frame: there is no opening hold. cameraHoldTime is what a drag away from the
+    // player starts, and the constructor leaves it spent (step 151; before it, this
+    // note read it as a hold on camera_start, and the port carried a guessed
+    // hold_time_s it zeroed here). Shown a level, the owner asked for the camera to
+    // begin already framed on the character rather than pan in from the goal, so
+    // Start takes the player's own place. A level that wants the pan in from
+    // camera_start back needs only this line.
     glm::dvec2 openOnPx = cameraStartPx;
     if (m_level.player != entt::null && registry.valid(m_level.player)) {
         openOnPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
     }
     m_follow.Start(m_cameraRules, openOnPx, ViewPx(), m_boundsPx);
-    m_follow.holdLeftS = 0.0;
     // AFTER buildDrawables, which is what sets m_artReady at the end of
     // buildSprites: built before it, the controls would find the flag still
     // false and quietly make nothing at all.
@@ -688,6 +688,16 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     // And the touch a shot waits on: a press that restarted the level fires
     // nothing in the new one when it comes up.
     m_shotTouch = Portals::TouchTrack{};
+    // And the camera's record of it: a touch still held into the next level is
+    // taken up there where it is, and moves nothing until it moves.
+    m_cameraTouch = Camera::TouchRecord{};
+    m_cameraFeel = Camera::Feel{};
+    m_cameraPadMoving = false;
+    // And 1-21's lesson, whose callbacks start again with a new level.
+    m_hintHand = Hint::Hand{};
+    m_hintArrow = Hint::Arrow{};
+    m_hintHandPlaced = false;
+    m_hintArrowPlaced = false;
     // The particles the level's entities were emitting go with them; a retry
     // would otherwise pile a second pool on the first. So do its lights, and the
     // shot's, and everything the script added while it ran.
@@ -4220,6 +4230,17 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
                 drawn.placed = static_cast<int>(m_placed.size());
                 m_placed.push_back(script);
             }
+            // 1-21'S LESSON (camera.json `hint`): ETHCallback_hand_waypoint1 and
+            // ETHCallback_up_down_arrow, named for the entity less its .ent, so either
+            // spelling of a placement runs them. The hand's first call also draws the
+            // line of text (emitHud).
+            if (entity == m_hintRules.handEntity) {
+                drawn.hint = HintRole::Hand;
+                m_hintHandPlaced = true;
+            } else if (entity == m_hintRules.arrowEntity) {
+                drawn.hint = HintRole::Arrow;
+                m_hintArrowPlaced = true;
+            }
         }
         if (m_sky.running) {
             for (std::size_t t = 0; t < m_sky.skies.size(); ++t) {
@@ -4968,6 +4989,21 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
                 rotation = Units::ToWorldRotation(sprite.rotation - turnedRad);
                 ownerAngleDeg += script.turn.turnedDeg;
             }
+        } else if (drawn.hint != HintRole::None) {
+            // 1-21's lesson (sim/Hint.hpp): the hand from where the level put it along
+            // its waypoints, each picture at its callback's alpha - SetAlpha, over a
+            // colour neither node gives - until it deletes itself. The arrow's pulse
+            // is its size, below.
+            if (drawn.hint == HintRole::Hand) {
+                gone = m_hintHand.gone;
+                const glm::dvec2 offset = m_hintHand.OffsetUnits(m_hintRules);
+                centrePx += offset;
+                ownerPx += offset;
+                drawn.fade = static_cast<float>(m_hintHand.Alpha(m_hintRules));
+            } else {
+                gone = m_hintArrow.gone;
+                drawn.fade = static_cast<float>(m_hintArrow.Alpha(m_hintRules));
+            }
         } else if (drawn.dragon) {
             // 2-32'S BOSS, drawn where the sim flies it and turned the way its
             // callback turns it (sim/Dragon.hpp). Its picture hangs off the entity
@@ -5095,6 +5131,8 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         // state, whose Scale(vector2) stretches it (0.8, 1.5).
         glm::dvec2 drawnSizePx = sizePx * drawn.scale;
         if (drawn.redKeyState) drawnSizePx *= m_level.redKey.rules.scale;
+        // And 1-21's arrow at bounce()'s scale per axis (sim/Hint.hpp).
+        if (drawn.hint == HintRole::Arrow) drawnSizePx *= m_hintArrow.Scale(m_hintRules);
         placeSprite(registry, drawn.quad, centrePx, drawnSizePx, drawn.z, rotation);
         drawn.centrePx = centrePx;
         drawn.ownerPx = ownerPx;
@@ -5184,6 +5222,10 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
         if (script.moves) Motion::Advance(m_motionRules, script.motion, frameMs);
         Motion::Advance(m_motionRules, script.turn, frameMs);
     }
+    // 1-21's hand and arrow (sim/Hint.hpp), each on its own callback's clock until
+    // it deletes itself.
+    if (m_hintHandPlaced) m_hintHand.Tick(m_hintRules, frameMs);
+    if (m_hintArrowPlaced) m_hintArrow.Tick(m_hintRules, frameMs);
     // AND GAME::LOOP'S OWN CALL on a `no_gravity` level (motions.json door): one
     // step a tick for the door, the black behind it and the glow, which share an
     // angle because the original steps all three in that one loop with that one
@@ -5271,6 +5313,25 @@ std::vector<MagicPortalsLayer::PlacedReport> MagicPortalsLayer::PlacedReports() 
         reports.push_back(std::move(report));
     }
     return reports;
+}
+
+MagicPortalsLayer::HintReport MagicPortalsLayer::HintState() const {
+    HintReport report;
+    report.handPlaced = m_hintHandPlaced;
+    report.arrowPlaced = m_hintArrowPlaced;
+    report.hand = m_hintHand;
+    report.arrow = m_hintArrow;
+    for (const DrawnSprite& drawn : m_sprites) {
+        if (drawn.hint == HintRole::Hand) {
+            report.handDrawn = drawn.quad != entt::null;
+            report.handCentrePx = drawn.centrePx;
+            report.handAlpha = drawn.colour.a * drawn.fade;
+        } else if (drawn.hint == HintRole::Arrow) {
+            report.arrowDrawn = drawn.quad != entt::null;
+            report.arrowAlpha = drawn.colour.a * drawn.fade;
+        }
+    }
+    return report;
 }
 
 std::vector<MagicPortalsLayer::MotionReport> MagicPortalsLayer::MotionReports() const {
@@ -7118,6 +7179,25 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
                 glyph.uvOffset + glyph.uvScale);
         }
     }
+
+    // 7. 1-21's "move the camera around" (camera.json `hint`): the DrawFadingText the
+    //    hand's first call makes, which the engine's drawable manager draws after the
+    //    caption it was handed after - over everything, on the screen and not the
+    //    level, from the view's bottom-left, and on the caption's frame clock, as
+    //    both are ETHTextDrawers timed from the level's first frame.
+    if (const Supersonic::BitmapFont* font = m_hintHandPlaced ? uiFont(m_hintRules.font) : nullptr;
+        font != nullptr && font->IsLoaded()) {
+        const double hint = Hint::TextAlpha(m_hintRules, LevelFrameMs());
+        if (hint > 0.0) {
+            const auto& pages = font->Pages();
+            for (const Hud::Glyph& glyph : Hud::LayOutTextFrom(*font, m_hintRules.text, Hint::TextTopLeft(m_hintRules, view),
+                                                               m_hintRules.unitsPerFontPx)) {
+                if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
+                add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], white(hint), glyph.uvOffset,
+                    glyph.uvOffset + glyph.uvScale);
+            }
+        }
+    }
 }
 
 const MagicPortalsLayer::ControlButton* MagicPortalsLayer::controlUnderPointer(const Touch& touch) const {
@@ -7184,6 +7264,19 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // as a real press at the same point does. Reading it twice would press and
     // release a scheduled tap inside one tick.
     Touch touch = touchThisTick(registry);
+    // THE CAMERA'S READING OF IT, first and whatever takes it below: the original's
+    // CameraController reads the engine's input raw (camera.json `drag`), at the
+    // place the touch is this tick, and asks the walk pads of that place. And
+    // whether the pads walk the player - ScreenPad::isMoving, which a walk key sets
+    // as the pad does (arrowKeysMove) and which no_gravity levels never set, as the
+    // original skips the pad's update there. The camera's tick takes both.
+    {
+        const glm::dvec2 view = ViewPx();
+        const bool onPad = touch.over && (Hud::OnPad(m_hudRules, Hud::Side::Left, view, m_levelAgeMs, touch.atView) ||
+                                          Hud::OnPad(m_hudRules, Hud::Side::Right, view, m_levelAgeMs, touch.atView));
+        m_cameraFeel = Camera::Track(m_cameraTouch, touch.pressed, touch.held, touch.over, touch.atView, onPad);
+        m_cameraPadMoving = !m_level.noGravity && direction != 0.0f;
+    }
     // AND THE TOUCH A SHOT IS FIRED BY, followed before anything below reads it,
     // as PortalManager::update runs TouchInputManager::update before either tap
     // path (placement.json `release`). On the tick a touch comes up, every reader
@@ -7215,9 +7308,11 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // diverts), so the suites can drive these exactly as they drive a key.
         case Control::Left:
             if (held) direction -= 1.0f;
+            if (held && !m_level.noGravity) m_cameraPadMoving = true;
             break;
         case Control::Right:
             if (held) direction += 1.0f;
+            if (held && !m_level.noGravity) m_cameraPadMoving = true;
             break;
         // And these are EDGES: held down, a reset would restart the level every
         // tick for as long as the button was pressed.
@@ -9548,11 +9643,11 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
         // to that entity's x - no lag, no hold, y pinned to 0 - so the
         // follow's easing does not run here at all. dragon.json has the
         // decode, and Camera::Clamp is the same arithmetic as the original's
-        // camMin/camMax expressed for a centre rather than a corner.
+        // camMin/camMax expressed for a centre rather than a corner. It has no
+        // dragMoveCamera, so no finger moves it (camera.json `drag`).
         const glm::dvec2 view = ViewPx();
         m_follow.centrePx =
             Camera::Clamp(glm::dvec2(m_level.dragon.atPx.x + view.x * 0.5, view.y * 0.5), view, m_boundsPx);
-        m_follow.holdLeftS = 0.0;
     } else {
         glm::dvec2 targetPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
         // 4-19's landing sets the character on the door every frame (cutscenes.json
@@ -9561,8 +9656,18 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
         // a body teleported through the floor each tick would push what it met.
         if (m_landing.running && m_doorSprite >= 0) targetPx = doorPointPx();
         m_cameraTargetPx = targetPx;
-        m_follow.Tick(m_cameraRules, targetPx, ViewPx(), m_boundsPx, fixedDelta);
+        // CameraController::update with this tick's touch (camera.json `drag`): what
+        // readInput read, and whether anything went through a portal in the half
+        // of the tick before it (Game::AfterStep's portals, the frame before's
+        // teleportToOther in the original's order).
+        Camera::Unlocks unlocks;
+        unlocks.teleported = !m_level.portals.transits.empty();
+        unlocks.padMoving = m_cameraPadMoving;
+        m_follow.Tick(m_cameraRules, targetPx, ViewPx(), m_boundsPx, fixedDelta, m_cameraFeel, unlocks);
     }
+    // Taken: a tick that reads no input drags nothing.
+    m_cameraFeel = Camera::Feel{};
+    m_cameraPadMoving = false;
     placeCamera(registry);
     layOutControls();
     // AFTER the camera: the sign is aimed at the corner this tick left it at,
@@ -9647,6 +9752,9 @@ void MagicPortalsLayer::openPause(entt::registry& registry) {
     // down, so one that went down on Resume would otherwise fire a shot where it
     // came up, back in the level (the port's own divergence, not the original's).
     m_shotTouch = Portals::TouchTrack{};
+    // And so is the camera's record of it, which the pause does not follow: a touch
+    // still held when the level resumes is taken up there.
+    m_cameraTouch = Camera::TouchRecord{};
 
     // GAME TIME STOPS (STimeManager::pause).
     freezeWorld(registry);
@@ -9937,6 +10045,10 @@ bool MagicPortalsLayer::popupTick(entt::registry& registry, float fixedDelta) {
     // until the level has resumed fires on its release, as the original's does.
     (void)Portals::TrackTouch(m_shotTouch, touch.pressed, touch.held, touch.released, touch.over, touch.atView,
                               touch.atPx);
+    // And the camera's record of it, which the engine's input keeps under a popup
+    // too: a touch held through one moves the camera, when the level resumes, by
+    // what it moved on that tick alone. The camera does not run here.
+    (void)Camera::Track(m_cameraTouch, touch.pressed, touch.held, touch.over, touch.atView, false);
     const bool touched = TouchClosesPopup(m_popupRules, *m_popup.cls, m_popup.state, ViewPx(), touch.pressed,
                                           touch.released, touch.over, touch.atView, m_popup.downOnClose);
     if (touched || Input::TickWasPressed(kBack)) ClosePopup();

@@ -16,6 +16,9 @@ inferred from identifiers.
   (`portal_system.gd:14-17`). portals.json's `static_portals_persist` is true.
 - **The camera follows the player, with no dragging.** This overrides the
   remake's reading of `dragMoveCamera` (`original-gameplay.md` §4).
+  *Since step 151 (2026-09-30, the program's rulings: every open call as the
+  original does) the drag is built as the original's, behind `game/data/camera.json`
+  `drag.drag_pan_enabled`; false restores this ruling.*
 - **The screen showed part of a level, and scrolled** as the player walked
   (asked the same day). How much it showed is read from the levels in step 2a.
 - **Stones broke the sandy walls** (asked in step 6), including the eight the
@@ -25096,3 +25099,196 @@ built: it belongs, with its `camera.json` switch, to the step that owns it.
 - **The bound is in view units.** `TrackTouch` measures the move in units of the view, so 18 of them are scale(18)
   (screenHeight / 256) only while `view.json` `height_px` stays 256 (marked `_inferred` there); `test_mp_layer`'s
   `unitPx` (window height / 256) pins it, and a retune of the view's height would fail that case first.
+
+## Step 151 - the camera drag as the original: a finger pans the view at twice its move, a drag away holds it 4000 ms, a touch held off the pads stops the follow, behind camera.json's switch; and 1-21's lesson in it (built)
+
+**TRACK B (the worktree `Magic-Portals-Remake-w2b`, branch `w2-b`, after step 150 `7aee28b`), the program's CD**
+(`docs/parity-backlog.md` section 6's owner's call "camera dragging", decided for the original behind a switch; the
+audit's `check_script.md` row 11; the backlog's stale note `Camera.hpp:6-10`; and its "tutorial helpers (1-21's camera
+hint)"). Its build reads the frozen level data in `out/snap_w2`; numbered in track B's range, and the merge renumbers
+it. Changed: `game/data/camera.json` (new: `drag` and `hint`), `data/portals.json` (the guessed `hold_time_s` removed,
+with a note), `game/sim/Camera.{hpp,cpp}` (`Drag`, `LoadDrag`, `TouchRecord`, `Feel`, `Track`, `Unlocks`,
+`Follow::holdElapsedMs`, `Follow::Held` and the touch-taking `Tick`), `game/sim/Hint.{hpp,cpp}` (new) and
+`game/sim/CMakeLists.txt`, `game/MagicPortalsLayer.{hpp,cpp}` (the camera's record of the touch in `readInput` and
+`popupTick`, its tick in `stepLevel`, resets in `unloadLevel` and `openPause`, 1-21's pictures and line, `HintState`,
+`HintRules`, `CameraRules`, `CameraHeld`, and the opening's note), `tests/test_mp_camera.cpp`, `tests/test_mp_layer.cpp`.
+No engine change (the pin stays `710bffc`), no converter change, no route file changed, no format finding (the decode
+is of the script; `camera.json` holds it). Evidence under the gitignored `out/parity/program/CD/`.
+
+**GAMEPLAY CHANGED (as the original does; the owner's open call on dragging, decided for the original behind a
+switch).** With a real pointer, on 127 of the 128 levels:
+- a touch held off the walk pads and moved pans the view at TWICE its move, the other way (the level follows the
+  finger at twice its pace), up to 100 screen px a frame, held inside the level;
+- a drag that has strayed more than scale(24) from where it went down, and is not moving fast back toward the player,
+  holds the view where it was left for 4000 ms after its last moving tick; a fast move back (scale(10) a frame or more
+  along the line from the player to the view's centre) lets it go, and so do walking on the pads (from the next tick)
+  and anything going through a portal;
+- while any touch is held off the pads, past the tick it went down, the view does not follow the player.
+
+A tap - down on one tick, up on the next, as every route's - is never held, so it pans nothing, holds nothing and stops
+nothing: all 70 routes win on their ticks with their drift unchanged. A drag of more than scale(18) fires no shot (step
+150's rule, unchanged); a touch that strays scale(18) or less still fires on its release, now through a camera its own
+held ticks may have panned by up to twice that - so with a real mouse a click's jitter moves the point it aims at in
+the level, as a finger's does in the original - through the pan; the original's release frame also runs one follow
+step before it aims, which the port's does not (deviation 6). 2-32 (level31a) is the one level whose camera cannot be dragged. **`camera.json`
+`drag.drag_pan_enabled` false restores the owner's 2026-09-11 ruling** ("the camera follows the player, with no
+dragging"): no pan, no hold, no stop, and the camera exactly as it was before this step (pinned bit for bit). The
+switch sits inside `camera.json`'s `drag` object (`drag.drag_pan_enabled`), not at the file's top level where the
+program's spec words it `drag_pan_enabled`; `Camera::LoadDrag`, `test_mp_camera` and this record all use the nested key.
+
+**BLOCKERS, checked first.** None unmet. Step 150 (release-to-fire, `7aee28b`) is in the tree, so a drag already fires
+nothing; the decode is in the listing (md5 `48fe65ce...`) and the engine's input in `reference/ethanon`; the font the
+lesson writes in is the caption's own (`Matura84_shadow.fnt`, already loaded); W.1's reachability check and
+`test_mp_routes` (70 routes) are there; no engine change is needed.
+
+**WHAT THE ORIGINAL DOES** (the listing; `camera.json` `drag._source` and `hint._source` have every citation).
+- `Game::preLoop` (112536..114414) #95-146: `AutoCameraController` when the level's `autoCamera` is not '', else
+  `CameraController`. Only level31a (2-32) sets `auto_camera` (to `dragon.ent`), so it alone has no drag. The camera is
+  added after the character (#184-202) and before `PortalManager` (#265-270), which runs `TouchInputManager::update`.
+- The constructor (105826..106336): `Follower(pos, 1000, 100)` (#66-82), `cameraHoldTime = 4000` (#84-86),
+  `cameraHoldElapsedTime = cameraHoldTime` (#88-91), `dragLockValue = scale(10)` (#93-99), the `arrows.ent` handles
+  (#101-114). **The hold starts spent: there is no opening hold.** `Camera.hpp:6-10` had read the 4000 ms as a hold on
+  camera_start before the camera first went to the player, and the port carried a guessed `hold_time_s` (0.5 s) for it
+  that the layer zeroed at every load; both are gone.
+- `update` (107461..107866): the hold's clock += the frame's time (#3-10); `dragMoveCamera` (#12-13); the follow only
+  when `cameraHoldElapsedTime > cameraHoldTime` and not `hasAnyTouch()` (#24-38); `SetCameraPos` (#77-83);
+  `ScreenPad::isMoving()` -> `unlockCamera()` after the follow (#85-92); `clampCameraPos` (#94-95). `hasAnyTouch`
+  (108003..108274): a touch in `GetTouchState` 2 (`GSKS_DOWN`) whose place is on no pad (`getTargetButton` 0;
+  149699..149925: 240 and 255 are the two pads' circles). `teleportToOther` (144944..145873) #211-217 unlocks too.
+- `dragMoveCamera` (108505..109260), per touch: nothing while a handle moves (`shouldLockCamera`, #3-7); only a
+  non-zero `GetTouchMove` (#17-36); `clampVirtualCamPos` (#38-39); off the pads and `length(move) < 100` (a bare
+  screen-px literal, #41-63) the view goes to `virtualCameraPos - move x 2` (#66-80); then, when
+  `getMaxMoveLength > scale(24)` (#82-92), `dp2(normalize(camera centre - character), move)` below `dragLockValue`
+  zeroes the hold's clock, and anything else sets it spent (#94-152).
+- gs2d's `MobileInput::Update` (`MobileInput.cpp:99-120`): the move is current - last on a DOWN frame, kept (0) on HIT,
+  zeroed on RELEASE and UP - so the tick a touch goes down and the tick it comes up move nothing.
+- **1-21**: `ETHCallback_hand_waypoint1` (368220..369697) and `ETHCallback_up_down_arrow` (369697..370197), read in
+  full: a repeating WaypointManager (0,0) -400 ms-> (10,0) -0-> (10,0) -2600 ms smoothBeginning-> (10,100) -300 ms->
+  back, 3300 ms a round, at alpha (1 - t/20000) x 2 and deleted past 20000 ms; the arrow at (1 - t/20000) x 0.3 x 2
+  with `bounce` (1.1,1)<->(1,1.1), 300 ms a leg, deleted past 20000 ms; and on the hand's first call `DrawFadingText`
+  "move the camera around" at (scale(50), screen height - scale(0.8) x 40) in `getMatura42FontName()` (Matura84_shadow
+  on hd, the caption's) at 0.8 of the caption's scale, for 10000 ms. Only 1-21 places either (the census of the 128
+  converted levels).
+- **No footage shows a drag** (`footage/INDEX.md`: every clip taps still, with `input swipe`), so the drag's numbers are
+  the decode's alone; the lesson's are measured on the library's stills below.
+
+**THE CHANGE.**
+- `game/data/camera.json` `drag`: `drag_pan_enabled` true, `pan_factor` 2, `max_frame_move_screen_px` 100 at
+  `screen_px_per_unit` 2.8125 (R12's 720, as `earthquake.json` takes its bare pixels: 35.56 units a frame),
+  `release_move_units` 24, `drag_lock_units` 10, `hold_ms` 4000. `Camera::LoadDrag` reads it strictly.
+- `Camera::Track` is the engine's input and the touch manager's farthest move for the one pointer, in a record of the
+  camera's own (`m_cameraTouch`): a control, a help block or the shot taking the touch does not stop the camera reading
+  it, as the original's reads `ETHInput` raw. It is followed in `readInput` (right after `touchThisTick`, before any
+  reader or early return) and in `popupTick`, and forgotten as a level unloads and as the pause opens (the pause does
+  not follow the touch: step 150's deviation 2). The farthest move it hands on is the one the last tick left, as the
+  camera runs before the manager. A touch found held that the record never saw go down is taken up where it is.
+- `Camera::Follow::Tick` with the tick's `Feel` and `Unlocks` is `CameraController::update`: a teleport since the last
+  tick's camera (this tick's `Portals::transits`, from `AfterStep`: the frame before's in the original's order) spends
+  the hold first; the clock adds the tick; a DOWN tick's move pans and judges the hold; the follow - the port's own
+  clamp-and-ease, called unchanged - runs only past the hold and with no touch held off the pads; the pads' walk
+  (`ScreenPad::isMoving`: a pad held or a walk key, never on a `no_gravity` level) spends the hold after it. With the
+  switch false, or no touch, it is the old `Tick`, instruction for instruction.
+- `Camera::Follow::Start` leaves the hold spent. The layer still opens on the player (the owner's choice); its note now
+  says the original eases in from camera_start with no hold.
+- `sim/Hint` and `camera.json` `hint`: the hand's callback (its own repeating WaypointManager), the arrow's
+  (`Art::Pulse` for `bounce`), and the line's `ETHTextDrawer` alpha. The layer marks the two pictures by entity name
+  (either spelling), advances both on the level's ticks with the placed pictures (`advanceMotions`), moves the hand,
+  fades both (`fade`, over a colour neither node gives), sizes the arrow and deletes both; `EmitHud` writes the line
+  after the caption, over everything, on the caption's frame clock, where the level places the hand. The line's words,
+  "move the camera around", are a short UI literal decoded from the script (`ETHCallback_hand_waypoint1` #203), kept in
+  `camera.json` `hint.text` as `game/data/ui.json` already keeps "Part ", "Chapter " and "new!" (with the decoded
+  `DrawText('new!', ...)` quoted in its note); the achievements' larger body of text stays out of the repository
+  (`out/data/achievements.json`).
+
+**THE GATES.** Before = step 150's committed build and records (`RF/`: `test_mp.exe` `2bbd2dbd`, `MagicPortals.exe`
+`4c17c2ae`, `RF/after/sweep`, `RF/suite_routes_final.txt`, `RF/allmode.log`); after = this step's build
+(`MagicPortals.exe` `d5e1a379`, `test_mp.exe` `1f4be6c7`; `test_mp_routes` ran alone on `7409a0f1`, whose game objects
+are the same - its successor recompiled only `test_mp_camera.cpp` and `test_mp_layer.cpp` - and again on `1f4be6c7` in
+the whole run). `game/data/camera.json` is newer than both exes because the window's switched-off run toggled it and put
+it back; it is runtime data, not compiled, and its md5 `9939a1c6` is the one every gate ran on (logged before and after).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in all three builds at `--parallel 4` (`CD/build1.log` 15 steps; `build2_relink_test.log`; `build3.log` 4 steps; no line with "warning") |
+| (1) Twice the swipe | a held move pans the view twice it, the other way; none at 100 px a frame or on a pad; held inside the level | no drag | **passes**: `ADragPansTheViewAtTwiceItsMove` (exactly +(10, -6) for (-5, 3) each held tick; 35.556 u a frame pans nothing, 35.056 u pans 70.11; a pad move pans nothing; the level's edge holds it); in the layer, `AFingerDragsTheCameraAtTwiceItsMoveAndFiresNothing` on level0: the view 163.84 u right for the 81.92 u the finger moved left while held, within 1e-6 |
+| (2) The 4000 ms hold | a drag away past scale(24) holds 4000 ms from its last held tick; a fast move back, a walk or a teleport lets it go; a move of 24 or less holds nothing; no opening hold | an opening hold, guessed and zeroed | **passes**: the follow's first move is **the 239th tick after the release**, 240 ticks of a float 1/60 s (4000.0002 ms) from the last held tick, in the camera suite and in the layer on level0; 8 u a tick back still holds and 10 lets go; a walk lets go from the next tick, a teleport on its own; a drag straying 24 holds nothing; `ThereIsNoOpeningHold` |
+| (3) A held touch stops the follow | held off the pads: no follow; on a pad, or on its first tick: the follow | always followed | **passes**: `AHeldTouchStopsTheFollow` (held 90 ticks: not a bit moved; on a pad, and on the release, it follows) |
+| (4) Both settings pinned | `drag_pan_enabled` true pinned; false is the old camera | no switch | **passes**: `CameraJsonPinsTheDragAndItsSwitch` (every number, the switch true; a copy set false reads the drag off and nothing else changed), `TheSwitchOffIsTheOldCamera` (400 ticks of drag, hold, walks and teleports, switched off: every centre the old follow's, bit for bit), `NoTouchIsTheOldFollow` (switched on, no touch: bit for bit); in the window, the same drag with the switch false moves nothing (`CD/window/drag_off_f*`) |
+| (5) A drag fires no portal | step 150's scale(18) | - | **passes**: the layer case's drag leaves the shot count as it was; the window's drags log no shot |
+| (6) 1-21's lesson | the text, the hand and the arrow, where the level carries them | the hand and the arrow still and whole, no line | **passes**: `OneTwentyOneLessonIsTheDecodedCallbacks` (every number; the round back where it began 3300 ms after the first call, within 2 ticks; whole at 10 s, half at 15, deleted on tick 1200; the arrow (1, 1.1) at 300 ms; the line's byte and place) and `OneTwentyOneTeachesTheDrag` (level20: both drawn; the hand at its waypoints' offset to 1e-6; 22 glyph quads from x 50 and 32 up from the bottom, at ETHTextDrawer's byte, gone by 10 s; both pictures there on tick 1199 and deleted on 1200; level30: no hand, no line). **Against the original's stills** (`CD/hint/`): the hand's displacement **+9.96 u across in all six** (the decode's 10), and 56.2 / 18.5 / 23.8 u down at h0.3 / h2.8 / h6.3, which the decoded round puts 2474 and 144 ms apart against the stills' 2500 and 3500 (200 mod 3300): **26 and 56 ms off** (t2.0 / t4.5 / t8.0: 37 and 61); the line's bright box **(144..855, 646..693) px at h0.3 against the port's (144..856, 646..695) at f30-f90**; the arrow fading 0.635 -> 0.551 -> 0.440 over h0.3 / h2.8 / h6.3, 0.0325 a second against the decode's 0.030 (its absolute level rests on the port's backdrop behind it, taken as the original's) |
+| (7) Every route still wins | `test_mp_routes`, 70 won; any a GAMEPLAY change breaks re-authored with its reason, none deleted | 70 won, 215 checks | **passes: 70 of 70 won, 215 checks, 0 failures, and all 70 route lines identical to step 150's** (win tick, shots and drift: `CD/routes_before_lines.txt` against `CD/routes_after_lines.txt`), and again on the final runner `1f4be6c7` in the whole run (`CD/routes_allmode_lines.txt`, identical): a one-tick tap never moves the camera. None re-authored |
+| (8) Reachability | no door newly sealed | 108 / 20 / 0 | **passes: 108 reachable, 20 opened, 0 sealed, 0 differ** from `reachability.json` (`CD/reach_check.txt`) |
+| (9) The after-sweep | 127 of 128 byte-identical to `RF/after/sweep`, and 1-21's change explained | `RF/after/sweep` | **passes: 127 of 128 byte-identical** (`CD/after/sweep` on `d5e1a379`; setup_B's checker, `CD/compare_after.txt`): 128 rc=0, validation ACTIVE in 128 logs and silent, every PNG whole and on its logged md5, 128 logs read `out/snap_w2` and none the live `out/`, no tap or `portal_launch` line; the saves seed `40bfef3a` before and after. **1-21 differs in 51,149 px, all of them the lesson** (`CD/diff_1-21.txt`): the hand and the arrow (x 140..324, y 177..572: 27,323 px, the hand 10 right and down its round, the arrow at 0.39 and pulsing) and the line (x 141..863, y 644..701: 23,826 px, at 0.30); 0 px anywhere else |
+| (10) The drag in the window | a real drag pans, holds and lets go on the suites' ticks | - | **passes** (`CD/window/`, `drag_timeline.txt`): `--drag 900,150:900,650@120-150` on 1-21 takes the view from centre y 384 to the level's top (128, clamped; 343.8 u of pan asked for) by f150, the exit door in view; held at 128 through f360; **f390 at 163.6 = 128 + 0.139 x 256, the follow's first tick (tick 389 = 149 + 240)**; 2.5 u from rest at f420, at rest from f450, and every frame from f510 identical to the switched-off run's. The switched-off run never moves; `camera.json` was put back byte for byte (`9939a1c6` before and after) |
+| (11) The runner once | every suite | 47 passed, 14,388 checks (step 150) | **passes: 47 suites, 47 passed, 0 failed, 14,473 checks** (`CD/allmode.log`): `test_mp_camera` 214 -> 280 and `test_mp_layer` 3,261 -> 3,280, every other count equal |
+
+**THE SUITES**, run directly: `test_mp_camera` **280**, 0 failures (214: the opening-hold case rewritten as
+`ThereIsNoOpeningHold`, ten cases new); `test_mp_layer` **3,280**, 0 failures (3,261: +19, two cases new);
+`test_mp_routes` **215**, 0 failures (215); and the whole runner once (gate 11). The first runs of `test_mp_camera`
+(280 checks, 1 failure) and `test_mp_layer` (3,280, 1 failure) each failed on the case's own arithmetic - a touch on a
+pad lets the follow run, and 3.5 s falls early in the hand's second round, not in its first - and the cases were
+corrected before the counts above.
+
+**SMART APP CONTROL: 1 refusal.** `test_mp.exe` `ae814d2c` (the first build's) was refused on its first launch
+("Permission denied"); deleted and relinked once (`7409a0f1`), it ran; the test fixes' relink (`1f4be6c7`) ran the first
+time. `MagicPortals.exe` `d5e1a379` ran the first time: the 128 sweep captures and three window runs.
+`MagicPortalsSpike.exe` was relinked and never launched. No ctest.
+
+**RULINGS APPLIED.** The owner's open call on camera dragging, decided for the original under the 2026-09-29 rulings,
+behind `camera.json`'s switch as the program asks; his 2026-09-11 ruling is one setting away. The level still opens on
+the player, as he chose (the original pans in from camera_start). R1, R2, R17 and R23 untouched; R24 and R25 as they are.
+
+**RECORDED DEVIATIONS.**
+1. **The follow is still the port's.** The original's is `Follower(1000, 100)` (the constructor #66-82), eased toward
+   the player's unclamped centre; the port's is its `_guess` clamp-and-ease (`follow_lag_s` 0.12). So how the view comes
+   back after a hold is the port's, not the original's.
+2. **The view a drag leaves is held inside the level at once.** The original keeps `virtualCameraPos` unclamped between
+   moving frames (it clamps it before each move, #38-39, and clamps only the shown camera after), so its follower can
+   start up to one frame's pan past an edge; the port keeps one centre, clamped every tick.
+3. **`shouldLockCamera` reads nothing.** No `arrows.ent` handle moves in the port (B4), so none locks the camera; the
+   step that builds the handle wires it.
+4. **The hand's round runs on the level's ticks.** The original's FrameTimer adds the engine's frame time, which a pause
+   does not stop, and its life the game's, which a pause does; the port advances both on the level's ticks, so under a
+   pause or a popup the hand holds where the original's goes on round. The arrow's callback runs from the level's first
+   tick where the original's (static) runs while its bucket is on screen (`motions.json` `_placed_notes`, the same
+   divergence); on 1-21 it is on screen from the start.
+5. **No touch is read under the pause or after the door or a death**, so no drag moves the camera there; the original's
+   camera still reads the input (INFERRED).
+6. **A release's shot is aimed through the camera before that tick's follow.** The original updates its controllers in
+   the order they were added (`GameControllerManager::addController` is `insertLast`, listing L6011; `update`, L6026,
+   walks them in order), and `Game::preLoop` adds the camera (#195-202) before `PortalManager` (#265-270): on the
+   release frame the touch is `GSKS_RELEASE`, so `hasAnyTouch` is false and the follow runs one step, and only then
+   does `managePortalInsertion` aim at `getReleasePos + GetCameraPos()` (L27815-41). The port fires in `readInput`
+   (step 150's order), before `stepLevel`'s `Camera::Follow::Tick`. Now that a touch held off the pads stops the follow,
+   the gap to the player can grow while a touch of scale(18) or less is held (the player falling, or walking by key),
+   and the original's one release-frame follow step (0.139 of that gap at the port's lag) then separates the two aims.
+   Found by the step's verification; not changed here (a behaviour change).
+7. **Both walk keys held at once do not spend the hold.** The layer sets the pads' "moving" from the summed key
+   direction (`direction != 0`), so left and right held together read as still; the original's
+   `ScreenPad::arrowKeysMove` (151039..151281 #7-45) sets `moving` for each key held, whatever the sum. The on-screen
+   pads are right (either held sets it). Found by the step's verification; not changed here (a behaviour change).
+
+**LEFT FOR LATER.**
+- The backlog is not edited here: the close role closes section 6's owner's call on camera dragging (built as the
+  original, behind the switch), the stale note `Camera.hpp:6-10` (corrected) and "tutorial helpers (1-21's camera hint)"
+  (built), and ticks the audit's `check_script.md` row 11.
+- The follow as `Follower(1000, 100)` (deviation 1), with section 4's "Camera follow lag / hold" row: the hold is now
+  decoded, the lag is still a guess.
+- B4's handle (`arrows.ent`, `shouldLockCamera`, deviation 3) and 2-20's `hand_waypoint0` lesson, which B4 owns.
+- WaypointManager now has three copies (`Ghost::Appear`, `DarkDragon::Path`, `Hint::Hand`, the third repeating): the
+  "Order 12.1 tidy, two WaypointManagers" row grows by one.
+- **Merge note:** `data/portals.json` loses `camera.hold_time_s`, which `Camera::LoadRules` no longer reads;
+  `Camera::Rules` is now `{followLagS, drag}` and `Camera::Follow::holdLeftS` is gone (`holdElapsedMs` in its place), so
+  a track that edits the camera block there, builds `Camera::Rules{lag, hold}` or sets `holdLeftS` meets this step. And
+  this tree's 426 route taps are all one tick (none held); a merged route tap with `release` later than `tick + 1` now
+  has held ticks, which stop the follow while held (and pan, if the tap moved): its drift and win tick are re-measured
+  on the merged build.
+- Two DEV notes are now incomplete, since in a level a drag also pans the camera: `ScheduleDevDrag`'s comment in
+  `MagicPortalsLayer.hpp` (the credits' and the dashboard's scrolling finger) and `main.cpp`'s `--drag` help text. Left
+  as they are here, because editing either relinks both executables the gates ran on; the next step that edits either
+  file says it.
+- Deviation 6: aim the release's shot after the tick's camera (fire after `Camera::Follow::Tick`, or tick the camera
+  first on a release tick), pinned by a layer case (a touch held 5 u for 60 ticks while the player falls, released, the
+  aim point compared).
+- Deviation 7: set the pads' "moving" from each walk key held (left, right and their alternates), not from the summed
+  direction - one line in `readInput`, with a camera case for both keys held.

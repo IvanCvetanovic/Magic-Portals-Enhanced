@@ -74,12 +74,16 @@
 
   "camera": {
     "_guess": true,
-    "_guess_note": "Applies to transit_mode, lerp_s, follow_lag_s and hold_time_s, NOT to bounds_min.",
+    "_guess_note": "Applies to transit_mode, lerp_s and follow_lag_s, NOT to bounds_min.",
     "_note": [
       "Section 3.7. Binary has CameraController, AutoCameraController, clampCameraPos,",
       "cameraHoldTime, cameraHoldElapsedTime — so there IS a hold-then-follow behaviour",
       "with a real duration. Values invented.",
-      "transit_mode options: cut | snap | lerp."
+      "transit_mode options: cut | snap | lerp.",
+      "The hold is DECODED since step 151 and lives in game/data/camera.json (drag.hold_ms,",
+      "4000 ms): it is what a drag away from the player starts, and the original's",
+      "constructor leaves it spent, so there is no opening hold. The guessed opening",
+      "hold_time_s (0.5) that stood here is removed; the port had zeroed it at every load."
     ],
     "bounds_min": [0, 0],
     "_bounds_note": [
@@ -92,8 +96,7 @@
     ],
     "transit_mode": "lerp",
     "lerp_s": 0.15,
-    "follow_lag_s": 0.12,
-    "hold_time_s": 0.5
+    "follow_lag_s": 0.12
   },
 
   "audio": {

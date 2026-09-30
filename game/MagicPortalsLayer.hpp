@@ -35,6 +35,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Effects.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
+#include "sim/Hint.hpp"
 #include "sim/Hud.hpp"
 #include "sim/Impacts.hpp"
 #include "sim/LevelEnd.hpp"
@@ -78,9 +79,13 @@ namespace MagicPortals {
 //    why, and N skips it, the Godot project's own development shortcut. At a world's end
 //    the Godot project opens its menu; the port has none yet, so it says the chapter is
 //    complete.
-//  - The camera is orthographic and follows the player, as the owner remembers
-//    it: Camera::Follow, moved on the tick and drawn between ticks. It shows
-//    view.json's height of the level, 256 px, at the window's shape.
+//  - The camera is orthographic and follows the player: Camera::Follow, moved on
+//    the tick and drawn between ticks. It shows view.json's height of the level,
+//    256 px, at the window's shape. And a finger drags it, as the original's does
+//    (camera.json `drag`, step 151): the pointer held off the walk pads pans it at
+//    twice its move, holds it 4000 ms after a drag away, and stops the follow while
+//    it is held. camera.json's drag_pan_enabled false restores the owner's
+//    2026-09-11 camera, which only follows.
 //  - Every sprite the level names (Sprites.hpp) is a textured quad, unlit and
 //    blended as the level says, in Godot's canvas order. A sprite follows its
 //    node's body, or the crystal, static portal, no-portal zone, key, keyhole or
@@ -1024,6 +1029,27 @@ public:
     };
     std::vector<PlacedReport> PlacedReports() const;
 
+    // 1-21's lesson (camera.json `hint`), for the suites, as the last tick left it:
+    // whether the level places each picture, the two callbacks, and each picture -
+    // whether it is still there, where the hand was put and is drawn, and the alpha
+    // each is drawn at.
+    struct HintReport {
+        bool handPlaced = false;
+        bool arrowPlaced = false;
+        Hint::Hand hand;
+        Hint::Arrow arrow;
+        bool handDrawn = false;
+        bool arrowDrawn = false;
+        glm::dvec2 handCentrePx{0.0};
+        float handAlpha = 0.0f;
+        float arrowAlpha = 0.0f;
+    };
+    HintReport HintState() const;
+    const Hint::Rules& HintRules() const { return m_hintRules; }
+    const Camera::Rules& CameraRules() const { return m_cameraRules; }
+    // Whether the camera is being held where a drag left it (camera.json `drag`).
+    bool CameraHeld() const { return m_follow.Held(m_cameraRules); }
+
     // A screen point (Input's coordinates) as the point in the level under it,
     // in the port's pixels. False when there is no viewport or camera.
     bool ScreenToLevelPx(const entt::registry& registry, const glm::vec2& screenPoint, glm::dvec2& outPx) const;
@@ -1285,6 +1311,8 @@ private:
     // SpaceSky's four (sim/Sky.hpp): the space sky, the spiral, the planet and the
     // eclipse.
     enum class SpaceRole { None, Sky, Spiral, Planet, Eclipse };
+    // 1-21's two lesson pictures (sim/Hint.hpp).
+    enum class HintRole { None, Hand, Arrow };
 
     // One of the level's sprites as a textured quad, and what it follows: the
     // crystal, static portal or no-portal zone it pictures, or else its node's
@@ -1339,6 +1367,9 @@ private:
         int motion{-1};       // in m_motions: a crystal or key its script bobs
         bool antiportal{false}; // ETHCallback_antiportal blinks and turns it (art.json)
         int placed{-1};       // in m_placed: a picture its own callback sways, fades or turns
+        // 1-21's hand or arrow (sim/Hint.hpp): moved, faded, pulsed and deleted by
+        // m_hintHand's or m_hintArrow's callback.
+        HintRole hint{HintRole::None};
         // Chapter 4's torch, in torch.lights: its picture goes on the tick after the
         // torch is lit, as the original's entity deletes itself (m_torchWatch).
         int torch{-1};
@@ -1685,6 +1716,24 @@ private:
     double m_viewHeightPx{0.0};
     float m_aspect{16.0f / 9.0f}; // the window's shape as of the last tick
     Camera::Follow m_follow;
+    // THE POINTER AS THE CAMERA READS IT (camera.json `drag`): its own record of the
+    // one touch, followed on every tick the touch is read - the level's and a
+    // popup's - because the original's camera reads the engine's input raw, whatever
+    // takes the touch. readInput leaves the tick's feel and whether the walk pads
+    // moved; the camera's tick takes them and clears them, so a tick that read no
+    // input (a stop's resuming half, the door's beat) drags nothing.
+    Camera::TouchRecord m_cameraTouch;
+    Camera::Feel m_cameraFeel;
+    bool m_cameraPadMoving{false};
+
+    // 1-21'S LESSON (camera.json `hint`, sim/Hint.hpp): the hand's and the arrow's
+    // callbacks, and whether the level places the hand, whose first call draws the
+    // line of text.
+    Hint::Rules m_hintRules;
+    Hint::Hand m_hintHand;
+    Hint::Arrow m_hintArrow;
+    bool m_hintHandPlaced{false};
+    bool m_hintArrowPlaced{false};
 
     Game::Data m_data;
     int m_dataIndex{-1}; // whose level m_data holds, so a retry reuses it

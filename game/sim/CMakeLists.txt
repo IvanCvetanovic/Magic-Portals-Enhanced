@@ -30,6 +30,7 @@ add_library(MagicPortalsSim STATIC
     GravityWell.cpp
     Hazards.cpp
     Hinge.cpp
+    Hint.cpp
     Hud.cpp
     Impacts.cpp
     Keys.cpp

@@ -669,6 +669,139 @@ void AShotLeavesOnTheReleaseOfATouchThatStayedWithinEighteen() {
     }
 }
 
+// A FINGER DRAGS THE CAMERA (camera.json `drag`, planning step 151). On level0, the
+// camera at rest at the level's left edge: a scheduled drag a fifth of the view to
+// the left over ten ticks - nine held ticks of a fiftieth - pans the view right by
+// twice what the finger moved while held; it strays far past scale(18), so it fires
+// nothing; and, a drag away from the player past scale(24), it leaves the view held
+// there until the tick the hold's 4000 ms have run from its last held tick, the
+// 239th after it comes up, when the follow takes it back toward the player. A tap -
+// down one tick, up the next - never moves it.
+void AFingerDragsTheCameraAtTwiceItsMoveAndFiresNothing() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.CameraRules().drag.enabled, "the port runs with camera.json's drag on, as the original");
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const glm::dvec2 rest = layer.CameraCentrePx();
+    const int shotsBefore = layer.SimLevel()->portals.shotsFired;
+    layer.ScheduleDevDrag(1, glm::dvec2(0.6, 0.3), glm::dvec2(0.4, 0.3), 11);
+    for (int tick = 0; tick < 11; ++tick) tickWith(layer, registry, kRest, {}, {}); // down, nine held, up
+    const double heldMove = 0.2 * layer.ViewPx().x * 0.9;
+    const glm::dvec2 dragged = layer.CameraCentrePx();
+    CHECK_MSG(NearD(dragged.x - rest.x, 2.0 * heldMove, 1e-6) && dragged.y == rest.y,
+              "the view went " + std::to_string(dragged.x - rest.x) + " right for the finger's " +
+                  std::to_string(heldMove) + " left while held: twice it");
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == shotsBefore, "and the drag fired nothing");
+    CHECK_MSG(layer.CameraHeld(), "and the view is held where it was left");
+    int movedOn = 0;
+    for (int tick = 1; tick <= 400 && movedOn == 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (layer.CameraCentrePx() != dragged) movedOn = tick;
+    }
+    CHECK_MSG(movedOn == 239, "held 4000 ms from its last held tick: the follow's first move is the 239th tick "
+                              "after it came up (" + std::to_string(movedOn) + ")");
+    CHECK_MSG(layer.CameraCentrePx().x < dragged.x, "and it goes back toward the player");
+    for (int tick = 0; tick < 300; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const glm::dvec2 back = layer.CameraCentrePx();
+    CHECK_MSG(NearD(back.x, rest.x, 0.01), "until it is at rest by the player again: " + Point(back));
+    // A tap is a touch down and up on the next tick: never held, so it never moves
+    // the camera.
+    layer.ScheduleDevTap(1, glm::dvec2(0.6, 0.3));
+    tickWith(layer, registry, kRest, {}, {});
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.CameraCentrePx() == back, "a tap moves the camera nothing");
+    layer.OnDetach(registry);
+}
+
+// 1-21 TEACHES THE DRAG (camera.json `hint`, planning step 151): the level places
+// ETHCallback_hand_waypoint1's hand and ETHCallback_up_down_arrow's arrow, and the
+// hand's first call writes "move the camera around" along the screen's bottom. The
+// hand goes along its waypoints from where the level put it, both fade, and both
+// are deleted once their life passes 20000 ms; the line fades out over 10000 ms, in
+// the caption's font from scale(50) across and 32 up from the bottom. A level that
+// places no hand writes no line.
+void OneTwentyOneTeachesTheDrag() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level20");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty()) {
+        CHECK_MSG(false, layer.LoadError());
+        return;
+    }
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortals::Hint::Rules& rules = layer.HintRules();
+    tickWith(layer, registry, kRest, {}, {});
+    MagicPortalsLayer::HintReport state = layer.HintState();
+    CHECK_MSG(state.handPlaced && state.arrowPlaced && state.handDrawn && state.arrowDrawn,
+              "level20 places the hand and the arrow, and both are drawn");
+    CHECK_MSG(state.hand.OffsetUnits(rules) == glm::dvec2(0.0) && state.handAlpha == 1.0f,
+              "the hand's first call leaves it where the level put it, whole");
+    const glm::dvec2 placed = state.handCentrePx;
+    CHECK_MSG(state.arrowAlpha == static_cast<float>(state.arrow.Alpha(rules)) && state.arrowAlpha > 0.59f,
+              "the arrow at 0.6 x (1 - t / 20000): " + std::to_string(state.arrowAlpha));
+    for (int tick = 1; tick < 211; ++tick) tickWith(layer, registry, kRest, {}, {});
+    state = layer.HintState();
+    const glm::dvec2 offset = state.hand.OffsetUnits(rules);
+    // 3.5 s is 12 ticks into its second round's step right (a round is 3300 ms).
+    CHECK_MSG(glm::length(state.handCentrePx - placed - offset) < 1e-6 && glm::length(offset) > 1.0,
+              "3.5 s in, the hand is its waypoints' " + Point(offset) + " from where it was put: " +
+                  Point(state.handCentrePx - placed));
+    // The caption is gone by 3 s, so every quad in its font is now the lesson's line.
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    const int glyphs = CountCaption(frame, rules.font);
+    CHECK_MSG(glyphs == static_cast<int>(rules.text.size()),
+              "the line is drawn, a quad a character: " + std::to_string(glyphs));
+    double left = 1e9;
+    double top = 1e9;
+    bool faded = true;
+    const float alpha = static_cast<float>(MagicPortals::Hint::TextAlpha(rules, layer.LevelAgeMs()));
+    for (const ScreenOverlay::Quad& quad : frame) {
+        if (quad.texture.find("Matura84_shadow") == std::string::npos) continue;
+        const Hud::Rect rect = OnView(layer, quad);
+        left = std::min(left, rect.min.x);
+        top = std::min(top, rect.min.y);
+        faded = faded && quad.color.a == alpha;
+    }
+    CHECK_MSG(left >= rules.leftUnits - 1.0 && left < rules.leftUnits + 5.0 &&
+                  top >= layer.ViewPx().y - rules.aboveBottomUnits,
+              "from 50 across and 32 up from the view's bottom: its first glyph at " + std::to_string(left) +
+                  ", its highest at " + std::to_string(top));
+    CHECK_MSG(faded && alpha > 0.6f && alpha < 0.7f,
+              "at ETHTextDrawer's byte, 1 - t / 10000: " + std::to_string(alpha));
+    for (int tick = 211; tick < 610; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(CountCaption(HudFrame(registry, layer), rules.font) == 0, "and gone by 10 s");
+    for (int tick = 610; tick < 1199; ++tick) tickWith(layer, registry, kRest, {}, {});
+    state = layer.HintState();
+    CHECK_MSG(state.handDrawn && state.arrowDrawn && state.handAlpha < 0.01f && state.arrowAlpha < 0.01f,
+              "just before 20 s both are still there, all but faded");
+    tickWith(layer, registry, kRest, {}, {});
+    state = layer.HintState();
+    CHECK_MSG(!state.handDrawn && !state.arrowDrawn, "and the tick their life passes 20000 ms deletes both");
+    layer.OnDetach(registry);
+
+    entt::registry otherRegistry;
+    publishViewport(otherRegistry);
+    MagicPortalsLayer other(TestPaths(), "level30");
+    other.OnAttach(otherRegistry);
+    if (!other.LoadError().empty()) {
+        CHECK_MSG(false, other.LoadError());
+        return;
+    }
+    other.OnUpdate(otherRegistry, MagicPortalsLayer::kTick);
+    for (int tick = 0; tick < 211; ++tick) tickWith(other, otherRegistry, kRest, {}, {});
+    CHECK_MSG(!other.HintState().handPlaced && CountCaption(HudFrame(otherRegistry, other), rules.font) == 0,
+              "level30 places no hand, and writes no line");
+    other.OnDetach(otherRegistry);
+}
+
 void Level8FromTheSpawnWithTapsAndWalking() {
     // 1-9 played through as a player would, tapping only what the screen shows.
     // test_mp_demolish plays the same route through Game::Tick.
@@ -16606,6 +16739,8 @@ void runTests() {
     AScheduledTapFiresTheShotARealPressFires();
     AScheduledTapOnAControlIsSpentOnIt();
     AShotLeavesOnTheReleaseOfATouchThatStayedWithinEighteen();
+    AFingerDragsTheCameraAtTwiceItsMoveAndFiresNothing();
+    OneTwentyOneTeachesTheDrag();
     Level8FromTheSpawnWithTapsAndWalking();
     LevelsFollowInOrderAndRetryIsInstant();
     NSkipsToTheNextLevel();
