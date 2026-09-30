@@ -1,0 +1,141 @@
+{
+  "_about": [
+    "3-15, found by the third verifier of step 127 (R1), on this build: won on tick 1018.",
+    "Ticks 1-370 are fix round 2's base (d/l14b_a): knight B portalled onto button_1666, the floor",
+    "gate up from ~280, the player across into the key's half by ~380. A portal at (470, 100), shot",
+    "steeply up past the platform's end and over the seesaw's left end (110 px from antiportal_1673,",
+    "96); back through the floor gate into the start half and a portal on the player at",
+    "(256.1, 204.3): out at (470, 100), down onto the seesaw, right along it and off its end onto",
+    "the floor right of it, outside both rings. There: a portal high by wall_low_emissive_1688 at",
+    "(829, 28) (130 px from antiportal_1683, 128) and one on the floor at (760, 202); left into it,",
+    "out at the top (pushed off the wall to x 813), and while falling a portal at (728, 191) under",
+    "the key (129 px) and, 25 ticks later, one on the falling player at (813.4, 148): out at",
+    "(728, 193) moving up at ~520 px/s, steered left, the key taken on tick ~801 at its own point;",
+    "down onto the seesaw's end, right to the keyhole (unlocked), the door lift gone, the door.",
+    "Leans on: the port's body-overlap traversal (entered (760, 202) with his centre ~25 px off),",
+    "the exit by the wall pushed out of it, the self-portal while falling, G10 (air control), G4",
+    "(600 px/s shots: at 200 u/s the (728, 191) shot would still be flying at tick 784), G1 via",
+    "fix round 2's base (knight B wedged on button_1666), and the port's seesaw."
+  ],
+  "level": "level14b",
+  "win_by": 1100,
+  "holds": [
+    {
+      "walk": "left",
+      "from": 1,
+      "to": 90
+    },
+    {
+      "walk": "left",
+      "from": 180,
+      "to": 195
+    },
+    {
+      "walk": "right",
+      "from": 215,
+      "to": 260
+    },
+    {
+      "walk": "right",
+      "from": 300,
+      "to": 370
+    },
+    {
+      "walk": "left",
+      "from": 420,
+      "to": 480
+    },
+    {
+      "walk": "right",
+      "from": 540,
+      "to": 672
+    },
+    {
+      "walk": "left",
+      "from": 740,
+      "to": 758
+    },
+    {
+      "walk": "left",
+      "from": 785,
+      "to": 797
+    },
+    {
+      "walk": "right",
+      "from": 840,
+      "to": 1100
+    }
+  ],
+  "taps": [
+    {
+      "tick": 95,
+      "at": [
+        150,
+        110
+      ]
+    },
+    {
+      "tick": 120,
+      "at": [
+        12.2,
+        159.1
+      ]
+    },
+    {
+      "tick": 145,
+      "at": [
+        175,
+        100
+      ]
+    },
+    {
+      "tick": 170,
+      "at": [
+        222,
+        85
+      ]
+    },
+    {
+      "tick": 405,
+      "at": [
+        470,
+        100
+      ]
+    },
+    {
+      "tick": 500,
+      "at": [
+        256.1,
+        204.3
+      ]
+    },
+    {
+      "tick": 700,
+      "at": [
+        829,
+        28
+      ]
+    },
+    {
+      "tick": 725,
+      "at": [
+        760,
+        202
+      ]
+    },
+    {
+      "tick": 759,
+      "at": [
+        728,
+        191
+      ]
+    },
+    {
+      "tick": 784,
+      "at": [
+        813.4,
+        148
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "_about": [
+    "1-23, re-routed for antiportal_878's 32 x 5.7 = 182.4 px (step 127, R1): it holds the right floor",
+    "and the upper platform, where step 126's portals were. Left to x 47; a portal over the hanging",
+    "platform's left end at (150, 80), one on the player. Right along the platform and off its right",
+    "end: the player falls against rolling_stone_ent_877 and pushes it off its pillar into the gap, and",
+    "lands on the pillar at x 392.6, 14.8 px from anti_portal_agent_ent_876, which the stone covered.",
+    "A tap at (545, 190): the shot kills the agent at once (tick ~301, the port fires from the player's",
+    "centre; the original's shot jumps 24 u along the same line and is still within 22.4 of it) and",
+    "antiportal_878 goes. The same tap again opens a portal on the right floor, over the stone's old",
+    "place and under the hanging column; one on the player. A shot up through the window between the",
+    "column and the post to (618, 50), one on the player; down beside the post and right into the door.",
+    "Won on tick 466 (step 127)."
+  ],
+  "level": "level22",
+  "win_by": 530,
+  "holds": [
+    {"walk": "left", "from": 5, "to": 70},
+    {"walk": "right", "from": 160, "to": 262},
+    {"walk": "right", "from": 440, "to": 530}
+  ],
+  "taps": [
+    {"tick": 110, "at": [150, 80]},
+    {"tick": 140, "at": [47.0, 202.3]},
+    {"tick": 300, "at": [545, 190]},
+    {"tick": 330, "at": [545, 190]},
+    {"tick": 360, "at": [392.6, 162.3]},
+    {"tick": 390, "at": [618, 50]},
+    {"tick": 420, "at": [545.0, 202.3]}
+  ]
+}

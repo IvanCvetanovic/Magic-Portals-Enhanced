@@ -1,0 +1,26 @@
+{
+  "_about": [
+    "3-19 (step 127, R1: the key's pocket behind spinning_platform_1554 lies inside antiportal_1555's 32",
+    "x 3.4 = 109 px, so no portal opens on its floor). Left down to the floor; a portal on the anchor's",
+    "right part at (240, 68), one on the player. A portal at the top of the pocket at (140, 22), 121 px",
+    "from the ring's centre, and one on the player: down into the pocket, taking the key (tick ~205).",
+    "Right against the spinning platform, whose joint's limits (lower -3.1415, upper 0) let it turn only",
+    "this way: the push turns it slowly (about 1.3 px of the player's way per 100 ticks) until the player",
+    "passes it on tick ~2800; right off the anchor, along the floor pushing the barrel, the key opens the",
+    "yellow door at its keyhole, and into the door. How fast the platform turns under the push is the",
+    "port's hinge, not measured against the original. Won on tick 3207 (step 127)."
+  ],
+  "level": "level18b",
+  "win_by": 3270,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 70},
+    {"walk": "left", "from": 135, "to": 145},
+    {"walk": "right", "from": 215, "to": 3270}
+  ],
+  "taps": [
+    {"tick": 100, "at": [240, 68]},
+    {"tick": 125, "at": [374.3, 202.3]},
+    {"tick": 160, "at": [140, 22]},
+    {"tick": 185, "at": [224, 74.3]}
+  ]
+}

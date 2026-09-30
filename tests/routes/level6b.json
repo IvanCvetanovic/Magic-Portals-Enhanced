@@ -1,0 +1,24 @@
+{
+  "_about": [
+    "3-07 (step 127, R1: antiportal_1213's 32 x 4.5 = 144 px holds the door and the end of the floor",
+    "before it, where knight A patrols). Left along the top, off the ledge's end and down to the floor,",
+    "left to x 81, clear of knight B's walk. A portal on the knights' ledge at (230, 200) and one at",
+    "(282, 310), 146 px from the ring's centre, where knight A's body reaches as it turns at the left end",
+    "of its walk (tick ~575): A goes through onto the ledge, where it walks right against the hanging",
+    "block and stays. A portal at (275, 298), right of knight B's walk, and one on the player; right into",
+    "the door. The knights never see or shoot (G1, not built). Won on tick 699 (step 127)."
+  ],
+  "level": "level6b",
+  "win_by": 760,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 75},
+    {"walk": "left", "from": 125, "to": 135},
+    {"walk": "right", "from": 655, "to": 900}
+  ],
+  "taps": [
+    {"tick": 300, "at": [230, 200]},
+    {"tick": 330, "at": [282, 310]},
+    {"tick": 620, "at": [275, 298]},
+    {"tick": 645, "at": [81.0, 298.3]}
+  ]
+}

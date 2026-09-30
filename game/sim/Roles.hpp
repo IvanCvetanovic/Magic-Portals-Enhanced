@@ -34,6 +34,9 @@ inline constexpr const char* kLift = "lift";
 inline constexpr const char* kMovingPlatform = "moving_platform";
 inline constexpr const char* kStaticPortal = "static_portal";
 inline constexpr const char* kNoPortalZone = "no_portal_zone";
+// The red orb a shot kills, and the ring round it with it (Portals.hpp Agent). No
+// zone: the original's agent refuses nothing (the remaster record's step 126).
+inline constexpr const char* kAntiPortalAgent = "anti_portal_agent";
 inline constexpr const char* kHazard = "hazard";
 inline constexpr const char* kDemolisher = "demolisher";
 inline constexpr const char* kLauncher = "launcher";

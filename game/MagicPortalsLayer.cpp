@@ -640,6 +640,8 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_statics.clear();
     for (auto& e : m_zones) destroy(e);
     m_zones.clear();
+    for (auto& e : m_agents) destroy(e);
+    m_agents.clear();
     for (auto& e : m_hazards) destroy(e);
     m_hazards.clear();
     for (ThrownBox& thrown : m_thrown) {
@@ -3644,6 +3646,12 @@ void MagicPortalsLayer::buildDrawables(entt::registry& registry) {
     for (std::size_t i = 0; i < m_level.portals.zones.size(); ++i) {
         m_zones.push_back(makeBox(registry, "Magic Portals No-Portal Zone", glm::vec3(0.0f), glm::vec3(1.0f), kZoneColour));
     }
+    // An anti-portal agent is no zone (step 126); its box is the square round the
+    // circle a shot dies in, in the zones' colour.
+    for (std::size_t i = 0; i < m_level.portals.agents.size(); ++i) {
+        m_agents.push_back(makeBox(registry, "Magic Portals Anti-Portal Agent", glm::vec3(0.0f), glm::vec3(1.0f),
+                                   kZoneColour));
+    }
     for (std::size_t i = 0; i < m_level.hazards.hazards.size(); ++i) {
         m_hazards.push_back(makeBox(registry, "Magic Portals Hazard", glm::vec3(0.0f), glm::vec3(1.0f), kHazardColour));
     }
@@ -4119,6 +4127,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         drawn.crystal = indexOf(m_level.goals.crystals, sprite.node);
         drawn.staticPortal = indexOf(m_level.portals.statics, sprite.node);
         drawn.zone = indexOf(m_level.portals.zones, sprite.node);
+        drawn.agent = indexOf(m_level.portals.agents, sprite.node);
         drawn.torch = indexOf(m_level.torch.lights, sprite.node);
         drawn.well = indexOf(m_level.wells.wells, sprite.node);
         // AN ANTIPORTAL IS DRAWN AT HALF ITS NODE'S SCALE (placement.json
@@ -4918,10 +4927,20 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         } else if (drawn.staticPortal >= 0) {
             gone = !m_level.portals.statics[static_cast<std::size_t>(drawn.staticPortal)].live;
         } else if (drawn.zone >= 0) {
-            // A patrolling zone carries its picture with it.
+            // A patrolling zone carries its picture with it, and a ring an agent's
+            // death deleted takes it away (step 126).
             const Portals::NoPortalZone& zone = m_level.portals.zones[static_cast<std::size_t>(drawn.zone)];
+            gone = zone.gone;
             centrePx += zone.CentreNowPx() - zone.centrePx;
             ownerPx += zone.CentreNowPx() - zone.centrePx;
+        } else if (drawn.agent >= 0) {
+            // AN ANTI-PORTAL AGENT: where it patrols, and gone - its particles with
+            // it - once a shot has killed it (ETHCallback_anti_portal_agent
+            // #134-142 DeleteEntity(thisEntity)).
+            const Portals::Agent& agent = m_level.portals.agents[static_cast<std::size_t>(drawn.agent)];
+            gone = agent.gone;
+            centrePx += agent.CentreNowPx() - agent.centrePx;
+            ownerPx += agent.CentreNowPx() - agent.centrePx;
         } else if (drawn.placed >= 0) {
             // Where its own callback put it this tick (advanceMotions): swung by its
             // linearMotion, and turned by AddToAngle about its own point,
@@ -5670,6 +5689,11 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
         const double sizePx = m_level.portals.rules.antiportalRadiusPx * zones[i].scale * 2.0;
         placeBox(registry, m_zones[i], zones[i].CentreNowPx(), glm::dvec2(sizePx), kZoneZ, kZoneDepth, 0.0f);
     }
+    const std::vector<Portals::Agent>& agents = m_level.portals.agents;
+    for (std::size_t i = 0; i < m_agents.size() && i < agents.size(); ++i) {
+        const double sizePx = m_level.portals.AgentReachPx(agents[i]) * 2.0;
+        placeBox(registry, m_agents[i], agents[i].CentreNowPx(), glm::dvec2(sizePx), kZoneZ, kZoneDepth, 0.0f);
+    }
 
     // Hazards, at the box that kills: the remake's trigger, not the shape the
     // converter gives them (Hazards.hpp).
@@ -5696,7 +5720,12 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
     for (const entt::entity e : m_buttons) show(e, !artOnly);
     for (const entt::entity e : m_crystals) show(e, !artOnly);
     for (const entt::entity e : m_statics) show(e, !artOnly);
-    for (const entt::entity e : m_zones) show(e, !artOnly);
+    for (std::size_t i = 0; i < m_zones.size(); ++i) {
+        show(m_zones[i], !artOnly && !(i < zones.size() && zones[i].gone));
+    }
+    for (std::size_t i = 0; i < m_agents.size(); ++i) {
+        show(m_agents[i], !artOnly && !(i < agents.size() && agents[i].gone));
+    }
     for (const entt::entity e : m_hazards) show(e, !artOnly);
     show(m_exit, !artOnly);
     // A placed portal and the shot, behind the original's pictures once they
@@ -7576,6 +7605,17 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
                                                                                          : "a refusal")
                                              << ": " << rule.entity << std::endl;
     }
+    // A SHOT AN ANTI-PORTAL AGENT KILLED (step 126): ETHCallback_anti_portal_agent's
+    // antiportal_explosion at the agent's point and scale(32), with no owner - the
+    // agent is deleted in the same call. Its shake is latchSimQuakes', its sound
+    // latchSimSounds'.
+    for (const Portals::AgentKill& kill : m_level.portals.agentKills) {
+        m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.antiportalExplosion, kill.atPx)));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "shot killed " << kill.agent << " on tick " << m_ticks << " at ("
+                                             << kill.shotPx.x << ", " << kill.shotPx.y << "); ring "
+                                             << (kill.ring.empty() ? std::string("none") : kill.ring)
+                                             << " deleted" << std::endl;
+    }
 
     // WHAT A CRYSTAL LEAVES WHERE IT WAS (the visuals plan's 10.2; effects.json
     // _crystals): pickCrystalEffect's crystal_pick where the character takes one,
@@ -8604,6 +8644,8 @@ void MagicPortalsLayer::latchSimQuakes() {
     for (const Portals::Failure& ended : level.portals.failures) {
         if (ended.kind == Portals::FailKind::Blocker) QueueQuake(Call::ShotBlocked);
     }
+    // A shot an anti-portal agent killed (its static callback, #179-181; step 126).
+    for (std::size_t i = 0; i < level.portals.agentKills.size(); ++i) QueueQuake(Call::AgentKilled);
     for (const Demolish::Breakable* wall : wallsBroken) {
         // destroyEffectScale, where the node sets it above 0 (#16-31); else 1.
         double scale = 1.0;
@@ -8927,6 +8969,10 @@ void MagicPortalsLayer::latchSimSounds() {
     for (int i = m_watch.traversals; i < now.traversals; ++i) latch("traversal");
     for (int i = m_watch.shotsFired; i < now.shotsFired; ++i) latch("shot_fired");
     for (int i = m_watch.shotsFailed; i < now.shotsFailed; ++i) latch("shot_failed");
+    // A shot an agent killed: playExplosionSound(true), from this tick's own
+    // record (step 126). Not a failed shot: the agent deletes it, so the
+    // projectile's own callback never plays playPortalFailedSound for it.
+    for (std::size_t i = 0; i < m_level.portals.agentKills.size(); ++i) latch("agent_killed");
     for (int i = m_watch.reflections; i < now.reflections; ++i) latch("shot_reflected");
     for (int i = m_watch.crystalsCollected; i < now.crystalsCollected; ++i) latch("crystal_collected");
     for (int i = m_watch.crystalsExpired; i < now.crystalsExpired; ++i) latch("crystal_expired");

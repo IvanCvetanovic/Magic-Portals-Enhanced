@@ -1,0 +1,22 @@
+{
+  "_about": [
+    "4-15, weightless (step 127, R1: antiportal_2359's 32 x 2 = 64 px reaches down over the keyhole's",
+    "corner). A tap at the block (415, 186): its recoil carries the player up-left along the ceiling",
+    "block, over shock_agent_2353's ring, taking the yellow key (tick ~145), against the left block. A",
+    "portal by the keyhole at (330, 85) and one on the player (tick 176, before the ring rises to it):",
+    "the key opens the yellow door. When it is gone a portal in the door at (436, 88), whose recoil",
+    "carries the player back left, and one on the player at (315.2, 62.9), 67 px from antiportal_2359's",
+    "centre: into the door. Won on tick 306 (step 127)."
+  ],
+  "level": "level14c",
+  "win_by": 370,
+  "holds": [
+  ],
+  "taps": [
+    {"tick": 30, "at": [415, 186]},
+    {"tick": 150, "at": [330, 85]},
+    {"tick": 176, "at": [138.3, 86.2]},
+    {"tick": 280, "at": [436, 88]},
+    {"tick": 304, "at": [315.2, 62.9]}
+  ]
+}

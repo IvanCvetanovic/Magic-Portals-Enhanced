@@ -1,0 +1,32 @@
+{
+  "_about": [
+    "2-25 (R1 fix 1): the lift up to the door's bridge lies inside antiportal_ent_1128 (scale 2, 64 px at",
+    "32 x scale); every portal here is 78 px or more from the ring's centre. Right, a portal on",
+    "button_1101 at (122, 118) and one on the player: door_lift_1100 rises; a portal through it into the",
+    "middle at (400, 150) and one on the player (tick 175); down behind the fireball carranca_right_1126",
+    "fired on 120. Right, a portal on button_1106 at (310, 72) and one on the player: door_lift_1104",
+    "rises; a portal through it at (525, 190) and one on the player (350), out of the fireball's lane",
+    "onto the lift, which carries the player up to the bridge, and right into the door. Won on tick 459.",
+    "The shot on tick 320 passes 20 px from reflect_agent_1127 (the port catches at 16; R23 may change",
+    "that) and the lift's run is the port's (G2); re-verify on the merged build (G5: carranca_right's",
+    "fireballs die on door_lift_1104 there, which only helps; no breakable wall for B1)."
+  ],
+  "level": "level24a",
+  "win_by": 540,
+  "holds": [
+    {"walk": "right", "from": 5, "to": 26},
+    {"walk": "left", "from": 76, "to": 79},
+    {"walk": "right", "from": 196, "to": 216},
+    {"walk": "right", "from": 350, "to": 700}
+  ],
+  "taps": [
+    {"tick": 40, "at": [122, 118]},
+    {"tick": 70, "at": [150, 202.3]},
+    {"tick": 125, "at": [400, 150]},
+    {"tick": 175, "at": [129.2, 123.4]},
+    {"tick": 225, "at": [310, 72]},
+    {"tick": 255, "at": [453.2, 202.3]},
+    {"tick": 320, "at": [525, 190]},
+    {"tick": 350, "at": [310, 74.3]}
+  ]
+}

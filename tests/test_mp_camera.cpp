@@ -205,6 +205,9 @@ void TheEarthquakeIsTheDecodedGenerator() {
                 {Call::NoPortalTap, 7.0, When::BeforeUpdate},
                 {Call::ShotBlocked, 5.0, When::AfterUpdate},
                 {Call::ShotFailedInField, 5.0, When::BeforeUpdate},
+                // A shot an anti-portal agent killed (step 126): the agent's own
+                // callback, and anti_portal_agent.ent is static.
+                {Call::AgentKilled, 20.0, When::AfterUpdate},
                 // The impact rows (step 104): the factor of hitIntensity each
                 // callback multiplies, inside the physics step.
                 {Call::PlayerImpact, 0.6, When::BeforeUpdate},

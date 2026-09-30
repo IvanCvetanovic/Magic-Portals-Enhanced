@@ -1,0 +1,34 @@
+{
+  "_about": [
+    "2-15 (R1 fix 1): button_1137, which raises door_lift_1136 in front of the door, lies inside",
+    "antiportal_ent_1082 (scale 2, 64 px at 32 x scale), and carranca_right_1075 sweeps the floor to it",
+    "every 2 s; every portal here is 110 px or more from the ring's centre. Right along the top ledge,",
+    "pushing barrel_bomb_ent_1072 off (carranca_1071's first fireball blows it up, tick ~100); left along",
+    "the middle ledge, a portal on the lone block at (40, 190) and one on the player. A portal in the",
+    "floor lane at (110, 295) and one against barrel_bomb_ent_1079 at (366, 168): the barrel drops into",
+    "the lane as a shield and takes the fireball fired on tick 360. A portal at (150, 310) and one on the",
+    "player; right onto the button (401) behind the fireball fired on 240, and wait while the lift rises;",
+    "right under it (576) ahead of the fireball fired on 480, into the door. Won on tick 616. Leans on",
+    "the port's traversal by body overlap for the barrel (its centre is 22.5 px from that portal) and on",
+    "G4 (shot speed) and the carrancas' timing (startStride 1500 / 0, stride 3000 / 2000); re-verify on",
+    "the merged build (G5: fireballs die on the first solid, which here only ends them sooner; no",
+    "breakable wall for B1)."
+  ],
+  "level": "level14a",
+  "win_by": 700,
+  "holds": [
+    {"walk": "right", "from": 30, "to": 100},
+    {"walk": "left", "from": 112, "to": 156},
+    {"walk": "right", "from": 212, "to": 217},
+    {"walk": "right", "from": 340, "to": 403},
+    {"walk": "right", "from": 565, "to": 700}
+  ],
+  "taps": [
+    {"tick": 175, "at": [40, 190]},
+    {"tick": 205, "at": [70, 106.3]},
+    {"tick": 230, "at": [110, 295]},
+    {"tick": 255, "at": [366, 168]},
+    {"tick": 290, "at": [150, 310]},
+    {"tick": 338, "at": [52.5, 186.3]}
+  ]
+}

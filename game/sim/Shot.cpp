@@ -208,6 +208,11 @@ std::optional<Hit> FirstBody(entt::registry& registry, const glm::dvec2& fromPx,
     return Meets(registry, fromPx, toPx, std::span<const entt::entity>(&ignore, 1), false, true);
 }
 
+std::optional<Hit> FirstBodyPassing(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
+                                    std::span<const entt::entity> ignore) {
+    return Meets(registry, fromPx, toPx, ignore, false, true);
+}
+
 std::optional<Hit> ClosestContact(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
                                   entt::entity ignore) {
     return Meets(registry, fromPx, toPx, std::span<const entt::entity>(&ignore, 1), true, false);

@@ -237,19 +237,21 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     out.portals.noGravity = noGravity;
     out.portals.recoilMps = data.zerog.recoilMetresPerSecond;
 
-    // The gravity wells, and the no-portal zone each one carries. NOTHING IN THE
-    // LEVEL FILE SAYS `antiportal` here: the agent's own callback adds one on its
-    // first tick, so a port that read only the .tscn would never place it and
-    // would let a portal open inside a well. The zone carries its own radius,
-    // because it comes from the agent's radius and not from white_ring.png.
+    // The gravity wells. A WELL REFUSES NO PORTAL AND STOPS NO SHOT (00_order R2,
+    // decided for the original; the remaster doc's step 125). The antiportal.ent
+    // its agent adds on its first tick is renamed gravity_area as it is added
+    // (ETHScene.cpp:264-266), after AntiPortalManager's constructor has gathered
+    // its fields by name (104925..105343 #16-35), so no tap is ever tested
+    // against it: it is the ring and the force, and no zone. And the shot flies
+    // through the agent's own body: projectile.ent has no shape, and the ray
+    // that judges a tap passes gravity_agent by name (placement.json
+    // final_pos.ray_ignores). The agent stays solid to everything else.
     if (!GravityWell::Find(data.scene, data.roles, data.wells, out.wells, error)) return false;
     out.wells.noGravity = noGravity;
     for (const GravityWell::Well& well : out.wells.wells) {
-        Portals::NoPortalZone zone;
-        zone.name = well.name;
-        zone.centrePx = well.atPx;
-        zone.radiusPx = well.ZoneRadiusPx(data.wells);
-        out.portals.zones.push_back(zone);
+        if (const auto body = out.built.entities.find(well.name); body != out.built.entities.end()) {
+            out.portals.shotPasses.push_back(body->second);
+        }
     }
 
     // Chapter 2's boss. It needs the BUILT level, not just the scene: the claw's

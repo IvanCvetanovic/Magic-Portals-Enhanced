@@ -1,0 +1,47 @@
+{
+  "_about": [
+    "3-31, re-routed by step 128 (the merge): step 127's route shot its first two fireballs from the",
+    "right platform's left edge, and since step 114 (G5) a fireball dies on the first solid it touches,",
+    "so both died on that platform's corner (8 ticks out) and the shock agent and the crate stood. This",
+    "route shoots them from where the line is clear. A portal on the gutter block at (384, 118) and one",
+    "on the player: fire_diamond_ent_2199 is taken (64). Right off the block, landing right of the drain",
+    "(the gutter's 10-unit slot at x 379-389 would take the diamond): from the right platform at (431,",
+    "234) a fireball left burns knight B, whose key drops on the left platform (462). Right onto",
+    "lift_ent_2438 and down with it (the port runs it on its own: G2; the original's is sent by a tap),",
+    "left onto single_block_plat_low_emissive_ent_2442; from (429.5, 362.3) a fireball at the shock agent",
+    "destroys it and its ring (569), and one aimed at (224, 421) clears the block's corner by 1.4 units",
+    "and burns crate_2355 at its top corner (606), baring anti_portal_agent_ent_2430. Back onto the lift",
+    "at the bottom, up, left off it and under the gutter: the diamond is drained (694). A portal by the",
+    "key and one on the player: the key is taken (737). Right to the ledge's end, a portal over the",
+    "single block at (392, 340) and one on the player; from the block a shot at (224, 456) kills the bare",
+    "agent and its ring (887, R17). A portal by the keyhole at (195, 450) and one on the player: the key",
+    "opens it (963) and the yellow door goes (1011); left into the door. Won on tick 1046. Every portal",
+    "before the agent dies is 199 px or more from antiportal_2436's centre (160 at 32 x scale, R1). Leans",
+    "on G1 (the knight never sees or shoots), G2, G10 and G4."
+  ],
+  "level": "level30b",
+  "win_by": 1150,
+  "holds": [
+    {"walk": "right", "from": 90, "to": 106},
+    {"walk": "right", "from": 375, "to": 395},
+    {"walk": "left", "from": 448, "to": 468},
+    {"walk": "right", "from": 560, "to": 600},
+    {"walk": "left", "from": 628, "to": 688},
+    {"walk": "right", "from": 750, "to": 775},
+    {"walk": "left", "from": 990, "to": 1160}
+  ],
+  "taps": [
+    {"tick": 30, "at": [384, 118]},
+    {"tick": 62, "at": [122, 90.3]},
+    {"tick": 314, "at": [113.3, 241.6]},
+    {"tick": 490, "at": [224, 384]},
+    {"tick": 520, "at": [224, 421]},
+    {"tick": 705, "at": [101.7, 228]},
+    {"tick": 735, "at": [376.9, 235.5]},
+    {"tick": 800, "at": [392, 340]},
+    {"tick": 830, "at": [169, 234.3]},
+    {"tick": 870, "at": [224, 456]},
+    {"tick": 895, "at": [195, 450]},
+    {"tick": 920, "at": [384.3, 364.9]}
+  ]
+}

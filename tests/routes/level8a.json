@@ -12,7 +12,10 @@
     "single_block_plat_no_emissive_ent_1097 (9-10), over double_block_plat_no_emissive_ent_1054",
     "(11-12). Left to wall04_no_emissive_ent_1006, a portal under it into the hole the crate left, 42",
     "units from antiportal_1096 (outside the port's 32 unit field; the original's is 64, R1), and one",
-    "on the player (13-14); out into the exit's room and right to the door. Won on tick 1319 (step 114)."
+    "on the player (13-14); out into the exit's room and right to the door. Won on tick 1319 (step 114).",
+    "Since step 127 (R1) the field is the original's 64 units and taps 13-14 lie inside it, so step 128",
+    "(the merge) adds a shot at anti_portal_agent_ent_1095 on tick 1238 (R17, step 126: a shot in",
+    "flight within 22.4 px kills it and deletes the ring round it), R1's own fix (merge_fixes)."
   ],
   "level": "level8a",
   "win_by": 1380,
@@ -37,6 +40,7 @@
     {"tick": 1160, "at": [502.3, 346.3]},
     {"tick": 1185, "at": [345, 160]},
     {"tick": 1210, "at": [435, 266.3]},
+    {"tick": 1238, "at": [226, 208]},
     {"tick": 1265, "at": [225, 250]},
     {"tick": 1290, "at": [268, 186.3]}
   ]

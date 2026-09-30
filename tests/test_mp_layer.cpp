@@ -1149,7 +1149,11 @@ void AnAntiportalIsDrawnAtHalfItsNodesScale() {
     const MagicPortals::Portals::Rules& rules = layer.SimLevel()->portals.rules;
     CHECK_MSG(rules.antiportalEntity == "antiportal", "the manager collects antiportal: " + rules.antiportalEntity);
     CHECK_NEAR(static_cast<float>(rules.antiportalManagerScale), 0.5f);
-    CHECK_NEAR(static_cast<float>(rules.antiportalRadiusPx), 16.0f); // the circle the port plays is not this step's
+    // The circle a tap is refused in is half the ring: 32 x scale, played since
+    // step 127 (R1), and 128 x the manager's 0.5 x 0.5 by the decode.
+    CHECK_NEAR(static_cast<float>(rules.antiportalRadiusPx), 32.0f);
+    const double halfTheRing = 128.0 * rules.antiportalManagerScale * 0.5;
+    CHECK_NEAR(static_cast<float>(rules.antiportalRadiusPx), static_cast<float>(halfTheRing));
     CloseTheLevelStartPopup(layer, registry);
     tickWith(layer, registry, kRest, {}, {});
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -1184,15 +1188,17 @@ void AnAntiportalIsDrawnAtHalfItsNodesScale() {
         CHECK_MSG(seen.found == 1, std::string(seen.image) + " drawn once at (" + std::to_string(seen.atPx.x) + ", " +
                                        std::to_string(seen.atPx.y) + "): " + std::to_string(seen.found));
     }
-    // The zones' boxes stay the circle the port plays, 16 x scale: the ring and the
-    // box differ until the refusal radius is the original's.
+    // The zones' boxes are the circle the port plays, 32 x scale since step 127
+    // (R1): the square round it is the ring's own 64 x scale across, one circle
+    // drawn and played.
     int boxesOnTheRule = 0;
     for (auto [entity, tag, transform] : registry.view<TagComponent, TransformComponent>().each()) {
         (void)entity;
         if (tag.tag != "Magic Portals No-Portal Zone") continue;
         const glm::dvec2 at = MagicPortals::Units::ToPixels(transform.position);
         if (glm::distance(at, glm::dvec2(180.0, 140.0)) < 0.5 &&
-            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(16.0 * 1.8 * 2.0)) < 1e-5f) {
+            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(32.0 * 1.8 * 2.0)) < 1e-5f &&
+            std::fabs(transform.scale.x - MagicPortals::Units::ToMetres(64.0 * 1.8)) < 1e-5f) {
             ++boxesOnTheRule;
         }
     }
@@ -13288,8 +13294,8 @@ void AShotIntoA17WallEndsInPortalFail() {
 }
 
 // Gate 2: "a 1-7 antiportal tap gives _in_antiportal at z 0". A tap 28 units
-// from antiportal_687, inside the 16 x 3 = 48 units the port plays (R1 is not
-// built), with a clear ray: red_waves (A) and red_cross at the tap, and on the
+// from antiportal_687, inside its 32 x 3 = 96 units (R1, played since step 127),
+// with a clear ray: red_waves (A) and red_cross at the tap, and on the
 // shot's arrival the red end at z 0 and the shake of 5, before the update.
 void AnAntiportalTapOn17EndsRedAtZeroAndShakes() {
     if (!OriginalArtIsThere("AnAntiportalTapOn17EndsRedAtZeroAndShakes")) return;
@@ -13386,6 +13392,94 @@ void TheBlockerKillsF3sLongShotRedAndShakesAfter() {
                     Point(aim).c_str(), Point(ends[0].atPx).c_str(), killed.tick);
     }
     checkQuakeRow(layer, registry, ticks, killed, "1-07 shot_blocked", 5.0, true);
+    layer.OnDetach(registry);
+}
+
+// FOOTAGE F17's FIRST SHOT ON 4-01 (level0c), through the layer (the remaster
+// record's step 126, R17): the player walked left to the locked pillar, a tap at
+// (450.1, 85.0). The shot passes 16 u from anti_portal_agent_ent_2107 (418, 108)
+// and dies there with it: ETHCallback_anti_portal_agent adds antiportal_explosion
+// at the agent and scale(32), deletes antiportal_2108, shakes 20 after the update
+// (a static entity's) and plays playExplosionSound(true) - and the shot is no
+// failed one, so neither portal_fail nor its sound. The agent's picture and the
+// ring's go.
+void AShotKillsF17sAgentWithItsBurstShakeAndSound() {
+    if (!OriginalArtIsThere("AShotKillsF17sAgentWithItsBurstShakeAndSound")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0c");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const auto drawnAt = [&registry](const char* image, glm::dvec2 atPx) {
+        int found = 0;
+        for (auto [entity, tag, material, transform] :
+             registry.view<TagComponent, MaterialComponent, TransformComponent>().each()) {
+            (void)entity;
+            if (tag.tag != "Magic Portals Sprite") continue;
+            if (material.albedoTexturePath.find(image) == std::string::npos) continue;
+            if (glm::distance(MagicPortals::Units::ToPixels(transform.position), atPx) > 0.5) continue;
+            ++found;
+        }
+        return found;
+    };
+    const glm::dvec2 agentAt(418.0, 108.0);
+    const glm::dvec2 ringAt(422.0, 60.0);
+    CHECK_MSG(drawnAt("anti_portal_agent.png", agentAt) == 1 && drawnAt("white_ring.png", ringAt) == 1,
+              "4-01 draws the agent and its ring before the shot");
+    // Left to the pillar, as F17's probe w1 walked: the player stops at x 153.
+    double lastX = -1.0;
+    for (int i = 0; i < 240; ++i) {
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kLeft}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        ++ticks;
+        const double x = playerPx(registry, layer).x;
+        if (i > 30 && std::fabs(x - lastX) < 1e-6) break;
+        lastX = x;
+    }
+    for (int i = 0; i < 20; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        ++ticks;
+    }
+    const glm::dvec2 stood = playerPx(registry, layer);
+    CHECK_MSG(std::fabs(stood.x - 153.0) < 1.0, "against the pillar: " + Point(stood));
+    const glm::dvec2 aim(450.1, 85.0);
+    CHECK_MSG(onScreen(registry, aim), "F17's tap is on the screen");
+    tap(layer, registry, screenOf(registry, aim));
+    ++ticks;
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const QuakeEdge killed = tickUntilUp(layer, registry, ticks, 120,
+                                         [](const PlayedLevel& played) { return played.portals.agentsKilled; });
+    CHECK_MSG(killed.tick > 0, "the agent was killed: " + lastFailure(layer));
+    if (killed.tick <= 0) return;
+    const std::vector<MagicPortals::Portals::AgentKill> kills = layer.SimLevel()->portals.agentKills;
+    CHECK_MSG(kills.size() == 1 && kills[0].agent == "anti_portal_agent_ent_2107" &&
+                  kills[0].ring == "antiportal_2108" && kills[0].atPx == agentAt,
+              "one kill, the agent's own ring with it");
+    CHECK(!layer.SimLevel()->portals.flight && layer.SimLevel()->portals.shotsFailed == 0);
+    CHECK(layer.SimLevel()->portals.failures.empty());
+    const std::vector<std::string> sounds = layer.LatchedSounds();
+    CHECK_MSG(std::count(sounds.begin(), sounds.end(), std::string("agent_killed")) == 1,
+              "playExplosionSound(true) latched once");
+    CHECK_MSG(std::count(sounds.begin(), sounds.end(), std::string("shot_failed")) == 0, "and no failed shot's sound");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const auto bursts = EffectsOf(layer, "antiportal_explosion.ent");
+    CHECK_MSG(bursts.size() == 1, "antiportal_explosion added: " + std::to_string(bursts.size()));
+    if (bursts.size() == 1) {
+        CHECK_MSG(bursts[0].atPx == agentAt && bursts[0].zUnits == 32.0,
+                  "at the agent, scale(32): " + Point(bursts[0].atPx) + " z " + std::to_string(bursts[0].zUnits));
+        CHECK_MSG(bursts[0].hasLight && std::fabs(bursts[0].lightRange - 199.0) < 1e-9,
+                  "its light, range 199: " + std::to_string(bursts[0].lightRange));
+    }
+    CHECK(EffectsOf(layer, "portal_fail.ent").empty() && EffectsOf(layer, "portal_fail_in_antiportal.ent").empty());
+    CHECK_MSG(drawnAt("anti_portal_agent.png", agentAt) == 0, "the agent's picture is gone");
+    CHECK_MSG(drawnAt("white_ring.png", ringAt) == 0, "and the ring's");
+    std::printf("  4-01, F17's shot from %s: the agent killed on tick %d at %s\n", Point(stood).c_str(), killed.tick,
+                kills.empty() ? "?" : Point(kills[0].shotPx).c_str());
+    checkQuakeRow(layer, registry, ticks, killed, "4-01 agent_killed", 20.0, true);
     layer.OnDetach(registry);
 }
 
@@ -16450,6 +16544,7 @@ void runTests() {
     AShotIntoA17WallEndsInPortalFail();
     AnAntiportalTapOn17EndsRedAtZeroAndShakes();
     TheBlockerKillsF3sLongShotRedAndShakesAfter();
+    AShotKillsF17sAgentWithItsBurstShakeAndSound();
     ATapWhileAShotFliesShowsTheHourglass();
     ABudgetZeroTapByTheSignMakesRedWavesAndAShake();
     TheGhostsShotMarksWhereItIsAimed();

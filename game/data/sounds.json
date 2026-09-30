@@ -103,6 +103,22 @@
       "pick": "both",
       "_note": "two samples together, not a choice between them"
     },
+    "playExplosionSound(true)": {
+      "files": ["explosion_huge.mp3"],
+      "min_interval_ms": 150,
+      "timer": "hugeExplosionSoundTimer",
+      "_source": [
+        "AudioManager::playExplosionSound(bool huge) (bytes 192072..192351) as one caller calls it:",
+        "ETHCallback_anti_portal_agent #183-187 pushes SetV1 1, so huge is true. The huge arm (#3-32)",
+        "plays g_sfxNames[8], explosion_huge, alone, and only once AudioManager.hugeExplosionSoundTimer",
+        "is past 150 ms (#9-12, CMPIu against the constant 150: 00_order 8.0 rule 1), then resets it;",
+        "the small arm (#33-60) plays g_sfxNames[1] on its own timer. So the call is ONE sample, not the",
+        "two the playExplosionSound row above plays: that row is the P6 backlog row's to correct, for its",
+        "own callers. The port's timer lets a call through at 150 ms where the original's needs above",
+        "150. Keyed with its argument so the decoded function is named, not a new one invented. Played",
+        "since the remaster record's step 126."
+      ]
+    },
     "playBurnSound": { "files": ["burn.mp3"] },
     "playFireballSound": { "files": ["fireball.mp3"] },
     "playFireExtinguishSound": { "files": ["spikes.mp3"] },
@@ -293,6 +309,7 @@
     "portal_placed": "playPortalCreatedSound",
     "shot_fired": "playPortalLaunchSound",
     "shot_failed": "playPortalFailedSound",
+    "agent_killed": "playExplosionSound(true)",
     "shot_reflected": "playReflectSound",
     "traversal": "playTeleportSound",
     "portal_spent": "playPortalKilledSound",

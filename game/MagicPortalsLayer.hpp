@@ -1326,7 +1326,8 @@ private:
         int diamond{-1};      // in diamonds.diamonds: drawn where it is, gone once spent
         int crystal{-1};      // in goals.crystals
         int staticPortal{-1}; // in portals.statics
-        int zone{-1};         // in portals.zones
+        int zone{-1};         // in portals.zones: gone with its zone
+        int agent{-1};        // in portals.agents: where it patrols, gone once a shot kills it
         int sky{-1};          // in m_sky.skies: pinned to the camera, not where the level put it
         bool satellite{false}; // m_sky's satellite, pinned the same way
         // Which of SpaceSky's four it is, each moved from the camera every frame.
@@ -1704,7 +1705,8 @@ private:
     entt::entity m_exit{entt::null};
     std::vector<entt::entity> m_portals;  // one per placed portal
     std::vector<entt::entity> m_statics;  // one per static portal, null once spent
-    std::vector<entt::entity> m_zones;    // one per no-portal zone
+    std::vector<entt::entity> m_zones;    // one per no-portal zone, hidden once gone
+    std::vector<entt::entity> m_agents;   // one per anti-portal agent, at its reach; hidden once killed
     std::vector<entt::entity> m_hazards;  // one per hazard, at the box that kills
     std::vector<ThrownBox> m_thrown;      // one per thrown body not yet taken back
     entt::entity m_shot{entt::null};      // the portal shot in flight, when there is one

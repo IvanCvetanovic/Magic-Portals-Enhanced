@@ -10,7 +10,8 @@
 //   default, and never more than a pair. At the cap the oldest portal gives
 //   way, or with that switched off the shot fails. A shot that arrives inside
 //   a no-portal zone fails too. A failed shot costs nothing. One shot flies at
-//   a time.
+//   a time. A shot that comes near an anti-portal agent on its way dies there
+//   and kills it, and the agent's ring goes with it (Agent).
 // - A level may also ship static portals (portal_static), which pair by index.
 // - Whatever comes into a portal goes out of its partner, as the original sends
 //   it (transit.json, decoded): at the partner itself, its velocity turned back,
@@ -117,6 +118,20 @@ struct Rules {
     // The entity whose presence turns a budget-0 tap into red_waves and a shake
     // (placement.json no_budget, blockPortalEffects' cached SeekEntity).
     std::string noPortalSignEntity;
+
+    // WHAT KILLS AN ANTI-PORTAL AGENT, AND WHICH RING GOES WITH IT (placement.json
+    // anti_portal_agent, decoded; the remaster record's step 126). A shot still in
+    // flight within killShare x the agent's size dies with it, and the agent then
+    // deletes the first ring spelled exactly ringEntity whose field holds it: in
+    // its own bucket, then in each of seekNeighbours' in turn.
+    struct AgentRules {
+        double sizeUnits = 0.0;  // GetSize().x: anti_portal_agent.png's 32, times the node's scale
+        double killShare = 0.0;  // 0.7
+        std::string ringEntity;  // "antiportal", the one spelling the search compares
+        double bucketUnits = 0.0; // GetBucket's floor(pos / 256)
+        std::vector<glm::dvec2> seekNeighbours;
+    };
+    AgentRules agent;
 };
 
 // The remake's portals.json: its placement, consumption and transit objects.
@@ -132,16 +147,13 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error);
 bool LoadPlacement(const std::string& path, Rules& out, std::string& error);
 
 // An antiportal. A tap within collision_radius_px times its `scale` is refused
-// (portal_system.gd:136-146). An anti_portal_agent with a speed and a stride
-// patrols: it swings as a moving platform does, on the axis its `direction`
-// names, vertical where it names none (behaviours.gd:48-51, 113-127). Three in
-// the game do, two in level10 and one in level13b.
+// (portal_system.gd:136-146). A zone with a speed and a stride patrols: it swings
+// as a moving platform does, on the axis its `direction` names, vertical where it
+// names none (behaviours.gd:48-51, 113-127). No placed zone of the game does
+// since the anti_portal_agents stopped being zones (Agent, below).
 //
-// In level10 every agent stands on a static antiportal of its own, whose field
-// holds the agent's whole swing. So there the patrol never changes where a tap
-// is refused. The port keeps the remake's two zones as they are; that the
-// original may carry the field with its agent is recorded in the remaster doc,
-// not guessed at here.
+// A zone an agent's death deleted is `gone`, and refuses nothing: the original's
+// isPointInAntiPortalField returns false for an entity that is not IsAlive.
 struct NoPortalZone {
     glm::dvec2 centrePx{0.0}; // where the level places it
     double scale = 1.0;
@@ -150,13 +162,44 @@ struct NoPortalZone {
     std::string name;          // last, so {centre, scale} still makes a zone
     // An EXPLICIT radius, for a zone that is not an antiportal the level placed.
     // Zero means the old arithmetic - antiportalRadiusPx times this node's own
-    // scale - which is every antiportal in the game. A gravity well's zone sets
-    // it, because its radius is the agent's own (52 to 248 px across the ten
-    // placements) and cannot be reached from a constant 64. GravityWell.hpp has
-    // the arithmetic.
+    // scale - which is every antiportal in the game. Nothing the port builds sets
+    // it now: the gravity wells' zones, which did, are gone (00_order R2, the
+    // remaster doc's step 125), since the original's well refuses no portal.
     double radiusPx = 0.0;
+    // The node's entity name as the level spells it, antiportal or antiportal.ent:
+    // an agent's death deletes only the bare spelling (Rules::AgentRules).
+    std::string entity;
+    bool gone = false; // deleted by an agent's death: it refuses nothing, and is drawn no more
 
     glm::dvec2 CentreNowPx() const { return moving ? motion.AtPx() : centrePx; }
+};
+
+// AN ANTI-PORTAL AGENT: the red orb that holds a ring open (placement.json
+// anti_portal_agent; ETHCallback_anti_portal_agent, bytes 336011..337087). It
+// refuses no portal and has no body. A portal shot that comes within
+// killShare x its size while still in flight dies there, and so does the agent,
+// and the agent takes one ring with it (State::Tick). One with a speed and a
+// stride patrols as a zone once did (Mover::Oscillation, the port's swing: R7 is
+// not built): two in level10 and one in level13b, each inside its own ring's
+// field all the way.
+struct Agent {
+    std::string name;
+    glm::dvec2 centrePx{0.0}; // where the level places it
+    double scale = 1.0;       // its node's `scale`: none of the 21 carries one
+    bool moving = false;
+    Mover::Oscillation motion; // when it patrols
+    bool gone = false;         // a shot killed it
+
+    glm::dvec2 CentreNowPx() const { return moving ? motion.AtPx() : centrePx; }
+};
+
+// An agent a shot killed this tick, for the frame to draw and play: the
+// explosion, the shake and the sound are the layer's.
+struct AgentKill {
+    std::string agent;
+    glm::dvec2 atPx{0.0};   // the agent's point: pos, where the explosion is added
+    glm::dvec2 shotPx{0.0}; // where the shot first came within reach of it
+    std::string ring;       // the zone deleted with it, or empty when none held it
 };
 
 struct Placed {
@@ -337,7 +380,13 @@ struct State {
     Shot::Rules shot;
     int budget = 0;
     entt::entity shooter = entt::null; // the player: where a shot leaves from, and what it passes through
+    // What else a flying shot passes through: each gravity well's agent, set by
+    // Game::Start (00_order R2). The original's projectile.ent has no shape and
+    // meets nothing on its way, and the ray that judges its tap passes
+    // gravity_agent by name, so a well stops no shot.
+    std::vector<entt::entity> shotPasses;
     std::vector<NoPortalZone> zones;
+    std::vector<Agent> agents;
     std::vector<Blocker> blockers;
     std::vector<Reflector> reflectors;
     std::vector<entt::entity> travellers; // the player, and every teleportable body
@@ -360,7 +409,11 @@ struct State {
     float lockoutS = 0.0f;
     std::optional<Flight> flight;
     int shotsFired = 0;
+    // A shot an agent killed is not one of these: the original's projectile is
+    // deleted by the agent's callback, so its own never fails it (no portal_fail,
+    // no failed sound). agentsKilled counts those.
     int shotsFailed = 0;
+    int agentsKilled = 0;
     int reflections = 0;     // every time a shot came off a reflector
     std::string lastFailure; // what stopped the last failed shot
 
@@ -399,6 +452,7 @@ struct State {
     std::vector<Launch> launches;
     std::vector<Reflection> reflected;
     std::vector<Failure> failures;
+    std::vector<AgentKill> agentKills; // this tick's alone, as failures are
 
     // A tap at a point in the level: a shot fired toward it. False when none
     // goes, because the level allows no portal or a shot is already flying.
@@ -407,9 +461,22 @@ struct State {
 
     // Whether a point is inside a zone the port plays - the test TryPlace
     // refuses by, exactly: an antiportal's radius times its scale, or a zone's
-    // own radius. It stands in for isPointInAntiPortalField in computePortalFinalPos,
-    // so the pictures follow the fields the port plays (R1 and R2 are not built).
+    // own radius, and never a zone that is gone. It stands in for
+    // isPointInAntiPortalField in computePortalFinalPos, so the pictures follow the
+    // fields the port plays (R1 is not built).
     bool InField(const glm::dvec2& atPx) const;
+    // The same test on one zone: isPointInAntiPortalField, the port's radius.
+    bool Holds(const NoPortalZone& zone, const glm::dvec2& atPx) const;
+
+    // deleteAntiPortalInThisBucket(GetBucket(atPx), atPx, true), what an agent's
+    // death calls (rules.agent): the first live zone spelled rules.agent.ringEntity
+    // whose field holds the point, in the point's bucket and then its neighbours',
+    // is gone. Its name, or empty when none holds the point.
+    std::string DeleteRingAt(const glm::dvec2& atPx);
+
+    // How near a shot an agent kills it: killShare x sizeUnits x its scale.
+    double AgentReachPx(const Agent& agent) const;
+    const Agent* FindAgent(const std::string& name) const;
 
     // The global computePortalFinalPos (355236..356384) from `casterPx` toward
     // `destPx`, with its hasBeenReflected. Reads the registry and
@@ -445,8 +512,9 @@ struct State {
     const NoPortalZone* FindZone(const std::string& name) const;
 
     // One tick, after the physics step. The lockout runs down, a patrolling zone
-    // swings on, a shot flies on, and a traveller newly inside a portal goes out
-    // of its partner.
+    // or agent swings on, a shot flies on - and dies with the first live agent it
+    // comes within reach of while still in flight - and a traveller newly inside
+    // a portal goes out of its partner.
     void Tick(entt::registry& registry, float dt);
 
     // A placed portal's entry circle, put back over its point: the hover moves
@@ -454,9 +522,9 @@ struct State {
     static void Centre(Placed& portal);
 };
 
-// A built level's portals, no-portal zones and projectile blockers. A
-// patrolling zone swings at movers.json's rate scale, and the player's shots fly
-// by shot.json. False, with `error`, for data that does not read.
+// A built level's portals, no-portal zones, anti-portal agents and projectile
+// blockers. A patrolling agent swings at movers.json's rate scale, and the
+// player's shots fly by shot.json. False, with `error`, for data that does not read.
 bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built,
           entt::registry& registry, entt::entity player, const Rules& rules, const Mover::Rules& movers,
           const Shot::Rules& shot, State& out, std::string& error);

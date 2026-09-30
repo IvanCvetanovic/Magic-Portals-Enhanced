@@ -182,9 +182,12 @@
       "    `scale` custom data, and the scene-wide pass that calls it scales every",
       "    entity that does not carry `scalable = 0`. No antiportal carries one.",
       "",
-      "128 * 0.5 = 64, times the node's own scale, as this block first read it. THAT",
-      "MISSED ONE CALL, and every number after it is 2x too big: see `manager` below.",
-      "The field is 32 x scale and the ring is drawn 64 x scale across."
+      "GetSize().x is that 128 x the node's `scale` x the manager's Scale(0.5) (`manager`",
+      "below): the ring is 64 x scale units ACROSS, and the circle a tap is refused in is",
+      "half of that, a RADIUS OF 32 x scale. An earlier reading of this block took",
+      "128 x 0.5 = 64 x scale for the radius: it missed the manager's Scale(0.5) and was",
+      "2x too big (64 x scale is the ring's diameter, never its radius). Footage F3",
+      "refutes it as it refutes the remake's 16 (`_measured` below)."
     ],
 
     "manager": {
@@ -219,30 +222,119 @@
       "scale": 0.5
     },
 
-    "radius_px": 16.0,
-    "_radius_note": [
-      "THE REMAKE'S GUESS, STILL PLAYED. The owner's standing ruling R1 (the remake's",
-      "out/parity/visuals/briefs/00_order.md section 6) takes the original's 32 x scale,",
-      "which the decode (`manager`) and F3's taps both give; a later step plays it.",
-      "Until then this file keeps the port's number and records the other one.",
+    "radius_px": 32.0,
+    "_radius_source": [
+      "DECODED, AND PLAYED since the remaster record's step 127 (00_order R1, the owner's",
+      "standing ruling: what the original does). white_ring.png's 128 x the manager's",
+      "Scale(0.5) x isPointInAntiPortalField's 0.5 (`_source`), in units per unit of the",
+      "node's own `scale`, which Portals::State::Holds multiplies it by. The port played the",
+      "remake's guess of 16 here, half the original's field, until step 127.",
       "",
-      "This note used to argue against 64 x scale: level6's projectile blocker",
-      "anti_projectile_wall_ent_743 at (313, 185) would sit entirely inside a 192 u",
-      "field. At the decoded 96 u its corners are inside too (farthest 91.1 u), but the",
-      "blocker is not pointless: F3 (6.3) shows it kills a shot aimed PAST the field's",
-      "right edge, which the field alone allows. test_mp_shot's blocker case lands",
-      "its shot at (380, 150), 101 u from the field's centre: outside at 16 x 3 and at",
-      "32 x 3."
+      "Every field is ONE circle, drawn and played: the ring the layer draws, 128 x",
+      "manager.scale x the node's scale across, is twice this radius x the node's scale.",
+      "A `no_portal` node is in the port's no_portal_zone role and is tested with this",
+      "radius too, though AntiPortalManager gathers only antiportal and antiportal.ent",
+      "(`manager`). The game places one, 1-07's no_portal_705 at (232, 194): its 32 u lies",
+      "wholly inside antiportal_687's 96 u field (56 u between the centres, 56 + 32 < 96),",
+      "so it refuses no tap the antiportal does not."
     ],
-    "_decoded_radius_px_not_applied": 32.0,
-
-    "_not_modelled": [
-      "A destroyed antiportal refuses nothing: isPointInAntiPortalField returns false",
-      "for an entity that is not IsAlive, and antiportal_explosion.ent exists. The port",
-      "has no notion of destroying one.",
+    "_measured": [
+      "Footage F3 (the remake's out/parity/footage/F3.md sections 2 and 6.1), 1-7 (level6),",
+      "antiportal_687 at (288, 192), scale 3, the player still at the spawn and every ray",
+      "clear: taps 35.6, 78.7, 93.9 and 94.9 u from its centre were refused (red_waves",
+      "each time), taps 97.1 and 98.1 u were accepted and opened a portal. The refusal",
+      "edge lies in (94.9, 97.1] u = (31.64, 32.36] x scale; 32 x 3 = 96. The 16 x 3 = 48",
+      "the port played is refuted by the refusals at 78.7-94.9 u.",
       "",
+      "The same level's projectile blocker anti_projectile_wall_ent_743 at (313, 185) has",
+      "its corners inside the 96 u field (farthest 91.1 u), but F3 (6.3) shows it kills a",
+      "shot aimed PAST the field's right edge, which the field alone allows: test_mp_shot's",
+      "blocker case lands its shot at (380, 150), 101 u from the field's centre, outside it."
+    ],
+
+    "_destroyed": [
+      "A destroyed antiportal refuses nothing: isPointInAntiPortalField (bytes 334800..335020)",
+      "returns false at #1-10 for an entity that is not IsAlive. What destroys one is an",
+      "anti_portal_agent a shot kills (`anti_portal_agent` below); since the remaster record's",
+      "step 126 the port plays it (Portals::NoPortalZone::gone)."
+    ],
+    "_not_modelled": [
       "The original's test is strict - squaredDistance < r*r - where the port's is <=.",
       "A tap exactly on the edge is refused by the port and allowed by the original."
+    ]
+  },
+
+  "anti_portal_agent": {
+    "_source": [
+      "ETHCallback_anti_portal_agent (AntiPortalManager.angelscript, bytes 336011..337087), the",
+      "callback of both spellings (00_order 8.0 rule 4), every frame the agent is run:",
+      "  #4-9     pos = GetPositionXY()",
+      "  #11-22   halfSize = GetSize() x 0.7f  (despite its name: 0.7 of the whole size)",
+      "  #24-35   getEntitiesFromNeighbourBuckets(GetBucket(pos), ...): what is round it",
+      "  #49-59   itself is passed over",
+      "  #61-77   only an entity named 'projectile.ent': the portal shot",
+      "  #79-108  only while it is still in flight: squaredDistance(its position, its",
+      "           'casterPos') < its 'squaredDistance', the square of the way it was fired",
+      "  #110-124 within halfSize.x of the agent: squaredDistance < halfSize.x ^ 2",
+      "  #126-142 DeleteEntity(the shot), DeleteEntity(itself)",
+      "  #144-166 AddScaledEntity('antiportal_explosion.ent', vector3(pos, scale(32)),",
+      "           getScale()) (effects.json antiportal_explosion)",
+      "  #168-177 deleteAntiPortalInThisBucket(GetBucket(pos), pos, true)",
+      "  #179-181 startEarthquake(20, 100) (earthquake.json agent_killed)",
+      "  #183-187 playExplosionSound(true) (sounds.json playExplosionSound(true))",
+      "  #189-190 and no other shot is looked at this frame.",
+      "The agent's own test is nothing more: anti_portal_agent.ent is shape 0 (no body) and",
+      "AntiPortalManager never gathers it (entity_roles.json no_portal_zone), so it refuses",
+      "no tap and stops nothing a shot is not killed by.",
+      "",
+      "size_units is GetSize().x, ETHSpriteEntity::GetCurrentSize = frame x scale",
+      "(ETHSpriteEntity.cpp:652): entities/anti_portal_agent.png is 32 x 32 by its PNG header,",
+      "SpriteCut 1 x 1, <Scale> 1, and no agent of the 21 carries a `scale` of its own, so",
+      "0.7 x 32 = 22.4 units. The node's `scale`, where one had it, would multiply it",
+      "(SGlobalScale::scaleEntity).",
+      "",
+      "deleteAntiPortalInThisBucket(bucket, agentPos, seekNeighbours) (bytes 335206..336011):",
+      "  #4-7     GetEntitiesFromBucket(bucket), in the bucket's own order",
+      "  #13-33   an entity whose GetEntityName() is exactly 'antiportal' - ring_entity, the",
+      "           BARE spelling only: an antiportal.ent is never deleted here",
+      "  #35-47   whose field holds agentPos (isPointInAntiPortalField, the field test a tap",
+      "           is refused by; a dead one holds nothing)",
+      "  #49-65   DeleteEntity(it) and true: ONE ring, the first",
+      "  #75-172  else, with seekNeighbours, the same once in each of bucket - (1, 0),",
+      "           + (1, 0), - (0, 1), + (0, 1), without seeking further (seek_neighbours, in",
+      "           that order: 00_order 8.0 rule 3, arguments pushed last-first)",
+      "  #173-176 else false: no ring goes.",
+      "bucket_units: GetBucket is floor(pos / bucketSize) (ETHBucketManager.cpp:47-50), and",
+      "Game::start's four-string LoadScene pushes no bucket size, so it is",
+      "_ETH_DEFAULT_BUCKET_SIZE, 256 (ETHTypes.h:58; ETHScriptWrapper.generic.cpp:314). Whether",
+      "the shipped engine buckets the .esc's own coordinates or the screen's is the remaster",
+      "record's open question (its draw-order step); it changes no answer here: on all 21",
+      "agents the ring deleted is the same at 256, 256 / 1.5 and 256 / 2.8125, and at a field",
+      "of 16 or 32 x scale (out/parity/program/R17/agent_census.txt)."
+    ],
+    "_measured": [
+      "footage F17 (out/parity/footage/F17.md 1.1-1.2), 4-01 (level0c): a shot from about",
+      "(153, 146) toward (450.1, 85.0) passes 16 u from anti_portal_agent_ent_2107 (418, 108);",
+      "the projectile is at the agent near #36 (2.167 s), antiportal_explosion bursts #44-#52,",
+      "and the pink field of antiportal_2108 is gone by #60 (3.25 s)."
+    ],
+    "size_units": 32.0,
+    "kill_share_of_size": 0.7,
+    "ring_entity": "antiportal",
+    "bucket_units": 256.0,
+    "seek_neighbours": [[-1, 0], [1, 0], [0, -1], [0, 1]],
+    "_not_modelled": [
+      "The agent is a static entity (anti_portal_agent.ent static 1), and Ethanon runs a static",
+      "entity's callback only while its bucket is drawn. The port tests every agent every",
+      "tick. A shot flies from the player to a tap, both on screen, and dies within 22.4 u of",
+      "an agent, so the agent's bucket is on screen in every case but an agent within 22.4 u of",
+      "the view's edge whose 256 u bucket lies wholly outside it.",
+      "The port's shot starts at the player's centre and flies shot.json's 600 u/s; the",
+      "original's jumps 24 u out on its first frame (G4, not built). So a player standing",
+      "within 22.4 u of an agent kills it with any shot, where the original's shot starts",
+      "24 u out along its aim. The port tests the whole of each tick's stretch",
+      "(Shot::EntersCircle) where the original tests the shot's point once a frame at 200 u/s:",
+      "the same pass through the circle, found without the coarser step's gaps."
     ]
   }
 }

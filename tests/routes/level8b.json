@@ -1,0 +1,32 @@
+{
+  "_about": [
+    "3-09 (step 127, R1: the key lies at antiportal_1504's centre, 64 px of field round it, so no portal",
+    "opens within reach of it). A portal at (420, 140) past the spawn block's corner and one on the",
+    "player; one on the left ledge at (245, 100), right of knight B's walk, and one on the player. A",
+    "portal high by the left wall at (20, 100), 69 px from the key's ring, and one in the pit at (318,",
+    "222): right off the ledge, falling into the pit's portal and out of the high one moving up and right",
+    "(invertLinearVelocity), past the key within its 26 px (carried from tick ~240), and down onto the",
+    "corner block. When moving_platform_1429 is up out of the line (tick 405) a portal on the floor at",
+    "(400, 200), one on the player; one by the keyhole at (580, 200), one on the player: the key opens",
+    "the yellow door, and right into the door. The knights never see or shoot (G1, not built). Won on",
+    "tick 645 (step 127)."
+  ],
+  "level": "level8b",
+  "win_by": 710,
+  "holds": [
+    {"walk": "right", "from": 200, "to": 240},
+    {"walk": "right", "from": 600, "to": 800}
+  ],
+  "taps": [
+    {"tick": 30, "at": [420, 140]},
+    {"tick": 60, "at": [617, 42.3]},
+    {"tick": 90, "at": [245, 100]},
+    {"tick": 120, "at": [420, 202.3]},
+    {"tick": 150, "at": [20, 100]},
+    {"tick": 175, "at": [318, 222]},
+    {"tick": 405, "at": [400, 200]},
+    {"tick": 445, "at": [54.0, 202.3]},
+    {"tick": 475, "at": [580, 200]},
+    {"tick": 500, "at": [400, 202.3]}
+  ]
+}

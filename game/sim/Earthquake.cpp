@@ -43,6 +43,7 @@ constexpr const char* kKeys[] = {
     "no_portal_tap",
     "shot_blocked",
     "shot_failed_in_field",
+    "agent_killed",
     "player_impact",
     "stone_impact",
     "minion_impact",

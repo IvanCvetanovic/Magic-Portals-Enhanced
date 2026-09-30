@@ -20,7 +20,8 @@ bool Moves(const std::string& role) {
 bool IsPorted(const std::string& role) {
     static const char* const kPorted[] = {
         kPlayerSpawn, kLevelBounds, kLevelProperties, kExitDoor, kCollectible,
-        kSwitch, kSwitchedDoor, kLift, kMovingPlatform, kNoPortalZone, kStaticPortal, kHazard, kDemolisher,
+        kSwitch, kSwitchedDoor, kLift, kMovingPlatform, kNoPortalZone, kAntiPortalAgent, kStaticPortal, kHazard,
+        kDemolisher,
         kLauncher, kProjectileBlocker, kReflector, kTurret, kFireSource, kExplosive, kHinge,
         kEnemySpawn, kWaypoint, kKey, kKeyhole, kLockedDoor, kShockField, kPickup, kTorch, kBouncer, kGravityWell,
         kRedKeyState,

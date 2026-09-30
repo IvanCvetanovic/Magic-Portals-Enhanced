@@ -1,0 +1,36 @@
+{
+  "_about": [
+    "3-13, won by killing the anti-portal agent (step 126, R17). Left off the shelf onto the crate, right",
+    "off its far side, and left again: the crate is pushed until it drops into the 64 px gap by the key's",
+    "block (released on tick 187; later and it slides over the gap and jams under the column). Over it to",
+    "the far wall, taking the blue key. From x 9.8 a shot at (70, 70) passes left of the block under the",
+    "agent and comes within 22.4 of anti_portal_agent_ent_1536 (82, 84): the agent and antiportal_1520, the",
+    "208 px field over the whole left of the level, are gone on tick ~345. A portal by the blue keyhole at",
+    "(380, 178), one on the player: the blue key opens it and the yellow key is taken. Right through where",
+    "the blue door stood, down, left to x 412. A portal over breakable_wall_1542 at (310, 360) and one",
+    "beside rolling_stone_1540 at (100, 298): the stone drops onto the wall and breaks it (tick 720). Left",
+    "into the hole, onto the stone; a portal in the corridor at (240, 466), one on the player; left past",
+    "keyhole_ent_1197 (the yellow door goes) to the door. Won on tick 1027 (step 126)."
+  ],
+  "level": "level12b",
+  "win_by": 1090,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 80},
+    {"walk": "right", "from": 81, "to": 106},
+    {"walk": "left", "from": 140, "to": 187},
+    {"walk": "left", "from": 240, "to": 330},
+    {"walk": "right", "from": 525, "to": 560},
+    {"walk": "left", "from": 600, "to": 624},
+    {"walk": "left", "from": 740, "to": 760},
+    {"walk": "left", "from": 880, "to": 1090}
+  ],
+  "taps": [
+    {"tick": 340, "at": [70, 70]},
+    {"tick": 370, "at": [380, 178]},
+    {"tick": 420, "at": [9.8, 170.3]},
+    {"tick": 650, "at": [310, 360]},
+    {"tick": 680, "at": [100, 298]},
+    {"tick": 830, "at": [240, 466]},
+    {"tick": 860, "at": [351.0, 401.0]}
+  ]
+}

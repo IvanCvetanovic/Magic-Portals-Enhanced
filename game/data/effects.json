@@ -677,6 +677,29 @@
     ]
   },
 
+  "antiportal_explosion": {
+    "entity": "antiportal_explosion.ent",
+    "offset_units": 0,
+    "z": {"value": 32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_anti_portal_agent (AntiPortalManager.angelscript, bytes 336011..337087) #144-166, when a",
+      "shot still in flight comes within 0.7 x the agent's size (placement.json anti_portal_agent):",
+      "AddScaledEntity('antiportal_explosion.ent', vector3(pos, g_scale.scale(32)), g_scale.getScale()),",
+      "pos the agent's own GetPositionXY() (#4-9) - the vector3(vector2, float) constructor, its float the",
+      "scale(32) pushed first (00_order 8.0 rule 3) - so the agent's point, 32 in front, unturned",
+      "(AddScaledEntity's 0f, ETHScriptWrapper.Scene.cpp:176-178), at the script's own size. After it, the",
+      "ring round the agent is deleted (#168-177), startEarthquake(20, 100) (earthquake.json agent_killed)",
+      "and playExplosionSound(true) (sounds.json). ITS .ent: no sprite, static 0; explosion.png cut 4 x 3,",
+      "3 particles all at once, life 450 +- 355, size 90, growth 2, max 250, (1, 0.3, 0.1); sparkles.bmp,",
+      "20 at once, life 2850 +- 1550, size 22 +- 16, growth -0.2, direction (0, 0.6) +- (0, 0.3), start",
+      "within (200, 170), (1, 0.1, 0.1) to black; both repeat 1; a <Light> range 199, (2, 1, 0.4), halo 64.",
+      "Temporary. MEASURED on footage F17 (4-01, #44-#52, 2.54-2.92 s): a large bright burst over the right",
+      "half of the screen where the agent was. Drawn from the remaster record's step 126."
+    ]
+  },
+
   "_crystals": [
     "WHAT A CRYSTAL LEAVES WHERE IT WAS - the visuals plan's 10.2 (00_order section 7; system_7 7f-1), drawn from",
     "planning step 106. Two call sites in ETHCallback_crystal.angelscript, each an AddScaledEntity at the",

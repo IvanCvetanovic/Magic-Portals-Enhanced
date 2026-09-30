@@ -967,10 +967,10 @@ void AtTheCapTheOldestGivesWay() {
 
 void ANoPortalZoneRefusesATap() {
     // level30 has no no-portal zone, so this one is the test's: at (300, 100)
-    // with scale 2, refusing taps within twice the ANTIPORTAL radius - the circle
-    // the port plays, whose decoded value placement.json records as 32, and not
-    // the portal's own 14. It is not checked here against a level that has a
-    // zone; test_mp_movers does that on level10.
+    // with scale 2, refusing taps within twice the ANTIPORTAL radius - the
+    // decoded 32, played since step 127 (R1), and not the portal's own 14. It is
+    // not checked here against a level that has a zone; test_mp_movers does that
+    // on level10, and on level6 against footage F3's taps.
     Play play;
     std::string error;
     CHECK_MSG(StartLevel30(play, true, error), error);
@@ -981,6 +981,8 @@ void ANoPortalZoneRefusesATap() {
     zone.scale = 2.0;
     play.portals.zones.push_back(zone);
     const double reach = g_portalRules.antiportalRadiusPx * 2.0;
+    // The port's old 16 x scale edge is well inside it now.
+    CHECK_MSG(!play.portals.TryPlace(glm::dvec2(300.0 + 16.0 * 2.0 + 1.0, 100.0)), "the old edge is refused");
     CHECK_MSG(!play.portals.TryPlace(glm::dvec2(300.0 + reach - 1.0, 100.0)), "a tap just inside it is refused");
     CHECK_MSG(play.portals.TryPlace(glm::dvec2(300.0 + reach + 1.0, 100.0)) && play.portals.portalsUsed == 1,
               "and one just outside is placed");
@@ -1001,27 +1003,29 @@ void ANoPortalZoneRefusesATap() {
 //     AntiPortalManager's constructor scales every field by 0.5 over the node's
 //     own scale, so the radius is 32 times the node's scale.
 //
-// So the port's 16 makes every no-portal field half the original's, on the 52
-// levels that carry one. placement.json holds the derivation.
+// The port played the remake's 16 until step 127 (R1), every no-portal field
+// half the original's on the 52 levels that carry one. placement.json holds the
+// derivation.
 //
 // Asserting the VALUES alone would not catch the bug this fixes: one field doing
 // both jobs passes that. What catches it is that the two differ, and that the
-// old 16 x scale point now falls INSIDE the refusal.
+// old 16 x scale point now falls INSIDE the refusal (ANoPortalZoneRefusesATap).
 void ThePlacementRadiiAreDecodedAndDistinct() {
     // A portal's own radius is DECODED and played: 14.
     CHECK_NEAR(static_cast<float>(g_portalRules.entryRadiusPx), 14.0f);
 
-    // An antiportal's is the remake's 16, still played. The decode says 32 - half
-    // white_ring.png's 128 px frame, times the manager's 0.5 and the node's scale -
-    // and footage F3 brackets the original's refusal on 1-7 at 31.6-32.4 x scale;
-    // placement.json carries it beside this one, and the owner's ruling R1 takes it
-    // in a step of its own. Asserting 16 here is asserting what the port PLAYS, so
-    // that changing it is a deliberate act rather than a silent one.
-    CHECK_NEAR(static_cast<float>(g_portalRules.antiportalRadiusPx), 16.0f);
+    // An antiportal's is DECODED and played since step 127 (R1): 32, half
+    // white_ring.png's 128 px frame times the manager's 0.5, times the node's
+    // scale; footage F3 brackets the original's refusal on 1-7 at
+    // (31.64, 32.36] x scale.
+    CHECK_NEAR(static_cast<float>(g_portalRules.antiportalRadiusPx), 32.0f);
 
     // The manager's Scale, which the ring is drawn by (64 x scale across) and the
-    // decoded radius comes from, read with the entity it collects.
+    // radius comes from, read with the entity it collects: one circle, drawn and
+    // played.
     CHECK_NEAR(static_cast<float>(g_portalRules.antiportalManagerScale), 0.5f);
+    CHECK_NEAR(static_cast<float>(g_portalRules.antiportalRadiusPx),
+               static_cast<float>(128.0 * g_portalRules.antiportalManagerScale * 0.5));
     CHECK_MSG(g_portalRules.antiportalEntity == "antiportal", "the manager collects antiportal");
 
     // The point of the split: two numbers, not one. The port carried a single

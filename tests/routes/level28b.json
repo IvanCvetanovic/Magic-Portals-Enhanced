@@ -1,0 +1,24 @@
+{
+  "_about": [
+    "3-29 (step 127, R1: antiportal_ent_2204's 32 x 5 = 160 px holds the middle of the level, where",
+    "knight B carries the yellow key). A portal over the left block at (140, 100) and one on the player;",
+    "right to take the fire diamond (tick 87), left off the block to the floor and right to x 190. A tap",
+    "at knight B (399, 212): the shot is burned into a fireball (the carried diamond), which flies along",
+    "the floor and burns the knight (tick ~297), and the key drops. Right along the floor taking the key,",
+    "up the ramp to the keyhole, which opens the yellow door, and on into the door. Knight A never sees",
+    "or shoots (G1, not built). Won on tick 582 (step 127)."
+  ],
+  "level": "level28b",
+  "win_by": 640,
+  "holds": [
+    {"walk": "right", "from": 75, "to": 90},
+    {"walk": "left", "from": 100, "to": 125},
+    {"walk": "right", "from": 165, "to": 195},
+    {"walk": "right", "from": 300, "to": 640}
+  ],
+  "taps": [
+    {"tick": 30, "at": [140, 100]},
+    {"tick": 55, "at": [62, 202.3]},
+    {"tick": 205, "at": [399, 212]}
+  ]
+}

@@ -4,23 +4,26 @@
 // `gravity_well`. Ten placements across five levels, and the last mechanic in
 // the game that is not a boss.
 //
-// A well is THREE things at once, and the port already had the first:
+// A well is these things at once, and the port already had the first:
 //   - a SOLID CIRCLE. The node is a StaticBody2D with a CircleShape2D, so it is
-//     an obstacle and a portal shot already dies on it (Shot::FirstBody walks
-//     sphere colliders and skips only triggers). Nothing here has to build that.
+//     an obstacle to the player and to every loose body. NOT TO A SHOT: the
+//     original's projectile.ent has no shape, and the ray that judges a tap
+//     passes gravity_agent by name, so Game::Start hands each agent's body to
+//     Portals::State::shotPasses and a shot flies through it (00_order R2).
 //   - an ATTRACTOR, which is this module: every DYNAMIC body inside its radius
 //     is pulled toward the centre. The original's DynamicBodyChooser rejects
 //     statics and anything with no physics controller, so platforms and walls
 //     stand still inside a well and only loose bodies move.
-//   - a NO-PORTAL ZONE. ETHCallback_gravity_agent adds an antiportal.ent at its
-//     own position on the first tick, so no portal may open inside its reach.
-//     Nothing in the level file says `antiportal`; it exists only in the
-//     callback, which is why a port reading the .tscn alone would never find it.
-//     Game::Start hands one to Portals::State::zones for each well.
-//   - and A GREEN RING, which is that same added entity SEEN: white_ring.png at
-//     the zone's own diameter, added, painted (0.25, 0.5, 0.25) by the callback
-//     that adds it. It is the one part of a well that is drawn rather than felt,
-//     and it is drawn by the layer from `Rules::ring` (gravitywell.json).
+//   - and A GREEN RING. ETHCallback_gravity_agent adds an antiportal.ent at its
+//     own position on the first tick - nothing in the level file says
+//     `antiportal`; it exists only in the callback - and that entity SEEN is
+//     white_ring.png at radius * 2 - 24 across, added, painted (0.25, 0.5, 0.25)
+//     by the callback. It is drawn by the layer from `Rules::ring`
+//     (gravitywell.json). IT REFUSES NO PORTAL: it is renamed gravity_area as it
+//     is added (ETHScene.cpp:264-266), after AntiPortalManager's constructor has
+//     gathered its fields by name (104925..105343 #16-35), so no tap is ever
+//     tested against it (00_order R2, decided for the original; the port's zone
+//     round each well went in the remaster doc's step 125).
 //
 // THE FORCE, decoded (ETHCallback_gravity_area, bytes 461443..462571):
 //
@@ -46,8 +49,8 @@
 
 namespace MagicPortals::GravityWell {
 
-// THE RING the agent adds with that zone, and the one thing about a well that is
-// seen rather than felt: an antiportal.ent, sized to the zone and painted green
+// THE RING the agent adds, and the one thing about a well that is seen rather
+// than felt: an antiportal.ent, sized from the agent's radius and painted green
 // by `area.SetColor(vector3(0.5, 1, 0.5) * 0.5)`. It is renamed `gravity_area` at
 // AddEntity, so the callback it gets is the force above and not
 // ETHCallback_antiportal: no blink, no turn, one size. gravitywell.json `ring`
@@ -101,13 +104,13 @@ struct Rules {
     double forceZeroGravity = 0.0; // 0.18, where the world's gravity is V2_ZERO
     double forceWithGravity = 0.0; // 0.5, where it is not
     double referenceFrameMs = 0.0; // 16.6666: the frame the force is quoted per
-    double zoneShrinkPx = 0.0;     // 24: the antiportal's SIZE is radius*2 - this
+    double zoneShrinkPx = 0.0;     // 24: the added antiportal's SIZE is radius*2 - this
     Ring ring;                     // and what that antiportal looks like
     Roundabout roundabout;         // and the laps round it
 };
 
 // False, with `error`, for a file that does not read, and for one whose numbers
-// would make a well that does nothing or a zone bigger than its own well.
+// would make a well that does nothing or a ring bigger than its own well.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
 struct Well {
@@ -116,16 +119,9 @@ struct Well {
     double radiusPx = 0.0;
 
     // THE SIZE the agent's scaleToSize gives its antiportal, across: radius*2 -
-    // 24, which is what is DRAWN. 188 units at level16c's radius of 106.
+    // 24, which is what is DRAWN. 188 units at level16c's radius of 106. Only
+    // drawn: the area refuses no portal (00_order R2), so nothing plays half of it.
     double RingSizePx(const Rules& rules) const { return radiusPx * 2.0 - rules.zoneShrinkPx; }
-
-    // The radius INSIDE WHICH NO PORTAL MAY OPEN, which is not the well's own:
-    // an antiportal refuses a tap within GetSize().x * 0.5, so it is half the
-    // size above - radius - 12, at every one of the ten placements. Derived from
-    // the ring in that order, as the original derives it, so that a ruling about
-    // the refusal (00_order R2) cannot move the picture; getting it wrong is 12
-    // px of silently wrong zone at every placement in the game.
-    double ZoneRadiusPx(const Rules& rules) const { return RingSizePx(rules) * 0.5; }
 };
 
 // The velocity a single well adds to a body this tick, in the engine's plane.

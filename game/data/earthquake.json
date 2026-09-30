@@ -235,6 +235,11 @@
       "when": "before_update",
       "_source": "D11 row 14. ETHCallback_projectile (358053..359141) #211-215, startEarthquake(5, 0), with portal_fail_in_antiportal.ent (#216-232), when a willDie shot arrives with its position inside an antiportal field; a plain portal_fail (#237-257) has none. projectile.ent static 0: a dynamic entity's callback, before the update. Wired in step 103 on the port's own failures that end inside a field it plays (Portals::State::failures): a shot refused where it arrives, or one a body stops inside a field. MEASURED on F3 #161-171: dy -5, +5, -2, +2, -1, +1 px, dx 0."
     },
+    "agent_killed": {
+      "intensity": 20.0,
+      "when": "after_update",
+      "_source": "D11 row 3. ETHCallback_anti_portal_agent (336011..337087) #179-181, startEarthquake(20, 100) - PshC4 100 then PshC4 20, arguments pushed last-first, so intensity 20 and the 100 a vibrate the desktop port has no motor for (as no_portal_tap's 40) - after it deletes the shot and itself, adds antiportal_explosion.ent and deletes the ring round it (#126-177), when a shot still in flight comes within 0.7 x its size (placement.json anti_portal_agent). anti_portal_agent.ent static 1: a static entity's callback, after the update. On the 17 levels that place one of the 21 agents. Wired in the remaster record's step 126 on the port's own kill (Portals::State::agentKills). Footage F17 (4-01, #44-#52) shows the burst; its shake was not measured."
+    },
     "player_impact": {
       "intensity": 0.6,
       "when": "before_update",
@@ -297,14 +302,13 @@
   },
 
   "_not_wired": [
-    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 27 wired above",
-    "(31 rows: row 1 has two intensities, and row 5 - explode - four callers of its own). Rows 2,",
+    "The 31 CALLs of the global (D11 section 4, D11_check C37-C38) less the 28 wired above",
+    "(32 rows: row 1 has two intensities, and row 5 - explode - four callers of its own). Rows 2,",
     "6 and 14 were wired by step 103 (the visuals plan's 10.1) on the refusal and the failures",
     "the port ALREADY plays, and rows 4, 8 and 25 (every player, stone and minion impact) by",
     "step 104, on contacts the port finds itself (sim/Impacts.hpp, D11_check C48). Row 3 (a",
-    "shot killed by an anti_portal_agent in flight, with antiportal_explosion.ent) waits on R23:",
-    "the port plays the agent as a no-portal zone and kills no shot on it, and its picture is",
-    "00_order 8.13's unowned row. Row 10 (a stone crushing a minion, 25) needs a minion a stone",
+    "shot killed by an anti_portal_agent in flight, with antiportal_explosion.ent) by step 126,",
+    "which built the kill (R17): agent_killed. Row 10 (a stone crushing a minion, 25) needs a minion a stone",
     "can kill, which the port does not have (Minions.hpp: not breakable), and that is gameplay.",
     "Row 21 (a burned carranca) needs a system the port does not have; row 30 (4-01's rocket) is",
     "wired by step 123 (the program's P2) as rocket_launch, with the launch it shakes;",

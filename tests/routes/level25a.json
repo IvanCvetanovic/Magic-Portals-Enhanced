@@ -1,0 +1,34 @@
+{
+  "_about": [
+    "2-26 (R1 fix 2): antiportal_955 (236, 16), scale 3.6, refuses within 115.2 px at 32 x scale round",
+    "anti_portal_agent_ent_956; the door's region is walled off by wall04_no_emissive_ent_958 except the",
+    "18 px slot under it (death_area_ent_978 in it). A portal on moving_platform_942 at (212, 130) (116.5",
+    "px from the ring's centre) and one on the player: onto the platform; at its top a shot toward (252,",
+    "5) kills the agent (337) and the ring goes. A portal at (378, 3) over wall04_no_emissive_ent_952 and",
+    "one on the player: down into the middle, steered right past fire_agent_961 (50 px or more from it)",
+    "onto moving_platform_960. Left to its very edge (centre x 396.4); at its lowest (tick 768, centre y",
+    "157.2) a shot through the slot, about 1 px under the wall and 2 px over the platform, opens a portal",
+    "at (530, 196) in the door's region, clear of the death area's full 52 px sensor (its right end at",
+    "517); one on the player: through, right into the door. Won on tick 827. Leans on the port's swing of",
+    "moving_platform_960 (+-35, R7: the original's +-70 takes the player level with the slot), the",
+    "player's stance on the platform's corner (the port's capsule), G10 (steered falls) and G4 (shot",
+    "speed)."
+  ],
+  "level": "level25a",
+  "win_by": 900,
+  "holds": [
+    {"walk": "right", "from": 250, "to": 254},
+    {"walk": "right", "from": 552, "to": 580},
+    {"walk": "left", "from": 740, "to": 752},
+    {"walk": "right", "from": 805, "to": 1000}
+  ],
+  "taps": [
+    {"tick": 30, "at": [212, 130]},
+    {"tick": 60, "at": [65, 138.3]},
+    {"tick": 330, "at": [252, 5]},
+    {"tick": 512, "at": [378, 3]},
+    {"tick": 536, "at": [214.2, 100]},
+    {"tick": 768, "at": [530, 196]},
+    {"tick": 792, "at": [394, 153]}
+  ]
+}

@@ -397,12 +397,17 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         std::printf("\n          %s diamond %s (%.1f, %.1f)%s", diamond.fire ? "fire" : "shock", diamond.name.c_str(),
                     diamond.atPx.x, diamond.atPx.y, diamond.gone ? " GONE" : (held(diamond.owner) ? " HELD" : ""));
     }
+    // A key another body holds (a knight's: step 125, for 4-28), and a keyhole
+    // whose door has gone with it.
     for (const auto& key : level->keys.keys) {
         std::printf("\n          key %s (%.1f, %.1f)%s", key.name.c_str(), key.atPx.x, key.atPx.y,
-                    key.spent ? " SPENT" : (held(key.owner) ? " HELD" : ""));
+                    key.spent ? " SPENT"
+                              : (held(key.owner) ? " HELD" : (key.owner != entt::null ? " held by another" : "")));
     }
     for (const auto& keyhole : level->keys.keyholes) {
-        if (keyhole.unlocked) std::printf("\n          keyhole %s UNLOCKED", keyhole.name.c_str());
+        if (keyhole.unlocked) {
+            std::printf("\n          keyhole %s UNLOCKED%s", keyhole.name.c_str(), keyhole.gone ? ", door gone" : "");
+        }
     }
     // 4-19's red key state (step 118): once its key is taken, the fade's clock and
     // bias, and the wall it broke at the end.
@@ -411,6 +416,13 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         std::printf("\n          red key state %s TAKEN by %s, %.0f ms, bias %.3f%s%s", red.name.c_str(),
                     red.takenBy.c_str(), red.elapsedMs, red.bias, red.gone ? " GONE, wall " : "",
                     red.gone ? (red.wallName.empty() ? "(none)" : red.wallName.c_str()) : "");
+    }
+    // An anti-portal agent a shot killed, and the ring it took with it (step 126).
+    for (const auto& agent : level->portals.agents) {
+        if (agent.gone) std::printf("\n          agent %s KILLED", agent.name.c_str());
+    }
+    for (const auto& zone : level->portals.zones) {
+        if (zone.gone) std::printf("\n          ring %s GONE", zone.name.c_str());
     }
     if (level->hazards.playerDied) std::printf("\n          PLAYER DIED: %s", level->hazards.killedBy.c_str());
     if (level->boss.beholder) {

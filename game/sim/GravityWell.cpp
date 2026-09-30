@@ -145,7 +145,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
 
-    // A well with no pull is a solid circle with a no-portal zone round it, and
+    // A well with no pull is a solid circle with a green ring round it, and
     // five levels would look built and play wrong.
     if (read.forceZeroGravity <= 0.0 || read.forceWithGravity <= 0.0) {
         error = path + ": force.length_zero_gravity and force.length_with_gravity are above zero";
@@ -158,7 +158,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     // The shrink takes SIZE off the antiportal, so it may not be negative, and a
     // shrink wider than the smallest well in the game (64 px radius, so 128 of
-    // size) would give that well a zone of nothing at all.
+    // size) would give that well a ring of nothing at all.
     if (read.zoneShrinkPx < 0.0) {
         error = path + ": zone.shrink_px is not negative";
         return false;
