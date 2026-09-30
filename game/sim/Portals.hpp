@@ -21,7 +21,9 @@
 //   ends are then spent; static ends stay. For a while after each traversal,
 //   entries are ignored.
 // - Only the player travels, and bodies whose entity says `teleportable` 1. The
-//   inline crate says 0.
+//   inline crate says 0. And a fireball, which has no body here (Turrets.hpp): it
+//   goes through a placed pair once, turned back, and the pair stays
+//   (CarryFireball).
 // - Entries are per portal and per body, like an Area2D's body_entered. So a
 //   portal placed over a crate sees the crate come in on the next tick, and a
 //   traveller put down inside its exit does not go back until it has left.
@@ -530,6 +532,24 @@ struct State {
     // A portal opened at a point at once, as an arriving shot opens one. The
     // suites use it to put portals where a test needs them. False when refused.
     bool TryPlace(const glm::dvec2& atPx);
+
+    // A FIREBALL THROUGH A PLACED PAIR (planning step 135, the backlog's G6):
+    // PortalManager::doTeleporting's placed-pair arm (bytes 139692..140259) for a
+    // traveller the port keeps as a point, fireball.ent. The first placed portal,
+    // oldest first as isThereAnythingInPortal walks them (147305..147664), whose
+    // point is closer than `grabPx` + rules.entryRadiusPx to the fireball's
+    // (EntityGrabber's circle test, turrets.json portal_grab_px) sends it to its
+    // partner's point, and returns that point; a lone portal has no partner
+    // (getOther) and sends nothing. The caller turns the fireball back and marks it
+    // teleportedOnce (teleportToOther #152-207), and asks again for none that is.
+    //
+    // THE PAIR STAYS: doesItDestroyPortals is false for fireball.ent, so no end is
+    // spent, and both are marked `teleported` (hasTeleportedSomething, #125-150),
+    // so the clear button refunds neither. The traversal is recorded as any other
+    // (transits, traversals: vanishEffect, appearEffect and playTeleportSound), and
+    // no lockout starts: that is the port's stand-in for the exit's `active` flag,
+    // which a fireball's exit does not need (the step's deviations).
+    std::optional<glm::dvec2> CarryFireball(const glm::dvec2& atPx, double grabPx);
 
     // PortalManager::killAll (bytes 147664..148016): every placed portal goes at
     // once. With `refund`, each that never carried anything is given back to the

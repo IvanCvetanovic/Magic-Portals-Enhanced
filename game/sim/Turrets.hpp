@@ -32,14 +32,25 @@
 // stops a carranca's fire (footage F6 #72, on 2-12). Game::AfterStep plays the
 // callback; Shot::SolidBodiesIn is the touch.
 //
+// THROUGH A PORTAL PAIR (planning step 135, the backlog's G6). fireball.ent
+// carries teleportable 1, and PortalManager names fireball.ent in two places of
+// its teleport path: mayTeleport (bytes 140557..140728) lets one through only
+// while its teleportedOnce is clear, and doesItDestroyPortals (145873..145999) is
+// false for it, so teleportToOther (144944..145873) keeps the pair, sets
+// hasTeleportedSomething on both ends (#125-150), turns the fireball's 'dir' back
+// (#152-176) and sets teleportedOnce (#178-207). So a fireball goes through a
+// placed pair ONCE, comes out of the partner flying back the way it came, and
+// the pair stays for the next one. Portals::State::CarryFireball is that path;
+// Game carries each fireball after the portals' tick. The static portals'
+// callback and the one-placement path would carry one too, without the once
+// test, and are not built: no level places a fireball source with either.
+//
 // NOT BUILT, and named here rather than found later:
-//   - Portal transit. fireball.ent carries teleportable 1, and the original's
-//     PortalManager tests for fireball.ent by name in its teleport path, so a
-//     fireball goes through portals. Portals::travellers takes entities, and a
-//     fireball here is a point and a radius with no entity, as the beholder's
-//     spikes are. Giving it one is its own step (the backlog's G6).
 //   - The picture. fireball.ent has no <Sprite> at all: what is seen is its
 //     ParticleSystem and its Light, so there is no image for the layer to draw.
+//   - Its speed. ETHCallback_fireball moves it by 'dir' x its speed, and a
+//     carranca's 'dir' is its node's (dirX, dirY) as written, 1.2 on level0a:
+//     the port normalises it (turrets.json's direction note).
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
@@ -57,6 +68,9 @@ namespace MagicPortals::Turrets {
 struct Rules {
     double speedPx = 0.0;  // fireball.ent's own speed, 130
     double radiusPx = 0.0; // its body's circle: (16 + 16) / 4 x its <Scale> 1.2
+    // Its share of the grab that finds it in a portal: half its UNSCALED 16 x 16
+    // box, 8 (turrets.json portal_grab_px), added to the portal's own 14.
+    double portalGrabPx = 0.0;
     double defaultStrideMs = 0.0;
     glm::dvec2 cullMarginPx{0.0}; // _guess
 };
@@ -100,6 +114,11 @@ struct Fireball {
     // over long before the fireball is - effects.json's fireball row and
     // darkdragon.json's fight.fireball_particle_scale carry the decode.
     double particleScale = 1.0;
+
+    // Its teleportedOnce, set by the one portal pair it has gone through
+    // (teleportToOther #178-207), after which mayTeleport refuses it every
+    // portal: it flies through the next one unmoved.
+    bool teleportedOnce = false;
 };
 
 struct State {

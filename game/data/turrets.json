@@ -41,7 +41,21 @@
       "its Light, so the layer has no image to draw it with."
     ],
     "speed_px_s": 130.0,
-    "radius_px": 9.6
+    "radius_px": 9.6,
+    "_portal_source": [
+      "WHERE A FIREBALL IS IN A PORTAL (planning step 135, the backlog's G6). fireball.ent says",
+      "teleportable 1, so PortalManager::isThereAnythingInPortal (bytes 147305..147664, #12-28)",
+      "finds one through getObjectInPortal (357583..358053, #1-11): an EntityGrabber round the",
+      "portal's point with PortalManager.portalCollisionRadius, which the constructor sets to",
+      "14 x getScale (135924..136705, #106-113). For a circle body the grabber",
+      "(EntityGrabber::EntityGrabber, 23924..24990, #65-105) takes an entity whose point is",
+      "closer than GetCollisionBox().size.x x scale(0.5) + that radius, a strict compare.",
+      "GetCollisionBox returns the entity's box UNSCALED (ETHEntity.cpp:314-321; only",
+      "CreateBody scales it, ETHPhysicsSimulator.cpp:72-73), so the fireball's share is half",
+      "its 16 x 16 box, 8 units, not its 9.6 body: in a portal while its centre is within",
+      "8 + 14 = 22 units of the portal's. portal_grab_px is that 8."
+    ],
+    "portal_grab_px": 8.0
   },
 
   "stride": {
@@ -74,12 +88,19 @@
       "fireball as 'dir'.",
       "",
       "NOT a unit vector in the data: level0a's carranca_right_ent_792 carries",
-      "dirX = 1.2. Nothing in the decoded script reads that 'dir' back - the only",
-      "GetVector2('dir') in the whole script is the lift's - so what the magnitude",
-      "means is unresolved: the fireball's own speed comes from its .ent, which",
-      "would make 1.2 either a 20% faster shot or simply a rightward direction",
-      "written loosely. The port normalises, as the Godot project does, and records the",
-      "question here rather than inventing an answer to it."
+      "dirX = 1.2, and eight of the game's 28 carrancas carry one that is not 1",
+      "(0.7 to 2; out/parity/program/G6/carrancas.txt). The port normalises, as the",
+      "Godot project does.",
+      "",
+      "CORRECTED in planning step 135: this note said nothing in the decoded script",
+      "reads 'dir' back. ETHCallback_fireball (bytes 418524..418930) does, every",
+      "frame: #1-13 GetVector2('dir'), #15-43 AddToPositionXY(dir x",
+      "scaledUnitsPerSecond(speed)), with nothing normalising it on the way",
+      "(carrancaCallback builds vector2(dirX, dirY), addFireball SetVector2s it). So the",
+      "original's fireball flies at |dir| x 130: 156 units/s on 2-01, 162.5 on 2-03,",
+      "260 for level14a's carranca_right_1075. NOT BUILT here - it retimes every",
+      "carranca and is a step of its own; the backlog's row 'A carranca's fireball flies",
+      "at |dir| x 130' holds it for the owner."
     ]
   },
 

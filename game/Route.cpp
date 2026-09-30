@@ -372,7 +372,9 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
     // The fire (step 114): every fireball in the air, where one went off this
     // tick, what is burning or gone, and the bombs.
     for (const auto& ball : level->turrets.fireballs) {
-        std::printf("\n          fireball %s (%.1f, %.1f)", ball.name.c_str(), ball.atPx.x, ball.atPx.y);
+        // " through" once it has gone through its one portal pair (step 135).
+        std::printf("\n          fireball %s (%.1f, %.1f)%s", ball.name.c_str(), ball.atPx.x, ball.atPx.y,
+                    ball.teleportedOnce ? " through" : "");
     }
     for (const glm::dvec2& atPx : level->turrets.spentPx) {
         std::printf("\n          fireball OFF at (%.1f, %.1f)", atPx.x, atPx.y);

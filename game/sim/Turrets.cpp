@@ -66,6 +66,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     Rules read;
     read.speedPx = fireball["speed_px_s"].AsNumber(0.0);
     read.radiusPx = fireball["radius_px"].AsNumber(0.0);
+    read.portalGrabPx = fireball["portal_grab_px"].AsNumber(0.0);
     read.defaultStrideMs = stride["default_ms"].AsNumber(0.0);
     if (!ReadPair(cull["margin_px"], read.cullMarginPx)) {
         error = path + ": margin_px is two numbers";
@@ -81,6 +82,13 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     // A fireball of no size touches nothing, and would fly through every wall.
     if (read.radiusPx <= 0.0) {
         error = path + ": radius_px is above zero";
+        return false;
+    }
+    // And one with no share of the grab would go through a portal only once its
+    // centre was inside the portal's own 14, so a portal would miss every fireball
+    // that passes it between 14 and 22 off its centre.
+    if (read.portalGrabPx <= 0.0) {
+        error = path + ": portal_grab_px is above zero";
         return false;
     }
 

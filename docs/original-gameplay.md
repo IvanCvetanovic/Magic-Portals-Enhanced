@@ -141,6 +141,16 @@ This was found by an assertion failing in `verify_gameplay.gd` — the test asse
 Per-instance and designer-controlled — the same logical object is teleportable in one
 placement and not in another. This answers MILESTONE_1 §3.8 from data.
 
+**DECODED** (`PortalManager`, planning step 135). A **fireball** is teleportable too, and the
+portal manager names `fireball.ent` twice on its way through a placed pair: `mayTeleport` lets
+one through only while its `teleportedOnce` is clear, and `doesItDestroyPortals` is false for it.
+So a fireball goes through a pair **once**, comes out of the partner at its point **flying back
+the way it came** (its `dir` times -1), and **the pair stays** for the next one; both ends are
+then marked as having carried something, so the clear-portals button refunds neither. It is in
+a portal while its centre is within 22 u of the portal's (half its unscaled 16 u box plus the
+portal's 14). A lone portal carries nothing. This is how a pair turns a carranca's stream back
+(the help popup on 2-03 and 2-06 shows it) or sends it onto a crate or a shock agent.
+
 ### 2.5 Portals can be blocked
 
 **DATA.** `antiportal` entities carry a `scale` multiplier (chapter-1 values 1.8 … 9).

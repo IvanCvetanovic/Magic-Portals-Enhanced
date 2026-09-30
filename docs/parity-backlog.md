@@ -1597,7 +1597,13 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   flight from a portal outside the ring. **77 of 128** won by a route `test_mp_routes` replays (77 files, 236 checks,
   0 failures), chapter 1: 20, chapter 2: 24, chapter 3: 15, chapter 4: 18. The 51 not won lose the six; five carry a
   recorded cause (1-17; 2-06 and 4-14, G6; 2-21 and 2-24, B4), and ten of the lift-door levels above remain (2-17 is
-  won). Open until all 128.)*
+  won). **Step 135 (G6, a fireball through a portal pair) adds 2-06 and 4-14** (`level5a` 570, `level13c` 354, both
+  won by play: a pair sends a carranca's fireball onto 2-06's crate and onto 4-14's shock agent) and re-authors 2-03
+  (1458 -> 911): step 114's hops through pairs along the floor now carried the fireball onto the player, so the player
+  holds the button behind a pair laid in the lane, which turns each fireball back, the way the original's help popup
+  W2P3 draws it. **79 of 128** won by a route `test_mp_routes` replays (79 files, 242 checks, 0 failures), chapter 1:
+  20, chapter 2: 25, chapter 3: 15, chapter 4: 19. The 49 not won lose 2-06 and 4-14; three carry a recorded cause
+  (1-17; 2-21 and 2-24, B4). Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1611,7 +1617,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   flood is optimistic"). The routes are their evidence. Step 133 (LD): 108 / 20 / 0, 0 differ. The flood treats every
   lift door as open (`FREE_ROLES` `switched_door`), so it sees neither the latch nor the crush; that step's evidence is
   its routes. Step 134 (G8): 108 / 20 / 0, 0 differ; the flood lights a level's barrels by any fire on it and models
-  no portal shot at all (no sight line, no flame), so a burned shot cannot move a verdict; its routes are its evidence.)*
+  no portal shot at all (no sight line, no flame), so a burned shot cannot move a verdict; its routes are its evidence.
+  Step 135 (G6): 108 / 20 / 0, 0 differ; the flood models no portal and no fireball's flight, so a fireball sent
+  through a pair cannot move a verdict either; its routes are its evidence.)*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1670,6 +1678,8 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
 4-21 is won (tick 587) and 1-14, 1-15, 1-16, 1-21, 1-32 and 4-19 are re-verified on their old ticks (B7).*
 *(2) is done by step 134 (G8): a shot through a flame becomes a fireball and a flame burns a minion; 2-10, 2-11, 2-16,
 2-17, 2-19 and 4-28 are won, and 2-23 and 2-31 re-authored (each had a shot the flame now burns).*
+*(3) is done by step 135 (G6): a fireball goes through a placed pair once, flying back the way it came, and the pair
+stays; 2-06 and 4-14 are won and 2-03 re-authored.*
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [ ] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -1699,7 +1709,8 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
       did (`out/parity/program/G8/fix1/b2/`): chapter 1 gold (the fixture) and chapter 2's window-replay medals, 47 of
       96 (2-31 silver, 2-32 gold); chapter select reads 48 %, under the 60 % chapters 3 and 4 need; 2-11, 2-12, 2-16
       and 2-32 now open, 2-07 still locked behind 2-06 (G6), 2-21 to 2-23 behind 2-20 (B4), 2-25 behind 2-24, 2-28 to
-      2-30 behind 2-27. Open until G6, B4 and the unrouted levels are won.*
+      2-30 behind 2-27. Open until G6, B4 and the unrouted levels are won.* *Step 135 (G6) gives 2-06 a route, so
+      2-07's lock behind it can clear (not re-measured). Open until B4 and the unrouted levels are won.*
 - [x] **B3. 4-32 cannot be won** - the barrel restock (`addEntityIfItCantBeFound('barrel_bomb')`, `ETHCallback_dark_dragon`
       ins 997-1064) and the lava's explode contact (`ETHBeginContactCallback_lava` L68416 #21-30) must land together,
       or a missed barrel softlocks. KNOWN ("Order 12.1, not built"). *Built in step 116*, both: after every shot at the
@@ -1784,11 +1795,19 @@ the port's pictures and overlay quads opted in; 2-32's claw line, 2-01's ramp li
       stopping on the closed door. Routes for 2-01 to 2-09 but 2-06 (row below). GAMEPLAY: 2-09's crate now burns
       only while `button_1022` is held as a fireball passes, the original's rule - until step 114 the port's fire burned
       `crate_no_emissive_1004` through the closed `door_lift_1007` on tick 167 with no input.
-- [ ] **G6. Fireballs never pass through portals** (`mayTeleport` lets one through once; the pair survives). *A
+- [x] **G6. Fireballs never pass through portals** (`mayTeleport` lets one through once; the pair survives). *A
       blocker for 2-06 (step 114) and for 4-14 (step 127, deviation 2)*: every player centre that touches 4-14's door
       is at most 64 px from `shock_agent_2285` (areaRadius 90), and the carranca's lane passes the agent at 100.2 px
       where contact needs 41.3; a fireball flies through a portal in its lane unmoved (`R1/fix2/cap/l13c`). G6's step
       routes 2-06 and 4-14, and re-authors 2-03's route (it hops each fireball through a portal pair).
+      *Built in step 135*: a fireball whose centre comes within 22 u of a placed portal with a partner (half its
+      unscaled 16 u box and the portal's 14, `EntityGrabber`) goes to the partner's point flying back the way it came
+      (`teleportToOther` #152-176 turns its 'dir'), once in its life (`teleportedOnce`, #178-207; `mayTeleport`); the
+      pair is not spent (`doesItDestroyPortals`) and neither end is refunded after (#125-150); the traversal is
+      recorded as any traveller's, so the layer draws the teleport's effects and plays its sound (seen in the window
+      by the step's verifier on 2-06, 4-14 and 2-03: the appear ring on the exit, the suck and sparkles at the entry,
+      the pair still drawn, `teleport.mp3` loaded after the transit tick; `out/parity/program/G6/verify1/window/`). GAMEPLAY on 43 of the 45 fireball-source levels (2-07 and 2-28 have a budget of 0). **Won by routes: 2-06 (570) and 4-14 (354)**;
+      2-03 re-authored (911). Its deviations are the row "Step 135's recorded deviations".
 - [x] **G8. A shot through a fire agent's flame becomes a fireball** (`ETHCallback_fire_agent` #254-265
       `burnProjectile`); the port's shot flies on. 20 levels. **A blocker since step 115**: no port route for 2-16
       (the ledge shadows the wall and the pit barrels from the fire agent's zone), 2-17 (its second wall 87 u from the
@@ -1982,10 +2001,12 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       its `--help` line, or give it a throwaway saves directory (code; the next step touching `main.cpp`). Step 113's
       runs left gold for 1-02 and 1-32 in `%APPDATA%/Magic Portals/scores.json` - the owner deletes it for a fresh
       save (below). *Step 114's `--help` says it; its own window runs used a throwaway `--saves`.*
-- [ ] **2-06 (`level5a`) has no route: it needs G6** (VERIFIED from its geometry and flags). The door's pocket (x 300-454 above `platform_no_emissive_ent_824`)
+- [x] **2-06 (`level5a`) has no route: it needs G6** (VERIFIED from its geometry and flags). The door's pocket (x 300-454 above `platform_no_emissive_ent_824`)
       is sealed by `block00_no_emissive_ent_823` and `crate_no_emissive_796` on it (teleportable 0, burnable 1), up to
       the ceiling. Fire alone removes the crate, and the level's one carranca fires along y 202, under the platform:
-      only a portal pair that carries its fireball (G6) reaches the crate (step 114).
+      only a portal pair that carries its fireball (G6) reaches the crate (step 114). *Won in step 135* (tick 570): a
+      portal left of the crate at (215, 32) and one in the lane at (300, 202), put there from `lift_ent_832` as it
+      goes down; fireball #2 comes out of (215, 32) flying right and burns the crate (390).
 - [x] **2-09 (`level8a`) is won by a route** (step 114's fix round: tick 1319, 14 shots). The fire burns
       `crate_no_emissive_1004` only while `button_1022` holds `door_lift_1007` open (before step 114 the port burned it
       through the closed door on tick 167 with no input), and nothing dynamic in the level can hold the button, so the
@@ -2007,7 +2028,9 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       lift's own clock; G2's step re-authors all three. 2-03 (`level2a`) hops each fireball through a portal
       pair, which G6 would carry the fire through: G6's step re-authors it. *Wave 1 adds* 1-27, 1-28, 1-29, 2-18 and
       2-25 (step 127) and 3-31 (step 128: the merge's re-route rides `lift_ent_2438`, where the old route leaned on
-      G1, G10 and G4); nine routes in all for G2's step.
+      G1, G10 and G4); nine routes in all for G2's step. *Step 135 (G6)* re-authors 2-03 (911: a pair in the lane
+      turns the fire back; no lift) and adds 2-06 (`level5a`, 570), whose player rides `lift_ent_832` down and up on
+      the lift's own clock and is put in a portal as it goes down: ten routes in all for G2's step.
 - [x] **`test_mp_dragon` NOT RUN in step 114** (Smart App Control refused it twice); the next step that links it runs
       it. (`test_mp_routes`, refused twice in the step, was relinked by its verifier and ran: 59 / 0, 18 of 18; the fix
       round's run, with 2-09, 62 checks, 0 failures, 19 of 19 won.) *Run at the merge (step 128) on the merged code:
@@ -2093,7 +2116,8 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       goes through its pair before the fireball reaches the portal (G6 would otherwise carry the fireball to the
       barrel's side); the wound-end torch shots do not touch it (it never goes left of x 192 before the key, and the
       torch is lit at the end under either rule, so its last tap puts it out and brings the light wall back).
-      *Step 128 replays it with R1 built: won on tick 3421, as before.*
+      *Step 128 replays it with R1 built: won on tick 3421, as before.* *Step 135 replays it with G6 built: no
+      fireball goes through either pair (the route trace marks none `through`); won on 3421.*
 - [ ] **The restock's pictures** (step 116; 3-32's too since step 117, deviation 5, at `barrel_spawn` and
       `fire_diamond_spawn`, with `playGhostItemAppearSound`): `addEntityAtSpawnPoint` adds `ghost_utility_spawn.ent` (explosion.JPG and
       onda.png bursts) at `barrel_spawn` with each barrel, and sets the new barrel's `minEmissive` to (1, 1, 1), the
@@ -2292,6 +2316,32 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       2-23's new shot by 2.8 px, 2-16's last portal by 2.7 px. 2-16, 2-17 and 2-19 teleport a barrel or a crate by a
       portal pair before the burn, which no clip shows, and 2-11's crate may be the original's G6 way (a fireball sent
       through portals). Whichever step builds G4, G6 or G10, or measures the seesaw, re-verifies these first.
+      *Step 135 (G6) replays all six on their step-134 ticks and no fireball of theirs goes through a pair (the trace
+      marks none `through`), so none leans on G6; 2-11's static crate is still burned by its flame's fireball.*
+- [ ] **A carranca's fireball flies at |dir| x 130 in the original** (step 135's finding, left for the owner;
+      GAMEPLAY when built). `ETHCallback_fireball` (418524..418930, #1-43) moves the fireball by
+      `GetVector2('dir')` x `scaledUnitsPerSecond(speed)` every frame, and a carranca's 'dir' is its node's
+      (dirX, dirY) as written (`carrancaCallback`, `addFireball` `SetVector2`), never normalised. Eight of the 28
+      carrancas carry one that is not 1 (`out/parity/program/G6/carrancas.txt`): `level0a` 1.2 (2-01, 156 u/s),
+      `level2a` -1.25 (2-03, 162.5), `level6a` -1.6 (2-07, 208), `level14a` -1.3 and 2 (2-15, 169 and 260), `level17a`
+      1.2 (2-18, 156), `level27a` -1.2 (2-28, 156), `level12c` 0.7 (4-13, 91). The port normalises to 130
+      (`turrets.json`'s direction note, corrected in step 135). Building it retimes those levels' lanes, the lane
+      pins in `test_mp_turrets` and the routes of 2-01, 2-03, 2-07, 2-15 and 2-18.
+- [ ] **Step 135's recorded deviations** (G6, the fireball through a pair, 1-5). (1) The exit's `active` flag is not
+      modelled for a fireball (`setActive(other, false)` until nothing is in any placed portal; an inactive end sends
+      nothing): a traveller entering the exit within about 10 ticks of a fireball coming out of it differs; the
+      shortest carranca stride is 90 ticks and no route has one. (2) One object per portal per frame
+      (`getObjectInPortal`) and the second portal's first (`doTeleporting` #37-98) are not modelled: a fireball and
+      another traveller in a pair's two ends on one tick differ; no route has one. (3) `hasMovingPlatformInAnyPortal`
+      (no transit while a lift or moving platform is within 5.6 u of any placed portal) is not built, for any
+      traveller; 2-06's route checked by hand against `lift_ent_832`'s polygon (26.0 u on 545, 68.7 u on 383). (4) The static portals' callback and the one-placement
+      path carry a fireball with no once test and no turn, and are not built for it: no level places a fireball
+      source with a static portal. (5) A fireball is carried after its tick's contact test, so it meets bodies from
+      its next tick, 2.17 u along, as Box2D sees the original's `SetPositionXY` on its next step.
+- [ ] **Step 135's routes lean on the port where no clip shows the original** (left for the owner). 2-06 (570)
+      rides `lift_ent_832` on its own clock (G2) and puts a portal on the player; 4-14 (354) drifts on the port's
+      zero-gravity recoil (70 u/s a tap, added); 2-03 (911) is timed on the port's 130 u/s fireball (the |dir| row).
+      No clip shows a fireball go through a pair; the decode and the help popup W2P3 are the evidence.
 
 - [ ] **Wave 1's routes lean on the port where the original is not shown** (step 127, deviation 8; step 125, deviation
       3), each for the step that builds the row to re-verify: body-overlap traversal, where the original tests a point

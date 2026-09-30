@@ -1,0 +1,25 @@
+{
+  "_about": [
+    "2-06 (planning step 135, G6): the door's pocket is sealed by crate_no_emissive_796 (burnable,",
+    "teleportable 0) on block00_no_emissive_ent_823, and the level's one carranca fires along y 202",
+    "under the floor. A portal left of the crate at (215, 32) from the start (30); the player walks onto",
+    "lift_ent_832 (232-262) and, riding it down, puts one in the lane at (300, 202) (305). Fireball #2",
+    "goes into it (383), comes out of (215, 32) flying right and burns the crate (390; gone 450). The",
+    "pair stays. Back at the lift's top, a portal in the pocket at (380, 30) (515; it takes the oldest",
+    "end's place) and one on the player as the lift goes down (545): out over the door, which he falls",
+    "onto. Won on tick 570. Leans on G2 (the port's lift runs on its own: the original's waits for a",
+    "tap) and G4 (the shot's speed). No portal stands within 5.6 u of the lift when anything goes",
+    "through (hasMovingPlatformInAnyPortal, not built)."
+  ],
+  "level": "level5a",
+  "win_by": 630,
+  "holds": [
+    {"walk": "right", "from": 232, "to": 262}
+  ],
+  "taps": [
+    {"tick": 30, "at": [215, 32]},
+    {"tick": 305, "at": [300, 202]},
+    {"tick": 515, "at": [380, 30]},
+    {"tick": 545, "at": [168, 136]}
+  ]
+}

@@ -876,6 +876,31 @@ int State::KillAll(bool refund) {
     return killed;
 }
 
+std::optional<glm::dvec2> State::CarryFireball(const glm::dvec2& atPx, double grabPx) {
+    // getOther: with fewer than two placed there is no partner, and teleportToOther
+    // does nothing (#15-24).
+    if (placed.size() < 2) return std::nullopt;
+    // EntityGrabber's test for a circle body (#65-105): closer than the two radii
+    // together, strictly.
+    const double reach = grabPx + rules.entryRadiusPx;
+    for (std::size_t i = 0; i < placed.size(); ++i) {
+        const glm::dvec2 gap = atPx - placed[i].atPx;
+        if (gap.x * gap.x + gap.y * gap.y >= reach * reach) continue;
+        // The pair is the first two placed, which is every pair a budget of two
+        // holds: getOther returns the first portal that is not this one.
+        const std::size_t other = i == 0 ? 1 : 0;
+        const glm::dvec2 exitPx = placed[other].atPx;
+        // vanishEffect with where it stood and the end it went in by, appearEffect
+        // with the end it comes out of (#52-75), and doTeleporting's sound.
+        transits.push_back(Traversal{atPx, placed[i].atPx, exitPx});
+        ++traversals;
+        placed[i].teleported = true;
+        placed[other].teleported = true;
+        return exitPx;
+    }
+    return std::nullopt;
+}
+
 bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built,
           entt::registry& registry, entt::entity player, const Rules& rules, const Mover::Rules& movers,
           const Shot::Rules& shot, State& out, std::string& error) {

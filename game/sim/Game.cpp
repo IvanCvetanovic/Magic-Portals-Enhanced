@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -340,7 +341,7 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     }
     // And what the carrancas spit. A fireball is a point and a radius with no
     // entity, so nothing here hands it to the portals as a thrown stone is
-    // handed; Turrets.hpp says why transit is a step of its own.
+    // handed: AfterStep carries it through a pair itself (CarryFireball).
     level.turrets.Fire(dt);
     // The minions walk before the step, as the player is steered before it: what
     // sets a velocity belongs on this side, what judges a position on the other.
@@ -861,6 +862,23 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // The beholder's rocks, against what the step ran them into.
     for (const entt::entity gone : level.boss.Contacts(registry, level.player, level.portals, dt)) Forget(level, gone);
     level.portals.Tick(registry, dt);
+    // Each fireball in a placed portal goes to its partner, ONCE (planning step
+    // 135; Turrets.hpp has the decode): PortalManager::mayTeleport refuses
+    // fireball.ent once its teleportedOnce is set, and teleportToOther keeps the
+    // pair, puts the fireball at the partner's point and multiplies its 'dir' by
+    // -1 (#152-176), so it flies back the way it came from there. After the
+    // portals' own tick, so a pair the player spent this tick carries nothing, and
+    // before a burn's fireball is added below, which is carried from its next tick
+    // as it flies from its next tick.
+    for (Turrets::Fireball& ball : level.turrets.fireballs) {
+        if (ball.teleportedOnce) continue;
+        const std::optional<glm::dvec2> exitPx =
+            level.portals.CarryFireball(ball.atPx, level.turrets.rules.portalGrabPx);
+        if (!exitPx) continue;
+        ball.atPx = *exitPx;
+        ball.velocityPx = -ball.velocityPx;
+        ball.teleportedOnce = true;
+    }
     // A shot a fire agent's flame burned on its way (Portals::Flame): burnProjectile's
     // fireball, where the shot first came within reach and along its heading. It
     // flies from the next tick, as the fire diamond's does.

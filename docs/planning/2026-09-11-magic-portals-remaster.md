@@ -25203,3 +25203,158 @@ compiled into an executable changed after the gates were measured (every changed
 were last written before the fix round's runner and the verifier's), so nothing was rebuilt or launched. The
 deviations and what is left for the owner are open rows in `docs/parity-backlog.md` section 6, which this commit also
 adds.
+
+## Step 135 - a fireball goes through a portal pair once, flying back the way it came, and the pair stays: mayTeleport's once and doesItDestroyPortals' false for fireball.ent, and 2-06 and 4-14 won by routes (built)
+
+**THE PROGRAM'S G6 ROW** (`docs/parity-backlog.md` section 6, "Fireballs never pass through portals"), decided for the
+original by the 2026-09-29 rulings. Track A, on step 134's `fdc100d`; the task text named step 132 as main's last and
+70 routes, which the tree had moved past (steps 133 and 134, 77 routes), so this step is 135 and its "before" sweep is
+`G8/after/sweep` (byte-identical to `LD/after/sweep` and `P1/clamp/after/sweep`). The evidence is under
+`out/parity/program/G6/` (`impl.md`; the route aids `carrancas.py`, `nodes.py`, `geo.py`, `render_map.py`, `maps/`,
+`drafts/`; `window/`, `after/`).
+**GAMEPLAY: YES.** 45 levels have a fireball source (`fireball_levels.txt`: the 21 carranca levels, 28 carrancas; the
+20 fire-agent levels, a shot burned into a fireball, step 134; the 5 fire-diamond levels; the two dragons', 2-32 and
+4-32); on 2 of them (2-07 `level6a`, 2-28 `level27a`) the budget is 0 and no pair can form, so the change plays on
+43. There a fireball whose centre comes within 22 u of a placed portal that has a partner goes to the
+partner's point and flies on from there the way it came, reversed, at its own speed; it does so once in its life (it
+flies through every portal after, unmoved), and the pair is not spent: it carries the next fireball too, until it
+perishes or the player spends it. Both ends of a pair a fireball went through are then never refunded by the
+clear-portals button, and the traversal is recorded as any traveller's (`transits`, `traversals`), which is what the
+layer draws the teleport's three effects (suck, sparkles, appear) and plays its sound from: measured in the sim
+(the turrets case), and seen in the window by the step's verifier (`verify1/window/crops_*.png`, 13 frames under
+`verify1/window/frames/` with their logs): on the transit tick (2-06 383, 4-14 167, 2-03 420) the appear ring opens on
+the exit and the suck and sparkles show at the entry, both ends are still drawn after, and each log loads
+`teleport.mp3` right after that tick (on 2-06 the player's first transit is not until 545). Until now the port's
+fireballs flew through portals unmoved. Changed: `game/sim/Portals.{hpp,cpp}`
+(`State::CarryFireball`), `game/sim/Game.cpp` (each fireball carried after `Portals::Tick`),
+`game/sim/Turrets.{hpp,cpp}` (`Fireball::teleportedOnce`, `Rules::portalGrabPx`, the header's NOT BUILT block
+replaced by the decode), `game/data/turrets.json`
+(`portal_grab_px` with its source; the direction note corrected, below), `game/Route.cpp` (the trace marks a fireball
+`through`), `tests/test_mp_turrets.cpp` (2 new cases, the reader's), `tests/routes/` (2-06 and 4-14 new, 2-03
+re-authored), `docs/original-gameplay.md` (section 2.4) and this record. No converter change, no format finding,
+engine untouched at `710bffc`.
+
+**BLOCKERS, checked first: none.** The listing is `all_functions.txt` `48fe65ce`. The fireball is the port's point and
+radius (`Turrets::Fireball`) with its contact callback (step 114); placed portals, their pair and their refund flag
+(`Placed::teleported`, `KillAll`) exist; `test_mp_routes` and the reachability check are in the tree. No engine change.
+
+**THE DECODE** (read under 00_order 8.0's rules):
+- `PortalManager::doTeleporting` (139692..140259): `isThereAnythingInPortal` (147305..147664) walks the placed portals
+  in their array's order, oldest first, and takes the object in each (`getObjectInPortal`, 357583..358053: an
+  `EntityGrabber` round the portal's point, radius `portalCollisionRadius` = 14 x getScale (the constructor
+  135924..136705, #106-113), filtered by `isTeleportable`); with `maxPortals` 2 it calls `teleportToOther(portal,
+  entity, true)` (#100-119), and plays `playTeleportSound` when that teleported (#146-151); with nothing in any portal
+  it calls `activateAll` (#153-155).
+- The grabber (`EntityGrabber::EntityGrabber`, 23924..24990, #65-105), for a circle body: taken when
+  `squaredDistance(point, entity) < (GetCollisionBox().size.x x scale(0.5) + radius)^2`. `GetCollisionBox` returns the
+  entity's box unscaled (`ETHEntity.cpp:314-321`; only `CreateBody` scales it, `ETHPhysicsSimulator.cpp:72-73`), so
+  fireball.ent's share is half its 16 x 16 box: **a fireball is in a portal while its centre is closer than 8 + 14 =
+  22 u to the portal's**, not 9.6 + 14.
+- `teleportToOther` (144944..145873): #15-24 `getOther` (the first placed portal that is not this one; none, nothing);
+  #25-35 **`mayTeleport`** (140557..140728): true for anything not named `fireball.ent`, and for a fireball only while
+  `GetUInt('teleportedOnce')` is 0; #36-42 `hasMovingPlatformInAnyPortal` (147042..147305: a `moving_platform`, `lift`
+  or `lift.ent` within 0.4 x 14 of any placed portal stops every transit); #43-50 `isActive(thisPortal)`; #52-75
+  vanishEffect, `SetPositionXY(other's point)`, appearEffect; #77-87 with killPortals, `setActive(other, false)`; #89-94
+  `invertLinearVelocity`; #105 **`doesItDestroyPortals`** (145873..145999) returns `!(name == 'fireball.ent')`: for
+  anything else #108-123 kill both ends; **for a fireball** #126-150 set `hasTeleportedSomething` 1 on both ends,
+  #152-176 `MultiplyVector2('dir', -1)` where the entity carries a vector2 'dir' (`DT_VECTOR2` = 5,
+  `ETHCustomDataManager.h:41`), and #178-207 `SetUInt('teleportedOnce', 1)`.
+- `ETHCallback_fireball` (418524..418930) moves the fireball by `dir` x `scaledUnitsPerSecond(speed)` each frame
+  (#1-43); its physics velocity is never set, so `invertLinearVelocity` changes nothing on it and the reversed `dir`
+  is what turns it back. The original's help popup `LevelHelpW2P3Popup` (on 2-03 and 2-06; `ui.json`) draws the same: a
+  fireball going left into one portal and out of the other going right, turned 180.
+- Not for this step's levels: `ETHCallback_portal_static` (360571..361404) and `teleportToFirstStaticPortal`
+  (145999..146550) carry any teleportable with no `mayTeleport` and no `dir` turn, and no level places a fireball source
+  with a static portal (statics on level0, level1 and level14 only).
+
+**THE PORT.**
+- **`Portals::State::CarryFireball(atPx, grabPx)`**: with fewer than two placed, nothing; otherwise the first placed
+  portal (oldest first) whose point is closer than `grabPx` + `entryRadiusPx` sends the fireball to its partner's
+  current point (the hover included), which it returns; both ends are marked `teleported` (the refund withheld,
+  `KillAll`), a `Traversal` is recorded and `traversals` counted (the layer's suck, sparkles and appear effects and
+  the teleport sound, as for every traveller), no end is spent and no lockout starts.
+- **`Game::AfterStep`**, right after `Portals::Tick`: each fireball not yet `teleportedOnce` is offered; one that goes
+  through is put at the exit, its velocity negated (its `dir` times -1) and marked `teleportedOnce`. After the portals'
+  tick, so a pair the player spent this tick carries nothing; before a burn's fireball is added, which is carried from
+  its next tick as it flies from its next tick.
+- **`turrets.json` `portal_grab_px` 8** (the decode above), read strictly (`LoadRules` refuses 0 or none).
+- **Corrected in `turrets.json`'s direction note (text only)**: it said nothing reads a carranca's 'dir' back;
+  `ETHCallback_fireball` does (#1-43), unnormalised, so the original's fireball flies at |dir| x 130. Not built here
+  (LEFT FOR THE OWNER).
+
+**THE ROUTES** (found with `nodes.py`, `geo.py` and `render_map.py` over the converted levels, then traced in
+`test_mp_routes --only`; every draft is under `drafts/`). Each is won by play with no DEV flag, and the window replays
+each on the suite's tick (`window/routes.txt`).
+
+| Level | Route | Won on | How |
+|---|---|---|---|
+| 2-06 `level5a` | new | 570 | the pocket's crate (burnable, teleportable 0) is reached only by fire: a portal left of it at (215, 32) from the start (30); the player walks onto `lift_ent_832` and, riding it down, puts one in the lane at (300, 202) (305); fireball #2 goes in (383), comes out of (215, 32) flying right and burns the crate (390, gone 450); from the lift's top a portal in the pocket at (380, 30) (515, taking the oldest end's place) and one on the player (545): out over the door, onto it |
+| 4-14 `level13c` | new | 354 | zero gravity: a portal in the carranca's lane at (320, 196) (30) and one at (310, 120) (60), both outside `antiportal_2284`'s 160; fireball #1 goes in (167), comes out flying right and destroys `shock_agent_2285` and itself (217); two taps into `block00_ent_2343` (240, 265), whose shots fail on it, drift the player right at 138 u/s over the pair and into the door |
+| 2-03 `level2a` | re-authored | 911 (1458) | step 114's hops through pairs along the floor now carried the fireball onto the player (dead on 464). Now the player holds `button_760` behind a pair laid in the lane between him and the carranca, (330, 192) on 345 and (270, 192) on 372: each fireball goes into the far end (420, 660, 900), comes out of the near one flying back right, passes the far end unmoved and goes off on the right wall; off the button on 860, under the door (0.77 raised) and in. 2 shots, the popup's way |
+
+No other route changed: the trace marks a fireball `through` on these three alone (`routes_through_final.txt`; on step
+134's routes, on 2-03 alone, `routes_through.txt`). Nudged by 2 to 3 ticks and 5 to 10 u, the copies win on 2-06 7 of 7
+and on 2-03 5 of 5, and on 4-14 6 of 7 round (310, 120) (`sens/`; cited for their won ticks, since their file names fail
+the suite's name check, which only committed files pass): 4-14's second portal was moved from (310, 132) to (310, 120)
+after the runner for margin, since at (315, 136) its fireball passes the agent 40 u off, where contact needs 39.6, and
+the player drifts into the live field (321); from (310, 116) to (310, 128) it wins, and at (310, 112) the player's drift
+enters it. The moving-platform gate is not built (deviation 3): on 2-06, the one route with a lift, every placed portal
+stands at least 26 u from `lift_ent_832`'s body whenever anything goes through, where the gate is 5.6: by the lift's
+polygon in the converted `level5a.tscn` (x +-31, y +-16 about its centre), on 383, the lift at y 114, the nearest
+portal, (215, 33.6), is 68.7 u from its body, and on 545, its centre at y 178, its top edge (y 162) is 26.0 u under the
+portal put on the player at (168, 136) (confirmed by the step's verifier, `verify1/verify1.md`).
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings | **passes.** `build1.log` (all targets) **0 warnings, 0 errors**: `test_mp.exe` `ccef1f30`, `MagicPortals.exe` `8a86119a`, `MagicPortalsSpike.exe` `73c74556` (linked, never launched). `MagicPortals.exe` refused once (below), deleted and relinked alone (`build2_relink.log`, 0 warnings, link only): `33b55a48` |
+| 1-01 at f420 before anything else | byte-identical to the baseline | **passes**: `4b85352e` on step 134's `5fbe913a`, equal to `G8/after/sweep` and `P1/clamp/after/sweep` (`check101/`) |
+| Through a pair, once, the pair kept | in within 22 u; at the partner's point, reversed; the pair placed and marked; through the next portal unmoved; no refund | **passes** (`test_mp_turrets` `AFireballGoesThroughAPairOnceAndThePairStays`, level0a's lane, ends at (100, 142) and (200, 142)): `carranca_right_ent_792#1` goes in on its 26th tick of flight, 20.68 u off A's centre (no nearer than 22 on any tick before), is put at B's point as B stands, (130, 0) turned to (-130, 0), `teleportedOnce`; both ends still placed and `teleported`; it comes back through A's 22 unmoved (no step over a tick's 2.17 u, `traversals` 1) and goes off at (9.3, 141.3); `KillAll(true)` takes 2 and refunds neither |
+| A lone portal | carries nothing | **passes** (`ALonePortalCarriesNoFireball`): nothing through, the fireball goes off on the block at x 278.5 as with no portal, and the unused portal is refunded |
+| The reader | `portal_grab_px` required | **passes** (`TheReaderRefusesWhatWouldBeSilent`): refused when missing; each hand-written bad file now carries it, so each is refused for its own fault |
+| The suites | the runner once; the suites the change touches pass | **passes** (`allmode.log`, one launch of `ccef1f30`, rc 0): 47 suites, **47 passed**, **14,466 checks** against step 134's 14,431: `test_mp_turrets` 96 -> **125**, `test_mp_routes` 236 -> **242**, 0 failures; every other count equal (`suite_counts.txt`) |
+| Routes named by the spec | 2-06 and 4-14 won by play; 2-03 re-authored | **2 of 2 won** (570, 354) and **2-03 won** (911, 2 shots), each on the same tick in the window (`window/routes.txt`, `MagicPortals.exe` `33b55a48`, validation ACTIVE and silent, taps only on the routes' ticks; 4-14's last line is the final file's, retaken after its portal moved) |
+| Route regression | every route still wins; one the change breaks is re-authored with its reason; none deleted | **passes.** **79 of 79** route files won by `test_mp_routes`, in the runner (`routes_allmode.txt`) and again on the final files after 4-14's portal moved (`routes_final.txt`, 242 checks, 0 failures, every tick the same): 2-03 re-authored (1458 -> 911; its hop pair carried the fire onto the player); every other route on its step-134 tick; none deleted. The run before 2-03's re-authoring failed on 2-03 alone (`routes_run1.txt`) |
+| Reachability | no door newly sealed | **passes**: `reachability.py --check`, 128 levels, 108 reachable, 20 opened, 0 sealed, 0 differ (`reachability.txt`). The flood models no portal shot and no fireball, so a fireball sent through a pair cannot move a verdict; the routes are the evidence |
+| The 128-level f420 sweep | every changed level explained against `G8/after/sweep` | **passes: 128 of 128 byte-identical** (`after/compare_vs_G8.txt`), as predicted: the sweep taps nothing, so no portal is placed and no fireball can be carried, and no level places a static portal with a fireball source. The same command line and saves (`40bfef3a` before and after), 128 rc 0 on `33b55a48`, validation ACTIVE in 128 logs and silent in all; every png opens and matches its md5 in `capture.txt` (`after/png_check.txt`) |
+
+**SMART APP CONTROL: 1 refusal.** `MagicPortals.exe` `8a86119a` (build 1) was refused on its first launch, the 2-03
+window replay (rc 126, "Permission denied"); deleted and relinked alone as `33b55a48`, which ran every launch after
+(4 window replays and the sweep's 128). `test_mp.exe` `ccef1f30` (linked once): every launch ran - the turrets suite,
+the route drafts and traces, the runner. `MagicPortalsSpike.exe` `73c74556` linked, never launched. Step 134's
+`MagicPortals.exe` `5fbe913a` ran once, for the 1-01 check. The verifier (`verify1.json`, a pass with three low
+findings: the two on this record's wording, the transit's picture and sound and 2-06's lift margin, applied here as
+text; the third, the task text's stale baseline, needs no change here): 0 refusals and 0 relinks; `MagicPortals.exe` `33b55a48` 144
+launches (the sweep's 128, 3 window replays, 13 frames), `test_mp.exe` `ccef1f30` 3 (the runner, a traced replay, a
+through-scan).
+
+**RECORDED DEVIATIONS.**
+1. **The exit's `active` flag is not modelled for a fireball.** `teleportToOther` sets the exit inactive
+   (`setActive(other, false)`, #77-87) until a frame on which nothing is in any placed portal (`activateAll`), and an
+   inactive end sends nothing (#43-50); the port starts no lockout for a fireball. What differs: a traveller entering
+   the exit end while the fireball that came out of it still overlaps it, which it does for about 10 ticks (22 u at
+   130 u/s). The shortest carranca stride is 1500 ms, 90 ticks (`carrancas.txt`), so a stream's next fireball never
+   meets an occupied exit, and no route has a traveller there.
+2. **One object per portal per frame is not modelled.** `getObjectInPortal` returns one entity per portal (the
+   preferred one, or the grabber's first) and `doTeleporting` moves the second portal's before the first's, the second
+   with killPortals clear (#37-98); the port carries every fireball in a pair's ends on its tick, apart from the bodies'
+   own transit. Only a fireball and another traveller in a pair's two ends on one tick differ; no route has one.
+3. **`hasMovingPlatformInAnyPortal` is not modelled**, for a fireball as for every traveller (the script inventory's
+   missing row): no transit while a lift or a moving platform is within 5.6 u of any placed portal. 2-06's route is
+   checked by hand (THE ROUTES).
+4. **The static portals' and the one-placement path are not built for a fireball** (the decode's last item): no level
+   places a fireball source with a static portal.
+5. **A fireball is carried after the contact test of its tick**, so one that comes out of a portal is first tested
+   against bodies on its next tick, 2.17 u along; the original's `SetPositionXY` is likewise seen by Box2D on its next
+   step. A burned shot's fireball is carried from its next tick.
+
+**LEFT FOR THE OWNER.**
+- **A carranca's fireball flies at |dir| x 130 in the original** (a finding of this step, not built): `ETHCallback_fireball`
+  moves it by its 'dir' unnormalised, and eight of the 28 carrancas carry a dir that is not 1 - `level0a` 1.2, `level2a`
+  -1.25, `level6a` -1.6, `level12c` 0.7, `level14a` -1.3 and 2, `level17a` 1.2, `level27a` -1.2
+  (`carrancas.txt`): 2-01's fireball flies at 156 u/s, 2-03's at 162.5, 2-07's at 208, level14a's second at 260. The
+  port normalises. Building it retimes every such carranca's routes and lanes; its own step (the backlog's new row).
+  2-03's re-authored route is timed on the port's 130.
+- **The new routes lean on the port where no clip shows the original**: 2-06 rides `lift_ent_832` on its own clock (G2:
+  the original's lift waits for a tap) and puts a portal on the player; 4-14 drifts on the port's zero-gravity recoil
+  (70 u/s a tap, added to the drift). No clip of the original shows a fireball go through a pair; the decode and the
+  help popup W2P3 are the evidence.

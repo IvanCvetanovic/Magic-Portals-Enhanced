@@ -29,10 +29,12 @@
 #include "core/Components.hpp"
 #include "sim/Game.hpp"
 #include "sim/LevelBuilder.hpp"
+#include "sim/Portals.hpp"
 #include "sim/Shot.hpp"
 #include "sim/Turrets.hpp"
 #include "sim/Units.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -634,6 +636,144 @@ void AKillingFireballDoesNotFlyOn() {
     CHECK_MSG(killed == 2, "two of the five lose their player to a fireball: " + std::to_string(killed));
 }
 
+// THROUGH A PORTAL PAIR, ONCE, AND THE PAIR STAYS (planning step 135, the
+// backlog's G6). PortalManager::mayTeleport lets fireball.ent through only while
+// its teleportedOnce is clear, doesItDestroyPortals is false for it, and
+// teleportToOther puts it at the partner's point and turns its 'dir' back
+// (bytes 144944..145873, #152-207). It is in a portal while its centre is closer
+// than 8 + 14 = 22 to the portal's: EntityGrabber takes half its UNSCALED 16 x 16
+// box (turrets.json portal_grab_px) and adds the portal's own radius.
+//
+// level0a's lane, y 142 from carranca_right_ent_792 at (23, 142) to the block's
+// face at x 278.5: A at (100, 142) in front of it and B at (200, 142) beyond A,
+// so the fireball goes in at A's left, comes out of B flying LEFT, and meets A
+// again from its right - which it flies through, unmoved, having been through
+// once. The pair is still there at the end, and the clear button refunds
+// neither end.
+constexpr double kGrabPx = 8.0 + 14.0;
+
+const Turrets::Fireball* FindFireball(const Run& run, const std::string& name) {
+    for (const Turrets::Fireball& ball : run.level.turrets.fireballs) {
+        if (ball.name == name) return &ball;
+    }
+    return nullptr;
+}
+
+void AFireballGoesThroughAPairOnceAndThePairStays() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+    CHECK_MSG(::test::nearly(static_cast<float>(run.level.turrets.rules.portalGrabPx), 8.0f),
+              "a fireball's share of the grab is half its unscaled 16 x 16 box: 8");
+    Portals::State& portals = run.level.portals;
+    const glm::dvec2 aPx(100.0, 142.0);
+    const glm::dvec2 bPx(200.0, 142.0);
+    CHECK_MSG(portals.TryPlace(aPx) && portals.TryPlace(bPx), "level0a takes a pair on its lane");
+    if (portals.placed.size() != 2) return;
+    const int idA = portals.placed[0].id;
+    const int idB = portals.placed[1].id;
+
+    // Its first fireball, and nothing else of the level's in the air.
+    for (int tick = 0; tick < 240 && run.level.turrets.fireballs.empty(); ++tick) Tick(run);
+    CHECK_MSG(run.level.turrets.fireballs.size() == 1, "the carranca fires its first fireball");
+    if (run.level.turrets.fireballs.size() != 1) return;
+    const std::string name = run.level.turrets.fireballs.front().name;
+    const glm::dvec2 speed = run.level.turrets.fireballs.front().velocityPx;
+    CHECK_MSG(speed.x > 0.0 && speed.y == 0.0, "flying right along the lane");
+
+    // Until it goes in. Every tick before, its centre was 22 or more from A's
+    // point as that tick left both.
+    int transitTick = -1;
+    double closestBeforePx = 1e9;
+    for (int tick = 0; tick < 120 && transitTick < 0; ++tick) {
+        Tick(run);
+        const Turrets::Fireball* ball = FindFireball(run, name);
+        if (ball == nullptr) break;
+        if (portals.traversals > 0) {
+            transitTick = tick;
+            break;
+        }
+        if (!portals.placed.empty()) {
+            closestBeforePx = std::min(closestBeforePx, glm::distance(ball->atPx, portals.placed[0].atPx));
+        }
+    }
+    CHECK_MSG(transitTick >= 0, "it goes into A");
+    if (transitTick < 0) return;
+    const Turrets::Fireball* through = FindFireball(run, name);
+    CHECK_MSG(through != nullptr, "and is still in the air");
+    if (through == nullptr) return;
+    CHECK_MSG(portals.transits.size() == 1 && portals.traversals == 1, "one traversal, recorded for the frame");
+    if (portals.transits.size() != 1) return;
+    const Portals::Traversal went = portals.transits.front();
+    const double inPx = glm::distance(went.travellerPx, went.entryPx);
+    CHECK_MSG(inPx < kGrabPx && closestBeforePx >= kGrabPx,
+              "it went in on the first tick its centre was within 22 of A's: " + std::to_string(inPx) +
+                  ", and no nearer than " + std::to_string(closestBeforePx) + " before");
+    CHECK_MSG(glm::distance(went.entryPx, aPx) < 2.5, "by A (its hover is 2 units)");
+    CHECK_MSG(portals.placed.size() == 2 && portals.placed[0].id == idA && portals.placed[1].id == idB,
+              "THE PAIR STAYS: both ends are still placed");
+    if (portals.placed.size() != 2) return;
+    CHECK_MSG(through->atPx == portals.placed[1].atPx && went.exitPx == through->atPx,
+              "and it is at B's point, as B stands this tick");
+    CHECK_MSG(through->velocityPx == -speed, "flying back the way it came: its 'dir' times -1");
+    CHECK_MSG(through->teleportedOnce, "marked teleportedOnce");
+    CHECK_MSG(portals.placed[0].teleported && portals.placed[1].teleported, "and both ends hasTeleportedSomething");
+
+    // Then back left through A, unmoved: never a jump, never a second traversal,
+    // and it goes off beyond A's far side.
+    bool passedA = false;
+    bool jumped = false;
+    glm::dvec2 lastPx = through->atPx;
+    glm::dvec2 offPx(0.0);
+    for (int tick = 0; tick < 240; ++tick) {
+        Tick(run);
+        const Turrets::Fireball* ball = FindFireball(run, name);
+        if (ball == nullptr) {
+            if (!run.level.turrets.spentPx.empty()) offPx = run.level.turrets.spentPx.front();
+            break;
+        }
+        if (glm::distance(ball->atPx, lastPx) > kTickTravelPx + 1e-4) jumped = true;
+        if (portals.placed.size() == 2 && glm::distance(ball->atPx, portals.placed[0].atPx) < kGrabPx) {
+            passedA = true;
+        }
+        lastPx = ball->atPx;
+    }
+    CHECK_MSG(passedA, "it comes back into A's grab");
+    CHECK_MSG(!jumped && portals.traversals == 1, "and flies through it unmoved: mayTeleport refuses it now");
+    CHECK_MSG(offPx.x < aPx.x - kGrabPx, "going off beyond it, at x " + std::to_string(offPx.x));
+    CHECK_MSG(portals.placed.size() == 2, "the pair is there still");
+
+    // PortalManager::killAll(true): no refund for an end that carried something.
+    const int used = portals.portalsUsed;
+    CHECK_EQ(portals.KillAll(true), 2);
+    CHECK_MSG(portals.portalsUsed == used, "the clear button refunds neither end it went through");
+    std::printf("  %s: %s went into A at (%.1f, %.1f), %.2f off its centre, on tick %d; came out of B going "
+                "(%.0f, %.0f), passed A again and went off at (%.1f, %.1f)\n",
+                kLevel, name.c_str(), went.entryPx.x, went.entryPx.y, inPx, transitTick, -speed.x, -speed.y, offPx.x,
+                offPx.y);
+}
+
+// A LONE PORTAL HAS NO PARTNER (getOther returns null, teleportToOther does
+// nothing), so the fireball flies through it to the block, and a portal nothing
+// went through is refunded as before.
+void ALonePortalCarriesNoFireball() {
+    Run run;
+    if (!Begin(kLevel, run)) return;
+    Portals::State& portals = run.level.portals;
+    CHECK_MSG(portals.TryPlace(glm::dvec2(100.0, 142.0)), "one portal on the lane");
+    glm::dvec2 offPx(0.0);
+    bool through = false;
+    for (int tick = 0; tick < 400 && offPx.x == 0.0; ++tick) {
+        Tick(run);
+        for (const Turrets::Fireball& ball : run.level.turrets.fireballs) through = through || ball.teleportedOnce;
+        if (!run.level.turrets.spentPx.empty()) offPx = run.level.turrets.spentPx.front();
+    }
+    CHECK_MSG(portals.traversals == 0 && !through, "nothing goes through a lone portal");
+    CHECK_MSG(std::fabs(offPx.x - 278.5) <= kTickTravelPx,
+              "the fireball goes off on the block's face at x 278.5: " + std::to_string(offPx.x));
+    CHECK_EQ(portals.KillAll(true), 1);
+    CHECK_MSG(portals.portalsUsed == 0, "and the portal, which carried nothing, is refunded");
+}
+
 void TheReaderRefusesWhatWouldBeSilent() {
     Turrets::Rules rules;
     std::string error;
@@ -648,14 +788,14 @@ void TheReaderRefusesWhatWouldBeSilent() {
     // A fireball that never leaves the mouth, and a carranca that fires every
     // tick, would each look like a level that works.
     const std::string zeroSpeed = WriteRules("zero-speed.json", R"({
-      "fireball": {"speed_px_s": 0.0, "radius_px": 9.6},
+      "fireball": {"speed_px_s": 0.0, "radius_px": 9.6, "portal_grab_px": 8.0},
       "stride": {"default_ms": 2000.0},
       "cull": {"margin_px": [64.0, 64.0]}
     })");
     CHECK_MSG(!Turrets::LoadRules(zeroSpeed, rules, error), "a speed of nothing is refused");
 
     const std::string zeroStride = WriteRules("zero-stride.json", R"({
-      "fireball": {"speed_px_s": 130.0, "radius_px": 9.6},
+      "fireball": {"speed_px_s": 130.0, "radius_px": 9.6, "portal_grab_px": 8.0},
       "stride": {"default_ms": 0.0},
       "cull": {"margin_px": [64.0, 64.0]}
     })");
@@ -664,18 +804,33 @@ void TheReaderRefusesWhatWouldBeSilent() {
     // A fireball of no size touches nothing, and would fly through every wall
     // again - the very thing step 114 put right.
     const std::string noRadius = WriteRules("no-radius.json", R"({
-      "fireball": {"speed_px_s": 130.0, "hit_px": [16.0, 16.0]},
+      "fireball": {"speed_px_s": 130.0, "hit_px": [16.0, 16.0], "portal_grab_px": 8.0},
       "stride": {"default_ms": 2000.0},
       "cull": {"margin_px": [64.0, 64.0]}
     })");
     CHECK_MSG(!Turrets::LoadRules(noRadius, rules, error), "and a fireball with no radius");
 
     const std::string noPair = WriteRules("no-pair.json", R"({
-      "fireball": {"speed_px_s": 130.0, "radius_px": 9.6},
+      "fireball": {"speed_px_s": 130.0, "radius_px": 9.6, "portal_grab_px": 8.0},
       "stride": {"default_ms": 2000.0},
       "cull": {"margin_px": [64.0]}
     })");
     CHECK_MSG(!Turrets::LoadRules(noPair, rules, error), "and a cull margin that is not two numbers");
+
+    // And one with no share of a portal's grab (step 135), which would slip past
+    // every portal it passes between 14 and 22 off its centre.
+    const std::string noGrab = WriteRules("no-grab.json", R"({
+      "fireball": {"speed_px_s": 130.0, "radius_px": 9.6},
+      "stride": {"default_ms": 2000.0},
+      "cull": {"margin_px": [64.0, 64.0]}
+    })");
+    CHECK_MSG(!Turrets::LoadRules(noGrab, rules, error), "and a fireball with no share of a portal's grab");
+    const std::string withGrab = WriteRules("with-grab.json", R"({
+      "fireball": {"speed_px_s": 130.0, "radius_px": 9.6, "portal_grab_px": 8.0},
+      "stride": {"default_ms": 2000.0},
+      "cull": {"margin_px": [64.0, 64.0]}
+    })");
+    CHECK_MSG(Turrets::LoadRules(withGrab, rules, error), "which is all that one lacked: " + error);
 }
 
 void runTests() {
@@ -692,6 +847,8 @@ void runTests() {
     ABarrelItTouchesGoesOff();
     AKillingFireballDoesNotFlyOn();
     EveryLaneEndsOnItsFirstBody();
+    AFireballGoesThroughAPairOnceAndThePairStays();
+    ALonePortalCarriesNoFireball();
 }
 
 } // namespace
