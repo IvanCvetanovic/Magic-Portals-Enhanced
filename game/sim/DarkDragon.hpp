@@ -53,9 +53,10 @@
 // the mouth's particle system - is the Look the arms write, which the layer draws
 // as the dark_dragon.ent the summon adds.
 //
-// NOT BUILT, and recorded in data/darkdragon.json: every sound, the scattered
-// small explosions of DAMAGE and DYING, the death's explode burst, and the
-// ghost_utility_spawn.ent dropped beside the key and at every restock. The earthquakes are the layer's
+// NOT BUILT, and recorded in data/darkdragon.json: the death's explode grab. Its
+// sounds are the layer's since planning step 142, and the scattered small explosions
+// of DAMAGE and DYING, the death's explode picture and the ghost_utility_spawn.ent
+// beside the key and at every restock since step 146 (effects.json). The earthquakes are the layer's
 // (earthquake.json), read from `phase`, the APPEARING `path`'s waypoint and bias,
 // `fired` and `gone`.
 

@@ -762,6 +762,7 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     // And the touch a shot waits on: a press that restarted the level fires
     // nothing in the new one when it comes up.
     m_shotTouch = Portals::TouchTrack{};
+    m_handTouch = Portals::TouchTrack{};
     // And the camera's record of it: a touch still held into the next level is
     // taken up there where it is, and moves nothing until it moves.
     m_cameraTouch = Camera::TouchRecord{};
@@ -1884,6 +1885,13 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
         atPx = Units::ToPixels(registry.get<TransformComponent>(m_knightQuad).position) +
                m_cutsceneRules.knight.pivotPx + owner.offsetPx;
         return true;
+    case EffectOwner::Kind::Character:
+        // ETHCallback_fire32's SeekEntity(targetID) finds the character hidden or
+        // not, and SetPositionXY puts the flames on its point every frame: the body,
+        // which stays in the world when the port hides the dead character's picture.
+        if (m_level.player == entt::null || !registry.valid(m_level.player)) return false;
+        atPx = Units::ToPixels(registry.get<TransformComponent>(m_level.player).position) + owner.offsetPx;
+        return true;
     }
     return false;
 }
@@ -2111,6 +2119,7 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_lightWallRebuilt = false;
     m_trailMs = 0.0;
     m_wellSpins.clear();
+    m_bossPictures = BossPictures{};
 }
 
 void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime) {
@@ -2146,6 +2155,13 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
             effect.cell = look.frame;
             effect.angleDeg = look.angleDeg;
             effect.emissive = look.emissive;
+        }
+        // A TORCH A PUT-OUT ADDED BACK (art.json unlit_torch, planning step 146):
+        // its callback's AddToAngle(unitsPerSecond(190)) since AddEntity's 0f, which
+        // its systems are turned by and its vertical picture is not.
+        if (effect.follow.kind == EffectOwner::Kind::UnlitTorch && effect.follow.index >= 0 &&
+            effect.follow.index < static_cast<int>(m_torchWatch.size())) {
+            effect.angleDeg = m_torchWatch[static_cast<std::size_t>(effect.follow.index)].spin.turnedDeg;
         }
 
         // ITS OWN CALLBACK, before the frame draws it (00_order 8.0 rule 6): the
@@ -4592,6 +4608,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         drawn.agent = indexOf(m_level.portals.agents, sprite.node);
         drawn.torch = indexOf(m_level.torch.lights, sprite.node);
         drawn.well = indexOf(m_level.wells.wells, sprite.node);
+        drawn.field = indexOf(m_level.fields.fields, sprite.node);
         // A draggable handle, or the fire agent or reflector that follows one
         // (handle.json): drawn from sim/Handle's point, not the node's.
         for (std::size_t h = 0; h < m_level.handles.handles.size(); ++h) {
@@ -5441,6 +5458,13 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             gone = diamond.gone;
             centrePx += diamond.atPx - sprite.atPx;
             ownerPx = diamond.atPx;
+            // CARRIED, NEARLY INVISIBLE (art.json carried_diamond): the carried arm's
+            // SetAlpha(0.1f), from the update after the pick - whose free arm drew it
+            // whole - until it goes or a boss puts it back as a new entity. Its
+            // systems are not faded: SetAlpha is the sprite's alone.
+            const auto index = static_cast<std::size_t>(drawn.diamond);
+            const bool faded = index < m_diamondEffects.size() && m_diamondEffects[index].faded;
+            drawn.fade = faded ? static_cast<float>(m_artRules.carriedDiamond.alpha) : 1.0f;
         } else if (drawn.keyhole >= 0) {
             // It holds still, fades over keys.json's fade and deletes itself.
             const Keys::Keyhole& keyhole = m_level.keys.keyholes[static_cast<std::size_t>(drawn.keyhole)];
@@ -5468,6 +5492,8 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             // linearMotion, and turned by AddToAngle about its own point,
             // counter-clockwise as Ethanon's angle and the engine's +z both turn.
             const PlacedScript& script = m_placed[static_cast<std::size_t>(drawn.placed)];
+            // A tutorial hand a release took away (tapHandsAway): DeleteEntity.
+            gone = script.tapped;
             if (script.moves) {
                 const glm::dvec2 swing = Motion::OffsetPx(script.motion);
                 centrePx += swing;
@@ -5621,6 +5647,13 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             m_torchWatch[static_cast<std::size_t>(drawn.torch)].unlitGone) {
             gone = true;
         }
+        // And while it stands, its callback's AddToAngle(unitsPerSecond(190)) over
+        // its node's angle (art.json unlit_torch): light_off.ent is ET_VERTICAL, so
+        // its picture is drawn unturned and only its systems - starting 12 units out
+        // - go round (ETHRenderEntity.cpp:105, ETHSpriteEntity.cpp:576).
+        if (drawn.torch >= 0 && drawn.torch < static_cast<int>(m_torchWatch.size())) {
+            ownerAngleDeg += m_torchWatch[static_cast<std::size_t>(drawn.torch)].spin.turnedDeg;
+        }
         // AND A GRAVITY WELL'S AGENT, as its callback sets its angle every frame
         // (gravitywell.json roundabout): a whole turn at rest, which draws as none,
         // and one turn and a settle over 3000 ms in the way the player last lapped
@@ -5653,6 +5686,11 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         if (drawn.handle >= 0) {
             drawnSizePx *= m_level.handles.Scale(m_level.handles.handles[static_cast<std::size_t>(drawn.handle)]);
         }
+        // And a shock agent at its own bounce's (art.json shock_ring agent_pulse): 1
+        // to 0.95 and back, 300 ms a leg, on the level's age as the antiportal's
+        // blink - about its own point, its pivot 0, and its sparks untouched.
+        if (drawn.field >= 0) drawnSizePx *= m_artRules.shockRing.agentPulse.ScaleAt(m_levelAgeMs);
+        drawn.drawnSizePx = drawnSizePx;
         placeSprite(registry, drawn.quad, centrePx, drawnSizePx, drawn.z, rotation);
         if (drawn.cover != entt::null) placeSkyCover(registry, drawn, centrePx, drawnSizePx, rotation);
         drawn.centrePx = centrePx;
@@ -5742,6 +5780,12 @@ void MagicPortalsLayer::advanceMotions(float fixedDelta) {
         PlacedScript& script = m_placed[static_cast<std::size_t>(drawn.placed)];
         if (script.moves) Motion::Advance(m_motionRules, script.motion, frameMs);
         Motion::Advance(m_motionRules, script.turn, frameMs);
+    }
+    // And each unlit torch's AddToAngle(unitsPerSecond(190)), while that entity
+    // stands - the level's own until the tick after it is lit, then the one a
+    // put-out adds (art.json unlit_torch; latchTorches starts it again at 0).
+    for (TorchWatch& watch : m_torchWatch) {
+        if (!watch.unlitGone) Motion::Advance(m_motionRules, watch.spin, frameMs);
     }
     // 1-21's hand and arrow (sim/Hint.hpp), each on its own callback's clock until
     // it deletes itself.
@@ -6349,8 +6393,8 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
         placeBox(registry, m_agents[i], agents[i].CentreNowPx(), glm::dvec2(sizePx), kZoneZ, kZoneDepth, 0.0f);
     }
 
-    // Hazards, at the box that kills: the Godot project's trigger, not the shape the
-    // converter gives them (Hazards.hpp).
+    // Hazards at their box: a destroyier's 16 px trigger, a death area's polygon
+    // bounds (it kills on the polygon itself, Hazards.hpp).
     const std::vector<Hazards::Hazard>& hazards = m_level.hazards.hazards;
     for (std::size_t i = 0; i < m_hazards.size() && i < hazards.size(); ++i) {
         glm::dvec2 centrePx, sizePx;
@@ -7189,6 +7233,10 @@ std::vector<MagicPortalsLayer::TorchReport> MagicPortalsLayer::TorchReports() co
         if (i < m_torchWatch.size()) {
             report.unlitGone = m_torchWatch[i].unlitGone;
             report.z = m_torchWatch[i].z;
+            report.turnedDeg = m_torchWatch[i].spin.turnedDeg;
+        }
+        for (const DrawnSprite& drawn : m_sprites) {
+            if (drawn.torch == static_cast<int>(i)) report.systemsAngleDeg = drawn.ownerAngleDeg;
         }
         reports.push_back(report);
     }
@@ -8063,10 +8111,21 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     Portals::TouchRelease release =
         Portals::TrackTouch(m_shotTouch, touch.pressed, touch.held, touch.released, touch.over, touch.atView,
                             touch.atPx);
+    // And the tutorial hands' own record of it (m_handTouch), which nothing below
+    // spends.
+    const Portals::TouchRelease handRelease =
+        Portals::TrackTouch(m_handTouch, touch.pressed, touch.held, touch.released, touch.over, touch.atView,
+                            touch.atPx);
     if (release.released) {
         touch.atView = release.atView;
         touch.atPx = release.atPx;
     }
+    // A TUTORIAL HAND THE RELEASE TAKES AWAY (effects.json smoke_vanish_hand_tap):
+    // ETHCallback_hand_tap asks every touch hasPortalRequestInput(t, true), its
+    // disabled status ignored - so a touch a lift took on its way down (below, on
+    // that tick) or a help block took still counts - whatever the shot does with
+    // the same release.
+    if (Portals::RequestsPortal(m_level.portals.rules, handRelease)) tapHandsAway(registry, handRelease);
     // A touch a lift took is followed no further: it fires no shot when it comes
     // up, on a later tick or on this one (a press and a release inside one tick).
     if (liftTook) {
@@ -8618,17 +8677,27 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
         // GetPosition() - its bob of this frame, its eth_z - plus scale(32) as a
         // carrier takes it, the player or a minion alike. The point is where the
         // last tick drew the key: this tick's Keys::Tick has already trailed it
-        // toward the carrier. A key with no picture (a level drawn as boxes, or a
-        // boss's dropped key, whose art is 12.1's and 12.2's) has no point to add
-        // it at, as a crystal's has none.
+        // toward the carrier. A key a boss dropped has no level picture: its point
+        // is where the runtime last drew its key.ent (EffectOwner::Kind::Key, its
+        // bob with it) and its depth that entity's (planning step 146). A level
+        // drawn as boxes has neither, and adds none, as a crystal's has none.
         if (key.owner != entt::null && key.owner != watch.owner) {
             const int index = static_cast<int>(i);
+            std::optional<Effects::Spawn> spawn;
             if (const DrawnSprite* drawn = pictureOf([index](const DrawnSprite& s) { return s.key == index; })) {
-                const Effects::Spawn spawn = Effects::OnEntity(m_effectRules.keyPick, drawn->ownerPx, drawn->lookZ);
-                m_effectQueue.push_back(effectAdd(spawn));
+                spawn = Effects::OnEntity(m_effectRules.keyPick, drawn->ownerPx, drawn->lookZ);
+            } else {
+                for (const Effect& dropped : m_effects) {
+                    if (dropped.follow.kind != EffectOwner::Kind::Key || dropped.follow.index != index) continue;
+                    spawn = Effects::OnEntity(m_effectRules.keyPick, dropped.atPx, dropped.zUnits);
+                    break;
+                }
+            }
+            if (spawn) {
+                m_effectQueue.push_back(effectAdd(*spawn));
                 SUPERSONIC_LOG_INFO("Magic Portals") << "key " << key.name << " taken on tick " << m_ticks << " at ("
-                                                     << spawn.atPx.x << ", " << spawn.atPx.y << ") z " << spawn.z
-                                                     << ": " << spawn.entity << std::endl;
+                                                     << spawn->atPx.x << ", " << spawn->atPx.y << ") z " << spawn->z
+                                                     << ": " << spawn->entity << std::endl;
             }
         }
         watch.owner = key.owner;
@@ -8702,6 +8771,13 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
         const bool goneBefore = watch.gone;
         watch.held = held;
         watch.gone = diamond.gone;
+        // Its carried arm's SetAlpha(0.1f) (art.json carried_diamond), on the second
+        // tick in a row it is held - the pick's own update ran the free arm - and
+        // kept, as nothing sets it back, until it goes or 3-32's boss puts it back as
+        // the new entity addEntityAtSpawnPoint adds.
+        watch.heldTicks = held ? watch.heldTicks + 1 : 0;
+        if (watch.heldTicks >= 2) watch.faded = true;
+        if (goneBefore && !diamond.gone) watch.faded = false;
         const int index = static_cast<int>(i);
         const DrawnSprite* drawn = pictureOf([index](const DrawnSprite& s) { return s.diamond == index; });
         if (drawn == nullptr) continue;
@@ -8825,6 +8901,27 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
         const Demolish::Breakable& breakable = breakables[i];
         if (m_wallEffects[i] != 0 || !breakable.broken) continue;
         m_wallEffects[i] = 1;
+        // A CARRANCA TAKEN (effects.json carranca_destroy, planning step 146): one of
+        // Turrets' - carranca and carranca_right, either spelling, whose callbacks
+        // both run carrancaCallback - adds carranca_destroy at its own point and
+        // depth, turned by its own angle, as its isDestroyed arm does (#123-157).
+        const bool carranca =
+            std::any_of(m_level.turrets.turrets.begin(), m_level.turrets.turrets.end(),
+                        [&breakable](const Turrets::Turret& turret) { return turret.name == breakable.name; });
+        if (carranca) {
+            const DrawnSprite* stone =
+                pictureOf([&breakable](const DrawnSprite& s) { return s.sprite.node == breakable.name; });
+            if (stone == nullptr) continue;
+            const double angleDeg = -stone->sprite.rotation * 180.0 / 3.14159265358979323846;
+            const Effects::Spawn dust =
+                Effects::OnEntityTurned(m_effectRules.carrancaDestroy, stone->sprite.atPx, stone->lookZ, angleDeg);
+            m_effectQueue.push_back(effectAdd(dust));
+            SUPERSONIC_LOG_INFO("Magic Portals") << "carranca " << breakable.name << " destroyed on tick " << m_ticks
+                                                 << ": " << dust.entity << " at (" << dust.atPx.x << ", "
+                                                 << dust.atPx.y << ") z " << dust.z << " angle " << dust.angleDeg
+                                                 << std::endl;
+            continue;
+        }
         if (!isBreakableWall(breakable.name)) continue;
         const DrawnSprite* wall =
             pictureOf([&breakable](const DrawnSprite& s) { return s.sprite.node == breakable.name; });
@@ -8939,6 +9036,18 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
             const double minionZ =
                 death.minion < m_minions.size() ? m_minions[death.minion].lookZ
                                                 : m_artRules.LevelDepth(m_artRules.minion.z);
+            // BURNED: its own callback's addFlames before its blood (ETHCallback_minion
+            // #1456-1471, planning step 146) - fire32.ent on its point and depth at its
+            // frame's width over 64, and left there, as its target is deleted on the
+            // same update.
+            if (death.byFire) {
+                const Effects::Spawn flames = Effects::Flames(m_effectRules, death.atPx, minionZ,
+                                                              static_cast<double>(m_minionCut.frameUnits.x));
+                m_effectQueue.push_back(effectAdd(flames));
+                SUPERSONIC_LOG_INFO("Magic Portals") << "minion burned on tick " << m_ticks << ": " << flames.entity
+                                                     << " at (" << flames.atPx.x << ", " << flames.atPx.y << ") z "
+                                                     << flames.z << " x " << flames.scale << std::endl;
+            }
             m_effectQueue.push_back(effectAdd(Effects::Blood(m_effectRules, death.atPx, minionZ)));
         }
     }
@@ -9013,6 +9122,10 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
         m_effectQueue.push_back(add);
         m_darkDragonQueued = true;
     }
+    // THE BOSSES' OWN PICTURES (planning step 146): what each dying arm scatters and
+    // its death's explode, and what a boss puts back - before the key a boss drops,
+    // as the ghost's DEATH arm adds its explosion before its key.
+    latchBossPictures(fixedDelta);
     // THE KEY A BOSS DROPS, which no node pictures: the key.ent the ghost's DEATH arm
     // adds at its own vector3 (AddScaledEntity('key.ent', GetPosition(), getScale()),
     // #1354-1368), and the dark dragon's DYING arm at key_pos's (ins 1851-1878),
@@ -9042,6 +9155,9 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
         add.follow.index = index;
         m_effectQueue.push_back(add);
     }
+    // And the dark dragon's last waypoint after its key: ghost_utility_spawn beside
+    // it, then explode (planning step 146).
+    latchDarkDragonDeath();
 }
 
 glm::dvec2 MagicPortalsLayer::cameraCornerPx() const {
@@ -9079,9 +9195,215 @@ void MagicPortalsLayer::latchDeathEffects(entt::registry& registry) {
             Effects::FallSkullPoint(m_effectRules, characterPx, cameraCornerPx(), ViewPx(), m_level.noGravity))));
         return;
     }
+    // A DEATH BY FIRE (planning step 146): addFlames(character) before the hp
+    // branch below - the fireball's contact (ETHBeginContactCallback_fireball
+    // #123-145) or a fire agent's flame (ETHCallback_fire_agent #222-251) - at the
+    // character's point and depth, at its frame's width over 64, and riding its
+    // body from then on (EffectOwner::Kind::Character).
+    const bool byFireball = m_level.turrets.playerKilled && m_level.hazards.killedBy == m_level.turrets.killedBy;
+    const bool byFlame = m_level.fire.playerKilled && m_level.hazards.killedBy == m_level.fire.killedBy;
+    if (byFireball || byFlame) {
+        EffectSpawn flames =
+            effectAdd(Effects::Flames(m_effectRules, characterPx, m_playerZ, playerCellPx(m_level.noGravity).x));
+        flames.follow.kind = EffectOwner::Kind::Character;
+        m_effectQueue.push_back(flames);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "player burned by " << m_level.hazards.killedBy << " on tick "
+                                             << m_ticks << ": " << flames.entity << " at (" << characterPx.x << ", "
+                                             << characterPx.y << ") z " << flames.zUnits << " x " << flames.scale
+                                             << std::endl;
+    }
     // And its hp branch (#3-63), which every other death the port has goes through:
     // blood at the character's whole vector3, its depth the character's own.
     m_effectQueue.push_back(effectAdd(Effects::Blood(m_effectRules, characterPx, m_playerZ)));
+}
+
+// ---- THE SMALLER PICTURES (the program's UI, planning step 146) -----------------
+//
+// effects.json _bosses_flames_hands. Each queued on the tick that decides it, from
+// what the simulation left and what the last latch saw (m_bossPictures), and added
+// on the frame as every effect is. The sound's watch reads the same arms for its
+// boss_explosion and its deaths, on its own clock from sounds.json's stride.
+void MagicPortalsLayer::latchBossPictures(float fixedDelta) {
+    const double tickMs = static_cast<double>(fixedDelta) * 1000.0;
+    BossPictures& seen = m_bossPictures;
+    // ONE UPDATE OF AN ARM THAT CALLS overTimeEntityAdder: its two draws, made
+    // whatever the clock says (randF runs before the call), from the effects'
+    // stream (00_order K8); and the add only on the update the clock reaches the
+    // stride.
+    const auto scatter = [this, tickMs](const Effects::Scatter& rule, double& clockMs, const glm::dvec2& centrePx,
+                                        const char* who) {
+        const double direction = effectRandom(0.0, rule.directionSpanRad);
+        const double length = effectRandom(0.0, rule.lengthSpan);
+        if (!Effects::AdderDue(rule, clockMs, tickMs)) return;
+        const Effects::Spawn spawn = Effects::ScatterAt(rule, centrePx, direction, length);
+        m_effectQueue.push_back(effectAdd(spawn));
+        SUPERSONIC_LOG_INFO("Magic Portals") << who << " scatters an explosion on tick " << m_ticks << ": "
+                                             << spawn.entity << " at (" << spawn.atPx.x << ", " << spawn.atPx.y
+                                             << ") from (" << centrePx.x << ", " << centrePx.y << ")" << std::endl;
+    };
+    // explode()'s explosion_large at the caller's superScale (explode_super_scale).
+    const auto explode = [this](const glm::dvec2& atPx, double superScale, const char* who) {
+        const Effects::Spawn spawn = Effects::Explode(m_effectRules, atPx, superScale);
+        m_effectQueue.push_back(effectAdd(spawn));
+        SUPERSONIC_LOG_INFO("Magic Portals") << who << " explodes on tick " << m_ticks << ": " << spawn.entity
+                                             << " at (" << spawn.atPx.x << ", " << spawn.atPx.y << ") z " << spawn.z
+                                             << " x " << spawn.scale << std::endl;
+    };
+    // addEntityAtSpawnPoint's effect, or the AddScaledEntity of it, on a marker's
+    // own point and depth.
+    const auto utility = [this](const glm::dvec2& atPx, double z, const std::string& why) {
+        const Effects::Spawn spawn = Effects::OnEntity(m_effectRules.ghostUtilitySpawn, atPx, z);
+        m_effectQueue.push_back(effectAdd(spawn));
+        SUPERSONIC_LOG_INFO("Magic Portals") << why << " on tick " << m_ticks << ": " << spawn.entity << " at ("
+                                             << spawn.atPx.x << ", " << spawn.atPx.y << ") z " << spawn.z << std::endl;
+    };
+
+    // 1-32'S BEHOLDER. DEAD's every update calls the adder (#1163-1253), the last
+    // included - each tick that ends dead and began with it there - and the last
+    // explodes it at 2 (#1257-1274), at its point: it does not move while dead.
+    if (m_level.boss.beholder.has_value()) {
+        const Boss::Beholder& beholder = *m_level.boss.beholder;
+        if (seen.valid && beholder.phase == Boss::Phase::Dead && !seen.beholderGone) {
+            scatter(m_effectRules.scatterBeholder, seen.beholderMs, beholder.atPx, "the beholder");
+        }
+        if (beholder.gone && !seen.beholderGone) explode(beholder.atPx, m_effectRules.explodeBeholder, "the beholder");
+        seen.beholderGone = beholder.gone;
+    }
+
+    // 3-32'S GHOST. The arm a tick runs is the phase the last one left: DAMAGE calls
+    // the adder while its hp is above 0 - at 0 it goes on to DEATH with no call - and
+    // DEATH on every update, the last included (#786-929, #1245-1331). DEATH's end
+    // explodes it at 2 where it stands (#1335-1352), before its key.
+    const Ghost::State& ghost = m_level.ghost;
+    if (seen.valid && seen.ghostSpawned && !seen.ghostGone &&
+        (seen.ghostPhase == Ghost::Phase::Death ||
+         (seen.ghostPhase == Ghost::Phase::Damage && ghost.phase != Ghost::Phase::Death))) {
+        scatter(m_effectRules.scatterGhost, seen.ghostMs, ghost.atPx, "the ghost");
+    }
+    if (ghost.present && ghost.gone && !seen.ghostGone) explode(ghost.atPx, m_effectRules.explodeGhost, "the ghost");
+
+    // WHAT A BOSS PUTS BACK, ghost_utility_spawn where addEntityAtSpawnPoint adds
+    // it, before the entity: each barrel a restock added (the dark dragon's after a
+    // shot, the ghost's on SHOOTING's beat, both at barrel_spawn), a fire diamond the
+    // ghost put back (at fire_diamond_spawn: SHOOTING's beat after its barrel, and
+    // RAGE_MODE's every update), and the escort RAGE_MODE calls after that, at
+    // minion_spawn_point (#1096-1123).
+    const std::vector<Restock::Added>& added = m_level.restock.added;
+    for (std::size_t i = seen.restocksSeen; i < added.size(); ++i) {
+        utility(added[i].atPx, added[i].z, "barrel " + added[i].name + " put back");
+    }
+    seen.restocksSeen = added.size();
+    const std::vector<Diamonds::Diamond>& diamonds = m_level.diamonds.diamonds;
+    if (seen.fireDiamondsGone.size() < diamonds.size()) seen.fireDiamondsGone.resize(diamonds.size(), 0);
+    for (std::size_t i = 0; i < diamonds.size(); ++i) {
+        const Diamonds::Diamond& diamond = diamonds[i];
+        if (ghost.present && diamond.fire && seen.fireDiamondsGone[i] != 0 && !diamond.gone) {
+            utility(ghost.diamondSpawnPx, markerDepth(ghost.rules.diamondSpawnName),
+                    "fire diamond " + diamond.name + " put back");
+        }
+        seen.fireDiamondsGone[i] = diamond.fire && diamond.gone ? char{1} : char{0};
+    }
+    if (ghost.present) {
+        for (int n = seen.summonsSeen; n < ghost.summons; ++n) {
+            utility(ghost.summonPx, markerDepth(ghost.rules.summonAnchorName), "the ghost calls an escort");
+        }
+        seen.summonsSeen = ghost.summons;
+    }
+
+    // 4-32'S DARK DRAGON. DAMAGE's and DYING's every update call
+    // darkDragonOvertimeSmallExplosionAdder (#1563, #1818), off its own point.
+    const DarkDragon::State& dark = m_level.darkDragon;
+    if (seen.valid && seen.darkAlive &&
+        (seen.darkPhase == DarkDragon::Phase::Damage || seen.darkPhase == DarkDragon::Phase::Dying)) {
+        scatter(m_effectRules.scatterDarkDragon, seen.darkMs, dark.atPx, "the dark dragon");
+    }
+
+    seen.ghostSpawned = ghost.present && ghost.spawned;
+    seen.ghostGone = ghost.gone;
+    seen.ghostPhase = ghost.phase;
+    seen.darkAlive = dark.Alive();
+    seen.darkPhase = dark.phase;
+    seen.valid = true;
+}
+
+void MagicPortalsLayer::latchDarkDragonDeath() {
+    // DYING's last waypoint (#1851-1931): key.ent at key_pos - queued just before
+    // this - then ghost_utility_spawn at key_pos's own GetPosition(), the platform,
+    // and explode at its own point at 1.
+    const DarkDragon::State& dark = m_level.darkDragon;
+    BossPictures& seen = m_bossPictures;
+    if (dark.present && dark.gone && !seen.darkGone) {
+        for (const Keys::Key& key : m_level.keys.keys) {
+            if (key.name != dark.keyName) continue;
+            const Effects::Spawn spawn = Effects::OnEntity(m_effectRules.ghostUtilitySpawn, key.atPx, dark.keyZUnits);
+            m_effectQueue.push_back(effectAdd(spawn));
+            SUPERSONIC_LOG_INFO("Magic Portals") << "the dark dragon's key dropped on tick " << m_ticks << ": "
+                                                 << spawn.entity << " at (" << spawn.atPx.x << ", " << spawn.atPx.y
+                                                 << ") z " << spawn.z << std::endl;
+            break;
+        }
+        const Effects::Spawn burst = Effects::Explode(m_effectRules, dark.atPx, m_effectRules.explodeDarkDragon);
+        m_effectQueue.push_back(effectAdd(burst));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "the dark dragon explodes on tick " << m_ticks << ": " << burst.entity
+                                             << " at (" << burst.atPx.x << ", " << burst.atPx.y << ") z " << burst.z
+                                             << " x " << burst.scale << std::endl;
+    }
+    seen.darkGone = dark.gone;
+}
+
+void MagicPortalsLayer::tapHandsAway(entt::registry& registry, const Portals::TouchRelease& release) {
+    // ScreenPad::isValidPoint (#48-58): a release on a walk pad takes no hand.
+    const glm::dvec2 view = ViewPx();
+    if (Hud::OnPad(m_hudRules, Hud::Side::Left, view, m_levelAgeMs, release.atView) ||
+        Hud::OnPad(m_hudRules, Hud::Side::Right, view, m_levelAgeMs, release.atView)) {
+        return;
+    }
+    // getReleasePos(t) + GetCameraPos(): the last point it was held at, through the
+    // camera the shot reads the same release through.
+    glm::dvec2 releasePx(0.0);
+    if (!ViewportToLevelPx(registry, glm::vec2(release.atPx), releasePx)) return;
+    for (DrawnSprite& drawn : m_sprites) {
+        if (drawn.placed < 0 || drawn.quad == entt::null) continue;
+        PlacedScript& script = m_placed[static_cast<std::size_t>(drawn.placed)];
+        if (script.tapped || m_motionRules.placed[script.row].entity != m_effectRules.handTapEntity) continue;
+        // Its own GetPositionXY(): where its swing last put it.
+        if (!Effects::HandTapped(m_effectRules, releasePx, drawn.ownerPx)) continue;
+        script.tapped = true;
+        const Effects::Spawn smoke =
+            Effects::HandTapSmoke(m_effectRules, drawn.ownerPx, drawn.lookZ, drawn.ownerAngleDeg);
+        m_effectQueue.push_back(effectAdd(smoke));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "hand " << drawn.sprite.node << " tapped away on tick " << m_ticks
+                                             << " by a release at (" << releasePx.x << ", " << releasePx.y
+                                             << "): " << smoke.entity << " at (" << smoke.atPx.x << ", "
+                                             << smoke.atPx.y << ") z " << smoke.z << std::endl;
+    }
+}
+
+double MagicPortalsLayer::markerDepth(const std::string& entity) const {
+    for (const Tscn::Node& node : m_data.scene.nodes) {
+        if (node.parent != "." || Roles::EntityName(node) != entity) continue;
+        const Tscn::Value* z = node.Meta("eth_z");
+        double read = 0.0;
+        return z != nullptr && z->AsNumber(read) ? read : 0.0;
+    }
+    return 0.0;
+}
+
+MagicPortalsLayer::DrawnPictureReport MagicPortalsLayer::DrawnPicture(const std::string& node) const {
+    DrawnPictureReport report;
+    for (const DrawnSprite& drawn : m_sprites) {
+        if (drawn.sprite.node != node) continue;
+        report.drawn = drawn.quad != entt::null;
+        report.quad = drawn.quad;
+        report.centrePx = drawn.centrePx;
+        report.sizePx = drawn.drawnSizePx;
+        report.alpha = drawn.colour.a * drawn.fade;
+        report.ownerPx = drawn.ownerPx;
+        report.ownerAngleDeg = drawn.ownerAngleDeg;
+        report.lookZ = drawn.lookZ;
+        break;
+    }
+    return report;
 }
 
 // ---- THE WIN CUTSCENES (the program's P2, planning step 123) ----------------------
@@ -9264,7 +9586,9 @@ void MagicPortalsLayer::latchTorches() {
     };
     const Torch::State& torch = m_level.torch;
     if (m_torchWatch.size() != torch.lights.size()) {
-        m_torchWatch.assign(torch.lights.size(), TorchWatch{});
+        TorchWatch fresh;
+        fresh.spin.degPerS = m_artRules.unlitTorch.spinDegPerS;
+        m_torchWatch.assign(torch.lights.size(), fresh);
         for (std::size_t i = 0; i < torch.lights.size(); ++i) {
             const DrawnSprite* picture = pictureOf(
                 [&torch, i](const DrawnSprite& drawn) { return drawn.sprite.node == torch.lights[i].name; });
@@ -9332,6 +9656,8 @@ void MagicPortalsLayer::latchTorches() {
             // so its origin is the last latch's.
             const glm::dvec2 originPx = m_signalSeen ? m_signalOriginPx : light.atPx;
             watch.unlitGone = false;
+            // A new light_off.ent, added at AddEntity's 0f: its turn starts again.
+            watch.spin.turnedDeg = 0.0;
             EffectSpawn back = effectAdd(Effects::At(m_effectRules.lightOffAtSignal, originPx));
             back.follow.kind = EffectOwner::Kind::UnlitTorch;
             back.follow.index = static_cast<int>(i);
@@ -10632,6 +10958,13 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             m_level.darkDragon.burned = true;
             SUPERSONIC_LOG_INFO("Magic Portals") << "DEV burn of the dark dragon on tick " << m_ticks << std::endl;
         }
+        // DEV ONLY: a breakable a suite asked broken on this tick, as a stone's touch
+        // breaks it, for this tick's latch to see.
+        for (const auto& [tick, node] : m_devBreaks) {
+            if (tick != m_ticks || m_level.demolish.FindBreakable(node) == nullptr) continue;
+            m_level.demolish.Break(registry, node, "a DEV break");
+            SUPERSONIC_LOG_INFO("Magic Portals") << "DEV break of " << node << " on tick " << m_ticks << std::endl;
+        }
         // DEV ONLY: the player put where a capture asked, for this tick's AfterStep
         // to judge - a door opened for the camera, never a route.
         for (const auto& [tick, atPx] : m_devPlaces) {
@@ -10928,6 +11261,7 @@ void MagicPortalsLayer::openPause(entt::registry& registry) {
     // down, so one that went down on Resume would otherwise fire a shot where it
     // came up, back in the level (the port's own divergence, not the original's).
     m_shotTouch = Portals::TouchTrack{};
+    m_handTouch = Portals::TouchTrack{};
     // And so is the camera's record of it, which the pause does not follow: a touch
     // still held when the level resumes is taken up there.
     m_cameraTouch = Camera::TouchRecord{};
@@ -11233,6 +11567,8 @@ bool MagicPortalsLayer::popupTick(entt::registry& registry, float fixedDelta) {
     // until the level has resumed fires on its release, as the original's does.
     (void)Portals::TrackTouch(m_shotTouch, touch.pressed, touch.held, touch.released, touch.over, touch.atView,
                               touch.atPx);
+    (void)Portals::TrackTouch(m_handTouch, touch.pressed, touch.held, touch.released, touch.over, touch.atView,
+                              touch.atPx);
     // And the camera's record of it, which the engine's input keeps under a popup
     // too: a touch held through one moves the camera, when the level resumes, by
     // what it moved on that tick alone. The camera does not run here.
@@ -11286,6 +11622,8 @@ void MagicPortalsLayer::ScheduleDevHold(int from, int to, float direction) {
 }
 
 void MagicPortalsLayer::ScheduleDevBurn(int tick) { m_devBurns.push_back(tick); }
+
+void MagicPortalsLayer::ScheduleDevBreak(int tick, const std::string& node) { m_devBreaks.emplace_back(tick, node); }
 
 void MagicPortalsLayer::ScheduleDevPlace(int tick, const glm::dvec2& atPx) { m_devPlaces.emplace_back(tick, atPx); }
 

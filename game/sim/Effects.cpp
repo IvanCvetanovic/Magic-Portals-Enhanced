@@ -184,6 +184,47 @@ bool ReadPlacedPortal(const Json::Value& root, const char* name, PlacedPortal& o
     return true;
 }
 
+// A boss's scatter row: the call's own facts as a Rule reads them, and the
+// arithmetic of its random point and its clock, every one stated.
+bool ReadScatter(const Json::Value& root, const char* name, Scatter& out, std::string& error) {
+    Scatter read;
+    if (!ReadRule(root, name, read.rule, error)) return false;
+    const Json::Value& row = root[name];
+    const std::string where = std::string(name);
+    const auto pair = [](const Json::Value& value, glm::dvec2& into) {
+        if (!value.IsArray() || value.AsArray().size() != 2 || !Finite(value.AsArray()[0]) ||
+            !Finite(value.AsArray()[1])) {
+            return false;
+        }
+        into = glm::dvec2(value.AsArray()[0].AsNumber(), value.AsArray()[1].AsNumber());
+        return true;
+    };
+    if (!Finite(row["stride_ms"]) || !(row["stride_ms"].AsNumber() > 0.0) || !Finite(row["direction_span_rad"]) ||
+        !(row["direction_span_rad"].AsNumber() > 0.0) || !Finite(row["length_from"]) ||
+        row["length_from"].AsNumber() < 0.0 || !Finite(row["length_span"]) || row["length_span"].AsNumber() < 0.0 ||
+        !pair(row["squash"], read.squash) || !(read.squash.x > 0.0 && read.squash.y > 0.0) ||
+        !pair(row["from_units"], read.fromUnits)) {
+        error = where + " needs stride_ms and direction_span_rad above 0, length_from and length_span from 0, a "
+                        "squash of two numbers above 0 and from_units [x, y]";
+        return false;
+    }
+    read.strideMs = row["stride_ms"].AsNumber();
+    read.directionSpanRad = row["direction_span_rad"].AsNumber();
+    read.lengthFrom = row["length_from"].AsNumber();
+    read.lengthSpan = row["length_span"].AsNumber();
+    // overTimeEntityAdder's AddEntity: the random point at a bare 0f, angle 0, and
+    // Scale(getScale()); the radius along the random direction is offset_units.
+    if (read.rule.turn != Turn::Fixed || read.rule.angleDeg != 0.0 || !(read.rule.offsetUnits > 0.0) ||
+        read.rule.offsetFixedUnits != glm::dvec2(0.0) || read.rule.z != 0.0 || read.rule.zScaled ||
+        read.rule.scale != 1.0) {
+        error = where + " is AddEntity(name, vector3(pos, 0f), @e) and Scale(getScale()): angle 0, z 0 bare, "
+                        "scale 1, and offset_units the radius g_scale.scale gives the random direction, above 0";
+        return false;
+    }
+    out = std::move(read);
+    return true;
+}
+
 Spawn SpawnOf(const Rule& rule, const glm::dvec2& fromPx, const glm::dvec2& direction) {
     Spawn spawn;
     spawn.entity = rule.entity;
@@ -267,7 +308,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "movement_trail", read.movementTrail, why) ||
         !ReadRule(root, "roundabout_effect", read.roundabout, why) ||
         !ReadRule(root, "antiportal_explosion", read.antiportalExplosion, why) ||
-        !ReadRule(root, "smoke_vanish", read.smokeVanish, why)) {
+        !ReadRule(root, "smoke_vanish", read.smokeVanish, why) ||
+        !ReadScatter(root, "boss_scatter_beholder", read.scatterBeholder, why) ||
+        !ReadScatter(root, "boss_scatter_ghost", read.scatterGhost, why) ||
+        !ReadScatter(root, "boss_scatter_dark_dragon", read.scatterDarkDragon, why) ||
+        !ReadRule(root, "ghost_utility_spawn", read.ghostUtilitySpawn, why) ||
+        !ReadRule(root, "fire32", read.flames, why) ||
+        !ReadRule(root, "carranca_destroy", read.carrancaDestroy, why) ||
+        !ReadRule(root, "smoke_vanish_hand_tap", read.handTapSmoke, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -731,6 +779,75 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": projectile_shoot is added by AddScaledEntity, whose angle is 0: a number, not a rule";
         return false;
     }
+    // THE SMALLER PICTURES (planning step 146). explode()'s superScale for each of
+    // its three boss callers: a scale of something, above 0.
+    {
+        const Json::Value& super = root["explode_super_scale"];
+        const struct {
+            const char* key;
+            double* into;
+        } callers[] = {{"beholder", &read.explodeBeholder},
+                       {"ghost", &read.explodeGhost},
+                       {"dark_dragon", &read.explodeDarkDragon}};
+        for (const auto& caller : callers) {
+            if (!super.IsObject() || !Finite(super[caller.key]) || !(super[caller.key].AsNumber() > 0.0)) {
+                error = path + ": explode_super_scale." + caller.key + " is the superScale its explode() passes, above 0";
+                return false;
+            }
+            *caller.into = super[caller.key].AsNumber();
+        }
+    }
+    // ghost_utility_spawn, fire32 and carranca_destroy each stand on an entity's
+    // own GetPosition() - the marker's, the target's, the carranca's - so their z
+    // is that entity's, 0 of g_scale's over it, and none is offset; the first two
+    // are unturned at the script's size, the third turned by its carranca.
+    const struct {
+        const char* name;
+        const Rule* rule;
+        Turn turn;
+    } onOwn[] = {{"ghost_utility_spawn", &read.ghostUtilitySpawn, Turn::Fixed},
+                 {"fire32", &read.flames, Turn::Fixed},
+                 {"carranca_destroy", &read.carrancaDestroy, Turn::EntityAngle}};
+    for (const auto& row : onOwn) {
+        if (row.rule->turn != row.turn || row.rule->angleDeg != 0.0 || row.rule->offsetUnits != 0.0 ||
+            row.rule->offsetFixedUnits != glm::dvec2(0.0) || row.rule->z != 0.0 || !row.rule->zScaled ||
+            row.rule->scale != 1.0) {
+            error = path + ": " + row.name + " stands on its entity's own GetPosition() (z 0, scaled true), offset by "
+                                             "nothing, at scale 1, " +
+                    (row.turn == Turn::Fixed ? std::string("unturned (angle 0)")
+                                             : std::string("turned by its entity (") + kEntityAngle + ")");
+            return false;
+        }
+    }
+    {
+        const Json::Value& width = root["fire32"]["width_units_per_scale"];
+        if (!Finite(width) || !(width.AsNumber() > 0.0)) {
+            error = path + ": fire32.width_units_per_scale is addFlames' 64, above 0";
+            return false;
+        }
+        read.flamesWidthUnits = width.AsNumber();
+    }
+    // The hand's smoke: a fixed pair, turned by the hand at the call (not by the
+    // row), on the hand's own depth, unturned itself; and the reach of a release.
+    {
+        const Rule& smoke = read.handTapSmoke;
+        const Json::Value& reach = root["smoke_vanish_hand_tap"]["reach_units"];
+        if (smoke.turn != Turn::Fixed || smoke.angleDeg != 0.0 || smoke.offsetUnits != 0.0 ||
+            smoke.offsetFixedUnits == glm::dvec2(0.0) || smoke.z != 0.0 || !smoke.zScaled || smoke.scale != 1.0 ||
+            !Finite(reach) || !(reach.AsNumber() > 0.0)) {
+            error = path + ": smoke_vanish_hand_tap is a fixed pair turned by the hand, on its own depth (z 0, scaled "
+                           "true), unturned, at scale 1, with a reach_units above 0";
+            return false;
+        }
+        read.handTapReachUnits = reach.AsNumber();
+        // ETHCallback_ + the entity less its .ent: whose placements it takes away.
+        const Json::Value& entity = root["smoke_vanish_hand_tap"]["hand_entity"];
+        if (!entity.IsString() || entity.AsString().empty() || entity.AsString().find('.') != std::string::npos) {
+            error = path + ": smoke_vanish_hand_tap.hand_entity is the hand's entity, without .ent";
+            return false;
+        }
+        read.handTapEntity = entity.AsString();
+    }
     // updateEyes both moves the eyes onto the character and hides them with it,
     // and the port has one owner that does both. A row that said otherwise would
     // need an owner of its own, so it is refused rather than half-honoured.
@@ -1025,6 +1142,70 @@ Spawn GhostAppear(const Rules& rules, const glm::dvec2& ghostPx, double ghostZUn
     // level's axis, and the row's bare 1 over it.
     Spawn spawn = SpawnOf(rules.ghostAppear, ghostPx, glm::dvec2(0.0));
     spawn.zBaseUnits = ghostZUnits;
+    return spawn;
+}
+
+bool AdderDue(const Scatter& scatter, double& clockMs, double tickMs) {
+    // #34-44 AddToUInt(getLastFrameElapsedTime()), then #53-54 CMPu clock, stride
+    // and JS past the add while it is below; #99-105 SetUInt(name, 0) on the add.
+    clockMs += tickMs;
+    if (clockMs < scatter.strideMs) return false;
+    clockMs = 0.0;
+    return true;
+}
+
+Spawn ScatterAt(const Scatter& scatter, const glm::dvec2& centrePx, double directionDraw, double lengthDraw) {
+    // vector2(sin(randDir), -cos(randDir)) x g_scale.scale(radius) x randLen [x
+    // squash], left to right as the script multiplies, in its floats; then added
+    // to the centre - to the dark dragon's fixed offset from it first.
+    const float direction = static_cast<float>(directionDraw);
+    const float length = static_cast<float>(scatter.lengthFrom) + static_cast<float>(lengthDraw);
+    float s = 0.0f;
+    float c = 1.0f;
+    Supersonic::DetMath::sincos(direction, s, c);
+    const float radius = static_cast<float>(scatter.rule.offsetUnits);
+    const float x = s * radius * length * static_cast<float>(scatter.squash.x);
+    const float y = -c * radius * length * static_cast<float>(scatter.squash.y);
+    // Given no direction, SpawnOf adds none of the row's offset_units (the radius,
+    // used above): the point is the one worked out here.
+    return SpawnOf(scatter.rule, centrePx + scatter.fromUnits + glm::dvec2(x, y), glm::dvec2(0.0));
+}
+
+Spawn Explode(const Rules& rules, const glm::dvec2& atPx, double superScale) {
+    // #1-23: g_scale.scale(superScale), which is superScale of the port's units.
+    Spawn spawn = LargeExplosion(rules, atPx);
+    spawn.scale = rules.largeExplosion.scale * superScale;
+    return spawn;
+}
+
+Spawn Flames(const Rules& rules, const glm::dvec2& targetPx, double targetZ, double targetWidthUnits) {
+    // #2-39: getScale() x size / (getScale() x 64) - the width in units over 64,
+    // the getScale()s cancelling into the port's one unit.
+    Spawn spawn = OnEntity(rules.flames, targetPx, targetZ);
+    spawn.scale = rules.flames.scale * targetWidthUnits / rules.flamesWidthUnits;
+    return spawn;
+}
+
+bool HandTapped(const Rules& rules, const glm::dvec2& releasePx, const glm::dvec2& handPx) {
+    // isPointInCircle: squaredDistance(p, pos) < radius x radius, TS - strictly.
+    const glm::dvec2 d = releasePx - handPx;
+    return d.x * d.x + d.y * d.y < rules.handTapReachUnits * rules.handTapReachUnits;
+}
+
+Spawn HandTapSmoke(const Rules& rules, const glm::dvec2& handPx, double handZ, double handAngleDeg) {
+    // multiply(v, rotateZ(t)): (v.x a11 + v.y a12, v.x a21 + v.y a22) with a11 = cos,
+    // a12 = sin, a21 = -sin, a22 = cos (GameMath.h:829-838, 857-870), in floats;
+    // degreeToRadian of the hand's GetAngle().
+    const float radians = static_cast<float>(handAngleDeg) * (3.141592654f / 180.0f);
+    float s = 0.0f;
+    float c = 1.0f;
+    Supersonic::DetMath::sincos(radians, s, c);
+    const float vx = static_cast<float>(rules.handTapSmoke.offsetFixedUnits.x);
+    const float vy = static_cast<float>(rules.handTapSmoke.offsetFixedUnits.y);
+    const glm::dvec2 turned(static_cast<double>(vx * c + vy * s), static_cast<double>(-vx * s + vy * c));
+    Spawn spawn = OnEntity(rules.handTapSmoke, handPx, handZ);
+    // OnEntity added the row's pair as it stands; the call adds it turned.
+    spawn.atPx = handPx + turned;
     return spawn;
 }
 

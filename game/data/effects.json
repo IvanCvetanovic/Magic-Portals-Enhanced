@@ -25,7 +25,10 @@
     "red_sparkles, blood where the character or a minion is killed, and skull where either falls. And",
     "chapter 3's ghost (12.2, planning step 98): its shot and the three entities the shot's calls add",
     "(its mark is portal_mark's row, the player's shot's, since the merge of planning step 112), and",
-    "the dark puffs that follow it in, with the followUp and Scale their own callback runs. Every other",
+    "the dark puffs that follow it in, with the followUp and Scale their own callback runs. And the smaller",
+    "pictures of planning step 146 (_bosses_flames_hands below): the three bosses' scattered explosions and",
+    "their deaths' explode, ghost_utility_spawn at every restock, summon and dropped key, the flames addFlames",
+    "puts on a burning character or minion, a carranca's dust, and a tapped-away tutorial hand's smoke. Every other",
     "effect the script adds gets its row with the step that draws it, so a",
     "missing row is an effect not yet drawn, not one the script lacks. What reads a row is",
     "sim/Effects, strictly: every field below is required.",
@@ -1408,6 +1411,209 @@
       "sprite; 20 sparkles.bmp over 650 +- 150 ms along RandStartPoint (112, 112), (0.8, 1, 0.8) to nothing, and",
       "one onda.png growing by 4.5 over 900 ms, (0.5, 1, 0.5) to black, both at StartPoint z 100, repeat 1:",
       "temporary."
+    ]
+  },
+
+  "_bosses_flames_hands": [
+    "THE SMALLER PICTURES THE ORIGINAL ADDS THAT THE PORT LACKED - the program's UI, planning step 146. Each row",
+    "below is one call site (or, for the bosses' scatter, one caller of overTimeEntityAdder), decoded from the",
+    "listing (out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0), its arguments pushed",
+    "last-first (00_order 8.0 rule 3). Pictures only: none of them is read by the simulation, and every one is",
+    "queued on the tick that decides it and added on the frame, as every row above is."
+  ],
+
+  "boss_scatter_beholder": {
+    "entity": "small_explosion_no_light.ent",
+    "offset_units": 48,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "stride_ms": 400,
+    "direction_span_rad": 6.283185307,
+    "length_from": 0.4,
+    "length_span": 0.7,
+    "squash": [1, 1],
+    "from_units": [0, 0],
+    "_source": [
+      "ETHCallback_beholder (Beholder.angelscript, bytes 374987..380209), BEHOLDER_STATE_DEAD, on every update",
+      "(#1163-1253): #1187-1192 randDir = randF(PI x 2); #1194-1197 randLen = randF(0.7) + 0.4; #1199-1227",
+      "explosionRandomPos = vector2(sin(randDir), -cos(randDir)) x g_scale.scale(48) x randLen - the -cos",
+      "pushed first, so it is the y; #1229-1253 overTimeEntityAdder(beholder, 'small_explosion_no_light.ent',",
+      "currentPos + explosionRandomPos, 400, spawnExplosion, 0), currentPos the beholder's point as the update",
+      "began (it does not move while dead). overTimeEntityAdder (Beholder.angelscript, bytes 372886..373491):",
+      "a uint clock on the owner named entityName + 'Adder', set to startTime by its first call (#20-33), plus",
+      "getLastFrameElapsedTime on every call (#34-44); at the stride or more (#53-54, CMPu then JS) #57-68",
+      "AddEntity(entityName, vector3(pos, 0f), @e) - at the point the call is given, a bare 0 z, angle 0 -",
+      "#77-84 e.Scale(g_scale.getScale()), the script's own size, #99-105 the clock back to 0, and #107-114",
+      "func(e, owner): spawnExplosion, playExplosionSound(false) (sounds.json boss_explosion, on the same",
+      "clock). ITS .ent: no sprite; explosion.png cut 4 x 3, 3 particles at once, life 450 +- 355, size 90,",
+      "growth 2, max 250, (1, 0.3, 0.1), start z 32, alphaMode 1, repeat 1; <Scale> 0.8; no light. Temporary.",
+      "The two draws are made on every update the arm runs, as the script makes them, from the effects'",
+      "stream (00_order K8); only the update that adds reads them."
+    ]
+  },
+
+  "boss_scatter_ghost": {
+    "entity": "small_explosion_no_light.ent",
+    "offset_units": 64,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "stride_ms": 400,
+    "direction_span_rad": 6.283185307,
+    "length_from": 0.4,
+    "length_span": 0.7,
+    "squash": [1, 1],
+    "from_units": [0, 0],
+    "_source": [
+      "ETHCallback_ghost (ETHCallback_ghost.angelscript, bytes 451999..457261): DAMAGE while its hp is above 0",
+      "(#786-787, CMPIi hp 0 then JNP to DEATH's switch at #933 with no call) #860-870 randDir = randF(PI x 2)",
+      "and randLen = randF(0.7) + 0.4, #872-900 explosionRandomPos = vector2(sin, -cos) x g_scale.scale(64) x",
+      "randLen, #902-929 overTimeEntityAdder(this, 'small_explosion_no_light.ent', GetPositionXY() +",
+      "explosionRandomPos, 400, spawnExplosion, 0); and DEATH on every update (#1265-1331) the same at",
+      "currentPos, the point read as the arm began (#1213-1218). One clock for both arms: the owner's",
+      "'small_explosion_no_light.entAdder' datum, which only an add zeroes. overTimeEntityAdder as",
+      "boss_scatter_beholder's. (ghost.json's old note read the vector2 as (-cos, sin): the -cos is pushed",
+      "first and so is the y; a uniform randDir gives the two the same spread.)"
+    ]
+  },
+
+  "boss_scatter_dark_dragon": {
+    "entity": "small_explosion_no_light.ent",
+    "offset_units": 64,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1,
+    "stride_ms": 400,
+    "direction_span_rad": 6.283185307,
+    "length_from": 0.4,
+    "length_span": 0.7,
+    "squash": [1, 0.7],
+    "from_units": [64, -32],
+    "_source": [
+      "darkDragonOvertimeSmallExplosionAdder (DarkDragon.angelscript, bytes 397662..398213), called on every",
+      "update of DAMAGE (ETHCallback_dark_dragon #1563) and of DYING (#1818): #1-11 randDir = randF(PI x 2),",
+      "randLen = randF(0.7) + 0.4; #13-50 explosionRandomPos = vector2(sin(randDir), -cos(randDir)) x",
+      "g_scale.scale(64) x randLen x vector2(1, 0.7) - the 0.7 pushed first, so the y is squashed; #52-77",
+      "currentPos = dragon.GetPositionXY() + g_scale.scale(vector2(64, -32)) - -32 pushed first, so 32 up the",
+      "screen; #79-103 overTimeEntityAdder(dragon, 'small_explosion_no_light.ent', currentPos +",
+      "explosionRandomPos, 400, spawnExplosion, 0), as boss_scatter_beholder's."
+    ]
+  },
+
+  "explode_super_scale": {
+    "beholder": 2,
+    "ghost": 2,
+    "dark_dragon": 1,
+    "_source": [
+      "explode(pos, superScale, killPlayer) (MiscCallbacks.angelscript, bytes 342023..342895) #1-23 adds",
+      "explosion_large.ent at vector3(pos, g_scale.scale(32)) and g_scale.scale(superScale): the explosion_large",
+      "row above, at superScale of the port's units. superScale scales the picture alone: the grab is",
+      "g_scale.scale(80) whatever it is (#37-46). Its three boss callers, each pushing last-first:",
+      "ETHCallback_beholder #1270-1274 explode(currentPos, 2f, SetV1 1) once deadTime is past 3550 (#1257-1268),",
+      "then raises its button and deletes itself; ETHCallback_ghost #1348-1352 explode(currentPos, 2f, SetV1 0)",
+      "once DEATH's elapsedTime is past 3550, then key.ent at its own vector3 (#1354-1368) and DeleteEntity;",
+      "ETHCallback_dark_dragon #1924-1931 explode(GetPositionXY(), 1f, SetV1 1) at DYING's last waypoint, after",
+      "key.ent and ghost_utility_spawn.ent at key_pos and single_block_plat_no_emissive.ent at platform_pos",
+      "(#1851-1922). The pictures only: what each blast grabs is not this row's (a beholder's kills a player in",
+      "it, Boss; the ghost's and the dark dragon's grabs are not built)."
+    ]
+  },
+
+  "ghost_utility_spawn": {
+    "entity": "ghost_utility_spawn.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "addEntityAtSpawnPoint (ETHCallback_ghost.angelscript, bytes 457542..458062) #15-20 spawnPos = the",
+      "spawn marker's GetPosition() and #24-41 AddEntity(effectEntityName, spawnPos, 0f, @e, '',",
+      "g_scale.getScale()) BEFORE #53-67 the entity it restocks, at the same vector3: the marker's own point",
+      "and depth (OnEntity), unturned, at the script's own size. Its callers name it as effectEntityName, each",
+      "only when the search finds none (addEntityIfItCantBeFound, bytes 457261..457542, #1-13): the dark",
+      "dragon's barrel after each shot at the player (ETHCallback_dark_dragon #997-1021, at barrel_spawn), the",
+      "ghost's barrel and fire diamond on SHOOTING's beat (ETHCallback_ghost #594-618 at barrel_spawn,",
+      "#632-656 at fire_diamond_spawn) and its fire diamond on every RAGE_MODE update (#1047-1071). And two",
+      "AddScaledEntity calls of their own: the ghost's RAGE_MODE summon (#1096-1123), at minion_spawn_point's",
+      "GetPosition() before the minion it adds, and the dark dragon's death (#1882-1893), at key_pos's",
+      "GetPosition() after the key. ITS .ent: no sprite, static 0; explosion.JPG, 10 at once, life 450 +- 150,",
+      "size 48 +- 12.2, growth -1.4, (1, 0.7, 0.5) to black; onda.png, 1, life 500, size 133, growth -6.4, min",
+      "16, (0.9, 0.7, 1) to clear; both alphaMode 1, repeat 1, start z 20. Temporary."
+    ]
+  },
+
+  "fire32": {
+    "entity": "fire32.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "width_units_per_scale": 64,
+    "_source": [
+      "addFlames(thisEntity) (ETHCallback_carranca.angelscript, bytes 420120..420459): #2-7 size = GetSize().x,",
+      "the target's frame times its scale (ETHSpriteEntity.cpp:652-683); #9-13 absSize = getScale() x 64;",
+      "#15-39 AddEntity('fire32.ent', thisEntity.GetPosition(), 0f, @e, '', getScale() x size / absSize) - the",
+      "target's own point and depth (OnEntity), unturned, at its width over 64 of the port's units: a target",
+      "64 units wide gets the .ent at its own size, the 40-unit mage 0.625; #53-64 e.SetInt('targetID', its",
+      "id). ETHCallback_fire32 (420459..420664) #1-30: every frame SeekEntity(targetID) and, while it finds it,",
+      "SetPositionXY(its GetPositionXY()) - so the flames ride their target, hidden or not (Hide is a flag,",
+      "ETHEntity.cpp:687-690, and a hidden body still moves), and stay where it was deleted. ITS CALLERS: the",
+      "fireball's contact with a character it kills (ETHBeginContactCallback_fireball #123-145: this, then hp",
+      "0), a fire agent's flame over a character (ETHCallback_fire_agent #222-251: hp 0, then this) - both",
+      "before checkGameLost's blood - a burned minion (ETHCallback_minion #1456-1471: destroy, then this, then",
+      "its blood #1478-1504), and a burnable crate's first burned update (manageBurnable #34-40; not drawn,",
+      "the remaster record's step 146, LEFT FOR LATER). ITS .ent: no sprite; fire.png cut 4 x 1, 32 released",
+      "over a lifetime (allAtOnce 0), alphaMode 1, repeat 2, life 450 +- 300, size 64 +- 12.2, growth -2.5,",
+      "direction (0, -2.3) +- (0.7, 0.2), start within (40, 40) at z 2, (0.4, 0.2, 0.1) to (1, 0.4, 0.2).",
+      "Temporary. FOOTAGE: F13's fire death on 2-10 (#44-#70: the flames over the death spot from the frame",
+      "the player goes, brightest at #60, gone by #70) and F15 r1 #157-#171 (3-32's burned knight)."
+    ]
+  },
+
+  "carranca_destroy": {
+    "entity": "carranca_destroy.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": true},
+    "angle": "entity_angle",
+    "scale": 1,
+    "_source": [
+      "carrancaCallback (ETHCallback_carranca.angelscript, bytes 416779..417483) #123-129 isDestroyed, then",
+      "#131-157 AddEntity('carranca_destroy.ent', GetPosition(), GetAngle(), @e, '', g_scale.getScale()) - the",
+      "carranca's own point and depth, turned by its own angle (OnEntityTurned), at the script's own size;",
+      "then startEarthquake(20, 0) and DeleteEntity (neither this row's). What sets `destroy` on a carranca in",
+      "the original is explode()'s grab (#111-122; a carranca is flagged breakable), which the port does not",
+      "build (demolish.json blast._not_built); the port takes a carranca only by a stone's touch, its own",
+      "Demolish rule, which no level's play reaches (no level with a flagged carranca places a stone). So this",
+      "row is drawn wherever the port breaks one, and is pinned by test_mp_layer alone. ITS .ent: no sprite; 22",
+      "dirt_particles.png cut 4 x 1 at once, life 1450 +- 350, start (0, -28, 10) within (0, 101), gravity",
+      "0.03, (0.1, 0.05, 0) fading; 7 smoke_particle.png at once, life 950 +- 200, size 60, growth 0.6,",
+      "within (0, 64), alpha 0.8 to 0; both repeat 1. Temporary."
+    ]
+  },
+
+  "smoke_vanish_hand_tap": {
+    "entity": "smoke_vanish.ent",
+    "offset_units": [0, -38],
+    "z": {"value": 0, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "reach_units": 30,
+    "hand_entity": "hand_tap",
+    "_source": [
+      "ETHCallback_hand_tap (MiscCallbacks.angelscript, bytes 344140..344990): #1-14 its linearMotion; while",
+      "not paused (#16-22), for each touch (#33-177): hasPortalRequestInput(t, true) (#37-46: a touch that came",
+      "up this frame having strayed at most scale(18), its disabled status ignored), its release point off the",
+      "walk pads (ScreenPad::isValidPoint, #48-58) and getReleasePos(t) + GetCameraPos() within",
+      "g_scale.scale(30) of its own GetPositionXY() (isPointInCircle, bytes 319901..320008: squaredDistance",
+      "strictly under the radius squared; #60-90): #92-111 pos = vector3(g_scale.scale(vector2(0, -38)), 0),",
+      "the -38 pushed first and so the y; #113-138 pos = multiply(pos, rotateZ(degreeToRadian(GetAngle()))),",
+      "Multiply(v, m) and RotateZ(theta) (GameMath.h:829-838, 857-870) giving (x cos + y sin, -x sin + y cos):",
+      "(-38 sin, -38 cos) of its angle; #140-161 AddScaledEntity('smoke_vanish.ent', GetPosition() + pos,",
+      "getScale()) - its own depth, unturned, the script's own size - and #165-171 DeleteEntity(thisEntity).",
+      "The point is the picture's centre: tap_icon.png hangs on a PivotAdjust of (0, 38), turned with the",
+      "hand. hand_tap.ent, static 0: 7 placements, on 1-02, 1-03 (two), 1-16 (two, one at 95 degrees) and",
+      "1-27 (two). The shot the same release fires is the portal manager's: the hand takes nothing from it."
     ]
   }
 }

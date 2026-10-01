@@ -49,9 +49,10 @@
 // Its LOOK (colour, alpha, scale, cell) is what the callback writes on the
 // entity; nothing in the simulation reads it back, and the layer draws it.
 //
-// Not built, and recorded in data/ghost.json: every sound, the death blast's 2.0,
-// the scattered explosions, the restock's ghost_utility_spawn.ent picture, and the
-// static body a portal shot cannot cross.
+// Not built, and recorded in data/ghost.json: the death blast's grab and the static
+// body a portal shot cannot cross. (Its sounds are the layer's since planning step
+// 142; its scattered explosions, its death's explode picture at 2.0 and the
+// restock's ghost_utility_spawn.ent the layer's since step 146, effects.json.)
 
 #include "sim/Minions.hpp"
 #include "sim/Motion.hpp"

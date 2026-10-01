@@ -850,6 +850,28 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     ring.spinDegPerS = ringEntry["spin_deg_per_s"].AsNumber();
     ring.jitterFrom = ringJitter["from"].AsNumber();
     ring.jitterSpan = ringJitter["span"].AsNumber();
+    // Its agent's own bounce (ETHCallback_shock_agent #241-263): a pulse that goes
+    // somewhere, as the beholder's do, or a row that decoded nothing.
+    if (!ReadPulse(ringEntry["agent_pulse"], ring.agentPulse) || ring.agentPulse.fromScale == ring.agentPulse.toScale) {
+        error = path + ": shock_ring.agent_pulse needs from and to, two different pairs, and a stride_ms above 0";
+        return false;
+    }
+
+    // What a carried diamond's and an unlit torch's own callbacks do to them
+    // (planning step 146): SetAlpha(0.1f) on every carried update, and
+    // AddToAngle(unitsPerSecond(190)) on every unlit one. Both required.
+    const Json::Value& carried = root["carried_diamond"]["alpha"];
+    if (!Finite(carried) || !(carried.AsNumber() >= 0.0 && carried.AsNumber() < 1.0)) {
+        error = path + ": carried_diamond.alpha is the SetAlpha a carried diamond is drawn at, in [0, 1)";
+        return false;
+    }
+    read.carriedDiamond.alpha = carried.AsNumber();
+    const Json::Value& spin = root["unlit_torch"]["spin_deg_per_s"];
+    if (!Finite(spin) || spin.AsNumber() == 0.0) {
+        error = path + ": unlit_torch.spin_deg_per_s is light_off's AddToAngle, in degrees a second, not 0";
+        return false;
+    }
+    read.unlitTorch.spinDegPerS = spin.AsNumber();
 
     // What three callbacks do to pictures the levels place. None has a default:
     // without them the port draws what the level saved - the anti-portal agent's

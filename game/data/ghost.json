@@ -325,7 +325,6 @@
 
   "death": {
     "burst_ms": 3550.0,
-    "blast_scale": 2.0,
     "key_entity_name": "key.ent",
     "key_colour": "yellow",
     "_note": [
@@ -338,22 +337,22 @@
       "adds is yellow by the entity's default, and level31b's keyhole and door being yellow is",
       "the level agreeing with the entity rather than the source of the value.",
       "",
-      "blast_scale is recorded and NOT applied: explode's own radius is fire.json's blast_px,",
-      "and what the 2.0 multiplies is not established. The port drops the key and does not",
-      "blast, which is the conservative reading - a blast that killed the player at the moment",
-      "of victory would be a worse error than a missing one."
+      "The 2.0 is explode()'s superScale, which scales its explosion_large.ent picture alone",
+      "(MiscCallbacks bytes 342023..342895 #1-23; the grab is g_scale.scale(80) whatever it is,",
+      "#37-46): the layer draws it since planning step 146, effects.json explode_super_scale,",
+      "where the number now lives. The port drops the key and does not blast - explode's grab",
+      "with killPlayer 0 (#1348-1349) would burn, set off or break what it reaches, which is",
+      "gameplay no step has built."
     ]
   },
 
-  "explosions": {
-    "stride_ms": 400.0,
-    "spread_px": 64.0,
-    "_not_built": [
-      "DAMAGE and DEATH both scatter small_explosion_no_light.ent through overTimeEntityAdder",
-      "at 400 ms, at an offset of scale(64) * (0.4 + randF(0.7)) along a random angle, built",
-      "as (-cos, sin). Presentation, and random - recorded, not built."
-    ]
-  },
+  "_explosions": [
+    "DAMAGE (while its hp is above 0) and DEATH both scatter small_explosion_no_light.ent through",
+    "overTimeEntityAdder at 400 ms, at scale(64) x (0.4 + randF(0.7)) along a random angle: drawn",
+    "by the layer since planning step 146, from effects.json boss_scatter_ghost, which holds the",
+    "numbers (this block's stride_ms 400 and spread_px 64 moved there; the vector2 is (sin, -cos),",
+    "the -cos pushed first, where this note once read (-cos, sin) - the same spread)."
+  ],
 
   "_not_built": [
     "The noise: all five ghost sounds, the appear sound among them (ETHCallback_ghost_minion #92-94).",
@@ -361,11 +360,12 @@
     "DEATH's StopSample #1224-1243 leaves the level silent), and so is level31b's no_music",
     "(Game::readProperties #166-181), which leaves the level silent until then (planning step 121).",
     "",
-    "The scattered explosions (DAMAGE and DEATH's overTimeEntityAdder) and the death blast's 2.0.",
-    "",
-    "The restock's picture: ghost_utility_spawn.ent at barrel_spawn and fire_diamond_spawn with each",
-    "restock (addEntityAtSpawnPoint #24-51), and playGhostItemAppearSound (#670-672). The barrel and",
-    "both fire-diamond restocks themselves are played since planning step 117 (restock above).",
+    "The scattered explosions (DAMAGE and DEATH's overTimeEntityAdder), the death's explode picture",
+    "at 2.0 and the restock's ghost_utility_spawn.ent at barrel_spawn and fire_diamond_spawn with each",
+    "restock (addEntityAtSpawnPoint #24-51) and at minion_spawn_point with each escort (#1096-1123)",
+    "are the layer's since planning step 146 (effects.json _bosses_flames_hands);",
+    "playGhostItemAppearSound (#670-672) since step 142. The barrel and both fire-diamond restocks",
+    "themselves are played since planning step 117 (restock above). Not built: the death blast's grab.",
     "",
     "The body. ghost.ent is a static sensor: the original's portal ray has no ghost.ent in its",
     "ignore list, so a shot across its body fails (F15 finding 2; the body's size, blast above).",

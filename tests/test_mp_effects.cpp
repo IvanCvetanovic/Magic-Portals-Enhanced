@@ -1178,6 +1178,137 @@ void TheTorchTrailAndRoundaboutRowsAreTheDecodedCalls() {
               "400 ms is not past 400");
 }
 
+// THE SMALLER PICTURES (the program's UI, planning step 146; effects.json
+// _bosses_flames_hands): each row is its call site as the listing has it.
+void TheSmallerPicturesRowsAreTheDecodedCalls() {
+    const Effects::Rules rules = TheRules();
+    // The three bosses' scatter: overTimeEntityAdder's AddEntity at vector3(pos, 0f),
+    // angle 0, Scale(getScale()), on a 400 ms clock, at randF(PI x 2) and 0.4 +
+    // randF(0.7) of a radius of 48 (the beholder) or 64 - the dark dragon's squashed
+    // to 0.7 down the screen and 64 right, 32 up off its point.
+    const struct {
+        const char* who;
+        const Effects::Scatter* row;
+        double radius;
+        glm::dvec2 squash;
+        glm::dvec2 from;
+    } scatters[] = {{"beholder", &rules.scatterBeholder, 48.0, glm::dvec2(1.0, 1.0), glm::dvec2(0.0)},
+                    {"ghost", &rules.scatterGhost, 64.0, glm::dvec2(1.0, 1.0), glm::dvec2(0.0)},
+                    {"dark dragon", &rules.scatterDarkDragon, 64.0, glm::dvec2(1.0, 0.7), glm::dvec2(64.0, -32.0)}};
+    for (const auto& one : scatters) {
+        const Effects::Scatter& s = *one.row;
+        const std::string who = one.who;
+        CHECK_MSG(s.rule.entity == "small_explosion_no_light.ent", who + ": small_explosion_no_light.ent");
+        CHECK_MSG(s.rule.offsetUnits == one.radius && s.rule.offsetFixedUnits == glm::dvec2(0.0),
+                  who + ": a radius of " + Num(one.radius));
+        CHECK_MSG(s.rule.z == 0.0 && !s.rule.zScaled && s.rule.turn == Effects::Turn::Fixed && s.rule.angleDeg == 0.0 &&
+                      s.rule.scale == 1.0,
+                  who + ": vector3(pos, 0f), angle 0, Scale(getScale())");
+        CHECK_MSG(s.strideMs == 400.0 && Near(s.directionSpanRad, 2.0 * kPi, 1e-8) && s.lengthFrom == 0.4 &&
+                      s.lengthSpan == 0.7,
+                  who + ": every 400 ms, randF(PI x 2), 0.4 + randF(0.7)");
+        CHECK_MSG(s.squash == one.squash && s.fromUnits == one.from, who + ": squash and offset " + At(s.squash) +
+                                                                          " " + At(s.fromUnits));
+    }
+    // explode()'s superScale for its three boss callers.
+    CHECK_MSG(rules.explodeBeholder == 2.0 && rules.explodeGhost == 2.0 && rules.explodeDarkDragon == 1.0,
+              "explode(..., 2f) for the beholder and the ghost, 1f for the dark dragon");
+    const Effects::Spawn burst = Effects::Explode(rules, glm::dvec2(300.0, 120.0), rules.explodeBeholder);
+    CHECK_MSG(burst.entity == "explosion_large.ent" && burst.atPx == glm::dvec2(300.0, 120.0) && burst.z == 32.0 &&
+                  burst.zScaled && burst.scale == 2.0 && burst.angleDeg == 0.0f,
+              "explosion_large at the point, scale(32) in front, at 2: z " + Num(burst.z) + " x " + Num(burst.scale));
+    // ghost_utility_spawn on a marker's own point and depth: key_pos's 6 on 4-32.
+    const Effects::Spawn spark = Effects::OnEntity(rules.ghostUtilitySpawn, glm::dvec2(78.0, 208.0), 6.0);
+    CHECK_MSG(spark.entity == "ghost_utility_spawn.ent" && spark.atPx == glm::dvec2(78.0, 208.0) && spark.z == 6.0 &&
+                  spark.zScaled && spark.scale == 1.0 && spark.angleDeg == 0.0f,
+              "ghost_utility_spawn at the marker's vector3, unturned, at its own size");
+    // addFlames: the target's point and depth, its width over 64 - the 40-unit mage
+    // at 0.625, a 64-unit target at the .ent's own size.
+    CHECK_MSG(rules.flames.entity == "fire32.ent" && rules.flamesWidthUnits == 64.0, "fire32.ent, over 64");
+    const Effects::Spawn mage = Effects::Flames(rules, glm::dvec2(120.0, 200.0), 4.0 / 2.8125, 40.0);
+    CHECK_MSG(mage.atPx == glm::dvec2(120.0, 200.0) && Near(mage.z, 4.0 / 2.8125, 1e-12) && mage.zScaled &&
+                  mage.scale == 0.625 && mage.angleDeg == 0.0f,
+              "the mage's flames at 40 / 64: x " + Num(mage.scale));
+    CHECK_MSG(Effects::Flames(rules, glm::dvec2(0.0), 0.0, 64.0).scale == 1.0, "a 64-unit target at 1");
+    // carranca_destroy, turned by its carranca as wall_destroy is by its wall.
+    CHECK_MSG(rules.carrancaDestroy.entity == "carranca_destroy.ent" &&
+                  rules.carrancaDestroy.turn == Effects::Turn::EntityAngle,
+              "carranca_destroy.ent, turned by its own entity");
+    const Effects::Spawn dust =
+        Effects::OnEntityTurned(rules.carrancaDestroy, glm::dvec2(500.0, 96.0), -6.0, 180.0);
+    CHECK_MSG(dust.atPx == glm::dvec2(500.0, 96.0) && dust.z == -6.0 && dust.angleDeg == 180.0f && dust.scale == 1.0,
+              "at its point and depth, turned by its angle");
+}
+
+// overTimeEntityAdder and the point each update's draws give, in the script's floats.
+void TheBossesScatterIsTheAddersClockAndTheirRandomPoint() {
+    const Effects::Rules rules = TheRules();
+    // The clock: the frame's time added, the add on the update it reaches 400, and
+    // back to 0 - at 60 Hz the 24th update, and every 24th after.
+    const double tickMs = static_cast<double>(1.0f / 60.0f) * 1000.0;
+    double clockMs = 0.0;
+    std::vector<int> adds;
+    for (int update = 1; update <= 100; ++update) {
+        if (Effects::AdderDue(rules.scatterGhost, clockMs, tickMs)) adds.push_back(update);
+    }
+    CHECK_MSG(adds == (std::vector<int>{24, 48, 72, 96}), "on the 24th update, then every 24th: " +
+                                                             std::to_string(adds.empty() ? -1 : adds[0]));
+    // vector2(sin(randDir), -cos(randDir)) x radius x (0.4 + draw): straight up at a
+    // draw of 0 and the shortest length, straight right at PI / 2 and the longest.
+    const glm::dvec2 centre(300.0, 100.0);
+    const Effects::Spawn up = Effects::ScatterAt(rules.scatterBeholder, centre, 0.0, 0.0);
+    CHECK_MSG(Near(up.atPx.x, 300.0, 1e-5) && Near(up.atPx.y, 100.0 - 48.0 * 0.4, 1e-4),
+              "randDir 0: 0.4 x 48 up the screen: " + At(up.atPx));
+    CHECK_MSG(up.entity == "small_explosion_no_light.ent" && up.z == 0.0 && !up.zScaled && up.scale == 1.0 &&
+                  up.angleDeg == 0.0f,
+              "at a bare 0, unturned, at the script's own size");
+    const Effects::Spawn right = Effects::ScatterAt(rules.scatterGhost, centre, kPi / 2.0, 0.7);
+    CHECK_MSG(Near(right.atPx.x, 300.0 + 64.0 * 1.1, 1e-4) && Near(right.atPx.y, 100.0, 1e-4),
+              "randDir PI / 2: 1.1 x 64 to the right: " + At(right.atPx));
+    // The dark dragon's: off its point by (64, -32), and squashed to 0.7 down the screen.
+    const Effects::Spawn dragon = Effects::ScatterAt(rules.scatterDarkDragon, centre, kPi, 0.0);
+    CHECK_MSG(Near(dragon.atPx.x, 364.0, 1e-4) && Near(dragon.atPx.y, 68.0 + 64.0 * 0.4 * 0.7, 1e-4),
+              "the dark dragon's, randDir PI: (64, -32) off it, then 0.4 x 64 x 0.7 down: " + At(dragon.atPx));
+    // Every draw lands within the ring the two spans allow.
+    double nearest = 1e9;
+    double farthest = 0.0;
+    for (int i = 0; i <= 64; ++i) {
+        for (const double length : {0.0, 0.35, 0.7}) {
+            const Effects::Spawn one =
+                Effects::ScatterAt(rules.scatterBeholder, centre, 2.0 * kPi * i / 64.0, length);
+            const double d = glm::length(one.atPx - centre);
+            nearest = std::min(nearest, d);
+            farthest = std::max(farthest, d);
+        }
+    }
+    CHECK_MSG(Near(nearest, 19.2, 1e-4) && Near(farthest, 52.8, 1e-4),
+              "the beholder's between 0.4 and 1.1 of 48: " + Num(nearest) + " to " + Num(farthest));
+}
+
+// ETHCallback_hand_tap: a release strictly within scale(30) of the hand's point, and
+// its smoke at multiply(vector3(0, -38, 0), rotateZ(its angle)) off it.
+void ATappedHandsSmokeTurnsWithIt() {
+    const Effects::Rules rules = TheRules();
+    CHECK_MSG(rules.handTapSmoke.entity == "smoke_vanish.ent" && rules.handTapReachUnits == 30.0 &&
+                  rules.handTapEntity == "hand_tap" && rules.handTapSmoke.offsetFixedUnits == glm::dvec2(0.0, -38.0),
+              "smoke_vanish.ent, 38 over the hand's point, within 30 of it, for hand_tap");
+    const glm::dvec2 hand(382.0, 117.0);
+    CHECK_MSG(Effects::HandTapped(rules, glm::dvec2(382.0 + 29.999, 117.0), hand), "29.999 away: taken");
+    CHECK_MSG(!Effects::HandTapped(rules, glm::dvec2(382.0 + 30.0, 117.0), hand), "30 away: not (strictly inside)");
+    CHECK_MSG(Effects::HandTapped(rules, glm::dvec2(382.0 + 21.0, 117.0 + 21.0), hand), "29.7 away along a diagonal");
+    // Upright (1-02's 622): 38 up the screen, on the hand's own depth, unturned.
+    const Effects::Spawn upright = Effects::HandTapSmoke(rules, hand, -2.0, 0.0);
+    CHECK_MSG(Near(upright.atPx.x, 382.0, 1e-9) && Near(upright.atPx.y, 117.0 - 38.0, 1e-5) && upright.z == -2.0 &&
+                  upright.zScaled && upright.angleDeg == 0.0f && upright.scale == 1.0,
+              "at angle 0: 38 up, on its depth: " + At(upright.atPx));
+    // 1-16's hand_tap_ent_768 at 95 degrees: (-38 sin 95, -38 cos 95) = (-37.855, +3.312),
+    // the picture's centre on its turned PivotAdjust (0, 38).
+    const Effects::Spawn turned = Effects::HandTapSmoke(rules, glm::dvec2(256.0, 96.0), 0.0, 95.0);
+    CHECK_MSG(Near(turned.atPx.x, 256.0 - 37.8554, 1e-3) && Near(turned.atPx.y, 96.0 + 3.3119, 1e-3) &&
+                  turned.angleDeg == 0.0f,
+              "at 95 degrees: (-37.855, +3.312) off it, the smoke itself unturned: " + At(turned.atPx));
+}
+
 void ARowMissingAFactIsRefused() {
     const std::string good = Read(kEffects);
     CHECK_MSG(!good.empty(), "effects.json is where the build says: " + kEffects);
@@ -1416,6 +1547,28 @@ void ARowMissingAFactIsRefused() {
     refused("no_wall_fade.json", "\"alpha_per_second\": 1,", "", "light_wall_at_ghost");
     refused("no_trail_speed.json", "\"min_speed\": 0.4,", "", "movement_trail");
     refused("no_trail_clock.json", "\"every_ms\": 400,", "\"every_ms\": 0,", "movement_trail");
+    // The smaller pictures' rows (planning step 146), each refused by name.
+    refused("no_flames.json", "\"fire32\": {", "\"fire32_gone\": {", "fire32");
+    refused("no_flames_width.json", "\"width_units_per_scale\": 64,", "", "fire32.width_units_per_scale");
+    refused("no_scatter.json", "\"boss_scatter_ghost\": {", "\"boss_scatter_gone\": {", "boss_scatter_ghost");
+    refused("flat_squash.json", "\"squash\": [1, 0.7],", "\"squash\": [1, 0],", "boss_scatter_dark_dragon");
+    refused("scaled_scatter.json",
+            "\"entity\": \"small_explosion_no_light.ent\",\n    \"offset_units\": 48,\n    \"z\": {\"value\": 0, "
+            "\"scaled\": false},",
+            "\"entity\": \"small_explosion_no_light.ent\",\n    \"offset_units\": 48,\n    \"z\": {\"value\": 0, "
+            "\"scaled\": true},",
+            "boss_scatter_beholder");
+    refused("no_super_scale.json", "\"dark_dragon\": 1,", "\"dark_dragon\": 0,", "explode_super_scale.dark_dragon");
+    refused("unturned_carranca.json",
+            "\"entity\": \"carranca_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": "
+            "true},\n    \"angle\": \"entity_angle\",",
+            "\"entity\": \"carranca_destroy.ent\",\n    \"offset_units\": 0,\n    \"z\": {\"value\": 0, \"scaled\": "
+            "true},\n    \"angle\": 0,",
+            "carranca_destroy");
+    refused("no_hand_reach.json", "\"reach_units\": 30,", "\"reach_units\": 0,", "smoke_vanish_hand_tap");
+    refused("hand_with_ent.json", "\"hand_entity\": \"hand_tap\",", "\"hand_entity\": \"hand_tap.ent\",",
+            "smoke_vanish_hand_tap.hand_entity");
+    refused("no_utility.json", "\"ghost_utility_spawn\": {", "\"ghost_utility_gone\": {", "ghost_utility_spawn");
 
     Effects::Rules rules;
     std::string why;
@@ -1445,6 +1598,9 @@ MP_SUITE_MAIN("test_mp_effects") {
     TheShockBurnAndExtinguishRowsAreTheDecodedCalls();
     TheWallStoneAndDoorRowsAreTheDecodedCalls();
     TheTorchTrailAndRoundaboutRowsAreTheDecodedCalls();
+    TheSmallerPicturesRowsAreTheDecodedCalls();
+    TheBossesScatterIsTheAddersClockAndTheirRandomPoint();
+    ATappedHandsSmokeTurnsWithIt();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

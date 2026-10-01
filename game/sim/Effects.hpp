@@ -43,7 +43,11 @@
 // player leaves; and the flash where it laps a well. And the level's end and a
 // death (11.3): the door's red suck and sparkles, blood where the character or a
 // minion was killed, and a skull where either fell. And chapter 3's ghost (12.2):
-// the shots it fires, what each adds, and the dark puffs that follow it in.
+// the shots it fires, what each adds, and the dark puffs that follow it in. And
+// the smaller pictures of the program's UI (planning step 146): the three bosses'
+// scattered explosions and their deaths' explode, ghost_utility_spawn wherever a
+// boss puts something back or drops its key, the flames addFlames puts on a
+// burning character or minion, a carranca's dust, and a tapped-away hand's smoke.
 
 #include <string>
 
@@ -146,6 +150,22 @@ struct FollowUpRule {
     double strideMs = 0.0;
     double rateMs = 0.0;
     bool dontPause = false; // it counts GetLastFrameElapsedTime, which a pause does not stop
+};
+
+// overTimeEntityAdder(owner, 'small_explosion_no_light.ent', centre + a random
+// point, stride, spawnExplosion, 0), as a boss's dying arms call it on every update
+// (effects.json boss_scatter_*): a fresh randDir = randF(directionSpanRad) and
+// randLen = lengthFrom + randF(lengthSpan) each update, the point
+//   centre + fromUnits + vector2(sin(randDir), -cos(randDir)) x radius x randLen x squash,
+// and an add only on the update the owner's clock reaches the stride.
+struct Scatter {
+    Rule rule;                     // the entity at a bare 0 z, unturned, scale 1; offsetUnits the radius
+    double strideMs = 0.0;         // overTimeEntityAdder's stride
+    double directionSpanRad = 0.0; // randDir's randF
+    double lengthFrom = 0.0;       // randLen's 0.4 ...
+    double lengthSpan = 0.0;       // ... + randF(0.7)
+    glm::dvec2 squash{1.0};        // the dark dragon's x vector2(1, 0.7); (1, 1) for the others
+    glm::dvec2 fromUnits{0.0};     // the dark dragon's g_scale.scale(vector2(64, -32)) off its point
 };
 
 // What followUp keeps on the entity: its PositionInterpolator and switchTime.
@@ -316,6 +336,27 @@ struct Rules {
     // deleted as its handle is first held: the hand's point 32 up, on its depth,
     // unturned (the remaster record's step 139).
     Rule smokeVanish;
+    // THE SMALLER PICTURES (the remaster record's step 146; effects.json
+    // _bosses_flames_hands). Each dying boss's scattered small_explosion_no_light,
+    // and the superScale its explode() gives explosion_large.
+    Scatter scatterBeholder;
+    Scatter scatterGhost;
+    Scatter scatterDarkDragon;
+    double explodeBeholder = 0.0;
+    double explodeGhost = 0.0;
+    double explodeDarkDragon = 0.0;
+    // addEntityAtSpawnPoint's effect, and the two AddScaledEntity calls of it.
+    Rule ghostUtilitySpawn;
+    // addFlames' fire32.ent, at the target's width over flamesWidthUnits.
+    Rule flames;
+    double flamesWidthUnits = 0.0;
+    // carrancaCallback's carranca_destroy.ent, turned by its carranca.
+    Rule carrancaDestroy;
+    // ETHCallback_hand_tap's smoke_vanish.ent: a fixed offset turned by the hand,
+    // and the reach a release must come within.
+    Rule handTapSmoke;
+    double handTapReachUnits = 0.0;
+    std::string handTapEntity; // the entity whose callback it is, without .ent: hand_tap
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a
@@ -542,5 +583,31 @@ Spawn EnemyShootBurst(const Rules& rules, const glm::dvec2& shotPx);
 // vector3(currentPos, GetPositionZ() + 1f), getScale()) - at the ghost's point as it
 // is added, the knight's, a BARE 1 over the ghost's own depth `ghostZUnits`.
 Spawn GhostAppear(const Rules& rules, const glm::dvec2& ghostPx, double ghostZUnits);
+
+// ---- the smaller pictures (the remaster record's step 146) ---------------------
+
+// overTimeEntityAdder's clock for one update of `tickMs` (bytes 372886..373491
+// #34-54, #99-105): the frame's time added, and true - the clock back at 0 - on the
+// update it reaches the stride, the one that adds.
+bool AdderDue(const Scatter& scatter, double& clockMs, double tickMs);
+
+// The point one update's two draws give - `directionDraw` randF(directionSpanRad)'s,
+// `lengthDraw` randF(lengthSpan)'s - in the script's floats: AddEntity's vector3(pos,
+// 0f), unturned, at the script's own size.
+Spawn ScatterAt(const Scatter& scatter, const glm::dvec2& centrePx, double directionDraw, double lengthDraw);
+
+// explode(pos, superScale, ...)'s explosion_large.ent: the explosion_large row at
+// superScale of the port's units.
+Spawn Explode(const Rules& rules, const glm::dvec2& atPx, double superScale);
+
+// addFlames(target): fire32.ent on the target's own point and depth, unturned, at
+// getScale() x GetSize().x / (getScale() x 64) - its width in units over 64.
+Spawn Flames(const Rules& rules, const glm::dvec2& targetPx, double targetZ, double targetWidthUnits);
+
+// ETHCallback_hand_tap #60-90: isPointInCircle(release, hand, scale(30)), strictly
+// inside; and #92-161, the smoke it leaves at its point plus multiply(vector3(0,
+// -38, 0), rotateZ(its angle)) - (-38 sin, -38 cos) - on its own depth, unturned.
+bool HandTapped(const Rules& rules, const glm::dvec2& releasePx, const glm::dvec2& handPx);
+Spawn HandTapSmoke(const Rules& rules, const glm::dvec2& handPx, double handZ, double handAngleDeg);
 
 } // namespace MagicPortals::Effects

@@ -173,7 +173,7 @@ struct Death {
     // Rules::EntityAboveCentrePx, taken before the body is destroyed.
     glm::dvec2 atPx{0.0, 0.0};
     bool byKiller = false; // a killer floor; otherwise a strike (Take) or a burn (Burn)
-    bool byFire = false;   // a fireball or a flame burned it (Burn): addFlames, which is not built
+    bool byFire = false;   // a fireball or a flame burned it (Burn): addFlames, the layer's fire32 (step 146)
 };
 
 struct State {

@@ -62,7 +62,8 @@
       "The rest of the grabbed set that reads 'destroy' in the original, left to its own module:",
       "a carranca (flagged breakable; carrancaCallback L85350 #128-183: carranca_destroy.ent,",
       "startEarthquake(20, 0), DeleteEntity) - 2-18's and 2-23's barrels stand 54 and 56 u from",
-      "one; a shock agent and a minion (burnable; ETHCallback_shock_agent L92534 #294,",
+      "one (its picture, carranca_destroy.ent, is drawn wherever Demolish takes a carranca since",
+      "planning step 146: effects.json carranca_destroy); a shock agent and a minion (burnable; ETHCallback_shock_agent L92534 #294,",
       "ETHCallback_minion L87616 #1478); a light wall (flagged; ETHCallback_light_wall L98075",
       "#32 takes it away on its own clock). The port's blast burns what is burnable and asks what",
       "is explosive, as before, and breaks only the entities listed above."

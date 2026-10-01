@@ -28,8 +28,10 @@
 //   Box2D's BeginContact, which the original's callback runs on, would still
 //   have reported it. A rock a portal holds is taken by it rather than landing.
 //
-// Not ported: the sounds, the smoke and the explosions' pictures, the final
-// blast's line of sight, and the blast's effect on anything but the player. The
+// Not ported: the final blast's line of sight, and the blast's effect on anything
+// but the player. The pictures are the layer's: its DEAD arm's scattered
+// small_explosion_no_light and the final explode's explosion_large at 2 since
+// planning step 146 (effects.json), and its sounds since step 142. The
 // earthquakes are the layer's, read from `hits`, `gone` and `rocksBroken`
 // (earthquake.json).
 

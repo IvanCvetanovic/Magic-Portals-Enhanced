@@ -468,6 +468,10 @@ struct ShockRing {
     double spinDegPerS = 0.0; // AddToAngle(unitsPerSecond(this)): counter-clockwise, game time
     double jitterFrom = 1.0;  // SetScale(base x (from + randF(span))), every frame
     double jitterSpan = 0.0;
+    // And its AGENT's own pulse, the shock_agent's sprite and not this ring's:
+    // bounce(this, V2_ONE, vector2(0.95, 0.95), 300) on every update (art.json
+    // shock_ring agent_pulse, planning step 146), on the level's age.
+    Pulse agentPulse;
 
     // Its depth in the level's units: a scaled depth as it stands, a bare literal
     // over the scale factor (step 86's rule, Rules::LevelDepth).
@@ -476,6 +480,18 @@ struct ShockRing {
     double SizeUnits(double radiusUnits) const { return radiusUnits * 2.0; }
     // The factor one frame's draw gives: `drawn` is randF(span), in [0, span].
     double JitterAt(double drawn) const { return jitterFrom + drawn; }
+};
+
+// A carried diamond's SetAlpha(0.1f), shock or fire, on every update it is
+// carried: the sprite's alpha alone (art.json carried_diamond, planning step 146).
+struct CarriedDiamond {
+    double alpha = 1.0;
+};
+
+// light_off.ent's AddToAngle(unitsPerSecond(190)) while it stands unlit: its
+// systems turn, its vertical picture does not (art.json unlit_torch, step 146).
+struct UnlitTorch {
+    double spinDegPerS = 0.0;
 };
 
 struct Rules {
@@ -506,6 +522,9 @@ struct Rules {
     BlackBars blackBars;
     // shock_area.ent, the ring each shock agent adds round itself
     ShockRing shockRing;
+    // what a carried diamond's and an unlit torch's own callbacks do to them
+    CarriedDiamond carriedDiamond;
+    UnlitTorch unlitTorch;
     // What a depth a script adds something at is in the level's units: that depth
     // over this (art.json depth). A level's nodes were multiplied by it at load and
     // what a script adds at a literal z was not.

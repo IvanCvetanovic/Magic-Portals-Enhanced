@@ -266,7 +266,7 @@
         "  ins 7-8     SetV1 v2, v0; PshV4        vertical = 0, false",
         "  ins 9-14    linearMotion(thisEntity, false, GetAngle() - 90f, 0f)",
         "  ins 16-22   only when not paused: the touches, and ins 60-170 a release within scale(30) of it adds",
-        "              smoke_vanish.ent and deletes it (System 7's, not built here)",
+        "              smoke_vanish.ent and deletes it (the layer's since planning step 146: effects.json smoke_vanish_hand_tap)",
         "No SetAlpha anywhere in the callback (null): it is drawn at the alpha the level gives it. A hand at angle",
         "0 swings along 0 - 90, which rotateZ turns down the screen; every placement carries speed 3 and",
         "stride 4 (a period of 2.09 s, 4 units either way)."

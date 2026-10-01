@@ -13050,6 +13050,29 @@ void TheBlackKnightsLandingMakesNoTremble() {
     layer.OnDetach(registry);
 }
 
+// THE SMALLER PICTURES (the program's UI, planning step 146): what the frames add, as
+// they add it, with the tick that queued it - a temporary effect may be gone by the
+// time a case looks, so a case that counts them reads them as they come.
+struct AddedEffect {
+    MagicPortalsLayer::EffectReport report;
+    int tick = 0;
+};
+
+void CollectAdded(const MagicPortalsLayer& layer, int& seen, int tick, std::vector<AddedEffect>& into) {
+    for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
+        if (one.id > seen) into.push_back(AddedEffect{one, tick});
+    }
+    seen = layer.EffectsSpawned();
+}
+
+std::vector<AddedEffect> AddedNamed(const std::vector<AddedEffect>& all, const char* entity) {
+    std::vector<AddedEffect> found;
+    for (const AddedEffect& one : all) {
+        if (one.report.entity == entity) found.push_back(one);
+    }
+    return found;
+}
+
 // CHAPTER 3'S BOSS (the visuals plan's 12.2, planning step 98; the owner's standing
 // ruling R4). level31b plays for a while with no ghost at all and the level's own
 // music; the black knight dies and ghost.ent is added where it went, drawn at the
@@ -13076,10 +13099,37 @@ void TheGhostComesWithItsKnightsDeath() {
     if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
     CloseTheLevelStartPopup(layer, registry);
     const MagicPortals::Game::Level& level = *layer.SimLevel();
-    const auto frame = [&layer, &registry](const glm::vec2& pointer, std::vector<std::string> down,
-                                           std::vector<std::string> pressed) {
+    // What the frames add as they go (planning step 146), with the ghost and its
+    // fire diamond as each tick left them.
+    struct GhostTick {
+        int tick = 0;
+        MagicPortals::Ghost::Phase phase = MagicPortals::Ghost::Phase::Appearing;
+        bool present = false;
+        glm::dvec2 atPx{0.0};
+        bool diamondHeld = false;
+        float diamondAlpha = 1.0f;
+    };
+    std::vector<AddedEffect> spawnedFx;
+    std::vector<GhostTick> ghostTicks;
+    int seenId = layer.EffectsSpawned();
+    int ticked = 0;
+    const auto frame = [&](const glm::vec2& pointer, std::vector<std::string> down,
+                           std::vector<std::string> pressed) {
         tickWith(layer, registry, pointer, std::move(down), std::move(pressed));
+        ++ticked;
+        GhostTick now;
+        now.tick = ticked;
+        now.phase = level.ghost.phase;
+        now.present = level.ghost.Alive();
+        now.atPx = level.ghost.atPx;
+        for (const MagicPortals::Diamonds::Diamond& diamond : level.diamonds.diamonds) {
+            if (diamond.name != "fire_diamond_ent_1256") continue;
+            now.diamondHeld = !diamond.gone && diamond.owner != entt::null;
+            now.diamondAlpha = layer.DrawnPicture(diamond.name).alpha;
+        }
+        ghostTicks.push_back(now);
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seenId, ticked, spawnedFx);
     };
     const auto step = [&frame]() { frame(kRest, {}, {}); };
     const auto effectsNamed = [&layer](const char* entity) {
@@ -13375,9 +13425,83 @@ void TheGhostComesWithItsKnightsDeath() {
         CHECK_MSG(glm::distance(keys[0].atPx, level.keys.keys.back().atPx) < 1.6, "where it lies, bobbing: " +
                                                                                      Point(keys[0].atPx));
     }
+
+    // THE SMALLER PICTURES IT ADDS (planning step 146; effects.json _bosses_flames_hands).
+    // A CARRIED FIRE DIAMOND is drawn whole on the tick it is taken - the free arm's
+    // update - and at SetAlpha(0.1) from the next, while it is carried.
+    int pickTick = -1;
+    int fadedWrong = 0;
+    for (std::size_t i = 0; i < ghostTicks.size(); ++i) {
+        const GhostTick& one = ghostTicks[i];
+        if (!one.diamondHeld) continue;
+        const bool firstHeld = i == 0 || !ghostTicks[i - 1].diamondHeld;
+        if (firstHeld && pickTick < 0) pickTick = one.tick;
+        if (firstHeld ? one.diamondAlpha != 1.0f : std::fabs(one.diamondAlpha - 0.1f) > 1e-6f) ++fadedWrong;
+    }
+    CHECK_MSG(pickTick > 0 && fadedWrong == 0,
+              "the fire diamond whole on the tick it is taken (" + std::to_string(pickTick) + "), at 0.1 after: " +
+                  std::to_string(fadedWrong) + " ticks off");
+    // ITS DYING ARMS' SCATTER: small_explosion_no_light at a bare 0, at the script's
+    // size, 0.4 to 1.1 of 64 off where it stood - only in DAMAGE and DEATH.
+    const std::vector<AddedEffect> scatterFx = AddedNamed(spawnedFx, "small_explosion_no_light.ent");
+    int scatterWrong = 0;
+    for (const AddedEffect& one : scatterFx) {
+        const auto at = std::find_if(ghostTicks.begin(), ghostTicks.end(),
+                                     [&one](const GhostTick& g) { return g.tick == one.tick; });
+        const double d = at == ghostTicks.end() ? -1.0 : glm::distance(one.report.atPx, at->atPx);
+        const bool armed = at != ghostTicks.end() && (at->phase == MagicPortals::Ghost::Phase::Damage ||
+                                                      at->phase == MagicPortals::Ghost::Phase::Death ||
+                                                      at->phase == MagicPortals::Ghost::Phase::Rage || !at->present);
+        if (!(d >= 25.6 - 1e-3 && d <= 70.4 + 1e-3) || one.report.zUnits != 0.0 || one.report.scriptScale != 1.0 ||
+            !armed) {
+            ++scatterWrong;
+        }
+    }
+    CHECK_MSG(scatterFx.size() >= 9 && scatterWrong == 0,
+              "its DAMAGE and DEATH scatter small_explosion_no_light 25.6 to 70.4 off it, at 0 and x1: " +
+                  std::to_string(scatterFx.size()) + ", " + std::to_string(scatterWrong) + " off");
+    // ITS DEATH'S EXPLODE: explosion_large at 2 where it stood, 32 in front, before its
+    // key - the barrels' own blasts at 1 being the rest of explosion_large's.
+    std::vector<AddedEffect> deathBursts;
+    for (const AddedEffect& one : AddedNamed(spawnedFx, "explosion_large.ent")) {
+        if (one.report.scriptScale != 1.0) deathBursts.push_back(one);
+    }
+    const std::vector<AddedEffect> droppedKeyFx = AddedNamed(spawnedFx, "key.ent");
+    CHECK_MSG(deathBursts.size() == 1 && !droppedKeyFx.empty(), "one explosion_large not a barrel's, and its key: " +
+                                                                   std::to_string(deathBursts.size()));
+    if (deathBursts.size() == 1 && !droppedKeyFx.empty()) {
+        CHECK_MSG(glm::distance(deathBursts[0].report.atPx, level.ghost.atPx) < 1e-9 &&
+                      NearD(deathBursts[0].report.zUnits, 32.0, 1e-12) && deathBursts[0].report.scriptScale == 2.0 &&
+                      deathBursts[0].report.id < droppedKeyFx[0].report.id,
+                  "explode(currentPos, 2f): at its point, scale(32) in front, at 2, before key.ent: " +
+                      Point(deathBursts[0].report.atPx));
+    }
+    // WHAT IT PUTS BACK: ghost_utility_spawn at barrel_spawn (190, 110) with each
+    // barrel its beat restocked, and at minion_spawn_point (436, 96) with each escort.
+    const std::vector<AddedEffect> utilityFx = AddedNamed(spawnedFx, "ghost_utility_spawn.ent");
+    int atBarrel = 0;
+    int atEscort = 0;
+    int utilityWrong = 0;
+    for (const AddedEffect& one : utilityFx) {
+        if (glm::distance(one.report.atPx, glm::dvec2(190.0, 110.0)) < 1e-9) {
+            ++atBarrel;
+        } else if (glm::distance(one.report.atPx, glm::dvec2(436.0, 96.0)) < 1e-9) {
+            ++atEscort;
+        } else if (glm::distance(one.report.atPx, glm::dvec2(356.0, 128.0)) > 1e-9) {
+            // A fire diamond put back stands at fire_diamond_spawn (356, 128); anything
+            // else is not where addEntityAtSpawnPoint adds it.
+            ++utilityWrong;
+        }
+        if (one.report.zUnits != 0.0 || one.report.scriptScale != 1.0 || one.report.drawn) ++utilityWrong;
+    }
+    CHECK_MSG(atBarrel == static_cast<int>(level.restock.added.size()) && atBarrel > 0 &&
+                  atEscort == level.ghost.summons && atEscort > 0 && utilityWrong == 0,
+              "ghost_utility_spawn with each of its " + std::to_string(level.restock.added.size()) + " barrels and " +
+                  std::to_string(level.ghost.summons) + " escorts, on the markers' 0: " + std::to_string(atBarrel) +
+                  ", " + std::to_string(atEscort) + ", " + std::to_string(utilityWrong) + " off");
     std::printf("  level31b: the ghost added on the knight's death, in at ghost_pos 226 ticks later, burned %d times, "
-                "shot %d, and dropped its key\n",
-                level.ghost.hits, level.ghost.shotsMade);
+                "shot %d, and dropped its key; %zu scattered explosions, %d + %d ghost_utility_spawn\n",
+                level.ghost.hits, level.ghost.shotsMade, scatterFx.size(), atBarrel, atEscort);
     layer.OnDetach(registry);
 }
 
@@ -13403,9 +13527,24 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
         CHECK_MSG(false, "level31c places the dark dragon's spawn, a torch and a player");
         return;
     }
-    const auto step = [&layer, &registry]() {
+    // What the frames add as they go (planning step 146), with the dragon as each
+    // tick left it.
+    struct DragonTick {
+        int tick = 0;
+        Phase phase = Phase::Appearing;
+        bool alive = false;
+        glm::dvec2 atPx{0.0};
+    };
+    std::vector<AddedEffect> spawnedFx;
+    std::vector<DragonTick> dragonTicks;
+    int seenId = layer.EffectsSpawned();
+    int ticked = 0;
+    const auto step = [&]() {
         tickWith(layer, registry, kRest, {}, {});
+        ++ticked;
+        dragonTicks.push_back(DragonTick{ticked, dragon.phase, dragon.Alive(), dragon.atPx});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seenId, ticked, spawnedFx);
     };
     const auto dragonEffect = [&layer]() -> std::optional<MagicPortalsLayer::EffectReport> {
         for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
@@ -13430,6 +13569,23 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
     for (int tick = 0; tick < 30; ++tick) {
         PutBodyAt(registry, level.player, floor);
         step();
+    }
+    // UNLIT, IT TURNS (art.json unlit_torch, planning step 146): its callback's
+    // AddToAngle(unitsPerSecond(190)) on every tick the level has run, its systems
+    // turned by it over its node's 0, and its vertical picture not at all.
+    {
+        const std::vector<MagicPortalsLayer::TorchReport> torches = layer.TorchReports();
+        const double ran = layer.LevelAgeMs();
+        const double want = std::fmod(190.0 * ran / 1000.0, 360.0);
+        CHECK_MSG(torches.size() == 1 && NearD(torches[0].turnedDeg, want, 1e-6) &&
+                      NearD(torches[0].systemsAngleDeg, torches[0].turnedDeg, 1e-9),
+                  "4-32's unlit torch turned 190 a second over " + std::to_string(ran) + " ms: " +
+                      std::to_string(torches.empty() ? -1.0 : torches[0].turnedDeg) + " against " +
+                      std::to_string(want));
+        const MagicPortalsLayer::DrawnPictureReport torch = layer.DrawnPicture(level.torch.lights.front().name);
+        CHECK_MSG(torch.drawn && torch.quad != entt::null &&
+                      registry.get<TransformComponent>(torch.quad).rotation.z == 0.0f,
+                  "and its picture, ET_VERTICAL, drawn unturned");
     }
     shoot(layer, registry, screenOf(registry, level.torch.lights.front().atPx));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -13624,9 +13780,84 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
                       glm::distance(level.keys.keys.back().atPx, glm::dvec2(78.0, 208.0)) < 1e-9,
                   "at key_pos, bobbing: " + Point(keys[0].atPx));
     }
+
+    // THE SMALLER PICTURES IT ADDS (planning step 146; effects.json _bosses_flames_hands).
+    // DAMAGE's and DYING's scatter: off its point by (64, -32), then 0.4 to 1.1 of 64
+    // squashed to 0.7 down the screen, at a bare 0 and x1.
+    const std::vector<AddedEffect> scatterFx = AddedNamed(spawnedFx, "small_explosion_no_light.ent");
+    int scatterWrong = 0;
+    for (const AddedEffect& one : scatterFx) {
+        const auto at = std::find_if(dragonTicks.begin(), dragonTicks.end(),
+                                     [&one](const DragonTick& d) { return d.tick == one.tick; });
+        if (at == dragonTicks.end()) {
+            ++scatterWrong;
+            continue;
+        }
+        const glm::dvec2 off = one.report.atPx - (at->atPx + glm::dvec2(64.0, -32.0));
+        const double r = std::sqrt(off.x * off.x + (off.y / 0.7) * (off.y / 0.7));
+        if (!(r >= 25.6 - 1e-3 && r <= 70.4 + 1e-3) || one.report.zUnits != 0.0 || one.report.scriptScale != 1.0) {
+            ++scatterWrong;
+        }
+    }
+    CHECK_MSG(scatterFx.size() >= 10 && scatterWrong == 0,
+              "its DAMAGE and DYING scatter off (64, -32), squashed to 0.7: " + std::to_string(scatterFx.size()) + ", " +
+                  std::to_string(scatterWrong) + " off");
+    // ITS DEATH, after its key: ghost_utility_spawn at key_pos (78, 208) on its 6, then
+    // explode at 1 where it stood.
+    const std::vector<AddedEffect> utilityFx = AddedNamed(spawnedFx, "ghost_utility_spawn.ent");
+    const std::vector<AddedEffect> droppedKeyFx = AddedNamed(spawnedFx, "key.ent");
+    int besideKey = 0;
+    int besideKeyId = 0;
+    int atBarrel = 0;
+    for (const AddedEffect& one : utilityFx) {
+        if (glm::distance(one.report.atPx, glm::dvec2(78.0, 208.0)) < 1e-9 && NearD(one.report.zUnits, 6.0, 1e-12)) {
+            ++besideKey;
+            besideKeyId = one.report.id;
+            if (!droppedKeyFx.empty()) CHECK_MSG(one.report.id > droppedKeyFx[0].report.id, "after the key");
+        } else if (glm::distance(one.report.atPx, glm::dvec2(430.0, 0.0)) < 1e-9) {
+            ++atBarrel;
+        }
+    }
+    CHECK_MSG(besideKey == 1 && atBarrel == static_cast<int>(level.restock.added.size()) &&
+                  besideKey + atBarrel == static_cast<int>(utilityFx.size()),
+              "ghost_utility_spawn beside the key once and with each of its " +
+                  std::to_string(level.restock.added.size()) + " barrels: " + std::to_string(besideKey) + ", " +
+                  std::to_string(atBarrel));
+    // Its own explode where it stood - a barrel's blast, if any went off, is elsewhere.
+    std::vector<AddedEffect> deathBursts;
+    for (const AddedEffect& one : AddedNamed(spawnedFx, "explosion_large.ent")) {
+        if (glm::distance(one.report.atPx, dragon.atPx) < 1e-9) deathBursts.push_back(one);
+    }
+    CHECK_MSG(deathBursts.size() == 1 && besideKeyId > 0 && deathBursts[0].report.id > besideKeyId &&
+                  NearD(deathBursts[0].report.zUnits, 32.0, 1e-12) && deathBursts[0].report.scriptScale == 1.0,
+              "and explode(GetPositionXY(), 1f) after it, where it stood, 32 in front, at 1: " +
+                  std::to_string(deathBursts.size()));
+    // ITS KEY TAKEN: ETHCallback_key's key_pick, at the key.ent where the runtime last
+    // drew it - its bob with it - and 32 in front of its 6.
+    if (keys.size() == 1 && !level.keys.keys.empty()) {
+        const MagicPortals::Keys::Key& key = level.keys.keys.back();
+        glm::dvec2 drawnAt = keys[0].atPx;
+        int took = -1;
+        for (int tick = 0; tick < 30 && key.owner == entt::null; ++tick) {
+            for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
+                if (one.entity == "key.ent") drawnAt = one.atPx;
+            }
+            PutBodyAt(registry, level.player, key.atPx);
+            step();
+            if (key.owner != entt::null) took = ticked;
+        }
+        const std::vector<AddedEffect> picks = AddedNamed(spawnedFx, "key_pick.ent");
+        CHECK_MSG(took > 0 && picks.size() == 1, "the player takes it, and one key_pick: " + std::to_string(picks.size()));
+        if (picks.size() == 1) {
+            CHECK_MSG(picks[0].tick == took && glm::distance(picks[0].report.atPx, drawnAt) < 1e-9 &&
+                          NearD(picks[0].report.zUnits, 6.0 + 32.0, 1e-12),
+                      "on the tick it is taken, where its key.ent was last drawn, 32 over its 6: " +
+                          Point(picks[0].report.atPx) + " for " + Point(drawnAt));
+        }
+    }
     std::printf("  level31c: the dark dragon drawn on %d frames as its callback left it, wounded, dead, and its "
-                "key drawn\n",
-                frames);
+                "key drawn; %zu scattered explosions, %d + %d ghost_utility_spawn\n",
+                frames, scatterFx.size(), besideKey, atBarrel);
     layer.OnDetach(registry);
 }
 
@@ -14808,6 +15039,9 @@ void AShockDiamondLeavesItsPickItsDeathAndItsStrike() {
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     }
     CHECK_MSG(diamond != nullptr && diamond->owner == layer.SimLevel()->player, "the player takes it");
+    // DRAWN WHOLE ON THE TICK IT IS TAKEN (art.json carried_diamond, planning step 146):
+    // the pick is the free arm's update; the carried arm's SetAlpha(0.1f) is the next's.
+    CHECK_MSG(layer.DrawnPicture(name).alpha == 1.0f, "whole on the tick it is taken");
     // Its sound on the tick (ETHCallback_shock_diamond #180; planning step 142).
     const auto heard = [&layer](const char* event) {
         const std::vector<std::string> sounds = layer.LatchedSounds();
@@ -14833,6 +15067,18 @@ void AShockDiamondLeavesItsPickItsDeathAndItsStrike() {
     const Burnt pickBurnt = BurnDown(layer, registry, pick.id, 120);
     CHECK_MSG(pickBurnt.mostReleased == 5 && pickBurnt.freedOn >= 20 && pickBurnt.freedOn <= 50,
               "all 5 released, freed on frame " + std::to_string(pickBurnt.freedOn) + " (550 +- 250 ms)");
+
+    // CARRIED: the next tick runs the carried arm, and the diamond is drawn at 0.1 -
+    // its sprite alone; its lightning is a particle system, which SetAlpha does not reach.
+    PutPlayerAt(registry, layer, lyingAt);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    {
+        const MagicPortalsLayer::DrawnPictureReport carried = layer.DrawnPicture(name);
+        CHECK_MSG(carried.drawn && std::fabs(carried.alpha - 0.1f) < 1e-6f &&
+                      std::fabs(registry.get<MaterialComponent>(carried.quad).albedoColor.a - 0.1f) < 1e-6f,
+                  "carried, at SetAlpha(0.1): " + std::to_string(carried.alpha));
+    }
 
     // STRUCK, on a later tick, carried.
     const entt::entity minion = layer.SimLevel()->minions.minions[0].body;
@@ -15990,6 +16236,14 @@ void ALiftDoorLeavesItsDustAsItOpensAndCloses() {
         CHECK_MSG(std::fabs(dust.atPx.x - from.x) < 1e-3 && std::fabs(dust.atPx.y - from.y - wantDy) < 1e-3,
                   "3-15: at the door's point where the tick began, " + std::to_string(wantDy) + " down: " +
                       Point(dust.atPx) + " against " + Point(from));
+        // And where that is, absolutely (step 133's verifier, done in planning step
+        // 146): door_lift_1677 shut at y 32, so the opening dust at 32 - 64, and the
+        // closing dust at the raised door's 32 - RisePx() (0.8 x 128 = 102.4) + 64.
+        const double rise = layer.SimLevel()->channels.doorRules.RisePx();
+        const double wantY = opening ? 32.0 - 64.0 : 32.0 - rise + 64.0;
+        CHECK_MSG(NearD(rise, 102.4, 1e-9) && std::fabs(dust.atPx.x - 430.0) < 1e-3 &&
+                      std::fabs(dust.atPx.y - wantY) < 1e-3,
+                  "3-15: the " + what + " dust at (430, " + std::to_string(wantY) + "): " + Point(dust.atPx));
         CHECK_MSG(opening ? fromProgress == 0.0f : fromProgress == 1.0f,
                   "3-15: the door " + std::string(opening ? "shut" : "fully raised") + " as it turns: " +
                       std::to_string(fromProgress));
@@ -18122,6 +18376,369 @@ void TheDashboardsLockedRowRaisesItsCard() {
     layer.OnDetach(registry);
 }
 
+// ---- The smaller pictures (the program's UI, planning step 146) -------------------
+//
+// effects.json _bosses_flames_hands and art.json's carried_diamond, unlit_torch and
+// shock_ring agent_pulse. The ghost's and the dark dragon's are in their own cases
+// above; these are the rest.
+
+// 1-32: the beholder's DEAD arm calls overTimeEntityAdder on every update - one
+// small_explosion_no_light every 400 ms, 0.4 to 1.1 of 48 off it, on the same ticks
+// as the sound's boss_explosion - and its end explodes it at 2 where it stands.
+void TheBeholdersDeathScattersAndExplodes() {
+    if (!OriginalArtIsThere("TheBeholdersDeathScattersAndExplodes")) return;
+    using MagicPortals::Boss::Phase;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || !layer.SimLevel()->boss.beholder.has_value()) {
+        return;
+    }
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    const MagicPortals::Boss::Beholder& beholder = *level.boss.beholder;
+    std::vector<AddedEffect> added;
+    std::vector<int> heard;
+    int seen = layer.EffectsSpawned();
+    int tick = 0;
+    int deadAt = -1;
+    int goneAt = -1;
+    const auto step = [&]() {
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        for (const std::string& event : layer.LatchedSounds()) {
+            if (event == "boss_explosion") heard.push_back(tick);
+        }
+        if (deadAt < 0 && beholder.phase == Phase::Dead) deadAt = tick;
+        if (goneAt < 0 && beholder.gone) goneAt = tick;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seen, tick, added);
+    };
+    // Three rocks rising into it, as TheBeholdersDeathStopsItsTrack puts them.
+    int thrown = 0;
+    for (int n = 0; n < 12000 && beholder.phase != Phase::Dead; ++n) {
+        step();
+        if (beholder.rocksThrown > thrown && !level.boss.rocks.empty()) {
+            thrown = beholder.rocksThrown;
+            const entt::entity rock = level.boss.rocks.back().body;
+            if (!registry.valid(rock)) continue;
+            const glm::vec3 inside = MagicPortals::Units::ToWorld(beholder.atPx.x, beholder.atPx.y + 10.0);
+            auto& at = registry.get<TransformComponent>(rock);
+            at.position = glm::vec3(inside.x, inside.y, at.position.z);
+            registry.get<RigidBodyComponent>(rock).velocity =
+                glm::vec3(0.0f, MagicPortals::Units::ToMetres(200.0), 0.0f);
+        }
+    }
+    CHECK_MSG(beholder.phase == Phase::Dead, "three rocks killed it");
+    if (beholder.phase != Phase::Dead) return;
+    for (int n = 0; n < 400 && !beholder.gone; ++n) step();
+    for (int n = 0; n < 5; ++n) step();
+    CHECK_MSG(deadAt > 0 && goneAt > deadAt, "dead on tick " + std::to_string(deadAt) + ", gone on " +
+                                                 std::to_string(goneAt));
+    // THE SCATTER: one every 24th update of its DEAD arm, from the tick it died to the
+    // tick it went, both run; each on the tick the sound's own clock plays.
+    const std::vector<AddedEffect> scatter = AddedNamed(added, "small_explosion_no_light.ent");
+    const int updates = goneAt - deadAt + 1;
+    std::vector<int> want;
+    for (int n = 24; n <= updates; n += 24) want.push_back(deadAt + n - 1);
+    std::vector<int> got;
+    int wrong = 0;
+    for (const AddedEffect& one : scatter) {
+        got.push_back(one.tick);
+        const double d = glm::distance(one.report.atPx, beholder.atPx);
+        if (!(d >= 19.2 - 1e-3 && d <= 52.8 + 1e-3) || one.report.zUnits != 0.0 || one.report.scriptScale != 1.0 ||
+            one.report.angleDeg != 0.0 || one.report.drawn || !one.report.temporary) {
+            ++wrong;
+        }
+    }
+    CHECK_MSG(!want.empty() && got == want, "every 24th update of DEAD: " + std::to_string(got.size()) + " of " +
+                                                std::to_string(want.size()) + ", the first on " +
+                                                std::to_string(got.empty() ? -1 : got[0]));
+    CHECK_MSG(got == heard, "on the ticks the sound's boss_explosion plays: " + std::to_string(heard.size()));
+    CHECK_MSG(wrong == 0, "19.2 to 52.8 off it, at a bare 0, at x1, unturned, no picture: " +
+                              std::to_string(wrong) + " off");
+    // THE END: explosion_large at 2, where it stood, 32 in front, on the tick it goes.
+    const std::vector<AddedEffect> bursts = AddedNamed(added, "explosion_large.ent");
+    CHECK_MSG(bursts.size() == 1, "one explosion_large: " + std::to_string(bursts.size()));
+    if (bursts.size() == 1) {
+        CHECK_MSG(bursts[0].tick == goneAt && glm::distance(bursts[0].report.atPx, beholder.atPx) < 1e-9 &&
+                      NearD(bursts[0].report.zUnits, 32.0, 1e-12) && bursts[0].report.scriptScale == 2.0,
+                  "explode(currentPos, 2f) on the tick it goes: tick " + std::to_string(bursts[0].tick) + " at " +
+                      Point(bursts[0].report.atPx) + " x " + std::to_string(bursts[0].report.scriptScale));
+    }
+    std::printf("  1-32: dead on tick %d, gone on %d: %zu scattered explosions, the last burst at x2\n", deadAt,
+                goneAt, scatter.size());
+    layer.OnDetach(registry);
+}
+
+// addFlames on a character fire kills - a fire agent's flame (2-10, footage F13's
+// fire death) and a fireball (2-32's dragon, which kills the idle player on tick
+// 286): fire32.ent on its point and depth at 40 / 64, before its blood, riding its
+// body after the picture is hidden.
+void ADeathByFireLeavesFlamesOnTheCharacter() {
+    if (!OriginalArtIsThere("ADeathByFireLeavesFlamesOnTheCharacter")) return;
+    for (const char* name : {"level9a", "level31a"}) {
+        const bool flame = std::string(name) == "level9a";
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), name);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) continue;
+        CloseTheLevelStartPopup(layer, registry);
+        const MagicPortals::Game::Level& level = *layer.SimLevel();
+        std::vector<AddedEffect> added;
+        int seen = layer.EffectsSpawned();
+        int tick = 0;
+        glm::dvec2 diedAtPx(0.0);
+        for (int n = 0; n < 600 && !layer.Dying(); ++n) {
+            if (flame && !level.fire.agents.empty()) PutBodyAt(registry, level.player, level.fire.agents.front().atPx);
+            tickWith(layer, registry, kRest, {}, {});
+            ++tick;
+            if (layer.Dying()) diedAtPx = playerPx(registry, layer);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            CollectAdded(layer, seen, tick, added);
+        }
+        const bool byFire = flame ? level.fire.playerKilled : level.turrets.playerKilled;
+        CHECK_MSG(layer.Dying() && byFire,
+                  std::string(name) + ": killed by " + (flame ? "the flame" : "a fireball") + ": " +
+                      level.hazards.killedBy);
+        if (!layer.Dying()) continue;
+        const std::vector<AddedEffect> flames = AddedNamed(added, "fire32.ent");
+        const std::vector<AddedEffect> blood = AddedNamed(added, "blood.ent");
+        CHECK_MSG(flames.size() == 1 && blood.size() == 1, std::string(name) + ": fire32 and blood, once each: " +
+                                                               std::to_string(flames.size()) + ", " +
+                                                               std::to_string(blood.size()));
+        if (flames.size() != 1 || blood.size() != 1) continue;
+        const MagicPortalsLayer::EffectReport& fire = flames[0].report;
+        CHECK_MSG(fire.id < blood[0].report.id && flames[0].tick == blood[0].tick,
+                  std::string(name) + ": addFlames before checkGameLost's blood, on the death's tick");
+        CHECK_MSG(glm::distance(fire.atPx, diedAtPx) < 1e-6 && NearD(fire.zUnits, layer.PlayerDepth(), 1e-12) &&
+                      fire.scriptScale == 0.625 && fire.angleDeg == 0.0 &&
+                      fire.followKind == MagicPortalsLayer::EffectOwner::Kind::Character && !fire.hidden &&
+                      fire.temporary && !fire.drawn && fire.systems == 1,
+                  std::string(name) + ": on the character's point and depth at 40 / 64, riding its body, shown: " +
+                      Point(fire.atPx) + " x " + std::to_string(fire.scriptScale));
+        // ETHCallback_fire32: SetPositionXY(its target's) every frame, the hidden body too.
+        const glm::dvec2 moved = diedAtPx + glm::dvec2(30.0, -20.0);
+        PutBodyAt(registry, level.player, moved);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::EffectReport after = ByIdIn(layer.EffectReports(), fire.id);
+        CHECK_MSG(after.id == fire.id && glm::distance(after.atPx, moved) < 1e-3,
+                  std::string(name) + ": and it follows the body: " + Point(after.atPx));
+        std::printf("  %s: burned by %s on tick %d: fire32 at %s x %.3f, then blood\n", name,
+                    level.hazards.killedBy.c_str(), flames[0].tick, Point(fire.atPx).c_str(), fire.scriptScale);
+        layer.OnDetach(registry);
+    }
+}
+
+// 4-28: a minion a fire agent's flame burns destroys itself on the next tick, and its
+// own callback adds addFlames' fire32.ent at its point - its frame's width over 64 -
+// before its blood, both left where it went (planning step 146).
+void ABurnedMinionLeavesItsFlamesBeforeItsBlood() {
+    if (!OriginalArtIsThere("ABurnedMinionLeavesItsFlamesBeforeItsBlood")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level27c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    if (level.minions.minions.empty() || level.fire.agents.empty()) {
+        CHECK_MSG(false, "4-28 places a knight and a fire agent");
+        return;
+    }
+    const std::vector<MagicPortalsLayer::MinionReport> before = layer.MinionReports();
+    const double frameWidth = before.empty() ? 0.0 : before.front().sizePx.x;
+    const double lookZ = before.empty() ? 0.0 : before.front().lookZ;
+    const MagicPortals::Minions::Minion& knight = level.minions.minions.front();
+    std::vector<AddedEffect> added;
+    int seen = layer.EffectsSpawned();
+    int tick = 0;
+    for (int n = 0; n < 10 && !knight.gone; ++n) {
+        if (knight.body != entt::null && registry.valid(knight.body)) {
+            PutBodyAt(registry, knight.body, level.fire.agents.front().atPx);
+        }
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seen, tick, added);
+    }
+    CHECK_MSG(knight.gone && level.minions.burned == 1, "the flame burned the knight");
+    const std::vector<AddedEffect> flames = AddedNamed(added, "fire32.ent");
+    const std::vector<AddedEffect> blood = AddedNamed(added, "blood.ent");
+    CHECK_MSG(flames.size() == 1 && blood.size() == 1, "fire32 and blood, once each: " +
+                                                           std::to_string(flames.size()) + ", " +
+                                                           std::to_string(blood.size()));
+    if (flames.size() != 1 || blood.size() != 1) return;
+    const MagicPortalsLayer::EffectReport& fire = flames[0].report;
+    CHECK_MSG(fire.id < blood[0].report.id && flames[0].tick == blood[0].tick,
+              "addFlames (#1471) before its blood (#1490), on one tick");
+    CHECK_MSG(glm::distance(fire.atPx, blood[0].report.atPx) < 1e-9 && NearD(fire.zUnits, lookZ, 1e-12) &&
+                  NearD(fire.scriptScale, frameWidth / 64.0, 1e-12) &&
+                  fire.followKind == MagicPortalsLayer::EffectOwner::Kind::None,
+              "at its point and depth, its " + std::to_string(frameWidth) + "-unit frame over 64, left there: " +
+                  Point(fire.atPx) + " x " + std::to_string(fire.scriptScale));
+    std::printf("  4-28: the knight burned: fire32 at %s x %.4f, then blood\n", Point(fire.atPx).c_str(),
+                fire.scriptScale);
+    layer.OnDetach(registry);
+}
+
+// 2-13: a carranca taken (here by a DEV break, as a stone's touch takes one: no
+// level's play takes one in the port) leaves carrancaCallback's carranca_destroy.ent
+// at its own point and depth, turned by its own angle, at the script's size.
+void ACarrancaBrokenLeavesItsDust() {
+    if (!OriginalArtIsThere("ACarrancaBrokenLeavesItsDust")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level12a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    CHECK_MSG(layer.SimLevel()->demolish.FindBreakable("carranca_1060") != nullptr,
+              "2-13's carranca_1060 is one of Demolish's breakables (flagged)");
+    std::vector<AddedEffect> added;
+    int seen = layer.EffectsSpawned();
+    for (int tick = 1; tick <= 4; ++tick) {
+        if (tick == 2) layer.ScheduleDevBreak(layer.LayerTicks() + 1, "carranca_1060");
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seen, tick, added);
+    }
+    const std::vector<AddedEffect> dust = AddedNamed(added, "carranca_destroy.ent");
+    CHECK_MSG(dust.size() == 1 && AddedNamed(added, "wall_destroy.ent").empty(),
+              "one carranca_destroy, and no wall's dust: " + std::to_string(dust.size()));
+    if (dust.size() == 1) {
+        const MagicPortalsLayer::EffectReport& one = dust[0].report;
+        CHECK_MSG(dust[0].tick == 2 && one.atPx == glm::dvec2(482.0, 202.0) && NearD(one.zUnits, -2.0, 1e-12) &&
+                      one.angleDeg == 0.0 && one.scriptScale == 1.0 && one.systems == 2 && one.temporary &&
+                      !one.drawn,
+                  "on the tick it goes, at (482, 202) on its -2, unturned as it stands, x1, two systems: " +
+                      Point(one.atPx) + " z " + std::to_string(one.zUnits));
+    }
+    layer.OnDetach(registry);
+}
+
+// 1-02 and 1-16: a release within scale(30) of a tutorial hand's point takes the hand
+// away with smoke_vanish at its picture's centre - multiply(vector3(0, -38, 0),
+// rotateZ(its angle)) off its point, so 1-16's 95-degree hand smokes to its left - and
+// a release further off leaves it standing (ETHCallback_hand_tap). And 1-27: a touch a
+// lift takes on its way down - which fires no shot - still takes a hand on its release,
+// as hasPortalRequestInput(t, true) ignores the touch's disabled status.
+void ATappedHandGoesWithItsSmoke() {
+    if (!OriginalArtIsThere("ATappedHandGoesWithItsSmoke")) return;
+    struct Case {
+        const char* level;
+        const char* hand;
+        bool missFirst;
+        bool byLift; // touched at 1-27's route point on lift_ent_1122 (110, 88), 14.9 off the hand
+    };
+    for (const Case& c : {Case{"level1", "hand_tap_ent_622", false, false},
+                          Case{"level15", "hand_tap_ent_768", true, false},
+                          Case{"level26", "hand_tap_ent_1160", false, true}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), c.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) continue;
+        CloseTheLevelStartPopup(layer, registry);
+        waitForFirstTap(layer, registry);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::string where = std::string(c.level) + " " + c.hand;
+        std::vector<AddedEffect> added;
+        int seen = layer.EffectsSpawned();
+        // Down on one tick and up on the next; what the release reads is the hand as
+        // the down tick's picture left it, which this returns.
+        const auto release = [&](const glm::dvec2& atPx) {
+            const glm::vec2 onScreen = screenOf(registry, atPx);
+            tap(layer, registry, onScreen);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            CollectAdded(layer, seen, 0, added);
+            const MagicPortalsLayer::DrawnPictureReport before = layer.DrawnPicture(c.hand);
+            lift(layer, registry, onScreen);
+            return before;
+        };
+        if (c.missFirst) {
+            // 31 units off: outside its reach, and it stands.
+            const MagicPortalsLayer::DrawnPictureReport standing = layer.DrawnPicture(c.hand);
+            (void)release(standing.ownerPx + glm::dvec2(31.0, 0.0));
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            CollectAdded(layer, seen, 1, added);
+            CHECK_MSG(layer.DrawnPicture(c.hand).drawn && AddedNamed(added, "smoke_vanish.ent").empty(),
+                      where + ": a release 31 off leaves it standing");
+            landShot(layer, registry);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            CollectAdded(layer, seen, 1, added);
+        }
+        const MagicPortalsLayer::DrawnPictureReport standing = layer.DrawnPicture(c.hand);
+        CHECK_MSG(standing.drawn, where + ": its picture stands");
+        if (!standing.drawn) continue;
+        int sendsBefore = 0;
+        for (const MagicPortals::Mover::Lift& lift : layer.SimLevel()->movers.lifts) sendsBefore += lift.motion.sends;
+        const MagicPortalsLayer::DrawnPictureReport hand =
+            release(c.byLift ? glm::dvec2(110.0, 88.0) : standing.ownerPx);
+        int sendsAfter = 0;
+        for (const MagicPortals::Mover::Lift& lift : layer.SimLevel()->movers.lifts) sendsAfter += lift.motion.sends;
+        if (c.byLift) CHECK_MSG(sendsAfter == sendsBefore + 1, where + ": the touch sent the lift");
+        CHECK_MSG(!layer.DrawnPicture(c.hand).drawn, where + ": gone on the release's tick");
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seen, 2, added);
+        const std::vector<AddedEffect> smoke = AddedNamed(added, "smoke_vanish.ent");
+        CHECK_MSG(smoke.size() == 1, where + ": one smoke_vanish: " + std::to_string(smoke.size()));
+        if (smoke.size() != 1) continue;
+        const double rad = hand.ownerAngleDeg * 3.14159265358979 / 180.0;
+        const glm::dvec2 want = hand.ownerPx + glm::dvec2(-38.0 * std::sin(rad), -38.0 * std::cos(rad));
+        CHECK_MSG(glm::distance(smoke[0].report.atPx, want) < 1e-4 && NearD(smoke[0].report.zUnits, hand.lookZ, 1e-12) &&
+                      smoke[0].report.angleDeg == 0.0 && smoke[0].report.scriptScale == 1.0,
+                  where + ": at its picture's centre, (-38 sin, -38 cos) of its " + std::to_string(hand.ownerAngleDeg) +
+                      " degrees off its point " + Point(hand.ownerPx) + ": " + Point(smoke[0].report.atPx));
+        std::printf("  %s: tapped away at %s (angle %.1f): smoke_vanish at %s\n", where.c_str(),
+                    Point(hand.ownerPx).c_str(), hand.ownerAngleDeg, Point(smoke[0].report.atPx).c_str());
+        layer.OnDetach(registry);
+    }
+}
+
+// 3-24: a shock agent's own bounce, 1 -> 0.95 -> 1 on 300 ms legs, on its picture
+// alone, on the level's age (art.json shock_ring agent_pulse).
+void AShockAgentPulsesOnItsBounce() {
+    if (!OriginalArtIsThere("AShockAgentPulsesOnItsBounce")) return;
+    MagicPortals::Art::Rules art;
+    std::string artError;
+    CHECK_MSG(MagicPortals::Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", art, artError),
+              artError);
+    const MagicPortals::Art::Pulse& pulse = art.shockRing.agentPulse;
+    CHECK_MSG(pulse.fromScale == glm::dvec2(1.0) && pulse.toScale == glm::dvec2(0.95) && pulse.strideMs == 300.0,
+              "bounce(this, V2_ONE, vector2(0.95, 0.95), 300)");
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level23b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    glm::dvec2 base(0.0);
+    int wrong = 0;
+    double smallest = 1e9;
+    for (int tick = 0; tick < 40; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::DrawnPictureReport agent = layer.DrawnPicture("shock_agent_2048");
+        const glm::dvec2 scale = pulse.ScaleAt(layer.LevelAgeMs());
+        if (tick == 0) base = agent.sizePx / scale;
+        if (glm::distance(agent.sizePx, base * scale) > 1e-6) ++wrong;
+        smallest = std::min(smallest, agent.sizePx.x / base.x);
+    }
+    CHECK_MSG(wrong == 0 && base.x > 0.0, "3-24's agent at its base " + Point(base) + " x the pulse on 40 ticks: " +
+                                              std::to_string(wrong) + " off");
+    CHECK_MSG(smallest < 0.9505 && smallest >= 0.95 - 1e-9, "down to 0.95 at 300 ms: " + std::to_string(smallest));
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -18333,6 +18950,12 @@ void runTests() {
     ThePausesAchievementsPopupShowsTheLevels();
     TheMainMenusPassFillsTheSavedSet();
     TheDashboardsLockedRowRaisesItsCard();
+    TheBeholdersDeathScattersAndExplodes();
+    ADeathByFireLeavesFlamesOnTheCharacter();
+    ABurnedMinionLeavesItsFlamesBeforeItsBlood();
+    ACarrancaBrokenLeavesItsDust();
+    ATappedHandGoesWithItsSmoke();
+    AShockAgentPulsesOnItsBounce();
 }
 
 } // namespace

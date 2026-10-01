@@ -271,7 +271,12 @@ work no step of §7 owns, and the owner's calls:
   `key_pick` (the merge); the key's fly-in into its keyhole (10.3); the carried shock diamond at alpha 0.1 (10.4); the
   shock agent's pulse (13.1); the unlit torch's spin (11.2); the dark dragon's scattered `small_explosion_no_light`,
   its death's `explode` and `ghost_utility_spawn` (12.1); the ghost's DAMAGE and DEATH explosions (12.2); and the
-  sounds 10.4, 11.2, 12.1, 12.2 and 13.1 name.
+  sounds 10.4, 11.2, 12.1, 12.2 and 13.1 name. *Step 146 (UI) built `fire32` on a burning character and on a burned
+  minion, a boss-dropped key's `key_pick`, the carried diamond at 0.1, the shock agent's pulse, the unlit torch's
+  spin, the dark dragon's scattered `small_explosion_no_light`, its death's `explode` (the picture; the grab is not
+  built) and `ghost_utility_spawn`, and the ghost's DAMAGE and DEATH explosions (with the beholder's, `carranca_destroy`
+  and the tutorial hands: section 6's "Smaller" row). Left: `shock_agent`'s `small_explosion.ent`, 2-32's claw's
+  `wall_destroy` and the key's fly-in; the sounds those rows name are step 142's.*
 - **The earthquake's follow-ups**: Q.1's gate 4 NOT MET (F16's +-10 opening; the owner accepts it or C52 is settled);
   whether the generator resets at a load; the shaken-camera readers the port keeps at rest, the skull among them
   (Q.1's deviation 6 and the merge's finding); D11 rows 3, 13, 21, 30 and 10 / 8's kill unwired (*rows 3 and 30
@@ -1071,9 +1076,12 @@ work no step of §7 owns, and the owner's calls:
       `earthquake.json`'s `fall` / `fall_no_gravity` and `minion_killed`, track B's step 101 (written as 121 on
       `visuals-d`), live on `main` since the merge and checked through the layer there by `AFallShakesTheView` and
       `EventsALevelMakesOnItsOwnShakeTheView` (`test_mp_layer` 2901 checks, 0 failures).
-- [ ] **Order 11.3 deviation, `fire32.ent` has no step** (step 96): 00_order section 5 names F13 for "11.3 `skull`,
+- [x] **Order 11.3 deviation, `fire32.ent` has no step** (step 96): 00_order section 5 names F13 for "11.3 `skull`,
       `blood`, `fire32`", section 7's 11.3 and `system_7` 7f do not. F13's fire death shows flames the port does not
-      draw. Next: the owner assigns it.
+      draw. Next: the owner assigns it. *Built in step 146 (UI)*: `fire32.ent` on the character a fireball or a fire
+      agent's flame kills, at its frame's width over 64 (0.625), riding its body. On 2-10 its onset and size match
+      F13's and its life the decode's; where it burns (in place, where F13's sink with the shrunken body) is step 146's
+      deviation 5, in section 6's row "Step 146's recorded deviations".
 - [x] **Order 11.3 deviation, the suck's smear sits 9 px (3.2 u) higher than F12's** (step 96). Closed in its fix
       round: the whole disc lands on the original's within 2 px in a shift search (`11.3/verify1/disc_offset.json`).
       The 9 px came from a centroid box that took in the doorway's sparks. A smear-only search differs by 13-14 px in x,
@@ -1213,11 +1221,14 @@ work no step of §7 owns, and the owner's calls:
       contact in a 216 ms gap). Seen on the port's picture in the independent check (`12.2/verify1/route/deathtick`:
       f468 white, its pale tail beside the explosion; f469 black); the original's frame at that tick is still unseen.
       Next: a 60 fps clip of the kill.
-- [ ] **Order 12.2 deviation, no `fire32` flames on the burned knight** (step 98, deviation 9; found by the independent
+- [x] **Order 12.2 deviation, no `fire32` flames on the burned knight** (step 98, deviation 9; found by the independent
       check). F15 r1 #157-#171 shows about 1.3 s of flames on the knight's spot - the minion's burn's `addFlames`
       (`ETHCallback_minion` #1456-1471); the port draws the explosion and the blood only (`12.2/verify1/f15_vs_port_0.png`
       at +0.73 and +1.26 s). `addFlames` is not built (`Minions.hpp`, `Death::byFire`). The same entity as the "Order
-      11.3 deviation, `fire32.ent` has no step" row above. Next: the owner assigns `fire32`.
+      11.3 deviation, `fire32.ent` has no step" row above. Next: the owner assigns `fire32`. *Built in step 146 (UI)*:
+      `fire32` on a burned minion (3-32's knight and the ghost's escorts, 4-28's knight) at its frame's width over 64
+      (0.59375), before its blood, left where the minion was deleted. Seen on 3-32's escort (burned on 1032) and 4-28's
+      knight (605); the knight's own burn on 264 is off its route's view.
 - [ ] **Order 12.2 deviation, the first ghost shot leaves sooner than the original's, unexplained** (step 98, deviation
       10; found by the independent check). The port's first shot leaves on SHOOTING's first tick (tick 695 on the
       check's fire route); F15 section 3 has the original's 0.2-0.3 s after the hover starts, not explained there. With
@@ -1266,7 +1277,9 @@ work no step of §7 owns, and the owner's calls:
       (`addEntityIfItCantBeFound`, ins 997-1064) - gameplay, the level's only weapon comes back only through it: level31c
       places ONE `barrel_bomb` and the dragon takes three burns, so **4-32 cannot be won in the port** without it.
       *The restock is built in step 116* (with the lava's contact, B3), and 4-32 is won by a route; the rest of this
-      row stands, `ghost_utility_spawn.ent` at each restock with it (the "restock's pictures" row).
+      row stands, `ghost_utility_spawn.ent` at each restock with it (the "restock's pictures" row). *Step 146 draws the
+      scattered `small_explosion_no_light.ent`, the death's `explode` (its picture; the grab is not built) and
+      `ghost_utility_spawn.ent` at each restock and at key_pos.*
 - [ ] **Order 12.1 finding, the summon's clock** (step 99; F16 section 3): the original's `dark_dragon_spawn` counts
       `arm_ms` 3000 from the level's start, gated on the light, so a torch lit late summons 4 s after it; the port counts
       from the light, 7 s. Gameplay. Next: the owner.
@@ -1437,7 +1450,8 @@ work no step of §7 owns, and the owner's calls:
       adds it only for a key a level node pictures, and 12.1 / 12.2 draw the bosses' keys as effects); the unlock's
       pictures against F9 need a route to a keyhole or a capture-only warp; `latchSimEffects` drops all three door
       effects when the keyhole's OR the door's picture is missing (no frozen level has either missing); `Keys.hpp`'s
-      header comment is stale. Next: the key's picture owner.
+      header comment is stale. Next: the key's picture owner. *A boss-dropped key's `key_pick` is built in step 146,
+      where the runtime last drew its `key.ent`.*
 - [ ] **Order 10.4, not built, and recorded** (step 108): `shock_agent`'s `small_explosion.ent` where a fireball destroys
       an agent (#331-345; deviation 2 - a one-row addition beside `shock_death_at_agent`, owned by no step); the carried
       shock diamond at alpha 0.1 (its lightning still draws at full strength while carried; `diamonds.json`
@@ -1445,7 +1459,8 @@ work no step of §7 owns, and the owner's calls:
       `playFireExtinguishSound`, `playLightOffSound`); F14's standoff (its knight struck 27 u off, where the port's route
       walks the knight into the player); the effects' onset - the strike's white peaks about 0.04 s after F14's, the
       water's plateau starts about 0.12 s after L1's; `Torch.hpp:42`'s stale comment (`Fields.hpp`'s was fixed by 13.1)
-      and `system_7.md`'s "unreachable" for `ETHCallback_shock_agent`. Next: their owners.
+      and `system_7.md`'s "unreachable" for `ETHCallback_shock_agent`. Next: their owners. *The carried diamond at 0.1
+      is built in step 146 (the sprite only; its lightning stays at full strength, as the original's).*
 - [ ] **Order 11.1, GAMEPLAY rows for the owner** (step 109, deviations 1-4; each moves the effects the step draws with
       it): `destroyable` stones are not destroyed by the wall they break (`ETHBeginContactCallback_breakable_wall`
       #42-60) - 12 placed stones on 10 levels, and every stone an `entity_launcher` throws (#200-209 set the flag), so on
@@ -1510,7 +1525,8 @@ work no step of §7 owns, and the owner's calls:
       clock passes 400 on its 24th or 25th frame (6); every dynamic body swept from the first tick, and the agent's clock
       off the bucket clock (8); the trail hides with the player (10); the light-on, light-off and switch sounds (13); a
       lit torch takes its level emitters off the placement stream, so later level emitters draw a shifted sequence after
-      a lighting (15). Next: their owners.
+      a lighting (15). Next: their owners. *(4) is built in step 146: AddToAngle(190 deg/s) on the unlit torch's
+      systems, its picture upright, measured against footage L1.*
 - [ ] **Order 13.1, the off-screen kill** (step 111; GAMEPLAY, older than it): `Fields::Tick` polls every ring every
       tick, where the original's `ETHCallback_shock_area` kills only while its bucket is drawn (D6_check 5.7). Next: the
       owner, with the bucket-visibility rows.
@@ -1519,7 +1535,8 @@ work no step of §7 owns, and the owner's calls:
       the ring turned and jittered from the level's first tick (the original's only while its bucket is drawn) and there
       from the first frame (the original's a frame later), on the port's 4.17 %-fast clock (the PORT-WIDE row), with
       `randF`'s inclusive 1.007 never drawn; paused frames now write the rings' two quads. None shows at 1 %. Next: a
-      small step for the pulse.
+      small step for the pulse. *The pulse is built in step 146 (1 -> 0.95 -> 1 on 300 ms legs, its picture only; on the
+      level's age, which the pause holds: step 146's deviation 2).*
 
 ## 3. UI
 
@@ -1972,8 +1989,13 @@ stays; 2-06 and 4-14 are won and 2-03 re-authored.*
       1, track B, `cc8be2e`: both switches saved on each toggle and read at the start as the original does, in
       `audio.json` beside `scores.json`; the previous run's log kept as `magicportals.prev.log`; and
       `tools\parity\play_build.bat` builds `build-play\` without validation for playing. GAMEPLAY: none); tutorial
-      helpers (1-21's camera hint, the tap-away hands); the beholder's death explosion; `fire32`,
-      `antiportal_explosion` (*built in step 126*), `carranca_destroy`, `small_explosion_no_light`; the closing lift door
+      helpers (1-21's camera hint, the tap-away hands - *the hands built in step 146*: a release strictly within 30 u
+      of a hand, off the walk pads, takes it with its `smoke_vanish`, read from the hands' own touch record, so 1-27's
+      two go at its route's lift touches); the beholder's death explosion (*built in step 146*: DEAD's scattered
+      `small_explosion_no_light` and its `explode` at x2); `fire32` (*built in step 146*, on the character and on a
+      burned minion; a burnable crate's not drawn), `antiportal_explosion` (*built in step 126*), `carranca_destroy`
+      (*built in step 146*, drawn wherever the port takes a carranca, which no level's play does),
+      `small_explosion_no_light` (*built in step 146*, the three bosses'); the closing lift door
       crushes nothing (*built in step 133*: it kills the player it closes on, the one character); `death_area`
       kills only the player in a 16 px box (*built in step 136*: it kills on its whole polygon, level5's 60 x 16 and
       level25a's 52 x 16, and the player is the only character, `isCharacter`); no teleport while a platform sits in
@@ -1993,6 +2015,7 @@ stays; 2-06 and 4-14 are won and 2-03 re-authored.*
       area kills on its polygon and its box is the polygon's bounds (drawn only in the debug box view). The next step
       that edits the layer (which relinks `MagicPortals.exe` and `test_mp.exe`) rewords it: "Hazards at their box: a
       destroyier's 16 px trigger, a death area's polygon bounds (it kills on the polygon itself, Hazards.hpp)".
+      *Done in step 146, in those words.*
 
 **Tests.** Step 113 built both: the audit's flood is `tools/parity/reachability.py` (the port's own rules read from
 `data/` and `game/data/`, verdicts pinned, ctest `parity_reachability`), and `test_mp_routes` replays every route in
@@ -2104,7 +2127,9 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       `carrancaCallback` L85350 #128-183: `carranca_destroy.ent`, `startEarthquake(20, 0)`, `DeleteEntity` - 2-18's and
       2-23's barrels stand 54 and 56 u from one), a shock agent and a minion (burnable; `ETHCallback_shock_agent` L92534
       #294, `ETHCallback_minion` L87616 #1478) and a light wall (`ETHCallback_light_wall` L98075 #32). The port's blast
-      breaks walls alone (`demolish.json` `blast._not_built`); each needs its own module's death.
+      breaks walls alone (`demolish.json` `blast._not_built`); each needs its own module's death. *Step 146 draws
+      `carranca_destroy.ent` wherever the port takes a carranca (only its stone rule, the row below); the blast's
+      taking stays unbuilt (step 146, deviation 3).*
 - [ ] **A stone breaks a carranca in the port only** (step 115): `Demolish::Find` holds every flagged breakable,
       carrancas included, and a stone's touch breaks any of them; the original's stone callback,
       `ETHBeginContactCallback_breakable_wall` (L68341), is `breakable_wall`'s alone. And it breaks only above a speed
@@ -2143,7 +2168,9 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       onda.png bursts) at `barrel_spawn` with each barrel, and sets the new barrel's `minEmissive` to (1, 1, 1), the
       floor of `ETHCallback_barrel_bomb`'s blink (#1-30), which the port draws for no barrel. The dying dragon's
       `ghost_utility_spawn.ent` beside the key is the same entity. One effects-runtime row and the blink, for the
-      effects' owner.
+      effects' owner. *The effects-runtime row is built in step 146*: `ghost_utility_spawn.ent` on the spawn marker's
+      own point and depth before each barrel and fire diamond a boss puts back, at the ghost's escorts and at the dark
+      dragon's key_pos. The barrel's `minEmissive` blink is still not drawn.
 - [ ] **The lava is filed as a hazard, and kills nobody in the original** (step 116, finding):
       `ETHBeginContactCallback_lava` (L68416) only burns and sets `explode`; `entity_roles.json` puts `lava` under
       `hazard`, so `Hazards` gives level31c's `lava_1140` a 16 px box that kills the player. Unreachable: the player
@@ -2300,18 +2327,21 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       original's callback may stop there and leave it up, where the port lowers it on tick 443; no route depends on
       it, and any door that leaves the view while raised is the same case. 4-21's door stays on screen through its
       press (camera (424, 128)). (6) `test_mp_play`'s floor stays 171 (it runs 223): the next step that relinks the
-      runner anyway raises it.
+      runner anyway raises it. *Step 146 relinked the runner and did not raise it (it runs 234 there): (6) is still
+      open.*
 - [ ] **2-18's re-authored kill threads about 0.4 px** (step 133, left for the owner): `level17a.json`'s shot toward
       (54, 72) passes about 0.4 px under the raised `door_lift_1146`'s bottom (56.6) and about 0.3 px over the barrel's
       left corner (120.7, 65.0), 21.6 px from the agent (R17's 22.4). Deterministic, won on 1965, and the geometry's (no
       line clears the door's corner, the barrel's corner and the agent's 22.4 each by more than about 0.5 px), but maybe
       not how the original is played; its reflector (`reflect_agent_1180`) is unused. Whichever step next touches the
       shot (G4), the door or the player's jump (G10) re-verifies 2-18 first.
-- [ ] **`ALiftDoorLeavesItsDustAsItOpensAndCloses` does not pin the rise** (step 133's verifier): it compares the dust
+- [x] **`ALiftDoorLeavesItsDustAsItOpensAndCloses` does not pin the rise** (step 133's verifier): it compares the dust
       against mix(closed, open, the watch's progress), so it passes at any rise; its print shows the closing dust at
       (430, -6.4), which is 32 - 102.4 + 64. The 102.4 itself is pinned in `test_mp_play` (`DoorsTakeTheirStrideFromTheLevel`,
       `ADoorRisesEasedAndLatches`, `ACrateOnAButtonOpensItsDoor`). The next step that relinks `test_mp.exe` anyway adds
-      an absolute check that the closing dust sits at y 32 - RisePx() + 64.
+      an absolute check that the closing dust sits at y 32 - RisePx() + 64. *Done in step 146*: the case now checks
+      the dust absolutely, the opening dust at (430, 32 - 64) and the closing dust at (430, 32 - RisePx() + 64), with
+      the rise 102.4.
 - [ ] **Step 134's recorded deviations** (the flame's burn, G8 and the minion, 1-6). (1) The burn point is where the
       shot first enters the 32 on the tick's whole stretch (`Shot::EntersCircle`), where the original tests the shot's
       point once a frame after moving it 200 u/s; a shot grazing the circle within about 0.4 px can differ (the
@@ -2327,7 +2357,8 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       gameplay rows" and "Order 13.1, the off-screen kill"): a shot or a knight burned off screen here may not be
       there. (6) A flame-burned minion shows no flames and makes no sound: `ETHCallback_minion` #1471's `addFlames` is
       not drawn and `burn()` #16's `playBurnSound` is not played (the "Order 12.2 deviation, no `fire32` flames on the
-      burned knight" row; the audio audit's `playBurnSound` row, missing).
+      burned knight" row; the audio audit's `playBurnSound` row, missing). *(6)'s flames are drawn since step 146
+      (`fire32` before the blood, at 0.59375).*
 - [ ] **Step 134's routes lean on the port where no clip shows the original** (step 134, left for the owner).
       **2-31** (`level30a.json`, 248) rests on the port's seesaw: the plank tips left-down under a player who walks up
       it from x 389 with his flight's speed (the hinge solver, and G10's walk), and its first portal, (445, 200), is 7 u
@@ -2461,3 +2492,25 @@ resuming the track the game had stopped, as the original does (step 121); whethe
       (0-1, 0-1, 0-1), and the 84 levels' 566 scattered edge rows above 12 (1-21 and 1-23 right, 4-01 left and 4-09
       right among them). (2) `sky.json`'s two `_` notes were reworded after the implementer's sweep: *settled by the
       verification*, whose sweep on the file as it is matched the implementer's 128 of 128.
+- [ ] **Step 146's recorded deviations** (UI, the smaller pictures the original adds; GAMEPLAY: none). (1) The
+      implementer's sweep and probes ran on `564f657e`, a link without the hands' own touch record (Smart App Control
+      refused the final code's): *settled by the verification*, whose sweep on the final binary `2cc4a50e` is 128 of
+      128 byte-identical to `UI/after/sweep/`, and whose 1-27 capture takes both hands at the route's lift touches
+      (`hand_tap_ent_1160` on 46, `hand_tap_ent_1195` on 521). (2) The shock agent's pulse runs on the level's age,
+      which the port's pause holds, where the original's getLastFrameElapsedTime runs through a pause (as the
+      antiportal's blink reads it); only the paused frames' share can tell. (3) `carranca_destroy` is drawn wherever
+      the port takes a carranca, which no level's play does; the original's taker, explode()'s grab, is not built (the
+      row "The rest of `explode`'s destroy set"). (4) The dark dragon's explode is at its last DYING waypoint, (28,
+      334.4), below the view, as decoded; not checked against footage. (5) **`fire32` on a dead character burns where it
+      died, where the original's sinks with the body**: on 2-10, F13's flames' centroid descends from 567 to 668 px and
+      leaves the screen by +0.92 s, the port's stays near (540, 550) px for about 1.45 s (its onset and size match
+      F13's, its life the decode's).
+      The cause is outside the step: `checkGameLost` (#47-58) hides the character and calls Scale(0.05) on it, so the
+      original's shrunken body falls off the platform's edge and `ETHCallback_fire32` follows it; the port keeps the
+      hidden body full size on the platform. Next: a step that builds that Scale(0.05) (after the death, so no win can
+      change; it checks the lost screen's timing), then re-measures 2-10's flames against F13 by time. (6) The hand's
+      reach test and smoke read the swing a tick behind: `tapHandsAway` reads where the last frame drew the hand, where
+      `ETHCallback_hand_tap` moves it first (`linearMotion` #1-14); at most one tick of a 4 u, 2.09 s swing, about 0.2
+      u. Optional fix: advance the swing to the tick before the test (a behaviour change). Also left by the step: 3-32's
+      black knight's own burn was not seen in view (off its route's camera; the same picture on the level's escort and
+      on 4-28's knight was), and `test_mp_play`'s floor (step 133's (6)).

@@ -648,6 +648,11 @@ public:
             // finished, where its PICTURE is drawn this frame (m_knightQuad), as a
             // minion's: its aura (planning step 123).
             Knight,
+            // The character's own body, never hidden: the flames addFlames puts on it
+            // (effects.json fire32), which ETHCallback_fire32 moves onto it every
+            // frame - SeekEntity finds a hidden entity, and Hide is a flag, so a
+            // dead character's flames ride its body down (planning step 146).
+            Character,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -973,8 +978,29 @@ public:
         bool levelPicture = false; // its node's quad is there
         bool unlitGone = false;    // the `delete` branch has run since it was last lit
         double z = 0.0;
+        // What its unlit self's AddToAngle(unitsPerSecond(190)) has turned it by
+        // (art.json unlit_torch, planning step 146), from the entity's start - the
+        // level's own, or the one a put-out added - and the angle its level
+        // picture's systems are turned by now, Ethanon's.
+        double turnedDeg = 0.0;
+        double systemsAngleDeg = 0.0;
     };
     std::vector<TorchReport> TorchReports() const;
+    // A level picture by its node, for the suites, as the last frame drew it:
+    // whether it is there, where, at what size and alpha, and its entity's angle
+    // (planning step 146: a shock agent's pulse, a carried diamond's alpha, a hand
+    // tapped away). `drawn` false and the rest empty for a node with no picture.
+    struct DrawnPictureReport {
+        bool drawn = false;
+        entt::entity quad{entt::null};
+        glm::dvec2 centrePx{0.0};
+        glm::dvec2 sizePx{0.0};
+        float alpha = 1.0f;
+        glm::dvec2 ownerPx{0.0};
+        double ownerAngleDeg = 0.0;
+        double lookZ = 0.0; // its node's eth_z, its depth in the level's units
+    };
+    DrawnPictureReport DrawnPicture(const std::string& node) const;
     // A gravity well agent's turn, in Ethanon's degrees, as its callback sets it
     // this tick (gravitywell.json roundabout): a whole turn at rest.
     double WellSpinDegrees(int well) const;
@@ -1345,6 +1371,11 @@ public:
     // and its white death are captures the visuals plan asks for. Ignored on a
     // tick the dragon is not there to burn.
     void ScheduleDevBurn(int tick);
+    // DEV ONLY: break the breakable `node` on the layer's tick `tick`, as a stone's
+    // touch breaks it (Demolish::Break) - for a suite: a carranca, which no level's
+    // play breaks in the port and whose carranca_destroy (planning step 146) is
+    // drawn wherever one goes. Ignored for a node Demolish does not hold.
+    void ScheduleDevBreak(int tick, const std::string& node);
     // DEV ONLY: the player's body put at a point of the level, its velocity zeroed,
     // on the layer's tick `tick`, after that tick's physics step and before what
     // judges where the step left it - so a capture can open a level's door and film
@@ -1477,6 +1508,11 @@ private:
         int torch{-1};
         // A gravity well's agent, in wells.wells: a lap turns it (m_wellSpins).
         int well{-1};
+        // A shock agent, in fields.fields: its callback's bounce pulses its picture
+        // (art.json shock_ring agent_pulse, planning step 146).
+        int field{-1};
+        // The size it was last drawn at, in the level's pixels (DrawnPicture).
+        glm::dvec2 drawnSizePx{0.0};
         // 4-19's red key state (sim/RedKey.hpp): drawn at its first call's scale per
         // axis and colour, that colour faded once its key is taken, gone with it.
         bool redKeyState{false};
@@ -1504,6 +1540,9 @@ private:
         bool moves{false};
         Motion::Linear motion;
         Motion::Turn turn;
+        // A tutorial hand a release came within reach of: its DeleteEntity
+        // (ETHCallback_hand_tap #165-171), its smoke queued (tapHandsAway).
+        bool tapped{false};
     };
 
     void bindInput();
@@ -1608,6 +1647,22 @@ private:
     // from latchSimEffects: what lighting a torch, putting it out and the wall
     // going add, each on the tick its state turns over.
     void latchTorches();
+    // THE SMALLER PICTURES (the program's UI, planning step 146), from
+    // latchSimEffects: the three bosses' dying arms' scattered
+    // small_explosion_no_light on each one's own overTimeEntityAdder clock, the
+    // beholder's and the ghost's deaths' explode, and ghost_utility_spawn wherever
+    // a boss puts its weapon back or calls an escort - each in its callback's own
+    // order, before the key a boss drops is queued. And the dark dragon's death,
+    // after that key: ghost_utility_spawn beside it, then its explode.
+    void latchBossPictures(float fixedDelta);
+    void latchDarkDragonDeath();
+    // ETHCallback_hand_tap's test of a release (effects.json smoke_vanish_hand_tap),
+    // from readInput on the tick a touch comes up: each tutorial hand within reach
+    // of where it was last held, off the walk pads, goes with its smoke.
+    void tapHandsAway(entt::registry& registry, const Portals::TouchRelease& release);
+    // The depth a marker of the level stands at: the first top-level node whose
+    // entity is `entity`, its eth_z (0 where it states none, or there is none).
+    double markerDepth(const std::string& entity) const;
     // What a tap the shot was offered leaves behind (the visuals plan's 10.1),
     // queued the moment Portals::State::Shoot returns: the mark a fired shot
     // leaves at the tap - red_cross or portal_mark by computePortalFinalPos's
@@ -2394,6 +2449,11 @@ private:
     struct DiamondWatch {
         bool held = false;
         bool gone = false;
+        // The ticks it has been held in a row, and whether its carried arm has run
+        // since it was last made: SetAlpha(0.1f) from the update after the pick
+        // (art.json carried_diamond), kept until it goes or a boss puts it back.
+        int heldTicks = 0;
+        bool faded = false;
     };
     std::vector<DiamondWatch> m_diamondEffects;
     // Per shock agent of Fields', in its order: gone at the last latch (a
@@ -2432,8 +2492,35 @@ private:
         bool lit = false;
         bool unlitGone = false;
         double z = 0.0;
+        // Its unlit entity's AddToAngle(unitsPerSecond(190)), stepped on the tick
+        // while it stands (art.json unlit_torch) and from 0 again for the one a
+        // put-out adds: its systems turn by it, its vertical picture does not.
+        Motion::Turn spin;
     };
     std::vector<TorchWatch> m_torchWatch;
+    // THE BOSSES' OWN PICTURES (planning step 146): each dying arm's
+    // overTimeEntityAdder clock for small_explosion_no_light - one per boss entity,
+    // as the original keeps it under 'small_explosion_no_light.entAdder' - run on
+    // the tick from effects.json's stride, so the picture needs nothing of
+    // sounds.json (whose boss_explosion runs the same clock beside it); and what the
+    // last latch saw, to tell which arm this tick ran and what a boss has put back.
+    struct BossPictures {
+        bool valid = false;
+        bool beholderGone = false;
+        bool ghostSpawned = false;
+        bool ghostGone = false;
+        Ghost::Phase ghostPhase = Ghost::Phase::Appearing;
+        bool darkAlive = false;
+        bool darkGone = false;
+        DarkDragon::Phase darkPhase = DarkDragon::Phase::Appearing;
+        double beholderMs = 0.0;
+        double ghostMs = 0.0;
+        double darkMs = 0.0;
+        std::size_t restocksSeen = 0;       // Restock::State::added: each a barrel put back
+        int summonsSeen = 0;                // the ghost's escorts called
+        std::vector<char> fireDiamondsGone; // per diamond of Diamonds': a fire one gone
+    };
+    BossPictures m_bossPictures;
     // The light wall's going as the last latch saw it (Torch::State::wallsGone),
     // and whether the wall standing now is one addLightWall built at the ghost -
     // its point the ghost's, its depth the ghost's - rather than the level's.
@@ -3043,6 +3130,12 @@ private:
     // as a level loads and as the pause opens, whose buttons the port presses on
     // the way down: a touch that went down on Resume must not fire when it comes up.
     Portals::TouchTrack m_shotTouch;
+    // AND THE TUTORIAL HANDS' READING OF THE SAME TOUCH (planning step 146):
+    // ETHCallback_hand_tap asks hasPortalRequestInput(t, true), its touch's disabled
+    // status ignored, so a touch a lift or a help block took still takes a hand on
+    // its release, and so does one a corner control spent. Followed and forgotten
+    // as m_shotTouch is, and never spent by what spends that one.
+    Portals::TouchTrack m_handTouch;
     // The plaque's dismissal, on GameLayer's clock (the level's age), once the
     // frame clock has passed its dismissAfterMs; negative before.
     double m_plaqueDismissAgeMs{-1.0};
@@ -3119,6 +3212,7 @@ private:
     };
     std::vector<DevTap> m_devTaps;
     std::vector<int> m_devBurns;
+    std::vector<std::pair<int, std::string>> m_devBreaks;
     std::vector<std::pair<int, glm::dvec2>> m_devPlaces;
     int m_ticks{0};
 

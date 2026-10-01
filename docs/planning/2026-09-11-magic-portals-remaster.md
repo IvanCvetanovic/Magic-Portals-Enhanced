@@ -27488,3 +27488,187 @@ its library frames. R24 and R25 stay the owner's; nothing else is ruled.
 - **The standing sweep baseline is now this step's** `out/parity/program/EC/after/sweep/` (`MagicPortals.exe`
   `3b842043`, what `build/` holds), for every later step - once these exact sources are committed; a commit that
   changes anything the executable is built from re-takes it.
+
+## Step 146 - the smaller pictures the original adds: the bosses' scattered explosions and their deaths' explode, ghost_utility_spawn wherever a boss puts something back, fire32 on what fire kills, a dropped key's pick, a carranca's dust, the tutorial hands tapped away, a carried diamond at 0.1, the shock agent's pulse and the unlit torch's turn (built)
+
+**THE PROGRAM'S UI** (`docs/parity-backlog.md` section 6, the "Smaller" row and the list "Pictures the original adds
+that no step owns"). Planned for wave 2's track C; it runs on MPR `main` after step 145 (EC, `12eb200`), engine
+`710bffc`, and its before is EC's after-sweep `out/parity/program/EC/after/sweep/`. Changed: `game/sim/Effects.{hpp,cpp}`
+(`Effects::Scatter`, `AdderDue`, `ScatterAt`, `Explode`, `Flames`, `HandTapped`, `HandTapSmoke`; the new rows read
+and refused by name), `game/data/effects.json` (the rows, `_bosses_flames_hands` first, at the file's end),
+`game/sim/Art.{hpp,cpp}` and `game/data/art.json` (`shock_ring.agent_pulse`, `carried_diamond`, `unlit_torch`),
+`game/MagicPortalsLayer.{hpp,cpp}` (the wiring below; `EffectOwner::Kind::Character`; `latchBossPictures`,
+`latchDarkDragonDeath`, `tapHandsAway`, `markerDepth`, `m_handTouch`; for the suites `DrawnPicture`,
+`TorchReport.turnedDeg` / `systemsAngleDeg` and the DEV hook `ScheduleDevBreak`), `tests/test_mp_effects.cpp`,
+`tests/test_mp_layer.cpp`, stale notes in `ghost.json` (its unread `explosions` block and `death.blast_scale` moved
+into `effects.json`), `darkdragon.json`, `diamonds.json`, `demolish.json`, `minions.json`, `motions.json`, `Boss.hpp`,
+`Ghost.hpp`, `DarkDragon.hpp`, `Minions.hpp`, and this record. No engine change (the pin stays `710bffc`), no
+converter change, no format finding. The evidence is under `out/parity/program/UI/` (`impl.md`; the verification's
+in `verify1/`).
+**GAMEPLAY: NONE.** Every addition is a picture the layer queues on the tick and adds on the frame; nothing the
+simulation reads moves (the gates: 86 of 86 routes on the same ticks, shots and drift; reachability 0 differ; the
+after-sweep's 128 logs equal to EC's in every event line but 2-32's new `fire32` line). The one change the simulation
+sees is the DEV hook `ScheduleDevBreak`, for a suite, which no capture flag and no route reaches. No route is added:
+not a gameplay step.
+
+**BLOCKERS, checked first: none.** Every item is a picture the effects runtime already knows how to draw (the
+original's `.ent` read at run time) at an event the port's simulation already reports, but two: the hands' release,
+which `readInput`'s touch record already gives (step 137), and a carranca's taking, which only the port's own stone
+rule causes and no level's play reaches (gated by a layer test, as the spec allows). `antiportal_explosion` was built
+by step 126 (R17: `latchSimEffects`' agent kills, `effects.json` `antiportal_explosion`) and is not touched.
+
+**THE PICTURES, AS DECODED AND BUILT** (each row's `_source` in `effects.json` or `art.json` carries the listing's
+bytes and instruction numbers, `out/parity/asbc/all_functions.txt`, md5 `48fe65ce`, arguments read last-first). Each
+is queued on the tick that decides it and added on the frame, its particles from the effects' stream (00_order K8),
+drawn in the effects' rows of the slot table (K13, no new row).
+- **The bosses' scattered explosions** (`boss_scatter_beholder`, `_ghost`, `_dark_dragon`). On every update of a
+  dying arm - the beholder's DEAD (#1163-1253), the ghost's DAMAGE while its hp is above 0 and its DEATH (#786-929,
+  #1265-1331), the dark dragon's DAMAGE and DYING (`darkDragonOvertimeSmallExplosionAdder`, #1563, #1818) - randDir =
+  randF(2 pi) and randLen = 0.4 + randF(0.7) are drawn, and `overTimeEntityAdder` adds `small_explosion_no_light.ent`
+  at the point + vector2(sin, -cos) x scale(48 or 64) x randLen (the dark dragon's x vector2(1, 0.7), about its point
+  + scale(64, -32)), at a bare 0 z, unturned, x1, when the owner's clock reaches 400 ms. The clock is the owner's
+  (`small_explosion_no_light.entAdder`) and only an add zeroes it, so it carries across arms (`Effects::AdderDue`);
+  the two draws are made whatever the clock says, as the script makes them.
+- **Their deaths' `explode`** (`explode_super_scale`): `explosion_large.ent` at the boss's point, scale(32) in front,
+  at superScale 2 (the beholder past 3550 ms dead, #1270-1274; the ghost at DEATH's end, before its `key.ent`,
+  #1348-1352) and 1 (the dark dragon at DYING's last waypoint, after its key and `ghost_utility_spawn`, #1924-1931).
+  The pictures only: the ghost's and the dark dragon's grabs are not built.
+- **`ghost_utility_spawn`**: `addEntityAtSpawnPoint` adds it on the spawn marker's own point and depth before the
+  entity it restocks - each barrel a restock adds (the dark dragon's after a shot, the ghost's on SHOOTING's beat),
+  each fire diamond the ghost puts back - and two AddScaledEntity calls add it: the ghost's RAGE_MODE escort at
+  minion_spawn_point, the dark dragon's death at key_pos.
+- **A dropped key's `key_pick`**: the key a boss drops has no level picture; its pick is added where the runtime last
+  drew its `key.ent` (`EffectOwner::Kind::Key`, its bob with it), on that entity's depth.
+- **`fire32`** (`addFlames`, bytes 420120..420459): `fire32.ent` on the target's point and depth, unturned, at its
+  frame's width over 64 (the mage 0.625, a minion 0.59375), before the blood - on the character a fireball or a fire
+  agent's flame kills, riding its body as `ETHCallback_fire32` follows its target (`EffectOwner::Kind::Character`),
+  and on a burned minion (3-32's knight, the ghost's escorts, 4-28's knight), left where it was deleted.
+- **`carranca_destroy`** (`carrancaCallback` #123-157): on the carranca's point and depth, turned by its own angle.
+  The original's taker is explode()'s grab, not built; the port's is its Demolish rule (a stone's touch), which no
+  level's play reaches.
+- **The tutorial hands** (`smoke_vanish_hand_tap`; `ETHCallback_hand_tap`, bytes 344140..344990): a release strictly
+  within scale(30) of a hand's point, off the walk pads, deletes the hand and adds `smoke_vanish.ent` at its
+  picture's centre, its point + multiply(vector3(0, -38, 0), rotateZ(its angle)), on its depth, unturned (1-16's
+  95-degree hand smokes to its left). `hasPortalRequestInput(t, true)` ignores a touch's disabled status, so the
+  hands read their own record of the touch (`m_handTouch`), which nothing spends: a touch a lift takes on its way
+  down (1-27's route) or a help block takes still takes a hand on its release, whatever the shot does with it.
+- **A carried diamond at 0.1** (`art.json` `carried_diamond`): the carried arm's SetAlpha(0.1f) (shock #222-225,
+  fire #234-237) from the tick after the pick, which the free arm's update draws whole, until it goes or a boss puts
+  it back; the sprite only (its lightning and flames are particles, which SetAlpha does not reach).
+- **The shock agent's pulse** (`shock_ring.agent_pulse`): `bounce(this, V2_ONE, vector2(0.95), 300)` on every
+  update, 1 -> 0.95 -> 1 on 300 ms legs (`Art::Pulse`) on its picture; its sparks and ring are not scaled.
+- **The unlit torch's turn** (`art.json` `unlit_torch`): `ETHCallback_light_off`'s AddToAngle(unitsPerSecond(190))
+  on the game's clock; `light_off.ent` is ET_VERTICAL, so its picture stays upright and its systems turn (their star
+  circles it 12 u out); from 0 again for the `light_off` a put-out adds back.
+- **Riders**: step 136's verifier's hazards comment (`MagicPortalsLayer.cpp:6396-6397`, the backlog's words), and
+  step 133's verifier's absolute check in `ALiftDoorLeavesItsDustAsItOpensAndCloses` (the closing dust at x 430, y
+  32 - RisePx() + 64, the rise 102.4).
+
+**THE GATES.** Before: EC's after-sweep, `MagicPortals.exe` `3b842043`, `test_mp.exe` `e39fe04f`. After:
+`test_mp.exe` `a76afeb3` (the final code); `MagicPortals.exe` `564f657e` for the implementer's sweep and probes - the
+final code but one change made after them, `m_handTouch`, read only on a touch's release - and `cbab0b76` (the final
+code), refused by Smart App Control and never launched. The verification deleted and relinked it once: **`2cc4a50e`,
+the final code, what `build/` holds**, which ran the verification's sweep and its gate frames (161 launches, none
+refused). `MagicPortalsSpike.exe` not rebuilt (`b72671eb`). Where a row says *the verification*, the measurement is
+`UI/verify1/`'s, on `2cc4a50e` and `a76afeb3`.
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4 | **passes** (`UI/build1.log` to `build6`): build1 ran out of compiler heap (C1002/C1060; rebuilt with `--parallel 3`); build2 failed `test_mp_layer.cpp` (a report struct named as an existing one, and one C4456), fixed; build3 and build5 (the hand record) **0 warnings**. Every changed unit compiled warning-free in its final form |
+| Suites | the runner once, with counts | **passes** on the final code (`UI/allmode.log`, `a76afeb3`, rc 0): `test_mp: 49 suites, 49 passed, 0 skipped, 0 failed`, **18,224 checks** (EC 18,097): `test_mp_effects` 706 -> 764 (the rows, the adder's clock and point, the hand's reach and smoke, 10 refusals), `test_mp_layer` 3,470 -> 3,539 (six new cases, four extended); every other count equal. An earlier link, `6d7f0a56`, ran 48 of 49: a `test_mp_effects` fixture replaced the first `"angle": "entity_angle",` in `effects.json`, by then `carranca_destroy`'s; the rows moved to the file's end (data only) and the suite alone re-run, 764 / 0 |
+| Routes | every route wins; none deleted | **passes** on the final code: 86 of 86, their 86 result lines (tick, shots, drift) identical to EC's (`UI/route_ticks_sorted.txt`) |
+| Reachability | no door newly sealed | **passes**: 108 reachable, 20 opened, **0 differ** (`UI/reach_check.txt`; data only) |
+| No gameplay change | nothing the simulation reads moves | **passes**: the routes and reachability; the after-sweep's 128 logs against EC's, event lines only: 1 differs, 2-32, by its one new line, "player burned by dragon_ent_1279#1 on tick 286: fire32.ent ..." (`UI/logdiff_UI.txt`). *The verification* compared every line of its 128 logs with EC's, paths normalised (`UI/verify1/compare_v1.txt`): the event lines differ only on 2-32, by that line; the renderer's per-placement counters only where the shock agent's logged size is its pulsed picture's (0.64 -> 0.637211; 15 agent levels) and on 2-32 (its draw counts) |
+| The sweep | the new pictures where predicted, nothing else | **passes** on `564f657e` and on the final binary (`UI/after/`, `compare_UI.txt`): 128 rc 0, a fresh `40bfef3a` save per launch, validation active and silent, no input line; **104 byte-identical, 24 changed**: 14 shock-agent levels (19 agents in view, 103,432 px: the pulse), 9 unlit-torch levels (4-22 to 4-27, 4-29 to 4-31; 63,334 px: the turn) and 2-32 (14,604 px, max delta 66: the fire death on 286 adds `fire32`; at f420 the change is a redistribution with no added light - the 462 px past 60 average -3.4 red, 44% brighter, 56% darker - the effects after the flames drawn from other numbers of the stream: *the verification*'s frames show the flames from f288 to about f376, gone by f420). 4-19's agent (behind the door's pillar), 3-31's (below the view) and 4-32's torch (left of the view) are unchanged, as predicted. *The verification*'s sweep on the final binary `2cc4a50e` (`UI/verify1/after/`, `compare_v1.txt`; 128 rc 0, a fresh save each, validation silent, every png its logged md5): **128 of 128 byte-identical to `UI/after/sweep/`**, so the final binary's frames are MEASURED, not inferred |
+| The torch's turn | the decode, against the original | **passes**: the original's star (footage L1, 4-22 before the lighting, 40 frames twice) circles at 33.57 and 32.54 px, 190.0 and 191.5 deg/s; the sweep's 9 stars stand 32.98-35.20 px out (median 33.92; 12 u is 33.75) at 249.6-252.7 deg (median 250.6; 7 s x 190 is 250 past whole turns). *The verification*, its direction: 4-22 f400 -> f406, the star 188.8 -> 207.1 deg counter-clockwise on screen (predicted 186.7 -> 205.7), +18.3 deg in 6 ticks (183 deg/s at pixel resolution), 32.6-32.9 px out, its trail turning the same way, as L1's (`UI/verify1/torch_dir.json`) |
+| The agent's pulse | the decode | **passes**: 15 of the 19 agents fitted (4 cut by the frame's edge) drawn at 0.9552-0.9588 of before, median 0.9571, against the decoded 0.9567 at f420 (`UI/gates/agent_sweep2.json`). *The verification*'s own fit (a 44 px disc, `UI/verify1/pulse_fit.json`): 15 agents at 0.955-0.963, median 0.960, the error 5-25x below an unscaled agent's; the lightning not scaled |
+| The bosses' pictures | a capture where a route reaches them | **passes**: the implementer's logs and tests, and *the verification*'s frames. The probes on `564f657e` (`UI/gates/`): 1-32's 8 scatters every 24 ticks from 2135, 0.616-1.085 of 48 u, its explode on 2324 at x2, 32 in front; 3-32's 28 (two DAMAGE arms from 776 and 1498, DEATH from 2221), 0.411-1.096 of 64 u, its explode on 2410 at x2, its key's `key_pick` on 2448; 4-32's 39, 0.436-1.089 of (64, 44.8) u, the second DAMAGE's first add 11 ticks after its wound (13 carried), `ghost_utility_spawn` at key_pos (78, 208) z 6 then the explode at x1 on 2993, its key's `key_pick` on 3083; `ghost_utility_spawn` at 3-32's barrel_spawn, fire_diamond_spawn and minion_spawn_point and at 4-32's barrel_spawn with each restock and escort. Every route won on its tick. `test_mp_layer` (final): `TheBeholdersDeathScattersAndExplodes`, and `TheGhostComesWithItsKnightsDeath` and `TheDarkDragonIsDrawnAsItsCallbackLeavesIt` extended. *The verification*, with the routes on `2cc4a50e` (`UI/verify1/gates/`, `crops/`; each capture's event lines the probes'): 1-32 f2140 and f2163 the scatters at the logged points, f2324 and f2330 `explosion_large` at x2 with `beholder_death`'s shake, then the beholder gone; 3-32 f496 two `ghost_utility_spawn` at barrel_spawn and fire_diamond_spawn, f780 the DAMAGE scatter, f2414 the explode at x2 with `key.ent` at the ghost's spot, f2451 the key taken; 4-32 f1226 a scatter on the head, about its point + (64, -32), f1623 the barrel's `ghost_utility_spawn` at (430, 0), f2997 `ghost_utility_spawn` at key_pos (the explode below the view, deviation 4), f3087 `key_pick`'s sparkles round the taken key |
+| `fire32` | a capture; F13's fire on 2-10 | **passes** on its onset, size and life; where the flames burn is deviation 5. Probes: 2-10 (`--hold right@60-240`, F13's input) burned by `fire_agent_ent_930` on tick 81, x 0.625; 3-32's knight on 264 (the ghost added there) and its escorts, 4-28's knight on 605, x 0.59375. `ADeathByFireLeavesFlamesOnTheCharacter` (2-10, 2-32) and `ABurnedMinionLeavesItsFlamesBeforeItsBlood` (4-28). *The verification*'s frames: 2-10 counted by F13's method, by time from the death (`UI/verify1/fire_2-10_port.json` against `fire_2-10_F13.json`): onset +0.08 s (F13 +0.065), peak 9,146 px at +0.75 s (F13 9,987 at +0.47 s), back to the baseline at +1.48 s (the decoded life 0.9-1.5 s; F13's flames leave the screen by +0.92 s, a lower bound); 2-32's flames f288 to about f376; 3-32's escort burned on 1032 (f1036, f1060) and 4-28's knight on 605 (f609, f640), flames and blood at the logged points. 3-32's knight's own burn is off its route's view (WHAT THIS DOES NOT COVER) |
+| The hands | a capture on 1-02, 1-03, 1-16, 1-27 | **passes.** Probes on `564f657e`: 1-02's `622` taken on the route's release (tick 100), 1-16's `765` (tick 30), 1-03's `578` and `577` by a two-tap route of the step's (236, 263); 1-03's and 1-16's last frames show those hands gone and 1-16's `768` standing. On the final code `ATappedHandGoesWithItsSmoke` takes 1-02's `622`, 1-16's `768` (a miss past 30 first) and **1-27's `1160` at the route's lift touch** (the test's smoke at (96, 45.88)), which the `564f657e` probe did not take (that build read the shot's record, which the lift spends: the change `m_handTouch` made). *The verification*, on `2cc4a50e`: 1-02's `622` on 100, the smoke where the glove was at f100; 1-03's two on 236 and 263, the png the probe's; 1-16's `765` on 30, and `768` by a route of its own (`UI/verify1/routes/hand_768_1-16.json`) on 61, the smoke at (214.2, 99.66), left of its point, on the glove's picture; **both of 1-27's hands taken by the route's two lift touches**: `1160` on 46 (the release at (110, 88), the smoke at (96, 42.49) z 4) and `1195` on 521 (the release at (544.0, 240), 6.7 u from it, the smoke at (543, 208.59) z 6), frames f44, f50, f519 and f525, the route won on 660 as before (`UI/verify1/gates/t1-27_full.log`, its lines 138 and 220) |
+| The carried diamond | a capture | **passes**: `AShockDiamondLeavesItsPickItsDeathAndItsStrike` (3-16) and `TheGhostComesWithItsKnightsDeath` (3-32's fire diamond, 0 ticks off): whole on the pick's tick, 0.1 after. *The verification*'s frames: 3-20 f165, the pick's tick, whole; f172 the sprite faint at the player's hand, its lightning at full strength (`UI/verify1/crops/t3-20_zoom.png`) |
+| `carranca_destroy` | a layer test (no route) | **passes**: `ACarrancaBrokenLeavesItsDust` (2-13's `carranca_1060`, broken by the DEV hook as a stone breaks it: the dust at (482, 202) z -2, angle 0, its picture gone) |
+
+**SMART APP CONTROL: 3 refused launches** (CodeIntegrity 3033/3077 from 16:09:20: 6 events, all
+`build/game/MagicPortals.exe`). `66236617` (build2) at 16:42:43, the sweep's first launch: deleted and relinked
+(#1), `564f657e`, which ran 140 times (the sweep, 128; the probes, 12), none refused. `19ee2b72` (the final code) at
+17:12:57, the sweep's re-take: deleted and relinked (#2), `cbab0b76`, refused at 17:13:16: both relinks spent, no
+further launch. `test_mp.exe`: `6d7f0a56` 2 launches, `a76afeb3` 1, none refused. Every launch had `--saves` with a
+fresh copy of `merge_w1/sweep_saves/scores.json`; the owner's `%APPDATA%\Magic Portals\` holds `scores.json` alone,
+`40bfef3a`. The verification (from 17:41:33) deleted and relinked `cbab0b76` once, to `2cc4a50e`, which ran 161
+times (its sweep, 128; its gate frames, 31; two camera drags, 2), and launched `test_mp.exe` `a76afeb3` once: **0
+refusals** (CodeIntegrity 3033/3077 to 18:39:40: none), every launch with `--saves` and a fresh copy. The commit
+linked and launched nothing. The step's total: 3 refused launches, all the implementer's.
+
+**VERIFIED, PASSED** (`UI/verify1.json`, its evidence in `UI/verify1/`; on the final code, head `12eb200`, engine
+`710bffc`; no fix round). The verifier re-derived each rule from the listing before reading the code: the owner's
+adder clock, which only an add zeroes and which carries across arms; the three bosses' arms and their orders;
+`addEntityAtSpawnPoint`; `addFlames` at GetSize().x / 64, Ethanon's integer frame giving the mage 40 and `minion.png`
+38; `carrancaCallback`; `ETHCallback_hand_tap`'s ignored status, strict reach and turned smoke; SetAlpha on the
+sprite alone; `bounce` on the agent's picture; AddToAngle on an ET_VERTICAL entity's systems. The code follows each.
+It recompiled the 46 port units that include a changed file with `build/`'s own flags, 0 warnings (a control with
+two deliberate warnings caught), and found `build/` otherwise current. Its own runs, once each: the runner with no
+argument, 49 of 49 suites, 18,224 checks, every count the step's (in it 86 of 86 routes, their lines EC's);
+reachability 108 / 20 / 0, 0 differ; its sweep and its gate frames on `2cc4a50e` (the table), their input only what
+each scheduled (`UI/verify1/input_check.txt`). Its four findings are text here, none a behaviour change: (medium) the
+record said 1-27's `1195` is reached by nothing, where the route's second lift touch takes it (the hands row
+corrected, deviation 1 too, and LEFT FOR LATER's bullet gone); (low) the record's binaries, frames and final sweep
+superseded by its retake (the gates' intro and rows, this paragraph, WHAT THIS DOES NOT COVER, deviation 1); (low)
+2-10's flames burn in place where F13's sink with the body, a cause outside this step (deviation 5); (low) the hand's
+reach test reads the swing a tick behind (deviation 6). The commit changed only this record and
+`docs/parity-backlog.md`, so `build/` holds the binaries the verification measured and `UI/after/sweep/` stands as
+the baseline.
+
+**WHAT THIS DOES NOT COVER.**
+- **3-32's black knight's own burn, in view** (tick 264, logged at (617.6, 206.2), x 0.59375): it is off its route's
+  camera, and the verification's two scheduled camera drags did not hold the view on it. The same picture is seen on
+  the same level's escort, burned on 1032 (the same `minion.png` frame and scale), and on 4-28's knight (605).
+- **The rest of the backlog's list**: `shock_agent`'s `small_explosion.ent` at its destruction (10.4), 2-32's claw's
+  `wall_destroy` (11.1), the key's fly-in into its keyhole (10.3), and the sounds those rows name (step 142's). Found
+  on the way and already noted where they live, not built: the fire agent's own pulse (1.02 -> 0.98, 300 ms), an
+  unowned diamond's idle bounce (0.9, 500 ms), the restocked barrel's minEmissive blink, a burnable crate's `fire32`
+  (`manageBurnable` #34-40) and a carranca's earthquake on its taking.
+- **explode()'s grabs** of the ghost, the dark dragon and a carranca: gameplay, not built.
+
+**RECORDED DEVIATIONS.**
+1. **The implementer's sweep and probes are `564f657e`'s, not the final binary's** (Smart App Control). The final
+   code takes both of 1-27's hands at the route's lift touches (`hand_tap_ent_1160` on 46, `hand_tap_ent_1195` on
+   521), the original's rule, which `564f657e` did not; from tick 46 1-27's effects draw from the stream after one
+   more `smoke_vanish`, and from 521 after two. Every input-free frame is the same by construction (INFERRED).
+   *Settled by the verification*: the final binary's sweep is 128 of 128 byte-identical to `UI/after/sweep/`, and its
+   boss captures' event lines are the probes'.
+2. **The agent's pulse runs on the level's age, which the port's pause holds**; the original's
+   getLastFrameElapsedTime runs through a pause, as the antiportal's blink reads it. Only the paused frames' share
+   can tell.
+3. **`carranca_destroy` is drawn wherever the port takes a carranca**, which no level's play does; the original's
+   taker, explode()'s grab, is not built.
+4. **The dark dragon's explode is at its last DYING waypoint, (28, 334.4), below the view** - as decoded; most of the
+   burst is off screen, and it is not checked against footage.
+5. **`fire32` on a dead character burns where it died, where the original's sinks with the body** (the verification,
+   2-10 against F13: F13's flames' centroid descends from 567 to 668 px and leaves the screen by +0.92 s; the port's
+   stays near (540, 550) px for about 1.45 s). The cause is outside this step: `checkGameLost` hides the character and
+   calls Scale(0.05) on it (#47-58), so the original's shrunken body falls off the platform's edge and
+   `ETHCallback_fire32` follows it; the port hides the body at full size, on the platform (no Scale(0.05) anywhere in
+   `game/`). The onset, size and life match the decode.
+6. **The hand's reach test and its smoke read the swing a tick behind**: `tapHandsAway` reads where the last frame
+   drew the hand (`drawn.ownerPx`), where `ETHCallback_hand_tap` moves it first (`linearMotion` #1-14) and then tests
+   and places the smoke. At most one tick of a 4 u, 2.09 s swing: about 0.2 u.
+
+**RULINGS APPLIED.** The standing direction: the original decides - each picture at its decoded point, depth, angle,
+scale and order, the torch's turn measured on footage L1. K8 (the scatter's two draws on every update the arm runs,
+from the effects' stream; the placement stream untouched) and K13 (the effects' rows) inherited. The bucket-clock row
+inherited: the agent's pulse and the torch's turn run from the level's first tick, the original's only while its
+bucket is drawn. The PORT-WIDE row on the script clock stays the owner's: `overTimeEntityAdder` keeps a uint of whole
+milliseconds, the port adds the tick's 16.667 (the stride in 24 ticks, the original's 24 frames at 60 fps). R24 and
+R25 stay the owner's; nothing else is ruled.
+
+**LEFT FOR LATER.**
+- **The standing sweep baseline is now this step's** `UI/after/sweep/` (`564f657e`'s, 128 of 128 byte-identical to
+  the verification's on `2cc4a50e`, what `build/` holds), for every later step - once these exact sources are
+  committed; a commit that changes anything the executable is built from re-takes it.
+- **`checkGameLost`'s Scale(0.05) of the dead body** (deviation 5): after the death, so no win can change; the step
+  that builds it checks the lost screen's timing and re-measures 2-10's flames against F13 by time.
+- **The hand's swing advanced to the tick before its reach test** (deviation 6; the verifier's optional fix): a
+  behaviour change, so not this record's.
+- **`test_mp_play`'s floor** stays 171 (it runs 234; step 133's rider (6)): this step relinked the runner and did not
+  raise it, as that would have cost another relink and launch under Smart App Control after the suites had passed on
+  the final code. The next step that relinks the runner raises it.

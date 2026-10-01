@@ -977,9 +977,26 @@
       "THE FIRST FRAME. The original's ring is added inside its agent's callback, after the frame's render",
       "list was built, so it is first drawn one frame later, turned and jittered once; the port's is drawn",
       "from the level's first frame, under the level's opening black.",
-      "THE AGENT'S OWN PULSE, bounce(this, V2_ONE, vector2(0.95, 0.95), 300) at ETHCallback_shock_agent",
-      "#241-263, pulses the agent's sprite, not this ring: not decoded to its argument order, not built.",
+      "THE AGENT'S OWN PULSE is agent_pulse below (built in planning step 146).",
       "playShockStrikeSound, when a ring kills, stays sounds.json's name."
+    ],
+    "agent_pulse": {"from": [1.0, 1.0], "to": [0.95, 0.95], "stride_ms": 300.0},
+    "_agent_pulse": [
+      "THE AGENT'S OWN PULSE, its sprite's and not this ring's: ETHCallback_shock_agent (bytes 446781..448212)",
+      "#241-263 on every update, whatever #12's areaAdded guard skips, bounce(this, V2_ONE, vector2(0.95, 0.95),",
+      "300) - pushed last-first (00_order 8.0 rule 3): 300 the stride, then vector2(0.95) into v7 (scaleB), then",
+      "V2_ONE copied into v15 (scaleA), then the entity. bounce (utilEntityEffect.angelscript, bytes",
+      "327057..327527) #55-75: the stride count of blinkElapsedTime says which way the leg runs, #77-88",
+      "interpolate(scaleA, scaleB, smoothEnd(bias)) - interpolate (Interpolator.angelscript, bytes",
+      "314472..314616) is a + (b - a) x bias - and #90-102 SetScale(g_scale.scale(it)): so 1 -> 0.95 -> 1, 300 ms",
+      "a leg, from 1 (Art::Pulse, as the beholder's and the timer dial's; art.json timer's bounceLightEntity reads",
+      "the same order the other way round, its scaleA 1.006 pushed last). SetScale sets the scale outright and",
+      "touches no particle system (ETHEntity.cpp:601-608, the loop commented out): the picture pulses, the",
+      "agent's tesla_shock_black_bg.png sparks do not, and no shock agent carries a light. Its clock is",
+      "getLastFrameElapsedTime, which a pause does not stop and nothing caps: the level's age, as the",
+      "antiportal's blink runs on (a pause holds the port's, which only the paused frames' share can tell). 21",
+      "agents on 16 levels, both spellings; static 1, so the original runs it only while its bucket is drawn",
+      "and the port from the level's first tick (the bucket-clock row, as the ring's turn). Planning step 146."
     ],
     "entity": "shock_area.ent",
     "colour": [0.4, 0.5, 0.5],
@@ -990,6 +1007,39 @@
     "_spin_deg_per_s": "ETHCallback_shock_area #17-25, AddToAngle(unitsPerSecond(20)): degrees (GLES2Sprite.cpp:268-270), counter-clockwise on the screen, from angle 0; unitsPerSecond's step (bytes 8045..8162, its divisor 1000.0 exactly, D6_check section 4) is capped at motions.json's frame_cap_ms and is 0 under a pause, so the turn stands still there",
     "jitter": {"from": 0.993, "span": 0.014},
     "_jitter": "ETHCallback_shock_area #53-66: SetScale(base x (0.993 + randF(0.014))), randF(n) uniform on [0, n] inclusive, drawn every frame, paused or not. The port draws it from its effects' stream (m_effectRandom, 00_order K8): the placement stream is untouched. +-0.2 to +-0.74 u at the rings' radii of 28 to 105"
+  },
+
+  "carried_diamond": {
+    "alpha": 0.1,
+    "_source": [
+      "A CARRIED DIAMOND IS NEARLY INVISIBLE. ETHCallback_shock_diamond (bytes 444545..446781) #57-58 GetInt('ownerID')",
+      "at or above 0 jumps to #222, the carried arm, whose first act is #223-225 SetAlpha(0.1f); and",
+      "ETHCallback_fire_diamond (bytes 448931..450911) #234-237 the same for a fire diamond. Every update it is",
+      "carried; the free arm (#59-221) never sets an alpha, and nothing else of the listing writes one to a",
+      "diamond, so a diamond is drawn at 1 until it is first carried. The pick itself is the free arm's (#186-197",
+      "SetInt('ownerID', the character's id)), so the frame a diamond is taken draws it whole and the next at",
+      "0.1. SetAlpha is the sprite's alone: m_v4Color.w (ETHEntity.cpp:505-508), which the particle draw does",
+      "not read (ETHParticleManager.cpp:381-389), so the diamond's lightning (shock) or flame (fire) is drawn",
+      "at full strength while it is carried, as footage F14 shows the shock diamond's on the player's hand",
+      "(#94 on). No diamond carries a light or a halo. Planning step 146."
+    ]
+  },
+
+  "unlit_torch": {
+    "spin_deg_per_s": 190.0,
+    "_source": [
+      "THE UNLIT TORCH TURNS: ETHCallback_light_off (ETHCallback_light_off.angelscript, bytes 467198..467878)",
+      "#36-44, every update until its `delete` (#1-35), AddToAngle(g_timeManager.unitsPerSecond(190)): 190",
+      "degrees a second, counter-clockwise on the screen, of game time - capped at motions.json's frame_cap_ms",
+      "and 0 under a pause (STimeManager::unitsPerSecond, bytes 8045..8162). light_off.ent is type 2, ET_VERTICAL,",
+      "whose picture is drawn unturned (ETHRenderEntity.cpp:105); the angle reaches its particle systems",
+      "(ETHSpriteEntity.cpp:576, UpdateParticleSystem(..., GetAngle(), ...)), each of whose two starts at",
+      "<StartPoint> (12, 0, 4) - so the sparks circle the torch 12 units out. From the node's own angle (all",
+      "ten placements, 4-22 to 4-32 less 4-28, carry none: 0), and from 0 for the light_off.ent a put-out",
+      "signal adds back (effects.json light_off_at_signal, AddEntity's 0f). static 1, so the original turns it",
+      "only while its bucket is drawn and the port from the level's first tick (the bucket-clock row).",
+      "FOOTAGE L1 (4-22 before the lighting, #0-#58) and F16 (4-32's torch). Planning step 146."
+    ]
   },
 
   "fire_agent": {

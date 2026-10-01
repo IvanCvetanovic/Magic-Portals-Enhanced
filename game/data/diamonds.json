@@ -178,7 +178,8 @@
 
   "_not_built": [
     "Presentation, in a renderer-free port. A carried diamond is set to alpha 0.1 - nearly",
-    "invisible, which is the whole visual of holding one. An unowned one calls",
+    "invisible, which is the whole visual of holding one (drawn by the layer since planning step",
+    "146: art.json carried_diamond, for a fire diamond too). An unowned one calls",
     "bounce(0.9, 0.9, 500), which is NOT physics: bounce lives in",
     "ETHFramework/utilEntityEffect.angelscript and drives a blinkElapsedTime counter, so it",
     "is the idle pulse an unowned diamond turns with, the analogue of the key's idle bob.",
