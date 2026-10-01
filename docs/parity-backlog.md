@@ -1603,7 +1603,13 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   holds the button behind a pair laid in the lane, which turns each fireball back, the way the original's help popup
   W2P3 draws it. **79 of 128** won by a route `test_mp_routes` replays (79 files, 242 checks, 0 failures), chapter 1:
   20, chapter 2: 25, chapter 3: 15, chapter 4: 19. The 49 not won lose 2-06 and 4-14; three carry a recorded cause
-  (1-17; 2-21 and 2-24, B4). Open until all 128.)*
+  (1-17; 2-21 and 2-24, B4). **Step 136 (HZ: a death area kills on its whole shape, and the platform gate) adds
+  1-06** (`level5` 457, won by play: a pair onto `block00_ent_761`, down under `wall04_ent_762`, a pair onto
+  `moving_platform_764`, and from it a shot through the slot `death_area_ent_800` fills to the door's block, then a
+  portal on the player). **80 of 128** won by a route `test_mp_routes` replays (80 files, 245 checks, 0 failures),
+  chapter 1: 21, chapter 2: 25, chapter 3: 15, chapter 4: 19. The other 79 win on their step-135 ticks; the platform
+  gate held entries on one of them (1-28: 9 ticks, its small crate riding `lift_ent_694` through a portal, won on the
+  same tick). The 48 not won lose 1-06; three carry a recorded cause (1-17; 2-21 and 2-24, B4). Open until all 128.)*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1619,7 +1625,10 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   its routes. Step 134 (G8): 108 / 20 / 0, 0 differ; the flood lights a level's barrels by any fire on it and models
   no portal shot at all (no sight line, no flame), so a burned shot cannot move a verdict; its routes are its evidence.
   Step 135 (G6): 108 / 20 / 0, 0 differ; the flood models no portal and no fireball's flight, so a fireball sent
-  through a pair cannot move a verdict either; its routes are its evidence.)*
+  through a pair cannot move a verdict either; its routes are its evidence. Step 136 (HZ): 108 / 20 / 0, 0 differ;
+  the flood frees every sensor, death areas included, and models no portal, so neither of that step's changes can move
+  a verdict (with the two death areas made rock, in an experiment outside the tool, 1-06 and 2-26 still read
+  reachable: a point passes the 6 u over 1-06's octagon); its routes are its evidence.)*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1776,6 +1785,8 @@ stays; 2-06 and 4-14 are won and 2-03 re-authored.*
       60 u/s (`ETHCallback_lift` L83504, `sendLiftToOtherPoint`) and fires no portal. 14 lifts on 13 levels. *Routes
       that ride the self-running lifts, which its step re-authors*: 2-02, 2-07, 2-09 (step 114; the Tests row), 1-27,
       1-28, 1-29, 2-18, 2-25 (step 127) and 3-31 (the merge's re-route rides `lift_ent_2438`; step 128, deviation 2).
+      *Step 136's platform gate reads the port's lift*: on 1-28 it holds `crate_small_ent_708`, riding
+      `lift_ent_694` down through the portal at (88, 175), for 9 ticks (868-876), so G2's step re-times that too.
 - [ ] **G3. Moving platforms swing half as far at twice the rate** (R7: `linearMotion` cos(angle) x stride from
       +stride; the port sin(2 x speed x t) x stride / 2). 15 platforms on 11 levels, 3 patrolling agents. *Routes that
       lean on it (wave 1)*: 1-11 (step 126: the kill of `anti_portal_agent_599` works at any point of the port's half
@@ -1964,7 +1975,11 @@ stays; 2-06 and 4-14 are won and 2-03 re-authored.*
       helpers (1-21's camera hint, the tap-away hands); the beholder's death explosion; `fire32`,
       `antiportal_explosion` (*built in step 126*), `carranca_destroy`, `small_explosion_no_light`; the closing lift door
       crushes nothing (*built in step 133*: it kills the player it closes on, the one character); `death_area`
-      kills only the player in a 16 px box; no teleport while a platform sits in a portal;
+      kills only the player in a 16 px box (*built in step 136*: it kills on its whole polygon, level5's 60 x 16 and
+      level25a's 52 x 16, and the player is the only character, `isCharacter`); no teleport while a platform sits in
+      a portal (*built in step 136*: `hasMovingPlatformInAnyPortal`, nothing through a placed pair while a
+      `moving_platform`, `lift` or `lift.ent` reaches within 5.6 u of any placed portal by its box with the corners
+      cut; the entry waits and goes when it has gone; static pairs never ask; 29 bodies on 24 levels);
       stale notes (`end_delay` - *corrected in step 123*, `Camera.hpp:6-10`, `entity_roles.json`'s cosmetic `arrows`
       (its `red_key_state` a role of its own since step 118, and its `rocket_launch` / `_landing` note rewritten in step
       123); `Turrets.hpp:17-22`'s and `diamonds.json`'s `_fireball_note` were corrected in step 114). And, from step
@@ -1972,7 +1987,12 @@ stays; 2-06 and 4-14 are won and 2-03 re-authored.*
       the next step that edits `main.cpp` finishes it; and a capture without `--saves` now reads the owner's
       `%APPDATA%\Magic Portals\audio.json` (step 124, deviation 2), so a capture that presses `sound` or `music` must
       pass `--saves` - the hermetic sweep pattern is `out/parity/program/merge_w1/capture_merge_w1.sh` (every run given
-      `--saves`, a scratch copy of `scores.json`), not `visuals/merge_c/capture_merge_c.sh`, which passes none.
+      `--saves`, a scratch copy of `scores.json`), not `visuals/merge_c/capture_merge_c.sh`, which passes none. And,
+      from step 136 (its verifier's finding): `game/MagicPortalsLayer.cpp:5707-5708` still calls the hazards' box "the
+      box that kills: the Godot project's trigger, not the shape the converter gives them"; since step 136 a death
+      area kills on its polygon and its box is the polygon's bounds (drawn only in the debug box view). The next step
+      that edits the layer (which relinks `MagicPortals.exe` and `test_mp.exe`) rewords it: "Hazards at their box: a
+      destroyier's 16 px trigger, a death area's polygon bounds (it kills on the polygon itself, Hazards.hpp)".
 
 **Tests.** Step 113 built both: the audit's flood is `tools/parity/reachability.py` (the port's own rules read from
 `data/` and `game/data/`, verdicts pinned, ctest `parity_reachability`), and `test_mp_routes` replays every route in
@@ -2332,9 +2352,9 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       nothing): a traveller entering the exit within about 10 ticks of a fireball coming out of it differs; the
       shortest carranca stride is 90 ticks and no route has one. (2) One object per portal per frame
       (`getObjectInPortal`) and the second portal's first (`doTeleporting` #37-98) are not modelled: a fireball and
-      another traveller in a pair's two ends on one tick differ; no route has one. (3) `hasMovingPlatformInAnyPortal`
-      (no transit while a lift or moving platform is within 5.6 u of any placed portal) is not built, for any
-      traveller; 2-06's route checked by hand against `lift_ent_832`'s polygon (26.0 u on 545, 68.7 u on 383). (4) The static portals' callback and the one-placement
+      another traveller in a pair's two ends on one tick differ; no route has one. (3) *Closed by step 136*:
+      `hasMovingPlatformInAnyPortal` is built for every traveller, a fireball included, and 2-06's route replays with
+      nothing held. (4) The static portals' callback and the one-placement
       path carry a fireball with no once test and no turn, and are not built for it: no level places a fireball
       source with a static portal. (5) A fireball is carried after its tick's contact test, so it meets bodies from
       its next tick, 2.17 u along, as Box2D sees the original's `SetPositionXY` on its next step.
@@ -2342,6 +2362,18 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       rides `lift_ent_832` on its own clock (G2) and puts a portal on the player; 4-14 (354) drifts on the port's
       zero-gravity recoil (70 u/s a tap, added); 2-03 (911) is timed on the port's 130 u/s fireball (the |dir| row).
       No clip shows a fireball go through a pair; the decode and the help popup W2P3 are the evidence.
+- [ ] **Step 136's recorded deviations** (HZ, the death area and the platform gate). (1) The gate reads the port's
+      platforms and lifts: G3's half swing and G2's self-running lifts, not the original's; each of those steps
+      re-verifies the gate's routes (1-28 is held today). (2) The death area meets the port's player capsule, 20 x 44
+      (player.json, a guess; R25), not the original's character body, and Box2D's polygon skin (`b2_polygonRadius`)
+      is not added: a first overlap kills, not a touch. (3) A held entry is the port's per-traveller
+      entry offered again each tick; the original's `isThereAnythingInPortal` takes one object per portal per frame
+      (step 135, deviation 2), which differs only with two travellers at one portal on one tick. (4) The reachability
+      flood cannot see either change (the row above). (5) A gate body turned or scaled is refused by `Portals::Find`
+      (the grabber's corner planes do not turn); none of the 29 is.
+- [ ] **1-06's route leans on the port** (step 136): the platform's swing (G3, R7), the shot's speed (G4) and the walk
+      (G10). The one clip of 1-06 (F13) shows only its fall death off the spawn block, which the port's walk off it
+      matches (tick 82); none shows the way through.
 
 - [ ] **Wave 1's routes lean on the port where the original is not shown** (step 127, deviation 8; step 125, deviation
       3), each for the step that builds the row to re-verify: body-overlap traversal, where the original tests a point

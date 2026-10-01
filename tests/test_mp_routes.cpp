@@ -102,6 +102,7 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
 struct Outcome {
     int wonTick = 0;
     int shots = 0;
+    int held = 0;
     std::vector<std::string> problems;
 };
 
@@ -133,6 +134,7 @@ Outcome Play(const Route::Plan& plan, const Options& options) {
     Outcome out;
     out.wonTick = driver.WonTick();
     out.shots = driver.Shots();
+    out.held = driver.Held();
     out.problems = driver.Problems();
     layer.OnDetach(registry);
     return out;
@@ -192,11 +194,13 @@ void RunRoutes(const Options& options) {
                   file.filename().string() + " is named for its level, " + plan.level);
         const std::string label = Label(chapters, plan.level);
         const Outcome outcome = Play(plan, options);
+        // With the entries the platform gate held on the way, where it held any (step 136).
+        const std::string held = outcome.held > 0 ? ", held " + std::to_string(outcome.held) : std::string();
         if (outcome.wonTick > 0) {
-            std::printf("  %s %s: won on tick %d (win_by %d), %d shot(s)\n", label.c_str(), plan.level.c_str(),
-                        outcome.wonTick, plan.winBy, outcome.shots);
+            std::printf("  %s %s: won on tick %d (win_by %d), %d shot(s)%s\n", label.c_str(), plan.level.c_str(),
+                        outcome.wonTick, plan.winBy, outcome.shots, held.c_str());
         } else {
-            std::printf("  %s %s: NOT WON\n", label.c_str(), plan.level.c_str());
+            std::printf("  %s %s: NOT WON%s\n", label.c_str(), plan.level.c_str(), held.c_str());
         }
         std::string problems;
         for (const std::string& problem : outcome.problems) problems += (problems.empty() ? "" : "; ") + problem;

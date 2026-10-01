@@ -27,6 +27,9 @@
 // - Entries are per portal and per body, like an Area2D's body_entered. So a
 //   portal placed over a crate sees the crate come in on the next tick, and a
 //   traveller put down inside its exit does not go back until it has left.
+// - Nothing goes through a placed pair while a moving platform or a lift is at
+//   any placed portal (Rules::gate, planning step 136): the entry is held, and
+//   offered again every tick until the platform has gone or the traveller has.
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Motion.hpp"
@@ -136,12 +139,25 @@ struct Rules {
         std::vector<glm::dvec2> seekNeighbours;
     };
     AgentRules agent;
+
+    // WHAT HOLDS A PLACED PAIR SHUT (transit.json `platform_gate`, decoded; planning
+    // step 136): teleportToOther #36-42 teleports nothing while
+    // hasMovingPlatformInAnyPortal - an entity isMovingPlatform names within
+    // radiusShare x entryRadiusPx of any placed portal, by EntityGrabber's box test.
+    struct GateRules {
+        std::vector<std::string> entities; // isMovingPlatform's names, exactly as it compares them
+        double radiusShare = 0.0;          // of portalCollisionRadius: 0.4, so 5.6 units
+    };
+    GateRules gate;
 };
 
 // Enhanced's portals.json: its placement, consumption and transit objects.
 // Its collision_radius_px is read and checked so a malformed file is still
 // refused, but nothing plays by it - LoadPlacement replaces it.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
+
+// transit.json's `platform_gate`, read strictly: at least one name, a share above 0.
+bool LoadGate(const std::string& path, Rules& out, std::string& error);
 
 // The port's own placement.json, over the top: the two decoded radii, and the
 // antiportal manager's entity and Scale. All must be there, the numbers above
@@ -228,6 +244,15 @@ struct Burn {
     std::string flame;
     glm::dvec2 atPx{0.0};    // where it first came within reach: projectilePos
     glm::dvec2 heading{0.0}; // its leg's direction, unit length: the shot's 'direction'
+};
+
+// A body the platform gate looks for: a moving platform or a lift a level places,
+// as EntityGrabber sees it - its collision box, centred on the entity's own point
+// (GetPositionXY, which is the port's transform), unturned and unscaled.
+struct GateBody {
+    std::string name;
+    entt::entity entity = entt::null;
+    glm::dvec2 halfPx{0.0}; // half its collision box: 32 x 16 for a moving platform, 31 x 16 for a lift
 };
 
 struct Placed {
@@ -419,9 +444,13 @@ struct State {
     std::vector<Blocker> blockers;
     std::vector<Reflector> reflectors;
     std::vector<entt::entity> travellers; // the player, and every teleportable body
+    std::vector<GateBody> gateBodies;     // the moving platforms and lifts (Rules::gate), set by Find
     std::vector<Static> statics;          // in the level's order
     std::vector<Placed> placed;           // oldest first
     int portalsUsed = 0;                  // every portal placed: what the golden score counts
+    // Every entry the platform gate held: one per traveller (a fireball included)
+    // per tick it was held. For the traces and the suites; nothing plays by it.
+    int transitsHeld = 0;
     // AND WHAT NAMES ONE, which is a different thing and has to be. The original
     // keeps an array of ETHEntity HANDLES, and a handle is never handed out
     // twice; the count above is the score's, and killAll(true) gives it back for
@@ -533,6 +562,17 @@ struct State {
     // suites use it to put portals where a test needs them. False when refused.
     bool TryPlace(const glm::dvec2& atPx);
 
+    // hasMovingPlatformInAnyPortal (bytes 147042..147305): whether any gate body
+    // reaches within rules.gate.radiusShare x rules.entryRadiusPx of any placed
+    // portal's point, where it stands this tick. Only a transit from a placed end to
+    // a placed end asks (teleportToOther #36-42): a static portal's never does.
+    bool PlatformInAnyPortal(entt::registry& registry) const;
+    // EntityGrabber's test for a box (#126-194): Shape(centre, 2 x half, angle 0,
+    // edgePlanes).overlapSphere(point, radius) - the point less than `radius` past
+    // each side, and past each corner's 45-degree plane (a + b < radius x sqrt 2).
+    static bool GrabsBox(const glm::dvec2& centrePx, const glm::dvec2& halfPx, const glm::dvec2& atPx,
+                         double radiusPx);
+
     // A FIREBALL THROUGH A PLACED PAIR (planning step 135, the backlog's G6):
     // PortalManager::doTeleporting's placed-pair arm (bytes 139692..140259) for a
     // traveller the port keeps as a point, fireball.ent. The first placed portal,
@@ -549,7 +589,11 @@ struct State {
     // (transits, traversals: vanishEffect, appearEffect and playTeleportSound), and
     // no lockout starts: that is the port's stand-in for the exit's `active` flag,
     // which a fireball's exit does not need (the step's deviations).
-    std::optional<glm::dvec2> CarryFireball(const glm::dvec2& atPx, double grabPx);
+    //
+    // AND NOTHING GOES WHILE A PLATFORM IS AT A PORTAL (step 136): one in reach of a
+    // pair while PlatformInAnyPortal is held there, counted in transitsHeld, and
+    // offered again on the next tick like every other traveller.
+    std::optional<glm::dvec2> CarryFireball(entt::registry& registry, const glm::dvec2& atPx, double grabPx);
 
     // PortalManager::killAll (bytes 147664..148016): every placed portal goes at
     // once. With `refund`, each that never carried anything is given back to the
@@ -565,7 +609,7 @@ struct State {
     // or agent swings on, a shot flies on - and dies with the first live agent it
     // comes within reach of while still in flight, or is burned by the first
     // flame (`burns`) - and a traveller newly inside a portal goes out of its
-    // partner.
+    // partner, unless the platform gate holds a placed pair.
     void Tick(entt::registry& registry, float dt);
 
     // A placed portal's entry circle, put back over its point: the hover moves

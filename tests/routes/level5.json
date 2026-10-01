@@ -1,0 +1,30 @@
+{
+  "_about": [
+    "1-06 (planning step 136): the door's side is walled off by wall04_ent_766 and wall04_ent_765 but",
+    "for the 24 px slot between them, which death_area_ent_800 fills: its whole 60 x 16 octagon kills",
+    "now, where the port's 16 px box did. A portal shot is no body to it, so the way is shot through",
+    "the slot. From the spawn a pair onto block00_ent_761 (160, 126) and the player (30, 60); right",
+    "off its end, down wall04_ent_762's face onto double_block_plat_ent_789 and under the wall to x",
+    "333.5 (80-166). A portal at (416, 90) over moving_platform_764 while it swings low (290), one on",
+    "the player (316): down onto the platform. Riding it up, at a centre of y 101 a shot through the",
+    "slot to (640, 108) over the door's block (412, 13 u clear of the wall above and 9 of the one",
+    "below); walking right off the platform, one on the player (437): out at (640, 110) at 140 u/s,",
+    "onto the block and into the door. Won on tick 457, 6 shots. The platform gate holds nothing:",
+    "the player's portal is 22 u over the platform's box, where the gate's reach is 5.6. Leans on the",
+    "port's swing of the platform (G3, R7 not built), G4 (shot speed) and G10 (the walk)."
+  ],
+  "level": "level5",
+  "win_by": 520,
+  "holds": [
+    {"walk": "right", "from": 80, "to": 166},
+    {"walk": "right", "from": 432, "to": 520}
+  ],
+  "taps": [
+    {"tick": 30, "at": [160, 126]},
+    {"tick": 60, "at": [34, 74.3]},
+    {"tick": 290, "at": [416, 90]},
+    {"tick": 316, "at": [333.5, 202.3]},
+    {"tick": 412, "at": [640, 108]},
+    {"tick": 437, "at": [422, 84.6]}
+  ]
+}

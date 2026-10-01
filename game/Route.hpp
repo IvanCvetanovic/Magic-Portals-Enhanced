@@ -94,6 +94,10 @@ public:
     int WonTick() const { return m_wonTick; }
     // Shots the route's taps fired, as the level counted them.
     int Shots() const { return m_shots; }
+    // Entries the platform gate held on the way (Portals::State::transitsHeld), as
+    // the last tick left the count: a route that wins with some held was re-timed by
+    // the gate, one with none never met it.
+    int Held() const { return m_held; }
     const std::vector<std::string>& Problems() const { return m_problems; }
     // Won, failed, or past win_by: nothing more to drive.
     bool Finished() const { return m_wonTick > 0 || !m_problems.empty() || m_ticks >= m_plan.winBy; }
@@ -115,6 +119,7 @@ private:
     int m_deaths = 0;
     int m_wonTick = 0;
     int m_shots = 0;
+    int m_held = 0;
     Record m_before; // the level's shot record as the last tick left it
     std::vector<std::string> m_problems;
 };

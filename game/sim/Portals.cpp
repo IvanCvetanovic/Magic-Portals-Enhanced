@@ -273,6 +273,69 @@ bool LoadPlacement(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
+bool LoadGate(const std::string& path, Rules& out, std::string& error) {
+    namespace Json = Supersonic::Json;
+
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        error = path + ": cannot open";
+        return false;
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    // Named, not a temporary: Json::Parser holds its text by reference.
+    const std::string text = buffer.str();
+
+    Json::Parser parser(text);
+    Json::Value root;
+    if (!parser.Parse(root)) {
+        error = path + ": " + parser.Error();
+        return false;
+    }
+    const Json::Value& gate = root["platform_gate"];
+    if (!gate.IsObject() || !gate["entities"].IsArray() || !gate["radius_share"].IsNumber()) {
+        error = path + ": platform_gate holds an entities list and a radius_share";
+        return false;
+    }
+    Rules::GateRules read;
+    for (const Json::Value& name : gate["entities"].AsArray()) {
+        if (!name.IsString() || name.AsString().empty()) {
+            error = path + ": platform_gate.entities holds a value that is not a name";
+            return false;
+        }
+        read.entities.push_back(name.AsString());
+    }
+    read.radiusShare = gate["radius_share"].AsNumber(0.0);
+    if (read.entities.empty() || !(read.radiusShare > 0.0)) {
+        error = path + ": platform_gate names at least one entity, and its radius_share is above zero";
+        return false;
+    }
+    out.gate = read;
+    return true;
+}
+
+bool State::GrabsBox(const glm::dvec2& centrePx, const glm::dvec2& halfPx, const glm::dvec2& atPx,
+                     double radiusPx) {
+    // How far the point lies past each side: overlapSphere refuses once one plane's
+    // inward distance is at or below -radius, so each must stay short of it - the
+    // four sides, and the corner plane through the nearest corner at 45 degrees.
+    const glm::dvec2 past = glm::abs(atPx - centrePx) - halfPx;
+    return past.x < radiusPx && past.y < radiusPx && past.x + past.y < radiusPx * std::sqrt(2.0);
+}
+
+bool State::PlatformInAnyPortal(entt::registry& registry) const {
+    const double radius = rules.gate.radiusShare * rules.entryRadiusPx;
+    for (const Placed& portal : placed) {
+        for (const GateBody& body : gateBodies) {
+            if (!registry.valid(body.entity)) continue;
+            const auto* transform = registry.try_get<TransformComponent>(body.entity);
+            if (transform == nullptr) continue;
+            if (GrabsBox(Units::ToPixels(transform->position), body.halfPx, portal.atPx, radius)) return true;
+        }
+    }
+    return false;
+}
+
 bool State::Holds(const NoPortalZone& zone, const glm::dvec2& atPx) const {
     // A deleted one holds nothing (isPointInAntiPortalField #1-10, IsAlive).
     if (zone.gone) return false;
@@ -777,10 +840,9 @@ void State::Tick(entt::registry& registry, float dt) {
     };
 
     for (const Entry& entry : entries) {
-        // portal_system.gd:183-191: nothing goes through while the lockout runs,
-        // an end a traversal before it spent leads nowhere, and neither does a
-        // portal with no partner.
-        if (lockoutS > 0.0f) continue;
+        // portal_system.gd:183-191: an end a traversal before it spent leads
+        // nowhere, and neither does a portal with no partner; and nothing goes
+        // through while the lockout runs (below, after the platform gate).
         std::optional<End> exit;
         if (entry.end.isStatic) {
             const Static& from = statics[static_cast<std::size_t>(entry.end.key)];
@@ -824,6 +886,24 @@ void State::Tick(entt::registry& registry, float dt) {
             }
         }
         if (!exit) continue;
+
+        // THE PLATFORM GATE (planning step 136): teleportToOther, the placed pair's
+        // one path, teleports nothing while a moving platform or a lift is at any
+        // placed portal (#36-42), before it asks whether the end is active (#43-50),
+        // which the lockout stands in for. The original asks again every frame the
+        // traveller is still in its portal, so a held entry is taken back out of the
+        // portal's `inside` and offered again on the next tick. A static end's
+        // paths never ask (ETHCallback_portal_static, teleportToFirstStaticPortal).
+        if (!entry.end.isStatic && !exit->isStatic && PlatformInAnyPortal(registry)) {
+            for (Placed& portal : placed) {
+                if (portal.id != entry.end.key) continue;
+                portal.inside.erase(std::remove(portal.inside.begin(), portal.inside.end(), entry.body),
+                                    portal.inside.end());
+            }
+            ++transitsHeld;
+            continue;
+        }
+        if (lockoutS > 0.0f) continue;
 
         const glm::dvec2 exitPx =
             exit->isStatic ? statics[static_cast<std::size_t>(exit->key)].atPx : placedWithId(exit->key)->atPx;
@@ -876,7 +956,7 @@ int State::KillAll(bool refund) {
     return killed;
 }
 
-std::optional<glm::dvec2> State::CarryFireball(const glm::dvec2& atPx, double grabPx) {
+std::optional<glm::dvec2> State::CarryFireball(entt::registry& registry, const glm::dvec2& atPx, double grabPx) {
     // getOther: with fewer than two placed there is no partner, and teleportToOther
     // does nothing (#15-24).
     if (placed.size() < 2) return std::nullopt;
@@ -886,6 +966,13 @@ std::optional<glm::dvec2> State::CarryFireball(const glm::dvec2& atPx, double gr
     for (std::size_t i = 0; i < placed.size(); ++i) {
         const glm::dvec2 gap = atPx - placed[i].atPx;
         if (gap.x * gap.x + gap.y * gap.y >= reach * reach) continue;
+        // teleportToOther's platform gate (#36-42), after mayTeleport - which the
+        // caller has asked - and before anything moves: held, and asked again on
+        // the next tick while the fireball is still in reach.
+        if (PlatformInAnyPortal(registry)) {
+            ++transitsHeld;
+            return std::nullopt;
+        }
         // The pair is the first two placed, which is every pair a budget of two
         // holds: getOther returns the first portal that is not this one.
         const std::size_t other = i == 0 ? 1 : 0;
@@ -924,6 +1011,29 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
             }
         }
         if (!rules.noPortalSignEntity.empty() && entityName == rules.noPortalSignEntity) out.noPortalSign = true;
+        // What the platform gate looks for, by the name isMovingPlatform compares
+        // (Rules::gate): its collision box about its own point. EntityGrabber turns
+        // the box's sides with the entity but not its corner planes, and takes the
+        // box unscaled, so a turned or scaled one is refused rather than guessed at;
+        // none of the game's 29 is either. Not built when the statics are left out.
+        if (std::find(rules.gate.entities.begin(), rules.gate.entities.end(), entityName) !=
+            rules.gate.entities.end()) {
+            double angle = 0.0;
+            const Tscn::Value* rotation = node.Find("rotation");
+            if ((rotation != nullptr && rotation->AsNumber(angle) && angle != 0.0) || node.Find("scale") != nullptr) {
+                error = node.name + ": a moving platform or lift that is turned or scaled, which the gate does not model";
+                return false;
+            }
+            glm::dvec2 offsetPx(0.0);
+            glm::dvec2 sizePx(0.0);
+            if (!LevelBuilder::ShapeBoundsPx(scene, node, offsetPx, sizePx)) {
+                error = node.name + ": a moving platform or lift with no collision shape";
+                return false;
+            }
+            if (const auto found = built.entities.find(node.name); found != built.entities.end()) {
+                out.gateBodies.push_back(GateBody{node.name, found->second, sizePx * 0.5});
+            }
+        }
         const std::string role = Roles::RoleOf(roles, node);
         if (role == Roles::kStaticPortal) {
             // portal_system.gd:79-87. An inactive one is not a portal, and one with

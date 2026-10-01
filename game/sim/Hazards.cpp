@@ -2,6 +2,7 @@
 
 #include "core/Components.hpp"
 #include "core/Json.hpp"
+#include "sim/Impacts.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
@@ -13,6 +14,41 @@ namespace MagicPortals::Hazards {
 namespace {
 
 namespace Json = Supersonic::Json;
+
+// Whether the player's collider meets a death area's polygon: the sensor's begin-contact,
+// the two shapes overlapping and not only touching.
+bool MeetsOutline(entt::registry& registry, entt::entity player, const std::vector<glm::dvec2>& outlinePx) {
+    Impacts::Shape body;
+    if (!Impacts::ShapeOf(registry, player, body)) return false;
+    Impacts::Shape area;
+    area.core = outlinePx;
+    return Impacts::Between(body, area).px < 0.0;
+}
+
+// A death area's own polygon, where the level puts it: the node's position plus its
+// CollisionPolygon2D's points and offset. False, with `error`, when it has none.
+bool OutlineOf(const Tscn::Scene& scene, const Tscn::Node& node, std::vector<glm::dvec2>& out, std::string& error) {
+    const Tscn::Node* body = scene.Child(node, "Body");
+    const Tscn::Node* shape = body != nullptr ? scene.Child(*body, "Shape") : nullptr;
+    const Tscn::Value* polygon = shape != nullptr && shape->type == "CollisionPolygon2D" ? shape->Find("polygon")
+                                                                                          : nullptr;
+    const Tscn::Value* position = node.Find("position");
+    if (polygon == nullptr || polygon->numbers.size() < 6 || polygon->numbers.size() % 2 != 0 ||
+        position == nullptr || position->kind != Tscn::Value::Kind::Vector2) {
+        error = node.name + ": a death area kills on its own polygon, and it has none (or no position)";
+        return false;
+    }
+    glm::dvec2 at(position->numbers[0], position->numbers[1]);
+    if (const Tscn::Value* offset = shape->Find("position");
+        offset != nullptr && offset->kind == Tscn::Value::Kind::Vector2) {
+        at += glm::dvec2(offset->numbers[0], offset->numbers[1]);
+    }
+    out.clear();
+    for (std::size_t i = 0; i + 1 < polygon->numbers.size(); i += 2) {
+        out.push_back(at + glm::dvec2(polygon->numbers[i], polygon->numbers[i + 1]));
+    }
+    return true;
+}
 
 } // namespace
 
@@ -48,6 +84,20 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         read.notHazardNames.push_back(name.AsString());
     }
 
+    // The hazards that kill on their own shape: the death area's two spellings.
+    const Json::Value& deathArea = root["death_area"];
+    if (!deathArea.IsObject() || !deathArea["entities"].IsArray() || deathArea["entities"].AsArray().empty()) {
+        error = path + ": no \"death_area.entities\" list";
+        return false;
+    }
+    for (const Json::Value& name : deathArea["entities"].AsArray()) {
+        if (!name.IsString() || name.AsString().empty()) {
+            error = path + ": death_area.entities holds a value that is not a name";
+            return false;
+        }
+        read.wholeShapeNames.push_back(name.AsString());
+    }
+
     // How far past the level a player may go before it has fallen out of it.
     const Json::Value& bounds = root["bounds"];
     if (!bounds.IsObject()) {
@@ -77,7 +127,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 void State::Tick(entt::registry& registry, entt::entity player) {
     if (player == entt::null || !registry.valid(player)) return;
     for (Hazard& hazard : hazards) {
-        const bool inside = Trigger::Overlaps(registry, player, hazard.box);
+        const bool inside = hazard.outlinePx.empty() ? Trigger::Overlaps(registry, player, hazard.box)
+                                                     : MeetsOutline(registry, player, hazard.outlinePx);
         if (inside && !hazard.playerInside && !playerDied) {
             playerDied = true;
             killedBy = hazard.name;
@@ -145,6 +196,21 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
         Hazard hazard;
         hazard.name = node.name;
         if (!Trigger::FromNode(node, hazard.box, error)) return false;
+        // A death area kills on its whole polygon (hazards.json `death_area`): FromNode
+        // above has refused a turned one, and the box becomes the polygon's bounds.
+        if (std::find(rules.wholeShapeNames.begin(), rules.wholeShapeNames.end(), entityName) !=
+            rules.wholeShapeNames.end()) {
+            if (!OutlineOf(scene, node, hazard.outlinePx, error)) return false;
+            glm::dvec2 lo = hazard.outlinePx.front();
+            glm::dvec2 hi = lo;
+            for (const glm::dvec2& point : hazard.outlinePx) {
+                lo = glm::min(lo, point);
+                hi = glm::max(hi, point);
+            }
+            const glm::vec3 centre = Units::ToWorld((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5);
+            hazard.box.centre = glm::vec2(centre.x, centre.y);
+            hazard.box.half = glm::vec2(Units::ToMetres((hi.x - lo.x) * 0.5), Units::ToMetres((hi.y - lo.y) * 0.5));
+        }
         out.hazards.push_back(hazard);
     }
     return true;

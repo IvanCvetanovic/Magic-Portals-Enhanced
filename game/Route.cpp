@@ -298,6 +298,7 @@ void Driver::AfterTick(MagicPortalsLayer& layer) {
         if (tap.tick == m_ticks) check(layer, tap);
     }
     const Game::Level* level = layer.SimLevel();
+    if (level != nullptr) m_held = level->portals.transitsHeld;
     if (level != nullptr && level->goals.completed) {
         m_wonTick = m_ticks;
         SUPERSONIC_LOG_INFO("Magic Portals") << "route " << m_plan.level << ": won on tick " << m_wonTick
@@ -337,6 +338,8 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
     if (level->portals.shotsBurned > 0) std::printf(" burned %d", level->portals.shotsBurned);
     if (level->portals.flight) std::printf(" FLYING");
     for (const auto& placed : level->portals.placed) std::printf(" [%.1f, %.1f]", placed.atPx.x, placed.atPx.y);
+    // Entries the platform gate has held so far (step 136), when it has held any.
+    if (level->portals.transitsHeld > 0) std::printf(" held %d", level->portals.transitsHeld);
     if (!level->portals.lastFailure.empty()) std::printf(" last fail: %s", level->portals.lastFailure.c_str());
     if (level->goals.completed) std::printf(" DOOR");
     // What else moves: every other traveller by its node's name, what the buttons

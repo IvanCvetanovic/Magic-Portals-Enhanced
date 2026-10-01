@@ -92,6 +92,9 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     // And over its guessed collision_radius_px, the two decoded radii: a
     // portal's own, and the quite separate one an antiportal refuses a tap in.
     if (!Portals::LoadPlacement(portDataDirectory + "/placement.json", read.portals, error)) return false;
+    // And what holds a placed pair shut: a moving platform or a lift at a portal
+    // (teleportToOther's platform gate, planning step 136), beside the transit it gates.
+    if (!Portals::LoadGate(portDataDirectory + "/transit.json", read.portals, error)) return false;
     // linearMotion's shared arithmetic - the frame its step is capped at and the
     // turn it wraps at - which a placed portal's own hover is taken over
     // (ETHCallback_portal #1-10). One reading of motions.json rather than a second
@@ -873,7 +876,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     for (Turrets::Fireball& ball : level.turrets.fireballs) {
         if (ball.teleportedOnce) continue;
         const std::optional<glm::dvec2> exitPx =
-            level.portals.CarryFireball(ball.atPx, level.turrets.rules.portalGrabPx);
+            level.portals.CarryFireball(registry, ball.atPx, level.turrets.rules.portalGrabPx);
         if (!exitPx) continue;
         ball.atPx = *exitPx;
         ball.velocityPx = -ball.velocityPx;

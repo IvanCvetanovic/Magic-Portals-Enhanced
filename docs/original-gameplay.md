@@ -173,6 +173,13 @@ first portal and subsequent portals are rate-limited differently.
 `computePortalFinalPos`, `g_portalCollisionRadius`. Also
 `addClearPortalsButton` / `removeClearPortalsButton` — the player can clear placed portals.
 
+**DECODED** (`hasMovingPlatformInAnyPortal`, planning step 136). **Nothing goes through a
+placed pair while a moving platform or a lift is at any placed portal.** `teleportToOther` asks
+it before it moves anything, and it is true while an entity named `moving_platform`, `lift` or
+`lift.ent` reaches within 0.4 x the portal's 14 u (5.6 u) of a placed portal's point, by the
+entity's collision box about its own point with its corners cut at 45 degrees. The traveller
+waits in its portal and goes as soon as the platform has moved on. Static portals never ask.
+
 **IDENTIFIER.** Audio hooks: `playPortalCreatedSound`, `playPortalLaunchSound`,
 `playPortalKilledSound`, `playPortalFailedSound`. A "failed" sound implies placement can be
 rejected — consistent with the antiportal fields.
@@ -198,6 +205,10 @@ pairing them with `button` entities. Not implemented in Enhanced yet.
 
 **IDENTIFIER.** `death_area.ent` kills on contact (`ETHBeginContactCallback_death_area`,
 `sensor=1`). Only one placement in chapter 1; far more in later worlds.
+**DECODED** (planning step 136): the callback sets `hp` 0 on a character whose body meets any part
+of the sensor's own polygon (level5's 60 x 16 octagon, level25a's 52 x 16), and the only
+character is the player (`isCharacter`, set by `GameCharacter`, built only for the main
+character). The levels place two, on 1-06 and 2-26 - not "far more".
 
 **MEASURED (§7.3).** Progression is a linear high-water mark — two persisted integers
 `lastWorldAllowed`/`lastLevelAllowed`. Not star-gated; a skip-level button exists and

@@ -26,5 +26,48 @@
       "inside its exit does not go back until it has left, and this lockout covers the tick",
       "it is put down in."
     ]
+  },
+
+  "platform_gate": {
+    "_source": [
+      "NOTHING GOES THROUGH A PLACED PAIR WHILE A MOVING PLATFORM OR A LIFT IS AT ANY PLACED",
+      "PORTAL. Decoded (planning step 136; listing out/parity/asbc/all_functions.txt, md5 48fe65ce).",
+      "PortalManager::teleportToOther (bytes 144944..145873) #36-42 calls",
+      "hasMovingPlatformInAnyPortal and returns, teleporting nothing, when it is true: after",
+      "mayTeleport (#25-35) and before isActive (#43-50). It is the ONE caller (a byte search), so",
+      "only the placed pair is gated: doTeleporting reaches teleportToOther when maxPortals is 2",
+      "(#33-120) and teleportToFirstStaticPortal when it is 1 (#121-144), and ETHCallback_portal_static",
+      "has its own path; neither of those two asks.",
+      "",
+      "hasMovingPlatformInAnyPortal (bytes 147042..147305): for every entity in PortalManager.portals",
+      "(the placed ones), EntityGrabber(portal.GetPositionXY(), portalCollisionRadius x 0.4,",
+      "isMovingPlatform) (#7-29, arguments pushed last-first); any grab of size above 0 answers true",
+      "(#31-40). portalCollisionRadius is placement.json's entry_radius_px, 14 x getScale, so",
+      "radius_share 0.4 gives 5.6 units.",
+      "",
+      "isMovingPlatform (MovingPlatforms.angelscript, bytes 372140..372382) is",
+      "GetEntityName() == 'moving_platform' || 'lift' || 'lift.ent', compared exactly: so",
+      "moving_platform_single.ent (inert, docs/original-gameplay.md section 6) is not one.",
+      "",
+      "EntityGrabber::EntityGrabber (bytes 23924..24990), for these entities (shape 3, a polygon, so",
+      "not the circle branch #65-124): #126-194 Shape(GetPositionXY(), GetCollisionBox().size x",
+      "getScale(), GetAngle(), edgePlanes true).overlapSphere(point, radius). The box is the entity's",
+      "collision box as stored (64 x 32 for every moving_platform but one of 64 x 64 on level11c,",
+      "62 x 32 for every lift), CENTRED ON THE ENTITY'S POINT, not times its own scale.",
+      "The grabber takes its candidates only from the point's bucket and its neighbours (#16-23:",
+      "GetBucket, getEntitiesFromNeighbourBuckets); at the game's 128-unit bucket that holds every",
+      "body the box test could take (a grabbed body's centre is at most about 51 units from the",
+      "portal's point: half the 64 x 64 box's diagonal plus 5.6), so the port does not model it.",
+      "Shape::Shape (bytes 89202..91621) gives it its four sides and, with edgePlanes, four",
+      "45-degree planes through its corners (normals normalize(+-1, +-1) inward, not turned with the",
+      "angle); the two-argument Shape::overlapSphere (bytes 93178..93477) answers false as soon as",
+      "one plane's dot is at or below -radius. So, with a and b how far the portal's point lies past",
+      "the box's sides in x and y: held while a < r, b < r and a + b < r x sqrt(2).",
+      "",
+      "The port looks for the entities named here, by the node's own shape bounds (none of the 29",
+      "in the game is turned or scaled, and Portals::Find refuses one that is)."
+    ],
+    "entities": ["moving_platform", "lift", "lift.ent"],
+    "radius_share": 0.4
   }
 }

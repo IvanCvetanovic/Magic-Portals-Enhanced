@@ -22,6 +22,35 @@
     "enemy_killer"
   ],
 
+  "death_area": {
+    "_source": [
+      "A DEATH AREA KILLS THE PLAYER ANYWHERE ON ITS OWN SHAPE. Decoded (planning step 136;",
+      "listing out/parity/asbc/all_functions.txt, md5 48fe65ce).",
+      "",
+      "ETHBeginContactCallback_death_area (MainCharacter.angelscript, bytes 338912..339123,",
+      "listing L66942) is the whole callback: #1-7 isCharacter(other), and if so #9-18",
+      "other.SetInt('hp', 0), which checkGameLost's hp arm then finishes (an hp death, no sound of",
+      "its own). It is a BEGIN-CONTACT callback of the entity's own Box2D sensor, so it fires the",
+      "moment any part of a character's body first meets any part of the sensor's shape: the",
+      "entity's collision polygon as the level stores it per instance (level5's is 60 x 16,",
+      "level25a's 52 x 16, the eight-point octagon death_area.ent carries), which the converter",
+      "writes as the node's CollisionPolygon2D.",
+      "",
+      "WHO DIES: isCharacter (GameCharacter.angelscript, bytes 337748..337852) reads the custom",
+      "uint 'isCharacter', which only GameCharacter::GameCharacter sets (#43-54). Its one caller is",
+      "SideScrollerCharacter::SideScrollerCharacter, whose one caller is",
+      "MainCharacter::MainCharacter (#35), whose factory's one caller is Game::preLoop (#75); and",
+      "none of the 323 .ent and .esc files carries the variable (a byte search in ASCII and",
+      "UTF-16, planning step 136). So the characters are the player alone: a minion, a crate or a",
+      "stone in a death area is untouched, as the port has it.",
+      "",
+      "The names are the callback's binding, ETHBeginContactCallback_ + RemoveExtension(name)",
+      "(00_order 8.0, rule 4): both spellings, of which the levels place only death_area.ent.",
+      "Until this step the port killed only in the Godot project's 16 px box at the node."
+    ],
+    "entities": ["death_area", "death_area.ent"]
+  },
+
   "bounds": {
     "_source": [
       "THE LEVEL'S OWN EDGE, which is the death nothing in this port tested for: a player",

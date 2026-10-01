@@ -16,6 +16,10 @@
 // the speeds - movers.json's rate scale and lift speed - are the Godot project's
 // guesses, carried as data, so the thresholds are computed from them.
 //
+// AND THE PLATFORM GATE (step 136): nothing goes through a placed pair while a
+// moving platform or a lift is at any placed portal, and a static pair is never
+// held.
+//
 // Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
 
@@ -32,6 +36,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <string>
 #include <system_error>
@@ -559,6 +564,271 @@ void F3sTapsBracketTheFieldOn107() {
     }
 }
 
+// ---- The platform gate (planning step 136) ----------------------------------
+//
+// PortalManager::teleportToOther #36-42 teleports nothing while
+// hasMovingPlatformInAnyPortal: an entity named moving_platform, lift or lift.ent
+// within 0.4 x the portal's 14 of any placed portal's point, by EntityGrabber's box
+// with its corner planes (transit.json `platform_gate`). Only the placed pair asks.
+
+void TheGatesNumbersAreTheDecodedOnes() {
+    Run run;
+    if (!Begin("level5", run)) return;
+    const Portals::Rules::GateRules& gate = run.data.portals.gate;
+    CHECK(gate.entities == (std::vector<std::string>{"moving_platform", "lift", "lift.ent"}));
+    CHECK(gate.radiusShare == 0.4);
+    CHECK_NEAR(static_cast<float>(gate.radiusShare * run.data.portals.entryRadiusPx), 5.6f);
+
+    // Each level's movers, by the names isMovingPlatform compares, at their own
+    // collision box's half.
+    struct Expected {
+        const char* level;
+        const char* name;
+        glm::dvec2 half;
+    };
+    const Expected bodies[] = {
+        {"level5", "moving_platform_764", {32.0, 16.0}},  {"level5a", "lift_ent_832", {31.0, 16.0}},
+        {"level1a", "lift_789", {31.0, 16.0}},            {"level11c", "moving_platform_2251", {32.0, 32.0}},
+        {"level11c", "moving_platform_2235", {32.0, 16.0}},
+    };
+    const std::size_t counts[] = {1, 1, 1, 2, 2};
+    std::size_t index = 0;
+    for (const Expected& expected : bodies) {
+        const std::size_t count = counts[index++];
+        Run level;
+        if (!Begin(expected.level, level)) continue;
+        const auto& found = level.level.portals.gateBodies;
+        const auto body = std::find_if(found.begin(), found.end(),
+                                       [&](const Portals::GateBody& one) { return one.name == expected.name; });
+        CHECK_MSG(found.size() == count && body != found.end() && body->halfPx == expected.half &&
+                      level.registry.valid(body->entity),
+                  std::string(expected.level) + " gates on " + expected.name);
+    }
+    // Not moving_platform_single.ent, which isMovingPlatform does not name: level0's
+    // moving_platform_single_ent_579 is no gate body.
+    Run none;
+    if (Begin("level0", none)) CHECK(none.level.portals.gateBodies.empty());
+}
+
+void TheGateReachesOverTheBoxWithItsCornersCut() {
+    // A 64 x 32 box at the origin, a radius of 5.6: short of it by less than the radius
+    // past a side, and past a corner only while a + b < 5.6 x sqrt 2 = 7.92.
+    const glm::dvec2 centre(0.0);
+    const glm::dvec2 half(32.0, 16.0);
+    const double r = 5.6;
+    struct Case {
+        glm::dvec2 at;
+        bool grabbed;
+    };
+    const Case cases[] = {
+        {{0.0, 0.0}, true},           {{37.5, 0.0}, true},    {{37.7, 0.0}, false},  {{-37.5, 0.0}, true},
+        {{0.0, 21.5}, true},          {{0.0, -21.7}, false},  {{35.9, 19.9}, true},  {{36.0, 20.0}, false},
+        {{-35.9, -19.9}, true},       {{37.5, 18.5}, false},  {{37.5, 16.0}, true},  {{32.0, 21.5}, true},
+    };
+    for (const Case& one : cases) {
+        CHECK_MSG(Portals::State::GrabsBox(centre, half, one.at, r) == one.grabbed,
+                  "at " + Px(one.at) + (one.grabbed ? " grabbed" : " not grabbed"));
+    }
+}
+
+void TheGateIsReadStrictly() {
+    const std::filesystem::path directory = std::filesystem::temp_directory_path() / "supersonic-test-mp-movers";
+    std::filesystem::create_directories(directory);
+    const auto write = [&](const char* name, const std::string& text) {
+        const std::filesystem::path path = directory / name;
+        std::ofstream(path, std::ios::binary) << text;
+        return path.string();
+    };
+    Portals::Rules rules;
+    std::string error;
+    CHECK_MSG(Portals::LoadGate(write("gate_good.json",
+                                      R"({"platform_gate": {"entities": ["lift"], "radius_share": 0.5}})"),
+                                rules, error),
+              error);
+    CHECK(rules.gate.entities == std::vector<std::string>{"lift"} && rules.gate.radiusShare == 0.5);
+    const char* const bad[] = {
+        R"({"transit": {}})",
+        R"({"platform_gate": {"entities": [], "radius_share": 0.4}})",
+        R"({"platform_gate": {"entities": ["lift"], "radius_share": 0}})",
+        R"({"platform_gate": {"entities": ["lift", 3], "radius_share": 0.4}})",
+        R"({"platform_gate": {"entities": ["lift"]}})",
+    };
+    for (const char* text : bad) {
+        error.clear();
+        CHECK_MSG(!Portals::LoadGate(write("gate_bad.json", text), rules, error) && !error.empty(),
+                  std::string("refused: ") + text);
+    }
+}
+
+// A bare State with level5's rules, a traveller of radius 4 and one gate body, 64 x 32,
+// put wherever a case wants it.
+struct GateRig {
+    entt::registry registry;
+    Portals::State state;
+    entt::entity traveller = entt::null;
+    entt::entity platform = entt::null;
+
+    void Put(entt::entity entity, const glm::dvec2& atPx) {
+        registry.get<TransformComponent>(entity).position = Units::ToWorld(atPx.x, atPx.y);
+    }
+    glm::dvec2 At(entt::entity entity) const {
+        return Units::ToPixels(registry.get<TransformComponent>(entity).position);
+    }
+};
+
+bool MakeGateRig(GateRig& rig) {
+    Run run;
+    if (!Begin("level5", run)) return false;
+    rig.state.rules = run.data.portals;
+    rig.state.shot = run.data.shot;
+    rig.state.budget = 2;
+    rig.traveller = rig.registry.create();
+    rig.registry.emplace<TransformComponent>(rig.traveller);
+    rig.registry.emplace<Supersonic::SphereColliderComponent>(rig.traveller).radius = Units::ToMetres(4.0);
+    rig.registry.emplace<RigidBodyComponent>(rig.traveller);
+    rig.state.travellers = {rig.traveller};
+    rig.platform = rig.registry.create();
+    rig.registry.emplace<TransformComponent>(rig.platform);
+    rig.state.gateBodies = {Portals::GateBody{"platform", rig.platform, {32.0, 16.0}}};
+    rig.Put(rig.traveller, {100.0, 100.0});
+    rig.Put(rig.platform, {600.0, 600.0});
+    return true;
+}
+
+void APlatformAtAPortalHoldsThePlacedPair() {
+    GateRig rig;
+    if (!MakeGateRig(rig)) return;
+    Portals::State& portals = rig.state;
+    CHECK(portals.TryPlace({100.0, 100.0}) && portals.TryPlace({200.0, 100.0}));
+    // The platform's top 3 u under B's point: b = -13, grabbed whatever the hover.
+    rig.Put(rig.platform, {200.0, 113.0});
+    CHECK(portals.PlatformInAnyPortal(rig.registry));
+    for (int tick = 0; tick < 5; ++tick) portals.Tick(rig.registry, kStep);
+    CHECK_MSG(portals.traversals == 0 && portals.transitsHeld == 5 && portals.placed.size() == 2,
+              "held on each of five ticks, and both ends still there: " + std::to_string(portals.transitsHeld));
+    CHECK_MSG(glm::distance(rig.At(rig.traveller), glm::dvec2(100.0, 100.0)) < 1e-3, "the traveller unmoved");
+    // Off the portal, 5.7 past its side at rest (hover 2 u either way is not enough).
+    rig.Put(rig.platform, {200.0, 100.0 + 16.0 + 5.6 + 2.2});
+    CHECK(!portals.PlatformInAnyPortal(rig.registry));
+    portals.Tick(rig.registry, kStep);
+    CHECK_MSG(portals.traversals == 1 && portals.transitsHeld == 5,
+              "the traveller still in A goes through on the first tick the platform has gone");
+    CHECK_MSG(glm::distance(rig.At(rig.traveller), glm::dvec2(200.0, 100.0)) < 2.5,
+              "out of B: " + Px(rig.At(rig.traveller)));
+
+    // ANY placed portal: the platform at A holds a traveller going in at B too.
+    GateRig other;
+    if (!MakeGateRig(other)) return;
+    CHECK(other.state.TryPlace({300.0, 100.0}) && other.state.TryPlace({100.0, 100.0}));
+    other.Put(other.platform, {300.0, 85.0});
+    other.state.Tick(other.registry, kStep);
+    CHECK_MSG(other.state.traversals == 0 && other.state.transitsHeld == 1, "a platform at the other end holds it");
+}
+
+void AStaticPairIsNeverHeld() {
+    GateRig rig;
+    if (!MakeGateRig(rig)) return;
+    Portals::State& portals = rig.state;
+    const auto box = [](const glm::dvec2& atPx) {
+        Trigger::Box out;
+        const glm::vec3 centre = Units::ToWorld(atPx.x, atPx.y);
+        out.centre = glm::vec2(centre.x, centre.y);
+        out.half = glm::vec2(Units::ToMetres(8.0));
+        return out;
+    };
+    Portals::Static from;
+    from.name = "static_0";
+    from.index = 0;
+    from.destiny = 1;
+    from.hasDestiny = true;
+    from.atPx = {100.0, 100.0};
+    from.trigger = box(from.atPx);
+    Portals::Static to = from;
+    to.name = "static_1";
+    to.index = 1;
+    to.destiny = 0;
+    to.atPx = {200.0, 100.0};
+    to.trigger = box(to.atPx);
+    portals.statics = {from, to};
+    // A placed portal with the platform over it: the gate is up for a placed pair.
+    CHECK(portals.TryPlace({400.0, 100.0}));
+    rig.Put(rig.platform, {400.0, 100.0});
+    CHECK(portals.PlatformInAnyPortal(rig.registry));
+    portals.Tick(rig.registry, kStep);
+    CHECK_MSG(portals.traversals == 1 && portals.transitsHeld == 0,
+              "ETHCallback_portal_static never asks: through the static pair");
+    CHECK(glm::distance(rig.At(rig.traveller), glm::dvec2(200.0, 100.0)) < 1e-3);
+}
+
+void AFireballIsHeldAsATravellerIs() {
+    GateRig rig;
+    if (!MakeGateRig(rig)) return;
+    Portals::State& portals = rig.state;
+    rig.Put(rig.traveller, {600.0, 100.0});
+    CHECK(portals.TryPlace({100.0, 100.0}) && portals.TryPlace({200.0, 100.0}));
+    rig.Put(rig.platform, {100.0, 80.0});
+    const glm::dvec2 ballPx(110.0, 100.0); // 10 u from A, inside its 8 + 14
+    CHECK_MSG(!portals.CarryFireball(rig.registry, ballPx, 8.0), "held while the platform is at A");
+    CHECK(portals.transitsHeld == 1 && portals.traversals == 0);
+    rig.Put(rig.platform, {600.0, 600.0});
+    const auto exit = portals.CarryFireball(rig.registry, ballPx, 8.0);
+    CHECK_MSG(exit && *exit == portals.placed[1].atPx, "and carried to B once it has gone");
+    CHECK(portals.transitsHeld == 1 && portals.traversals == 1);
+}
+
+void Level5sPlatformHoldsThePlayerUntilItSwingsAway() {
+    // level5's moving_platform_764 swings y 144 + 32 sin(2 x 0.7 t) (the port's swing,
+    // movers.json; R7 is not built). A portal at (416, 100), which its box comes within
+    // 5.6 of while its centre is above y 121.6, and one on the player at the spawn.
+    Run run;
+    if (!Begin("level5", run) || run.level.movers.platforms.empty()) return;
+    Portals::State& portals = run.level.portals;
+    const Mover::Platform& platform = run.level.movers.platforms.front();
+    const glm::dvec2 aPx(416.0, 100.0);
+    const double radius = portals.rules.gate.radiusShare * portals.rules.entryRadiusPx;
+    // Until the gate would be up at A: the platform near the top of its swing.
+    int tick = 0;
+    for (; tick < 400; ++tick) {
+        Tick(run);
+        if (tick > 30 && Portals::State::GrabsBox(BodyPx(run, platform.entity), {32.0, 16.0}, aPx, radius - 2.5)) break;
+    }
+    const glm::dvec2 standPx = BodyPx(run, run.level.player);
+    CHECK_MSG(portals.TryPlace(aPx) && portals.TryPlace(standPx), "a pair: A over the swing, B on the player");
+    if (portals.placed.size() != 2) return;
+    const int idA = portals.placed[0].id;
+    CHECK(portals.PlatformInAnyPortal(run.registry));
+    int held = 0;
+    int transitTick = -1;
+    bool gateUpWhileHeld = true;
+    glm::dvec2 lastAPx = portals.placed[0].atPx; // A where the last tick left it, hover and all
+    for (int more = 0; more < 200 && transitTick < 0; ++more) {
+        const int before = portals.transitsHeld;
+        Tick(run);
+        if (portals.traversals > 0) {
+            transitTick = tick + 1 + more;
+            break;
+        }
+        if (portals.transitsHeld > before) {
+            ++held;
+            gateUpWhileHeld = gateUpWhileHeld && portals.PlatformInAnyPortal(run.registry);
+        }
+        for (const Portals::Placed& portal : portals.placed) {
+            if (portal.id == idA) lastAPx = portal.atPx;
+        }
+    }
+    const glm::dvec2 platformPx = BodyPx(run, platform.entity);
+    std::printf("  level5: A (416, 100), B on the player at %s; held %d tick(s), through on tick %d with the "
+                "platform's centre at y %.2f\n",
+                Px(standPx).c_str(), held, transitTick, platformPx.y);
+    CHECK_MSG(held > 10 && gateUpWhileHeld, "held while the platform's box is within 5.6 of A");
+    CHECK_MSG(transitTick > 0, "and through once it has swung away");
+    // A's hover moves it hundredths of a unit a tick and the platform under 0.75.
+    CHECK_MSG(!Portals::State::GrabsBox(platformPx, {32.0, 16.0}, lastAPx, radius - 0.05) &&
+                  Portals::State::GrabsBox(platformPx, {32.0, 16.0}, lastAPx, radius + 1.0),
+              "on the first tick its box is no longer within 5.6 of A");
+    CHECK_MSG(glm::distance(BodyPx(run, run.level.player), aPx) < 5.0, "the player out of A");
+}
+
 void runTests() {
     MoversJsonCarriesTheRemakesGuesses();
     ChapterOnesMovers();
@@ -571,6 +841,13 @@ void runTests() {
     TheRingIsSoughtInTheAgentsBucketThenItsNeighbours();
     F17sShotKillsTheAgentOn401();
     F3sTapsBracketTheFieldOn107();
+    TheGatesNumbersAreTheDecodedOnes();
+    TheGateReachesOverTheBoxWithItsCornersCut();
+    TheGateIsReadStrictly();
+    APlatformAtAPortalHoldsThePlacedPair();
+    AStaticPairIsNeverHeld();
+    AFireballIsHeldAsATravellerIs();
+    Level5sPlatformHoldsThePlayerUntilItSwingsAway();
 }
 
 } // namespace

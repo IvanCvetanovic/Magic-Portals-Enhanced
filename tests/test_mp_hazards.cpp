@@ -1,12 +1,13 @@
 // Hazards: what kills the player, and where.
 //
-// Pinned exactly, because the files and the Godot project's code say it: chapter 1's
-// four hazards and their boxes. None carries a trigger_size, so each kills in
-// LevelRuntime's 16 px fallback box at its node, not in the shape the converter
-// gives it (Hazards.hpp). What happens is judged on the tick: the player dies
-// entering the box, and not beside it where level5's death_area octagon reaches
-// but its box does not. Only the player can die - Hazards::State::Tick is given
-// the player and nothing else - so that is not tested here.
+// Pinned exactly, because the files say it: chapter 1's four hazards. A DEATH AREA
+// KILLS ON ITS WHOLE SHAPE (planning step 136, hazards.json `death_area`, decoded):
+// level5's is its 60 x 16 octagon and level25a's its 52 x 16. The destroyiers carry no
+// trigger_size, so each still kills in LevelRuntime's 16 px fallback box at its node
+// (Hazards.hpp). What happens is judged on the tick: the player dies entering the
+// octagon anywhere - beside the old box too - and lives past its cut corner, inside
+// its bounds. Only the player can die - the characters are the player alone
+// (isCharacter), and Hazards::State::Tick is given it and nothing else.
 //
 // Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
@@ -24,6 +25,7 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <vector>
 
 using namespace MagicPortals;
 using Supersonic::RigidBodyComponent;
@@ -67,7 +69,6 @@ void ChapterOnesFourHazards() {
         glm::dvec2 at;
     };
     const Expected expected[] = {
-        {"level5", "death_area_ent_800", {513.0, 104.0}},
         {"level23", "destroyier_ent_1051", {448.0, 344.0}},
         {"level23", "destroyier_ent_1074", {64.0, 390.0}},
         {"level24", "destroyier_ent_1195", {448.0, 504.0}},
@@ -84,22 +85,69 @@ void ChapterOnesFourHazards() {
                       std::fabs(size.y - 16.0) < 1e-3,
                   std::string(hazard.name) + ": the 16 px fallback at its node");
     }
+    // The two death areas, on their own octagons: the level's per-instance collision
+    // size (60 x 16 and 52 x 16) about the node, the eight points death_area.ent gives.
+    struct Area {
+        const char* level;
+        const char* name;
+        glm::dvec2 at;
+        glm::dvec2 size;
+    };
+    const Area areas[] = {
+        {"level5", "death_area_ent_800", {513.0, 104.0}, {60.0, 16.0}},
+        {"level25a", "death_area_ent_978", {491.0, 182.0}, {52.0, 16.0}},
+    };
+    const glm::dvec2 unit[] = {{-0.6, 1.0}, {-1.0, 0.6}, {-1.0, -0.6}, {-0.6, -1.0},
+                               {0.6, -1.0},  {1.0, -0.6}, {1.0, 0.6},   {0.6, 1.0}};
+    for (const Area& area : areas) {
+        Run run;
+        if (!Begin(area.level, run)) continue;
+        CHECK_EQ(run.level.hazards.hazards.size(), std::size_t{1});
+        const Hazards::Hazard* found = run.level.hazards.FindHazard(area.name);
+        CHECK_MSG(found != nullptr && found->outlinePx.size() == 8, std::string(area.level) + " has " + area.name);
+        if (found == nullptr || found->outlinePx.size() != 8) continue;
+        bool points = true;
+        for (std::size_t i = 0; i < 8; ++i) {
+            points = points && glm::distance(found->outlinePx[i], area.at + unit[i] * area.size * 0.5) < 1e-6;
+        }
+        CHECK_MSG(points, std::string(area.name) + ": its octagon, point by point");
+        const glm::dvec2 centre = Units::ToPixels(glm::vec3(found->box.centre, 0.0f));
+        const glm::dvec2 size = glm::dvec2(found->box.half) * 2.0 * Units::kPixelsPerMetre;
+        CHECK_MSG(glm::distance(centre, area.at) < 1e-3 && glm::distance(size, area.size) < 1e-3,
+                  std::string(area.name) + ": its box is the octagon's bounds");
+    }
+    // And what hazards.json names: the callback's two spellings.
     Run level5;
-    if (Begin("level5", level5)) CHECK_EQ(level5.level.hazards.hazards.size(), std::size_t{1});
+    if (Begin("level5", level5)) {
+        CHECK(level5.data.hazards.wholeShapeNames == (std::vector<std::string>{"death_area", "death_area.ent"}));
+    }
 }
 
-void TheBoxKillsAndTheOctagonDoesNot() {
-    // Beside the box, where the converter's 60 x 16 octagon still reaches (x from
-    // 483 to 543): the player lives.
-    {
-        Run run;
-        if (!Begin("level5", run)) return;
-        const double half = run.data.tuning.widthPx * 0.5;
-        PutPlayer(run, glm::dvec2(513.0 - 8.0 - 2.0 - half, 104.0));
-        Game::Tick(run.data, run.registry, run.level, 0.0f, kStep);
-        CHECK_MSG(!run.level.hazards.playerDied, "beside the box, inside the octagon, the player lives");
-    }
-    // In the box: it dies, on that tick, and says where.
+// The player put at a point and judged there, with no step between: the octagon's
+// geometry against the player's collider alone.
+bool JudgedAt(const glm::dvec2& atPx) {
+    Run run;
+    if (!Begin("level5", run)) return false;
+    PutPlayer(run, atPx);
+    run.level.hazards.Tick(run.registry, run.level.player);
+    return run.level.hazards.playerDied;
+}
+
+void TheWholeOctagonKills() {
+    // The player's collider: a capsule 20 wide (player.json, a guess), so its sides
+    // are 10 from its centre. The octagon spans x 483..543, its ends x 483 and 543
+    // over y 99.2..108.8, its top y 96 over x 495..531.
+    // Beside the old 16 px box (x 505..521), inside the octagon: it dies now.
+    CHECK_MSG(JudgedAt({513.0 - 8.0 - 2.0 - 10.0, 104.0}), "beside the old box, inside the octagon, the player dies");
+    CHECK_MSG(JudgedAt({474.0, 104.0}), "its side 1 u into the octagon's end: dies");
+    CHECK_MSG(!JudgedAt({472.0, 104.0}), "its side 1 u short of the octagon's end: lives");
+    CHECK_MSG(JudgedAt({552.0, 104.0}), "the same at the other end: dies");
+    CHECK_MSG(!JudgedAt({554.0, 104.0}), "and lives 1 u short of it");
+    // Inside the octagon's bounds, past its cut corner: the capsule's foot at (484,
+    // 97.5), 1.05 off the chamfer from (483, 99.2) to (495, 96).
+    CHECK_MSG(!JudgedAt({484.0, 97.5 - 22.0}), "in the bounds, over the cut corner: lives");
+    CHECK_MSG(JudgedAt({513.0, 97.5 - 22.0}), "the same foot over its middle: dies");
+    // In the middle, through the whole tick: it dies on that tick, and says where.
     {
         Run run;
         if (!Begin("level5", run)) return;
@@ -162,7 +210,7 @@ void TheLevelsEdgeIsADeathToo() {
 
 void runTests() {
     ChapterOnesFourHazards();
-    TheBoxKillsAndTheOctagonDoesNot();
+    TheWholeOctagonKills();
     TheLevelsEdgeIsADeathToo();
 }
 

@@ -51,10 +51,10 @@
 // sound exactly when the thing it hit is named enemy_killer.
 //
 // Its box is the shape the level gives it (LevelBuilder::ShapeBoundsPx), not the
-// 16 px fallback Trigger::FromNode would hand back. A hazard's box is the
-// Godot project's, because the port matches the Godot project where the Godot project is what a
-// player meets; this floor is not in the Godot project's path at all, and a kill floor
-// shrunk to 16 px would miss everything that fell past it.
+// 16 px fallback Trigger::FromNode would hand back, which a destroyier still kills
+// in (a death area kills on its own polygon since planning step 136, as the
+// original's sensor does). A kill floor shrunk to 16 px would miss everything that
+// fell past it.
 //
 // NOT built here, and deliberately: sight, shooting, and a minion being
 // breakable. minion.ent carries breakable=1, burnable=1 and teleportable=1;

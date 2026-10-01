@@ -3,15 +3,17 @@
 // What kills the player: LevelRuntime's hazard trigger (level_runtime.gd:270-281),
 // and what main.gd does about it (:155-158), which is to retry the level at once.
 //
-// - A hazard's trigger is the box LevelRuntime._attach_trigger builds for it:
-//   metadata/trigger_size, or the 16 px fallback (Trigger::FromNode). The Godot project
-//   never reads the Area2D the converter gives a death_area or a destroyier, and
-//   neither carries a trigger_size, so each kills only in the fallback box at its
-//   node. level5's death_area is a 60 x 16 octagon, and in the Godot project only its
-//   middle 16 x 16 kills. The port does as the Godot project does, as it does for
-//   buttons. The original's sensor would fire on the whole shape; that is
-//   recorded in the remaster doc, not guessed at here.
-// - Only the player, and on entry, as body_entered fires. So a player put down
+// - A DEATH AREA KILLS ON ITS WHOLE SHAPE (hazards.json `death_area`, decoded; planning
+//   step 136): ETHBeginContactCallback_death_area sets hp 0 on a character whose body
+//   first meets the entity's own sensor polygon, so the port tests the player's
+//   collider against the node's CollisionPolygon2D - level5's 60 x 16 octagon and
+//   level25a's 52 x 16. The characters are the player alone (isCharacter), so this is
+//   still given the player and nothing else. Until that step the port killed only in
+//   the Godot project's 16 px fallback box at the node, as it still does for the rest.
+// - Every other hazard's trigger is the box LevelRuntime._attach_trigger builds for
+//   it: metadata/trigger_size, or the 16 px fallback (Trigger::FromNode). Neither
+//   destroyier nor lava carries a trigger_size, so each kills in the box at its node.
+// - Only on entry, as a begin-contact and body_entered fire. So a player put down
 //   inside one dies on the first tick.
 // - destroyier.ent also despawns what a launcher throws (hazards.gd:420-422). The
 //   Godot project's launcher throws nothing, and the port's has not been built, so here
@@ -35,6 +37,10 @@ namespace MagicPortals::Hazards {
 struct Rules {
     std::vector<std::string> notHazardNames;
 
+    // The hazards that kill on their own collision polygon: hazards.json
+    // `death_area.entities`, the callback's two spellings.
+    std::vector<std::string> wholeShapeNames;
+
     // How far past the level's own extent the player may go before it has
     // fallen out of the world: hazards.json's `bounds.margin_px`, which is the
     // original's `size * 2` at both ends. See that file for the decode.
@@ -45,7 +51,10 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
 struct Hazard {
     std::string name;
+    // What it kills in: the box, or - for a death area - its own polygon, in the
+    // level's pixels (+y down), with the box then the polygon's bounds.
     Trigger::Box box;
+    std::vector<glm::dvec2> outlinePx;
     bool playerInside = false; // as of the last tick, to find the next entry
 };
 
@@ -78,7 +87,7 @@ struct State {
 };
 
 // Every hazard of a level. False, with `error`, for a rotated one, whose box
-// would turn with it.
+// would turn with it, and for a death area with no polygon to kill on.
 bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rules, State& out, std::string& error);
 
 } // namespace MagicPortals::Hazards

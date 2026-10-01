@@ -25358,3 +25358,168 @@ through-scan).
   the original's lift waits for a tap) and puts a portal on the player; 4-14 drifts on the port's zero-gravity recoil
   (70 u/s a tap, added to the drift). No clip of the original shows a fireball go through a pair; the decode and the
   help popup W2P3 are the evidence.
+
+## Step 136 - a death area kills on its whole shape, and nothing goes through a placed pair while a moving platform or a lift is at a portal: ETHBeginContactCallback_death_area and hasMovingPlatformInAnyPortal, and 1-06 won by a route (built)
+
+**THE PROGRAM'S "SMALLER" ROW** (`docs/parity-backlog.md` section 6: "`death_area` kills only the player in a 16 px
+box; no teleport while a platform sits in a portal"), decided for the original by the 2026-09-29 rulings. Track A, on
+step 135's `eb2143c`; the task text named step 132 as main's last and 70 routes, which the tree had moved past (steps
+133 to 135, 79 routes), so this step is 136 and its "before" sweep is `G6/after/sweep` (byte-identical to
+`P1/clamp/after/sweep`; its 128 pngs open and match their logged md5s, `HZ/before_png_check.txt`). The evidence is
+under `out/parity/program/HZ/` (`impl.md`; `gate_census.py` and `.txt`, the route aids `nodes.py`, `geo.py`,
+`render_map.py`, `maps/`, `drafts/`, `sens/`; `suites/`, `window/`, `after/`).
+**GAMEPLAY: YES, two changes.** (1) **A death area kills the player anywhere on its own polygon** - level5's 60 x 16
+octagon (1-06) and level25a's 52 x 16 (2-26), the only two placed - where the port killed only in a 16 x 16 box at the
+node: a player beside the old box, inside the octagon, now dies. (2) **Nothing goes through a placed pair while a
+moving platform or a lift is at any placed portal**: on the 24 levels that place one of the 29 entities named
+`moving_platform`, `lift` or `lift.ent`, a traveller (a fireball included) that enters a placed portal while one of
+them reaches within 5.6 u of any placed portal's point waits in it, and goes on the first tick it no longer does, if
+it is still in the portal; static pairs are never held. Until now the port had no such gate (step 135, deviation 3).
+Changed: `game/sim/Hazards.{hpp,cpp}` (a death area's `outlinePx`, met by `Impacts::Between`), `game/data/hazards.json`
+(`death_area`), `game/sim/Portals.{hpp,cpp}` (`Rules::GateRules`, `LoadGate`, `GateBody`, `gateBodies`,
+`transitsHeld`, `GrabsBox`, `PlatformInAnyPortal`, the hold in `Tick` and in `CarryFireball`, which now takes the
+registry), `game/data/transit.json` (`platform_gate`), `game/sim/Game.cpp` (reads it; the new `CarryFireball`),
+`game/Route.{hpp,cpp}` (`Driver::Held`, the trace's `held N`), `tests/test_mp_routes.cpp` (a route's held count on
+its line), `tests/test_mp_hazards.cpp`, `tests/test_mp_movers.cpp` (7 new cases), `tests/routes/level5.json` (new),
+`game/sim/Minions.hpp` and `game/data/minions.json` (a note on the hazard box corrected, text only),
+`docs/original-gameplay.md` (2.7 and 3) and this record. No converter change, no format finding, engine untouched at
+`710bffc`.
+
+**BLOCKERS, checked first: none.** The listing is `all_functions.txt` `48fe65ce`. Both halves need only what the tree
+has: the converted `death_area` polygons (`CollisionPolygon2D` under each node), the player's collider
+(`Impacts::ShapeOf`), the movers' bodies (`Mover::Wire`, by node name in `LevelBuilder::Built`), placed portals with
+their points and `inside` lists, `test_mp_routes` and the reachability check. No engine change.
+
+**THE DECODE** (read under 00_order 8.0's rules):
+- `ETHBeginContactCallback_death_area` (MainCharacter.angelscript, 338912..339123, L66942), the whole callback: #1-7
+  `isCharacter(other)`, #9-18 `other.SetInt('hp', 0)`. A begin-contact callback of the entity's own Box2D sensor, so it
+  fires when any part of a character's body first meets any part of the sensor's shape: `death_area.ent`'s eight-point
+  polygon (v0 (-0.6, 1) ... v7 (0.6, 1)) at the per-instance collision size each `.esc` stores - level5's 60 x 16 at
+  (513, 104), level25a's 52 x 16 at (491, 182) - which the converter writes as the node's `CollisionPolygon2D`.
+- `isCharacter` (GameCharacter.angelscript, 337748..337852) reads the custom uint `isCharacter`, which only
+  `GameCharacter::GameCharacter` sets (#43-54); its one caller is `SideScrollerCharacter::SideScrollerCharacter`,
+  whose one caller is `MainCharacter::MainCharacter` (#35), whose factory's one caller is `Game::preLoop` (#75), and
+  none of the 323 `.ent` and `.esc` files carries the variable (`search_ischaracter.py`: a byte search in ASCII,
+  UTF-16LE and UTF-16BE, with `death_area` found in level5's and level25a's scenes as the control). **The characters are the player alone**: "any character" is the player, and a minion, crate or stone in
+  a death area is untouched in both games.
+- `PortalManager::teleportToOther` (144944..145873) #36-42: `hasMovingPlatformInAnyPortal` true returns with nothing
+  moved, after `mayTeleport` (#25-35) and before `isActive` (#43-50). It is the one caller (a byte search), so only the
+  placed pair asks: `doTeleporting` (139692..140259) reaches `teleportToOther` when `maxPortals` is 2 (#33-120) and
+  `teleportToFirstStaticPortal` when it is 1 (#121-144); `ETHCallback_portal_static` has its own path. With something
+  in a portal and nothing moved, `doTeleporting` calls neither `playTeleportSound` nor `activateAll` (#145-155), and
+  the next frame asks again while the traveller is still in its portal.
+- `hasMovingPlatformInAnyPortal` (147042..147305): for each entity in `PortalManager.portals` (the placed ones),
+  `EntityGrabber(portal.GetPositionXY(), portalCollisionRadius x 0.4, isMovingPlatform)` (#7-29, arguments pushed
+  last-first); any grab of size above 0 answers true (#31-40). `portalCollisionRadius` is 14 x getScale
+  (`placement.json`), so **5.6 u**.
+- `isMovingPlatform` (MovingPlatforms.angelscript, 372140..372382): `GetEntityName()` is `moving_platform`, `lift` or
+  `lift.ent`, exactly - so `moving_platform_single.ent` (inert, `docs/original-gameplay.md` section 6) is not one.
+- `EntityGrabber::EntityGrabber` (23924..24990), for these polygon bodies (shape 3, not the circle branch #65-124):
+  #126-194 `Shape(GetPositionXY(), GetCollisionBox().size x getScale(), GetAngle(), edgePlanes true)
+  .overlapSphere(point, radius)` - the entity's collision box as stored (64 x 32 for every `moving_platform` but
+  `level11c`'s 64 x 64, 62 x 32 for every lift), **centred on the entity's point**, not times its own scale. The
+  grabber takes its candidates only from the point's bucket and its neighbours (#16-23: `GetBucket`,
+  `getEntitiesFromNeighbourBuckets`); at the game's 128 u bucket (B5) that holds every body the box test could take,
+  whose centre is at most about 51 u from the portal's point (half the 64 x 64 box's diagonal plus 5.6), so it
+  changes no verdict and the port does not model it. `Shape::Shape` (89202..91621) gives it four sides and, with
+  `edgePlanes`, four planes through the corners with inward normals normalize(+-1, +-1) (#404-614; not turned with the
+  angle); the two-argument `Shape::overlapSphere` (93178..93477) answers false once one plane's dot is at or below
+  -radius (#42-49). So with a and b how far the portal's point lies past the box's sides in x and y:
+  **held while a < 5.6, b < 5.6 and a + b < 5.6 x sqrt 2**.
+- Tick order: the moving platforms and lifts are static entities (`static="1"`) moved by their own callbacks
+  (`ETHCallback_moving_platform` 371816..371942: `linearMotion`), which Ethanon runs after the scene's update function
+  (`ETHScene.cpp:464-491`, step 117's reading). `PortalManager` updates in that function: `Game::preLoop` #265-270
+  builds it and hands it to `BaseState::addController` (10829..10925 #11, `GameControllerManager::addController`),
+  and `BaseState::loop` (11245..11317 #6) runs `GameControllerManager::update`, which calls each controller's
+  `update` (37595..37749 #22). That `BaseState::loop` is the scene's update function is INFERRED from the framework's
+  shape, not traced to the engine's call. So the original's gate reads the platform where the frame's physics step
+  had it; the port moves its movers before the step and asks after it, so it reads the same point relative to the
+  step.
+
+**THE PORT.**
+- **`Hazards`**: a hazard whose entity is named in `hazards.json` `death_area.entities` (`death_area`,
+  `death_area.ent`, the callback's binding) keeps its node's polygon in the level's pixels (`outlinePx`, the node's
+  position plus the shape's offset and points; `Find` refuses one with none), and `Tick` kills the player on the tick
+  its collider (`Impacts::ShapeOf`, the capsule) first overlaps it (`Impacts::Between` below 0, touching not counted),
+  as it did for the box. Its `box` becomes the polygon's bounds. The destroyiers and the lava keep the 16 px box.
+- **`Portals::State::PlatformInAnyPortal`**: each gate body (`GateBody`: every node whose entity name
+  `transit.json` `platform_gate.entities` lists, its half collision box from `LevelBuilder::ShapeBoundsPx`, found by
+  `Portals::Find`, which refuses a turned or scaled one; none of the 29 is) against every placed portal's current
+  point (the hover included), by `GrabsBox` (the octagon above) at `radius_share` 0.4 x `entryRadiusPx`.
+- **`Tick`**: an entry whose end and exit are both placed is held while the gate is up, before the lockout (the
+  port's stand-in for `isActive`): counted in `transitsHeld`, and the traveller taken back out of that portal's
+  `inside` so it is offered again on the next tick, which is the original's every-frame ask. Static entries never
+  ask. **`CarryFireball(registry, ...)`** holds a fireball in reach of a pair the same way (after the caller's
+  `teleportedOnce`, `mayTeleport`), and it is asked again the next tick.
+- **The routes' record**: `test_mp_routes` prints `held N` on a route's line when the gate held any entry, and the
+  trace prints it per tick, so the one regression run shows which routes the gate touched.
+
+**THE ROUTES** (1-06 found with `render_map.py`, `nodes.py` and traces; every draft is under `drafts/`). Each is won by
+play with no DEV flag.
+
+| Level | Route | Won on | How |
+|---|---|---|---|
+| 1-06 `level5` | new | 457 | `death_area_ent_800` fills the 24 u slot between `wall04_ent_766` and `wall04_ent_765`, the one way to the door's side, and a player walking off the spawn block falls (as F13 shows the original's). A pair onto `block00_ent_761` (160, 126) and the player (30, 60); off its end, down `wall04_ent_762`'s face onto `double_block_plat_ent_789` and under the wall (80-166); a portal at (416, 90) over `moving_platform_764` as it swings low (290) and one on the player (316): onto the platform. Riding up, at a centre of y 101 a shot through the slot and over the death area (a sensor stops no shot) to (640, 108) above the door's block (412; 13 u under the upper wall, 9 over the lower); walking right, one on the player (437): out at (640, 110) at 140 u/s, onto the block and into the door. 6 shots. Nothing held: the player's portal is 22 u over the platform's box |
+| 2-26 `level25a` | unchanged | 827 | step 127's route, which keeps clear of the death area's full 52 u (its last exit, (530, 196), 3 u past the octagon's right end with the player moving away) and is never held: its portal over `moving_platform_942`, (212, 130), carries the player on 60, while the platform is low |
+| 1-28 `level27` | unchanged | 968 | held 9 ticks (868-876): `crate_small_ent_708` rides `lift_ent_694` down into the portal at (88, 175), whose point the lift's box covers; it goes through on 877 instead of 868, still onto `button_709`, and the door and the win are where they were |
+
+The gate's other routed levels - 1-11, 1-27, 1-29, 2-02, 2-06, 2-07, 2-09, 2-18, 2-25, 2-31, 3-03, 3-09 and 3-31
+(with 1-06, 1-28 and 2-26, the 16 of its 24 levels that have a route) - win on their step-135 ticks with nothing held;
+the other eight (2-28, 3-06, 3-08, 3-10, 3-23, 3-28, 4-12, 4-22) have no route. Nudged, 1-06's copies win 8 of 9
+(`sens/results.txt`: A's tap on 288 or 292, the through-slot shot on 408 or aimed at y 104 or 112, the last tap 4 u
+either side or 4 u up); the ninth moves the through-slot shot to 416, 21 ticks before the last tap, which the 400 ms
+between taps then refuses (the driver's report): the schedule's own spacing, not a margin.
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings | **passes.** `build/build2.log` (all targets, `-j 3`) **0 warnings, 0 errors**: `test_mp.exe` `f16462a5`, `MagicPortals.exe` `237e7544`, `MagicPortalsSpike.exe` `3dceb251` (linked, never launched). The first attempt (`build/build1.log`, default parallelism) stopped on `C1060 compiler is out of heap space` in seven translation units while other tracks built beside it: 0 warnings, and nothing of this step's code in the messages |
+| 1-01 at f420 before anything else | byte-identical to the baseline | **passes**: `4b85352e` on step 135's `33b55a48`, equal to `G6/after/sweep` and `P1/clamp/after/sweep` (`check101/`) |
+| The whole octagon kills | a death area kills on its polygon; the old box's outside inside the octagon kills; past the cut corner lives | **passes** (`test_mp_hazards`): both octagons pinned point by point and their bounds (60 x 16 at (513, 104), 52 x 16 at (491, 182)); on level5 the player dies at (493, 104), beside the old box; its side 1 u into either end dies, 1 u short lives; its foot at (484, 97.5), inside the bounds 1.05 u off the chamfer, lives, and the same foot over the middle dies; through a whole tick at (513, 104) it dies, named `death_area_ent_800`. The destroyiers keep the 16 px box |
+| The platform gate | the decoded names and 5.6; the octagon test; held while a body is at any placed portal, then through; static pairs never; fireballs too; read strictly | **passes** (`test_mp_movers`, 7 cases): the names and 0.4 x 14; gate bodies on level5, level5a, level1a and level11c (64 x 64) and none on level0 (`moving_platform_single.ent`); `GrabsBox` on 12 points (5.5 in, 5.7 out on each side; a = b = 3.9 in, 4.0 out; (5.5, 2.5) out, where a square corner would take it); a rig held 5 ticks with both ends kept and the traveller unmoved, through on the first tick the body has gone; a body at the other end holds too; a static pair goes with the gate up; a fireball held, then carried to B; level5's own platform holds the player 64 ticks in a portal on him with A at (416, 100), through on tick 237 as the box leaves A's 5.6; `LoadGate` refuses 5 bad files |
+| The suites | the runner once; the suites the change touches pass | **passes** (`suites/allmode_raw.txt`, one launch of `f16462a5`, rc 0): 47 suites, **47 passed**, **14,552 checks** against step 135's 14,466: `test_mp_hazards` 43 -> **62**, `test_mp_movers` 146 -> **210**, `test_mp_routes` 242 -> **245**, 0 failures; every other count equal (`suites/suite_counts.txt`) |
+| Routes named by the spec | 1-06 and 2-26 won by play | **2 of 2**: 1-06 won on 457 (new) and 2-26 on 827 (unchanged), in the runner and in the window (below) |
+| Moving-platform routes re-verified | every routed gate level wins; which were held | **16 of 16 won**, 15 on their step-135 ticks and 1-06 new; held on one, 1-28 (9 entries, won on 968 as before) |
+| Route regression | every route still wins; one the change breaks is re-authored with its reason; none deleted | **passes: 80 of 80** route files won by `test_mp_routes` in the runner (`suites/routes_allmode.txt`, 245 checks, 0 failures); the 79 of step 135 on the same ticks with the same shots (a diff against `G6/routes_final.txt` differs by 1-06's new line and by 1-28's added `, held 9`, on the same tick 968 with the same 2 shots: `verify1/routes_vs_G6.diff`); none re-authored, none deleted |
+| Reachability | no door newly sealed | **passes**: `reachability.py --check`, 128 levels, 108 reachable, 20 opened, 0 sealed, 0 differ (`reachability.txt`). Vacuous for this step, as recorded: the flood frees every sensor, death areas included, and models no portal. With both death areas made rock in a copy of the tool (`reach_deathrock.py`, an experiment) 1-06 and 2-26 still read reachable - a point passes the 6 u over level5's octagon - so the routes are the evidence |
+| The 128-level f420 sweep | every changed level explained against `G6/after/sweep` | **passes: 128 of 128 byte-identical** (`after/compare_vs_G6.txt`), as predicted: the sweep taps nothing, so no portal is placed, and no player reaches either death area in 420 ticks. The same command line and saves (`40bfef3a` before and after), 128 rc 0 on `237e7544`, validation ACTIVE in 128 logs and silent in all, no input in any log; every png opens and matches its md5 in `capture.txt` (`after/png_check.txt`) |
+
+**In the window** (`window/routes.txt`, `MagicPortals.exe` `237e7544` through main's `--route`, validation ACTIVE and
+silent, taps only on the routes' ticks): 1-06 won on 457, 2-26 on 827 and 1-28 on 968, each on the suite's tick.
+
+**SMART APP CONTROL: 0 refusals.** `test_mp.exe` `f16462a5` (linked once) ran every launch: the suites one at a time
+while writing (hazards, movers, routes), 1-06's drafts, traces and nudges, 1-28's trace, and the runner.
+`MagicPortals.exe` `237e7544` (linked once) ran every launch: the sweep's 128 and 3 window replays.
+`MagicPortalsSpike.exe` `3dceb251` linked, never launched. Step 135's `33b55a48` ran once, for the 1-01 check. The
+implementer's last pass put the changed sources back to LF after that build, which moved their times with their
+content unchanged; the verifier (`verify1.json`, a pass with three low findings) therefore rebuilt, 0 warnings and 0
+errors (`verify1/build.log`), as `MagicPortals.exe` `5836d67e`, `test_mp.exe` `3170b21d` and `MagicPortalsSpike.exe`
+`3ff7aff1`, from the same working tree (its diff's md5 `bbab5ac3`, `verify1/worktree_diff_md5.txt`), and re-measured
+every gate on them with the same results: 0 refusals, `MagicPortals.exe` 134 launches, `test_mp.exe` 2. Its findings
+are applied here as text: the route regression's wording (above), the grabber's bucket gather (THE DECODE and
+`transit.json`), and the layer's stale hazard-box comment as a backlog note. The commit role rebuilt nothing and ran
+`test_mp.exe` `3170b21d` once, `test_mp_movers` on the edited `transit.json` (210 checks, 0 failures): 0 refusals.
+
+**RULINGS APPLIED.** The "Smaller" row's two items, decided for the original under the program's rule (every ruling in
+favour of what the original does). R1, R2, R17 and R23 are not touched; R24 and R25 are neither touched nor
+withdrawn; camera dragging is untouched.
+
+**RECORDED DEVIATIONS.**
+1. **The gate reads the port's movers**: G3's half swing (`sin(2 x speed x t) x stride / 2`, R7 not built) and G2's
+   self-running lifts, not the original's `linearMotion` and tap-sent lifts. Each of those steps re-verifies the gate's
+   routes; 1-28 is held today, and 1-06 and 2-26 time their portals over platforms by the port's swing.
+2. **The death area meets the port's player capsule**, 20 x 44 (`player.json`, a guess; R25), not the original's
+   character body, and Box2D's polygon skin (`b2_polygonRadius`) is not added: a first overlap, not a touch, kills.
+3. **A held entry is the port's per-traveller entry**, offered again each tick; the original's
+   `isThereAnythingInPortal` takes one object per portal per frame (step 135, deviation 2), which differs only with two
+   travellers at one portal on one tick.
+4. **The reachability flood cannot see either change** (the gate row above).
+5. **A turned or scaled gate body is refused**, not modelled: the grabber turns the box's sides with the entity's
+   angle but not its corner planes, and takes the box unscaled. None of the 29 is turned or scaled.
+
+**CLOSED.** Step 135's deviation 3 (`hasMovingPlatformInAnyPortal` not modelled): built, for every traveller, a
+fireball included; 2-06's route replays with nothing held.
+
+**LEFT FOR THE OWNER.**
+- **1-06's route leans on the port** where no clip shows the original: the platform's swing (G3), the shot's speed (G4)
+  and the walk (G10). The one clip of 1-06 (F13) shows only its fall death off the spawn block, which the port's walk
+  off it matches (the player dies on tick 82 of a plain walk right).
