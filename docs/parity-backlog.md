@@ -115,13 +115,13 @@ suites a change touches once each, and report what stayed blocked.
       `out/parity/program/resume_2026-10-01.md`, `merge_w2/finalize.md`). The checkout is
       `C:\Users\icvet\Desktop\Magic-Portals-Enhanced` (`b25a426` named it in `CLAUDE.md`, `docs/parity.md` and here),
       and GitHub answers a push with "This repository moved" to `IvanCvetanovic/Magic-Portals-Enhanced`, through whose
-      redirect every push since has gone; `origin` still names `.../Magic-Portals-Remake.git`, and so does
-      `README.md`'s clone line. Both venvs' console-script shims (`pytest.exe`, `pip.exe` and the others pip wrote)
-      name the old folder: run `.venv/Scripts/python -m pytest` and `-m ruff` (`ruff.exe` is ruff's own binary, not a
-      shim; it does not name the old folder). Step 132's identifiers and keys still say Remake
+      redirect wave 2's pushes went. **Done after the close:** `origin` is set to `.../Magic-Portals-Enhanced.git`
+      (the commit that wrote this line was pushed to it) and `README.md`'s clone line names it. Still open: both
+      venvs' console-script shims (`pytest.exe`, `pip.exe` and the others pip wrote) name the old folder: run
+      `.venv/Scripts/python -m pytest` and `-m ruff` (`ruff.exe` is ruff's own binary, not a shim; it does not name
+      the old folder). Step 132's identifiers and keys still say Remake
       (`Units::kRemakeWorldGravityPx`, `Game::UseRemakeGravity`, the `_remake_*_not_applied` keys, `compare.py`'s
-      positional `remake`): a code and data step of their own. For the owner: `git remote set-url origin
-      https://github.com/IvanCvetanovic/Magic-Portals-Enhanced.git`, and the README's clone line with it.
+      positional `remake`): a code and data step of their own.
 - [ ] **For the owner, his file: `CLAUDE.md`'s workflow rule 2 still runs a suite as
       `build/tests/test_mp_<suite>.exe`** (step 129's LEFT FOR THE OWNER). Since step 129 every suite is in one
       runner, `build/tests/test_mp.exe test_mp_<suite>` (`test_mp.exe` alone runs them all, `--list` names them); the

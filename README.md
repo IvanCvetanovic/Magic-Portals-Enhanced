@@ -56,7 +56,7 @@ commit. Its suites are `tests/test_mp_*`. It moved here from the engine reposito
 `games/magicportals` on 2026-09-19, with its history.
 
 ```bash
-git clone --recurse-submodules https://github.com/IvanCvetanovic/Magic-Portals-Remake.git
+git clone --recurse-submodules https://github.com/IvanCvetanovic/Magic-Portals-Enhanced.git
 # in a clone made without --recurse-submodules:  git submodule update --init
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=ON
 cmake --build build
