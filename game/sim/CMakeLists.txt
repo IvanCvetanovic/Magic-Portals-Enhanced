@@ -43,6 +43,7 @@ add_library(MagicPortalsSim STATIC
     MenuState.cpp
     Minions.cpp
     Motion.cpp
+    Notificator.cpp
     Mover.cpp
     Particles.cpp
     Pause.cpp

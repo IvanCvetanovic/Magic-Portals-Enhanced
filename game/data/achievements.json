@@ -1,0 +1,362 @@
+{
+  "_about": [
+    "WHEN THE ORIGINAL UNLOCKS AN ACHIEVEMENT, how it keeps the unlocked set, and the two cards and the",
+    "popup that show it. Read by sim/Achievements.hpp and sim/Notificator.hpp; planning step 172.",
+    "",
+    "NUMBERS AND NAMES ONLY. Each achievement's title, description, icon and points are Asantee-authored and",
+    "live in Enhanced's gitignored out/data/achievements.json (tools/asbc/achievements.py), read at run time",
+    "beside chapters.json. This file names an achievement by its id alone, and says what unlocks it.",
+    "",
+    "Every rule is DECODED from Enhanced's out/parity/asbc/all_functions.txt (md5",
+    "48fe65ce8baea16b94ed84d8d7be84b0), read by the rules of out/parity/visuals/briefs/00_order.md 8.0:",
+    "arguments are pushed last-first, and `CMPIu vX, vN` / `SetV4 vX, vN` carry the CONSTANT N, whatever",
+    "name the listing puts beside vN. Instruction numbers (#) are the function's own.",
+    "",
+    "WHERE THE ORIGINAL UNLOCKS, all through AchievementManager::unlock(id, notify, delay) (247231..248007):",
+    "  - the door's frame: GameStateController::writeScore builds LevelFinishedLayer, whose constructor",
+    "    (271777..273843) calls registerMedalAchievements(g_currentWorld, true) (#499-502) - after setScore",
+    "    has saved the medal - and then checkForLevelAchievements(g_currentWorld, currentLevel, score,",
+    "    numPortals, GameStateController::getGameTime(), true) (#504-516): `completion` and `level` below;",
+    "  - chapter select, on every visit: WorldSelector::WorldSelector (167326..168612) #265-291,",
+    "    registerMedalAchievements(t, true) for every chapter t;",
+    "  - the main menu, on every visit: PortalMainMenu::preLoop #395-396 calls",
+    "    checkPreviouslyUnlockAchievements (202712..202943): for every world registerMedalAchievements(t,",
+    "    false) and for every level checkForLevelAchievements(t, l, getScore(t, l), 99999, 0, false) - with the",
+    "    state not 'Game', which only the medal and completion rules pass;",
+    "  - in play: `key` and `help_block` below.",
+    "Not built: AchievementManager::mergeOtherAchievementFiles (246105..246631), which merges another",
+    "version's file found under GetExternalStoragePath and findOtherVersionPath (there is none on this",
+    "platform), and unlock #58-72's ForwardCommand('flurry ACHIEVEMENT_UNLOCKED_ID_' + id), analytics."
+  ],
+
+  "unlock": {
+    "_source": [
+      "AchievementManager::unlock (247231..248007): #3-8 nothing at all for an id isUnlocked already has",
+      "(isUnlocked, 248275..248672, splits m_list on ',' and ParseInt's each); #10-56 m_list gets ',' when",
+      "it is not empty and then the id, so the list keeps the order of unlocking; #74-182 only when notify",
+      "is set, the card (`card` below); #184-185 saveList, notify or not; #187-188 computeAchievementPoints."
+    ]
+  },
+
+  "save": {
+    "_source": [
+      "AchievementManager::saveList (249353..249707): an enmlFile with entity 'achievements' holding",
+      "list = m_list (#6-24) and hash = generateAchivementHashCode(m_list) (#32-57), written to",
+      "findScorePath() + 'achievements.enml' (#65-84), beside scores.enml. loadList (245190..246105) reads",
+      "it back in AchievementManager's constructor (244316..244562 #32-33): an empty file is no list (#33-49);",
+      "otherwise #59-123 list and hash, and #125-137 the list is kept only when its hash is the one",
+      "generateAchivementHashCode gives it - any other hash leaves m_list '' and prints 'Invalid achievement",
+      "list hash code' (#138-202).",
+      "generateAchivementHashCode (248672..249240): '' for an empty list (#3-24); otherwise, over the ids split",
+      "on ',' in order, t from 0, an int64 sum of uint(id) x (t + 2) - the product in 32 bits, uTOi64",
+      "(#56-88) - then - 27 (#90-92, SetV8 v27: the constant), x 3 (#94-96), + 2 (#98-100), cut to a 32-bit",
+      "int (#103 i64TOi) and written in decimal (#104-117).",
+      "THE PORT keeps the same two values under the same names in its own JSON, achievements.json in the",
+      "directory scores.json is in (sim/Scores.hpp says why not the original's enml). A save from before",
+      "this step has no such file: it opens empty, and the main menu's pass fills it from the medals, as",
+      "the original's does on every visit."
+    ],
+    "file": "achievements.json",
+    "entity": "achievements",
+    "list_key": "list",
+    "hash_key": "hash",
+    "hash_first_multiplier_offset": 2,
+    "hash_subtract": 27,
+    "hash_multiply": 3,
+    "hash_add": 2
+  },
+
+  "completion": {
+    "_source": [
+      "registerMedalAchievements(world, notify) (399746..400758): accomplishment = ScoreManager::",
+      "computeWorldAccomplishment(world) (#1-5, Locking::ChapterCompletion); below 50 nothing (#7-8); 50..74",
+      "the chapter's 50 (#13-61); 75..99 its 50 and its 75 (#63-139); 100 its 50, 75 and 100 (#141-245), in",
+      "that order, each unlock(id, notify, 2500). The JMPP tables (#21, #71, #149) map world 0..3 to ids."
+    ],
+    "delay_ms": 2500,
+    "worlds": [
+      {"world": 0, "steps": [{"min_percent": 50, "id": 0}, {"min_percent": 75, "id": 3}, {"min_percent": 100, "id": 37}]},
+      {"world": 1, "steps": [{"min_percent": 50, "id": 1}, {"min_percent": 75, "id": 4}, {"min_percent": 100, "id": 38}]},
+      {"world": 2, "steps": [{"min_percent": 50, "id": 2}, {"min_percent": 75, "id": 5}, {"min_percent": 100, "id": 39}]},
+      {"world": 3, "steps": [{"min_percent": 50, "id": 70}, {"min_percent": 75, "id": 71}, {"min_percent": 100, "id": 72}]}
+    ]
+  },
+
+  "level": {
+    "_source": [
+      "checkForLevelAchievements(world, level, score, numPortals, gameTime, notify) (401641..408734): world v0,",
+      "level v-1, score v-2 (the medal this play earned, 1 bronze .. 3 gold), numPortals v-3, gameTime v-4,",
+      "notify v-5. #1-12 the current state's name; every rule that needs the game tests it against 'Game'",
+      "(`game` below). Each dispatch is dispatchAchievement(id, notify, 2500) (401133..401234, which is",
+      "unlock(id, notify, delay)), in the order below, which is the function's. The world blocks are #14-382,",
+      "#384-725, #727-1219 and #1221-1934; inside each the levels are an if / else-if chain but for world 2,",
+      "whose levels 22, 23 and 31 are tested after it (#1146-1218) - the same thing, as a level is one level.",
+      "",
+      "A RULE IS ALL OF ITS TERMS:",
+      "  medal_at_least N   score >= N (CMPIu score, vN with JS past, or TNS)",
+      "  medal_above N      score > N (JNP past, or TP)",
+      "  portals_at_most N  numPortals <= N (JP past, or JNP into, or TNP)",
+      "  portals_exactly N  numPortals == N (JNZ past, or JZ into)",
+      "  game               the current state is 'Game' (string::opEquals, then JLowZ past)",
+      "  time_at_most_ms N  gameTime <= N (JNP into): GameStateController.m_gameTime, which update",
+      "                     (123254..123683 #3-10) adds g_timeManager's frame time to before checkGameEnd",
+      "  count              countEntities(names) (400758..401133): ';'-split names, the sum of",
+      "                     GetEntityArray(name).size() - live entities named exactly so - then at_least or",
+      "                     exactly the number",
+      "  exists / absent    SeekEntity(name) is, or is not, null (CmpPtr, TNZ / TZ)",
+      "  lift_doors_shut    #317-380: GetEntityArray('door_lift') and ('door_lift.ent') into one array, and",
+      "                     every one's GetInt('status') == 0 - ETHCallback_door_lift (411544..414041) sets",
+      "                     0 at its original place (#300-327), 1 as it starts to open (#389-398), 2 at its",
+      "                     open place (#460-469), -1 as it starts back (#530-539); none at all passes",
+      "  unnoticed N        hasBeenUnnoticed(N) (401465..401641): exactly N 'minion.ent' and spottedCount()",
+      "                     (401234..401465, the sum of each one's 'enemySpotCount') == 0 (#22 CMPIu v4, v0:",
+      "                     the constant 0)",
+      "  laps_at_least N    retrieveRondaboutCount(SeekEntity('gravity_area'), SeekEntity('dark_mage.ent'))",
+      "                     (459326..459694): the body's cwRoundCount_<area id> + ccwRoundCount_<area id>, the",
+      "                     laps computeRoundabout counts (gravitywell.json roundabout); CMPIi v4, 3 and JS"
+    ],
+    "delay_ms": 2500,
+    "rules": [
+      {"id": 45, "world": 0, "level": 0, "terms": [{"medal_above": 0}], "_source": "#17-27"},
+      {"id": 6, "world": 0, "level": 1, "terms": [{"medal_at_least": 3}], "_source": "#29-39"},
+      {"id": 7, "world": 0, "level": 2, "terms": [{"medal_at_least": 3}], "_source": "#41-51"},
+      {"id": 8, "world": 0, "level": 3, "terms": [{"medal_at_least": 3}], "_source": "#53-63"},
+      {"id": 9, "world": 0, "level": 8, "terms": [{"medal_at_least": 3}], "_source": "#65-75"},
+      {"id": 78, "world": 0, "level": 12, "terms": [{"game": true}, {"medal_at_least": 3}, {"portals_at_most": 8}], "_source": "#77-110"},
+      {"id": 46, "world": 0, "level": 14, "terms": [{"medal_at_least": 3}], "_source": "#112-122"},
+      {"id": 48, "world": 0, "level": 19, "terms": [{"portals_at_most": 8}, {"game": true}], "_source": "#124-149"},
+      {"id": 81, "world": 0, "level": 20, "terms": [{"portals_at_most": 4}, {"game": true}], "_source": "#151-176"},
+      {"id": 47, "world": 0, "level": 22, "terms": [{"medal_at_least": 3}], "_source": "#178-188"},
+      {"id": 10, "world": 0, "level": 9, "terms": [{"game": true}, {"count": ["anti_portal_agent", "anti_portal_agent.ent"], "at_least": 1}], "_source": "#190-223 (#216 CMPIu v4, v1: at least 1)"},
+      {"id": 14, "world": 0, "level": 31, "terms": [{"medal_above": 0}], "_source": "#225-235"},
+      {"id": 11, "world": 0, "level": 25, "terms": [{"game": true}, {"count": ["rolling_stone", "rolling_stone.ent"], "at_least": 8}], "_source": "#237-270"},
+      {"id": 12, "world": 0, "level": 27, "terms": [{"game": true}, {"portals_exactly": 0}], "_source": "#272-297"},
+      {"id": 13, "world": 0, "level": 30, "terms": [{"game": true}, {"lift_doors_shut": ["door_lift", "door_lift.ent"]}], "_source": "#299-381"},
+
+      {"id": 15, "world": 1, "level": 0, "terms": [{"game": true}, {"exists": "crate_no_emissive"}], "_source": "#387-426"},
+      {"id": 43, "world": 1, "level": 3, "terms": [{"game": true}, {"portals_at_most": 6}], "_source": "#428-453"},
+      {"id": 44, "world": 1, "level": 4, "terms": [{"game": true}, {"portals_at_most": 2}], "_source": "#455-480"},
+      {"id": 16, "world": 1, "level": 7, "terms": [{"game": true}, {"count": ["crate_small_no_emissive.ent", "crate_small_no_emissive", "crate_small", "crate.ent", "crate_no_emissive.ent", "crate_no_emissive"], "exactly": 0}], "_source": "#482-515"},
+      {"id": 17, "world": 1, "level": 13, "terms": [{"game": true}, {"portals_at_most": 7}], "_source": "#517-541"},
+      {"id": 80, "world": 1, "level": 13, "terms": [{"game": true}, {"portals_at_most": 7}, {"count": ["crate_small_no_emissive.ent"], "exactly": 0}], "_source": "#517-557: inside #535's portals test"},
+      {"id": 18, "world": 1, "level": 18, "terms": [{"game": true}, {"count": ["crate_no_emissive.ent"], "exactly": 0}], "_source": "#560-593"},
+      {"id": 19, "world": 1, "level": 23, "terms": [{"game": true}, {"portals_at_most": 4}], "_source": "#595-620"},
+      {"id": 20, "world": 1, "level": 27, "terms": [{"game": true}, {"count": ["crate_small_no_emissive"], "at_least": 1}, {"medal_at_least": 3}], "_source": "#622-663 (#648 CMPIu v3, v1 and JNS, then #652 TNS: gold too, which the description does not say)"},
+      {"id": 82, "world": 1, "level": 30, "terms": [{"game": true}, {"portals_at_most": 2}], "_source": "#665-690"},
+      {"id": 21, "world": 1, "level": 31, "terms": [{"portals_at_most": 22}, {"game": true}], "_source": "#692-716"},
+      {"id": 22, "world": 1, "level": 31, "terms": [{"medal_above": 0}], "_source": "#718-724"},
+
+      {"id": 23, "world": 2, "level": 0, "terms": [{"game": true}, {"count": ["minion.ent"], "exactly": 0}, {"medal_above": 1}], "_source": "#730-771"},
+      {"id": 24, "world": 2, "level": 1, "terms": [{"game": true}, {"unnoticed": 2}], "_source": "#773-799"},
+      {"id": 25, "world": 2, "level": 2, "terms": [{"game": true}, {"count": ["minion.ent"], "exactly": 0}], "_source": "#801-834"},
+      {"id": 26, "world": 2, "level": 3, "terms": [{"game": true}, {"unnoticed": 2}], "_source": "#836-861"},
+      {"id": 41, "world": 2, "level": 3, "terms": [{"game": true}, {"count": ["minion.ent"], "exactly": 0}, {"medal_at_least": 3}], "_source": "#863-885"},
+      {"id": 27, "world": 2, "level": 4, "terms": [{"game": true}, {"portals_at_most": 4}], "_source": "#888-912"},
+      {"id": 28, "world": 2, "level": 4, "terms": [{"game": true}, {"unnoticed": 2}], "_source": "#914-921"},
+      {"id": 29, "world": 2, "level": 5, "terms": [{"game": true}, {"count": ["minion.ent"], "exactly": 3}, {"medal_at_least": 3}], "_source": "#924-964 (#950 CMPIu v3, v3: exactly 3)"},
+      {"id": 30, "world": 2, "level": 7, "terms": [{"game": true}, {"portals_at_most": 8}], "_source": "#967-991"},
+      {"id": 31, "world": 2, "level": 8, "terms": [{"game": true}, {"count": ["minion.ent"], "exactly": 2}, {"medal_at_least": 3}], "_source": "#994-1034"},
+      {"id": 74, "world": 2, "level": 8, "terms": [{"game": true}, {"count": ["minion.ent"], "exactly": 0}, {"medal_at_least": 3}], "_source": "#1036-1058"},
+      {"id": 32, "world": 2, "level": 10, "terms": [{"game": true}, {"unnoticed": 2}], "_source": "#1061-1087"},
+      {"id": 33, "world": 2, "level": 15, "terms": [{"game": true}, {"count": ["minion.ent"], "exactly": 3}], "_source": "#1089-1122"},
+      {"id": 34, "world": 2, "level": 20, "terms": [{"medal_at_least": 3}], "_source": "#1124-1134"},
+      {"id": 35, "world": 2, "level": 21, "terms": [{"medal_at_least": 3}], "_source": "#1136-1145"},
+      {"id": 40, "world": 2, "level": 22, "terms": [{"game": true}, {"count": ["minion.ent"], "exactly": 3}], "_source": "#1147-1179"},
+      {"id": 42, "world": 2, "level": 23, "terms": [{"game": true}, {"unnoticed": 1}], "_source": "#1181-1207 (no medal test, which the description has)"},
+      {"id": 36, "world": 2, "level": 31, "terms": [{"medal_above": 0}], "_source": "#1209-1218"},
+
+      {"id": 49, "world": 3, "level": 0, "terms": [{"medal_above": 0}], "_source": "#1224-1234"},
+      {"id": 50, "world": 3, "level": 1, "terms": [{"game": true}, {"portals_exactly": 0}, {"medal_at_least": 3}], "_source": "#1236-1269"},
+      {"id": 53, "world": 3, "level": 6, "terms": [{"game": true}, {"time_at_most_ms": 8016}, {"medal_at_least": 3}], "_source": "#1271-1304"},
+      {"id": 55, "world": 3, "level": 7, "terms": [{"game": true}, {"time_at_most_ms": 7016}, {"medal_at_least": 3}], "_source": "#1306-1339"},
+      {"id": 54, "world": 3, "level": 8, "terms": [{"game": true}, {"time_at_most_ms": 13016}, {"medal_at_least": 3}], "_source": "#1341-1374"},
+      {"id": 56, "world": 3, "level": 10, "terms": [{"game": true}, {"time_at_most_ms": 15016}, {"medal_at_least": 3}], "_source": "#1376-1409"},
+      {"id": 57, "world": 3, "level": 13, "terms": [{"game": true}, {"time_at_most_ms": 18016}, {"medal_at_least": 3}], "_source": "#1411-1444"},
+      {"id": 59, "world": 3, "level": 14, "terms": [{"game": true}, {"portals_exactly": 0}], "_source": "#1446-1471"},
+      {"id": 52, "world": 3, "level": 15, "terms": [{"game": true}, {"portals_exactly": 0}, {"medal_at_least": 3}], "_source": "#1473-1506"},
+      {"id": 58, "world": 3, "level": 16, "terms": [{"game": true}, {"portals_exactly": 0}, {"medal_at_least": 3}], "_source": "#1508-1540"},
+      {"id": 60, "world": 3, "level": 16, "terms": [{"game": true}, {"laps_at_least": 3}], "_source": "#1541-1570"},
+      {"id": 79, "world": 3, "level": 17, "terms": [{"game": true}, {"portals_at_most": 4}, {"medal_at_least": 3}], "_source": "#1573-1606"},
+      {"id": 64, "world": 3, "level": 21, "terms": [{"game": true}, {"exists": "light_off.ent"}, {"medal_at_least": 3}], "_source": "#1608-1655"},
+      {"id": 65, "world": 3, "level": 24, "terms": [{"game": true}, {"exists": "light_off.ent"}, {"medal_at_least": 3}], "_source": "#1657-1703"},
+      {"id": 66, "world": 3, "level": 24, "terms": [{"game": true}, {"absent": "light_off.ent"}, {"unnoticed": 1}], "_source": "#1705-1733 (#1715 TZ)"},
+      {"id": 67, "world": 3, "level": 25, "terms": [{"game": true}, {"exists": "light_off.ent"}], "_source": "#1736-1775"},
+      {"id": 75, "world": 3, "level": 26, "terms": [{"game": true}, {"exists": "light_off.ent"}], "_source": "#1777-1816 (no medal test, which the description has)"},
+      {"id": 76, "world": 3, "level": 29, "terms": [{"game": true}, {"medal_at_least": 3}, {"unnoticed": 1}], "_source": "#1818-1847"},
+      {"id": 68, "world": 3, "level": 30, "terms": [{"medal_at_least": 3}], "_source": "#1849-1858"},
+      {"id": 69, "world": 3, "level": 30, "terms": [{"medal_at_least": 3}, {"game": true}, {"exists": "light_off.ent"}], "_source": "#1849-1893: inside #1852's medal test"},
+      {"id": 73, "world": 3, "level": 31, "terms": [{"medal_above": 0}], "_source": "#1896-1905"},
+      {"id": 77, "world": 3, "level": 31, "terms": [{"game": true}, {"medal_at_least": 3}, {"portals_at_most": 12}], "_source": "#1907-1934"}
+    ]
+  },
+
+  "key": {
+    "_source": [
+      "ETHCallback_key (438490..442683) #703-857, its free arm: a character or a minion within squaredRange",
+      "(#718-760) takes the key - key_pick.ent (#794-799), playKeyPickSound (#803-805), ownerID (#807-818) -",
+      "and when its GetString('color') is 'red' (#822-845), dispatchAchievement(61, true, 5000) (#847-851)."
+    ],
+    "colour": "red",
+    "id": 61,
+    "delay_ms": 5000
+  },
+
+  "help_block": {
+    "_source": [
+      "HelpBlockController::update (226317..228622): a released touch on a help block in world 3",
+      "(#462-465, CMPIu v2, v3: the constant) on level 0 dispatches 62 (#476-481) before it opens",
+      "RedKeyLocationHelpPopup (#483-509), and on level 1 dispatches 63 (#512-517) before its",
+      "SpaceEasterEggHelpPopup; both dispatchAchievement(id, true, 1500)."
+    ],
+    "delay_ms": 1500,
+    "levels": [
+      {"world": 3, "level": 0, "id": 62},
+      {"world": 3, "level": 1, "id": 63}
+    ]
+  },
+
+  "menu_pass": {
+    "_source": [
+      "checkPreviouslyUnlockAchievements (202712..202943): notify false (#15, #24 SetV1 vX, v0), the score",
+      "ScoreManager::getScore(world, level) (#28-32), numPortals 99999 (#27) and gameTime 0 (#26)."
+    ],
+    "num_portals": 99999,
+    "game_time_ms": 0
+  },
+
+  "level_world": {
+    "_source": [
+      "WHAT THE PORT READS FOR A RULE'S ENTITIES, at the door's tick (MagicPortalsLayer::achievementsAtDoor):",
+      "count and exists ask every entity the level placed by its metadata/entity_name - still in the world,",
+      "a shot anti-portal agent not, a burned crate or broken stone not (its body destroyed) - and what was",
+      "added since: a launcher's thrown stones and the minions the markers spawned, by the entity each adds.",
+      "A torch is the exception: lighting one deletes it (ETHCallback_light_off #1-35, #105-114) where the",
+      "port keeps the node and marks it lit, and the fire signal that puts one back out adds a FRESH",
+      "`signal_torch` (ETHCallback_fire_signal; torch.json), whatever the first was named - so",
+      "SeekEntity('light_off.ent') finds an unlit torch placed under that name or one a signal put out.",
+      "spottedCount reads every minion's enemySpotCount, which only sight raises; the port builds no",
+      "sight (minions.json), so it is 0 and a level's minions count as never having noticed the player."
+    ],
+    "signal_torch": "light_off.ent"
+  },
+
+  "card": {
+    "_source": [
+      "AchievementManager::unlock #77-180, when notify is set: a Notification (Notification::Notification,",
+      "43353..43619) with bgImage 'sprites/nnotificationbg.png' (#86-96), message 'Achievement unlocked! ' +",
+      "Achievement.title (#98-124 - the title itself, never getTitle's secret mask), icon",
+      "'sprites/achievements/' + Achievement.iconSprite (#126-152), durationMS 3400 (#154-156), delay the",
+      "caller's (#158-159), sound getAchievementSoundName (#161-172, sounds.json's achievement_card), then",
+      "Notificator::notify (#174-180)."
+    ],
+    "background": "sprites/nnotificationbg.png",
+    "message_prefix": "Achievement unlocked! ",
+    "icon_directory": "sprites/achievements/",
+    "duration_ms": 3400,
+    "sound_event": "achievement_card"
+  },
+
+  "locked_card": {
+    "_source": [
+      "ScoreDashboard::displayLevelLockedNotification (241425..241713), from ScoreDashboard::loop #780-786",
+      "on a tap on a row whose level is locked: bgImage 'sprites/nnotificationbg.png' (#6-14), message",
+      "'This level is locked!' (#18-26), icon '' (#30-38), durationMS 1500 (#42-44), delay 0 (#46-48), sound",
+      "'' (#50-58)."
+    ],
+    "background": "sprites/nnotificationbg.png",
+    "message": "This level is locked!",
+    "duration_ms": 1500,
+    "delay_ms": 0
+  },
+
+  "notificator": {
+    "_source": [
+      "main (309790..310306) #1-31 builds g_notificationManager: Notificator(normalizedPos (0.5, 1), origin",
+      "(0.5, 1), fontScale (1 / getHdSpriteDensity()) x 0.6, getVerdana20FontName(), textOffset (0, 4))",
+      "(arguments pushed last-first; each vector2 pushes y first). Notificator::Notificator (43669..44253)",
+      "#83-92 iconSize (22, 22). loop (312880..313283) #93-97 updates and draws it every frame after the",
+      "state's loop: over everything, on any screen. Its clock is GetLastFrameElapsedTime (update",
+      "44743..45185 #3-8), which no pause stops; the port's is its tick.",
+      "notify (48475..48571): insertionTime = now, onto the stack. updateStack (47981..48475): the first",
+      "card on the stack whose delay has passed (strictly) goes onto the shown list with insertionTime = now",
+      "- one a frame (#112 JMP out) - and its sound is played then (#52-75, PlaySample) and the callback",
+      "called (#78-102). update #20-98: the first shown card goes once now - insertionTime > durationMS",
+      "(strictly), with the dismiss callback; every card behind it has its insertionTime set to now on every",
+      "frame, so its time starts only when it is first. draw (45185..47404) draws the first alone.",
+      "THE CALLBACKS (main #42-56): notificationCallback (310306..310388) setMusicVolume(0.15) and",
+      "notificationDismissCallback (310388..310471) setDefaultMusicVolume - 0.6 when the current track is",
+      "g_musicNames[0] (running_with_wolves_loop_b), 0.7 otherwise (195179..195443), WHATEVER the track was",
+      "started at: the menu's warlords_loop_a plays at 1.0 and comes back at 0.7. Both do nothing with no",
+      "current track (setMusicVolume 194987..195179 #3-30).",
+      "computeEffectScale (47404..47981): colour white; for a card `elapsed` ms old of duration d, effect",
+      "stride min(d / 2, 1000) and fade stride min(d / 2, 800); below the effect stride elastic(elapsed /",
+      "stride); past d less the fade stride, alpha 1 - (elapsed - (d - fade)) / fade, clamped, and scale",
+      "smoothEnd(alpha); between, 1.",
+      "draw: currentScale = scale(that) units a sprite pixel; the font at fontScale x currentScale; iconSize x",
+      "currentScale, and when there is an icon the text box is widened by half its width (textPitch); the",
+      "text box is ComputeTextBoxSize x the font scale + (textPitch, 0). The background cut 3 x 1",
+      "(SetupSpriteRects #150-158), each piece at origin (0, origin.y): piece 0 at its frame size x scale",
+      "ending where the text box begins, piece 1 stretched over the text box's width at piece 0's height,",
+      "piece 2 after it, all from the screen point normalizedPos x screen; the text drawCenteredText at the",
+      "card's middle (screen point less (0, origin.y x height x 0.5)) + textOffset x scale + (textPitch, 0);",
+      "the icon at V2_HALF, the card's middle less (textBoxWidth / 2, 0) + textOffset x scale."
+    ],
+    "normalized_pos": [0.5, 1.0],
+    "origin": [0.5, 1.0],
+    "font": "Verdana40_shadow.fnt",
+    "units_per_font_px": 0.3,
+    "text_offset_units": [0, 4],
+    "icon_units": [22, 22],
+    "background_units": [64, 32],
+    "background_columns": 3,
+    "effect_ms_cap": 1000,
+    "fade_ms_cap": 800,
+    "music_volume_shown": 0.15,
+    "music_volume_default_first_track": 0.6,
+    "music_volume_default_other": 0.7,
+    "music_first_track": "boss"
+  },
+
+  "popup": {
+    "_source": [
+      "THE PAUSE'S ACHIEVEMENTS POPUP. CustomGameMenuLayer::CustomGameMenuLayer (278359..280345) #229-280 adds",
+      "the 'scores' button only when getAchievementsFromLevel(world, level) (249772..250229, null for a level",
+      "no achievement names) is not null - 59 of the 128 levels; CustomGameMenuLayer::update (280592..281012)",
+      "#38-94 on its press sets it unpressed and opens AchievementsPopup(that list) with",
+      "UILayerManager::openPopup (78770..78899): over the pause, which is current again when it goes",
+      "(Popup::update 72366..72677 #28-67). The owner's ruling keeps the button on every level (ui.json",
+      "pause.achievements_button): on the 69 the original gives none, it opens nothing.",
+      "AchievementsPopup::AchievementsPopup (281510..282417): Popup::Popup with no picture of its own and",
+      "sprites/popup_close_button.png at (0.92, 0.5) (#5-29; the help popups' close, ui.json popups),",
+      "tapScreenToClose (#42-44) and setButtonHighlightEffects(close, 0.03, 150) (#46-60); then, for each",
+      "of the level's achievements in the list's order, '@' when it is unlocked or '#' (#91-110), ' ',",
+      "getTitle(unlocked), ':\\n', getDescription(unlocked) (#121-190 - the secret mask applies here), and",
+      "'\\n\\n' between two (#194-207).",
+      "AchievementsPopup::draw (282670..283226): UILayer::draw (the dim and the close button), then while",
+      "'close' is there, its colour's alpha as `bias`, the frame's scale scale(dismissed ? smoothBeginning(bias)",
+      ": elastic(bias)) (#28-58), and TextBoxFrame(text, getVerdana20FontName(), 'sprites/box_bg.png',",
+      "GetScreenSize() / 2, V2_HALF, scale(1 / getHdSpriteDensity()) x 0.8, that scale) in the button's",
+      "colour (#59-129).",
+      "TextBoxFrame::draw (36781..37291): the text box ComputeTextBoxSize x textScale, its top-left the",
+      "position less box x origin; ImageFrame(tiles, that top-left, V2_ZERO, the box, bgScale, true)",
+      "(#56-91), then DrawText at the top-left at textScale (#93-114): the text takes no bounce.",
+      "ImageFrame::draw (34075..35953), borderOutside: the tiles cut 3 x 3, a tile frameSize x scale; the",
+      "nine pieces round the box - the corners outside it, the edges stretched along it, piece 4 over it.",
+      "ImageFrame::drawSprite (35953..36120): DrawShapedSprite at pos - origin x size."
+    ],
+    "tiles": "sprites/box_bg.png",
+    "tile_units": [64, 64],
+    "tile_columns": 3,
+    "tile_rows": 3,
+    "font": "Verdana40_shadow.fnt",
+    "units_per_font_px": 0.4,
+    "unlocked_mark": "@",
+    "locked_mark": "#",
+    "close_button": {
+      "sprite": "sprites/popup_close_button.png",
+      "at_screen": [0.92, 0.5],
+      "origin": [0.5, 0.5],
+      "size_units": [64, 64]
+    }
+  }
+}

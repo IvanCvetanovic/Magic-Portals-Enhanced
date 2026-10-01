@@ -25343,3 +25343,253 @@ census of what played; it says what was latched now, and LEFT FOR THE OWNER carr
 time stamp; `MagicPortals.exe` (`193bf60b`) and `test_mp.exe` (`5ddd3f34`) relinked, and `MagicPortalsSpike.exe`
 (`d8d60427`), which the fix rounds' targeted builds had left stale on `MagicPortalsSim.lib`; none launched. The gates
 stand as measured on `0bc35794` and `9a1c9c5a`. Smart App Control: 5 refusals across the step, 0 at commit.
+
+## Step 172 - achievements as the original: every condition checkForLevelAchievements and registerMedalAchievements test, the red key's and the two help blocks', the unlocked set saved with its hash, the "Achievement unlocked!" card, the dashboard's "This level is locked!" and the pause's AchievementsPopup (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w2c`, branch `w2-c`, on step 171's `90df118`, engine `710bffc`), the
+program's P8** (`docs/parity-backlog.md` section 6, "P8. Achievements"; the audit's P8, `screens_inventory.md` 4, 5
+and 8, `check_screens.md` 4, 5 and 8). Its build reads the frozen level data in `out/snap_w2`; numbered in track C's
+range, and the merge renumbers it. Changed: `game/data/achievements.json` (new: every rule, the save, the two cards,
+the Notificator and the popup, each cited), `game/sim/Achievements.{hpp,cpp}` (the rules and their reader, `World`,
+`Play`, `Dispatches`, `CompletionIds`, `HelpBlockId`, `HashOf`, `PopupText`, `FromLevel`, the saved set `Store`),
+`game/sim/Notificator.{hpp,cpp}` (new: the queue, `EffectOf`, the card's `LayOut`, `LayOutBox` for
+TextBoxFrame/ImageFrame), `game/sim/Dashboard.{hpp,cpp}` (`Build` given the unlocked ids), `game/sim/CMakeLists.txt`,
+`game/MagicPortalsLayer.{hpp,cpp}` (the hooks, `LevelWorld`, the card and the popup drawn, the music's volume per
+track), `game/data/sounds.json` (`achievement_card`), `game/data/ui.json` (`pause.achievements_button`'s stale
+reason), `game/main.cpp` (`--saves`' help), `tests/test_mp_achievements.cpp` (new) with `tests/CMakeLists.txt`,
+`tests/test_mp_layer.cpp` (five cases, two older checks), `tests/test_mp_routes.cpp` (each route's unlocks, checked).
+No engine change (the pin stays `710bffc`), no converter change, `tools/asbc` and `out/snap_w2` untouched. No format
+finding: the save's two keys are the original's script, cited in `achievements.json` `save` (as step 124 cited
+`audio.json`'s).
+
+**GAMEPLAY: none.** An unlock reads the level and writes a file and a card; nothing the simulation reads changes.
+Measured: the 70 routes won on the same ticks with their output line for line as step 171's apart from the new
+achievement lines and 4-19's sound census, which gains the card's `achievement_card x1`; reachability unchanged; and
+127 of the 128 levels' f420 frames byte-identical, 4-20's differing by 61's card alone, in its box, every log's game
+lines unchanged (gate 15). Two things a player meets that are not the game's rules: the
+card over every screen, and the music turned down under it (the Notificator's callbacks, below).
+
+**BLOCKERS, checked first: none.** Every condition, the save, both cards, the popup and its frame are in the listing
+(`all_functions.txt`, md5 `48fe65ce...`); the port has every input a rule reads (portals, the medal, the level's age,
+live entities, the lift doors, the torches, the wells' laps) but minion sight, which only seven rules read (LEFT FOR
+THE OWNER); the original's list is Enhanced's gitignored `out/snap_w2/data/achievements.json` (82 entries, read at
+run time, not changed).
+
+**WHAT THE ORIGINAL DOES** (arguments pushed last-first, `CMPIu vX, vN` the constant N; `achievements.json` cites
+every instruction).
+- **Where it unlocks**, always `AchievementManager::unlock(id, notify, delay)` (247231..248007): on the door's frame
+  `LevelFinishedLayer::LevelFinishedLayer` (271777..273843), which `writeScore` builds after `setScore` has saved the
+  medal, calls `registerMedalAchievements(g_currentWorld, true)` (#499-502) and then `checkForLevelAchievements(world,
+  level, score, numPortals, GameStateController::getGameTime(), true)` (#504-516) - `score` the medal this play earned,
+  the time `m_gameTime`, which `update` adds the frame to before `checkGameEnd`; `WorldSelector::WorldSelector`
+  (167326..168612) #265-291 `registerMedalAchievements(t, true)` for every chapter on every visit;
+  `PortalMainMenu::preLoop` #395-396 `checkPreviouslyUnlockAchievements` (202712..202943): for every world
+  `registerMedalAchievements(t, false)` and every level `checkForLevelAchievements(t, l, getScore(t, l), 99999, 0,
+  false)`, silently, outside the game; `ETHCallback_key` #822-851 `dispatchAchievement(61, true, 5000)` when a key
+  whose colour is red is taken (by the character or a minion, #713-742); `HelpBlockController::update` #462-517
+  dispatches 62 on 4-01's block and 63 on 4-02's, with 1500, before their popups.
+- **The conditions.** `checkForLevelAchievements` (401641..408734): 67 dispatches, each `dispatchAchievement(id,
+  notify, 2500)`, read as conjunctions of: the medal at least or above N, the portals at most or exactly N, the state
+  'Game', the game time at most N ms, `countEntities` (400758..401133: the ';'-split names, the sum of
+  `GetEntityArray(name).size()`) at least or exactly N, `SeekEntity(name)` null or not, every `door_lift` /
+  `door_lift.ent` at `status` 0 (`ETHCallback_door_lift`: 0 at its place, 1 opening, 2 open, -1 closing),
+  `hasBeenUnnoticed(N)` (401465..401641: exactly N `minion.ent` and `spottedCount()` 0 - #22 `CMPIu v4, v0` the
+  constant 0), and `retrieveRondaboutCount` (459326..459694: the body's laps round the first `gravity_area`) at least
+  3. `registerMedalAchievements` (399746..400758): a chapter at 50, 75 and 100 % unlocks its three badges, in that
+  order, each with 2500. 67 + 12 + 61, 62 and 63 = 82, each id named once - the list's 82. **Where the bytecode and
+  the list's descriptions disagree the bytecode is built**: 20 (2-28) also wants gold (#652 TNS); 42 (3-24) and 75
+  (4-27) test no medal.
+- **The saved set.** `unlock` #3-8 does nothing for an id `isUnlocked` (248275..248672) finds in `m_list`; #10-56 adds
+  it, so the list keeps the order of unlocking; #184-185 `saveList` on every unlock, notify or not. `saveList`
+  (249353..249707): entity `achievements`, `list` and `hash` = `generateAchivementHashCode(list)` (248672..249240: the
+  sum of `uint(id) x (t + 2)` in 64 bits, less 27, times 3, plus 2, cut to an int, in decimal; '' for no list), in
+  `findScorePath() + 'achievements.enml'`. `loadList` (245190..246105) keeps the list only when its hash is its own.
+- **The card.** `unlock` #74-182 when `notify`: a `Notification` on `sprites/nnotificationbg.png`, `'Achievement
+  unlocked! ' + Achievement.title` (the title itself, never the secret mask), icon `'sprites/achievements/' +
+  iconSprite`, 3400 ms, the caller's delay, sound `getAchievementSoundName`; `Notificator::notify`.
+  `displayLevelLockedNotification` (241425..241713), from `ScoreDashboard::loop` #780-786: 'This level is locked!',
+  no icon, 1500 ms, delay 0, no sound. `main` #1-56 builds the one `Notificator` (normalizedPos (0.5, 1), origin (0.5,
+  1), `getVerdana20FontName()` at 0.6 / density, textOffset (0, 4)) with two callbacks - `notificationCallback`
+  `setMusicVolume(0.15)`, `notificationDismissCallback` `setDefaultMusicVolume` (0.6 for g_musicNames[0], else 0.7) -
+  and `loop` #93-97 updates and draws it after every state, on frame time. `updateStack` moves ONE card a frame from the
+  stack once its delay has strictly passed, plays its sound and calls the callback; `update` dismisses the first shown
+  once its duration has strictly passed and starts the time of every card behind it again; `draw` draws the first:
+  `computeEffectScale` (elastic in over min(d / 2, 1000), a fade with `smoothEnd` shrink over min(d / 2, 800)), the
+  background cut 3 x 1 round the text box, the text centred, the icon on the box's left edge.
+- **The pause's AchievementsPopup.** `CustomGameMenuLayer` #229-280 adds 'scores' only where
+  `getAchievementsFromLevel` (249772..250229) is not null - 59 levels; `update` #38-94 opens `AchievementsPopup` over the
+  pause with `UILayerManager::openPopup`. `AchievementsPopup::AchievementsPopup` (281510..282417): a `Popup` with no
+  picture, `popup_close_button.png` at (0.92, 0.5), `tapScreenToClose`, the close's highlight; its text, per achievement,
+  '@' or '#', ' ', `getTitle`, ':\n', `getDescription`, '\n\n' between two. `draw` (282670..283226): the frame scaled by
+  the close button's alpha through `elastic` (in) or `smoothBeginning` (out), `TextBoxFrame` (36128..37291) at the
+  screen's centre over `ImageFrame` (33417..36120) with `borderOutside`: `box_bg.png` cut 3 x 3 round the text, the
+  text unbounced at 0.8 / density. Verdana40_shadow.fnt draws '#' as a padlock (the probe's capture).
+- **Not built**: `mergeOtherAchievementFiles` (246105..246631, another version's file - there is none here) and
+  `unlock` #58-72's `flurry` analytics.
+
+**THE CHANGE.**
+1. **The rules as data** (`game/data/achievements.json`): the 67 level rules in the function's order with their
+   instruction ranges, the 12 badges by chapter in unlocking order, the key's and the help blocks', the menu's fixed
+   arguments, the save's keys and hash constants, both cards, the Notificator's numbers and the popup's. Ids, numbers
+   and names only; titles, descriptions and icons stay in Enhanced's list. `Achievements::LoadRules` refuses a term it
+   does not know and an id two rules name.
+2. **The evaluator** (`Achievements::Dispatches`): a rule's terms in order, the first false one ending it; the level
+   answers through `World`. The layer's `LevelWorld` counts what the level placed by its `metadata/entity_name` while
+   it is still in the world (a shot agent and a destroyed body are not), and what was added since - a launcher's
+   stones, the markers' minions - by the entity each adds; a torch by `Torch::Light` (unlit, under that name, or put
+   back out by a signal, which adds `light_off.ent`, `level_world.signal_torch`); a lift door at `status` 0 by
+   `Mover::Door` (not opening, progress 0); the laps by `GravityWell::State::sweeps` (the player's, round the first
+   well); the spotted count 0 (no sight).
+3. **The hooks**: the door's tick after `recordWin` (the chapter's badges, then the level's rules with this play's
+   medal, portals and time - the level's age with this tick's 16.667 ms), chapter select on every visit (badges, with
+   cards), the main menu on every visit (the silent pass), a named `--level`'s start (the same pass, where the menu
+   would have run it), the red key's carrier changing, and 4-01's and 4-02's help-block release.
+4. **The saved set** (`Achievements::Store`): `achievements.json` beside `scores.json` in the save directory, the
+   original's `list` and `hash` under `achievements`; a wrong hash opens empty, a file that does not read is said and
+   written over at the next unlock, an empty directory is memory-only. The dashboard reads it
+   (`Dashboard::Build(..., ids)`).
+5. **The Notificator** (`sim/Notificator`): the queue on the layer's tick after each tick's state, on every screen; a
+   card shown latches its sound (`achievement_card` = `getAchievementSoundName`) and sets the current track's volume to
+   0.15, a card gone sets 0.6 or 0.7; `MagicPortalsLayer::EmitNotifications` draws the first card over everything, in
+   the menu's box or the level's view. The music keeps a volume per track (`Music::volumes`), cleared by a
+   `playMusic`; `updateMusic` gives the voice its volume (`AudioEngine::SetVoiceParameters`).
+6. **The pause's popup**: `PressPause(Achievements)` opens it where the level has achievements; while it is up it takes
+   the pause's tick and every touch (the pause's buttons take nothing), a touch down, its close button or the back key
+   closes it, and the pause is current again once it is gone. Drawn after the pause: the framework's dim and close
+   button (`emitPopup`), then the nine tiles and the text.
+
+**THE GATES.** Before = step 171 (`MagicPortals.exe` `0bc35794`, `test_mp.exe` `9a1c9c5a`, `P6/fix2/after/sweep`,
+`P6/fix2/suites/`); after = `MagicPortals.exe` **`b662576b`**, `test_mp.exe` **`a5edebc3`** (rebuilt after the
+folder's rename as `ebbdff7e` / `e85bbf06`, on which the verification retook every gate: the step's last paragraph).
+Everything under `out/parity/program/P8/`. Every exe run was given `--saves` (a scratch directory; the owner's
+`%APPDATA%/Magic Portals/scores.json`, `40bfef3a`, was read for gate 12 by its copy and is unchanged; no
+`achievements.json` was written there).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in six builds (`build/build1-6.log`, `-j 4`, then `-j 2` for the spike): build 1 stopped on the new suite's `CHECK_EQ` of two strings (a test error, `std::to_string`); build 2 `a1c619f0` / `0f08040c` (the runner refused, SMART APP CONTROL); build 3 the runner relinked once, `03f211b7`; build 4 `main.cpp`'s help, `84563841` (never launched); build 5 the card's log by id and the test's hash, `b662576b` / `a5edebc3`; build 6 `MagicPortalsSpike.exe` relinked on the changed `MagicPortalsSim.lib` (`6fcb49ea`, not launched); after the folder's rename, the rebuild for the repointed input paths (127 steps, `ebbdff7e` / `c680f3ef` / `ee475e9f`), the verifier's relink of the refused runner (`e85bbf06`) and the commit's rebuild of `main.cpp`'s help (`1a7674e3`, not launched), 0 warnings each |
+| (1) Every id unlocked by exactly one rule, as the list | 67 level rules, 12 badges, 61/62/63; the list's 82 ids each once; each rule's (world, level) its entry's; 59 levels named | 27 of 82 (the tool's two tables) | **passes** (`test_mp_achievements`): 82 of 82, each rule on its entry's level, the badges the chapters' own, 61 4-19's, 62 and 63 4-01's and 4-02's (secret); 59 levels named |
+| (2) The menu's pass is the tool's walk of the same bytecode | with the menu's arguments, every level x medal 0..3 and chapter x 0..100 % equal to `from_level_medal` / `from_completion` | - | **passes**: 512 level-medal cells (27 unlocks) and 404 chapter cells, 0 differ |
+| (3) Every term as the bytecode tests it | a case per kind and per boundary | - | **passes**: 46 cases - 1-10's agent, 1-26's 8 stones, 1-28's no portal, 1-31's doors, 2-01's crate by name, 2-08's six crate names, 2-14's 17 and 80, 2-28's gold, 2-32's 22 portals and the finish, 3-01's silver, 3-02's two unnoticed and one spotted, 3-09's 31 and 74, 3-24's 42 at bronze, 4-07's 8016 / 8016.5 ms, 4-17's laps, 4-25's dark and light, 4-27 at bronze, 4-31's 68 and 69, 4-32's 12 / 13 portals; no level, no level term |
+| (4) The save | the hash worked by hand; the list in unlocking order; a wrong hash empty; a broken file written over; memory-only writes nothing | - | **passes**: `45` 191, `45,6,7` 329, `0` -79, `3,0,37` 383, `2147483647,2147483647` 2147483554 (the 32-bit product and cut); round trip `45,6,7`; hash 330 refused; `{ not json` said, empty, rewritten |
+| (5) The Notificator | 20 ms frames: two cards at once shown 2500 ms on strictly, one a frame, each 3400 ms in turn; the effect's values | - | **passes**: shown A@126, B@127, gone A@297, B@467; scale 0 at 0, elastic(0.5) = 1.0156 at 500, 1 from 1000 to 2600, alpha 0.5 and scale smoothEnd(0.5) = 0.7071 at 3000, alpha 0 at 3400; the locked card's 750 / 750 |
+| (6) The card's and the frame's places | at full size on 1280x720: the three pieces round the text box at the bottom centre, the text pitched by half the icon, the icon on the box's left edge; the nine tiles outside the text, the bounce on the tiles alone | - | **passes** (`TheCardSitsAtTheBottomCentre`, `TheBoxFramesTheText`) |
+| (7) The door, layer | 1-01 walked to its door: 45 on the door's tick with this play's medal, portals and time; saved there with its hash; its card off the stack strictly past 2500 ms with its stinger and the music at 0.15, gone strictly past 3400 ms with 0.7; drawn as three pieces and the icon | nothing unlocked by play | **passes** (`TheDoorUnlocksItsAchievementAndRaisesItsCard`): door tick 193, medal 3, 0 portals, 3216.7 ms (= the level's age); `list` "45", `hash` "191"; the card 149 ticks after the door (the queue's 150th update, counting the door tick's own: 2500.0002 ms, strictly past 2500), gone 204 later (3400.0003 ms); music 0.7 / 0.15 / 0.7; `achievement_card` once |
+| (8) The red key, layer | 4-19's key taken: 61 on that tick, its card strictly past 5000 ms | - | **passes**: 61 on the pick's tick, the card 299 ticks later |
+| (9) The pause's popup, layer | 1-31 (achievement 13's): open, its text the list's entry, silent, the pause's buttons dead under it, nine tiles and the close drawn, closed by the back key and gone with the pause current; 1-05 (none): nothing opens | the button opened nothing | **passes**: '# ' + title + ':\n' + description; `box_bg.png` x 9, `popup_close_button.png` x 1; gone 60 ticks after the back key, then Resume resumes; 1-05 nothing |
+| (10) The main menu's pass and the dashboard, layer | chapter 1 all gold: 0, 3, 37, 45, 6, 7, 8, 9, 46, 47, 14, silent, in that order, saved with its hash; the dashboard from the saved set the same rows and points as from the medals | the dashboard from the medals | **passes**: that order, `hash` 5192 (1757 - 27, x 3, + 2), no card; rows and points equal |
+| (11) The locked row, layer | a fresh save's 1-02 row: 'This level is locked!' at once, 1500 ms, no icon, no sound but the denial | the denial heard, nothing drawn | **passes**: row 4, the card on the next tick, `achievement_denied` once and no `achievement_card`; three pieces over the dashboard |
+| (12) The exe | (a) 1-01 to its door, a fresh save: the card at f420 and nothing else changed; (b) the same with the owner-like save: the start's pass silent, no card; (c) 1-31's popup; (d) the owner's own save copied, through the menu: `scores.json` unchanged, `achievements.json` made, the dashboard on it; (e) a help block's dispatch | - | **passes** (`probe/`): (a) door 193, `achievement 45's card shown on tick 342`, f420 the card in (254..1026, 631..720) and `list` 45 / 191; (b) `45, 6, 14` on tick 0 by the pass, `hash` 413, no unlock at the door, `scores.json` `40bfef3a` before and after, f420 differs from (a) only inside the card's box (67,833 px); (c) the popup over the dimmed pause, the padlock, the frame; (d) the menu on tick 143 unlocks 45, 6 and 14 silently, `scores.json` `40bfef3a` before and after (and the owner's own untouched, no file added there), the dashboard 20 points; (e) 4-02's help block (the player `--place`d beside it, a DEV probe, never a route): 63 on its release tick 121, its popup not built, the card on tick 210 (strictly past 1500 ms), `list` 63 / `hash` 299 |
+| (13) No gameplay change: routes | 70 won on the same ticks, output as step 171's apart from the achievement lines; every unlock its level's or its chapter's, at its door with a card (or the red key's), every medal-only rule exactly as the medal | 70 won, 1,143 checks | **passes** (`suites/final/test_mp_routes.txt`): 70 won on the same 70 ticks, **1,241 checks** (+98), 0 failures; 11,730 lines without the achievement lines, 1 differs from step 171's: 4-19's sound census, now with `achievement_card x1` (its card shown on tick 428, before its door on 581) (`routes_diff.txt`) |
+| (14) Winnability | reachability 108 / 20 / 0, 0 differ | 108 / 20 / 0 | **passes** (`reach_check.txt`, main's venv) |
+| (15) The 128-level f420 sweep | 128 rc 0, validation silent, pngs whole and on their lines, no input line; **128 of 128 identical to `P6/fix2/after/sweep`** (written on the premise that no level reaches a door, a red key or a help block in 420 frames) | `P6/fix2/after/sweep` | **NOT MET as written, explained: 127 of 128 identical** (`compare_P8.txt`; also 127 of 128 to `base_w2C/sweep`). The premise was wrong for 4-20, and **4-20 differs by the card alone**: its red key (`key_1335`) is taken on tick 1 - the player starts on it - so `ETHCallback_key`'s 61 is dispatched there as on 4-19 (the bytecode tests the colour, not the level), and the sweep's shared save did not have it: the card shown on tick 300, at f420 in its hold, 71,212 px in (235..1047, 631..720) - the card's box, over the walk pads - and nothing else. 128 rc 0, no stall, every png whole and on its logged md5, validation ACTIVE in 128 and silent, 0 input lines, art from `out/snap_w2` in 128; every log's game lines (the achievement lines aside) as step 171's, 128 of 128; the seeded `scores.json` `40bfef3a` before and after, and the shared save's `achievements.json` now `45,6,14,61` / `1328` (1-01's start pass unlocked 45, 6 and 14 from the seeded medals, silently; 4-20 61) |
+
+**THE ROUTES' UNLOCKS** (gate 13; memory-only saves, so each route from nothing): 1-01 45, 1-02 6, 1-03 7, 1-32 14,
+2-14 17 (its small crate not burned: no 80), 2-32 22 (24 portals: no 21), 3-02 24 (unnoticed - no sight), 3-32 36, 4-01
+49, 4-19 61 (the pick, tick 129), 4-30 76 (gold and unnoticed - no sight), 4-32 73 and 77 (gold, 6 portals). 58 routes
+unlock nothing (their medal or numbers miss, or 2-01's crate burned at tick 181, 1-10's two agents shot).
+
+**SUITES**, on `test_mp.exe` `a5edebc3`, once each (`suites/final/`): `test_mp_achievements` **1,140** (new),
+`test_mp_layer` **3,388** (3,343 + 45: the five cases and the two older checks), `test_mp_routes` **1,241** (1,143 +
+98), `test_mp_info` **389**, `test_mp_sounds` **242**, 0 failures each. The first runners: `03f211b7` ran all five
+(`test_mp_layer` 3,388 with 1 failure, the menu case's hand hash written for another order - 4514 is `45,6,7,8,9,46,47,
+14,0,3,37`'s - fixed to 5192). Not run: the other 42 suites - none includes a changed header but through
+`MagicPortalsLayer.hpp`, which only the layer and routes suites include, and `Dashboard.hpp` / `Achievements.hpp`,
+which `test_mp_info` does.
+
+**SMART APP CONTROL: 2 refusals across the step, both of `test_mp.exe`.** The implementation's 1 (`sac_check.txt`,
+CodeIntegrity 3033/3077/3118 at 02:57:01): `test_mp.exe` `0f08040c` on its first launch, deleted and relinked once
+(`03f211b7`), which ran; `a5edebc3` ran on its first launch. `MagicPortals.exe` `b662576b` ran on its first launch
+(the probes and the sweep's 128 launches); `a1c619f0` and `84563841` were linked and never launched;
+`MagicPortalsSpike.exe` `6fcb49ea` linked, not launched. The verification's 1 (`verify1/sac_check.txt`, at 11:06:09):
+the rename's runner `c680f3ef` on its first launch, deleted and relinked once to `e85bbf06`, which ran;
+`MagicPortals.exe` `ebbdff7e` ran all its 137 launches. 0 at commit.
+
+**RECORDED DEVIATIONS.**
+1. **The game's time is the level's age on the tick** (16.667 ms ticks, a pause's time excluded), where the original
+   sums whole-millisecond frames from `GameStateController`'s creation; the time rules' +16 ms slack (8016 ...) takes
+   a frame either way.
+2. **A named `--level` runs the main menu's silent pass at its start** (the menu path runs it at the menu, as the
+   original): without it the first door of a dev run would raise cards for badges the save earned long ago.
+3. **A lift door is at `status` 0 when it is not opening and at its place** (`Mover::Door`); the original's door
+   latches (B7, built on `main` by the wave's other track, not in this tree), so a door that reverses mid-way reads as
+   the port moves it.
+4. **The Notificator runs on the layer's tick**, the original's on frame time; its strict comparisons are kept, so a
+   card shows on the 150th tick after a 2500 ms delay at 60 Hz.
+5. **The music's volume is kept per track** (`setMusicVolume` on `currentTrack`): a track a card turned down and a
+   `playMusic` of another leaves each at its own; INFERRED from SetSampleVolume being a sample's, not measured.
+6. **A card's log line names the achievement by id** and the unlock's by id: the titles are the original's list's.
+7. **A card without Enhanced's list is not raised** (the unlock is still made and saved): its words are the list's.
+8. **A save shared across runs carries what one run unlocked into the next**, as the player's own does: the sweep's
+   4-20 raises 61's card because no earlier run of that save took 4-19's key (gate 15).
+
+**RULINGS APPLIED.** The standing direction: the original decides - every condition as its bytecode tests it (the
+descriptions lose where they disagree: 20, 42, 75), the saved set and its hash as `saveList` writes them, both cards as
+the Notificator draws them, the music under them as its callbacks set it. **The owner's ruling on the pause's
+Achievements button is kept**: drawn on every level; the original draws it on the 59 levels an achievement names
+(gate 1), and on the other 69 it opens nothing here (`ui.json`'s stale reason replaced). R1, R2, R17, R23 not this
+step's; R24 and R25 untouched; camera dragging not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Stealth fires on play alone.** Minion sight is not built, so `spottedCount` is 0 and the seven "unnoticed"
+  achievements - 24 (3-02), 26 (3-04), 28 (3-05), 32 (3-11), 42 (3-24), 66 (4-25, lights on), 76 (4-30, gold) - unlock
+  whenever the level's minions all stand; two routes do (3-02's 24, 4-30's 76). They become as hard as the original's
+  when sight is built and raises `enemySpotCount`; the owner may prefer them held until then.
+- **Conditions on what is still to be built** (they fire now where the port's mechanics already reach them): the
+  minion counts - every one killed: 23 (3-01), 25 (3-03), 41 (3-04), 74 (3-09); none killed: 29 (3-06), 31 (3-09),
+  33 (3-16), 40 (3-23) - count the `minion.ent` left standing, which the killer floor, a fireball and a shock diamond
+  take now and a knight's sword (G1), a stone's crush and an explosion's burn will; 10 (1-10) counts live agents (step 126's kill); 13 (1-31) reads
+  the lift doors (B7's latch); 60 (4-17) the laps (step 110's sweep); 69 (4-31) needs its torch lit and put back out
+  by the fire signal (the placed one is the bare `light_off`).
+- **The pause's button on the 69 levels no achievement names** opens nothing (above): the ruling is the owner's.
+- **Two of the original's on-screen strings are committed as runtime values** (the verification's finding, low, not
+  blocking): `achievements.json`'s `card.message_prefix` 'Achievement unlocked! ' and `locked_card.message` 'This
+  level is locked!', which `test_mp_achievements.cpp` and `test_mp_layer.cpp` embed too, where the project keeps the
+  achievements' own words, the secret mask's included, in Enhanced's gitignored `out/data/achievements.json` as
+  Asantee-authored (`ui.json`'s dashboard note, `Achievements.hpp`); the dashboard's 'new!' (`ui.json`) is committed
+  the same way. `docs/permission.md` is still the 'PASTE THE ACTUAL GRANT HERE' stub, so the scope that would settle
+  it is not recorded. Either `tools/asbc/achievements.py` extracts the two strings into `out/data/achievements.json`,
+  as it does the secret words, and the port reads them there, or a ruling records that short UI strings may be
+  committed.
+- **Not built**: `mergeOtherAchievementFiles` and the analytics line.
+- **Verified by reading, not by a case or a route**: `LevelWorld`'s answers on real levels for the lift doors (1-31's
+  three `door_lift` nodes are `Puzzle::SwitchedDoor`s named by their node, `Puzzle::Wire`), the torches
+  (`Torch::Light::name` is the node's, so `FindNode` resolves on 4-22, 4-25, 4-26, 4-27) and the laps
+  (`GravityWell::State::Tick` keys each sweep by the body's own entity - the player's is `Level::player` - and the
+  well's index in scene order). The routes exercise `Count` on real scenes (2-14's live crate, 1-10's dead agents);
+  no route wins 1-31, 4-17 gold, or a dark level unlit, and 62 (4-01's block, off the view at the probe's tap) was not
+  reached - it is 63's hook, which was.
+- For the close role: the backlog's P8 row and "Left by step 126"'s note (10 counts the live agents - built so), step
+  171's "Not built ... the achievement stinger (no unlock notification)" (built here), the audit's P8 and the UI2
+  "AchievementsPopup unmeasured" row, and the "Smaller" row's `--saves` `--help` sentence (step 124's, finished at
+  this step's commit).
+- For the merge's renumbering: "step 172" is written in `achievements.json`, `sounds.json`, `ui.json`,
+  `Achievements.hpp`, `Dashboard.hpp`, `MagicPortalsLayer.{hpp,cpp}`, `tests/CMakeLists.txt` and the three suites.
+- **For the merge, the lift doors' status** (the verification's finding, low): `LevelWorld::LiftDoorsShut`
+  (`MagicPortalsLayer.cpp`) reads `status` 0 as `!motion.opening && motion.progress <= 0` (deviation 3), as this tree
+  has no latch; `main`'s step 133 (`5ee1c66`) gives `Mover::Door` the decoded `DoorStatus` (Closing -1, Shut 0,
+  Opening 1, Open 2). The old fields are still on `main`, so the merge compiles either way; at the merge it tests
+  `door->motion.status == DoorStatus::Shut`, the decode's 0, and keeps achievement 13's case.
+
+**VERIFIED AFTER THE FOLDER'S RENAME, PASSED** (`out/parity/program/P8/verify1.json`, its evidence in `P8/verify1/`).
+A power loss at about 03:50 on 2026-10-01 cut the first verification before it measured anything
+(`P8/verify1_dead_poweroff/`); the owner then renamed the main checkout to `Magic-Portals-Enhanced`, and this tree was
+rebuilt for its repointed input paths (127 steps, 0 warnings; only the compiled-in paths changed): `MagicPortals.exe`
+`ebbdff7e`, `test_mp.exe` `c680f3ef` (refused, relinked once to `e85bbf06`), `MagicPortalsSpike.exe` `ee475e9f` (not
+launched). On `ebbdff7e` and `e85bbf06` every gate was retaken or re-derived: the decode re-read, its 67 dispatches
+identical to `achievements.json`'s in their order, and the hash confirmed by the original's own save - the rig's
+device `achievements.enml` (28 ids) stores 48140 = (16073 - 27) x 3 + 2, its order the menu pass's; the runner once
+with no argument, 48 of 48 suites, 0 failures, **16,812 checks** (the five above at their counts, the other 43 at
+step 171's); the 70 routes on the same ticks, their output line for line the implementation's; reachability
+108 / 20 / 0; the exe's probes (a) to (e), a locked row (1-04) and the popup's '@' and two entries; the f420 sweep with
+a fresh copy of the owner's `scores.json` for every launch (the implementation's shared one save), **128 of 128
+byte-identical to `P8/after/sweep`**, and 127 of 128 to `P6/fix2/after/sweep` and `base_w2C/sweep`, 4-20 by 61's card
+alone (gate 15); the owner's `%APPDATA%/Magic Portals` exactly `scores.json`, `40bfef3a`. Its five problems, all
+low, at commit in text only: `main.cpp`'s `--saves` help, step 124's unfinished sentence which this step rewrote, now
+ends "without changing the player's own save", and the named `--level`'s start pass is a sentence of its own; the two
+on-screen strings and the lift doors' merge note are in LEFT FOR THE OWNER above; this paragraph records the rebuild
+and the round; the implementation's shared sweep save needed no change, the fresh-save sweep giving its frames. The
+help is printed by `--help` alone, but it is a source change, so the tree was rebuilt at commit
+(`P8/commit/build_commit.log`, 0 warnings): `main.cpp.obj` recompiled and `MagicPortals.exe` relinked, `1a7674e3`,
+not launched; the whole build then had no work to do. The gates stand as measured on `ebbdff7e` and `e85bbf06`.
+Smart App Control: 2 refusals across the step, 0 at commit.

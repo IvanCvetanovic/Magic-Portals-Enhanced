@@ -44,6 +44,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/MainMenu.hpp"
 #include "sim/MenuState.hpp"
 #include "sim/Motion.hpp"
+#include "sim/Notificator.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Pause.hpp"
 #include "sim/Popup.hpp"
@@ -1126,6 +1127,38 @@ public:
         return m_achievementsLoaded ? &m_achievements : nullptr;
     }
     const std::string& AchievementsError() const { return m_achievementsError; }
+
+    // ---- unlocking them (planning step 172) --------------------------------------
+    //
+    // What unlocks each (game/data/achievements.json, sim/Achievements.hpp's
+    // Rules), the set the player has unlocked, kept in Paths::saveDir beside the
+    // medals (Achievements::Store), and the original's Notificator, which shows an
+    // unlock's card - and the dashboard's "This level is locked!" - over every
+    // screen (sim/Notificator.hpp). AchievementRulesError is empty when the rules
+    // read; without them nothing unlocks.
+    const Achievements::Rules& AchievementRules() const { return m_achievementRules; }
+    const std::string& AchievementRulesError() const { return m_achievementRulesError; }
+    const Achievements::Store& AchievementStore() const { return m_achievementStore; }
+    // Every unlock this run, in order: the id, the layer's tick, and whether a card
+    // was asked for.
+    struct Unlock {
+        int id = -1;
+        int tick = 0;
+        bool notify = false;
+    };
+    const std::vector<Unlock>& Unlocks() const { return m_unlocks; }
+    const Notificator::Rules& NotificatorRules() const { return m_notificatorRules; }
+    const Notificator::Queue& Notifications() const { return m_notificator; }
+    // What the last door's tick asked of the level (checkForLevelAchievements'
+    // arguments), for the suites; empty before a door.
+    std::optional<Achievements::Play> LastDoorPlay() const { return m_lastDoorPlay; }
+    // The music's volume as the original's calls have left it for the current
+    // track: the track's own, or what a card set (setMusicVolume and
+    // setDefaultMusicVolume); a negative value for no current track.
+    double MusicVolumeNow() const;
+    // Puts the Notificator's card into the screen overlay, over everything else this
+    // frame. OnUpdate calls it once a frame, after EmitHud and EmitMenu.
+    void EmitNotifications(entt::registry& registry) const;
     // Puts this frame's menu into the screen overlay: the main menu's pictures, the
     // loading screen's logo and dots, and every menu state's black. Nothing when no
     // menu state is up. OnUpdate calls it once a frame.
@@ -1161,9 +1194,18 @@ public:
     bool SoundOn() const { return m_soundOn; }
     bool MusicOn() const { return m_musicOn; }
     // Press one of the pause's buttons, as a tap on it does. False when it led
-    // nowhere: no pause is up, the button is not there, or it is Achievements,
-    // which the port has no screen for yet.
+    // nowhere: no pause is up, the button is not there, or it is Achievements on a
+    // level no achievement names (the owner's ruling keeps the button there; the
+    // original has none to press).
     bool PressPause(entt::registry& registry, Pause::Button button);
+    // The pause's AchievementsPopup (planning step 172): up over the pause, its text,
+    // and its popup's clock. Closed by a touch down anywhere, its close button or
+    // the back key, as a help popup is; the pause is current again once it is gone.
+    bool AchievementsPopupOpen() const { return m_achievementsPopup.open; }
+    const std::string& AchievementsPopupText() const { return m_achievementsPopup.text; }
+    const Popup::Open* AchievementsPopupState() const {
+        return m_achievementsPopup.open ? &m_achievementsPopup.state : nullptr;
+    }
 
     // The level's FRAME clock: its age plus every millisecond game time stood
     // still under a pause or a popup. What the original times by frame time
@@ -1650,6 +1692,28 @@ private:
     // The exit reached: the medal computed and saved on the door's own tick, as
     // checkGameEnd's writeScore does it; the screen comes later (openFinished).
     void recordWin();
+
+    // ---- achievements (planning step 172) -----------------------------------------
+    // AchievementManager::unlock: nothing for an id the store has; else the id
+    // added and saved, and with `notify` its card onto the Notificator's stack.
+    void unlockAchievement(int id, bool notify, double delayMs, const char* why);
+    // The door's tick, after recordWin's medal: registerMedalAchievements(world,
+    // true) and checkForLevelAchievements with this play's numbers.
+    void achievementsAtDoor(const entt::registry& registry, double gameTimeMs);
+    // registerMedalAchievements(world, notify) over the saved medals.
+    void achievementsForChapter(int world, bool notify);
+    // checkPreviouslyUnlockAchievements: every chapter and level, silently.
+    void achievementsMenuPass();
+    // The red key's pick (ETHCallback_key #822-851), on the edge of its carrier.
+    void achievementsForKeys();
+    // The Notificator's update, and what a card shown or gone asks of the music.
+    void tickNotificator(double dtMs);
+    void setMusicVolume(double volume);
+    void setDefaultMusicVolume();
+    // The pause's AchievementsPopup: opened over it, ticked in its place, drawn over it.
+    bool openAchievementsPopup();
+    void achievementsPopupTick(entt::registry& registry, double dtMs);
+    void emitAchievementsPopup(Supersonic::ScreenOverlay& overlay, const glm::dvec2& view) const;
 
     float viewportAspect(const entt::registry& registry) const;
     void placeCamera(entt::registry& registry);
@@ -2442,6 +2506,10 @@ private:
     struct Music {
         std::string current;  // the last playMusic's track, "" as the AudioManager starts it
         bool stopped = false; // stopped since, until a playMusic or a resumeMusic
+        // A track's SetSampleVolume since its playMusic: what a card's
+        // setMusicVolume and setDefaultMusicVolume leave it at (planning step 172).
+        // A track not here plays at its own volume.
+        std::map<std::string, double> volumes;
     };
     Music m_music;
     // What the level looked like on the last tick, for the calls made once.
@@ -2459,6 +2527,7 @@ private:
     // alone for ever: the layer holds this and stops it itself, or menu to
     // level to menu leaves two tracks playing over each other.
     Supersonic::AudioEngine::VoiceId m_musicVoice{Supersonic::AudioEngine::kInvalidVoice};
+    float m_musicVoiceVolume{-1.0f}; // what the voice was last given
 
     // The menu. Screen::None while a level is played.
     Screen m_screen{Screen::None};
@@ -2542,6 +2611,31 @@ private:
     Achievements::Content m_achievements;
     bool m_achievementsLoaded{false};
     std::string m_achievementsError;
+    // And the port's own rules for unlocking them, the saved set, this run's
+    // unlocks, and the Notificator (planning step 172).
+    Achievements::Rules m_achievementRules;
+    bool m_achievementRulesReady{false};
+    std::string m_achievementRulesError;
+    Achievements::Store m_achievementStore;
+    std::vector<Unlock> m_unlocks;
+    std::optional<Achievements::Play> m_lastDoorPlay;
+    // Each key's carrier as the last tick left it, for the red key's pick.
+    std::vector<entt::entity> m_achievementKeyOwners;
+    Notificator::Rules m_notificatorRules;
+    bool m_notificatorReady{false};
+    Notificator::Queue m_notificator;
+    // Each card's picture, resolved once: the background and the achievements'
+    // icons, by the name the card gives them; empty for one that cannot be read.
+    std::map<std::string, std::string> m_cardImages;
+    // The pause's AchievementsPopup.
+    struct AchievementsPopupScreen {
+        bool open{false};
+        Popup::Class cls;
+        Popup::Open state;
+        std::string text;
+        bool downOnClose{false};
+    };
+    AchievementsPopupScreen m_achievementsPopup;
     // The loading screen's scene, in the level's space.
     entt::entity m_loadingBg{entt::null};
     entt::entity m_loadingCharacter{entt::null};

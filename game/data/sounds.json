@@ -674,6 +674,13 @@
       "level_button's teleport, and its back button getButtonSoundName, menu_button's."
     ],
     "achievement_pick": "playAchievementPickSound",
-    "achievement_denied": "playAchievementPickDeniedSound"
+    "achievement_denied": "playAchievementPickDeniedSound",
+    "_note_achievement_card": [
+      "An unlocked achievement's card (planning step 172; achievements.json card): AchievementManager::unlock",
+      "#161-172 gives the Notification getAchievementSoundName's file, and Notificator::updateStack",
+      "(47981..48475 #52-75) PlaySample's it as the card leaves the stack for the screen - not at the unlock.",
+      "The locked card has no sound (displayLevelLockedNotification #50-58)."
+    ],
+    "achievement_card": "getAchievementSoundName"
   }
 }

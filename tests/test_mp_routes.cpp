@@ -39,6 +39,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -245,7 +246,73 @@ struct Outcome {
     std::vector<std::string> problems;
     Census census;
     bool censusChecked = false;
+    // The achievements the run unlocked, and what its door asked (planning step 172).
+    std::vector<MagicPortalsLayer::Unlock> unlocks;
+    std::optional<MagicPortals::Achievements::Play> door;
 };
+
+// Every unlock of a won route is one its own level's rules or its chapter's
+// badges name, at its door with a card - or the red key's, before it - and every
+// rule of its level whose terms are all the medal's fires exactly when the door's
+// medal passes them: the evaluator against the plain arithmetic, in play.
+void CheckAchievements(const std::string& label, const Outcome& outcome,
+                       const MagicPortals::Achievements::Rules& rules) {
+    namespace Achievements = MagicPortals::Achievements;
+    CHECK_MSG(outcome.door.has_value(), label + ": its door asked for achievements");
+    if (!outcome.door) return;
+    const Achievements::Play& door = *outcome.door;
+    const auto unlocked = [&outcome](int id) {
+        return std::any_of(outcome.unlocks.begin(), outcome.unlocks.end(),
+                           [id](const MagicPortalsLayer::Unlock& unlock) { return unlock.id == id; });
+    };
+    for (const MagicPortalsLayer::Unlock& unlock : outcome.unlocks) {
+        bool named = unlock.id == rules.key.id && unlock.tick <= outcome.wonTick;
+        for (const Achievements::LevelRule& rule : rules.level) {
+            named = named || (rule.id == unlock.id && rule.world == door.world && rule.level == door.level &&
+                              unlock.tick == outcome.wonTick);
+        }
+        if (static_cast<std::size_t>(door.world) < rules.completion.size()) {
+            for (const Achievements::CompletionStep& step : rules.completion[static_cast<std::size_t>(door.world)]) {
+                named = named || (step.id == unlock.id && unlock.tick == outcome.wonTick);
+            }
+        }
+        CHECK_MSG(named && unlock.notify, label + ": achievement " + std::to_string(unlock.id) + " on tick " +
+                                              std::to_string(unlock.tick) + " is its own, with a card");
+    }
+    for (const Achievements::LevelRule& rule : rules.level) {
+        if (rule.world != door.world || rule.level != door.level) continue;
+        bool medalOnly = true;
+        bool passes = true;
+        for (const Achievements::Term& term : rule.terms) {
+            if (term.kind == Achievements::TermKind::MedalAtLeast) {
+                passes = passes && door.medal >= static_cast<int>(term.value);
+            } else if (term.kind == Achievements::TermKind::MedalAbove) {
+                passes = passes && door.medal > static_cast<int>(term.value);
+            } else {
+                medalOnly = false;
+            }
+        }
+        if (!medalOnly) continue;
+        CHECK_MSG(unlocked(rule.id) == passes, label + ": achievement " + std::to_string(rule.id) +
+                                                   (passes ? " unlocked" : " not unlocked") + " at medal " +
+                                                   std::to_string(door.medal));
+    }
+}
+
+std::string DescribeUnlocks(const Outcome& outcome) {
+    std::string text;
+    for (const MagicPortalsLayer::Unlock& unlock : outcome.unlocks) {
+        text += " " + std::to_string(unlock.id) + "@" + std::to_string(unlock.tick);
+    }
+    if (text.empty()) text = " none";
+    if (outcome.door) {
+        char play[96];
+        std::snprintf(play, sizeof play, " (door: medal %d, %d portals, %.1f ms)", outcome.door->medal,
+                      outcome.door->portals, outcome.door->gameTimeMs);
+        text += play;
+    }
+    return text;
+}
 
 Outcome Play(const Route::Plan& plan, const Options& options, const std::string& label) {
     entt::registry registry;
@@ -279,6 +346,8 @@ Outcome Play(const Route::Plan& plan, const Options& options, const std::string&
     out.shots = driver.Shots();
     out.problems = driver.Problems();
     out.census = std::move(census);
+    out.unlocks = layer.Unlocks();
+    out.door = layer.LastDoorPlay();
     if (out.wonTick > 0 && layer.SimLevel() != nullptr) {
         CheckCensus(label + " " + plan.level, out.census, moments, *layer.SimLevel());
         out.censusChecked = true;
@@ -311,6 +380,10 @@ void RunRoutes(const Options& options) {
     MagicPortals::Chapters::Table chapters;
     std::string error;
     CHECK_MSG(MagicPortals::Chapters::Load(kChapters, chapters, error), error);
+    MagicPortals::Achievements::Rules achievementRules;
+    const bool rulesRead = MagicPortals::Achievements::LoadRules(
+        std::string(MAGICPORTALS_PORT_DATA_DIR) + "/achievements.json", achievementRules, error);
+    CHECK_MSG(rulesRead, error);
 
     std::vector<std::filesystem::path> files;
     if (options.only.empty()) {
@@ -349,6 +422,9 @@ void RunRoutes(const Options& options) {
         }
         // What it heard (planning step 171), on a line of its own.
         std::printf("  %s %s sounds:%s\n", label.c_str(), plan.level.c_str(), Describe(outcome.census).c_str());
+        // And what it unlocked (planning step 172).
+        std::printf("  %s %s achievements:%s\n", label.c_str(), plan.level.c_str(), DescribeUnlocks(outcome).c_str());
+        if (outcome.wonTick > 0 && rulesRead) CheckAchievements(label + " " + plan.level, outcome, achievementRules);
         std::string problems;
         for (const std::string& problem : outcome.problems) problems += (problems.empty() ? "" : "; ") + problem;
         CHECK_MSG(outcome.problems.empty(), label + " " + plan.level + ": " + problems);

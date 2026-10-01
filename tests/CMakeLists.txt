@@ -78,6 +78,12 @@ add_mp_test(test_mp_turrets SKIPS_WITH_77)
 # case gives a save directory, its own (test_mp_layer's
 # TheSwitchesAreKeptBetweenRuns, planning step 124).
 add_mp_test(test_mp_scores)
+
+# The achievements as the original unlocks them, the saved set and its hash, and
+# the Notificator's card and the pause's popup frame (planning step 172). Pure sim
+# and a scratch directory; its checks against the original's list skip themselves
+# without Enhanced's out/data/achievements.json, the rest run.
+add_mp_test(test_mp_achievements)
 # Every converted level started as the port starts one: the remaster's inventory.
 add_mp_test(test_mp_start SKIPS_WITH_77)
 # Static portals, on the tutorial levels that ship them.

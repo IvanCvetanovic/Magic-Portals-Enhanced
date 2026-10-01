@@ -283,6 +283,32 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
         m_achievementsError = why;
         SUPERSONIC_LOG_WARN("Magic Portals") << "no achievement rows: " << why << std::endl;
     }
+    // And the port's own rules for unlocking them (planning step 172), the set the
+    // player has unlocked - beside the medals, memory-only for a bare suite - and
+    // the Notificator that shows a card. Rules that will not read unlock nothing;
+    // they are the port's own and committed, so that is said loudly.
+    if (std::string why; Achievements::LoadRules(m_paths.portData + "/achievements.json", m_achievementRules, why)) {
+        m_achievementRulesReady = true;
+        if (std::string opened; !m_achievementStore.Open(m_paths.saveDir, m_achievementRules.save, opened)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "achievements not read, none kept: " << opened << std::endl;
+        } else if (m_achievementStore.HashRefused()) {
+            // loadList #138-202: the list is dropped and the run starts with none.
+            SUPERSONIC_LOG_WARN("Magic Portals") << "achievements' hash is not their list's, none kept: "
+                                                 << m_achievementStore.Path() << std::endl;
+        } else if (m_achievementStore.Persists()) {
+            SUPERSONIC_LOG_INFO("Magic Portals") << "achievements: " << m_achievementStore.Ids().size()
+                                                 << " unlocked (" << m_achievementStore.Path() << ")" << std::endl;
+        }
+    } else {
+        m_achievementRulesError = why;
+        SUPERSONIC_LOG_ERROR("Magic Portals") << "achievement rules not read: " << why << std::endl;
+    }
+    if (std::string why; Notificator::LoadRules(m_paths.portData + "/achievements.json",
+                                                m_paths.portData + "/gravitywell.json", m_notificatorRules, why)) {
+        m_notificatorReady = true;
+    } else {
+        SUPERSONIC_LOG_ERROR("Magic Portals") << "no achievement cards: " << why << std::endl;
+    }
 
     std::string error;
     const bool read = Chapters::Load(m_paths.chapters, m_chapters, error) &&
@@ -325,6 +351,10 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
         m_loadError = m_startLevel + " is not a level of " + m_paths.chapters;
     } else {
         buildCamera(registry);
+        // The main menu's silent pass (checkPreviouslyUnlockAchievements), which a
+        // named level never passes through: run where the menu would have run it,
+        // so the first door raises no card for a badge the save had earned before.
+        achievementsMenuPass();
         loadLevel(registry, start);
     }
     if (read) {
@@ -384,6 +414,28 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
             }
             resolve(board.rows.iconDirectory + m_achievements.secret.icon, true);
         }
+    }
+    if (read && m_notificatorReady && m_achievementRulesReady) {
+        // The cards' pictures and their font, and the pause's popup's tiles, each
+        // resolved once for the run: a card may come up on any screen.
+        const auto card = [this](const std::string& file) {
+            if (m_cardImages.find(file) != m_cardImages.end()) return;
+            const std::string path = originalAsset(file);
+            m_cardImages[file] = imageSizePx(path).y > 0.0 ? path : std::string();
+            if (m_cardImages[file].empty()) {
+                SUPERSONIC_LOG_WARN("Magic Portals") << "card picture could not be read: " << path << std::endl;
+            }
+        };
+        card(m_achievementRules.card.background);
+        card(m_achievementRules.locked.background);
+        card(m_achievementRules.popup.tiles);
+        if (m_achievementsLoaded) {
+            for (const Achievements::Entry& entry : m_achievements.entries) {
+                card(m_achievementRules.card.iconDirectory + entry.icon);
+            }
+        }
+        loadUiFont(m_notificatorRules.font);
+        loadUiFont(m_achievementRules.popup.font);
     }
     if (m_current < 0 && m_screen == Screen::None) {
         SUPERSONIC_LOG_ERROR("Magic Portals") << "Could not start: " << m_loadError << std::endl;
@@ -633,6 +685,7 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
 }
 
 void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps) {
+    m_achievementKeyOwners.clear();
     // THE LIGHTMAPS GO BACK WITH THE LEVEL. Each lightmapped sprite holds a
     // texture and a material set of its own (730 across the game), and the
     // registry keeps both until told to drop them; a session walking the chapters
@@ -858,6 +911,262 @@ void MagicPortalsLayer::recordWin() {
 int MedalFor(const MagicPortalsLayer::Cleared& cleared) {
     return LevelEnd::ComputeScore(cleared.portalsUsed, cleared.goldenScore, cleared.crystals, cleared.crystalsTotal);
 }
+
+// ---- achievements (planning step 172) ------------------------------------------------
+
+namespace {
+
+// What checkForLevelAchievements asks of the level, answered from the simulation
+// at the door's tick (achievements.json level_world).
+class LevelWorld final : public Achievements::World {
+public:
+    LevelWorld(const entt::registry& registry, const Game::Data& data, const Game::Level& level,
+               const Achievements::Rules& rules)
+        : m_registry(registry), m_data(data), m_level(level), m_rules(rules) {}
+
+    int Count(const std::vector<std::string>& names) const override {
+        int count = 0;
+        // What the level placed, by its entity_name, while it is still in the world.
+        for (const Tscn::Node& node : m_data.scene.nodes) {
+            if (node.parent != ".") continue;
+            const std::string* entity = EntityName(node);
+            if (entity == nullptr || !Named(names, *entity)) continue;
+            if (Alive(node.name)) ++count;
+        }
+        // And what was added since: a launcher's stones, the markers' minions.
+        for (const Launchers::Thrown& thrown : m_level.launchers.live) {
+            if (thrown.launcher >= m_level.launchers.launchers.size()) continue;
+            if (!Named(names, m_level.launchers.launchers[thrown.launcher].entity)) continue;
+            if (thrown.body != entt::null && m_registry.valid(thrown.body)) ++count;
+        }
+        for (const Minions::Minion& minion : m_level.minions.minions) {
+            if (!Named(names, minion.entity) || minion.gone) continue;
+            if (minion.body != entt::null && m_registry.valid(minion.body)) ++count;
+        }
+        return count;
+    }
+
+    bool Exists(const std::string& name) const override {
+        // A torch: unlit, under that name or put back out by a signal, which adds
+        // a fresh signal_torch whatever the first was called.
+        const auto& torchNames = m_level.torch.rules.torchNames;
+        if (std::find(torchNames.begin(), torchNames.end(), name) != torchNames.end()) {
+            for (const Torch::Light& light : m_level.torch.lights) {
+                if (light.lit) continue;
+                const Tscn::Node* node = m_data.scene.FindNode(light.name);
+                const std::string* entity = node != nullptr ? EntityName(*node) : nullptr;
+                if ((entity != nullptr && *entity == name) || (light.switched && name == m_rules.signalTorch)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return Count({name}) > 0;
+    }
+
+    bool LiftDoorsShut(const std::vector<std::string>& names) const override {
+        for (const Tscn::Node& node : m_data.scene.nodes) {
+            if (node.parent != ".") continue;
+            const std::string* entity = EntityName(node);
+            if (entity == nullptr || !Named(names, *entity)) continue;
+            // `status` 0: at its original place and not starting to open. A lift
+            // door no switch moves keeps it.
+            const Puzzle::SwitchedDoor* door = m_level.channels.FindDoor(node.name);
+            if (door != nullptr && (door->motion.opening || door->motion.progress > 0.0f)) return false;
+        }
+        return true;
+    }
+
+    int SpottedCount() const override {
+        // Sight is not built (minions.json): no minion has noticed anything.
+        return 0;
+    }
+
+    int Laps() const override {
+        // SeekEntity('gravity_area') is the level's first well; the body is the
+        // player's.
+        if (m_level.wells.wells.empty()) return 0;
+        for (const GravityWell::Sweep& sweep : m_level.wells.sweeps) {
+            if (sweep.body == m_level.player && sweep.well == 0) return sweep.cw + sweep.ccw;
+        }
+        return 0;
+    }
+
+private:
+    static const std::string* EntityName(const Tscn::Node& node) {
+        const Tscn::Value* entity = node.Meta("entity_name");
+        if (entity == nullptr || entity->kind != Tscn::Value::Kind::String) return nullptr;
+        return &entity->text;
+    }
+
+    static bool Named(const std::vector<std::string>& names, const std::string& name) {
+        return std::find(names.begin(), names.end(), name) != names.end();
+    }
+
+    bool Alive(const std::string& node) const {
+        for (const Portals::Agent& agent : m_level.portals.agents) {
+            if (agent.name == node) return !agent.gone;
+        }
+        const auto found = m_level.built.entities.find(node);
+        if (found != m_level.built.entities.end()) return m_registry.valid(found->second);
+        return true; // no body, and nothing that takes it away
+    }
+
+    const entt::registry& m_registry;
+    const Game::Data& m_data;
+    const Game::Level& m_level;
+    const Achievements::Rules& m_rules;
+};
+
+} // namespace
+
+void MagicPortalsLayer::unlockAchievement(int id, bool notify, double delayMs, const char* why) {
+    if (!m_achievementRulesReady) return;
+    // unlock #3-8: an id already unlocked is nothing at all - no card either.
+    if (!m_achievementStore.Add(id)) return;
+    m_unlocks.push_back(Unlock{id, m_ticks, notify});
+    // #184-185 saveList, notify or not.
+    std::string saved;
+    if (std::string why2; !m_achievementStore.Save(why2)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "achievements not saved: " << why2 << std::endl;
+        saved = " (not saved)";
+    } else if (!m_achievementStore.Persists()) {
+        saved = " (kept, no save directory)";
+    }
+    SUPERSONIC_LOG_INFO("Magic Portals") << "achievement " << id << " unlocked on tick " << m_ticks << " by " << why
+                                         << saved << (notify ? ", its card on the stack" : "") << std::endl;
+    if (!notify || !m_notificatorReady) return;
+    // #77-180: the card, with the entry's own title and icon - none to show
+    // without Enhanced's list, which says why once at attach.
+    const Achievements::Entry* entry = m_achievementsLoaded ? m_achievements.Find(id) : nullptr;
+    if (entry == nullptr) return;
+    Notificator::Card card;
+    card.id = id;
+    card.background = m_achievementRules.card.background;
+    card.message = m_achievementRules.card.messagePrefix + entry->title;
+    card.icon = m_achievementRules.card.iconDirectory + entry->icon;
+    card.sound = m_achievementRules.card.soundEvent;
+    card.durationMs = m_achievementRules.card.durationMs;
+    card.delayMs = delayMs;
+    m_notificator.Notify(std::move(card));
+}
+
+void MagicPortalsLayer::achievementsForChapter(int world, bool notify) {
+    if (!m_achievementRulesReady) return;
+    // registerMedalAchievements #1-5: computeWorldAccomplishment over the saved medals.
+    const int percent = Locking::ChapterCompletion(m_lockingRules, m_scores, m_chapters, world);
+    const std::string why = "chapter " + std::to_string(world + 1) + " at " + std::to_string(percent) + "%";
+    for (const int id : Achievements::CompletionIds(m_achievementRules, world, percent)) {
+        unlockAchievement(id, notify, m_achievementRules.completionDelayMs, why.c_str());
+    }
+}
+
+void MagicPortalsLayer::achievementsMenuPass() {
+    if (!m_achievementRulesReady || !m_hudReady) return;
+    // checkPreviouslyUnlockAchievements (202712..202943): every world's badges, then
+    // its levels with the saved medal, 99999 portals, time 0 and not in the game.
+    int worlds = 0;
+    for (const Chapters::Level& level : m_chapters.levels) worlds = std::max(worlds, level.world + 1);
+    for (int world = 0; world < worlds; ++world) {
+        achievementsForChapter(world, false);
+        for (int index = 0; index < Locking::LevelsIn(m_chapters, world); ++index) {
+            Achievements::Play play;
+            play.world = world;
+            play.level = index;
+            play.medal = m_scores.Get(world, index);
+            play.portals = m_achievementRules.menuPortals;
+            play.gameTimeMs = m_achievementRules.menuGameTimeMs;
+            play.game = false;
+            for (const int id : Achievements::Dispatches(m_achievementRules, play, nullptr)) {
+                unlockAchievement(id, false, m_achievementRules.levelDelayMs, "the main menu's pass");
+            }
+        }
+    }
+}
+
+void MagicPortalsLayer::achievementsAtDoor(const entt::registry& registry, double gameTimeMs) {
+    if (!m_achievementRulesReady || !m_lastCleared || m_current < 0) return;
+    const Chapters::Level& entry = m_chapters.levels[static_cast<std::size_t>(m_current)];
+    // LevelFinishedLayer::LevelFinishedLayer #499-502: the chapter's badges, the
+    // medal just saved among its medals...
+    achievementsForChapter(entry.world, true);
+    // ...then #504-516 this play's: the medal it earned, its portals, the game's
+    // time, in the game.
+    Achievements::Play play;
+    play.world = entry.world;
+    play.level = entry.index;
+    play.medal = MedalFor(*m_lastCleared);
+    play.portals = m_lastCleared->portalsUsed;
+    play.gameTimeMs = gameTimeMs;
+    play.game = true;
+    m_lastDoorPlay = play;
+    SUPERSONIC_LOG_INFO("Magic Portals") << m_lastCleared->label << " achievements asked on tick " << m_ticks
+                                         << ": medal " << play.medal << ", " << play.portals << " portals, "
+                                         << play.gameTimeMs << " ms" << std::endl;
+    const LevelWorld world(registry, m_data, m_level, m_achievementRules);
+    for (const int id : Achievements::Dispatches(m_achievementRules, play, &world)) {
+        unlockAchievement(id, true, m_achievementRules.levelDelayMs, "the door");
+    }
+}
+
+void MagicPortalsLayer::achievementsForKeys() {
+    if (!m_achievementRulesReady || !m_loaded) return;
+    const std::vector<Keys::Key>& keys = m_level.keys.keys;
+    if (m_achievementKeyOwners.size() != keys.size()) m_achievementKeyOwners.assign(keys.size(), entt::null);
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        const entt::entity owner = keys[i].owner;
+        // ETHCallback_key #822-851: a carrier takes it and its colour is red.
+        if (owner != entt::null && owner != m_achievementKeyOwners[i] &&
+            keys[i].colour == m_achievementRules.key.colour) {
+            unlockAchievement(m_achievementRules.key.id, true, m_achievementRules.key.delayMs, "the red key's pick");
+        }
+        m_achievementKeyOwners[i] = owner;
+    }
+}
+
+void MagicPortalsLayer::tickNotificator(double dtMs) {
+    if (!m_notificatorReady) return;
+    // An achievement's card by its id - its words are the original's list's, kept
+    // out of the log - and the dashboard's by its own message.
+    const auto named = [](const Notificator::Card& card) {
+        return card.id >= 0 ? "achievement " + std::to_string(card.id) + "'s card" : "card \"" + card.message + "\"";
+    };
+    for (const Notificator::Event& event : m_notificator.Update(dtMs)) {
+        if (event.kind == Notificator::Event::Kind::Shown) {
+            // updateStack #52-102: its sound, and notificationCallback.
+            if (!event.card.sound.empty()) latch(event.card.sound);
+            setMusicVolume(m_notificatorRules.musicVolumeShown);
+            SUPERSONIC_LOG_INFO("Magic Portals") << named(event.card) << " shown on tick " << m_ticks << std::endl;
+        } else {
+            // update #52-83: notificationDismissCallback.
+            setDefaultMusicVolume();
+            SUPERSONIC_LOG_INFO("Magic Portals") << named(event.card) << " gone on tick " << m_ticks << std::endl;
+        }
+    }
+}
+
+void MagicPortalsLayer::setMusicVolume(double volume) {
+    // AudioManager::setMusicVolume (194987..195179): the current track's, if there is one.
+    if (m_music.current.empty()) return;
+    m_music.volumes[m_music.current] = volume;
+}
+
+void MagicPortalsLayer::setDefaultMusicVolume() {
+    // setDefaultMusicVolume (195179..195443): 0.6 for g_musicNames[0], 0.7 for any other.
+    if (m_music.current.empty()) return;
+    m_music.volumes[m_music.current] = m_music.current == m_notificatorRules.musicFirstTrack
+                                           ? m_notificatorRules.musicVolumeDefaultFirstTrack
+                                           : m_notificatorRules.musicVolumeDefaultOther;
+}
+
+double MagicPortalsLayer::MusicVolumeNow() const {
+    if (m_music.current.empty()) return -1.0;
+    const auto set = m_music.volumes.find(m_music.current);
+    if (set != m_music.volumes.end()) return set->second;
+    const Sounds::Track* track = m_soundRules.FindTrack(m_music.current);
+    return track != nullptr ? track->volume : -1.0;
+}
+
 
 // ---- the entities' particles --------------------------------------------------
 //
@@ -2702,7 +3011,17 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
     // track. Chapter and level select, credits and the dashboard call no music
     // hook, so what played before them - a level's track, or the silence of a
     // no_music level or a beaten boss - goes on under them.
-    if (changed && screen == Screen::Main) musicPlay(kMenuTrack);
+    if (changed && screen == Screen::Main) {
+        musicPlay(kMenuTrack);
+        // #395-396 checkPreviouslyUnlockAchievements, on every visit, silently.
+        achievementsMenuPass();
+    }
+    if (changed && screen == Screen::Worlds) {
+        // WorldSelector::WorldSelector #265-291: every chapter's badges, with a card.
+        int worlds = 0;
+        for (const Chapters::Level& level : m_chapters.levels) worlds = std::max(worlds, level.world + 1);
+        for (int world = 0; world < worlds; ++world) achievementsForChapter(world, true);
+    }
     if (changed && screen == Screen::Credits) {
         // CreditsScreenLayer's constructor: the strip's top on the bottom edge.
         m_credits = Credits::Start(MenuBoxPx());
@@ -2711,8 +3030,12 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
     if (changed && screen == Screen::Achievements) {
         // ScoreDashboard::preLoop: a fresh list at the top, and what the save has
         // unlocked of it now.
-        m_dashboardBoard = Dashboard::Build(m_achievementsLoaded ? &m_achievements : nullptr, m_lockingRules, m_scores,
-                                            m_chapters);
+        // AchievementManager::isUnlocked reads the saved list (planning step 172).
+        const Achievements::Content* content = m_achievementsLoaded ? &m_achievements : nullptr;
+        m_dashboardBoard = m_achievementRulesReady
+                               ? Dashboard::Build(content, m_lockingRules, m_scores, m_chapters,
+                                                  m_achievementStore.Ids())
+                               : Dashboard::Build(content, m_lockingRules, m_scores, m_chapters);
         m_dashboardState = Dashboard::State{};
         for (const std::string* font :
              {&m_dashboardRules.header.font, &m_dashboardRules.title.font, &m_dashboardRules.description.font,
@@ -3262,9 +3585,19 @@ void MagicPortalsLayer::dashboardInput(entt::registry& registry) {
     const Dashboard::Outcome outcome =
         Dashboard::Tick(m_dashboardRules, m_dashboardBoard, m_dashboardState, MenuBoxPx(), m_menuClock.ms, input);
     if (outcome.pick) latch("achievement_pick");
-    // displayLevelLockedNotification's placement is not decoded (spec U2): the
-    // denial is heard, and nothing is drawn for it.
-    if (outcome.denied) latch("achievement_denied");
+    // ScoreDashboard::loop #780-786: the denial heard, and
+    // displayLevelLockedNotification's card on the Notificator (planning step 172).
+    if (outcome.denied) {
+        latch("achievement_denied");
+        if (m_notificatorReady && m_achievementRulesReady) {
+            Notificator::Card card;
+            card.background = m_achievementRules.locked.background;
+            card.message = m_achievementRules.locked.message;
+            card.durationMs = m_achievementRules.locked.durationMs;
+            card.delayMs = m_achievementRules.locked.delayMs;
+            m_notificator.Notify(std::move(card));
+        }
+    }
     if (outcome.back) {
         latch("menu_button");
         m_pendingMenu.kind = PendingMenu::Kind::Screen;
@@ -6970,6 +7303,159 @@ void MagicPortalsLayer::emitPopup(Supersonic::ScreenOverlay& overlay, const glm:
     }
 }
 
+bool MagicPortalsLayer::openAchievementsPopup() {
+    if (!m_pause.open || m_achievementsPopup.open || !m_achievementRulesReady || !m_achievementsLoaded) return false;
+    const Chapters::Level* level = Current();
+    if (level == nullptr) return false;
+    // getAchievementsFromLevel: none named, no popup - and in the original no
+    // button either (CustomGameMenuLayer #229-280).
+    const std::vector<const Achievements::Entry*> entries = Achievements::FromLevel(m_achievements, level->world,
+                                                                                    level->index);
+    if (entries.empty()) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << "achievements pressed on tick " << m_ticks
+                                             << ": no achievement names this level, nothing opens" << std::endl;
+        return false;
+    }
+    const Achievements::Rules::Popup& rules = m_achievementRules.popup;
+    AchievementsPopupScreen popup;
+    popup.open = true;
+    // Popup::Popup with no picture of its own, the help popups' close button,
+    // tapScreenToClose and the close's highlight (AchievementsPopup #5-60).
+    popup.cls.name = "AchievementsPopup";
+    popup.cls.card.sprite.clear();
+    popup.cls.closeButton.sprite = rules.closeSprite;
+    popup.cls.closeButton.atScreen = glm::dvec2(rules.closeAtX, rules.closeAtY);
+    popup.cls.closeButton.origin = glm::dvec2(rules.closeOriginX, rules.closeOriginY);
+    popup.cls.closeButton.sizeUnits = glm::dvec2(rules.closeUnitsX, rules.closeUnitsY);
+    popup.cls.tapScreenToClose = true;
+    popup.cls.closeButtonHighlight = true;
+    popup.state = Popup::Start(popup.cls);
+    popup.text = Achievements::PopupText(m_achievementRules, m_achievements, entries, m_achievementStore.Sorted());
+    m_achievementsPopup = std::move(popup);
+    loadUiFont(rules.font);
+    SUPERSONIC_LOG_INFO("Magic Portals") << "AchievementsPopup opened over the pause on tick " << m_ticks << " with "
+                                         << entries.size() << " achievement(s)" << std::endl;
+    return true;
+}
+
+void MagicPortalsLayer::achievementsPopupTick(entt::registry& registry, double dtMs) {
+    using Supersonic::Input;
+    AchievementsPopupScreen& popup = m_achievementsPopup;
+    Popup::Tick(popup.cls, popup.state, dtMs);
+    // Popup::hasReceivedCloseCommand: a touch down anywhere, the close button, or
+    // the back key; the touch reaches nothing under it.
+    const Touch touch = touchThisTick(registry);
+    const bool touched = TouchClosesPopup(m_popupRules, popup.cls, popup.state, ViewPx(), touch.pressed,
+                                          touch.released, touch.over, touch.atView, popup.downOnClose);
+    if ((touched || Input::TickWasPressed(kBack) || devPressDue(DevPress::Back)) && !Popup::Closing(popup.state)) {
+        Popup::Close(popup.state);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "AchievementsPopup closed on tick " << m_ticks << std::endl;
+    }
+    // Popup::update #28-67: everything dismissed, the pause current again.
+    if (Popup::Gone(m_popupRules, popup.state)) {
+        m_achievementsPopup = AchievementsPopupScreen{};
+        SUPERSONIC_LOG_INFO("Magic Portals") << "AchievementsPopup gone, the pause current on tick " << m_ticks
+                                             << std::endl;
+    }
+}
+
+void MagicPortalsLayer::emitAchievementsPopup(Supersonic::ScreenOverlay& overlay, const glm::dvec2& view) const {
+    using Supersonic::ScreenOverlay;
+    const AchievementsPopupScreen& popup = m_achievementsPopup;
+    // UILayer::draw first: the dim and the close button, as a help popup's.
+    emitPopup(overlay, view, popup.cls, popup.state);
+    // AchievementsPopup::draw #28-58: the frame bounces with the close button's
+    // alpha, eased in by elastic and out by smoothBeginning; the text does not.
+    const Popup::CloseButtonState button = Popup::CloseButtonAt(m_popupRules, popup.cls, popup.state, view);
+    const double bias = static_cast<double>(button.alphaByte) / 255.0;
+    if (button.alphaByte <= 0) return;
+    const double scale = Popup::Closing(popup.state) ? Ease::SmoothBeginning(bias)
+                                                     : Notificator::Elastic(m_notificatorRules, bias);
+    const Achievements::Rules::Popup& rules = m_achievementRules.popup;
+    const Supersonic::BitmapFont* font = uiFont(rules.font);
+    if (font == nullptr || !font->IsLoaded()) return;
+    const auto tiles = m_cardImages.find(rules.tiles);
+    // The button's colour: its alpha, and the press tint Button::update writes into it.
+    const glm::vec4 colour(glm::vec3(static_cast<float>(button.tint)), static_cast<float>(bias));
+    const Notificator::Box box =
+        Notificator::LayOutBox(glm::dvec2(rules.tileUnitsX, rules.tileUnitsY), rules.tileColumns, rules.tileRows, scale,
+                               rules.unitsPerFontPx, view * 0.5, glm::dvec2(0.5), glm::dvec2(font->Measure(popup.text)));
+    const auto add = [&overlay, &view, &colour](const Hud::Rect& rect, const std::string& image,
+                                                const glm::dvec2& uvMin, const glm::dvec2& uvMax) {
+        ScreenOverlay::Quad quad;
+        quad.min = glm::vec2(rect.min / view);
+        quad.max = glm::vec2(rect.Max() / view);
+        quad.uvMin = glm::vec2(uvMin);
+        quad.uvMax = glm::vec2(uvMax);
+        quad.color = colour;
+        quad.texture = image;
+        quad.clampToEdge = true;
+        overlay.Add(std::move(quad));
+    };
+    if (tiles != m_cardImages.end() && !tiles->second.empty()) {
+        for (int i = 0; i < 9; ++i) add(box.pieces[i], tiles->second, box.uvMin[i], box.uvMax[i]);
+    }
+    // TextBoxFrame::draw #93-114: DrawText from the box's top-left.
+    const auto& pages = font->Pages();
+    for (const Hud::Glyph& glyph : Hud::LayOutTextFrom(*font, popup.text, box.textTopLeft, rules.unitsPerFontPx)) {
+        if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
+        add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], glyph.uvOffset, glyph.uvOffset + glyph.uvScale);
+    }
+}
+
+void MagicPortalsLayer::EmitNotifications(entt::registry& registry) const {
+    using Supersonic::ScreenOverlay;
+    auto* const* slot = registry.ctx().find<ScreenOverlay*>();
+    if (slot == nullptr || *slot == nullptr) return;
+    ScreenOverlay& overlay = **slot;
+    if (!m_notificatorReady || !m_hudReady) return;
+    const Notificator::Card* card = m_notificator.Front();
+    if (card == nullptr) return;
+    // Over whatever is on the screen: the menu's box on a menu state, the level's
+    // view over a level.
+    const glm::dvec2 view = menuStateUp() ? MenuBoxPx() : ViewPx();
+    if (view.x <= 0.0 || view.y <= 0.0) return;
+    const Supersonic::BitmapFont* font = uiFont(m_notificatorRules.font);
+    const glm::dvec2 textPx = font != nullptr && font->IsLoaded() ? glm::dvec2(font->Measure(card->message))
+                                                                   : glm::dvec2(0.0);
+    const Notificator::Layout layout =
+        Notificator::LayOut(m_notificatorRules, *card, m_notificator.FrontAgeMs(), view, textPx);
+    // computeEffectScale's colour: white, at the fade's alpha.
+    const glm::vec4 colour(1.0f, 1.0f, 1.0f, static_cast<float>(layout.alpha));
+    if (colour.a <= 0.0f) return;
+    const auto add = [&overlay, &view, &colour](const Hud::Rect& rect, const std::string& image,
+                                                const glm::dvec2& uvMin, const glm::dvec2& uvMax) {
+        ScreenOverlay::Quad quad;
+        quad.min = glm::vec2(rect.min / view);
+        quad.max = glm::vec2(rect.Max() / view);
+        quad.uvMin = glm::vec2(uvMin);
+        quad.uvMax = glm::vec2(uvMax);
+        quad.color = colour;
+        quad.texture = image;
+        quad.clampToEdge = true;
+        overlay.Add(std::move(quad));
+    };
+    // Notificator::draw: the three pieces, the text, then the icon.
+    if (const auto background = m_cardImages.find(card->background);
+        background != m_cardImages.end() && !background->second.empty()) {
+        for (int c = 0; c < 3; ++c) add(layout.pieces[c], background->second, layout.uvMin[c], layout.uvMax[c]);
+    }
+    if (font != nullptr && font->IsLoaded()) {
+        const auto& pages = font->Pages();
+        for (const Hud::Glyph& glyph :
+             Hud::LayOutText(*font, card->message, layout.textCentre, layout.unitsPerFontPx)) {
+            if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
+            add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], glyph.uvOffset,
+                glyph.uvOffset + glyph.uvScale);
+        }
+    }
+    if (layout.hasIcon) {
+        if (const auto icon = m_cardImages.find(card->icon); icon != m_cardImages.end() && !icon->second.empty()) {
+            add(layout.icon, icon->second, glm::dvec2(0.0), glm::dvec2(1.0));
+        }
+    }
+}
+
 void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     using Supersonic::ScreenOverlay;
     auto* const* slot = registry.ctx().find<ScreenOverlay*>();
@@ -7105,6 +7591,8 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     //     class's own draw() - turned sprites turned in the view's square units,
     //     which the overlay is told in fractions of this view's shape.
     if (m_popup.open && m_popup.cls != nullptr) emitPopup(overlay, view, *m_popup.cls, m_popup.state);
+    // 4a'. The pause's AchievementsPopup, the current layer over it.
+    if (m_pause.open && m_achievementsPopup.open) emitAchievementsPopup(overlay, view);
 
     // 4b. The finished or the lost screen, when one is up: the CURRENT UI layer
     //     over the running level and whatever the HUD has left, and under the
@@ -9516,6 +10004,8 @@ void MagicPortalsLayer::musicPlay(const char* track) {
     // switch off nothing is heard, and the switch's resume plays this.
     m_music.current = track;
     m_music.stopped = false;
+    // #3-8 and SetSampleVolume: the track at its own volume, whatever a card left.
+    m_music.volumes.erase(m_music.current);
     noteMusic();
 }
 
@@ -9622,10 +10112,26 @@ void MagicPortalsLayer::latchMusic() {
 
 void MagicPortalsLayer::updateMusic(entt::registry& registry) {
     const std::string wanted = WantedTrack();
-    if (wanted == m_track) return;
-
     Supersonic::AudioEngine** slot = registry.ctx().find<Supersonic::AudioEngine*>();
     Supersonic::AudioEngine* audio = slot != nullptr ? *slot : nullptr;
+    // The track's volume as SetSampleVolume last left it: a card turns it down and
+    // back (planning step 172).
+    const auto volumeOf = [this](const std::string& name, double own) {
+        const auto set = m_music.volumes.find(name);
+        return static_cast<float>(set != m_music.volumes.end() ? set->second : own);
+    };
+    if (wanted == m_track) {
+        if (audio != nullptr && audio->IsAvailable() && m_musicVoice != Supersonic::AudioEngine::kInvalidVoice) {
+            if (const Sounds::Track* track = m_soundRules.FindTrack(m_track)) {
+                const float volume = volumeOf(m_track, track->volume);
+                if (volume != m_musicVoiceVolume) {
+                    audio->SetVoiceParameters(m_musicVoice, volume, 1.0f, 0.0f);
+                    m_musicVoiceVolume = volume;
+                }
+            }
+        }
+        return;
+    }
     // No device: m_track is left alone, so the right track starts if one ever
     // appears, rather than the layer believing it already did.
     if (audio == nullptr || !audio->IsAvailable()) return;
@@ -9638,8 +10144,9 @@ void MagicPortalsLayer::updateMusic(entt::registry& registry) {
     if (m_track.empty()) return;
     const Sounds::Track* track = m_soundRules.FindTrack(m_track);
     if (track == nullptr) return;
+    m_musicVoiceVolume = volumeOf(m_track, track->volume);
     m_musicVoice = audio->Play(Sounds::Directory(m_paths.original) + "/" + track->file, track->loop,
-                               static_cast<float>(track->volume), 1.0f);
+                               m_musicVoiceVolume, 1.0f);
 }
 
 void MagicPortalsLayer::stopMusic(entt::registry& registry) {
@@ -9659,6 +10166,8 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
     // portal manager maps one before g_earthquakeGen runs.
     liftQuake(registry);
     fixedTick(registry, fixedDelta);
+    // main's loop updates the Notificator after the state's loop, whatever is up.
+    tickNotificator(static_cast<double>(fixedDelta) * 1000.0);
     // Then the generator's update, between what this tick's events called it
     // with from before it and what they called it with from after.
     quakeTick();
@@ -9780,6 +10289,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         // branches below, which may put a screen up.
         latchSimSounds(fixedDelta);
         latchMusic();
+        achievementsForKeys();
         latchSimEffects(registry, fixedDelta);
         latchSimQuakes();
         // ...and the moment the exit reports, the beat before the medal; the
@@ -9834,8 +10344,11 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             // Said with the tick, so a capture can be dated from the door.
             SUPERSONIC_LOG_INFO("Magic Portals") << "door reached on tick " << m_ticks << ", pads at "
                                                  << m_padEndByte << std::endl;
-            // And writeScore, on this same tick (checkGameEnd #75).
+            // And writeScore, on this same tick (checkGameEnd #75) - and the
+            // LevelFinishedLayer it builds, whose constructor asks for the
+            // achievements, with GameStateController's time: this tick's included.
             recordWin();
+            achievementsAtDoor(registry, m_levelAgeMs + dtMs);
         } else if (m_level.hazards.playerDied) {
             // DYING, which is not the same moment as the lost screen, and was
             // the whole of this branch before: death was an instant retry, so
@@ -10085,6 +10598,7 @@ void MagicPortalsLayer::closePause(entt::registry& registry) {
     // UILayer::hide(true): gone on this frame, no fade, and every element reset,
     // so the next pause plays its whole entrance again (spec 2.4).
     m_pause = PauseScreen{};
+    m_achievementsPopup = AchievementsPopupScreen{};
     layOutControls();
 }
 
@@ -10256,6 +10770,14 @@ bool MagicPortalsLayer::helpBlockInput(entt::registry& registry, const Touch& to
         return taken;
     }
     const Chapters::Level* level = Current();
+    // HelpBlockController::update #462-517: 4-01's and 4-02's blocks dispatch an
+    // achievement before they open their popup - 4-02's whether or not the port
+    // builds it.
+    if (level != nullptr && m_achievementRulesReady) {
+        if (const int id = Achievements::HelpBlockId(m_achievementRules, level->world, level->index); id >= 0) {
+            unlockAchievement(id, true, m_achievementRules.helpBlockDelayMs, "a help block");
+        }
+    }
     bool listed = false;
     const Popup::Class* popup = level != nullptr ? Popup::HelpBlockClass(m_popupRules, level->name, listed) : nullptr;
     if (popup == nullptr) {
@@ -10432,6 +10954,17 @@ bool MagicPortalsLayer::pauseTick(entt::registry& registry, float fixedDelta) {
     using Supersonic::Input;
     // The step the app just ran is undone before anything looks at the world.
     holdWorld(registry);
+    // The AchievementsPopup is the current layer over the pause while it is up
+    // (UILayerManager::openPopup): it takes the tick and every touch, and the
+    // pause stands as it was under it.
+    if (m_achievementsPopup.open) {
+        const double popupMs = static_cast<double>(fixedDelta) * 1000.0;
+        m_stoppedMs += popupMs;
+        m_aspect = viewportAspect(registry);
+        layOutControls();
+        achievementsPopupTick(registry, popupMs);
+        return false;
+    }
     // UI frame time runs; game time does not, and the level's frame clock counts
     // the difference.
     const double dtMs = static_cast<double>(fixedDelta) * 1000.0;
@@ -10477,7 +11010,9 @@ bool MagicPortalsLayer::pauseTick(entt::registry& registry, float fixedDelta) {
 }
 
 bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button button) {
-    if (!m_pause.open) return false;
+    // Under the AchievementsPopup the pause is not the current layer: its buttons
+    // take nothing.
+    if (!m_pause.open || m_achievementsPopup.open) return false;
     switch (button) {
     case Pause::Button::Resume:
         // GameState::hideMenuPopup: the layer hidden, GameLayer current, game time
@@ -10497,10 +11032,11 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
         closePause(registry);
         return PressMenu(registry, MenuButton{MenuButton::Kind::Next});
     case Pause::Button::Achievements:
-        // OWNER RULING: kept, and drawn - but the AchievementsPopup it opens is
-        // not built (spec section 7, U10), so pressing it changes nothing. Silent,
-        // as the resume is (planning step 171).
-        return false;
+        // CustomGameMenuLayer::update #38-94: the AchievementsPopup over the pause
+        // (planning step 172). OWNER RULING: the button is kept on every level; on a
+        // level no achievement names - where the original has no button - it opens
+        // nothing. Silent, as the resume is (planning step 171).
+        return openAchievementsPopup();
     case Pause::Button::Sound: {
         // GlobalSoundSwitch::manageSoundSwitch: SetGlobalVolume 1 or 0. And
         // SoundPanelLayer::manageMusicSwitch dismisses the music switch while the
@@ -10578,6 +11114,8 @@ void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
     EmitHud(registry);
     // And the menu states', which never share a frame with the HUD.
     EmitMenu(registry);
+    // And the Notificator's card over both: main's loop draws it after the state's.
+    EmitNotifications(registry);
     // Only the camera's SHAPE, for the viewport this frame is drawn into.
     if (m_camera == entt::null || !registry.valid(m_camera)) return;
     registry.get<Supersonic::CameraComponent>(m_camera).aspect = viewportAspect(registry);

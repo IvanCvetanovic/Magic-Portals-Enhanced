@@ -500,9 +500,12 @@
         "AchievementManager::getAchievementsFromLevel is not null; update (instructions 38..94)",
         "opens an AchievementsPopup through UILayerManager::openPopup.",
         "MEASURED: TL (920, 630), Pearson 0.9993 (spec 2.1 P8).",
-        "OWNER RULING: kept. The port has no achievements table and no AchievementsPopup yet (spec",
-        "section 7 U10), so it is drawn on every level - every captured level has one - and",
-        "pressing it does nothing visible."
+        "OWNER RULING: kept, drawn on every level. The original adds it only on the 59 levels an",
+        "achievement names (getAchievementsFromLevel over the list: the 2026-09-29 audit's count, and",
+        "test_mp_achievements'); the ruling's old reason - no achievements table and no popup - is gone",
+        "since planning steps 54 and 172. Since step 172 it opens the AchievementsPopup",
+        "(achievements.json popup) on those 59, and on the other 69, where the original has no button,",
+        "nothing: the ruling is the owner's to revisit."
       ],
       "sprite": "scores.png",
       "at_screen": [1, 1],

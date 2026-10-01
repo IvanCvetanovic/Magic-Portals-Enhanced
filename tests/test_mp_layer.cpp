@@ -8101,11 +8101,13 @@ void ThePausesButtonsGoWhereTheOriginalsGo() {
 
     // Skip is not there on a level never finished, and pressing it leads nowhere.
     CHECK_MSG(!layer.PressPause(registry, Pause::Button::Skip) && layer.Paused(), "no skip on a fresh level");
-    // Achievements: kept by the owner's ruling, and pressing it changes nothing
-    // yet - the popup it opens is not built.
+    // Achievements: kept on every level by the owner's ruling; 1-05 is named by no
+    // achievement, so - where the original has no button - it opens nothing
+    // (planning step 172).
     CHECK_MSG(TapPauseButton(layer, registry, Pause::Button::Achievements) && layer.Paused() &&
-                  IsAt(layer, "level4") && layer.MenuScreen() == MagicPortalsLayer::Screen::None,
-              "Achievements does nothing visible");
+                  !layer.AchievementsPopupOpen() && IsAt(layer, "level4") &&
+                  layer.MenuScreen() == MagicPortalsLayer::Screen::None,
+              "Achievements opens nothing on 1-05");
 
     // The sound switch: off, sound_mute in its place, the music switch dismissed
     // and gone 700 ms later; and no music is wanted.
@@ -17155,7 +17157,14 @@ void TheLevelsButtonsSoundAsTheOriginalsDo() {
     CHECK_MSG(TapThePauseControl(layer, registry) && layer.Paused(), "the pause");
     for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-    CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Achievements) == false);
+    // 1-31 is achievement 13's: the popup over the pause, silent, closed by the back
+    // key, and the pause current again once it has gone (planning step 172).
+    if (layer.AchievementsContent() != nullptr) {
+        CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Achievements) && layer.AchievementsPopupOpen());
+        press(layer, registry, MagicPortalsLayer::kBack);
+        for (int tick = 0; tick < 120 && layer.AchievementsPopupOpen(); ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK(!layer.AchievementsPopupOpen() && layer.Paused());
+    }
     // The music switch first: the sound's toggle dismisses it for a while.
     CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Music) && !layer.MusicOn());
     CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Music) && layer.MusicOn());
@@ -17164,6 +17173,333 @@ void TheLevelsButtonsSoundAsTheOriginalsDo() {
     CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Resume));
     CHECK_MSG(layer.LatchedSounds().empty(),
               "scores, both switches and resume are silent: " + std::to_string(layer.LatchedSounds().size()));
+    layer.OnDetach(registry);
+}
+
+// ---- achievements (planning step 172) ---------------------------------------------
+
+std::vector<ScreenOverlay::Quad> CardFrame(entt::registry& registry, const MagicPortalsLayer& layer) {
+    static ScreenOverlay overlay;
+    overlay.Clear();
+    registry.ctx().insert_or_assign<ScreenOverlay*>(&overlay);
+    layer.EmitNotifications(registry);
+    return overlay.Quads();
+}
+
+std::filesystem::path AchievementsScratch(const char* name) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / name;
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    return dir;
+}
+
+std::string ReadText(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+int Heard(const MagicPortalsLayer& layer, const char* event) {
+    const std::vector<std::string> sounds = layer.LatchedSounds();
+    return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string(event)));
+}
+
+// 1-01 to its door: LevelFinishedLayer's constructor asks on the door's tick -
+// the medal this play earned, its portals, the game's time - and 45 is unlocked
+// there and saved with its hash; its card leaves the stack strictly after 2500 ms
+// with its stinger and turns the music to 0.15, and goes 3400 ms later with
+// setDefaultMusicVolume's 0.7 (the level's track is not g_musicNames[0]).
+void TheDoorUnlocksItsAchievementAndRaisesItsCard() {
+    const std::filesystem::path dir = AchievementsScratch("supersonic-test-mp-layer-achievements");
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = dir.string();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.AchievementRulesError().empty(),
+              layer.LoadError() + layer.AchievementRulesError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK_MSG(layer.Unlocks().empty(), "a fresh save: the start's pass unlocks nothing");
+    for (int tick = 0; tick < 600 && !layer.Finishing(); ++tick) {
+        std::vector<std::string> pressed;
+        if (tick == 0) pressed.push_back(MagicPortalsLayer::kRight);
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, std::move(pressed));
+    }
+    CHECK_MSG(layer.Finishing(), "level0's door is reached by walking right");
+    if (!layer.Finishing()) return;
+    const int door = layer.LayerTicks();
+    const std::optional<MagicPortals::Achievements::Play> play = layer.LastDoorPlay();
+    const auto& cleared = layer.LastCleared();
+    const int medal = cleared ? MagicPortals::LevelEnd::ComputeScore(cleared->portalsUsed, cleared->goldenScore,
+                                                                     cleared->crystals, cleared->crystalsTotal)
+                              : -1;
+    CHECK_MSG(play && play->world == 0 && play->level == 0 && play->game && play->medal == medal &&
+                  play->portals == cleared->portalsUsed,
+              "the door asked with this play's numbers");
+    if (play) {
+        CHECK_MSG(NearD(play->gameTimeMs, layer.LevelAgeMs(), 0.01),
+                  "and the game's time, this tick's included: " + std::to_string(play->gameTimeMs) + " against " +
+                      std::to_string(layer.LevelAgeMs()));
+    }
+    CHECK_MSG(layer.Unlocks().size() == 1 && layer.Unlocks()[0].id == 45 && layer.Unlocks()[0].tick == door &&
+                  layer.Unlocks()[0].notify,
+              "45 on the door's tick, with its card");
+    const std::string saved = ReadText(dir / "achievements.json");
+    CHECK_MSG(saved.find("\"list\": \"45\"") != std::string::npos && saved.find("\"hash\": \"191\"") != std::string::npos,
+              "saved there and then, with its hash: " + saved);
+    CHECK_MSG(layer.Notifications().Stacked() == 1 && layer.Notifications().Front() == nullptr,
+              "the card waits on the stack");
+    const double gameTrack = layer.MusicVolumeNow();
+    int shownAt = -1;
+    int goneAt = -1;
+    double shownVolume = -1.0;
+    std::vector<ScreenOverlay::Quad> shownFrame;
+    for (int tick = door + 1; tick <= door + 420 && goneAt < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (shownAt < 0 && layer.Notifications().Front() != nullptr) {
+            shownAt = tick;
+            shownVolume = layer.MusicVolumeNow();
+            CHECK_MSG(Heard(layer, "achievement_card") == 1, "the stinger as it leaves the stack");
+        }
+        if (shownAt > 0 && tick == shownAt + 60) shownFrame = CardFrame(registry, layer);
+        if (shownAt > 0 && goneAt < 0 && layer.Notifications().Front() == nullptr) goneAt = tick;
+    }
+    CHECK_MSG(shownAt - door >= 149 && shownAt - door <= 150,
+              "shown strictly past 2500 ms: " + std::to_string(shownAt - door) + " ticks after the door");
+    CHECK_MSG(goneAt - shownAt >= 204 && goneAt - shownAt <= 205,
+              "gone strictly past 3400 ms: " + std::to_string(goneAt - shownAt));
+    CHECK_MSG(NearD(gameTrack, 0.7, 1e-9) && NearD(shownVolume, 0.15, 1e-9) &&
+                  NearD(layer.MusicVolumeNow(), 0.7, 1e-9),
+              "the music 0.7, 0.15 under the card, 0.7 after it");
+    CHECK_EQ(Heard(layer, "achievement_card"), 1);
+    if (layer.AchievementsContent() != nullptr && !shownFrame.empty()) {
+        CHECK_MSG(CountImage(shownFrame, "nnotificationbg.png") == 3, "the card's three pieces");
+        const MagicPortals::Achievements::Entry* entry = layer.AchievementsContent()->Find(45);
+        if (entry != nullptr) CHECK_MSG(CountImage(shownFrame, entry->icon) == 1, "and its icon");
+    }
+    std::printf("  1-01: 45 on the door's tick %d (medal %d, %d portals, %.1f ms); card %d ticks later, gone %d after\n",
+                door, medal, play ? play->portals : -1, play ? play->gameTimeMs : -1.0, shownAt - door,
+                goneAt - shownAt);
+    layer.OnDetach(registry);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
+// 4-19's red key: its pick dispatches 61 with a 5000 ms delay (ETHCallback_key
+// #822-851), on the tick its carrier changes, and nothing at its door.
+void TheRedKeysPickUnlocksItsAchievement() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level18c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CloseTheLevelStartPopup(layer, registry);
+    int picked = -1;
+    for (int tick = 0; tick < 30 && picked < 0; ++tick) {
+        PutPlayerAt(registry, layer, glm::dvec2(440.0, 128.0));
+        registry.get<RigidBodyComponent>(layer.SimLevel()->player).velocity = glm::vec3(0.0f);
+        tickWith(layer, registry, kRest, {}, {});
+        for (const MagicPortals::Keys::Key& key : layer.SimLevel()->keys.keys) {
+            if (key.owner != entt::null && picked < 0) picked = layer.LayerTicks();
+        }
+    }
+    CHECK_MSG(picked > 0, "the player takes 4-19's key");
+    CHECK_MSG(layer.Unlocks().size() == 1 && layer.Unlocks()[0].id == 61 && layer.Unlocks()[0].tick == picked,
+              "61 on the pick's tick");
+    int shownAt = -1;
+    for (int tick = 0; tick < 320 && shownAt < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (layer.Notifications().Front() != nullptr) shownAt = layer.LayerTicks();
+    }
+    CHECK_MSG(shownAt - picked >= 299 && shownAt - picked <= 300,
+              "its card strictly past 5000 ms: " + std::to_string(shownAt - picked) + " ticks");
+    std::printf("  4-19: 61 on the pick's tick %d, its card %d ticks later\n", picked, shownAt - picked);
+    layer.OnDetach(registry);
+}
+
+// The pause's AchievementsPopup over 1-31, which achievement 13 names: up over the
+// pause, its text the list's, the pause's buttons taking nothing under it, closed
+// by the back key and gone with the pause current again. Over 1-05, named by none,
+// the button the owner keeps opens nothing.
+void ThePausesAchievementsPopupShowsTheLevels() {
+    namespace Pause = MagicPortals::Pause;
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level4");
+        layer.OnAttach(registry);
+        if (layer.SimLevel() == nullptr) return;
+        CloseTheLevelStartPopup(layer, registry);
+        press(layer, registry, MagicPortalsLayer::kBack);
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK(layer.Paused());
+        CHECK_MSG(!layer.PressPause(registry, Pause::Button::Achievements) && !layer.AchievementsPopupOpen(),
+                  "1-05: no achievement names it, nothing opens");
+        layer.OnDetach(registry);
+    }
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CloseTheLevelStartPopup(layer, registry);
+    press(layer, registry, MagicPortalsLayer::kBack);
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    if (layer.AchievementsContent() == nullptr) {
+        std::printf("  (the popup's part skipped: no list of the original's)\n");
+        layer.OnDetach(registry);
+        return;
+    }
+    CHECK(layer.PressPause(registry, Pause::Button::Achievements) && layer.AchievementsPopupOpen());
+    const MagicPortals::Achievements::Entry* entry = layer.AchievementsContent()->Find(13);
+    const std::string text = layer.AchievementsPopupText();
+    CHECK_MSG(entry != nullptr && text == "# " + entry->title + ":\n" + entry->description,
+              "1-31's one achievement, locked: '" + text + "'");
+    CHECK_MSG(Heard(layer, "menu_button") == 0 && Heard(layer, "level_button") == 0, "silent");
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(!layer.PressPause(registry, Pause::Button::Music) && layer.MusicOn(),
+              "the pause's buttons take nothing under it");
+    if (OriginalArtIsThere("ThePausesAchievementsPopupShowsTheLevels")) {
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        CHECK_MSG(CountImage(frame, "box_bg.png") == 9, "the frame's nine tiles");
+        CHECK_MSG(CountImage(frame, "popup_close_button.png") == 1, "and its close button");
+    }
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK(layer.AchievementsPopupOpen() && layer.Paused());
+    int goneAfter = -1;
+    for (int tick = 1; tick <= 120 && goneAfter < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (!layer.AchievementsPopupOpen()) goneAfter = tick;
+    }
+    CHECK_MSG(goneAfter > 0 && layer.Paused(), "gone, the pause current again");
+    CHECK(layer.PressPause(registry, Pause::Button::Resume) && !layer.Paused());
+    std::printf("  1-31: the popup up over the pause, gone %d ticks after the back key\n", goneAfter);
+    layer.OnDetach(registry);
+}
+
+// The main menu's pass (checkPreviouslyUnlockAchievements) over a save whose first
+// chapter is all gold: its three badges and its eight medal achievements, silently,
+// in the function's order, saved - and the dashboard reads the saved set: the same
+// rows and points the medals gave it before.
+void TheMainMenusPassFillsTheSavedSet() {
+    namespace Scores = MagicPortals::Scores;
+    using Screen = MagicPortalsLayer::Screen;
+    const std::filesystem::path dir = AchievementsScratch("supersonic-test-mp-layer-menu-pass");
+    {
+        Scores::Store seed;
+        std::string why;
+        CHECK(seed.Open(dir.string(), why));
+        for (int level = 0; level < 32; ++level) seed.Record(0, level, Scores::kGold);
+        CHECK_MSG(seed.Save(why), why);
+    }
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = dir.string();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !TickToTheMainMenu(layer, registry)) {
+        CHECK_MSG(false, "no main menu: " + layer.LoadError());
+        return;
+    }
+    std::string order;
+    bool silent = true;
+    for (const MagicPortalsLayer::Unlock& unlock : layer.Unlocks()) {
+        order += (order.empty() ? "" : ",") + std::to_string(unlock.id);
+        silent = silent && !unlock.notify;
+    }
+    CHECK_MSG(order == "0,3,37,45,6,7,8,9,46,47,14" && silent,
+              "the badges, then the levels in order, silently: " + order);
+    const std::string saved = ReadText(dir / "achievements.json");
+    CHECK_MSG(saved.find("\"list\": \"0,3,37,45,6,7,8,9,46,47,14\"") != std::string::npos &&
+                  saved.find("\"hash\": \"5192\"") != std::string::npos,
+              "saved with its hash: " + saved);
+    CHECK_MSG(layer.Notifications().Stacked() == 0, "no card");
+    const auto touchAt = [&](double xPx, double yPx) {
+        const glm::vec2 at(static_cast<float>(xPx), static_cast<float>(yPx));
+        tickWith(layer, registry, at, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        releaseWith(layer, registry, at);
+    };
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    touchAt(1100.0, 675.0);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Achievements, "the dashboard");
+    if (layer.MenuScreen() != Screen::Achievements) return;
+    if (layer.AchievementsContent() != nullptr) {
+        Scores::Store medals;
+        std::string why;
+        CHECK(medals.Open(dir.string(), why));
+        const MagicPortals::Dashboard::Board before = MagicPortals::Dashboard::Build(
+            layer.AchievementsContent(), layer.LockingRules(), medals, layer.ChapterTable());
+        const MagicPortals::Dashboard::Board& now = layer.DashboardBoard();
+        bool same = before.lines.size() == now.lines.size() && before.points == now.points;
+        for (std::size_t i = 0; same && i < now.lines.size(); ++i) same = before.lines[i].unlocked == now.lines[i].unlocked;
+        CHECK_MSG(same, "the saved set unlocks the rows the medals did, " + std::to_string(now.points) + " points");
+    }
+    layer.OnDetach(registry);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
+// On a fresh save 1-02 is locked, and its row's tap raises "This level is locked!"
+// at once (displayLevelLockedNotification: delay 0, no icon, no sound of its own).
+void TheDashboardsLockedRowRaisesItsCard() {
+    using Screen = MagicPortalsLayer::Screen;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !TickToTheMainMenu(layer, registry)) {
+        CHECK_MSG(false, "no main menu: " + layer.LoadError());
+        return;
+    }
+    if (layer.AchievementsContent() == nullptr) {
+        std::printf("  (skipped: no list of the original's)\n");
+        layer.OnDetach(registry);
+        return;
+    }
+    const auto touchAt = [&](double xPx, double yPx) {
+        const glm::vec2 at(static_cast<float>(xPx), static_cast<float>(yPx));
+        tickWith(layer, registry, at, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        releaseWith(layer, registry, at);
+    };
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    touchAt(1100.0, 675.0);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Achievements, "the dashboard");
+    if (layer.MenuScreen() != Screen::Achievements) return;
+    const MagicPortals::Dashboard::Board& board = layer.DashboardBoard();
+    int locked = -1;
+    for (std::size_t i = 0; i < board.lines.size() && locked < 0; ++i) {
+        const auto& line = board.lines[i];
+        if (!line.header && line.level >= 0 && !line.levelUnlocked) locked = static_cast<int>(i);
+    }
+    const glm::dvec2 view = layer.MenuBoxPx();
+    CHECK_MSG(locked >= 0 && MagicPortals::Dashboard::LineShown(layer.DashboardRules(), view, locked, 0.0),
+              "a locked level's row on the view: " + std::to_string(locked));
+    if (locked < 0) return;
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const Hud::Rect rect = MagicPortals::Dashboard::LineHitRect(layer.DashboardRules(), view, locked, 0.0);
+    const glm::dvec2 px = rect.Centre() / view * glm::dvec2(1280.0, 720.0);
+    touchAt(px.x, px.y);
+    tickWith(layer, registry, kRest, {}, {});
+    const MagicPortals::Notificator::Card* card = layer.Notifications().Front();
+    CHECK_MSG(card != nullptr && card->message == "This level is locked!" && card->icon.empty() && card->sound.empty() &&
+                  card->durationMs == 1500.0,
+              "This level is locked!, at once, for 1500 ms, no icon and no sound of its own");
+    CHECK_MSG(Heard(layer, "achievement_denied") == 1 && Heard(layer, "achievement_card") == 0,
+              "the denial heard, and nothing else");
+    if (OriginalArtIsThere("TheDashboardsLockedRowRaisesItsCard")) {
+        for (int tick = 0; tick < 45; ++tick) tickWith(layer, registry, kRest, {}, {});
+        const std::vector<ScreenOverlay::Quad> frame = CardFrame(registry, layer);
+        CHECK_MSG(CountImage(frame, "nnotificationbg.png") == 3, "its three pieces over the dashboard");
+    }
+    std::printf("  the dashboard's row %d, its level locked: the card at once\n", locked);
     layer.OnDetach(registry);
 }
 
@@ -17367,6 +17703,11 @@ void runTests() {
     ABeholderRockBrokenOnTheLevelIsHeard();
     ATimedCrystalsAlertIsLatchedOnceAtItsDialsStart();
     TheLevelsButtonsSoundAsTheOriginalsDo();
+    TheDoorUnlocksItsAchievementAndRaisesItsCard();
+    TheRedKeysPickUnlocksItsAchievement();
+    ThePausesAchievementsPopupShowsTheLevels();
+    TheMainMenusPassFillsTheSavedSet();
+    TheDashboardsLockedRowRaisesItsCard();
 }
 
 } // namespace
