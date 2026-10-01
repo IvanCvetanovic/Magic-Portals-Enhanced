@@ -2639,3 +2639,230 @@ done, P6 and P8 open.
 gameplay rules brought to the original's, and 70 levels shown winnable where none were, with no engine change and no
 lost work. The cost was 83 Smart App Control notifications, nearly half of them in one merge, 17 suites still unrun,
 a night's captures written into Ivan's own save, and an owner-reported glitch that has to wait for the engine.
+
+### 2026-09-30 07:27 - Session 22: program wave 2, cut by a power loss
+
+*Written 2026-10-01 at the close by session b06a6813, from the records - planning steps 129-143 of
+`docs/planning/2026-09-11-magic-portals-remaster.md`, each role's report under the gitignored
+`out/parity/program/<id>/` (`impl.md`, `fix*.md`, `shelve.md`, `commit.md` and the verifiers' `verify*.json`), the
+setups (`setup_B.md`, `setup_C.md`), `resume_2026-10-01.md` and git - not from a transcript. Session 3906f894 ran the
+wave and wrote no entry of its own: the laptop lost power at about 03:50 on 2026-10-01. 07:27 is the time of its first
+record (T.2's `ctest_N_before.txt`), not a measured start. Every number below is one a record states or git shows;
+where a figure is assembled from several records, it says so.*
+
+**Built:**
+- **2a, on `main`, one step at a time** (runs `wf_b4e26a20-eed` and `wf_7ac3130c-5eb`, and by hand), all pushed: step
+  129 (T.2, `e1826f3`), the 47 `test_mp_*` suites in one runner, `test_mp.exe`, so a relink makes one new executable
+  instead of 47 - its first launch ran every suite on wave 1's merged code, the 17 never run there among them (47 of
+  47 in one process, 48 of 48 under ctest); step 130 (P0, `8ce9668`), the engine pin `4bfcf67` -> `a733ca0`, twenty
+  commits of another game's opt-in work, all 128 levels byte-identical; step 131 (P1, `02e4d10`), clamp-to-edge
+  sampling for the port's pictures through the engine's `710bffc`, which took Ivan's "weird lines around the dragon's
+  arms" on 2-32 away, with 2-01's ramp line and the sky's edge rows; step 132 (`fd80e82`), the project's name, Magic
+  Portals Enhanced, in the wording only (476 occurrences in 138 files), on his word of 2026-09-30.
+- **2b, three tracks at once from 15:21** (run `wf_298c195a-9e5`). Track A on `main`, pushed as it went: step 133 (LD,
+  `5ee1c66`), the lift door as `ETHCallback_door_lift` runs it, which wins 4-21; 134 (G8, `fdc100d`), a shot through a
+  flame becomes a fireball and a flame burns a minion (2-10, 2-11, 2-16, 2-17, 2-19 and 4-28 won); 135 (G6,
+  `eb2143c`), a fireball through a portal pair once (2-06 and 4-14 won); 136 (HZ, `d7e8322`), a death area on its
+  whole shape and the platform gate (1-06 won). Track B in the worktree `w2-b`, written 150-153 and committed there:
+  RF (`7aee28b`), the shot on the touch's release; CD (`93eb2a1`), the camera drag behind a switch, and 1-21's lesson;
+  AR (`0e76e6d`), the draggable handle (2-20, 2-21, 2-22 and 2-24 won); G2 (`056e1cd`), the waiting lift (3-08 and
+  3-10 won, nine lift routes re-authored). Track C in `w2-c`, written 170-172: MS (`6462ba9`), the medal saved on the
+  door's tick and 4-19's key sparkles; P6 (`90df118`), the sound pass; P8, achievements, implemented at 03:37 and in
+  its first verification when the power went.
+
+**GAMEPLAY changed in nine steps**, each as the original does: 133 (all 46 lift doors on 37 levels: 0.8 of the height,
+eased, latched, and a closing door crushes the player), 134 (the 20 fire-agent levels; a minion's burn on 3-19, 3-23
+and 4-28), 135 (43 fireball levels), 136 (the two death areas; 29 platform and lift bodies on 24 levels), 137 (every
+level: the shot leaves on the release), 138 (127 levels, behind `camera.json`'s switch, whose false is Ivan's
+2026-09-11 ruling), 139 (2-20 to 2-24 and 2-27), 140 (the 13 lift levels), 141 (every level, narrowly: the medal is
+saved on the door's tick, from that tick's counts). None in 129-132, 142 (sound) or 143 (achievements). R24 and R25
+were not touched.
+
+**Broke / dead ends:**
+- **The power loss.** At about 03:50 the laptop lost power. P8's first verifier, started at 03:37, left one file
+  (`appdata_before.md5`, 03:48); P8's 18 uncommitted files survived whole (0 NUL bytes each, checked the next
+  morning), and nothing committed was lost.
+- **P1 (step 131) failed three verifications and was shelved** (14:23, stash `ee5e852d`). Smart App Control refused
+  the engine's `test_materials.exe` twice, so the test first ran on Linux under WSL (442 checks, 0 failures, against
+  its parent's 419); 4-32's dark dragon is lit through a normal map whose borders differ, so it moved at its spike
+  tips (7,412 px on 92 of 348 sampled frames, on a scratch build) where gate 5 asked for byte-identity; and the other
+  game's session moved the engine's `origin/main` under it once (`5de6310`, a licence commit on `a733ca0`) and then
+  rewrote it (`5de6310` -> `889f020`, the same tree under a reworded message), so the engine commit was rebased once
+  (a recompile and relink of all three executables) and cherry-picked once. Finished by hand: gate 5 decided as the
+  original (SOIL clamps every texture, normal maps included), the commit re-made on `889f020` as `710bffc`, reviewed
+  by the other game's session (the engine's ctest 57 of 57 under WSL) and pushed before `02e4d10`.
+- **Step 134's first round left 2-31 red**: its kill shot is now burned at the flame, as the original's would be. The
+  verifier failed it; the fix round found the agent shot from under its pocket, reached over the seesaw in flight from
+  a portal outside the ring (won on 248).
+- **Step 142 (P6) failed its first two verifications on real defects**: a crate's fall was never heard (the impact
+  watch's "carried" slack had no room for the step's own g dt^2, 0.272 px against 0.178), then a beholder rock
+  breaking on the level was silent. It passed on its third, and its five Smart App Control refusals are the most of
+  any step.
+- **The machine ran short with three trees building and capturing**: C: fell to 49 MB free in MS's sweep and 45 MB in
+  P6's (two PNGs written empty and re-taken) and filled during G8's first verification; the compiler ran out of heap
+  (C1060) in LD's, HZ's and P6's builds; one launch in P6's fix-round sweep died "bad allocation" (1-04, re-taken).
+- **Task text behind the tree**: G8, G6 and HZ were each told "step 132, 70 routes"; each found `main` further on,
+  took the next number and used the previous step's sweep as its before.
+- **Two levels not won, each waiting on the other track**: 2-27 (AR: only a shot the fixed flame turns into a
+  fireball, aimed by the handle's reflector, reaches its crates - and G8 was on track A) and 3-23 (G2: both keys are
+  carried by knights - and the flame's burn of a minion was on track A).
+- A capture window minimised by something else stalled one of RF's window runs; restored without taking focus, the
+  fixed-step run went on with its ticks unchanged.
+- P1's commit, made by hand, put the claw row's closing note and a new row after the backlog's closing "The owner's
+  calls" paragraph, and EC's and UI's rows later followed them there (moved back at this close).
+
+**Decision:**
+- 2b ran as three tracks: A's gameplay rows needed `main`'s routes and pushed as they went; B's touch-side rows
+  (release, drag, handle, lift) and C's presentation rows (medal, sound, achievements) ran on frozen levels
+  (`out/snap_w2`) in worktrees, committed there and were left for a merge.
+- Every ruling decided for the original, gameplay included. Ivan's open call on camera dragging was built as the
+  original behind `camera.json`'s `drag.drag_pan_enabled`, whose false restores his 2026-09-11 "no dragging" bit for
+  bit.
+- The engine moved only in steps of its own, each with a 128-level sweep: P0's fast-forward (byte-identical) and P1's
+  clamp (every level's edge pixels, measured and attributed). P1's gate 5 was decided as the original does, not tuned.
+
+**Smart App Control: 12 refused launches in this session, so 12 notifications**, assembled from the records, not
+observed: P1 2 (`test_materials.exe`), LD 1, G6 1, CD 1, AR 1, P6 5 (3 at its build, 1 by its first verifier, 1 in its
+second fix round), P8 1. Every other role, the two setups included, recorded 0. P1's third verifier saw one more block
+it could not attribute (MiKTeX's `pdftoppm.exe`, 13:37:15): not counted here, though it may have shown Ivan a
+notification. No loop: each refusal cost at most the relinks the rule allows.
+
+**Assets check:** yes, by the records for 12 of the session's 14 commits: the commit roles of T.2, P0, LD, G8, G6, HZ,
+RF, CD, AR, G2, MS and P6 each record in their `commit.md` that the forbidden-extension grep printed nothing on the
+staged names and that nothing from `out/` or `reference/` was staged. Step 131 (`02e4d10`, committed by hand) and step
+132 (`fd80e82`) have no report of those checks under `out/parity/program/` (`P1/commit.md` is wave 1's P1, `e1dab6e`
+on `w1-b`); they are covered by session 23's grep over every file the wave changed (`9299a40..aa374d4`), which printed
+nothing. This entry was written at session 23's close, whose literal `git status --short` is in the next entry.
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** 14 commits: 2a's four and track A's four on `main`, pushed (`9299a40..d7e8322`: 175 files, +4,761 /
+-897); track B's four on `w2-b` (117 files, +5,773 / -872) and track C's two on `w2-c` (22 files, +2,753 / -121), not
+pushed. The runner: 47 suites, 14,359 checks at step 129 -> 14,552 at step 136 on `main`; 48 suites, 15,175 at step
+140 on `w2-b`; 47, 15,529 at step 142 on `w2-c`; 0 failures at each commit. Routes: 70 -> 80 on `main`, 76 on `w2-b`,
+70 on `w2-c`. Reachability 108 / 20 / 0, 0 differ at every step that ran it (step 132 did not). Sweeps at f420 against
+each step's before: P0 128 of 128 byte-identical; P1 128 of 128 changed, 541,090 px, all edge pixels; track A's four
+128 of 128 each; RF 128, CD 127 (1-21's lesson), AR 122 (the six handle levels), G2 118 (ten lift levels), MS 128 and
+P6 128 identical; P8 127 (4-20's achievement card). Build 0 warnings throughout (the 12 `D9025` notes on the engine's
+vendored `/W0` files are the known baseline). The planning doc 24,171 -> 25,525 lines on `main`. Engine pin
+`4bfcf67` -> `a733ca0` -> `710bffc`. Ivan's save: `scores.json` alone, `40bfef3a`, every launch on a scratch copy.
+
+**Inferred mood:** a guess from the facts - the program's most productive day so far: fourteen steps committed and a
+fifteenth implemented, nine gameplay rules brought to the original's, sixteen more levels shown winnable, and Ivan's
+own dragon-arm report fixed through a reviewed engine change; it ended in the dark, with the last step half-verified,
+a disk running near empty, and a P1 that took three verifications, a shelving and a hand finish.
+
+### 2026-10-01 10:27 - Session 23: the resume - the folder renamed, wave 2 finished
+
+*Written at the close by this session's close role, from the session's own records - `resume_2026-10-01.md` (written
+by the session before it launched its continuation run), `P8/verify1.json` and `P8/commit.md`, `merge_w2/merge.md`,
+`verify1.json` and `finalize.md`, the `EC/` and `UI/` reports - and git. The close role checked the repository, wrote
+the backlog's rows and these two entries and committed the two files; it built, launched and captured nothing. 10:27
+is the resume record's first time.*
+
+**Built:**
+- **The resume.** Found: the power had gone mid-2b; track A pushed (`origin/main` = `d7e8322`), B and C committed in
+  their worktrees, P8 implemented and whole. Ivan had renamed the main checkout to `Magic-Portals-Enhanced` at about
+  10:26 ("i renamed it now, since thats what it was supposed to be named"), which left both worktrees "not a git
+  repository" and every CMake cache naming the old folder. Repaired: `git worktree repair` on both and their
+  `engine/.git` repointed; w2c's cache repointed at `out/snap_w2` and `reference/extracted/assets` and rebuilt (127
+  steps, 0 warnings); main's `build/` configured afresh and built at `b25a426` (258 steps, 0 warnings, the 12 known
+  `D9025` notes); the converter venv's editable install repointed; `b25a426`, the docs' new folder name, pushed.
+  Main's `out/` equals `out/snap_w2` by its manifest (1,256 files); `git fsck` clean; Ivan's save untouched.
+- **Step 143 (P8) verified and committed** (`b45c740`, on `w2-c`): a fresh verifier re-derived the decode, confirmed
+  the hash on the original's own saved 48140, ran 48 of 48 suites (16,812 checks), the 70 routes and reachability, and
+  re-took the sweep with a fresh save per launch (128 of 128 identical to the implementer's); its five low findings
+  were applied as text.
+- **Step 144, the merge** (`c2d7682` for `w2-b`, `4d9ee56` for `w2-c`), with B's 150-153 renumbered 137-140 and C's
+  170-172 141-143 (213 references for B, 140 for C). 19 conflicts kept both ways; the overlaps git merged silently
+  re-derived by reading - P8's lift doors against LD's status, the unlock census on 86 routes, P6's latches against
+  G2's lift and G8's and G6's fireballs, RF's touch against P8's popup, CD's and AR's fingers against G8 and G2. One
+  GAMEPLAY rule of its own: the flame a shot meets stands where the last tick's follow left its agent, burned before
+  it follows (`ETHCallback_fire_agent` #253-265 before #280; 18 checks in `test_mp_handle`). Track A's 14 routes moved
+  into the release meaning. 86 of 86 routes won, 49 of 49 suites (18,059 checks), reachability 108 / 20 / 0, and every
+  changed level of the sweep owned by one track. An independent verifier passed all 18 gates; the finalize role pushed
+  `b25a426..4d9ee56` and removed both worktrees and both branches.
+- **Step 145 (EC, `12eb200`)**: the screen's dark edge columns, found with the claw's lines. `dark_sky.png` has no
+  fullhd twin, so on its 44 levels a 455 u sky spans a 455.11 u view and 4x MSAA left one sample of each edge pixel
+  the black clear; a second copy of the sky drawn just behind it, out to the frame's pixel edges, fixes 41 of them
+  (edge medians L 0.817 -> 1.002 and R 0.838 -> 0.986; the original 1.002 / 0.988), and the other 84 levels are
+  byte-identical. GAMEPLAY: none.
+- **Step 146 (UI, `aa374d4`)**: the smaller pictures the original adds - the bosses' scattered explosions and their
+  deaths' explode, `ghost_utility_spawn` at every restock, `fire32` on what fire kills, a dropped key's pick, a
+  carranca's dust, the tutorial hands tapped away, a carried diamond at 0.1, the shock agent's pulse and the unlit
+  torch's turn; 104 levels byte-identical at f420 and 24 changed, each explained. GAMEPLAY: none.
+- **The close**: section 6's wave-2 paragraph, table and rows (track B's and C's texts rewritten against the merged
+  tree), and these two entries.
+
+**Broke / dead ends:**
+- **The folder's rename** broke both worktrees' git links, the CMake caches' baked paths and the venvs' console-script
+  shims; the shims still name the old folder (`python -m pytest` and `-m ruff` work).
+- **GitHub had been renamed too.** At 10:27 `.../Magic-Portals-Enhanced.git` was "Repository not found"; at the
+  merge's push GitHub answered "This repository moved". Every push since has gone through the redirect; `origin` and
+  the README's clone line are left for Ivan (a backlog row).
+- **The merge's first full route run won 84 of 86.** 2-18's kill (step 140's) now ended on LD's raised door, whose
+  102.4 rise leaves its bottom at 56.6: re-authored through a 1.2 px window in the aim on one release tick (1120; won
+  on 1191). 2-06's route (step 135's) rode the self-running lift that step 140 removed: re-authored with two lift
+  sends (575). The merge's own test failed its first run: it compared the flame with an agent that creeps about 1e-4 u
+  a tick.
+- **`git worktree remove` refused both worktrees** ("working trees containing submodules cannot be moved or removed");
+  `--force` was used only after every check came back clean - status, ignored files, both branches ancestors of
+  `main`, the engine module repos holding nothing unique, no stash.
+- **UI's final executable never ran for its implementer**: Smart App Control refused three links of
+  `MagicPortals.exe`, both delete-and-relinks spent, so its sweep and probes ran on a link without the hands' own
+  touch record. The verifier relinked once and re-took everything on the final binary (128 of 128 identical), and
+  found the record wrong about 1-27's second hand, which the route's second lift touch does take (tick 521).
+- **EC moved one level away from the original**: 2-05's right edge column, rows 421-586, now blends a dark wall with
+  the sky's cover where the black clear was (166 edge rows moved away, 161 of them 2-05's). Recorded; the fix, a
+  pixel-centre cover for every picture at the frame's edge, is left for its own step.
+- A minimised capture window stalled 1-20 in the merge verifier's sweep; re-run, identical.
+
+**Decision:**
+- EC and UI, planned for track C, ran on `main` after the merge, so they wrote against the merged code.
+- **Backlog rows closed only where a committed step closed them**: B1 (all nine of its levels now won by routes), G2,
+  Release-to-fire, P6, P8, the self-running-lift routes row and 2-06's lane; "2-24's kept-out barrel" ticked as moot
+  (2-24 is won with the handle). B4 stays open for 2-27, B2 for chapter 2's three unrouted levels. Track B's and C's
+  row texts were rewritten against the merged tree, not pasted: P6's "the lift's clank per turn" went with step 140,
+  its "achievement stinger" came with step 143, MS's stale-`--help` row was fixed in step 142, P8's deviation 3 and
+  G8's deviation 4 closed at the merge, and CD's deviation 3 by step 139.
+- **A pure move**: step 131's closing note and three rows (the screen's columns, steps 145's and 146's deviations)
+  stood after "The owner's calls"; they are back in the Tests list, line for line unchanged (the edit script checks
+  the same lines before and after the move).
+- Not pushed: a checker reads this commit first.
+
+**Smart App Control: 7 refused launches in this session**, from the records: P8's verifier 1 (`test_mp.exe`, relinked
+once), the merge 3 (two runners and one game, each relinked once), UI 3 (`MagicPortals.exe`, both relinks spent). The
+resume, P8's commit, the merge's verifier and finalize, EC, UI's verifier and commit, and this close: 0 (this role's
+CodeIntegrity query from 18:57: no event). **Wave 2 in all: 19** (session 22's 12 and these 7), against wave 1's 83 -
+the one runner of step 129 is most of the difference.
+
+**Assets check:** yes - `git status --short`, run after appending this entry, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/`. The forbidden-extension grep
+(`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, plus `^out/` and `^reference/`) over
+`git diff --cached --name-only` printed nothing before the commit, and over every file the wave changed
+(`9299a40..aa374d4`) it prints nothing either.
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** 6 commits in this session before the close (`b25a426`, `b45c740`, `c2d7682`, `4d9ee56`, `12eb200`,
+`aa374d4`); with session 22's 14, wave 2 is 20 commits `9299a40..aa374d4`, 272 files, +19,725 / -1,948, and the
+planning doc 24,171 -> 27,674 lines (steps 129-146). Routes: 86 of 128 won by a route `test_mp_routes` replays, 1,513
+checks, 0 failures (chapter 1 21, chapter 2 29, chapter 3 17, chapter 4 19); 42 not won, three with a recorded cause.
+The runner after step 146: 49 suites, 18,224 checks, 0 failures. Reachability 108 / 20 / 0, 0 differ. The standing
+f420 baseline: `out/parity/program/UI/after/sweep`, taken on `MagicPortals.exe` `564f657e` and 128 of 128
+byte-identical to `UI/verify1/after/sweep` on `2cc4a50e`, the binary `build/` holds. Engine pin `710bffc`. Ivan's save
+at the end: `%APPDATA%/Magic Portals/` holds `scores.json` alone, 164 bytes, md5 `40bfef3ac396b4e94bdd97990401435a`.
+The backlog 2,516 -> 2,863 lines.
+
+**Inferred mood:** a guess from the facts - a recovery day that ended further on than the night it recovered from: the
+power loss cost one verifier and no work, the rename cost a morning of repairs, and the merge and both picture steps
+landed; the price was seven more Smart App Control notifications, one level's edge moved the wrong way, and a GitHub
+rename found by surprise.
