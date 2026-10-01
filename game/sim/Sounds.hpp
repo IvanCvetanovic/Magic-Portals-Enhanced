@@ -32,11 +32,17 @@ namespace MagicPortals::Sounds {
 struct Hook {
     std::string name;
     // One file, or two. Two means either "both together" or "one at random",
-    // and the original does both: playExplosionSound plays explosion_huge AND
-    // explosion_small, playCrystalPickSound picks one of the two gathers.
+    // and the original does both: playLightOnSound plays magical_sweep_08 AND
+    // portal_created, playCrystalPickSound picks one of the two gathers. (Not
+    // playExplosionSound, which plays ONE, chosen by its argument: sounds.json
+    // carries it as its two calls, planning step 171.)
     std::vector<std::string> files;
     bool both = false;
+    // The volume the hook sets, or - where it hands on its own argument, as
+    // playFallSound, playRandomWoodSound and playStoneHitSound do - the one the
+    // caller gives with the event.
     double volume = 1.0;
+    bool volumeFromArgument = false;
 
     // The sample speed, which is the engine's pitch. Three shapes, because the
     // original has three: a number it states, a range it draws from
@@ -63,10 +69,53 @@ struct Track {
     bool loop = true;
 };
 
+// A begin-contact callback's sound (sounds.json `impacts`): which event it
+// latches, the hitIntensity it needs, and the volume it hands its hook - the
+// same hitIntensity the earthquake's impact rows read, with a gate of its own.
+struct Impact {
+    std::string event;
+    double hitAbove = 0.0;
+    double volumeDivisor = 1.0; // the volume is hitIntensity / this
+    bool absolute = false;      // abs(hitIntensity) first: the crate's (#26-29)
+    // The other's entity names that stop the callback before its sound.
+    std::vector<std::string> spares;
+    // The crate's: the event against a character instead, and the entity names
+    // whose callback crateContactCallback is.
+    std::string characterEvent;
+    std::vector<std::string> entities;
+    // The stone's: its event and volume on a destroyier.ent.
+    std::string destroyierEvent;
+    double destroyierVolume = 0.0;
+};
+
+// True, with the volume it passes, where a contact of `hit` sounds.
+bool ImpactVolume(const Impact& rule, double hit, double& volume);
+
+struct Impacts {
+    Impact player; // ETHBeginContactCallback_dark_mage #82-90
+    Impact minion; // ETHBeginContactCallback_minion #132-140
+    Impact stone;  // ETHBeginContactCallback_rolling_stone #58-94
+    Impact crate;  // crateContactCallback #31-56
+};
+
+// Numbers a sound's moment needs that no other table carries (sounds.json
+// `cues`), each with its decode there.
+struct Cues {
+    double beholderAppearMarginXPx = 0.0; // scale(vector2(48, 32)) round the screen
+    double beholderAppearMarginYPx = 0.0;
+    double dragonAppearAfterMs = 0.0;     // its elapsedTime above this, once
+    double bossExplosionStrideMs = 0.0;   // overTimeEntityAdder's small explosions
+    double lightSwitchAfterMs = 0.0;      // a light wall's switch, into its fade
+};
+
 struct Rules {
     std::map<std::string, Hook> hooks;
     std::map<std::string, Track> music;        // "menu", "game", "boss", "rocket", "back_home"
     std::map<std::string, std::string> events; // the port's event -> a hook's name
+    // Optional in the file - a table the suites write has neither - and, where
+    // present, every event they name must be one of `events`.
+    Impacts impacts;
+    Cues cues;
 
     // Null when there is none. An event mapped to an empty name is SILENT and
     // deliberately so: the port names what it can see happen even where the
@@ -77,9 +126,10 @@ struct Rules {
 };
 
 // False, with `error`, for a file that does not read, a hook with no files, a
-// speed that is none of the three shapes, or an event naming a hook that is not
-// there. A typo in a sound's name is a sound nobody hears, which is the quietest
-// kind of bug; it is refused at load instead.
+// speed that is none of the three shapes, an event naming a hook that is not
+// there, or an impact naming an event that is not. A typo in a sound's name is a
+// sound nobody hears, which is the quietest kind of bug; it is refused at load
+// instead.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
 // Where the original's sounds are, given its extracted assets.

@@ -2,9 +2,11 @@
 
 #include "core/Json.hpp"
 
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 namespace MagicPortals::Sounds {
 
@@ -63,7 +65,7 @@ bool ReadHook(const std::string& name, const Json::Value& entry, Hook& out, std:
     }
 
     // Two files mean one of two things and the file has to say which, because
-    // the original does both: playExplosionSound plays them together,
+    // the original does both: playLightOnSound plays them together,
     // playCrystalPickSound picks one.
     if (entry.Has("pick")) {
         const std::string pick = entry["pick"].AsString("");
@@ -81,13 +83,18 @@ bool ReadHook(const std::string& name, const Json::Value& entry, Hook& out, std:
         return false;
     }
 
+    // A number the hook sets, or "argument": the one its caller hands it
+    // (playFallSound's hitIntensity / 18), which comes with the event.
     if (entry.Has("volume")) {
         const Json::Value& volume = entry["volume"];
-        if (!volume.IsNumber() || volume.AsNumber() <= 0.0 || volume.AsNumber() > 1.0) {
-            error = name + "'s volume is above zero and at most one";
+        if (volume.IsString() && volume.AsString("") == "argument") {
+            read.volumeFromArgument = true;
+        } else if (!volume.IsNumber() || volume.AsNumber() <= 0.0 || volume.AsNumber() > 1.0) {
+            error = name + "'s volume is above zero and at most one, or \"argument\"";
             return false;
+        } else {
+            read.volume = volume.AsNumber();
         }
-        read.volume = volume.AsNumber();
     }
 
     // Three shapes, because the original has three: a number, a range it draws
@@ -157,7 +164,107 @@ bool ReadTrack(const std::string& name, const Json::Value& entry, Track& out, st
     return true;
 }
 
+// An event an impact latches: named, and one of `events` - a typo would be a
+// contact nobody ever hears.
+bool KnownEvent(const std::map<std::string, std::string>& events, const std::string& owner, const char* key,
+                const std::string& event, std::string& error) {
+    if (event.empty() || events.find(event) == events.end()) {
+        error = owner + "'s " + key + " names \"" + event + "\", which is not an event";
+        return false;
+    }
+    return true;
+}
+
+bool ReadNames(const Json::Value& entry, const char* key, std::vector<std::string>& out) {
+    out.clear();
+    if (!entry.Has(key)) return true;
+    if (!entry[key].IsArray()) return false;
+    for (const Json::Value& name : entry[key].AsArray()) {
+        if (!name.IsString() || name.AsString("").empty()) return false;
+        out.push_back(name.AsString(""));
+    }
+    return true;
+}
+
+bool ReadImpact(const std::string& name, const Json::Value& entry, const std::map<std::string, std::string>& events,
+                Impact& out, std::string& error) {
+    const std::string owner = "impacts." + name;
+    if (!entry.IsObject()) {
+        error = owner + " is an object";
+        return false;
+    }
+    Impact read;
+    read.event = entry["event"].AsString("");
+    if (!KnownEvent(events, owner, "event", read.event, error)) return false;
+    if (!entry["hit_above"].IsNumber() || entry["hit_above"].AsNumber() < 0.0) {
+        error = owner + "'s hit_above is a number, not negative";
+        return false;
+    }
+    read.hitAbove = entry["hit_above"].AsNumber();
+    if (!entry["volume_divisor"].IsNumber() || !(entry["volume_divisor"].AsNumber() > 0.0)) {
+        error = owner + "'s volume_divisor is above zero";
+        return false;
+    }
+    read.volumeDivisor = entry["volume_divisor"].AsNumber();
+    read.absolute = entry["absolute"].AsBool(false);
+    if (!ReadNames(entry, "spares", read.spares) || !ReadNames(entry, "entities", read.entities)) {
+        error = owner + "'s spares and entities are lists of names";
+        return false;
+    }
+    if (entry.Has("character_event")) {
+        read.characterEvent = entry["character_event"].AsString("");
+        if (!KnownEvent(events, owner, "character_event", read.characterEvent, error)) return false;
+    }
+    if (entry.Has("destroyier_event")) {
+        read.destroyierEvent = entry["destroyier_event"].AsString("");
+        if (!KnownEvent(events, owner, "destroyier_event", read.destroyierEvent, error)) return false;
+        const Json::Value& volume = entry["destroyier_volume"];
+        if (!volume.IsNumber() || volume.AsNumber() <= 0.0 || volume.AsNumber() > 1.0) {
+            error = owner + "'s destroyier_volume is above zero and at most one";
+            return false;
+        }
+        read.destroyierVolume = volume.AsNumber();
+    }
+    out = std::move(read);
+    return true;
+}
+
+bool ReadCues(const Json::Value& entry, Cues& out, std::string& error) {
+    Cues read;
+    const Json::Value& margin = entry["beholder_appear_margin_px"];
+    if (!margin.IsArray() || margin.AsArray().size() != 2 || !margin.AsArray()[0].IsNumber() ||
+        !margin.AsArray()[1].IsNumber() || margin.AsArray()[0].AsNumber() < 0.0 ||
+        margin.AsArray()[1].AsNumber() < 0.0) {
+        error = "cues.beholder_appear_margin_px is two numbers, not negative";
+        return false;
+    }
+    read.beholderAppearMarginXPx = margin.AsArray()[0].AsNumber();
+    read.beholderAppearMarginYPx = margin.AsArray()[1].AsNumber();
+    const auto positive = [&entry, &error](const char* key, double& into) {
+        if (!entry[key].IsNumber() || !(entry[key].AsNumber() > 0.0)) {
+            error = std::string("cues.") + key + " is above zero";
+            return false;
+        }
+        into = entry[key].AsNumber();
+        return true;
+    };
+    if (!positive("dragon_appear_after_ms", read.dragonAppearAfterMs) ||
+        !positive("boss_explosion_stride_ms", read.bossExplosionStrideMs) ||
+        !positive("light_switch_after_ms", read.lightSwitchAfterMs)) {
+        return false;
+    }
+    out = read;
+    return true;
+}
+
 } // namespace
+
+bool ImpactVolume(const Impact& rule, double hit, double& volume) {
+    const double read = rule.absolute ? std::fabs(hit) : hit;
+    if (rule.event.empty() || !(read > rule.hitAbove) || !(rule.volumeDivisor > 0.0)) return false;
+    volume = read / rule.volumeDivisor;
+    return true;
+}
 
 const Hook* Rules::FindHook(const std::string& name) const {
     const auto it = hooks.find(name);
@@ -238,6 +345,35 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
             return false;
         }
         read.events.emplace(event, hook);
+    }
+
+    // The contacts' sounds and the moments' numbers (planning step 171), read
+    // after the events they name.
+    if (root.Has("impacts")) {
+        const Json::Value& impacts = root["impacts"];
+        const std::pair<const char*, Impact*> rows[] = {{"player", &read.impacts.player},
+                                                         {"minion", &read.impacts.minion},
+                                                         {"stone", &read.impacts.stone},
+                                                         {"crate", &read.impacts.crate}};
+        for (const auto& [key, into] : rows) {
+            if (!ReadImpact(key, impacts[key], read.events, *into, why)) {
+                error = path + ": " + why;
+                return false;
+            }
+        }
+        // A crate's sound is its callback's, and a callback is bound by name.
+        if (read.impacts.crate.entities.empty() || read.impacts.crate.characterEvent.empty()) {
+            error = path + ": impacts.crate names its entities and its character_event";
+            return false;
+        }
+        if (read.impacts.stone.destroyierEvent.empty()) {
+            error = path + ": impacts.stone names its destroyier_event";
+            return false;
+        }
+    }
+    if (root.Has("cues") && !ReadCues(root["cues"], read.cues, why)) {
+        error = path + ": " + why;
+        return false;
     }
 
     out = std::move(read);

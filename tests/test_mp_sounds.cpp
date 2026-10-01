@@ -119,6 +119,46 @@ void TheSpeedShapesRead() {
     CHECK_MSG(door->speedFromDoorStride, "the door's speed comes from its own stride");
 }
 
+// A hook that hands on its caller's volume, and an impact's gate and volume
+// (planning step 171).
+void TheArgumentVolumeAndTheImpactsRead() {
+    Sounds::Rules rules;
+    std::string error;
+    const std::string fall = WriteRules(
+        "argument.json", Whole("{\"thump\":{\"files\":[\"a.mp3\"],\"volume\":\"argument\"}}", "{\"landed\":\"thump\"}"));
+    CHECK_MSG(Sounds::LoadRules(fall, rules, error), error);
+    const Sounds::Hook* thump = rules.FindHook("thump");
+    CHECK_MSG(thump != nullptr && thump->volumeFromArgument, "\"argument\" is the caller's volume");
+
+    const std::string loud = WriteRules("loud.json", Whole("{\"h\":{\"files\":[\"a.mp3\"],\"volume\":\"loud\"}}"));
+    CHECK_MSG(!Sounds::LoadRules(loud, rules, error), "a volume that is neither a number nor \"argument\"");
+
+    // An impact naming an event the table does not have is a contact nobody hears.
+    const std::string unknown = WriteRules(
+        "impact-typo.json",
+        "{\"hooks\":{\"h\":{\"files\":[\"a.mp3\"]}},\"music\":{},\"events\":{\"landed\":\"h\"},"
+        "\"impacts\":{\"player\":{\"event\":\"landde\",\"hit_above\":3.5,\"volume_divisor\":18}}}");
+    CHECK_MSG(!Sounds::LoadRules(unknown, rules, error), "an impact's event that is not an event is refused");
+    CHECK_MSG(error.find("landde") != std::string::npos, "and named: " + error);
+
+    Sounds::Impact crate;
+    crate.event = "knock";
+    crate.hitAbove = 2.0;
+    crate.volumeDivisor = 30.0;
+    crate.absolute = true;
+    double volume = 0.0;
+    CHECK_MSG(Sounds::ImpactVolume(crate, -6.0, volume) && ::test::nearly(static_cast<float>(volume), 0.2f),
+              "abs(-6) / 30: " + std::to_string(volume));
+    CHECK_MSG(!Sounds::ImpactVolume(crate, 2.0, volume), "at 2 it is not above 2");
+    Sounds::Impact player = crate;
+    player.absolute = false;
+    player.hitAbove = 3.5;
+    player.volumeDivisor = 18.0;
+    CHECK_MSG(!Sounds::ImpactVolume(player, -9.0, volume), "the player's is not taken absolute");
+    CHECK_MSG(Sounds::ImpactVolume(player, 9.0, volume) && ::test::nearly(static_cast<float>(volume), 0.5f),
+              "9 / 18: " + std::to_string(volume));
+}
+
 // The port's real file, and the decode it carries.
 void ThePortsOwnTableIsTheOriginals() {
     Sounds::Rules rules;
@@ -185,31 +225,90 @@ void ThePortsOwnTableIsTheOriginals() {
                   "light-on and roundabout are byte for byte the same hook");
     }
 
-    // Two together, versus one of two at random.
-    const Sounds::Hook* explosion = rules.FindHook("playExplosionSound");
+    // ONE EXPLOSION, CHOSEN BY ITS ARGUMENT. playExplosionSound(bool huge):
+    // #3 CpyVtoR4 v-1[huge], #4 JLowZ -> 33 - explosion_huge alone on its own
+    // 150 ms timer, or explosion_small alone on another. This pinned "both
+    // samples together" until planning step 171, which was the misdecode.
+    CHECK_MSG(rules.FindHook("playExplosionSound") == nullptr,
+              "no hook plays both explosions: the function is its two calls");
+    const Sounds::Hook* huge = rules.FindHook("playExplosionSound(true)");
+    const Sounds::Hook* small = rules.FindHook("playExplosionSound(false)");
+    CHECK_MSG(huge != nullptr && small != nullptr, "both arms of playExplosionSound should read");
+    if (huge != nullptr && small != nullptr) {
+        CHECK_MSG(huge->files == std::vector<std::string>{"explosion_huge.mp3"} && !huge->both,
+                  "true is explosion_huge, alone");
+        CHECK_MSG(small->files == std::vector<std::string>{"explosion_small.mp3"} && !small->both,
+                  "false is explosion_small, alone");
+        CHECK_MSG(huge->timer == "hugeExplosionSoundTimer" && small->timer == "smallExplosionSoundTimer",
+                  "each arm on its own timer");
+        CHECK_NEAR(static_cast<float>(huge->minIntervalMs), 150.0f);
+        CHECK_NEAR(static_cast<float>(small->minIntervalMs), 150.0f);
+    }
+
+    // One of two at random, and the shared timer.
     const Sounds::Hook* crystal = rules.FindHook("playCrystalPickSound");
     const Sounds::Hook* alert = rules.FindHook("playCrystalTempAlertSound");
-    CHECK_MSG(explosion != nullptr && crystal != nullptr && alert != nullptr, "the paired hooks should read");
-    if (explosion != nullptr && crystal != nullptr && alert != nullptr) {
-        CHECK_MSG(explosion->files.size() == 2 && explosion->both, "an explosion is both samples together");
+    CHECK_MSG(crystal != nullptr && alert != nullptr, "the crystal hooks should read");
+    if (crystal != nullptr && alert != nullptr) {
         CHECK_MSG(crystal->files.size() == 2 && !crystal->both, "a crystal is one of two at random");
         CHECK_NEAR(static_cast<float>(crystal->volume), 0.8f);
         // The shared timer: the two crystal sounds hold EACH OTHER off, which
-        // is one Timer in the original, not one per hook.
+        // is one Timer in the original, not one per hook - each against its
+        // own number (CMPIu v1, v50 and CMPIu v1, v100).
         CHECK_MSG(!crystal->timer.empty() && crystal->timer == alert->timer,
                   "the pick and the alert share one timer");
         CHECK_NEAR(static_cast<float>(crystal->minIntervalMs), 50.0f);
+        CHECK_NEAR(static_cast<float>(alert->minIntervalMs), 100.0f);
     }
 
-    // The wood drag draws its speed, and is the hook that proved the whole
-    // table had to be keyed on what reaches PlaySample.
+    // The wood drag is the hook that proved the whole table had to be keyed on
+    // what reaches PlaySample: it draws a speed for entry 2 and plays entry 22,
+    // whose own speed nothing sets.
     const Sounds::Hook* drag = rules.FindHook("playWoodDragSound");
     CHECK_MSG(drag != nullptr, "playWoodDragSound should read");
     if (drag != nullptr) {
         CHECK_MSG(drag->files.size() == 1 && drag->files[0] == "wood_drag.mp3",
                   "the drag plays wood_drag, not the portal_fail it only sets the speed on");
-        CHECK_MSG(drag->speedIsRandom, "its speed is drawn");
+        CHECK_MSG(!drag->speedIsRandom && ::test::nearly(static_cast<float>(drag->speed), 1.0f),
+                  "and wood_drag is heard at 1.0: the drawn speed is portal_fail's");
+        CHECK_MSG(drag->timer == "woodDragSoundTimer", "on woodDragSoundTimer");
+        CHECK_NEAR(static_cast<float>(drag->minIntervalMs), 200.0f);
     }
+
+    // The rest of the audit's section 5, each read off its hook's body.
+    const auto speedOf = [&rules](const char* hook, float speed) {
+        const Sounds::Hook* found = rules.FindHook(hook);
+        CHECK_MSG(found != nullptr && !found->speedIsRandom && !found->speedFromDoorStride &&
+                      ::test::nearly(static_cast<float>(found->speed), speed),
+                  std::string(hook) + " at speed " + std::to_string(speed));
+    };
+    speedOf("playKeyPickSound", 0.5f);
+    speedOf("playKeyUnlockSound", 0.5f);
+    speedOf("playLightSwitchSound", 0.5f);
+    speedOf("playGhostDeathSound", 0.5f);
+    speedOf("playFireExtinguishSound", 0.5f);
+    const Sounds::Hook* close = rules.FindHook("playDoorCloseSound");
+    CHECK_MSG(close != nullptr && close->speedFromDoorStride, "a door closes at 3000 / its stride, as it opens");
+    const auto argumentOf = [&rules](const char* hook, const char* timer, float intervalMs) {
+        const Sounds::Hook* found = rules.FindHook(hook);
+        CHECK_MSG(found != nullptr && found->volumeFromArgument, std::string(hook) + " takes its caller's volume");
+        if (found == nullptr) return;
+        CHECK_MSG(found->timer == timer && ::test::nearly(static_cast<float>(found->minIntervalMs), intervalMs),
+                  std::string(hook) + " on " + timer + " at " + std::to_string(intervalMs) + " ms");
+    };
+    argumentOf("playFallSound", "charHitSoundTimer", 200.0f);
+    argumentOf("playRandomWoodSound", "woodSoundTimer", 150.0f);
+    argumentOf("playStoneHitSound", "", 0.0f);
+    for (const char* drawnSpeed : {"playRandomWoodSound", "playStoneHitSound"}) {
+        const Sounds::Hook* found = rules.FindHook(drawnSpeed);
+        CHECK_MSG(found != nullptr && found->speedIsRandom && ::test::nearly(static_cast<float>(found->speedFrom), 0.8f) &&
+                      ::test::nearly(static_cast<float>(found->speedTo), 1.0f),
+                  std::string(drawnSpeed) + " draws randF(0.2) + 0.8");
+    }
+    const Sounds::Hook* fireball = rules.FindHook("playFireballSound");
+    CHECK_MSG(fireball != nullptr && fireball->timer == "fireballSoundTimer" &&
+                  ::test::nearly(static_cast<float>(fireball->minIntervalMs), 100.0f),
+              "a fireball on its 100 ms timer");
 
     // The five tracks, at the volumes the original starts them.
     const Sounds::Track* menu = rules.FindTrack("menu");
@@ -260,6 +359,86 @@ void ThePortsOwnTableIsTheOriginals() {
     // The dashboard's rows: a tap on an open level's row, and on a locked one's.
     playsFor("achievement_pick", "playAchievementPickSound");
     playsFor("achievement_denied", "playAchievementPickDeniedSound");
+
+    // PLANNING STEP 171, the sound pass: each event at the hook its decoded call
+    // site plays (sounds.json carries every citation).
+    playsFor("crystal_alert", "playCrystalTempAlertSound");
+    playsFor("key_picked", "playKeyPickSound");
+    playsFor("door_unlocked", "playDoorUnlockSound");
+    playsFor("key_unlocked", "playKeyUnlockSound");
+    playsFor("keyhole_vanished", "playDemolitionSound");
+    playsFor("player_landed", "playFallSound");
+    playsFor("minion_landed", "playFallSound");
+    playsFor("minion_fell", "playMinionFallSound");
+    playsFor("crate_knocked", "playRandomWoodSound");
+    playsFor("crate_dragged", "playWoodDragSound");
+    playsFor("stone_hit", "playStoneHitSound");
+    playsFor("stone_broken", "playStoneHitSound");
+    playsFor("fireball_spat", "playFireballSound");
+    playsFor("fireball_burst", "playExplosionSound(false)");
+    playsFor("fireball_on_shock_agent", "playExplosionSound(true)");
+    playsFor("bomb_blast", "playExplosionSound(true)");
+    playsFor("agent_killed", "playExplosionSound(true)");
+    playsFor("burned", "playBurnSound");
+    playsFor("fire_diamond_drained", "playFireExtinguishSound");
+    playsFor("shock_picked", "playShockDiamondPickSound");
+    playsFor("shock_struck", "playShockStrikeSound");
+    playsFor("light_on", "playLightOnSound");
+    playsFor("light_off", "playLightOffSound");
+    playsFor("light_switch", "playLightSwitchSound");
+    playsFor("boss_appeared", "playBeholderAppearSound");
+    playsFor("boss_struck", "playBeholderHitSound");
+    playsFor("boss_hurt", "playBeholderDamageSound");
+    playsFor("boss_spike_hit", "playBeholderSpikeHitSound");
+    playsFor("boss_rock_dropped", "playStoneAppearSound");
+    playsFor("boss_explosion", "playExplosionSound(false)");
+    playsFor("boss_dead", "playExplosionSound(true)");
+    playsFor("dragon_appeared", "playDragonAppearSound");
+    playsFor("dragon_took_off", "playDragonTakeOffSound");
+    playsFor("claw_crushed", "playDemolitionSound");
+    playsFor("ghost_appeared", "playGhostAppearSound");
+    playsFor("ghost_item", "playGhostItemAppearSound");
+    playsFor("ghost_hurt", "playGhostDamageSound");
+    playsFor("ghost_dead", "playGhostDeathSound");
+    playsFor("ghost_burst", "playExplosionSound(true)");
+    playsFor("enemy_shot", "playEnemyShootSound");
+    playsFor("enemy_shot_ended", "playEnemyShootExplodeSound");
+    playsFor("dark_dragon_appeared", "playDarkDragonAppearSound");
+    playsFor("dark_dragon_mouth", "playDarkDragonOpenMouthSound");
+    playsFor("dark_dragon_hurt", "playDarkDragonDamageSound");
+    playsFor("dark_dragon_item", "playGhostItemAppearSound");
+    playsFor("dark_dragon_dead", "playDarkDragonDeathSound");
+    playsFor("dark_dragon_burst", "playExplosionSound(true)");
+    // And the ones the original has no sound for, which the port had given one:
+    // a launcher's throw calls no audio function; a beholder rock's break is
+    // its landing's stone_hit; the beholder's button moves in silence.
+    for (const char* silent : {"stone_thrown", "boss_rock_broken", "boss_button_raised"}) {
+        CHECK_MSG(rules.events.count(silent) == 1 && rules.ForEvent(silent) == nullptr,
+                  std::string(silent) + " is named, and silent");
+    }
+
+    // The contacts' own gates and volumes (sounds.json impacts).
+    const Sounds::Impacts& impacts = rules.impacts;
+    CHECK_MSG(impacts.player.event == "player_landed" && impacts.player.hitAbove == 3.5 &&
+                  impacts.player.volumeDivisor == 18.0 && !impacts.player.absolute && impacts.player.spares.empty(),
+              "the player's thump: above 3.5, hit / 18, and no crate test");
+    CHECK_MSG(impacts.minion.event == "minion_landed" && impacts.minion.hitAbove == 3.5 &&
+                  impacts.minion.volumeDivisor == 18.0 &&
+                  impacts.minion.spares == std::vector<std::string>{"enemy_killer"},
+              "a minion's: the same, and not on the killer floor");
+    CHECK_MSG(impacts.stone.event == "stone_hit" && impacts.stone.hitAbove == 2.0 &&
+                  impacts.stone.volumeDivisor == 3.0 && impacts.stone.destroyierEvent == "stone_broken" &&
+                  impacts.stone.destroyierVolume == 1.0,
+              "a stone's: above 2 at hit / 3, and 1 on a destroyier");
+    CHECK_MSG(impacts.crate.event == "crate_knocked" && impacts.crate.characterEvent == "crate_dragged" &&
+                  impacts.crate.hitAbove == 2.0 && impacts.crate.volumeDivisor == 30.0 && impacts.crate.absolute &&
+                  impacts.crate.entities.size() == 12,
+              "a crate's: |hit| above 2 at |hit| / 30, the drag against the character, six callbacks' twelve names");
+    const Sounds::Cues& cues = rules.cues;
+    CHECK_MSG(cues.beholderAppearMarginXPx == 48.0 && cues.beholderAppearMarginYPx == 32.0 &&
+                  cues.dragonAppearAfterMs == 2000.0 && cues.bossExplosionStrideMs == 400.0 &&
+                  cues.lightSwitchAfterMs == 800.0,
+              "the cues: scale(48, 32), 2000 ms, 400 ms, 800 ms");
 }
 
 // The one case that opens the original's own files.
@@ -299,6 +478,7 @@ void EverySoundNamedIsReallyThere() {
 void runTests() {
     TheReaderRefusesWhatWouldBeSilent();
     TheSpeedShapesRead();
+    TheArgumentVolumeAndTheImpactsRead();
     ThePortsOwnTableIsTheOriginals();
     EverySoundNamedIsReallyThere();
 }

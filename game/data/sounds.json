@@ -72,9 +72,9 @@
     },
     "playCrystalTempAlertSound": {
       "files": ["crystal_temp_alert.mp3"],
-      "min_interval_ms": 50,
+      "min_interval_ms": 100,
       "timer": "crystal",
-      "_note": "reads the SAME AudioManager.crystalSoundTimer as the pick above, so the two rate-limit each other rather than each its own"
+      "_note": "reads the SAME AudioManager.crystalSoundTimer as the pick above, so the two rate-limit each other rather than each its own - each against its own number: the pick's CMPIu v1, v50, this one's CMPIu v1, v100 (00_order 8.0 rule 1: the vN is the constant N). This said 50 until the remaster record's step 171"
     },
     "playCrystalVanishSound": {
       "files": ["spike_hit.mp3"],
@@ -86,7 +86,11 @@
       "speed": "3000 / doorOpenStride",
       "_note": "a slow door is a slow sound; the port passes the door's own stride"
     },
-    "playDoorCloseSound": { "files": ["door_open.mp3"] },
+    "playDoorCloseSound": {
+      "files": ["door_open.mp3"],
+      "speed": "3000 / doorOpenStride",
+      "_note": "the same body as playDoorOpenSound: SetSampleSpeed(3000f / uTOf(doorOpenStride)) on entry 17, then PlaySample. Played at 1.0 until the remaster record's step 171"
+    },
     "playDoorUnlockSound": {
       "files": ["crystal_gather_G.mp3"],
       "speed": 0.5,
@@ -95,35 +99,59 @@
     "playFinalDoorSound": { "files": ["final_door_sound.mp3"] },
 
     "playElevatorSound": { "files": ["elevator.mp3"] },
-    "playStoneHitSound": { "files": ["stone_hit.mp3"] },
+    "playStoneHitSound": {
+      "files": ["stone_hit.mp3"],
+      "volume": "argument",
+      "speed": "random 0.8 to 1.0",
+      "_source": "its argument to SetSampleVolume on entry 12, then randF(0.2) + 0.8 (ADDIf 0.8f) to SetSampleSpeed and PlaySample; no timer. Its callers pass hitIntensity / 3 (ETHBeginContactCallback_rolling_stone #65-71, above 2) and 1 (#91-94, on destroyier.ent): `impacts.stone` below. Carried as one file and no speed until the remaster record's step 171"
+    },
     "playStoneAppearSound": { "files": ["portal_created.mp3"] },
     "playDemolitionSound": { "files": ["demolition.mp3"] },
-    "playExplosionSound": {
-      "files": ["explosion_huge.mp3", "explosion_small.mp3"],
-      "pick": "both",
-      "_note": "two samples together, not a choice between them"
-    },
+    "_explosion_note": [
+      "AudioManager::playExplosionSound(bool huge) (bytes 192072..192351) is ONE sample chosen by its",
+      "argument, not two: #3 CpyVtoR4 v-1[huge], #4 JLowZ -> 33. The huge arm (#5-32) plays",
+      "g_sfxNames[8], explosion_huge, alone, once AudioManager.hugeExplosionSoundTimer is past 150 ms",
+      "(CMPIu v1, v150: 00_order 8.0 rule 1), and resets that timer; the small arm (#33-60) plays",
+      "g_sfxNames[1], explosion_small, on smallExplosionSoundTimer at 150. Until the remaster record's",
+      "step 171 this table carried a 'playExplosionSound' that played BOTH files at once, and",
+      "test_mp_sounds pinned it: that entry is gone, and the function is carried as its two calls,",
+      "keyed with the argument each caller passes (SetV1 vN pushes the constant N): true from explode",
+      "#27-31, ETHCallback_anti_portal_agent #183-187 and ETHBeginContactCallback_fireball #114-118 (a",
+      "shock agent); false from spawnExplosion #1-5 and ETHBeginContactCallback_fireball #154-158. The",
+      "port's timer lets a call through at 150 ms where the original's needs above 150."
+    ],
     "playExplosionSound(true)": {
       "files": ["explosion_huge.mp3"],
       "min_interval_ms": 150,
       "timer": "hugeExplosionSoundTimer",
-      "_source": [
-        "AudioManager::playExplosionSound(bool huge) (bytes 192072..192351) as one caller calls it:",
-        "ETHCallback_anti_portal_agent #183-187 pushes SetV1 1, so huge is true. The huge arm (#3-32)",
-        "plays g_sfxNames[8], explosion_huge, alone, and only once AudioManager.hugeExplosionSoundTimer",
-        "is past 150 ms (#9-12, CMPIu against the constant 150: 00_order 8.0 rule 1), then resets it;",
-        "the small arm (#33-60) plays g_sfxNames[1] on its own timer. So the call is ONE sample, not the",
-        "two the playExplosionSound row above plays: that row is the P6 backlog row's to correct, for its",
-        "own callers. The port's timer lets a call through at 150 ms where the original's needs above",
-        "150. Keyed with its argument so the decoded function is named, not a new one invented. Played",
-        "since the remaster record's step 126."
-      ]
+      "_source": "playExplosionSound's huge arm, #5-32 (the _explosion_note above). Played since the remaster record's step 126 (an anti-portal agent's kill); every other caller since step 171"
+    },
+    "playExplosionSound(false)": {
+      "files": ["explosion_small.mp3"],
+      "min_interval_ms": 150,
+      "timer": "smallExplosionSoundTimer",
+      "_source": "playExplosionSound's small arm, #33-60, on its own timer (the _explosion_note above). Played since the remaster record's step 171"
     },
     "playBurnSound": { "files": ["burn.mp3"] },
-    "playFireballSound": { "files": ["fireball.mp3"] },
-    "playFireExtinguishSound": { "files": ["spikes.mp3"] },
+    "playFireballSound": {
+      "files": ["fireball.mp3"],
+      "min_interval_ms": 100,
+      "timer": "fireballSoundTimer",
+      "_source": "AudioManager.fireballSoundTimer, CMPIu v1, v100, then PlaySample(entry 5) and the timer reset. Its one caller is addFireball #87, which every fireball goes through: a carranca's (#108), a converted shot's (burnProjectile #54), 2-32's dragon's (#754) and the dark dragon's (#978, #1720). No timer until the remaster record's step 171"
+    },
+    "playFireExtinguishSound": {
+      "files": ["spikes.mp3"],
+      "speed": 0.5,
+      "_source": "c0.5f SetSampleSpeed on the literal soundfx/spikes.mp3, then PlaySample"
+    },
 
-    "playFallSound": { "files": ["fall.mp3"] },
+    "playFallSound": {
+      "files": ["fall.mp3"],
+      "volume": "argument",
+      "min_interval_ms": 200,
+      "timer": "charHitSoundTimer",
+      "_source": "AudioManager.charHitSoundTimer, CMPIu v1, v200, then its argument to SetSampleVolume on entry 18, PlaySample and the timer reset. Its callers pass hitIntensity / 18 above 3.5 (ETHBeginContactCallback_dark_mage #82-90, ETHBeginContactCallback_minion #132-140): `impacts` below. Carried with neither until the remaster record's step 171"
+    },
     "playDieByFallSound": { "files": ["fall.mp3"] },
     "playDeathSound": { "files": ["dark_whoosh_17.mp3"] },
     "playVictorySound": {
@@ -140,14 +168,17 @@
     "playRandomWoodSound": {
       "files": ["wood01.mp3", "wood02.mp3"],
       "pick": "random",
-      "_note": "computed index, the two wood entries"
+      "volume": "argument",
+      "speed": "random 0.8 to 1.0",
+      "min_interval_ms": 150,
+      "timer": "woodSoundTimer",
+      "_note": "computed index, the two wood entries: AudioManager.woodSoundTimer, CMPIu v1, v150, then rand(1) + 15, its argument to SetSampleVolume, randF(0.2) + 0.8 (ADDIf 0.8f, #31-34) to SetSampleSpeed, PlaySample and the timer reset. Its caller passes |hitIntensity| / 30 (crateContactCallback #31-51): `impacts.crate` below. Carried with none of the three until the remaster record's step 171"
     },
     "playWoodDragSound": {
       "files": ["wood_drag.mp3"],
-      "speed": "random 0.5 to 2.0",
       "min_interval_ms": 200,
-      "timer": "wood",
-      "_note": "sets the speed on entry 2 and plays entry 22; the played one is what is heard"
+      "timer": "woodDragSoundTimer",
+      "_note": "AudioManager.woodDragSoundTimer, CMPIu v1, v200. It sets randF(1.5) + 0.5 as the speed of ENTRY 2 (portal_fail) and plays ENTRY 22 (wood_drag), whose speed nothing sets: the drag is heard at 1.0, and the drawn speed lands on the next portal_fail (the bleed _about describes, not reproduced). Until the remaster record's step 171 this applied the drawn speed to wood_drag itself"
     },
 
     "playLightOnSound": {
@@ -169,7 +200,8 @@
     },
     "playLightSwitchSound": {
       "files": ["spike_hit.mp3"],
-      "_note": "its whole body is a call to playKeyUnlockSound"
+      "speed": 0.5,
+      "_note": "its whole body is a call to playKeyUnlockSound, so it is that hook's spike_hit at volume 1 and speed 0.5 (no speed until the remaster record's step 171)"
     },
 
     "playBeholderAppearSound": { "files": ["beholder_appear.mp3"] },
@@ -184,7 +216,11 @@
       "pick": "both"
     },
     "playGhostDamageSound": { "files": ["beholder_appear.mp3"] },
-    "playGhostDeathSound": { "files": ["beholder_damage.mp3"] },
+    "playGhostDeathSound": {
+      "files": ["beholder_damage.mp3"],
+      "speed": 0.5,
+      "_source": "c0.5f SetSampleSpeed on the literal soundfx/beholder_damage.mp3, then PlaySample (no speed until the remaster record's step 171)"
+    },
     "playGhostItemAppearSound": { "files": ["portal_created.mp3"] },
 
     "playDragonAppearSound": { "files": ["beholder_damage.mp3"] },
@@ -198,8 +234,16 @@
     "playMinionSmashSound": { "files": ["flesh_heavy_impact_03.mp3"] },
     "playMinionQuestionMarkSound": { "files": ["enemy_confused.mp3"] },
 
-    "playKeyPickSound": { "files": ["crystal_gather_E.mp3"] },
-    "playKeyUnlockSound": { "files": ["spike_hit.mp3"] },
+    "playKeyPickSound": {
+      "files": ["crystal_gather_E.mp3"],
+      "speed": 0.5,
+      "_source": "c1f SetSampleVolume and c0.5f SetSampleSpeed on entry 24, then PlaySample (no speed until the remaster record's step 171)"
+    },
+    "playKeyUnlockSound": {
+      "files": ["spike_hit.mp3"],
+      "speed": 0.5,
+      "_source": "c1f SetSampleVolume and c0.5f SetSampleSpeed on entry 25, then PlaySample (no speed until the remaster record's step 171)"
+    },
     "playRedKeyGotSound": { "files": ["red_key_got.mp3"] },
     "playShockDiamondPickSound": { "files": ["shock_diamond_pick.mp3"] },
     "playShockStrikeSound": { "files": ["shock_strike.mp3"] },
@@ -298,11 +342,74 @@
     "music_enabled_default": true
   },
 
+  "impacts": {
+    "_about": [
+      "THE BEGIN-CONTACT CALLBACKS' SOUNDS (the remaster record's step 171). Each is the same",
+      "callback, and the same hitIntensity, as earthquake.json's impact rows - dp2(its own",
+      "GetLinearVelocity(), the normal) / getScale(), which the port finds on its own contacts",
+      "(sim/Impacts.hpp) - with a gate of its own and the volume it passes: hit / volume_divisor.",
+      "A hook whose volume is the argument clamps it to 1 (the original's SoundEffectManager.java:86",
+      "caps the stream volume at 0.99). `spares`: the other's entity names that stop the callback",
+      "before its sound. The crate's is not the earthquake's crate test: isCrate (#66-75) skips",
+      "only the player's shake, and #82-90 run for a crate too."
+    ],
+    "player": {
+      "event": "player_landed",
+      "hit_above": 3.5,
+      "volume_divisor": 18.0,
+      "_source": "ETHBeginContactCallback_dark_mage (339123..339677) #82-90: CMPIf hitIntensity, 3.5f; JNP; then SetV4 18f, DIVf and playFallSound(hitIntensity / 18). Nothing for a sensor (#1-11); no crate test on this arm"
+    },
+    "minion": {
+      "event": "minion_landed",
+      "hit_above": 3.5,
+      "volume_divisor": 18.0,
+      "spares": ["enemy_killer"],
+      "_source": "ETHBeginContactCallback_minion (437083..437789) #132-140, the same test and volume as the player's, reached only where the other's GetEntityName() is not 'enemy_killer' (#57-74), as earthquake.json minion_impact's shake is. minion.ent's only: 3-32's ghost_minion.ent has no such callback"
+    },
+    "stone": {
+      "event": "stone_hit",
+      "hit_above": 2.0,
+      "volume_divisor": 3.0,
+      "destroyier_event": "stone_broken",
+      "destroyier_volume": 1.0,
+      "_source": "ETHBeginContactCallback_rolling_stone (346486..347456): #58-59 CMPIf hitIntensity, 2f, then the shake and #66-71 playStoneHitSound(hitIntensity / 3); #73-94 on destroyier.ent, playStoneHitSound(1) before its shake of 6 and destroy(). The normal is the line between the two entity points (#6-26), as earthquake.json stone_impact reads it. Every rolling_stone: placed, thrown by a launcher, and the beholder's rock - whose break on something static (#170-208) comes after this arm in the same begin, so a rock the port breaks before its watch sees the contact is given that begin (Boss::State::staticHitsNow). NOT BUILT: a launched stone's #58-71 on the destroyier (the port's destroyier is a trigger box, not a body, and plays #91-94 alone), and 3-20's placed stone on its destroyier (the port does not take a placed stone there)"
+    },
+    "crate": {
+      "event": "crate_knocked",
+      "character_event": "crate_dragged",
+      "hit_above": 2.0,
+      "volume_divisor": 30.0,
+      "absolute": true,
+      "entities": [
+        "crate", "crate.ent", "crate_no_emissive", "crate_no_emissive.ent", "crate_low_emissive",
+        "crate_low_emissive.ent", "crate_small", "crate_small.ent", "crate_small_no_emissive",
+        "crate_small_no_emissive.ent", "wood_piece_small", "wood_piece_small.ent"
+      ],
+      "_source": "crateContactCallback (421695..422055), which the six ETHBeginContactCallback_crate, _crate_no_emissive, _crate_low_emissive, _wood_piece_small, _crate_small and _crate_small_no_emissive call (#26): hitIntensity = abs(dp2(GetLinearVelocity(), normal) / getScale()) (#17-29); above 2 (#31-32), volume = hitIntensity / 30 (#34-35); against anything not isCharacter playRandomWoodSound(volume) (#37-51), against a character playWoodDragSound() (#53-56). isCharacter is the 'isCharacter' datum, which only GameCharacter::GameCharacter sets: the player. No sensor test here (the port's contacts are its solid bodies alone)"
+    }
+  },
+
+  "cues": {
+    "_about": "Numbers a sound's moment needs and no other table of the port's carries (the remaster record's step 171).",
+    "beholder_appear_margin_px": [48.0, 32.0],
+    "_beholder_appear": "ETHCallback_beholder (374987..380209) #286-360: while 'hasAppeared' is 0, isPointInRect(its GetPositionXY(), GetCameraPos() - scale(vector2(48, 32)), GetScreenSize() + that x 2) - PshC4 32 then 48, arguments last-first - plays playBeholderAppearSound once and sets it. In the level's units, as every scale() is",
+    "dragon_appear_after_ms": 2000.0,
+    "_dragon_appear": "ETHCallback_dragon (380209..383437) #326-367: while 'appearSoundPlayed' is 0, once its elapsedTime - the firing clock, just advanced by the frame (#277-303) - is above 2000 (CMPIu v24, v2000; TP), playDragonAppearSound, and the datum set",
+    "boss_explosion_stride_ms": 400.0,
+    "_boss_explosion": "overTimeEntityAdder('small_explosion_no_light.ent', 400, spawnExplosion, 0) (372886..373491): a clock kept on the boss's own entity under that name, started at 0 by its first call and added each frame's time (#20-44); at 400 or more it adds one, calls spawnExplosion, which plays playExplosionSound(false) (#1-5), and zeroes the clock (#53-115). Nothing else zeroes it, so it carries from one arm to the next. Called on every update of: the beholder's DEAD arm (ETHCallback_beholder #1163-1253); the ghost's DAMAGE arm while its hp is above 0 (ETHCallback_ghost #786-929, the update that goes to RAGE_MODE included) and its DEATH arm (#1245-1331); the dark dragon's DAMAGE and DYING arms, through darkDragonOvertimeSmallExplosionAdder (397662..398213; ETHCallback_dark_dragon #1563, #1818)",
+    "light_switch_after_ms": 800.0,
+    "_light_switch": "ETHCallback_light_wall (470129..470827) #57-97: once its elapsedTime since the torch flagged it is above 800 (CMPIu v6, v800; JP), and 'soundPlayed' is 0, playLightSwitchSound and the datum set; above 1500 it goes (#101-150), which is wall_broken's demolition"
+  },
+
   "_events_note": [
     "What the port can see happen, and the hook it plays. The port watches its own",
     "simulation across a tick - a portal placed, a shot fired, a crystal collected -",
     "and plays the sound on the FRAME, never on the tick, so nothing here can reach",
-    "the state hash. An event whose hook is empty is silent."
+    "the state hash. An event whose hook is empty is silent.",
+    "",
+    "Every event below the remaster record's step 171 wired or re-pointed says where the",
+    "original plays it in its note; a caller's argument that chooses the hook (SetV1 vN",
+    "pushes the constant N, 00_order 8.0 rule 1) is in the hook's name."
   ],
 
   "events": {
@@ -312,9 +419,22 @@
     "agent_killed": "playExplosionSound(true)",
     "shot_reflected": "playReflectSound",
     "traversal": "playTeleportSound",
+    "_note_portal_spent": [
+      "PortalManager::killAll #5 plays playPortalKilledSound at its entry, whatever it kills: the",
+      "clear button (PortalManager::update #106, which is not there with no portal placed, #62-72),",
+      "a static portal spent, and the dark dragon's wound (ETHCallback_dark_dragon #1508-1511, step",
+      "171)."
+    ],
     "portal_spent": "playPortalKilledSound",
 
     "crystal_collected": "playCrystalPickSound",
+    "_note_crystal_alert": [
+      "A TIMED CRYSTAL's init block (ETHCallback_crystal #1-82): where its 'time' is set (#60-71),",
+      "addTimerToCrystal (#78) and then playCrystalTempAlertSound (#82), once. The port starts every",
+      "timed crystal's dial on the level's first tick, and latches one per timed crystal there; the",
+      "shared 100 ms crystal timer lets the first through (step 171)."
+    ],
+    "crystal_alert": "playCrystalTempAlertSound",
     "crystal_expired": "playCrystalVanishSound",
 
     "door_opened": "playDoorOpenSound",
@@ -323,6 +443,25 @@
     "lift_turned": "playElevatorSound",
 
     "wall_broken": "playDemolitionSound",
+    "_note_keys": [
+      "KEYS (step 171). ETHCallback_key (438490..442683): #805 playKeyPickSound as a carrier takes a",
+      "free key, with key_pick.ent (#768-799); #550 playDoorUnlockSound on the frame after it finds",
+      "its keyhole, as the fly-in's WaypointManager is built (#221-547); #635 playKeyUnlockSound on",
+      "that manager's frame 1, with key_unlock_halo.ent (#593-632). ETHCallback_keyhole",
+      "(443376..444400) #235 playDemolitionSound as it deletes itself and its door, with",
+      "keyhole_vanish.ent and its shake (#150-239)."
+    ],
+    "key_picked": "playKeyPickSound",
+    "door_unlocked": "playDoorUnlockSound",
+    "key_unlocked": "playKeyUnlockSound",
+    "keyhole_vanished": "playDemolitionSound",
+
+    "_note_impacts": "The contact callbacks' own (`impacts` above; step 171). A stone's destroy on a destroyier.ent is stone_broken.",
+    "player_landed": "playFallSound",
+    "minion_landed": "playFallSound",
+    "crate_knocked": "playRandomWoodSound",
+    "crate_dragged": "playWoodDragSound",
+    "stone_hit": "playStoneHitSound",
     "_note_red_key_got": [
       "4-19'S RED KEY TAKEN (planning step 118): ETHCallback_red_key_state (listing L97171) #268-270",
       "calls playRedKeyGotSound on the frame the key in its bucket has an owner, once - the same",
@@ -330,9 +469,58 @@
       "else (AudioManager bytes 199212..199292). The wall it breaks 6000 ms later is wall_broken."
     ],
     "red_key_got": "playRedKeyGotSound",
-    "stone_thrown": "playStoneAppearSound",
+    "_note_stone_thrown": [
+      "SILENT (step 171). ETHCallback_entity_launcher calls no audio function at all: only",
+      "AddEntity, custom data, a scale and the time. playStoneAppearSound, which this named, is",
+      "the beholder's spawnStone (#1-3): boss_rock_dropped."
+    ],
+    "stone_thrown": "",
     "stone_broken": "playStoneHitSound",
+    "_note_fireballs": [
+      "addFireball #87 plays playFireballSound for EVERY fireball: a carranca's, a shot a fire",
+      "diamond or a fire agent's flame turns (burnProjectile #54), 2-32's dragon's and the dark",
+      "dragon's, at the player or the torch - on its 100 ms timer (step 171; a carranca's alone",
+      "before). ETHBeginContactCallback_fireball (418930..419710): a fireball destroyed on anything",
+      "#153-158 playExplosionSound(false); on a shock agent first #99-118 playExplosionSound(true),",
+      "then the same small one (#122 -> #146); and what it destroys on is burned if burnable",
+      "(#159-173). A shock agent's own callback plays playShockStrikeSound as it goes (#294-299)."
+    ],
     "fireball_spat": "playFireballSound",
+    "fireball_burst": "playExplosionSound(false)",
+    "fireball_on_shock_agent": "playExplosionSound(true)",
+    "_note_blasts": [
+      "explode (342023..342895) #27-31 playExplosionSound(true), for a barrel bomb's blast (its",
+      "callback #60), and every burnable it grabs burn()ed (#140-152). burn (419710..419817) sets",
+      "'burned' and plays playBurnSound unconditionally; its callers are explode #152, the lava",
+      "#19, a fire agent #220 (what is not burned yet) and a fireball #173. And a fire diamond",
+      "taken plays it too (ETHCallback_fire_diamond #190-192), and one a gutter drains plays",
+      "playFireExtinguishSound (#427-455). The port latches a burn where a burnable first burns",
+      "and where a fire kills a minion (step 171)."
+    ],
+    "bomb_blast": "playExplosionSound(true)",
+    "burned": "playBurnSound",
+    "fire_diamond_drained": "playFireExtinguishSound",
+    "_note_minion_fell": "ETHBeginContactCallback_enemy_killer (436701..437083) #1-22: a minion on the killer floor destroyed, the shake of 20, playMinionFallSound (step 171).",
+    "minion_fell": "playMinionFallSound",
+    "_note_shock": [
+      "SHOCK (step 171). ETHCallback_shock_diamond (444545..446781) #178-180 playShockDiamondPickSound",
+      "as it is taken, and #445-447 playShockStrikeSound as it strikes; ETHCallback_shock_agent",
+      "(446781..448212) #289-299 playShockStrikeSound as it goes (a fireball destroyed it);",
+      "ETHCallback_shock_area (448212..448931) #136-151 playShockStrikeSound as a ring kills the",
+      "character."
+    ],
+    "shock_picked": "playShockDiamondPickSound",
+    "shock_struck": "playShockStrikeSound",
+    "_note_light": [
+      "LIGHT (step 171). ETHCallback_light_off (467198..467878) #143-145 playLightOnSound as a shot",
+      "or a fireball lights the torch; ETHCallback_fire_signal (470827..471942) #273-275",
+      "playLightOffSound as its signal is shot and the torch goes out; ETHCallback_light_wall",
+      "#84-86 playLightSwitchSound once, 800 ms into its fade (`cues`), and #105-107",
+      "playDemolitionSound as it goes, which is wall_broken."
+    ],
+    "light_on": "playLightOnSound",
+    "light_off": "playLightOffSound",
+    "light_switch": "playLightSwitchSound",
 
     "_note_roundabout": [
       "A LAP ROUND A GRAVITY WELL (the visuals plan's 11.2; gravitywell.json roundabout):",
@@ -386,13 +574,97 @@
     "level_finished": "playFinalDoorSound",
     "medal_shown": "playVictorySound",
 
+    "_note_beholder": [
+      "1-32'S BEHOLDER, ETHCallback_beholder (374987..380209), re-derived in step 171: #350 appear,",
+      "once, the first time it stands inside the screen grown by `cues`; #561 playBeholderHitSound",
+      "and #565 playBeholderDamageSound TOGETHER as a stone rising into it hurts it (boss_struck and",
+      "boss_hurt on one tick - the port played Damage alone there, and Hit as a dropped rock broke);",
+      "#852 its eye shut; #1018 each volley's spikes; ETHCallback_beholder_spike #178-185",
+      "playBeholderSpikeHitSound on every frame a spike stands in the character's shrunken box;",
+      "spawnStone #1-3 playStoneAppearSound as each rock is dropped (#874 hands it to",
+      "overTimeEntityAdder, which calls it on the add). A rock is a rolling_stone.ent: every begin",
+      "of it runs #58-71 first, stone_hit at hitIntensity / 3 above 2 with its shake, and the one",
+      "on something static then destroys it (destroyOnStaticHit, #170-208, the shake of 5 and no",
+      "sound), so boss_rock_broken is silent and the contact it breaks on is heard as stone_hit.",
+      "The port's Boss::State::Contacts can break a rock within its margin of a static before",
+      "the impact watch sees the two touch; that contact's begin is then made from Contacts'",
+      "judgement (Boss::State::staticHitsNow; step 171's second fix round). DEAD: a small",
+      "explosion every 400 ms (boss_explosion, `cues`) and, past 3550 ms, explode(...) #1270-1274, whose",
+      "playExplosionSound(true) is boss_dead. The button then moves with no sound at all",
+      "(#1276-1315): levelFinishedEffect's callers are checkGameEnd and ETHCallback_dragon_knight",
+      "alone, so boss_button_raised is silent (it played playFinalDoorSound until step 171)."
+    ],
+    "boss_appeared": "playBeholderAppearSound",
+    "boss_struck": "playBeholderHitSound",
     "boss_hurt": "playBeholderDamageSound",
     "boss_eyes_shut": "playBeholderCloseEyesSound",
     "boss_spikes": "playBeholderSpikesSound",
-    "boss_rock_broken": "playBeholderHitSound",
-    "boss_dead": "playExplosionSound",
-    "boss_button_raised": "playFinalDoorSound",
+    "boss_spike_hit": "playBeholderSpikeHitSound",
+    "boss_rock_dropped": "playStoneAppearSound",
+    "boss_rock_broken": "",
+    "boss_explosion": "playExplosionSound(false)",
+    "boss_dead": "playExplosionSound(true)",
+    "boss_button_raised": "",
 
+    "_note_dragon": [
+      "2-32'S DRAGON (step 171). ETHCallback_dragon (380209..383437) #326-367 playDragonAppearSound",
+      "once (`cues`); #409-437, the take-off, inside `if (!tookOff)`, playDragonTakeOffSound after",
+      "the boss track's StopSample; ETHCallback_dragon_claw (383726..386175) #434-445",
+      "playDemolitionSound as the claw deletes a platform; its fireballs are fireball_spat."
+    ],
+    "dragon_appeared": "playDragonAppearSound",
+    "dragon_took_off": "playDragonTakeOffSound",
+    "claw_crushed": "playDemolitionSound",
+
+    "_note_ghost": [
+      "3-32'S GHOST (step 171). ETHCallback_ghost_minion (451487..451999) #71-94",
+      "playGhostAppearSound as the dying knight adds ghost.ent. ETHCallback_ghost (451999..457261),",
+      "its states APPEARING 0, SHOOTING 1, RAGE_MODE 2, DAMAGE 3, DEATH 4: on each SHOOTING beat,",
+      "after the shot and the two restocks, #670-672 playGhostItemAppearSound whatever they added;",
+      "burned, #707-770 into DAMAGE with playGhostDamageSound; DAMAGE at hp 0, #776-975 into DEATH",
+      "with playGhostDeathSound (speed 0.5); RAGE_MODE's summon, #1149-1157",
+      "playGhostItemAppearSound, and its way back to SHOOTING, #1160-1205 playGhostDamageSound;",
+      "DAMAGE while hp is above 0 (#786-929) and DEATH (#1245-1331) a small explosion every 400 ms",
+      "(boss_explosion, `cues`), and past 3550 ms in DEATH explode(...) #1348-1352.",
+      "Its shots: addEnemyShoot #172 playEnemyShootSound, and ETHCallback_enemy_shoot #354-356",
+      "playEnemyShootExplodeSound as one ends."
+    ],
+    "ghost_appeared": "playGhostAppearSound",
+    "ghost_item": "playGhostItemAppearSound",
+    "ghost_hurt": "playGhostDamageSound",
+    "ghost_dead": "playGhostDeathSound",
+    "ghost_burst": "playExplosionSound(true)",
+    "enemy_shot": "playEnemyShootSound",
+    "enemy_shot_ended": "playEnemyShootExplodeSound",
+
+    "_note_dark_dragon": [
+      "4-32'S DARK DRAGON (step 171). ETHCallback_dark_dragon_spawn (388631..389418) #120-122",
+      "playDarkDragonAppearSound as it adds it. ETHCallback_dark_dragon (389418..397662): in",
+      "APPEARING, #608-643 once, the first frame its jaw's cell is 3, playDarkDragonOpenMouthSound;",
+      "burned in FIGHTING, #1072-1123 playDarkDragonDamageSound, then #1504-1511",
+      "playGhostItemAppearSound and killAll, whose playPortalKilledSound is portal_spent; DAMAGE's",
+      "last waypoint, #1722-1724 playDarkDragonDamageSound again as it goes back to FIGHTING; hp",
+      "at 0, #1996-2018 playDarkDragonDeathSound into DYING; DYING's last waypoint, #1924-1931",
+      "explode(...). Every DAMAGE and DYING update a small explosion every 400 ms (#1563, #1818:",
+      "boss_explosion, `cues`). Its fireballs are fireball_spat."
+    ],
+    "dark_dragon_appeared": "playDarkDragonAppearSound",
+    "dark_dragon_mouth": "playDarkDragonOpenMouthSound",
+    "dark_dragon_hurt": "playDarkDragonDamageSound",
+    "dark_dragon_item": "playGhostItemAppearSound",
+    "dark_dragon_dead": "playDarkDragonDeathSound",
+    "dark_dragon_burst": "playExplosionSound(true)",
+
+    "_note_buttons": [
+      "BUTTONS (step 171). A Button plays only what setSound gave it (Button::Button #21-23 starts it",
+      "'', Button::update #140-163). The world and level tiles are teleport:",
+      "Page::setupItemButton #127-143 sets getItemSelectButtonSoundName on them (WorldSelector",
+      "#153, createLevelSelectState #148). The level's restart is teleport (GameLayer::GameLayer",
+      "#207-216, Game::Game #74). The pause's resume and scores are given none",
+      "(GameMenuLayer::GameMenuLayer #74-112), and the sound and music switches are UISwitches that",
+      "setSound never reaches (GlobalSoundSwitch::GlobalSoundSwitch #23): silent. Until step 171",
+      "the tiles, resume, scores and switches played button.mp3 and the restart nothing."
+    ],
     "menu_button": "getButtonSoundName",
     "level_button": "getRetryButtonSound",
     "_note_achievements": [

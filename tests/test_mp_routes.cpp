@@ -38,6 +38,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -80,10 +81,65 @@ void PublishViewport(entt::registry& registry) {
     registry.ctx().insert_or_assign(viewport);
 }
 
+// Every sound a route's run latched, by event (planning step 171).
+using Census = std::map<std::string, int>;
+
+// ETHCallback_light_wall #57-97: its switch once its elapsedTime is above 800
+// (CMPIu v6, v800), sounds.json cues.light_switch_after_ms.
+constexpr double kLightSwitchAfterMs = 800.0;
+
+// Two latches whose tick a count cannot show (planning step 171's second fix
+// round): light_switch on the first tick of a light wall's fade past 800 ms, and
+// fire_diamond_drained on the tick a gutter takes a fire diamond
+// (ETHCallback_fire_diamond #427-455). Each tick's latches against what the level
+// did on that tick; a tick where they differ is kept for the route's check.
+struct Moments {
+    bool wallPast = false;      // the wall's fade was past 800 ms at the last tick
+    std::vector<char> fireGone; // per diamond: a fire one, gone, at the last tick
+    bool marked = false;        // the first tick has been read
+    int switches = 0;           // due on their tick, and so heard
+    int drains = 0;
+    std::string off;            // each tick whose latches were not what was due
+
+    void Tick(const MagicPortals::Game::Level& level, const std::vector<std::string>& latched, int tick) {
+        const auto heard = [&latched](const char* event) {
+            return static_cast<int>(std::count(latched.begin(), latched.end(), std::string(event)));
+        };
+        // A wall put back and flagged again fades afresh, with its own switch.
+        const bool past = level.torch.wall.going && level.torch.wall.goingMs > kLightSwitchAfterMs;
+        const int switchDue = past && !wallPast ? 1 : 0;
+        wallPast = past;
+        // A level's first tick reads its diamonds against the level as it is made:
+        // none gone.
+        std::vector<char> gone;
+        for (const auto& diamond : level.diamonds.diamonds) {
+            gone.push_back(diamond.fire && diamond.gone ? char{1} : char{0});
+        }
+        if (!marked) fireGone.assign(gone.size(), char{0});
+        marked = true;
+        int drainDue = 0;
+        if (gone.size() == fireGone.size()) {
+            for (std::size_t i = 0; i < gone.size(); ++i) drainDue += gone[i] != 0 && fireGone[i] == 0 ? 1 : 0;
+        }
+        fireGone = std::move(gone);
+        const int switched = heard("light_switch");
+        const int drained = heard("fire_diamond_drained");
+        if (switched != switchDue || drained != drainDue) {
+            off += " tick " + std::to_string(tick) + ": light_switch " + std::to_string(switched) + " of " +
+                   std::to_string(switchDue) + " due, fire_diamond_drained " + std::to_string(drained) + " of " +
+                   std::to_string(drainDue) + ";";
+        }
+        switches += switchDue;
+        drains += drainDue;
+    }
+};
+
 // One frame as the app runs it under --fixed-step: the physics step, the game's tick
 // with nothing pressed but what the route scheduled, the route's own tick after it,
-// then the game's frame.
-void Frame(MagicPortalsLayer& layer, Route::Driver& driver, entt::registry& registry) {
+// then the game's frame - which plays, and so clears, what the tick latched: counted
+// into `census` first, and read against the tick's moments.
+void Frame(MagicPortalsLayer& layer, Route::Driver& driver, entt::registry& registry, Census& census,
+           Moments& moments) {
     PhysicsSystem::Update(registry, MagicPortalsLayer::kTick);
     Input::TickInput input;
     input.mousePosition = kRest;
@@ -91,7 +147,91 @@ void Frame(MagicPortalsLayer& layer, Route::Driver& driver, entt::registry& regi
     layer.OnFixedUpdate(registry, MagicPortalsLayer::kTick);
     Input::EndReplayedTick();
     driver.AfterTick(layer);
+    const std::vector<std::string> latched = layer.LatchedSounds();
+    for (const std::string& event : latched) ++census[event];
+    if (layer.SimLevel() != nullptr) moments.Tick(*layer.SimLevel(), latched, layer.LayerTicks());
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+}
+
+// What a won route's run heard, against what its level's own counters say
+// happened: each of step 171's latches at its event, once per event (sounds.json
+// carries the decode). A relation that holds for every route, or for the level
+// whose mechanism it is. And two latches on their very tick (Moments).
+void CheckCensus(const std::string& label, const Census& census, const Moments& moments,
+                 const MagicPortals::Game::Level& level) {
+    const auto heard = [&census](const char* event) {
+        const auto found = census.find(event);
+        return found == census.end() ? 0 : found->second;
+    };
+    const auto pin = [&label](bool holds, const std::string& what) { CHECK_MSG(holds, label + ": " + what); };
+    pin(moments.off.empty(), "light_switch on its wall's first tick past 800 ms (" + std::to_string(moments.switches) +
+                                 " due) and fire_diamond_drained on its diamond's (" +
+                                 std::to_string(moments.drains) + " due), on no other:" + moments.off);
+    // Silent in the original, so never latched.
+    for (const char* silent : {"stone_thrown", "boss_rock_broken", "boss_button_raised", "button_pressed"}) {
+        pin(heard(silent) == 0, std::string(silent) + " is silent");
+    }
+    int timed = 0;
+    for (const auto& crystal : level.goals.crystals) timed += crystal.timed ? 1 : 0;
+    pin(heard("crystal_alert") == timed, "one crystal_alert per timed crystal: " +
+                                             std::to_string(heard("crystal_alert")) + " of " + std::to_string(timed));
+    pin(heard("bomb_blast") == level.fire.blasts, "a bomb_blast per blast");
+    int spat = level.turrets.converted + level.dragon.fired + level.darkDragon.fired;
+    for (const auto& turret : level.turrets.turrets) spat += turret.fired;
+    pin(heard("fireball_spat") == spat, "a fireball_spat per fireball made: " + std::to_string(heard("fireball_spat")) +
+                                            " of " + std::to_string(spat));
+    int spent = 0;
+    for (const auto& key : level.keys.keys) spent += key.spent ? 1 : 0;
+    pin(heard("keyhole_vanished") == level.keys.opened, "a keyhole_vanished per door opened");
+    pin(heard("door_unlocked") <= spent && heard("key_unlocked") <= heard("door_unlocked"),
+        "a key's fly-in: door_unlocked then key_unlocked, for spent keys");
+    pin(heard("key_picked") >= (level.keys.picked > 0 ? 1 : 0), "a key_picked where a key was taken");
+    pin(heard("minion_fell") == level.minions.killed, "a minion_fell per minion the killer floor took");
+    pin(heard("claw_crushed") == level.dragon.crushed, "a claw_crushed per platform the claw took");
+    if (level.boss.beholder.has_value()) {
+        const auto& beholder = *level.boss.beholder;
+        pin(heard("boss_appeared") == 1, "the beholder appears once");
+        pin(heard("boss_struck") == beholder.hits && heard("boss_hurt") == beholder.hits,
+            "boss_struck and boss_hurt together, per hit: " + std::to_string(beholder.hits));
+        pin(heard("boss_rock_dropped") == beholder.rocksThrown, "a boss_rock_dropped per rock");
+        pin(heard("boss_dead") == (beholder.gone ? 1 : 0), "boss_dead as it goes");
+        // DEAD for 3550 ms and a tick: small explosions at 400, 800 ... 3200 ms.
+        if (beholder.gone) pin(heard("boss_explosion") == 8, "eight small explosions: " +
+                                                                 std::to_string(heard("boss_explosion")));
+    }
+    if (level.dragon.present) {
+        pin(heard("dragon_appeared") == 1, "the dragon appears once");
+        pin(heard("dragon_took_off") == (level.dragon.tookOff ? 1 : 0), "dragon_took_off as it takes off");
+    }
+    if (level.ghost.present && level.ghost.spawned) {
+        const auto& ghost = level.ghost;
+        pin(heard("ghost_appeared") == 1, "the ghost appears once");
+        pin(heard("ghost_item") == ghost.beats + ghost.summons, "a ghost_item per beat and summon");
+        pin(heard("ghost_hurt") >= ghost.hits, "a ghost_hurt per burn, and per rage left");
+        pin(heard("enemy_shot") == ghost.shotsFired, "an enemy_shot per shot");
+        pin(heard("ghost_burst") == (ghost.gone ? 1 : 0), "its burst as it goes");
+        pin(heard("ghost_dead") == (ghost.phase == MagicPortals::Ghost::Phase::Death ? 1 : 0), "its death, once");
+    }
+    if (level.darkDragon.present && level.darkDragon.summoned) {
+        const auto& dark = level.darkDragon;
+        pin(heard("dark_dragon_appeared") == 1 && heard("dark_dragon_mouth") == 1, "it appears and opens its jaw once");
+        pin(heard("dark_dragon_item") == dark.hits, "a dark_dragon_item per wound");
+        pin(heard("dark_dragon_dead") == (dark.phase == MagicPortals::DarkDragon::Phase::Dying ? 1 : 0),
+            "its death, once");
+        pin(heard("dark_dragon_burst") == (dark.gone ? 1 : 0), "its burst as it goes");
+        // Each wound's damage sound at its start and at DAMAGE's end, but the last,
+        // which goes straight into DYING.
+        if (dark.gone) {
+            pin(heard("dark_dragon_hurt") == 2 * dark.hits - 1,
+                "dark_dragon_hurt twice a wound but the last: " + std::to_string(heard("dark_dragon_hurt")));
+        }
+    }
+}
+
+std::string Describe(const Census& census) {
+    std::string text;
+    for (const auto& [event, count] : census) text += " " + event + " x" + std::to_string(count);
+    return text.empty() ? " none" : text;
 }
 
 // The trace a route is written by, which main's --route-trace prints too (Route.hpp).
@@ -103,9 +243,11 @@ struct Outcome {
     int wonTick = 0;
     int shots = 0;
     std::vector<std::string> problems;
+    Census census;
+    bool censusChecked = false;
 };
 
-Outcome Play(const Route::Plan& plan, const Options& options) {
+Outcome Play(const Route::Plan& plan, const Options& options, const std::string& label) {
     entt::registry registry;
     PublishViewport(registry);
     MagicPortalsLayer layer(RoutePaths(), plan.level);
@@ -113,8 +255,10 @@ Outcome Play(const Route::Plan& plan, const Options& options) {
     Route::Driver driver(plan);
     driver.Begin(layer);
     int lastFailed = -1;
+    Census census;
+    Moments moments;
     while (!driver.Finished()) {
-        Frame(layer, driver, registry);
+        Frame(layer, driver, registry, census, moments);
         if (options.trace <= 0) continue;
         const int tick = layer.LayerTicks();
         const bool tapped = std::any_of(plan.taps.begin(), plan.taps.end(),
@@ -134,6 +278,11 @@ Outcome Play(const Route::Plan& plan, const Options& options) {
     out.wonTick = driver.WonTick();
     out.shots = driver.Shots();
     out.problems = driver.Problems();
+    out.census = std::move(census);
+    if (out.wonTick > 0 && layer.SimLevel() != nullptr) {
+        CheckCensus(label + " " + plan.level, out.census, moments, *layer.SimLevel());
+        out.censusChecked = true;
+    }
     layer.OnDetach(registry);
     return out;
 }
@@ -191,13 +340,15 @@ void RunRoutes(const Options& options) {
         CHECK_MSG(file.stem().string() == plan.level,
                   file.filename().string() + " is named for its level, " + plan.level);
         const std::string label = Label(chapters, plan.level);
-        const Outcome outcome = Play(plan, options);
+        const Outcome outcome = Play(plan, options, label);
         if (outcome.wonTick > 0) {
             std::printf("  %s %s: won on tick %d (win_by %d), %d shot(s)\n", label.c_str(), plan.level.c_str(),
                         outcome.wonTick, plan.winBy, outcome.shots);
         } else {
             std::printf("  %s %s: NOT WON\n", label.c_str(), plan.level.c_str());
         }
+        // What it heard (planning step 171), on a line of its own.
+        std::printf("  %s %s sounds:%s\n", label.c_str(), plan.level.c_str(), Describe(outcome.census).c_str());
         std::string problems;
         for (const std::string& problem : outcome.problems) problems += (problems.empty() ? "" : "; ") + problem;
         CHECK_MSG(outcome.problems.empty(), label + " " + plan.level + ": " + problems);

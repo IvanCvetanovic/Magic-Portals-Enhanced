@@ -547,6 +547,21 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     }
 
     m_loaded = true;
+    // Its crates, whose begin-contacts are crateContactCallback's (sounds.json
+    // impacts.crate; planning step 171), in the scene's order so that two begun on
+    // one tick are latched in the same order every run.
+    m_crates.clear();
+    {
+        const std::vector<std::string>& crates = m_soundRules.impacts.crate.entities;
+        for (const Tscn::Node& node : m_data.scene.nodes) {
+            if (node.parent != "." ||
+                std::find(crates.begin(), crates.end(), Roles::EntityName(node)) == crates.end()) {
+                continue;
+            }
+            const auto built = m_level.built.entities.find(node.name);
+            if (built != m_level.built.entities.end()) m_crates.push_back(built->second);
+        }
+    }
     // Its music, as Game::preLoop starts it - a retry and a skip included, each a
     // fresh Game state - and the bosses' calls watched from nothing.
     m_musicWatch = MusicWatch{};
@@ -693,8 +708,11 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     unloadLights(registry);
     // The next level starts its own comparison. Without this, the first tick
     // of a level would hear every counter fall back to zero as if it had
-    // happened - a retry would play the whole level's sounds at once.
+    // happened - a retry would play the whole level's sounds at once. And the
+    // sounds' one-shot data and clocks, which are the level's entities'.
     m_watch = Watch{};
+    m_soundCues = SoundCues{};
+    m_crates.clear();
     // And the earthquake's two, for the same reason. The generator itself is
     // NOT reset: the original's is one for the game (m_quake).
     m_quakeWatch = QuakeWatch{};
@@ -2726,15 +2744,18 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
 bool MagicPortalsLayer::PressMenu(entt::registry& registry, MenuButton button) {
     // Every button makes a noise, and not the same one: the menu's own is the
     // only thing in the game that plays button.mp3, while the buttons a level
-    // puts up - retry, next, the list - are all a teleport.
+    // puts up - retry, next, the list - are all a teleport. So are the world and
+    // level tiles: Page::setupItemButton #127-143 gives each one
+    // getItemSelectButtonSoundName (planning step 171; button.mp3 before), which
+    // it plays on the press whether or not the tile is open.
     switch (button.kind) {
     case MenuButton::Kind::Play:
-    case MenuButton::Kind::World:
-    case MenuButton::Kind::Level:
     case MenuButton::Kind::Back:
     case MenuButton::Kind::Forward:
         latch("menu_button");
         break;
+    case MenuButton::Kind::World:
+    case MenuButton::Kind::Level:
     case MenuButton::Kind::Retry:
     case MenuButton::Kind::Next:
     case MenuButton::Kind::List:
@@ -3365,8 +3386,9 @@ bool MagicPortalsLayer::PressMainMenu(entt::registry& registry, MainMenu::Button
         } else {
             m_mainMusicAddedMs = dismissing ? m_mainMusicDismissedMs + dismissMs : now;
         }
+        // Silent: a UISwitch, which no setSound reaches (GlobalSoundSwitch
+        // #23; planning step 171 - it played button.mp3 before).
         switchedSound();
-        latch("menu_button");
         return true;
     }
     case MainMenu::Button::Music: {
@@ -3376,7 +3398,6 @@ bool MagicPortalsLayer::PressMainMenu(entt::registry& registry, MainMenu::Button
         if (!shown) return false;
         m_musicOn = !m_musicOn;
         switchedMusic();
-        latch("menu_button");
         return true;
     }
     }
@@ -7249,8 +7270,13 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
             break;
         // And these are EDGES: held down, a reset would restart the level every
         // tick for as long as the button was pressed.
+        // Its sound is getRestartLevelButtonSound's teleport (GameLayer::GameLayer
+        // #207-216, Game::Game #74; planning step 171 - silent before).
         case Control::Reset:
-            if (pressed && m_current >= 0) loadLevel(registry, m_current);
+            if (pressed && m_current >= 0) {
+                latch("level_button");
+                loadLevel(registry, m_current);
+            }
             break;
         // GameLayer's menu button calls GameState::showMenuPopup (bytes
         // 98935..99036): the pause, over this level, rather than out of it.
@@ -7258,8 +7284,9 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
             if (pressed) openPause(registry);
             break;
         // PortalManager::killAll(true): the placed portals go, those that never
-        // carried anything are given back, and it plays playPortalKilledSound
-        // once whatever the count.
+        // carried anything are given back, and it plays playPortalKilledSound at
+        // its entry (#5). The button is not there with none placed (update
+        // #62-72), and a press that finds none - the port's own case - is silent.
         case Control::Clear:
             if (pressed && m_level.portals.KillAll(true) > 0) latch("portal_spent");
             break;
@@ -7424,11 +7451,23 @@ std::vector<std::string> MagicPortalsLayer::LatchedSounds() const {
     return events;
 }
 
-void MagicPortalsLayer::latch(const char* event, double doorStrideMs) {
+std::vector<double> MagicPortalsLayer::LatchedVolumes() const {
+    std::vector<double> volumes;
+    volumes.reserve(m_latched.size());
+    for (const Latched& latched : m_latched) volumes.push_back(latched.volume);
+    return volumes;
+}
+
+void MagicPortalsLayer::latch(const std::string& event, double doorStrideMs, double volume) {
     // Only what the table names. An event it leaves silent, or does not know,
     // costs nothing here and says nothing.
     if (m_soundRules.ForEvent(event) == nullptr) return;
-    m_latched.push_back(Latched{event, doorStrideMs});
+    m_latched.push_back(Latched{event, doorStrideMs, volume});
+    // Said with the tick, so a run's log is the census of what it latched, not of what
+    // played: a hook's timer drops some, and a hook may ignore the volume (planning step 171).
+    SUPERSONIC_LOG_INFO("Magic Portals") << "sound " << event
+                                         << (volume >= 0.0 ? " at volume " + std::to_string(volume) : std::string())
+                                         << " on tick " << m_ticks << std::endl;
 }
 
 double MagicPortalsLayer::soundRandom(double from, double to) {
@@ -8811,6 +8850,10 @@ std::vector<Impacts::Watched> MagicPortalsLayer::impactBodies() const {
         if (!Earthquake::IsEntity(minion.entity, entityOf(Call::MinionImpact))) continue;
         bodies.push_back(Impacts::Watched{minion.body, Impacts::Kind::Minion, minionPoint, minionDrop});
     }
+    // crateContactCallback's six callers: every crate, whose begins are a sound
+    // and no shake (planning step 171). Each pair a watched body touches is its
+    // own, so watching a crate changes nothing about the player's or a stone's.
+    for (const entt::entity crate : m_crates) bodies.push_back(Impacts::Watched{crate, Impacts::Kind::Crate, {}});
     return bodies;
 }
 
@@ -8839,6 +8882,24 @@ void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable
         begin.otherAtPx = glm::dvec2(position->numbers[0], position->numbers[1]);
         m_impactBegins.push_back(begin);
     }
+    // A beholder rock Boss::State::Contacts broke on something static before the
+    // step brought the two into touch (it breaks one within its margin of a
+    // static, or where the step would have taken it): the rock's own callback in
+    // that contact, whose first arm runs before destroyOnStaticHit's (#58-71, then
+    // #170-208), read from what the rock carried into the step. Not where the
+    // watch has a begin of the rock this tick, nor where it has the pair touching
+    // already - met on an earlier step, so its begin is past (planning step 171's
+    // second fix round).
+    for (const Boss::StaticHit& hit : m_level.boss.staticHitsNow) {
+        const bool begun = std::any_of(m_impactBegins.begin(), m_impactBegins.end(),
+                                       [&](const Impacts::Begin& b) { return b.body == hit.rock; });
+        Impacts::Begin begin;
+        if (begun || m_impacts.Touching(hit.rock, hit.other) || !m_impacts.Carried(hit.rock, begin)) continue;
+        begin.other = hit.other;
+        begin.normal = glm::dvec2(0.0);
+        begin.otherAtPx = hit.otherAtPx;
+        m_impactBegins.push_back(begin);
+    }
     // Whose begin it is, for the log: the player, or the stone's or the minion's
     // own node name (a minion answers to its marker's).
     const auto nameOf = [this](const Impacts::Begin& begin) -> std::string {
@@ -8851,8 +8912,22 @@ void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable
         }
         return "a body";
     };
-    // Each begin, turned into its row's call where the row calls on it.
+    // Each begin, turned into its row's call where the row calls on it - and its
+    // callback's sound, on a gate of its own (sounds.json impacts; planning step
+    // 171).
+    const Sounds::Impacts& sounds = m_soundRules.impacts;
     for (const Impacts::Begin& begin : m_impactBegins) {
+        double volume = 0.0;
+        if (begin.kind == Impacts::Kind::Crate) {
+            // crateContactCallback: its own velocity along the contact's normal,
+            // taken absolute (#6-29) - no line between entity points - and the
+            // drag against the character, the knock against anything else.
+            const double hit = Earthquake::HitIntensity(m_quakeRules, begin.Approaching(begin.normal), begin.normal);
+            if (Sounds::ImpactVolume(sounds.crate, hit, volume)) {
+                latch(begin.other == m_level.player ? sounds.crate.characterEvent : sounds.crate.event, 0.0, volume);
+            }
+            continue;
+        }
         Call call = Call::PlayerImpact;
         glm::dvec2 along = begin.normal;
         if (begin.kind != Impacts::Kind::Player) {
@@ -8873,6 +8948,16 @@ void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable
                                              << " on " << (other.empty() ? std::string("a body") : other) << " hit " << hit
                                              << (calls ? "" : ", no call") << " on tick " << m_ticks << std::endl;
         if (calls) QueueQuake(call, hit);
+        // The same callback's sound, after its shake: the player's on no crate
+        // test (#82-90), the minion's past the same enemy_killer test (#132-140),
+        // the stone's on the same gate (#58-71).
+        const Sounds::Impact& sound = begin.kind == Impacts::Kind::Player  ? sounds.player
+                                      : begin.kind == Impacts::Kind::Stone ? sounds.stone
+                                                                           : sounds.minion;
+        if (std::find(sound.spares.begin(), sound.spares.end(), other) == sound.spares.end() &&
+            Sounds::ImpactVolume(sound, hit, volume)) {
+            latch(sound.event, 0.0, volume);
+        }
     }
 }
 
@@ -8973,8 +9058,9 @@ void MagicPortalsLayer::shakeView(entt::registry& registry) {
     }
 }
 
-void MagicPortalsLayer::latchSimSounds() {
+void MagicPortalsLayer::latchSimSounds(float fixedDelta) {
     if (!m_loaded) return;
+    const double tickMs = static_cast<double>(fixedDelta) * 1000.0;
 
     Watch now;
     now.valid = true;
@@ -8993,17 +9079,91 @@ void MagicPortalsLayer::latchSimSounds() {
     now.wallsBroken = m_level.demolish.Broken();
     now.redKeyTaken = m_level.redKey.destroyed;
     for (const Launchers::Launcher& launcher : m_level.launchers.launchers) now.stonesThrown += launcher.thrown;
-    // Summed across the carrancas, as the launchers' throws are: each keeps its
-    // own count, and what the sound wants is how many were spat in all.
+    // EVERY FIREBALL, whoever made it, as addFireball #87 plays it for each
+    // (step 171; a carranca's alone before): summed across the carrancas, the
+    // shots a fire diamond or a flame turned, and the two dragons'.
     for (const Turrets::Turret& turret : m_level.turrets.turrets) now.fireballsSpat += turret.fired;
+    now.fireballsSpat += m_level.turrets.converted + m_level.dragon.fired + m_level.darkDragon.fired;
     if (m_level.boss.beholder.has_value()) {
         now.bossHits = m_level.boss.beholder->hits;
         now.bossVolleys = m_level.boss.beholder->volleys;
         now.bossFrame = m_level.boss.beholder->frame;
         now.bossGone = m_level.boss.beholder->gone;
+        now.bossRocksThrown = m_level.boss.beholder->rocksThrown;
     }
     now.bossRocksBroken = m_level.boss.rocksBroken;
     now.bossButtonRaised = m_level.boss.buttonRaised;
+    now.bossSpikeHits = m_level.boss.spikeHits;
+    now.blasts = m_level.fire.blasts;
+    now.despawned = m_level.launchers.despawned;
+    now.minionsKilled = m_level.minions.killed;
+    now.minionsBurned = m_level.minions.burned;
+    now.doorsOpened = m_level.keys.opened;
+    now.struck = m_level.diamonds.struck;
+    now.torchesLit = m_level.torch.lit;
+    now.torchesPutOut = m_level.torch.putOut;
+    now.crushed = m_level.dragon.crushed;
+    now.dragonTookOff = m_level.dragon.present && m_level.dragon.tookOff;
+    now.ringKilled = m_level.fields.playerKilled;
+    now.playerDead = m_level.hazards.playerDied;
+    for (const Fire::Burnable& burnable : m_level.fire.burnables) {
+        now.burnables.push_back(burnable.burned ? char{1} : char{0});
+    }
+    for (const Fields::Field& field : m_level.fields.fields) now.fieldsGone.push_back(field.gone ? char{1} : char{0});
+    for (const Diamonds::Diamond& diamond : m_level.diamonds.diamonds) {
+        now.diamondsHeld.push_back(!diamond.gone && diamond.owner != entt::null ? char{1} : char{0});
+        now.diamondsGone.push_back(diamond.gone ? char{1} : char{0});
+    }
+    for (const Keys::Key& key : m_level.keys.keys) now.keyOwners.push_back(key.owner);
+    const Ghost::State& ghost = m_level.ghost;
+    now.ghostSpawned = ghost.present && ghost.spawned;
+    now.ghostGone = ghost.gone;
+    now.ghostPhase = ghost.phase;
+    now.ghostBeats = ghost.beats;
+    now.ghostSummons = ghost.summons;
+    now.ghostHits = ghost.hits;
+    now.ghostShotsFired = ghost.shotsFired;
+    now.ghostShotsEnded = ghost.shotsFired - static_cast<int>(ghost.shots.size());
+    const DarkDragon::State& dark = m_level.darkDragon;
+    now.darkSummoned = dark.present && dark.summoned;
+    now.darkAlive = dark.Alive();
+    now.darkGone = dark.gone;
+    now.darkPhase = dark.phase;
+    now.darkHits = dark.hits;
+
+    // THE ONE-SHOTS AND CLOCKS, which run from the level's first tick: each is a
+    // test the original makes on every frame, not an edge.
+    //
+    // A timed crystal's init block adds its dial and plays the alert once, and
+    // the port starts every dial on the level's first tick: one latch each there,
+    // which the shared 100 ms crystal timer lets the first of through
+    // (ETHCallback_crystal #60-82).
+    if (!m_watch.valid) {
+        for (const Goals::Crystal& crystal : m_level.goals.crystals) {
+            if (crystal.timed && !crystal.collected && !crystal.expired) latch("crystal_alert");
+        }
+    }
+    // A key's fly-in, on the clock latchSimEffects keeps for its halo: the frame
+    // it builds its WaypointManager plays playDoorUnlockSound (ETHCallback_key
+    // #221-550), and its frame 1 playKeyUnlockSound with the halo (#593-635).
+    if (m_soundCues.keyFlyIns.size() < m_level.keys.keys.size()) m_soundCues.keyFlyIns.resize(m_level.keys.keys.size());
+    for (std::size_t i = 0; i < m_level.keys.keys.size(); ++i) {
+        Effects::FlyIn& flyIn = m_soundCues.keyFlyIns[i];
+        const bool builtBefore = flyIn.built;
+        const bool halo = Effects::AdvanceFlyIn(m_effectRules, flyIn, m_level.keys.keys[i].spent, tickMs);
+        if (flyIn.built && !builtBefore) latch("door_unlocked");
+        if (halo) latch("key_unlocked");
+    }
+    // A light wall's switch, once into its fade (ETHCallback_light_wall #57-97;
+    // sounds.json cues). A wall put back and flagged again is a new entity, with
+    // a new datum.
+    if (!m_level.torch.wall.going) {
+        m_soundCues.lightSwitched = false;
+    } else if (!m_soundCues.lightSwitched && m_level.torch.wall.goingMs > m_soundRules.cues.lightSwitchAfterMs) {
+        m_soundCues.lightSwitched = true;
+        latch("light_switch");
+    }
+    latchBossCues(tickMs);
     now.doorsOpening.reserve(m_level.channels.doors.size());
     for (const Puzzle::SwitchedDoor& door : m_level.channels.doors) {
         now.doorsOpening.push_back(door.motion.opening ? char{1} : char{0});
@@ -9017,6 +9177,10 @@ void MagicPortalsLayer::latchSimSounds() {
     // zeroed one: otherwise a level that begins with two static portals and a
     // standing door would announce all of it in its opening frame.
     if (!m_watch.valid) {
+        // Step 171's own edges are read against the level as it is made - every
+        // count at 0, nothing burned, held, taken or gone - and so on its first tick
+        // too: 4-29's key, which the player is spawned on, is taken on that tick.
+        latchStepSounds(FreshWatch(now), now);
         m_watch = std::move(now);
         return;
     }
@@ -9043,14 +9207,24 @@ void MagicPortalsLayer::latchSimSounds() {
                                              << ", the light fades over " << m_level.redKey.rules.fadeMs << " ms"
                                              << std::endl;
     }
+    // Silent since step 171: ETHCallback_entity_launcher calls no audio function.
     for (int i = m_watch.stonesThrown; i < now.stonesThrown; ++i) latch("stone_thrown");
     for (int i = m_watch.fireballsSpat; i < now.fireballsSpat; ++i) latch("fireball_spat");
-    for (int i = m_watch.bossHits; i < now.bossHits; ++i) latch("boss_hurt");
+    // 1-32's beholder (sounds.json _note_beholder): a stone rising into it is
+    // playBeholderHitSound and playBeholderDamageSound together (#561, #565).
+    for (int i = m_watch.bossHits; i < now.bossHits; ++i) {
+        latch("boss_struck");
+        latch("boss_hurt");
+    }
     for (int i = m_watch.bossVolleys; i < now.bossVolleys; ++i) latch("boss_spikes");
+    // Silent since step 171: a rock's break is its landing's stone_hit.
     for (int i = m_watch.bossRocksBroken; i < now.bossRocksBroken; ++i) latch("boss_rock_broken");
     if (now.bossFrame == 1 && m_watch.bossFrame != 1) latch("boss_eyes_shut");
     if (now.bossGone && !m_watch.bossGone) latch("boss_dead");
+    // Silent since step 171: the button moves with no sound (#1276-1315).
     if (now.bossButtonRaised && !m_watch.bossButtonRaised) latch("boss_button_raised");
+
+    latchStepSounds(m_watch, now);
 
     // A door that started moving, with its own stride: the hook's speed is
     // 3000 / it, so a slow door sounds slow.
@@ -9071,6 +9245,197 @@ void MagicPortalsLayer::latchSimSounds() {
     }
 
     m_watch = std::move(now);
+}
+
+MagicPortalsLayer::Watch MagicPortalsLayer::FreshWatch(const Watch& now) {
+    // The level as it is made: every count 0, every flag clear, every carrier none,
+    // each list as long as the tick's.
+    Watch fresh;
+    fresh.burnables.assign(now.burnables.size(), char{0});
+    fresh.fieldsGone.assign(now.fieldsGone.size(), char{0});
+    fresh.diamondsHeld.assign(now.diamondsHeld.size(), char{0});
+    fresh.diamondsGone.assign(now.diamondsGone.size(), char{0});
+    fresh.keyOwners.assign(now.keyOwners.size(), entt::null);
+    return fresh;
+}
+
+void MagicPortalsLayer::latchStepSounds(const Watch& was, const Watch& now) {
+    // 1-32's beholder: each rock it drops (spawnStone #1-3) and each frame a
+    // spike stands in the player's box (ETHCallback_beholder_spike #178-185).
+    for (int i = was.bossRocksThrown; i < now.bossRocksThrown; ++i) latch("boss_rock_dropped");
+    for (int i = was.bossSpikeHits; i < now.bossSpikeHits; ++i) latch("boss_spike_hit");
+    // THE REST OF STEP 171'S, each at the moment its call site plays it
+    // (sounds.json carries every citation).
+    //
+    // A stone destroyed on a destroyier: playStoneHitSound(1) (#91-94).
+    for (int i = was.despawned; i < now.despawned; ++i) {
+        latch(m_soundRules.impacts.stone.destroyierEvent, 0.0, m_soundRules.impacts.stone.destroyierVolume);
+    }
+    // A bomb's blast: explode #27-31. A fireball destroyed on anything: its
+    // small explosion (#153-158), from this tick's own record.
+    for (int i = was.blasts; i < now.blasts; ++i) latch("bomb_blast");
+    for (std::size_t i = 0; i < m_level.turrets.spentPx.size(); ++i) latch("fireball_burst");
+    // A shock agent a fireball destroyed - Fields' only destroyer: the huge one
+    // first (#99-118), the burn of a burnable shock_agent.ent (#159-173), and the
+    // agent's own strike as it goes (ETHCallback_shock_agent #289-299).
+    if (now.fieldsGone.size() == was.fieldsGone.size()) {
+        for (std::size_t i = 0; i < now.fieldsGone.size(); ++i) {
+            if (now.fieldsGone[i] == 0 || was.fieldsGone[i] != 0) continue;
+            latch("fireball_on_shock_agent");
+            latch("burned");
+            latch("shock_struck");
+        }
+    }
+    // What burns: a burnable set alight by a blast, a flame, the lava or a
+    // fireball, once - and a minion a fire took (burn, #16).
+    if (now.burnables.size() == was.burnables.size()) {
+        for (std::size_t i = 0; i < now.burnables.size(); ++i) {
+            if (now.burnables[i] != 0 && was.burnables[i] == 0) latch("burned");
+        }
+    }
+    for (int i = was.minionsBurned; i < now.minionsBurned; ++i) latch("burned");
+    // A minion on the killer floor (ETHBeginContactCallback_enemy_killer #22).
+    for (int i = was.minionsKilled; i < now.minionsKilled; ++i) latch("minion_fell");
+    // A key taken as its free arm takes it (ETHCallback_key #805), the carrier
+    // changed as key_pick's rule reads it; and a keyhole gone with its door
+    // (ETHCallback_keyhole #235).
+    if (now.keyOwners.size() == was.keyOwners.size()) {
+        for (std::size_t i = 0; i < now.keyOwners.size(); ++i) {
+            if (now.keyOwners[i] != entt::null && now.keyOwners[i] != was.keyOwners[i]) latch("key_picked");
+        }
+    }
+    for (int i = was.doorsOpened; i < now.doorsOpened; ++i) latch("keyhole_vanished");
+    // Diamonds (ETHCallback_shock_diamond #180 and #447; ETHCallback_fire_diamond
+    // #192 and #455): a shock one taken, a fire one taken - its burn - a strike,
+    // and a fire one a gutter drains.
+    if (now.diamondsHeld.size() == was.diamondsHeld.size()) {
+        for (std::size_t i = 0; i < now.diamondsHeld.size(); ++i) {
+            const bool fire = m_level.diamonds.diamonds[i].fire;
+            if (now.diamondsHeld[i] != 0 && was.diamondsHeld[i] == 0) latch(fire ? "burned" : "shock_picked");
+            if (fire && now.diamondsGone[i] != 0 && was.diamondsGone[i] == 0) latch("fire_diamond_drained");
+        }
+    }
+    for (int i = was.struck; i < now.struck; ++i) latch("shock_struck");
+    // A ring's kill (ETHCallback_shock_area #136-151), on the rule its
+    // shock_death reads: claimed this tick, of a player alive at the last tick,
+    // and the death Hazards records is the ring's.
+    if (now.ringKilled && !was.ringKilled && !was.playerDead && now.playerDead &&
+        m_level.hazards.killedBy == m_level.fields.killedBy) {
+        latch("shock_struck");
+    }
+    // The torches (ETHCallback_light_off #145, ETHCallback_fire_signal #275).
+    for (int i = was.torchesLit; i < now.torchesLit; ++i) latch("light_on");
+    for (int i = was.torchesPutOut; i < now.torchesPutOut; ++i) latch("light_off");
+    // 2-32's dragon: its take-off, once, and each platform its claw takes.
+    if (now.dragonTookOff && !was.dragonTookOff) latch("dragon_took_off");
+    for (int i = was.crushed; i < now.crushed; ++i) latch("claw_crushed");
+    // The ghost and the dark dragon: the edges of their states.
+    latchLateBossSounds(was, now);
+}
+
+void MagicPortalsLayer::latchBossCues(double tickMs) {
+    const Sounds::Cues& cues = m_soundRules.cues;
+    // overTimeEntityAdder's clock for small_explosion_no_light on a boss's own
+    // entity, on an update its arm calls it: at the stride or more, one
+    // spawnExplosion - playExplosionSound(false) - and the clock back to 0.
+    const auto adder = [this, tickMs, &cues](double& clockMs) {
+        clockMs += tickMs;
+        if (clockMs < cues.bossExplosionStrideMs) return;
+        clockMs = 0.0;
+        latch("boss_explosion");
+    };
+
+    // 1-32'S BEHOLDER. The first time it stands inside the screen grown by
+    // scale(48, 32) on each side, once (ETHCallback_beholder #286-360):
+    // GetCameraPos() is the view's top-left corner, and isPointInRect takes both
+    // edges in.
+    if (m_level.boss.beholder.has_value()) {
+        const Boss::Beholder& beholder = *m_level.boss.beholder;
+        if (!beholder.gone && !m_soundCues.beholderAppeared) {
+            const glm::dvec2 view = ViewPx();
+            const glm::dvec2 margin(cues.beholderAppearMarginXPx, cues.beholderAppearMarginYPx);
+            const glm::dvec2 low = m_follow.centrePx - view * 0.5 - margin;
+            const glm::dvec2 high = low + view + margin * 2.0;
+            if (beholder.atPx.x >= low.x && beholder.atPx.y >= low.y && beholder.atPx.x <= high.x &&
+                beholder.atPx.y <= high.y) {
+                m_soundCues.beholderAppeared = true;
+                latch("boss_appeared");
+            }
+        }
+        // Its DEAD arm calls the adder on every update (#1163-1253), the last
+        // included: each tick that ends dead and began with it there.
+        if (m_watch.valid && beholder.phase == Boss::Phase::Dead && !m_watch.bossGone) {
+            adder(m_soundCues.beholderAdderMs);
+        }
+    }
+
+    // 2-32'S DRAGON, once its elapsedTime - the firing clock - is past the cue
+    // (ETHCallback_dragon #326-367).
+    if (m_level.dragon.present && !m_soundCues.dragonAppeared &&
+        m_level.dragon.elapsedMs > cues.dragonAppearAfterMs) {
+        m_soundCues.dragonAppeared = true;
+        latch("dragon_appeared");
+    }
+
+    if (!m_watch.valid) return;
+    // 3-32'S GHOST. The arm a tick runs is the phase the last one left, and the
+    // adder is called by DAMAGE while its hp is above 0 - it goes on to DEATH
+    // otherwise, with no call - and by DEATH (ETHCallback_ghost #786-929,
+    // #1245-1331).
+    const Ghost::State& ghost = m_level.ghost;
+    if (m_watch.ghostSpawned && !m_watch.ghostGone &&
+        (m_watch.ghostPhase == Ghost::Phase::Death ||
+         (m_watch.ghostPhase == Ghost::Phase::Damage && ghost.phase != Ghost::Phase::Death))) {
+        adder(m_soundCues.ghostAdderMs);
+    }
+    // 4-32'S DARK DRAGON: DAMAGE's and DYING's every update call the adder
+    // (darkDragonOvertimeSmallExplosionAdder, #1563, #1818); and APPEARING's jaw
+    // at its widest cell plays playDarkDragonOpenMouthSound once (#608-643),
+    // which is where the port restarts the mouth's system.
+    const DarkDragon::State& dark = m_level.darkDragon;
+    if (m_watch.darkAlive &&
+        (m_watch.darkPhase == DarkDragon::Phase::Damage || m_watch.darkPhase == DarkDragon::Phase::Dying)) {
+        adder(m_soundCues.darkAdderMs);
+    }
+    if (dark.Alive() && dark.phase == DarkDragon::Phase::Appearing && dark.look.systemRestarted &&
+        !m_soundCues.darkMouth) {
+        m_soundCues.darkMouth = true;
+        latch("dark_dragon_mouth");
+    }
+}
+
+void MagicPortalsLayer::latchLateBossSounds(const Watch& was, const Watch& now) {
+    // 3-32's ghost (sounds.json _note_ghost): added by the dying knight; each
+    // SHOOTING beat, and RAGE_MODE's summon, playGhostItemAppearSound; burned into
+    // DAMAGE and RAGE_MODE back to SHOOTING, playGhostDamageSound; DAMAGE at hp 0
+    // into DEATH, playGhostDeathSound; gone, explode's huge one. Its shots, as
+    // they leave and as they end.
+    if (now.ghostSpawned && !was.ghostSpawned) latch("ghost_appeared");
+    for (int i = was.ghostShotsFired; i < now.ghostShotsFired; ++i) latch("enemy_shot");
+    for (int i = was.ghostBeats; i < now.ghostBeats; ++i) latch("ghost_item");
+    for (int i = was.ghostHits; i < now.ghostHits; ++i) latch("ghost_hurt");
+    for (int i = was.ghostSummons; i < now.ghostSummons; ++i) latch("ghost_item");
+    if (was.ghostPhase == Ghost::Phase::Rage && now.ghostPhase == Ghost::Phase::Shooting) latch("ghost_hurt");
+    if (was.ghostPhase == Ghost::Phase::Damage && now.ghostPhase == Ghost::Phase::Death) latch("ghost_dead");
+    if (now.ghostGone && !was.ghostGone) latch("ghost_burst");
+    for (int i = was.ghostShotsEnded; i < now.ghostShotsEnded; ++i) latch("enemy_shot_ended");
+    // 4-32's dark dragon (sounds.json _note_dark_dragon): added by its spawn;
+    // burned, playDarkDragonDamageSound, playGhostItemAppearSound and killAll's
+    // playPortalKilledSound; DAMAGE's last waypoint back to FIGHTING, the damage
+    // sound again; into DYING, playDarkDragonDeathSound; gone, explode's huge one.
+    if (now.darkSummoned && !was.darkSummoned) latch("dark_dragon_appeared");
+    for (int i = was.darkHits; i < now.darkHits; ++i) {
+        latch("dark_dragon_hurt");
+        latch("dark_dragon_item");
+        latch("portal_spent");
+    }
+    if (was.darkPhase == DarkDragon::Phase::Damage && now.darkPhase == DarkDragon::Phase::Fighting) {
+        latch("dark_dragon_hurt");
+    }
+    if (now.darkSummoned && now.darkPhase == DarkDragon::Phase::Dying && was.darkPhase != DarkDragon::Phase::Dying) {
+        latch("dark_dragon_dead");
+    }
+    if (now.darkGone && !was.darkGone) latch("dark_dragon_burst");
 }
 
 void MagicPortalsLayer::playLatched(entt::registry& registry, float deltaTime) {
@@ -9108,10 +9473,14 @@ void MagicPortalsLayer::playLatched(entt::registry& registry, float deltaTime) {
             m_timerAtMs[hook->timer] = m_soundClockMs;
         }
 
-        const float volume = static_cast<float>(hook->volume);
+        // The hook's own volume, or its caller's (a landing's hitIntensity / 18),
+        // which the original's SoundEffectManager caps below 1 (its line 86) and
+        // this caps at 1.
+        const double asked = hook->volumeFromArgument ? std::clamp(latched.volume, 0.0, 1.0) : hook->volume;
+        const float volume = static_cast<float>(asked);
         const float pitch = pitchFor(*hook, latched.doorStrideMs);
         if (hook->both || hook->files.size() == 1) {
-            // Two samples TOGETHER, which is what an explosion is.
+            // Two samples TOGETHER, which is what playLightOnSound is.
             for (const std::string& file : hook->files) audio->Play(directory + file, false, volume, pitch);
         } else {
             // Or one of the two, drawn: the crystal gathers, the wood knocks.
@@ -9409,7 +9778,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         Game::AfterStep(m_data, registry, m_level, fixedDelta);
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
-        latchSimSounds();
+        latchSimSounds(fixedDelta);
         latchMusic();
         latchSimEffects(registry, fixedDelta);
         latchSimQuakes();
@@ -10112,8 +10481,8 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
     switch (button) {
     case Pause::Button::Resume:
         // GameState::hideMenuPopup: the layer hidden, GameLayer current, game time
-        // resumed. Its button makes the menu's own noise.
-        latch("menu_button");
+        // resumed. Silent: GameMenuLayer::GameMenuLayer #74-112 adds it with no
+        // setSound (planning step 171; it played button.mp3 before).
         closePause(registry);
         return true;
     case Pause::Button::Levels:
@@ -10129,9 +10498,8 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
         return PressMenu(registry, MenuButton{MenuButton::Kind::Next});
     case Pause::Button::Achievements:
         // OWNER RULING: kept, and drawn - but the AchievementsPopup it opens is
-        // not built (spec section 7, U10), so pressing it changes nothing but
-        // the noise a button makes.
-        latch("menu_button");
+        // not built (spec section 7, U10), so pressing it changes nothing. Silent,
+        // as the resume is (planning step 171).
         return false;
     case Pause::Button::Sound: {
         // GlobalSoundSwitch::manageSoundSwitch: SetGlobalVolume 1 or 0. And
@@ -10147,8 +10515,8 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
         } else {
             m_pause.musicAddedMs = dismissing ? m_pause.musicDismissedMs + dismissMs : now;
         }
+        // Silent: a UISwitch, as on the main menu (planning step 171).
         switchedSound();
-        latch("menu_button");
         return true;
     }
     case Pause::Button::Music: {
@@ -10159,7 +10527,6 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
         if (!shown) return false;
         m_musicOn = !m_musicOn;
         switchedMusic();
-        latch("menu_button");
         return true;
     }
     }

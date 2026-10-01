@@ -141,6 +141,18 @@ struct Rock {
     glm::dvec2 velocityPx{0.0}; // as the step began
 };
 
+// A rock Contacts broke on something static, and the static it judged that on
+// (the first it found): the contact whose begin-contact callback runs its first
+// arm (ETHBeginContactCallback_rolling_stone #58-71, a shake and
+// playStoneHitSound(hitIntensity / 3) above 2) before destroyOnStaticHit's
+// (#170-208). The rock's body is gone; its id is kept for the layer's impact
+// watch, which read what the rock carried into the step (planning step 171).
+struct StaticHit {
+    entt::entity rock = entt::null;
+    entt::entity other = entt::null;
+    glm::dvec2 otherAtPx{0.0}; // the other's entity point: its transform, as the watch reads one
+};
+
 struct Spike {
     glm::dvec2 atPx{0.0};
     glm::dvec2 directionPx{0.0}; // a unit vector, +y down
@@ -160,12 +172,21 @@ struct State {
     bool playerKilled = false;
     std::string killedBy;
     int rocksBroken = 0; // on what they ran into
+    // Every tick a spike stood in the player's shrunken box, one for each spike:
+    // ETHCallback_beholder_spike #178-185 plays playBeholderSpikeHitSound on each
+    // such frame, and goes on doing so after the kill. Counted for the layer's
+    // sound (planning step 171); nothing in the simulation reads it.
+    int spikeHits = 0;
     // Every stone it broke this tick, by name and where it stood: its rocks on
     // what they ran into (Contacts, which empties it first) and a stone that rose
     // into it (Tick's, which the caller names from the stones it handed over).
     // Where ETHCallback_rolling_stone adds rolling_stone_destroy.ent; written for
     // the picture, and nothing in the simulation reads it.
     std::vector<Launchers::StoneGone> brokenNow;
+    // Of those, each rock Contacts broke on something static this tick, and on
+    // what (Contacts empties it first). For the layer's sound and shake; nothing
+    // in the simulation reads it.
+    std::vector<StaticHit> staticHitsNow;
 
     // Before the step: where each rock is and how fast it goes, which its
     // contacts are judged by.

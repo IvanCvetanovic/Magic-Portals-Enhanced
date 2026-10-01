@@ -25011,3 +25011,335 @@ not touched.
   measured here changes.
 - For the merge's renumbering: "planning step 170" is written in `cutscenes.json` (`rocket_landing._source`),
   `tests/test_mp_layer.cpp` and `tests/test_mp_cutscene.cpp`.
+
+## Step 171 - the sound pass: playExplosionSound plays one sample chosen by its argument, and every sound the original plays that the port did not, latched at its decoded event with its decoded volume, speed and timer (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w2c`, branch `w2-c`, on step 170's `6462ba9`, engine `710bffc`), the
+program's P6** (`docs/parity-backlog.md` section 6, "P6. The sound pass"; the audit's P6, `audio_inventory.md` and
+`check_audio.md`). Its build reads the frozen level data in `out/snap_w2`; numbered in track C's range, and the merge
+renumbers it. Changed: `game/data/sounds.json` (the explosion's two calls, twelve hooks' parameters, 42 new events and 4
+re-pointed, the new `impacts` and `cues` tables, every citation), `game/sim/Sounds.{hpp,cpp}` (a volume that is the
+caller's argument; the `impacts` and `cues` readers; `ImpactVolume`), `game/MagicPortalsLayer.{hpp,cpp}` (the latches, a
+latched volume, the crates in the impact watch, the buttons, a `sound <event> on tick N` log line),
+`game/sim/Boss.{hpp,cpp}` (`spikeHits`; `staticHitsNow`, the second fix round), `game/sim/Ghost.{hpp,cpp}` (`beats`),
+`game/sim/Impacts.hpp` (`Kind::Crate`; `Watch::Touching`, the second fix round),
+`game/sim/Impacts.cpp` (a crate's reach and its begin's normal, the fix round; `Touching`, the second, below),
+`game/main.cpp` (the `--saves`, `--hold` and `--route` help step 170 left),
+`tests/test_mp_{sounds,layer,routes,boss,ghost}.cpp`. No engine change (the pin stays `710bffc`), no converter change,
+no format finding (script behaviour, cited in `sounds.json`).
+
+**GAMEPLAY: none.** Every change is a sound latched on the tick and played on the frame; the two simulation counters
+(`Boss::State::spikeHits`, `Ghost::State::beats`) and the second fix round's record of the statics the beholder's rocks
+break on (`Boss::State::staticHitsNow`) are read by nothing in the simulation. Measured: 70 of 70 routes won
+on the same ticks with their output line for line as step 170's apart from the sound lines, reachability unchanged, and
+128 of 128 levels' f420 frames byte-identical (the gates).
+
+**BLOCKERS, checked first: none.** Every call site is in the listing (`all_functions.txt`, md5 `48fe65ce...`), the
+Android runtime's sample semantics in `reference/ethanon` (`AndroidAudio.cpp:177-255`, `SoundEffectManager.java:82-91`),
+and each moment is one the port already has (a counter, a flag, a phase, a contact of the impact watch) but two, which
+get a counter each.
+
+**WHAT THE ORIGINAL DOES** (arguments pushed last-first, and `SetV1 vN` / `CMPIu vX, vN` the constant N, `00_order.md`
+8.0; each cited in full in `sounds.json`'s `_note_*` entries).
+- **`playExplosionSound(bool huge)`** (192072..192351): #3 `CpyVtoR4 v-1[huge]`, #4 `JLowZ -> 33`: explosion_huge alone
+  on `hugeExplosionSoundTimer` (150) or explosion_small alone on `smallExplosionSoundTimer` (150) - ONE sample. The
+  table played both, and `test_mp_sounds.cpp:193` pinned it. True from `explode` #27-31, `ETHCallback_anti_portal_agent`
+  #183-187 and `ETHBeginContactCallback_fireball` #114-118 (a shock agent); false from `spawnExplosion` #1-5 and the
+  fireball's #154-158.
+- **The contacts.** `ETHBeginContactCallback_dark_mage` #82-90 `playFallSound(hit / 18)` above 3.5 (no crate test on
+  this arm); `ETHBeginContactCallback_minion` #132-140 the same, past its `enemy_killer` test;
+  `ETHBeginContactCallback_rolling_stone` #58-71 `playStoneHitSound(hit / 3)` above 2 and #91-94 `(1)` on
+  `destroyier.ent`, and for a beholder rock on something static #170-208 `destroyOnStaticHit`'s shake of 5 and
+  `destroy()` AFTER #58-71 in the same begin (so a rock's break is silent and the contact it breaks on is heard);
+  `crateContactCallback` #17-56 (the six crate callbacks) `abs(hit) > 2`, `playRandomWoodSound(|hit| /
+  30)` against anything but the character, `playWoodDragSound()` against it (`isCharacter` is the datum only
+  `GameCharacter::GameCharacter` sets).
+- **Keys.** `ETHCallback_key` #805 pick (with `key_pick.ent`); #550 door unlock on the frame after `foundKeyhole` is
+  set, as the fly-in's WaypointManager is built (#221-547); #635 key unlock on its frame 1 (with the halo);
+  `ETHCallback_keyhole` #235 demolition as it deletes itself and its door.
+- **Fireballs, burning, minions.** `addFireball` #87 plays `playFireballSound` (100 ms) for every fireball (carranca
+  #108, `burnProjectile` #54, 2-32's dragon #754, the dark dragon #978 and #1720); `burn` (419710..419817) plays
+  `playBurnSound` unconditionally (`explode` #152, the lava #19, a fire agent #220, a fireball #173), and a fire diamond
+  taken plays it (`ETHCallback_fire_diamond` #190-192), one a gutter drains `playFireExtinguishSound` (#427-455);
+  `ETHBeginContactCallback_enemy_killer` #22 `playMinionFallSound`.
+- **The timed crystal.** `ETHCallback_crystal`'s init block, where `time` is set (#60-71): `addTimerToCrystal` #78 and
+  `playCrystalTempAlertSound` #82, once, on the shared crystal timer at `CMPIu v1, v100` (the table said 50).
+- **The bosses.** 1-32 (`ETHCallback_beholder`): #350 appear once, inside the screen grown by `scale(vector2(48, 32))`
+  (#286-360); #561 hit and #565 damage together; `spawnStone` #1-3 `playStoneAppearSound` for each rock (called by
+  `overTimeEntityAdder` on the add); `ETHCallback_beholder_spike` #178-185 spike hit on every frame a spike stands in
+  the character's box; DEAD: `overTimeEntityAdder('small_explosion_no_light.ent', 400, spawnExplosion)` every update
+  (#1163-1253) and, past 3550 ms, `explode` (#1270-1274); the button then moves with no sound (#1276-1315). 2-32
+  (`ETHCallback_dragon`): #326-367 appear once its firing clock passes 2000; #409-437 take-off;
+  `ETHCallback_dragon_claw` #434-445 demolition per platform. 3-32: `ETHCallback_ghost_minion` #71-94 appear;
+  `ETHCallback_ghost` #670-672 item on every SHOOTING beat, #1149-1157 on the summon, #707-770 damage into DAMAGE,
+  #1160-1205 damage out of RAGE_MODE, #776-975 death (speed 0.5) into DEATH, small explosions in DAMAGE while hp is
+  above 0 (#786-929) and in DEATH (#1245-1331), `explode` #1348-1352; `addEnemyShoot` #172, `ETHCallback_enemy_shoot`
+  #354-356. 4-32: `ETHCallback_dark_dragon_spawn` #120-122 appear; `ETHCallback_dark_dragon` #608-643 open mouth once
+  (APPEARING, the jaw's cell 3), #1072-1123 damage, #1504-1511 item and `killAll` (its `playPortalKilledSound`),
+  #1722-1724 damage again at DAMAGE's last waypoint, #1996-2018 death into DYING, `explode` #1924-1931, and
+  `darkDragonOvertimeSmallExplosionAdder` (397662..398213) on every DAMAGE and DYING update (#1563, #1818). The adder's
+  clock is a datum on the boss's entity, zeroed only by an add, so it carries from one arm to the next.
+- **Shock and light.** `ETHCallback_shock_diamond` #180 pick, #447 strike; `ETHCallback_shock_agent` #289-299 strike as
+  a destroyed agent goes; `ETHCallback_shock_area` #136-151 strike as a ring kills the character;
+  `ETHCallback_light_off` #145 light on; `ETHCallback_fire_signal` #275 light off; `ETHCallback_light_wall` #84-86
+  switch once 800 ms into its fade (its #105-107 demolition is the port's `wall_broken` already).
+- **Buttons.** A Button plays only what `setSound` gave it (`Button::Button` #21-23, `Button::update` #140-163): the
+  world and level tiles are teleport (`Page::setupItemButton` #127-143), the level's restart is teleport
+  (`GameLayer::GameLayer` #207-216, `Game::Game` #74); the pause's resume and scores (`GameMenuLayer::GameMenuLayer`
+  #74-112) and the four switches (UISwitches, `GlobalSoundSwitch::GlobalSoundSwitch` #23) are silent. The clear button
+  cannot be pressed with none placed (`PortalManager::update` #62-72; the audit's "empty clear" claim was refuted by its
+  check).
+- **`ETHCallback_entity_launcher`** calls no audio function: 1-24..1-26's throws are silent.
+- **Parameters** (the hook bodies): key pick, key unlock and the light switch speed 0.5; door close `3000 /
+  doorOpenStride` as door open; ghost death and fire extinguish speed 0.5; fall volume argument and `charHitSoundTimer`
+  200; random wood volume argument, speed `randF(0.2) + 0.8`, `woodSoundTimer` 150; wood drag `woodDragSoundTimer` 200
+  at speed 1.0 (the drawn speed is set on entry 2, portal_fail, and never on wood_drag); fireball 100; stone hit volume
+  argument and speed `randF(0.2) + 0.8`; the crystal alert 100.
+
+**THE CHANGE.**
+1. **`sounds.json`**: `playExplosionSound(true)` and `(false)`, each one file on its own timer, and no hook that plays
+   both; the twelve hooks' parameters above; 42 events added and 4 re-pointed, each with its citation (`boss_hurt` is
+   now Damage beside `boss_struck`'s Hit; `boss_dead` the huge explosion; `boss_rock_broken`, `boss_button_raised` and
+   `stone_thrown` silent); `impacts` (the four callbacks' events, gates and volume divisors, the crate's twelve entity
+   names) and `cues` (48 x 32, 2000 ms, 400 ms, 800 ms). `Sounds::LoadRules` reads `"volume": "argument"` and the two
+   tables, and refuses an impact naming an event the table does not have.
+2. **The latches** (`MagicPortalsLayer::latchSimSounds`, `latchStepSounds`, `latchLateBossSounds`, `latchBossCues`,
+   `latchImpacts`), each from a moment the port has: a counter going up (blasts, spent fireballs, fireballs made by any
+   source, doors a keyhole opened, strikes, torches lit or put out, claw crushes, ghost beats and summons, dark-dragon
+   wounds, rocks dropped, spike hits, minions burned or on the killer floor); a flag turning (a burnable burned, a
+   diamond held or drained, a shock agent gone, a key's carrier); a phase edge (the ghost's RAGE to SHOOTING and DAMAGE
+   to DEATH, the dark dragon's DAMAGE to FIGHTING and into DYING); a key's fly-in on `Effects::AdvanceFlyIn`'s clock; a
+   one-shot test (the beholder in the grown screen, the dragon's 2000 ms, the dark dragon's widest jaw, a light wall's
+   800 ms); the adder's 400 ms clock per boss, carried across arms. Step 171's edges are read on a level's first tick
+   too, against the level as it is made (4-29's key is taken on tick 1), where the older events keep their first-tick
+   mark. A timed crystal's alert is latched once per timed crystal on the first tick. `Latched` carries the caller's
+   volume, capped at 1 where it is played; `LatchedVolumes()` shows it.
+3. **The contacts**: the impact loop latches each begin's sound on its own gate beside its shake, and the level's crates
+   (`impacts.crate.entities`, in scene order) are watched as `Impacts::Kind::Crate`, a sound and no shake, reading their
+   own velocity along the contact's normal, absolute. Each watched body's pairs are its own, so the player's, stones'
+   and minions' begins do not move (the routes' impact and earthquake lines are unchanged). For a crate alone
+   (`Impacts.cpp`, the fix round): the watch's "carried by the step" reach allows the step's own gravity, `g dt^2` =
+   0.272 px at 980 px/s^2 and 60 Hz, since a box has no radius to cover it; and where the step has taken the box into
+   the other's (the cores overlap, so `Between` has only the line between the centres), the begin's normal is taken
+   with the box where the step found it, still apart - the face it met. For a beholder rock (the second fix round):
+   `Boss::State::Contacts` breaks one within its 2 px margin of a static, or where the step would have taken it, which
+   can be before the step brings the two into touch, so the watch never saw that begin; each rock it breaks is kept
+   with the static it broke it on (`staticHitsNow`), and where the watch has no begin of the rock that tick and does
+   not have the pair touching already (`Watch::Touching`), the layer makes the begin from what the rock carried into
+   the step (`Watch::Carried`), as it already did for a stone Demolish took on a breakable - its sound and its shake
+   (hit x 2, which `boss_rock_broken`'s 5, queued after it, overwrites on the same tick).
+4. **The buttons**: tiles and the restart latch `level_button`; resume, scores and the switches latch nothing.
+5. **Two counters** for moments the layer cannot see: `Boss::State::spikeHits` (every spike in the box, every tick,
+   counted apart from the unchanged kill) and `Ghost::State::beats`.
+
+**THE GATES.** Before = step 170 (`MagicPortals.exe` `63f17802`, `test_mp.exe` `3d8f7083`, `MS/after/sweep` and MS's
+suite outputs); after = `MagicPortals.exe` **`0bc35794`** and `test_mp.exe` **`9a1c9c5a`**, the second fix round's
+(the build round's `75fb7317` and the first fix round's `64e824a6` and `907dbaab` are named where their measurements
+stand). Everything under `out/parity/program/P6/`; the fix rounds' under `P6/fix1/` and `P6/fix2/`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in the eleven builds (`build/build1-11.log`; build 2 stopped on 12 errors, a namespace in a new case, fixed in build 3), and in the fix round's four (`fix1/build/build1-4.log`: `--target test_mp` three times - `Impacts.cpp`, the layer and `test_mp_layer.cpp`, then the suite twice for its drop positions - and `--target MagicPortals`, a link); **the second fix round's four** (`fix2/build/build1-4.log`): build 1 (`--target test_mp`) stopped on 15 `C1060 compiler is out of heap space` with 16 compilers running beside the other tracks' builds (no warning, no error in the code), build 2 the same with `-j 3`, **0 warnings** (`test_mp.exe` `9a1c9c5a`), build 3 `--target MagicPortals -j 3`, 0 warnings (`cd5cf156`, refused), build 4 its relink, 0 warnings (`0bc35794`) |
+| (1) The explosion is one sample chosen by its argument | no hook plays both; `(true)` explosion_huge alone on `hugeExplosionSoundTimer` 150, `(false)` explosion_small alone on `smallExplosionSoundTimer` 150 | `playExplosionSound` both files, pinned (`test_mp_sounds.cpp:193`) | **passes** (`test_mp_sounds` 242 checks, 0 failures): the both-entry gone, each arm its file and timer |
+| (2) Every event's hook and every hook's parameters pinned | the 42 new and 4 re-pointed events; the twelve hooks' parameters; `impacts` and `cues` read | 33 events, 107 checks | **passes** (same run): 75 events, 67 hooks; the reader refuses a volume that is neither a number nor `argument` and an impact naming no event; `ImpactVolume`'s gates |
+| (3) Each latch at its event, in play: the routes' census | per won route: a crystal_alert per timed crystal, a bomb_blast per blast, a fireball_spat per fireball made, a keyhole_vanished per door opened, a key's door_unlocked before its key_unlocked, a minion_fell per killer-floor kill, a claw_crushed per crush, the four silent events never latched; per boss: beholder appear 1, struck = hurt = hits, rock dropped = rocks, 8 small explosions and dead 1; dragon appear 1, take-off as it takes off; ghost appear 1, item = beats + summons, enemy_shot = shots, death 1, burst 1; dark dragon appear 1, mouth 1, item = wounds, hurt = 2 x wounds - 1, death 1, burst 1 | - | **passes** (`test_mp_routes` 1,073 checks, 0 failures; `suites/test_mp_routes.txt`, `routes_census_totals.txt`): 1-32 appear 1, struck 3 / hurt 3, rocks 3, small explosions 8, dead 1; 2-32 dragon appear 1, claw 15, fireballs 5; 3-32 ghost appear 1, item 8, hurt 5 (3 burns, 2 rages left), shots 6 / ended 6, small explosions 28, dead 1, burst 1; 4-32 appear 1, mouth 1, hurt 5, item 3, portal_spent 3, small explosions 39, dead 1, burst 1. **Fix round** (`907dbaab`, `fix1/suites/final/`): the same 1,073 checks, 0 failures, and every census the same but the crates': **crate_knocked 25 on 13 routes** (2-01, 3-12, 3-13, 2-14, 3-14, 1-15 x2, 4-19, 1-28 x7, 1-29 x3, 2-32 x2, 2-05, 1-08 x2, 2-08 x2), volumes 0.076-0.517, where the build round heard 6 on 4. Of those six, five keep their volume exactly (3-12 tick 160, 4-19 tick 121, 1-28 ticks 390 and 446, 2-32 tick 1426); 1-28's at tick 603 went 0.092147 -> 0.085493, most likely the face's normal giving no credit to a sideways speed the centres' line leaned toward, as the original's contact normal gives none (not traced one by one) (`fix1/suites/routes_crates_fix1.txt`); crate_dragged 0 (no route drops a crate on the player). **Second fix round** (`9a1c9c5a`, `fix2/suites/`): **1,143 checks, 0 failures** (the 70 moments, row 3b), and the routes' whole output identical to the verifier's `verify2/routes_v2.txt` but the checks line (every sound line and census the same) |
+| (3b) Two latches on their very tick, in play (the second fix round) | per won route, each tick's `light_switch` latches = 1 on the first tick of a light wall's fade past 800 ms (`ETHCallback_light_wall` #57-97) and 0 on every other; each tick's `fire_diamond_drained` = the fire diamonds a gutter took on that tick (`ETHCallback_fire_diamond` #427-455), read by the suite itself from `torch.wall` and `diamonds` | - | **passes** (`9a1c9c5a`): 70 of 70 routes with no tick off; heard on their ticks: `light_switch` on 4-29 tick 88, 4-30 tick 89, 4-31 tick 154; `fire_diamond_drained` on 3-31 tick 694 and 3-32 ticks 298, 1105, 1827, 2267 |
+| (4) Each latch on its tick, layer | a key's pick, door unlock (the tick after the unlock), key unlock (the halo's, 41st) and keyhole vanish; a shock diamond's pick and strike; a fire diamond's burn at its pick and fireball at a conversion; a fireball on a shock agent: huge, small, burn, strike; light on; light off; a ring kill's strike, not after a fall; a stone on a destroyier at volume 1; the landing thump at hit / 18 over 3.5 and none under; one alert per timed crystal on the first tick; play button.mp3 and both tiles teleport; restart teleport; resume, scores and both switches silent | - | **passes** on the fix round's runner `907dbaab`: `test_mp_layer` **3,326 checks, 0 failures** (`fix1/suites/final/test_mp_all.txt`) - every listed moment (1-05's hard landing hit 9.2, thump 0.5111 = 9.2 / 18; its soft landing 2.4, none; 1-15 one alert on tick 1, none in 120 more), the crate's fall (row 4b) and 2-32's `dragon_took_off`, once, on the tick after the take-off's (the take-off on the case's 3,100th tick, the latch on its 3,101st: the dragon turns in `Game::BeforeStep`, after the tick's latches are read). The build round's record, kept: 3,313 checks and 1 failure on `2a3160ef` (`suites/run6/`), the synthetic crate knock that began nothing; its checks were taken out, and the runner handed over, `1f2c7a9e`, was refused and never ran here; the verifier's relink of it, `1ee10976`, ran 3,311, 0 failures. **Second fix round**: `9a1c9c5a`, **3,343 checks, 0 failures** (+17, row 4c) |
+| (4c) A beholder rock broken on the level, at its contact (the second fix round) | 1-32 with the verifier's probe's walks (right 30-110, left 565-601, right 676-790): the first rock's break has one stone begin, on the static `Contacts` broke it on, made from `Contacts`' judgement; `stone_hit` once at hit / 3, the hit held to the velocities the case itself read before each tick, along the line from the rock's point to the static's, / 50; the shake called at hit x 2 and `boss_rock_broken`'s 5 the tick's last word; the next rock, whose begin the watch sees, one begin and one `stone_hit`, not two | the fix round: no begin, silent (`verify2/probe_rock/`) | **passes** (`9a1c9c5a`): **`adder_715#1` broken on tick 717** (the probe's tick) on `platform.ent` (`platform_ent_7`, at (128, 240)), the rock from (199.6, 191.5), 42 velocities read, fell at 637.0 px/s (12.74 straight down), **7.1432 along the line** to the platform's point; `stone_hit` at **2.381074** (played at 1), the shake 14.2864, then 5; **`adder_715#2` on tick 892**: the watch's own begin on `platform.ent`, hit 2.0787, one `stone_hit` (0.692891). The game (`0bc35794`, `fix2/probe_rock/`) logs the same three lines on tick 717, and its f900 frame is the verifier's, `11d2057e` |
+| (4b) A crate's fall, at its contact (the fix round) | 1-05's crate let fall at rest onto `platform_ent_658` begins it on the tick it reaches it and latches `crate_knocked` once at \|hit\| / 30, the hit the fall's own speed straight down the face's normal / 50 (within 1 %, against the velocities the case itself read); let fall onto the player, `crate_dragged` once and no knock; each drop let go touching nothing (its first step g dt^2) | the build round: no begin, no knock | **passes** (`907dbaab`): **x 72, 40 px**: begin on tick 20, normal (0, 1), hit 4.9000 = 245.0 px/s / 50, `crate_knocked` at **0.163333**; **x 36, 25 px**: tick 13, normal (0, 1) where the centres' line is (0.529, 0.849), hit 3.9200 = 196.0 / 50, **0.130667**; **the drag**, 20 px onto the player stood at x 72: tick 14, normal (0, 1), hit 3.2667, `crate_dragged` once, no knock. Each drop's first step 0.272 px. The per-tick trace is printed (velocity in, travel, the old reach and the new, the gap and normal to the other) |
+| (5) No gameplay change: routes | 70 won on the same ticks, the output as step 170's apart from the sound lines | 70 won (`MS/suites/test_mp_routes.txt`) | **passes**: 70 won on the same ticks; 9,538 lines, 0 differ (`suites/routes_diff.txt`); the fix round on `907dbaab` the same, 9,538 lines with the sound lines taken out, 0 differ (`fix1/suites/final/routes_diff_final.txt`, empty): the player's, stones' and minions' impact and earthquake lines unchanged; the second fix round on `9a1c9c5a` the same, 9,538 lines, 0 differ (`fix2/suites/routes_diff_fix2.txt`, empty): no route breaks a beholder rock on the level, so no route gained a line |
+| (6) Winnability | reachability 108 / 20 / 0, 0 differ | 108 / 20 / 0 | **passes** (`reach_check.txt`, main's venv); the fix round the same, 108 / 20, 0 differ (`fix1/reach_check.txt`); the second the same (`fix2/reach_check.txt`) |
+| (7) The 128-level f420 sweep | 128 rc 0, validation silent, pngs whole and on their lines, no input line, **128 of 128 identical to `MS/after/sweep`** | `MS/after/sweep` | **passes: 128 of 128 identical** (`compare_sweep.txt`, `compare_final.txt`): 128 rc 0, no stall, validation ACTIVE in 128 and 0 messages, 0 input lines, art from `out/snap_w2` in 128, the seeded save `40bfef3a` before and after. Two frames, 4-04 and 4-05, were written EMPTY at 20:22 with the C: drive at 45 MB free (their logged md5 `d41d8cd9`, the empty file's); both were re-taken at 20:48 with the same exe, command line and saves (`retake_P6.sh`), identical to MS's, their first logs kept as `*.log.run1` with the same sound lines. **Fix round** (`MagicPortals.exe` `64e824a6`, `fix1/after/`, `fix1/compare_fix1.txt`): **128 of 128 identical to `MS/after/sweep`** and to the build round's `P6/after/sweep`; 128 rc 0, no stall, every png whole and on its logged md5, validation ACTIVE in 128 and silent, 0 input lines, art from `out/snap_w2` in 128, the saves `40bfef3a` before and after. 1-04's first launch died at start-up, before its level loaded (`fatal: bad allocation`, rc 127, 22:24, with 3 of 14 GB of memory free while other tracks ran; its log, with the device-teardown leak report that exit left, kept as `1-04_level3.log.run1`); re-taken once at 22:44 with the same exe, command line and saves (`fix1/retake_fix1.sh`): rc 0, `b8de4dbd`, MS's. **Second fix round** (`0bc35794`, `fix2/after/`, `fix2/compare_fix2.txt`): **128 of 128 identical to `MS/after/sweep`** and to the verifier's `verify2/after/sweep`; 128 rc 0 on the first launch, no stall, every png whole and on its logged md5, validation ACTIVE in 128 and silent, 0 input lines, art from `out/snap_w2` in 128, the saves `40bfef3a` before and after; every log's game lines the verifier's but the "last run's log was not kept" line on 7 (the shared `%TEMP%` log's rotation, beside other tracks' runs; `fix2/log_compare_fix2.txt`) |
+| (8) The sweep's census | crystal_alert on exactly the 20 timed-crystal levels, one per timed crystal; no stone_thrown; the launchers' stones at volume 1 on their destroyiers | - | **passes** (`sweep_census.txt`): 35 alerts on 1-15, 1-24, 1-25, 1-27, 1-29, 2-04, 2-07, 2-11, 2-13, 2-15, 2-20 to 2-23, 3-06, 3-11, 3-14, 3-16, 4-06, 4-11 - one per timed crystal, all on tick 1; 0 stone_thrown; stone_broken 7, all at 1.0, on 1-24 and 1-25; fireball_spat 54 and fireball_burst 43 on 22 and 20 levels; key_picked 19 = the 19 key_pick effect lines; dragon_appeared on 2-32's tick 121; boss_appeared on 1-32's tick 300. **Fix round** (`fix1/compare_fix1.txt`): every event's count and levels as the build round's but the crates': **crate_knocked 11 on 6 levels** (1-30 x2, 2-05 x2, 2-08, 2-19 x3, 2-20 x2, 3-12), volumes 0.081-0.307, where the build round heard 4 on 3. **Second fix round**: every event's count and levels the verifier's (`fix2/compare_fix2.txt`); no level's f420 run breaks a beholder rock, so none gained a `stone_hit` |
+
+**SUITES**, on the second fix round's runner `9a1c9c5a`, one launch with no argument (`fix2/suites/`, 00:19-00:21 on
+2026-10-01, rc 0): **`test_mp: 47 suites, 47 passed, 0 skipped, 0 failed`** - `test_mp_sounds` **242** (107 + 135),
+`test_mp_boss` **136** (133 + 3), `test_mp_ghost` **185** (183 + 2), `test_mp_camera` **214** (unchanged;
+`Impacts::Kind` grew), `test_mp_routes` **1,143** (215 + 858, the census, + 70, a route's moments), `test_mp_layer`
+**3,343** (3,271 + 72: the build round's 40 that stand, the first fix round's 15 - the crate's two knocks and its drag,
+13, the take-off's sound, 1, and the platform's lookup, 1 - and the second's 17, the beholder's rocks), and the other
+41 suites at the first fix round's counts (`fix2/suites/suite_tally.txt`). The first fix round's runner `907dbaab`
+ran the same 47 with `test_mp_layer` 3,326 and `test_mp_routes` 1,073 (`fix1/suites/final/`). The build round ran `test_mp_sounds`, `_boss`, `_ghost` and
+`_camera` on `e9263216`, `test_mp_routes` on `221ed5b6` and `test_mp_layer` on `2a3160ef` (3,313, 1 failure, the crate
+knock); its last runner, `1f2c7a9e`, never ran here, and the verifier's relink of it, `1ee10976`, ran all 47 with 0
+failures (`test_mp_layer` 3,311).
+
+**SMART APP CONTROL: 5 refusals across the step, 4 of `test_mp.exe` and 1 of `MagicPortals.exe`, all in this
+worktree.** The second fix round's 1 (`fix2/sac_check.txt`): `MagicPortals.exe` `cd5cf156` at 00:23:14 (CodeIntegrity
+3033/3077/3118), deleted and relinked once to `0bc35794`, which ran (the probe, then the 128-level sweep); its runner
+`9a1c9c5a` ran on its first launch. The build round's 3
+(`sac_check.txt`: CodeIntegrity 3033/3077/3118 at 19:46:59, 19:58:55, 19:59:19): `1b323f6f`, deleted and relinked once
+to `bd5493cd`, which ran; `5849f69d`, and its one delete-and-relink `469ff3e6`, refused again. The verifier's 1:
+`1f2c7a9e` at 21:10:21, relinked once to `1ee10976`, which ran. `MagicPortals.exe` `75fb7317` was allowed on its first
+launch (130 launches). **The fix round: 0 refusals** (`fix1/sac_check.txt`): three runners linked and each launched
+once (`dcebc083`, `0acea601`, `907dbaab`), and `MagicPortals.exe` `64e824a6` launched 128 times.
+
+**RECORDED DEVIATIONS.**
+1. **A timed crystal's alert on the level's first tick**, with its dial (the port starts every dial there); the
+   original's crystal is `static="1"`, so its init runs when its bucket is first processed - later for one off screen.
+2. **A burn is latched once per burnable, at its first burn**; the original's `burn()` also sounds on a re-burn (a blast
+   or fireball on one burning already, every lava begin). A minion a fire takes is latched as the port removes it.
+3. **A shock agent a fireball destroys strikes on the same tick**; the original's agent plays it on its next frame.
+4. **The dark dragon's torch shot sounds whenever the port fires it** (step 99's divergence: the original's fires only
+   at an unlit torch).
+5. **The beholder's first sight uses the port's camera** (`m_follow`'s centre and `ViewPx()`) as the latch finds it.
+6. **An argument volume caps at 1** (the original's stream volume caps at 0.99 of the device's).
+7. **The sample-state bleed is not reproduced** (unchanged, `sounds.json` `_about`): wood_drag's drawn speed lands
+   nowhere, where the original's lands on the next portal_fail.
+8. **A crate's contacts are its solid ones**; the original's crate callback has no sensor test.
+9. **The adder's clock runs on the port's tick** (16.667 ms), the original's on whole-millisecond frames.
+10. **A spike goes on sounding after the kill** while the player's body stands, per spike per tick, as the original's
+    does every frame one is in the character's box.
+11. **The log gains a line per latched sound** (`sound <event>[ at volume v] on tick N`), the shipped game's too:
+    `lift_turned` alone wrote 109 across the 70 routes.
+12. **An edge the simulation makes in `Game::BeforeStep` is latched on the next tick** - 2-32's dragon's take-off, its
+    claw's crushes and its fireballs, and a carranca's fireball - because the tick's latches are read after
+    `Game::AfterStep` and before `Game::BeforeStep`: heard one tick, 16.7 ms, after the frame it happens on (measured
+    for the take-off: taken on the case's 3,100th tick, `dragon_took_off` latched on its 3,101st). The original plays
+    each inside the callback.
+13. **A crate's begin with a moving body takes the other where the step left it** (the fix round's normal): only the
+    crate is looked at again where the step found it.
+14. **A beholder rock's break is heard on the tick the port breaks it** (the second fix round). `Boss::State::Contacts`
+    breaks a rock within its 2 px margin of a static, or where the step would have taken it, which can be a step before
+    the original's fixtures would touch; the begin made of it reads the static `Contacts` found first (the original
+    calls a begin for every fixture that starts to touch in the step) and the velocities the rock carried into the steps
+    since it last met or left something, as a watched begin does. The latch skips a pair the watch already keeps as
+    touching (the port judges a rock every tick, the original's callback only at the begin), which no case exercises;
+    the one other such begin measured, 1-32's resting pile in `test_mp_layer`'s `boss_rock_broken` row (`adder_715#1`
+    on tick 1714, after it had lain on another body since tick 999), read 0.160 and was silent.
+15. **A thrown stone on a destroyier plays `playStoneHitSound(1)` alone** (#91-94). The original's begin runs #58-71 first
+    (`stone_hit` at hit / 3 above 2, and a shake of hit x 2 that the destroyier's 6 overwrites), and the port's destroyier
+    is a trigger box (`Launchers::State::Cull`), not a body the impact watch can see meet the stone; the port has no
+    contact tick of its own for it, so it is not made up.
+
+**RULINGS APPLIED.** The standing direction: the original decides - every sound at its call site, with its parameters.
+R1, R2, R17, R23 not this step's; R24 and R25 untouched; camera dragging not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Latches pinned to their hook but not to their moment** (the fix round pinned `crate_knocked`, `crate_dragged` and
+  `dragon_took_off`, gates 4 and 4b; the second, `light_switch` and `fire_diamond_drained` on their ticks in every
+  route, gate 3b, and a beholder rock's `stone_hit`, gate 4c): `boss_spike_hit` (only the sim counter is tested; no
+  layer case brings 1-32's beholder to a volley over the player, and the latch never fired in a run); `minion_landed`
+  (heard in play, 3 routes and the sweep; its hit is read along the line between the entity points, and no layer case
+  drops a knight - its walk steers it). The census relations that set a latch against the counter it reads
+  (`bomb_blast` = blasts, `claw_crushed` = crushes, `minion_fell` = killer-floor kills, `boss_struck` = hits,
+  `boss_rock_dropped` = rocks, `ghost_item` = beats + summons, `enemy_shot` = shots) prove one latch per increment, and
+  its tick is the tick the counter moves on, not one the relation checks.
+- **The lift still clanks at each turn** (`lift_turned`): the original's `playElevatorSound` is on a tap on the lift
+  (`ETHCallback_lift` #219-262), and the lift as a tap target is not built (gameplay).
+- **Not built, as their mechanisms are not**: the minions' spotted, question-mark and shot sounds (sight and shooting,
+  34 levels), a stone crushing a minion (`playMinionSmashSound`), the achievement stinger (no unlock notification), and
+  3-20's placed stone on its destroyier (`playStoneHitSound(1)`, and `(hit / 3)` above 2, #58-94): the port never takes
+  a placed stone there (`rolling_stone_ent_1599` and `destroyier_ent_1666`; the backlog's Order 11.1 gameplay rows).
+- **The log's `sound` line is a latch, not a play** (the third verification's one problem, low; its wording fixed at
+  commit, its behaviour left): the line is said for every latch, one the hook's shared timer then drops included (the
+  sweep latches 35 `crystal_alert` on 20 levels, and the 100 ms timer plays the first of each tick, as the original's
+  does), and `crate_dragged`'s line names the crate's volume though `playWoodDragSound` takes none and plays at its
+  hook's own. No sound is wrong. Printing ` at volume` only for a hook whose volume is its argument, or latching
+  `crate_dragged` with none, changes the log, so it is left.
+- For the close role: the backlog's P6 row, and the audit's "Order 10.4" burn and extinguish, "Order 13.1" shock and the
+  light rows' sounds, which are built here.
+- For the merge's renumbering: "step 171" is written in `sounds.json`, `Sounds.hpp`, `MagicPortalsLayer.{hpp,cpp}`,
+  `Boss.hpp`, `Ghost.hpp`, `Impacts.hpp`, `Impacts.cpp` and the five suites.
+
+**STEP 171'S FIX ROUND (2026-09-30), AFTER THE VERIFIER FAILED IT** (`out/parity/program/P6/verify1.json`). The
+verifier re-measured every gate, passed eleven, and failed the step on one high problem and one medium one, with two
+low ones. The evidence is under `out/parity/program/P6/fix1/`, and the report is `P6/fix1.md`. **GAMEPLAY: still none**
+(the watch is read-only; routes, reachability and the sweep below).
+1. **A crate's fall was not heard (high, true; fixed).** Diagnosed on 1-05's crate by a per-tick trace in the restored
+   case (`fix1/crate_diagnostic.txt`): the masks pass both ways (layer 1, collides with all), `ShapeOf` reads the box
+   (58 x 58) and the platform's hull, and `Between`'s gap closes 39.7 -> 0 px, so the pair was always seen. The cause
+   is the watch's "carried by the step" reach, `|v| dt + radius + touch`. A box has no radius, so it is `|v| dt` +
+   0.178 px, and a free-fall step travels `|v| dt + g dt^2`, 0.272 px more. **Every step of the fall failed it** (tick
+   14: travel 4.083 against 3.989), was taken for a put (its velocities dropped, the step not looked at), and **the
+   step that brings the box to its floor starts from rest after the solver's brake** (tick 20: velocity in 0.0, travel
+   0.272 against 0.178), so it could never begin. The build round's after-step bound failed on that same step: the
+   solver zeroes the velocity as the pair meets. **Fix** (`Impacts.cpp`): for a crate, the reach adds the step's own
+   gravity, `g dt^2`, read as `PhysicsSystem::Update` reads it (`PhysicsSettings` in the registry's context, or its
+   defaults; 0 for a kinematic body, one with `useGravity` off, or a zero-gravity level). The begin then comes on tick
+   20, read at the fall's 245.0 px/s. **A second defect on the way**: on that tick the box overlaps the face by 0.017
+   px, `Between` takes its overlap branch, and the normal is the line between the centres - (-0.175, 0.985) at x 72,
+   (0.529, 0.849) at x 36, a hit read 15 % low there, and a crate far along a wide floor could fall under the gate of
+   2. **Fix**: where a crate's cores meet the other's, its begin's normal is taken with the box where the step found
+   it, still apart - (0, 1) in both. The player's, stones' and minions' reach and normals are unchanged (their
+   radius covers the step's gravity; a shake change is not this step's). Pinned by gate 4b; the routes' non-sound
+   output is unchanged (gate 5). Crates now knock 25 times on 13 routes, where 6 on 4 were heard; five of those six
+   keep their volume, and 1-28's at tick 603 is quieter by the normal (gate 3).
+2. **This record said NOT RUN and NOT MET where it had been measured (medium, true; fixed).** Row 4, SUITES, SMART APP
+   CONTROL and LEFT FOR THE OWNER are rewritten from this round's runner; the refusals are counted across the step
+   (4); and the old LEFT bullet's `g dt^2` "0.33 px against 0.178 u" is 0.272 px against 0.178 px (the touching
+   distance, 0.5 original px, is 0.178 of the port's).
+3. **Latches pinned to their hook but not their moment (low, true; three of five fixed).** `crate_knocked` and
+   `crate_dragged` (gate 4b), and `dragon_took_off` (gate 4: once, on the tick after the take-off -
+   RECORDED DEVIATIONS 12). `boss_spike_hit` and `minion_landed` are left (LEFT FOR THE OWNER, with why).
+4. **A duplicated comment line in `latchStepSounds` (low, true; fixed).**
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| Build | 0 warnings | **passes**: four builds, 0 warnings (`fix1/build/build1-4.log`); `test_mp.exe` `907dbaab`, `MagicPortals.exe` `64e824a6` |
+| The crate's fall, at its contact | a begin on the tick it meets, the face's normal, `crate_knocked` once at the fall's hit / 30 (within 1 % of the velocities the case read), `crate_dragged` on the player | **passes** (gate 4b): 0.163333 at x 72, 0.130667 at x 36, the drag once |
+| The runner, once | 47 suites, 0 failures | **passes**: `907dbaab`, one launch, 47 of 47, `test_mp_layer` 3,326, `test_mp_routes` 1,073 (`fix1/suites/final/`). The two runners before it: `dcebc083` 47 of 47 (the same code, the x 36 and drag drops put into `block00_ent_663`'s corner and pushed out of it on their first step, so they were moved and a release check added); `0acea601` 46 of 47, the one failure that release check, at x 36 put 2 px under the block and still pushed 2.254 px on its first step, so moved to 11 px under (`fix1/suites/attempt2_0acea601/`) |
+| Routes, no gameplay change | 9,538 non-sound lines, 0 differ | **passes** (`fix1/suites/final/routes_diff_final.txt`, empty) |
+| Reachability | 108 / 20 / 0, 0 differ | **passes** (`fix1/reach_check.txt`) |
+| The 128-level f420 sweep | 128 of 128 identical to `MS/after/sweep` | **passes**: `64e824a6`, **128 of 128 identical** to `MS/after/sweep` and to the build round's; 128 rc 0 (1-04 re-taken once after a start-up `bad allocation`, identical), whole, on their md5s, validation silent, 0 input lines, saves unchanged (`fix1/compare_fix1.txt`). No pixel moved, as a sound-only change should not |
+| The sweep's census | as gate 8; crates re-counted | **passes**: crystal_alert 35 on the 20 levels, all tick 1; stone_thrown 0; stone_broken 7 at 1.0; key_picked 19; every other event as the build round's; **crate_knocked 11 on 6 levels** (was 4 on 3) |
+| Smart App Control | refusals counted | **0 this round** (`fix1/sac_check.txt`: the log's one block since 21:55, at 22:38:45, is the main checkout's `MagicPortals.exe`, another role's; this tree's sweep launched on either side of it with rc 0) |
+
+**STEP 171'S SECOND FIX ROUND (2026-10-01), AFTER THE VERIFIER FAILED IT AGAIN** (`out/parity/program/P6/verify2.json`).
+The verifier re-measured every gate, passed twelve, and failed two on one medium problem, with three low ones. The
+evidence is under `out/parity/program/P6/fix2/`, and the report is `P6/fix2.md`. **GAMEPLAY: still none** (the new
+record and accessor are read by the layer's latch alone; routes, reachability and the sweep below).
+1. **A beholder rock that breaks on the level was silent (medium, true; fixed).** The verifier's probe
+   (`verify2/probe_rock/`, 1-32 with walks and no taps) broke `adder_715#1` on tick 717 with no begin and no sound.
+   The cause is `Boss::State::Contacts`: it breaks a rock within its 2 px margin of a static, or where the step would
+   have taken it, so the rock can go before the step brings the pair into touch and the watch never sees a begin; the
+   second rock (tick 892) did get one, so it hung on timing. The original's callback runs #58-71 (`stone_hit` at hit /
+   3 above 2, and a shake of hit x 2) before `destroyOnStaticHit`'s #170-208 in the same begin, so `sounds.json`'s
+   "its break is silent" was half right: `boss_rock_broken` is silent, the contact it breaks on is not. **Fix**:
+   `Contacts` keeps each rock it breaks with the first static it judged it on (`Boss::State::staticHitsNow`), and
+   `latchImpacts` makes that begin from what the rock carried into the step (`Watch::Carried`), where the watch has no
+   begin of the rock that tick and does not have the pair touching already (`Watch::Touching`) - the way it already
+   made a stone's begin on a breakable Demolish took. **The shake goes with it**, as the original's callback calls it;
+   `boss_rock_broken`'s 5 is queued after it on the same tick and overwrites it (`Generator::Start` writes the
+   amplitude over), so no frame moves (the probe's f900 frame and the sweep below are unchanged). The hit is along the
+   line between the entity points (#6-26): the probe's rock fell at 637.0 px/s, 12.74 straight down, but reads **7.14**
+   along the line to `platform_ent_7`'s point at (128, 240), so `stone_hit` at 2.381 (played at 1); the verifier's
+   "about 13" took the fall as the normal. Pinned by gate 4c. `sounds.json`'s `_note_beholder` and `impacts.stone`'s
+   `_source` say it as the listing does; RECORDED DEVIATIONS 14. The runner's whole output against the verifier's
+   (`fix2/suites/all_diff_vs_verify2.txt`, timings and paths dropped) gained, outside the new case, one line: the
+   layer's `1-32 boss_rock_broken` row, 1-32 left at rest, now logs `impact stone_impact of a body on platform.ent hit
+   0.160034, no call on tick 1714` - a Contacts begin under both gates, so no shake and no sound, and the row's numbers
+   are unchanged. The boss suite, the other level31 cases and the routes gained nothing.
+2. **`light_switch` and `fire_diamond_drained` pinned to their hook and not their moment (low, true; fixed).** The
+   routes suite reads, on every tick of every route, the light wall's fade and the fire diamonds' `gone` itself and
+   holds each tick's latches to them (gate 3b); LEFT FOR THE OWNER says what the census relations that read a latch's
+   own counter do and do not prove.
+3. **A dragon edge made in `Game::BeforeStep` is latched a tick late (low, true; left).** Already RECORDED DEVIATIONS
+   12; inaudible (16.7 ms), and moving the latch would split the tick's sound watch in two.
+4. **Two destroyier paths the step did not name (low, true; recorded).** 3-20's placed stone is under LEFT's "not
+   built" (the port never takes a placed stone on a destroyier), and a thrown stone's missing #58-71 on its destroyier
+   is RECORDED DEVIATIONS 15: the port's destroyier is a trigger box with no contact tick of its own, so none is made up.
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| Build | 0 warnings | **passes**: `fix2/build/build2-4.log` 0 warnings (build 1 stopped on the compiler's heap, `C1060` x 15, beside the other tracks' builds; re-run with `-j 3`); `test_mp.exe` `9a1c9c5a`, `MagicPortals.exe` `0bc35794` (its first link `cd5cf156` refused) |
+| A beholder rock broken on the level, at its contact | one begin of the rock on its break's tick, `stone_hit` once at hit / 3 (the case's own velocities), the shake hit x 2 then 5; the watch's own begin not doubled | **passes** (gate 4c): tick 717, hit 7.1432, `stone_hit` 2.381074, shake 14.2864 then 5; tick 892, one begin (the watch's), one `stone_hit` 0.692891. The game logs the same on tick 717 (`fix2/probe_rock/level31.log`; its diff against the verifier's probe log is those three lines and where `stone_hit.mp3` is loaded), f900 frame `11d2057e` = the verifier's |
+| Two latches on their tick, in play | each route's `light_switch` and `fire_diamond_drained` on their ticks and no other | **passes** (gate 3b): 70 of 70, 3 switches and 5 drains, each on its tick |
+| The runner, once | 47 suites, 0 failures | **passes**: `9a1c9c5a`, one launch, 47 of 47, `test_mp_layer` 3,343, `test_mp_routes` 1,143, the other 45 at the first fix round's counts (`fix2/suites/`) |
+| Routes, no gameplay change | 9,538 non-sound lines, 0 differ | **passes** (`fix2/suites/routes_diff_fix2.txt`, empty); the routes' output is the verifier's but the checks line |
+| Reachability | 108 / 20 / 0, 0 differ | **passes** (`fix2/reach_check.txt`) |
+| The 128-level f420 sweep | 128 of 128 identical to `MS/after/sweep` | **passes**: `0bc35794`, **128 of 128 identical** to `MS/after/sweep` and to `verify2/after/sweep`; 128 rc 0, whole, on their md5s, validation silent, 0 input lines, saves unchanged (`fix2/compare_fix2.txt`); every log's game lines as the verifier's (`fix2/log_compare_fix2.txt`). No pixel moved |
+| The sweep's census | as gate 8 | **passes**: every event's count and levels the verifier's - crystal_alert 35 on the 20 levels, all tick 1; stone_thrown 0; stone_broken 7 at 1.0; stone_hit 4 on 3; crate_knocked 11 on 6; key_picked 19 |
+| Smart App Control | refusals counted | **1 this round** (`fix2/sac_check.txt`): `MagicPortals.exe` `cd5cf156` at 00:23:14 on its first launch (the probe), deleted and relinked once to `0bc35794`, which ran the probe and the sweep; `test_mp.exe` `9a1c9c5a` ran on its first launch |
+
+**VERIFIED A THIRD TIME, PASSED** (`out/parity/program/P6/verify3.json`, on `MagicPortals.exe` `0bc35794` and
+`test_mp.exe` `9a1c9c5a`): every gate retaken or re-derived - the runner once, 47 of 47 (`test_mp_layer` 3,343,
+`test_mp_routes` 1,143); the routes' 9,538 non-sound lines, 0 differ; reachability 108 / 20 / 0; the probe's tick 717
+and f900 `11d2057e`; the sweep 128 of 128 identical to `MS/after/sweep`, every log's game lines the second fix round's;
+0 refusals. Its one problem (low), at commit, in text only: the comment on `MagicPortalsLayer::latch` called the log the
+census of what played; it says what was latched now, and LEFT FOR THE OWNER carries the behaviour half (the log's
+`sound` line). A comment is a source change, so the tree was rebuilt at commit (`P6/commit/build.log`, 0 warnings):
+`MagicPortalsLayer.cpp.obj` alone recompiled, byte-identical to the gates' but for the 2 bytes of its COFF header's
+time stamp; `MagicPortals.exe` (`193bf60b`) and `test_mp.exe` (`5ddd3f34`) relinked, and `MagicPortalsSpike.exe`
+(`d8d60427`), which the fix rounds' targeted builds had left stale on `MagicPortalsSim.lib`; none launched. The gates
+stand as measured on `0bc35794` and `9a1c9c5a`. Smart App Control: 5 refusals across the step, 0 at commit.

@@ -303,6 +303,11 @@ public:
     // suite, every headless render, and Linux - plays nothing and would
     // otherwise leave nothing to assert. This is what OnUpdate would play.
     std::vector<std::string> LatchedSounds() const;
+    // And the volume each was latched with, in the same order: the caller's, for
+    // a hook that takes one (a landing's hitIntensity / 18), or -1.
+    std::vector<double> LatchedVolumes() const;
+    // The crates whose begin-contacts the impact watch reads for their sound.
+    const std::vector<entt::entity>& WatchedCrates() const { return m_crates; }
 
     // Why there is no sound, when there is none.
     const std::string& SoundsError() const { return m_soundsError; }
@@ -2272,10 +2277,20 @@ private:
     void loadSounds();
     // Remember that `event` happened on this tick. Named for sounds.json's
     // events table; one the file leaves silent costs nothing here. A door
-    // brings its own stride: its hook's speed is 3000 / it.
-    void latch(const char* event, double doorStrideMs = 0.0);
+    // brings its own stride: its hook's speed is 3000 / it. A hook that takes
+    // its caller's volume (playFallSound's hitIntensity / 18) is given it here.
+    void latch(const std::string& event, double doorStrideMs = 0.0, double volume = -1.0);
     // What the simulation did this tick, against what it looked like last.
-    void latchSimSounds();
+    void latchSimSounds(float fixedDelta);
+    // The bosses' calls (planning step 171): the tests their callbacks make on
+    // every frame - a first sight, a clock - and the edges of their states.
+    void latchBossCues(double tickMs);
+    struct Watch;
+    // Step 171's edges between two ticks' watches, and the late bosses' among
+    // them; on a level's first tick against FreshWatch, the level as it is made.
+    void latchStepSounds(const Watch& was, const Watch& now);
+    void latchLateBossSounds(const Watch& was, const Watch& now);
+    static Watch FreshWatch(const Watch& now);
     void playLatched(entt::registry& registry, float deltaTime);
     // WantedTrack on the device: started and stopped as it changes.
     void updateMusic(entt::registry& registry);
@@ -2333,12 +2348,64 @@ private:
         // and these are only ever compared with the last tick's.
         std::vector<char> doorsOpening;
         std::vector<char> liftsForward;
+        // Planning step 171's, each compared with the last tick's in the same way.
+        int blasts = 0;            // Fire: bombs gone off
+        int despawned = 0;         // Launchers: a stone on a destroyier
+        int minionsKilled = 0;     // Minions: the killer floor
+        int minionsBurned = 0;     // Minions: burned by fire
+        int doorsOpened = 0;       // Keys: keyholes gone with their doors
+        int struck = 0;            // Diamonds: shock strikes
+        int torchesLit = 0;        // Torch
+        int torchesPutOut = 0;
+        int crushed = 0;           // 2-32's claw
+        bool dragonTookOff = false;
+        int bossRocksThrown = 0;
+        int bossSpikeHits = 0;
+        bool ringKilled = false;   // Fields claimed the player...
+        bool playerDead = false;   // ...and whether the player was dead
+        std::vector<char> burnables;    // Fire's burnables: burned
+        std::vector<char> fieldsGone;   // Fields: a shock agent destroyed
+        std::vector<char> diamondsHeld; // Diamonds: carried
+        std::vector<char> diamondsGone;
+        std::vector<entt::entity> keyOwners; // Keys: each key's carrier
+        // The two late bosses, whose sounds are their states' edges.
+        bool ghostSpawned = false;
+        bool ghostGone = false;
+        Ghost::Phase ghostPhase = Ghost::Phase::Appearing;
+        int ghostBeats = 0;
+        int ghostSummons = 0;
+        int ghostHits = 0;
+        int ghostShotsFired = 0;
+        int ghostShotsEnded = 0;
+        bool darkSummoned = false;
+        bool darkAlive = false;
+        bool darkGone = false;
+        DarkDragon::Phase darkPhase = DarkDragon::Phase::Appearing;
+        int darkHits = 0;
+    };
+
+    // The sound's own state across ticks, where a count going up is not the
+    // moment (planning step 171): the original's one-shot data and clocks, each
+    // named for the datum it stands for. Reset with each level, as the watch is.
+    struct SoundCues {
+        bool beholderAppeared = false; // ETHCallback_beholder's hasAppeared
+        bool dragonAppeared = false;   // ETHCallback_dragon's appearSoundPlayed
+        bool darkMouth = false;        // ETHCallback_dark_dragon's appearSoundPlayed
+        bool lightSwitched = false;    // the light wall's soundPlayed, for this wall's fade
+        // overTimeEntityAdder's small_explosion_no_light clock on each boss's own
+        // entity: started by its first call, zeroed only by an add.
+        double beholderAdderMs = 0.0;
+        double ghostAdderMs = 0.0;
+        double darkAdderMs = 0.0;
+        // Each key's fly-in clock, as latchSimEffects runs its own (Effects::FlyIn).
+        std::vector<Effects::FlyIn> keyFlyIns;
     };
 
     // One event the tick saw, with what playing it needs to know.
     struct Latched {
         std::string event;
         double doorStrideMs = 0.0;
+        double volume = -1.0; // the caller's volume, for a hook that takes one; below 0 none
     };
 
     // ---- the drawing diagnostic ---------------------------------------------
@@ -2358,6 +2425,11 @@ private:
     std::string m_soundsError;      // why there is no sound, when there is none
     std::vector<Latched> m_latched; // this tick's events, in the order they happened
     Watch m_watch;
+    SoundCues m_soundCues;
+    // The level's crates, whose callback is crateContactCallback (sounds.json
+    // impacts.crate.entities), in the scene's order: made at the load, for the
+    // impact watch.
+    std::vector<entt::entity> m_crates;
     double m_soundClockMs = 0.0;               // the frames' own clock, for the shared timers
     std::map<std::string, double> m_timerAtMs; // when each shared timer last let one through
     // Seeded and the layer's OWN, for the reason the particles' generator is:
