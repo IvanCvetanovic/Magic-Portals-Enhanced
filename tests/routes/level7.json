@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-08, with the crate onto the dashed square, as the level's hint shows it. Step 113's route opened",
     "a portal over the door's ledge just outside antiportal_539's old 16 x 4.7 = 75 px; at 32 x scale",
@@ -7,7 +8,9 @@
     "portal at (472, 142), under the hanging pillar and 160 px from the ring's centre. Right, pushing",
     "the crate until single_block_plat_ent_743 stops it at x 483 under the pillar, its top level with",
     "the ledge; one on the player, who comes out on the crate and walks right onto the ledge and into",
-    "the door. Won on tick 422 (step 127)."
+    "the door. Won on tick 422 (step 127).",
+    "Step 137 (a shot leaves on the release): won on tick 423; the first shot, up on 95, is aimed",
+    "2.577 px off its point (the camera moved while the finger was down)."
   ],
   "level": "level7",
   "win_by": 480,
@@ -17,9 +20,9 @@
     {"walk": "right", "from": 360, "to": 480}
   ],
   "taps": [
-    {"tick": 30, "at": [320, 60]},
-    {"tick": 60, "at": [395.0, 202.3]},
-    {"tick": 95, "at": [472, 142]},
-    {"tick": 350, "at": [444.5, 202.3]}
+    {"tick": 29, "at": [320, 60]},
+    {"tick": 59, "at": [395.0, 202.3]},
+    {"tick": 94, "at": [472, 142]},
+    {"tick": 349, "at": [444.5, 202.3]}
   ]
 }

@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-21 (step 133), won by the lift door's latch. A portal over breakable_wall_1751 at (420, 120) and one",
     "beside rolling_stone_1759 at (70, 146) from the spawn platform: the stone drops through onto the wall",
@@ -21,7 +22,7 @@
     {"walk": "right", "from": 90, "to": 650}
   ],
   "taps": [
-    {"tick": 30, "at": [420, 120]},
-    {"tick": 70, "at": [70, 146]}
+    {"tick": 29, "at": [420, 120]},
+    {"tick": 69, "at": [70, 146]}
   ]
 }

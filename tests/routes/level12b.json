@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-13, won by killing the anti-portal agent (step 126, R17). Left off the shelf onto the crate, right",
     "off its far side, and left again: the crate is pushed until it drops into the 64 px gap by the key's",
@@ -25,12 +26,12 @@
     {"walk": "left", "from": 880, "to": 1090}
   ],
   "taps": [
-    {"tick": 340, "at": [70, 70]},
-    {"tick": 370, "at": [380, 178]},
-    {"tick": 420, "at": [9.8, 170.3]},
-    {"tick": 650, "at": [310, 360]},
-    {"tick": 680, "at": [100, 298]},
-    {"tick": 830, "at": [240, 466]},
-    {"tick": 860, "at": [351.0, 401.0]}
+    {"tick": 339, "at": [70, 70]},
+    {"tick": 369, "at": [380, 178]},
+    {"tick": 419, "at": [9.8, 170.3]},
+    {"tick": 649, "at": [310, 360]},
+    {"tick": 679, "at": [100, 298]},
+    {"tick": 829, "at": [240, 466]},
+    {"tick": 859, "at": [351.0, 401.0]}
   ]
 }

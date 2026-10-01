@@ -1,22 +1,24 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-07, walking only (max_portals 0). Onto lift_ent_883 as it comes back to its marker a (the",
-    "port runs it on its own: G2), up, and left along the top, pushing rolling_stone_890 off the",
-    "platform's end; it rolls down the ramp and the shaft and stops on the floor in carranca_891's",
-    "lane, where it stops every fireball (planning step 114). Back onto the lift at the top, off its",
-    "far side to the floor, under the lift and the platform onto button_937, and left under",
-    "door_lift_936 once it has risen. Won on tick 1007 (step 114); on 1008 since step 133, whose",
-    "latching door is still rising as the player passes under it, where the port's old door had turned",
-    "back when the player stepped off the button and grazed its head on the way down."
+    "2-07, walking only (max_portals 0). Re-authored in step 140 (G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a second, and the touch fires no shot (\"shot\": false), where step 114's route",
+    "boarded lift_ent_883 as the port brought it back on its own. Onto the lift at its marker a; a touch (200)",
+    "sends it up, and left along the top, pushing rolling_stone_890 off the platform's end; it rolls down the ramp",
+    "and the shaft and stops on the floor in carranca_891's lane, where it stops every fireball (planning step",
+    "114). Back onto the lift, which waits at the top, off its far side to the floor, under the platform onto",
+    "button_937, and left under door_lift_936 once it has risen. Won on tick 1126 (step 140; 1007 on the",
+    "self-running lift)."
   ],
   "level": "level6a",
-  "win_by": 1070,
+  "win_by": 1186,
   "holds": [
     {"walk": "right", "from": 165, "to": 185},
-    {"walk": "left", "from": 262, "to": 305},
-    {"walk": "right", "from": 575, "to": 640},
-    {"walk": "left", "from": 665, "to": 706},
-    {"walk": "left", "from": 925, "to": 1070}
+    {"walk": "left", "from": 380, "to": 423},
+    {"walk": "right", "from": 693, "to": 758},
+    {"walk": "left", "from": 783, "to": 824},
+    {"walk": "left", "from": 1043, "to": 1186}
   ],
-  "taps": []
+  "taps": [
+    {"tick": 200, "at": [352, 262], "shot": false}
+  ]
 }

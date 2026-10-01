@@ -87,11 +87,17 @@ struct Door {
 // when the node has no stride.
 bool DoorFromNode(const Tscn::Node& node, const DoorRules& rules, Door& out, std::string& error);
 
-// The port's own mover numbers, game/data/movers.json: two of the
-// Godot project's guesses, which it keeps in behaviours.gd rather than in its data.
+// The port's own mover numbers, game/data/movers.json: the Godot project's guessed
+// swing, and the lift as ETHCallback_lift runs it (decoded).
 struct Rules {
     double oscillationRateScale = 0.0; // RATE_SCALE_K, _guess
-    double liftSpeedPx = 0.0;          // speed_px_s's default, _guess
+    double liftSpeedUnitsPerS = 0.0;   // the callback's literal 60
+    glm::dvec2 liftSizeUnits{0.0};     // lift.png's 64 x 32: the rect a touch sends it from
+    // blinkColor(this, (0.6, 0.6, 0.6), (1, 1, 1), 300): a triangle between the two
+    // colours, each leg a stride long. The picture's, drawn by the layer.
+    glm::dvec3 liftBlinkFrom{1.0};
+    glm::dvec3 liftBlinkTo{1.0};
+    double liftBlinkStrideMs = 0.0;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -119,17 +125,33 @@ struct Oscillation {
 bool OscillationFromNode(const Tscn::Node& node, const glm::dvec2& axis, double rateScale, Oscillation& out,
                          std::string& error);
 
-// A lift, behaviours.gd's SHUTTLE profile (:129-138, :165-169): toward marker `b`
-// at its speed, then back to `a`, turning the moment it arrives. It starts where
-// the level places it, which in every placement is marker `a`.
-struct Shuttle {
+// A lift as ETHCallback_lift runs it (movers.json `lift`): at rest on its marker `a`
+// from the first frame, until a touch goes down inside its picture and SENDS it
+// (sendLiftToOtherPoint) - from a to b, from b to a, and from anywhere between back
+// to a, whichever way it was going. Sent, it moves toward `dest` at its speed and is
+// put on it the frame it has come as far from `origin` as a is from b; there it waits
+// for the next touch. Every test of where it is reads this state, never its body,
+// whose float round trip would break the callback's exact vector2 equalities.
+struct Travel {
     glm::dvec2 aPx{0.0};
     glm::dvec2 bPx{0.0};
-    double speedPx = 0.0;
-    bool forward = true; // heading for b
     glm::dvec2 atPx{0.0};
+    glm::dvec2 destPx{0.0};   // 'dest': where it is going, or where it rests
+    glm::dvec2 originPx{0.0}; // 'origin': the end it is measured from
+    glm::dvec2 dir{0.0};      // 'dir': normalize(dest - its point when sent)
+    double legSquared = 0.0;  // 'squaredDistance': |b - a|^2
+    double speedPx = 0.0;
+    int sends = 0;            // how many touches have sent it: playElevatorSound each
 
+    bool Moving() const { return atPx != destPx; }
+    // sendLiftToOtherPoint.
+    void Send();
+    // One frame of #263-367: moved by dir x speed x dt while it is not at `dest`, and
+    // put on `dest` once it has come the leg's length from `origin`.
     void Advance(double dt);
+    // isPointInRect(point, its point, size, (0.5, 0.5)): the rect of `sizeUnits`
+    // centred on it, both edges in.
+    bool Holds(const glm::dvec2& pointPx, const glm::dvec2& sizeUnits) const;
 };
 
 struct Platform {
@@ -141,7 +163,8 @@ struct Platform {
 struct Lift {
     std::string name;
     entt::entity entity = entt::null;
-    Shuttle motion;
+    Travel motion;
+    glm::dvec2 sizeUnits{0.0}; // its picture's, which a touch is tested against
 };
 
 // A level's moving platforms and lifts. Its doors are its switches' (Puzzle).
@@ -153,13 +176,19 @@ struct Movers {
     // MoveKinematic so that it carries what stands on it.
     void Tick(entt::registry& registry, float dt);
 
+    // A touch gone down this frame at `pointPx`, a point of the level: every lift
+    // whose picture holds it is sent, as each lift's own callback tests the touch.
+    // How many were sent - the caller's to take the touch when it is any.
+    int Press(const glm::dvec2& pointPx);
+
     const Platform* FindPlatform(const std::string& name) const;
     const Lift* FindLift(const std::string& name) const;
 };
 
 // A built level's moving platforms and lifts. A lift's ends are the marker
 // entities its `a` and `b` name, or its own place where it names none
-// (level_runtime.gd:157-163), and its speed is its own or movers.json's. False,
+// (level_runtime.gd:157-163); it is put on `a`, and its speed and size are
+// movers.json's for every lift - the callback reads no `speed` of a node's. False,
 // with `error`, for a platform with no speed or stride, or a mover not built.
 bool Wire(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built, const Rules& rules,
           Movers& out, std::string& error);

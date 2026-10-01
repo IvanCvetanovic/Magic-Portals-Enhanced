@@ -140,8 +140,9 @@ struct Rules {
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
-// A fire_source placement. It never moves and has no body, so its position is all
-// there is of it.
+// A fire_source placement. It has no body, so its position is all there is of it;
+// one whose node names a handle in `follow` is moved after that handle, after its
+// flame has burned for the tick (sim/Handle, Game::AfterStep). The rest never move.
 struct Agent {
     std::string name;
     glm::dvec2 atPx{0.0};

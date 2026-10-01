@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-19 (planning step 134, G8): crate_no_emissive_ent_1109 stands where the barrel must go, so a",
     "portal at (100, 150) and one on its side at (250, 60) (24, 48) drop it to the floor; portals at",
@@ -15,14 +16,14 @@
     {"walk": "right", "from": 330, "to": 400}
   ],
   "taps": [
-    {"tick": 24, "at": [100, 150]},
-    {"tick": 48, "at": [250, 60]},
-    {"tick": 80, "at": [300, 55]},
-    {"tick": 104, "at": [180, 200]},
-    {"tick": 130, "at": [100, 40]},
-    {"tick": 154, "at": [146.8, 202.3]},
-    {"tick": 180, "at": [279.4, 55.3]},
-    {"tick": 260, "at": [400, 40]},
-    {"tick": 296, "at": [100, 143.8]}
+    {"tick": 23, "at": [100, 150]},
+    {"tick": 47, "at": [250, 60]},
+    {"tick": 79, "at": [300, 55]},
+    {"tick": 103, "at": [180, 200]},
+    {"tick": 129, "at": [100, 40]},
+    {"tick": 153, "at": [146.8, 202.3]},
+    {"tick": 179, "at": [279.4, 55.3]},
+    {"tick": 259, "at": [400, 40]},
+    {"tick": 295, "at": [100, 143.8]}
   ]
 }

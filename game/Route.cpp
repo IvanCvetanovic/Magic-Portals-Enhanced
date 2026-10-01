@@ -36,6 +36,7 @@ constexpr const char* kTick = "tick";
 constexpr const char* kRelease = "release";
 constexpr const char* kAt = "at";
 constexpr const char* kShot = "shot";
+constexpr const char* kDragTo = "to";
 } // namespace Key
 
 constexpr const char* kLeft = "left";
@@ -164,7 +165,7 @@ bool Load(const std::string& path, Plan& out, std::string& error) {
         for (const Json::Value& entry : root[Key::kTaps].AsArray()) {
             const std::string where = path + ": taps[" + std::to_string(index++) + "]";
             if (!entry.IsObject() ||
-                !OnlyKeys(entry, {Key::kTick, Key::kRelease, Key::kAt, Key::kShot}, where, error)) {
+                !OnlyKeys(entry, {Key::kTick, Key::kRelease, Key::kAt, Key::kShot, Key::kDragTo}, where, error)) {
                 if (error.empty()) error = where + ": not an object";
                 return false;
             }
@@ -189,6 +190,25 @@ bool Load(const std::string& path, Plan& out, std::string& error) {
                 }
                 tap.shot = entry[Key::kShot].AsBool();
             }
+            if (entry.Has(Key::kDragTo)) {
+                const Json::Value& to = entry[Key::kDragTo];
+                if (!to.IsArray() || to.AsArray().size() != 2 || !to.AsArray()[0].IsNumber() ||
+                    !to.AsArray()[1].IsNumber()) {
+                    error = where + ": \"to\" is not a point [x, y] of the level";
+                    return false;
+                }
+                tap.toPx = glm::dvec2(to.AsArray()[0].AsNumber(), to.AsArray()[1].AsNumber());
+                // Held on at least one tick after it goes down, which is where it moves,
+                // and a drag fires nothing: the file says both.
+                if (tap.releaseTick < tap.tick + 2) {
+                    error = where + ": a drag is let go at least two ticks after it goes down (\"release\")";
+                    return false;
+                }
+                if (tap.shot) {
+                    error = where + ": a drag fires no shot; say \"shot\": false";
+                    return false;
+                }
+            }
             plan.taps.push_back(tap);
         }
         std::stable_sort(plan.taps.begin(), plan.taps.end(), [](const Tap& a, const Tap& b) { return a.tick < b.tick; });
@@ -208,9 +228,19 @@ bool Load(const std::string& path, Plan& out, std::string& error) {
     return true;
 }
 
+bool ReleasesOn(const Plan& plan, int tick) {
+    return std::any_of(plan.taps.begin(), plan.taps.end(), [tick](const Tap& tap) { return tap.releaseTick == tick; });
+}
+
 // ---- the driver ---------------------------------------------------------------
 
-Driver::Driver(Plan plan) : m_plan(std::move(plan)) {}
+Driver::Driver(Plan plan) : m_plan(std::move(plan)) { m_fingers.assign(m_plan.taps.size(), glm::dvec2(-1.0)); }
+
+double Driver::MaxDriftPx() const {
+    double most = 0.0;
+    for (const Aim& aim : m_aims) most = std::max(most, aim.driftPx);
+    return most;
+}
 
 Driver::Record Driver::record(const MagicPortalsLayer& layer) const {
     Record out;
@@ -237,11 +267,13 @@ void Driver::Begin(MagicPortalsLayer& layer) {
     }
     for (const Hold& hold : m_plan.holds) layer.ScheduleDevHold(hold.from, hold.to, hold.direction);
     m_before = record(layer);
+    m_camera = layer.CameraCentrePx();
     schedule(layer, m_ticks + 1);
 }
 
 void Driver::schedule(MagicPortalsLayer& layer, int tick) {
-    for (const Tap& tap : m_plan.taps) {
+    for (std::size_t i = 0; i < m_plan.taps.size(); ++i) {
+        const Tap& tap = m_plan.taps[i];
         if (tap.tick != tick) continue;
         // The view as this tick leaves it is the view the next tick's input is read
         // against: the camera moves after readInput (MagicPortalsLayer::stepLevel).
@@ -253,12 +285,31 @@ void Driver::schedule(MagicPortalsLayer& layer, int tick) {
                     " is off the view, which shows " + Px(corner) + " to " + Px(corner + view));
             continue;
         }
+        m_fingers[i] = fraction;
+        if (tap.toPx) {
+            // A drag: the finger moves on the screen from `at` to `to` over the ticks
+            // it is held, both put on the view through this camera. The layer's drag
+            // reaches its end on the release tick, which moves nothing (gs2d zeroes a
+            // RELEASE frame's move), so it is given the point one held tick further on,
+            // and lies on `to` on the last held tick.
+            const glm::dvec2 toFraction = (*tap.toPx - corner) / view;
+            if (!(toFraction.x > 0.0 && toFraction.x < 1.0 && toFraction.y > 0.0 && toFraction.y < 1.0)) {
+                problem("the drag down on tick " + std::to_string(tap.tick) + " to " + Px(*tap.toPx) +
+                        " leaves the view, which shows " + Px(corner) + " to " + Px(corner + view));
+                continue;
+            }
+            const double held = static_cast<double>(tap.releaseTick - tap.tick);
+            const glm::dvec2 end = fraction + (toFraction - fraction) * (held / (held - 1.0));
+            layer.ScheduleDevDrag(tap.tick, fraction, end, tap.releaseTick);
+            continue;
+        }
         layer.ScheduleDevTap(tap.tick, fraction, tap.releaseTick);
     }
 }
 
-void Driver::check(const MagicPortalsLayer& layer, const Tap& tap) {
-    const std::string which = "the tap on tick " + std::to_string(tap.tick) + " at " + Px(tap.atPx);
+void Driver::check(const MagicPortalsLayer& layer, const Tap& tap, std::size_t index) {
+    const std::string which = "the tap down on tick " + std::to_string(tap.tick) + " and up on " +
+                              std::to_string(tap.releaseTick) + " at " + Px(tap.atPx);
     const Game::Level* level = layer.SimLevel();
     if (level == nullptr) {
         problem(which + " has no level to land in");
@@ -272,14 +323,19 @@ void Driver::check(const MagicPortalsLayer& layer, const Tap& tap) {
         if (shoot) problem(which + " was to fire nothing, and fired a shot");
         return;
     }
+    // Where the finger is on the view, through the camera this tick read - the one
+    // the last tick left - is what the shot is aimed at.
+    const glm::dvec2 view = layer.ViewPx();
+    const glm::dvec2 under = m_camera - view * 0.5 + m_fingers[index] * view;
     if (!shoot) {
-        problem(which + " fired nothing: a control, a help block, a popup or a pause took it");
+        problem(which + " fired nothing on its release: a control, a help block, a popup or a pause took it");
     } else if (portals.lastTap.reason != Portals::TapReason::Fired) {
         problem(which + " was refused: " + ReasonName(portals.lastTap.reason));
-    } else if (glm::length(portals.lastTap.atPx - tap.atPx) > kTapTolerancePx) {
-        problem(which + " was aimed at " + Px(portals.lastTap.atPx));
+    } else if (glm::length(portals.lastTap.atPx - under) > kTapTolerancePx) {
+        problem(which + " was aimed at " + Px(portals.lastTap.atPx) + ", not under the finger at " + Px(under));
     } else {
         ++m_shots;
+        m_aims.push_back(Aim{tap.releaseTick, glm::length(under - tap.atPx)});
     }
 }
 
@@ -294,8 +350,9 @@ void Driver::AfterTick(MagicPortalsLayer& layer) {
         problem("the player died on tick " + std::to_string(m_ticks));
         return;
     }
-    for (const Tap& tap : m_plan.taps) {
-        if (tap.tick == m_ticks) check(layer, tap);
+    // A tap is judged on the tick it comes up, where its shot leaves.
+    for (std::size_t i = 0; i < m_plan.taps.size(); ++i) {
+        if (m_plan.taps[i].releaseTick == m_ticks) check(layer, m_plan.taps[i], i);
     }
     const Game::Level* level = layer.SimLevel();
     if (level != nullptr) m_held = level->portals.transitsHeld;
@@ -310,6 +367,7 @@ void Driver::AfterTick(MagicPortalsLayer& layer) {
         return;
     }
     m_before = record(layer);
+    m_camera = layer.CameraCentrePx();
     schedule(layer, m_ticks + 1);
 }
 
@@ -371,6 +429,9 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         if (!registry.valid(lift.entity)) continue;
         const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(lift.entity).position);
         std::printf("\n          lift %s (%.1f, %.1f)", lift.name.c_str(), at.x, at.y);
+        // Where it is going, or where it waits for a touch (step 140).
+        std::printf(" %s (%.1f, %.1f)", lift.motion.Moving() ? "to" : "at rest", lift.motion.destPx.x,
+                    lift.motion.destPx.y);
     }
     // The fire (step 114): every fireball in the air, where one went off this
     // tick, what is burning or gone, and the bombs.
@@ -481,6 +542,15 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(minion.body).position);
         std::printf("\n          minion %s (%.1f, %.1f)", minion.name.c_str(), at.x, at.y);
     }
+    // The draggable handles and what follows them (step 139): where each is, and
+    // whether a touch holds it this tick.
+    for (const auto& handle : level->handles.handles) {
+        std::printf("\n          handle %s (%.1f, %.1f)%s", handle.node.c_str(), handle.atPx.x, handle.atPx.y,
+                    handle.moving ? " HELD" : "");
+    }
+    for (const auto& follower : level->handles.followers) {
+        std::printf("\n          follower %s (%.1f, %.1f)", follower.node.c_str(), follower.atPx.x, follower.atPx.y);
+    }
     std::printf("\n");
 }
 
@@ -498,9 +568,8 @@ void ReplayLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta) {
     m_driver.AfterTick(m_game);
     if (m_traceEvery <= 0 || m_traced) return;
     const int tick = m_game.LayerTicks();
-    const std::vector<Tap>& taps = m_driver.Planned().taps;
-    const bool tapped =
-        std::any_of(taps.begin(), taps.end(), [tick](const Tap& tap) { return tap.tick == tick; });
+    // On the tick a tap comes up: the shot has just left.
+    const bool tapped = ReleasesOn(m_driver.Planned(), tick);
     if (m_driver.Finished() && !wasFinished) {
         m_traced = true;
         Trace(m_game, registry, m_driver.WonTick() > 0 ? "WON" : "END");
@@ -519,7 +588,7 @@ void ReplayLayer::OnDetach(entt::registry& registry) {
     std::cout << "[Magic Portals] route " << plan.file << ": ";
     if (m_driver.WonTick() > 0) {
         std::cout << plan.level << " won on tick " << m_driver.WonTick() << " (win_by " << plan.winBy << "), "
-                  << m_driver.Shots() << " shot(s)";
+                  << m_driver.Shots() << " shot(s), the aim's drift at most " << m_driver.MaxDriftPx() << " px";
     } else if (!m_driver.Problems().empty()) {
         std::cout << plan.level << " FAILED: " << m_driver.Problems().front();
     } else {

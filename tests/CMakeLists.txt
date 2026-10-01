@@ -96,6 +96,9 @@ add_mp_test(test_mp_demolish SKIPS_WITH_77)
 # Fire agents, burning crates and barrel bombs - and the asymmetry between them,
 # that fire kills the player where a blast cannot reach one.
 add_mp_test(test_mp_fire SKIPS_WITH_77)
+# The draggable handle (arrows.ent) and the flame or reflector that follows it, and
+# 2-20's lesson in it (planning step 139). Reads every converted level for its census.
+add_mp_test(test_mp_handle SKIPS_WITH_77)
 # Seesaws and spinning platforms. No tick of its own: the joint is attached when
 # the level is built and the engine's solver does the rest.
 add_mp_test(test_mp_hinge SKIPS_WITH_77)

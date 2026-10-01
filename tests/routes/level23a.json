@@ -1,0 +1,35 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "2-24 (planning step 139): seven barrels, two breakable walls, button_1144 behind breakable_wall_1141 and",
+    "door_lift_1145 before the door; one barrel set off sets off all seven (step 115's finding). Drag 1 (10-31) parks",
+    "the flame at (150, 20). Pairs (15, 40) + over barrel 1170, and (15, 10) + over barrel 1197, send the two that",
+    "join the cluster by the wall to the row's far end: then barrels 1171 and 1136 alone reach the wall. Drag 2",
+    "(230-251) brings the flame over 1171: the two go off and wall 1141 breaks (tick ~275), the row untouched. Left onto",
+    "barrel 1087, left of where the lift door rises; a portal floating over the button (305, 60), and one above barrel",
+    "1135: it drops onto the button (tick ~440) and the lift door opens. Drags 3 and 4 (500-561) take the flame along",
+    "the ceiling and down onto the row: the row goes off, and 1132's blast takes breakable_wall_1131 (tick ~590). Left",
+    "into the hole, down into the lower room, and right under the risen door to the exit. Won on tick 722. The lift",
+    "door opens only while a barrel holds the button here (no latch: B7, not in this tree); the original's latch would",
+    "hold it as well. No shot passes within 32 of the flame (G8 not built)."
+  ],
+  "level": "level23a",
+  "win_by": 800,
+  "holds": [
+    {"walk": "left", "from": 300, "to": 312},
+    {"walk": "left", "from": 600, "to": 620},
+    {"walk": "right", "from": 660, "to": 780}
+  ],
+  "taps": [
+    {"tick": 10, "release": 31, "at": [48, 40], "to": [150, 20], "shot": false},
+    {"tick": 50, "at": [15, 40]},
+    {"tick": 90, "at": [169, 79]},
+    {"tick": 140, "at": [15, 10]},
+    {"tick": 180, "at": [207, 44]},
+    {"tick": 230, "release": 251, "at": [150, 20], "to": [239, 12], "shot": false},
+    {"tick": 330, "at": [305, 60]},
+    {"tick": 420, "at": [125, 80]},
+    {"tick": 500, "release": 531, "at": [239, 12], "to": [15, 12], "shot": false},
+    {"tick": 540, "release": 561, "at": [15, 12], "to": [15, 60], "shot": false}
+  ]
+}

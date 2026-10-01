@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-14 (planning step 135, G6): shock_agent_2285 (areaRadius 90) stands on the door, which also lies",
     "in antiportal_2284's 160, and only a fireball removes a shock agent. carranca_ent_2287 fires left",
@@ -13,9 +14,9 @@
   "win_by": 420,
   "holds": [],
   "taps": [
-    {"tick": 30, "at": [320, 196]},
-    {"tick": 60, "at": [310, 120]},
-    {"tick": 240, "at": [153, 45]},
-    {"tick": 265, "at": [182, 50]}
+    {"tick": 29, "at": [320, 196]},
+    {"tick": 59, "at": [310, 120]},
+    {"tick": 239, "at": [153, 45]},
+    {"tick": 264, "at": [182, 50]}
   ]
 }

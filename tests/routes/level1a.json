@@ -1,16 +1,20 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-02, walking only. lift_789 runs on its own in the port (the backlog's G2: the original's idles",
-    "at marker a until a tap sends it), so this route waits for it: right onto it as it comes back",
-    "down on tick 274, standing still through the three carrancas' lanes on the way up, right off",
-    "at the top onto the bar and along to the door. Won on tick 528 (step 114). It rides the",
-    "self-running lift, so G2's step has to re-author it."
+    "2-02, walking only. Re-authored in step 140 (G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a second, and the touch fires no shot (\"shot\": false), where step 114's route boarded lift_789 as",
+    "the port brought it back on its own. Right onto it at its foot; a touch (160) sends it up, which carries the",
+    "player through the three carrancas' lanes (y 288, 192 and 144) at half the port's old speed: they fire every",
+    "4000 ms from ticks 60, 120 and 180, and a send between about tick 90 and 229 (mod 240) crosses each lane",
+    "between its fireballs (reasoned from the lanes' geometry, not measured); 160 sits in the middle. Right off at the top onto the bar and along to the door. Won",
+    "on tick 568 (step 140; 528 on the self-running lift)."
   ],
   "level": "level1a",
-  "win_by": 590,
+  "win_by": 628,
   "holds": [
-    {"walk": "right", "from": 250, "to": 288},
-    {"walk": "right", "from": 405, "to": 590}
+    {"walk": "right", "from": 5, "to": 28},
+    {"walk": "right", "from": 440, "to": 628}
   ],
-  "taps": []
+  "taps": [
+    {"tick": 160, "at": [100, 376], "shot": false}
+  ]
 }

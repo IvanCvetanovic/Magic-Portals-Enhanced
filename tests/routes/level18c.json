@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-19, weightless, won through the red key (planning step 118): every tap also pushes the player 70 u/s",
     "away from it. Tap 1 opens a portal over button_2515 (62, 195); tap 2 fails on the closed door_lift_2498",
@@ -12,17 +13,19 @@
     "the player on to the rocket: won on tick 581 (step 118, and again in step 133). The route rides the",
     "port's portal shot (600 u/s, G4): a step that moves it re-authors taps 3-5. The original's route",
     "(footage F17 r5) opened a portal inside the crate, which the port's shot cannot (it fails on the",
-    "crate)."
+    "crate).",
+    "Step 137 (a shot leaves on the release): won on tick 582; the shots up on 54 and 102 are aimed",
+    "1.129 and 1.119 px off their points (the camera moved while the finger was down)."
   ],
   "level": "level18c",
   "win_by": 640,
   "holds": [],
   "taps": [
-    {"tick": 30, "at": [62, 195]},
-    {"tick": 54, "at": [331.8, 165.3]},
-    {"tick": 78, "at": [224, 215]},
-    {"tick": 102, "at": [440, 148]},
-    {"tick": 126, "at": [284.4, 208.5]},
-    {"tick": 492, "at": [400, 170]}
+    {"tick": 29, "at": [62, 195]},
+    {"tick": 53, "at": [331.8, 165.3]},
+    {"tick": 77, "at": [224, 215]},
+    {"tick": 101, "at": [440, 148]},
+    {"tick": 125, "at": [284.4, 208.5]},
+    {"tick": 491, "at": [400, 170]}
   ]
 }

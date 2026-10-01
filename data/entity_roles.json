@@ -193,9 +193,21 @@
         "hand_waypoint1",
         "no_portal_sign.ent",
         "help_block.ent",
-        "arrows.ent",
         "hand_waypoint0",
         "up_down_arrow.ent"
+      ]
+    },
+    "handle": {
+      "_note": [
+        "The draggable handle (planning step 139; the port's game/data/handle.json, sim/Handle). Filed as",
+        "scenery_hint, 'purely cosmetic', until then; it is not: a touch that goes down on it drags it one for",
+        "one with the finger, 64 units a frame at most (ETHCallback_arrows, listing L67305), and the fire agent",
+        "or reflector whose `follow` names it eases after it (doFollow, L67201) - the only way to bring a flame",
+        "to 2-20's crates. Six placements, one on each of 2-20 to 2-24 and 2-27, each on its follower's point."
+      ],
+      "names": [
+        "arrows",
+        "arrows.ent"
       ]
     },
     "demolisher": {
@@ -387,7 +399,8 @@
         "Decoration and boss parts with a live ETHCallback but no gameplay consequence.",
         "Classified explicitly so the coverage sweep reports ZERO unexplained entities rather",
         "than a list someone has to re-triage.",
-        "  arrows.ent / hand_waypoint0 - tutorial hint graphics (see scenery_hint)",
+        "  hand_waypoint0              - 2-20's lesson hand (see scenery_hint; its callback is handle.json's",
+        "                                lesson). arrows.ent, filed beside it until step 139, is `handle`",
         "  gutter_mouth.ent            - a wall spout; decorative drip emitter",
         "  dragon_claw.ent             - part of the chapter-2 boss, which is a placeholder",
         "  rocket_launch / _landing    - the anchors of 4-01's and 4-19's win cutscenes, acting only",

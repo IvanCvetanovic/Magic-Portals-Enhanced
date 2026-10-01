@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-15 (R1 fix 1): button_1137, which raises door_lift_1136 in front of the door, lies inside",
     "antiportal_ent_1082 (scale 2, 64 px at 32 x scale), and carranca_right_1075 sweeps the floor to it",
@@ -24,11 +25,11 @@
     {"walk": "right", "from": 565, "to": 700}
   ],
   "taps": [
-    {"tick": 175, "at": [40, 190]},
-    {"tick": 205, "at": [70, 106.3]},
-    {"tick": 230, "at": [110, 295]},
-    {"tick": 255, "at": [366, 168]},
-    {"tick": 290, "at": [150, 310]},
-    {"tick": 338, "at": [52.5, 186.3]}
+    {"tick": 174, "at": [40, 190]},
+    {"tick": 204, "at": [70, 106.3]},
+    {"tick": 229, "at": [110, 295]},
+    {"tick": 254, "at": [366, 168]},
+    {"tick": 289, "at": [150, 310]},
+    {"tick": 337, "at": [52.5, 186.3]}
   ]
 }

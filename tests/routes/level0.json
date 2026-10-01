@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-01: right held from the start. The player walks into the first pair of static portals, comes",
     "out in the lower room, walks through the second pair and on to the door; the level grants no",

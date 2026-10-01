@@ -86,6 +86,10 @@ struct Rules {
     // is spent even by a shot that goes on to fail.
     double firstPortalMinMs = 0.0;
     double nextPortalMinMs = 0.0;
+    // How far a touch may stray from where it went down and still fire when it comes
+    // up: hasPortalRequestInput's scale(18), in units of the 256-unit view
+    // (placement.json `release`, decoded). TrackTouch below says when.
+    double releaseMaxMoveUnits = 0.0;
 
     bool consumeOnTraverse = false;    // owner-confirmed
     bool staticPortalsPersist = false; // owner-confirmed 11 September: they stay
@@ -230,8 +234,9 @@ struct AgentKill {
 // shot's point along its `direction`. The agent is static and its callback runs
 // after the shot's, which deletes itself on the frame it reaches the end of its
 // way, so only a shot still in flight is burned - the anti-portal agent's rule
-// above. Set by Game::Start from Fire's agents; a flame never moves (B4's handle
-// is not built).
+// above. Set by Game::Start from Fire's agents, and moved by Game::AfterStep each
+// tick to where its agent stands BEFORE that tick's follow: a fire agent on a
+// handle (step 139) burns, burnProjectile included, before its doFollow (#280).
 struct Flame {
     std::string name;
     glm::dvec2 centrePx{0.0};
@@ -399,6 +404,45 @@ struct Tap {
     glm::dvec2 atPx{0.0};
     TapReason reason = TapReason::Fired;
 };
+
+// THE TOUCH A SHOT IS FIRED BY (placement.json `release`, decoded). The original
+// fires on the frame a touch comes UP, never on the one it goes down, and only when
+// it has not strayed more than scale(18) from where it went down: TouchInputManager
+// keeps, per touch, where it went down (hitPos), where it was last held (lastTouchPos)
+// and the farthest it has been from hitPos (maxMoveLength), and
+// hasPortalRequestInput asks for GSKS_RELEASE with that farthest at most scale(18).
+// The shot is aimed at the last point the touch was HELD at (getReleasePos), mapped
+// through the camera of the release frame - not at where it came up.
+//
+// One of these follows the layer's one pointer, tick by tick, whatever it is: a real
+// press or a tap a capture scheduled.
+struct TouchTrack {
+    bool down = false;
+    glm::dvec2 hitView{0.0};   // hitPos: where it went down, in units of the view
+    glm::dvec2 lastView{0.0};  // lastTouchPos: where it was on the last tick it was held
+    glm::dvec2 lastPx{0.0};    // the same point in the viewport's pixels, which the shot maps
+    double maxMoveUnits = 0.0; // maxMoveLength: the farthest it has been from hitView
+};
+// What a tick's touch did to it: whether this is the tick it came up on, with the
+// last point it was held at and how far it strayed.
+struct TouchRelease {
+    bool released = false;
+    glm::dvec2 atView{0.0};
+    glm::dvec2 atPx{0.0};
+    double maxMoveUnits = 0.0;
+};
+// One tick of TouchInputManager::update for the one pointer, given the tick's
+// edges and where it is. A touch that goes down (re)starts the record; one held
+// moves its last point and may stretch its move; the tick it comes up returns its
+// record and ends it. A press and a release on the same tick are a touch that went
+// down and up there. Off the game (`over` false), or up with no release this record
+// saw, the touch is forgotten and fires nothing.
+TouchRelease TrackTouch(TouchTrack& track, bool pressed, bool held, bool released, bool over,
+                        const glm::dvec2& atView, const glm::dvec2& atPx);
+// hasPortalRequestInput: this tick's touch came up, and strayed no more than the
+// rules allow. What it then does - the gates, the controls, the shot - is the
+// caller's and Shoot's.
+bool RequestsPortal(const Rules& rules, const TouchRelease& release);
 
 // What a tick's shot did, for the frame to draw: cleared and refilled by every
 // Tick, as `transits` is, and read by nothing in the simulation.

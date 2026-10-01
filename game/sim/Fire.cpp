@@ -189,7 +189,8 @@ std::vector<entt::entity> State::Tick(entt::registry& registry, entt::entity pla
         Blast(*this, registry, atPx, bomb.name);
     }
 
-    // Then the fire agents, which never move and have no body of their own.
+    // Then the fire agents, which have no body of their own: each where the last
+    // tick left it (a handle's follower moves after this, sim/Handle).
     const double reach2 = rules.reachPx * rules.reachPx;
     for (const Agent& agent : agents) {
         if (!playerKilled && player != entt::null && registry.valid(player) &&

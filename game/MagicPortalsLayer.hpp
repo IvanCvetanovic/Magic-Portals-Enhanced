@@ -35,6 +35,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Effects.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
+#include "sim/Hint.hpp"
 #include "sim/Hud.hpp"
 #include "sim/Impacts.hpp"
 #include "sim/LevelEnd.hpp"
@@ -78,9 +79,13 @@ namespace MagicPortals {
 //    why, and N skips it, the Godot project's own development shortcut. At a world's end
 //    the Godot project opens its menu; the port has none yet, so it says the chapter is
 //    complete.
-//  - The camera is orthographic and follows the player, as the owner remembers
-//    it: Camera::Follow, moved on the tick and drawn between ticks. It shows
-//    view.json's height of the level, 256 px, at the window's shape.
+//  - The camera is orthographic and follows the player: Camera::Follow, moved on
+//    the tick and drawn between ticks. It shows view.json's height of the level,
+//    256 px, at the window's shape. And a finger drags it, as the original's does
+//    (camera.json `drag`, step 138): the pointer held off the walk pads pans it at
+//    twice its move, holds it 4000 ms after a drag away, and stops the follow while
+//    it is held. camera.json's drag_pan_enabled false restores the owner's
+//    2026-09-11 camera, which only follows.
 //  - Every sprite the level names (Sprites.hpp) is a textured quad, unlit and
 //    blended as the level says, in Godot's canvas order. A sprite follows its
 //    node's body, or the crystal, static portal, no-portal zone, key, keyhole or
@@ -1024,6 +1029,54 @@ public:
     };
     std::vector<PlacedReport> PlacedReports() const;
 
+    // 1-21's lesson (camera.json `hint`), for the suites, as the last tick left it:
+    // whether the level places each picture, the two callbacks, and each picture -
+    // whether it is still there, where the hand was put and is drawn, and the alpha
+    // each is drawn at.
+    struct HintReport {
+        bool handPlaced = false;
+        bool arrowPlaced = false;
+        Hint::Hand hand;
+        Hint::Arrow arrow;
+        bool handDrawn = false;
+        bool arrowDrawn = false;
+        glm::dvec2 handCentrePx{0.0};
+        float handAlpha = 0.0f;
+        float arrowAlpha = 0.0f;
+    };
+    HintReport HintState() const;
+
+    // THE HANDLES (handle.json, sim/Handle.hpp), for the suites, as the last tick
+    // left them: each handle's picture - where it is drawn, its alpha and its size -
+    // each follower's picture and its light's owner point, and 2-20's lesson hand.
+    struct HandleReport {
+        std::string node;
+        bool drawn = false;
+        glm::dvec2 centrePx{0.0};
+        glm::dvec2 sizePx{0.0};
+        float alpha = 0.0f;
+    };
+    std::vector<HandleReport> HandleReports() const;
+    struct FollowerReport {
+        std::string node;
+        bool drawn = false;
+        glm::dvec2 centrePx{0.0};
+        glm::dvec2 ownerPx{0.0};
+    };
+    std::vector<FollowerReport> FollowerReports() const;
+    struct LessonReport {
+        bool placed = false;
+        Handle::Lesson lesson;
+        bool drawn = false;
+        glm::dvec2 centrePx{0.0};
+        float alpha = 0.0f;
+    };
+    LessonReport LessonState() const;
+    const Hint::Rules& HintRules() const { return m_hintRules; }
+    const Camera::Rules& CameraRules() const { return m_cameraRules; }
+    // Whether the camera is being held where a drag left it (camera.json `drag`).
+    bool CameraHeld() const { return m_follow.Held(m_cameraRules); }
+
     // A screen point (Input's coordinates) as the point in the level under it,
     // in the port's pixels. False when there is no viewport or camera.
     bool ScreenToLevelPx(const entt::registry& registry, const glm::vec2& screenPoint, glm::dvec2& outPx) const;
@@ -1195,14 +1248,18 @@ public:
     // block, wherever the camera has it on that tick. The popups and the menu
     // states read it: it opens a help block's popup, closes one that is up, and
     // presses a menu's buttons as a touch does. During play it is the tick's touch
-    // readInput hands on, so it works a HUD control, presses a help block or fires
-    // the shot exactly as a real press at that point of the view would. The pause
-    // and the end screens still read the mouse alone; the pause's buttons have
-    // ScheduleDevPress.
+    // readInput hands on, so it works a HUD control, presses a help block or - on
+    // its RELEASE, as the original fires (placement.json `release`) - fires the
+    // shot, exactly as a real touch down and up at that point of the view would.
+    // It never moves, so it always fires if nothing takes it; a drag (below) that
+    // strays more than scale(18) does not. The pause and the end screens still
+    // read the mouse alone; the pause's buttons have ScheduleDevPress.
     void ScheduleDevTap(int tick, std::optional<glm::dvec2> viewFraction, int releaseTick = 0);
     // DEV ONLY: a drag - a touch down at `from` on tick `tick`, moved at an even pace
     // to reach `to` on `releaseTick`, and released there. Both are fractions of the
     // view. The credits' and the dashboard's scroll captures need a finger that moves.
+    // In a level, its release fires a shot only if it strayed no more than scale(18),
+    // aimed where it was on the tick before its release (getReleasePos).
     void ScheduleDevDrag(int tick, const glm::dvec2& from, const glm::dvec2& to, int releaseTick);
 
     // DEV ONLY: press one of these on the layer's tick `tick` (1 the first
@@ -1281,6 +1338,8 @@ private:
     // SpaceSky's four (sim/Sky.hpp): the space sky, the spiral, the planet and the
     // eclipse.
     enum class SpaceRole { None, Sky, Spiral, Planet, Eclipse };
+    // 1-21's two lesson pictures (sim/Hint.hpp).
+    enum class HintRole { None, Hand, Arrow, Lesson };
 
     // One of the level's sprites as a textured quad, and what it follows: the
     // crystal, static portal or no-portal zone it pictures, or else its node's
@@ -1335,6 +1394,18 @@ private:
         int motion{-1};       // in m_motions: a crystal or key its script bobs
         bool antiportal{false}; // ETHCallback_antiportal blinks and turns it (art.json)
         int placed{-1};       // in m_placed: a picture its own callback sways, fades or turns
+        // 1-21's hand or arrow (sim/Hint.hpp): moved, faded, pulsed and deleted by
+        // m_hintHand's or m_hintArrow's callback; or 2-20's lesson hand, by m_lesson's.
+        HintRole hint{HintRole::None};
+        // A draggable handle, in m_level.handles.handles: drawn where it is dragged,
+        // at its callback's alpha and bounce; or a fire agent or reflector that
+        // follows one, in m_level.handles.followers: picture, light and particles
+        // where it has got to (sim/Handle.hpp).
+        int handle{-1};
+        int follower{-1};
+        // A lift, in m_level.movers.lifts: ETHCallback_lift blinks its colour every
+        // frame (movers.json lift.blink), whatever it is doing.
+        int lift{-1};
         // Chapter 4's torch, in torch.lights: its picture goes on the tick after the
         // torch is lit, as the original's entity deletes itself (m_torchWatch).
         int torch{-1};
@@ -1681,6 +1752,36 @@ private:
     double m_viewHeightPx{0.0};
     float m_aspect{16.0f / 9.0f}; // the window's shape as of the last tick
     Camera::Follow m_follow;
+    // THE POINTER AS THE CAMERA READS IT (camera.json `drag`): its own record of the
+    // one touch, followed on every tick the touch is read - the level's and a
+    // popup's - because the original's camera reads the engine's input raw, whatever
+    // takes the touch. readInput leaves the tick's feel and whether the walk pads
+    // moved; the camera's tick takes them and clears them, so a tick that read no
+    // input (a stop's resuming half, the door's beat) drags nothing.
+    Camera::TouchRecord m_cameraTouch;
+    Camera::Feel m_cameraFeel;
+    bool m_cameraPadMoving{false};
+
+    // 1-21'S LESSON (camera.json `hint`, sim/Hint.hpp): the hand's and the arrow's
+    // callbacks, and whether the level places the hand, whose first call draws the
+    // line of text.
+    Hint::Rules m_hintRules;
+    Hint::Hand m_hintHand;
+    Hint::Arrow m_hintArrow;
+    bool m_hintHandPlaced{false};
+    bool m_hintArrowPlaced{false};
+
+    // 2-20'S LESSON (handle.json `lesson`): hand_waypoint0's callback, and the
+    // handle it watches (in m_level.handles.handles; -1 none).
+    Handle::Lesson m_lesson;
+    int m_lessonHandle{-1};
+    // The handles' reading of the touch (ETHCallback_arrows): getRelativeHitPos,
+    // the point of the level it went down on through the camera the tick after it
+    // went down left - the portal manager sets it after the camera on the HIT
+    // frame. Empty from a release until the next DOWN tick.
+    std::optional<glm::dvec2> m_handleHitPx;
+    // The tick's length, for what readInput hands a callback's clock.
+    double m_tickMs{0.0};
 
     Game::Data m_data;
     int m_dataIndex{-1}; // whose level m_data holds, so a retry reuses it
@@ -2319,10 +2420,10 @@ private:
         bool bossGone = false;
         bool bossButtonRaised = false;
         bool redKeyTaken = false; // 4-19's red key state saw its key taken
+        int liftsSent = 0;        // touches that sent a lift, summed over the lifts
         // char rather than bool: std::vector<bool> is not a container of bools,
         // and these are only ever compared with the last tick's.
         std::vector<char> doorsOpening;
-        std::vector<char> liftsForward;
     };
 
     // One event the tick saw, with what playing it needs to know.
@@ -2735,6 +2836,13 @@ private:
         double maxMovePx{0.0};
     };
     HelpTouch m_helpTouch;
+    // THE TOUCH A SHOT IS FIRED BY (Portals::TouchTrack): where the pointer went
+    // down, where it was last held and how far it strayed, followed by readInput
+    // and, under a popup, by popupTick, as TouchInputManager::update follows it
+    // whether or not the game is stopped. A shot leaves on its release. Forgotten
+    // as a level loads and as the pause opens, whose buttons the port presses on
+    // the way down: a touch that went down on Resume must not fire when it comes up.
+    Portals::TouchTrack m_shotTouch;
     // The plaque's dismissal, on GameLayer's clock (the level's age), once the
     // frame clock has passed its dismissAfterMs; negative before.
     double m_plaqueDismissAgeMs{-1.0};

@@ -1,0 +1,34 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "2-21 (planning step 139): the door room is closed by breakable_wall_1040, and the one barrel sits in a pocket",
+    "plugged by crate_no_emissive_1109 (burnable, not teleportable). Drag 1 (10-31) takes the flame to the crate",
+    "(gone on ~118); drag 2 (135-156) parks it at (230, 30). From x 256 a portal floats in the pocket at (40, 57), shot",
+    "through the burnt crate's gap, and one on the player: in the pocket, on the barrel (tick 280). A portal in the niche",
+    "before the wall (338, 130) and one beside the barrel (22, 145), 14 u from its face: the barrel goes to the niche",
+    "and settles on the block against the wall. Drag 3 (430-451) brings the flame to it: its blast takes the wall",
+    "(tick 478). Drag 4 (500-521) parks the flame in the floor at (260, 240). Out of the pocket by a pair (200, 20) and",
+    "the player, left to x 151, and a pair (440, 100) and the player into the door room. Won on tick 815. No shot",
+    "passes within 32 of the flame (G8 not built)."
+  ],
+  "level": "level20a",
+  "win_by": 900,
+  "holds": [
+    {"walk": "right", "from": 40, "to": 52},
+    {"walk": "left", "from": 660, "to": 678}
+  ],
+  "taps": [
+    {"tick": 10, "release": 31, "at": [220, 98], "to": [96, 94], "shot": false},
+    {"tick": 135, "release": 156, "at": [96, 94], "to": [230, 30], "shot": false},
+    {"tick": 165, "at": [40, 57]},
+    {"tick": 260, "at": [250, 190]},
+    {"tick": 300, "at": [338, 130]},
+    {"tick": 400, "at": [22, 145]},
+    {"tick": 430, "release": 451, "at": [230, 30], "to": [338, 142], "shot": false},
+    {"tick": 500, "release": 521, "at": [338, 142], "to": [260, 240], "shot": false},
+    {"tick": 530, "at": [200, 20]},
+    {"tick": 620, "at": [39, 138]},
+    {"tick": 690, "at": [440, 100]},
+    {"tick": 790, "at": [150, 190]}
+  ]
+}

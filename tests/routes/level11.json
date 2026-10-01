@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-12, re-routed for antiportal_574's 32 x 2.5 = 80 px (step 127, R1), which holds the block by the",
     "gap (step 126's portals there are refused). A portal over the left platform's end at (300, 160),",
@@ -18,16 +19,16 @@
     {"walk": "right", "from": 340, "to": 430}
   ],
   "taps": [
-    {"tick": 30, "at": [300, 160]},
-    {"tick": 60, "at": [73, 202.3]},
-    {"tick": 90, "at": [380, 205]},
-    {"tick": 120, "at": [300, 202.3]},
-    {"tick": 150, "at": [459.8, 36.7]},
-    {"tick": 180, "at": [410, 150]},
-    {"tick": 210, "at": [380, 202.3]},
-    {"tick": 240, "at": [600, 190]},
-    {"tick": 270, "at": [410, 150.3]},
-    {"tick": 300, "at": [644.4, 2]},
-    {"tick": 330, "at": [593.2, 185.7]}
+    {"tick": 29, "at": [300, 160]},
+    {"tick": 59, "at": [73, 202.3]},
+    {"tick": 89, "at": [380, 205]},
+    {"tick": 119, "at": [300, 202.3]},
+    {"tick": 149, "at": [459.8, 36.7]},
+    {"tick": 179, "at": [410, 150]},
+    {"tick": 209, "at": [380, 202.3]},
+    {"tick": 239, "at": [600, 190]},
+    {"tick": 269, "at": [410, 150.3]},
+    {"tick": 299, "at": [644.4, 2]},
+    {"tick": 329, "at": [593.2, 185.7]}
   ]
 }

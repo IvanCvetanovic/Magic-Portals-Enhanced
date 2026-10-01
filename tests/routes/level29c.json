@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-30 (R1 fix 1): knight B carries the key and stands at wayB1 inside antiportal_ent_2005 (scale 2,",
     "64 px at 32 x scale); every portal here is 93 px or more from the ring's centre. A shot at the unlit",
@@ -26,12 +27,12 @@
     {"walk": "left", "from": 1516, "to": 1800}
   ],
   "taps": [
-    {"tick": 30, "at": [274, 50]},
-    {"tick": 775, "at": [290, 100]},
-    {"tick": 800, "at": [268.7, 202.3]},
-    {"tick": 1185, "at": [530, 50]},
-    {"tick": 1215, "at": [572.4, 202.3]},
-    {"tick": 1488, "at": [255, 70]},
-    {"tick": 1515, "at": [266.6, 202.3]}
+    {"tick": 29, "at": [274, 50]},
+    {"tick": 774, "at": [290, 100]},
+    {"tick": 799, "at": [268.7, 202.3]},
+    {"tick": 1184, "at": [530, 50]},
+    {"tick": 1214, "at": [572.4, 202.3]},
+    {"tick": 1487, "at": [255, 70]},
+    {"tick": 1514, "at": [266.6, 202.3]}
   ]
 }

@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-06 (planning step 135, G6): the door's pocket is sealed by crate_no_emissive_796 (burnable,",
     "teleportable 0) on block00_no_emissive_ent_823, and the level's one carranca fires along y 202",
@@ -17,9 +18,9 @@
     {"walk": "right", "from": 232, "to": 262}
   ],
   "taps": [
-    {"tick": 30, "at": [215, 32]},
-    {"tick": 305, "at": [300, 202]},
-    {"tick": 515, "at": [380, 30]},
-    {"tick": 545, "at": [168, 136]}
+    {"tick": 29, "at": [215, 32]},
+    {"tick": 304, "at": [300, 202]},
+    {"tick": 514, "at": [380, 30]},
+    {"tick": 544, "at": [168, 136]}
   ]
 }

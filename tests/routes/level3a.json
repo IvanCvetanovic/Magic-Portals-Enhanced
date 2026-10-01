@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-04. Over the block by portal (taps 1-2) into the niche under carranca_677; then",
     "crate_no_emissive_ent_804, the crate plugging the hole at the right end, sent to the block top by a",
@@ -16,13 +17,13 @@
     {"walk": "right", "from": 470, "to": 600}
   ],
   "taps": [
-    {"tick": 55, "at": [220, 20]},
-    {"tick": 85, "at": [150, 92]},
-    {"tick": 150, "at": [230, 10]},
-    {"tick": 180, "at": [440, 98]},
-    {"tick": 215, "at": [470, 108]},
-    {"tick": 245, "at": [288, 92]},
-    {"tick": 280, "at": [400, 205]},
-    {"tick": 310, "at": [476, 140]}
+    {"tick": 54, "at": [220, 20]},
+    {"tick": 84, "at": [150, 92]},
+    {"tick": 149, "at": [230, 10]},
+    {"tick": 179, "at": [440, 98]},
+    {"tick": 214, "at": [470, 108]},
+    {"tick": 244, "at": [288, 92]},
+    {"tick": 279, "at": [400, 205]},
+    {"tick": 309, "at": [476, 140]}
   ]
 }

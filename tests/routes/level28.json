@@ -1,28 +1,30 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-29 (step 127, R1: antiportal_791's 32 x 4 = 128 px holds the lift's column and everything",
-    "left of door_lift_774). Right to x 450; a portal over button_772 at (258, 190) and one beside",
-    "crate_small_ent_792's right face at (455, 78): the crate comes down onto the button and the door",
-    "lift rises. A portal at (200, 165), over the crate, and one on the player; left through the",
-    "raised door lift and against lift_ent_796 as it comes down, onto it at its bottom and up. From the",
-    "lift a portal at (350, 150) and one beside the crate at (232, 209): the crate leaves the button",
-    "and the door lift, which blocks the upper floor while it is raised, comes down. Down and up with",
-    "the lift once more (the port runs it on its own: G2, not built), and at its top right onto the",
-    "upper floor and into the door. Won on tick 487 (step 127)."
+    "1-29 (step 127, R1: antiportal_791's 32 x 4 = 128 px holds the lift's column and everything left of",
+    "door_lift_774). Re-authored in step 140 (G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a second, and the touch fires no shot (\"shot\": false), where step 127's route rode lift_ent_796 down and",
+    "up on the port's own clock. Right to x 450; a portal over button_772 at (258, 190) and one beside",
+    "crate_small_ent_792's right face at (455, 78): the crate comes down onto the button and the door lift rises.",
+    "A portal at (200, 165), over the crate, and one on the player; left through the raised door lift onto the",
+    "lift, which waits at its foot. From there a portal at (350, 150) and one beside the crate at (232, 209): the",
+    "crate leaves the button and the door lift, which blocks the upper floor while it is raised, comes down. A",
+    "touch sends the lift up (400), and at its top right onto the upper floor and into the door. Won on tick 589",
+    "(step 140; 487 on step 127's self-running lift)."
   ],
   "level": "level28",
-  "win_by": 550,
+  "win_by": 649,
   "holds": [
     {"walk": "right", "from": 1, "to": 40},
     {"walk": "left", "from": 222, "to": 265},
-    {"walk": "right", "from": 445, "to": 550}
+    {"walk": "right", "from": 540, "to": 649}
   ],
   "taps": [
-    {"tick": 60, "at": [258, 190]},
-    {"tick": 90, "at": [455, 78]},
-    {"tick": 120, "at": [200, 165]},
-    {"tick": 150, "at": [450.7, 202.3]},
-    {"tick": 268, "at": [350, 150]},
-    {"tick": 296, "at": [232, 209]}
+    {"tick": 59, "at": [258, 190]},
+    {"tick": 89, "at": [455, 78]},
+    {"tick": 119, "at": [200, 165]},
+    {"tick": 149, "at": [450.7, 202.3]},
+    {"tick": 279, "at": [350, 150]},
+    {"tick": 369, "at": [232, 209]},
+    {"tick": 400, "at": [96, 240], "shot": false}
   ]
 }

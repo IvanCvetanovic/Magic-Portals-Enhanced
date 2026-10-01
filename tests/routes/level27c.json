@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-28 as the original plays it (planning step 134): the flame burns the knight and the player",
     "carries its key. Off the spawn's left end (1-32) and a few steps right; a portal at the ramp's",
@@ -19,11 +20,11 @@
     {"walk": "right", "from": 650, "to": 920}
   ],
   "taps": [
-    {"tick": 50, "at": [270, 200]},
-    {"tick": 76, "at": [54.9, 202.3]},
-    {"tick": 300, "at": [220, 70]},
-    {"tick": 330, "at": [90, 206]},
-    {"tick": 610, "at": [222, 40]},
-    {"tick": 640, "at": [258.5, 202.3]}
+    {"tick": 49, "at": [270, 200]},
+    {"tick": 75, "at": [54.9, 202.3]},
+    {"tick": 299, "at": [220, 70]},
+    {"tick": 329, "at": [90, 206]},
+    {"tick": 609, "at": [222, 40]},
+    {"tick": 639, "at": [258.5, 202.3]}
   ]
 }

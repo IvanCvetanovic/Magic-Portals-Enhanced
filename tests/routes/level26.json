@@ -1,24 +1,26 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-27 (step 127, R1: antiportal_1194's 32 x 4.1 = 131 px holds the door's ledge). Right onto",
-    "lift_ent_1122, down with it; at its bottom a portal on the floor at (250, 205), past the hanging",
-    "wall, and one on the player as the lift rises. A portal over button_1044 at (32, 170) and one",
-    "beside crate_ent_1130's left face at (287, 196): the crate goes through and lands on the button,",
-    "and door_lift_1043 rises. Right through the door to x 426; then right again as lift_1186 comes",
-    "down (the port runs both lifts on their own: G2, not built), onto it at its bottom, up with it",
-    "against the ledge's face, and onto the ledge into the door. Won on tick 549 (step 127)."
+    "1-27 (step 127, R1: antiportal_1194's 32 x 4.1 = 131 px holds the door's ledge). Re-authored in step 140 (G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a second, and the touch fires no shot (\"shot\": false), where step",
+    "127's route rode both lifts as the port ran them on their own. Right onto lift_ent_1122, at rest at the top;",
+    "a touch on it (45) sends it down, and at its bottom right under the hanging wall to x 215. A portal over",
+    "button_1044 at (32, 170) and one beside crate_ent_1130's left face at (287, 196): the crate goes through and",
+    "lands on the button, and door_lift_1043 rises. Right through the door onto lift_1186, at rest at its foot; a",
+    "touch (520) sends it up against the ledge's face, and right onto the ledge into the door. Won on tick 660",
+    "(step 140; 549 on step 127's self-running lifts)."
   ],
   "level": "level26",
-  "win_by": 610,
+  "win_by": 720,
   "holds": [
     {"walk": "right", "from": 1, "to": 25},
-    {"walk": "right", "from": 210, "to": 275},
-    {"walk": "right", "from": 440, "to": 610}
+    {"walk": "right", "from": 215, "to": 260},
+    {"walk": "right", "from": 380, "to": 503},
+    {"walk": "right", "from": 625, "to": 720}
   ],
   "taps": [
-    {"tick": 78, "at": [250, 205]},
-    {"tick": 104, "at": [99.8, 161]},
-    {"tick": 165, "at": [32, 170]},
-    {"tick": 190, "at": [287, 196]}
+    {"tick": 45, "at": [110, 88], "shot": false},
+    {"tick": 280, "at": [32, 170]},
+    {"tick": 345, "at": [287, 196]},
+    {"tick": 520, "at": [544, 240], "shot": false}
   ]
 }

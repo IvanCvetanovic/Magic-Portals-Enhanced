@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-16 (planning step 134, G8): no straight fireball from fire_agent_ent_1190 reaches the pit's",
     "barrels where they settle (barrel_bomb_ent_1195 at y 216.4: out/parity/program/G8/burnscan.py), so",
@@ -16,12 +17,12 @@
     {"walk": "left", "from": 212, "to": 320}
   ],
   "taps": [
-    {"tick": 24, "at": [176, 145]},
-    {"tick": 48, "at": [288, 120]},
-    {"tick": 72, "at": [40, 75]},
-    {"tick": 104, "at": [351, 90.3]},
-    {"tick": 130, "at": [239.36, 158.34]},
-    {"tick": 180, "at": [180, 168]},
-    {"tick": 205, "at": [40, 142.3]}
+    {"tick": 23, "at": [176, 145]},
+    {"tick": 47, "at": [288, 120]},
+    {"tick": 71, "at": [40, 75]},
+    {"tick": 103, "at": [351, 90.3]},
+    {"tick": 129, "at": [239.36, 158.34]},
+    {"tick": 179, "at": [180, 168]},
+    {"tick": 204, "at": [40, 142.3]}
   ]
 }

@@ -1309,6 +1309,74 @@ void ThePortalCooldownsHoldATapOff() {
     CHECK_MSG(!play.portals.Shoot(play.registry, aim), "a second tap straight after the first is refused");
 }
 
+// A SHOT LEAVES ON A TOUCH'S RELEASE, and only one that strayed no more than
+// scale(18) from where it went down (placement.json `release`, the remaster record's
+// step 137): hasPortalRequestInput asks for GSKS_RELEASE and maxMoveLength <=
+// scale(18), and the shot is aimed at getReleasePos, the last point the touch was
+// HELD at. The move is the farthest the touch has been from where it went down, not
+// the length of its path, and the tick it comes up adds nothing to it.
+void ATouchFiresOnItsReleaseWithinEighteenUnits() {
+    CHECK_NEAR(static_cast<float>(g_portalRules.releaseMaxMoveUnits), 18.0f);
+    using Portals::TouchRelease;
+    using Portals::TouchTrack;
+    using Portals::TrackTouch;
+    const glm::dvec2 down(100.0, 80.0);
+    const auto px = [](const glm::dvec2& view) { return view * 2.8125; }; // 1280x720's pixels a unit
+    const auto fires = [](const TouchRelease& up) { return Portals::RequestsPortal(g_portalRules, up); };
+
+    // Down, held two ticks where it went down, up: nothing until the up, which fires
+    // at where it was held.
+    {
+        TouchTrack track;
+        CHECK_MSG(!TrackTouch(track, true, true, false, true, down, px(down)).released && track.down,
+                  "the tick it goes down fires nothing");
+        CHECK(!TrackTouch(track, false, true, false, true, down, px(down)).released);
+        const TouchRelease up = TrackTouch(track, false, false, true, true, down + glm::dvec2(40.0, 0.0),
+                                           px(down + glm::dvec2(40.0, 0.0)));
+        CHECK_MSG(up.released && fires(up) && up.maxMoveUnits == 0.0 && up.atView == down && up.atPx == px(down),
+                  "it fires on the tick it comes up, at the last point it was held, whatever the up says");
+        CHECK_MSG(!track.down, "and the touch is over");
+    }
+    // Strayed exactly 18 (the bound is inclusive: TNP), and just over it.
+    for (const double stray : {18.0, 18.5}) {
+        TouchTrack track;
+        (void)TrackTouch(track, true, true, false, true, down, px(down));
+        const glm::dvec2 far = down + glm::dvec2(0.0, stray);
+        (void)TrackTouch(track, false, true, false, true, far, px(far));
+        // Back where it went down before it comes up: the farthest counts, not the last.
+        (void)TrackTouch(track, false, true, false, true, down, px(down));
+        const TouchRelease up = TrackTouch(track, false, false, true, true, down, px(down));
+        CHECK_MSG(up.released && std::fabs(up.maxMoveUnits - stray) < 1e-12 && fires(up) == (stray <= 18.0),
+                  "a touch that strayed " + std::to_string(stray) + " units " +
+                      (stray <= 18.0 ? "fires" : "fires nothing") + " when it comes up, back where it went down");
+    }
+    // A press and a release on one tick: down and up there, no move.
+    {
+        TouchTrack track;
+        const TouchRelease up = TrackTouch(track, true, false, true, true, down, px(down));
+        CHECK_MSG(up.released && fires(up) && up.atView == down, "down and up on one tick fires there");
+    }
+    // Up with no release the record saw (a tick nobody tracked took it), and a
+    // pointer that left the game: each forgets the touch, which then fires nothing.
+    {
+        TouchTrack track;
+        (void)TrackTouch(track, true, true, false, true, down, px(down));
+        (void)TrackTouch(track, false, false, false, true, down, px(down));
+        CHECK_MSG(!track.down && !TrackTouch(track, false, false, true, true, down, px(down)).released,
+                  "a touch seen up without its release is over, and a later release fires nothing");
+        (void)TrackTouch(track, true, true, false, true, down, px(down));
+        (void)TrackTouch(track, false, false, false, false, down, px(down));
+        CHECK_MSG(!track.down && !TrackTouch(track, false, false, true, true, down, px(down)).released,
+                  "and so is one that left the game");
+    }
+    // A release this record never saw go down (it went down under the pause).
+    {
+        TouchTrack track;
+        CHECK_MSG(!TrackTouch(track, false, false, true, true, down, px(down)).released,
+                  "a release whose touch went down elsewhere fires nothing");
+    }
+}
+
 void ThePlayerGoesThroughAndThePairIsSpent() {
     // A portal on the floor ahead of the spawn at (230, 208), and its partner in
     // the air at (300, 120). The player walks right into the first and comes out
@@ -1603,6 +1671,7 @@ void runTests() {
     ANoPortalZoneRefusesATap();
     ThePlacementRadiiAreDecodedAndDistinct();
     ThePortalCooldownsHoldATapOff();
+    ATouchFiresOnItsReleaseWithinEighteenUnits();
     ThePlayerGoesThroughAndThePairIsSpent();
     OnlyTeleportablesTravel();
     ACratePortalledOntoAButtonOpensItsDoor();

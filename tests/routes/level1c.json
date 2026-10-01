@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-02, weightless (step 127, R1: antiportal_2074's 32 x 2 = 64 px lies far from the door). A portal",
     "in the door at (344, 120); its recoil pushes the player left at 70 u/s, and one on the player where",
@@ -9,7 +10,7 @@
   "holds": [
   ],
   "taps": [
-    {"tick": 30, "at": [344, 120]},
-    {"tick": 55, "at": [109.1, 148.7]}
+    {"tick": 29, "at": [344, 120]},
+    {"tick": 54, "at": [109.1, 148.7]}
   ]
 }

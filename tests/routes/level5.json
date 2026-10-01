@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-06 (planning step 136): the door's side is walled off by wall04_ent_766 and wall04_ent_765 but",
     "for the 24 px slot between them, which death_area_ent_800 fills: its whole 60 x 16 octagon kills",
@@ -20,11 +21,11 @@
     {"walk": "right", "from": 432, "to": 520}
   ],
   "taps": [
-    {"tick": 30, "at": [160, 126]},
-    {"tick": 60, "at": [34, 74.3]},
-    {"tick": 290, "at": [416, 90]},
-    {"tick": 316, "at": [333.5, 202.3]},
-    {"tick": 412, "at": [640, 108]},
-    {"tick": 437, "at": [422, 84.6]}
+    {"tick": 29, "at": [160, 126]},
+    {"tick": 59, "at": [34, 74.3]},
+    {"tick": 289, "at": [416, 90]},
+    {"tick": 315, "at": [333.5, 202.3]},
+    {"tick": 411, "at": [640, 108]},
+    {"tick": 436, "at": [422, 84.6]}
   ]
 }

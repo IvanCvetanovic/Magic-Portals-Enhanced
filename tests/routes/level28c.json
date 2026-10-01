@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-29 (R1 fix 2): antiportal_1995 (576, 24), scale 5, refuses within 160 px at 32 x scale, which",
     "holds button_2037, door_lift_2038, the keyhole's cell and the door; the knights' corridor below (y",
@@ -17,7 +18,9 @@
     "yellow door on 1265 (1401). Won on tick 1501 (1519 before). Leans on G1 (the knights never see or",
     "shoot), the port's patrol (a knight lifted off its floor never comes within 8 px of its waypoint and",
     "walks on toward that waypoint's x), the port's traversal by body overlap (the knight walks into a",
-    "portal whose centre is at the knight's head), G10 and G4 (shot speed)."
+    "portal whose centre is at the knight's head), G10 and G4 (shot speed).",
+    "Step 137 (a shot leaves on the release): won on tick 1520; the shots up on 800 and 1128 are",
+    "aimed 0.306 and 0.773 px off their points (the camera moved while the finger was down)."
   ],
   "level": "level28c",
   "win_by": 1700,
@@ -28,10 +31,10 @@
     {"walk": "right", "from": 1435, "to": 1800}
   ],
   "taps": [
-    {"tick": 30, "at": [88, 50]},
-    {"tick": 300, "at": [400, 60]},
-    {"tick": 800, "at": [640, 205]},
-    {"tick": 1128, "at": [400, 80]},
-    {"tick": 1152, "at": [365, 202]}
+    {"tick": 29, "at": [88, 50]},
+    {"tick": 299, "at": [400, 60]},
+    {"tick": 799, "at": [640, 205]},
+    {"tick": 1127, "at": [400, 80]},
+    {"tick": 1151, "at": [365, 202]}
   ]
 }

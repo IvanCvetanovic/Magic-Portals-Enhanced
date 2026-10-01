@@ -24,7 +24,7 @@ bool IsPorted(const std::string& role) {
         kDemolisher,
         kLauncher, kProjectileBlocker, kReflector, kTurret, kFireSource, kExplosive, kHinge,
         kEnemySpawn, kWaypoint, kKey, kKeyhole, kLockedDoor, kShockField, kPickup, kTorch, kBouncer, kGravityWell,
-        kRedKeyState,
+        kRedKeyState, kHandle,
         // Nothing to play: drawn, or read by another role.
         "lift_marker", "camera_start", "scenery_hint", "scenery_fx",
     };

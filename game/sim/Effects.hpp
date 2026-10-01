@@ -312,6 +312,10 @@ struct Rules {
     // an agent: at the agent's point and scale(32), unturned (the remaster record's
     // step 126).
     Rule antiportalExplosion;
+    // ETHCallback_hand_waypoint0's smoke_vanish.ent, where 2-20's lesson hand is
+    // deleted as its handle is first held: the hand's point 32 up, on its depth,
+    // unturned (the remaster record's step 139).
+    Rule smokeVanish;
 };
 
 // False, with `error`, when the file cannot be read or any row is missing, has a

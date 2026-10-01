@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-03: its tutorial popup comes up as the level loads and a touch closes it (tick 1; the level",
     "resumes on tick 61). Right over the mound to the foot of the door's block, where the camera shows",
@@ -13,7 +14,7 @@
   ],
   "taps": [
     {"tick": 1, "at": [102, 206], "shot": false},
-    {"tick": 240, "at": [640, 170]},
-    {"tick": 270, "at": [566, 205]}
+    {"tick": 239, "at": [640, 170]},
+    {"tick": 269, "at": [566, 205]}
   ]
 }

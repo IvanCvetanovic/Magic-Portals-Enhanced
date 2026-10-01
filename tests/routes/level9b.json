@@ -1,0 +1,35 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-10, added in step 140 (G2): lift_ent_1318 waits at its foot until a touch inside it sends it",
+    "(ETHCallback_lift), at 60 units a second, and a touch on it fires no shot (\"shot\": false). Four portals,",
+    "the level's golden score. Left off the start platform, down the ramp and onto the lift; a touch sends it up",
+    "(172). From its top a portal at (320, 60), over the pillar, and one beside rolling_stone_1198 at (65, 96):",
+    "the stone comes out over breakable_wall_1316 and breaks it (389) while knight B (minion_spawn_913), who",
+    "took key_ent_1271 on tick 125, walks along it, and the knight falls with the key to the ramp, where it",
+    "holds at its wayB1. A touch brings the lift down (400); a portal at (32, 265) over keyhole_ent_1196 and one",
+    "beside the knight at (262, 335): the knight goes through and lands by the keyhole with the key, which opens",
+    "it, and door_locked_ent_1195 goes. A touch sends the lift up (630) under the knight's way off the single",
+    "block, and it walks off into the open column and falls to enemy_killer_1140 (732). A touch brings the lift",
+    "down (790), and right down the ramp, under where the door was, into the door. Won on tick 1085. Leans on G1",
+    "(the knight never sees or shoots), on a knight carrying a key to its keyhole (keys.json), and on a knight",
+    "walking off a floor's end into a pit, as the original's does (ETHCallback_minion walks toward its",
+    "waypoint's x with no floor probe: its one ray, #943, is the sight line)."
+  ],
+  "level": "level9b",
+  "win_by": 1145,
+  "holds": [
+    {"walk": "left", "from": 30, "to": 168},
+    {"walk": "right", "from": 955, "to": 1145}
+  ],
+  "taps": [
+    {"tick": 172, "at": [100, 318], "shot": false},
+    {"tick": 335, "at": [320, 60]},
+    {"tick": 365, "at": [65, 96]},
+    {"tick": 400, "at": [100, 160], "shot": false},
+    {"tick": 585, "at": [32, 265]},
+    {"tick": 615, "at": [262, 335]},
+    {"tick": 630, "at": [100, 318], "shot": false},
+    {"tick": 790, "at": [100, 160], "shot": false}
+  ]
+}

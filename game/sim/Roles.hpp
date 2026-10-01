@@ -102,6 +102,12 @@ inline constexpr const char* kGravityWell = "gravity_well";
 // key is taken fades with the level's ambient light and then breaks the wall to
 // the rocket. The role table filed it as scenery_fx, "a HUD-ish indicator".
 inline constexpr const char* kRedKeyState = "red_key_state";
+// The draggable handle, arrows.ent (Handle.hpp): a touch drags it, and the fire
+// agent or reflector that names it in `follow` eases after it. The role table
+// filed it as scenery_hint, "purely cosmetic", until the remaster record's step
+// 139. Found by its entity name, as the original's callback is, rather than by
+// this role, which is named here so a level carrying one stops counting as inert.
+inline constexpr const char* kHandle = "handle";
 
 // Roles whose body moves and has to carry what stands on it, so the builder makes
 // them kinematic rather than static: the Godot project's MOVING_ROLES

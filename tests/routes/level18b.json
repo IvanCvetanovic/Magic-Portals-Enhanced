@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-19 (step 127, R1: the key's pocket behind spinning_platform_1554 lies inside antiportal_1555's 32",
     "x 3.4 = 109 px, so no portal opens on its floor). Left down to the floor; a portal on the anchor's",
@@ -18,9 +19,9 @@
     {"walk": "right", "from": 215, "to": 3270}
   ],
   "taps": [
-    {"tick": 100, "at": [240, 68]},
-    {"tick": 125, "at": [374.3, 202.3]},
-    {"tick": 160, "at": [140, 22]},
-    {"tick": 185, "at": [224, 74.3]}
+    {"tick": 99, "at": [240, 68]},
+    {"tick": 124, "at": [374.3, 202.3]},
+    {"tick": 159, "at": [140, 22]},
+    {"tick": 184, "at": [224, 74.3]}
   ]
 }

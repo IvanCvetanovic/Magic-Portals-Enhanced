@@ -129,6 +129,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Zerog::LoadRules(portDataDirectory + "/zerog.json", read.zerog, error)) return false;
     if (!Bounce::LoadRules(portDataDirectory + "/bounce.json", read.bounce, error)) return false;
     if (!GravityWell::LoadRules(portDataDirectory + "/gravitywell.json", read.wells, error)) return false;
+    if (!Handle::LoadRules(portDataDirectory + "/handle.json", read.handle, error)) return false;
     // And what Enhanced's role table calls a hazard but the original does not.
     if (!Hazards::LoadRules(portDataDirectory + "/hazards.json", read.hazards, error)) return false;
     // The entities a boss adds that no level places (sim/Restock): read beside the
@@ -248,6 +249,17 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     if (!Portals::Find(data.scene, data.roles, out.built, registry, out.player, data.portals, data.movers, data.shot,
                        out.portals, error)) {
         return false;
+    }
+    // The handles and their followers, each follower bound to the fire agent or the
+    // reflector its node is - found above, by node - which it moves.
+    if (!Handle::Find(data.scene, data.handle, out.handles, error)) return false;
+    for (Handle::Follower& follower : out.handles.followers) {
+        for (std::size_t i = 0; i < out.fire.agents.size(); ++i) {
+            if (out.fire.agents[i].name == follower.node) follower.fireAgent = static_cast<int>(i);
+        }
+        for (std::size_t i = 0; i < out.portals.reflectors.size(); ++i) {
+            if (out.portals.reflectors[i].name == follower.node) follower.reflector = static_cast<int>(i);
+        }
     }
 
     // And what a tap does to the player who fired it, which in these levels is
@@ -404,6 +416,31 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
                 level.fire.minionsAlight.end()) {
                 level.fire.minionsAlight.push_back(minion.body);
             }
+        }
+    }
+    // The flames a portal shot meets (Portals::State::flames, step 134) stand where
+    // this tick's burns found their agents. ETHCallback_fire_agent runs every test of
+    // its burn loop - burnProjectile's (#253-265) among them - before its doFollow
+    // (#280), so a shot flying in Portals::Tick below is burned by a flame where the
+    // LAST tick's follow left it, as the crates and the minions above were; the
+    // follow below moves the agent for the next tick. Fire never erases an agent and
+    // Game::Start made one flame per agent in Fire's order (wave 2's merge, step 144).
+    for (std::size_t i = 0; i < level.portals.flames.size() && i < level.fire.agents.size(); ++i) {
+        if (level.portals.flames[i].name == level.fire.agents[i].name) {
+            level.portals.flames[i].centrePx = level.fire.agents[i].atPx;
+        }
+    }
+    // doFollow: ETHCallback_fire_agent calls it after its burn loop, so a flame burns
+    // where the last tick left it and then moves; ETHCallback_reflect_agent calls it
+    // first, so a reflector moves before it turns a shot (Portals::Tick, below).
+    // followUp's dontPause counts the frame's time (handle.json follow).
+    level.handles.Follow(static_cast<double>(dt) * 1000.0);
+    for (const Handle::Follower& follower : level.handles.followers) {
+        if (follower.fireAgent >= 0 && follower.fireAgent < static_cast<int>(level.fire.agents.size())) {
+            level.fire.agents[static_cast<std::size_t>(follower.fireAgent)].atPx = follower.atPx;
+        }
+        if (follower.reflector >= 0 && follower.reflector < static_cast<int>(level.portals.reflectors.size())) {
+            level.portals.reflectors[static_cast<std::size_t>(follower.reflector)].centrePx = follower.atPx;
         }
     }
     // What each blast grabbed with a clear line has its `destroy` set (explode,

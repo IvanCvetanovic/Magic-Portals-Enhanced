@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-09 (step 127, R1: the key lies at antiportal_1504's centre, 64 px of field round it, so no portal",
     "opens within reach of it). A portal at (420, 140) past the spawn block's corner and one on the",
@@ -18,15 +19,15 @@
     {"walk": "right", "from": 600, "to": 800}
   ],
   "taps": [
-    {"tick": 30, "at": [420, 140]},
-    {"tick": 60, "at": [617, 42.3]},
-    {"tick": 90, "at": [245, 100]},
-    {"tick": 120, "at": [420, 202.3]},
-    {"tick": 150, "at": [20, 100]},
-    {"tick": 175, "at": [318, 222]},
-    {"tick": 405, "at": [400, 200]},
-    {"tick": 445, "at": [54.0, 202.3]},
-    {"tick": 475, "at": [580, 200]},
-    {"tick": 500, "at": [400, 202.3]}
+    {"tick": 29, "at": [420, 140]},
+    {"tick": 59, "at": [617, 42.3]},
+    {"tick": 89, "at": [245, 100]},
+    {"tick": 119, "at": [420, 202.3]},
+    {"tick": 149, "at": [20, 100]},
+    {"tick": 174, "at": [318, 222]},
+    {"tick": 404, "at": [400, 200]},
+    {"tick": 444, "at": [54.0, 202.3]},
+    {"tick": 474, "at": [580, 200]},
+    {"tick": 499, "at": [400, 202.3]}
   ]
 }

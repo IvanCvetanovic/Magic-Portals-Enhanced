@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-03, the fire sent back (re-authored in planning step 135, G6): the door (door_lift_758, a 16 s",
     "stride) rises from the first press of button_760 (326) and, since step 133, all the way whatever",
@@ -20,7 +21,7 @@
     {"walk": "left", "from": 860, "to": 970}
   ],
   "taps": [
-    {"tick": 345, "at": [330, 192]},
-    {"tick": 372, "at": [270, 192]}
+    {"tick": 344, "at": [330, 192]},
+    {"tick": 371, "at": [270, 192]}
   ]
 }

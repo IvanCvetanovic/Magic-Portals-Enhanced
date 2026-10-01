@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-11, re-routed for antiportal_709's 32 x 6 = 192 px (step 127, R1), which holds the whole spawn",
     "island (step 126's self-tap there is refused). Right to the island's edge; a portal on the ledge at",
@@ -20,15 +21,15 @@
     {"walk": "left", "from": 420, "to": 490}
   ],
   "taps": [
-    {"tick": 30, "at": [335, 195]},
-    {"tick": 60, "at": [250, 250]},
-    {"tick": 180, "at": [400, 44.5]},
-    {"tick": 210, "at": [384, 70]},
-    {"tick": 240, "at": [306.9, 202.3]},
-    {"tick": 270, "at": [544, 110]},
-    {"tick": 300, "at": [384, 106.3]},
-    {"tick": 330, "at": [674, 60]},
-    {"tick": 360, "at": [740, 108]},
-    {"tick": 390, "at": [544, 106.3]}
+    {"tick": 29, "at": [335, 195]},
+    {"tick": 59, "at": [250, 250]},
+    {"tick": 179, "at": [400, 44.5]},
+    {"tick": 209, "at": [384, 70]},
+    {"tick": 239, "at": [306.9, 202.3]},
+    {"tick": 269, "at": [544, 110]},
+    {"tick": 299, "at": [384, 106.3]},
+    {"tick": 329, "at": [674, 60]},
+    {"tick": 359, "at": [740, 108]},
+    {"tick": 389, "at": [544, 106.3]}
   ]
 }

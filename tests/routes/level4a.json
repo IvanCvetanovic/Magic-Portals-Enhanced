@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-05. crate_no_emissive_ent_912, the crate sealing the ledge, sent away: a portal in the air to",
     "the left, then one opened 10 px from the crate's face, which carries it through (it falls into",
@@ -12,9 +13,9 @@
     {"walk": "right", "from": 125, "to": 240}
   ],
   "taps": [
-    {"tick": 30, "at": [100, 70]},
-    {"tick": 60, "at": [244, 140]},
-    {"tick": 95, "at": [260, 138]},
-    {"tick": 120, "at": [214, 244]}
+    {"tick": 29, "at": [100, 70]},
+    {"tick": 59, "at": [244, 140]},
+    {"tick": 94, "at": [260, 138]},
+    {"tick": 119, "at": [214, 244]}
   ]
 }

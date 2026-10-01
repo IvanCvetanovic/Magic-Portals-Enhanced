@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-13 (planning step 115). Right off the ledge to the floor before the first fireball (fired",
     "on tick 240); a portal ahead on the floor (tap 1) and one over single_block_plat 1059",
@@ -16,9 +17,9 @@
     {"walk": "left", "from": 380, "to": 560}
   ],
   "taps": [
-    {"tick": 80, "at": [256, 206]},
-    {"tick": 105, "at": [345, 110]},
-    {"tick": 175, "at": [180, 200]},
-    {"tick": 200, "at": [402, 110]}
+    {"tick": 79, "at": [256, 206]},
+    {"tick": 104, "at": [345, 110]},
+    {"tick": 174, "at": [180, 200]},
+    {"tick": 199, "at": [402, 110]}
   ]
 }

@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-31, re-authored in planning step 134 (G8): step 127's way shot anti_portal_agent_ent_990 from the",
     "end of double_block_961 through fire_agent_963's flame (13.8 px from it), and the flame now burns",
@@ -20,10 +21,10 @@
     {"walk": "left", "from": 70, "to": 198}
   ],
   "taps": [
-    {"tick": 30, "at": [445, 200]},
-    {"tick": 100, "at": [598, 276]},
-    {"tick": 185, "at": [294, 112]},
-    {"tick": 212, "at": [60, 90]},
-    {"tick": 240, "at": [244.1, 236.5]}
+    {"tick": 29, "at": [445, 200]},
+    {"tick": 99, "at": [598, 276]},
+    {"tick": 184, "at": [294, 112]},
+    {"tick": 211, "at": [60, 90]},
+    {"tick": 239, "at": [244.1, 236.5]}
   ]
 }

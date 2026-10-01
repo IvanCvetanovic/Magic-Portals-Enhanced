@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-04: from the ledge, a portal over the right-hand platform (aimed over the block at x 272-336",
     "and clear of the right walk pad's corner), one just ahead on the ledge; right into it, out over",
@@ -13,7 +14,7 @@
     {"walk": "right", "from": 200, "to": 300}
   ],
   "taps": [
-    {"tick": 30, "at": [400, 175]},
-    {"tick": 75, "at": [105, 80]}
+    {"tick": 29, "at": [400, 175]},
+    {"tick": 74, "at": [105, 80]}
   ]
 }

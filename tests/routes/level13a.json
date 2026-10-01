@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-14 (planning step 115). crate_small_no_emissive_ent_1152 sent through a pair onto",
     "button_1112 (taps 1-2), which raises door_lift_1111 and lets the fire through along y 89.",
@@ -14,9 +15,9 @@
     {"walk": "right", "from": 450, "to": 580}
   ],
   "taps": [
-    {"tick": 30, "at": [20, 160]},
-    {"tick": 55, "at": [72, 95]},
-    {"tick": 380, "at": [262, 100]},
-    {"tick": 420, "at": [118, 209]}
+    {"tick": 29, "at": [20, 160]},
+    {"tick": 54, "at": [72, 95]},
+    {"tick": 379, "at": [262, 100]},
+    {"tick": 419, "at": [118, 209]}
   ]
 }

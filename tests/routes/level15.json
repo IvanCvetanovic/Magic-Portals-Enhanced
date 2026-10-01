@@ -1,4 +1,5 @@
 {
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-16: from the spawn, never moving until the end. A portal over button_687, one in the free space",
     "just left of crate_ent_740 where it plugs the notch in the pillar: the crate is inside the second",
@@ -13,9 +14,9 @@
     {"walk": "right", "from": 175, "to": 300}
   ],
   "taps": [
-    {"tick": 30, "at": [198, 196]},
-    {"tick": 70, "at": [215, 96]},
-    {"tick": 130, "at": [310, 70]},
-    {"tick": 165, "at": [62, 205]}
+    {"tick": 29, "at": [198, 196]},
+    {"tick": 69, "at": [215, 96]},
+    {"tick": 129, "at": [310, 70]},
+    {"tick": 164, "at": [62, 205]}
   ]
 }

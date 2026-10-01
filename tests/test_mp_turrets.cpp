@@ -415,12 +415,10 @@ void ABarrelItTouchesGoesOff() {
 // geometry (lanes_r9.6.txt); a crate or a stone can have moved, and those are
 // printed. Chapter 2 and 4's 21 levels, 28 carrancas.
 //
-// 2-06 (level5a) is printed and not pinned: its first static body is the left
-// wall at x 9.5, but lift_ent_832 comes down into the lane on its own and the
-// fireball goes off on the lift at x 192.3 on tick 200. The port's lifts run
-// unasked, where the original's idles at its marker `a` until a tap sends it
-// (the backlog's G2, not this step's); with that built, 2-06's fire reaches the
-// wall again.
+// 2-06 (level5a) is pinned since planning step 140: its first static body is the
+// left wall at x 9.5. Until then the port's lift_ent_832 came down into the lane on
+// its own and the fireball went off on it at x 192.3 on tick 200; the original's
+// lift, and now the port's, waits on its marker a until a touch sends it.
 void EveryLaneEndsOnItsFirstBody() {
     struct Lane {
         const char* level;
@@ -431,7 +429,7 @@ void EveryLaneEndsOnItsFirstBody() {
         {"level0a", "carranca_right_ent_792", 278.5},  {"level1a", "carranca_795", 9.5},
         {"level1a", "carranca_796", 73.5},             {"level1a", "carranca_right_ent_799", 121.0},
         {"level2a", "carranca_ent_677", 198.5},        {"level3a", "carranca_677", 137.5},
-        {"level6a", "carranca_891", 232.5},
+        {"level5a", "carranca_ent_827", 9.5},          {"level6a", "carranca_891", 232.5},
         {"level7a", "carranca_right_821", 247.5},      {"level8a", "carranca_right_ent_1061", 153.5},
         {"level11a", "carranca_right_ent_1048", 103.5}, {"level12a", "carranca_1060", 152.5},
         {"level13a", "carranca_1143", 360.5},          {"level14a", "carranca_1071", 9.5},
@@ -520,8 +518,8 @@ void EveryLaneEndsOnItsFirstBody() {
     }
     CHECK_MSG(carrancas == 28, "the game's 28 carrancas: " + std::to_string(carrancas));
     CHECK_MSG(bornDead == 0, "no fireball goes off on the tick it was fired: " + std::to_string(bornDead));
-    CHECK_MSG(pinnedSeen == 19 && matched == 19,
-              "each of the 19 static lanes ends on its first static body: " + std::to_string(matched) + " of " +
+    CHECK_MSG(pinnedSeen == 20 && matched == 20,
+              "each of the 20 static lanes ends on its first static body: " + std::to_string(matched) + " of " +
                   std::to_string(pinnedSeen));
 }
 
