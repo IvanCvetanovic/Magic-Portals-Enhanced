@@ -125,9 +125,10 @@ are only compile definitions (`game/sim/CMakeLists.txt`).
 
 ## Environment (Ivan's machine)
 
-**Checked 2026-09-19.**
+**Checked 2026-09-19; the folder renamed 2026-10-01.**
 
-- OS: Windows 11. This repo is `C:\Users\icvet\Desktop\Magic-Portals-Remake`, with the
+- OS: Windows 11. This repo is `C:\Users\icvet\Desktop\Magic-Portals-Enhanced` (the folder was
+  `Magic-Portals-Remake` until 2026-10-01; the GitHub repository still has that name), with the
   engine checked out inside it at `engine/` (`git submodule update --init`). SE's own clone,
   `C:\Users\icvet\Desktop\Supersonic-Engine`, is where engine changes are made and pushed;
   moving `engine/` to a new engine commit is then a commit here. **There is no `D:` drive** —

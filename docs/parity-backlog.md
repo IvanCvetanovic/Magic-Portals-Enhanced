@@ -2,7 +2,7 @@
 
 State at 2026-09-30 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
 match the original, in the order it should be done. Every spec named here lives under
-`Magic-Portals-Remake/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
+`Magic-Portals-Enhanced/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
 
 How to work on any item: `docs/parity.md` (rig, captures), `tools/parity/` (emu, capture_original, capture_screens,
 markers, locate, compare, frames, port_build.bat). Port captures: Bash only, from this repository's root,
@@ -2414,7 +2414,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
 without `--saves` and wrote 4-01 and 4-19 bronze and 2-32 gold into that file; exactly those three entries were
 removed the same night (md5 `40bfef3a` since, unchanged through the merge's 128-level sweep, which ran on a scratch
 copy). The play build (`build-play\`, step 124) was in the `w1b` worktree and went with it: run
-`tools\parity\play_build.bat` in `C:\Users\icvet\Desktop\Magic-Portals-Remake` to build one from the merged code. On
+`tools\parity\play_build.bat` in `C:\Users\icvet\Desktop\Magic-Portals-Enhanced` to build one from the merged code. On
 4-01, 4-19 and 2-32 the medal is saved when the medal screen comes up, 5, 14.5 and 6.6 s after the door (step 123's
 MEDIUM row): quitting in that time loses the medal.
 

@@ -134,9 +134,9 @@ fixes all land here; an engine fix lands in the engine's repository, and `engine
 Capture it from **Bash** (PowerShell 5.1 mangles the arguments), with an absolute `--screenshot`:
 
 ```
-cd ~/Desktop/Magic-Portals-Remake
+cd ~/Desktop/Magic-Portals-Enhanced
 mkdir -p out/parity/port
-build/game/MagicPortals.exe --level level0 --window 1280x720 --fixed-step --frames 420 --screenshot ~/Desktop/Magic-Portals-Remake/out/parity/port/level0.png
+build/game/MagicPortals.exe --level level0 --window 1280x720 --fixed-step --frames 420 --screenshot ~/Desktop/Magic-Portals-Enhanced/out/parity/port/level0.png
 ```
 
 `--fixed-step` makes each frame 1/60 s of game time, and two runs of the same level and frame come out
