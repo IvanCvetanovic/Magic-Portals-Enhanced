@@ -275,6 +275,10 @@ struct State {
     int shotsMade = 0; // every shot of the level: the ids
     int hits = 0;      // times it was burned
     int summons = 0;   // minions it called
+    // SHOOTING's beats, each of which ends in playGhostItemAppearSound whatever
+    // its restocks added (ins 670-672). Counted for the layer's sound (planning
+    // step 142); nothing in the simulation reads it.
+    int beats = 0;
     std::vector<Shot> shots;
     // Where each shot that ended on this tick stood as it was destroyed - in its
     // range or on the player - cleared and refilled by every Tick, for the layer

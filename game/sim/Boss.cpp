@@ -200,6 +200,7 @@ std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity
                                           const Portals::State& portals, float dt) {
     std::vector<entt::entity> broken;
     brokenNow.clear();
+    staticHitsNow.clear();
     const bool hasPlayer = player != entt::null && registry.valid(player);
     const double reachPx = rock.radiusPx + contactMarginPx;
     for (const Rock& made : rocks) {
@@ -227,11 +228,12 @@ std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity
             Supersonic::PhysicsSystem::OverlapSphere(registry, centre, Units::ToMetres(reachPx), near, made.body,
                                                      false);
         }
-        const bool hit = std::any_of(near.begin(), near.end(), [&](entt::entity other) {
+        const auto hit = std::find_if(near.begin(), near.end(), [&](entt::entity other) {
             return !registry.all_of<RigidBodyComponent>(other) && registry.all_of<TransformComponent>(other) &&
                    Intensity(at, made.velocityPx, PxOf(registry, other), rules.pxPerUnit) > 0.0;
         });
-        if (!hit) continue;
+        if (hit == near.end()) continue;
+        staticHitsNow.push_back(StaticHit{made.body, *hit, PxOf(registry, *hit)});
         registry.destroy(made.body);
         broken.push_back(made.body);
         ++rocksBroken;
@@ -408,6 +410,15 @@ void State::flySpikes(entt::registry& registry, entt::entity player, float dt) {
     std::erase_if(spikes, [&](const Spike& spike) {
         return spike.atPx.x < lowPx.x || spike.atPx.y < lowPx.y || spike.atPx.x > highPx.x || spike.atPx.y > highPx.y;
     });
+    // The sound's count, apart from the kill below: every spike in the box, the
+    // kill's own test, on every tick - before the kill and after it.
+    if (hasPlayer) {
+        for (const Spike& spike : spikes) {
+            if (std::fabs(spike.atPx.x - playerPx.x) <= halfPx.x && std::fabs(spike.atPx.y - playerPx.y) <= halfPx.y) {
+                ++spikeHits;
+            }
+        }
+    }
     if (!hasPlayer || playerKilled) return;
     for (const Spike& spike : spikes) {
         if (std::fabs(spike.atPx.x - playerPx.x) > halfPx.x || std::fabs(spike.atPx.y - playerPx.y) > halfPx.y) continue;

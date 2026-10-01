@@ -45,6 +45,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/MainMenu.hpp"
 #include "sim/MenuState.hpp"
 #include "sim/Motion.hpp"
+#include "sim/Notificator.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Pause.hpp"
 #include "sim/Popup.hpp"
@@ -308,6 +309,11 @@ public:
     // suite, every headless render, and Linux - plays nothing and would
     // otherwise leave nothing to assert. This is what OnUpdate would play.
     std::vector<std::string> LatchedSounds() const;
+    // And the volume each was latched with, in the same order: the caller's, for
+    // a hook that takes one (a landing's hitIntensity / 18), or -1.
+    std::vector<double> LatchedVolumes() const;
+    // The crates whose begin-contacts the impact watch reads for their sound.
+    const std::vector<entt::entity>& WatchedCrates() const { return m_crates; }
 
     // Why there is no sound, when there is none.
     const std::string& SoundsError() const { return m_soundsError; }
@@ -381,6 +387,7 @@ public:
         int count = 0;       // the pool
         int active = 0;      // GetNumActiveParticles
         int drawn = 0;       // particles with a quad this frame
+        double largestDrawnSize = 0.0; // the largest of those, in units
         bool anyReleased = false;
         glm::dvec2 newestBornPx{0.0}; // the released particle with the youngest life
         double newestAgeMs = 0.0;     // and its age: 0 when it began this frame
@@ -1173,6 +1180,38 @@ public:
         return m_achievementsLoaded ? &m_achievements : nullptr;
     }
     const std::string& AchievementsError() const { return m_achievementsError; }
+
+    // ---- unlocking them (planning step 143) --------------------------------------
+    //
+    // What unlocks each (game/data/achievements.json, sim/Achievements.hpp's
+    // Rules), the set the player has unlocked, kept in Paths::saveDir beside the
+    // medals (Achievements::Store), and the original's Notificator, which shows an
+    // unlock's card - and the dashboard's "This level is locked!" - over every
+    // screen (sim/Notificator.hpp). AchievementRulesError is empty when the rules
+    // read; without them nothing unlocks.
+    const Achievements::Rules& AchievementRules() const { return m_achievementRules; }
+    const std::string& AchievementRulesError() const { return m_achievementRulesError; }
+    const Achievements::Store& AchievementStore() const { return m_achievementStore; }
+    // Every unlock this run, in order: the id, the layer's tick, and whether a card
+    // was asked for.
+    struct Unlock {
+        int id = -1;
+        int tick = 0;
+        bool notify = false;
+    };
+    const std::vector<Unlock>& Unlocks() const { return m_unlocks; }
+    const Notificator::Rules& NotificatorRules() const { return m_notificatorRules; }
+    const Notificator::Queue& Notifications() const { return m_notificator; }
+    // What the last door's tick asked of the level (checkForLevelAchievements'
+    // arguments), for the suites; empty before a door.
+    std::optional<Achievements::Play> LastDoorPlay() const { return m_lastDoorPlay; }
+    // The music's volume as the original's calls have left it for the current
+    // track: the track's own, or what a card set (setMusicVolume and
+    // setDefaultMusicVolume); a negative value for no current track.
+    double MusicVolumeNow() const;
+    // Puts the Notificator's card into the screen overlay, over everything else this
+    // frame. OnUpdate calls it once a frame, after EmitHud and EmitMenu.
+    void EmitNotifications(entt::registry& registry) const;
     // Puts this frame's menu into the screen overlay: the main menu's pictures, the
     // loading screen's logo and dots, and every menu state's black. Nothing when no
     // menu state is up. OnUpdate calls it once a frame.
@@ -1208,9 +1247,18 @@ public:
     bool SoundOn() const { return m_soundOn; }
     bool MusicOn() const { return m_musicOn; }
     // Press one of the pause's buttons, as a tap on it does. False when it led
-    // nowhere: no pause is up, the button is not there, or it is Achievements,
-    // which the port has no screen for yet.
+    // nowhere: no pause is up, the button is not there, or it is Achievements on a
+    // level no achievement names (the owner's ruling keeps the button there; the
+    // original has none to press).
     bool PressPause(entt::registry& registry, Pause::Button button);
+    // The pause's AchievementsPopup (planning step 143): up over the pause, its text,
+    // and its popup's clock. Closed by a touch down anywhere, its close button or
+    // the back key, as a help popup is; the pause is current again once it is gone.
+    bool AchievementsPopupOpen() const { return m_achievementsPopup.open; }
+    const std::string& AchievementsPopupText() const { return m_achievementsPopup.text; }
+    const Popup::Open* AchievementsPopupState() const {
+        return m_achievementsPopup.open ? &m_achievementsPopup.state : nullptr;
+    }
 
     // The level's FRAME clock: its age plus every millisecond game time stood
     // still under a pause or a popup. What the original times by frame time
@@ -1508,8 +1556,13 @@ private:
     // drawn this frame - kept and made invisible for an effect's emitter, which
     // spawns and spends particles by the dozen, destroyed for a level's, as step
     // 59 built them and the suites count them.
+    //
+    // `scaleAfterStep` is an ETHEntity::Scale another entity's callback makes this
+    // frame, after the owner's own update stepped its particles and before the
+    // draw (ETHScene.cpp:467-488): each particle is stepped on the old system, then
+    // its size and velocity scaled, then drawn; the system is scaled last.
     void stepEmitter(entt::registry& registry, Emitter& emitter, double elapsedMs, const Particles::Random& random,
-                     bool pooled);
+                     bool pooled, double scaleAfterStep = 1.0);
     // A number in [from, to) from the layer's OWN generator.
     double particleRandom(double from, double to);
     // And from the one the EFFECTS draw on (00_order K8): every non-placement
@@ -1707,8 +1760,31 @@ private:
     // select on the chapter's page, and GameFinishedPopup over it after the last
     // chapter's last level.
     void goTo(entt::registry& registry, int next);
-    // The exit reached: recorded, and on to the next level.
-    void clearLevel(entt::registry& registry);
+    // The exit reached: the medal computed and saved on the door's own tick, as
+    // checkGameEnd's writeScore does it; the screen comes later (openFinished).
+    void recordWin();
+
+    // ---- achievements (planning step 143) -----------------------------------------
+    // AchievementManager::unlock: nothing for an id the store has; else the id
+    // added and saved, and with `notify` its card onto the Notificator's stack.
+    void unlockAchievement(int id, bool notify, double delayMs, const char* why);
+    // The door's tick, after recordWin's medal: registerMedalAchievements(world,
+    // true) and checkForLevelAchievements with this play's numbers.
+    void achievementsAtDoor(const entt::registry& registry, double gameTimeMs);
+    // registerMedalAchievements(world, notify) over the saved medals.
+    void achievementsForChapter(int world, bool notify);
+    // checkPreviouslyUnlockAchievements: every chapter and level, silently.
+    void achievementsMenuPass();
+    // The red key's pick (ETHCallback_key #822-851), on the edge of its carrier.
+    void achievementsForKeys();
+    // The Notificator's update, and what a card shown or gone asks of the music.
+    void tickNotificator(double dtMs);
+    void setMusicVolume(double volume);
+    void setDefaultMusicVolume();
+    // The pause's AchievementsPopup: opened over it, ticked in its place, drawn over it.
+    bool openAchievementsPopup();
+    void achievementsPopupTick(entt::registry& registry, double dtMs);
+    void emitAchievementsPopup(Supersonic::ScreenOverlay& overlay, const glm::dvec2& view) const;
 
     float viewportAspect(const entt::registry& registry) const;
     void placeCamera(entt::registry& registry);
@@ -2149,6 +2225,9 @@ private:
         // ETHParticleManager::GetNumActiveParticles as of this frame's update: what a
         // light and a halo take the share of.
         int active = 0;
+        // How many of 4-19's landing's Scale(0.9) calls on its owner it has taken:
+        // the key's, whose ETHEntity::Scale scales its systems too (updateEmitters).
+        int scalingsTaken = 0;
         std::vector<Particles::Particle> particles;
         std::vector<entt::entity> quads; // one per particle, null while it is not drawn
         // What its quads are tagged with, so a level's particles and a spawned
@@ -2363,10 +2442,20 @@ private:
     void loadSounds();
     // Remember that `event` happened on this tick. Named for sounds.json's
     // events table; one the file leaves silent costs nothing here. A door
-    // brings its own stride: its hook's speed is 3000 / it.
-    void latch(const char* event, double doorStrideMs = 0.0);
+    // brings its own stride: its hook's speed is 3000 / it. A hook that takes
+    // its caller's volume (playFallSound's hitIntensity / 18) is given it here.
+    void latch(const std::string& event, double doorStrideMs = 0.0, double volume = -1.0);
     // What the simulation did this tick, against what it looked like last.
-    void latchSimSounds();
+    void latchSimSounds(float fixedDelta);
+    // The bosses' calls (planning step 142): the tests their callbacks make on
+    // every frame - a first sight, a clock - and the edges of their states.
+    void latchBossCues(double tickMs);
+    struct Watch;
+    // Step 142's edges between two ticks' watches, and the late bosses' among
+    // them; on a level's first tick against FreshWatch, the level as it is made.
+    void latchStepSounds(const Watch& was, const Watch& now);
+    void latchLateBossSounds(const Watch& was, const Watch& now);
+    static Watch FreshWatch(const Watch& now);
     void playLatched(entt::registry& registry, float deltaTime);
     // WantedTrack on the device: started and stopped as it changes.
     void updateMusic(entt::registry& registry);
@@ -2424,12 +2513,64 @@ private:
         // char rather than bool: std::vector<bool> is not a container of bools,
         // and these are only ever compared with the last tick's.
         std::vector<char> doorsOpening;
+        // Planning step 142's, each compared with the last tick's in the same way.
+        int blasts = 0;            // Fire: bombs gone off
+        int despawned = 0;         // Launchers: a stone on a destroyier
+        int minionsKilled = 0;     // Minions: the killer floor
+        int minionsBurned = 0;     // Minions: burned by fire
+        int doorsOpened = 0;       // Keys: keyholes gone with their doors
+        int struck = 0;            // Diamonds: shock strikes
+        int torchesLit = 0;        // Torch
+        int torchesPutOut = 0;
+        int crushed = 0;           // 2-32's claw
+        bool dragonTookOff = false;
+        int bossRocksThrown = 0;
+        int bossSpikeHits = 0;
+        bool ringKilled = false;   // Fields claimed the player...
+        bool playerDead = false;   // ...and whether the player was dead
+        std::vector<char> burnables;    // Fire's burnables: burned
+        std::vector<char> fieldsGone;   // Fields: a shock agent destroyed
+        std::vector<char> diamondsHeld; // Diamonds: carried
+        std::vector<char> diamondsGone;
+        std::vector<entt::entity> keyOwners; // Keys: each key's carrier
+        // The two late bosses, whose sounds are their states' edges.
+        bool ghostSpawned = false;
+        bool ghostGone = false;
+        Ghost::Phase ghostPhase = Ghost::Phase::Appearing;
+        int ghostBeats = 0;
+        int ghostSummons = 0;
+        int ghostHits = 0;
+        int ghostShotsFired = 0;
+        int ghostShotsEnded = 0;
+        bool darkSummoned = false;
+        bool darkAlive = false;
+        bool darkGone = false;
+        DarkDragon::Phase darkPhase = DarkDragon::Phase::Appearing;
+        int darkHits = 0;
+    };
+
+    // The sound's own state across ticks, where a count going up is not the
+    // moment (planning step 142): the original's one-shot data and clocks, each
+    // named for the datum it stands for. Reset with each level, as the watch is.
+    struct SoundCues {
+        bool beholderAppeared = false; // ETHCallback_beholder's hasAppeared
+        bool dragonAppeared = false;   // ETHCallback_dragon's appearSoundPlayed
+        bool darkMouth = false;        // ETHCallback_dark_dragon's appearSoundPlayed
+        bool lightSwitched = false;    // the light wall's soundPlayed, for this wall's fade
+        // overTimeEntityAdder's small_explosion_no_light clock on each boss's own
+        // entity: started by its first call, zeroed only by an add.
+        double beholderAdderMs = 0.0;
+        double ghostAdderMs = 0.0;
+        double darkAdderMs = 0.0;
+        // Each key's fly-in clock, as latchSimEffects runs its own (Effects::FlyIn).
+        std::vector<Effects::FlyIn> keyFlyIns;
     };
 
     // One event the tick saw, with what playing it needs to know.
     struct Latched {
         std::string event;
         double doorStrideMs = 0.0;
+        double volume = -1.0; // the caller's volume, for a hook that takes one; below 0 none
     };
 
     // ---- the drawing diagnostic ---------------------------------------------
@@ -2449,6 +2590,11 @@ private:
     std::string m_soundsError;      // why there is no sound, when there is none
     std::vector<Latched> m_latched; // this tick's events, in the order they happened
     Watch m_watch;
+    SoundCues m_soundCues;
+    // The level's crates, whose callback is crateContactCallback (sounds.json
+    // impacts.crate.entities), in the scene's order: made at the load, for the
+    // impact watch.
+    std::vector<entt::entity> m_crates;
     double m_soundClockMs = 0.0;               // the frames' own clock, for the shared timers
     std::map<std::string, double> m_timerAtMs; // when each shared timer last let one through
     // Seeded and the layer's OWN, for the reason the particles' generator is:
@@ -2461,6 +2607,10 @@ private:
     struct Music {
         std::string current;  // the last playMusic's track, "" as the AudioManager starts it
         bool stopped = false; // stopped since, until a playMusic or a resumeMusic
+        // A track's SetSampleVolume since its playMusic: what a card's
+        // setMusicVolume and setDefaultMusicVolume leave it at (planning step 143).
+        // A track not here plays at its own volume.
+        std::map<std::string, double> volumes;
     };
     Music m_music;
     // What the level looked like on the last tick, for the calls made once.
@@ -2478,6 +2628,7 @@ private:
     // alone for ever: the layer holds this and stops it itself, or menu to
     // level to menu leaves two tracks playing over each other.
     Supersonic::AudioEngine::VoiceId m_musicVoice{Supersonic::AudioEngine::kInvalidVoice};
+    float m_musicVoiceVolume{-1.0f}; // what the voice was last given
 
     // The menu. Screen::None while a level is played.
     Screen m_screen{Screen::None};
@@ -2561,6 +2712,31 @@ private:
     Achievements::Content m_achievements;
     bool m_achievementsLoaded{false};
     std::string m_achievementsError;
+    // And the port's own rules for unlocking them, the saved set, this run's
+    // unlocks, and the Notificator (planning step 143).
+    Achievements::Rules m_achievementRules;
+    bool m_achievementRulesReady{false};
+    std::string m_achievementRulesError;
+    Achievements::Store m_achievementStore;
+    std::vector<Unlock> m_unlocks;
+    std::optional<Achievements::Play> m_lastDoorPlay;
+    // Each key's carrier as the last tick left it, for the red key's pick.
+    std::vector<entt::entity> m_achievementKeyOwners;
+    Notificator::Rules m_notificatorRules;
+    bool m_notificatorReady{false};
+    Notificator::Queue m_notificator;
+    // Each card's picture, resolved once: the background and the achievements'
+    // icons, by the name the card gives them; empty for one that cannot be read.
+    std::map<std::string, std::string> m_cardImages;
+    // The pause's AchievementsPopup.
+    struct AchievementsPopupScreen {
+        bool open{false};
+        Popup::Class cls;
+        Popup::Open state;
+        std::string text;
+        bool downOnClose{false};
+    };
+    AchievementsPopupScreen m_achievementsPopup;
     // The loading screen's scene, in the level's space.
     entt::entity m_loadingBg{entt::null};
     entt::entity m_loadingCharacter{entt::null};

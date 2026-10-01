@@ -26358,6 +26358,716 @@ sound as the listing has them). R1, R2, R17 and R23 untouched; R24 and R25 as th
   (`fire_agent_ent_1139` at (210, 304)), and its new shots pass 50 units or more from it (reasoned, not measured).
   `tests/test_mp_turrets.cpp`'s pinned lane list gains 2-06's row here (19 -> 20).
 
+## Step 141 - the medal saved on the door's tick, as writeScore saves it, and 4-19's key sparkles shrunk with the key by its Scale(0.9) (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w2c`, branch `w2-c`, on step 132's `fd80e82`, engine `710bffc`), the
+program's MS**: step 123's two MEDIUM rows (`docs/parity-backlog.md` section 6, "Left by step 123"; the wave-1
+table's order (6)). Its build reads the frozen level data in `out/snap_w2`; numbered in track C's range, and the merge
+renumbers it. Changed: `game/MagicPortalsLayer.{hpp,cpp}` (`clearLevel` split: `recordWin` on the door's tick, the
+screen `openFinished` at the delay; `stepEmitter`'s `scaleAfterStep`; the landing key's emitters scaled in
+`updateEmitters`; `Emitter::scalingsTaken`; `EmitterReport::largestDrawnSize`), `game/sim/Cutscene.{hpp,cpp}`
+(`Landing::keyScalings`), `game/data/cutscenes.json` (`rocket_landing._source`: the engine decode),
+`tests/test_mp_layer.cpp` (two cases), `tests/test_mp_cutscene.cpp` (two checks). No engine change (the pin stays
+`710bffc`), no converter change, no format finding (script and engine behaviour).
+
+**GAMEPLAY: when the medal is saved, and from which tick's counts, on every level.** Nothing before the door moves;
+what changes is WHEN the medal is saved, on every level:
+on the door's tick, where the port saved it when the finished screen came up - 1400 ms later on 125 levels, 5000 /
+14500 / 6600 ms on 4-01, 4-19 and 2-32. So R, N or the window closed in that beat no longer loses the medal. The
+medal's numbers are read on that tick too (the screen shows them): a portal a shot opens after the door would no
+longer count, as the original's `writeScore` reads `getPortalCounter` on the door's frame (deviation 3). The sparkles
+are pictures.
+
+**BLOCKERS, checked first: none.** Both rows name their decode; the listing (`all_functions.txt`, md5 `48fe65ce...`)
+and the engine source (`reference/ethanon`) settle both; the three levels have routes (`tests/routes/level0c`,
+`level18c`, `level31a`), `test_mp_routes` and `reachability.py` are in the tree; every capture ran with `--saves` on
+its own copy of the seeded save (`merge_w1/sweep_saves/scores.json`, `40bfef3a`).
+
+**WHAT THE ORIGINAL DOES** (arguments pushed last-first, `00_order.md` 8.0).
+- **The medal.** `GameStateController::checkGameEnd` (bytes 125613..126638), on the frame the character reaches the
+  door: #47 `levelFinishedEffect`, #54 `Hide`, #71 `SetLinearVelocity(V2_ZERO)`, **#75 `writeScore`**. `writeScore`
+  (125310..125613): #3-38 `computeScore(getPortalCounter, goldenScore, crystalCount, m_maxCrystals)`; #40-48
+  `ScoreManager::setScore(g_currentWorld, m_levelIndex, score, false)`, which (165965..166605) #3-14 keeps it only when
+  it beats the saved one, and **#139 `enmlFile::writeToFile`: the file is written there and then**; #50-69
+  `LevelFinishedLayer(m_levelIndex, score, portalCounter, numCrystals, m_maxCrystals)` added to the layer manager, not
+  current. Only #209-259, once `gameEndElapsedTime` passes `gameWonDelay`, `setCurrentLayer('levelFinishedLayer')` and
+  `playVictorySound`. The port did the save in `clearLevel`, at the screen.
+- **The key.** `ETHCallback_rocket_landing` #185-227: every won frame `SeekEntity('key')`, `Scale(0.9)` - the
+  `void Scale(const float)` binding (`ETHScriptObjRegister.generic.cpp:399`), `ETHEntity::Scale(float)`
+  (`ETHEntity.cpp:591-599`), which multiplies the entity's scale AND calls `ScaleParticleSystem` on each of its
+  systems (`ETHSpriteEntity.cpp:512-518` -> `ETHParticleManager::ScaleParticleSystem`, `ETHParticleManager.cpp:444-451`:
+  the system's lengths, `ETHParticleSystem.cpp:27-40`, and every particle's size and direction,
+  `ETHParticleManager.h:160-164`) - then `SetAlpha(its scale)`, which is the entity's colour only
+  (`ETHEntity.cpp:505-508`; `DrawParticles` passes no entity colour, `ETHRenderEntity.cpp:390-411`). **The order in a
+  frame**: `key.ent` is `static="0"` with a callback (`ETHCallback_key`), so always active and updated, particles then
+  callback, in `UpdateAlwaysActiveEntities`; `rocket_landing` is `static="1"`, its callback in
+  `UpdateCurrentFrameEntities`, after (`ETHScene.cpp:467-488`; `ETHActiveEntityHandler.cpp:134-138` and `:157-161`,
+  each `Update` then `RunCallbackScript`); the scene draws after both. So the key's particles step at the old scale,
+  are scaled, and are drawn scaled. 4-19's `key_2701` carries two `sparkles.bmp` systems (2 particles each, size 12,
+  spread 5, growth -0.05, start points (-2, -6) and (2, 6)). The port shrank and faded the picture (step 123) and left
+  the systems whole: they glowed on where the key was.
+
+**THE CHANGE.**
+1. **The save on the door's tick.** `recordWin` (was the first half of `clearLevel`) runs in the `goals.completed`
+   branch, after the door's log line: it computes `Cleared` from that tick's counts, keeps it in `m_lastCleared` for the
+   screen, and `Record`s and `Save`s the medal (only a better one, as before). The screen comes at `m_wonDelayMs` as it
+   did (`openFinished`). One log line: `<label> medal N saved on tick T` (or `kept (no save directory)` for a suite's
+   memory-only store, or `the save's M is as good`).
+2. **The key's systems.** `Cutscene::StepLanding` counts its `Scale(0.9)` calls (`keyScalings`, one a tick with
+   `keyScale`). `updateEmitters` gives each emitter of the landing's key sprite as many factors of
+   `key_scale_per_frame` as calls it has not taken (`Emitter::scalingsTaken`), and `stepEmitter`'s new `scaleAfterStep`
+   applies them as the engine does: each particle stepped on the old system, then its size and velocity scaled, then
+   its quad placed; the system scaled last, for the next frame's resets. Nothing else is scaled; an effect's emitter
+   passes 1.
+
+**THE GATES.** Before = the tree's build as set up (`MagicPortals.exe` `23da9600`, step 132's code) and
+`base_w2C/sweep`; after = `MagicPortals.exe` **`63f17802`**, `test_mp.exe` **`3d8f7083`**. Everything under
+`out/parity/program/MS/`. Every run's own save copy was `40bfef3a` before it; the owner's
+`%APPDATA%/Magic Portals/scores.json` read `40bfef3a` before and after every run (`capture.txt`).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** (`build/build1.log`: `-j 4 --target MagicPortals test_mp`, 13 steps - `Cutscene`, the layer, `main`, `LevelVisit`, `Route` twice, `test_mp_{cutscene,routes,layer}` - 2 links) |
+| (1) The save, layer | level0 walked to its door: the file (a suite's own directory) holds the medal on the door's tick, the screen 84 ticks later; 4-19: the file holds it on the door's tick and R 60 ticks later restarts the level with it kept | saved at the screen only | **passes** (`TheMedalIsSavedOnTheDoorsTick`): 1-01 door tick 193, gold in the file on it, the screen at +84; 4-19 bronze in the file on the door's tick, kept through R at +60, no screen shown |
+| (2) The save, exe, 60-ish ticks after the door | the three routes' levels: the file holds the medal and the log says saved on the door's tick; before, the file unchanged | the file unchanged (`40bfef3a`) at f420 / f650 / f2640 on 4-01 / 4-19 / 2-32 (doors 351 / 581 / 2577) | **passes**: `4-1 medal 2 saved on tick 351` (file `b389b1c2`), `4-19 medal 1 saved on tick 581` (`8f91cf87`), `2-32 medal 3 saved on tick 2577` (`248f7cd4`) |
+| (3) The same medal and the same screen | past the medal: the same file, screen tick and final frame as before | files `b389b1c2` / `8f91cf87` / `248f7cd4` (silver, bronze, gold), `finished screen current` on 651 / 1451 / 2973 | **passes**: the same three files and ticks; final frames identical on 4-01 (`5e8e40f0`) and 2-32 (`43e44ab9`); 4-19's f1500 differs by the key's sparkles alone (gate 6). The short runs' final frames: 4-01 and 2-32 identical, 4-19's f650 the sparkles alone (1,472 px in (514-615, 440-517), luma removed 34,343, added 0) |
+| (4) Every route's medal on its door tick | `test_mp_routes` 70 won, 215 checks; each route's medal line on its door's tick | 70 won, 215 checks (step 131) | **passes**: 70 won on the same ticks (4-01 351, 4-19 581, 2-32 2577), 215 checks, 0 failures; 70 medal lines, each on the tick of its door line (12 gold, 44 silver, 14 bronze; `suites/medal_lines_check.txt`); without them the output equals step 131's (`P1/clamp/after/allmode.log`, paths normalised: 0 lines differ) |
+| (5) The key's systems, layer | each frame from the door both of `key_2701`'s systems at 12 x the key's scale; no particle drawn over 17 x it; 30 frames on, under 0.67 u; no other system on the level scaled | 12 throughout | **passes** (`TheLandingKeysSparklesShrinkWithIt`, 41 frames): 0 frames off; the largest drawn 11.25 u before the door, **0.5227 u** 30 frames after (4 drawn; 17 x 0.9^31 = 0.650) |
+| (6) The key's sparkles, exe (4-19 won by its route) | frames identical to the door; after it only the sparkles' pixels differ, the glow removed and none added once they are sub-pixel; none left under the medal | the sparkles hang on the key's trail in the doorway through the 14.5 s and under the medal: f1500 916 px, luma 8,086 | **passes** (`d419_measure.txt`, `l419_measure.txt`, `crops/`): every 12th frame to f660, 48 of 55 identical (f12-f576), 7 differ from f588 (door + 7), each box on the key's trail (x 304-628, y 436-520), luma removed 16,000-67,000, added 1,079 at f600 and 177 / 26 at f612 / f624 (INFERRED, not measured: particles renewed at the scaled start points), **0 from f636**; every 60th frame to f1500, 9 of 9 identical to f540, 16 differ from f600 to f1500, luma **added 0.0 from f660**: the difference is the before-frame's sparkles, down to f1500 under the medal (916 px removed) |
+| (7) The 128-level f420 sweep | 128 rc 0, validation silent, pngs whole and matching their log lines, no input line; **128 of 128 identical to `base_w2C/sweep`** (no level is won in 420 frames, and a death saves nothing) | `base_w2C/sweep` | **passes: 128 of 128 identical** (`compare_sweep.txt`; also 128 of 128 to `P1/clamp/after/sweep`): 128 rc 0 (one stall, 4-14, killed at 600 s and re-run once to rc 0 - its window and another tree's capture both froze at 17:08:48), validation ACTIVE in 128 logs and 0 with a message, 128 pngs whole and matching their log lines, 0 input lines, art from `out/snap_w2` in 128 of 128, the seeded save `40bfef3a` before and after; no door line and no medal line in any log; the one death, 2-32's on tick 286, as in the baseline |
+| (8) Winnability | reachability 108 / 20 / 0 and 0 differ; 4-01, 4-19 and 2-32 won by their routes | 108 / 20 / 0, 0 differ | **passes**: `reach_check.txt` 108 reachable, 20 opened, 0 differ (main's venv, as the setup ran it); the three won on 351, 581 and 2577 (gate 4) |
+
+**SUITES**, once each: `test_mp_cutscene` **153** (151 + 2), `test_mp_layer` **3,271** (3,245 + the two cases' 26),
+`test_mp_routes` **215** (70 won), 0 failures each. Not run: the other 44 suites - no unit of theirs includes a changed
+header (the build recompiled none) and none drives the layer.
+
+**SMART APP CONTROL: 0 refusals.** `MagicPortals.exe` `63f17802` and `test_mp.exe` `3d8f7083` were each allowed on
+their first launch (`MagicPortals.exe`: 7 capture runs and the sweep's 129 launches; `test_mp.exe`: 3 runs);
+`CodeIntegrity/Operational` holds 0 events from 16:25 to 17:38 (`MS/sac_check.txt`).
+
+**RECORDED DEVIATIONS.**
+1. **The scalings follow the port's tick**, as the picture's `keyScale` does (step 123): the emitters take as many as
+   the ticks since their last frame, so with more than one tick a frame they are stepped once for several scalings,
+   where the original steps once per scaling. With `--fixed-step`, and at 60 Hz, one each.
+2. **The landing's first scaling is on the door's tick**, which step 123 INFERRED (its `static="1"` callback runs after
+   the game state in the frame); the key's step-then-scale order within a frame is decoded (above).
+3. **The medal's counts are the door tick's.** A shot in flight at the door that opens a portal after it counted
+   before and does not now, as `writeScore` reads `getPortalCounter` on the door's frame (`Portals::TryPlace` counts a
+   portal when it opens). That no crystal is taken after the door is INFERRED (the player is hidden; its body stays in
+   the world and was not checked). The three levels measured give the same medal both ways (gate 3); for the other 67
+   routes the old build's medal past the door was not measured (their runs stop at the win).
+4. **The log** gains one line per won level (change 1).
+5. **Found, not changed**: `ghost_appear_effect`'s per-frame scale (step 98, `updateEffects`) is applied after its
+   quads are placed, so its drawn size runs a frame behind its scale (x 1.005); the key's is drawn scaled. Not this
+   step's.
+
+**RULINGS APPLIED.** The standing direction: the original decides - the save where `writeScore` makes it, the
+systems as `ETHEntity::Scale` scales them. R1, R2, R17, R23 not this step's; R24 and R25 untouched; camera dragging
+not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- For the close role: the backlog's "Left by step 123" row (both MEDIUM items done), and the "Before the owner's
+  testing" paragraph's last sentence (the medal saved late on 4-01, 4-19 and 2-32) is now stale.
+- **The C: drive was nearly full** while this step ran (49-348 MB free until about 17:08, shared with the other
+  tracks): after measuring, the 4-19 series were pruned to one frame a side (`d419_f660`, `l419_f1500`) and the
+  capture runs' final frames removed; every frame's md5 is kept (`series_md5.txt`, `capture.txt`), with the per-frame
+  numbers (`*_measure.json`) and the diff crops (`crops/`). No sweep png was cut short (gate 7). The before exe
+  `23da9600` was overwritten by this step's build, so the before side of gates 2, 3 and 6 rests on those logs, md5s
+  and two surviving frames; the f600-f624 "luma added" readings were not re-taken by the verifier.
+- **`MagicPortals.exe --help` is stale on the player's own save** (the verifier, LOW; not changed here because the
+  string is compiled in and changing it relinks the measured `63f17802`): `--route` says "a run that goes on past the
+  level's end records its medal", and `--hold` says nothing. Since this step ANY run that reaches a door writes the
+  medal on that tick, a `--hold` capture that walks into a door included: give `--saves <absolute dir>` to every run
+  that can reach a door. The next step that relinks `MagicPortals.exe` rewords `--route` and adds the warning to
+  `--hold` (`game/main.cpp:436-443`).
+- Noticed, not examined: a static entity's callback runs only while its bucket is mapped for drawing
+  (`ETHScene.cpp:526-572`, `AddStaticCallbackWhenEligible`); F17 shows 4-19's landing run to its end, so nothing
+  measured here changes.
+- For the merge's renumbering: "planning step 141" is written in `cutscenes.json` (`rocket_landing._source`),
+  `tests/test_mp_layer.cpp` and `tests/test_mp_cutscene.cpp`.
+
+## Step 142 - the sound pass: playExplosionSound plays one sample chosen by its argument, and every sound the original plays that the port did not, latched at its decoded event with its decoded volume, speed and timer (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w2c`, branch `w2-c`, on step 141's `6462ba9`, engine `710bffc`), the
+program's P6** (`docs/parity-backlog.md` section 6, "P6. The sound pass"; the audit's P6, `audio_inventory.md` and
+`check_audio.md`). Its build reads the frozen level data in `out/snap_w2`; numbered in track C's range, and the merge
+renumbers it. Changed: `game/data/sounds.json` (the explosion's two calls, twelve hooks' parameters, 42 new events and 4
+re-pointed, the new `impacts` and `cues` tables, every citation), `game/sim/Sounds.{hpp,cpp}` (a volume that is the
+caller's argument; the `impacts` and `cues` readers; `ImpactVolume`), `game/MagicPortalsLayer.{hpp,cpp}` (the latches, a
+latched volume, the crates in the impact watch, the buttons, a `sound <event> on tick N` log line),
+`game/sim/Boss.{hpp,cpp}` (`spikeHits`; `staticHitsNow`, the second fix round), `game/sim/Ghost.{hpp,cpp}` (`beats`),
+`game/sim/Impacts.hpp` (`Kind::Crate`; `Watch::Touching`, the second fix round),
+`game/sim/Impacts.cpp` (a crate's reach and its begin's normal, the fix round; `Touching`, the second, below),
+`game/main.cpp` (the `--saves`, `--hold` and `--route` help step 141 left),
+`tests/test_mp_{sounds,layer,routes,boss,ghost}.cpp`. No engine change (the pin stays `710bffc`), no converter change,
+no format finding (script behaviour, cited in `sounds.json`).
+
+**GAMEPLAY: none.** Every change is a sound latched on the tick and played on the frame; the two simulation counters
+(`Boss::State::spikeHits`, `Ghost::State::beats`) and the second fix round's record of the statics the beholder's rocks
+break on (`Boss::State::staticHitsNow`) are read by nothing in the simulation. Measured: 70 of 70 routes won
+on the same ticks with their output line for line as step 141's apart from the sound lines, reachability unchanged, and
+128 of 128 levels' f420 frames byte-identical (the gates).
+
+**BLOCKERS, checked first: none.** Every call site is in the listing (`all_functions.txt`, md5 `48fe65ce...`), the
+Android runtime's sample semantics in `reference/ethanon` (`AndroidAudio.cpp:177-255`, `SoundEffectManager.java:82-91`),
+and each moment is one the port already has (a counter, a flag, a phase, a contact of the impact watch) but two, which
+get a counter each.
+
+**WHAT THE ORIGINAL DOES** (arguments pushed last-first, and `SetV1 vN` / `CMPIu vX, vN` the constant N, `00_order.md`
+8.0; each cited in full in `sounds.json`'s `_note_*` entries).
+- **`playExplosionSound(bool huge)`** (192072..192351): #3 `CpyVtoR4 v-1[huge]`, #4 `JLowZ -> 33`: explosion_huge alone
+  on `hugeExplosionSoundTimer` (150) or explosion_small alone on `smallExplosionSoundTimer` (150) - ONE sample. The
+  table played both, and `test_mp_sounds.cpp:193` pinned it. True from `explode` #27-31, `ETHCallback_anti_portal_agent`
+  #183-187 and `ETHBeginContactCallback_fireball` #114-118 (a shock agent); false from `spawnExplosion` #1-5 and the
+  fireball's #154-158.
+- **The contacts.** `ETHBeginContactCallback_dark_mage` #82-90 `playFallSound(hit / 18)` above 3.5 (no crate test on
+  this arm); `ETHBeginContactCallback_minion` #132-140 the same, past its `enemy_killer` test;
+  `ETHBeginContactCallback_rolling_stone` #58-71 `playStoneHitSound(hit / 3)` above 2 and #91-94 `(1)` on
+  `destroyier.ent`, and for a beholder rock on something static #170-208 `destroyOnStaticHit`'s shake of 5 and
+  `destroy()` AFTER #58-71 in the same begin (so a rock's break is silent and the contact it breaks on is heard);
+  `crateContactCallback` #17-56 (the six crate callbacks) `abs(hit) > 2`, `playRandomWoodSound(|hit| /
+  30)` against anything but the character, `playWoodDragSound()` against it (`isCharacter` is the datum only
+  `GameCharacter::GameCharacter` sets).
+- **Keys.** `ETHCallback_key` #805 pick (with `key_pick.ent`); #550 door unlock on the frame after `foundKeyhole` is
+  set, as the fly-in's WaypointManager is built (#221-547); #635 key unlock on its frame 1 (with the halo);
+  `ETHCallback_keyhole` #235 demolition as it deletes itself and its door.
+- **Fireballs, burning, minions.** `addFireball` #87 plays `playFireballSound` (100 ms) for every fireball (carranca
+  #108, `burnProjectile` #54, 2-32's dragon #754, the dark dragon #978 and #1720); `burn` (419710..419817) plays
+  `playBurnSound` unconditionally (`explode` #152, the lava #19, a fire agent #220, a fireball #173), and a fire diamond
+  taken plays it (`ETHCallback_fire_diamond` #190-192), one a gutter drains `playFireExtinguishSound` (#427-455);
+  `ETHBeginContactCallback_enemy_killer` #22 `playMinionFallSound`.
+- **The timed crystal.** `ETHCallback_crystal`'s init block, where `time` is set (#60-71): `addTimerToCrystal` #78 and
+  `playCrystalTempAlertSound` #82, once, on the shared crystal timer at `CMPIu v1, v100` (the table said 50).
+- **The bosses.** 1-32 (`ETHCallback_beholder`): #350 appear once, inside the screen grown by `scale(vector2(48, 32))`
+  (#286-360); #561 hit and #565 damage together; `spawnStone` #1-3 `playStoneAppearSound` for each rock (called by
+  `overTimeEntityAdder` on the add); `ETHCallback_beholder_spike` #178-185 spike hit on every frame a spike stands in
+  the character's box; DEAD: `overTimeEntityAdder('small_explosion_no_light.ent', 400, spawnExplosion)` every update
+  (#1163-1253) and, past 3550 ms, `explode` (#1270-1274); the button then moves with no sound (#1276-1315). 2-32
+  (`ETHCallback_dragon`): #326-367 appear once its firing clock passes 2000; #409-437 take-off;
+  `ETHCallback_dragon_claw` #434-445 demolition per platform. 3-32: `ETHCallback_ghost_minion` #71-94 appear;
+  `ETHCallback_ghost` #670-672 item on every SHOOTING beat, #1149-1157 on the summon, #707-770 damage into DAMAGE,
+  #1160-1205 damage out of RAGE_MODE, #776-975 death (speed 0.5) into DEATH, small explosions in DAMAGE while hp is
+  above 0 (#786-929) and in DEATH (#1245-1331), `explode` #1348-1352; `addEnemyShoot` #172, `ETHCallback_enemy_shoot`
+  #354-356. 4-32: `ETHCallback_dark_dragon_spawn` #120-122 appear; `ETHCallback_dark_dragon` #608-643 open mouth once
+  (APPEARING, the jaw's cell 3), #1072-1123 damage, #1504-1511 item and `killAll` (its `playPortalKilledSound`),
+  #1722-1724 damage again at DAMAGE's last waypoint, #1996-2018 death into DYING, `explode` #1924-1931, and
+  `darkDragonOvertimeSmallExplosionAdder` (397662..398213) on every DAMAGE and DYING update (#1563, #1818). The adder's
+  clock is a datum on the boss's entity, zeroed only by an add, so it carries from one arm to the next.
+- **Shock and light.** `ETHCallback_shock_diamond` #180 pick, #447 strike; `ETHCallback_shock_agent` #289-299 strike as
+  a destroyed agent goes; `ETHCallback_shock_area` #136-151 strike as a ring kills the character;
+  `ETHCallback_light_off` #145 light on; `ETHCallback_fire_signal` #275 light off; `ETHCallback_light_wall` #84-86
+  switch once 800 ms into its fade (its #105-107 demolition is the port's `wall_broken` already).
+- **Buttons.** A Button plays only what `setSound` gave it (`Button::Button` #21-23, `Button::update` #140-163): the
+  world and level tiles are teleport (`Page::setupItemButton` #127-143), the level's restart is teleport
+  (`GameLayer::GameLayer` #207-216, `Game::Game` #74); the pause's resume and scores (`GameMenuLayer::GameMenuLayer`
+  #74-112) and the four switches (UISwitches, `GlobalSoundSwitch::GlobalSoundSwitch` #23) are silent. The clear button
+  cannot be pressed with none placed (`PortalManager::update` #62-72; the audit's "empty clear" claim was refuted by its
+  check).
+- **`ETHCallback_entity_launcher`** calls no audio function: 1-24..1-26's throws are silent.
+- **Parameters** (the hook bodies): key pick, key unlock and the light switch speed 0.5; door close `3000 /
+  doorOpenStride` as door open; ghost death and fire extinguish speed 0.5; fall volume argument and `charHitSoundTimer`
+  200; random wood volume argument, speed `randF(0.2) + 0.8`, `woodSoundTimer` 150; wood drag `woodDragSoundTimer` 200
+  at speed 1.0 (the drawn speed is set on entry 2, portal_fail, and never on wood_drag); fireball 100; stone hit volume
+  argument and speed `randF(0.2) + 0.8`; the crystal alert 100.
+
+**THE CHANGE.**
+1. **`sounds.json`**: `playExplosionSound(true)` and `(false)`, each one file on its own timer, and no hook that plays
+   both; the twelve hooks' parameters above; 42 events added and 4 re-pointed, each with its citation (`boss_hurt` is
+   now Damage beside `boss_struck`'s Hit; `boss_dead` the huge explosion; `boss_rock_broken`, `boss_button_raised` and
+   `stone_thrown` silent); `impacts` (the four callbacks' events, gates and volume divisors, the crate's twelve entity
+   names) and `cues` (48 x 32, 2000 ms, 400 ms, 800 ms). `Sounds::LoadRules` reads `"volume": "argument"` and the two
+   tables, and refuses an impact naming an event the table does not have.
+2. **The latches** (`MagicPortalsLayer::latchSimSounds`, `latchStepSounds`, `latchLateBossSounds`, `latchBossCues`,
+   `latchImpacts`), each from a moment the port has: a counter going up (blasts, spent fireballs, fireballs made by any
+   source, doors a keyhole opened, strikes, torches lit or put out, claw crushes, ghost beats and summons, dark-dragon
+   wounds, rocks dropped, spike hits, minions burned or on the killer floor); a flag turning (a burnable burned, a
+   diamond held or drained, a shock agent gone, a key's carrier); a phase edge (the ghost's RAGE to SHOOTING and DAMAGE
+   to DEATH, the dark dragon's DAMAGE to FIGHTING and into DYING); a key's fly-in on `Effects::AdvanceFlyIn`'s clock; a
+   one-shot test (the beholder in the grown screen, the dragon's 2000 ms, the dark dragon's widest jaw, a light wall's
+   800 ms); the adder's 400 ms clock per boss, carried across arms. Step 142's edges are read on a level's first tick
+   too, against the level as it is made (4-29's key is taken on tick 1), where the older events keep their first-tick
+   mark. A timed crystal's alert is latched once per timed crystal on the first tick. `Latched` carries the caller's
+   volume, capped at 1 where it is played; `LatchedVolumes()` shows it.
+3. **The contacts**: the impact loop latches each begin's sound on its own gate beside its shake, and the level's crates
+   (`impacts.crate.entities`, in scene order) are watched as `Impacts::Kind::Crate`, a sound and no shake, reading their
+   own velocity along the contact's normal, absolute. Each watched body's pairs are its own, so the player's, stones'
+   and minions' begins do not move (the routes' impact and earthquake lines are unchanged). For a crate alone
+   (`Impacts.cpp`, the fix round): the watch's "carried by the step" reach allows the step's own gravity, `g dt^2` =
+   0.272 px at 980 px/s^2 and 60 Hz, since a box has no radius to cover it; and where the step has taken the box into
+   the other's (the cores overlap, so `Between` has only the line between the centres), the begin's normal is taken
+   with the box where the step found it, still apart - the face it met. For a beholder rock (the second fix round):
+   `Boss::State::Contacts` breaks one within its 2 px margin of a static, or where the step would have taken it, which
+   can be before the step brings the two into touch, so the watch never saw that begin; each rock it breaks is kept
+   with the static it broke it on (`staticHitsNow`), and where the watch has no begin of the rock that tick and does
+   not have the pair touching already (`Watch::Touching`), the layer makes the begin from what the rock carried into
+   the step (`Watch::Carried`), as it already did for a stone Demolish took on a breakable - its sound and its shake
+   (hit x 2, which `boss_rock_broken`'s 5, queued after it, overwrites on the same tick).
+4. **The buttons**: tiles and the restart latch `level_button`; resume, scores and the switches latch nothing.
+5. **Two counters** for moments the layer cannot see: `Boss::State::spikeHits` (every spike in the box, every tick,
+   counted apart from the unchanged kill) and `Ghost::State::beats`.
+
+**THE GATES.** Before = step 141 (`MagicPortals.exe` `63f17802`, `test_mp.exe` `3d8f7083`, `MS/after/sweep` and MS's
+suite outputs); after = `MagicPortals.exe` **`0bc35794`** and `test_mp.exe` **`9a1c9c5a`**, the second fix round's
+(the build round's `75fb7317` and the first fix round's `64e824a6` and `907dbaab` are named where their measurements
+stand). Everything under `out/parity/program/P6/`; the fix rounds' under `P6/fix1/` and `P6/fix2/`.
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in the eleven builds (`build/build1-11.log`; build 2 stopped on 12 errors, a namespace in a new case, fixed in build 3), and in the fix round's four (`fix1/build/build1-4.log`: `--target test_mp` three times - `Impacts.cpp`, the layer and `test_mp_layer.cpp`, then the suite twice for its drop positions - and `--target MagicPortals`, a link); **the second fix round's four** (`fix2/build/build1-4.log`): build 1 (`--target test_mp`) stopped on 15 `C1060 compiler is out of heap space` with 16 compilers running beside the other tracks' builds (no warning, no error in the code), build 2 the same with `-j 3`, **0 warnings** (`test_mp.exe` `9a1c9c5a`), build 3 `--target MagicPortals -j 3`, 0 warnings (`cd5cf156`, refused), build 4 its relink, 0 warnings (`0bc35794`) |
+| (1) The explosion is one sample chosen by its argument | no hook plays both; `(true)` explosion_huge alone on `hugeExplosionSoundTimer` 150, `(false)` explosion_small alone on `smallExplosionSoundTimer` 150 | `playExplosionSound` both files, pinned (`test_mp_sounds.cpp:193`) | **passes** (`test_mp_sounds` 242 checks, 0 failures): the both-entry gone, each arm its file and timer |
+| (2) Every event's hook and every hook's parameters pinned | the 42 new and 4 re-pointed events; the twelve hooks' parameters; `impacts` and `cues` read | 33 events, 107 checks | **passes** (same run): 75 events, 67 hooks; the reader refuses a volume that is neither a number nor `argument` and an impact naming no event; `ImpactVolume`'s gates |
+| (3) Each latch at its event, in play: the routes' census | per won route: a crystal_alert per timed crystal, a bomb_blast per blast, a fireball_spat per fireball made, a keyhole_vanished per door opened, a key's door_unlocked before its key_unlocked, a minion_fell per killer-floor kill, a claw_crushed per crush, the four silent events never latched; per boss: beholder appear 1, struck = hurt = hits, rock dropped = rocks, 8 small explosions and dead 1; dragon appear 1, take-off as it takes off; ghost appear 1, item = beats + summons, enemy_shot = shots, death 1, burst 1; dark dragon appear 1, mouth 1, item = wounds, hurt = 2 x wounds - 1, death 1, burst 1 | - | **passes** (`test_mp_routes` 1,073 checks, 0 failures; `suites/test_mp_routes.txt`, `routes_census_totals.txt`): 1-32 appear 1, struck 3 / hurt 3, rocks 3, small explosions 8, dead 1; 2-32 dragon appear 1, claw 15, fireballs 5; 3-32 ghost appear 1, item 8, hurt 5 (3 burns, 2 rages left), shots 6 / ended 6, small explosions 28, dead 1, burst 1; 4-32 appear 1, mouth 1, hurt 5, item 3, portal_spent 3, small explosions 39, dead 1, burst 1. **Fix round** (`907dbaab`, `fix1/suites/final/`): the same 1,073 checks, 0 failures, and every census the same but the crates': **crate_knocked 25 on 13 routes** (2-01, 3-12, 3-13, 2-14, 3-14, 1-15 x2, 4-19, 1-28 x7, 1-29 x3, 2-32 x2, 2-05, 1-08 x2, 2-08 x2), volumes 0.076-0.517, where the build round heard 6 on 4. Of those six, five keep their volume exactly (3-12 tick 160, 4-19 tick 121, 1-28 ticks 390 and 446, 2-32 tick 1426); 1-28's at tick 603 went 0.092147 -> 0.085493, most likely the face's normal giving no credit to a sideways speed the centres' line leaned toward, as the original's contact normal gives none (not traced one by one) (`fix1/suites/routes_crates_fix1.txt`); crate_dragged 0 (no route drops a crate on the player). **Second fix round** (`9a1c9c5a`, `fix2/suites/`): **1,143 checks, 0 failures** (the 70 moments, row 3b), and the routes' whole output identical to the verifier's `verify2/routes_v2.txt` but the checks line (every sound line and census the same) |
+| (3b) Two latches on their very tick, in play (the second fix round) | per won route, each tick's `light_switch` latches = 1 on the first tick of a light wall's fade past 800 ms (`ETHCallback_light_wall` #57-97) and 0 on every other; each tick's `fire_diamond_drained` = the fire diamonds a gutter took on that tick (`ETHCallback_fire_diamond` #427-455), read by the suite itself from `torch.wall` and `diamonds` | - | **passes** (`9a1c9c5a`): 70 of 70 routes with no tick off; heard on their ticks: `light_switch` on 4-29 tick 88, 4-30 tick 89, 4-31 tick 154; `fire_diamond_drained` on 3-31 tick 694 and 3-32 ticks 298, 1105, 1827, 2267 |
+| (4) Each latch on its tick, layer | a key's pick, door unlock (the tick after the unlock), key unlock (the halo's, 41st) and keyhole vanish; a shock diamond's pick and strike; a fire diamond's burn at its pick and fireball at a conversion; a fireball on a shock agent: huge, small, burn, strike; light on; light off; a ring kill's strike, not after a fall; a stone on a destroyier at volume 1; the landing thump at hit / 18 over 3.5 and none under; one alert per timed crystal on the first tick; play button.mp3 and both tiles teleport; restart teleport; resume, scores and both switches silent | - | **passes** on the fix round's runner `907dbaab`: `test_mp_layer` **3,326 checks, 0 failures** (`fix1/suites/final/test_mp_all.txt`) - every listed moment (1-05's hard landing hit 9.2, thump 0.5111 = 9.2 / 18; its soft landing 2.4, none; 1-15 one alert on tick 1, none in 120 more), the crate's fall (row 4b) and 2-32's `dragon_took_off`, once, on the tick after the take-off's (the take-off on the case's 3,100th tick, the latch on its 3,101st: the dragon turns in `Game::BeforeStep`, after the tick's latches are read). The build round's record, kept: 3,313 checks and 1 failure on `2a3160ef` (`suites/run6/`), the synthetic crate knock that began nothing; its checks were taken out, and the runner handed over, `1f2c7a9e`, was refused and never ran here; the verifier's relink of it, `1ee10976`, ran 3,311, 0 failures. **Second fix round**: `9a1c9c5a`, **3,343 checks, 0 failures** (+17, row 4c) |
+| (4c) A beholder rock broken on the level, at its contact (the second fix round) | 1-32 with the verifier's probe's walks (right 30-110, left 565-601, right 676-790): the first rock's break has one stone begin, on the static `Contacts` broke it on, made from `Contacts`' judgement; `stone_hit` once at hit / 3, the hit held to the velocities the case itself read before each tick, along the line from the rock's point to the static's, / 50; the shake called at hit x 2 and `boss_rock_broken`'s 5 the tick's last word; the next rock, whose begin the watch sees, one begin and one `stone_hit`, not two | the fix round: no begin, silent (`verify2/probe_rock/`) | **passes** (`9a1c9c5a`): **`adder_715#1` broken on tick 717** (the probe's tick) on `platform.ent` (`platform_ent_7`, at (128, 240)), the rock from (199.6, 191.5), 42 velocities read, fell at 637.0 px/s (12.74 straight down), **7.1432 along the line** to the platform's point; `stone_hit` at **2.381074** (played at 1), the shake 14.2864, then 5; **`adder_715#2` on tick 892**: the watch's own begin on `platform.ent`, hit 2.0787, one `stone_hit` (0.692891). The game (`0bc35794`, `fix2/probe_rock/`) logs the same three lines on tick 717, and its f900 frame is the verifier's, `11d2057e` |
+| (4b) A crate's fall, at its contact (the fix round) | 1-05's crate let fall at rest onto `platform_ent_658` begins it on the tick it reaches it and latches `crate_knocked` once at \|hit\| / 30, the hit the fall's own speed straight down the face's normal / 50 (within 1 %, against the velocities the case itself read); let fall onto the player, `crate_dragged` once and no knock; each drop let go touching nothing (its first step g dt^2) | the build round: no begin, no knock | **passes** (`907dbaab`): **x 72, 40 px**: begin on tick 20, normal (0, 1), hit 4.9000 = 245.0 px/s / 50, `crate_knocked` at **0.163333**; **x 36, 25 px**: tick 13, normal (0, 1) where the centres' line is (0.529, 0.849), hit 3.9200 = 196.0 / 50, **0.130667**; **the drag**, 20 px onto the player stood at x 72: tick 14, normal (0, 1), hit 3.2667, `crate_dragged` once, no knock. Each drop's first step 0.272 px. The per-tick trace is printed (velocity in, travel, the old reach and the new, the gap and normal to the other) |
+| (5) No gameplay change: routes | 70 won on the same ticks, the output as step 141's apart from the sound lines | 70 won (`MS/suites/test_mp_routes.txt`) | **passes**: 70 won on the same ticks; 9,538 lines, 0 differ (`suites/routes_diff.txt`); the fix round on `907dbaab` the same, 9,538 lines with the sound lines taken out, 0 differ (`fix1/suites/final/routes_diff_final.txt`, empty): the player's, stones' and minions' impact and earthquake lines unchanged; the second fix round on `9a1c9c5a` the same, 9,538 lines, 0 differ (`fix2/suites/routes_diff_fix2.txt`, empty): no route breaks a beholder rock on the level, so no route gained a line |
+| (6) Winnability | reachability 108 / 20 / 0, 0 differ | 108 / 20 / 0 | **passes** (`reach_check.txt`, main's venv); the fix round the same, 108 / 20, 0 differ (`fix1/reach_check.txt`); the second the same (`fix2/reach_check.txt`) |
+| (7) The 128-level f420 sweep | 128 rc 0, validation silent, pngs whole and on their lines, no input line, **128 of 128 identical to `MS/after/sweep`** | `MS/after/sweep` | **passes: 128 of 128 identical** (`compare_sweep.txt`, `compare_final.txt`): 128 rc 0, no stall, validation ACTIVE in 128 and 0 messages, 0 input lines, art from `out/snap_w2` in 128, the seeded save `40bfef3a` before and after. Two frames, 4-04 and 4-05, were written EMPTY at 20:22 with the C: drive at 45 MB free (their logged md5 `d41d8cd9`, the empty file's); both were re-taken at 20:48 with the same exe, command line and saves (`retake_P6.sh`), identical to MS's, their first logs kept as `*.log.run1` with the same sound lines. **Fix round** (`MagicPortals.exe` `64e824a6`, `fix1/after/`, `fix1/compare_fix1.txt`): **128 of 128 identical to `MS/after/sweep`** and to the build round's `P6/after/sweep`; 128 rc 0, no stall, every png whole and on its logged md5, validation ACTIVE in 128 and silent, 0 input lines, art from `out/snap_w2` in 128, the saves `40bfef3a` before and after. 1-04's first launch died at start-up, before its level loaded (`fatal: bad allocation`, rc 127, 22:24, with 3 of 14 GB of memory free while other tracks ran; its log, with the device-teardown leak report that exit left, kept as `1-04_level3.log.run1`); re-taken once at 22:44 with the same exe, command line and saves (`fix1/retake_fix1.sh`): rc 0, `b8de4dbd`, MS's. **Second fix round** (`0bc35794`, `fix2/after/`, `fix2/compare_fix2.txt`): **128 of 128 identical to `MS/after/sweep`** and to the verifier's `verify2/after/sweep`; 128 rc 0 on the first launch, no stall, every png whole and on its logged md5, validation ACTIVE in 128 and silent, 0 input lines, art from `out/snap_w2` in 128, the saves `40bfef3a` before and after; every log's game lines the verifier's but the "last run's log was not kept" line on 7 (the shared `%TEMP%` log's rotation, beside other tracks' runs; `fix2/log_compare_fix2.txt`) |
+| (8) The sweep's census | crystal_alert on exactly the 20 timed-crystal levels, one per timed crystal; no stone_thrown; the launchers' stones at volume 1 on their destroyiers | - | **passes** (`sweep_census.txt`): 35 alerts on 1-15, 1-24, 1-25, 1-27, 1-29, 2-04, 2-07, 2-11, 2-13, 2-15, 2-20 to 2-23, 3-06, 3-11, 3-14, 3-16, 4-06, 4-11 - one per timed crystal, all on tick 1; 0 stone_thrown; stone_broken 7, all at 1.0, on 1-24 and 1-25; fireball_spat 54 and fireball_burst 43 on 22 and 20 levels; key_picked 19 = the 19 key_pick effect lines; dragon_appeared on 2-32's tick 121; boss_appeared on 1-32's tick 300. **Fix round** (`fix1/compare_fix1.txt`): every event's count and levels as the build round's but the crates': **crate_knocked 11 on 6 levels** (1-30 x2, 2-05 x2, 2-08, 2-19 x3, 2-20 x2, 3-12), volumes 0.081-0.307, where the build round heard 4 on 3. **Second fix round**: every event's count and levels the verifier's (`fix2/compare_fix2.txt`); no level's f420 run breaks a beholder rock, so none gained a `stone_hit` |
+
+**SUITES**, on the second fix round's runner `9a1c9c5a`, one launch with no argument (`fix2/suites/`, 00:19-00:21 on
+2026-10-01, rc 0): **`test_mp: 47 suites, 47 passed, 0 skipped, 0 failed`** - `test_mp_sounds` **242** (107 + 135),
+`test_mp_boss` **136** (133 + 3), `test_mp_ghost` **185** (183 + 2), `test_mp_camera` **214** (unchanged;
+`Impacts::Kind` grew), `test_mp_routes` **1,143** (215 + 858, the census, + 70, a route's moments), `test_mp_layer`
+**3,343** (3,271 + 72: the build round's 40 that stand, the first fix round's 15 - the crate's two knocks and its drag,
+13, the take-off's sound, 1, and the platform's lookup, 1 - and the second's 17, the beholder's rocks), and the other
+41 suites at the first fix round's counts (`fix2/suites/suite_tally.txt`). The first fix round's runner `907dbaab`
+ran the same 47 with `test_mp_layer` 3,326 and `test_mp_routes` 1,073 (`fix1/suites/final/`). The build round ran `test_mp_sounds`, `_boss`, `_ghost` and
+`_camera` on `e9263216`, `test_mp_routes` on `221ed5b6` and `test_mp_layer` on `2a3160ef` (3,313, 1 failure, the crate
+knock); its last runner, `1f2c7a9e`, never ran here, and the verifier's relink of it, `1ee10976`, ran all 47 with 0
+failures (`test_mp_layer` 3,311).
+
+**SMART APP CONTROL: 5 refusals across the step, 4 of `test_mp.exe` and 1 of `MagicPortals.exe`, all in this
+worktree.** The second fix round's 1 (`fix2/sac_check.txt`): `MagicPortals.exe` `cd5cf156` at 00:23:14 (CodeIntegrity
+3033/3077/3118), deleted and relinked once to `0bc35794`, which ran (the probe, then the 128-level sweep); its runner
+`9a1c9c5a` ran on its first launch. The build round's 3
+(`sac_check.txt`: CodeIntegrity 3033/3077/3118 at 19:46:59, 19:58:55, 19:59:19): `1b323f6f`, deleted and relinked once
+to `bd5493cd`, which ran; `5849f69d`, and its one delete-and-relink `469ff3e6`, refused again. The verifier's 1:
+`1f2c7a9e` at 21:10:21, relinked once to `1ee10976`, which ran. `MagicPortals.exe` `75fb7317` was allowed on its first
+launch (130 launches). **The fix round: 0 refusals** (`fix1/sac_check.txt`): three runners linked and each launched
+once (`dcebc083`, `0acea601`, `907dbaab`), and `MagicPortals.exe` `64e824a6` launched 128 times.
+
+**RECORDED DEVIATIONS.**
+1. **A timed crystal's alert on the level's first tick**, with its dial (the port starts every dial there); the
+   original's crystal is `static="1"`, so its init runs when its bucket is first processed - later for one off screen.
+2. **A burn is latched once per burnable, at its first burn**; the original's `burn()` also sounds on a re-burn (a blast
+   or fireball on one burning already, every lava begin). A minion a fire takes is latched as the port removes it.
+3. **A shock agent a fireball destroys strikes on the same tick**; the original's agent plays it on its next frame.
+4. **The dark dragon's torch shot sounds whenever the port fires it** (step 99's divergence: the original's fires only
+   at an unlit torch).
+5. **The beholder's first sight uses the port's camera** (`m_follow`'s centre and `ViewPx()`) as the latch finds it.
+6. **An argument volume caps at 1** (the original's stream volume caps at 0.99 of the device's).
+7. **The sample-state bleed is not reproduced** (unchanged, `sounds.json` `_about`): wood_drag's drawn speed lands
+   nowhere, where the original's lands on the next portal_fail.
+8. **A crate's contacts are its solid ones**; the original's crate callback has no sensor test.
+9. **The adder's clock runs on the port's tick** (16.667 ms), the original's on whole-millisecond frames.
+10. **A spike goes on sounding after the kill** while the player's body stands, per spike per tick, as the original's
+    does every frame one is in the character's box.
+11. **The log gains a line per latched sound** (`sound <event>[ at volume v] on tick N`), the shipped game's too:
+    `lift_turned` alone wrote 109 across the 70 routes.
+12. **An edge the simulation makes in `Game::BeforeStep` is latched on the next tick** - 2-32's dragon's take-off, its
+    claw's crushes and its fireballs, and a carranca's fireball - because the tick's latches are read after
+    `Game::AfterStep` and before `Game::BeforeStep`: heard one tick, 16.7 ms, after the frame it happens on (measured
+    for the take-off: taken on the case's 3,100th tick, `dragon_took_off` latched on its 3,101st). The original plays
+    each inside the callback.
+13. **A crate's begin with a moving body takes the other where the step left it** (the fix round's normal): only the
+    crate is looked at again where the step found it.
+14. **A beholder rock's break is heard on the tick the port breaks it** (the second fix round). `Boss::State::Contacts`
+    breaks a rock within its 2 px margin of a static, or where the step would have taken it, which can be a step before
+    the original's fixtures would touch; the begin made of it reads the static `Contacts` found first (the original
+    calls a begin for every fixture that starts to touch in the step) and the velocities the rock carried into the steps
+    since it last met or left something, as a watched begin does. The latch skips a pair the watch already keeps as
+    touching (the port judges a rock every tick, the original's callback only at the begin), which no case exercises;
+    the one other such begin measured, 1-32's resting pile in `test_mp_layer`'s `boss_rock_broken` row (`adder_715#1`
+    on tick 1714, after it had lain on another body since tick 999), read 0.160 and was silent.
+15. **A thrown stone on a destroyier plays `playStoneHitSound(1)` alone** (#91-94). The original's begin runs #58-71 first
+    (`stone_hit` at hit / 3 above 2, and a shake of hit x 2 that the destroyier's 6 overwrites), and the port's destroyier
+    is a trigger box (`Launchers::State::Cull`), not a body the impact watch can see meet the stone; the port has no
+    contact tick of its own for it, so it is not made up.
+
+**RULINGS APPLIED.** The standing direction: the original decides - every sound at its call site, with its parameters.
+R1, R2, R17, R23 not this step's; R24 and R25 untouched; camera dragging not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Latches pinned to their hook but not to their moment** (the fix round pinned `crate_knocked`, `crate_dragged` and
+  `dragon_took_off`, gates 4 and 4b; the second, `light_switch` and `fire_diamond_drained` on their ticks in every
+  route, gate 3b, and a beholder rock's `stone_hit`, gate 4c): `boss_spike_hit` (only the sim counter is tested; no
+  layer case brings 1-32's beholder to a volley over the player, and the latch never fired in a run); `minion_landed`
+  (heard in play, 3 routes and the sweep; its hit is read along the line between the entity points, and no layer case
+  drops a knight - its walk steers it). The census relations that set a latch against the counter it reads
+  (`bomb_blast` = blasts, `claw_crushed` = crushes, `minion_fell` = killer-floor kills, `boss_struck` = hits,
+  `boss_rock_dropped` = rocks, `ghost_item` = beats + summons, `enemy_shot` = shots) prove one latch per increment, and
+  its tick is the tick the counter moves on, not one the relation checks.
+- **The lift still clanks at each turn** (`lift_turned`): the original's `playElevatorSound` is on a tap on the lift
+  (`ETHCallback_lift` #219-262), and the lift as a tap target is not built (gameplay).
+- **Not built, as their mechanisms are not**: the minions' spotted, question-mark and shot sounds (sight and shooting,
+  34 levels), a stone crushing a minion (`playMinionSmashSound`), the achievement stinger (no unlock notification), and
+  3-20's placed stone on its destroyier (`playStoneHitSound(1)`, and `(hit / 3)` above 2, #58-94): the port never takes
+  a placed stone there (`rolling_stone_ent_1599` and `destroyier_ent_1666`; the backlog's Order 11.1 gameplay rows).
+- **The log's `sound` line is a latch, not a play** (the third verification's one problem, low; its wording fixed at
+  commit, its behaviour left): the line is said for every latch, one the hook's shared timer then drops included (the
+  sweep latches 35 `crystal_alert` on 20 levels, and the 100 ms timer plays the first of each tick, as the original's
+  does), and `crate_dragged`'s line names the crate's volume though `playWoodDragSound` takes none and plays at its
+  hook's own. No sound is wrong. Printing ` at volume` only for a hook whose volume is its argument, or latching
+  `crate_dragged` with none, changes the log, so it is left.
+- For the close role: the backlog's P6 row, and the audit's "Order 10.4" burn and extinguish, "Order 13.1" shock and the
+  light rows' sounds, which are built here.
+- For the merge's renumbering: "step 142" is written in `sounds.json`, `Sounds.hpp`, `MagicPortalsLayer.{hpp,cpp}`,
+  `Boss.hpp`, `Ghost.hpp`, `Impacts.hpp`, `Impacts.cpp` and the five suites.
+
+**STEP 142'S FIX ROUND (2026-09-30), AFTER THE VERIFIER FAILED IT** (`out/parity/program/P6/verify1.json`). The
+verifier re-measured every gate, passed eleven, and failed the step on one high problem and one medium one, with two
+low ones. The evidence is under `out/parity/program/P6/fix1/`, and the report is `P6/fix1.md`. **GAMEPLAY: still none**
+(the watch is read-only; routes, reachability and the sweep below).
+1. **A crate's fall was not heard (high, true; fixed).** Diagnosed on 1-05's crate by a per-tick trace in the restored
+   case (`fix1/crate_diagnostic.txt`): the masks pass both ways (layer 1, collides with all), `ShapeOf` reads the box
+   (58 x 58) and the platform's hull, and `Between`'s gap closes 39.7 -> 0 px, so the pair was always seen. The cause
+   is the watch's "carried by the step" reach, `|v| dt + radius + touch`. A box has no radius, so it is `|v| dt` +
+   0.178 px, and a free-fall step travels `|v| dt + g dt^2`, 0.272 px more. **Every step of the fall failed it** (tick
+   14: travel 4.083 against 3.989), was taken for a put (its velocities dropped, the step not looked at), and **the
+   step that brings the box to its floor starts from rest after the solver's brake** (tick 20: velocity in 0.0, travel
+   0.272 against 0.178), so it could never begin. The build round's after-step bound failed on that same step: the
+   solver zeroes the velocity as the pair meets. **Fix** (`Impacts.cpp`): for a crate, the reach adds the step's own
+   gravity, `g dt^2`, read as `PhysicsSystem::Update` reads it (`PhysicsSettings` in the registry's context, or its
+   defaults; 0 for a kinematic body, one with `useGravity` off, or a zero-gravity level). The begin then comes on tick
+   20, read at the fall's 245.0 px/s. **A second defect on the way**: on that tick the box overlaps the face by 0.017
+   px, `Between` takes its overlap branch, and the normal is the line between the centres - (-0.175, 0.985) at x 72,
+   (0.529, 0.849) at x 36, a hit read 15 % low there, and a crate far along a wide floor could fall under the gate of
+   2. **Fix**: where a crate's cores meet the other's, its begin's normal is taken with the box where the step found
+   it, still apart - (0, 1) in both. The player's, stones' and minions' reach and normals are unchanged (their
+   radius covers the step's gravity; a shake change is not this step's). Pinned by gate 4b; the routes' non-sound
+   output is unchanged (gate 5). Crates now knock 25 times on 13 routes, where 6 on 4 were heard; five of those six
+   keep their volume, and 1-28's at tick 603 is quieter by the normal (gate 3).
+2. **This record said NOT RUN and NOT MET where it had been measured (medium, true; fixed).** Row 4, SUITES, SMART APP
+   CONTROL and LEFT FOR THE OWNER are rewritten from this round's runner; the refusals are counted across the step
+   (4); and the old LEFT bullet's `g dt^2` "0.33 px against 0.178 u" is 0.272 px against 0.178 px (the touching
+   distance, 0.5 original px, is 0.178 of the port's).
+3. **Latches pinned to their hook but not their moment (low, true; three of five fixed).** `crate_knocked` and
+   `crate_dragged` (gate 4b), and `dragon_took_off` (gate 4: once, on the tick after the take-off -
+   RECORDED DEVIATIONS 12). `boss_spike_hit` and `minion_landed` are left (LEFT FOR THE OWNER, with why).
+4. **A duplicated comment line in `latchStepSounds` (low, true; fixed).**
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| Build | 0 warnings | **passes**: four builds, 0 warnings (`fix1/build/build1-4.log`); `test_mp.exe` `907dbaab`, `MagicPortals.exe` `64e824a6` |
+| The crate's fall, at its contact | a begin on the tick it meets, the face's normal, `crate_knocked` once at the fall's hit / 30 (within 1 % of the velocities the case read), `crate_dragged` on the player | **passes** (gate 4b): 0.163333 at x 72, 0.130667 at x 36, the drag once |
+| The runner, once | 47 suites, 0 failures | **passes**: `907dbaab`, one launch, 47 of 47, `test_mp_layer` 3,326, `test_mp_routes` 1,073 (`fix1/suites/final/`). The two runners before it: `dcebc083` 47 of 47 (the same code, the x 36 and drag drops put into `block00_ent_663`'s corner and pushed out of it on their first step, so they were moved and a release check added); `0acea601` 46 of 47, the one failure that release check, at x 36 put 2 px under the block and still pushed 2.254 px on its first step, so moved to 11 px under (`fix1/suites/attempt2_0acea601/`) |
+| Routes, no gameplay change | 9,538 non-sound lines, 0 differ | **passes** (`fix1/suites/final/routes_diff_final.txt`, empty) |
+| Reachability | 108 / 20 / 0, 0 differ | **passes** (`fix1/reach_check.txt`) |
+| The 128-level f420 sweep | 128 of 128 identical to `MS/after/sweep` | **passes**: `64e824a6`, **128 of 128 identical** to `MS/after/sweep` and to the build round's; 128 rc 0 (1-04 re-taken once after a start-up `bad allocation`, identical), whole, on their md5s, validation silent, 0 input lines, saves unchanged (`fix1/compare_fix1.txt`). No pixel moved, as a sound-only change should not |
+| The sweep's census | as gate 8; crates re-counted | **passes**: crystal_alert 35 on the 20 levels, all tick 1; stone_thrown 0; stone_broken 7 at 1.0; key_picked 19; every other event as the build round's; **crate_knocked 11 on 6 levels** (was 4 on 3) |
+| Smart App Control | refusals counted | **0 this round** (`fix1/sac_check.txt`: the log's one block since 21:55, at 22:38:45, is the main checkout's `MagicPortals.exe`, another role's; this tree's sweep launched on either side of it with rc 0) |
+
+**STEP 142'S SECOND FIX ROUND (2026-10-01), AFTER THE VERIFIER FAILED IT AGAIN** (`out/parity/program/P6/verify2.json`).
+The verifier re-measured every gate, passed twelve, and failed two on one medium problem, with three low ones. The
+evidence is under `out/parity/program/P6/fix2/`, and the report is `P6/fix2.md`. **GAMEPLAY: still none** (the new
+record and accessor are read by the layer's latch alone; routes, reachability and the sweep below).
+1. **A beholder rock that breaks on the level was silent (medium, true; fixed).** The verifier's probe
+   (`verify2/probe_rock/`, 1-32 with walks and no taps) broke `adder_715#1` on tick 717 with no begin and no sound.
+   The cause is `Boss::State::Contacts`: it breaks a rock within its 2 px margin of a static, or where the step would
+   have taken it, so the rock can go before the step brings the pair into touch and the watch never sees a begin; the
+   second rock (tick 892) did get one, so it hung on timing. The original's callback runs #58-71 (`stone_hit` at hit /
+   3 above 2, and a shake of hit x 2) before `destroyOnStaticHit`'s #170-208 in the same begin, so `sounds.json`'s
+   "its break is silent" was half right: `boss_rock_broken` is silent, the contact it breaks on is not. **Fix**:
+   `Contacts` keeps each rock it breaks with the first static it judged it on (`Boss::State::staticHitsNow`), and
+   `latchImpacts` makes that begin from what the rock carried into the step (`Watch::Carried`), where the watch has no
+   begin of the rock that tick and does not have the pair touching already (`Watch::Touching`) - the way it already
+   made a stone's begin on a breakable Demolish took. **The shake goes with it**, as the original's callback calls it;
+   `boss_rock_broken`'s 5 is queued after it on the same tick and overwrites it (`Generator::Start` writes the
+   amplitude over), so no frame moves (the probe's f900 frame and the sweep below are unchanged). The hit is along the
+   line between the entity points (#6-26): the probe's rock fell at 637.0 px/s, 12.74 straight down, but reads **7.14**
+   along the line to `platform_ent_7`'s point at (128, 240), so `stone_hit` at 2.381 (played at 1); the verifier's
+   "about 13" took the fall as the normal. Pinned by gate 4c. `sounds.json`'s `_note_beholder` and `impacts.stone`'s
+   `_source` say it as the listing does; RECORDED DEVIATIONS 14. The runner's whole output against the verifier's
+   (`fix2/suites/all_diff_vs_verify2.txt`, timings and paths dropped) gained, outside the new case, one line: the
+   layer's `1-32 boss_rock_broken` row, 1-32 left at rest, now logs `impact stone_impact of a body on platform.ent hit
+   0.160034, no call on tick 1714` - a Contacts begin under both gates, so no shake and no sound, and the row's numbers
+   are unchanged. The boss suite, the other level31 cases and the routes gained nothing.
+2. **`light_switch` and `fire_diamond_drained` pinned to their hook and not their moment (low, true; fixed).** The
+   routes suite reads, on every tick of every route, the light wall's fade and the fire diamonds' `gone` itself and
+   holds each tick's latches to them (gate 3b); LEFT FOR THE OWNER says what the census relations that read a latch's
+   own counter do and do not prove.
+3. **A dragon edge made in `Game::BeforeStep` is latched a tick late (low, true; left).** Already RECORDED DEVIATIONS
+   12; inaudible (16.7 ms), and moving the latch would split the tick's sound watch in two.
+4. **Two destroyier paths the step did not name (low, true; recorded).** 3-20's placed stone is under LEFT's "not
+   built" (the port never takes a placed stone on a destroyier), and a thrown stone's missing #58-71 on its destroyier
+   is RECORDED DEVIATIONS 15: the port's destroyier is a trigger box with no contact tick of its own, so none is made up.
+
+| Gate (this round) | Required | Measured |
+|---|---|---|
+| Build | 0 warnings | **passes**: `fix2/build/build2-4.log` 0 warnings (build 1 stopped on the compiler's heap, `C1060` x 15, beside the other tracks' builds; re-run with `-j 3`); `test_mp.exe` `9a1c9c5a`, `MagicPortals.exe` `0bc35794` (its first link `cd5cf156` refused) |
+| A beholder rock broken on the level, at its contact | one begin of the rock on its break's tick, `stone_hit` once at hit / 3 (the case's own velocities), the shake hit x 2 then 5; the watch's own begin not doubled | **passes** (gate 4c): tick 717, hit 7.1432, `stone_hit` 2.381074, shake 14.2864 then 5; tick 892, one begin (the watch's), one `stone_hit` 0.692891. The game logs the same on tick 717 (`fix2/probe_rock/level31.log`; its diff against the verifier's probe log is those three lines and where `stone_hit.mp3` is loaded), f900 frame `11d2057e` = the verifier's |
+| Two latches on their tick, in play | each route's `light_switch` and `fire_diamond_drained` on their ticks and no other | **passes** (gate 3b): 70 of 70, 3 switches and 5 drains, each on its tick |
+| The runner, once | 47 suites, 0 failures | **passes**: `9a1c9c5a`, one launch, 47 of 47, `test_mp_layer` 3,343, `test_mp_routes` 1,143, the other 45 at the first fix round's counts (`fix2/suites/`) |
+| Routes, no gameplay change | 9,538 non-sound lines, 0 differ | **passes** (`fix2/suites/routes_diff_fix2.txt`, empty); the routes' output is the verifier's but the checks line |
+| Reachability | 108 / 20 / 0, 0 differ | **passes** (`fix2/reach_check.txt`) |
+| The 128-level f420 sweep | 128 of 128 identical to `MS/after/sweep` | **passes**: `0bc35794`, **128 of 128 identical** to `MS/after/sweep` and to `verify2/after/sweep`; 128 rc 0, whole, on their md5s, validation silent, 0 input lines, saves unchanged (`fix2/compare_fix2.txt`); every log's game lines as the verifier's (`fix2/log_compare_fix2.txt`). No pixel moved |
+| The sweep's census | as gate 8 | **passes**: every event's count and levels the verifier's - crystal_alert 35 on the 20 levels, all tick 1; stone_thrown 0; stone_broken 7 at 1.0; stone_hit 4 on 3; crate_knocked 11 on 6; key_picked 19 |
+| Smart App Control | refusals counted | **1 this round** (`fix2/sac_check.txt`): `MagicPortals.exe` `cd5cf156` at 00:23:14 on its first launch (the probe), deleted and relinked once to `0bc35794`, which ran the probe and the sweep; `test_mp.exe` `9a1c9c5a` ran on its first launch |
+
+**VERIFIED A THIRD TIME, PASSED** (`out/parity/program/P6/verify3.json`, on `MagicPortals.exe` `0bc35794` and
+`test_mp.exe` `9a1c9c5a`): every gate retaken or re-derived - the runner once, 47 of 47 (`test_mp_layer` 3,343,
+`test_mp_routes` 1,143); the routes' 9,538 non-sound lines, 0 differ; reachability 108 / 20 / 0; the probe's tick 717
+and f900 `11d2057e`; the sweep 128 of 128 identical to `MS/after/sweep`, every log's game lines the second fix round's;
+0 refusals. Its one problem (low), at commit, in text only: the comment on `MagicPortalsLayer::latch` called the log the
+census of what played; it says what was latched now, and LEFT FOR THE OWNER carries the behaviour half (the log's
+`sound` line). A comment is a source change, so the tree was rebuilt at commit (`P6/commit/build.log`, 0 warnings):
+`MagicPortalsLayer.cpp.obj` alone recompiled, byte-identical to the gates' but for the 2 bytes of its COFF header's
+time stamp; `MagicPortals.exe` (`193bf60b`) and `test_mp.exe` (`5ddd3f34`) relinked, and `MagicPortalsSpike.exe`
+(`d8d60427`), which the fix rounds' targeted builds had left stale on `MagicPortalsSim.lib`; none launched. The gates
+stand as measured on `0bc35794` and `9a1c9c5a`. Smart App Control: 5 refusals across the step, 0 at commit.
+
+## Step 143 - achievements as the original: every condition checkForLevelAchievements and registerMedalAchievements test, the red key's and the two help blocks', the unlocked set saved with its hash, the "Achievement unlocked!" card, the dashboard's "This level is locked!" and the pause's AchievementsPopup (built)
+
+**TRACK C (the worktree `Magic-Portals-Remake-w2c`, branch `w2-c`, on step 142's `90df118`, engine `710bffc`), the
+program's P8** (`docs/parity-backlog.md` section 6, "P8. Achievements"; the audit's P8, `screens_inventory.md` 4, 5
+and 8, `check_screens.md` 4, 5 and 8). Its build reads the frozen level data in `out/snap_w2`; numbered in track C's
+range, and the merge renumbers it. Changed: `game/data/achievements.json` (new: every rule, the save, the two cards,
+the Notificator and the popup, each cited), `game/sim/Achievements.{hpp,cpp}` (the rules and their reader, `World`,
+`Play`, `Dispatches`, `CompletionIds`, `HelpBlockId`, `HashOf`, `PopupText`, `FromLevel`, the saved set `Store`),
+`game/sim/Notificator.{hpp,cpp}` (new: the queue, `EffectOf`, the card's `LayOut`, `LayOutBox` for
+TextBoxFrame/ImageFrame), `game/sim/Dashboard.{hpp,cpp}` (`Build` given the unlocked ids), `game/sim/CMakeLists.txt`,
+`game/MagicPortalsLayer.{hpp,cpp}` (the hooks, `LevelWorld`, the card and the popup drawn, the music's volume per
+track), `game/data/sounds.json` (`achievement_card`), `game/data/ui.json` (`pause.achievements_button`'s stale
+reason), `game/main.cpp` (`--saves`' help), `tests/test_mp_achievements.cpp` (new) with `tests/CMakeLists.txt`,
+`tests/test_mp_layer.cpp` (five cases, two older checks), `tests/test_mp_routes.cpp` (each route's unlocks, checked).
+No engine change (the pin stays `710bffc`), no converter change, `tools/asbc` and `out/snap_w2` untouched. No format
+finding: the save's two keys are the original's script, cited in `achievements.json` `save` (as step 124 cited
+`audio.json`'s).
+
+**GAMEPLAY: none.** An unlock reads the level and writes a file and a card; nothing the simulation reads changes.
+Measured: the 70 routes won on the same ticks with their output line for line as step 142's apart from the new
+achievement lines and 4-19's sound census, which gains the card's `achievement_card x1`; reachability unchanged; and
+127 of the 128 levels' f420 frames byte-identical, 4-20's differing by 61's card alone, in its box, every log's game
+lines unchanged (gate 15). Two things a player meets that are not the game's rules: the
+card over every screen, and the music turned down under it (the Notificator's callbacks, below).
+
+**BLOCKERS, checked first: none.** Every condition, the save, both cards, the popup and its frame are in the listing
+(`all_functions.txt`, md5 `48fe65ce...`); the port has every input a rule reads (portals, the medal, the level's age,
+live entities, the lift doors, the torches, the wells' laps) but minion sight, which only seven rules read (LEFT FOR
+THE OWNER); the original's list is Enhanced's gitignored `out/snap_w2/data/achievements.json` (82 entries, read at
+run time, not changed).
+
+**WHAT THE ORIGINAL DOES** (arguments pushed last-first, `CMPIu vX, vN` the constant N; `achievements.json` cites
+every instruction).
+- **Where it unlocks**, always `AchievementManager::unlock(id, notify, delay)` (247231..248007): on the door's frame
+  `LevelFinishedLayer::LevelFinishedLayer` (271777..273843), which `writeScore` builds after `setScore` has saved the
+  medal, calls `registerMedalAchievements(g_currentWorld, true)` (#499-502) and then `checkForLevelAchievements(world,
+  level, score, numPortals, GameStateController::getGameTime(), true)` (#504-516) - `score` the medal this play earned,
+  the time `m_gameTime`, which `update` adds the frame to before `checkGameEnd`; `WorldSelector::WorldSelector`
+  (167326..168612) #265-291 `registerMedalAchievements(t, true)` for every chapter on every visit;
+  `PortalMainMenu::preLoop` #395-396 `checkPreviouslyUnlockAchievements` (202712..202943): for every world
+  `registerMedalAchievements(t, false)` and every level `checkForLevelAchievements(t, l, getScore(t, l), 99999, 0,
+  false)`, silently, outside the game; `ETHCallback_key` #822-851 `dispatchAchievement(61, true, 5000)` when a key
+  whose colour is red is taken (by the character or a minion, #713-742); `HelpBlockController::update` #462-517
+  dispatches 62 on 4-01's block and 63 on 4-02's, with 1500, before their popups.
+- **The conditions.** `checkForLevelAchievements` (401641..408734): 67 dispatches, each `dispatchAchievement(id,
+  notify, 2500)`, read as conjunctions of: the medal at least or above N, the portals at most or exactly N, the state
+  'Game', the game time at most N ms, `countEntities` (400758..401133: the ';'-split names, the sum of
+  `GetEntityArray(name).size()`) at least or exactly N, `SeekEntity(name)` null or not, every `door_lift` /
+  `door_lift.ent` at `status` 0 (`ETHCallback_door_lift`: 0 at its place, 1 opening, 2 open, -1 closing),
+  `hasBeenUnnoticed(N)` (401465..401641: exactly N `minion.ent` and `spottedCount()` 0 - #22 `CMPIu v4, v0` the
+  constant 0), and `retrieveRondaboutCount` (459326..459694: the body's laps round the first `gravity_area`) at least
+  3. `registerMedalAchievements` (399746..400758): a chapter at 50, 75 and 100 % unlocks its three badges, in that
+  order, each with 2500. 67 + 12 + 61, 62 and 63 = 82, each id named once - the list's 82. **Where the bytecode and
+  the list's descriptions disagree the bytecode is built**: 20 (2-28) also wants gold (#652 TNS); 42 (3-24) and 75
+  (4-27) test no medal.
+- **The saved set.** `unlock` #3-8 does nothing for an id `isUnlocked` (248275..248672) finds in `m_list`; #10-56 adds
+  it, so the list keeps the order of unlocking; #184-185 `saveList` on every unlock, notify or not. `saveList`
+  (249353..249707): entity `achievements`, `list` and `hash` = `generateAchivementHashCode(list)` (248672..249240: the
+  sum of `uint(id) x (t + 2)` in 64 bits, less 27, times 3, plus 2, cut to an int, in decimal; '' for no list), in
+  `findScorePath() + 'achievements.enml'`. `loadList` (245190..246105) keeps the list only when its hash is its own.
+- **The card.** `unlock` #74-182 when `notify`: a `Notification` on `sprites/nnotificationbg.png`, `'Achievement
+  unlocked! ' + Achievement.title` (the title itself, never the secret mask), icon `'sprites/achievements/' +
+  iconSprite`, 3400 ms, the caller's delay, sound `getAchievementSoundName`; `Notificator::notify`.
+  `displayLevelLockedNotification` (241425..241713), from `ScoreDashboard::loop` #780-786: 'This level is locked!',
+  no icon, 1500 ms, delay 0, no sound. `main` #1-56 builds the one `Notificator` (normalizedPos (0.5, 1), origin (0.5,
+  1), `getVerdana20FontName()` at 0.6 / density, textOffset (0, 4)) with two callbacks - `notificationCallback`
+  `setMusicVolume(0.15)`, `notificationDismissCallback` `setDefaultMusicVolume` (0.6 for g_musicNames[0], else 0.7) -
+  and `loop` #93-97 updates and draws it after every state, on frame time. `updateStack` moves ONE card a frame from the
+  stack once its delay has strictly passed, plays its sound and calls the callback; `update` dismisses the first shown
+  once its duration has strictly passed and starts the time of every card behind it again; `draw` draws the first:
+  `computeEffectScale` (elastic in over min(d / 2, 1000), a fade with `smoothEnd` shrink over min(d / 2, 800)), the
+  background cut 3 x 1 round the text box, the text centred, the icon on the box's left edge.
+- **The pause's AchievementsPopup.** `CustomGameMenuLayer` #229-280 adds 'scores' only where
+  `getAchievementsFromLevel` (249772..250229) is not null - 59 levels; `update` #38-94 opens `AchievementsPopup` over the
+  pause with `UILayerManager::openPopup`. `AchievementsPopup::AchievementsPopup` (281510..282417): a `Popup` with no
+  picture, `popup_close_button.png` at (0.92, 0.5), `tapScreenToClose`, the close's highlight; its text, per achievement,
+  '@' or '#', ' ', `getTitle`, ':\n', `getDescription`, '\n\n' between two. `draw` (282670..283226): the frame scaled by
+  the close button's alpha through `elastic` (in) or `smoothBeginning` (out), `TextBoxFrame` (36128..37291) at the
+  screen's centre over `ImageFrame` (33417..36120) with `borderOutside`: `box_bg.png` cut 3 x 3 round the text, the
+  text unbounced at 0.8 / density. Verdana40_shadow.fnt draws '#' as a padlock (the probe's capture).
+- **Not built**: `mergeOtherAchievementFiles` (246105..246631, another version's file - there is none here) and
+  `unlock` #58-72's `flurry` analytics.
+
+**THE CHANGE.**
+1. **The rules as data** (`game/data/achievements.json`): the 67 level rules in the function's order with their
+   instruction ranges, the 12 badges by chapter in unlocking order, the key's and the help blocks', the menu's fixed
+   arguments, the save's keys and hash constants, both cards, the Notificator's numbers and the popup's. Ids, numbers
+   and names only; titles, descriptions and icons stay in Enhanced's list. `Achievements::LoadRules` refuses a term it
+   does not know and an id two rules name.
+2. **The evaluator** (`Achievements::Dispatches`): a rule's terms in order, the first false one ending it; the level
+   answers through `World`. The layer's `LevelWorld` counts what the level placed by its `metadata/entity_name` while
+   it is still in the world (a shot agent and a destroyed body are not), and what was added since - a launcher's
+   stones, the markers' minions - by the entity each adds; a torch by `Torch::Light` (unlit, under that name, or put
+   back out by a signal, which adds `light_off.ent`, `level_world.signal_torch`); a lift door at `status` 0 by
+   `Mover::Door` (not opening, progress 0); the laps by `GravityWell::State::sweeps` (the player's, round the first
+   well); the spotted count 0 (no sight).
+3. **The hooks**: the door's tick after `recordWin` (the chapter's badges, then the level's rules with this play's
+   medal, portals and time - the level's age with this tick's 16.667 ms), chapter select on every visit (badges, with
+   cards), the main menu on every visit (the silent pass), a named `--level`'s start (the same pass, where the menu
+   would have run it), the red key's carrier changing, and 4-01's and 4-02's help-block release.
+4. **The saved set** (`Achievements::Store`): `achievements.json` beside `scores.json` in the save directory, the
+   original's `list` and `hash` under `achievements`; a wrong hash opens empty, a file that does not read is said and
+   written over at the next unlock, an empty directory is memory-only. The dashboard reads it
+   (`Dashboard::Build(..., ids)`).
+5. **The Notificator** (`sim/Notificator`): the queue on the layer's tick after each tick's state, on every screen; a
+   card shown latches its sound (`achievement_card` = `getAchievementSoundName`) and sets the current track's volume to
+   0.15, a card gone sets 0.6 or 0.7; `MagicPortalsLayer::EmitNotifications` draws the first card over everything, in
+   the menu's box or the level's view. The music keeps a volume per track (`Music::volumes`), cleared by a
+   `playMusic`; `updateMusic` gives the voice its volume (`AudioEngine::SetVoiceParameters`).
+6. **The pause's popup**: `PressPause(Achievements)` opens it where the level has achievements; while it is up it takes
+   the pause's tick and every touch (the pause's buttons take nothing), a touch down, its close button or the back key
+   closes it, and the pause is current again once it is gone. Drawn after the pause: the framework's dim and close
+   button (`emitPopup`), then the nine tiles and the text.
+
+**THE GATES.** Before = step 142 (`MagicPortals.exe` `0bc35794`, `test_mp.exe` `9a1c9c5a`, `P6/fix2/after/sweep`,
+`P6/fix2/suites/`); after = `MagicPortals.exe` **`b662576b`**, `test_mp.exe` **`a5edebc3`** (rebuilt after the
+folder's rename as `ebbdff7e` / `e85bbf06`, on which the verification retook every gate: the step's last paragraph).
+Everything under `out/parity/program/P8/`. Every exe run was given `--saves` (a scratch directory; the owner's
+`%APPDATA%/Magic Portals/scores.json`, `40bfef3a`, was read for gate 12 by its copy and is unchanged; no
+`achievements.json` was written there).
+
+| Gate | Required | Before | After |
+|---|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | - | **passes: 0 warnings** in six builds (`build/build1-6.log`, `-j 4`, then `-j 2` for the spike): build 1 stopped on the new suite's `CHECK_EQ` of two strings (a test error, `std::to_string`); build 2 `a1c619f0` / `0f08040c` (the runner refused, SMART APP CONTROL); build 3 the runner relinked once, `03f211b7`; build 4 `main.cpp`'s help, `84563841` (never launched); build 5 the card's log by id and the test's hash, `b662576b` / `a5edebc3`; build 6 `MagicPortalsSpike.exe` relinked on the changed `MagicPortalsSim.lib` (`6fcb49ea`, not launched); after the folder's rename, the rebuild for the repointed input paths (127 steps, `ebbdff7e` / `c680f3ef` / `ee475e9f`), the verifier's relink of the refused runner (`e85bbf06`) and the commit's rebuild of `main.cpp`'s help (`1a7674e3`, not launched), 0 warnings each |
+| (1) Every id unlocked by exactly one rule, as the list | 67 level rules, 12 badges, 61/62/63; the list's 82 ids each once; each rule's (world, level) its entry's; 59 levels named | 27 of 82 (the tool's two tables) | **passes** (`test_mp_achievements`): 82 of 82, each rule on its entry's level, the badges the chapters' own, 61 4-19's, 62 and 63 4-01's and 4-02's (secret); 59 levels named |
+| (2) The menu's pass is the tool's walk of the same bytecode | with the menu's arguments, every level x medal 0..3 and chapter x 0..100 % equal to `from_level_medal` / `from_completion` | - | **passes**: 512 level-medal cells (27 unlocks) and 404 chapter cells, 0 differ |
+| (3) Every term as the bytecode tests it | a case per kind and per boundary | - | **passes**: 46 cases - 1-10's agent, 1-26's 8 stones, 1-28's no portal, 1-31's doors, 2-01's crate by name, 2-08's six crate names, 2-14's 17 and 80, 2-28's gold, 2-32's 22 portals and the finish, 3-01's silver, 3-02's two unnoticed and one spotted, 3-09's 31 and 74, 3-24's 42 at bronze, 4-07's 8016 / 8016.5 ms, 4-17's laps, 4-25's dark and light, 4-27 at bronze, 4-31's 68 and 69, 4-32's 12 / 13 portals; no level, no level term |
+| (4) The save | the hash worked by hand; the list in unlocking order; a wrong hash empty; a broken file written over; memory-only writes nothing | - | **passes**: `45` 191, `45,6,7` 329, `0` -79, `3,0,37` 383, `2147483647,2147483647` 2147483554 (the 32-bit product and cut); round trip `45,6,7`; hash 330 refused; `{ not json` said, empty, rewritten |
+| (5) The Notificator | 20 ms frames: two cards at once shown 2500 ms on strictly, one a frame, each 3400 ms in turn; the effect's values | - | **passes**: shown A@126, B@127, gone A@297, B@467; scale 0 at 0, elastic(0.5) = 1.0156 at 500, 1 from 1000 to 2600, alpha 0.5 and scale smoothEnd(0.5) = 0.7071 at 3000, alpha 0 at 3400; the locked card's 750 / 750 |
+| (6) The card's and the frame's places | at full size on 1280x720: the three pieces round the text box at the bottom centre, the text pitched by half the icon, the icon on the box's left edge; the nine tiles outside the text, the bounce on the tiles alone | - | **passes** (`TheCardSitsAtTheBottomCentre`, `TheBoxFramesTheText`) |
+| (7) The door, layer | 1-01 walked to its door: 45 on the door's tick with this play's medal, portals and time; saved there with its hash; its card off the stack strictly past 2500 ms with its stinger and the music at 0.15, gone strictly past 3400 ms with 0.7; drawn as three pieces and the icon | nothing unlocked by play | **passes** (`TheDoorUnlocksItsAchievementAndRaisesItsCard`): door tick 193, medal 3, 0 portals, 3216.7 ms (= the level's age); `list` "45", `hash` "191"; the card 149 ticks after the door (the queue's 150th update, counting the door tick's own: 2500.0002 ms, strictly past 2500), gone 204 later (3400.0003 ms); music 0.7 / 0.15 / 0.7; `achievement_card` once |
+| (8) The red key, layer | 4-19's key taken: 61 on that tick, its card strictly past 5000 ms | - | **passes**: 61 on the pick's tick, the card 299 ticks later |
+| (9) The pause's popup, layer | 1-31 (achievement 13's): open, its text the list's entry, silent, the pause's buttons dead under it, nine tiles and the close drawn, closed by the back key and gone with the pause current; 1-05 (none): nothing opens | the button opened nothing | **passes**: '# ' + title + ':\n' + description; `box_bg.png` x 9, `popup_close_button.png` x 1; gone 60 ticks after the back key, then Resume resumes; 1-05 nothing |
+| (10) The main menu's pass and the dashboard, layer | chapter 1 all gold: 0, 3, 37, 45, 6, 7, 8, 9, 46, 47, 14, silent, in that order, saved with its hash; the dashboard from the saved set the same rows and points as from the medals | the dashboard from the medals | **passes**: that order, `hash` 5192 (1757 - 27, x 3, + 2), no card; rows and points equal |
+| (11) The locked row, layer | a fresh save's 1-02 row: 'This level is locked!' at once, 1500 ms, no icon, no sound but the denial | the denial heard, nothing drawn | **passes**: row 4, the card on the next tick, `achievement_denied` once and no `achievement_card`; three pieces over the dashboard |
+| (12) The exe | (a) 1-01 to its door, a fresh save: the card at f420 and nothing else changed; (b) the same with the owner-like save: the start's pass silent, no card; (c) 1-31's popup; (d) the owner's own save copied, through the menu: `scores.json` unchanged, `achievements.json` made, the dashboard on it; (e) a help block's dispatch | - | **passes** (`probe/`): (a) door 193, `achievement 45's card shown on tick 342`, f420 the card in (254..1026, 631..720) and `list` 45 / 191; (b) `45, 6, 14` on tick 0 by the pass, `hash` 413, no unlock at the door, `scores.json` `40bfef3a` before and after, f420 differs from (a) only inside the card's box (67,833 px); (c) the popup over the dimmed pause, the padlock, the frame; (d) the menu on tick 143 unlocks 45, 6 and 14 silently, `scores.json` `40bfef3a` before and after (and the owner's own untouched, no file added there), the dashboard 20 points; (e) 4-02's help block (the player `--place`d beside it, a DEV probe, never a route): 63 on its release tick 121, its popup not built, the card on tick 210 (strictly past 1500 ms), `list` 63 / `hash` 299 |
+| (13) No gameplay change: routes | 70 won on the same ticks, output as step 142's apart from the achievement lines; every unlock its level's or its chapter's, at its door with a card (or the red key's), every medal-only rule exactly as the medal | 70 won, 1,143 checks | **passes** (`suites/final/test_mp_routes.txt`): 70 won on the same 70 ticks, **1,241 checks** (+98), 0 failures; 11,730 lines without the achievement lines, 1 differs from step 142's: 4-19's sound census, now with `achievement_card x1` (its card shown on tick 428, before its door on 581) (`routes_diff.txt`) |
+| (14) Winnability | reachability 108 / 20 / 0, 0 differ | 108 / 20 / 0 | **passes** (`reach_check.txt`, main's venv) |
+| (15) The 128-level f420 sweep | 128 rc 0, validation silent, pngs whole and on their lines, no input line; **128 of 128 identical to `P6/fix2/after/sweep`** (written on the premise that no level reaches a door, a red key or a help block in 420 frames) | `P6/fix2/after/sweep` | **NOT MET as written, explained: 127 of 128 identical** (`compare_P8.txt`; also 127 of 128 to `base_w2C/sweep`). The premise was wrong for 4-20, and **4-20 differs by the card alone**: its red key (`key_1335`) is taken on tick 1 - the player starts on it - so `ETHCallback_key`'s 61 is dispatched there as on 4-19 (the bytecode tests the colour, not the level), and the sweep's shared save did not have it: the card shown on tick 300, at f420 in its hold, 71,212 px in (235..1047, 631..720) - the card's box, over the walk pads - and nothing else. 128 rc 0, no stall, every png whole and on its logged md5, validation ACTIVE in 128 and silent, 0 input lines, art from `out/snap_w2` in 128; every log's game lines (the achievement lines aside) as step 142's, 128 of 128; the seeded `scores.json` `40bfef3a` before and after, and the shared save's `achievements.json` now `45,6,14,61` / `1328` (1-01's start pass unlocked 45, 6 and 14 from the seeded medals, silently; 4-20 61) |
+
+**THE ROUTES' UNLOCKS** (gate 13; memory-only saves, so each route from nothing): 1-01 45, 1-02 6, 1-03 7, 1-32 14,
+2-14 17 (its small crate not burned: no 80), 2-32 22 (24 portals: no 21), 3-02 24 (unnoticed - no sight), 3-32 36, 4-01
+49, 4-19 61 (the pick, tick 129), 4-30 76 (gold and unnoticed - no sight), 4-32 73 and 77 (gold, 6 portals). 58 routes
+unlock nothing (their medal or numbers miss, or 2-01's crate burned at tick 181, 1-10's two agents shot).
+
+**SUITES**, on `test_mp.exe` `a5edebc3`, once each (`suites/final/`): `test_mp_achievements` **1,140** (new),
+`test_mp_layer` **3,388** (3,343 + 45: the five cases and the two older checks), `test_mp_routes` **1,241** (1,143 +
+98), `test_mp_info` **389**, `test_mp_sounds` **242**, 0 failures each. The first runners: `03f211b7` ran all five
+(`test_mp_layer` 3,388 with 1 failure, the menu case's hand hash written for another order - 4514 is `45,6,7,8,9,46,47,
+14,0,3,37`'s - fixed to 5192). Not run: the other 42 suites - none includes a changed header but through
+`MagicPortalsLayer.hpp`, which only the layer and routes suites include, and `Dashboard.hpp` / `Achievements.hpp`,
+which `test_mp_info` does.
+
+**SMART APP CONTROL: 2 refusals across the step, both of `test_mp.exe`.** The implementation's 1 (`sac_check.txt`,
+CodeIntegrity 3033/3077/3118 at 02:57:01): `test_mp.exe` `0f08040c` on its first launch, deleted and relinked once
+(`03f211b7`), which ran; `a5edebc3` ran on its first launch. `MagicPortals.exe` `b662576b` ran on its first launch
+(the probes and the sweep's 128 launches); `a1c619f0` and `84563841` were linked and never launched;
+`MagicPortalsSpike.exe` `6fcb49ea` linked, not launched. The verification's 1 (`verify1/sac_check.txt`, at 11:06:09):
+the rename's runner `c680f3ef` on its first launch, deleted and relinked once to `e85bbf06`, which ran;
+`MagicPortals.exe` `ebbdff7e` ran all its 137 launches. 0 at commit.
+
+**RECORDED DEVIATIONS.**
+1. **The game's time is the level's age on the tick** (16.667 ms ticks, a pause's time excluded), where the original
+   sums whole-millisecond frames from `GameStateController`'s creation; the time rules' +16 ms slack (8016 ...) takes
+   a frame either way.
+2. **A named `--level` runs the main menu's silent pass at its start** (the menu path runs it at the menu, as the
+   original): without it the first door of a dev run would raise cards for badges the save earned long ago.
+3. **A lift door is at `status` 0 when it is not opening and at its place** (`Mover::Door`); the original's door
+   latches (B7, built on `main` by the wave's other track, not in this tree), so a door that reverses mid-way reads as
+   the port moves it.
+4. **The Notificator runs on the layer's tick**, the original's on frame time; its strict comparisons are kept, so a
+   card shows on the 150th tick after a 2500 ms delay at 60 Hz.
+5. **The music's volume is kept per track** (`setMusicVolume` on `currentTrack`): a track a card turned down and a
+   `playMusic` of another leaves each at its own; INFERRED from SetSampleVolume being a sample's, not measured.
+6. **A card's log line names the achievement by id** and the unlock's by id: the titles are the original's list's.
+7. **A card without Enhanced's list is not raised** (the unlock is still made and saved): its words are the list's.
+8. **A save shared across runs carries what one run unlocked into the next**, as the player's own does: the sweep's
+   4-20 raises 61's card because no earlier run of that save took 4-19's key (gate 15).
+
+**RULINGS APPLIED.** The standing direction: the original decides - every condition as its bytecode tests it (the
+descriptions lose where they disagree: 20, 42, 75), the saved set and its hash as `saveList` writes them, both cards as
+the Notificator draws them, the music under them as its callbacks set it. **The owner's ruling on the pause's
+Achievements button is kept**: drawn on every level; the original draws it on the 59 levels an achievement names
+(gate 1), and on the other 69 it opens nothing here (`ui.json`'s stale reason replaced). R1, R2, R17, R23 not this
+step's; R24 and R25 untouched; camera dragging not touched.
+
+**LEFT FOR THE OWNER / FOR LATER.**
+- **Stealth fires on play alone.** Minion sight is not built, so `spottedCount` is 0 and the seven "unnoticed"
+  achievements - 24 (3-02), 26 (3-04), 28 (3-05), 32 (3-11), 42 (3-24), 66 (4-25, lights on), 76 (4-30, gold) - unlock
+  whenever the level's minions all stand; two routes do (3-02's 24, 4-30's 76). They become as hard as the original's
+  when sight is built and raises `enemySpotCount`; the owner may prefer them held until then.
+- **Conditions on what is still to be built** (they fire now where the port's mechanics already reach them): the
+  minion counts - every one killed: 23 (3-01), 25 (3-03), 41 (3-04), 74 (3-09); none killed: 29 (3-06), 31 (3-09),
+  33 (3-16), 40 (3-23) - count the `minion.ent` left standing, which the killer floor, a fireball and a shock diamond
+  take now and a knight's sword (G1), a stone's crush and an explosion's burn will; 10 (1-10) counts live agents (step 126's kill); 13 (1-31) reads
+  the lift doors (B7's latch); 60 (4-17) the laps (step 110's sweep); 69 (4-31) needs its torch lit and put back out
+  by the fire signal (the placed one is the bare `light_off`).
+- **The pause's button on the 69 levels no achievement names** opens nothing (above): the ruling is the owner's.
+- **Two of the original's on-screen strings are committed as runtime values** (the verification's finding, low, not
+  blocking): `achievements.json`'s `card.message_prefix` 'Achievement unlocked! ' and `locked_card.message` 'This
+  level is locked!', which `test_mp_achievements.cpp` and `test_mp_layer.cpp` embed too, where the project keeps the
+  achievements' own words, the secret mask's included, in Enhanced's gitignored `out/data/achievements.json` as
+  Asantee-authored (`ui.json`'s dashboard note, `Achievements.hpp`); the dashboard's 'new!' (`ui.json`) is committed
+  the same way. `docs/permission.md` is still the 'PASTE THE ACTUAL GRANT HERE' stub, so the scope that would settle
+  it is not recorded. Either `tools/asbc/achievements.py` extracts the two strings into `out/data/achievements.json`,
+  as it does the secret words, and the port reads them there, or a ruling records that short UI strings may be
+  committed.
+- **Not built**: `mergeOtherAchievementFiles` and the analytics line.
+- **Verified by reading, not by a case or a route**: `LevelWorld`'s answers on real levels for the lift doors (1-31's
+  three `door_lift` nodes are `Puzzle::SwitchedDoor`s named by their node, `Puzzle::Wire`), the torches
+  (`Torch::Light::name` is the node's, so `FindNode` resolves on 4-22, 4-25, 4-26, 4-27) and the laps
+  (`GravityWell::State::Tick` keys each sweep by the body's own entity - the player's is `Level::player` - and the
+  well's index in scene order). The routes exercise `Count` on real scenes (2-14's live crate, 1-10's dead agents);
+  no route wins 1-31, 4-17 gold, or a dark level unlit, and 62 (4-01's block, off the view at the probe's tap) was not
+  reached - it is 63's hook, which was.
+- For the close role: the backlog's P8 row and "Left by step 126"'s note (10 counts the live agents - built so), step
+  142's "Not built ... the achievement stinger (no unlock notification)" (built here), the audit's P8 and the UI2
+  "AchievementsPopup unmeasured" row, and the "Smaller" row's `--saves` `--help` sentence (step 124's, finished at
+  this step's commit).
+- For the merge's renumbering: "step 143" is written in `achievements.json`, `sounds.json`, `ui.json`,
+  `Achievements.hpp`, `Dashboard.hpp`, `MagicPortalsLayer.{hpp,cpp}`, `tests/CMakeLists.txt` and the three suites.
+- **For the merge, the lift doors' status** (the verification's finding, low): `LevelWorld::LiftDoorsShut`
+  (`MagicPortalsLayer.cpp`) reads `status` 0 as `!motion.opening && motion.progress <= 0` (deviation 3), as this tree
+  has no latch; `main`'s step 133 (`5ee1c66`) gives `Mover::Door` the decoded `DoorStatus` (Closing -1, Shut 0,
+  Opening 1, Open 2). The old fields are still on `main`, so the merge compiles either way; at the merge it tests
+  `door->motion.status == DoorStatus::Shut`, the decode's 0, and keeps achievement 13's case.
+
+**VERIFIED AFTER THE FOLDER'S RENAME, PASSED** (`out/parity/program/P8/verify1.json`, its evidence in `P8/verify1/`).
+A power loss at about 03:50 on 2026-10-01 cut the first verification before it measured anything
+(`P8/verify1_dead_poweroff/`); the owner then renamed the main checkout to `Magic-Portals-Enhanced`, and this tree was
+rebuilt for its repointed input paths (127 steps, 0 warnings; only the compiled-in paths changed): `MagicPortals.exe`
+`ebbdff7e`, `test_mp.exe` `c680f3ef` (refused, relinked once to `e85bbf06`), `MagicPortalsSpike.exe` `ee475e9f` (not
+launched). On `ebbdff7e` and `e85bbf06` every gate was retaken or re-derived: the decode re-read, its 67 dispatches
+identical to `achievements.json`'s in their order, and the hash confirmed by the original's own save - the rig's
+device `achievements.enml` (28 ids) stores 48140 = (16073 - 27) x 3 + 2, its order the menu pass's; the runner once
+with no argument, 48 of 48 suites, 0 failures, **16,812 checks** (the five above at their counts, the other 43 at
+step 142's); the 70 routes on the same ticks, their output line for line the implementation's; reachability
+108 / 20 / 0; the exe's probes (a) to (e), a locked row (1-04) and the popup's '@' and two entries; the f420 sweep with
+a fresh copy of the owner's `scores.json` for every launch (the implementation's shared one save), **128 of 128
+byte-identical to `P8/after/sweep`**, and 127 of 128 to `P6/fix2/after/sweep` and `base_w2C/sweep`, 4-20 by 61's card
+alone (gate 15); the owner's `%APPDATA%/Magic Portals` exactly `scores.json`, `40bfef3a`. Its five problems, all
+low, at commit in text only: `main.cpp`'s `--saves` help, step 124's unfinished sentence which this step rewrote, now
+ends "without changing the player's own save", and the named `--level`'s start pass is a sentence of its own; the two
+on-screen strings and the lift doors' merge note are in LEFT FOR THE OWNER above; this paragraph records the rebuild
+and the round; the implementation's shared sweep save needed no change, the fresh-save sweep giving its frames. The
+help is printed by `--help` alone, but it is a source change, so the tree was rebuilt at commit
+(`P8/commit/build_commit.log`, 0 warnings): `main.cpp.obj` recompiled and `MagicPortals.exe` relinked, `1a7674e3`,
+not launched; the whole build then had no work to do. The gates stand as measured on `ebbdff7e` and `e85bbf06`.
+Smart App Control: 2 refusals across the step, 0 at commit.
+
 ## Step 144 - wave 2's three tracks merged: track B's 137 to 140 and track C's 141 to 143 after track A's 133 to 136, every route in the release meaning, the flame a shot meets where its agent burns from, and every track's routes replayed on the merged build (built)
 
 **MERGE NOTE (2026-10-01: `w2-b`, then `w2-c`, into `main`, after step 136 and `b25a426`).** The program's wave 2
@@ -26379,6 +27089,9 @@ at `710bffc` and none moved it.
 | 151 | 138 | B | CD (the camera drag) | `93eb2a1` |
 | 152 | 139 | B | AR (B4, the draggable handle) | `0e76e6d` |
 | 153 | 140 | B | G2 (the lift) | `056e1cd` |
+| 170 | 141 | C | MS (the medal at the door, 4-19's key sparkles) | `6462ba9` |
+| 171 | 142 | C | P6 (the sound pass) | `90df118` |
+| 172 | 143 | C | P8 (achievements) | `b45c740` |
 
 **THE FIRST MERGE, `w2-b`** (117 files; 14 conflicted, every one kept both ways):
 - **This document's tail**, where both appended: track A's 133 to 136, then track B's, renumbered. Track B's pointer
@@ -26441,3 +27154,172 @@ and `test_mp_handle` 9 (8 + the merge's case).
 The first merge was built alone, before the second (`out/parity/program/merge_w2/build1_m1.log`: 86 steps, **0
 warnings**; `build2_m1.log`: the new case, 3 steps, 0 warnings); nothing was launched on it. Its gates are the second
 merge's, below.
+
+**THE SECOND MERGE, `w2-c`** (33 files; 5 conflicted, every one kept both ways):
+- **This document's tail.** Track C's 710 appended lines go in before this step (`fd80e82..w2-c` only appends here).
+- **`game/MagicPortalsLayer.hpp`, the sound watch**: step 142's fields kept; its `liftsForward` dropped, because step
+  140 had replaced it with `liftsSent`. The watch has one lift count, and `sounds.json` one lift event, step 140's
+  `lift_sent` (playElevatorSound per send); `lift_turned` is gone.
+- **`game/main.cpp`, `--route`'s help**: both meanings, the shot on the up (137) and the medal recorded on the door's
+  tick (141).
+- **`tests/test_mp_layer.cpp`**: both tracks' cases were appended at the same place: track B's (2-20's handle, 1-28's
+  lift), then track C's eleven.
+- **`tests/test_mp_routes.cpp`**: track C's `Play(plan, options, label)` with step 136's held tail.
+
+**22 places in this document** give track C's new numbers (the three headings and 19 references, one split across a
+line and fixed by hand) and **118 outside it**: `sounds.json` (36, one split), `MagicPortalsLayer.cpp` (23, one
+split), `MagicPortalsLayer.hpp` (9), `test_mp_layer.cpp` (22), `test_mp_routes.cpp` (6), `test_mp_sounds.cpp` (3),
+`ui.json` and `Boss.hpp` (2 each) and one each in `achievements.json`, `cutscenes.json`, `Achievements.hpp`,
+`Dashboard.hpp`, `Ghost.hpp`, `Impacts.{hpp,cpp}`, `Notificator.hpp`, `Sounds.{hpp,cpp}`, `tests/CMakeLists.txt`
+and `test_mp_{achievements,boss,cutscene,ghost}.cpp`. After both renumberings a grep for steps 150 to 153 and 170 to
+172 over `game`, `tests`, `data`, `docs` and `tools` finds only step 128's and this step's own "written as" lines and
+the backlog's line on wave 1. The run lists: `test_mp_layer` 209 cases defined and 209 called (198 + 11), and the
+runner 49 suites (47 + `test_mp_handle` + `test_mp_achievements`).
+
+**THE OVERLAPS GIT MERGED WITHOUT A CONFLICT, RE-DERIVED** (`out/parity/program/merge_w2/merge.md` has each check):
+- **(a) Achievement 13's lift doors** (step 143's deviation 3, written against the unlatched door). `LevelWorld::
+  LiftDoorsShut` now reads step 133's status machine, `status == DoorStatus::Shut` - the decode's `GetInt('status')
+  == 0` - instead of `!opening && progress <= 0`. The two part on two frames: the one a falling door is back at its
+  place (progress 0, but the status reads Closing until the next frame sees it, as `ETHCallback_door_lift` #1-6
+  does), and a door pressed again as it lands, which goes Shut and Opening in one frame and is never read shut. Only
+  1-31 carries achievement 13; no route reaches it, so it stays verified by reading, as step 143 left it. **Step
+  143's deviation 3 is closed.**
+- **(b) The route census, re-pinned from the merged run** (86 routes). The same twelve routes unlock the same ids on
+  the same ticks as on track C's 70: 1-01 45, 1-02 6, 1-03 7, 1-32 14, 2-14 17, 2-32 22, 3-02 24, 3-32 36, 4-01 49,
+  4-19 61 (pick tick 129), 4-30 76 and 4-32 73 + 77. The 16 routes track C never had unlock nothing. A door's play
+  (medal, portals, game time) moved only where its route or its tick did: track B's lift routes (1-27, 1-28, 1-29,
+  2-02, 2-07, 2-09, 2-25, 3-31), track A's re-authored ones (2-03, 2-23, 2-31, 4-31), this step's (2-06, 2-18) and
+  the release drift's ticks (1-08, 3-03, 3-20, 4-16, 4-18, 4-19, 4-29). `test_mp_routes` counts 1,513 checks: track
+  C's 1,241 and 17 for each of the 16 added routes (3 of the route, 13 of the sound census, 1 of its door). The sound
+  census changed only where a track's mechanism or route did (`merge.md` lists each row): 109 `lift_turned` became 26
+  `lift_sent`.
+- **(c) The sounds against the new mechanisms.** The lift: 26 `lift_sent` for the 26 touches that send a lift, each
+  latched the tick after its press (step 140's deviation 6), and no `lift_turned`. The fireballs: every shot a flame
+  burns latches one `fireball_spat` on its burn tick (2-10 x2, 2-11, 2-16, 2-17, 2-19), because step 134's burned shot
+  is a converted fireball (`turrets.converted`), which step 142's watch counts, as `addFireball` #87 plays it for
+  `burnProjectile` - **step 134's deviation 4 (the converted fireball's launch sound) is closed by the merge**. A
+  fireball through a pair latches one `traversal` on its transit (2-03 x3, 2-06, 4-14) and its burst only where it
+  ends. A transit the platform gate holds latches nothing until it goes. The death area kills as a hazard did, so its
+  sounds are the old death's. The door's sound has one stride, its node's `strideMs` (133) through `sounds.json`'s
+  `3000 / doorOpenStride` (142). A minion a flame burns is now heard (`burned`, step 142's latch on Minions' count),
+  on the tick it is destroyed - RECORDED DEVIATION 1.
+- **(d) The touch** (137) against the pause's popup, the dashboard, the door's medal and the buttons' sounds. A help
+  block takes a touch on its press and opens on its release at the last held point, and no shot leaves; the corner
+  controls spend the touch on their press (step 137's deviation 1), the in-level restart latching `level_button` on
+  that press (142); the pause forgets the touch (137), its Achievements button opens step 143's popup, and under it
+  the pause's buttons take nothing; the dashboard is a menu screen, off the shot's path. The medal is saved on the
+  door's tick (141), which a route's taps reach as before.
+- **(e) The camera's finger and the handle** against the flame and the lift. The camera reads the raw touch before any
+  reader takes it; a lift touch is a one-tick tap in every route, never DOWN, so it pans, holds and stops nothing; a
+  moving handle locks the finger (139); and the flame on a handle is THE FLAME above. No level has both a lift and a
+  handle.
+- **K13, K8, one spawn rule, D11.** No track added a `kSlotTable` class or a random draw: track A's `burn_projectile`
+  and track B's `smoke_vanish` go through the effects runtime (`effectAdd`, `m_effectRandom`), and track C's key
+  sparkles scale an existing emitter's step. `smoke_vanish` is track B's one new rule. No track changed `Earthquake`,
+  `earthquake.json` or added a `startEarthquake` call: step 133's landing shake is the existing `DoorLanded` call read
+  off `landings`, and step 142's rock shake goes through the impacts' existing rows.
+- **The converter.** No track touched it; main's live `out/` equals `out/snap_w2` by its manifest, so `out/levels`
+  stays.
+
+**THE ROUTES, REPLAYED ON THE MERGED BUILD.** `tests/routes/` holds 86 routes: the 70 of the base, track A's ten and
+track B's six. The first full run won 84. The other two are the tracks meeting:
+- **2-18 `level17a`** (step 140's route for the waiting lift) was not won by 1254: its kill shot from (253.8, 43.5)
+  toward (54, 76) ended on `door_lift_1146` at (191, 53.65). That is step 133's finding again: the latched door rises
+  102.4, so its bottom stands at 56.6. Re-timed as step 133 fixed its own route: the portal under the fall goes down a
+  tick earlier (1095), so that the kill can leave on the player's RISING pass through y 49.9 on 1120 - the first tick
+  the 400 ms between releases allows - toward (53.8, 72) (the tap's (56.2, 72), carried 2.36 by the camera while the
+  finger is down): under the door's bottom, over the barrel's corner, and within 22.4 of the agent, which goes with
+  its ring on 1137. The door-room portal is (60, 50), which the raised door lets through from mid-fall ((60, 30) now
+  meets the door's bottom). **Won on tick 1191.** The kill wins for a tap from y 71.4 to 72.6 and x 54 to 58, and
+  only released on 1120; the door-room portal from y 45 to 55.
+- **2-06 `level5a`** (step 135's route) rode the old self-running lift and was not won by 630. Re-authored for the
+  waiting lift: the same portal by the crate (30); right onto the lift and a touch sends it down (265); the lane
+  portal at (300, 202) from it (345); fireball #2 through the pair burns the crate (390); a touch sends the lift back
+  up (400); the pocket portal (531) and one on the player (556). **Won on tick 575**, and on each of eight nudges.
+- After both: **86 routes, 1,513 checks, 0 failures.** 83 won on exactly their own track's last tick; 4-29 on 1502,
+  step 133's 1501 and the tick step 137's drift adds; 2-06 and 2-18 on their new ticks
+  (`merge_w2/route_ticks_run2.txt`). The four routes track A wrote over the base and track B only migrated (2-03,
+  2-23, 2-31, 4-31) won on track A's ticks;
+  track B's lift routes on track B's ticks, the latched doors included (1-28, 1-29, 2-07, 2-09); 2-24's drag route on
+  722, though step 139 had feared the latch; the four drag routes with no shot burned; 1-28 with no entry held (step
+  136's 9-tick hold was on the self-running lift). Track A's migrated taps drift up to 6.80 px (2-11's) and win on
+  track A's ticks.
+
+**GAMEPLAY OF THE MERGE'S OWN: THE FLAME A SHOT MEETS** (above). Everything else is one track's, as that track
+committed it; the routes above are route data only.
+
+**THE SWEEP** (`out/parity/program/merge_w2/sweep/`, `capture_merge_w2.sh`, `compare_merge_w2.py`). The 128
+levels at f420 on `MagicPortals.exe` `1e569b97`, the merged build, with step 143's command line: every launch given a
+FRESH copy of the player's `scores.json` (`40bfef3a`) in its own folder, as track C's verifier did, so no frame
+depends on the order.
+**128 of 128 rc 0**, no stall; validation ACTIVE in 128 logs and 0 with a message; 0 logs with unscheduled input;
+all 128 read main's live `out/levels`. Every PNG of the six sweeps compared - O, the wave's base
+(`P1/clamp/after/sweep`, step 131), A (`HZ/after`, step 136), B (`G2/after`, step 140), C (`P8/after`, step 143),
+C' (P8's verifier, fresh saves) and M - is on the md5 its capture logged and whole, 768 of 768. Each save after its
+launch: `scores.json` `40bfef3a` 128 times; `achievements.json` 45, 6, 14 (hash 413) 127 times and 45, 6, 14, 61
+(1328) once, 4-20's red key on tick 1. Track A moved no level off O (its steps changed nothing an untouched f420
+shows); track B moved 17 and track C one; none moved the same level.
+- **110 levels no track moved: M equals O on all 110, byte for byte.**
+- **17 levels only track B moved** (1-21's lesson; the handle and its lesson on 2-20 to 2-24 and 2-27; the waiting
+  lift on 1-27, 1-28, 1-29, 2-02, 2-06, 2-07, 2-09, 2-18, 3-10 and 3-23): **M equals B on all 17.**
+- **1 level only track C moved** (4-20, achievement 61's card): **M equals C and C' on it.**
+
+No level differs from every track: the merge's own rule (the flame on a handle) moves nothing at f420, where no handle
+is dragged.
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4, Release, Ninja | **passes: 0 warnings** in the first merge's builds (86 + 3 steps), the second's (55 steps) and the four builds after it (the case's fix and three relinks); `MagicPortals.exe` `1e569b97`, `test_mp.exe` `85d354ab` |
+| Both merges keep every behaviour | the conflicts resolved both ways | **passes**: 14 + 5 conflicts, above; the run lists complete (`test_mp_layer` 209 / 209, 49 suites) |
+| The overlaps re-derived (a) to (e) | each answered from both tracks' code | **passes**, above: the door status, the census, the sounds once at their events, the touch, the camera and the handle |
+| One `kSlotTable` (K13), `m_effectRandom` (K8), one spawn rule, D11 | as 00_order states them | **passes**: no new slot class, random draw or earthquake call; `smoke_vanish` one rule |
+| Every track's routes win (winnability) | every route in `tests/routes/` wins, no DEV flag; none deleted | **passes after two route fixes: 86 routes, 1,513 checks, 0 failures**; 83 on their own track's tick |
+| Reachability | no door newly sealed | **passes**: ctest's `parity_reachability` passed; `reachability.py --check`: 128 levels, opened 20, reachable 108, sealed 0; 0 differ |
+| The whole runner | once, every suite | **passes: 49 suites, 49 passed, 18,059 checks** (the second run; the first's one failure was the merge's own case, below) |
+| The sweep | 128 rc 0, validation active and silent, every difference attributed | **passes: 128 of 128 rc 0**, ACTIVE and silent in 128; 110 = O, 17 = B, 1 = C; none unexplained |
+| The player's save | untouched | **passes**: `%APPDATA%/Magic Portals/` holds `scores.json` `40bfef3a` alone, before and after |
+
+**THE SUITES**: every suite had 0 failures in the second whole run (`test_mp.exe` `85d354ab`, one launch,
+`allmode2.log`): 49 suites, 18,059 checks. Each count is the base's (step 132's) plus each track's own change, but two:
+`test_mp_handle` 562 (track B's 544 and this step's case, 18) and `test_mp_routes` 1,513 (track C's 1,241 and 17 for
+each of the 16 routes it never had: 3 of the route, 13 of the sound census, 1 of its door). The counts:
+`achievements` 1,140, `boss` 136, `bounce` 189, `camera` 282, `chapters` 43, `cutscene` 153, `darkdragon` 259,
+`demolish` 162, `diamonds` 134, `dragon` 230, `effects` 706, `fields` 63, `fire` 127, `frontdoor` 194, `geometry`
+64, `ghost` 185, `handle` 562, `hazards` 62, `hinge` 28, `hud` 417, `info` 389, `keys` 169, `launchers` 105, `layer`
+3,455, `levelend` 226, `levels` 129, `lighting` 548, `minions` 288, `motion` 169, `movers` 316, `play` 234, `popup`
+200, `portal` 37, `routes` 1,513, `scores` 63, `select` 112, `shot` 181, `sky` 630, `sounds` 242, `sprites` 1,575,
+`start` 753, `statics` 106, `tiers` 527, `timed` 84, `torch` 134, `tscn` 204, `turrets` 125, `wells` 321 and `zerog`
+88. The first whole run (`test_mp.exe` `039f199b`) passed 48: the merge's own case failed one check, which compared
+the flame with its agent exactly after the follow had settled - but followUp re-aims every 100 ms while the agent is
+off its handle, so it creeps on by about a ten-thousandth of a unit a tick. The case now checks that the flame stands
+where the last tick left the agent, and within 0.01 of where it is; every other count was the same in both runs. Run
+alone as well: `test_mp_levels` 129 (the merged runner's first launch), `test_mp_handle` 562 (the fixed runner's) and
+`test_mp_routes` (the routes above).
+
+**SMART APP CONTROL: 3 refusals, each a notification to the owner.** `test_mp.exe` `879e7b3b` (the merged build's
+first runner) on its first launch: deleted and relinked once, `039f199b`, which ran. `test_mp.exe` `c1f0c9cc` (the
+relink for the merge's case's fix): deleted and relinked once, `85d354ab`, which ran. `MagicPortals.exe` `cdff328b`
+on the sweep's first launch: deleted and relinked once (one of the two allowed), `1e569b97`, which ran the sweep.
+No exe was relinked twice; no gate stands on a launch that did not run.
+
+**RULINGS APPLIED**: none of the merge's own. Every ruling a track applied stands as that track committed it. R24
+and R25 stay the owner's; camera dragging is built behind its switch (step 138).
+
+**RECORDED DEVIATIONS.**
+1. **A minion a flame burns is heard a tick late.** `burn()` plays `playBurnSound` on the frame the fire agent's
+   callback burns it (#16; step 134's alight tick); the port latches `burned` when Minions takes it, on the next tick
+   (16.7 ms). The other half of step 134's deviation 6, the flames on the burned knight, stays undrawn.
+2. **2-18's kill is released on one tick only** (1120): the route rides the 400 ms between releases and the
+   player's rise past y 49.9. The window is in the aim (1.2 px), not the tick.
+
+**LEFT FOR LATER.**
+- **The backlog is not edited by this merge.** Tracks B and C wrote their section-6 row texts into their commit
+  reports under the OLD numbers (`out/parity/program/<RF, CD, AR, G2, MS, P6, P8>/commit.md`). The close role writes
+  them with the map above, and adds: the flame on a handle (this step's GAMEPLAY), 2-06 and 2-18 re-routed, step 134's
+  deviation 4 and step 143's deviation 3 closed, step 142's "the lift's clank per turn" gone with step 140, and this
+  step's two deviations.
+- **2-27 and 3-23 still have no route.** 2-27 (step 139's finding) waits on a shot through the flame turned onto its
+  crates by the handle's reflector; 3-23 (step 140's) on step 134's burn of a knight by a flame. Both mechanisms are
+  now on one build.
+- **`--drag`'s help and `ScheduleDevDrag`'s comment** still describe a menu drag only (step 138's LEFT FOR LATER).
+- **The standing sweep baseline is now this step's** `out/parity/program/merge_w2/sweep/`, for every later step.

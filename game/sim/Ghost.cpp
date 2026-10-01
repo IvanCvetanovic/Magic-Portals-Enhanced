@@ -524,6 +524,7 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, bool play
             look.frame = rules.shootingFrame;
             if (elapsedMs > rules.intervalMs) {
                 elapsedMs = 0.0;
+                ++beats;
 
                 // The restocks ride the same beat, on whichever side of the red
                 // line the player stands (ins 593: the shot's two gates jump here):

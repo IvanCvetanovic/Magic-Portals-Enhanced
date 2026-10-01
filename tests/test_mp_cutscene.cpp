@@ -209,10 +209,14 @@ void TheLandingSinksTheRocketAndRaisesTheEclipse() {
         if (frame == 1) {
             CHECK(landing.running && landing.elapsedMs == 20.0);
             CHECK(Near(landing.keyScale, 0.9));
+            CHECK_EQ(landing.keyScalings, 1);
         }
         if (frame == 10) CHECK_MSG(Near(landing.keyScale, std::pow(0.9, 10.0), 1e-12), std::to_string(landing.keyScale));
     }
     CHECK_EQ(starts, 1);
+    // One Scale(0.9) a frame, the clock's stop notwithstanding: what the layer
+    // scales the key's systems by (planning step 141).
+    CHECK_EQ(landing.keyScalings, 700);
     CHECK_MSG(landing.elapsedMs == 12500.0, std::to_string(landing.elapsedMs));
     CHECK(Near(landing.bias, 1.0, 1e-6));
     CHECK(Near(Cutscene::LandingDoorOffsetPx(rules, landing.bias).x, 256.0, 1e-3));

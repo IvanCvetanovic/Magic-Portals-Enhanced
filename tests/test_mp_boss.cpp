@@ -385,6 +385,14 @@ void TheSpikesKillAndLeave() {
         for (int tick = 0; tick < 200 && !rig.boss.playerKilled; ++tick) TickRig(rig);
         CHECK_MSG(rig.boss.playerKilled && rig.boss.killedBy == "adder_test's spike",
                   "on the line at " + Px(on) + ": killed by '" + rig.boss.killedBy + "'");
+        // ETHCallback_beholder_spike #178-185 plays its sound on every frame a spike
+        // stands in the box, the kill's and after (planning step 142).
+        const int atKill = rig.boss.spikeHits;
+        CHECK_MSG(atKill >= 1, "the killing spike is counted: " + std::to_string(atKill));
+        for (int tick = 0; tick < 60; ++tick) TickRig(rig);
+        CHECK_MSG(rig.boss.spikeHits > atKill && rig.boss.killedBy == "adder_test's spike",
+                  "and it goes on counting as the spike passes, the kill unchanged: " +
+                      std::to_string(rig.boss.spikeHits));
     }
     {
         Rig rig;
@@ -392,6 +400,7 @@ void TheSpikesKillAndLeave() {
         TickRig(rig, {Stone(rig, {400.0, 100.0}, {0.0, -300.0})});
         for (int tick = 0; tick < 1200; ++tick) TickRig(rig);
         CHECK_MSG(!rig.boss.playerKilled, "under it: killed by '" + rig.boss.killedBy + "'");
+        CHECK_MSG(rig.boss.spikeHits == 0, "and no spike ever stood in its box");
         CHECK_MSG(rig.boss.beholder->volleys == 6 && rig.boss.spikes.empty(),
                   std::to_string(rig.boss.spikes.size()) + " spikes left");
     }

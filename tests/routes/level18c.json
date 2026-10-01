@@ -15,7 +15,8 @@
     "(footage F17 r5) opened a portal inside the crate, which the port's shot cannot (it fails on the",
     "crate).",
     "Step 137 (a shot leaves on the release): won on tick 582; the shots up on 54 and 102 are aimed",
-    "1.129 and 1.119 px off their points (the camera moved while the finger was down)."
+    "1.129 and 1.119 px off their points (the camera moved while the finger was down). The same on the",
+    "merged build (step 144), with step 133's latched door: won on tick 582, the same drifts."
   ],
   "level": "level18c",
   "win_by": 640,

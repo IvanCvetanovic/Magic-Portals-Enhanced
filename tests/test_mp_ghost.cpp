@@ -735,6 +735,8 @@ void itPutsItsBarrelBackOnEveryBeat() {
     }
     CHECK_MSG(run.level.ghost.phase == Ghost::Phase::Shooting && run.level.restock.added.size() == 1,
               "the first beat of SHOOTING puts one back");
+    // Each beat, counted for its playGhostItemAppearSound (ins 670-672; planning step 142).
+    CHECK_MSG(run.level.ghost.beats == 1, "one beat: " + std::to_string(run.level.ghost.beats));
     const Restock::Added* first = Barrel(run, 0);
     if (first == nullptr) return;
     CHECK_MSG(first->name == "barrel_bomb_low_emissive_ent#1" && first->alias == "barrel_bomb" &&
@@ -771,6 +773,7 @@ void itPutsItsBarrelBackOnEveryBeat() {
     // While it stands, the beats put none back.
     Hold(run, kBehindTheLine, 400);
     CHECK_MSG(run.level.restock.added.size() == 1, "none while it stands, two beats on");
+    CHECK_MSG(run.level.ghost.beats == 3, "three beats counted: " + std::to_string(run.level.ghost.beats));
     // Gone, the next beat does.
     SetOff(run, *first, rest);
     Hold(run, kBehindTheLine, 3);

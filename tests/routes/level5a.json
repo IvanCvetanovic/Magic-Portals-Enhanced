@@ -3,14 +3,17 @@
   "_about": [
     "2-06 (planning step 135, G6): the door's pocket is sealed by crate_no_emissive_796 (burnable,",
     "teleportable 0) on block00_no_emissive_ent_823, and the level's one carranca fires along y 202",
-    "under the floor. A portal left of the crate at (215, 32) from the start (30); the player walks onto",
-    "lift_ent_832 (232-262) and, riding it down, puts one in the lane at (300, 202) (305). Fireball #2",
-    "goes into it (383), comes out of (215, 32) flying right and burns the crate (390; gone 450). The",
-    "pair stays. Back at the lift's top, a portal in the pocket at (380, 30) (515; it takes the oldest",
-    "end's place) and one on the player as the lift goes down (545): out over the door, which he falls",
-    "onto. Won on tick 570. Leans on G2 (the port's lift runs on its own: the original's waits for a",
-    "tap) and G4 (the shot's speed). No portal stands within 5.6 u of the lift when anything goes",
-    "through (hasMovingPlatformInAnyPortal, not built)."
+    "under the floor. Re-authored at wave 2's merge (planning step 144) for step 140's lift, which waits on",
+    "its marker a (160, 112) until a touch inside it sends it (\"shot\": false), where step 135's route rode",
+    "the port's old self-running lift. A portal left of the crate at (215, 32) from the start (30); right",
+    "onto lift_ent_832 (232-262) and a touch sends it down (265). Riding it, a portal in the lane at",
+    "(300, 202) (345), under the middle block. Fireball #2 goes into it (about 382), comes out of",
+    "(215, 32) flying right and burns the crate (390). The pair stays. At the foot a touch sends the lift",
+    "up (400); at the top (528), a portal in the pocket at (380, 30) (531; it takes the oldest end's",
+    "place) and one on the player (556): out over the door, which he falls onto. Won on tick 575. Every",
+    "one of eight nudges wins (each tap 4 to 11 ticks either way). Leans on G4 (the shot's speed). The",
+    "platform gate (step 136) holds nothing: no placed portal is within 5.6 of the lift when anything goes",
+    "through."
   ],
   "level": "level5a",
   "win_by": 630,
@@ -19,8 +22,10 @@
   ],
   "taps": [
     {"tick": 29, "at": [215, 32]},
-    {"tick": 304, "at": [300, 202]},
-    {"tick": 514, "at": [380, 30]},
-    {"tick": 544, "at": [168, 136]}
+    {"tick": 265, "at": [160, 120], "shot": false},
+    {"tick": 344, "at": [300, 202]},
+    {"tick": 400, "at": [160, 232], "shot": false},
+    {"tick": 530, "at": [380, 30]},
+    {"tick": 555, "at": [165.6, 74.3]}
   ]
 }

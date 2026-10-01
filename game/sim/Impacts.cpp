@@ -2,6 +2,7 @@
 
 #include "core/Components.hpp"
 #include "core/DetMath.hpp"
+#include "core/PhysicsSettings.hpp"
 #include "sim/LevelBuilder.hpp"
 #include "sim/Units.hpp"
 
@@ -140,6 +141,22 @@ bool Collide(const Solid& a, const Solid& b) { return (a.collidesWith & b.layer)
 bool Near(const Solid& a, const Solid& b, double touchPx) {
     return a.lo.x - touchPx <= b.hi.x && b.lo.x - touchPx <= a.hi.x && a.lo.y - touchPx <= b.hi.y &&
            b.lo.y - touchPx <= a.hi.y;
+}
+
+// Where Between found the two cores themselves meeting: no line between nearest
+// points, only the one between the cores' centres.
+bool CoresMeet(const Gap& gap, const Shape& a, const Shape& b) { return gap.px <= -(a.radiusPx + b.radiusPx); }
+
+// The engine's gravity on `body` in a step, px/s^2, as PhysicsSystem::Update
+// takes it: the world's (PhysicsSettings in the registry's context, or its
+// defaults), on a body that is neither kinematic nor let off it.
+double GravityPx(entt::registry& registry, entt::entity body) {
+    const auto* rigid = registry.try_get<RigidBodyComponent>(body);
+    if (rigid == nullptr || rigid->isKinematic || !rigid->useGravity) return 0.0;
+    static const Supersonic::PhysicsSettings kDefaults;
+    const Supersonic::PhysicsSettings* stored = registry.ctx().find<Supersonic::PhysicsSettings>();
+    const glm::vec3 gravity = (stored != nullptr ? *stored : kDefaults).gravity;
+    return glm::length(dvec2(gravity.x, gravity.y)) * Units::kPixelsPerMetre;
 }
 
 } // namespace
@@ -329,8 +346,16 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
         // is looked at afresh where it now is, and what it carried before was
         // carried elsewhere. (A portal moves a body after the step, before the
         // next is steered: BeforeStep finds a teleport.)
-        const bool carried = glm::length(pre.centrePx - nowCentre) <=
-                             glm::length(pre.velocityPx) * dtS + real->shape.radiusPx + touchPx;
+        double reachPx = glm::length(pre.velocityPx) * dtS + real->shape.radiusPx + touchPx;
+        // A crate's box has no radius, and the step's own gravity carries it
+        // g dt^2 past its velocity going in - 0.272 px at 980 px/s^2 and 60 Hz,
+        // over the touching distance - so without that every step of a fall was
+        // a put: it lost the speed it fell at, and the step that brings it to its
+        // floor, taken from rest after the solver's brake, was never looked at
+        // (planning step 142's fix round). The round bodies' begins stay as
+        // steps 101-104 measured them.
+        if (pre.kind == Kind::Crate) reachPx += GravityPx(registry, pre.body) * dtS * dtS;
+        const bool carried = glm::length(pre.centrePx - nowCentre) <= reachPx;
         if (!carried) {
             pre.recentPx.assign(1, pre.velocityPx);
             pre.dropPx = dvec2(0.0);
@@ -366,6 +391,18 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
             begin.kind = pre.kind;
             begin.other = other.entity;
             begin.normal = gap.normal;
+            // A crate's callback reads the contact's normal, the face it met
+            // (crateContactCallback #6-29). Where the step has taken its box into
+            // the other's - the solver lets a resting pair overlap by its slop -
+            // Between has only the line between the two centres, which over a wide
+            // floor leans far from the face; looked at where the step found it,
+            // still apart, the line between their nearest points is that face's.
+            if (pre.kind == Kind::Crate && CoresMeet(gap, self.shape, other.shape)) {
+                Shape before = self.shape;
+                for (dvec2& point : before.core) point += pre.centrePx - nowCentre;
+                const Gap apart = Between(before, other.shape);
+                if (!CoresMeet(apart, before, other.shape)) begin.normal = apart.normal;
+            }
             begin.velocityPx = pre.velocityPx;
             begin.atPx = pre.atPx + pre.dropPx;
             begin.gapPx = gap.px;
@@ -418,6 +455,10 @@ bool Watch::Carried(entt::entity body, Begin& out) const {
         return true;
     }
     return false;
+}
+
+bool Watch::Touching(entt::entity body, entt::entity other) const {
+    return std::binary_search(m_touching.begin(), m_touching.end(), Pair(body, other));
 }
 
 void Watch::Reset() {

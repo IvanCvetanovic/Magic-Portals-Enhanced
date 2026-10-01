@@ -241,10 +241,13 @@ LandingStep StepLanding(const Rules& rules, Landing& landing, double frameMs) {
         landing.running = true;
         landing.elapsedMs = 0.0;
         landing.keyScale = 1.0;
+        landing.keyScalings = 0;
         step.started = true;
     }
-    // #185-227: the key, every frame while there is one. The layer applies it.
+    // #185-227: the key, every frame while there is one. The layer applies it, to
+    // the picture and, as ETHEntity::Scale does (ETHEntity.cpp:591-599), its systems.
     landing.keyScale *= rules.landing.keyScalePerFrame;
+    ++landing.keyScalings;
     // #229-256: the clock stops at the first value that reaches the launch time.
     if (landing.elapsedMs < rules.landing.launchMs) landing.elapsedMs += frameMs;
     landing.bias = LandingBias(rules, landing.elapsedMs);

@@ -467,10 +467,15 @@ void OnTwoTwentyAShotIsBurnedWhereTheFlameStands() {
     // Followed: a shot through the new place is burned, one through the old flies on.
     Run settled;
     if (!start(settled)) return;
-    for (int tick = 0; tick < 240; ++tick) Game::Tick(settled.data, settled.registry, settled.level, 0.0f, kStep);
+    for (int tick = 0; tick < 239; ++tick) Game::Tick(settled.data, settled.registry, settled.level, 0.0f, kStep);
+    const glm::dvec2 lastPlace = settled.level.fire.agents[agent].atPx;
+    Game::Tick(settled.data, settled.registry, settled.level, 0.0f, kStep);
     const glm::dvec2 now = settled.level.fire.agents[agent].atPx;
     CHECK_MSG(Near(now, glm::dvec2(345.0, 105.0), 1.0), "the agent has followed the handle: " + Px(now));
-    CHECK_MSG(settled.level.portals.flames[agent].centrePx == now, "and its flame stands there");
+    // followUp re-aims every 100 ms while the agent is not on its handle, so it creeps on
+    // and never lands exactly: its flame stands where the last tick's follow left it.
+    CHECK_MSG(settled.level.portals.flames[agent].centrePx == lastPlace && Near(lastPlace, now, 1e-2),
+              "and its flame stands where the last tick left the agent, within 0.01 of it");
     const auto oneTick = [&](const glm::dvec2& place) {
         Portals::Flight across;
         across.fromPx = place - glm::dvec2(flameReach - 1.0 + reach, 0.0);

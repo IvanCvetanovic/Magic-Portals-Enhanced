@@ -36,6 +36,7 @@
 #include "core/Components.hpp"
 #include "core/Input.hpp"
 #include "core/InterpolationSystem.hpp"
+#include "core/PhysicsSettings.hpp"
 #include "core/PhysicsSystem.hpp"
 #include "core/RenderSettings.hpp"
 // For the renderer's own cull: RenderSystem.hpp carries renderer/Frustum.hpp.
@@ -2913,6 +2914,13 @@ void TheMenuWalksToALevel() {
     CHECK(layer.MenuScreen() == Screen::None);
     CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
     CHECK(IsAt(layer, "level0"));
+    // And what each press latched (planning step 142): play is the menu's own
+    // button.mp3, a world tile and a level tile are teleports
+    // (getItemSelectButtonSoundName, Page::setupItemButton #127-143).
+    const std::vector<std::string> sounds = layer.LatchedSounds();
+    CHECK_MSG(std::count(sounds.begin(), sounds.end(), std::string("menu_button")) == 1 &&
+                  std::count(sounds.begin(), sounds.end(), std::string("level_button")) == 2,
+              "play is button.mp3, the two tiles teleports");
 }
 
 // The second page holds what the first does not, and the page buttons reach it.
@@ -6069,7 +6077,10 @@ ImpactRead readImpact(const MagicPortals::Earthquake::Rules& rules, const MagicP
     read.along = along;
     read.hit = glm::dot(begin.Approaching(along), along) / 50.0;
     read.other = layer.EntityNameOf(begin.other);
-    read.calls = MagicPortals::Earthquake::ImpactCalls(rules, read.call, read.hit, read.other);
+    // A crate's begin is its callback's sound, and no row shakes on it (planning
+    // step 142).
+    read.calls = begin.kind != MagicPortals::Impacts::Kind::Crate &&
+                 MagicPortals::Earthquake::ImpactCalls(rules, read.call, read.hit, read.other);
     read.intensity = rules.Of(read.call).intensity * read.hit;
     return read;
 }
@@ -8353,11 +8364,13 @@ void ThePausesButtonsGoWhereTheOriginalsGo() {
 
     // Skip is not there on a level never finished, and pressing it leads nowhere.
     CHECK_MSG(!layer.PressPause(registry, Pause::Button::Skip) && layer.Paused(), "no skip on a fresh level");
-    // Achievements: kept by the owner's ruling, and pressing it changes nothing
-    // yet - the popup it opens is not built.
+    // Achievements: kept on every level by the owner's ruling; 1-05 is named by no
+    // achievement, so - where the original has no button - it opens nothing
+    // (planning step 143).
     CHECK_MSG(TapPauseButton(layer, registry, Pause::Button::Achievements) && layer.Paused() &&
-                  IsAt(layer, "level4") && layer.MenuScreen() == MagicPortalsLayer::Screen::None,
-              "Achievements does nothing visible");
+                  !layer.AchievementsPopupOpen() && IsAt(layer, "level4") &&
+                  layer.MenuScreen() == MagicPortalsLayer::Screen::None,
+              "Achievements opens nothing on 1-05");
 
     // The sound switch: off, sound_mute in its place, the music switch dismissed
     // and gone 700 ms later; and no music is wanted.
@@ -14433,6 +14446,12 @@ void AKeyAndItsKeyholeLeaveWhatTheScriptAdds() {
     }
     CHECK_MSG(key != nullptr && key->owner == layer.SimLevel()->player, "the player takes " + keyName);
     if (key == nullptr || key->owner == entt::null) return;
+    // Its sound on that tick, ETHCallback_key #805 (planning step 142).
+    const auto heard = [&layer](const char* event) {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string(event)));
+    };
+    CHECK_MSG(heard("key_picked") == 1, "playKeyPickSound latched on the pick's tick");
     FirstEffect(layer, "key_pick.ent", count);
     CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the pick's tick");
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -14462,15 +14481,25 @@ void AKeyAndItsKeyholeLeaveWhatTheScriptAdds() {
     if (key == nullptr || !key->spent) return;
 
     // THE HALO, on the fly-in's frame 1: the 41st tick after the unlock at 60 Hz.
+    // And the two sounds of the fly-in (planning step 142): playDoorUnlockSound
+    // as the next tick builds its WaypointManager (#221-550), playKeyUnlockSound
+    // with the halo (#593-635).
     int haloAfter = -1;
+    int unlockHeard = -1;
+    int keyUnlockHeard = -1;
     MagicPortalsLayer::EffectReport halo;
     for (int n = 1; n <= 80 && haloAfter < 0; ++n) {
         tickWith(layer, registry, kRest, {}, {});
+        if (heard("door_unlocked") > 0 && unlockHeard < 0) unlockHeard = n;
+        if (heard("key_unlocked") > 0 && keyUnlockHeard < 0) keyUnlockHeard = n;
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         halo = FirstEffect(layer, "key_unlock_halo.ent", count);
         if (count > 0) haloAfter = n;
     }
     CHECK_MSG(haloAfter == 41 && count == 1, "one halo, on the 41st tick after the unlock: " + std::to_string(haloAfter));
+    CHECK_MSG(unlockHeard == 1, "playDoorUnlockSound on the tick after the unlock: " + std::to_string(unlockHeard));
+    CHECK_MSG(keyUnlockHeard == haloAfter,
+              "playKeyUnlockSound on the halo's tick: " + std::to_string(keyUnlockHeard));
     CHECK_MSG(halo.atPx == holeAt && nearlyU(halo.zUnits, 32.0),
               "at the keyhole, z 32 of its own (not -14 + 32): " + Point(halo.atPx) + " z " +
                   std::to_string(halo.zUnits));
@@ -14494,6 +14523,7 @@ void AKeyAndItsKeyholeLeaveWhatTheScriptAdds() {
     }
     CHECK_MSG(goneAfter > 0, "the keyhole goes");
     if (goneAfter < 0) return;
+    CHECK_MSG(heard("keyhole_vanished") == 1, "playDemolitionSound on the keyhole's tick (#235)");
     CHECK_MSG(layer.EffectsSpawned() == spawnedBefore, "nothing is added on the keyhole's tick");
     CHECK_MSG(std::fabs(layer.Quake().amplitudePx - quakeRowPx(20.0)) < 1e-9,
               "door_unlocked's 20 on the same tick: " + std::to_string(layer.Quake().amplitudePx) + " px");
@@ -14620,6 +14650,12 @@ void AShockDiamondLeavesItsPickItsDeathAndItsStrike() {
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     }
     CHECK_MSG(diamond != nullptr && diamond->owner == layer.SimLevel()->player, "the player takes it");
+    // Its sound on the tick (ETHCallback_shock_diamond #180; planning step 142).
+    const auto heard = [&layer](const char* event) {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string(event)));
+    };
+    CHECK_MSG(heard("shock_picked") == 1 && heard("burned") == 0, "playShockDiamondPickSound, and no burn");
     int count = 0;
     FirstEffect(layer, "shock_diamond_pick.ent", count);
     CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the tick");
@@ -14657,6 +14693,7 @@ void AShockDiamondLeavesItsPickItsDeathAndItsStrike() {
     }
     CHECK_MSG(struck == 1 && layer.SimLevel()->diamonds.strikes.size() == static_cast<std::size_t>(1),
               "the minion is struck, and the tick records it");
+    CHECK_MSG(heard("shock_struck") == 1, "playShockStrikeSound on the strike's tick (#447)");
     if (layer.SimLevel()->diamonds.strikes.empty()) return;
     const MagicPortals::Diamonds::Strike strike = layer.SimLevel()->diamonds.strikes[0];
     CHECK_MSG(EffectsOf(layer, "shock_death.ent").empty() && EffectsOf(layer, "shock_strike.ent").empty(),
@@ -14756,6 +14793,13 @@ void AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs() {
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     }
     CHECK_MSG(owned(), "the player takes the fire diamond");
+    // Its sound on the tick: playBurnSound (ETHCallback_fire_diamond #190-192;
+    // planning step 142), not a shock diamond's.
+    const auto heard = [&layer](const char* event) {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string(event)));
+    };
+    CHECK_MSG(heard("burned") == 1 && heard("shock_picked") == 0, "playBurnSound as it is taken");
     CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && EffectsOf(layer, "burn_projectile.ent").empty(),
               "nothing is added on the tick");
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -14789,6 +14833,7 @@ void AFireDiamondBurnsWhereItIsTakenAndWhereItsShotIs() {
     CHECK_MSG(layer.SimLevel()->turrets.converted == converted + 1 &&
                   layer.SimLevel()->diamonds.burnedPx.size() == static_cast<std::size_t>(1),
               "the shot is burned on the next tick, and the tick records where");
+    CHECK_MSG(heard("fireball_spat") == 1, "and addFireball's playFireballSound with it (#87)");
     if (layer.SimLevel()->diamonds.burnedPx.empty()) return;
     const glm::dvec2 burnedAt = layer.SimLevel()->diamonds.burnedPx[0];
     const std::string made = "fire_diamond#" + std::to_string(converted + 1);
@@ -14873,6 +14918,22 @@ void AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds() {
     }
     CHECK_MSG(gone, "the fireball destroyed the agent");
     if (!gone) return;
+    // Its sounds on the tick (planning step 142): ETHBeginContactCallback_fireball's
+    // huge explosion for a shock agent (#99-118), then the small one every
+    // destroyed fireball plays (#153-158) and the burn of the burnable agent
+    // (#159-173); and the agent's own strike as it goes (#289-299).
+    {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        const auto heard = [&sounds](const char* event) {
+            return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string(event)));
+        };
+        CHECK_MSG(heard("fireball_on_shock_agent") == 1 && heard("fireball_burst") == 1 && heard("burned") == 1 &&
+                      heard("shock_struck") == 1,
+                  "the huge explosion, the small, the burn and the strike: " +
+                      std::to_string(heard("fireball_on_shock_agent")) + " / " +
+                      std::to_string(heard("fireball_burst")) + " / " + std::to_string(heard("burned")) + " / " +
+                      std::to_string(heard("shock_struck")));
+    }
     // deleteEntity(childID) takes the ring with the agent, on the tick Fields marks it.
     {
         const std::vector<MagicPortalsLayer::ShockRingReport> rings = layer.ShockRings();
@@ -14964,6 +15025,13 @@ void AFireSignalPutOutLeavesItsWaterAtItsTorch() {
     }
     CHECK_MSG(lit && putOutOn > 0, "the torch was lit and its signal put out, on tick " + std::to_string(putOutOn));
     if (putOutOn < 0) return;
+    {
+        // Its sound on that tick: playLightOffSound (ETHCallback_fire_signal #275;
+        // planning step 142).
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        CHECK_MSG(std::count(sounds.begin(), sounds.end(), std::string("light_off")) == 1,
+                  "playLightOffSound on the tick it is put out");
+    }
     CHECK_MSG(!layer.SimLevel()->torch.signal.present, "and the signal is gone");
     CHECK(EffectsOf(layer, "extinguish_fire.ent").empty());
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -15008,6 +15076,13 @@ void AShotLightsTheTorchAsTheEntityItAdds() {
     }
     CHECK_MSG(litOn > 0, "L1's tap lit 4-22's torch, on tick " + std::to_string(litOn));
     if (litOn < 0) return;
+    {
+        // Its sound on that tick: playLightOnSound (ETHCallback_light_off #145;
+        // planning step 142).
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        CHECK_MSG(std::count(sounds.begin(), sounds.end(), std::string("light_on")) == 1,
+                  "playLightOnSound on the tick it is lit");
+    }
     // The tick it is lit: queued, not added; the unlit picture still stands.
     CHECK(EffectsOf(layer, "light_from_projectile.ent").empty() && EffectsOf(layer, "light_on_sparkles.ent").empty());
     std::vector<MagicPortalsLayer::TorchReport> torches = layer.TorchReports();
@@ -15394,6 +15469,13 @@ void AShockRingsKillLeavesShockDeathAtThePlayer() {
         }
         CHECK_MSG(claimed, "the ring claims the player");
         if (!claimed) return;
+        {
+            // Its strike's sound on the same rule as its shock_death (ETHCallback_shock_area
+            // #136-151; planning step 142): heard only where the ring's is the death.
+            const std::vector<std::string> sounds = layer.LatchedSounds();
+            const auto strikes = std::count(sounds.begin(), sounds.end(), std::string("shock_struck"));
+            CHECK_MSG(strikes == (fallFirst ? 0 : 1), "playShockStrikeSound " + std::to_string(strikes) + " time(s)");
+        }
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         int deaths = 0;
         const MagicPortalsLayer::EffectReport death = FirstEffect(layer, "shock_death.ent", deaths);
@@ -15644,6 +15726,19 @@ void AStoneADespawnerTakesLeavesItsPuff() {
               "a despawner takes a stone within 400 ticks");
     if (!taken || layer.SimLevel()->launchers.despawnedNow.size() != 1) return;
     const MagicPortals::Launchers::StoneGone gone = layer.SimLevel()->launchers.despawnedNow.front();
+    {
+        // Its sound on that tick: playStoneHitSound(1) (ETHBeginContactCallback_rolling_stone
+        // #91-94; planning step 142), at its argument's volume, 1.
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        const std::vector<double> volumes = layer.LatchedVolumes();
+        int broken = 0;
+        for (std::size_t i = 0; i < sounds.size() && i < volumes.size(); ++i) {
+            if (sounds[i] == "stone_broken" && volumes[i] == 1.0) ++broken;
+        }
+        CHECK_MSG(broken == 1, "stone_broken at volume 1 on the tick: " + std::to_string(broken));
+        CHECK_MSG(std::count(sounds.begin(), sounds.end(), std::string("stone_thrown")) == 0,
+                  "and no launcher's throw is ever heard: ETHCallback_entity_launcher calls no audio");
+    }
     int count = 0;
     FirstEffect(layer, "rolling_stone_destroy.ent", count);
     CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the tick");
@@ -16419,10 +16514,20 @@ void TheDragonsTakeOffStopsTheBossTrack() {
                                                  layer.WantedTrack());
     CloseTheLevelStartPopup(layer, registry);
     const MagicPortals::Dragon::State& dragon = layer.SimLevel()->dragon;
+    // And its take-off's sound (ETHCallback_dragon #409-437, planning step 142),
+    // once: the dragon's turn is taken in Game::BeforeStep, after the tick's
+    // latches are read, so its edge is latched on the tick after.
+    std::vector<int> tookOffSounds;
+    const auto countTakeOffs = [&layer, &tookOffSounds](int tick) {
+        for (const std::string& event : layer.LatchedSounds()) {
+            if (event == "dragon_took_off") tookOffSounds.push_back(tick);
+        }
+    };
     int offBefore = 0;
     int ticks = 0;
     for (; ticks < 4000 && !dragon.tookOff; ++ticks) {
         tickWith(layer, registry, kRest, {}, {});
+        countTakeOffs(ticks);
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         if (!dragon.tookOff && layer.WantedTrack() != "boss") ++offBefore;
     }
@@ -16431,11 +16536,19 @@ void TheDragonsTakeOffStopsTheBossTrack() {
     int heard = 0;
     for (int tick = 0; tick < 120; ++tick) {
         tickWith(layer, registry, kRest, {}, {});
+        countTakeOffs(ticks + tick);
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         if (!layer.WantedTrack().empty()) ++heard;
     }
     CHECK_MSG(heard == 0, "nor after it: " + std::to_string(heard));
-    std::printf("  2-32: the dragon took off on tick %d, and the boss's track stopped with it\n", ticks);
+    std::string at;
+    for (const int tick : tookOffSounds) at += " " + std::to_string(tick);
+    // The loop's last tick, ticks - 1, is the one the take-off was taken on.
+    CHECK_MSG(tookOffSounds.size() == 1 && tookOffSounds[0] >= ticks - 1 && tookOffSounds[0] <= ticks,
+              "dragon_took_off once, as it takes off on tick " + std::to_string(ticks - 1) + ": latched on" +
+                  (at.empty() ? std::string(" none") : at));
+    std::printf("  2-32: the dragon took off on tick %d, and the boss's track stopped with it; dragon_took_off on%s\n",
+                ticks, at.empty() ? " none" : at.c_str());
     layer.OnDetach(registry);
 }
 
@@ -16862,6 +16975,995 @@ void OneTwentyEightsLiftIsSentByATouchAndFiresNothing() {
     layer.OnDetach(registry);
 }
 
+// THE MEDAL IS SAVED ON THE DOOR'S TICK (planning step 141; step 123's MEDIUM row):
+// checkGameEnd calls writeScore on the frame the character goes in (#75), whose
+// setScore writes the file there and then (#48), and only the screen waits for the
+// level's gameWonDelay. On level0, walked to its door, the file has the medal on
+// that tick and the screen comes 84 ticks (1400 ms) later; on 4-19 (level18c), whose
+// end_delay is 14500 ms, R pressed 60 ticks after the door - which the port reads in
+// the beat - restarts the level with the medal kept, and no screen came up. Into a
+// directory of its own, emptied first and last, never a player's save.
+void TheMedalIsSavedOnTheDoorsTick() {
+    namespace Scores = MagicPortals::Scores;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-medals";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = dir.string();
+    // What the file says, read as the next run would read it.
+    const auto saved = [&dir](int world, int level) {
+        Scores::Store store;
+        std::string why;
+        return store.Open(dir.string(), why) ? store.Get(world, level) : -1;
+    };
+    const auto earned = [](const MagicPortalsLayer& layer) {
+        const auto& c = layer.LastCleared();
+        return c ? MagicPortals::LevelEnd::ComputeScore(c->portalsUsed, c->goldenScore, c->crystals, c->crystalsTotal)
+                 : -1;
+    };
+
+    // level0 (1-01), walked to its door.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level0");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        CHECK_EQ(saved(0, 0), Scores::kUnplayed);
+        for (int tick = 0; tick < 600 && !layer.Finishing(); ++tick) {
+            std::vector<std::string> pressed;
+            if (tick == 0) pressed.push_back(MagicPortalsLayer::kRight);
+            tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, std::move(pressed));
+        }
+        CHECK_MSG(layer.Finishing(), "level0's door is reached by walking right");
+        if (!layer.Finishing()) return;
+        const int door = layer.LayerTicks();
+        const int medal = earned(layer);
+        CHECK_MSG(medal > Scores::kUnplayed && saved(0, 0) == medal,
+                  "on the door's tick the file holds " + std::to_string(saved(0, 0)) + ", the play earned " +
+                      std::to_string(medal));
+        CHECK(layer.MenuScreen() == MagicPortalsLayer::Screen::None);
+        int screenAt = -1;
+        for (int tick = door + 1; tick <= door + 90 && screenAt < 0; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            if (layer.MenuScreen() == MagicPortalsLayer::Screen::Finished) screenAt = tick;
+        }
+        CHECK_MSG(screenAt == door + 84, "the medal screen " + std::to_string(screenAt - door) + " ticks after the door");
+        CHECK_EQ(saved(0, 0), medal);
+        std::printf("  1-01: door on tick %d, medal %d in the file on it, the screen %d ticks later\n", door, medal,
+                    screenAt - door);
+        layer.OnDetach(registry);
+    }
+
+    // 4-19 (level18c): the door, then R in the 14.5 s beat.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level18c");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        CHECK_EQ(saved(3, 18), Scores::kUnplayed);
+        const int door = ReachTheDoor(layer, registry, glm::dvec2(590.0, 134.0));
+        if (door < 0) return;
+        const int medal = earned(layer);
+        CHECK_MSG(medal > Scores::kUnplayed && saved(3, 18) == medal,
+                  "on the door's tick the file holds " + std::to_string(saved(3, 18)) + ", the play earned " +
+                      std::to_string(medal));
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK(layer.Finishing() && layer.MenuScreen() == MagicPortalsLayer::Screen::None);
+        press(layer, registry, MagicPortalsLayer::kRetry);
+        CHECK_MSG(IsAt(layer, "level18c") && layer.SimLevel() != nullptr && !layer.Finishing(),
+                  "R in the beat restarts 4-19");
+        CHECK_MSG(saved(3, 18) == medal, "and the medal stays saved: " + std::to_string(saved(3, 18)));
+        CHECK_MSG(saved(0, 0) > Scores::kUnplayed, "beside 1-01's");
+        std::printf("  4-19: door on tick %d, medal %d in the file on it, kept through R 60 ticks later\n", door, medal);
+        layer.OnDetach(registry);
+    }
+    std::filesystem::remove_all(dir, ec);
+}
+
+// 4-19'S KEY SPARKLES SHRINK WITH IT (planning step 141; step 123's deviation 1):
+// rocket_landing calls the key's Scale(0.9) every frame from the door's (#185-227),
+// and ETHEntity::Scale(float) scales the entity's systems too (ETHEntity.cpp:591-599,
+// ETHParticleSystem.cpp:27-40, PARTICLE::Scale). Each frame both of key_2701's
+// sparkles systems are 12 x the key's scale, every particle drawn no larger than
+// 17 x it (size 12 plus its spread of 5, shrinking from there), and 30 frames on
+// none is drawn over two thirds of a unit. Nothing else on the level is scaled.
+void TheLandingKeysSparklesShrinkWithIt() {
+    if (!OriginalArtIsThere("TheLandingKeysSparklesShrinkWithIt")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level18c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const auto keys = [&layer] {
+        std::vector<MagicPortalsLayer::EmitterReport> found;
+        for (const MagicPortalsLayer::EmitterReport& report : layer.EmitterReports()) {
+            if (report.node == "key_2701") found.push_back(report);
+        }
+        return found;
+    };
+    // The level's other systems, by size, to see that the landing scales none of them.
+    const auto others = [&layer] {
+        std::vector<double> sizes;
+        for (const MagicPortalsLayer::EmitterReport& report : layer.EmitterReports()) {
+            if (report.node != "key_2701") sizes.push_back(report.systemSize);
+        }
+        return sizes;
+    };
+
+    double largestBefore = 0.0;
+    for (int f = 0; f < 60; ++f) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        for (const MagicPortalsLayer::EmitterReport& key : keys()) {
+            largestBefore = std::max(largestBefore, key.largestDrawnSize);
+        }
+    }
+    const std::vector<MagicPortalsLayer::EmitterReport> before = keys();
+    CHECK_EQ(before.size(), 2u);
+    for (const MagicPortalsLayer::EmitterReport& key : before) CHECK(key.systemSize == 12.0);
+    CHECK_MSG(largestBefore > 5.0, "the key's sparkles are drawn before the door: " + std::to_string(largestBefore));
+    const std::vector<double> othersBefore = others();
+
+    const int door = ReachTheDoor(layer, registry, glm::dvec2(590.0, 134.0));
+    if (door < 0) return;
+    int wrongSystem = 0;
+    int tooLarge = 0;
+    double largestAt30 = -1.0;
+    int drawnAt30 = 0;
+    for (int f = 0; f <= 40; ++f) {
+        // The door's tick has run; its frame draws now, then each tick and its frame.
+        if (f > 0) tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const MagicPortalsLayer::CutsceneReport now = layer.CutscenePicture(registry);
+        const double scale = now.keyScale;
+        if (f == 0) CHECK(now.landing.keyScalings == 1 && std::fabs(scale - 0.9) < 1e-12);
+        for (const MagicPortalsLayer::EmitterReport& key : keys()) {
+            if (std::fabs(key.systemSize - 12.0 * scale) > 1e-9 * 12.0 * scale) ++wrongSystem;
+            if (key.largestDrawnSize > 17.0 * scale * (1.0 + 1e-9)) ++tooLarge;
+            if (f == 30) {
+                largestAt30 = std::max(largestAt30, key.largestDrawnSize);
+                drawnAt30 += key.drawn;
+            }
+        }
+    }
+    CHECK_MSG(wrongSystem == 0, std::to_string(wrongSystem) + " frames' systems not at 12 x the key's scale");
+    CHECK_MSG(tooLarge == 0, std::to_string(tooLarge) + " frames drew a sparkle over 17 x the key's scale");
+    CHECK_MSG(largestAt30 >= 0.0 && largestAt30 < 17.0 * std::pow(0.9, 31.0) * (1.0 + 1e-9) && largestAt30 < 0.67,
+              "30 frames after the door the largest drawn is " + std::to_string(largestAt30) + " units (" +
+                  std::to_string(drawnAt30) + " drawn)");
+    CHECK_MSG(others() == othersBefore, "no other system on the level was scaled");
+    std::printf("  4-19: the key's sparkles at most %.3f units before the door, %.4f 30 frames after it (%d drawn)\n",
+                largestBefore, largestAt30, drawnAt30);
+    layer.OnDetach(registry);
+}
+
+// PLANNING STEP 142, the sound pass: the begin-contact callbacks' sounds, each on
+// its own gate and at the volume it hands its hook. On 1-05 (level4), whose crate
+// lies on a floor: the player put 30 px over its floor and sent down at 400 px/s
+// begins it well above playFallSound's 3.5 and is heard at hit / 18
+// (ETHBeginContactCallback_dark_mage #82-90); let fall 8 px from rest, it begins it
+// under 3.5 and is not; and the level's crate is one the impact watch reads for
+// crateContactCallback (#31-56). Each volume is read off the tick's own begins. Put
+// up and not down onto the floor: the watch must see the body leave what it stood on
+// after a step for its meeting something again to be a begin.
+void TheContactsAreHeardAtTheirCallbacksVolumes() {
+    using Kind = MagicPortals::Impacts::Kind;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level4");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+
+    struct Drop {
+        std::vector<double> hits;         // each begin of the body's, its hitIntensity
+        std::vector<std::string> sounds;  // what the tick latched
+        std::vector<double> volumes;
+    };
+    // One throw of `body`: put at `putAt` and given `downPxS` (up, where it is
+    // negative), then ticked to the first tick whose begins of the
+    // body's include a hitIntensity above `needAbove` in size (any begin, below 0):
+    // that tick's begins' hits along their normals, and the sounds it latched.
+    const auto drop = [&](entt::entity body, Kind kind, const glm::dvec2& putAt, double downPxS, double needAbove) {
+        Drop seen;
+        PutBodyAt(registry, body, putAt);
+        registry.get<RigidBodyComponent>(body).velocity =
+            glm::vec3(0.0f, -MagicPortals::Units::ToMetres(downPxS), 0.0f);
+        std::string path;
+        bool found = false;
+        for (int tick = 0; tick < 90 && !found; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            path += " " + std::to_string(MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position).y);
+            std::vector<double> hits;
+            for (const auto& begin : layer.ImpactBegins()) {
+                if (begin.body == body || begin.other == body) {
+                    path += " [begin kind " + std::to_string(static_cast<int>(begin.kind)) +
+                            (begin.body == body ? " of it" : " on it") + " on tick " + std::to_string(tick) + "]";
+                }
+                if (begin.body != body || begin.kind != kind) continue;
+                hits.push_back(glm::dot(begin.Approaching(begin.normal), begin.normal) / rules.hitPxPerUnit);
+                found = found || std::fabs(hits.back()) > needAbove;
+            }
+            if (found) {
+                seen.hits = hits;
+                seen.sounds = layer.LatchedSounds();
+                seen.volumes = layer.LatchedVolumes();
+            }
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        if (!found) std::printf("  1-05: no begin found; the body's y from %.3f:%s\n", putAt.y, path.c_str());
+        for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        return seen;
+    };
+    // The volumes a tick latched for `event`, in its order.
+    const auto volumesOf = [](const Drop& seen, const char* event) {
+        std::vector<double> out;
+        for (std::size_t i = 0; i < seen.sounds.size() && i < seen.volumes.size(); ++i) {
+            if (seen.sounds[i] == event) out.push_back(seen.volumes[i]);
+        }
+        return out;
+    };
+    const auto describeHits = [](const std::vector<double>& hits) {
+        std::string text;
+        for (double hit : hits) text += " " + std::to_string(hit);
+        return text;
+    };
+
+    const entt::entity player = layer.SimLevel()->player;
+    const Drop hard = drop(player, Kind::Player, playerPx(registry, layer) - glm::dvec2(0.0, 30.0), 400.0, 3.5);
+    CHECK_MSG(!hard.hits.empty() && *std::max_element(hard.hits.begin(), hard.hits.end()) > 3.5,
+              "the hard landing begins its floor above 3.5:" + describeHits(hard.hits));
+    std::vector<double> want;
+    for (double hit : hard.hits) {
+        if (hit > 3.5) want.push_back(hit / 18.0);
+    }
+    const std::vector<double> thumps = volumesOf(hard, "player_landed");
+    bool same = thumps.size() == want.size();
+    for (std::size_t i = 0; same && i < want.size(); ++i) same = std::fabs(thumps[i] - want[i]) < 1e-9;
+    CHECK_MSG(same && !want.empty(), "playFallSound at hit / 18 for each begin above 3.5: " +
+                                         std::to_string(thumps.size()) + " latched, hits" + describeHits(hard.hits));
+    std::printf("  1-05: the player's hard landing, hits%s, thump at %s\n", describeHits(hard.hits).c_str(),
+                thumps.empty() ? "none" : std::to_string(thumps[0]).c_str());
+
+    const Drop soft = drop(player, Kind::Player, playerPx(registry, layer) - glm::dvec2(0.0, 8.0), 0.0, -1.0);
+    CHECK_MSG(!soft.hits.empty() && *std::max_element(soft.hits.begin(), soft.hits.end()) < 3.5,
+              "the soft one begins it under 3.5:" + describeHits(soft.hits));
+    CHECK_MSG(volumesOf(soft, "player_landed").empty(), "and is not heard");
+
+    // The crate: level4's one, a body of crateContactCallback's.
+    entt::entity crate = entt::null;
+    for (const auto& [name, entity] : layer.SimLevel()->built.entities) {
+        const std::string entityName = layer.EntityNameOf(entity);
+        if (entityName == "crate" || entityName == "crate.ent") crate = entity;
+    }
+    CHECK_MSG(crate != entt::null && registry.all_of<RigidBodyComponent>(crate), "1-05 places a crate that moves");
+    if (crate == entt::null || !registry.all_of<RigidBodyComponent>(crate)) return;
+    const std::vector<entt::entity>& watched = layer.WatchedCrates();
+    CHECK_MSG(watched.size() == 1 && watched[0] == crate,
+              "and the impact watch reads it: " + std::to_string(watched.size()) + " watched");
+
+    // THE CRATE'S FALL (step 142's fix round). Each drop puts the crate at rest over
+    // `onto` and lets it fall. The crate's begin with `onto` must come on the tick it
+    // reaches it, and the tick's latch must be crateContactCallback's (#17-56):
+    // crate_knocked at |hit| / 30 against anything but the character, crate_dragged
+    // against the character. The knock's volume is held to what this case saw the
+    // crate fall at, not to the begin's own reading: the fastest velocity it carried
+    // into a step, straight down onto a flat face, over hit_px_per_unit and 30. Each
+    // tick of a drop is printed with the watch's reach, the old and the new, and the
+    // gap and normal to `onto`, which is the diagnosis.
+    struct CrateDrop {
+        int tick = -1;                  // of the crate's begin with `onto`; -1 where none came
+        double hit = 0.0;               // that begin's |hitIntensity| along its normal
+        glm::dvec2 normal{0.0};
+        std::vector<std::string> sounds; // what that tick latched
+        std::vector<double> volumes;
+        double fastestDownPxS = 0.0;     // the fastest +y velocity the crate carried into a step
+        double firstMovePx = -1.0;       // its first step's travel: g dt^2 where it was let go touching nothing
+    };
+    const double dtS = static_cast<double>(MagicPortalsLayer::kTick);
+    const double touchPx = MagicPortals::Earthquake::ToUnits(rules, rules.touchPx);
+    const auto* physics = registry.ctx().find<PhysicsSettings>();
+    const double gravityPx =
+        physics != nullptr ? glm::length(glm::dvec2(physics->gravity.x, physics->gravity.y)) * MagicPortals::Units::kPixelsPerMetre
+                           : 0.0;
+    const auto bodyAtPx = [&registry](entt::entity body) {
+        return MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position);
+    };
+    const auto masksOf = [&registry](entt::entity body) {
+        std::uint32_t layerBits = 0;
+        std::uint32_t with = 0;
+        if (const auto* box = registry.try_get<BoxColliderComponent>(body)) {
+            layerBits = box->layer;
+            with = box->collidesWith;
+        } else if (const auto* capsule = registry.try_get<CapsuleColliderComponent>(body)) {
+            layerBits = capsule->layer;
+            with = capsule->collidesWith;
+        } else if (const auto* hull = registry.try_get<ConvexHullColliderComponent>(body)) {
+            layerBits = hull->layer;
+            with = hull->collidesWith;
+        }
+        return "layer " + std::to_string(layerBits) + " collidesWith " + std::to_string(with);
+    };
+    const auto crateDrop = [&](const glm::dvec2& putAt, entt::entity onto, const char* what) {
+        CrateDrop seen;
+        PutBodyAt(registry, crate, putAt);
+        char line[240];
+        std::string trace;
+        for (int tick = 0; tick < 90 && seen.tick < 0; ++tick) {
+            const glm::dvec2 before = bodyAtPx(crate);
+            const glm::dvec2 velocity = MagicPortals::Units::ToPixels(registry.get<RigidBodyComponent>(crate).velocity);
+            seen.fastestDownPxS = std::max(seen.fastestDownPxS, velocity.y);
+            tickWith(layer, registry, kRest, {}, {});
+            const double moved = glm::length(bodyAtPx(crate) - before);
+            if (tick == 0) seen.firstMovePx = moved;
+            const double oldReach = glm::length(velocity) * dtS + touchPx;
+            MagicPortals::Impacts::Shape a;
+            MagicPortals::Impacts::Shape b;
+            MagicPortals::Impacts::Gap gap;
+            gap.px = std::numeric_limits<double>::quiet_NaN();
+            if (MagicPortals::Impacts::ShapeOf(registry, crate, a) && MagicPortals::Impacts::ShapeOf(registry, onto, b)) {
+                gap = MagicPortals::Impacts::Between(a, b);
+            }
+            std::snprintf(line, sizeof line,
+                          "\n    %2d: x %.3f y %.3f turned %.3f v %.1f moved %.3f reach %.3f/%.3f gap %.3f n (%.3f, %.3f)",
+                          tick, bodyAtPx(crate).x, bodyAtPx(crate).y,
+                          static_cast<double>(registry.get<TransformComponent>(crate).rotation.z), velocity.y, moved,
+                          oldReach, oldReach + gravityPx * dtS * dtS, gap.px, gap.normal.x, gap.normal.y);
+            trace += line;
+            for (const auto& begin : layer.ImpactBegins()) {
+                if (begin.body != crate || begin.kind != Kind::Crate) continue;
+                trace += " [begin on " + layer.EntityNameOf(begin.other) + "]";
+                if (begin.other != onto) continue;
+                seen.tick = tick;
+                seen.normal = begin.normal;
+                seen.hit = std::fabs(glm::dot(begin.Approaching(begin.normal), begin.normal) / rules.hitPxPerUnit);
+                seen.sounds = layer.LatchedSounds();
+                seen.volumes = layer.LatchedVolumes();
+            }
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        std::printf("  1-05 %s: the crate from %s (crate %s; it %s), per tick: x, y, turned (rad), v in px/s, "
+                    "moved, reach old/new, gap and normal to it:%s\n",
+                    what, Point(putAt).c_str(), masksOf(crate).c_str(), masksOf(onto).c_str(), trace.c_str());
+        for (int tick = 0; tick < 30; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        return seen;
+    };
+    const auto describeDrop = [](const CrateDrop& seen) {
+        std::string text = "tick " + std::to_string(seen.tick) + ", hit " + std::to_string(seen.hit) + ", normal (" +
+                           std::to_string(seen.normal.x) + ", " + std::to_string(seen.normal.y) + "), fell at " +
+                           std::to_string(seen.fastestDownPxS) + " px/s; latched";
+        for (std::size_t i = 0; i < seen.sounds.size(); ++i) {
+            text += " " + seen.sounds[i] + (i < seen.volumes.size() ? "@" + std::to_string(seen.volumes[i]) : "");
+        }
+        return text;
+    };
+
+    // The knocks: onto the open top of platform_ent_658 (x -57.6 to 185.6 at y 126),
+    // down to its rest at y 97 - 40 px at x 72, and 25 px at x 36, 11 px under the
+    // corner block over x 32 and y 32 (2 px under it, the solver still pushed the
+    // crate out of it on its first step). At x 72 the line between the centres leans
+    // 10 degrees off the face; at x 36, 32 - which the begin's normal must not take.
+    const double releasePx = gravityPx * dtS * dtS;
+    const auto platform = layer.SimLevel()->built.entities.find("platform_ent_658");
+    CHECK_MSG(platform != layer.SimLevel()->built.entities.end(), "1-05 builds platform_ent_658");
+    if (platform == layer.SimLevel()->built.entities.end()) return;
+    for (const glm::dvec2 putAt : {glm::dvec2(72.0, 57.0), glm::dvec2(36.0, 72.0)}) {
+        const std::string where = "knock at x " + std::to_string(static_cast<int>(putAt.x));
+        const CrateDrop knock = crateDrop(putAt, platform->second, where.c_str());
+        CHECK_MSG(std::fabs(knock.firstMovePx - releasePx) < 0.01,
+                  where + ": let go at rest, touching nothing: its first step " + std::to_string(knock.firstMovePx) + " px");
+        CHECK_MSG(knock.tick >= 0, where + ": the crate's begin with the platform, as it reaches it");
+        if (knock.tick < 0) continue;
+        const double fellAt = knock.fastestDownPxS / rules.hitPxPerUnit;
+        CHECK_MSG(knock.normal.y > 0.9999 && knock.hit > 2.0 && std::fabs(knock.hit - fellAt) <= 0.01 * fellAt,
+                  where + ": along the face's normal, at the speed it fell: " + describeDrop(knock));
+        const std::vector<double> knocks = [&] {
+            std::vector<double> out;
+            for (std::size_t i = 0; i < knock.sounds.size() && i < knock.volumes.size(); ++i) {
+                if (knock.sounds[i] == "crate_knocked") out.push_back(knock.volumes[i]);
+            }
+            return out;
+        }();
+        const bool dragged = std::find(knock.sounds.begin(), knock.sounds.end(), "crate_dragged") != knock.sounds.end();
+        CHECK_MSG(knocks.size() == 1 && !dragged && std::fabs(knocks[0] - fellAt / 30.0) <= 0.01 * fellAt / 30.0 &&
+                      std::fabs(knocks[0] - knock.hit / 30.0) < 1e-9,
+                  where + ": playRandomWoodSound(|hit| / 30), once, and no drag: " + describeDrop(knock));
+        std::printf("  1-05 %s: %s\n", where.c_str(), describeDrop(knock).c_str());
+    }
+
+    // The drag: the crate let fall 20 px onto the head of the player, stood on that
+    // platform's top at x 72 - the crate clear of the corner block over x 32 and the
+    // block over x 112, and under the ceiling at y 0. The crate is parked first where
+    // it was made.
+    PutBodyAt(registry, crate, glm::dvec2(158.0, 194.0));
+    MagicPortals::Impacts::Shape playerShape;
+    CHECK_MSG(MagicPortals::Impacts::ShapeOf(registry, player, playerShape), "the player has a solid shape");
+    const auto extent = [&registry, player] {
+        MagicPortals::Impacts::Shape shape;
+        MagicPortals::Impacts::ShapeOf(registry, player, shape);
+        double top = std::numeric_limits<double>::infinity();
+        double bottom = -std::numeric_limits<double>::infinity();
+        for (const glm::dvec2& point : shape.core) {
+            top = std::min(top, point.y - shape.radiusPx);
+            bottom = std::max(bottom, point.y + shape.radiusPx);
+        }
+        return glm::dvec2(top, bottom);
+    };
+    const double feetBelowCentre = extent().y - playerPx(registry, layer).y;
+    PutBodyAt(registry, player, glm::dvec2(72.0, 126.0 - feetBelowCentre - 0.5));
+    for (int tick = 0; tick < 30; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const double headPx = extent().x;
+    const glm::dvec2 over(playerPx(registry, layer).x, headPx - 20.0 - 29.0);
+    CHECK_MSG(over.y - 29.0 > 0.5 && std::fabs(over.x - 72.0) < 2.0,
+              "the player stands on the platform's top, room over its head: " + Point(playerPx(registry, layer)) +
+                  ", head at y " + std::to_string(headPx));
+    const CrateDrop drag = crateDrop(over, player, "drag");
+    CHECK_MSG(std::fabs(drag.firstMovePx - releasePx) < 0.01,
+              "the drag's crate let go at rest, touching nothing: its first step " + std::to_string(drag.firstMovePx) + " px");
+    CHECK_MSG(drag.tick >= 0 && drag.hit > 2.0, "the crate's begin with the player, above 2: " + describeDrop(drag));
+    const auto count = [](const CrateDrop& seen, const char* event) {
+        return std::count(seen.sounds.begin(), seen.sounds.end(), std::string(event));
+    };
+    CHECK_MSG(count(drag, "crate_dragged") == 1 && count(drag, "crate_knocked") == 0,
+              "playWoodDragSound against the character, and no knock: " + describeDrop(drag));
+    std::printf("  1-05 drag: %s\n", describeDrop(drag).c_str());
+    layer.OnDetach(registry);
+}
+
+// PLANNING STEP 142'S SECOND FIX ROUND: a beholder rock that breaks on the level is
+// heard. Boss::State::Contacts breaks a rock within its margin of something static,
+// or where the step would have taken it, before the step brings the two into touch,
+// so the impact watch never saw that begin and the rock's own callback
+// (ETHBeginContactCallback_rolling_stone #58-71: startEarthquake(hit x 2) and
+// playStoneHitSound(hit / 3) above 2, before destroyOnStaticHit's #170-208) went
+// unheard. 1-32 (level31) with the walks of the verifier's probe
+// (out/parity/program/P6/verify2/probe_rock): right on ticks 30-110, left on 565-601
+// and right on 676-790, so the first rock falls clear of the player to the floor. On
+// its break's tick there is one stone begin of it, on the static Contacts broke it
+// on, and stone_hit is latched once at hit / 3 - the hit worked out here from the
+// velocities the case itself read before each tick, along the line from the rock's
+// point to the static's, over hit_px_per_unit - and the begin calls the stone's
+// shake at hit x 2, before boss_rock_broken's 5, which is the tick's last word. The
+// next rock is one the watch sees reach the floor itself: one begin and one latch
+// on its tick, not two.
+void ABeholderRockBrokenOnTheLevelIsHeard() {
+    using Kind = MagicPortals::Impacts::Kind;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK_MSG(!layer.PopupOpen(), "1-32 opens on no popup, as the probe's run did");
+    layer.ScheduleDevHold(30, 110, 1.0f);
+    layer.ScheduleDevHold(565, 601, -1.0f);
+    layer.ScheduleDevHold(676, 790, 1.0f);
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    // Each rock's velocity and point as each tick began, which is where the watch
+    // reads them (the layer's last act of a tick).
+    struct Read {
+        entt::entity body = entt::null;
+        std::string name;
+        std::vector<glm::dvec2> velocitiesPx;
+        glm::dvec2 atPx{0.0};
+    };
+    std::vector<Read> reads;
+    int breaks = 0;
+    int ticks = 0;
+    for (int i = 0; i < 1100 && breaks < 2 && layer.SimLevel() != nullptr; ++i) {
+        for (const MagicPortals::Boss::Rock& rock : layer.SimLevel()->boss.rocks) {
+            if (!registry.valid(rock.body)) continue;
+            auto read = std::find_if(reads.begin(), reads.end(), [&](const Read& r) { return r.body == rock.body; });
+            if (read == reads.end()) {
+                reads.push_back(Read{rock.body, rock.name, {}, glm::dvec2(0.0)});
+                read = reads.end() - 1;
+            }
+            read->velocitiesPx.push_back(
+                MagicPortals::Units::ToPixels(registry.get<RigidBodyComponent>(rock.body).velocity));
+            read->atPx = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(rock.body).position);
+        }
+        const int brokenBefore = layer.SimLevel()->boss.rocksBroken;
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        if (layer.SimLevel() == nullptr) break;
+        const PlayedLevel& level = *layer.SimLevel();
+        if (level.boss.rocksBroken == brokenBefore) {
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            continue;
+        }
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        const std::vector<double> volumes = layer.LatchedVolumes();
+        std::vector<double> stoneHits;
+        for (std::size_t s = 0; s < sounds.size() && s < volumes.size(); ++s) {
+            if (sounds[s] == "stone_hit") stoneHits.push_back(volumes[s]);
+        }
+        CHECK_MSG(!level.boss.staticHitsNow.empty(), "the rock broke on something static on tick " +
+                                                         std::to_string(layer.LayerTicks()));
+        for (const MagicPortals::Boss::StaticHit& hit : level.boss.staticHitsNow) {
+            ++breaks;
+            const auto read = std::find_if(reads.begin(), reads.end(), [&](const Read& r) { return r.body == hit.rock; });
+            const std::string name = read != reads.end() ? read->name : std::string("?");
+            const std::string where = "1-32 " + name + " broken on tick " + std::to_string(layer.LayerTicks()) + " on " +
+                                      layer.EntityNameOf(hit.other);
+            std::vector<const MagicPortals::Impacts::Begin*> begins;
+            for (const auto& begin : layer.ImpactBegins()) {
+                if (begin.body == hit.rock && begin.kind == Kind::Stone) begins.push_back(&begin);
+            }
+            CHECK_MSG(registry.valid(hit.other) && !registry.all_of<RigidBodyComponent>(hit.other),
+                      where + ": on a static body");
+            CHECK_MSG(begins.size() == 1, where + ": one stone begin of it, not " + std::to_string(begins.size()));
+            if (begins.size() != 1 || read == reads.end() || !registry.valid(hit.other)) continue;
+            const ImpactRead impact = readImpact(rules, layer, *begins[0]);
+            if (breaks == 1) {
+                // The watch never saw this one reach the floor: the begin is the one
+                // made of Contacts' judgement, with no normal of its own.
+                CHECK_MSG(begins[0]->other == hit.other && begins[0]->normal == glm::dvec2(0.0),
+                          where + ": the begin is Contacts', on what it broke the rock on");
+                const glm::dvec2 otherPx =
+                    MagicPortals::Units::ToPixels(registry.get<TransformComponent>(hit.other).position);
+                const glm::dvec2 apart = otherPx - read->atPx;
+                const glm::dvec2 along = glm::length(apart) > 0.0 ? apart / glm::length(apart) : glm::dvec2(0.0);
+                double fastest = -std::numeric_limits<double>::infinity();
+                double fell = 0.0;
+                for (const glm::dvec2& velocity : read->velocitiesPx) {
+                    fastest = std::max(fastest, glm::dot(velocity, along));
+                    fell = std::max(fell, velocity.y);
+                }
+                const double want = fastest / rules.hitPxPerUnit;
+                CHECK_MSG(want > 2.0, where + ": it came at the static above 2 (" + std::to_string(want) +
+                                          "), so the original's is heard");
+                CHECK_MSG(std::fabs(impact.hit - want) <= 1e-6 * std::fabs(want),
+                          where + ": the begin's hit " + std::to_string(impact.hit) + " against " +
+                              std::to_string(want) + " from the velocities read");
+                CHECK_MSG(stoneHits.size() == 1 && std::fabs(stoneHits[0] - want / 3.0) <= 1e-6 * std::fabs(want),
+                          where + ": playStoneHitSound(hit / 3) once: " + std::to_string(stoneHits.size()) +
+                              " latched" + (stoneHits.empty() ? "" : ", the first at " + std::to_string(stoneHits[0])));
+                CHECK_MSG(impact.calls && std::fabs(impact.intensity - 2.0 * want) <= 1e-6 * std::fabs(want),
+                          where + ": and startEarthquake(hit x 2): " + std::to_string(impact.intensity));
+                const std::string landed = quakeLanded(seen, 5.0, false);
+                CHECK_MSG(landed.empty(), where + ": boss_rock_broken's 5 is the tick's last word: " + landed);
+                std::printf("  %s at (%.1f, %.1f): the rock from (%.1f, %.1f), %zu velocities read, fell at %.1f px/s "
+                            "(%.4f straight down), %.4f along the line to it; stone_hit at %.6f, the shake %.4f\n",
+                            where.c_str(), otherPx.x, otherPx.y, read->atPx.x, read->atPx.y,
+                            read->velocitiesPx.size(), fell, fell / rules.hitPxPerUnit, want,
+                            stoneHits.empty() ? -1.0 : stoneHits[0], impact.intensity);
+            } else {
+                // The watch's own begin, and the one latch its gate gives.
+                const std::size_t due = impact.hit > 2.0 ? 1 : 0;
+                CHECK_MSG(stoneHits.size() == due, where + ": " + std::to_string(stoneHits.size()) +
+                                                       " stone_hit latched on a begin at " +
+                                                       std::to_string(impact.hit) + ", not one begin's " +
+                                                       std::to_string(due));
+                std::printf("  %s: the watch's own begin (on %s), hit %.4f, %zu stone_hit\n", where.c_str(),
+                            impact.other.empty() ? "a body" : impact.other.c_str(), impact.hit, stoneHits.size());
+            }
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(breaks == 2, "1-32's first two rocks broke on the level: " + std::to_string(breaks));
+    layer.OnDetach(registry);
+}
+
+// PLANNING STEP 142: a timed crystal's init block plays playCrystalTempAlertSound
+// once, as it adds its dial (ETHCallback_crystal #60-82), and the port starts every
+// dial on the level's first tick: one latch per timed crystal there, and none after.
+// 1-15 (level14).
+void ATimedCrystalsAlertIsLatchedOnceAtItsDialsStart() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level14");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int timed = 0;
+    for (const auto& crystal : layer.SimLevel()->goals.crystals) {
+        if (crystal.timed) ++timed;
+    }
+    CHECK_MSG(timed >= 1, "1-15 places a timed crystal: " + std::to_string(timed));
+    CloseTheLevelStartPopup(layer, registry);
+    const auto alerts = [&layer] {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string("crystal_alert")));
+    };
+    CHECK_MSG(alerts() == 0, "nothing before the level's first tick");
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(alerts() == timed, "one per timed crystal on the first: " + std::to_string(alerts()));
+    for (int tick = 0; tick < 120; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(alerts() == timed, "and none after: " + std::to_string(alerts()));
+    layer.OnDetach(registry);
+}
+
+// PLANNING STEP 142: the level's restart is a teleport (GameLayer::GameLayer
+// #207-216, Game::Game #74), and the pause's resume, scores and switches are silent
+// (GameMenuLayer::GameMenuLayer #74-112; GlobalSoundSwitch::GlobalSoundSwitch #23).
+void TheLevelsButtonsSoundAsTheOriginalsDo() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    waitForFirstTap(layer, registry);
+    const auto heard = [&layer](const char* event) {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string(event)));
+    };
+    Hud::Rect rect;
+    CHECK_MSG(layer.ControlRect(MagicPortalsLayer::Control::Reset, rect), "restart is shown");
+    if (!layer.ControlRect(MagicPortalsLayer::Control::Reset, rect)) return;
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    tap(layer, registry, ScreenOfView(layer, rect.Centre()));
+    CHECK_MSG(layer.LevelAgeMs() == 0.0 && heard("level_button") == 1 && heard("menu_button") == 0,
+              "a press on restart restarts the level with the teleport: " + std::to_string(heard("level_button")));
+
+    for (int tick = 0; tick < 90; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(TapThePauseControl(layer, registry) && layer.Paused(), "the pause");
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    // 1-31 is achievement 13's: the popup over the pause, silent, closed by the back
+    // key, and the pause current again once it has gone (planning step 143).
+    if (layer.AchievementsContent() != nullptr) {
+        CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Achievements) && layer.AchievementsPopupOpen());
+        press(layer, registry, MagicPortalsLayer::kBack);
+        for (int tick = 0; tick < 120 && layer.AchievementsPopupOpen(); ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK(!layer.AchievementsPopupOpen() && layer.Paused());
+    }
+    // The music switch first: the sound's toggle dismisses it for a while.
+    CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Music) && !layer.MusicOn());
+    CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Music) && layer.MusicOn());
+    CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Sound) && !layer.SoundOn());
+    CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Sound) && layer.SoundOn());
+    CHECK(layer.PressPause(registry, MagicPortals::Pause::Button::Resume));
+    CHECK_MSG(layer.LatchedSounds().empty(),
+              "scores, both switches and resume are silent: " + std::to_string(layer.LatchedSounds().size()));
+    layer.OnDetach(registry);
+}
+
+// ---- achievements (planning step 143) ---------------------------------------------
+
+std::vector<ScreenOverlay::Quad> CardFrame(entt::registry& registry, const MagicPortalsLayer& layer) {
+    static ScreenOverlay overlay;
+    overlay.Clear();
+    registry.ctx().insert_or_assign<ScreenOverlay*>(&overlay);
+    layer.EmitNotifications(registry);
+    return overlay.Quads();
+}
+
+std::filesystem::path AchievementsScratch(const char* name) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / name;
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    return dir;
+}
+
+std::string ReadText(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+int Heard(const MagicPortalsLayer& layer, const char* event) {
+    const std::vector<std::string> sounds = layer.LatchedSounds();
+    return static_cast<int>(std::count(sounds.begin(), sounds.end(), std::string(event)));
+}
+
+// 1-01 to its door: LevelFinishedLayer's constructor asks on the door's tick -
+// the medal this play earned, its portals, the game's time - and 45 is unlocked
+// there and saved with its hash; its card leaves the stack strictly after 2500 ms
+// with its stinger and turns the music to 0.15, and goes 3400 ms later with
+// setDefaultMusicVolume's 0.7 (the level's track is not g_musicNames[0]).
+void TheDoorUnlocksItsAchievementAndRaisesItsCard() {
+    const std::filesystem::path dir = AchievementsScratch("supersonic-test-mp-layer-achievements");
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = dir.string();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.AchievementRulesError().empty(),
+              layer.LoadError() + layer.AchievementRulesError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK_MSG(layer.Unlocks().empty(), "a fresh save: the start's pass unlocks nothing");
+    for (int tick = 0; tick < 600 && !layer.Finishing(); ++tick) {
+        std::vector<std::string> pressed;
+        if (tick == 0) pressed.push_back(MagicPortalsLayer::kRight);
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, std::move(pressed));
+    }
+    CHECK_MSG(layer.Finishing(), "level0's door is reached by walking right");
+    if (!layer.Finishing()) return;
+    const int door = layer.LayerTicks();
+    const std::optional<MagicPortals::Achievements::Play> play = layer.LastDoorPlay();
+    const auto& cleared = layer.LastCleared();
+    const int medal = cleared ? MagicPortals::LevelEnd::ComputeScore(cleared->portalsUsed, cleared->goldenScore,
+                                                                     cleared->crystals, cleared->crystalsTotal)
+                              : -1;
+    CHECK_MSG(play && play->world == 0 && play->level == 0 && play->game && play->medal == medal &&
+                  play->portals == cleared->portalsUsed,
+              "the door asked with this play's numbers");
+    if (play) {
+        CHECK_MSG(NearD(play->gameTimeMs, layer.LevelAgeMs(), 0.01),
+                  "and the game's time, this tick's included: " + std::to_string(play->gameTimeMs) + " against " +
+                      std::to_string(layer.LevelAgeMs()));
+    }
+    CHECK_MSG(layer.Unlocks().size() == 1 && layer.Unlocks()[0].id == 45 && layer.Unlocks()[0].tick == door &&
+                  layer.Unlocks()[0].notify,
+              "45 on the door's tick, with its card");
+    const std::string saved = ReadText(dir / "achievements.json");
+    CHECK_MSG(saved.find("\"list\": \"45\"") != std::string::npos && saved.find("\"hash\": \"191\"") != std::string::npos,
+              "saved there and then, with its hash: " + saved);
+    CHECK_MSG(layer.Notifications().Stacked() == 1 && layer.Notifications().Front() == nullptr,
+              "the card waits on the stack");
+    const double gameTrack = layer.MusicVolumeNow();
+    int shownAt = -1;
+    int goneAt = -1;
+    double shownVolume = -1.0;
+    std::vector<ScreenOverlay::Quad> shownFrame;
+    for (int tick = door + 1; tick <= door + 420 && goneAt < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (shownAt < 0 && layer.Notifications().Front() != nullptr) {
+            shownAt = tick;
+            shownVolume = layer.MusicVolumeNow();
+            CHECK_MSG(Heard(layer, "achievement_card") == 1, "the stinger as it leaves the stack");
+        }
+        if (shownAt > 0 && tick == shownAt + 60) shownFrame = CardFrame(registry, layer);
+        if (shownAt > 0 && goneAt < 0 && layer.Notifications().Front() == nullptr) goneAt = tick;
+    }
+    CHECK_MSG(shownAt - door >= 149 && shownAt - door <= 150,
+              "shown strictly past 2500 ms: " + std::to_string(shownAt - door) + " ticks after the door");
+    CHECK_MSG(goneAt - shownAt >= 204 && goneAt - shownAt <= 205,
+              "gone strictly past 3400 ms: " + std::to_string(goneAt - shownAt));
+    CHECK_MSG(NearD(gameTrack, 0.7, 1e-9) && NearD(shownVolume, 0.15, 1e-9) &&
+                  NearD(layer.MusicVolumeNow(), 0.7, 1e-9),
+              "the music 0.7, 0.15 under the card, 0.7 after it");
+    CHECK_EQ(Heard(layer, "achievement_card"), 1);
+    if (layer.AchievementsContent() != nullptr && !shownFrame.empty()) {
+        CHECK_MSG(CountImage(shownFrame, "nnotificationbg.png") == 3, "the card's three pieces");
+        const MagicPortals::Achievements::Entry* entry = layer.AchievementsContent()->Find(45);
+        if (entry != nullptr) CHECK_MSG(CountImage(shownFrame, entry->icon) == 1, "and its icon");
+    }
+    std::printf("  1-01: 45 on the door's tick %d (medal %d, %d portals, %.1f ms); card %d ticks later, gone %d after\n",
+                door, medal, play ? play->portals : -1, play ? play->gameTimeMs : -1.0, shownAt - door,
+                goneAt - shownAt);
+    layer.OnDetach(registry);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
+// 4-19's red key: its pick dispatches 61 with a 5000 ms delay (ETHCallback_key
+// #822-851), on the tick its carrier changes, and nothing at its door.
+void TheRedKeysPickUnlocksItsAchievement() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level18c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CloseTheLevelStartPopup(layer, registry);
+    int picked = -1;
+    for (int tick = 0; tick < 30 && picked < 0; ++tick) {
+        PutPlayerAt(registry, layer, glm::dvec2(440.0, 128.0));
+        registry.get<RigidBodyComponent>(layer.SimLevel()->player).velocity = glm::vec3(0.0f);
+        tickWith(layer, registry, kRest, {}, {});
+        for (const MagicPortals::Keys::Key& key : layer.SimLevel()->keys.keys) {
+            if (key.owner != entt::null && picked < 0) picked = layer.LayerTicks();
+        }
+    }
+    CHECK_MSG(picked > 0, "the player takes 4-19's key");
+    CHECK_MSG(layer.Unlocks().size() == 1 && layer.Unlocks()[0].id == 61 && layer.Unlocks()[0].tick == picked,
+              "61 on the pick's tick");
+    int shownAt = -1;
+    for (int tick = 0; tick < 320 && shownAt < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (layer.Notifications().Front() != nullptr) shownAt = layer.LayerTicks();
+    }
+    CHECK_MSG(shownAt - picked >= 299 && shownAt - picked <= 300,
+              "its card strictly past 5000 ms: " + std::to_string(shownAt - picked) + " ticks");
+    std::printf("  4-19: 61 on the pick's tick %d, its card %d ticks later\n", picked, shownAt - picked);
+    layer.OnDetach(registry);
+}
+
+// The pause's AchievementsPopup over 1-31, which achievement 13 names: up over the
+// pause, its text the list's, the pause's buttons taking nothing under it, closed
+// by the back key and gone with the pause current again. Over 1-05, named by none,
+// the button the owner keeps opens nothing.
+void ThePausesAchievementsPopupShowsTheLevels() {
+    namespace Pause = MagicPortals::Pause;
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level4");
+        layer.OnAttach(registry);
+        if (layer.SimLevel() == nullptr) return;
+        CloseTheLevelStartPopup(layer, registry);
+        press(layer, registry, MagicPortalsLayer::kBack);
+        for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK(layer.Paused());
+        CHECK_MSG(!layer.PressPause(registry, Pause::Button::Achievements) && !layer.AchievementsPopupOpen(),
+                  "1-05: no achievement names it, nothing opens");
+        layer.OnDetach(registry);
+    }
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CloseTheLevelStartPopup(layer, registry);
+    press(layer, registry, MagicPortalsLayer::kBack);
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    if (layer.AchievementsContent() == nullptr) {
+        std::printf("  (the popup's part skipped: no list of the original's)\n");
+        layer.OnDetach(registry);
+        return;
+    }
+    CHECK(layer.PressPause(registry, Pause::Button::Achievements) && layer.AchievementsPopupOpen());
+    const MagicPortals::Achievements::Entry* entry = layer.AchievementsContent()->Find(13);
+    const std::string text = layer.AchievementsPopupText();
+    CHECK_MSG(entry != nullptr && text == "# " + entry->title + ":\n" + entry->description,
+              "1-31's one achievement, locked: '" + text + "'");
+    CHECK_MSG(Heard(layer, "menu_button") == 0 && Heard(layer, "level_button") == 0, "silent");
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(!layer.PressPause(registry, Pause::Button::Music) && layer.MusicOn(),
+              "the pause's buttons take nothing under it");
+    if (OriginalArtIsThere("ThePausesAchievementsPopupShowsTheLevels")) {
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        CHECK_MSG(CountImage(frame, "box_bg.png") == 9, "the frame's nine tiles");
+        CHECK_MSG(CountImage(frame, "popup_close_button.png") == 1, "and its close button");
+    }
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK(layer.AchievementsPopupOpen() && layer.Paused());
+    int goneAfter = -1;
+    for (int tick = 1; tick <= 120 && goneAfter < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        if (!layer.AchievementsPopupOpen()) goneAfter = tick;
+    }
+    CHECK_MSG(goneAfter > 0 && layer.Paused(), "gone, the pause current again");
+    CHECK(layer.PressPause(registry, Pause::Button::Resume) && !layer.Paused());
+    std::printf("  1-31: the popup up over the pause, gone %d ticks after the back key\n", goneAfter);
+    layer.OnDetach(registry);
+}
+
+// The main menu's pass (checkPreviouslyUnlockAchievements) over a save whose first
+// chapter is all gold: its three badges and its eight medal achievements, silently,
+// in the function's order, saved - and the dashboard reads the saved set: the same
+// rows and points the medals gave it before.
+void TheMainMenusPassFillsTheSavedSet() {
+    namespace Scores = MagicPortals::Scores;
+    using Screen = MagicPortalsLayer::Screen;
+    const std::filesystem::path dir = AchievementsScratch("supersonic-test-mp-layer-menu-pass");
+    {
+        Scores::Store seed;
+        std::string why;
+        CHECK(seed.Open(dir.string(), why));
+        for (int level = 0; level < 32; ++level) seed.Record(0, level, Scores::kGold);
+        CHECK_MSG(seed.Save(why), why);
+    }
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = dir.string();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !TickToTheMainMenu(layer, registry)) {
+        CHECK_MSG(false, "no main menu: " + layer.LoadError());
+        return;
+    }
+    std::string order;
+    bool silent = true;
+    for (const MagicPortalsLayer::Unlock& unlock : layer.Unlocks()) {
+        order += (order.empty() ? "" : ",") + std::to_string(unlock.id);
+        silent = silent && !unlock.notify;
+    }
+    CHECK_MSG(order == "0,3,37,45,6,7,8,9,46,47,14" && silent,
+              "the badges, then the levels in order, silently: " + order);
+    const std::string saved = ReadText(dir / "achievements.json");
+    CHECK_MSG(saved.find("\"list\": \"0,3,37,45,6,7,8,9,46,47,14\"") != std::string::npos &&
+                  saved.find("\"hash\": \"5192\"") != std::string::npos,
+              "saved with its hash: " + saved);
+    CHECK_MSG(layer.Notifications().Stacked() == 0, "no card");
+    const auto touchAt = [&](double xPx, double yPx) {
+        const glm::vec2 at(static_cast<float>(xPx), static_cast<float>(yPx));
+        tickWith(layer, registry, at, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        releaseWith(layer, registry, at);
+    };
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    touchAt(1100.0, 675.0);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Achievements, "the dashboard");
+    if (layer.MenuScreen() != Screen::Achievements) return;
+    if (layer.AchievementsContent() != nullptr) {
+        Scores::Store medals;
+        std::string why;
+        CHECK(medals.Open(dir.string(), why));
+        const MagicPortals::Dashboard::Board before = MagicPortals::Dashboard::Build(
+            layer.AchievementsContent(), layer.LockingRules(), medals, layer.ChapterTable());
+        const MagicPortals::Dashboard::Board& now = layer.DashboardBoard();
+        bool same = before.lines.size() == now.lines.size() && before.points == now.points;
+        for (std::size_t i = 0; same && i < now.lines.size(); ++i) same = before.lines[i].unlocked == now.lines[i].unlocked;
+        CHECK_MSG(same, "the saved set unlocks the rows the medals did, " + std::to_string(now.points) + " points");
+    }
+    layer.OnDetach(registry);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
+// On a fresh save 1-02 is locked, and its row's tap raises "This level is locked!"
+// at once (displayLevelLockedNotification: delay 0, no icon, no sound of its own).
+void TheDashboardsLockedRowRaisesItsCard() {
+    using Screen = MagicPortalsLayer::Screen;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !TickToTheMainMenu(layer, registry)) {
+        CHECK_MSG(false, "no main menu: " + layer.LoadError());
+        return;
+    }
+    if (layer.AchievementsContent() == nullptr) {
+        std::printf("  (skipped: no list of the original's)\n");
+        layer.OnDetach(registry);
+        return;
+    }
+    const auto touchAt = [&](double xPx, double yPx) {
+        const glm::vec2 at(static_cast<float>(xPx), static_cast<float>(yPx));
+        tickWith(layer, registry, at, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        releaseWith(layer, registry, at);
+    };
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    touchAt(1100.0, 675.0);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Achievements, "the dashboard");
+    if (layer.MenuScreen() != Screen::Achievements) return;
+    const MagicPortals::Dashboard::Board& board = layer.DashboardBoard();
+    int locked = -1;
+    for (std::size_t i = 0; i < board.lines.size() && locked < 0; ++i) {
+        const auto& line = board.lines[i];
+        if (!line.header && line.level >= 0 && !line.levelUnlocked) locked = static_cast<int>(i);
+    }
+    const glm::dvec2 view = layer.MenuBoxPx();
+    CHECK_MSG(locked >= 0 && MagicPortals::Dashboard::LineShown(layer.DashboardRules(), view, locked, 0.0),
+              "a locked level's row on the view: " + std::to_string(locked));
+    if (locked < 0) return;
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const Hud::Rect rect = MagicPortals::Dashboard::LineHitRect(layer.DashboardRules(), view, locked, 0.0);
+    const glm::dvec2 px = rect.Centre() / view * glm::dvec2(1280.0, 720.0);
+    touchAt(px.x, px.y);
+    tickWith(layer, registry, kRest, {}, {});
+    const MagicPortals::Notificator::Card* card = layer.Notifications().Front();
+    CHECK_MSG(card != nullptr && card->message == "This level is locked!" && card->icon.empty() && card->sound.empty() &&
+                  card->durationMs == 1500.0,
+              "This level is locked!, at once, for 1500 ms, no icon and no sound of its own");
+    CHECK_MSG(Heard(layer, "achievement_denied") == 1 && Heard(layer, "achievement_card") == 0,
+              "the denial heard, and nothing else");
+    if (OriginalArtIsThere("TheDashboardsLockedRowRaisesItsCard")) {
+        for (int tick = 0; tick < 45; ++tick) tickWith(layer, registry, kRest, {}, {});
+        const std::vector<ScreenOverlay::Quad> frame = CardFrame(registry, layer);
+        CHECK_MSG(CountImage(frame, "nnotificationbg.png") == 3, "its three pieces over the dashboard");
+    }
+    std::printf("  the dashboard's row %d, its level locked: the card at once\n", locked);
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -17061,6 +18163,17 @@ void runTests() {
     TheRocketLaunchesAfter4_01sDoor();
     TheRocketLandsAfter4_19sDoor();
     TheKnightWalksIntoTheDoorAfter2_32();
+    TheMedalIsSavedOnTheDoorsTick();
+    TheLandingKeysSparklesShrinkWithIt();
+    TheContactsAreHeardAtTheirCallbacksVolumes();
+    ABeholderRockBrokenOnTheLevelIsHeard();
+    ATimedCrystalsAlertIsLatchedOnceAtItsDialsStart();
+    TheLevelsButtonsSoundAsTheOriginalsDo();
+    TheDoorUnlocksItsAchievementAndRaisesItsCard();
+    TheRedKeysPickUnlocksItsAchievement();
+    ThePausesAchievementsPopupShowsTheLevels();
+    TheMainMenusPassFillsTheSavedSet();
+    TheDashboardsLockedRowRaisesItsCard();
 }
 
 } // namespace

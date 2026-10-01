@@ -31,8 +31,9 @@
 
 namespace MagicPortals::Impacts {
 
-// Whose callback a watched body's begins run.
-enum class Kind { Player, Stone, Minion };
+// Whose callback a watched body's begins run. A crate's (crateContactCallback)
+// is a sound and no shake: planning step 142.
+enum class Kind { Player, Stone, Minion, Crate };
 
 struct Watched {
     entt::entity body = entt::null;
@@ -126,6 +127,10 @@ public:
     // judges elsewhere, as Demolish judges a stone against what it breaks. False
     // where BeforeStep kept nothing for `body`.
     bool Carried(entt::entity body, Begin& out) const;
+
+    // Whether the last AfterStep found `body` touching `other`: a pair that met
+    // on that step or before it, so any begin of theirs has been read already.
+    bool Touching(entt::entity body, entt::entity other) const;
 
     void Reset();
 

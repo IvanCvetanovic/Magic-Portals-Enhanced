@@ -143,6 +143,10 @@ struct Board {
 // and what the save unlocks of them. A null content is a board with no rows.
 Board Build(const Achievements::Content* content, const Locking::Rules& locking, const Scores::Store& scores,
             const Chapters::Table& chapters);
+// The same with the unlocked ids given: AchievementManager's saved list
+// (Achievements::Store), which is what the dashboard reads since planning step 143.
+Board Build(const Achievements::Content* content, const Locking::Rules& locking, const Scores::Store& scores,
+            const Chapters::Table& chapters, std::vector<int> unlocked);
 
 // doScrolling's stride - lineOffset * (achievements + worlds) - and the lowest the
 // list scrolls to before the bottom band pulls it back.

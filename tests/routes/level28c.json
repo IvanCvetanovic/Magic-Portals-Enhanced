@@ -19,8 +19,10 @@
     "shoot), the port's patrol (a knight lifted off its floor never comes within 8 px of its waypoint and",
     "walks on toward that waypoint's x), the port's traversal by body overlap (the knight walks into a",
     "portal whose centre is at the knight's head), G10 and G4 (shot speed).",
-    "Step 137 (a shot leaves on the release): won on tick 1520; the shots up on 800 and 1128 are",
-    "aimed 0.306 and 0.773 px off their points (the camera moved while the finger was down)."
+    "Step 137 (a shot leaves on the release): won on tick 1520 on the unlatched door; the shots up on",
+    "800 and 1128 are aimed 0.306 and 0.773 px off their points (the camera moved while the finger was",
+    "down). On the merged build (step 144), with step 133's latch, won on tick 1502: step 133's 1501",
+    "and the tick the drift adds, the same 0.306 and 0.773 px."
   ],
   "level": "level28c",
   "win_by": 1700,

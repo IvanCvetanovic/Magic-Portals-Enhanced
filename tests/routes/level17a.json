@@ -18,7 +18,16 @@
     "1194. Re-authored in step 140 (G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a second, and the touch fires no shot (\"shot\": false): step 127's route rode the port's self-running lift for",
     "1300 ticks to meet the carranca's phase, and now waits at the foot instead. Leans on the port's traversal",
     "by body overlap (the crate; the player into (365, 146) and under a portal opened on him) and on R17's kill",
-    "by a shot aimed into the field."
+    "by a shot aimed into the field.",
+    "Re-timed at wave 2's merge (planning step 144), where step 133's latched lift door meets this route: the door",
+    "rises 102.4, so its bottom stands at 56.6, and the kill line from (253.8, 43.5) toward (54, 76) met it (the shot",
+    "ended at (191, 53.65)). The portal under the fall now goes down a tick earlier (1095), so that the kill shot",
+    "can leave on the player's RISING pass through y 49.9 on 1120 - the first tick the 400 ms between releases allows",
+    "- toward (53.8, 72) (the tap's (56.2, 72), carried 2.36 left by the camera while the finger is down): under the",
+    "door's bottom and over the barrel's corner, and 22 from the agent, which goes with its ring on 1137. The door-room",
+    "portal is (60, 50), which the raised door lets through from mid-fall on 1146 ((60, 30) now meets its bottom).",
+    "Won on tick 1191. The kill wins for a tap from y 71.4 to 72.6 and from x 54 to 58, and only released on 1120: on",
+    "1121 the player is 3.4 higher and the line meets the door; the door-room portal wins from y 45 to 55."
   ],
   "level": "level17a",
   "win_by": 1254,
@@ -40,9 +49,9 @@
     {"tick": 895, "at": [68, 258]},
     {"tick": 898, "at": [470, 280], "shot": false},
     {"tick": 1048, "at": [255, 70]},
-    {"tick": 1096, "at": [365, 146]},
-    {"tick": 1121, "at": [54, 76]},
-    {"tick": 1145, "at": [60, 30]},
+    {"tick": 1095, "at": [365, 146]},
+    {"tick": 1119, "at": [56.2, 72]},
+    {"tick": 1145, "at": [60, 50]},
     {"tick": 1169, "at": [248, 146]}
   ]
 }

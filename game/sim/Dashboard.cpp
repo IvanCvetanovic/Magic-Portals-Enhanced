@@ -168,10 +168,16 @@ Layout LayOut(const Rules& rules, const glm::dvec2& viewUnits) {
 
 Board Build(const Achievements::Content* content, const Locking::Rules& locking, const Scores::Store& scores,
             const Chapters::Table& chapters) {
+    return Build(content, locking, scores, chapters,
+                 content != nullptr ? Achievements::Unlocked(*content, locking, scores, chapters) : std::vector<int>());
+}
+
+Board Build(const Achievements::Content* content, const Locking::Rules& locking, const Scores::Store& scores,
+            const Chapters::Table& chapters, std::vector<int> unlocked) {
     Board board;
     for (const Chapters::Level& level : chapters.levels) board.worlds = std::max(board.worlds, level.world + 1);
     if (content == nullptr) return board;
-    const std::vector<int> unlocked = Achievements::Unlocked(*content, locking, scores, chapters);
+    std::sort(unlocked.begin(), unlocked.end());
     board.points = Achievements::Points(*content, unlocked);
     board.achievements = static_cast<int>(content->entries.size());
     // The loop's currentWorld starts at -1, so the first achievement has a header too.
