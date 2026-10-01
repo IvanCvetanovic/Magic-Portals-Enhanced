@@ -27323,3 +27323,168 @@ and R25 stay the owner's; camera dragging is built behind its switch (step 138).
   now on one build.
 - **`--drag`'s help and `ScheduleDevDrag`'s comment** still describe a menu drag only (step 138's LEFT FOR LATER).
 - **The standing sweep baseline is now this step's** `out/parity/program/merge_w2/sweep/`, for every later step.
+
+## Step 145 - the screen's edge columns: a sky narrower than the view drawn again behind itself to the frame's pixel edges, as the original's one sample at each pixel's centre draws them (built)
+
+**THE PROGRAM'S EC** (`docs/parity-backlog.md`, the Tests row "The screen's left and right columns draw dark", found
+with 2-32's claw lines, `out/parity/program/dragon_lines/check.md`). Planned for wave 2's track C; it runs on MPR
+`main` after the merge (step 144, `4d9ee56`), engine `710bffc`, and its before is the merge's verified sweep
+`out/parity/program/merge_w2/sweep/`. Changed: `game/sim/Sky.{hpp,cpp}` (`Sky::PixelCover`, the pixel-centre rule on
+one axis; `Rules::pixelCover`, read from `static_sky.pixel_cover` and required), `game/data/sky.json` (`pixel_cover`
+true, its source and its measurement), `game/MagicPortalsLayer.{hpp,cpp}` (a sky's cover: `DrawnSprite::cover`,
+`placeSkyCover`, `Slot::SkyCover`, `kSkyCoverTag`, `kDefaultFrameWidthPx`), `tests/test_mp_sky.cpp`,
+`tests/test_mp_layer.cpp` and this record. No engine change, the pin stays `710bffc`; no converter change; no format
+finding. The evidence is under `out/parity/program/EC/` (`impl.md`).
+**GAMEPLAY: NONE.** A picture drawn behind the sky; nothing the simulation reads moves. 86 of 86 routes win on the
+same ticks with the same shots and drift, reachability is unchanged, and the 84 levels without a dark sky are
+byte-identical at f420 (the gates). No route is added: not a gameplay step.
+
+**BLOCKERS, checked first: none.** The spec stops the step if the cause is the engine's. It is not: the engine
+resolves the geometry it is given correctly. The port hands it a sky 0.31 px narrower than the frame, which the
+original's frame never shows and a multisampled one does. An engine remedy (a sample count a game can set to 1)
+would alias every other quad edge in the game, which this row does not ask for ("only the edge columns change"), so
+the remedy is the port's: the sky must reach the samples of every pixel whose centre it covers.
+
+**THE CAUSE, MEASURED.**
+- **Which levels.** The before sweep against the library's h6.3 stills, column 0 over column 1 (L) and column 1279
+  over 1278 (R), RGB means over all 720 rows (`EC/edge_cols.py`), grouped by the sky each level draws
+  (`level_sky.txt`): the 44 levels that draw `dark_sky.png` (1-32, all of chapter 2, 3-13, 4-20 to 4-22, 4-25 and
+  4-27 to 4-32) have median **L 0.817, R 0.838, against the original's 1.002 and 0.988**. Every other group is the
+  original's to 0.01: `sky.png` 0.996 / 0.982 (original 0.997 / 0.975), `icy_sky.png` 0.998 / 0.887 (0.998 / 0.890),
+  `red_sky.png` 0.998 / 0.971 (0.997 / 0.966), `sky_purple.png` 0.998 / 0.979 (0.999 / 0.977), `satellite_sky.png`
+  0.999 / 0.980 (0.999 / 0.979), no sky 1.000 / 0.980 (0.999 / 0.979). 1-01's and the icy levels' darker right
+  column is in the original's frames too; that it is the fullhd files' black padding (`sky.json` `_units`) filtered
+  into the edge pixel is INFERRED, not measured. Either way it is not this row's.
+- **The geometry.** `dark_sky.png` is 455 x 256 and has no hd or fullhd twin (`tiers.json` `_census`), so scaleSky's
+  256 / 256 leaves it 455 u across, against the 455.11 u of a 16:9 view: 1279.6875 of the frame's 1280 px, centred
+  (StaticSky's pitch), **0.15625 px short of each side**. The five skies with a fullhd file are 512 u, 1440 px.
+- **The sampling.** The engine draws the scene with 4x MSAA (`engine/src/renderer/VulkanOffscreen.cpp:15`; every log:
+  "1280x720, 4x MSAA"). Vulkan's standard 4-sample positions are (0.375, 0.125), (0.875, 0.375), (0.125, 0.625) and
+  (0.625, 0.875) of a pixel: the sample at x 0.125 of column 0 lies left of 0.15625, the one at 0.875 of column 1279
+  right of 1279.84375. The sky's fragment is shaded once, at the pixel's centre (`sampleShadingEnable` false,
+  `VulkanPipeline.cpp:166`; no `centroid` in `shader.vert` or `shader.frag`), and fills three samples; the fourth
+  keeps the black clear (`SceneRendering`). The resolve averages them before the composite's 5/6/5
+  (`RenderSettings.hpp:120-125`). So an edge pixel of sky alone was about 0.75 of its sky: over the rows the after
+  sweep shows as sky alone (the edge equal to its inner neighbour), the before ratio is median **0.759 (left, 21,004
+  rows) and 0.764 (right, 19,578)**; 2-01's row 240 reads (74, 85, 90) beside (99, 113, 123), the 5/6/5 of three
+  quarters of it.
+- **What the original shows.** Its library frames are flat at both edges, so no sample of an edge pixel lies in the
+  0.156 px strip: a frame of one sample a pixel at its centre gives that (so would a 2x pattern at 0.25 and 0.75).
+  Its surface comes from `ConfigChooser`, which asks EGL for red, green and blue of at least 4 and ES2, and no
+  `EGL_SAMPLES` (`reference/ethanon/toolkit/Source/src/gs2d/projects/Android/Ethanon/src/net/asantee/gs2d/
+  ConfigChooser.java:24-25`), and takes the first config whose sizes are exactly 5/6/5/0 (`:48-66`;
+  `GL2JNIView.java:121`). That this first config is single-sampled is INFERRED from EGL 1.4's sort (section 3.4.1.2:
+  fewer sample buffers, then fewer samples, first), not read on the emulator.
+- **The causal experiment, on the merge's own executable** (`1e569b97`, no relink; `EC/cap_exp.sh`, `EC/exp/`). The
+  sweep's command line with `--art` on a byte copy of `out/assets`: 2-01, 2-32 and 4-21 **byte-identical to
+  `merge_w2/sweep`** (`c7e368a0`, `b5304ce0`, `c1d7942b`), so the copy is faithful. The same copy with
+  `dark_sky.png` widened to 457 x 256 by its own edge column on each side, so every texel lands where it did and only
+  the quad grows 1 u each side: the columns of sky go flat - 2-01 L 0.821 -> 1.000, R 0.839 -> 0.988; 2-32 L 0.743
+  -> 0.975 (the rest is the dragon's own art at the edge), R 0.749 -> 1.000; 4-21 L 0.810 -> 1.004, R 0.883 -> 0.995;
+  957, 1,117 and 1,065 px changed. **And 4 and 5 px inside the frame** on 2-01 and 2-32, one 5/6/5 step each in open
+  sky (2-01 (595, 348) green 73 -> 77, (99, 664) red 159 -> 164, and two more): a quad of another size interpolates
+  its uv through other numbers, and a value on the edge of a step rounds the other way. So the remedy leaves the
+  sky's own quad as it is.
+
+**THE FIX: A SKY'S COVER** (`placeSkyCover`; `sky.json` `static_sky.pixel_cover`, true).
+- **Built** in `buildSprites` for a StaticSky sky whose drawn width is below the view's (the viewport's at the
+  level's load): its own picture, a second quad tagged `Magic Portals Sky Cover`, interpolated as the sky is. The 84
+  levels whose sky is as wide as the view or wider, or that have none, get no cover and take no new path; SpaceSky's
+  sky is not touched.
+- **Placed** in `syncSprites` from where its sky was just placed. Across: the sky's span moved out to the pixel
+  boundaries the pixel-centre rule gives (`Sky::PixelCover`: a low edge to the first pixel whose centre it covers,
+  `ceil(e - 0.5)`, a high edge past the last; an edge on a boundary stays), in the viewport's pixels; for
+  `dark_sky.png`, the frame's 0 to 1280 px. Down: the sky's own rows. Its uv is stretched to match (`uvScale.x`
+  1280 / 1279.6875, `uvOffset.x` -0.15625 / 1279.6875), so each texel stays where the sky draws it, and every pixel
+  centre it shades is one the sky covers: it adds samples, never a pixel the sky does not draw.
+- **Drawn** immediately behind its sky: `Slot::SkyCover`, -1/64 of the sky's slot, in front of every other row but
+  the picture, an effect's last system too for up to 14 of them. The sky is opaque (an RGB file at alpha 1), so its
+  blend writes every sample it covers outright and the frame's interior cannot move; in the two edge columns the
+  cover fills the fourth sample with the sky's own colour at the same pixel centre.
+- **Coloured** by the same `tint` call as its sky (colour, emissive, lightmap, light mask), **shaken** with it
+  (`shakeView`), **destroyed** with it (`unloadLevel`, through which every load, retry and skip passes, and a sky
+  gone), and never copied into a restocked barrel.
+
+**THE GATES.** Before: the merge's verified sweep, `MagicPortals.exe` `1e569b97`, `test_mp.exe` `85d354ab`. After:
+`MagicPortals.exe` `3b842043`, `test_mp.exe` `e39fe04f`; `MagicPortalsSpike.exe` was not rebuilt (`b72671eb`).
+
+| Gate | Required | Measured |
+|---|---|---|
+| Build | 0 warnings, MSVC /W4 | **passes.** `port_build.bat --target MagicPortals test_mp`: build1 13 steps with one C4456 in the new case (its `last` hid the ordering loop's), renamed; build2 3 steps, **0 warnings** (`EC/build1.log`, `build2.log`). Every changed translation unit compiled warning-free in its final form. build1's `test_mp.exe` was relinked before any launch |
+| Suites | the runner once, with counts | **passes** (`EC/allmode.log`; `e39fe04f`'s first launch, 90 s, rc 0): `test_mp: 49 suites, 49 passed, 0 skipped, 0 failed`, **18,097 checks** (the merge 18,059): `test_mp_layer` 3,455 -> 3,470 (the slot table's new row; `ADarkSkyIsCoveredToTheFramesEdges`), `test_mp_sky` 630 -> 653 (`pixel_cover` read, and required; `ThePixelCoverIsWhatThePixelCentresDraw`; the census: 44 skies narrower than the view, each covered to the 1280 px frame's edges); every other count equal |
+| Routes | every route wins; none deleted | **passes**: 86 of 86 won, their 86 result lines (tick, shots, drift) identical to the merge's run (`EC/route_ticks.txt`) |
+| Reachability | no door newly sealed | **passes**: `reachability.py --check`, 128 levels, 108 reachable, 20 opened, 0 sealed, **0 differ** (`EC/reach_check.txt`) |
+| The cover in play | on the sky's ticks and frames | **passes** (`test_mp_layer`): 2-01 walked left 200 ticks as its route opens, camera 284.4 -> 227.6 px, each tick drawn at four interpolated frames: the cover spans the frame's 0 to 1280 px and the sky 0.156 to 1279.844 on all 1,000 ticks and frames (0 off), 1/64 slot behind the sky, which is behind every other mesh; its uv as above; its material the sky's. Under the light wall's trembles (some shaken frames, asserted) it never leaves its sky's y. It goes with the level; 1-31's 512 u sky has none |
+| The sweep | only the edge columns change | **passes** (`EC/after/`, `compare_EC.txt`). The merge's command line (`--window 1280x720 --fixed-step --frames 420 --saves`, a fresh `40bfef3a` copy per launch): 128 rc 0, validation active in 128 logs and silent, each png whole and equal to the md5 its capture logged, no input line in any log. **The 84 other levels byte-identical. Of the 44, 41 changed (3-13, 4-25 and 4-30 did not: other pictures cover both edge columns there), 38,648 px, 18,855 in column 0 and 19,793 in column 1279, and 0 anywhere else**; max delta 33 |
+| The library | the edge columns as the original's | **passes.** Medians over the 44: **L 0.817 -> 1.002, R 0.838 -> 0.986 (original 1.002, 0.988)**; the 84 others unchanged at 0.999 / 0.978 (original 0.999 / 0.978). In the rows whose inner column (1, 1278) equals the original's, the edge column equals the original's too in **97.4% (left, 13,225 of 13,581) and 96.5% (right, 13,207 of 13,682)**, from 48.1% and 32.2%. Their mean error (the absolute difference, RGB summed) over every such row of the 44: **33.85 -> 0.40**, 58.5% -> 0.7% of rows above 12; the 84 others' is 1.12 (1.2%). Row by row on the 41 changed levels: 15,991 nearer, 8,744 equal, **166 farther** (`toward_original.txt`; RECORDED DEVIATIONS 1). Crops: `EC/crops/edges_<level>_x8.png` (before, after, original) |
+| No gameplay change | nothing the simulation reads moves | **passes**: the routes and reachability above; the sweep's logs differ from the merge's in their output paths and timings, and on 7 dark-sky levels (2-04, 2-05, 2-08, 2-13, 2-22, 2-23, 2-32) in the renderer's drawn and blended counts, by one: the cover's own draw. No event line differs (the verifier's diff of all 128 logs, `EC/verify1/logdiff_v1.txt`; the implementer had diffed 2-01's and 1-01's) |
+
+**SMART APP CONTROL: 0 refusals across the step** (CodeIntegrity 3033/3077 from 13:53: none). `MagicPortals.exe`
+`1e569b97` (the merge's): 6 launches, the experiment. `3b842043`: 128, the sweep, its first launch alone.
+`test_mp.exe` `e39fe04f`: 1. Linked and never launched: build1's `test_mp.exe` (replaced by build2 before any launch).
+The verification linked nothing and launched `test_mp.exe` `e39fe04f` once and `MagicPortals.exe` `3b842043` 131
+times: none refused (14:58:42 to 15:28:58). The commit launched and linked nothing.
+
+**VERIFIED, PASSED** (`EC/verify1.json`, its evidence in `EC/verify1/`; on the same `MagicPortals.exe` `3b842043` and
+`test_mp.exe` `e39fe04f`, head `4d9ee56`, engine `710bffc`; no fix round). The verifier re-derived the rule from the
+listing before reading the code (StaticSky's `scaleSky` and `position`: the sky scaled to one screen tall and centred
+on the view), and took its own census of the rows whose interior is smooth: the original's edge columns are flat
+(median 1.000, 98.3-98.6% of rows within 3 grey of their neighbour in the h0.3, h2.8 and h6.3 stills), the before's
+are not (median 0.759 left and 0.768 right, 23.8% and 26.4% within 3 grey), and the after's are (1.000; 98.5% and
+98.3%). Separately it reproduced the step's own numbers: the sky-alone rows, 0.759 (21,004) and 0.764 (19,578), and
+2-01's row 240. The code follows the rule (`Sky::PixelCover`; `placeSkyCover`'s view from the camera as `syncSprites`
+places the sky, and its uv through the engine's `MakeUvTransform`), and an independent check agrees: the after-sweep's
+columns 0 and 1279 are byte-identical over all 720 rows to the widened-sky experiment's on 2-01, 2-32 and 4-21. The 9
+changed translation units, recompiled into scratch objects with `build/`'s own flags and nothing linked: 0 warnings.
+Its own runs, once each: the runner with no argument (49 of 49 suites, 18,097 checks, every count the step's; in it
+`test_mp_routes` 86 of 86, the lines the merge's); reachability 108 / 20 / 0, 0 differ; its own 128-level f420 sweep
+with a fresh `40bfef3a` save per launch, 128 rc 0, validation silent, 128 of 128 byte-identical to `EC/after/sweep/`
+(so deviation 2 moved no frame); 2-01 and 2-02 from their first visible frame, and 2-01's route to tick 376 every 8th
+frame, through the camera's pan and the fireball trembles: both edges median 1.000 in every frame; crops of 2-01,
+2-05, 2-09, 2-32, 4-21 and the control 3-01 looked at. Its three findings, all low, are text here, none a behaviour
+change: 2-05's right edge (deviation 1; the gates it proposes for the later step are in LEFT FOR LATER), the
+no-gameplay row's sentence on the logs (amended in the table), and the cover's scrolling path, which no level takes
+(LEFT FOR LATER). The commit changed only this record and `docs/parity-backlog.md`, so `build/` holds the binaries the
+gates were measured on and `EC/after/sweep/` stands as the baseline.
+
+**WHAT THIS DOES NOT COVER.**
+- **Every other quad edge** stays a 4x MSAA blend where the original's is the pixel-centre rule's (step 102's
+  recorded note). This step covers the frame's edge columns, where the sky's short span left the black clear.
+- **A window resized during a level.** Whether a sky gets a cover is decided at the level's load, from the viewport
+  then; a window made wider mid-level that left a 512 u sky short of the frame would get none until the next load.
+  Every capture and every library frame is 1280 x 720.
+
+**RECORDED DEVIATIONS.**
+1. **166 edge rows moved away from the original, 161 of them 2-05's right edge** (y 421-586; R 0.974 -> 1.049
+   against the original's 0.964; there the edge equals the original's in 79 of 255 inner-matched rows). There
+   `bar4_contrast.png` (64 u wide at 423, so its right edge at 455 u) ends at 1279.69 px, inside the last pixel,
+   whose centre it covers and whose fourth sample it does not. Before, that sample was the black clear, and the
+   wall's own edge texels are black, so the pixel matched the original by chance; now it is the sky behind,
+   (0, 0, 0) -> (8, 16, 16) and (16, 16, 16). That is what the same wall draws on any level whose sky covers the frame
+   (the 84, by construction: the same renderer path), and what any quad edge draws against the sky inside the frame:
+   the general MSAA blend above. The other five rows are one quantisation step or two at a picture's edge: 2-04 left
+   y 581 (6, 3, 6) -> (6, 6, 6), original (8, 4, 8); 2-19 left y 357 (8, 8, 8) -> (8, 12, 16), original (8, 12, 8);
+   2-25 left y 635 (123, 125, 123) -> (123, 125, 127), original (123, 121, 123); 2-32 left y 64 and 66, near black,
+   (0, 1, 0) and (0, 1, 3) -> (3, 1, 3), original (0, 0, 0).
+2. **`sky.json`'s two notes were reworded after the sweep** (`_pixel_cover`, `_pixel_cover_measured`: the provenance
+   of the original's single sample made INFERRED, and the after-sweep numbers added). They are `_` keys nothing reads,
+   so the build, the suites and the sweep stand for the file as it is.
+   *Settled by the verification*: its own sweep, on the file as it is, matched the implementer's 128 of 128.
+
+**RULINGS APPLIED.** The standing direction: the original decides. Its frame's edge pixels are the sky's, measured on
+its library frames. R24 and R25 stay the owner's; nothing else is ruled.
+
+**LEFT FOR LATER.**
+- **The pixel-centre rule for every picture at the frame's edge**: a cover like the sky's for any level picture whose
+  edge falls in the frame's outer half pixel would settle deviation 1 (2-05's wall) and the scattered edge rows of the
+  other 84 levels (566 inner-matched rows above 12). It would touch those levels' frames, so it is its own step. Its
+  gates, as the verifier proposes: 2-05's column 1279, rows 421-586, back to the original's (0-1, 0-1, 0-1) (their
+  mean is (8.9, 14.6, 16.7) now, (0.8, 0.8, 1.0) before and (1.0, 1.2, 1.3) in the original), and the 84 levels' 566
+  rows.
+- **The cover's scrolling path is not exercised.** Each sky of a scrolling strip that is narrower than the view would
+  get its own cover, the covers abutting; no level scrolls a sky (`test_mp_sky`'s census: 37 `scrolling_sky` keys, 0
+  scrolling skies), so no suite and no capture draws two. If one ever does, two abutting tiles go into
+  `ThePixelCoverIsWhatThePixelCentresDraw` (the verifier's third finding).
+- **The standing sweep baseline is now this step's** `out/parity/program/EC/after/sweep/` (`MagicPortals.exe`
+  `3b842043`, what `build/` holds), for every later step - once these exact sources are committed; a commit that
+  changes anything the executable is built from re-takes it.

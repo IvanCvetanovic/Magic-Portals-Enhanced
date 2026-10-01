@@ -490,6 +490,14 @@ public:
     // a gap with a door glow (4-04 to 4-08, 4-12, 4-14 and 4-15 place both) the two
     // are drawn the other way round from the original's -22 behind -10; both are
     // added (AM_ADD, GL_ONE, GL_ONE), and an add commutes, so no pixel shows it.
+    //
+    // THE SKY'S COVER (sky.json pixel_cover, step 145) is the sky's own picture
+    // drawn again out to the frame's pixel edges, and it shows only in the MSAA
+    // samples the sky leaves uncovered at those edges, where the original's
+    // pixel-centre frame shows the sky over whatever is behind it. So it stands
+    // immediately behind its sky - a sixty-fourth of a slot, in front of every
+    // other row but the picture, and of an effect's last system for up to 14 of
+    // them - and the sky, opaque, draws every one of its own samples over it.
     enum class Slot {
         ShockRing,      // a shock agent's ring, at the absolute -10 its AddEntity gives it
         ShotPicture,    // the portal shot, at the z 0 addProjectile gives it, behind the player
@@ -510,6 +518,7 @@ public:
         PlacedPortal,   // a portal the player opened: portal.ent, at the z 0 insertPortal gives it
         EffectHalo,     // that entity's halo, a quarter in front of its own picture
         EffectSystems,  // and its particle systems, spread over the quarter after that halo
+        SkyCover,       // a sky's cover, its own picture to the frame's pixel edges, just behind it
         Picture,        // a level's own picture, and the player's: the slot itself
         Halo,           // a light's halo, a quarter in front of its owner's picture
         Systems,        // an entity's particle systems, spread over the quarter after its halo
@@ -552,6 +561,7 @@ public:
         {Slot::PlacedPortal, "placed portal", -0.25, false},
         {Slot::EffectHalo, "effect halo", -0.25, false},
         {Slot::EffectSystems, "effect particle systems", -0.25, true},
+        {Slot::SkyCover, "sky cover", -0.015625, false},
         {Slot::Picture, "picture", 0.0, false},
         {Slot::Halo, "halo", 0.25, false},
         {Slot::Systems, "particle systems", 0.25, true},
@@ -572,6 +582,11 @@ public:
     // overlay (the HUD) is drawn after the scene and stays over it, as the original's
     // top layer is. test_mp_layer pins the value and that nothing else reaches it.
     static constexpr float kLayerableTopZ = 1.0f;
+
+    // The tag of a sky's cover (Slot::SkyCover), which is not one of the level's
+    // pictures: a suite finds it by this, and a count of "Magic Portals Sprite"
+    // does not see it.
+    static constexpr const char* kSkyCoverTag = "Magic Portals Sky Cover";
 
     // ---- the effects the script ADDS (system_7 7a-2) ------------------------
     //
@@ -1436,6 +1451,9 @@ private:
         int zone{-1};         // in portals.zones: gone with its zone
         int agent{-1};        // in portals.agents: where it patrols, gone once a shot kills it
         int sky{-1};          // in m_sky.skies: pinned to the camera, not where the level put it
+        // A sky narrower than the view: its picture again, behind it, out to the
+        // frame's pixel edges (sky.json pixel_cover, placeSkyCover). Null otherwise.
+        entt::entity cover{entt::null};
         bool satellite{false}; // m_sky's satellite, pinned the same way
         // Which of SpaceSky's four it is, each moved from the camera every frame.
         SpaceRole space{SpaceRole::None};
@@ -1796,6 +1814,12 @@ private:
     entt::entity makeSprite(entt::registry& registry, const char* tag, const std::string& texture, bool additive);
     void placeSprite(entt::registry& registry, entt::entity quad, const glm::dvec2& centrePx,
                      const glm::dvec2& sizePx, float z, float rotation) const;
+    // A sky's cover, from where its sky was just placed (sky.json pixel_cover):
+    // across, the sky's span moved out to the frame's pixel edges (Sky::PixelCover),
+    // with its uv stretched to match, so every texel lands where the sky draws it;
+    // down, the sky's own rows; just behind it (Slot::SkyCover).
+    void placeSkyCover(entt::registry& registry, const DrawnSprite& drawn, const glm::dvec2& centrePx,
+                       const glm::dvec2& sizePx, float rotation) const;
     // An image's size, read once per file (Sprites::ImageSize); zero when it
     // cannot be read.
     glm::dvec2 imageSizePx(const std::string& path);

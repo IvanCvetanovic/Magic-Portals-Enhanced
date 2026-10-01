@@ -98,6 +98,11 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": static_sky.screen_pitch and static_sky.frame_cap_ms are above zero";
         return false;
     }
+    if (!block.Has("pixel_cover") || !block["pixel_cover"].IsBool()) {
+        error = path + ": static_sky.pixel_cover is missing or not true or false";
+        return false;
+    }
+    read.pixelCover = block["pixel_cover"].AsBool();
     out = std::move(read);
     return true;
 }
@@ -202,6 +207,17 @@ glm::dvec2 DrawnSizePx(const Controller& sky, std::size_t t) {
 
 glm::dvec2 SatellitePx(const Controller& sky, const glm::dvec2& viewCentrePx, const glm::dvec2& viewPx) {
     return viewCentrePx - viewPx * 0.5 + sky.satelliteOriginalPx;
+}
+
+Span PixelCover(double lowPx, double highPx, double viewLowPx, double viewSpanPx, double framePx) {
+    if (!(highPx > lowPx) || !(viewSpanPx > 0.0) || !(framePx > 0.0)) return Span{lowPx, highPx};
+    const double perLevelPx = framePx / viewSpanPx;
+    // Pixel i's centre is at i + 0.5. A low edge at e draws pixel i when
+    // i + 0.5 >= e, so from ceil(e - 0.5); a high edge at e draws it when
+    // i + 0.5 < e, so up to ceil(e - 0.5), exclusive.
+    const double low = std::ceil((lowPx - viewLowPx) * perLevelPx - 0.5);
+    const double high = std::ceil((highPx - viewLowPx) * perLevelPx - 0.5);
+    return Span{viewLowPx + low / perLevelPx, viewLowPx + high / perLevelPx};
 }
 
 void Advance(const Rules& rules, Controller& sky, double dtS) {

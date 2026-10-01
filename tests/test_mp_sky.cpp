@@ -132,6 +132,8 @@ void TheRulesAreSkyJsons() {
     CHECK(rules.spaceBgKey == "space_bg");
     CHECK(rules.screenPitch == 0.5);
     CHECK(rules.frameCapMs == 200.0);
+    CHECK_MSG(rules.pixelCover, "pixel_cover: a sky short of the frame is drawn to its edge pixels, as the "
+                                "original's one sample at each pixel's centre draws it (step 145)");
 
     // A file that would pin the sky's centre to the view's corner is refused.
     const std::filesystem::path broken = std::filesystem::temp_directory_path() / "supersonic-test-mp-sky.json";
@@ -145,8 +147,62 @@ void TheRulesAreSkyJsons() {
     std::string error;
     CHECK_MSG(!Sky::LoadRules(broken.string(), refused, error) && error.find("screen_pitch") != std::string::npos,
               "a pitch of 0 is refused: " + error);
+    // And one that does not say whether a sky is drawn to the frame's edge pixels.
+    {
+        std::ofstream out(broken, std::ios::binary | std::ios::trunc);
+        out << R"({"static_sky": {"properties_entity": "properties", "space_bg_key": "space_bg",
+                  "entity_names": ["sky"], "satellite_name": "satellite", "scroll_key": "scroll",
+                  "screen_pitch": 0.5, "frame_cap_ms": 200.0}})";
+    }
+    error.clear();
+    CHECK_MSG(!Sky::LoadRules(broken.string(), refused, error) && error.find("pixel_cover") != std::string::npos,
+              "a file without pixel_cover is refused: " + error);
     std::error_code ec;
     std::filesystem::remove(broken, ec);
+}
+
+// THE PIXEL-CENTRE COVER (sky.json pixel_cover, planning step 145). The original's
+// frame is one sample a pixel, at its centre; a sky's cover spans, edge to edge, the
+// pixels whose centres the sky covers. dark_sky.png, 455 u at the centre of the
+// 455.11 u view of a 1280 px frame, is 0.15625 px short of each side: its cover is
+// the whole frame. Wherever the camera is: the view moves, and the frame with it.
+void ThePixelCoverIsWhatThePixelCentresDraw() {
+    const double perPx = 1280.0 / kView.x; // 2.8125 frame px a level px
+    const auto frame = [perPx](double levelPx, double viewLow) { return (levelPx - viewLow) * perPx; };
+    for (const double centre : {kView.x * 0.5, 284.4, 1000.0, -40.25}) {
+        const double viewLow = centre - kView.x * 0.5;
+        const Sky::Span dark = Sky::PixelCover(centre - 227.5, centre + 227.5, viewLow, kView.x, 1280.0);
+        CHECK_MSG(std::fabs(frame(centre - 227.5, viewLow) - 0.15625) < 1e-9 &&
+                      std::fabs(frame(centre + 227.5, viewLow) - 1279.84375) < 1e-9,
+                  "dark_sky.png is 0.15625 px short of each side");
+        CHECK_MSG(std::fabs(frame(dark.lowPx, viewLow)) < 1e-9 && std::fabs(frame(dark.highPx, viewLow) - 1280.0) < 1e-9,
+                  "its cover is the frame, 0 to 1280 px: " + std::to_string(frame(dark.lowPx, viewLow)) + " to " +
+                      std::to_string(frame(dark.highPx, viewLow)) + " with the view at " + std::to_string(centre));
+        // A 512 u sky's edges are on boundaries, 80 px past the frame's: they stay.
+        const Sky::Span wide = Sky::PixelCover(centre - 256.0, centre + 256.0, viewLow, kView.x, 1280.0);
+        CHECK_MSG(std::fabs(frame(wide.lowPx, viewLow) + 80.0) < 1e-9 &&
+                      std::fabs(frame(wide.highPx, viewLow) - 1360.0) < 1e-9,
+                  "a 512 u sky's span is its own");
+    }
+    // Each edge by the rule, in frame pixels (a view of 1280 level px, one to one).
+    const auto cover = [](double low, double high) { return Sky::PixelCover(low, high, 0.0, 1280.0, 1280.0); };
+    const Sky::Span out = cover(0.4, 1279.6);
+    CHECK_MSG(out.lowPx == 0.0 && out.highPx == 1280.0, "0.4 px short: out to the edge, whose centre it covers");
+    const Sky::Span in = cover(0.6, 1279.4);
+    CHECK_MSG(in.lowPx == 1.0 && in.highPx == 1279.0, "0.6 px short: in to the next boundary, the edge pixel's "
+                                                      "centre uncovered and the original's pixel not the sky's");
+    const Sky::Span on = cover(3.0, 1277.0);
+    CHECK_MSG(on.lowPx == 3.0 && on.highPx == 1277.0, "an edge on a boundary stays");
+    const Sky::Span half = cover(0.5, 1279.5);
+    CHECK_MSG(half.lowPx == 0.0 && half.highPx == 1279.0,
+              "a centre exactly on the low edge is drawn, on the high edge is not");
+    // What cannot be a span or a view comes back as given.
+    const Sky::Span none = Sky::PixelCover(10.0, 10.0, 0.0, 1280.0, 1280.0);
+    const Sky::Span noView = Sky::PixelCover(0.4, 1279.6, 0.0, 0.0, 1280.0);
+    const Sky::Span noFrame = Sky::PixelCover(0.4, 1279.6, 0.0, 1280.0, 0.0);
+    CHECK(none.lowPx == 10.0 && none.highPx == 10.0);
+    CHECK(noView.lowPx == 0.4 && noView.highPx == 1279.6);
+    CHECK(noFrame.lowPx == 0.4 && noFrame.highPx == 1279.6);
 }
 
 void AStillSkyIsTheViewsCentreWhereverTheCameraIs() {
@@ -703,6 +759,9 @@ void EveryLevelsSky() {
     const Tiers::Rules tiers = TheTiers();
     int one = 0, space = 0, neither = 0, satelliteAlone = 0, levels = 0, named = 0, namedEnt = 0;
     int wide = 0, narrow = 0, otherWidth = 0; // skies of 512 u (fullhd), 455 u (1x), and any other
+    // Of the skies narrower than the view, those whose pixel cover is the 1280 px frame
+    // edge to edge (sky.json pixel_cover, step 145), and those that are not.
+    int coveredToTheFrame = 0, coveredOtherwise = 0;
     int scrolling = 0, scaledOtherThanOne = 0, notTheViewsCentre = 0, scrollingSkyKey = 0;
     std::string firstWrong;
     std::error_code ec;
@@ -755,6 +814,20 @@ void EveryLevelsSky() {
                 ++notTheViewsCentre;
                 if (firstWrong.empty()) firstWrong = level;
             }
+            const double width = Sky::DrawnSizePx(sky, t).x;
+            if (width < kView.x) {
+                const double centre = Sky::DrawnCentrePx(rules, sky, t, camera, kView).x;
+                const double viewLow = camera.x - kView.x * 0.5;
+                const Sky::Span cover =
+                    Sky::PixelCover(centre - width * 0.5, centre + width * 0.5, viewLow, kView.x, 1280.0);
+                const double perPx = 1280.0 / kView.x;
+                if (std::fabs((cover.lowPx - viewLow) * perPx) < 1e-9 &&
+                    std::fabs((cover.highPx - viewLow) * perPx - 1280.0) < 1e-9) {
+                    ++coveredToTheFrame;
+                } else {
+                    ++coveredOtherwise;
+                }
+            }
         }
     }
     std::printf("  %d levels: %d one sky (%d 'sky', %d 'sky.ent'), %d space, %d neither, %d satellite alone; "
@@ -780,6 +853,11 @@ void EveryLevelsSky() {
     CHECK_EQ(wide, 51);
     CHECK_EQ(narrow, 44);
     CHECK_EQ(otherWidth, 0);
+    // The 44 are the skies narrower than the view, and each one's cover is the frame.
+    std::printf("  skies narrower than the view: %d covered to the 1280 px frame's edges, %d otherwise\n",
+                coveredToTheFrame, coveredOtherwise);
+    CHECK_EQ(coveredToTheFrame, 44);
+    CHECK_EQ(coveredOtherwise, 0);
     CHECK_MSG(notTheViewsCentre == 0, "every sky at the view's centre, first wrong " + firstWrong);
 }
 
@@ -864,6 +942,7 @@ MP_SUITE_MAIN("test_mp_sky") {
     AScrollingStripAndItsEnds();
     ALoneScrollingSkyIsBothEnds();
     AFullhdSkyIsWiderAndStillCentred();
+    ThePixelCoverIsWhatThePixelCentresDraw();
     TheSpaceRulesAreSkyJsons();
     ASpaceLevelBuildsSpaceSky();
     SpaceSkyIsPinnedToTheCamera();

@@ -7563,6 +7563,147 @@ void TheSceneHasFourBlackBarsInFrontOfEverything() {
     CHECK_MSG(left == 0, "the bars go with the level");
 }
 
+// ---- a sky narrower than the view (sky.json pixel_cover, step 145) ------------------
+//
+// dark_sky.png has no fullhd twin, so 2-01's sky (level0a) is 455 u across the view's
+// 455.11: 1279.6875 of the frame's 1280 px, centred, 0.15625 px short of each side. The
+// original's frame is one sample a pixel, at its centre, which the sky covers in both
+// edge columns; the engine's 4x MSAA left a quarter of each the black clear. Its cover
+// is its own picture just behind it, out to the frame's edges, its uv stretched so each
+// texel stays where the sky draws it, in the sky's colour and light, on the sky's ticks
+// and frames and shaken with it. 1-31 (level30), whose fullhd icy_sky.png is 512 u,
+// gets none, and neither level leaves one behind it.
+void ADarkSkyIsCoveredToTheFramesEdges() {
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0a");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+            CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+            return;
+        }
+        entt::entity sky = entt::null;
+        for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+            if (tag.tag == "Magic Portals Sprite" && EndsWith(material.albedoTexturePath, "/dark_sky.png")) {
+                sky = entity;
+            }
+        }
+        const entt::entity cover = FirstTagged(registry, MagicPortalsLayer::kSkyCoverTag);
+        CHECK_MSG(sky != entt::null && cover != entt::null && Tagged(registry, MagicPortalsLayer::kSkyCoverTag) == 1,
+                  "2-01 draws dark_sky.png and one cover for it");
+        if (sky == entt::null || cover == entt::null) return;
+        CHECK_MSG(registry.all_of<InterpolatedTransformComponent>(cover), "interpolated, as its sky is");
+        CloseTheLevelStartPopup(layer, registry);
+
+        // Its place on one frame: the sky's centre, the frame's whole width across and
+        // the sky's own rows down, immediately behind the sky and behind everything else.
+        const auto coverOk = [&](std::string& why) {
+            const auto& at = registry.get<TransformComponent>(cover);
+            const auto& skyAt = registry.get<TransformComponent>(sky);
+            const auto [x, y] = screenRectOf(registry, cover);
+            const auto [skyX, skyY] = screenRectOf(registry, sky);
+            float deepestOther = 1e9f;
+            for (auto [entity, tag, transform, mesh] :
+                 registry.view<TagComponent, TransformComponent, MeshComponent>().each()) {
+                (void)tag;
+                (void)mesh;
+                if (entity != cover) deepestOther = std::min(deepestOther, transform.position.z);
+            }
+            const auto& uv = registry.get<MaterialComponent>(cover);
+            const bool ok = std::fabs(at.position.x - skyAt.position.x) <= 1e-5f &&
+                            std::fabs(at.position.y - skyAt.position.y) <= 1e-5f && at.scale.y == skyAt.scale.y &&
+                            std::fabs(x.lo) < 1e-2 && std::fabs(x.hi - 1280.0) < 1e-2 &&
+                            std::fabs(skyX.lo - 0.15625) < 1e-2 && std::fabs(skyX.hi - 1279.84375) < 1e-2 &&
+                            std::fabs(y.lo - skyY.lo) < 1e-3 && std::fabs(y.hi - skyY.hi) < 1e-3 &&
+                            std::fabs((skyAt.position.z - at.position.z) - 0.015625f * 0.004f) < 2e-7f &&
+                            deepestOther == skyAt.position.z &&
+                            std::fabs(uv.uvScale.x - static_cast<float>(1280.0 / 1279.6875)) < 1e-6f &&
+                            std::fabs(uv.uvOffset.x - static_cast<float>(-0.15625 / 1279.6875)) < 1e-8f &&
+                            uv.uvScale.y == 1.0f && uv.uvOffset.y == 0.0f;
+            if (!ok && why.empty()) {
+                why = "cover x " + std::to_string(x.lo) + ".." + std::to_string(x.hi) + " px, sky's " +
+                      std::to_string(skyX.lo) + ".." + std::to_string(skyX.hi) + ", z " +
+                      std::to_string(at.position.z) + " behind " + std::to_string(skyAt.position.z) +
+                      " (deepest other " + std::to_string(deepestOther) + "), uv x " +
+                      std::to_string(uv.uvScale.x) + " + " + std::to_string(uv.uvOffset.x);
+            }
+            return ok;
+        };
+
+        // Walked left for 200 ticks, as 2-01's route opens (tests/routes/level0a.json, safe
+        // from the carranca), each tick drawn at four frames between it and the next: the
+        // camera pans from the level's right clamp with the player.
+        const double startX = layer.CameraCentrePx().x;
+        int off = 0;
+        int ticks = 0;
+        int frames = 0;
+        std::string why;
+        for (int tick = 0; tick < 200; ++tick) {
+            InterpolationSystem::BeginTick(registry);
+            tickWith(layer, registry, kRest, {MagicPortalsLayer::kLeft},
+                     tick == 0 ? std::vector<std::string>{MagicPortalsLayer::kLeft} : std::vector<std::string>{});
+            InterpolationSystem::EndTick(registry);
+            if (layer.MenuScreen() != MagicPortalsLayer::Screen::None) break;
+            ++ticks;
+            if (!coverOk(why)) ++off;
+            for (int f = 1; f <= 4; ++f) {
+                InterpolationSystem::Apply(registry, static_cast<float>(f) / 4.0f);
+                ++frames;
+                if (!coverOk(why)) ++off;
+            }
+        }
+        std::printf("  level0a: camera %.1f -> %.1f px over %d ticks, the cover off its place on %d of %d ticks "
+                    "and frames\n",
+                    startX, layer.CameraCentrePx().x, ticks, off, ticks + frames);
+        CHECK_MSG(ticks == 200, "the walk ran its 200 ticks: " + std::to_string(ticks));
+        CHECK_MSG(layer.CameraCentrePx().x < startX - 20.0, "the camera panned");
+        CHECK_MSG(off == 0, "the cover is the frame's width, centred on its sky and just behind it: " + why);
+
+        // In its sky's colour and light, from the same file read the same way.
+        const auto& skyLook = registry.get<MaterialComponent>(sky);
+        const auto& look = registry.get<MaterialComponent>(cover);
+        CHECK_MSG(look.albedoTexturePath == skyLook.albedoTexturePath && look.clampToEdge == skyLook.clampToEdge &&
+                      look.albedoColor == skyLook.albedoColor && look.sprite2D == skyLook.sprite2D &&
+                      look.blend == skyLook.blend && look.overlayTexturePath == skyLook.overlayTexturePath &&
+                      look.normalTexturePath == skyLook.normalTexturePath && look.unlit == skyLook.unlit &&
+                      look.transparent == skyLook.transparent,
+                  "the cover is drawn as its sky is");
+
+        // And shaken with it: the light wall's ten trembles, each frame drawn after its tick.
+        layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
+        int shaken = 0;
+        int apart = 0;
+        for (int tick = 0; tick < 60; ++tick) {
+            InterpolationSystem::BeginTick(registry);
+            tickWith(layer, registry, kRest, {}, {});
+            InterpolationSystem::EndTick(registry);
+            InterpolationSystem::Apply(registry, 0.5f);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            if (layer.QuakeOffsetUnits() != 0.0) ++shaken;
+            if (registry.get<TransformComponent>(cover).position.y != registry.get<TransformComponent>(sky).position.y) {
+                ++apart;
+            }
+        }
+        CHECK_MSG(shaken > 0 && apart == 0, std::to_string(shaken) + " shaken frames, the cover off its sky on " +
+                                                std::to_string(apart));
+        layer.OnDetach(registry);
+        CHECK_MSG(Tagged(registry, MagicPortalsLayer::kSkyCoverTag) == 0, "the cover goes with the level");
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+            CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+            return;
+        }
+        CHECK_MSG(Tagged(registry, MagicPortalsLayer::kSkyCoverTag) == 0, "1-31's 512 u sky has no cover");
+        layer.OnDetach(registry);
+    }
+}
+
 // On a scene wider than the bars reach they stop at x 768 (00_order 8.13; D11
 // section 2 measured the band stopping mid-screen on 4-01): 2-32 is 2632 wide.
 void TheBlackBarsStopAt768OnAWideScene() {
@@ -11010,6 +11151,7 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::PlacedPortal) == -0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::EffectHalo) == -0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::EffectSystems) == -0.25);
+    CHECK(MagicPortalsLayer::SlotFractionOf(Slot::SkyCover) == -0.015625);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Picture) == 0.0);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Halo) == 0.25);
     CHECK(MagicPortalsLayer::SlotFractionOf(Slot::Systems) == 0.25);
@@ -11050,6 +11192,20 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
                                            std::to_string(deepest) + ", stands behind the shock ring");
     }
 
+    // A SKY'S COVER (sky.json pixel_cover, step 145): immediately behind its sky, in
+    // front of every other row - an effect's last system too, for up to 14 of them,
+    // which stands at -1/4 + SlotFraction(n - 1, n) - 1/4 of its slot (systemZ).
+    const double cover = MagicPortalsLayer::SlotFractionOf(Slot::SkyCover);
+    CHECK(static_cast<int>(Slot::SkyCover) + 1 == static_cast<int>(Slot::Picture));
+    CHECK_MSG(MagicPortalsLayer::SlotFractionOf(Slot::EffectSystems) < cover &&
+                  cover < MagicPortalsLayer::SlotFractionOf(Slot::Picture),
+              "the cover after an effect's systems begin, and before the picture");
+    for (const int n : {1, 2, 14}) {
+        const double lastSystem = -0.25 - 0.25 + MagicPortals::Particles::SlotFraction(n - 1, n);
+        CHECK_MSG(lastSystem < cover, "an effect's last of " + std::to_string(n) + " systems, at " +
+                                          std::to_string(lastSystem) + ", stands behind a sky's cover");
+    }
+
     // THE TIE THE TABLE STATES. The twelve between-slot classes share one
     // fraction, so two of them at one z_index land on exactly one z; what orders
     // them there is the order the port adds their quads, which is the order of
@@ -11085,7 +11241,9 @@ void TheBetweenSlotTableSaysWhereEachClassStands() {
     // And the three classes whose systems share the quarter that follows them,
     // evenly, so no system of an entity ties with another (Particles::SlotFraction).
     // Each quarter is open at both ends, so none of the three touches a z any
-    // other row stands on: (-1/2, -1/4), (-1/4, 0) and (1/4, 1/2).
+    // other row stands on: (-1/2, -1/4), (-1/4, 0) and (1/4, 1/2) - but for a
+    // sky's cover at -1/64, which only an effect of 15 systems would reach (the
+    // most any .ent carries is 2; pinned above).
     int spreads = 0;
     for (const auto& row : table) {
         if (row.spreads) ++spreads;
@@ -17994,6 +18152,7 @@ void runTests() {
     TheBeholderHurtShakesTheView();
     TheF14RouteLandsOnTheBlock();
     TheSceneHasFourBlackBarsInFrontOfEverything();
+    ADarkSkyIsCoveredToTheFramesEdges();
     TheBlackBarsStopAt768OnAWideScene();
     TheBetweenSlotTableSaysWhereEachClassStands();
     TheTableIsTheFractionTheLayerDrawsAt();

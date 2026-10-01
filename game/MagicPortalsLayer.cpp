@@ -46,6 +46,9 @@ constexpr float kCameraDistance = 20.0f;
 // The window's shape until a viewport says otherwise: the 16:9 at which the
 // view is 455 px wide.
 constexpr float kDefaultAspect = 16.0f / 9.0f;
+// And its width in the frame's own pixels: main.cpp's 1280 x 720 window, which a
+// sky's cover snaps its edges to (placeSkyCover).
+constexpr double kDefaultFrameWidthPx = 1280.0;
 
 // sounds.json's tracks, by the calls that ask for them: playMenuMusic,
 // playGameMusic(false) and playGameMusic(true), which is getBossMusicName's.
@@ -717,7 +720,10 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
         destroy(thrown.quad);
     }
     m_thrown.clear();
-    for (DrawnSprite& drawn : m_sprites) destroy(drawn.quad);
+    for (DrawnSprite& drawn : m_sprites) {
+        destroy(drawn.quad);
+        destroy(drawn.cover);
+    }
     m_sprites.clear();
     m_motions.clear();
     m_placed.clear();
@@ -4190,6 +4196,36 @@ void MagicPortalsLayer::placeSprite(entt::registry& registry, entt::entity quad,
     transform.rotation = glm::vec3(0.0f, 0.0f, rotation);
 }
 
+void MagicPortalsLayer::placeSkyCover(entt::registry& registry, const DrawnSprite& drawn, const glm::dvec2& centrePx,
+                                      const glm::dvec2& sizePx, float rotation) const {
+    using Supersonic::MaterialComponent;
+    if (drawn.cover == entt::null || !registry.valid(drawn.cover) || !(sizePx.x > 0.0)) return;
+    // Across, in the view's own pixels as the sky was just placed in them. A turned
+    // sky - none is: StaticSky sets no angle, and no level turns its sky - keeps its
+    // own span, and its cover stays wholly behind it.
+    const glm::dvec2 view = ViewPx();
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    const double framePx = viewport != nullptr && viewport->Size().x > 0.0f ? static_cast<double>(viewport->Size().x)
+                                                                            : kDefaultFrameWidthPx;
+    const double skyLowPx = centrePx.x - sizePx.x * 0.5;
+    const double skyHighPx = centrePx.x + sizePx.x * 0.5;
+    Sky::Span span{skyLowPx, skyHighPx};
+    if (rotation == 0.0f) {
+        span = Sky::PixelCover(skyLowPx, skyHighPx, m_follow.centrePx.x - view.x * 0.5, view.x, framePx);
+    }
+    const double widthPx = span.highPx - span.lowPx;
+    placeSprite(registry, drawn.cover, glm::dvec2((span.lowPx + span.highPx) * 0.5, centrePx.y),
+                glm::dvec2(widthPx, sizePx.y), slotOver(drawn.z, Slot::SkyCover), rotation);
+    // Down, the sky's own rows: it is one view tall and on the frame's edges. And the
+    // uv the stretch across asks for, so every texel lands where the sky draws it - u
+    // runs 0 to 1 across a quad, left to right (ModelLoader::GenerateQuad). Every
+    // pixel centre the cover shades is one the sky covers, so it shades the sky's own
+    // colour there: the stretch adds samples, never a pixel the sky does not draw.
+    auto& material = registry.get<MaterialComponent>(drawn.cover);
+    material.uvScale = glm::vec2(static_cast<float>(widthPx / sizePx.x), 1.0f);
+    material.uvOffset = glm::vec2(static_cast<float>((span.lowPx - skyLowPx) / sizePx.x), 0.0f);
+}
+
 glm::dvec2 MagicPortalsLayer::imageSizePx(const std::string& path) {
     if (const auto known = m_imageSizes.find(path); known != m_imageSizes.end()) return known->second;
     int width = 0;
@@ -4683,6 +4719,18 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
                 if (m_sky.skies[t].node == sprite.node) drawn.sky = static_cast<int>(t);
             }
             drawn.satellite = m_sky.hasSatellite && m_sky.satelliteNode == sprite.node;
+            // A SKY NARROWER THAN THE VIEW (sky.json pixel_cover): dark_sky.png, the
+            // one sky with no fullhd twin, is 455 u across a view of 455.11. Its
+            // cover is its own picture, drawn behind it to the frame's pixel edges
+            // (placeSkyCover), so the MSAA samples it leaves at those edges are the
+            // sky's and not the black clear's, as the original's pixel-centre frame
+            // draws them. A sky as wide as the view or wider gets none. The view as
+            // the viewport is now: m_aspect may still be the last level's here.
+            if (drawn.sky >= 0 && m_skyRules.pixelCover &&
+                Sky::DrawnSizePx(m_sky, static_cast<std::size_t>(drawn.sky)).x <
+                    m_viewHeightPx * static_cast<double>(viewportAspect(registry))) {
+                drawn.cover = makeSprite(registry, kSkyCoverTag, sprite.texture, sprite.additive);
+            }
         }
         if (m_space.running) {
             if (sprite.node == m_space.skyNode) drawn.space = SpaceRole::Sky;
@@ -4711,6 +4759,8 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             if (!registry.all_of<InterpolatedTransformComponent>(drawn.quad)) {
                 registry.emplace<InterpolatedTransformComponent>(drawn.quad);
             }
+            // And a sky's cover with it, placed on the same ticks from the same camera.
+            if (drawn.cover != entt::null) registry.emplace<InterpolatedTransformComponent>(drawn.cover);
         }
         drawn.sprite = std::move(sprite);
         m_sprites.push_back(std::move(drawn));
@@ -5288,6 +5338,9 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         // barrel_bomb.ent's <Particles /> is empty.
         made.lightmap.clear();
         made.particles.clear();
+        // And never its template's quads: a barrel has no sky's cover, and a copy
+        // that kept one would destroy it twice.
+        made.cover = entt::null;
         made.quad = makeSprite(registry, "Magic Portals Restocked Sprite", made.sprite.texture, made.sprite.additive);
         // A body, moved on the tick and drawn between ticks, as buildSprites gives one.
         registry.emplace<InterpolatedTransformComponent>(made.quad);
@@ -5585,6 +5638,8 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         if (gone) {
             registry.destroy(drawn.quad);
             drawn.quad = entt::null;
+            if (drawn.cover != entt::null && registry.valid(drawn.cover)) registry.destroy(drawn.cover);
+            drawn.cover = entt::null;
             continue;
         }
         // At the scale a script gave its entity: 1 but for a static portal's 0.8 and
@@ -5599,6 +5654,7 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             drawnSizePx *= m_level.handles.Scale(m_level.handles.handles[static_cast<std::size_t>(drawn.handle)]);
         }
         placeSprite(registry, drawn.quad, centrePx, drawnSizePx, drawn.z, rotation);
+        if (drawn.cover != entt::null) placeSkyCover(registry, drawn, centrePx, drawnSizePx, rotation);
         drawn.centrePx = centrePx;
         drawn.ownerPx = ownerPx;
         drawn.ownerAngleDeg = ownerAngleDeg;
@@ -6457,6 +6513,10 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
             }
         }
         tint(registry, drawn.quad, colour, emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
+        // A sky's cover in its sky's colour and light: the samples it fills are the sky's.
+        if (drawn.cover != entt::null) {
+            tint(registry, drawn.cover, colour, emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
+        }
     }
     // What no level places, with its .ent's emissive (art.json, launchers.json).
     // None has a lightmap: a bake belongs to an entity the level file placed.
@@ -9848,6 +9908,12 @@ void MagicPortalsLayer::shakeView(entt::registry& registry) {
         }
         if (auto* transform = registry.try_get<TransformComponent>(drawn.quad)) {
             m_quakeDrawn.quads.emplace_back(drawn.quad, transform->position.y);
+            transform->position.y += dy;
+        }
+        // A sky's cover goes with its sky.
+        if (drawn.cover == entt::null || !registry.valid(drawn.cover)) continue;
+        if (auto* transform = registry.try_get<TransformComponent>(drawn.cover)) {
+            m_quakeDrawn.quads.emplace_back(drawn.cover, transform->position.y);
             transform->position.y += dy;
         }
     }

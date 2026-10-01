@@ -54,6 +54,7 @@ struct Rules {
     std::string scrollKey;              // scroll: a sky's own float
     double screenPitch = 0.0;           // 0.5
     double frameCapMs = 0.0;            // 200: unitsPerSecond's min
+    bool pixelCover = false;            // pixel_cover: a sky short of the frame filled to its pixels (PixelCover)
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -109,6 +110,24 @@ glm::dvec2 SatellitePx(const Controller& sky, const glm::dvec2& viewCentrePx, co
 // original places each sky and only then moves its scrollPos, so a frame draws
 // the scroll the previous one left. Nothing on a still sky.
 void Advance(const Rules& rules, Controller& sky, double dtS);
+
+// THE PIXEL-CENTRE COVER (sky.json pixel_cover; planning step 145). The original
+// draws its frame one sample a pixel, at the pixel's centre, so a pixel is the
+// sky's when its centre is: dark_sky.png, which has no fullhd twin, is 455 u
+// across a view of 455.11, and its 0.16 px short at each side never shows. The
+// port's engine draws with 4x MSAA, whose sample at x 0.125 of the first column
+// and 0.875 of the last lies past such an edge, so a quarter of each edge pixel
+// was the black clear. One axis of a sky's span, `lowPx` to `highPx` in the
+// level's pixels, with each edge moved to the pixel boundary that rule draws to:
+// the low edge to the first pixel whose centre it covers, the high edge past the
+// last. `viewLowPx` and `viewSpanPx` are the view along that axis in the level's
+// pixels and `framePx` the frame's pixels across it. An edge on a boundary stays;
+// a span or view that is not above zero comes back as it was given.
+struct Span {
+    double lowPx = 0.0;
+    double highPx = 0.0;
+};
+Span PixelCover(double lowPx, double highPx, double viewLowPx, double viewSpanPx, double framePx);
 
 // ---- SpaceSky ---------------------------------------------------------------
 //

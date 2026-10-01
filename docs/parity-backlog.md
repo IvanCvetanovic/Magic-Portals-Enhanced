@@ -2434,7 +2434,30 @@ resuming the track the game had stopped, as the original does (step 121); whethe
       and the arm-cleared claw byte-identical over 450 frames); 2-01's row 461 71.5 -> 86.8 grey (the original 88.5);
       2-32's sky edge rows flat (+2.05 / -1.78 -> -0.03 / -0.04). The dark dragon's normal map clamps too, as the
       original's does (deviation 8, accepted as the original).
-- [ ] **The screen's left and right columns draw dark** (found with the claw's lines, 2026-09-30; `dragon_lines/check.md`):
+- [x] **The screen's left and right columns draw dark** (found with the claw's lines, 2026-09-30; `dragon_lines/check.md`):
       the leftmost column about 0.65x its neighbour, the rightmost about 0.91x, from a level's first frame; the original
       is flat. Not the wrap (clamping leaves them): one untested model is a sky 1279.69 px wide over 1280 with 4x MSAA
       showing the black clear at the edges. Next: its own step, measured against the library frames.
+      *Closed by step 145 (EC), 2026-10-01*: the model holds, on the 44 levels that draw `dark_sky.png` (1-32, all of
+      chapter 2, 3-13, 4-20 to 4-22, 4-25 and 4-27 to 4-32), which has no fullhd twin: 455 u across a 455.11 u view,
+      0.156 px short of each side, so 4x MSAA left one sample of each edge pixel the black clear (rows of sky alone at
+      0.76 of their neighbour); the 84 others matched the original already. The port now draws such a sky's picture a
+      second time just behind it, out to the frame's pixel edges by the pixel-centre rule (`sky.json` `pixel_cover`;
+      `Sky::PixelCover`), its uv stretched so no texel moves. GAMEPLAY: none. Measured on the f420 sweep: the 84 others
+      byte-identical; of the 44, 41 change and only in columns 0 and 1279 (38,648 px); medians L 0.817 -> 1.002 and
+      R 0.838 -> 0.986 (the original 1.002 / 0.988); edge rows equal to the original's 48.1% -> 97.4% (left) and
+      32.2% -> 96.5% (right); flat in play from the first visible frame, through the camera's pan and the trembles (the
+      verifier's frames). Left: 2-05's right edge, the row below.
+- [ ] **Step 145's recorded deviations** (EC, the screen's edge columns). (1) **2-05's right edge moved away from the
+      original.** 166 edge rows of the 41 changed levels did, 161 of them 2-05's column 1279, y 421-586: there
+      `bar4_contrast.png` (its right edge at 455 u) ends at 1279.69 px, covering pixel 1279's centre but not its x 0.875
+      sample. That sample was the black clear, as black as the wall's edge texels, and is now the sky's cover: a mean of
+      (0.8, 0.8, 1.0) -> (8.9, 14.6, 16.7) against the original's (1.0, 1.2, 1.3), the right edge's ratio 0.974 -> 1.049
+      (the original's 0.964). The same wall draws so on any level whose sky covers the frame, as any quad edge does
+      against the sky (the general MSAA blend, step 102's note). The other 5 rows are one or two 5/6/5 steps at a
+      picture's edge (2-04, 2-19, 2-25 and 2-32's two). Next, its own step since it touches the 84 levels' frames:
+      the pixel-centre rule for every level picture at the frame's edge (a quad whose edge lies in the frame's outer
+      half pixel drawn out to it, or given a cover like the sky's); gates: 2-05's column 1279, rows 421-586, back to
+      (0-1, 0-1, 0-1), and the 84 levels' 566 scattered edge rows above 12 (1-21 and 1-23 right, 4-01 left and 4-09
+      right among them). (2) `sky.json`'s two `_` notes were reworded after the implementer's sweep: *settled by the
+      verification*, whose sweep on the file as it is matched the implementer's 128 of 128.
