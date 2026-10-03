@@ -4,16 +4,66 @@
     "shot from the character toward the tap, and the portal opens where it arrives. A wall, a",
     "crate or a stone on the way stops it, and a shot that fails costs nothing. The Godot project",
     "opens a portal at the tap at once, so this is the port's. See",
-    "docs/planning/2026-09-11-magic-portals-remaster.md, step 8."
+    "docs/planning/2026-09-11-magic-portals-remaster.md, step 8; the flight's numbers are the",
+    "original's since step 149 (program wave 3a, G4)."
   ],
 
   "flight": {
-    "_note": [
-      "How fast a shot flies. The original's script has the shot (portal_launch,",
-      "projectileDir, projectilePos) but its speed is not decoded, and nobody measured it."
+    "_source": [
+      "ETHCallback_projectile (Portal.angelscript, bytes 358053..359141), the projectile.ent the global",
+      "addProjectile (354113..355121) adds, listing out/parity/asbc/all_functions.txt (md5",
+      "48fe65ce8baea16b94ed84d8d7be84b0) L71109, arguments pushed last-first. The callback runs ONCE a",
+      "frame, and its first run falls straight through into the common block, so the first frame does",
+      "both:",
+      "  #1-12    CheckCustomData('initialPos'): absent on the first run",
+      "  #14-27   SetVector2('initialPos', GetPositionXY()): where it was spawned, BEFORE the jump",
+      "  #29-55   AddToPositionXY(direction x g_scale.scale(24)): the first-frame jump of 24 units",
+      "  #57-71   AddScaledEntity('projectile_shoot.ent', GetPosition()): the flash, AFTER the jump",
+      "  #74-125  every run: angle = degrees(getAngle(dir)) - 90, then",
+      "           AddToPositionXY(dir x g_timeManager.scaledUnitsPerSecond(200)): the advance",
+      "  #127-156 squaredDistance(initialPos, GetPositionXY()) > GetFloat('squaredDistance') (CMPf, JNP: a",
+      "           STRICT greater), the stored squaredDistance(finalPos, casterPos) addProjectile #94-110 wrote",
+      "  #158-199 arrived: with 'willDie' clear insertPortal(destiny, preferedTeleportEntity); #201-263 else",
+      "           the fail effects and playPortalFailedSound; #264-272 DeleteEntity(thisEntity)",
+      "So the shot is not snapped to its destination: it is carried past it by the last advance, the",
+      "portal opens at the stored `destiny` (the tap, here), and it arrives on the first frame k with",
+      "24 + k x (200 x ms / 1000) > the distance - the jump is part of the first frame's travel.",
+      "",
+      "The advance's clock: STimeManager::scaledUnitsPerSecond (bytes 8284..8363) = unitsPerSecond x",
+      "g_scale.getScale(), and unitsPerSecond (8045..8162 ins 3-15) = speed x min(200,",
+      "GetLastFrameElapsedTime()) / 1000 x m_factor - the script's FLOORED whole milliseconds (clock.json,",
+      "planning step 147), 16 at the 60 Hz the program matches: 200 x 16 / 1000 = 3.2 units a frame, 192 a",
+      "second of wall time, not 200 and not the guess of 600 this file held until step 149. In the",
+      "port's units g_scale.getScale() is 1 (motions.json says why). frame_cap_ms is that min's 200, the",
+      "same one motions.json's linear_motion carries.",
+      "",
+      "WHEN IT FIRST RUNS (reference/ethanon/toolkit/Source/src/engine/Scene/). ETHScene::Update",
+      "(ETHScene.cpp:459-493) runs the physics (:464), then every ALWAYS-ACTIVE entity's callback",
+      "(ETHActiveEntityHandler.cpp:113-143 UpdateAlwaysActiveEntities; :70-73 says which: a callback and",
+      "not static - the projectile), then the script's scene update (:473-474; `loop`, main.angelscript",
+      "bytes 312880..313283, which LoadScene is given as the update function: PortalManager::update and",
+      "the tap), then the STATIC entities' callbacks (:488, ETHActiveEntityHandler.cpp:145-165: an",
+      "anti_portal_agent, a fire_agent, a reflect_agent). A tap's AddEntity (ETHScene.cpp:261-292) puts the",
+      "projectile in its bucket at once and on the dynamic list (ETHActiveEntityHandler.cpp:56-64), but",
+      "this frame's dynamic pass is over: its first callback runs on the NEXT frame, and a static agent",
+      "sees it at its spawn point on the frame it is fired. DeleteEntity erases it from its bucket at once",
+      "(ETHScene.cpp:924-927, ETHBucketManager.cpp:434-476), so a shot that arrives is gone before any",
+      "static callback of that frame looks.",
+      "The two facts that order rests on were read, not assumed. The flags: reference/extracted/assets/entities/",
+      "projectile.ent is static=0 with a callback (so always active), and anti_portal_agent.ent, fire_agent.ent,",
+      "reflect_agent.ent and anti_projectile_wall.ent are static=1. The tap: PortalManager::update is a GameController,",
+      "run by GameControllerManager::update (listing ins 6-24, CALLINTF GameController::update) from BaseState::loop (bytes",
+      "11245..11317 ins 6-8) under Game::loop (114414..114716), which the global `loop` reaches through",
+      "SStateManager::runCurrentLoopFunction (9012..9068): inside the scene-update function, never inside an entity's",
+      "callback, so the dynamic pass of the tap's frame is already over when it adds the projectile.",
+      "In the port's tick the order is the same cycle cut elsewhere: Game::AfterStep (the shot's callback",
+      "and the static ones, Portals::Tick) runs BEFORE readInput (the tap) in MagicPortalsLayer::fixedTick, so",
+      "the first Tick after Shoot is already the next frame's and no delay is added; the static pass of the",
+      "tap's own frame, between the two, is the first pass of that Tick (Portals::Flight::fresh)."
     ],
-    "_guess": true,
-    "speed_px_s": 600.0
+    "speed_units_s": 200.0,
+    "first_frame_jump_units": 24.0,
+    "frame_cap_ms": 200.0
   },
 
   "reflection": {
@@ -24,7 +74,8 @@
       "rest of the distance it was fired: a flat reflector sends it to the tap mirrored across",
       "it. reflect_agent.ent has no collision (shape 0) and no size, so how near a shot has to",
       "pass is not the original's either: half its 32 px sprite. The original's script keeps",
-      "a hasBeenReflected flag, not a count, so a shot comes off one reflector at most."
+      "a hasBeenReflected flag, not a count, so a shot comes off one reflector at most.",
+      "(G9 builds the original's 32 and its leg; step 149 leaves both as they were.)"
     ],
     "_guess": true,
     "catch_radius_px": 16.0,

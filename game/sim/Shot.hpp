@@ -33,7 +33,12 @@ namespace MagicPortals::Shot {
 
 // The port's shot.json.
 struct Rules {
-    double speedPx = 0.0;         // _guess
+    // The flight, DECODED (ETHCallback_projectile; planning step 149): the shot jumps `jumpUnits`
+    // on its first callback and then advances speedUnits x min(frameCapMs, the script's whole
+    // milliseconds) / 1000 a callback.
+    double speedUnits = 0.0;
+    double jumpUnits = 0.0;
+    double frameCapMs = 0.0;
     double reflectRadiusPx = 0.0; // _guess: how near a reflector a shot has to pass
     int maxReflections = 0;       // _guess: how many reflectors one shot comes off
     bool defaultPlaneVertical = true; // _guess: the plane of a reflector whose level gives none

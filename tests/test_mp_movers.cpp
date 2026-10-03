@@ -557,9 +557,12 @@ void AnAgentKillsAShotStillInFlightAndItsRing() {
     CHECK_EQ(rig.state.agentsKilled, 1);
     if (kills.size() != 1) return;
     const Portals::AgentKill& kill = kills[0];
-    // Where it first came within 0.7 x 32 = 22.4 px, short of the agent.
-    CHECK_MSG(kill.agent == "agent" && kill.atPx == glm::dvec2(300.0, 200.0) &&
-                  glm::distance(kill.shotPx, glm::dvec2(300.0 - 22.4, 200.0)) < 1e-9,
+    // The first POSITION the shot is sampled at within 0.7 x 32 = 22.4 px, short of the agent: the
+    // static callback looks once a frame (planning step 149), so within one advance (3.33 px on a
+    // bare tick) of the 22.4 and strictly inside it.
+    const double killedAt = glm::distance(kill.shotPx, glm::dvec2(300.0, 200.0));
+    CHECK_MSG(kill.agent == "agent" && kill.atPx == glm::dvec2(300.0, 200.0) && killedAt < 22.4 &&
+                  killedAt >= 22.4 - 200.0 / 60.0 && kill.shotPx.x < 300.0,
               "killed at " + Px(kill.shotPx));
     // One ring, the bare spelling; the antiportal.ent on the same point stays.
     CHECK_MSG(kill.ring == "ring_bare", "deleted " + kill.ring);

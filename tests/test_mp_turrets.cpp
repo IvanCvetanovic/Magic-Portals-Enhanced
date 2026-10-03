@@ -30,6 +30,7 @@
 #include "sim/Game.hpp"
 #include "sim/LevelBuilder.hpp"
 #include "sim/Portals.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Shot.hpp"
 #include "sim/Turrets.hpp"
 #include "sim/Units.hpp"
@@ -105,13 +106,16 @@ void TheCarrancasAreFound() {
 
     std::printf("  %s: %d carranca(s)\n", kLevel, static_cast<int>(turrets.turrets.size()));
 
-    // carranca_right_ent_792: dirX 1.2, dirY 0, so it fires to the RIGHT, and
-    // the direction is carried as a unit vector however the data spells it.
+    // carranca_right_ent_792: dirX 1.2, dirY 0, so it fires to the RIGHT, and the direction is carried
+    // AS WRITTEN (planning step 149): ETHCallback_fireball moves a fireball by 'dir' x its speed, nothing
+    // normalises it, and so this carranca's fireball flies at 1.2 x 130.
     bool sawRightward = false;
     for (const Turrets::Turret& turret : turrets.turrets) {
         const double length =
             std::sqrt(turret.directionPx.x * turret.directionPx.x + turret.directionPx.y * turret.directionPx.y);
-        CHECK_MSG(::test::nearly(static_cast<float>(length), 1.0f), "every direction is a unit vector");
+        const float wanted = turret.name == "carranca_right_ent_792" ? 1.2f : 1.0f;
+        CHECK_MSG(::test::nearly(static_cast<float>(length), wanted),
+                  turret.name + "'s direction is its node's, of length " + std::to_string(length));
         CHECK_MSG(turret.strideMs > 0.0, "and every stride is a real one");
         // Its own body, which its fireballs pass by (isCarranca): the one it spits
         // starts inside it.
@@ -178,17 +182,85 @@ void AFireballFliesAtItsOwnSpeed() {
         if (now.name != before.name) continue;
         const glm::dvec2 moved = now.atPx - wasAt;
         const double distance = std::sqrt(moved.x * moved.x + moved.y * moved.y);
-        // 130 px/s over one sixtieth of a second.
+        // Its dir's length times 130 px/s over one sixtieth of a second: level0a's one carranca is the
+        // 1.2 one (planning step 149), so 156 px/s.
+        double share = 1.0;
+        for (const Turrets::Turret& turret : run.level.turrets.turrets) {
+            if (before.name.rfind(turret.name + "#", 0) == 0) share = glm::length(turret.directionPx);
+        }
         CHECK_MSG(::test::nearly(static_cast<float>(distance),
-                                 static_cast<float>(run.level.turrets.rules.speedPx * kStep), 0.01f),
-                  "a fireball travels its .ent's own 130 px/s");
+                                 static_cast<float>(share * run.level.turrets.rules.speedPx * kStep), 0.01f),
+                  "a fireball travels its dir's length x its .ent's own 130 px/s: " + std::to_string(distance));
         return;
     }
+}
+
+// THE EIGHT CARRANCAS WHOSE dir IS NOT 1 (planning step 149; out/parity/program/G6/carrancas.txt): the
+// original's fireball flies at |dir| x 130, nothing normalising dir on the way (ETHCallback_fireball
+// #1-43), so each of these retimes. Pinned level by level from the converted nodes - 2-01, 2-03, 2-07,
+// 2-15 (two), 2-18, 2-28 and 4-13 - at the floored 16 ms a tick the program matches, where the
+// fireball covers |dir| x 130 x 16 / 1000 units.
+void TheEightCarrancasFlyAtTheirDirsLength() {
+    struct Lane {
+        const char* level;
+        const char* carranca;
+        double dirX; // as the node writes it
+    };
+    const Lane lanes[] = {{"level0a", "carranca_right_ent_792", 1.2},  {"level2a", "carranca_ent_677", -1.25},
+                          {"level6a", "carranca_891", -1.6},           {"level14a", "carranca_1071", -1.3},
+                          {"level14a", "carranca_right_1075", 2.0},    {"level17a", "carranca_right_1075", 1.2},
+                          {"level27a", "carranca_888", -1.2},          {"level12c", "carranca_right_ent_2339", 0.7}};
+    const ScriptClock::Step floored(0.016, 1.0f / 60.0f);
+    int flewOn = 0;
+    for (const Lane& lane : lanes) {
+        Run run;
+        if (!Begin(lane.level, run)) continue;
+        const Turrets::Turret* turret = nullptr;
+        for (const Turrets::Turret& candidate : run.level.turrets.turrets) {
+            if (candidate.name == lane.carranca) turret = &candidate;
+        }
+        CHECK_MSG(turret != nullptr, std::string(lane.level) + " places " + lane.carranca);
+        if (turret == nullptr) continue;
+        CHECK_MSG(turret->directionPx == glm::dvec2(lane.dirX, 0.0),
+                  std::string(lane.carranca) + "'s dir is the node's, " + std::to_string(turret->directionPx.x) + ", " +
+                      std::to_string(turret->directionPx.y));
+        // Until it has spat once.
+        const Turrets::Fireball* ball = nullptr;
+        const std::string wanted = std::string(lane.carranca) + "#1";
+        for (int tick = 0; tick < 600 && ball == nullptr; ++tick) {
+            Game::Tick(run.data, run.registry, run.level, 0.0f, floored);
+            for (const Turrets::Fireball& candidate : run.level.turrets.fireballs) {
+                if (candidate.name == wanted) ball = &candidate;
+            }
+        }
+        CHECK_MSG(ball != nullptr, wanted + " is spat within 600 ticks");
+        if (ball == nullptr) continue;
+        const double speed = std::fabs(lane.dirX) * run.level.turrets.rules.speedPx;
+        CHECK_MSG(::test::nearly(static_cast<float>(glm::length(ball->velocityPx)), static_cast<float>(speed)) &&
+                      ball->velocityPx == turret->directionPx * run.level.turrets.rules.speedPx,
+                  wanted + " leaves at |dir| x 130 = " + std::to_string(speed) + ", not " +
+                      std::to_string(glm::length(ball->velocityPx)));
+        // And covers that x 16 / 1000 a tick while it flies.
+        const glm::dvec2 wasAt = ball->atPx;
+        Game::Tick(run.data, run.registry, run.level, 0.0f, floored);
+        for (const Turrets::Fireball& now : run.level.turrets.fireballs) {
+            if (now.name != wanted) continue;
+            ++flewOn;
+            CHECK_MSG(::test::nearly(static_cast<float>(glm::distance(now.atPx, wasAt)),
+                                     static_cast<float>(speed * 16.0 / 1000.0), 0.001f),
+                      wanted + " covers " + std::to_string(speed * 16.0 / 1000.0) + " a tick, " +
+                          std::to_string(glm::distance(now.atPx, wasAt)));
+        }
+    }
+    std::printf("  the eight carrancas whose dir is not 1: %d fireballs measured over a tick\n", flewOn);
+    CHECK_MSG(flewOn == 8, "each of the eight is measured flying a tick: " + std::to_string(flewOn));
 }
 
 // One tick of travel at 130 px/s: how far the port's stop may sit from the
 // geometry's, since a flight is tested where each tick leaves it.
 constexpr double kTickTravelPx = 130.0 / 60.0;
+// level0a's one carranca flies at 1.2 x that (planning step 149): its dir is 1.2.
+constexpr double kLevel0aTickTravelPx = 1.2 * 130.0 / 60.0;
 
 void AFireballDiesOnTheFirstWall() {
     Run run;
@@ -211,7 +283,7 @@ void AFireballDiesOnTheFirstWall() {
         }
         for (const glm::dvec2& atPx : run.level.turrets.spentPx) {
             ++spent;
-            if (std::fabs(atPx.x - 278.5) > kTickTravelPx || std::fabs(atPx.y - 142.0) > 1e-6) {
+            if (std::fabs(atPx.x - 278.5) > kLevel0aTickTravelPx || std::fabs(atPx.y - 142.0) > 1e-6) {
                 ++wrong;
                 std::printf("  %s: a fireball went off at (%.2f, %.2f), not at the block's face\n", kLevel, atPx.x,
                             atPx.y);
@@ -228,7 +300,7 @@ void AFireballDiesOnTheFirstWall() {
               "and every one fired ends there rather than at the level's edge: " + std::to_string(spent) +
                   " went off and " + std::to_string(run.level.turrets.fireballs.size()) + " fly, of " +
                   std::to_string(fired));
-    CHECK_MSG(farthestPx < 278.5 + kTickTravelPx, "and none is ever seen past the block");
+    CHECK_MSG(farthestPx < 278.5 + kLevel0aTickTravelPx, "and none is ever seen past the block");
     std::printf("  %s after a minute: %d fired, %d went off on the block, %d live; the farthest at x %.2f\n", kLevel,
                 fired, spent, static_cast<int>(run.level.turrets.fireballs.size()), farthestPx);
 }
@@ -486,7 +558,11 @@ void EveryLaneEndsOnItsFirstBody() {
                         wherePx = atPx;
                     }
                 }
-                const bool wentOff = best < 4.0 * kTickTravelPx;
+                double share = 1.0;
+                for (const Turrets::Turret& turret : run.level.turrets.turrets) {
+                    if (turret.name == owner) share = glm::length(turret.directionPx);
+                }
+                const bool wentOff = best < 4.0 * kTickTravelPx * share;
                 if (it->first == owner + "#1" && firstEnd.find(owner) == firstEnd.end()) {
                     firstEnd[owner] = {wentOff ? tick : -tick, wherePx};
                 }
@@ -509,7 +585,8 @@ void EveryLaneEndsOnItsFirstBody() {
             for (const Lane& lane : pinned) {
                 if (std::string(lane.level) != name || turret.name != lane.carranca) continue;
                 ++pinnedSeen;
-                const bool here = endTick >= 0 && std::fabs(at.x - lane.stopPx) <= kTickTravelPx;
+                const bool here =
+                    endTick >= 0 && std::fabs(at.x - lane.stopPx) <= kTickTravelPx * glm::length(turret.directionPx);
                 if (here) ++matched;
                 std::printf("; the static lane says x %.1f: %s", lane.stopPx, here ? "MATCH" : "MISMATCH");
             }
@@ -729,7 +806,7 @@ void AFireballGoesThroughAPairOnceAndThePairStays() {
             if (!run.level.turrets.spentPx.empty()) offPx = run.level.turrets.spentPx.front();
             break;
         }
-        if (glm::distance(ball->atPx, lastPx) > kTickTravelPx + 1e-4) jumped = true;
+        if (glm::distance(ball->atPx, lastPx) > kLevel0aTickTravelPx + 1e-4) jumped = true;
         if (portals.placed.size() == 2 && glm::distance(ball->atPx, portals.placed[0].atPx) < kGrabPx) {
             passedA = true;
         }
@@ -766,7 +843,7 @@ void ALonePortalCarriesNoFireball() {
         if (!run.level.turrets.spentPx.empty()) offPx = run.level.turrets.spentPx.front();
     }
     CHECK_MSG(portals.traversals == 0 && !through, "nothing goes through a lone portal");
-    CHECK_MSG(std::fabs(offPx.x - 278.5) <= kTickTravelPx,
+    CHECK_MSG(std::fabs(offPx.x - 278.5) <= kLevel0aTickTravelPx,
               "the fireball goes off on the block's face at x 278.5: " + std::to_string(offPx.x));
     CHECK_EQ(portals.KillAll(true), 1);
     CHECK_MSG(portals.portalsUsed == 0, "and the portal, which carried nothing, is refunded");
@@ -836,6 +913,7 @@ void runTests() {
     TheCarrancasAreFound();
     TheFirstShotComesAStrideIn();
     AFireballFliesAtItsOwnSpeed();
+    TheEightCarrancasFlyAtTheirDirsLength();
     TheTouchIsTheOriginals();
     AFireballDiesOnTheFirstWall();
     AFireballBurnsThePlayer();

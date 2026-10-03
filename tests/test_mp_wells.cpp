@@ -372,7 +372,8 @@ void AShotFliesThroughAWell() {
 
     // And the shot, fired as a tap fires it and flown by the level's own tick.
     CHECK(level.portals.Shoot(registry, tapPx));
-    for (int tick = 0; tick < 60 && level.portals.flight; ++tick) Game::Tick(data, registry, level, 0.0f, kStep);
+    // At the original's 200 units a second and not the port's old 600 (planning step 149): well over a second.
+    for (int tick = 0; tick < 600 && level.portals.flight; ++tick) Game::Tick(data, registry, level, 0.0f, kStep);
     CHECK(!level.portals.flight.has_value());
     CHECK_EQ(level.portals.shotsFailed, 0);
     CHECK_EQ(static_cast<int>(level.portals.placed.size()), 1);

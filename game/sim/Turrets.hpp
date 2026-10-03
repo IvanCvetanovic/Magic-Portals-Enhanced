@@ -48,9 +48,10 @@
 // NOT BUILT, and named here rather than found later:
 //   - The picture. fireball.ent has no <Sprite> at all: what is seen is its
 //     ParticleSystem and its Light, so there is no image for the layer to draw.
-//   - Its speed. ETHCallback_fireball moves it by 'dir' x its speed, and a
-//     carranca's 'dir' is its node's (dirX, dirY) as written, 1.2 on level0a:
-//     the port normalises it (turrets.json's direction note).
+//   (Its speed is BUILT since planning step 149: ETHCallback_fireball moves it by
+//   'dir' x its speed, a carranca's 'dir' is its node's (dirX, dirY) as written,
+//   1.2 on level0a, and the port flies it at that length x 130 - turrets.json's
+//   direction note.)
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
@@ -80,7 +81,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error);
 struct Turret {
     std::string name;
     glm::dvec2 atPx{0.0};
-    glm::dvec2 directionPx{0.0}; // a unit vector, +y down
+    glm::dvec2 directionPx{0.0}; // the node's (dirX, dirY) as written, +y down: NOT a unit vector
     // Its own StaticBody2D, which every fireball passes (isCarranca, #41-50):
     // the one it spits starts inside it. entt::null for a level built without
     // its statics.

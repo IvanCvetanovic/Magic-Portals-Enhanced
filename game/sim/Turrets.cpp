@@ -198,11 +198,11 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         // The Godot project's defaults for a node that names neither (hazards.gd:340-344).
         glm::dvec2 direction(Meta(node, "dirX", -1.0), Meta(node, "dirY", 0.0));
         if (direction.x == 0.0 && direction.y == 0.0) direction = glm::dvec2(-1.0, 0.0);
-        const double length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
-        // Normalised, and turrets.json records what the magnitude might have
-        // meant: level0a's carranca carries a dirX of 1.2, and nothing decoded
-        // reads that back.
-        turret.directionPx = direction / length;
+        // As written, NOT normalised: ETHCallback_fireball moves a fireball by 'dir' x
+        // scaledUnitsPerSecond(speed), and addFireball stores the carranca's own vector2(dirX, dirY)
+        // as that 'dir' (turrets.json `direction`; planning step 149). Its length is the fireball's
+        // share of the speed: 1.2 on level0a's carranca_right_ent_792.
+        turret.directionPx = direction;
 
         turret.strideMs = Meta(node, "stride", rules.defaultStrideMs);
         if (turret.strideMs <= 0.0) {

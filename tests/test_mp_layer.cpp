@@ -2210,10 +2210,12 @@ void TheShotsCellsRunOnOneTimer() {
         const entt::entity quad = FirstTagged(registry, "Magic Portals Shot Sprite");
         return quad == entt::null ? -1 : static_cast<int>(registry.get<SpriteAnimationComponent>(quad).firstFrame);
     };
-    // The same timer, stepped by hand the same way: once on the tap's tick, then
-    // once on each tick the shot still flies.
+    // The same timer, stepped by hand the same way: once on each tick the shot's own callback runs
+    // and it still flies - not on the tap's tick, where the shot has had no callback yet
+    // (planning step 149) - so the tap's tick shows the cell the last shot left.
     MagicPortals::Art::FrameTimer mirror;
     const double tickMs = kScriptMs;
+    int shownCell = 0;
     const auto fly = [&](const std::string& which) {
         shoot(layer, registry, screenOf(registry, playerPx(registry, layer) + glm::dvec2(0.0, -48.0)));
         CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), which + " fired: " + lastFailure(layer));
@@ -2221,15 +2223,18 @@ void TheShotsCellsRunOnOneTimer() {
         std::vector<int> want;
         while (layer.SimLevel()->portals.flight && drawn.size() < 240) {
             drawn.push_back(cell());
-            want.push_back(mirror.Set(0, 5, 30.0, true, tickMs));
+            want.push_back(shownCell);
             tickWith(layer, registry, kRest, {}, {});
+            if (layer.SimLevel()->portals.flight) shownCell = mirror.Set(0, 5, 30.0, true, tickMs);
         }
         CHECK_MSG(!drawn.empty() && drawn == want, which + ": every tick's cell is the timer's");
         return drawn;
     };
     const std::vector<int> first = fly("the first shot");
-    // 48 units at shot.json's speed is a few ticks: the cells those ticks show.
-    const std::vector<int> cycle({0, 0, 1, 1, 2, 2, 3, 3, 4, 5});
+    // 48 units at the decoded flight is 8 ticks: the cells those ticks show - the held cell of the
+    // tap's tick, then the timer's own, which stays on cell 0 for two steps (the first set only resets
+    // it) and then moves on one cell every 30 ms of 16 ms ticks.
+    const std::vector<int> cycle({0, 0, 0, 1, 1, 2, 2, 3, 3, 4});
     const std::size_t shown = std::min(first.size(), cycle.size());
     CHECK_MSG(shown >= 4 && std::equal(first.begin(), first.begin() + static_cast<std::ptrdiff_t>(shown), cycle.begin()),
               "from cell 0, a cell every 30 ms of 16.7 ms ticks, at most one a tick: " + std::to_string(first.size()) +
@@ -14098,9 +14103,24 @@ bool ReadyToShoot(MagicPortalsLayer& layer, entt::registry& registry, int& ticks
 struct Flown {
     std::vector<MagicPortals::Portals::Launch> launches;
     std::vector<MagicPortals::Portals::Failure> ends;
+    // Every projectile_shoot the frames showed, once each: the flash lives 350 ms, which is over
+    // before a flight at the decoded 192 units a second ends (planning step 149).
+    std::vector<MagicPortalsLayer::EffectReport> flashes;
     int endTick = -1;
     QuakeTick endSeen;
 };
+
+// `seen` with whatever projectile_shoot flashes the layer shows now that it has not recorded: one a
+// frame is the same effect, found by where it stands.
+void NoteFlashes(const MagicPortalsLayer& layer, std::vector<MagicPortalsLayer::EffectReport>& seen) {
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity != "projectile_shoot.ent") continue;
+        const bool known = std::any_of(seen.begin(), seen.end(), [&report](const MagicPortalsLayer::EffectReport& old) {
+            return old.atPx == report.atPx && old.zUnits == report.zUnits;
+        });
+        if (!known) seen.push_back(report);
+    }
+}
 
 Flown FlyWithFrames(MagicPortalsLayer& layer, entt::registry& registry, int& ticks) {
     Flown flown;
@@ -14114,6 +14134,7 @@ Flown FlyWithFrames(MagicPortalsLayer& layer, entt::registry& registry, int& tic
             flown.endSeen = seen;
         }
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        NoteFlashes(layer, flown.flashes);
     }
     return flown;
 }
@@ -14226,7 +14247,7 @@ void AShotIntoA17WallEndsInPortalFail() {
     // projectile's z 0.
     CHECK_EQ(flown.launches.size(), std::size_t{1});
     const glm::dvec2 dir = glm::normalize(aim - from);
-    const auto flashes = EffectsOf(layer, "projectile_shoot.ent");
+    const auto& flashes = flown.flashes;
     CHECK_MSG(flashes.size() == 1 && glm::distance(flashes[0].atPx, from + dir * 24.0) < 1e-4 &&
                   flashes[0].zUnits == 0.0,
               "projectile_shoot 24 out from " + Point(from) + ": " + std::to_string(flashes.size()));
@@ -14665,13 +14686,15 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     int turnTick = -1;
     MagicPortals::Portals::Reflection turn;
-    for (int i = 0; i < 60 && layer.SimLevel()->portals.flight && turnTick < 0; ++i) {
+    std::vector<MagicPortalsLayer::EffectReport> seenFlashes; // the 350 ms flash is over by the turn
+    for (int i = 0; i < 120 && layer.SimLevel()->portals.flight && turnTick < 0; ++i) {
         tickWith(layer, registry, kRest, {}, {});
         if (!layer.SimLevel()->portals.reflected.empty()) {
             turnTick = i;
             turn = layer.SimLevel()->portals.reflected.front();
         }
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        NoteFlashes(layer, seenFlashes);
     }
     CHECK_MSG(turnTick >= 0, "the shot was turned: " + lastFailure(layer));
     if (turnTick < 0) return;
@@ -14680,7 +14703,7 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
     const auto marks = EffectsOf(layer, "portal_mark.ent");
     CHECK_MSG(marks.size() == 1 && marks[0].atPx == turn.said.atPx && marks[0].zUnits == 32.0,
               "portal_mark at the new leg's end, " + Point(turn.said.atPx) + ": " + std::to_string(marks.size()));
-    auto flashes = EffectsOf(layer, "projectile_shoot.ent");
+    auto flashes = seenFlashes;
     bool atTurn = false;
     for (const auto& flash : flashes) atTurn = atTurn || (flash.atPx == turn.atPx && flash.zUnits == 0.0);
     CHECK_MSG(flashes.size() == 2 && atTurn, "the first leg's flash and the old shot's where it turned, " +
@@ -14691,7 +14714,8 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
                           layer.SimLevel()->portals.launches.front().fromPx == turn.atPx;
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     CHECK_MSG(launched, "the new leg launches on the tick after its turn, from where it turned");
-    flashes = EffectsOf(layer, "projectile_shoot.ent");
+    NoteFlashes(layer, seenFlashes);
+    flashes = seenFlashes;
     const glm::dvec2 way = glm::normalize(turn.toPx - turn.atPx);
     bool out24 = false;
     for (const auto& flash : flashes) out24 = out24 || glm::distance(flash.atPx, turn.atPx + way * 24.0) < 1e-4;

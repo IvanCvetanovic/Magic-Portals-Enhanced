@@ -37,6 +37,14 @@ void Teleport(entt::registry& registry, entt::entity body, const glm::dvec2& exi
         glm::vec3(Units::ToMetres(exitVelocityPx.x), Units::ToMetres(-exitVelocityPx.y), rigid.velocity.z);
 }
 
+// A static callback's own test of a shot's position: squaredDistance(position, the agent's) < reach ^ 2,
+// STRICT (ETHCallback_anti_portal_agent #110-124, ETHCallback_fire_agent #109-117). The original
+// samples the position once a frame; State::Tick says which points.
+bool Reaches(const glm::dvec2& shotPx, const glm::dvec2& centrePx, double reachPx) {
+    const glm::dvec2 gap = shotPx - centrePx;
+    return glm::dot(gap, gap) < reachPx * reachPx;
+}
+
 } // namespace
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error) {
@@ -519,6 +527,11 @@ bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx, double veloc
     fired.fromPx = Units::ToPixels(registry.get<TransformComponent>(shooter).position);
     fired.toPx = atPx;
     fired.atPx = fired.fromPx;
+    // The tap's AddEntity is in `loop`, after this frame's dynamic callbacks: the static callbacks of
+    // this frame see the shot where it was spawned, and its own first callback is the next frame's
+    // (Tick's first pass, then its second). The layer takes the tap after its tick's AfterStep, so
+    // the next Tick IS the next frame.
+    fired.fresh = true;
     flight = fired;
     ++shotsFired;
 
@@ -711,92 +724,145 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
                      placed.end());
     }
 
-    // The shot flies on, through this tick's stretch of its way, against the
-    // world as the step left it. What the stretch meets first decides: a body or
-    // a blocker ends it, and a reflector turns it, mirrored across its plane, for
-    // the rest of its way. Reaching the end of its way opens a portal there, or
-    // fails where none may open.
-    if (flight) {
-        // The leg's first tick, for the picture: ETHCallback_projectile's first
-        // frame flashes projectile_shoot before it moves the shot at all, so a
-        // leg that ends on this very tick has flashed too.
-        if (!flight->launched) {
-            flight->launched = true;
-            launches.push_back(Launch{flight->atPx, flight->toPx});
+    // THE SHOT FLIES ON AS ETHCallback_projectile DOES (shot.json `flight`, planning step 149).
+    //
+    // Its callback runs once a frame. The first run stores where the shot is (initialPos), jumps it
+    // `jumpUnits` along its direction and flashes projectile_shoot there (#14-71); every run, that
+    // one included, then advances it speedUnits x min(frameCapMs, the script's milliseconds) / 1000
+    // (#113-125) and asks whether it has gone FARTHER than its destiny (#127-156, a strict compare:
+    // the shot overshoots, and the portal opens at the destiny, never at the shot).
+    //
+    // WHEN, and what the other callbacks see. ETHScene::Update runs the dynamic callbacks (the
+    // shot's), then `loop` (the tap and its AddEntity), then the static ones (an agent, a flame, a
+    // reflector, a blocker). So on the frame a tap fires it the shot has no callback yet - it exists,
+    // and the static callbacks of that frame see it at its spawn point - and its first callback is
+    // the next frame's. The layer takes a tap AFTER this half of its tick (readInput follows
+    // Game::AfterStep), so the first Tick after Shoot IS that next frame: no tick is added, and the
+    // spawn pass of the tap's own frame, which falls between the two, is run as that Tick's first
+    // pass (`Flight::fresh`). A static callback of a frame the shot's own callback ended on finds
+    // nothing: DeleteEntity erases it from its bucket at once. And a static callback samples the
+    // shot's POSITION once a frame, never the way between two: the spawn, then the point after the
+    // jump and first advance, then each advance. The agents and flames below are tested so. What the
+    // original has no counterpart for - a solid body on the way, a blocker's box and a reflector's
+    // reach, the port's own rules (R23, G9 not built) - are still tested along the way, from where
+    // the shot started the tick, and not on the jump alone: the tap-time ray the original decides
+    // a wall by starts 8 units out and sees every wall on the way.
+    const auto flyOnePass = [&](bool callback) {
+        const glm::dvec2 startPx = flight->atPx; // initialPos on the first callback
+        glm::dvec2 afterJumpPx = startPx;        // where what the original samples begins
+        glm::dvec2 next = startPx;
+        bool arrives = false;
+        bool pastEnd = false;  // the jump alone carried it beyond its destiny
+        bool inFlight = false; // short of the end of its way when the static callbacks look
+        if (callback) {
+            const glm::dvec2 left = flight->toPx - startPx;
+            const double length = glm::length(left);
+            const glm::dvec2 heading = length > 0.0 ? left / length : glm::dvec2(0.0);
+            double remaining = length;
+            if (!flight->launched) {
+                // The leg's first callback, for the picture too: projectile_shoot is added after the
+                // jump and before the shot moves on, so a leg that ends on this tick has flashed.
+                flight->launched = true;
+                launches.push_back(Launch{startPx, flight->toPx});
+                afterJumpPx = startPx + heading * shot.jumpUnits;
+                remaining -= shot.jumpUnits;
+            }
+            const double reach =
+                shot.speedUnits * std::min(shot.frameCapMs, std::max(0.0, ScriptClock::Ms(step))) / 1000.0;
+            arrives = reach > remaining;
+            pastEnd = remaining < 0.0;
+            inFlight = reach < remaining;
+            next = arrives ? flight->toPx : afterJumpPx + heading * reach;
+        } else {
+            // s = 0 < the stored squaredDistance: in flight, unless it was fired at its own spawn point.
+            inFlight = glm::length(flight->toPx - startPx) > 0.0;
         }
-        const glm::dvec2 left = flight->toPx - flight->atPx;
-        const double remaining = glm::length(left);
-        const double reach = shot.speedPx * step.scriptS;
-        const bool arrives = remaining <= reach;
-        const glm::dvec2 next = arrives ? flight->toPx : flight->atPx + left * (reach / remaining);
+        // Every along below is measured on the pass's whole stretch, startPx to next; a sample is at its
+        // end (or, with no callback, at the spawn point where the stretch has no length).
+        const double span = glm::length(next - startPx);
+        const auto alongStretch = [&](const glm::dvec2& from, double along) {
+            if (!(span > 0.0)) return 0.0;
+            const double lead = glm::length(from - startPx) / span;
+            return lead + along * (1.0 - lead);
+        };
+        const double sampleAlong = callback ? 1.0 : 0.0;
+        const auto pointAt = [&](double along) { return startPx + (next - startPx) * along; };
+
         double first = 2.0; // along the stretch, from 0 to 1: past its end until something is met
         std::string stoppedBy;
         FailKind stopKind = FailKind::Body; // what stoppedBy is, for the picture
         std::vector<entt::entity> passes = shotPasses;
         passes.push_back(shooter);
-        if (const auto hit = Shot::FirstBodyPassing(registry, flight->atPx, next, passes)) {
+        if (const auto hit = Shot::FirstBodyPassing(registry, startPx, next, passes)) {
             const auto* tag = registry.try_get<Supersonic::TagComponent>(hit->body);
             stoppedBy = tag != nullptr ? tag->tag : std::string("a body");
             first = hit->along;
         }
+        // From the point after the jump; none when the jump alone passed the destiny (the shot is gone
+        // that frame before any static callback looks).
+        const bool swept = !(arrives && pastEnd);
         for (const Blocker& blocker : blockers) {
-            if (const auto along = Shot::Enters(flight->atPx, next, blocker.box); along && *along < first) {
-                stoppedBy = blocker.name;
-                first = *along;
-                stopKind = FailKind::Blocker;
-            }
-        }
-        int turnedBy = -1;
-        if (flight->reflections < shot.maxReflections) {
-            for (std::size_t i = 0; i < reflectors.size(); ++i) {
-                if (static_cast<int>(i) == flight->lastReflector) continue;
-                const auto along =
-                    Shot::EntersCircle(flight->atPx, next, reflectors[i].centrePx, shot.reflectRadiusPx);
-                if (along && *along < first) {
-                    turnedBy = static_cast<int>(i);
-                    first = *along;
+            if (!swept) break;
+            if (const auto along = Shot::Enters(afterJumpPx, next, blocker.box)) {
+                const double at = alongStretch(afterJumpPx, *along);
+                if (at < first) {
+                    stoppedBy = blocker.name;
+                    first = at;
+                    stopKind = FailKind::Blocker;
                 }
             }
         }
-        // AN ANTI-PORTAL AGENT KILLS A SHOT STILL IN FLIGHT that comes within its
-        // reach (ETHCallback_anti_portal_agent #61-124), before the shot meets
-        // anything later on its way. A shot that arrives, or is stopped, first is
-        // the projectile's own callback's and never reaches the agent's: the
-        // original's shot is in flight only while it is short of the end of its
-        // way (#79-108), so an agent it would first come near at that end is not
-        // met.
-        int killedBy = -1;
-        for (std::size_t i = 0; i < agents.size(); ++i) {
-            const Agent& agent = agents[i];
-            if (agent.gone) continue;
-            const auto along = Shot::EntersCircle(flight->atPx, next, agent.CentreNowPx(), AgentReachPx(agent));
-            if (along && *along < first && !(arrives && *along >= 1.0)) {
-                killedBy = static_cast<int>(i);
-                first = *along;
+        int turnedBy = -1;
+        if (swept && flight->reflections < shot.maxReflections) {
+            for (std::size_t i = 0; i < reflectors.size(); ++i) {
+                if (static_cast<int>(i) == flight->lastReflector) continue;
+                const auto along =
+                    Shot::EntersCircle(afterJumpPx, next, reflectors[i].centrePx, shot.reflectRadiusPx);
+                if (!along) continue;
+                const double at = alongStretch(afterJumpPx, *along);
+                if (at < first) {
+                    turnedBy = static_cast<int>(i);
+                    first = at;
+                }
             }
         }
-        // A FIRE AGENT'S FLAME BURNS A SHOT STILL IN FLIGHT that comes within its
-        // reach (ETHCallback_fire_agent #158-177, #253-265), by the same rule: the
-        // shot deletes itself in its own callback on the frame it reaches the end
-        // of its way (ETHCallback_projectile #127-156, #265-270), before the
-        // static agent's callback looks for it. Whichever of the two it meets
-        // first has it.
+        // AN ANTI-PORTAL AGENT KILLS A SHOT STILL IN FLIGHT whose position is within its reach when its
+        // static callback looks (ETHCallback_anti_portal_agent #61-124): it names only an entity called
+        // projectile.ent (#61-77), asks that the shot be short of the end of its way, squaredDistance(
+        // its position, its casterPos) < its squaredDistance (#79-108, strict), and that its position be
+        // within 0.7 x size.x (#110-124, strict), before the shot meets anything later on its way. It
+        // sees the shot where the callback and the jump left it: on the frame the tap fires it, at the
+        // player's centre (so an agent within reach of the player dies at once); on its first callback,
+        // 24 + 3.2 units out and never in between; then each advance. A shot that arrives, or is
+        // stopped, first is the projectile's own callback's and never reaches the agent's.
+        int killedBy = -1;
+        for (std::size_t i = 0; i < agents.size() && inFlight; ++i) {
+            const Agent& agent = agents[i];
+            if (agent.gone || arrives) continue;
+            if (Reaches(next, agent.CentreNowPx(), AgentReachPx(agent)) && sampleAlong < first) {
+                killedBy = static_cast<int>(i);
+                first = sampleAlong;
+            }
+        }
+        // A FIRE AGENT'S FLAME BURNS A SHOT whose position is within its reach (ETHCallback_fire_agent
+        // #97-117, #158-177, #253-265): squaredDistance < size.x ^ 2, centre to centre, and no
+        // in-flight test of its own - but the shot deletes itself in its own callback on the frame it
+        // reaches the end of its way (ETHCallback_projectile #127-156, #265-270), before the static
+        // agent's callback looks for it. Whichever of the two it meets first has it.
         int burnedBy = -1;
-        for (std::size_t i = 0; i < flames.size(); ++i) {
+        for (std::size_t i = 0; i < flames.size() && !arrives; ++i) {
             const Flame& flame = flames[i];
-            const auto along = Shot::EntersCircle(flight->atPx, next, flame.centrePx, flame.reachPx);
-            if (along && *along < first && !(arrives && *along >= 1.0)) {
+            if (Reaches(next, flame.centrePx, flame.reachPx) && sampleAlong < first) {
                 burnedBy = static_cast<int>(i);
-                first = *along;
+                first = sampleAlong;
             }
         }
         if (burnedBy >= 0) {
-            // burnProjectile: killProjectile, then addFireball(projectilePos,
-            // projectileDir, false, 1) - Game's, from this record. No portal, no
-            // failure and no sound of the shot's own.
+            // burnProjectile: killProjectile, then addFireball(projectilePos, projectileDir, false, 1) -
+            // Game's, from this record. No portal, no failure and no sound of the shot's own.
             Burn burn;
             burn.flame = flames[static_cast<std::size_t>(burnedBy)].name;
-            burn.atPx = flight->atPx + (next - flight->atPx) * first;
+            burn.atPx = pointAt(first);
             const glm::dvec2 leg = flight->toPx - flight->atPx;
             const double length = glm::length(leg);
             if (length > 0.0) burn.heading = leg / length;
@@ -804,23 +870,21 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             ++shotsBurned;
             flight.reset();
         } else if (killedBy >= 0) {
-            // #126-142 both deleted, and #168-177 the ring round the agent with
-            // them. The explosion, the shake and the sound (#144-166, #179-187)
-            // are the frame's, from this record.
+            // #126-142 both deleted, and #168-177 the ring round the agent with them. The explosion,
+            // the shake and the sound (#144-166, #179-187) are the frame's, from this record.
             Agent& agent = agents[static_cast<std::size_t>(killedBy)];
             AgentKill kill;
             kill.agent = agent.name;
             kill.atPx = agent.CentreNowPx();
-            kill.shotPx = flight->atPx + (next - flight->atPx) * first;
+            kill.shotPx = pointAt(first);
             agent.gone = true;
             kill.ring = DeleteRingAt(kill.atPx);
             agentKills.push_back(kill);
             ++agentsKilled;
             flight.reset();
         } else if (turnedBy >= 0) {
-            // Off the reflector where the shot reached it, mirrored, for the rest
-            // of its way.
-            const glm::dvec2 at = flight->atPx + (next - flight->atPx) * first;
+            // Off the reflector where the shot reached it, mirrored, for the rest of its way.
+            const glm::dvec2 at = pointAt(first);
             glm::dvec2 onward = flight->toPx - at;
             if (reflectors[static_cast<std::size_t>(turnedBy)].vertical) {
                 onward.x = -onward.x;
@@ -832,9 +896,9 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             flight->lastReflector = turnedBy;
             ++flight->reflections;
             ++reflections;
-            // For the pictures: ETHCallback_reflect_agent works the new leg out as
-            // a reflected shot and marks its end, and the new leg is a new
-            // projectile, which flashes on its own first tick.
+            // For the pictures: ETHCallback_reflect_agent works the new leg out as a reflected shot and
+            // marks its end, and the new leg is a new projectile, which flashes on its own first
+            // callback - the next tick's, as a shot a static callback adds always is.
             reflected.push_back(Reflection{at, flight->toPx, FinalPosFrom(registry, flight->toPx, at, true)});
             flight->launched = false;
         } else {
@@ -844,9 +908,9 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
                 refused = true;
             }
             if (!stoppedBy.empty()) {
-                // Where it ended, for the picture: the point it met a body or a
-                // blocker's box at, or the tap it could open nothing at.
-                const glm::dvec2 endPx = refused ? flight->toPx : flight->atPx + (next - flight->atPx) * first;
+                // Where it ended, for the picture: the point it met a body or a blocker's box at, or the
+                // tap it could open nothing at.
+                const glm::dvec2 endPx = refused ? flight->toPx : pointAt(first);
                 failures.push_back(Failure{endPx, refused ? FailKind::Refused : stopKind, InField(endPx)});
                 ++shotsFailed;
                 lastFailure = stoppedBy;
@@ -857,7 +921,13 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
                 flight->atPx = next;
             }
         }
+    };
+    if (flight && flight->fresh) {
+        // The static callbacks of the frame the tap added it on, which saw it where it was spawned.
+        flight->fresh = false;
+        flyOnePass(false);
     }
+    if (flight) flyOnePass(true);
 
     // An end of a traversal: a static portal by its place in `statics`, which
     // never moves, or a placed one by its id, since placed portals come and go.

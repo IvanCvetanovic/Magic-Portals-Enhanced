@@ -2608,3 +2608,43 @@ the shipped script's listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce
   bottom edge over frames #43-#48 (88-95 %, inside the edge's 1 px quantisation; at the clip's 30 frames a second a fixed and a dynamic step coincide, so F13's fall
   does not separate them: F10 carries the time base); its walk off 1-06's start block ends 84.3-84.6 units along, which the decode with the 14-unit sensor
   reproduces (80.8-84.9 at 30 to 24 frames a second) and a point-sized foot does not (72.8-78.8).
+
+## 14. The portal shot's flight and the order of a frame's callbacks (planning step 149)
+
+Found while decoding `ETHCallback_projectile` for the port's shot (G4); every line is read from the engine's source and from the shipped script's
+listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce`, arguments pushed last-first), and the numbers are checked against footage F2 and F3.
+
+- **`ETHCallback_projectile`** (`Portal.angelscript`, bytes 358053..359141, listing L71109), once a frame, the first run falling straight through into the
+  common block: ins 1-12 `CheckCustomData('initialPos')` (absent on the first run); 14-27 `SetVector2('initialPos', GetPositionXY())` - where it was spawned, BEFORE the
+  jump; 29-55 `AddToPositionXY(GetVector2('direction') x g_scale.scale(24))` - the first-frame jump (`PshC4 1103101952` is 24f); 57-71 `AddScaledEntity('projectile_shoot.ent',
+  GetPosition())` - the flash, AFTER the jump and before the advance; 74-111 `dir`, `_projectileFrameTimer.set(0, 5, 30, true)`, `SetAngle(degrees(getAngle(dir)) - 90)`;
+  113-125 `AddToPositionXY(dir x g_timeManager.scaledUnitsPerSecond(200))` - the advance, every run, the first included; 127-156 `squaredDistance(initialPos,
+  GetPositionXY()) > GetFloat('squaredDistance')` (`CMPf`, `JNP -> 273`: a STRICT greater); 158-199 arrived, `willDie` clear: `insertPortal(destiny, preferedTeleportEntity)`
+  at the stored `destiny`, not at the shot; 201-263 else the fail effects and `playPortalFailedSound`; 264-272 `DeleteEntity(thisEntity)`. So the shot overshoots its destiny
+  rather than snapping to it, and arrives on the first callback k with `24 + k x advance` above the distance - the jump is part of the first callback's travel.
+- **`addProjectile`** (bytes 354113..355121, listing L70234): ins 1-12 `dirVector = normalize(finalPos - casterPos)`; 16-40 `AddEntity('projectile.ent', vector3(casterPos, 0), ...)`;
+  57-125 stores `direction`, `destiny = finalPos`, `casterPos`, `squaredDistance(finalPos, casterPos)` (a float) and `willDie` (a uint). The shot has no body (`projectile.ent` shape
+  0), so nothing in flight can stop it but the static callbacks below: the tap-time ray (`computePortalFinalPos`) already decided where it ends.
+- **The advance's clock.** `STimeManager::scaledUnitsPerSecond(speed)` (bytes 8284..8363) is `unitsPerSecond(speed) x g_scale.getScale()`, and `unitsPerSecond` (8045..8162 ins 3-15)
+  is `speed x min(200, GetLastFrameElapsedTime()) / 1000 x m_factor`: the script's FLOORED whole milliseconds (planning step 147), 16 at 60 Hz. One advance is `200 x 16 / 1000` = **3.2
+  units**, 192 a second of wall time, and the first callback's is 24 + 3.2 = 27.2; a frame over 200 ms advances 40. `g_scale.getScale()` is 1 in the port's units
+  (`SGlobalScale`, section 13).
+- **The order of a frame** (`reference/ethanon/toolkit/Source/src/engine/`): `ETHScene::Update` (`Scene/ETHScene.cpp:459-493`) runs the physics (`:464`); every always-active entity's
+  callback (`:467`, `ETHActiveEntityHandler::UpdateAlwaysActiveEntities`, `Scene/ETHActiveEntityHandler.cpp:113-143`; an entity is always active when it has a callback and is not static,
+  `:70-73` - the projectile); the script's scene-update function (`:473-474`: `loop`, `main.angelscript` bytes 312880..313283, which `Game::start`'s `LoadScene` names, listing L21053 -
+  `PortalManager::update` and the tap); then the STATIC entities' callbacks (`:488`, `UpdateCurrentFrameEntities`, `:145-165`: `anti_portal_agent`, `fire_agent`, `reflect_agent`,
+  `anti_projectile_wall`). A tap's `AddEntity` (`ETHScene.cpp:261-292`) puts the projectile in its bucket at once and on the dynamic list (`ETHActiveEntityHandler.cpp:56-64`) after the
+  dynamic pass of that frame is over: **its first callback is the next frame's, and the static callbacks of the frame it was fired on see it where it was spawned.** `DeleteEntity`
+  (`ETHScriptWrapper.Scene.cpp:186-196`, `ETHScene.cpp:924-927`) erases the entity from its bucket at once (`ETHBucketManager.cpp:434-476`), so **a shot that arrives is gone before any
+  static callback of that frame looks**. The two facts that order rests on, read: `entities/projectile.ent` is `static="0"` with a callback (always active; `shouldEntityBeAlwaysActive`), and `anti_portal_agent.ent`, `fire_agent.ent`, `reflect_agent.ent` and `anti_projectile_wall.ent` are `static="1"`; and the tap is `PortalManager::update`, a `GameController` that `GameControllerManager::update` (ins 6-24, `CALLINTF GameController::update`) runs from `BaseState::loop` (bytes 11245..11317 ins 6-8) under `Game::loop` (114414..114716), which the global `loop` reaches through `SStateManager::runCurrentLoopFunction` (9012..9068) - inside the scene-update function, never inside an entity's callback. A static callback therefore samples the shot's POSITION once a frame: at its spawn, then 27.2 units out, then every 3.2 - never the way between.
+- **What the static callbacks ask of that position** (`ETHCallback_anti_portal_agent`, bytes 336011..337087 ins 61-124: a `projectile.ent`, short of the end of its way -
+  `squaredDistance(position, casterPos) < squaredDistance`, strict - and within `0.7 x GetSize().x` (`squaredDistance < halfSize.x^2`, strict) of the agent; `ETHCallback_fire_agent`,
+  bytes 350254..351485 ins 97-117, 158-177, 253-265: `squaredDistance(entity, agent) < size.x^2` for every entity round it, and a `projectile.ent` goes to `burnProjectile`, with no
+  in-flight test of its own).
+- **The fireball's speed** (`ETHCallback_fireball`, bytes 418524..418930 ins 1-43): `dir = GetVector2('dir')`, `speed = GetFloat('speed')` (`fireball.ent`: 130), `AddToPositionXY(dir x
+  scaledUnitsPerSecond(speed))` - `dir` is what `addFireball` (bytes 417483..417923 ins 58-67) stored from the carranca's own `vector2(dirX, dirY)`, never normalised, so the fireball
+  flies at `|dir| x 130`: 1.2 on `level0a` (2-01), 1.25 (2-03), 1.6 (2-07), 1.3 and 2 (2-15), 1.2 (2-18, 2-28), 0.7 (4-13); the other 20 carrancas carry a unit `dir`.
+- **Checked against footage** (`out/parity/footage/F2.md`, `F3.md`; `out/parity/program/G4/footage/analysis.txt`): the projectile tracked per frame, in memory, from the mp4s of F2 and F3
+  (nine clean shots, 87 frames): the speed fitted freely from each shot's own frames pools to **193 +- 3 u/s** (plain mean 196, scatter 11, standard error 4) against the decode's 200 x ms / 1000
+  (192 a second of wall time at 60 Hz, 196-199 at the clips' 17-30 frames a second), and the old 600 is out by 82 u rms against the decode's 6.7; the first frame a shot is seen on is 32.8-50.9
+  units out (the jump plus 4-134 ms of that frame's advance) and never nearer; and the frame a shot's end is shown on is within -1 to +2 frames of the decode's.

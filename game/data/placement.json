@@ -361,12 +361,17 @@
       "tick. A shot flies from the player to a tap, both on screen, and dies within 22.4 u of",
       "an agent, so the agent's bucket is on screen in every case but an agent within 22.4 u of",
       "the view's edge whose 256 u bucket lies wholly outside it.",
-      "The port's shot starts at the player's centre and flies shot.json's 600 u/s; the",
-      "original's jumps 24 u out on its first frame (G4, not built). So a player standing",
-      "within 22.4 u of an agent kills it with any shot, where the original's shot starts",
-      "24 u out along its aim. The port tests the whole of each tick's stretch",
-      "(Shot::EntersCircle) where the original tests the shot's point once a frame at 200 u/s:",
-      "the same pass through the circle, found without the coarser step's gaps."
+      "BUILT in planning step 149 (G4): the shot flies as ETHCallback_projectile does, and an",
+      "agent tests its POSITION once a frame, as the original's static callback does: on the",
+      "tick a tap fires it (the projectile is added by `loop`, after the dynamic callbacks, so",
+      "this frame's static pass finds it where it was spawned: at the player's centre), then on",
+      "its first callback at 24 + 3.2 u out - never in between - then every 3.2 u (shot.json",
+      "`flight`). So an agent within 22.4 u of the PLAYER still dies at once (the static pass of",
+      "the tap's own frame sees the shot at its spawn, short of the end of its way); one that",
+      "only the first hop's line passes near does not, and a shot that arrives on a callback",
+      "is deleted before any static callback of that frame looks (DeleteEntity erases it from its",
+      "bucket at once, ETHBucketManager.cpp:434-476), so an agent it would first come within",
+      "22.4 u of at the end of its way is not met."
     ]
   }
 }

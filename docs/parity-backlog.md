@@ -1873,6 +1873,7 @@ editing a route. The engine pin stays `710bffc`.
 |---|---|---|---|---|---|---|
 | 147 | CK | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 11 recorded deviations (owner-delegated); the third verifier passed 12 of 13 gates, and the one it failed, the player's ground walk-cell flipbook, is cosmetic and G10's; 49 of 50 suites, 17,717 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: every scripted motion, timer, blink and fade runs 16 ms a tick where it ran 16.667, 4.17 % slower in wall time (the 400 ms between taps takes 26 ticks, not 24; a 10 s crystal runs out on the 626th tick; the lost screen on the 88th) | none: 41 of the 86 routes still win on this build and 45 do not; **the routes are re-authored by the wave's route phase after PIC** |
 | 148 | G10 | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 13 recorded deviations (owner-delegated); the verifier passed all ten gates and listed six problems, three medium (the standing creep, a confirmed regression against the library; the unruled 60 Hz rate; the world's mixed time base) and three low, whose text findings the commit applied; 50 of 51 suites, 17,654 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: the player is the decode's - walk 144 u/s set outright, an air brake of 0.86 a tick and no steering, gravity 4000 u/s^2 under the original's fixed 1/30 s physics step, a 14-unit ground sensor, the zero-g recoil 140 u/s a shot, a turn toward a tap | none: **23 of the 86 routes still win** (CK: 41), 63 do not; **the routes are re-authored by the wave's route phase after PIC** |
+| 149 | G4 | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 9 recorded deviations (owner-delegated); the verifier passed all twelve gates and listed five low problems, all text only, which the commit applied (`game/data/shot.json`'s `_source` gained two comment facts after the executables were built: notes only, its keys unchanged, run by the verifier's full launch and sweep); 50 of 51 suites, 17,574 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep changes exactly the seven carranca levels (121 of 128 byte-identical), each explained by its fireballs' bursts and shakes | **yes**: every portal shot flies the original's 3.2 units a tick after a 24-unit jump (192 a second of wall time, about three times slower than before: 300 units 32 -> 87 ticks), opens its portal at its destiny when it has gone past it, and is seen by an anti-portal agent and a flame by its position once a frame; seven levels' fireballs fly at their carranca's |dir| x 130 (2-01 156, 2-03 162.5, 2-07 208, 2-15 169 and 260, 2-18 156, 2-28 156, 4-13 91) | none: **8 of the 86 routes still win** (G10: 23), 78 do not - 15 that won fail now, 14 with a second tap refused by a flight and 2-12 with a pair opened 27 ticks late; **the routes are re-authored by the wave's route phase after PIC** |
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -1953,6 +1954,34 @@ editing a route. The engine pin stays `710bffc`.
       hit 8.0 for a 100-unit drop (8.94 continuous, 8.67 on the original's own frames).
 - [ ] **G10-13. `Player.cpp`'s clamp comment says a fall of 570 units reaches Box2D's clamp**; the exact figure is 586.7 (about 590, as the
       step and `player.json` say). A comment, not edited to keep the tested binaries current; correct it at the next relink.
+
+**G4's recorded deviations**, each an open row for the step named (planning step 149 has the evidence, `RECORDED DEVIATIONS` 1-9):
+- [ ] **G4-1. The destination is the tap, not the tap-time ray's `finalPos`** (R23): the original's distance is `|finalPos - casterPos|` (the contact for
+      a wall or a body a portal may not open on, 10 units past it for one it may); the port's shot flies to the tap and fails on the first body along the
+      way. The marks already follow the ray. Next: **R23's step** (with G9), which also decides the sensor and teleportable-body disagreements.
+- [ ] **G4-2. Bodies, blockers and reflectors are swept along the tick's way, not sampled** (the original has no body in flight; its blocker and reflector
+      callbacks sample a position): a graze of at most 3.2 units at a blocker (64 x 128) or a reflector (16; G9's 32), and on an arrival tick they are
+      still swept up to the destination where the original's static callbacks find nothing. Next: **G9 / R23**.
+- [ ] **G4-3. The spawn pass runs on the first tick after the tap**, one tick after the original's static frame (the layer reads a tap after `AfterStep`): an
+      agent within 22.4 of the player dies, and a flame within 32 burns the shot, 16 ms later. No owner unless the layer's order changes (PIC).
+- [ ] **G4-4. A reflected leg starts at the catch point**, not at the reflector (the original's new projectile spawns at the agent's point and jumps 24 from
+      there). Next: **G9**.
+- [ ] **G4-5. The sampled test is in double**; the original's squared distances are float32, so an exact tie is not pinned.
+- [ ] **G4-6. The shot's cell timer steps on a tick the callback ran** (the tap's tick and a reflected leg's creation tick call it in no original frame);
+      its stride, its one global timer and the ghost's shots are as they were. Two cosmetic one-tick differences of the picture ride with it: the original sets
+      the timer (#89-100) before its arrival test, so it steps on the arrival callback too (the port's only while a flight remains), and on the tap's own tick
+      the port draws the shot already turned along its way where the callback has not yet run.
+- [ ] **G4-7. The footage is at 17-30 frames a second** (the pts are presentation times; the per-shot slope scatters 174-207 u/s): it supports the decode to
+      about +-5 % pooled and cannot separate 192 from 200; F2 shot A and F3 take a1's second shot have too few clean frames to fit a slope. No clip shows the
+      shot at 60 Hz. The arrival agreement is -0.064..+0.030 s (mean +0.002) on the continuous `(D - 24) / 192` and -0.049..+0.045 s (mean +0.011) against the
+      discrete 60 Hz decode: both inside one clip gap. Next: **the final comparison** (section 5).
+- [ ] **G4-8. The failure picture's anti-portal-field flag reads the destiny, not the shot's overshot position**: `ETHCallback_projectile` #201-211 asks
+      `isPointInAntiPortalField(GetPositionXY())` of the position after the last advance, up to 3.2 units past the destiny; `Portals.cpp` asks `InField` of the
+      destiny. A tap within 3.2 units of a field's edge could draw `portal_fail_in_antiportal` (and queue the field's shake) where the original draws
+      `portal_fail`, or the reverse; the picture and shake only. Next: **R23's step** (with G4-1).
+- [ ] **G4-9. An agent is tested at its end-of-tick centre; the original tests before it moves**: `ETHCallback_anti_portal_agent` runs its kill test (#37-199)
+      before its own `linearMotion` (#201-250), while `Portals::Tick` advances the agent's motion at its top and `flyOnePass` reads its centre after. About a
+      unit of the agent's own motion; pre-existing, no pinned scenario flips. No owner assigned: a row for the final comparison (section 5) to weigh.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2087,12 +2116,27 @@ editing a route. The engine pin stays `710bffc`.
       swing and is phase-dependent under the original's; its door-block shot to (740, 108) passes 0.6 px from the
       lowest point of `anti_portal_agent_639`'s original swing, where it would kill that agent and open nothing) and
       2-26 (step 127: a shot through the slot from the moving platform's edge; the full swing would widen it).
-- [ ] **G4. The portal shot flies 600 u/s against 200** (`ETHCallback_projectile` L71109 #113-125, with a 24 u jump
+- [x] **G4. The portal shot flies 600 u/s against 200** (`ETHCallback_projectile` L71109 #113-125, with a 24 u jump
       on its first frame, #29-55). *Every route leans on it* (with G10), and 2-14's, 4-19's and 4-32's are tick-exact
       on it (their rows). *And a first-tick kill* (step 126): a shot fired from within 22.4 u of an anti-portal agent
       kills it at once, even a self-tap that arrives on its first tick, where the original's projectile jumps 24 u out on
       its first frame and one that arrives on that frame is never in flight (`placement.json`
-      `anti_portal_agent._not_modelled`). No route and no suite fires from there.
+      `anti_portal_agent._not_modelled`). No route and no suite fires from there. *Built in step 149 (wave 3a, local,
+      not pushed): the shot is the original's callback - a jump of 24 on its first run, an advance of `200 x
+      min(200, the script's ms) / 1000` on every run (3.2 units a tick, 192 a second of wall time at 60 Hz), arrived
+      when it has gone STRICTLY past its destiny, the portal opened at the destiny, never at the shot - read by an
+      agent's and a flame's static callback by its POSITION once a frame (at its spawn on the tap's own frame, 27.2 out
+      on its first callback, then every 3.2), and gone before they look on the frame it arrives. No tick is added to
+      the tap (the layer reads it after `AfterStep`). GAMEPLAY on every level with a shot: a shot takes about three times
+      longer (100 units 11 -> 24 ticks, 300: 32 -> 87, 500: 53 -> 149), so a second tap inside a flight is the hourglass
+      far more often. **The first-tick kill row, ruled from the decode**: an agent within 22.4 of the player does die on
+      the first tick with any shot that has a way to fly (the static callback of the tap's own frame sees it at its
+      spawn), a self-tap with none spares it, and an agent only the first hop's line passes is spared. Footage F2 and F3
+      (nine clean shots, 87 frames): speed 193 +- 3 u/s against 200 (192), the 600 out by 82 u rms against 6.7; F3's
+      nine arrivals within -0.064..+0.030 s of `(D - 24) / 192`. **8 of the 86 routes still win** (G10: 23): 15 that won
+      fail now (14 on a second tap refused by a flight, 2-12 on a pair opened 27 ticks late) and 38 routes in all are refused
+      by a flight (`census.md`); no route file was edited, **the routes are re-authored by the wave's route phase after PIC**.
+      Its recorded deviations are the block "G4's recorded deviations".*
 - [x] **G5. Fireballs pass walls and closed doors** (`ETHBeginContactCallback_fireball` L85862 #152 dies on anything
       solid that is not a carranca, a sensor or a spared character). On 2-12 the player dies at the spawn (tick 180).
       *Built in step 114*: the fireball's body is fireball.ent's circle, radius 9.6; every solid body it touches spends
@@ -2731,8 +2775,11 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       through portals). Whichever step builds G4, G6 or G10, or measures the seesaw, re-verifies these first.
       *Step 135 (G6) replays all six on their step-134 ticks and no fireball of theirs goes through a pair (the trace
       marks none `through`), so none leans on G6; 2-11's static crate is still burned by its flame's fireball.*
-- [ ] **A carranca's fireball flies at |dir| x 130 in the original** (step 135's finding, left for the owner;
-      GAMEPLAY when built). `ETHCallback_fireball` (418524..418930, #1-43) moves the fireball by
+- [x] **A carranca's fireball flies at |dir| x 130 in the original** (step 135's finding, left for the owner;
+      GAMEPLAY when built). *Built in step 149 (G4): `Turrets` keeps the node's (dirX, dirY) as written and a fireball's
+      velocity is that times 130; pinned level by level in `test_mp_turrets` (`TheEightCarrancasFlyAtTheirDirsLength`);
+      the other 20 carrancas, every converted shot and the dragons' fireballs are unit, 130 as before; the routes of
+      2-01, 2-03, 2-07, 2-15 and 2-18 are the wave's route phase's.* `ETHCallback_fireball` (418524..418930, #1-43) moves the fireball by
       `GetVector2('dir')` x `scaledUnitsPerSecond(speed)` every frame, and a carranca's 'dir' is its node's
       (dirX, dirY) as written (`carrancaCallback`, `addFireball` `SetVector2`), never normalised. Eight of the 28
       carrancas carry one that is not 1 (`out/parity/program/G6/carrancas.txt`): `level0a` 1.2 (2-01, 156 u/s),

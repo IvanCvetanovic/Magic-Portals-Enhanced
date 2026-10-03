@@ -4,7 +4,10 @@
 // arithmetic in Portal.hpp.
 //
 // - A tap fires a shot (Shot.hpp) from the player's centre toward the tap. It
-//   flies at shot.json's speed, and fails on the first solid body or
+//   flies as ETHCallback_projectile does (shot.json `flight`, decoded; planning
+//   step 149): a jump of 24 units and an advance of 200 x the script's
+//   milliseconds / 1000 on its first callback, the advance alone after, and
+//   it fails on the first solid body or
 //   projectile blocker it meets. Where it arrives a portal opens, a circle,
 //   against a budget. The budget is the level's max_portals or portals.json's
 //   default, and never more than a pair. At the cap the oldest portal gives
@@ -361,10 +364,17 @@ struct Flight {
     glm::dvec2 atPx{0.0};   // where it is now
     int reflections = 0;    // how many reflectors it has come off
     int lastReflector = -1; // the last of them, which cannot turn it again at once
-    // Whether this leg has had its first tick - ETHCallback_projectile's first
-    // frame, which flashes projectile_shoot - since it was fired or last turned.
-    // Read for the picture alone (State::launches).
+    // Whether this leg has had its first callback - ETHCallback_projectile's first
+    // frame, which stores initialPos, jumps the shot 24 units and flashes
+    // projectile_shoot - since it was fired or last turned. A leg that has not jumps
+    // when Tick next runs its callback; one a test builds mid-way sets it.
     bool launched = false;
+    // Set by Shoot, and cleared by the first Tick: a shot the tap's `loop` added has had no callback
+    // yet, and the static callbacks of that frame (an agent, a flame) see it where it was spawned.
+    // Tick runs that look first, then the shot's own first callback, which is the next frame's -
+    // the Tick that follows the tap in the layer's order. A leg a reflector turns is not fresh:
+    // the Tick that turned it is over, and its first callback is the next Tick's.
+    bool fresh = false;
 };
 
 // WHAT computePortalFinalPos ANSWERS: the global (bytes 355236..356384) and

@@ -111,15 +111,27 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + ": " + parser.Error();
         return false;
     }
-    if (!root.IsObject() || !root.Has("flight") || !root["flight"].IsObject() || !root["flight"].Has("speed_px_s") ||
-        !root["flight"]["speed_px_s"].IsNumber()) {
-        error = path + ": flight.speed_px_s is missing or not a number";
+    if (!root.IsObject() || !root.Has("flight") || !root["flight"].IsObject()) {
+        error = path + ": flight is missing or not an object";
         return false;
     }
+    const Json::Value& flight = root["flight"];
+    const auto flightNumber = [&](const char* key, double& into) {
+        if (!flight.Has(key) || !flight[key].IsNumber()) {
+            error = path + ": flight." + key + " is missing or not a number";
+            return false;
+        }
+        into = flight[key].AsNumber();
+        return true;
+    };
     Rules read;
-    read.speedPx = root["flight"]["speed_px_s"].AsNumber();
-    if (read.speedPx <= 0.0) {
-        error = path + ": flight.speed_px_s is not above 0";
+    if (!flightNumber("speed_units_s", read.speedUnits) || !flightNumber("first_frame_jump_units", read.jumpUnits) ||
+        !flightNumber("frame_cap_ms", read.frameCapMs)) {
+        return false;
+    }
+    // A shot that does not move never arrives, and a jump backward is not the original's.
+    if (read.speedUnits <= 0.0 || read.frameCapMs <= 0.0 || read.jumpUnits < 0.0) {
+        error = path + ": flight.speed_units_s and flight.frame_cap_ms are above 0 and flight.first_frame_jump_units is not below it";
         return false;
     }
     const Json::Value& reflection = root["reflection"];

@@ -35,6 +35,7 @@
 #include "sim/Game.hpp"
 #include "sim/Units.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -504,6 +505,7 @@ void AShotThroughTheFlameBecomesAFireball() {
     shot.fromPx = agent.atPx + glm::dvec2(-81.0, -10.0);
     shot.toPx = agent.atPx + glm::dvec2(79.0, -10.0);
     shot.atPx = shot.fromPx;
+    shot.launched = true; // in the middle of its way: the case is about the flame, not the jump
     run.level.portals.flight = shot;
     int burnedOn = 0;
     for (int tick = 1; tick <= 20 && burnedOn == 0; ++tick) {
@@ -514,7 +516,19 @@ void AShotThroughTheFlameBecomesAFireball() {
     if (burnedOn == 0) return;
 
     const Portals::Burn burn = run.level.portals.burns.front();
-    const double entryX = agent.atPx.x - std::sqrt(32.0 * 32.0 - 10.0 * 10.0);
+    // The flame's callback samples the shot's POSITION once a frame (planning step 149), so the shot
+    // is burned at the first point of its flight within the 32 - an advance of 3.33 units on a bare
+    // tick, from 81 short - and not where its line first crosses the circle (x less 30.397).
+    const Shot::Rules& flying = run.level.portals.shot;
+    const double advance =
+        flying.speedUnits * std::min(flying.frameCapMs, static_cast<double>(kStep) * 1000.0) / 1000.0;
+    double entryX = shot.fromPx.x;
+    while (std::hypot(entryX - agent.atPx.x, -10.0) >= 32.0) entryX += advance;
+    CHECK_MSG(entryX > agent.atPx.x - std::sqrt(32.0 * 32.0 - 10.0 * 10.0) &&
+                  entryX - advance <= agent.atPx.x - std::sqrt(32.0 * 32.0 - 10.0 * 10.0),
+              "that point lies within one advance past the line's entry");
+    CHECK_MSG(burnedOn == static_cast<int>(std::lround((entryX - shot.fromPx.x) / advance)),
+              "on the tick that carries it there, " + std::to_string(burnedOn));
     CHECK_MSG(burn.flame == agent.name, "by " + agent.name + ", got '" + burn.flame + "'");
     CHECK_MSG(std::fabs(burn.atPx.x - entryX) < 1e-6 && std::fabs(burn.atPx.y - shot.fromPx.y) < 1e-6,
               "where it first came within the 32, x " + std::to_string(entryX));
@@ -559,8 +573,9 @@ void AShotThatMissesTheFlameFliesOn() {
     over.fromPx = agentPx + glm::dvec2(-81.0, -33.0);
     over.toPx = agentPx + glm::dvec2(79.0, -33.0);
     over.atPx = over.fromPx;
+    over.launched = true;
     past.level.portals.flight = over;
-    for (int tick = 0; tick < 20 && past.level.portals.flight.has_value(); ++tick) Tick(past);
+    for (int tick = 0; tick < 120 && past.level.portals.flight.has_value(); ++tick) Tick(past);
     CHECK_EQ(past.level.portals.shotsBurned, 0);
     CHECK_MSG(past.level.turrets.fireballs.empty(), "a shot 33 px over the agent is not burned");
     CHECK_EQ(past.level.portals.placed.size(), std::size_t{1});
@@ -571,8 +586,9 @@ void AShotThatMissesTheFlameFliesOn() {
     stops.fromPx = agentPx + glm::dvec2(-81.0, -10.0);
     stops.toPx = agentPx + glm::dvec2(-31.0, -10.0); // 32.6 from the agent, where it opens
     stops.atPx = stops.fromPx;
+    stops.launched = true;
     shortOf.level.portals.flight = stops;
-    for (int tick = 0; tick < 20 && shortOf.level.portals.flight.has_value(); ++tick) Tick(shortOf);
+    for (int tick = 0; tick < 120 && shortOf.level.portals.flight.has_value(); ++tick) Tick(shortOf);
     CHECK_EQ(shortOf.level.portals.shotsBurned, 0);
     CHECK_EQ(shortOf.level.portals.placed.size(), std::size_t{1});
 }

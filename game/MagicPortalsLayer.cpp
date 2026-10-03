@@ -11243,7 +11243,9 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, con
     // once a step while a shot flies: the one timer, so a shot starts on the cell
     // the last one left. No step runs under a pause or popup, so the cell holds there,
     // where the original's keeps cycling (a stated divergence, art.json shot.animation).
-    if (m_level.portals.flight) {
+    // Only a shot whose callback ran this tick calls it: one fired on this very tick, or a leg a
+    // reflector turned, has had no callback yet (Flight::launched; planning step 149).
+    if (m_level.portals.flight && m_level.portals.flight->launched) {
         const Art::Shot& bolt = m_artRules.shot;
         m_shotCell = m_shotFrames.Set(0, bolt.Frames() - 1, bolt.strideMs, true, ScriptClock::Ms(step));
     }

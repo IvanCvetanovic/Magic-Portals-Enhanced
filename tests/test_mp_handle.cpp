@@ -443,12 +443,16 @@ void OnTwoTwentyAShotIsBurnedWhereTheFlameStands() {
     for (int tick = 1; tick < moveTick; ++tick) Game::Tick(shot.data, shot.registry, shot.level, 0.0f, kStep);
     CHECK_MSG(shot.level.fire.agents[agent].atPx == before, "the second run stands where the first did");
     const glm::dvec2 heading = (after - before) / glm::length(after - before);
-    const double reach = shot.level.portals.shot.speedPx * static_cast<double>(kStep);
+    // One advance of the decoded flight on a bare tick: 200 x min(200, 16.67 ms) / 1000.
+    const Shot::Rules& flying = shot.level.portals.shot;
+    const double reach =
+        flying.speedUnits * std::min(flying.frameCapMs, static_cast<double>(kStep) * 1000.0) / 1000.0;
     const double flameReach = shot.level.portals.flames[agent].reachPx;
     Portals::Flight flight;
     flight.fromPx = before - heading * (flameReach - 1.0 + reach);
     flight.toPx = before + heading * 200.0;
     flight.atPx = flight.fromPx;
+    flight.launched = true; // a shot in the middle of its way: this case is about the flame, not the jump
     const glm::dvec2 stretchEnd = flight.fromPx + heading * reach;
     CHECK_MSG(glm::length(stretchEnd - after) > flameReach,
               "its stretch stays out of reach of where the follow takes the agent");
@@ -459,8 +463,10 @@ void OnTwoTwentyAShotIsBurnedWhereTheFlameStands() {
     if (shot.level.portals.burns.size() == 1u) {
         const Portals::Burn& burn = shot.level.portals.burns.front();
         CHECK(burn.flame == shot.level.fire.agents[agent].name);
-        CHECK_MSG(Near(burn.atPx, before - heading * flameReach, 1e-6),
-                  "where it came within reach of the place before the follow: " + Px(burn.atPx));
+        // The flame's callback samples the shot's POSITION once a frame (planning step 149): the
+        // advance's end, 1 unit inside the reach of where the agent stood before its follow.
+        CHECK_MSG(Near(burn.atPx, stretchEnd, 1e-6),
+                  "where the tick left it, within reach of the place before the follow: " + Px(burn.atPx));
     }
     CHECK_MSG(shot.level.fire.agents[agent].atPx == after, "while the follow moved the agent on, as in the first run");
 
@@ -481,6 +487,7 @@ void OnTwoTwentyAShotIsBurnedWhereTheFlameStands() {
         across.fromPx = place - glm::dvec2(flameReach - 1.0 + reach, 0.0);
         across.toPx = place + glm::dvec2(200.0, 0.0);
         across.atPx = across.fromPx;
+        across.launched = true;
         settled.level.portals.flight = across;
         const int burnedBefore = settled.level.portals.shotsBurned;
         Game::Tick(settled.data, settled.registry, settled.level, 0.0f, kStep);
