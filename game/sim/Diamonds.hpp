@@ -158,7 +158,7 @@ struct State {
     // bodies a shock diamond struck, which the caller must hand to Minions::Take
     // - this module never destroys one itself.
     std::vector<entt::entity> Tick(entt::registry& registry, const std::vector<Carry::Carrier>& carriers,
-                                   const std::vector<entt::entity>& prey, float dt);
+                                   const std::vector<entt::entity>& prey, double dt);
 
     const Diamond* Find(const std::string& name) const;
     const Gutter* FindGutter(const std::string& name) const;

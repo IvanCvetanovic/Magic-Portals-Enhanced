@@ -34,6 +34,7 @@
 #include "sim/LevelBuilder.hpp"
 #include "sim/Mover.hpp"
 #include "sim/Roles.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Trigger.hpp"
 #include "sim/Tscn.hpp"
 
@@ -103,7 +104,7 @@ struct Channels {
 
     // One tick, before the physics step. Every button counts what is on it, and
     // every door runs its status machine on its own button and travels.
-    void Tick(entt::registry& registry, float dt);
+    void Tick(entt::registry& registry, const ScriptClock::Step& step);
 
     // ETHBeginContactCallback_door_lift, right after Tick has moved the doors and
     // before the step moves the player: a contact begins in the original's next

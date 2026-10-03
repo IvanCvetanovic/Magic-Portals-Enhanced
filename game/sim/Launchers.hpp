@@ -57,9 +57,11 @@ struct Launcher {
     std::string entity; // what it throws
     Throwable throws;
     double strideS = 0.0;
+    double strideMs = 0.0; // the node's stride itself
     glm::dvec2 minPx{0.0}; // the cull box
     glm::dvec2 maxPx{0.0};
-    double leftS = 0.0; // until the next throw
+    // Until the next throw, in the script's whole milliseconds (planning step 147).
+    double leftMs = 0.0;
     int thrown = 0;
 };
 
@@ -100,7 +102,7 @@ struct State {
 
     // Before the step: each launcher whose time has come throws. Returns what
     // was thrown this tick, which is also in `live`.
-    std::vector<Thrown> Throw(entt::registry& registry, float dt);
+    std::vector<Thrown> Throw(entt::registry& registry, double dt);
 
     // After the step: a thrown body out of its launcher's box, or in a
     // despawner's, is destroyed. Returns the bodies destroyed, for the caller to

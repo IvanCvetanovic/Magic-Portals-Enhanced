@@ -10,6 +10,7 @@
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Tscn.hpp"
 
 #include <string>
@@ -22,7 +23,7 @@ namespace MagicPortals::Mover {
 
 // Puts a kinematic body at `target` for the step about to be taken, with the
 // velocity that gets it there in `dt`: (target - where it is) / dt.
-void MoveKinematic(entt::registry& registry, entt::entity entity, const glm::vec3& target, float dt);
+void MoveKinematic(entt::registry& registry, entt::entity entity, const glm::vec3& target, float physicsDt);
 
 // A lift door (door_lift.ent), as ETHCallback_door_lift runs it (movers.json
 // `door`, planning step 133). Until then the port ran the Godot project's
@@ -78,8 +79,9 @@ struct Door {
     glm::dvec2 InterpolatedPx() const;
 
     // One frame of ETHCallback_door_lift (#210-633) with its switch `active` or not,
-    // and the body moved where it puts it (MoveKinematic).
-    void Tick(entt::registry& registry, entt::entity entity, bool active, float dt);
+    // and the body moved where it puts it (MoveKinematic). The interpolator's clock is
+    // the script's; the body's velocity is measured against the physics step.
+    void Tick(entt::registry& registry, entt::entity entity, bool active, const ScriptClock::Step& step);
 };
 
 // A door as the level places it: shut where the node stands, opening straight up
@@ -173,8 +175,10 @@ struct Movers {
     std::vector<Lift> lifts;
 
     // One step of each, before the physics step, every body moved with
-    // MoveKinematic so that it carries what stands on it.
-    void Tick(entt::registry& registry, float dt);
+    // MoveKinematic so that it carries what stands on it. Where it goes is the script's
+    // clock (linearMotion's unitsPerSecond); the velocity that carries it there is the
+    // physics step's.
+    void Tick(entt::registry& registry, const ScriptClock::Step& step);
 
     // A touch gone down this frame at `pointPx`, a point of the level: every lift
     // whose picture holds it is sent, as each lift's own callback tests the touch.

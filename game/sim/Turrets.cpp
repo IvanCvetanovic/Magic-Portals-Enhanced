@@ -96,7 +96,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-std::vector<Fireball> State::Fire(float dt) {
+std::vector<Fireball> State::Fire(double dt) {
     std::vector<Fireball> now;
     const double ms = static_cast<double>(dt) * 1000.0;
     for (Turret& turret : turrets) {
@@ -123,7 +123,7 @@ std::vector<Fireball> State::Fire(float dt) {
     return now;
 }
 
-void State::Tick(entt::registry& registry, entt::entity player, float dt) {
+void State::Tick(entt::registry& registry, entt::entity player, double dt) {
     // Taken first, as Fire::Tick takes its blasts: what this tick destroys is
     // what the layer reads after it, and last tick's is gone.
     spentPx.clear();

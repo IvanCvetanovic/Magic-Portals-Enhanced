@@ -272,10 +272,9 @@ glm::dvec3 Antiportal::ColourAt(double elapsedMs) const {
     // it is (the remainder over the stride). The two clocks do NOT run at one rate: the
     // original sums a FLOOR of each frame's milliseconds as a uint (ETHEngine.cpp:147
     // truncates the loop's float, and libApplication.so's Update(float) calls
-    // __aeabi_f2uiz before SetLastFrameElapsedTime), so at 60 Hz it gains 16 ms a frame
-    // where this port's tick gains 1000/60 - the port runs 4.17 % fast. It is the clock
-    // every scripted motion reads, so flooring it is a port-wide change and not this
-    // function's: see art.json antiportal _source and the record's step 72.
+    // __aeabi_f2uiz before SetLastFrameElapsedTime), so at 60 Hz it gains 16 ms a frame.
+    // The caller's clock is that sum since planning step 147 (sim/ScriptClock): the
+    // level's age gains the script's 16 ms a tick, so the blink runs at the original's rate.
     const double ms = std::max(0.0, elapsedMs);
     const double legs = std::floor(ms / strideMs);
     double bias = (ms - legs * strideMs) / strideMs;
@@ -286,9 +285,8 @@ glm::dvec3 Antiportal::ColourAt(double elapsedMs) const {
 glm::dvec3 Blink::At(double elapsedMs) const {
     if (!(strideMs > 0.0)) return from;
     // blinkColor's ins 55-75, which blinkEmissive repeats instruction for
-    // instruction: the leg, the way it runs, how far along it is. The clock, and
-    // how far it strays from the original's floored one, is the caller's
-    // (art.json non_teleportable _clock, antiportal's _source).
+    // instruction: the leg, the way it runs, how far along it is. The clock is
+    // the caller's (art.json non_teleportable _clock, antiportal's _source): the script's floor.
     const double ms = std::max(0.0, elapsedMs);
     const double legs = std::floor(ms / strideMs);
     double bias = (ms - legs * strideMs) / strideMs;

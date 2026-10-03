@@ -197,7 +197,7 @@ void State::BeforeStep(entt::registry& registry) {
 }
 
 std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity player,
-                                          const Portals::State& portals, float dt) {
+                                          const Portals::State& portals, float physicsDt) {
     std::vector<entt::entity> broken;
     brokenNow.clear();
     staticHitsNow.clear();
@@ -212,7 +212,7 @@ std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity
         const glm::dvec2 at = PxOf(registry, made.body);
         // Where it would have got to had nothing stopped it: the solver can turn
         // a hard hit away within the step, and BeginContact would still report it.
-        const glm::dvec2 ahead = made.atPx + made.velocityPx * static_cast<double>(dt);
+        const glm::dvec2 ahead = made.atPx + made.velocityPx * static_cast<double>(physicsDt);
         // Into the player hard enough, and it dies.
         if (hasPlayer && !playerKilled &&
             (Trigger::Overlaps(registry, player, CircleAt(at, reachPx)) ||
@@ -246,7 +246,7 @@ std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity
 }
 
 State::Turn State::Tick(entt::registry& registry, entt::entity player, const std::vector<entt::entity>& stones,
-                        float dt) {
+                        double dt) {
     Turn turn;
     flySpikes(registry, player, dt);
     if (!beholder || beholder->gone) return turn;
@@ -398,7 +398,7 @@ Rock State::drop(entt::registry& registry, const glm::dvec2& atPx) {
     return made;
 }
 
-void State::flySpikes(entt::registry& registry, entt::entity player, float dt) {
+void State::flySpikes(entt::registry& registry, entt::entity player, double dt) {
     // projectileBehaviour, then ETHCallback_beholder_spike's two tests: out of
     // the level and its margin it goes; in the player's shrunken box it kills.
     const glm::dvec2 lowPx = -rules.cullMarginPx;

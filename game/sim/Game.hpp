@@ -47,6 +47,7 @@
 #include "sim/Puzzle.hpp"
 #include "sim/RedKey.hpp"
 #include "sim/Restock.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Torch.hpp"
 #include "sim/Tscn.hpp"
@@ -196,15 +197,17 @@ struct Level {
 // too, so there is nothing to wire.
 bool Start(const Data& data, entt::registry& registry, Level& out, std::string& error, bool withStatics = true);
 
-void BeforeStep(const Data& data, entt::registry& registry, Level& level, float direction, float dt);
+void BeforeStep(const Data& data, entt::registry& registry, Level& level, float direction,
+                const ScriptClock::Step& step);
 // Takes the Data, as BeforeStep does. A torch that puts its light wall BACK has
 // to rebuild that wall's body, and LevelBuilder::BuildEntity needs the scene to
 // do it - the node's body and shape are its children. The alternative was for
 // Level to borrow a scene pointer, which is a lifetime hazard introduced for one
 // feature; there were three call sites, so the signature moved instead.
-void AfterStep(const Data& data, entt::registry& registry, Level& level, float dt);
+void AfterStep(const Data& data, entt::registry& registry, Level& level, const ScriptClock::Step& step);
 
 // One whole tick, for a caller that steps physics itself.
-void Tick(const Data& data, entt::registry& registry, Level& level, float direction, float dt);
+void Tick(const Data& data, entt::registry& registry, Level& level, float direction,
+                const ScriptClock::Step& step);
 
 } // namespace MagicPortals::Game

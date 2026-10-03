@@ -315,6 +315,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
 
     std::string error;
     const bool read = Chapters::Load(m_paths.chapters, m_chapters, error) &&
+                      ScriptClock::LoadRules(m_paths.portData + "/clock.json", m_clockRules, error) &&
                       Camera::LoadRules(m_paths.data + "/portals.json", m_cameraRules, error) &&
                       Camera::LoadDrag(m_paths.portData + "/camera.json", m_cameraRules, error) &&
                       Hint::LoadRules(m_paths.portData + "/camera.json", m_hintRules, error) &&
@@ -340,6 +341,10 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     // ui.json is the port's own and committed, so a HUD that will not read is a
     // fault in this repository and stops the start as loudly as a missing level.
     m_hudReady = read;
+    // The tick's two deltas before the first tick runs: what a constructor that moves
+    // by "a frame" (the space sky's planet, the loading screen) is handed.
+    m_step = ScriptClock::TickStep(m_clockRules, kTick);
+    m_tickMs = ScriptClock::Ms(m_step);
     // As EarthquakeGenerator's constructor leaves it, once for the whole run.
     m_quake.Reset(m_quakeRules);
     if (!read) {
@@ -529,6 +534,7 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // And the time a pause or a popup stood it still, which the new level has had
     // none of, and the plaque's dismissal, which it has not reached.
     m_stoppedMs = 0.0;
+    m_levelFrameWallMs = 0.0;
     m_plaqueDismissAgeMs = -1.0;
     m_plaqueAlpha = 0.0;
     const Chapters::Level& entry = m_chapters.levels[static_cast<std::size_t>(index)];
@@ -2133,7 +2139,12 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
     }
     if (m_effects.empty()) return;
 
+    // The frame's wall milliseconds step the entities' PARTICLE systems and their lifetimes -
+    // the C++ side, which ETHScene::Update hands the float (ETHScene.cpp:459-473). Their
+    // scripts read the whole-millisecond floor (planning step 147): a frame that is a
+    // tick gives exactly its 16 ms, any other is scaled to match.
     const double elapsedMs = static_cast<double>(deltaTime) * 1000.0;
+    const double scriptMs = ScriptClock::OfFrameMs(m_clockRules, elapsedMs, ScriptClock::WallMs(m_step));
     const Particles::Random random = [this](double from, double to) { return effectRandom(from, to); };
     for (std::size_t i = 0; i < m_effects.size();) {
         Effect& effect = m_effects[i];
@@ -2169,10 +2180,10 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
         // torch's bounce. Both clocks are the frame's; the first frame an entity is
         // drawn on is one frame into them, as its callback has run once by then.
         if (effect.alphaPerSecond > 0.0) {
-            effect.alpha = std::min(1.0, effect.alpha + effect.alphaPerSecond * elapsedMs / 1000.0);
+            effect.alpha = std::min(1.0, effect.alpha + effect.alphaPerSecond * scriptMs / 1000.0);
         }
         if (effect.bounces) {
-            effect.bounceMs += elapsedMs;
+            effect.bounceMs += scriptMs;
             effect.bounceScale = effect.bounce.ScaleAt(effect.bounceMs);
         }
         const glm::dvec2 drawnScale = effect.scale * effect.bounceScale;
@@ -2296,7 +2307,7 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
             glm::dvec2 targetPx(0.0);
             bool targetHidden = false;
             if (effectOwnerPoint(registry, effect.followUpTarget, targetPx, targetHidden)) {
-                effect.atPx = effect.followUpState.Tick(*effect.followUp, effect.atPx, targetPx, elapsedMs);
+                effect.atPx = effect.followUpState.Tick(*effect.followUp, effect.atPx, targetPx, scriptMs);
             }
         }
         if (effect.scalePerFrame != 1.0) {
@@ -3187,7 +3198,7 @@ bool MagicPortalsLayer::PressMenu(entt::registry& registry, MenuButton button) {
     return false;
 }
 
-void MagicPortalsLayer::menuTick(entt::registry& registry, float fixedDelta) {
+void MagicPortalsLayer::menuTick(entt::registry& registry, const ScriptClock::Step& step) {
     using namespace Supersonic;
     // WHAT THE LAST TICK ASKED FOR, before anything else: a release, the loading
     // screen's hold or the back key. The original's setState swaps between
@@ -3222,7 +3233,8 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, float fixedDelta) {
         m_menuClock.fresh = false;
     } else {
         ++m_menuClock.ticks;
-        m_menuClock.ms += static_cast<double>(fixedDelta) * 1000.0;
+        m_menuClock.ms += ScriptClock::Ms(step);
+        m_menuClock.wallMs += ScriptClock::WallMs(step);
     }
 
     m_aspect = viewportAspect(registry);
@@ -3253,7 +3265,7 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, float fixedDelta) {
         return;
     }
     if (m_screen == Screen::Credits) {
-        creditsInput(registry, fixedDelta);
+        creditsInput(registry, step);
         return;
     }
     if (m_screen == Screen::Achievements) {
@@ -3263,7 +3275,7 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, float fixedDelta) {
 
     if (m_screen == Screen::Worlds || m_screen == Screen::Levels) {
         if (m_menuPopup.open) {
-            menuPopupTick(registry, fixedDelta);
+            menuPopupTick(registry, step);
         } else {
             selectorInput(registry);
         }
@@ -3327,7 +3339,7 @@ bool TouchClosesPopup(const Popup::Rules& rules, const Popup::Class& cls, const 
 
 } // namespace
 
-void MagicPortalsLayer::menuPopupTick(entt::registry& registry, float fixedDelta) {
+void MagicPortalsLayer::menuPopupTick(entt::registry& registry, const ScriptClock::Step& step) {
     using Supersonic::Input;
     // LevelSelector::loop reads the back key whatever layer is current: the state
     // goes, on the next tick as ever, and the popup with it.
@@ -3339,7 +3351,7 @@ void MagicPortalsLayer::menuPopupTick(entt::registry& registry, float fixedDelta
     }
     // UI frame time from the state's first tick, which is the popup's zero. The
     // PageManager is not the current layer, so its clock stands (SelectorLayerMs).
-    const double dtMs = m_menuClock.ticks > 0 ? static_cast<double>(fixedDelta) * 1000.0 : 0.0;
+    const double dtMs = m_menuClock.ticks > 0 ? ScriptClock::Ms(step) : 0.0;
     Popup::Tick(*m_menuPopup.cls, m_menuPopup.state, dtMs);
     // Read once a tick: a scheduled tap steps as it is read.
     const Touch touch = touchThisTick(registry);
@@ -3374,7 +3386,7 @@ void MagicPortalsLayer::menuPopupTick(entt::registry& registry, float fixedDelta
     // again, and the PageManager is updated from the next tick.
     if (!Popup::Gone(m_popupRules, m_menuPopup.state)) return;
     m_menuPopup = MenuPopupScreen{};
-    m_selectorLayerFromMs = m_menuClock.ms + static_cast<double>(fixedDelta) * 1000.0;
+    m_selectorLayerFromMs = m_menuClock.ms + ScriptClock::Ms(step);
     SUPERSONIC_LOG_INFO("Magic Portals") << "popup gone over the menu on tick " << m_ticks << std::endl;
 }
 
@@ -3394,7 +3406,8 @@ void MagicPortalsLayer::loadingTick(entt::registry& registry) {
     const glm::dvec2 view = MenuBoxPx();
     // LoadingScreen::loop's frame: 1 on the state's first tick.
     const int frame = m_menuClock.ticks + 1;
-    const double tickMs = static_cast<double>(kTick) * 1000.0;
+    // LoadingScreen::loop reads sys:GetLastFrameElapsedTime directly: the script's floor.
+    const double tickMs = ScriptClock::Ms(m_step);
 
     if (m_loadingBg != entt::null && registry.valid(m_loadingBg)) {
         placeSprite(registry, m_loadingBg, rules.background.centreOfScreen * view, rules.background.sizeUnits, -1.0f,
@@ -3565,7 +3578,7 @@ void MagicPortalsLayer::selectorInput(entt::registry& registry) {
     Selector::Step(rules, m_selectorBoard, m_selectorState);
 }
 
-void MagicPortalsLayer::creditsInput(entt::registry& registry, float fixedDelta) {
+void MagicPortalsLayer::creditsInput(entt::registry& registry, const ScriptClock::Step& step) {
     using Supersonic::Input;
     // BackButtonLayer::isBackButtonPressed's key: the main menu, on the next tick.
     if (Input::TickWasPressed(kBack) || devPressDue(DevPress::Back)) {
@@ -3593,7 +3606,7 @@ void MagicPortalsLayer::creditsInput(entt::registry& registry, float fixedDelta)
     // The state's first tick is where the constructor put the strip; it moves from
     // the next, a tick's worth each.
     if (m_menuClock.ticks > 0) {
-        Credits::Step(m_creditsRules, m_credits, view, static_cast<double>(fixedDelta) * 1000.0, touching, move);
+        Credits::Step(m_creditsRules, m_credits, view, ScriptClock::Ms(step), touching, move);
     }
     const bool inside = touch.over && Credits::BackHitRect(m_creditsRules, view, ms).Contains(touch.atView);
     m_creditsTouch.backHeld = m_creditsTouch.down && m_creditsTouch.downOnBack && touching && inside;
@@ -3815,7 +3828,7 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
     };
     const Hud::Rect whole{glm::dvec2(0.0), view};
     const float black =
-        static_cast<float>(MenuState::FadeAlphaByte(m_mainMenuRules.state, m_menuClock.ms)) / 255.0f;
+        static_cast<float>(MenuState::FadeAlphaByte(m_mainMenuRules.state, m_menuClock.wallMs)) / 255.0f;
 
     if (m_screen == Screen::Main) {
         // The background, then the layer's buttons in the order they were added,
@@ -4400,7 +4413,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         const glm::dvec2 view(m_viewHeightPx * static_cast<double>(viewportAspect(registry)), m_viewHeightPx);
         if (std::string why;
             !Sky::BuildSpace(m_spaceRules, m_skyRules, m_motionRules, m_data.scene, view,
-                             static_cast<double>(kTick) * 1000.0, m_space, why)) {
+                             ScriptClock::Ms(m_step), m_space, why)) {
             SUPERSONIC_LOG_WARN("Magic Portals") << "the space sky is drawn where the level put it: " << why
                                                  << std::endl;
             m_space = Sky::Space{};
@@ -5762,10 +5775,10 @@ bool MagicPortalsLayer::motionRuns(const DrawnSprite& drawn) const {
     return false;
 }
 
-void MagicPortalsLayer::advanceMotions(float fixedDelta) {
+void MagicPortalsLayer::advanceMotions(const ScriptClock::Step& step) {
     // The tick is the frame the callbacks run on. A paused or popped-up level is not
     // stepped, which is the original's m_factor 0: the angle holds.
-    const double frameMs = static_cast<double>(fixedDelta) * 1000.0;
+    const double frameMs = ScriptClock::Ms(step);
     // ETHCallback_gravity_agent's effectAngleTime, getLastFrameElapsedTime a frame
     // (gravitywell.json roundabout); a lap zeroes it (latchSimEffects).
     for (WellSpin& spin : m_wellSpins) spin.ms += frameMs;
@@ -5994,12 +6007,13 @@ std::vector<MagicPortalsLayer::MotionReport> MagicPortalsLayer::MotionReports() 
 void MagicPortalsLayer::syncTimers(entt::registry& registry) {
     using namespace Supersonic;
     const Art::Timer& timer = m_artRules.timer;
-    const double tickMs = static_cast<double>(kTick) * 1000.0;
+    // ETHCallback_timer's elapsedTime adds getLastFrameElapsedTime (ins 1-13): the script's floor.
+    const double tickMs = ScriptClock::Ms(m_step);
     for (TimerDial& dial : m_timers) {
         if (dial.quad == entt::null) continue;
         const Goals::Crystal& crystal = m_level.goals.crystals[static_cast<std::size_t>(dial.crystal)];
-        const double timeMs = crystal.lifeS * 1000.0;
-        double elapsedMs = (crystal.lifeS - crystal.leftS) * 1000.0;
+        const double timeMs = crystal.lifeMs;
+        double elapsedMs = crystal.elapsedMs;
         if (crystal.expired || dial.taken) {
             dial.shrinking = true;
         } else if (crystal.collected) {
@@ -7043,11 +7057,11 @@ void MagicPortalsLayer::matchMinions() {
     }
 }
 
-void MagicPortalsLayer::advanceMinions(float fixedDelta) {
+void MagicPortalsLayer::advanceMinions(const ScriptClock::Step& step) {
     matchMinions();
     const Art::Minion& art = m_artRules.minion;
     const std::vector<Minions::Minion>& minions = m_level.minions.minions;
-    const double ms = static_cast<double>(fixedDelta) * 1000.0;
+    const double ms = ScriptClock::Ms(step);
     for (std::size_t i = 0; i < minions.size(); ++i) {
         const Minions::Minion& minion = minions[i];
         // The sim's arms, one for one; the blocked-way Search arm is not among
@@ -7948,22 +7962,26 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     //    values, as the original drew them, so each is its decoded alpha as it
     //    stands - two stacked blacks leave (t / 700)^2 of the picture, t being
     //    their own age: the level's less overlay.startAfterMs (step 40). On the
-    //    FRAME clock, because FadeInController reads GetTime(), which a pause does
-    //    not stop; the pads run on game time, which it does.
+    //    WALL frame clock (LevelFrameWallMs: the engine's 16.667 ms a tick, a pause
+    //    and a popup counted), because FadeInController reads sys:GetTime(), which a
+    //    pause does not stop and the script's floor of each frame does not touch
+    //    (planning step 147, fix 1); the pads run on game time, which a pause does stop.
     const Hud::Rect whole{glm::dvec2(0.0), view};
     const int over = m_hudRules.overlay.layersOverPads;
     const int under = m_hudRules.overlay.layers - over;
     const auto black = [](double alpha) { return glm::vec4(0.0f, 0.0f, 0.0f, static_cast<float>(alpha)); };
-    add(whole, std::string(), black(Hud::OverlayLayersAlpha(m_hudRules, LevelFrameMs(), under)));
+    add(whole, std::string(), black(Hud::OverlayLayersAlpha(m_hudRules, LevelFrameWallMs(), under)));
     for (const Control kind : {Control::Left, Control::Right}) {
         if (const ControlButton* button = find(kind)) add(button->rect, button->image, white(button->alpha));
     }
-    add(whole, std::string(), black(Hud::OverlayLayersAlpha(m_hudRules, LevelFrameMs(), over)));
+    add(whole, std::string(), black(Hud::OverlayLayersAlpha(m_hudRules, LevelFrameWallMs(), over)));
 
     // 6. "Part N", over everything, laid out for this view's width. On the frame
-    //    clock too: ETHTextDrawer::Draw adds the engine's own frame time, so a
-    //    caption still fading when a pause opens goes on fading above it. The
-    //    popups' captures show that; no capture of a pause does (spec 2.2, U3).
+    //    clock too, but the SCRIPT's: ETHTextDrawer::Draw adds the unsigned long
+    //    ETHEngine::DrawTopLayer hands it (ETHEngine.cpp:205, GetLastFrameElapsedTime():
+    //    the floored whole milliseconds), so a caption still fading when a pause opens
+    //    goes on fading above it, 16 ms a tick. The popups' captures show that; no
+    //    capture of a pause does (spec 2.2, U3).
     const double caption = Hud::CaptionAlpha(m_hudRules, LevelFrameMs());
     if (caption > 0.0 && !m_captionText.empty()) {
         const auto& pages = m_captionFont.Pages();
@@ -8449,7 +8467,7 @@ MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn
 // The rule is that queuing happens on the TICK while adding and drawing happen on
 // the FRAME, so that an effect cannot reach Game::Level or the state hash by the
 // back door.
-void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fixedDelta) {
+void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, const ScriptClock::Step& step) {
     if (!m_loaded) return;
 
     // A MINION'S OWN SYSTEMS (the visuals plan's 11.4, planning step 97). The
@@ -8705,7 +8723,7 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
         // vector3(keyholePos, scale(32)) - the keyhole it found, at a depth of its
         // own - 41 ticks after the unlock at 60 Hz. The flight itself is not built.
         const bool haloNow =
-            Effects::AdvanceFlyIn(m_effectRules, watch.flyIn, key.spent, static_cast<double>(fixedDelta) * 1000.0);
+            Effects::AdvanceFlyIn(m_effectRules, watch.flyIn, key.spent, ScriptClock::Ms(step));
         if (haloNow && key.opened >= 0 && key.opened < static_cast<int>(keyholes.size())) {
             const Keys::Keyhole& found = keyholes[static_cast<std::size_t>(key.opened)];
             const Effects::Spawn spawn = Effects::At(m_effectRules.keyUnlockHalo, found.atPx);
@@ -8973,7 +8991,7 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
         const glm::vec3 velocity = registry.get<Supersonic::RigidBodyComponent>(m_level.player).velocity;
         const double speed = std::sqrt(static_cast<double>(velocity.x) * velocity.x +
                                        static_cast<double>(velocity.y) * velocity.y);
-        if (Effects::TrailDue(m_effectRules, m_trailMs, speed, static_cast<double>(fixedDelta) * 1000.0)) {
+        if (Effects::TrailDue(m_effectRules, m_trailMs, speed, ScriptClock::Ms(step))) {
             const glm::dvec2 atPx =
                 Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
             const Effects::Spawn trail = Effects::OnEntity(m_effectRules.movementTrail, atPx, m_playerZ);
@@ -9125,7 +9143,7 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, float fi
     // THE BOSSES' OWN PICTURES (planning step 146): what each dying arm scatters and
     // its death's explode, and what a boss puts back - before the key a boss drops,
     // as the ghost's DEATH arm adds its explosion before its key.
-    latchBossPictures(fixedDelta);
+    latchBossPictures(step);
     // THE KEY A BOSS DROPS, which no node pictures: the key.ent the ghost's DEATH arm
     // adds at its own vector3 (AddScaledEntity('key.ent', GetPosition(), getScale()),
     // #1354-1368), and the dark dragon's DYING arm at key_pos's (ins 1851-1878),
@@ -9223,8 +9241,8 @@ void MagicPortalsLayer::latchDeathEffects(entt::registry& registry) {
 // what the simulation left and what the last latch saw (m_bossPictures), and added
 // on the frame as every effect is. The sound's watch reads the same arms for its
 // boss_explosion and its deaths, on its own clock from sounds.json's stride.
-void MagicPortalsLayer::latchBossPictures(float fixedDelta) {
-    const double tickMs = static_cast<double>(fixedDelta) * 1000.0;
+void MagicPortalsLayer::latchBossPictures(const ScriptClock::Step& step) {
+    const double tickMs = ScriptClock::Ms(step);
     BossPictures& seen = m_bossPictures;
     // ONE UPDATE OF AN ARM THAT CALLS overTimeEntityAdder: its two draws, made
     // whatever the clock says (randF runs before the call), from the effects'
@@ -10245,9 +10263,9 @@ void MagicPortalsLayer::shakeView(entt::registry& registry) {
     }
 }
 
-void MagicPortalsLayer::latchSimSounds(float fixedDelta) {
+void MagicPortalsLayer::latchSimSounds(const ScriptClock::Step& step) {
     if (!m_loaded) return;
-    const double tickMs = static_cast<double>(fixedDelta) * 1000.0;
+    const double tickMs = ScriptClock::Ms(step);
 
     Watch now;
     now.valid = true;
@@ -10619,8 +10637,11 @@ void MagicPortalsLayer::latchLateBossSounds(const Watch& was, const Watch& now) 
 }
 
 void MagicPortalsLayer::playLatched(entt::registry& registry, float deltaTime) {
-    // The frames' own clock, which the shared timers are kept on.
-    m_soundClockMs += static_cast<double>(deltaTime) * 1000.0;
+    // The frames' own clock, which the shared timers are kept on: the AudioManager's Timers
+    // (AudioManager::update -> Timer::update), which add the script's whole milliseconds, so the
+    // frame's floor (sim/ScriptClock, planning step 147).
+    m_soundClockMs += ScriptClock::OfFrameMs(m_clockRules, static_cast<double>(deltaTime) * 1000.0,
+                                             ScriptClock::WallMs(m_step));
     if (m_latched.empty()) return;
     // The sound switch off is SetGlobalVolume(0): nothing is heard, and what the
     // tick latched is dropped rather than kept for later.
@@ -10853,24 +10874,31 @@ void MagicPortalsLayer::stopMusic(entt::registry& registry) {
 }
 
 void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta) {
+    // `fixedDelta` is the engine's tick, which the physics integrates and the layer
+    // does not touch. What the SCRIPTS see of it is the original's floor: the whole
+    // milliseconds of a frame, 16 of the tick's 16.667 (sim/ScriptClock.hpp).
+    m_step = ScriptClock::TickStep(m_clockRules, fixedDelta);
+    const ScriptClock::Step& step = m_step;
     // What the last frame shook off the camera first, so the tick reads it at
     // rest: a tap is mapped before the generator moves anything, as the original's
     // portal manager maps one before g_earthquakeGen runs.
     liftQuake(registry);
-    fixedTick(registry, fixedDelta);
+    fixedTick(registry, step);
     // main's loop updates the Notificator after the state's loop, whatever is up.
-    tickNotificator(static_cast<double>(fixedDelta) * 1000.0);
+    tickNotificator(ScriptClock::Ms(step));
     // Then the generator's update, between what this tick's events called it
     // with from before it and what they called it with from after.
     quakeTick();
 }
 
-void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
+void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::Step& step) {
     using Supersonic::Input;
     ++m_ticks;
     // The layer's own clock: what the original's absolute GetTimeF reads give.
-    m_layerClockMs += static_cast<double>(fixedDelta) * 1000.0;
-    m_tickMs = static_cast<double>(fixedDelta) * 1000.0;
+    // WALL milliseconds, which sys:GetTime and sys:GetTimeF read: the engine's own tick, not
+    // the floor. Every script reader of the floor takes m_tickMs (planning step 147).
+    m_layerClockMs += ScriptClock::WallMs(step);
+    m_tickMs = ScriptClock::Ms(step);
     // Asked for on the TICK, where a key press is an edge, and answered on the
     // frame, where the picture is.
     if (Input::TickWasPressed(kDump)) m_dumpRequested = true;
@@ -10878,7 +10906,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
     // A menu is up instead of a level: it takes the tick, and nothing below
     // runs. The two are never both in the registry.
     if (m_screen != Screen::None && !overLevel) {
-        menuTick(registry, fixedDelta);
+        menuTick(registry, step);
         updateHud(registry);
         return;
     }
@@ -10886,12 +10914,12 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
     // step. Only on the tick it resumes does the level take up its tick again,
     // from exactly where the tap left it.
     if (m_pause.open) {
-        if (pauseTick(registry, fixedDelta) && m_loaded && m_screen == Screen::None) {
+        if (pauseTick(registry, step) && m_loaded && m_screen == Screen::None) {
             // The tick the pause was opened on read its input and stopped short
             // of BeforeStep; this one runs that half now, with the walk the keys
             // ask for - the pointer is on the button that resumed it, and a tap
             // spent on a button is spent.
-            stepLevel(registry, keyDirection(), fixedDelta);
+            stepLevel(registry, keyDirection(), step);
         }
         tickPlaqueDismissal(false);
         updateHud(registry);
@@ -10901,8 +10929,8 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
     // BeforeStep half, as the pause does; one raised as the level loaded owes
     // nothing, and the next tick is the level's first.
     if (m_popup.open) {
-        if (popupTick(registry, fixedDelta) && m_loaded && m_screen == Screen::None) {
-            stepLevel(registry, keyDirection(), fixedDelta);
+        if (popupTick(registry, step) && m_loaded && m_screen == Screen::None) {
+            stepLevel(registry, keyDirection(), step);
         }
         tickPlaqueDismissal(false);
         updateHud(registry);
@@ -10912,7 +10940,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
     // D7): the screen's clock, counters and buttons first - a button that leaves
     // the level leaves it before it is stepped again - and then the level's own
     // tick below, which reads no input once it has ended.
-    if (overLevel && endScreenTick(registry, fixedDelta)) {
+    if (overLevel && endScreenTick(registry, step)) {
         updateHud(registry);
         return;
     }
@@ -10949,7 +10977,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         }
     }
 
-    const double dtMs = static_cast<double>(fixedDelta) * 1000.0;
+    const double dtMs = ScriptClock::Ms(step);
     if (m_loaded) {
         // DEV ONLY: a burn a capture scheduled for this tick, set as Game's blast
         // test sets it, for the step's own AfterStep to read on this same tick.
@@ -10982,15 +11010,15 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         // together first, read before anything after the step moves or breaks a
         // body - Box2D calls a begin-contact callback inside the step itself.
         m_impactBegins = m_impacts.AfterStep(registry, Earthquake::ToUnits(m_quakeRules, m_quakeRules.touchPx),
-                                             static_cast<double>(fixedDelta));
+                                             static_cast<double>(step.physicsS));
         // So first what follows a step...
-        Game::AfterStep(m_data, registry, m_level, fixedDelta);
+        Game::AfterStep(m_data, registry, m_level, step);
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
-        latchSimSounds(fixedDelta);
+        latchSimSounds(step);
         latchMusic();
         achievementsForKeys();
-        latchSimEffects(registry, fixedDelta);
+        latchSimEffects(registry, step);
         latchSimQuakes();
         // ...and the moment the exit reports, the beat before the medal; the
         // moment the player dies, the beat before the lost screen. Should both
@@ -11093,6 +11121,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
         // The level is a tick older. BEFORE the input, because the pads slide
         // in and a tap is tested against where they are on this tick.
         m_levelAgeMs += dtMs;
+        m_levelFrameWallMs += ScriptClock::WallMs(step);
         // GameLayer is updated on this tick: the plaque's colour is written.
         tickPlaqueDismissal(true);
         if (m_finishing || m_dying) {
@@ -11101,7 +11130,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             // is its buttons are its own (endScreenTick). The level still runs,
             // with nobody walking it - and no handle held, though each pulses on.
             m_level.handles.Rest(dtMs);
-            stepLevel(registry, 0.0f, fixedDelta);
+            stepLevel(registry, 0.0f, step);
             updateHud(registry);
             return;
         }
@@ -11115,12 +11144,12 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, float fixedDelta) {
             updateHud(registry);
             return;
         }
-        stepLevel(registry, direction, fixedDelta);
+        stepLevel(registry, direction, step);
     }
     updateHud(registry);
 }
 
-void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, float fixedDelta) {
+void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, const ScriptClock::Step& step) {
     m_direction = direction; // for the picture: which way the player walks this tick
     m_aspect = viewportAspect(registry);
     // SideScrollerCharacter::detectPushing, asked of the body as the physics step
@@ -11142,7 +11171,7 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     // wide the window is. Dragon.hpp says why that width is the only piece of
     // the camera the sim takes from outside.
     m_level.dragon.viewWidthPx = ViewPx().x;
-    Game::BeforeStep(m_data, registry, m_level, direction, fixedDelta);
+    Game::BeforeStep(m_data, registry, m_level, direction, step);
     // The dragon's callback runs HERE, before the step, and the other bosses'
     // after it (AfterStep): its take-off's stop is read on its own tick.
     latchMusic();
@@ -11172,7 +11201,7 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
         Camera::Unlocks unlocks;
         unlocks.teleported = !m_level.portals.transits.empty();
         unlocks.padMoving = m_cameraPadMoving;
-        m_follow.Tick(m_cameraRules, targetPx, ViewPx(), m_boundsPx, fixedDelta, m_cameraFeel, unlocks);
+        m_follow.Tick(m_cameraRules, targetPx, ViewPx(), m_boundsPx, step.scriptS, m_cameraFeel, unlocks);
     }
     // Taken: a tick that reads no input drags nothing.
     m_cameraFeel = Camera::Feel{};
@@ -11182,7 +11211,7 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     // AFTER the camera: the sign is aimed at the corner this tick left it at,
     // with its frame time held back while the blacks are whole and handed
     // over in one piece when they start, as the original's load hands it.
-    tickNoPortalSign(Hud::HandOver(m_hudRules, m_levelAgeMs, static_cast<double>(fixedDelta) * 1000.0,
+    tickNoPortalSign(Hud::HandOver(m_hudRules, m_levelAgeMs, ScriptClock::Ms(step),
                                    m_sign.heldMs));
     // MainCharacter::update on a no_gravity level, once a step: never under a
     // pause or a popup, where no step runs, and not once the player has gone into
@@ -11190,7 +11219,7 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     // when finished).
     if (m_level.noGravity && m_playerQuad != entt::null && !m_finishing && !m_dying) {
         m_noGravityColumn = Art::UpdateNoGravity(m_artRules.character, m_noGravityPlayer, m_direction != 0.0f,
-                                                 static_cast<double>(fixedDelta) * 1000.0);
+                                                 ScriptClock::Ms(step));
     }
     // ETHCallback_projectile's SetFrame(_projectileFrameTimer.set(0, 5, 30, true)),
     // once a step while a shot flies: the one timer, so a shot starts on the cell
@@ -11198,7 +11227,7 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     // where the original's keeps cycling (a stated divergence, art.json shot.animation).
     if (m_level.portals.flight) {
         const Art::Shot& bolt = m_artRules.shot;
-        m_shotCell = m_shotFrames.Set(0, bolt.Frames() - 1, bolt.strideMs, true, static_cast<double>(fixedDelta) * 1000.0);
+        m_shotCell = m_shotFrames.Set(0, bolt.Frames() - 1, bolt.strideMs, true, ScriptClock::Ms(step));
     }
     // And ETHCallback_enemy_shoot's SetFrame(_projectileFrameTimer.set(0, 5, 30, true))
     // (#126-137), once a step for every shot of the chapter-3 ghost in flight: the
@@ -11209,19 +11238,19 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, flo
     for (const Ghost::Shot& shot : m_level.ghost.shots) {
         const Ghost::Rules& rules = m_level.ghost.rules;
         m_ghostShotCells[shot.id] = m_shotFrames.Set(rules.shotFirstCell, rules.shotLastCell, rules.shotCellStrideMs,
-                                                     true, static_cast<double>(fixedDelta) * 1000.0);
+                                                     true, ScriptClock::Ms(step));
     }
     // linearMotion's calls BEFORE the pictures are placed: a call steps the angle and
     // writes the position in one, and the frame draws what it wrote (motions.json).
-    advanceMotions(fixedDelta);
+    advanceMotions(step);
     // ETHCallback_minion sets a minion's velocity and its frame in one update:
     // Minions::Tick, in BeforeStep above, chose each one's arm, and this frames it.
-    advanceMinions(fixedDelta);
+    advanceMinions(step);
     syncDrawables(registry);
     m_pushing = pushing;
     // StaticSky::update's order: every sky placed (syncSprites, just now), and
     // only then its scroll moved on, so the next tick draws what this one left.
-    if (m_sky.running) Sky::Advance(m_skyRules, m_sky, static_cast<double>(fixedDelta));
+    if (m_sky.running) Sky::Advance(m_skyRules, m_sky, step.scriptS);
     // Last: what each body the impact rows watch carries into the step, as the
     // tick has steered it (the original's callbacks read the velocity the last
     // frame left). Read only.
@@ -11545,12 +11574,13 @@ bool MagicPortalsLayer::ClosePopup() {
     return true;
 }
 
-bool MagicPortalsLayer::popupTick(entt::registry& registry, float fixedDelta) {
+bool MagicPortalsLayer::popupTick(entt::registry& registry, const ScriptClock::Step& step) {
     using Supersonic::Input;
     // The step the app just ran is undone before anything looks at the world.
     holdWorld(registry);
-    const double dtMs = static_cast<double>(fixedDelta) * 1000.0;
+    const double dtMs = ScriptClock::Ms(step);
     m_stoppedMs += dtMs;
+    m_levelFrameWallMs += ScriptClock::WallMs(step);
     Popup::Tick(*m_popup.cls, m_popup.state, dtMs);
     m_aspect = viewportAspect(registry);
     layOutControls();
@@ -11580,12 +11610,12 @@ bool MagicPortalsLayer::popupTick(entt::registry& registry, float fixedDelta) {
     // Popup::update: once every sprite and the button are dismissed, the last layer
     // is current again and game time resumes - on this tick.
     if (!Popup::Gone(m_popupRules, m_popup.state)) return false;
-    const bool step = m_popup.stepOnResume;
+    const bool stepsOnResume = m_popup.stepOnResume;
     thawWorld(registry);
     m_popup = PopupScreen{};
     layOutControls();
     SUPERSONIC_LOG_INFO("Magic Portals") << "popup gone, game time resumed on tick " << m_ticks << std::endl;
-    return step;
+    return stepsOnResume;
 }
 
 void MagicPortalsLayer::tickPlaqueDismissal(bool updated) {
@@ -11646,11 +11676,11 @@ std::vector<LevelEnd::Piece> MagicPortalsLayer::endPieces(const glm::dvec2& view
     return {};
 }
 
-bool MagicPortalsLayer::endScreenTick(entt::registry& registry, float fixedDelta) {
+bool MagicPortalsLayer::endScreenTick(entt::registry& registry, const ScriptClock::Step& step) {
     using Supersonic::Input;
     // UI frame time, which this layer being current is what advances; and the
     // ScoreCounters, which count only while it is.
-    const double dtMs = static_cast<double>(fixedDelta) * 1000.0;
+    const double dtMs = ScriptClock::Ms(step);
     m_end.clockMs += dtMs;
     if (m_screen == Screen::Finished) {
         m_end.portals.Tick(dtMs, m_levelEndRules.finished.counterStrideMs);
@@ -11687,7 +11717,7 @@ bool MagicPortalsLayer::endScreenTick(entt::registry& registry, float fixedDelta
     return true;
 }
 
-bool MagicPortalsLayer::pauseTick(entt::registry& registry, float fixedDelta) {
+bool MagicPortalsLayer::pauseTick(entt::registry& registry, const ScriptClock::Step& step) {
     using Supersonic::Input;
     // The step the app just ran is undone before anything looks at the world.
     holdWorld(registry);
@@ -11695,8 +11725,9 @@ bool MagicPortalsLayer::pauseTick(entt::registry& registry, float fixedDelta) {
     // (UILayerManager::openPopup): it takes the tick and every touch, and the
     // pause stands as it was under it.
     if (m_achievementsPopup.open) {
-        const double popupMs = static_cast<double>(fixedDelta) * 1000.0;
+        const double popupMs = ScriptClock::Ms(step);
         m_stoppedMs += popupMs;
+        m_levelFrameWallMs += ScriptClock::WallMs(step);
         m_aspect = viewportAspect(registry);
         layOutControls();
         achievementsPopupTick(registry, popupMs);
@@ -11704,9 +11735,10 @@ bool MagicPortalsLayer::pauseTick(entt::registry& registry, float fixedDelta) {
     }
     // UI frame time runs; game time does not, and the level's frame clock counts
     // the difference.
-    const double dtMs = static_cast<double>(fixedDelta) * 1000.0;
+    const double dtMs = ScriptClock::Ms(step);
     m_pause.clockMs += dtMs;
     m_stoppedMs += dtMs;
+    m_levelFrameWallMs += ScriptClock::WallMs(step);
     // The window may change shape under a pause; restart and pause, drawn frozen
     // under it, stay on their corner.
     m_aspect = viewportAspect(registry);

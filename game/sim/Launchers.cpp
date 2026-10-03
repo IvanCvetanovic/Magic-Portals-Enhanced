@@ -79,13 +79,13 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-std::vector<Thrown> State::Throw(entt::registry& registry, float dt) {
+std::vector<Thrown> State::Throw(entt::registry& registry, double dt) {
     std::vector<Thrown> now;
     for (std::size_t i = 0; i < launchers.size(); ++i) {
         Launcher& launcher = launchers[i];
-        launcher.leftS -= dt;
-        if (launcher.leftS > 0.0) continue;
-        launcher.leftS += launcher.strideS;
+        launcher.leftMs -= dt * 1000.0;
+        if (launcher.leftMs > 0.0) continue;
+        launcher.leftMs += launcher.strideMs;
         Thrown thrown;
         thrown.name = launcher.name + "#" + std::to_string(++launcher.thrown);
         thrown.launcher = i;
@@ -187,7 +187,8 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
             return false;
         }
         launcher.strideS = strideMs / 1000.0;
-        launcher.leftS = rules.firstThrowStrides * launcher.strideS;
+        launcher.strideMs = strideMs;
+        launcher.leftMs = rules.firstThrowStrides * strideMs;
         out.launchers.push_back(launcher);
     }
     return true;

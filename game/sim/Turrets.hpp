@@ -157,10 +157,10 @@ struct State {
     // takes that to play the sound - AudioManager::playFireballSound, which
     // sounds.json already names - because a sound is the layer's and never the
     // tick's.
-    std::vector<Fireball> Fire(float dt);
+    std::vector<Fireball> Fire(double dt);
 
     // After the step: the fireballs fly, leave by the level's edge, and kill.
-    void Tick(entt::registry& registry, entt::entity player, float dt);
+    void Tick(entt::registry& registry, entt::entity player, double dt);
 
     // Every carranca's own body: what a fireball's touch passes by.
     std::vector<entt::entity> Bodies() const;

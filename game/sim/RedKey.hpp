@@ -36,8 +36,8 @@
 // - the bucket-visibility clock: red_key_state is static, and a static entity's
 //   callback runs only while its bucket is visible (00_order 8.12c); the port's
 //   clock runs every tick, as for every static callback the port builds;
-// - the uint milliseconds: the original adds whole milliseconds a frame, the port
-//   adds the tick's 16.67;
+// - (the uint milliseconds are built since planning step 147: the tick hands it the
+//   script's whole 16;)
 // - which of two static callbacks runs first in a frame: the port takes the wall on
 //   the tick the fade ends, the original on that frame or the next, by the order of
 //   the visible buckets (the wall's is not the state's).

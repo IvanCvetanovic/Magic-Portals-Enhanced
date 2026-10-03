@@ -59,6 +59,7 @@ add_library(MagicPortalsSim STATIC
     Restock.cpp
     Roles.cpp
     Scores.cpp
+    ScriptClock.cpp
     Shot.cpp
     Sky.cpp
     Sounds.cpp

@@ -658,7 +658,7 @@ void State::Centre(Placed& portal) {
     portal.trigger.centre = glm::vec2(centre.x, centre.y);
 }
 
-void State::Tick(entt::registry& registry, float dt) {
+void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     // What went through last tick has been drawn; this tick starts with none -
     // and nor has it launched, turned or lost a shot yet.
     transits.clear();
@@ -667,16 +667,18 @@ void State::Tick(entt::registry& registry, float dt) {
     failures.clear();
     agentKills.clear();
     burns.clear();
-    lockoutS = std::max(0.0f, lockoutS - dt);
-    // The cooldown clocks run UP, as the original's two Timers do.
-    const double elapsedMs = static_cast<double>(dt) * 1000.0;
+    // The port's own guess, on the engine's tick: nothing in the original reads it.
+    lockoutS = std::max(0.0f, lockoutS - step.physicsS);
+    // The cooldown clocks run UP, as the original's two Timers do (Timer::update reads
+    // the script's clock).
+    const double elapsedMs = ScriptClock::Ms(step);
     sinceStartMs += elapsedMs;
     sinceTapMs += elapsedMs;
     for (NoPortalZone& zone : zones) {
-        if (zone.moving) zone.motion.t += dt;
+        if (zone.moving) zone.motion.t += step.scriptS;
     }
     for (Agent& agent : agents) {
-        if (agent.moving && !agent.gone) agent.motion.t += dt;
+        if (agent.moving && !agent.gone) agent.motion.t += step.scriptS;
     }
 
     // EVERY PLACED PORTAL'S OWN CALLBACK, before anything reads where it is
@@ -718,7 +720,7 @@ void State::Tick(entt::registry& registry, float dt) {
         }
         const glm::dvec2 left = flight->toPx - flight->atPx;
         const double remaining = glm::length(left);
-        const double reach = shot.speedPx * static_cast<double>(dt);
+        const double reach = shot.speedPx * step.scriptS;
         const bool arrives = remaining <= reach;
         const glm::dvec2 next = arrives ? flight->toPx : flight->atPx + left * (reach / remaining);
         double first = 2.0; // along the stretch, from 0 to 1: past its end until something is met

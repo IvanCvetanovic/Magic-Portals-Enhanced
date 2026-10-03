@@ -221,6 +221,10 @@
       "150164..151039, instruction 170: g_timeManager's last frame time) and the sign's follow.",
       "The black is the only part timed by GetTime(), a live CLOCK_MONOTONIC read",
       "(AndroidGLES2Video.cpp:66-70) - see overlay.start_after_ms for what that costs it.",
+      "IN THE PORT (planning step 147, fix 1), the black fades on the WALL frame clock - the engine's",
+      "16.667 ms a tick, the clock this file's 465 and 700 were fitted on - and the rest on the script's",
+      "floored 16 ms a tick: the caption, the hint and the plaque's dismissal (ETHTextDrawer is handed the",
+      "uint GetLastFrameElapsedTime(), ETHEngine.cpp:205), the pads, the sign.",
       "A retry opens the same way: its restart builds a fresh Game state."
     ],
 

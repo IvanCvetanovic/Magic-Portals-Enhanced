@@ -27672,3 +27672,265 @@ R25 stay the owner's; nothing else is ruled.
 - **`test_mp_play`'s floor** stays 171 (it runs 234; step 133's rider (6)): this step relinked the runner and did not
   raise it, as that would have cost another relink and launch under Smart App Control after the suites had passed on
   the final code. The next step that relinks the runner raises it.
+
+
+## Step 147 - the script clock is a floor of each frame's milliseconds, as the original's: 16 ms a tick of 16.667, one source for every scripted motion, timer, blink and fade, with the physics step and the wall clock left where they were (built)
+
+**THE PROGRAM'S CK** (`docs/parity-backlog.md` section 6, section 2's first PORT-WIDE row; program wave 3a, the TIMING GROUP,
+run alone on MPR `main` after step 146 (UI, `aa374d4`), engine `710bffc`, nothing else running; the first of the group's
+four steps - CK, G10, G4, PIC, committed locally and not pushed). Its before is UI's after-sweep
+`out/parity/program/UI/after/sweep/`, `MagicPortals.exe` `2cc4a50e`. Changed: `game/sim/ScriptClock.{hpp,cpp}` (new: `Rules`,
+`LoadRules`, `FloorMs`, `Step`, `TickStep`, `Ms`, `WallMs`, `OfFrameMs`), `game/data/clock.json` (new), `game/MagicPortalsLayer.{hpp,cpp}`
+(`m_clockRules`, `m_step`, `TickStep()`, `ClockRules()`; every helper `fixedTick` calls takes the `Step`; `updateEffects`,
+`playLatched`, `loadingTick`, `syncTimers`), `game/sim/Game.{hpp,cpp}` (`BeforeStep`, `AfterStep`, `Tick` take a `Step`),
+the sim components that read a delta (`Boss`, `Bounce`, `DarkDragon`, `Diamonds`, `Dragon`, `Fields`, `Fire`, `Ghost`, `Goals`, `GravityWell`, `Keys`,
+`Launchers`, `Minions`, `Mover`, `Portals`, `Puzzle`, `Torch`, `Turrets`; the list is in `impl.md`), `tests/test_mp_clock.cpp` (new suite), `tests/test_mp_layer.cpp`, `tests/test_mp_timed.cpp`,
+`tests/CMakeLists.txt`, stale notes in `art.json`, `Art.cpp`, `RedKey.hpp`, and this record. No engine change (the pin stays
+`710bffc`: `SimulationClock.fixedDelta` and the physics are exactly what they were), no converter change, no route file touched. The
+evidence is under `out/parity/program/CK/` (`impl.md`, `readers.md`; the census in `census.md`).
+
+**GAMEPLAY: CHANGED, plainly.** Every scripted motion, timer, blink and fade the original reads through its floored clock now
+advances **16 ms a tick where it advanced 16.667: 4.17 % slower in wall time**, at the original's own 60 Hz - **bar one site, the
+player's ground walk-cell flipbook (DEVIATION 1, cosmetic)**. What that moves,
+by name: **the 400 ms between taps** (`PortalManager`'s own `Timer`, which proceeds only when it is STRICTLY above 400 - the
+strictness read in the listing (`PortalManager::update` runs `Timer::update` on `lastPortalTimer`, ins 14, before `managePortalInsertion`,
+ins 59, whose `CMPu` / `JP` at ins 50-51 proceeds only when the timer is strictly above `NEXT_PORTAL_MIN_TIME`; `Timer::reset` follows the
+tap) - and so refuses on equal: 25 ticks of 16 are exactly 400 ms of script clock and still refuse, and the next tap that passes
+is 26 ticks on, 416 ms of script clock, about 433 ms of wall (DECODED, fix 1; the first build labelled it INFERRED); at 16.667 ms 24 ticks were enough,
+400.00001. The routes space their taps by 24: **38 of the 45 routes that no longer win are refused on exactly this**; the other
+seven fail elsewhere, named in the census below. The program re-authors all 86 after PIC); timed
+crystals (a 10 s crystal is whole through its 625th tick, where the sum is exactly 10000 and the original's test is strictly above, and runs
+out on the 626th, 10.43 s of wall - fix 1; the first build ran it out on the 625th), the 20 s a placed portal lives, the 1400 ms of the lost
+screen and the door's `end_delay` (88 ticks, not 84), the achievements' and the medal's level time (16 ms a frame, as the
+original's `writeScore` sums it), lifts, platforms, door bobs, the antiportal's 600 ms period (37.5 ticks, 625 ms of wall), every
+bob and turn, the portal shot's flight (until G4 decodes it), the gravity wells' pull (16 / 16.667 of what it did a tick),
+the bosses', the minions' and the 2-32 dragon's timers (the dragon's elapsed time, claw sweep and flight ran on the tick's 16.667 beside a follower on 16 since step 77;
+they now count the same 16 ms, as the original's one basis does: **this unifies step 77's "two clock bases" row** (its re-gate is not done: RULINGS, LEFT FOR LATER), and the 2-32 schedule runs 4.17 % slower in wall time), the camera's follow share, the rocket's shake (every seventh tick: step 123's
+deviation 2), the pause's, the popups' and the menus' clocks (their buttons, popups and entrances). **Not moved**: anything the physics carries (the player's walk
+and gravity - `Player::Steer` stays on the engine's step until G10 - a minion's, a knight's and a rolling stone's velocity, a
+kinematic body's carry; **and the player's ground walk-cell flipbook**, which the engine's own `SpriteAnimationSystem` still
+advances by 16.667 ms a tick, so the walk cycle stays 4.17 % fast in wall time, as it was before CK: DEVIATION 1), and everything the original reads from `GetTime` (the earthquake generator, the placed portal's 400 ms
+kill, the title and the choosers' blink, **and the opening blacks: every menu state's one black and the level's two, `FadeInController`,
+which fade on the wall clock as they always did - the level's are gone on the 70th tick, 1166.7 ms of wall; fix 1, the first build had
+slowed them to the 73rd**). **Slower, and on the script's floor by decode**: the level-start caption, 1-21's hint and the plaque's dismissal
+(`ETHTextDrawer::Draw` is handed the `unsigned long` `GetLastFrameElapsedTime()` by `ETHEngine::DrawTopLayer`, `ETHEngine.cpp:205`), the pads' slide and pulse, the
+no-portal sign's follow.
+
+**FIX ROUND 1** (the first verifier's verdict, `out/parity/program/CK/verify1.json`; the report is `CK/fix1.md`). One medium defect, fixed: **the opening
+blacks are `GetTime` readers** (`FadeInController`, listing bytes 37911..38779) **and the first build had put them on the script's 16 ms** - the menu states' black
+took 44 ticks where it took 42 before CK, and the level's two ended on tick 73 where they ended on 70, a regression against the footage fit `ui.json`'s 465 / 700 were
+made on. They fade on their own wall accumulators now (`m_menuClock.wallMs`, `m_levelFrameWallMs`, each += `WallMs(step)`, a pause and a popup counted as `GetTime` counts
+them), and `readers.md` rows 10-13 say so (with the two controllers' construction sites, `BaseState::preLoop` and `Game::preLoop`). **The verifier was wrong about the caption and
+the hint**: `ETHTextDrawer::Draw` is handed `GetLastFrameElapsedTime()`, an `unsigned long`, by `ETHEngine::DrawTopLayer` (`ETHEngine.cpp:205` -> `ETHDrawableManager.cpp:36` ->
+`ETHDrawable.cpp:64-66`; `ETHScriptWrapper.h:369`, `.System.cpp:105-107`) - the floored clock - so they, the plaque's dismissal and the pads stay on the script's 16, and the stale
+"engine's own frame time" comment is corrected. Also fixed, all low: **the crystal expires strictly above its time** (fixed; what stays open of it is DEVIATION 6), the tap spacing relabelled DECODED, `clock.json`'s
+`frame_ms` note reworded (the floor is derived in code), `ScriptClock::Rules`' repeated defaults commented, the launcher's reset-to-zero recorded (DEVIATION 5), and where 4-21's
+timeline first parts located (the census). Not fixed: the looser pins (LEFT FOR LATER).
+
+**FIX ROUND 2** (the second verifier's verdict, `out/parity/program/CK/verify2.json`; the report is `CK/fix2.md`). No high or medium problem; the
+verifier passed every gate but the readers table, and the one defect there is real: **the table had 69 functions and the listing has 70**. The
+missing reader is `CreditsScreenLayer::update` (bytes 181111..181697, ins 66-67), the one caller of the RAW global `sys:UnitsPerSecond`
+(`m_lastFrameElapsedTime / 1000 x speed`, `ETHScriptWrapper.System.cpp:95-98`: the floored uint, no `min(200)`, no `m_factor`), which the scan's pattern had
+no name for. **The port was already right** (`creditsInput` -> `Credits::Step(..., ScriptClock::Ms(step), ...)`: 16 ms a tick, so the missing `min(200)`
+can not show): only `readers.md`'s row and count were wrong, so no source, no test and no pixel moved and nothing was relinked. Fixed, all notes: the
+table and its scan (70 rows: 59 `F`, 10 `W`, 1 `F+W`; a second scan keyed by name and byte range finds the same 70 in 94 call sites), `clock.json`'s decode note,
+this step's counts, the stale notes the verifier named in `dragon.json` (the two clock bases are one now) and `sky.json`, the `frame_ms` name below, the original's
+physics step (below: a fixed 1/30 s, not the frame's float: prose only, nothing in the port changes), and the four first-build `.log` files left in `CK/after/sweep/`. The looser pins and
+the inferred causes stay on LEFT FOR LATER.
+
+**BLOCKERS, checked first: none.** The listing shows every reader (70 functions, as of fix 2); the decode of SE step 72 is confirmed in
+the listing and the engine source (`ETHEngine.cpp:141-168`). The spec's own examples of wall-clock readers (the 400 ms tap
+clock, `addEnemyShoot`'s 2000 ms, the keyhole's clock) are script-clock readers in the listing (`Timer::update`, `ETHCallback_minion`,
+`ETHCallback_keyhole`); only 13 call sites in 11 functions read `GetTime` / `GetTimeF` (`readers.md`), and the shake re-arm of step 123 is the rocket's own
+counter, not the generator's. The step follows the listing, not the spec's examples.
+
+**THE CLOCK, AS DECODED AND BUILT.**
+- **The decode** (`clock.json`, `readers.md`): `ETHEngine::Update` gives the SCRIPTS `static_cast<unsigned long>` of the frame's
+  float milliseconds (`ETHEngine.cpp:147`, `__aeabi_f2uiz` at `0x1cb364` in the shipped library) and the C++ side the float
+  (`:166`): the physics call (`ETHScene.cpp:464`; the original's level world steps a FIXED 1/30 s whatever float it is handed - `AverageFPSRateManager`,
+  below) and every entity's own update, so its particle systems
+  (`ETHSpriteEntity.cpp:453-459`, `:571-576`). A script reads the integer through `getLastFrameElapsedTime` (bytes
+  7894..7961: `fTOu(uTOf(ms) x m_factor)`), `unitsPerSecond` (8045..8162: `speed x min(200, ms) / 1000`), `sys:GetLastFrameElapsedTime` and, in one function, the
+  raw `sys:UnitsPerSecond` (the credits' scroll, `CreditsScreenLayer::update`: `uint / 1000 x speed`, `ETHScriptWrapper.System.cpp:95-98`; found in fix 2).
+  The C++ side has two readers of the floored uint of its own: `ETHTextDrawer::Draw` (the caption and 1-21's hint, below) and `ETHParticleDrawer::Draw`
+  (`ETHParticleDrawer.cpp:49-51`), which only `sys:PlayParticleEffect` creates and the listing never calls, so this game has none.
+  At 60 Hz that is 16 of 16.667: `matched_hz` 60, the floor `floor(1000 / matched_hz)` = floor(1000 / 60) = 16 (derived in `ScriptClock::LoadRules`;
+  `clock.json` has no key of its own for it; the other rates' floors are in `clock.json`'s note: 30 Hz 33, 120 Hz 8, 144 Hz 6).
+- **One script-facing delta**: `ScriptClock::Step { double scriptS; float physicsS; }`. The layer builds it once a tick
+  (`OnFixedUpdate`: `TickStep(rules, fixedDelta)`) and hands it to `fixedTick`, which gives every helper the `Step`; the
+  sim's components take `step.scriptS` as a `double` (`Game::BeforeStep` / `AfterStep`), `Channels`, `Door`, `Movers`,
+  `Bounce`, `Portals` the `Step` itself. **The script's delta is exactly whole milliseconds**: n / 1000 and back by x 1000 is
+  exact in a double for every whole n up to 1000 (`test_mp_clock` checks all of them), so a tick of 16 is 16.0, 25 are 400.0, 625 are
+  10000.0 - where `0.016f` would have made a tick 16.00000076 ms and 25 of them 400.00002, the defect step 123's "100.000005
+  passes `> 100`" was. A bare float is a `Step` of one length for both deltas (what the pure suites' `kStep` has always
+  meant), so every sim-level suite keeps stepping at the length it was written for.
+- **Three other clocks are named, not changed**: the physics step (`step.physicsS`, the engine's tick, `SimulationClock.fixedDelta`;
+  measured against by `MoveKinematic` - the velocity that lands a kinematic body on its target is over THAT step, not the script's 16 -
+  `Player::Steer`, `Boss::Contacts`' reach, `Impacts`, and the portals' re-entry lockout - 12 ticks, `reentry_lockout_s` 0.2, a `_guess` nothing in the original reads);
+  the wall clock (`m_layerClockMs` += `WallMs(step)`: the earthquake generator's `GetTime`, the menu pieces) and the fades' own accumulators
+  (`m_menuClock.wallMs`, `m_levelFrameWallMs`, the same step: the opening blacks' `GetTime`); and the frame's own
+  float (the emitters' particle systems, and the placed portal's kill fade: its 400 ms is `GetTime` and its x 0.9 a frame a per-frame multiply, so both stay on the frame).
+  One reader of the engine's tick is NOT yet on the script's, and should be: the player's ground walk-cell flipbook (the engine's `SpriteAnimationSystem`; DEVIATION 1). (Fix 2, prose only: the original's own level world steps a FIXED 1/30 s
+  whatever the frame - `Game::preLoop` ins 323 builds `AverageFPSRateManager`, which sets the simulator's fixed step to 0.0333333 and re-asserts it every update;
+  `ETHPhysicsSimulator::Update` steps `m_fixedTimeStepValue`, `ETHPhysicsSimulator.cpp:156-161`; `GetCurrentPhysicsTimeStepMS` is 33.33, `minions.json` `step_ms` -
+  so no floor reaches the original's physics, and none is applied to the port's own step. `clock.json` and `readers.md` said "the engine's float" before.)
+- **The per-frame paths** (`updateEffects`, `playLatched`) take `OfFrameMs`: a frame the length of the tick is the floor exactly, any
+  other is scaled by 16 / 16.667. The emitters of `updateEffects` keep the frame's milliseconds.
+- **Second-based countdowns became millisecond sums**: `Goals::Crystal::elapsedMs` / `lifeMs` (the dial's `elapsedTime`, the node's
+  `time` itself) and `Launchers::Launcher::leftMs` / `strideMs`, so a threshold at a multiple of 16 trips on the tick the
+  original's integer sum does (Goals expires STRICTLY above the time, as the dial's own test and the original's `ETHCallback_timer` do - fix 1; DEVIATION 5 is the launcher, which keeps its own test).
+
+**THE GATES.** Before: UI's after-sweep (`MagicPortals.exe` `2cc4a50e`), `test_mp.exe` `a76afeb3` (49 suites, 18,224 checks), reachability
+108 / 20 / 0. After the first build: `test_mp.exe` `bdfe8fd2` (`e8ce1965` before the dark-dragon pins), `MagicPortals.exe` `4d7c4c7d`; **after fix 1** (the final code):
+`test_mp.exe` `6f8fc6c0`, `MagicPortals.exe` `164125fa`; **after fix 2: the same two executables** (no source, no test, no behaviour changed: notes, the table and the step's own text only).
+
+| Gate | Required | Measured |
+|---|---|---|
+| The readers table | every reader classified, `out/parity/program/CK/readers.md` | **passes, as of fix 2**: **70 functions** (69 in the first two builds), each `F` (floored, 59), `W` (wall, 10) or `F+W` (1: `ETHCallback_portal`), through `TM`, raw or the raw global `sys:UnitsPerSecond`, with the port's site before and after; the 3 velocity readers the port does not scale are listed. The 70th, `CreditsScreenLayer::update`, was missed by the scan's pattern (the second verifier found it); the port already steps it on the script's ms. A second scan keyed by name and byte range finds the same 70 functions (94 call sites) as the table, none more; every other `sys:` time-named call (`GetCurrentPhysicsTimeStepMS`, `GetFPSRate`, `SetFixedTimeStep(Value)`, `SetTimeStepScale`) is classified as not a clock reader |
+| Build | 0 warnings, MSVC /W4 | **passes** (`CK/build_full6.log`, and `build_full7.log` for the final test-only relink of the first build; every unit compiled warning-free in its final form: the one build that warned, `build_full1.log`, did so on the new suite's `CHECK_NEAR` of doubles, fixed before any launch). **Fix 1**: the changed units compiled alone first, with no link (`CK/fix1/compile_0{0,1,2}.log`: 42 of the 126 object targets recompiled, the rest up to date, 0 warnings, rc 0), then one `port_build.bat` (`CK/fix1/build_full1.log`: 5 links, 0 warnings; `MagicPortalsSpike.exe` relinked, not launched) |
+| One script-facing delta; every scripted reader takes it | `ScriptClock::Step` the one source for every scripted motion the original reads through the floored clock; wall readers on the wall clock; the physics step untouched | **passes but for ONE site** (the third verifier's one failed gate: DEVIATION 1). Code and logs agree - `ScriptClock::TickStep` is the one place; the sweep logs' pure script-timed events move by x 1.04-1.05 (`fireball_spat` 53 events, median 1.0465; crystals gone 1.043-1.046; `boss_appeared` 300 -> 312) and every physics-decided event is identical (impact 41, key 19, sound 68, earthquake 41 equal); 1-30's crate pile stands in the same pose on the same tick - **except the player's ground walk-cell flipbook, which the engine's `SpriteAnimationSystem` still advances by 16.667 ms a tick** (cosmetic: no physics, route or sweep frame depends on it) |
+| The floor pinned, the physics step untouched | a unit test | **passes**: `test_mp_clock` (new suite, 132 checks): the rules and their refusals, the floor's truncation, the exact sum (`n / 1000` for all n to 1000; 25, 50, 125, 625 ticks trip 400, 800, 2000, 10000), the Step, `OfFrameMs`; `ADoorsInterpolatorRunsOnTheScriptsMillisecondsAndItsBodyOnThePhysicsStep` (velocity x 1/60 is the displacement, x 0.016 is 0.96 of it); and `test_mp_layer`'s `TheScriptClockIsTheFloorOfEachTicksMilliseconds`: `SimulationClock.fixedDelta` == `kTick`, `TickStep().physicsS` == `kTick`, the age 16 ms a tick exactly over 75 ticks, the layer clock 16.6666675 |
+| The antiportal's period | pinned in ticks | **passes**: 600 ms of script clock is 37.5 ticks, 625 ms of wall; 75 ticks are two periods to the millisecond and the blink is where it started (`test_mp_layer`, `test_mp_clock`) |
+| The crystal's dial | pinned in ticks | **passes, as of fix 1**: 2,000 / 10,000 / 12,000 ms crystals expire STRICTLY above their time, on ticks 126 / 626 / 751 holding 2016 / 10016 / 12016 ms (`test_mp_clock`; the first build pinned 125 / 625 / 750 on `>=`); the layer's dial on 1-27's `crystal_1264` is whole through the 625th tick (the sum is exactly 10000, cell 7 held by ins 242-248's `min(7)`) and expires on the 626th (600th before CK), on cells `tick x 16 x 8 / 10000` |
+| A Motion | pinned in ticks | **passes**: a crystal's bob is 0.032 rad a tick (angle after 100 ticks = start + 3.2, 4.17 % less than 16.667 ms would give); `test_mp_layer`'s bob, door, arrow and circle cases at 16 ms |
+| The shake's re-arm | every seventh tick (step 123, deviation 2) | **passes**: `StepLaunch` re-arms on updates 7, 14, ... (53 calls to the launch's 6000 ms; 59 before); `TheRocketLaunchesAfter4_01sDoor` pins 53 |
+| Suites | all but `test_mp_routes` pass, one runner launch | **passes**: `test_mp: 50 suites, 49 passed, 0 skipped, 1 failed` (first build: `CK/allmode5.log`, `bdfe8fd2`, one full launch, then three `test_mp_routes --only ... --trace` launches of `e8ce1965`; **fix 1**: `CK/fix1/allmode1.log`, `6f8fc6c0`, one full launch, no refusal), the one failure `test_mp_routes`, whose census is below. **17,717 checks** after fix 1 (17,709 after the first build, 18,224 before; routes 1,513 -> 851): `test_mp_clock` 132 -> 134 (the strict expiry's three elapsed values), `test_mp_layer` 3,539 -> 3,554 -> 3,560 (the black on the wall clock: `TheLevelStartBlackFadesOnTheWallClock` and two checks in the menu and pause cases), `test_mp_timed` 84 (a field moved), every other count equal |
+| The opening blacks on the wall clock (fix 1; the first verifier's problem 1) | `FadeInController` reads `sys:GetTime`: the menu states' black fades as before CK (half at 21 ticks, gone at 42) and the level's two blacks end on the 70th tick | **passes**: the menu case's pre-CK pins restored verbatim and passing (127 / 255 at 21 ticks within 1e-6, gone at 42, `MenuStateWallMs` 350.0, the script's `MenuStateMs` 336); the layer case `TheLevelStartBlackFadesOnTheWallClock` (both quads are `OverlayLayersAlpha` of `LevelFrameWallMs()` on every tick to the 70th, where both are gone; the script clock would hold them to the 73rd); `ThePauseStopsTheLevelUnderIt`: the wall frame clock gains 125 x 16.667 under a 125-tick pause. **Measured on the build** (`CK/fix1/fade_measure.md`, 1-05 `level4`, a static scene, the mean of the upper middle of the frame against f78): ratio 0.7434 / 0.9159 / 0.9613 / 1.0000 at f64 / f68 / f69 / f70 against the wall model 0.7443 / 0.9156 / 0.9612 / 1.0000 (the script model: 0.6400 / 0.7924 / 0.8349 / 0.8784); 1-01 `level0` tracks it and is whole at f70 (the CK build left 0.123 of black at f70 and was whole at f74) |
+| Re-pinned, not weakened | only where the new timing moved a number | **passes, with one recorded loss** (the beholder case's hard branch, DEVIATION 4): the layer suite's first run failed 46 cases (277 checks), each a tick count or a millisecond value of a script-clock time (a 1400 ms screen on tick 88 not 84, a 1000 ms fade in 63 ticks, a 6000 ms fade in 375, ...); every re-pin is the same rule at 16 ms and the new count is recorded in the case (`impl.md` lists them). Two cases needed more than a count: the dark dragon's flashes now start with the 8 ms the last leg overshot, so their emissive is within 0.02 of the pure colour, not 1e-6 - too wide to tell one update from the next, which is why the path's own frame and carried milliseconds are pinned (frame 0 on the 63rd update, frame 1 with 8 ms on the 64th; frame 1 on the 18th, frame 2 with 12 ms on the 19th) - and the beholder's rock, which loses its hard branch (DEVIATION 4) |
+| Reachability | 108 / 20 / 0, unchanged | **passes**: 108 reachable, 20 opened, **0 differ** before and after (`CK/reach_before.txt`, `reach_after.txt`, byte-identical; data only, the code changes nothing it reads) |
+| The sweep | every changed level explained by the model | **Re-taken in fix 1** on the final `MagicPortals.exe` `164125fa` (`CK/fix1/sweep_run/capture.txt`, `CK/fix1.md`): 128 rc 0, validation active and silent, no input line, a fresh `40bfef3a` save per launch; **124 byte-identical to the first build's sweep, 4 differ** - 1-24, 2-04, 3-16, 4-06, exactly the four levels whose x16-ms crystal expires before tick 420, where the strict expiry moves its vanish from tick 250 / 375 to 251 / 376 (the only event-log difference in them; the pixels that differ are random-driven particle detail: 2-04's fireball burst of tick 403, a knight's red-eye glow in 1-24 and 3-16, a glow at 4-06's planet limb; the shared effects stream is the INFERRED mechanism, not traced). Those four pngs replace their first-build copies in `CK/after/sweep/`, which is the step's final after-sweep (`CK/after/sweep_UPDATED_by_fix1.txt`; **fix 2 replaced their four `.log` files too**, which the first replacement had left as the first build's: `CK/after/sweep_UPDATED_by_fix2.txt`; by event lines exactly those four of the 128 logs differ between `CK/after/sweep` and the fix-1 run, and none now); against the UI baseline it is still 3 identical, 125 changed. The first build's record follows. **First build: recorded: named per level, located by region only** (`CK/after/`, `compare_CK.txt`, `sweep_explained.md`): 128 launches, every one rc 0, a fresh `40bfef3a` save each, validation active and silent in all 128, the exe unchanged at the end, no input line. **3 byte-identical** (1-17, 3-32, 4-32) and **125 changed**. Every level places script-clocked pictures (`predict.py`: all 128), and a picture stands at tick 420 = 6720 ms of script clock where the baseline's stood at 7000: the crystals' bob (1-04's 5 px is the least), the antiportals' blink and turn, the lifts', platforms' and shock agents' motions, the placed arrows, circles and hands, the unlit torches' turn, the tutorial ring round each walk pad on 1-01 (the ring's size at 6720 ms against 7000: `crops/1-01_level0_c0.png`), the beholder on 1-32 (`crops/1-32_level31_c0.png`: its picture alone), and the space levels' turning spiral and bobbing planet, **11 levels over 400,000 px** (10 space levels, whose spiral fills the view, and 2-32's whole view - INFERRED: the camera is locked to a dragon whose flight is script-timed, the one `auto_camera` level). The three identical: 1-17 draws three crystals (the two phases share the pixels), and 3-32 and 4-32 draw nothing script-clocked at frame 420 (INFERRED: their bosses' Followers already summed whole milliseconds before this step). **The control against a leak into the physics is the routes, not the sweep's logs**: the 34 routes that still win on the same tick all win with the same number of shots, and 21 of them print a result line byte-equal to the baseline's (tick, shots, aim drift); the other 13 differ only in the aim's drift, by 0.003 to 0.42 px (1-08, 1-10, 1-12, 1-21, 1-23, 2-03, 2-04, 2-21, 2-23, 2-25, 2-30, 2-31, 3-10; INFERRED: the camera's follow, which reads the script clock, moves the view the aim is read through by a hair) - a player's walk, fall and carry that differed would not reach the same door on the same tick. The sweep's own event-log diff, filtered to what the physics decides (`physics_control.txt`), is a weak secondary: the 30 levels with no script-moved body (no lift, platform, slab, switched door, minion, boss, launcher, carranca, well, shock ring or rolling stone) are equal in all 30, but only 4 of them print a physics-decided line at all (9 lines) - a still sweep prints almost none; of the 98 levels with a script-moved body, 79 are equal and 19 differ, each in a line that body decides (a launcher's stones destroyed 94 ticks apart, not 90, at the same hit values). `logdiff_CK.txt`: 43 of the 128 logs differ in an event line, all script-timed (a crystal's expiry, a stone's despawn, a boss's cue). The reasons for the three levels whose changed pixels sit where my on-screen list shows no script-clocked picture: 1-01 (the pad rings), 1-03 (a placed circle and a tapping hand: INFERRED, drawn as quads the sprite report does not name) and 1-32 (the beholder) |
+| The routes | a census, no route file edited | **recorded**: `test_mp_routes` run once with the suites: **41 of 86 still win** (34 on the same tick, the rest within +6 ticks but 4-21 at 438 against 587), **45 do not** (below); no route file touched. **The census on the fix-1 build is identical, route by route** (`CK/fix1/census.md`): neither the strict crystal nor the wall-clock blacks moves a route |
+
+**THE ROUTE CENSUS** (`CK/census.md` has every route: its baseline tick, its tick now or its first problem). 41 still win, all within their
+`win_by`: 34 on the same tick as before and 1-03 +3, 2-24 -1, 3-08 +4, 3-13 +6, 4-18 +2, 4-28 +4 (these six not traced) and **4-21 on 438 against 587**
+(INFERRED: its rolling stone goes through a gravity agent whose pull is now 0.96 of what it was a tick, and the route's door is reached
+149 ticks sooner; fix 1 located where the two timelines first part, by comparing the CK trace (`CK/trace_level20c.log`) with the pre-CK trace of the same route
+(`program/LD/verify1/level20c_trace2.txt`, the route also won on tick 587 there): both agree to the tick through the two shots, the crystal on 18, the portal
+traversal and the breakable wall on 80 and the crystals on 211; the first differences are **the stone's hit on the gravity agent (tick 111, hit 3.198 before; tick 115, hit 2.951
+now)** and the lift's opening (218 before, 215 now), after which the stone ends elsewhere, the player meets it on 311 where it met it on 282, and the exit is
+reached on 438, where before the lift closed on 578 and the exit was reached on 587. The cause stays INFERRED - the first difference is the gravity agent's, whose pull is the one script-moved
+body the route's stone meets - and the lift's 3-tick shift is not explained.) 45 do not win:
+- **38 are refused at a tap by the 400 ms between taps, strictly above 400 ms being what passes** (1-06, 1-28, 2-05, 2-06, 2-08, 2-09, 2-10, 2-11, 2-13, 2-14, 2-15, 2-16, 2-17,
+  2-19, 2-26, 3-03, 3-07, 3-12, 3-14, 3-15, 3-19, 3-20, 3-22, 3-27, 3-29, 3-31, 4-02, 4-07, 4-08, 4-11, 4-14, 4-15, 4-16, 4-19,
+  4-25, 4-29, 4-30, 4-31): a route taps 24 ticks after the last, which is 400.00001 ms at 16.667 and 384 at 16. (The spacing that
+  passes at 16 ms is 26 ticks of sum - DECODED in the listing: `Timer::update` runs before `managePortalInsertion` and its `CMPu` / `JP` is strict; the re-author measures it on the build.)
+- **2-18**: the tap on tick 144 is refused, **a shot still in flight** (INFERRED: the shot flies 4.17 % slower in wall time).
+- **3-09** (tick 149) and **2-32** (tick 514): the tap is **off the view** by 0.34 and 11.5 units (traced: 3-09's view starts at 20.34 on tick 149, the tap is at 20.00; INFERRED
+  cause: the camera's follow takes a smaller share of its lag a tick).
+- **4 deaths**: **1-11** on tick 471 (traced as far as: 10 shots fired, 2 failed - the last "the tap, where no portal may open" - and the
+  player falls past the level on 471; INFERRED cause: a moving no-portal zone whose swing is the script's); **1-32** on 1040, **3-32** on 556 and
+  **4-32** on 1294 (INFERRED: the bosses' timers moved against a route written for the old timeline; not traced).
+
+**SMART APP CONTROL: 1 refused launch, mine** (CodeIntegrity 3033/3077 from 15:38: `build/tests/test_mp.exe` `ce4320e4` at 16:02:38, the first launch of the first runner,
+deleted and relinked once to `b420197f`, which ran). The relinked `b420197f`, the four links after it (`4fe6fbdf`, `2cd03cc7`, `e8ce1965`, `bdfe8fd2`) and the game (`4d7c4c7d`,
+128 launches: the sweep) ran with no refusal; the 16:33 `Penumbra.exe` event is another session's. Every `MagicPortals.exe` launch had `--saves` with a fresh copy of
+`merge_w1/sweep_saves/scores.json`; the owner's `%APPDATA%\Magic Portals\` holds `scores.json` alone, `40bfef3a`.
+
+**Fix 1: no refusal** (CodeIntegrity 3033 / 3077 queried from 17:54, the round's start, to 18:27: no event). `test_mp.exe` `6f8fc6c0` launched once (the full run), `MagicPortals.exe` `164125fa` 146 times (18 fade frames and the 128-level sweep), each with `--saves` on a fresh copy of `scores.json`; `MagicPortalsSpike.exe` relinked and never launched; neither exe relinked after its first launch. The owner's `%APPDATA%\Magic Portals\` still holds `scores.json` alone, `40bfef3a`.
+
+**Fix 2: no refusal** (CodeIntegrity 3033 / 3077 queried from 19:30, the round's start: no event). `test_mp.exe` `6f8fc6c0` launched **once**, the full run (`CK/fix2/allmode1.log`): 50 suites, 49 passed,
+the one failure `test_mp_routes` (851 checks, 90 failures = 45 routes x 2, its result lines identical to fix 1's), **17,717 checks, every suite's count identical to fix 1's** (`CK/fix2/counts_fix2.txt` against `counts_fix1.txt`) - run because
+three data files the port reads at run time (`clock.json`, `dragon.json`, `sky.json`) had their notes edited; the non-comment content of the two tracked ones is equal to `HEAD`'s, key for key. `MagicPortals.exe` was not launched
+(no pixel can move), nothing was relinked (no source or test is newer than the exes; md5s unchanged), reachability re-run: 108 / 20 / 0, byte-identical to before. The owner's `%APPDATA%\Magic Portals\` still holds `scores.json` alone, `40bfef3a`.
+
+**THE THIRD VERIFIER** (`out/parity/program/CK/verify3.json`). Thirteen gates: twelve pass and **one fails, the walk-cell site (DEVIATION 1; medium, cosmetic)**.
+It re-derived the decode before it read the code, re-scanned the listing (70 readers, 94 call sites, 0 missing), launched the full runner once (50 suites, 49 passed, 17,717 checks),
+re-took the 128-level sweep itself (128 rc 0, every PNG byte-identical to `CK/after/sweep`; 3 identical and 125 changed against the UI baseline), the census (equal to `census.md` for
+all 86 rows), reachability (108 / 20 / 0, rc 0) and a compile-only retake (126 of 126 objects, 0 warnings), with no Smart App Control refusal and the owner's save untouched.
+**The step is committed with the recorded deviations below (owner-delegated).** The walk cell is a source change and a test re-pin, so it belongs to G10's step, which relinks anyway;
+the verdict's text-only findings are applied in the commit (the walk cell named in the gameplay paragraph, the not-moved list, the gates and the clocks table; the `ETHParticleDrawer`
+sentence; the residual sweep cases in DEVIATION 3). **No source, test or data file was edited, nothing was relinked and nothing was launched for the commit**: `test_mp.exe` `6f8fc6c0`
+and `MagicPortals.exe` `164125fa` are the final code (three data files' notes, `clock.json`, `dragon.json` and `sky.json`, are newer than them; fix 2 ran the runner after editing them).
+
+**RECORDED DEVIATIONS** (the decision's eleven rows, each with its cause and its owner; the first build's list of ten is folded into the body above, which states each of its items:
+the listing's departure from the spec's examples under BLOCKERS, the shot and the player not decoded here under the GAMEPLAY paragraph and LEFT FOR LATER, the lockout, the placed
+portal's kill and the emitters under THE CLOCK, the sim suites' bare-float tick under THE CLOCK, the strict crystal under fix 1).
+1. **The player's ground walk-cell flipbook is on the engine's unfloored tick (the third verifier's one failed gate; medium, cosmetic).** Required: every reader the original steps
+   through the floored clock is stepped by `ScriptClock::Step`. Measured: ONE site is not. The original reads `SideScrollerCharacter::updateFrame` (bytes 130241..130614) ins 80 ->
+   `FrameTimer::set(0, 3, 90)` (23254..23650, ins 6-11 add the raw floored `sys:GetLastFrameElapsedTime`): a column is 90 ms of script clock, 93.75 ms of wall. The port's engine flipbook
+   (`MagicPortalsLayer.cpp:4175-4181`, `:6266`; engine `SupersonicApp.cpp:1540`, `SpriteAnimationSystem.cpp:36-60`) advances 16.667 ms a tick: the walk cycle runs 4.17 % fast, the very
+   error CK removes elsewhere (the same timer on `no_gravity` levels, `:11221`, and the shot's, the ghost's and the knights' cells are already on `Ms(step)`). Not a regression and not new:
+   before CK every timer, this one too, added 16.667; CK fixed every other and not this one, which is why it now stands out. No physics, route or sweep frame depends on it (cells touch no
+   gameplay; the sweep has no input), so the census and `CK/after/sweep/` stay valid. The unchanged `test_mp_layer` walk case (the six ticks after the first walking tick: "add 100 ms, one
+   stride and 10 ms over") pins the 16.667. Cause: a missed site (the engine's flipbook is not handed the script's `Step`). **Owner: G10 (the player as the decode says; it relinks anyway);
+   fallback PIC.** Fix: step the cell with the `FrameTimer` logic on `Ms(step)` in `stepLevel`, as `m_shotFrames` and the weightless column do (`art.json` walk `stride_ms` 90, first 0, last 3,
+   repeat, remainder kept), leave the engine flipbook still (`playing = false`; this also removes the stop-tick off-by-one that test's comment records), re-pin the walk case (6 ticks add
+   96 ms, 6 over) - preferred over scaling `framesPerSecond` by 16 / 16.667, which only approximates the integer sum. `readers.md` row 8 and its clocks table carry the site.
+2. **The route census: 45 of the 86 routes no longer win** (the gate asked for a census with `tests/routes` untouched; `test_mp_routes` is expected to fail). Measured: 41 win (34 on the
+   same tick; 1-03 +3, 2-24 -1, 3-08 +4, 3-13 +6, 4-18 +2, 4-28 +4; 4-21 on tick 438 against 587), 45 do not (851 checks, 90 failures = 45 routes x 2); the third verifier's parser equals
+   `census.md` for all 86 rows. 38 are refused by the 400 ms between taps (DECODED: strictly above 400 of the script clock, 26 ticks of 16 ms). **Seven first causes are INFERRED and
+   untraced**: 2-18 (a shot still in flight: the shot's 4.17 % slower flight), 3-09 and 2-32 (the tap falls off the view: the camera's follow share), 1-11 (a moving no-portal zone; the
+   player falls past the level), 1-32, 3-32 and 4-32 (deaths: the bosses' timers); and 4-21 wins 149 ticks sooner (INFERRED: the gravity agent's 0.96 pull on the rolling stone; the 3-tick
+   lift shift is unexplained). **Owner: the wave's route re-author phase after PIC** (each route is replayed on the final build, so every cause is traced or the route replaced); the
+   shot-flight and view-edge rows also move with G4; the 4-21 pull is G1's.
+3. **Three velocity readers carry no 0.96.** `applyForces` (G10), `ETHCallback_minion` and `ETHCallback_dragon_knight` (G1) multiply the velocity they set by `elapsedTime /
+   GetCurrentPhysicsTimeStepMS` - the physics' FIXED 1/30 s, 33.33 ms, not the frame's float (`ETHPhysicsSimulator.cpp:156-161`; fix 2), so `applyForces`' `speedScale` is `scale x
+   min(66, 16) / 33.33`: x 0.96 with the floor. The port's fixed velocities are the decode at an unstated elapsedTime (`readers.md`, "the velocity readers"): x 1.0. Unchanged by CK in itself,
+   **but CK exposes it for motion bounded by a script timer**: before CK the timers and the unscaled velocities were both about 4.17 % off the original's, in the same direction, so a leg
+   bounded by a timer (a minion's or a knight's patrol leg, a stone's thrown flight) matched the original's by compensation; after CK the timers are exact and the velocity is not, so such a
+   leg runs about 4.17 % longer than the original's. This fits the third verifier's f438 model test, where 1-30, 3-05, 3-23 and 3-24 are not brought nearer the baseline (1-30's crate pile
+   stands in the same pose on the same tick and only the scripted red tint differs; the knight's cell in the other three differs - a history-dependent `FrameTimer` plus patrols on unscaled
+   velocities), and is the owned cause of those residuals, INFERRED and untraced; it is not a leak into the physics. **Owner: G10** (the player; `docs/parity-backlog.md`) **and G1** (the
+   minions and the knight).
+4. **Looser pins (test coverage, not behaviour).** Required: re-pins only where the new timing moved a number - met, each recorded. `TheRocketLandsAfter4_19sDoor`'s door tolerance is 1.0 where
+   the 12 ms overshoot (about 0.4 u) could be pinned to its computed value. **The beholder case loses its hard branch**: `ABeholderRockBrokenOnTheLevelIsHeard` (the player left to fall) now sees
+   the first rock drop on tick 1222 (the layer cases that place the player see 1005) and its first two static breaks come late and SOFT, so its heard-above-2 branch is no longer exercised (the
+   first break's velocity is read from the last tick, not the fastest ever, and the soft branch asserts the gate shut: no `stone_hit`, no `startEarthquake`); the hard, heard break has no
+   coverage in this case (it needs a rock placed over the floor; INFERRED cause of the shift: the player rides a platform whose swing is the script's; not traced). The dark dragon's flash
+   colour is within 0.02 (its path's frame and carried milliseconds are pinned instead); the pad-alpha check's second clause is 6/255 (its first still pins the HUD formula);
+   `test_mp_clock`'s antiportal check is arithmetic (the layer case measures the period). **Owner: the next timing step that edits the same suite** (G4 for the shot and the doors, G10 for the
+   player), else the wave's independent verifier or close role, from the open row in `docs/parity-backlog.md`.
+5. **The launcher's strict test and reset-to-zero (unchanged by CK, not claimed).** `ETHCallback_entity_launcher` throws when `elapsedTime > stride` (ins 63-64, `CMPu`, `JNP`, strict) and
+   **resets the sum to 0 after a throw** (ins 213-222, `SetUInt elapsedTime 0`); the port's `Launchers` carries the remainder (`leftMs += strideMs`) and throws at `leftMs <= 0`, so a stride
+   that is a multiple of 16 ms throws a tick early and every period is a tick short (2000 ms: 125 ticks against the original's 126; an exact multiple of 16 may be a tick). `first_throw` is
+   still an undecoded port guess. **Owner: the next step that edits `Launchers.cpp`** (G1's minion and knight work, or the re-author's first launcher level), measured by the sweep's "stones
+   destroyed 94 ticks apart, not 90" lines; an open row in `docs/parity-backlog.md`.
+6. **The timed crystal's origin: the 626th or the 627th tick.** The strict expiry is fixed (fix 1: `ETHCallback_timer` ins 102-103, `CMPu elapsedTime, time; JNP`, the vanish only when
+   `elapsedTime > time`; 126 / 626 / 751 for 2 / 10 / 12 s; `Goals` and `syncTimers`' dial use one test), and 626 is the earliest the decode allows. **Still unproven: the timer entity's first
+   add** (`addTimerToCrystal`, inside the crystal's first callback) may land a tick after the crystal's, which would make the original's vanish the 627th; the port's crystal and dial count
+   from the level's first tick, as before. **Owner: the route re-author and the final comparison** against footage of a timed crystal.
+7. **The loading screen's, the menus' and the popups' timings moved with the clock and were not re-measured** against the `launch_gold` and UI footage (their ms are the original's, summed as
+   the original sums them, 16 a frame; the buttons, popups and entrances ride the script clock by decode). **Except the opening blacks**, which are `GetTime` and ride the wall clock (fix 1:
+   the level's two end on tick 70, a menu state's on 42 ticks, measured on the build against a wall model): they fade exactly as before CK, on the footage fit `ui.json`'s 465 / 700 were
+   made on. **Owner: the final comparison** (`docs/parity-backlog.md` section 6, with `out/parity/footage/INDEX.md`).
+8. **2-32's dragon schedule: one clock basis, not re-gated** (step 77's "two clock bases" row). The dragon's `elapsedMs`, claw sweep and flight now count the same 16 ms as its follower, as the
+   original's one basis does: the schedule runs 4.17 % slower in wall time (GAMEPLAY, stated above). The row's "re-gate 5.2's schedule on it" and the f180 / f240 / f420 / f444 frames of
+   step 77 are NOT re-measured. **Owner: the route re-author phase** (2-32's route is among the 45) **and the final comparison**; the backlog row is annotated as to the unification only.
+9. **The per-frame paths scale a frame's milliseconds by 16 / 16.667 where the original floors each frame's own** (`updateEffects`, `playLatched`: `OfFrameMs`). Exact at the 60 Hz tick (the
+   fixed step); a limit at any other frame rate, where the original floors each frame's own milliseconds and jitters between 16 and 17 on a real device. Not a deviation at the matched rate
+   (`clock.json`: `matched_hz` 60; 30 -> 33, 120 -> 8, 59.94 -> 16, 144 -> 6 recorded). **Owner: none**, unless the port gains a variable-rate mode.
+10. **The sweep: four frames carry random-driven particle detail one tick off** (1-24, 2-04, 3-16, 4-06) - exactly the levels whose x 16 ms crystal expires before tick 420; the only event-log
+    difference is the expiry tick (250 -> 251, 375 -> 376; GAMEPLAY: the strict crystal). The shared effects stream (`m_effectRandom`, K8) is the INFERRED mechanism, not traced.
+    **Owner: PIC** (the picture of a body at its tick's own position re-takes the sweep); no action unless the next sweep shows a deterministic motion differing there.
+11. **Documentation (low, the third verifier's problem 4): `readers.md` named `ETHTextDrawer` as the C++ side's only reader of the floored uint.** `ETHParticleDrawer::Draw`
+    (`ETHParticleDrawer.cpp:49-51`) is the other, never created by this game (the listing never calls `sys:PlayParticleEffect`). Applied with this commit as one sentence in `readers.md` and in
+    THE CLOCK's decode bullet above; nothing open.
+
+**RULINGS APPLIED.** The standing direction, the original decides: the floor, as decoded, gameplay included (stated above). K8, K13 and the
+effects' stream inherited (the emitters keep the frame's float: the stream's draws are unchanged). R24 and R25 stay the owner's,
+and every row the owner has not ruled stays as it was. The PORT-WIDE row on the script clock is **built by this step, bar one site** (DEVIATION 1: the player's walk-cell flipbook, G10's), so
+`docs/parity-backlog.md` annotates it and leaves it unticked until that site is on the script's step; **the "Step 77 deviation, two
+clock bases where the original keeps one" row is done as to the unification** (`Dragon::State::Tick` takes the script's step, so `elapsedMs`, the claw's sweep, the
+flight and the follower count one 16 ms; `dragon.json`'s note says so) and is annotated, not ticked. **What the row also asks, "re-gate 5.2's schedule on it",
+is not done here** (DEVIATION 8): the f180 / f240 / f420 / f444 frames of step 77 were not re-measured (LEFT FOR LATER). The other PORT-WIDE row, the
+pictures a tick behind (PIC), is not closed.
+
+**LEFT FOR LATER.**
+- **G10, G4, PIC read this clock**: `ScriptClock::Step` is the one place (`step.scriptS`, `Ms(step)`); G10's `applyForces` takes
+  `min(66, ms) / stepMs` from it (0.96), G4's shot `scaledUnitsPerSecond` (the shot's reach per tick, `Portals`, takes the script's 16 until G4 replaces the flight, and `Player::Steer` stays on the engine's step until G10). **For G10 (fix 2): `stepMs` is the physics' FIXED 33.33 ms, not the frame's float** -
+  `applyForces`' `speedScale` is `scale x min(66, 16) / 33.33` (`GetCurrentPhysicsTimeStepMS`: `AverageFPSRateManager` sets the simulator's fixed step to 1/30 s,
+  `ETHPhysicsSimulator.cpp:156-167`; `readers.md`, "What stays off the script clock"), not `/ 16.667`; the ratio to the unfloored reading is still 0.96.
+- **All 86 routes are re-authored after PIC** (wave 3a), the census above their first problems.
+- **The walk-cell flipbook** (DEVIATION 1: G10's step, fallback PIC), **the velocity readers** (DEVIATION 3), the launcher's strict
+  test and reset-to-zero (DEVIATION 5), the timed crystal's origin (DEVIATION 6), the footage re-check of the loading, menu and popup timings (DEVIATION 7), and the beholder's cause (DEVIATION 4).
+- **Looser pins the first verifier named**: `TheRocketLandsAfter4_19sDoor`'s door tolerance is 1.0 where the 12 ms overshoot (about 0.4 u) could be pinned to its
+  computed value; the beholder case's hard branch (DEVIATION 4); the dark dragon's flash colour is within 0.02, its path's frame and carried milliseconds pinned
+  instead; the pad-alpha check's second clause is 6/255 (its first clause still pins the HUD formula). `test_mp_clock`'s antiportal check is arithmetic; the layer case
+  measures the period. None changed in fix 1 or fix 2 (each is a test rewrite that costs a relink and a launch under Smart App Control).
+- **The 2-32 dragon's schedule is not re-gated on the one basis** (step 77's row: "then re-gate 5.2's schedule on it"): the f180 / f240 / f420 / f444 frames step 77
+  quotes were taken with `elapsedMs`, the sweep and the flight on 16.667 beside a follower on 16, and are not re-measured; the dragon's route (2-32) is one of the
+  seven that fail for another reason and is re-authored after PIC.
+- **4-21 wins 149 ticks sooner (438 against 587)** on a cause traced only to the gravity agent's 0.96 pull and a 3-tick lift shift; the route re-author exercises it again.
+- **The standing sweep baseline is now this step's** `CK/after/sweep/` once committed, for the next step (G10).
+- **`test_mp_play`'s floor stays 171** (it runs 234): as in step 146, raising it would cost another relink and launch of the runner
+  under Smart App Control after the suites passed on the final code.

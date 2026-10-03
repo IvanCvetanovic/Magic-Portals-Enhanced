@@ -49,7 +49,7 @@ bool State::ExitOpen() const {
     return !rules.exitRequiresAllCrystals || Remaining() == 0;
 }
 
-void State::Tick(entt::registry& registry, entt::entity player, float dt) {
+void State::Tick(entt::registry& registry, entt::entity player, double dt) {
     if (player != entt::null && registry.valid(player)) {
         for (Crystal& crystal : crystals) {
             if (!crystal.collected && !crystal.expired && Trigger::Overlaps(registry, player, crystal.box)) {
@@ -64,11 +64,15 @@ void State::Tick(entt::registry& registry, entt::entity player, float dt) {
         playerInExit = inExit;
     }
     // Then the timed crystals run down (behaviours.gd:219-225). One with no time
-    // left to begin with never goes, as in the Godot project.
+    // left to begin with never goes, as in the Godot project. STRICTLY above its time,
+    // as ETHCallback_timer's own test is (ins 102-103, CMPu elapsedTime, time; JNP skips
+    // the vanish unless elapsedTime > time): a 10,000 ms crystal sums exactly 10000 on
+    // its 625th tick and is still there, and goes on the 626th, 10016 (planning step
+    // 147, fix 1).
     for (Crystal& crystal : crystals) {
-        if (!crystal.timed || crystal.collected || crystal.expired || crystal.leftS <= 0.0) continue;
-        crystal.leftS -= dt;
-        if (crystal.leftS <= 0.0) crystal.expired = true;
+        if (!crystal.timed || crystal.collected || crystal.expired || crystal.lifeMs <= 0.0) continue;
+        crystal.elapsedMs += dt * 1000.0;
+        if (crystal.elapsedMs > crystal.lifeMs) crystal.expired = true;
     }
 }
 
@@ -96,8 +100,8 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const Rules& rule
                     return false;
                 }
                 crystal.timed = true;
+                crystal.lifeMs = ms;
                 crystal.lifeS = ms / 1000.0;
-                crystal.leftS = crystal.lifeS;
             }
             if (!Trigger::FromNode(node, crystal.box, error)) return false;
             out.crystals.push_back(crystal);

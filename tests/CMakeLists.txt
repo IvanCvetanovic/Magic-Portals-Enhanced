@@ -79,6 +79,10 @@ add_mp_test(test_mp_turrets SKIPS_WITH_77)
 # TheSwitchesAreKeptBetweenRuns, planning step 124).
 add_mp_test(test_mp_scores)
 
+# The original's script clock: the whole milliseconds a frame gives the scripts, as a floor, and
+# what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic.
+add_mp_test(test_mp_clock)
+
 # The achievements as the original unlocks them, the saved set and its hash, and
 # the Notificator's card and the pause's popup frame (planning step 143). Pure sim
 # and a scratch directory; its checks against the original's list skip themselves

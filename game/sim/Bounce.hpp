@@ -28,6 +28,7 @@
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Tscn.hpp"
 
 #include <string>
@@ -67,7 +68,7 @@ struct State {
 
     // One step, before the physics step, each body moved with MoveKinematic so
     // that it carries what stands on it - as Mover::Movers::Tick does.
-    void Tick(entt::registry& registry, float dt);
+    void Tick(entt::registry& registry, const ScriptClock::Step& step);
 
     const Bob* Find(const std::string& name) const;
 };

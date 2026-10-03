@@ -428,7 +428,7 @@ void State::Spawn(const glm::dvec2& knightPx) {
 }
 
 State::Turn State::Tick(entt::registry& registry, entt::entity player, bool playerAlive,
-                        std::size_t minionsStanding, const Motion::Rules& motion, float dt) {
+                        std::size_t minionsStanding, const Motion::Rules& motion, double dt) {
     Turn turn;
     spentPx.clear();
     if (!present) return turn;

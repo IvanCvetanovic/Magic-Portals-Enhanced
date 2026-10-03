@@ -251,7 +251,8 @@
     ],
     "_inferred": [
       "The constructor's linearMotion call steps the planet by the frame before the level's",
-      "first update, which no capture shows; the port steps it by its own tick (1/60 s). The",
+      "first update, which no capture shows; the port steps it by one tick of the script clock",
+      "(ScriptClock::Ms(m_step), 16 ms a 60 Hz tick since planning step 147, not 1/60 s). The",
       "most it could be is unitsPerSecond's 200 ms cap: 0.1 rad of phase, under 0.005 u of bob",
       "near cos's floor at PI. INFERRED, not measured."
     ],

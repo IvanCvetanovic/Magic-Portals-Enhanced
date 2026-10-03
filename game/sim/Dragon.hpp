@@ -255,7 +255,7 @@ struct State {
     // One tick, before the physics step: it sets positions, it spits as
     // Turrets::Fire does, and it takes geometry away before the solver reads it.
     // `completed` is GameStateController::isFinished, which gates the firing.
-    Turn Tick(entt::registry& registry, entt::entity player, bool completed, float dt);
+    Turn Tick(entt::registry& registry, entt::entity player, bool completed, double dt);
 };
 
 // The level's dragon, its claw, the take_off marker, the level's far corner and

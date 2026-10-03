@@ -352,7 +352,7 @@ glm::dvec2 State::CameraLeftPx() const {
     return glm::dvec2(std::clamp(atPx.x, 0.0, most), 0.0);
 }
 
-State::Turn State::Tick(entt::registry& registry, entt::entity player, bool completed, float dt) {
+State::Turn State::Tick(entt::registry& registry, entt::entity player, bool completed, double dt) {
     Turn turn;
     if (!present) return turn;
 

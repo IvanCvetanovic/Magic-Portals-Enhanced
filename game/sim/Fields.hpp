@@ -95,7 +95,7 @@ struct State {
 
     // One tick, after the physics step: each ring swings, then judges where the
     // step left the player.
-    void Tick(entt::registry& registry, entt::entity player, float dt);
+    void Tick(entt::registry& registry, entt::entity player, double dt);
 
     // A fireball destroyed a shock agent. Marks it gone and hands back the
     // trigger body the converter gave it, for Game to pass through Forget;

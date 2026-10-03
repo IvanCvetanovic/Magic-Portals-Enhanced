@@ -164,7 +164,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-std::vector<entt::entity> State::Tick(entt::registry& registry, entt::entity player, float dt) {
+std::vector<entt::entity> State::Tick(entt::registry& registry, entt::entity player, double dt) {
     std::vector<entt::entity> removed;
     blastsPx.clear();
     grabbedNow.clear();

@@ -131,7 +131,7 @@ struct Well {
 // `noGravity` picks the strength, and it is the LEVEL's flag rather than a
 // question put to the registry: the original branches on GetGravity() ==
 // V2_ZERO, and Game::Level::noGravity is what set that in the first place.
-glm::vec3 Pull(const Well& well, const Rules& rules, const glm::dvec2& bodyPx, bool noGravity, float dt);
+glm::vec3 Pull(const Well& well, const Rules& rules, const glm::dvec2& bodyPx, bool noGravity, double dt);
 
 // One body's sweep round one well: computeRoundabout's custom data on the body,
 // named by the well's id (roundSum_<id>, lastVector_<id>, cw/ccwRoundCount_<id>).
@@ -177,7 +177,7 @@ struct State {
     // code and would fight whatever moves it; a static one has no velocity at
     // all. That is the port's reading of DynamicBodyChooser. Each body's sweep
     // round each well is stepped from the same point the pull is measured from.
-    void Tick(entt::registry& registry, float dt);
+    void Tick(entt::registry& registry, double dt);
 
     const Well* Find(const std::string& name) const;
 };

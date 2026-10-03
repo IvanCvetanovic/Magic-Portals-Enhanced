@@ -478,7 +478,7 @@ double NeckLiftPx(const Rules& rules, double angleDeg, double neckMs) {
 }
 
 State::Turn State::Tick(entt::registry& registry, entt::entity player, bool torchLit, const glm::dvec2& torchPx,
-                        bool hasTorch, bool completed, const Motion::Rules& motion, float dt) {
+                        bool hasTorch, bool completed, const Motion::Rules& motion, double dt) {
     Turn turn;
     if (!present || gone) return turn;
 

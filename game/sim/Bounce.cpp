@@ -101,12 +101,12 @@ glm::dvec2 Bob::AtPx(const Rules& rules) const {
     return originPx + axis * (wave * rules.stridePx);
 }
 
-void State::Tick(entt::registry& registry, float dt) {
+void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     // min(200, elapsed), as STimeManager::unitsPerSecond takes it, and then to
     // seconds because the speed is in radians a second. m_factor is 1 in normal
     // play - it is the pause and slow-motion dial, and isPaused is m_factor == 0
     // - so it is not carried here.
-    const double milliseconds = std::min(static_cast<double>(dt) * 1000.0, rules.frameClampMs);
+    const double milliseconds = std::min(ScriptClock::Ms(step), rules.frameClampMs);
     const double advance = rules.speedRadPerSec * (milliseconds / 1000.0);
 
     for (Bob& bob : bobs) {
@@ -119,7 +119,7 @@ void State::Tick(entt::registry& registry, float dt) {
         // MoveKinematic, not a bare transform write: it sets the velocity the
         // contact solve reads, which is what makes the slab carry what stands on
         // it rather than slide out from under it.
-        Mover::MoveKinematic(registry, bob.entity, Units::ToWorld(at.x, at.y), dt);
+        Mover::MoveKinematic(registry, bob.entity, Units::ToWorld(at.x, at.y), step.physicsS);
     }
 }
 

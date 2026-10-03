@@ -541,6 +541,12 @@ work no step of §7 owns, and the owner's calls:
       flooring the one clock every scripted motion reads moves every committed step's captures. Next: the owner's call on
       whether the port floors its script-facing delta and at which frame rate the original is to be matched, then one
       re-capture of the committed baselines.
+      *Step 147 (CK, wave 3a; committed locally, not pushed) builds the floor: `ScriptClock::Step` is the one script-facing
+      delta (16 of the tick's 16.667 ms), the 70 functions that read the clock are classified in a table, and the physics step
+      and the wall clock stay where they were, so every scripted timer, blink and fade now runs 4.17 % slower in wall time.
+      Built bar one site, so the row stays open: the player's ground walk-cell flipbook is still advanced by the engine's tick
+      (CK-1, section 6, G10's). 41 of the 86 routes still win on that build; the routes are re-authored by the wave's route
+      phase after PIC.*
 - [ ] **PORT-WIDE, found verifying step 78 (order 3.4): the picture of any body is drawn one tick behind the sim.**
       `buildSprites` gives every body-linked quad an `InterpolatedTransformComponent` (`game/MagicPortalsLayer.cpp:2590`)
       and `InterpolationSystem::Apply` draws `previousPosition -> currentPosition` at the frame's alpha
@@ -720,6 +726,9 @@ work no step of §7 owns, and the owner's calls:
       it is not local: feeding `elapsedMs` the truncated frame shifts level31a's whole schedule about 4% later and
       moves the f180 / f240 / f420 / f444 frames that step quotes, and the claw's sweep and the flight run on the
       tick too. Next: the owner's call on one basis for the module, then re-gate 5.2's schedule on it.
+      *Step 147 (CK) did the unification: `Dragon::State::Tick` takes the script's step, so `elapsedMs`, the claw's sweep, the
+      flight and the follower count one 16 ms. The row stays open for what it also asks, re-gating 5.2's schedule on it (CK-8,
+      section 6).*
 - [ ] **Step 77 deviation, the dragon's flight timing against the original's library frame.** On `2-32_h2.8` the
       original's dragon sits lower and further right than the port's at the nominal same time (f168), with no mouth
       fire - a descent/timing gap that predates step 5.2, whose flight numbers (45, -60, 25 px/s and the 48 ceiling)
@@ -1702,7 +1711,8 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       room's crates) and 3-23 (step 140's finding: both keys are carried by knights; its route waits on step 134's
       burn of a minion by a flame, with no recorded attempt yet) - the last two with their mechanisms on one build
       since the merge. Nine of the 42 hold a lift door: 1-13, 1-18, 1-26, 1-31, 2-29, 3-05, 3-16, 4-22, 4-24. The
-      other 39 have no recorded attempt. Open until all 128.)*
+      other 39 have no recorded attempt. Open until all 128.)* *Wave 3a, step 147 (CK, local, not pushed): 41 of the 86 win on its
+      build and 45 do not (CK-2); the routes are re-authored by the wave's route phase after PIC.*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1845,6 +1855,61 @@ stealth achievements; (3) G3 (R7), with 1-06, 1-11, 2-26 and the platform gate; 
 (7) the final comparison (section 5), with the pixel-centre rule for every picture at the frame's edge (step 145's
 deviation 1) before it, and the ship preparation: the grant in `docs/permission.md`, the play build, the owner's calls
 below.
+
+**Wave 3a (the timing group; 2026-10-03, in progress).** Four steps on `main`, run alone because each moves every frame and every
+route tick: the script clock's floor (CK), the player's decoded movement (G10), the portal shot's decoded flight (G4) and the picture
+of a body drawn at its tick's own position (PIC), in that order. They commit locally and are not pushed; after PIC the wave
+re-authors all 86 routes on the final build, an independent verifier checks the whole build, and only then is it pushed. So inside a
+timing step `test_mp_routes` is expected to fail on the routes the new timing moves, and each step records a census instead of
+editing a route. The engine pin stays `710bffc`.
+
+| Step | Row | Track | Commit | Outcome | GAMEPLAY | Routes added |
+|---|---|---|---|---|---|---|
+| 147 | CK | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 11 recorded deviations (owner-delegated); the third verifier passed 12 of 13 gates, and the one it failed, the player's ground walk-cell flipbook, is cosmetic and G10's; 49 of 50 suites, 17,717 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: every scripted motion, timer, blink and fade runs 16 ms a tick where it ran 16.667, 4.17 % slower in wall time (the 400 ms between taps takes 26 ticks, not 24; a 10 s crystal runs out on the 626th tick; the lost screen on the 88th) | none: 41 of the 86 routes still win on this build and 45 do not; **the routes are re-authored by the wave's route phase after PIC** |
+
+**CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
+- [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
+      third verifier; cosmetic, no physics, route or sweep frame depends on it). The original's `FrameTimer::set(0, 3, 90)`
+      (`SideScrollerCharacter::updateFrame` ins 80) adds the floored 16 ms; the port's engine flipbook
+      (`MagicPortalsLayer.cpp:4175-4181`, `:6266`) is 4.17 % fast in wall time. Next: **G10** (it relinks anyway; fallback
+      PIC) steps the cell with the `FrameTimer` logic on `Ms(step)` in `stepLevel`, as `m_shotFrames` does, and re-pins
+      `test_mp_layer`'s walk case (6 ticks add 96 ms, 6 over).
+- [ ] **CK-2. 45 of the 86 routes no longer win on CK's build** (41 do: 34 on the same tick; 1-03 +3, 2-24 -1, 3-08 +4, 3-13 +6,
+      4-18 +2, 4-28 +4; 4-21 on 438 against 587). 38 are refused by the 400 ms between taps (DECODED: strictly above 400 of the
+      script clock, so 26 ticks, not 24); seven first causes are INFERRED and untraced: 2-18 (a shot in flight), 3-09 and 2-32 (the
+      tap off the view: the camera's follow share), 1-11 (a moving no-portal zone), 1-32, 3-32 and 4-32 (the bosses' timers); 4-21's
+      149 ticks sooner is the gravity agent's 0.96 pull (INFERRED). Next: **the wave's route re-author phase after PIC**, each route
+      replayed on the final build so every cause is traced or the route replaced (G4 moves the shot-flight and view-edge rows).
+- [ ] **CK-3. Three velocity readers carry no 0.96**: `applyForces`, `ETHCallback_minion` and `ETHCallback_dragon_knight` scale the
+      velocity they set by `elapsedTime / 33.33` (the physics' fixed 1/30 s), x 0.96 with the floor; the port leaves x 1.0. CK
+      exposes it for motion bounded by a script timer (a patrol leg, a stone's flight: about 4.17 % longer than the original's), the
+      INFERRED cause of the sweep residuals 1-30, 3-05, 3-23 and 3-24. Next: **G10** (the player: its row under the majors) and
+      **G1** (minions and the knight).
+- [ ] **CK-4. Looser pins**: `TheRocketLandsAfter4_19sDoor`'s door tolerance 1.0; the beholder case lost its hard branch
+      (`ABeholderRockBrokenOnTheLevelIsHeard`: the first two static breaks are soft in the new timeline, so the heard-above-2 branch
+      is not exercised; it needs a rock placed over the floor); the dark dragon's flash colour within 0.02; the pad-alpha check's
+      second clause 6/255; `test_mp_clock`'s antiportal check is arithmetic. Next: **the next timing step that edits the same suite**
+      (G4 for the shot and the doors, G10 for the player), else the wave's verifier or close role.
+- [ ] **CK-5. The launcher's strict test and reset-to-zero**: `ETHCallback_entity_launcher` throws at `elapsedTime > stride` and
+      resets the sum to 0; `Launchers` carries the remainder and throws at `leftMs <= 0`, so its period is 125 ticks where the
+      original's is 126 (2000 ms). Unchanged by CK. Next: **the first step that edits `Launchers.cpp`** (G1, or the re-author's first
+      launcher level), measured by the sweep's "stones destroyed 94 ticks apart, not 90" lines.
+- [ ] **CK-6. The timed crystal's origin: the 626th or the 627th tick.** The strict expiry is built (126 / 626 / 751 ticks for 2 /
+      10 / 12 s); whether the timer entity's first add lands a tick after the crystal's is not traced. Next: **the route re-author
+      and the final comparison**, against footage of a timed crystal.
+- [ ] **CK-7. The loading screen's, the menus' and the popups' timings were not re-measured against the UI footage** after the clock
+      moved them (the opening blacks are `GetTime` and stay on the footage fit). Next: **the final comparison** (section 5), with
+      `out/parity/footage/INDEX.md`.
+- [ ] **CK-8. 2-32's dragon schedule runs on one clock basis and is not re-gated** (the "Step 77 deviation, two clock bases" row
+      above, done as to the unification): step 77's f180 / f240 / f420 / f444 frames are not re-measured. Next: **the route
+      re-author phase** (2-32's route is among the 45) **and the final comparison**.
+- [ ] **CK-9. The per-frame paths scale a frame's milliseconds by 16 / 16.667** where the original floors each frame's own: exact at
+      the 60 Hz tick, a limit at any other rate. No owner unless the port gains a variable-rate mode.
+- [ ] **CK-10. The sweep: four frames (1-24, 2-04, 3-16, 4-06) carry random-driven particle detail one tick off**, the levels whose
+      x 16 ms crystal expires before tick 420 (its expiry 250 -> 251, 375 -> 376). The shared effects stream is the INFERRED
+      mechanism. Next: **PIC**, which re-takes the sweep; no action unless a deterministic motion differs there.
+- [x] **CK-11. `readers.md` named `ETHTextDrawer` as the only C++ reader of the floored uint**; `ETHParticleDrawer::Draw` is the
+      other, never created by this game. Closed in CK's commit (one sentence in the readers table and in step 147).
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be

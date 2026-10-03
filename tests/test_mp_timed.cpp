@@ -93,7 +93,8 @@ void ChapterOnesEightTimedCrystals() {
         std::vector<double> found;
         for (const Goals::Crystal& crystal : goals.crystals) {
             if (crystal.timed) found.push_back(crystal.lifeS);
-            CHECK(crystal.timed ? crystal.leftS == crystal.lifeS : crystal.lifeS == 0.0);
+            CHECK(crystal.timed ? crystal.elapsedMs == 0.0 && crystal.lifeMs > 0.0 && crystal.lifeS == crystal.lifeMs / 1000.0
+                                : crystal.lifeS == 0.0 && crystal.lifeMs == 0.0);
         }
         CHECK_MSG(found == lives, std::string(name) + "'s timed crystals");
         total += static_cast<int>(found.size());
@@ -116,7 +117,7 @@ void ItGoesAtItsTime() {
     if (crystal == nullptr) return;
     int tick = 0;
     for (; tick < 714; ++tick) Tick(run); // 11.9 s
-    CHECK_MSG(!crystal->expired, "still there at 11.9 s, with " + std::to_string(crystal->leftS) + " s left");
+    CHECK_MSG(!crystal->expired, "still there at 11.9 s, " + std::to_string(crystal->elapsedMs) + " ms in");
     for (; tick < 723; ++tick) Tick(run); // 12.05 s
     CHECK_MSG(crystal->expired, "gone by 12.05 s");
     // Gone, it cannot be collected.
@@ -230,7 +231,9 @@ void TheDialShowsTheTimeElapsed() {
         ++tick;
         crystal = run.level.goals.FindCrystal("crystal_1264");
         if (crystal == nullptr || crystal->expired || crystal->collected) break;
-        const int frame = timer.FrameAt((crystal->lifeS - crystal->leftS) * 1000.0, crystal->lifeS * 1000.0);
+        // The pure suite's tick is a bare float's, 1/60 s for script and physics alike: the cell
+        // follows the dial's elapsedTime, the sum of those ticks.
+        const int frame = timer.FrameAt(crystal->elapsedMs, crystal->lifeMs);
         if (frame != tick * 8 / 600) ++off;
     }
     CHECK_MSG(off == 0, std::to_string(off) + " ticks off the cell (tick x 8) / 600");

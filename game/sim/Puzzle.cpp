@@ -83,7 +83,7 @@ void Button::Rebase(entt::registry& registry, const glm::vec2& centre) {
     Place(registry, *this);
 }
 
-void Channels::Tick(entt::registry& registry, float dt) {
+void Channels::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     for (Button& button : buttons) {
         const bool pressed = Trigger::DynamicBodiesIn(registry, button.box) > 0;
         if (pressed != button.pressed) {
@@ -102,7 +102,7 @@ void Channels::Tick(entt::registry& registry, float dt) {
         // inside the physics step and this runs later in the same Update
         // (ETHScene.cpp:464, :488), so the first pressed frame is already drawn
         // one frame's ease down, not at 0 (00_order 8.0 rule 6).
-        button.slideMs += static_cast<double>(dt) * 1000.0;
+        button.slideMs += ScriptClock::Ms(step);
         button.sunkPx = button.DepthPx();
         Place(registry, button);
     }
@@ -111,7 +111,7 @@ void Channels::Tick(entt::registry& registry, float dt) {
     for (SwitchedDoor& door : doors) {
         const bool active = door.button >= 0 && static_cast<std::size_t>(door.button) < buttons.size() &&
                             buttons[static_cast<std::size_t>(door.button)].pressed;
-        door.motion.Tick(registry, door.entity, active, dt);
+        door.motion.Tick(registry, door.entity, active, step);
     }
 }
 

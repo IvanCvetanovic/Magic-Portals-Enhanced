@@ -36,6 +36,7 @@
 #include "sim/Mover.hpp"
 #include "sim/Portal.hpp"
 #include "sim/Roles.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Shot.hpp"
 #include "sim/Trigger.hpp"
 #include "sim/Tscn.hpp"
@@ -654,7 +655,7 @@ struct State {
     // comes within reach of while still in flight, or is burned by the first
     // flame (`burns`) - and a traveller newly inside a portal goes out of its
     // partner, unless the platform gate holds a placed pair.
-    void Tick(entt::registry& registry, float dt);
+    void Tick(entt::registry& registry, const ScriptClock::Step& step);
 
     // A placed portal's entry circle, put back over its point: the hover moves
     // both, because the original has one position and not two.

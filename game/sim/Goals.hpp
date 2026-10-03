@@ -48,8 +48,14 @@ struct Crystal {
     Trigger::Box box;
     bool collected = false;
     bool timed = false;
-    double lifeS = 0.0; // the level's `time`, in seconds
-    double leftS = 0.0; // counting down from lifeS
+    double lifeS = 0.0;       // the level's `time`, in seconds (lifeMs / 1000)
+    double lifeMs = 0.0;      // the level's `time` itself: the number the node states
+    // The dial's elapsedTime (ETHCallback_timer ins 1-13): the script's whole
+    // milliseconds, summed as the original's uint is, and tested strictly above `lifeMs`
+    // (ins 102-103), so a 10,000 ms crystal is whole through its 625th tick of 16 ms
+    // (the sum is exactly 10000) and runs out on the 626th, not on a float's 600th
+    // (planning step 147, fix 1).
+    double elapsedMs = 0.0;
     bool expired = false;
 };
 
@@ -68,7 +74,7 @@ struct State {
     // then how long the timed crystals have left. The Godot project does not define the
     // order of two triggers in one frame. Crystals go first here, so an entry on
     // the tick the last crystal goes finds the exit open.
-    void Tick(entt::registry& registry, entt::entity player, float dt);
+    void Tick(entt::registry& registry, entt::entity player, double dt);
 
     const Crystal* FindCrystal(const std::string& name) const;
 };

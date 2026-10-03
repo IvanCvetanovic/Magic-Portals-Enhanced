@@ -134,7 +134,7 @@ struct State {
     // At most ONE switch is worked per tick: the original's poll takes the first
     // projectile it finds in the bucket and spends it, and a single shot cannot
     // light two torches.
-    Turn Tick(const std::optional<glm::dvec2>& flightPx, const std::vector<glm::dvec2>& fireballPx, float dt);
+    Turn Tick(const std::optional<glm::dvec2>& flightPx, const std::vector<glm::dvec2>& fireballPx, double dt);
 
     const Light* Find(const std::string& name) const;
 

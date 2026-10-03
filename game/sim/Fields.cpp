@@ -90,7 +90,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-void State::Tick(entt::registry& registry, entt::entity player, float dt) {
+void State::Tick(entt::registry& registry, entt::entity player, double dt) {
     const double seconds = static_cast<double>(dt);
 
     for (Field& field : fields) {

@@ -122,7 +122,8 @@ namespace MagicPortals {
 //    drops.
 class MagicPortalsLayer final : public Supersonic::EngineLayer {
 public:
-    // The port's tick: the Godot project's physics runs at Godot's default 60 Hz.
+    // The engine's tick: 60 Hz, the physics step, and the layer clock's step (sys:GetTime). The SCRIPTS
+    // see the floor of it, 16 of its 16.667 ms (sim/ScriptClock, game/data/clock.json): TickStep().
     static constexpr float kTick = 1.0f / 60.0f;
 
     // The actions this layer binds at attach, named so tests and a recording
@@ -1171,8 +1172,18 @@ public:
     // How long the menu state that is up has been current: ticks and milliseconds.
     int MenuStateTicks() const { return m_menuClock.ticks; }
     double MenuStateMs() const { return m_menuClock.ms; }
+    // The same, in WALL milliseconds: the clock the state's black (a FadeInController,
+    // which reads sys:GetTime) fades on.
+    double MenuStateWallMs() const { return m_menuClock.wallMs; }
     // The layer's own clock since it attached, in milliseconds of the tick.
+    // The layer clock: WALL milliseconds, the engine's tick a tick, which sys:GetTime and
+    // sys:GetTimeF read (the earthquake generator, the portal's 400 ms kill, the
+    // choosers' blink). The scripts' own clock is the floor of it, LevelAgeMs's step.
     double LayerClockMs() const { return m_layerClockMs; }
+    // The last tick's two deltas: the script's whole milliseconds and the physics step the
+    // engine integrated (sim/ScriptClock.hpp, planning step 147).
+    const ScriptClock::Step& TickStep() const { return m_step; }
+    const ScriptClock::Rules& ClockRules() const { return m_clockRules; }
     // The main menu's buttons a held touch that went down inside them is still
     // inside (MainMenu::Bit): drawn at the press tint.
     unsigned MainMenuHeld() const { return m_menuTouch.mainHeld; }
@@ -1302,10 +1313,16 @@ public:
     }
 
     // The level's FRAME clock: its age plus every millisecond game time stood
-    // still under a pause or a popup. What the original times by frame time
-    // neither stops - the level-start caption, the blacks' wall clock - reads
-    // this; what runs on game time reads LevelAgeMs.
+    // still under a pause or a popup, in the script's milliseconds. What the original
+    // times by a frame clock neither stops and reads from GetLastFrameElapsedTime - the
+    // level-start caption and the hint (ETHTextDrawer::Draw, handed the floored uint by
+    // ETHEngine::DrawTopLayer, ETHEngine.cpp:205), the plaque's dismissal (m_uiTime) -
+    // reads this; what runs on game time reads LevelAgeMs.
     double LevelFrameMs() const { return m_levelAgeMs + m_stoppedMs; }
+    // The same ticks in WALL milliseconds, a pause and a popup counted too: what the
+    // level's two blacks (FadeInControllers, which read sys:GetTime) fade on. Not the
+    // script's: a tick is the engine's 16.667 here, where LevelFrameMs gains 16.
+    double LevelFrameWallMs() const { return m_levelFrameWallMs; }
 
     // Whether game time is stopped: a pause or a popup is up.
     bool GameTimeStopped() const { return m_pause.open || m_popup.open; }
@@ -1577,9 +1594,9 @@ private:
     void openMenuPopup(const Popup::Class& cls);
     // One tick of it, in selectorInput's place while it is up: its close, and the
     // pager's slide, which PageManager::draw decays and no layer switch stops.
-    void menuPopupTick(entt::registry& registry, float fixedDelta);
+    void menuPopupTick(entt::registry& registry, const ScriptClock::Step& step);
     // The credits' touch and the strip's tick (CreditsScreenLayer::update).
-    void creditsInput(entt::registry& registry, float fixedDelta);
+    void creditsInput(entt::registry& registry, const ScriptClock::Step& step);
     // The dashboard's touch, wheel and tick (ScoreDashboard::loop, DashboardLayer).
     void dashboardInput(entt::registry& registry);
     // openState(world, level), from the dashboard's start button.
@@ -1595,7 +1612,7 @@ private:
     // Just the drawables, which a rebuilt screen replaces but a click on a
     // level takes away for good.
     void unloadMenuDrawables(entt::registry& registry);
-    void menuTick(entt::registry& registry, float fixedDelta);
+    void menuTick(entt::registry& registry, const ScriptClock::Step& step);
     // One of the original's own menu images, which live beside its entities.
     std::string menuImage(const std::string& file) const;
 
@@ -1642,7 +1659,7 @@ private:
     // draws it. `fixedDelta` is the tick's length, which a spent key's fly-in
     // clock counts (Effects::AdvanceFlyIn); `registry` is read for the player's
     // point, where a shock ring's kill adds shock_death.
-    void latchSimEffects(const entt::registry& registry, float fixedDelta);
+    void latchSimEffects(const entt::registry& registry, const ScriptClock::Step& step);
     // Chapter 4's torches, their signal and their wall (the visuals plan's 11.2),
     // from latchSimEffects: what lighting a torch, putting it out and the wall
     // going add, each on the tick its state turns over.
@@ -1654,7 +1671,7 @@ private:
     // a boss puts its weapon back or calls an escort - each in its callback's own
     // order, before the key a boss drops is queued. And the dark dragon's death,
     // after that key: ghost_utility_spawn beside it, then its explode.
-    void latchBossPictures(float fixedDelta);
+    void latchBossPictures(const ScriptClock::Step& step);
     void latchDarkDragonDeath();
     // ETHCallback_hand_tap's test of a release (effects.json smoke_vanish_hand_tap),
     // from readInput on the tick a touch comes up: each tutorial hand within reach
@@ -1764,14 +1781,14 @@ private:
     // One linearMotion call for every crystal and key whose script makes one this
     // tick (sim/Motion), and one call of every placed picture's callback, BEFORE
     // syncSprites draws where they leave them.
-    void advanceMotions(float fixedDelta);
+    void advanceMotions(const ScriptClock::Step& step);
     // Whether a picture's script calls linearMotion now: a crystal while it lives,
     // a key while no one carries it and it has not found its keyhole.
     bool motionRuns(const DrawnSprite& drawn) const;
     void syncBoss(entt::registry& registry);
     // The minions' frames, once a level step after Minions::Tick has chosen each
     // one's arm (Art::UpdateMinion), and their pictures where their bodies stand.
-    void advanceMinions(float fixedDelta);
+    void advanceMinions(const ScriptClock::Step& step);
     void syncMinions(entt::registry& registry);
     // Chapter 3's boss, as the tick left its Look: made when the knight's death adds
     // it, unmade when it has gone (planning step 98).
@@ -1935,8 +1952,15 @@ private:
     // went down left - the portal manager sets it after the camera on the HIT
     // frame. Empty from a release until the next DOWN tick.
     std::optional<glm::dvec2> m_handleHitPx;
-    // The tick's length, for what readInput hands a callback's clock.
+    // The script's milliseconds of this tick (ScriptClock::Ms of m_step), for what
+    // readInput hands a callback's clock.
     double m_tickMs{0.0};
+    // The original's script clock (clock.json) and this tick's two deltas: the sim's `dt`
+    // is the floor of a frame's milliseconds and the physics step is the engine's own
+    // tick; m_layerClockMs below advances by the engine's tick, as sys:GetTime does
+    // (sim/ScriptClock.hpp, planning step 147).
+    ScriptClock::Rules m_clockRules;
+    ScriptClock::Step m_step;
 
     Game::Data m_data;
     int m_dataIndex{-1}; // whose level m_data holds, so a retry reuses it
@@ -2557,7 +2581,7 @@ private:
     // its caller's volume (playFallSound's hitIntensity / 18) is given it here.
     void latch(const std::string& event, double doorStrideMs = 0.0, double volume = -1.0);
     // What the simulation did this tick, against what it looked like last.
-    void latchSimSounds(float fixedDelta);
+    void latchSimSounds(const ScriptClock::Step& step);
     // The bosses' calls (planning step 142): the tests their callbacks make on
     // every frame - a first sight, a clock - and the edges of their states.
     void latchBossCues(double tickMs);
@@ -2751,7 +2775,11 @@ private:
     struct MenuClock {
         bool fresh{true};
         int ticks{0};
+        // The script's milliseconds (a tick's 16): what Button::update reads.
         double ms{0.0};
+        // The same ticks in WALL milliseconds (the engine's 16.667): what the state's
+        // FadeInController reads, through sys:GetTime (planning step 147, fix 1).
+        double wallMs{0.0};
     };
     MenuClock m_menuClock;
     double m_layerClockMs{0.0};
@@ -2901,7 +2929,7 @@ private:
     std::vector<LevelEnd::Piece> endPieces(const glm::dvec2& viewUnits, double ms) const;
     // One tick of the screen: its clock, its counters and its buttons. True when
     // a button was pressed, which may have taken the level away.
-    bool endScreenTick(entt::registry& registry, float fixedDelta);
+    bool endScreenTick(entt::registry& registry, const ScriptClock::Step& step);
     // What the HUD keeps once a level has ended: the pads' last byte, and
     // whether clear-portals goes with restart and pause.
     void endHud();
@@ -3158,7 +3186,7 @@ private:
     void openPopup(entt::registry& registry, const Popup::Class& cls, bool stepOnResume);
     // One tick under a popup. True when it resumed the level on this tick and the
     // level owes the rest of its tick.
-    bool popupTick(entt::registry& registry, float fixedDelta);
+    bool popupTick(entt::registry& registry, const ScriptClock::Step& step);
     // A popup's pieces (sim/Popup) into the screen overlay on a view of `view`
     // design units: the level's, from EmitHud, and chapter select's, from EmitMenu.
     void emitPopup(Supersonic::ScreenOverlay& overlay, const glm::dvec2& view, const Popup::Class& cls,
@@ -3184,6 +3212,9 @@ private:
     Switches::Store m_switches;
     // Game time stood still this level, for LevelFrameMs.
     double m_stoppedMs{0.0};
+    // Every tick since the level loaded, stopped or not, in wall milliseconds, for
+    // LevelFrameWallMs.
+    double m_levelFrameWallMs{0.0};
     // Each pause picture's file resolved to the hd art once per level; empty
     // for one that cannot be read, which is then not drawn.
     std::map<std::string, std::string> m_pauseImages;
@@ -3228,10 +3259,10 @@ private:
     // app runs before every tick whether or not the game's time is stopped.
     void holdWorld(entt::registry& registry);
     // One tick under the pause. True when it resumed the level on this tick.
-    bool pauseTick(entt::registry& registry, float fixedDelta);
+    bool pauseTick(entt::registry& registry, const ScriptClock::Step& step);
     // The rest of a level's tick once its input is read: what comes before the
     // next physics step, the camera, the controls and the drawables.
-    void stepLevel(entt::registry& registry, float direction, float fixedDelta);
+    void stepLevel(entt::registry& registry, float direction, const ScriptClock::Step& step);
     // The walk the keys alone ask for, with no pointer.
     float keyDirection() const;
     // Whether a scheduled DEV press of this kind is due, taking it if so.
@@ -3262,7 +3293,7 @@ private:
     //
     // The level's tick itself: what OnFixedUpdate ran before the earthquake,
     // which now wraps it.
-    void fixedTick(entt::registry& registry, float fixedDelta);
+    void fixedTick(entt::registry& registry, const ScriptClock::Step& step);
     // What the tick after the physics step did, against what it looked like
     // before: every call site whose event is AfterStep's. Beside latchSimEffects.
     void latchSimQuakes();

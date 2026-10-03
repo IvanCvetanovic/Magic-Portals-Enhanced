@@ -307,26 +307,27 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     return true;
 }
 
-void BeforeStep(const Data& data, entt::registry& registry, Level& level, float direction, float dt) {
-    level.channels.Tick(registry, dt);
+void BeforeStep(const Data& data, entt::registry& registry, Level& level, float direction,
+                const ScriptClock::Step& step) {
+    level.channels.Tick(registry, step);
     // A closing lift door's crush, judged where the doors now stand and where the
     // last step left the player: the contact the original's next step begins
     // (Puzzle::Channels::Crush). Its death is folded in with the others, below.
     level.channels.Crush(registry, level.player);
-    level.movers.Tick(registry, dt);
+    level.movers.Tick(registry, step);
     // The bobbing slabs, beside the platforms and for the same reason: what sets
     // a body's position belongs before the step, what judges one after it.
-    level.bounce.Tick(registry, dt);
+    level.bounce.Tick(registry, step);
     // And the wells, which add to a velocity rather than set a position - so
     // they belong here too, before the solver reads what they wrote, and after
     // the movers so a body riding a platform is not pulled off it mid-tick.
-    level.wells.Tick(registry, dt);
+    level.wells.Tick(registry, step.scriptS);
     // Chapter 2's boss, and it belongs on this side for all three of the reasons
     // this half exists: it sets its own position, it spits as Turrets::Fire does,
     // and it takes geometry away BEFORE the solver reads it, so no contact is
     // ever resolved against a platform that is about to vanish.
     if (level.dragon.present) {
-        const Dragon::State::Turn turn = level.dragon.Tick(registry, level.player, level.goals.completed, dt);
+        const Dragon::State::Turn turn = level.dragon.Tick(registry, level.player, level.goals.completed, step.scriptS);
         // The claw's four names are scenery - none is in entity_roles.json - so
         // no module walks a list of them behind this. The removal still goes
         // through Forget, as a burnt crate does: a crushed platform cannot be a
@@ -350,17 +351,17 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     }
     // What a launcher throws travels and breaks walls as a stone the level
     // places does.
-    for (const Launchers::Thrown& thrown : level.launchers.Throw(registry, dt)) {
+    for (const Launchers::Thrown& thrown : level.launchers.Throw(registry, step.scriptS)) {
         if (thrown.is.teleportable) level.portals.travellers.push_back(thrown.body);
         if (thrown.is.demolisher) level.demolish.stones.push_back(Demolish::Stone{thrown.name, thrown.body});
     }
     // And what the carrancas spit. A fireball is a point and a radius with no
     // entity, so nothing here hands it to the portals as a thrown stone is
     // handed: AfterStep carries it through a pair itself (CarryFireball).
-    level.turrets.Fire(dt);
+    level.turrets.Fire(step.scriptS);
     // The minions walk before the step, as the player is steered before it: what
     // sets a velocity belongs on this side, what judges a position on the other.
-    level.minions.Tick(registry, dt);
+    level.minions.Tick(registry, step.scriptS);
     level.boss.BeforeStep(registry);
     // In a zero-gravity level the player is NOT STEERED AT ALL, and that single
     // absence is both halves of the original's behaviour at once:
@@ -373,16 +374,16 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // heavily pinned function in the port untouched - test_mp_play walks
     // level30's seam through it at friction 0 and 1 and prints both.
     if (level.player != entt::null && !level.noGravity) {
-        Player::Steer(registry, level.player, data.tuning, direction, dt);
+        Player::Steer(registry, level.player, data.tuning, direction, step.physicsS);
     }
 }
 
-void AfterStep(const Data& data, entt::registry& registry, Level& level, float dt) {
-    level.goals.Tick(registry, level.player, dt);
+void AfterStep(const Data& data, entt::registry& registry, Level& level, const ScriptClock::Step& step) {
+    level.goals.Tick(registry, level.player, step.scriptS);
     level.hazards.Tick(registry, level.player);
     // The fireballs fly on where the step left the player, and judge it there,
     // as the hazards above them do.
-    level.turrets.Tick(registry, level.player, dt);
+    level.turrets.Tick(registry, level.player, step.scriptS);
     level.demolish.Tick(registry);
     // The fire agents, what is burning down, and the bombs - before the portals,
     // which move things. What it takes away goes through Forget as a thrown body
@@ -399,7 +400,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         level.fire.minionsAlight.clear();
         for (const entt::entity gone : level.minions.Burn(registry, alight)) Forget(level, gone);
     }
-    for (const entt::entity gone : level.fire.Tick(registry, level.player, dt)) Forget(level, gone);
+    for (const entt::entity gone : level.fire.Tick(registry, level.player, step.scriptS)) Forget(level, gone);
     // And the flames' burn of a minion, the second of ETHCallback_fire_agent's four
     // tests (#193-220): minion.ent and ghost_minion.ent carry burnable 1, and a
     // minion is no character, so this is all a flame does to one. Measured from
@@ -434,7 +435,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // where the last tick left it and then moves; ETHCallback_reflect_agent calls it
     // first, so a reflector moves before it turns a shot (Portals::Tick, below).
     // followUp's dontPause counts the frame's time (handle.json follow).
-    level.handles.Follow(static_cast<double>(dt) * 1000.0);
+    level.handles.Follow(ScriptClock::Ms(step));
     for (const Handle::Follower& follower : level.handles.followers) {
         if (follower.fireAgent >= 0 && follower.fireAgent < static_cast<int>(level.fire.agents.size())) {
             level.fire.agents[static_cast<std::size_t>(follower.fireAgent)].atPx = follower.atPx;
@@ -578,7 +579,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         for (const Minions::Minion& minion : level.minions.minions) {
             if (!minion.gone && minion.body != entt::null) carriers.push_back(Carry::Carrier{minion.body, minionPoint});
         }
-        for (const entt::entity gone : level.keys.Tick(registry, carriers, dt)) Forget(level, gone);
+        for (const entt::entity gone : level.keys.Tick(registry, carriers, step.scriptS)) Forget(level, gone);
     }
     // 4-19's red key state (ETHCallback_red_key_state, listing L97171), AFTER the
     // keys: a key taken this tick is seen this tick, as the original's static
@@ -587,7 +588,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // takes it - here Demolish, on the same tick; RedKey.hpp says why the original
     // may take it a frame later.
     {
-        const RedKey::State::Turn turn = level.redKey.Tick(level.keys, static_cast<double>(dt) * 1000.0);
+        const RedKey::State::Turn turn = level.redKey.Tick(level.keys, ScriptClock::Ms(step));
         if (turn.destroyWall) {
             level.redKey.wallName = level.demolish.SeekAndDestroy(level.redKey.rules.wallEntity, level.redKey.name);
             for (const entt::entity gone : level.demolish.Destroyed(registry)) Forget(level, gone);
@@ -608,7 +609,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         for (const Minions::Minion& minion : level.minions.minions) {
             if (!minion.gone && minion.body != entt::null) prey.push_back(minion.body);
         }
-        const std::vector<entt::entity> struck = level.diamonds.Tick(registry, carriers, prey, dt);
+        const std::vector<entt::entity> struck = level.diamonds.Tick(registry, carriers, prey, step.scriptS);
         for (const entt::entity gone : level.minions.Take(registry, struck)) Forget(level, gone);
     }
     // turnProjectilesIntoFireBalls. While a fire diamond is carried its callback
@@ -639,7 +640,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     // The shock rings swing, and judge where the step left the player. A poll
     // every frame rather than an entry test, which is what separates one of these
     // from a hazard.
-    level.fields.Tick(registry, level.player, dt);
+    level.fields.Tick(registry, level.player, step.scriptS);
     // Chapter 3's boss. AFTER the blast test above on purpose: a blast that
     // reaches it this tick sets `burned`, and this reads it on the same tick
     // rather than the next.
@@ -667,7 +668,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         // the port's terms, which has no hp but a death (Hazards).
         const bool playerAlive = level.player != entt::null && !level.hazards.playerDied;
         const Ghost::State::Turn turn =
-            level.ghost.Tick(registry, level.player, playerAlive, standing, data.motion, dt);
+            level.ghost.Tick(registry, level.player, playerAlive, standing, data.motion, step.scriptS);
 
         // addEntityIfItCantBeFound (ins 594-630), on SHOOTING's beat: a barrel bomb
         // at barrel_spawn when the level holds none by that name - the ghost's one
@@ -780,7 +781,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         fireballPx.reserve(level.turrets.fireballs.size());
         for (const Turrets::Fireball& ball : level.turrets.fireballs) fireballPx.push_back(ball.atPx);
 
-        const Torch::State::Turn turn = level.torch.Tick(flightPx, fireballPx, dt);
+        const Torch::State::Turn turn = level.torch.Tick(flightPx, fireballPx, step.scriptS);
 
         // hasProjectileAround accepts a fireball as readily as a portal shot, so
         // either can be the one that is spent.
@@ -816,7 +817,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
         const bool hasTorch = !level.torch.lights.empty();
         const glm::dvec2 torchPx = hasTorch ? level.torch.lights.front().atPx : glm::dvec2(0.0);
         const DarkDragon::State::Turn turn = level.darkDragon.Tick(
-            registry, level.player, level.torch.lit > 0, torchPx, hasTorch, level.goals.completed, data.motion, dt);
+            registry, level.player, level.torch.lit > 0, torchPx, hasTorch, level.goals.completed, data.motion, step.scriptS);
 
         // breakDarkDragonWall. The wall carries metadata/breakable, so it is
         // already a Demolish::Breakable with a body - Demolish takes it, as it
@@ -900,8 +901,8 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     }
 
     // The beholder's rocks, against what the step ran them into.
-    for (const entt::entity gone : level.boss.Contacts(registry, level.player, level.portals, dt)) Forget(level, gone);
-    level.portals.Tick(registry, dt);
+    for (const entt::entity gone : level.boss.Contacts(registry, level.player, level.portals, step.physicsS)) Forget(level, gone);
+    level.portals.Tick(registry, step);
     // Each fireball in a placed portal goes to its partner, ONCE (planning step
     // 135; Turrets.hpp has the decode): PortalManager::mayTeleport refuses
     // fireball.ent once its teleportedOnce is set, and teleportToOther keeps the
@@ -930,7 +931,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     std::vector<entt::entity> stones;
     stones.reserve(level.demolish.stones.size());
     for (const Demolish::Stone& stone : level.demolish.stones) stones.push_back(stone.body);
-    const Boss::State::Turn turn = level.boss.Tick(registry, level.player, stones, dt);
+    const Boss::State::Turn turn = level.boss.Tick(registry, level.player, stones, step.scriptS);
     // A stone it broke on itself, named for the picture while Demolish still
     // knows it (Boss::State::brokenNow): its rolling_stone_destroy.
     for (std::size_t i = 0; i < turn.broken.size() && i < turn.brokenPx.size(); ++i) {
@@ -969,10 +970,11 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, float d
     }
 }
 
-void Tick(const Data& data, entt::registry& registry, Level& level, float direction, float dt) {
-    BeforeStep(data, registry, level, direction, dt);
-    Supersonic::PhysicsSystem::Update(registry, dt);
-    AfterStep(data, registry, level, dt);
+void Tick(const Data& data, entt::registry& registry, Level& level, float direction,
+          const ScriptClock::Step& step) {
+    BeforeStep(data, registry, level, direction, step);
+    Supersonic::PhysicsSystem::Update(registry, step.physicsS);
+    AfterStep(data, registry, level, step);
 }
 
 } // namespace MagicPortals::Game

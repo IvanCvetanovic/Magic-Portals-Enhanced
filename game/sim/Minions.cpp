@@ -241,7 +241,7 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
     return minion.body;
 }
 
-void State::Tick(entt::registry& registry, float dt) {
+void State::Tick(entt::registry& registry, double dt) {
     // Taken first, as Turrets::Tick takes its spent fireballs: what the tick
     // after this one destroys is what the layer reads next, and the last is gone.
     deaths.clear();

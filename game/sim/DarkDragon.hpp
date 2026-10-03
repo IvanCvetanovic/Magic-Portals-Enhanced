@@ -338,7 +338,7 @@ struct State {
     // for the shot a wound sends at it; `completed` is isFinished; `motion` is
     // motions.json's linearMotion arithmetic (its frame cap and its wrap).
     Turn Tick(entt::registry& registry, entt::entity player, bool torchLit, const glm::dvec2& torchPx,
-              bool hasTorch, bool completed, const Motion::Rules& motion, float dt);
+              bool hasTorch, bool completed, const Motion::Rules& motion, double dt);
 
     bool Alive() const { return present && alive && !gone; }
 };

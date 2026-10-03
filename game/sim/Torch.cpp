@@ -130,7 +130,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 }
 
 State::Turn State::Tick(const std::optional<glm::dvec2>& flightPx, const std::vector<glm::dvec2>& fireballPx,
-                        float dt) {
+                        double dt) {
     Turn turn;
     const double ms = static_cast<double>(dt) * 1000.0;
     const double seconds = static_cast<double>(dt);

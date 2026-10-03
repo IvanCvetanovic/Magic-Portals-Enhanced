@@ -12,10 +12,13 @@
 
 namespace MagicPortals::Mover {
 
-void MoveKinematic(entt::registry& registry, entt::entity entity, const glm::vec3& target, float dt) {
+void MoveKinematic(entt::registry& registry, entt::entity entity, const glm::vec3& target, float physicsDt) {
     auto& transform = registry.get<Supersonic::TransformComponent>(entity);
     auto& rigid = registry.get<Supersonic::RigidBodyComponent>(entity);
-    rigid.velocity = dt > 0.0f ? (target - transform.position) / dt : glm::vec3(0.0f);
+    // Over the PHYSICS step - the solver moves the body by velocity x its own step, so the
+    // velocity that lands it on `target` is measured against that, whatever the script's
+    // frame is (planning step 147).
+    rigid.velocity = physicsDt > 0.0f ? (target - transform.position) / physicsDt : glm::vec3(0.0f);
     transform.position = target;
 }
 
@@ -28,7 +31,7 @@ glm::dvec2 Door::InterpolatedPx() const {
     return fromPx + (toPx - fromPx) * bias;
 }
 
-void Door::Tick(entt::registry& registry, entt::entity entity, bool active, float dt) {
+void Door::Tick(entt::registry& registry, entt::entity entity, bool active, const ScriptClock::Step& step) {
     // Every status read is of currentPos, where the last frame's SetPositionXY left
     // it (#1-6), so each arrival is seen a frame after it happens.
     if (atPx == closedPx) {
@@ -57,11 +60,11 @@ void Door::Tick(entt::registry& registry, entt::entity entity, bool active, floa
     }
     // #587-624: update() - InterpolationTimer adds the frame's milliseconds - and
     // SetPositionXY(getCurrentPos()).
-    elapsedMs += static_cast<double>(dt) * 1000.0;
+    elapsedMs += ScriptClock::Ms(step);
     atPx = InterpolatedPx();
     const double rise = closedPx.y - openPx.y;
     progress = rise != 0.0 ? static_cast<float>((closedPx.y - atPx.y) / rise) : 0.0f;
-    MoveKinematic(registry, entity, Units::ToWorld(atPx.x, atPx.y), dt);
+    MoveKinematic(registry, entity, Units::ToWorld(atPx.x, atPx.y), step.physicsS);
 }
 
 bool DoorFromNode(const Tscn::Node& node, const DoorRules& rules, Door& out, std::string& error) {
@@ -235,15 +238,15 @@ bool Travel::Holds(const glm::dvec2& pointPx, const glm::dvec2& sizeUnits) const
     return pointPx.x >= low.x && pointPx.x <= high.x && pointPx.y >= low.y && pointPx.y <= high.y;
 }
 
-void Movers::Tick(entt::registry& registry, float dt) {
+void Movers::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     for (Platform& platform : platforms) {
-        platform.motion.t += dt;
+        platform.motion.t += step.scriptS;
         const glm::dvec2 at = platform.motion.AtPx();
-        MoveKinematic(registry, platform.entity, Units::ToWorld(at.x, at.y), dt);
+        MoveKinematic(registry, platform.entity, Units::ToWorld(at.x, at.y), step.physicsS);
     }
     for (Lift& lift : lifts) {
-        lift.motion.Advance(dt);
-        MoveKinematic(registry, lift.entity, Units::ToWorld(lift.motion.atPx.x, lift.motion.atPx.y), dt);
+        lift.motion.Advance(step.scriptS);
+        MoveKinematic(registry, lift.entity, Units::ToWorld(lift.motion.atPx.x, lift.motion.atPx.y), step.physicsS);
     }
 }
 

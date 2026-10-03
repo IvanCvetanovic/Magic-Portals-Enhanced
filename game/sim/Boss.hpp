@@ -194,12 +194,14 @@ struct State {
     // contacts are judged by.
     void BeforeStep(entt::registry& registry);
 
-    // After a step of `dt`, before the portals: a rock that ran into something
+    // After a step of `physicsDt` - the PHYSICS step, which carried the rocks: it is
+    // measured against the solver's own length, not the script's frame (planning step
+    // 147) - before the portals: a rock that ran into something
     // static breaks, and one that ran into the player hard enough kills it. A
     // rock a portal holds goes through it instead. Returns the rocks broken, for
     // the caller to forget.
     std::vector<entt::entity> Contacts(entt::registry& registry, entt::entity player, const Portals::State& portals,
-                                       float dt);
+                                       float physicsDt);
 
     // After the portals: the spikes fly, and the beholder takes its turn.
     struct Turn {
@@ -208,11 +210,11 @@ struct State {
         std::vector<glm::dvec2> brokenPx; // and where each stood, in `broken`'s order
         bool buttonRaised = false;        // on this tick
     };
-    Turn Tick(entt::registry& registry, entt::entity player, const std::vector<entt::entity>& stones, float dt);
+    Turn Tick(entt::registry& registry, entt::entity player, const std::vector<entt::entity>& stones, double dt);
 
 private:
     Rock drop(entt::registry& registry, const glm::dvec2& atPx);
-    void flySpikes(entt::registry& registry, entt::entity player, float dt);
+    void flySpikes(entt::registry& registry, entt::entity player, double dt);
     void follow(Beholder& beholder, const glm::dvec2& destPx, double ms);
 };
 

@@ -318,7 +318,7 @@ struct State {
     // many minions the level still has - RAGE_MODE waits on its escort being killed
     // - and `motion` the motions.json the hover's linearMotion runs by.
     Turn Tick(entt::registry& registry, entt::entity player, bool playerAlive, std::size_t minionsStanding,
-              const Motion::Rules& motion, float dt);
+              const Motion::Rules& motion, double dt);
 
     // explode's reach (MiscCallbacks, listing L67590, #33-122) for the one entity it
     // can burn that the port holds as no body: EntityGrabber's sphere of the blast's

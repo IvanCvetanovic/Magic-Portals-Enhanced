@@ -214,7 +214,7 @@ struct State {
     // One tick, after the physics step. Returns the bodies it took away, which
     // the caller must pass through Forget: a burnt crate can be a portal
     // traveller, and a blasted one a demolisher's target.
-    std::vector<entt::entity> Tick(entt::registry& registry, entt::entity player, float dt);
+    std::vector<entt::entity> Tick(entt::registry& registry, entt::entity player, double dt);
 
     const Burnable* FindBurnable(const std::string& name) const;
     const Bomb* FindBomb(const std::string& name) const;

@@ -168,7 +168,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-glm::vec3 Pull(const Well& well, const Rules& rules, const glm::dvec2& bodyPx, bool noGravity, float dt) {
+glm::vec3 Pull(const Well& well, const Rules& rules, const glm::dvec2& bodyPx, bool noGravity, double dt) {
     const glm::dvec2 toCentre = well.atPx - bodyPx;
     const double squaredDist = toCentre.x * toCentre.x + toCentre.y * toCentre.y;
     const double squaredRadius = well.radiusPx * well.radiusPx;
@@ -273,7 +273,7 @@ bool StepSweep(const Roundabout& rules, Sweep& sweep, bool first, const glm::vec
     return true;
 }
 
-void State::Tick(entt::registry& registry, float dt) {
+void State::Tick(entt::registry& registry, double dt) {
     lapsNow.clear();
     if (wells.empty() || dt <= 0.0f) return;
 

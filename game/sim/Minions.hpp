@@ -198,7 +198,7 @@ struct State {
 
     // One tick, BEFORE the physics step: each minion serves its dwell and then
     // walks, as the player is steered before the step rather than after it.
-    void Tick(entt::registry& registry, float dt);
+    void Tick(entt::registry& registry, double dt);
 
     // And after it: a minion left standing in a killer floor is taken. Returns
     // the bodies it took away, which the caller must pass through Forget. Split
