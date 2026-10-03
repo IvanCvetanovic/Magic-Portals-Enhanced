@@ -27840,7 +27840,7 @@ all 86 rows), reachability (108 / 20 / 0, rc 0) and a compile-only retake (126 o
 **The step is committed with the recorded deviations below (owner-delegated).** The walk cell is a source change and a test re-pin, so it belongs to G10's step, which relinks anyway;
 the verdict's text-only findings are applied in the commit (the walk cell named in the gameplay paragraph, the not-moved list, the gates and the clocks table; the `ETHParticleDrawer`
 sentence; the residual sweep cases in DEVIATION 3). **No source, test or data file was edited, nothing was relinked and nothing was launched for the commit**: `test_mp.exe` `6f8fc6c0`
-and `MagicPortals.exe` `164125fa` are the final code (three data files' notes, `clock.json`, `dragon.json` and `sky.json`, are newer than them; fix 2 ran the runner after editing them).
+and `MagicPortals.exe` `164125fa` are the final code (three data files the port reads at run time, `clock.json`, `dragon.json` and `sky.json`, are newer than them, notes only: `dragon.json` and `sky.json` were last edited at 19:25, before fix 2's full runner launch (19:31), and `clock.json` at 19:35 (a citation correction after fix 2's final review), before the third verifier's full launch (19:43) and its 141 captures; the runner's counts are identical in both launches).
 
 **RECORDED DEVIATIONS** (the decision's eleven rows, each with its cause and its owner; the first build's list of ten is folded into the body above, which states each of its items:
 the listing's departure from the spec's examples under BLOCKERS, the shot and the player not decoded here under the GAMEPLAY paragraph and LEFT FOR LATER, the lockout, the placed
