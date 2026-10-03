@@ -3,6 +3,7 @@
 #include "core/Components.hpp"
 #include "core/Json.hpp"
 #include "core/PhysicsSystem.hpp"
+#include "sim/Impacts.hpp"
 #include "sim/LevelBuilder.hpp"
 #include "sim/Shot.hpp"
 #include "sim/Units.hpp"
@@ -11,6 +12,7 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 namespace MagicPortals::Player {
 
@@ -18,16 +20,6 @@ using Supersonic::CapsuleColliderComponent;
 using Supersonic::RigidBodyComponent;
 using Supersonic::TagComponent;
 using Supersonic::TransformComponent;
-
-namespace {
-
-// Godot's move_toward: a step of at most `delta` towards `to`, never past it.
-float MoveToward(float from, float to, float delta) {
-    if (std::fabs(to - from) <= delta) return to;
-    return from + (to > from ? delta : -delta);
-}
-
-} // namespace
 
 bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
     namespace Json = Supersonic::Json;
@@ -52,25 +44,64 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         const char* key;
         double Tuning::*field;
     } fields[] = {
-        {"movement", "walk_speed_px_s", &Tuning::walkSpeedPx},
-        {"movement", "acceleration_px_s2", &Tuning::accelerationPx},
-        {"movement", "friction_px_s2", &Tuning::frictionPx},
-        {"movement", "air_control", &Tuning::airControl},
-        {"gravity", "gravity_px_s2", &Tuning::gravityPx},
-        {"gravity", "max_fall_speed_px_s", &Tuning::maxFallPx},
+        {"movement", "speed", &Tuning::speed},
+        {"movement", "elapsed_cap_ms", &Tuning::elapsedCapMs},
+        {"movement", "air_decay", &Tuning::airDecay},
+        {"movement", "air_decay_fps", &Tuning::airDecayFps},
+        {"gravity", "world_m_s2", &Tuning::worldGravity},
+        {"gravity", "scale", &Tuning::gravityScale},
+        {"gravity", "max_translation_m", &Tuning::maxTranslationM},
+        {"gravity", "reference_px_per_unit", &Tuning::referencePxPerUnit},
         {"body", "width_px", &Tuning::widthPx},
         {"body", "height_px", &Tuning::heightPx},
+        {"feet", "width_px", &Tuning::feetWidthPx},
+        {"feet", "height_px", &Tuning::feetHeightPx},
+        {"feet", "chamfer", &Tuning::feetChamfer},
+        {"feet", "touch_px", &Tuning::feetTouchPx},
     };
-    out = Tuning{};
+    Tuning read;
     for (const auto& field : fields) {
         const Json::Value& value = root[field.section][field.key];
         if (!value.IsNumber()) {
             error = path + ": " + field.section + "." + field.key + " is not a number";
             return false;
         }
-        out.*(field.field) = value.AsNumber();
+        // A walk of nothing, a world without gravity or a rate of nothing is a file that
+        // describes another game: the weightless levels take their gravity from zerog.json,
+        // never from a zero here.
+        if (!(value.AsNumber() > 0.0)) {
+            error = path + ": " + field.section + "." + field.key + " is above zero";
+            return false;
+        }
+        read.*(field.field) = value.AsNumber();
     }
+    out = read;
     return true;
+}
+
+double WalkOriginal(const Tuning& tuning, const ScriptClock::Step& step) {
+    // applyForces #15-36: elapsedTime = float(min(66, getLastFrameElapsedTime())) - the script's
+    // floored milliseconds - and speedScale = scale(speed) x elapsedTime / GetCurrentPhysicsTimeStepMS.
+    // scale(x) is x metres here: the port's metre is 50 units, as the original's is 50 of the
+    // screen's pixels, and the 256-unit design height cancels (listing 8.12a).
+    const double elapsedMs = std::min(tuning.elapsedCapMs, ScriptClock::Ms(step));
+    const double stepMs = step.simS * 1000.0;
+    return stepMs > 0.0 ? tuning.speed * elapsedMs / stepMs : 0.0;
+}
+
+double WalkCarried(const Tuning& tuning, const ScriptClock::Step& step) {
+    return WalkOriginal(tuning, step) * ScriptClock::SimRatio(step);
+}
+
+double AirShare(const Tuning& tuning, const ScriptClock::Step& step) {
+    // applyForces #71-84: min(1, GetFPSRate() / 60 x 0.86), the 60 and the 0.86 immediates.
+    return std::min(1.0, tuning.airDecay * step.fps / tuning.airDecayFps);
+}
+
+double FallPerTick(const Tuning& tuning, const ScriptClock::Step& step) {
+    // Box2D adds gravity x gravityScale x the step to the velocity each step (b2Body.cpp's
+    // integration; ETHPhysicsController::SetGravityScale); the port's tick carries it at SimRatio.
+    return tuning.worldGravity * tuning.gravityScale * step.simS * ScriptClock::SimRatio(step);
 }
 
 entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tuning& tuning) {
@@ -91,19 +122,45 @@ entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tunin
 }
 
 bool Grounded(entt::registry& registry, entt::entity player, const Tuning& tuning) {
-    const glm::vec3 centre = registry.get<TransformComponent>(player).position;
-    const glm::vec3 feet = centre - glm::vec3(0.0f, Units::ToMetres(tuning.heightPx * 0.5 - 1.0), 0.0f);
-    return Supersonic::PhysicsSystem::IsGrounded(registry, feet, Units::ToMetres(4.0), player);
+    // char_feet.ent's octagon (Size 14 x 10, vertices (+-chamfer, +-1) and (+-1, +-chamfer) of its half
+    // size), centred on the bottom of the body.
+    const glm::dvec2 bottomPx = Units::ToPixels(registry.get<TransformComponent>(player).position) +
+                                glm::dvec2(0.0, tuning.heightPx * 0.5);
+    const glm::dvec2 half(tuning.feetWidthPx * 0.5, tuning.feetHeightPx * 0.5);
+    Impacts::Shape feet;
+    for (const glm::dvec2 corner : {glm::dvec2(-tuning.feetChamfer, 1.0), glm::dvec2(-1.0, tuning.feetChamfer),
+                                    glm::dvec2(-1.0, -tuning.feetChamfer), glm::dvec2(-tuning.feetChamfer, -1.0),
+                                    glm::dvec2(tuning.feetChamfer, -1.0), glm::dvec2(1.0, -tuning.feetChamfer),
+                                    glm::dvec2(1.0, tuning.feetChamfer), glm::dvec2(tuning.feetChamfer, 1.0)}) {
+        feet.core.push_back(bottomPx + corner * half);
+    }
+    // The engine's own broad phase names what stands near the sensor (solid colliders only: a trigger is a
+    // sensor, which numTouches ignores); each is then tested by its shape, a hull by its outline, against the
+    // octagon - the broad phase answers by bounds, so it can only name more than touch.
+    std::vector<entt::entity> candidates;
+    const double reachPx = std::hypot(half.x, half.y) + tuning.feetTouchPx + 1.0;
+    Supersonic::PhysicsSystem::OverlapSphere(registry, Units::ToWorld(bottomPx.x, bottomPx.y),
+                                             Units::ToMetres(reachPx), candidates, player, false);
+    for (const entt::entity entity : candidates) {
+        Impacts::Shape solid;
+        if (!Impacts::ShapeOf(registry, entity, solid)) continue;
+        if (Impacts::Between(feet, solid).px <= tuning.feetTouchPx) return true;
+    }
+    return false;
 }
 
 glm::dvec2 PushAim(entt::registry& registry, entt::entity player, const Tuning& tuning, float direction,
-                   double airShare) {
+                   const ScriptClock::Step& step) {
     const auto* rigid = registry.try_get<RigidBodyComponent>(player);
-    const glm::dvec2 velocityPx = rigid != nullptr ? Units::ToPixels(rigid->velocity) : glm::dvec2(0.0);
+    // The body's velocity in the original's own units: what GetLinearVelocity gives applyForces.
+    const glm::dvec2 velocityPx =
+        rigid != nullptr ? Units::ToPixels(rigid->velocity) / ScriptClock::SimRatio(step) : glm::dvec2(0.0);
     // applyForces instructions 38-56: the walk across the vertical velocity;
     // 63-84: where isTouchingGround is not set, the body's own x instead.
-    if (Grounded(registry, player, tuning)) return glm::dvec2(direction * tuning.walkSpeedPx, velocityPx.y);
-    return glm::dvec2(velocityPx.x * airShare, velocityPx.y);
+    if (Grounded(registry, player, tuning)) {
+        return glm::dvec2(direction * WalkOriginal(tuning, step) * Units::kPixelsPerMetre, velocityPx.y);
+    }
+    return glm::dvec2(velocityPx.x * AirShare(tuning, step), velocityPx.y);
 }
 
 bool Pushing(entt::registry& registry, entt::entity player, const glm::dvec2& aimPx, double reachPx,
@@ -115,18 +172,30 @@ bool Pushing(entt::registry& registry, entt::entity player, const glm::dvec2& ai
     return Shot::ClosestContact(registry, fromPx, toPx, player).has_value();
 }
 
-void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, float direction, float dt) {
+void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, float direction,
+           const ScriptClock::Step& step) {
     const bool grounded = Grounded(registry, player, tuning);
     auto& rigid = registry.get<RigidBodyComponent>(player);
 
-    rigid.velocity.y =
-        std::max(rigid.velocity.y - Units::ToMetres(tuning.gravityPx) * dt, -Units::ToMetres(tuning.maxFallPx));
+    // Box2D integrates the velocity before it moves the body: gravity first.
+    rigid.velocity.y -= static_cast<float>(FallPerTick(tuning, step));
 
-    // player.gd:101-105, in metres.
-    const float target = direction * Units::ToMetres(tuning.walkSpeedPx);
-    float rate = Units::ToMetres(direction != 0.0f ? tuning.accelerationPx : tuning.frictionPx);
-    if (!grounded) rate *= static_cast<float>(tuning.airControl);
-    rigid.velocity.x = MoveToward(rigid.velocity.x, target, rate * dt);
+    if (grounded) {
+        // applyForces #38-56: set outright, the pad's -1, 0 or 1 times speedScale: no ramp, and no pad
+        // is a velocity of zero.
+        rigid.velocity.x = direction * static_cast<float>(WalkCarried(tuning, step));
+    } else {
+        // #63-84: the pad is ignored and the body keeps min(1, GetFPSRate() / 60 x 0.86) of its x.
+        rigid.velocity.x *= static_cast<float>(AirShare(tuning, step));
+    }
+
+    // b2Island::Solve (b2Island.cpp:286): a step's translation above b2_maxTranslation scales the whole
+    // velocity down to it. In the port's metres a tick that is 2 / 2.8125 = 0.711 m, 35.6 units: a fall of
+    // 570 units reaches it, so only a body that goes on falling does - the hidden body of a dead player.
+    const double limitM = tuning.maxTranslationM / tuning.referencePxPerUnit;
+    const double translationM = std::hypot(static_cast<double>(rigid.velocity.x), static_cast<double>(rigid.velocity.y)) *
+                                static_cast<double>(step.physicsS);
+    if (translationM > limitM) rigid.velocity *= static_cast<float>(limitM / translationM);
 }
 
 } // namespace MagicPortals::Player

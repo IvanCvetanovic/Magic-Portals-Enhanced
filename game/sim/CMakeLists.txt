@@ -94,8 +94,10 @@ set(SUPERSONIC_MAGICPORTALS_LEVELS "${_magicPortalsRepo}/out/levels"
 # And Enhanced's own data - its entity_roles.json, portals.json and
 # player.json in data/, which are Enhanced's authored files rather than the
 # original's. The tests read the role table and pin what it says of a level
-# (test_mp_play); the numbers in portals.json and player.json are marked _guess
-# there, so they are carried as data and nothing pins them.
+# (test_mp_play); the numbers in portals.json are marked _guess there, so they
+# are carried as data and nothing pins them. player.json's walk, air brake,
+# gravity and ground sensor are decoded since planning step 148 and pinned by
+# test_mp_player; only its capsule is still a guess.
 set(SUPERSONIC_MAGICPORTALS_DATA "${_magicPortalsRepo}/data"
     CACHE PATH "Enhanced's data directory (data in this repository)")
 

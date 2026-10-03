@@ -563,7 +563,12 @@ struct State {
     // A tap at a point in the level: a shot fired toward it. False when none
     // goes, because the level allows no portal or a shot is already flying.
     // Either way it writes lastTap, and nothing else it writes on a refusal.
-    bool Shoot(entt::registry& registry, const glm::dvec2& atPx);
+    //
+    // `velocityRatio` is how many times the original's own Box2D velocity the shooter's is carried at
+    // (ScriptClock::SimRatio, which the layer passes; Player.hpp says why): the recoil is a velocity
+    // the original adds to its own, so the shooter is given that many times over. 1 is a body
+    // carried in the original's own units, which is what a suite that calls this bare means.
+    bool Shoot(entt::registry& registry, const glm::dvec2& atPx, double velocityRatio = 1.0);
 
     // Whether a point is inside a zone the port plays - the test TryPlace
     // refuses by, exactly: an antiportal's radius times its scale, or a zone's

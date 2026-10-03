@@ -448,6 +448,11 @@ void Tick(Play& play, float direction) {
     Game::Tick(g_data, play.registry, play, direction, kStep);
 }
 
+// The walk speed the suite's own tick gives, in px/s: the decoded walk (player.json movement.speed over
+// the tick the suite steps at, kStep: a bare float is one length for the script and the physics, and
+// the original's own physics second, so the ratio is 1).
+double WalkPx() { return Player::WalkCarried(g_tuning, ScriptClock::Step(kStep)) * Units::kPixelsPerMetre; }
+
 glm::dvec2 PlayerPx(Play& play) {
     return Units::ToPixels(play.registry.get<TransformComponent>(play.player).position);
 }
@@ -524,7 +529,7 @@ Walk WalkTheSeam(float friction) {
     for (int tick = 1; tick <= 120 && walk.reachedAtS < 0.0; ++tick) {
         Tick(play, 1.0f);
         const double vx = play.registry.get<RigidBodyComponent>(play.player).velocity.x * Units::kPixelsPerMetre;
-        if (vx >= 0.95 * g_tuning.walkSpeedPx) atSpeed = true;
+        if (vx >= 0.95 * WalkPx()) atSpeed = true;
         if (atSpeed) walk.slowestPx = std::min(walk.slowestPx, vx);
         if (PlayerPx(play).x >= kSeamWalkEndPx) walk.reachedAtS = tick * static_cast<double>(kStep);
     }
@@ -554,7 +559,7 @@ void ThePlayerWalksAcrossTheSeam() {
                     static_cast<double>(friction), kSeamWalkEndPx, walk.reachedAtS, walk.slowestPx, walk.endXPx);
         if (friction != Player::kFriction) continue;
         CHECK_MSG(walk.reachedAtS > 0.0, "the player gets across the seam");
-        CHECK_MSG(walk.slowestPx > 0.5 * g_tuning.walkSpeedPx,
+        CHECK_MSG(walk.slowestPx > 0.5 * WalkPx(),
                   "without catching: the slowest held tick was " + std::to_string(walk.slowestPx) + " px/s");
     }
 }
@@ -1413,7 +1418,7 @@ void ThePlayerGoesThroughAndThePairIsSpent() {
     const double speedPx = glm::length(exitVelocityPx);
     const double wantPx = g_portalRules.transit.momentumMode == "reset"
                               ? 0.0
-                              : g_tuning.walkSpeedPx * g_portalRules.transit.exitSpeedScale;
+                              : WalkPx() * g_portalRules.transit.exitSpeedScale;
     CHECK_MSG(std::fabs(speedPx - wantPx) < 2.0,
               "its walk carried through: " + std::to_string(speedPx) + " px/s, want " + std::to_string(wantPx));
     CHECK_MSG(play.portals.placed.empty() && play.portals.portalsUsed == 2, "and the pair is spent");

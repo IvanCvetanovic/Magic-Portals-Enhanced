@@ -16,7 +16,6 @@
     "Started with only the first, every level would be a room the player floats in with no way",
     "to move and no way to finish. That is what this file's numbers exist to prevent."
   ],
-
   "level_property": {
     "_note": [
       "The property on the level_properties node, read exactly as `darkest` is. The original",
@@ -26,7 +25,6 @@
     ],
     "flag_name": "no_gravity"
   },
-
   "world": {
     "_note": [
       "setGravity(V2_ZERO) when the flag is on. Zero is not a tunable here: the mode IS zero",
@@ -38,7 +36,6 @@
     ],
     "gravity_px_s2": 0.0
   },
-
   "recoil": {
     "_note": [
       "PortalManager::applyImpulse, bytes 142841..143178, decoded in full:",
@@ -49,18 +46,21 @@
       "SetLinearVelocity at 57), so shots accumulate and DRIFT IS THE MECHANIC. Without the",
       "add, every tap would reset the player's motion instead of building on it.",
       "",
-      "WHY 1.4 NEEDS NO CONVERSION. `scale` is SGlobalScale::scale (bytes 5809..5878), which",
-      "is one multiply by m_scaleFactor; m_scaleFactor is GetScreenSize().y / m_absoluteSize",
-      "(updateScaleFactor, bytes 5592..5699), and m_absoluteSize is 480 (the constructor,",
-      "bytes 5032..5158). At the 480-tall reference the call is the number itself. The SAME",
-      "wrapper wraps the world's gravity as scale(10), and Units.hpp already has that 10",
-      "decoded as Box2D's DEFAULT_GRAVITY in metres per second squared - so the 1.4 is metres",
-      "per second too, and the engine's velocities already are. 70 px/s at kPixelsPerMetre 50,",
-      "for anyone reading it beside the Godot project's pixel numbers (its walk is a guessed 160).",
+      "WHAT 1.4 IS, in the port's units (corrected by planning step 148: the earlier note was built on m_absoluteSize 480, which is only",
+      "the pre-main constructor value). `scale` is SGlobalScale::scale (bytes 5809..5878), one multiply by m_scaleFactor, and",
+      "m_scaleFactor is GetScreenSize().y / m_absoluteSize (updateScaleFactor, bytes 5592..5699), which main and preLoop call with 256",
+      "(briefs 00_order 8.12a; D6 measured 2.8125 px/u = 720/256). So scale(1.4) is 1.4 x H/256 Box2D metres a second; Box2D's metre is",
+      "50 screen pixels (ETHPhysicsSimulator.cpp:27), so that is 70 x H/256 pixels, and at H/256 pixels a level unit it is 70 UNITS a",
+      "second of the original's PHYSICS, whatever the screen. There is no resolution divergence: the recoil scales with the screen as the",
+      "level does (the old note's 'stronger on a taller screen' read the 480 as a reference, and measured in units it is not).",
       "",
-      "A DIVERGENCE, RECORDED RATHER THAN MATCHED. Because m_scaleFactor is screen height over",
-      "480, the original's recoil got STRONGER on a taller screen - 1.4 at 480, 3.15 at 1080.",
-      "That is a resolution bug, not a mechanic, and the port takes the reference value.",
+      "A PHYSICS SECOND IS NOT A WALL SECOND. The original's Box2D world steps a FIXED 1/30 s a frame (clock.json physics_step_s), so a",
+      "velocity of 70 units a second carries a body 2.33 units a FRAME whatever the frame's length: 140 units a second of wall time at a",
+      "60 Hz frame, and 70 x fps / 30 at any other. F10 (out/parity/footage/F10.md section 3.1) measured one shot at 112-125 px/s =",
+      "40-44 u/s on an emulator running 17-19 frames a second (70 x 17/30 = 39.7, 70 x 19/30 = 44.3): the decode explains the footage to",
+      "its measurement, and the earlier 'F10 measured 40-44 where the port's 70 is too fast' was the footage read at the wrong frame",
+      "rate. The port's solver steps its 1/60 s tick, so `metres_per_second` stays the decoded 1.4 and the shooter is given it at",
+      "ScriptClock::SimRatio (2) times over (Portals::State::Shoot, Player.hpp): 2.33 units a tick, 140 units a second at 60 Hz.",
       "",
       "A SECOND, SMALLER DIVERGENCE. The original aims the recoil away from `finalPos`, the",
       "destination computePortalFinalPos worked out; the port aims it away from the tap itself",
@@ -75,7 +75,6 @@
     ],
     "metres_per_second": 1.4
   },
-
   "census": {
     "_note": [
       "Measured, not inferred: 18 levels set the flag, level1c through level18c, and they are",

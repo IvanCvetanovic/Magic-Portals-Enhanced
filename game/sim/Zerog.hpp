@@ -17,23 +17,19 @@
 // So there is no module here that owns a body or a tick. What the port needs is
 // a flag on the level, two branches in Game, and the arithmetic below.
 //
-// WHAT THE RECOIL IS, and why it needs no conversion. applyImpulse (bytes
-// 142841..143178) reads
+// WHAT THE RECOIL IS, and what unit it is in. applyImpulse (bytes 142841..143178) reads
 //
 //     SetLinearVelocity(GetLinearVelocity() + normalize(playerPos - finalPos) * scale(1.4))
 //
-// - an ADD onto the existing velocity, so shots accumulate and drift is the
-// mechanic. `scale` is SGlobalScale::scale, which is one multiply by
-// m_scaleFactor, and m_scaleFactor is GetScreenSize().y / m_absoluteSize with
-// m_absoluteSize 480. So at the 480-tall reference the call is the number
-// itself. The SAME wrapper wraps the world's gravity as scale(10), and that 10
-// is Box2D's own DEFAULT_GRAVITY in metres per second squared - so the 1.4 is
-// metres per second too, and the engine's velocities already are. 70 px/s, for
-// anyone reading it against the port's pixel numbers.
-//
-// (That the original's recoil therefore got STRONGER on a taller screen is a
-// resolution bug, not a mechanic. The port takes the reference value; zerog.json
-// records the divergence.)
+// - an ADD onto the existing velocity, so shots accumulate and drift is the mechanic. `scale` is
+// SGlobalScale::scale, one multiply by m_scaleFactor, which is GetScreenSize().y / 256 (main and
+// preLoop call updateScaleFactor with 256: briefs 00_order 8.12a; 480 is only the pre-main
+// constructor value). So 1.4 is 70 UNITS a second of the original's physics, on every screen. That
+// physics steps a FIXED 1/30 s a frame (clock.json), so the shove carries a body 2.33 units a
+// frame: 140 units a second of wall time at 60 Hz, and the 40-44 F10 measured at 17-19 frames a
+// second (70 x fps / 30). The metres_per_second below is the decoded 1.4; Portals::State::Shoot
+// gives the shooter it at ScriptClock::SimRatio times over, as the player's whole velocity is
+// carried (Player.hpp). zerog.json says it at length.
 
 #include <string>
 
@@ -57,8 +53,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error);
 // AWAY from where you tapped.
 //
 // Turned over in y, because the port's pixels count down and the engine's
-// metres count up. The magnitude is carried straight through for the reason
-// above: it is already metres per second.
+// metres count up. The magnitude is carried straight through, in the port's metres
+// a second: the caller gives it at the shooter's SimRatio (see above).
 //
 // A tap exactly ON the player is the one case normalize cannot answer, and this
 // gives nothing rather than a NaN that would poison the body's velocity.

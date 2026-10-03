@@ -2557,3 +2557,54 @@ Independently confirmed against real sample data: `.esc` and `.ent` are both XML
 `<Ethanon>` root; a `.esc` entity instance embeds the full entity definition inline
 *alongside* an `<EntityName>foo.ent</EntityName>` reference
 (`testbed/GeneralTests/scenes/customDataTesting.esc`).
+
+## 13. The physics step, the velocity units and the character's movement (planning step 148)
+
+Found while decoding `SideScrollerCharacter::applyForces` for the port's player (G10); every line is read from the engine's source and from
+the shipped script's listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce`), and the numbers are checked against footage F10 and F13.
+
+- **The world steps a FIXED time, not the frame.** `ETHPhysicsSimulator::Update` (`engine/Physics/ETHPhysicsSimulator.cpp:156-161`) steps
+  `m_fixedTimeStep ? m_fixedTimeStepValue : m_dynamicTimeStep`, times `m_timeStepScale`; the constructor (`:125-127`) starts with the fixed
+  step off and the value `1/60`. The script turns it on: `Game::preLoop` (bytes 112536..114414) ins 323 builds `AverageFPSRateManager`, whose
+  constructor (bytes 231862..231968) ins 1-3 sets `m_timeStep` to the float `1023969417` (0.033333335) and whose `manageFixedTimeStep` (bytes
+  232198..232274) calls `SetFixedTimeStep(true)` then `SetFixedTimeStepValue(m_timeStep)`, from the constructor and from every update (bytes
+  232143..232198). `GetCurrentPhysicsTimeStepMS` is then `0.033333335 x 1000` (`ETHPhysicsSimulator.cpp:165-168`). So **a frame advances the
+  Box2D world 1/30 s whatever its length**: at 60 frames a second the world runs at twice wall time. `STimeManager::setFactor` (bytes 7961..8045)
+  is the step scale: 1, and 0 under `pause` (bytes 7727..7781).
+- **Velocity units.** Box2D's metre is `ETHPhysicsSimulator::DEFAULT_SCALE` = 50 of the engine's pixels (`:27`, `:170-177`; the world's
+  gravity is `(0, 10)`, `:26`, `:132`, and `SetGravity` multiplies by the global scale, `:213-216`). `ETHPhysicsController::SetLinearVelocity`
+  multiplies by the global scale and `GetLinearVelocity` divides by it (`engine/Physics/ETHPhysicsController.cpp:117-123`, `:146-151`), which is 1.0
+  in this game (`SetScaleFactor` occurs 0 times in `android_game.bin`). The script's own `g_scale.scale(x)` is `x x GetScreenSize().y / 256`
+  (`SGlobalScale::updateScaleFactor`, bytes 5592..5699; called with 256 from `main` (bytes 309790..310306) ins 76-79 and `main.angelscript`'s `preLoop`
+  (313382..313559) ins 1-4; the constructor's 480, bytes 5032..5158, is only the value before `main`). So a velocity of `scale(x)` is `x x H/256` Box2D
+  metres a second = `x x H/256 x 50` screen pixels = **50 x level units a second per `x`, on every screen** (a screen pixel is `H/256` units).
+- **The ceiling.** `b2Island::Solve` clamps a step's translation to `b2_maxTranslation` = 2 m (`box2d/Box2D/Common/b2Settings.h:101`;
+  `box2d/Box2D/Dynamics/b2Island.cpp:282-288` and `:480-486`): the whole velocity is scaled down to it, after the contact solve. 100 screen pixels:
+  35.6 units at the 720-line emulator, fewer on a taller screen. Gravity is added as `v += h x (gravityScale x gravity + invMass x force)` (`:206`).
+- **`SideScrollerCharacter::applyForces`** (bytes 129676..130142): ins 15-24 `elapsedTime = float(min(66, getLastFrameElapsedTime()))`; 26-36 `speedScale
+  = g_scale.scale(speed) x elapsedTime / GetCurrentPhysicsTimeStepMS()`; 38-56 `dirVec = (moveVec.x x speedScale, linearVel.y)`; 58-69 off the ground:
+  71-84 `dirVec.x = linearVel.x x min(1, GetFPSRate() / 60 x 0.86)`; 86-91 `SetLinearVelocity(dirVec)`. `speed` is 3 (`SideScrollerCharacter`'s constructor,
+  bytes 152667..153096, ins 13-15) and `SetGravityScale(2)` is ins 58-62. `SideScrollerCharacter::update` (bytes 153242..153396) ins 20-29 runs applyForces only when
+  `!m_forceNoImpulse`, which `MainCharacter`'s constructor (bytes 126650..127790) ins 10-17 and 35 sets from `noGravity`: **no zero-gravity level
+  runs applyForces**, and the recoil's velocity (`PortalManager::applyImpulse`, bytes 142841..143178: `SetLinearVelocity(GetLinearVelocity() + normalize(..)
+  x scale(1.4))`) is never set over.
+- **`GetFPSRate`** is `m_provider->GetVideo()->GetFPSRate()` (`engine/Script/ETHScriptWrapper.System.cpp:130-133`); on Android it is
+  `GLES2Video::GetFPSRate` (`gs2d/src/Video/GLES2/GLES2Video.cpp:872-875`), `max(1, m_fpsRate)`, set by `ComputeFPSRate` (`:877-889`) to `m_frameCount x
+  (time since the last update)` once more than a second has passed - a frame count times a window of a second or more, not their quotient - and 30 until
+  then (`:93`). A 60 Hz device reads about 60 to 63; the emulator the footage is from, 17 to 19.
+- **The ground flag.** `isTouchingGround(entity)` (bytes 361475..361584) reads the entity's `isTouchingGround` datum, which `manageFeet` (bytes
+  131341..131709) ins 42-87 sets at the end of each update from the `numTouches` of the `char_feet.ent` entity it moves to the body's position + `feetOffset`
+  every update (ins 14-40). `feetOffset` is `(collisionBox.pos + (0, collisionBox.size.y x 0.5))` scaled (`addFeetOffset`, bytes 128877..129480, ins 56-74).
+  `char_feet.ent` is a **sensor** (`sensor="1"`, `shape="3"`) with `<Size x="14" y="10">` and the octagon `v0{-0.6;1} v1{-1;0.6} v2{-1;-0.6} v3{-0.6;-1} v4{0.6;-1}
+  v5{1;-0.6} v6{1;0.6} v7{0.6;1}`. `ETHBeginContactCallback_char_feet` and `ETHEndContactCallback_char_feet` (bytes 361966..362396) add 1 and -1 to `numTouches`
+  for every other fixture `shouldBeIgnoredByFeet` (bytes 361584..361843) does not refuse: a sensor, `isCharacter`, `fireball.ent` and a name beginning
+  `anti_sight_wall` (`prefixMatches`, bytes 361843..361966). `dark_mage.ent`'s body is two circles (`posY = -0.5` and `0.5`, radius 1.3 of its 14 x 36 box).
+- **Facing.** `PortalManager::managePortalInsertion` (bytes 143178..144166) ins 101-124, on a tap taken with no `projectile.ent` alive, calls
+  `character.setDirection(1)` where the character's x is above the tap's, else `setDirection(2)`; `GameCharacter::setDirection` (bytes 120269..120337) stores it, and
+  the next update with no walk draws that row (`SideScrollerCharacter::updateFrame`, bytes 130241..130614, ins 88-102).
+- **Checked against footage** (`out/parity/footage/F10.md`, `F13.md`; `out/parity/program/G10/f13/`): F10's recoil, 40-44 u/s at 17-19 frames a second, is `70 x fps / 30`
+  (39.7-44.3); F13's walk, 406 px/s = 144.4 u/s (the clip's own cadence is 29.5 frames a second: median gap 33.9 ms); its fall, per frame: the step is fixed, so the
+  growth is `1000 x (1/30)^2` = 1.111 units = 3.125 px a frame squared at 2.8125 px a unit whatever the frame rate, against 2.75-2.96 px/frame^2 measured on the
+  bottom edge over frames #43-#48 (88-95 %, inside the edge's 1 px quantisation; at the clip's 30 frames a second a fixed and a dynamic step coincide, so F13's fall
+  does not separate them: F10 carries the time base); its walk off 1-06's start block ends 84.3-84.6 units along, which the decode with the 14-unit sensor
+  reproduces (80.8-84.9 at 30 to 24 frames a second) and a point-sized foot does not (72.8-78.8).

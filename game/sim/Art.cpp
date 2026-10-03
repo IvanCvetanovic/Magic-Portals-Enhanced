@@ -507,16 +507,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     double offset[2] = {0.0, 0.0};
     if (!push.IsObject() || !Finite(push["reach_frame_width_share"]) ||
         !(push["reach_frame_width_share"].AsNumber() > 0.0) || !Numbers(push["offset_px"], 2, offset) ||
-        !Finite(push["air_velocity_share"]) || !(push["air_velocity_share"].AsNumber() > 0.0) ||
         !pushRows.IsObject() || !pushRows.Has("left") || !WholeBelow(pushRows["left"], mage.rows, arm.leftRow) ||
         !pushRows.Has("other") || !WholeBelow(pushRows["other"], mage.rows, arm.otherRow)) {
-        error = path + ": character needs push.reach_frame_width_share and push.air_velocity_share above 0, "
+        error = path + ": character needs push.reach_frame_width_share above 0, "
                        "push.offset_px as two numbers, and push.rows.left and .other, each inside its sheet";
         return false;
     }
     arm.reachFrameWidthShare = push["reach_frame_width_share"].AsNumber();
     arm.offsetPx = glm::dvec2(offset[0], offset[1]);
-    arm.airVelocityShare = push["air_velocity_share"].AsNumber();
 
     // And what a no_gravity level changes: the sheet it wears, the column that
     // turns while it stands, and its hover. None is defaulted - without them the

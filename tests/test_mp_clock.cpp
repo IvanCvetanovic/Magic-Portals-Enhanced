@@ -47,7 +47,9 @@
 #include "sim/ScriptClock.hpp"
 #include "sim/Units.hpp"
 
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -87,8 +89,9 @@ bool Load(const std::string& text, ScriptClock::Rules& out, std::string& error) 
     return ok;
 }
 
-std::string RulesText(const std::string& hz, const std::string& snap = "0.001") {
-    return "{\"matched_hz\": " + hz + ", \"snap_ms\": " + snap + "}";
+std::string RulesText(const std::string& hz, const std::string& snap = "0.001",
+                      const std::string& physics = "0.03333333507180214") {
+    return "{\"matched_hz\": " + hz + ", \"snap_ms\": " + snap + ", \"physics_step_s\": " + physics + "}";
 }
 
 void TheRulesAreClockJsons() {
@@ -97,6 +100,11 @@ void TheRulesAreClockJsons() {
     CHECK_EQ(rules.frameMs, 16u);
     CHECK_NEARD(rules.wallFrameMs, 1000.0 / 60.0);
     CHECK_NEARD(rules.snapMs, 0.001);
+    // The original's physics advances a FIXED 1/30 s a frame: AverageFPSRateManager's m_timeStep, the float
+    // the listing prints as 0.0333333f - the bits 1023969417, 0.033333335 - not 1/30 exactly, and exactly twice
+    // the float 1/60 the engine's tick is.
+    CHECK_NEARD(rules.physicsStepS, static_cast<double>(std::bit_cast<float>(std::uint32_t{1023969417u})));
+    CHECK(rules.physicsStepS == 2.0 * static_cast<double>(kPhysicsStep));
 
     // The other rates' floors, as clock.json's note lists them.
     struct Case {
@@ -125,6 +133,12 @@ void AFileThatWouldStopOrBlurTheClockIsRefused() {
     // Whole hertz: a fraction is not a display's rate here.
     CHECK(!Load(RulesText("59.94"), out, error));
     CHECK(!Load(RulesText("60", "-1"), out, error));
+    // A physics step of nothing or less, or one that is not a number, or missing: the player's walk and
+    // fall are divided by it.
+    CHECK(!Load(RulesText("60", "0.001", "0"), out, error));
+    CHECK(!Load(RulesText("60", "0.001", "-0.0333"), out, error));
+    CHECK(!Load(RulesText("60", "0.001", "\"0.0333\""), out, error));
+    CHECK(!Load("{\"matched_hz\": 60, \"snap_ms\": 0.001}", out, error));
     // A key that is not a number, one missing, a file that is not JSON, one that is not there.
     CHECK(!Load("{\"matched_hz\": \"60\", \"snap_ms\": 0.001}", out, error));
     CHECK(!Load("{\"matched_hz\": 60}", out, error));
@@ -200,10 +214,19 @@ void TheStepKeepsThePhysicsStepAndABareFloatIsOneLengthForBoth() {
         CHECK_MSG(step.physicsS == physics, "TickStep leaves the engine's step alone");
         CHECK(step.scriptS * 1000.0 == 16.0);
     }
-    // A bare float: what a pure suite's `kStep` is, for both.
+    // The original's physics second the step carries (planning step 148): the fixed 1/30 s of a frame, a
+    // ratio of 2 to the 1/60 s tick, and the 60 GetFPSRate answers at the matched rate.
+    const ScriptClock::Step layer = ScriptClock::TickStep(rules, kPhysicsStep);
+    CHECK(layer.simS == rules.physicsStepS);
+    CHECK_NEARD(ScriptClock::SimRatio(layer), 2.0);
+    CHECK(layer.fps == 60.0);
+    // A bare float: what a pure suite's `kStep` is, for both - and the original's physics second one with
+    // the tick, a ratio of 1, so a suite that steps a body in the original's own units still means it.
     const ScriptClock::Step bare = 1.0f / 60.0f;
     CHECK(bare.physicsS == kPhysicsStep);
     CHECK(bare.scriptS == static_cast<double>(kPhysicsStep));
+    CHECK_NEARD(ScriptClock::SimRatio(bare), 1.0);
+    CHECK_MSG(std::fabs(bare.fps - 60.0) < 1e-5, "a bare float's frame rate is 1 / the tick");
     const ScriptClock::Step none;
     CHECK(none.physicsS == kPhysicsStep);
     // The engine's own tick is not changed by being asked about.

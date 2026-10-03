@@ -321,7 +321,10 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // And the wells, which add to a velocity rather than set a position - so
     // they belong here too, before the solver reads what they wrote, and after
     // the movers so a body riding a platform is not pulled off it mid-tick.
-    level.wells.Tick(registry, step.scriptS);
+    //
+    // The pull is a velocity the original adds to a body's own Box2D velocity each frame; the player's is
+    // carried at ScriptClock::SimRatio times that (Player.hpp), so the pull it is given is too.
+    level.wells.Tick(registry, step.scriptS, level.player, ScriptClock::SimRatio(step));
     // Chapter 2's boss, and it belongs on this side for all three of the reasons
     // this half exists: it sets its own position, it spits as Turrets::Fire does,
     // and it takes geometry away BEFORE the solver reads it, so no contact is
@@ -374,7 +377,7 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // heavily pinned function in the port untouched - test_mp_play walks
     // level30's seam through it at friction 0 and 1 and prints both.
     if (level.player != entt::null && !level.noGravity) {
-        Player::Steer(registry, level.player, data.tuning, direction, step.physicsS);
+        Player::Steer(registry, level.player, data.tuning, direction, step);
     }
 }
 

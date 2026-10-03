@@ -8225,7 +8225,15 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     if (touch.over && Portals::RequestsPortal(m_level.portals.rules, release)) {
         glm::dvec2 atPx(0.0);
         if (ViewportToLevelPx(registry, glm::vec2(touch.atPx), atPx)) {
-            m_level.portals.Shoot(registry, atPx);
+            if (m_level.portals.Shoot(registry, atPx, ScriptClock::SimRatio(m_step)) && m_level.player != entt::null &&
+                registry.valid(m_level.player)) {
+                // managePortalInsertion #101-124, on a tap it takes with no projectile alive: the character
+                // is turned toward the tap - setDirection(1), left, where its x is above the tap's, else
+                // setDirection(2), right (F10 3.2: faces the tap and glides away from it). A walking update
+                // sets its direction again from the pad, which the picture's sync does after this.
+                const double playerX = Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position).x;
+                m_facingRight = !(playerX > atPx.x);
+            }
             // What the tap leaves behind, read off the record Shoot has just
             // written - a picture, whatever the shot does next.
             queueTapEffects(registry);
@@ -8989,8 +8997,11 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, const Sc
     if (m_level.noGravity && !m_finishing && !m_dying && m_level.player != entt::null &&
         registry.valid(m_level.player) && registry.all_of<Supersonic::RigidBodyComponent>(m_level.player)) {
         const glm::vec3 velocity = registry.get<Supersonic::RigidBodyComponent>(m_level.player).velocity;
+        // addTrail reads GetLinearVelocity of the original's own world, a ratio the player is carried above
+        // (Player.hpp): the port's metres a second over SimRatio.
         const double speed = std::sqrt(static_cast<double>(velocity.x) * velocity.x +
-                                       static_cast<double>(velocity.y) * velocity.y);
+                                       static_cast<double>(velocity.y) * velocity.y) /
+                             ScriptClock::SimRatio(step);
         if (Effects::TrailDue(m_effectRules, m_trailMs, speed, ScriptClock::Ms(step))) {
             const glm::dvec2 atPx =
                 Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
@@ -10017,7 +10028,14 @@ std::vector<Impacts::Watched> MagicPortalsLayer::impactBodies() const {
         return m_quakeRules.entity[static_cast<std::size_t>(call)];
     };
     // ETHBeginContactCallback_dark_mage: the player's body.
-    if (m_level.player != entt::null) bodies.push_back(Impacts::Watched{m_level.player, Impacts::Kind::Player, {}});
+    //
+    // Its velocity is carried at SimRatio times the original's (Player.hpp), and hitIntensity is read of the
+    // original's: so a begin reports it by 1 / SimRatio of the body's own.
+    if (m_level.player != entt::null) {
+        Impacts::Watched player{m_level.player, Impacts::Kind::Player, {}};
+        player.velocityScale = 1.0 / ScriptClock::SimRatio(m_step);
+        bodies.push_back(player);
+    }
     // ETHBeginContactCallback_rolling_stone: every rolling stone - placed, or
     // thrown, or the beholder's rock (both rolling_stone.ent, launchers.json and
     // boss.json). A placed stone of another entity has no such callback.
@@ -11163,7 +11181,7 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, con
         const Art::Push& push = m_artRules.character.push;
         pushing = Player::Pushing(
             registry, m_level.player,
-            Player::PushAim(registry, m_level.player, m_data.tuning, direction, push.airVelocityShare),
+            Player::PushAim(registry, m_level.player, m_data.tuning, direction, step),
             push.reachFrameWidthShare * playerCellPx(false).x, push.offsetPx);
     }
     // BEFORE the tick, not after it: the dragon's claw measures everything

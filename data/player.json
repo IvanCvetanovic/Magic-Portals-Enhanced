@@ -1,50 +1,104 @@
 {
   "_about": [
-    "Character movement values.",
+    "Character movement values. The walk and the fall are DECODED from the original's listing (planning step 148, G10);",
+    "the capsule is still the Godot project's guess.",
     "",
-    "⚠ EVERY NUMBER IN THIS FILE IS A GUESS. Not one has been measured against the",
-    "original. They are marked with _guess: true so the marking survives, per",
-    "MILESTONE_1.md section 3's rule: 'if a value is guessed rather than measured, it",
-    "gets a # GUESS comment in the JSON. No silent guesses.' The milestone's acceptance",
-    "checklist requires zero guesses remaining, so this file is a standing TODO.",
+    "The listing is out/parity/asbc/all_functions.txt (md5 48fe65ce8baea16b94ed84d8d7be84b0), cited as bytes a..b and",
+    "instruction numbers; arguments are pushed last-first (docs/ethanon-formats.md; briefs 00_order 8.0). The Godot",
+    "project's walk_speed 160, acceleration 1400, friction 1800, air_control 0.65, gravity 1200 and max_fall_speed 900 are",
+    "GONE: the original has no ramp, no friction of its own, no air control and no terminal velocity.",
     "",
-    "WHAT IS ACTUALLY KNOWN (from the compiled AngelScript in android_game.bin, so it is",
-    "structure rather than numbers):",
-    "  - The character is player-driven, NOT auto-walking: there is a ScreenPad /",
-    "    SCREEN_PAD_BUTTON and a DIRECTION enum of MOVING_UP/DOWN/LEFT/RIGHT plus",
-    "    setDirection. So a virtual d-pad drives it.",
-    "  - char_feet.ent is a separate ground-contact sensor entity, with",
-    "    ETHBeginContactCallback_char_feet / ETHEndContactCallback_char_feet. Ground",
-    "    detection is a sensor, not a raycast.",
-    "  - 'jumpForth' is the ONLY jump-related identifier in the whole binary, which is",
-    "    weak evidence that jumping is limited or situational rather than a core verb.",
-    "    Do not treat the jump values below as confirmed to even exist.",
-    "  - killMainCharacter / isCharacterDead confirm an explicit death state.",
+    "Where the numbers are used: game/sim/Player.cpp (Steer, WalkOriginal, WalkCarried, AirShare, FallPerTick). Those carry",
+    "the original's Box2D units into the port's tick through ScriptClock::SimRatio (clock.json physics_step_s); read the",
+    "header of Player.hpp before reading a number here as units a second of the port.",
     "",
-    "TO RESOLVE: record the original and frame-step it (MILESTONE_1 7.6), or decode the",
-    "numeric constants out of android_game.bin. Until then, playtest feel means nothing."
+    "ALSO KNOWN (older, from the compiled script's structure): a virtual pad (ScreenPad, SCREEN_PAD_BUTTON, DIRECTION), a",
+    "char_feet.ent ground sensor with begin/end contact callbacks, and 'jumpForth' the only jump identifier - the jump",
+    "block below stays off."
   ],
-
   "movement": {
-    "_guess": true,
-    "_note": "Pixel units, matching the original's coordinate space (1 unit = 1 px at scale 1).",
-    "walk_speed_px_s": 160.0,
-    "acceleration_px_s2": 1400.0,
-    "friction_px_s2": 1800.0,
-    "air_control": 0.65
-  },
-
-  "gravity": {
-    "_guess": true,
-    "_note": [
-      "Ethanon runs Box2D with gravity (0, +10) in Box2D units at a 1/50 world scale",
-      "(docs/ethanon-formats.md section 10), i.e. +y down like Godot. The value below is",
-      "NOT that converted figure - it is a platformer-feel guess and will not match."
+    "_source": [
+      "DECODED. SideScrollerCharacter::SideScrollerCharacter (bytes 152667..153096) ins 13-15: speed = SetV4 1077936128 = 3f.",
+      "SideScrollerCharacter::applyForces (bytes 129676..130142):",
+      "  ins 15-24  elapsedTime = float(min(66, g_timeManager.getLastFrameElapsedTime())) - the script's whole milliseconds",
+      "             (STimeManager::getLastFrameElapsedTime, bytes 7894..7961), 16 at a 60 Hz frame (clock.json);",
+      "  ins 26-36  speedScale = g_scale.scale(speed) x elapsedTime / GetCurrentPhysicsTimeStepMS (33.33: clock.json physics_step_s);",
+      "  ins 38-56  dirVec = (moveVec.x x speedScale, linearVel.y) - the velocity SET OUTRIGHT, the pad's -1, 0 or 1 across the",
+      "             body's vertical velocity, no ramp; no pad held is a velocity of 0 (ScreenPad::getDirection, bytes 149614..149699;",
+      "             arrowKeysMove, bytes 151039..151281, adds -1 or 1 to dir.x);",
+      "  ins 58-69  isTouchingGround(entity) false (the feet sensor's numTouches, manageFeet bytes 131341..131709): skips to 85 when it is true;",
+      "  ins 71-84  dirVec.x = linearVel.x x min(1, GetFPSRate() / 60 x 0.86) - the pad ignored in the air (the 60 is SetV4 1114636288,",
+      "             the 0.86 MULIf 1063004406, the 1 PshC4 1065353216);",
+      "  ins 86-91  SetLinearVelocity(dirVec) (ETHPhysicsController::SetLinearVelocity multiplies by the global scale, 1.0).",
+      "scale(x) is x x GetScreenSize().y / 256 (SGlobalScale::updateScaleFactor, bytes 5592..5699, called with 256 from main and preLoop:",
+      "briefs 00_order 8.12a; 480 is only the pre-main constructor value), so a velocity of scale(x) is x x H/256 Box2D metres a second,",
+      "and Box2D's metre is 50 of the screen's pixels (ETHPhysicsSimulator.cpp:27, :170-177) - 50 x H/256 pixels, which at H/256 pixels a",
+      "level unit is 50 x level units a second, whatever the screen. The port's metre is 50 units (Units.hpp), so `speed` is in the port's",
+      "metres a second.",
+      "At a 60 Hz frame: 3 x 16 / 33.33 = 1.44 m/s of the original's physics, which its 1/30 s step carries 0.048 m = 2.4 units a frame,",
+      "144 units a second (150 x 16 / 16.667). MEASURED: F13's walk, about 400 px/s at 2.8125 px/u = 142 u/s (out/parity/footage/F13.md section 3)."
     ],
-    "gravity_px_s2": 1200.0,
-    "max_fall_speed_px_s": 900.0
+    "speed": 3.0,
+    "elapsed_cap_ms": 66,
+    "_elapsed_cap_ms": "applyForces ins 15, PshC4 66: min(66, the script's frame ms). The 66 is twice the 33.33 step; no 60 Hz frame reaches it (16 ms).",
+    "air_decay": 0.86,
+    "air_decay_fps": 60.0,
+    "_air_decay": [
+      "applyForces ins 75-79. The factor is min(1, GetFPSRate() / 60 x 0.86), evaluated at the matched 60 Hz: 0.86 (the spec's ruling, step",
+      "CK's clock). GetFPSRate is the video's frames counted over a window just over a second long, times that window (GLES2Video.cpp",
+      "ComputeFPSRate, :878-889: frameCount x interval, an initial 30 for the first second), so a real 60 Hz device reads about 60-63 and the",
+      "factor 0.86-0.90; an emulator at 17 fps reads 17 and the factor 0.24: the air brake depends on the frame rate, as the original's physics step does."
+    ]
   },
-
+  "gravity": {
+    "_source": [
+      "DECODED. The world: Game::preLoop (bytes 112536..114414) ins 416-427, SetGravity(vector2(0, g_scale.scale(10))) - ins 405-414 is",
+      "V2_ZERO on a no_gravity level, which is zerog.json's - and ETHPhysicsSimulator::SetGravity multiplies by the global scale, 1.0",
+      "(ETHScriptWrapper.Scene.cpp:670-675, ETHPhysicsSimulator.cpp:213-216): 10 m/s^2 of the original's physics, 500 units a second",
+      "squared, Box2D's own DEFAULT_GRAVITY (ETHPhysicsSimulator.cpp:26). The body: SideScrollerCharacter::SideScrollerCharacter ins 58-62,",
+      "ETHPhysicsController::SetGravityScale(2f) (PshC4 1073741824); dark_mage.ent's own gravityScale is 1.",
+      "Box2D adds g x gravityScale x its step to a velocity each step and then moves the body by velocity x step, and the step is the",
+      "fixed 1/30 s (clock.json): 20 x 1/30 = 0.667 m/s a frame, so 1.111 units a frame squared, whatever the frame's length. At a 60 Hz",
+      "frame that is 4000 units a second squared of wall time (4 x 1000: the physics' second is half a frame's). The one cap is Box2D's b2_maxTranslation,",
+      "2 m a step (b2Settings.h:101; b2Island.cpp:286, :484: a step's translation above it scales the whole velocity down to it): 100 screen pixels,",
+      "35.6 units at the 720-line emulator the footage is from. A fall from the top of a 256-unit level (23.9 units a step) does not reach it; a body that falls on does,",
+      "which is what bounds a hidden, dead player's body, that the layer leaves in the world. Player::Steer applies it per tick (below).",
+      "CROSS-CHECK: F13's 1-06 fall (out/parity/program/G10/f13/: the player's bounding box per frame from F13_fall_1-06.mp4). The clip's own cadence is the",
+      "reference: its median frame gap is 33.9 ms (29.5 frames a second; the gaps run 18-69 ms; no duplicate frames). Per frame, a fall's growth does not depend on the",
+      "frame rate (the physics step is fixed): the decode is 1000 units a second squared x (1/30 s)^2 = 1.111 units a frame squared = 3.125 px at 2.8125 px a unit;",
+      "the clip's bottom edge on frames #43-#48 grows 2.75-2.96 px a frame squared (quadratic fit 2.96, 2.92 over #43-#50, endpoint difference 2.75; the edge is",
+      "quantised to about 1 px), 88-95 % of the decode's. At the clip's 30 frames a second a fixed and a dynamic step coincide, so this proves nothing between them",
+      "(F10, at 17-19 frames a second, carries the time base). The walk-off replayed offline ends 84.9 units along at 24 frames a second, 83.3 at 28 and 80.8 at 30",
+      "(the clip's is 84.3-84.6), and the replay's fall at the 24-frame fit runs within 10 units of the clip's through frames #43-#50 (rms 5.3 units over the whole run)."
+    ],
+    "world_m_s2": 10.0,
+    "scale": 2.0,
+    "max_translation_m": 2.0,
+    "reference_px_per_unit": 2.8125,
+    "_max_translation": "b2_maxTranslation (b2Settings.h:101), in Box2D metres a step; the limit in the port's metres a tick is max_translation_m / reference_px_per_unit (2 / 2.8125 = 0.711 m = 35.6 units): Box2D's metre is 50 screen pixels and the port's 50 units, so the screen's pixels a unit decide it. reference_px_per_unit is 720 / 256, the line count every capture of the original is at (briefs 00_order 8.12a; D6 measured 2.8125); on a taller screen the original's limit is fewer units."
+  },
+  "feet": {
+    "_source": [
+      "DECODED. char_feet.ent (reference/extracted/assets/entities, a sensor): <Size x=14 y=10>, <Polygon> v0{x=-0.6;y=1} v1{x=-1;y=0.6}",
+      "v2{x=-1;y=-0.6} v3{x=-0.6;y=-1} v4{x=0.6;y=-1} v5{x=1;y=-0.6} v6{x=1;y=0.6} v7{x=0.6;y=1} - an octagon 14 units wide and 10 tall whose",
+      "corners are cut at 0.6 of the half size (`chamfer`). SideScrollerCharacter::addFeetOffset (bytes 128877..129480) ins 56-74 puts it at the",
+      "entity's position + (0, collisionBox.size.y x 0.5) - 18 units below the point for dark_mage.ent's 14 x 36 box, which is the bottom of its two",
+      "circles (radius 1.3 at +-0.5 of the half height: 18.1) - and manageFeet (bytes 131341..131709) ins 14-40 moves it there every update, then",
+      "ins 42-87 sets the entity's isTouchingGround to whether its numTouches (ETHBeginContactCallback_char_feet / ETHEndContactCallback_char_feet,",
+      "bytes 361966..362396: +1 / -1 for every contact shouldBeIgnoredByFeet does not refuse) is above 0. shouldBeIgnoredByFeet (bytes",
+      "361584..361843) refuses a sensor, a character (isCharacter), `fireball.ent` and any name beginning `anti_sight_wall`.",
+      "The port centres the octagon on the bottom of its own capsule (body.height_px / 2 below the centre: the original's 18 against the circles'",
+      "18.1) and tests it against every solid collider but the player's (Player::Grounded; a minion's body is not refused: RECORDED DEVIATIONS).",
+      "MEASURED: F13's 1-06 walk off the start block (out/parity/program/G10/f13/): the player's centre ends 84.3-84.6 units along, 20 past the block's",
+      "edge at 64. The decoded walk, air brake and fall replayed offline at the clip's 24 to 30 frames a second end at 80.8-84.9 with the 14-unit feet",
+      "(half width 7: the body is on the ground until its feet are 7 clear of the edge) and at 72.8-78.8 with a point for a foot."
+    ],
+    "width_px": 14.0,
+    "height_px": 10.0,
+    "chamfer": 0.6,
+    "touch_px": 0.5,
+    "_touch_px": "how near counts as touching: Box2D calls BeginContact on the first step a manifold has a point, within the polygons' skin (earthquake.json impacts.touch_px, the same 0.5, D11_check C47)"
+  },
   "jump": {
     "_guess": true,
     "_note": [
@@ -72,7 +126,6 @@
       "from absence, so still verify it."
     ]
   },
-
   "body": {
     "_guess": true,
     "_note": "Collision capsule. The original's char_feet.ent implies feet sit below the body.",

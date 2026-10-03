@@ -48,6 +48,12 @@ struct Watched {
     // is looked at there - the pairs it touches, the point it aims from - until
     // its own shape reaches one of those pairs, or it is put somewhere else.
     glm::dvec2 spawnDropPx{0.0};
+    // The original's own Box2D velocity per unit of this body's port velocity, which a begin reports
+    // it by: the callbacks read GetLinearVelocity of a world that steps 1/30 s a frame, and the player
+    // is carried at ScriptClock::SimRatio times that (Player.hpp), so its is 1 / SimRatio. A body the
+    // port carries in the original's own units - a stone, a minion, a crate - is 1. What the watch
+    // looks at (how far a body travels a step, where it stands) stays in the port's own.
+    double velocityScale = 1.0;
 };
 
 // A collider in the plane, in the port's pixels (+y down): a convex core of one
@@ -74,9 +80,9 @@ struct Gap {
 Gap Between(const Shape& a, const Shape& b);
 
 // How many steps of a body's velocities are kept, back to the last time it met
-// or left something: a second at the port's 60 Hz, in which the player's
-// gravity reaches its fall's cap (player.json) and past which a stone's only
-// grows. The engine's solver takes a closing pair's approach out before the pair
+// or left something: a second at the port's 60 Hz, which is longer than any fall
+// a level's height allows (the player falls 256 units in about 0.36 s at the
+// decoded gravity, Player.hpp) and past which a stone's only grows. The engine's solver takes a closing pair's approach out before the pair
 // meets - a speculative contact, apart but inside the step's reach, which it
 // brakes to a stop, in stages, from as far as a step's travel above a floor - so
 // the speed a pair came together at is a velocity of a step before the one it
@@ -140,6 +146,7 @@ private:
         entt::entity body = entt::null;
         Kind kind = Kind::Player;
         glm::dvec2 velocityPx{0.0};
+        double velocityScale = 1.0; // Watched::velocityScale
         glm::dvec2 centrePx{0.0}; // its transform
         glm::dvec2 atPx{0.0};     // its entity point
         glm::dvec2 pointOffsetPx{0.0};

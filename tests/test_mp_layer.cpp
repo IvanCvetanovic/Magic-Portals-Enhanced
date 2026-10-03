@@ -259,6 +259,21 @@ glm::dvec2 playerPx(entt::registry& registry, const MagicPortalsLayer& layer) {
     return MagicPortals::Units::ToPixels(registry.get<TransformComponent>(layer.SimLevel()->player).position);
 }
 
+void PutPlayerAt(entt::registry& registry, const MagicPortalsLayer& layer, const glm::dvec2& atPx) {
+    auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+    const glm::vec3 world = MagicPortals::Units::ToWorld(atPx.x, atPx.y);
+    transform.position = glm::vec3(world.x, world.y, transform.position.z);
+}
+
+// The player held in the air where a case wants it, a tick after a tick. Its velocity goes with it: the
+// original's body has no terminal velocity (Box2D clamps a step's move at 2 m), so a player put back
+// every tick but left its speed would pick up 1.33 m/s a tick and travel hundreds of units between the
+// puts (the Godot project's 900 px/s cap hid that, planning step 148).
+void HoldPlayerAt(entt::registry& registry, const MagicPortalsLayer& layer, const glm::dvec2& atPx) {
+    PutPlayerAt(registry, layer, atPx);
+    registry.get<RigidBodyComponent>(layer.SimLevel()->player).velocity = glm::vec3(0.0f);
+}
+
 std::string Point(const glm::dvec2& p) {
     return "(" + std::to_string(p.x) + ", " + std::to_string(p.y) + ")";
 }
@@ -845,6 +860,24 @@ void Level8FromTheSpawnWithTapsAndWalking() {
         return;
     }
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+
+    // THE TWO CRYSTALS ON THE SHELF - (83, 32) and (144, 48), high over the floor the walk keeps to - are not
+    // on this solve's path any more. They were picked on the way out of the far portal, by steering in the
+    // air; the original's player cannot steer there (applyForces ignores the pad off the ground and keeps
+    // 0.86 of its x velocity a frame), so the exit falls straight down at x 31. The case takes them with the
+    // player put on each, and puts it back on its spawn: the medal counter below is the case's subject, and
+    // it counts three. Whether the level's designed solve takes them another way is the route phase's
+    // (planning step 148, LEFT FOR THE OWNER).
+    {
+        const glm::dvec2 spawn = playerPx(registry, layer);
+        for (const MagicPortals::Goals::Crystal& crystal : layer.SimLevel()->goals.crystals) {
+            const glm::dvec2 at = MagicPortals::Units::ToPixels(glm::vec3(crystal.box.centre, 0.0f));
+            if (crystal.collected || at.y >= 100.0) continue;
+            HoldPlayerAt(registry, layer, at);
+            tickWith(layer, registry, kRest, {}, {});
+        }
+        HoldPlayerAt(registry, layer, spawn);
+    }
 
     for (int tick = 0; tick < 180 && playerPx(registry, layer).x < 195.0; ++tick) {
         std::vector<std::string> pressed;
@@ -3749,12 +3782,6 @@ const MagicPortalsLayer::EmitterReport* ReportOf(const std::vector<MagicPortalsL
 // step 91); this makes the seventh a compile error.
 const MagicPortalsLayer::EmitterReport* ReportOf(std::vector<MagicPortalsLayer::EmitterReport>&& reports,
                                                  const std::string& node, int slot) = delete;
-
-void PutPlayerAt(entt::registry& registry, const MagicPortalsLayer& layer, const glm::dvec2& atPx) {
-    auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
-    const glm::vec3 world = MagicPortals::Units::ToWorld(atPx.x, atPx.y);
-    transform.position = glm::vec3(world.x, world.y, transform.position.z);
-}
 
 // 1-1's torch and static portals, as the original places and draws their systems:
 //  - 2a: the flame starts at the torch's NODE plus (0, -12), (288, 52), not at
@@ -6919,10 +6946,12 @@ void APlayerLandingShakesTheView() {
                 Point(rest - glm::dvec2(0.0, 100.0)).c_str(), landedOn, describe(begins.front(), read).c_str());
     CHECK_MSG(std::fabs(begins.front().normal.x) < 1e-6 && std::fabs(begins.front().normal.y - 1.0) < 1e-6,
               "straight down onto the floor: " + Point(begins.front().normal));
-    // What it came in at: 100 px at player.json's 1200 px/s^2 is about 490 px/s, a
-    // little less by the ticks; the solver braked it before it touched.
+    // What it came in at, as the original's callback reads it: 100 px at the decoded 1000 px/s^2 of the
+    // original's physics (10 x 2, a step of 1/30 s: planning step 148) is 447 px/s, a little less by the
+    // frames - 400, the 12th frame's - and the solver braked it before it touched. The port carries the
+    // player at twice that and the begin reports it by half (Impacts::Watched::velocityScale).
     const glm::dvec2 came = begins.front().Approaching(begins.front().normal);
-    CHECK_MSG(came.y > 400.0 && came.y < 520.0, "the fall it came in at: " + Point(came) + ", where the landing step carried " +
+    CHECK_MSG(came.y > 380.0 && came.y < 460.0, "the fall it came in at: " + Point(came) + ", where the landing step carried " +
                                                     Point(begins.front().velocityPx));
     CHECK_MSG(read.calls && lastImpactCall(rules, layer) == read.intensity, "the landing calls");
     const std::string landedRow = quakeLanded(landed, read.intensity, false);
@@ -14089,6 +14118,83 @@ Flown FlyWithFrames(MagicPortalsLayer& layer, entt::registry& registry, int& tic
     return flown;
 }
 
+// managePortalInsertion #101-124: on a tap it takes with no projectile alive, the character is turned toward
+// the tap - setDirection(1), left, where its x is above the tap's, else setDirection(2), right
+// (PortalManager.character.setDirection; F10 3.2: he faces the tap and glides away from it). Planning step 148
+// builds it, the "facing a portal tap" row of step 62's deviations; before it the player never turned but by
+// walking.
+void APlayerTurnsToTheTapItTakes() {
+    if (!OriginalArtIsThere("APlayerTurnsToTheTapItTakes")) return;
+    MagicPortals::Art::Rules rules;
+    std::string error;
+    CHECK_MSG(MagicPortals::Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", rules, error),
+              error);
+    const MagicPortals::Art::Character& mage = rules.character;
+    const auto rowStart = [&mage](int row) { return static_cast<uint32_t>(row * mage.columns); };
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level6");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    const entt::entity mageQuad = FirstTagged(registry, "Magic Portals Player Sprite");
+    CHECK(mageQuad != entt::null);
+    if (mageQuad == entt::null) return;
+    const auto firstFrame = [&registry, mageQuad]() { return registry.get<SpriteAnimationComponent>(mageQuad).firstFrame; };
+    const uint32_t facingRight = rowStart(mage.rightRow) + static_cast<uint32_t>(mage.idleColumn);
+    const uint32_t facingLeft = rowStart(mage.leftRow) + static_cast<uint32_t>(mage.idleColumn);
+    CHECK_MSG(firstFrame() == facingRight, "a level starts facing right");
+
+    // A tap to the player's left turns it left, standing where it stands.
+    const glm::dvec2 at = playerPx(registry, layer);
+    shoot(layer, registry, screenOf(registry, at + glm::dvec2(-60.0, -30.0)));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap was taken: " + lastFailure(layer));
+    CHECK_MSG(firstFrame() == facingLeft, "turned to a tap on its left: frame " + std::to_string(firstFrame()));
+    CHECK_MSG(playerPx(registry, layer).x == at.x, "and it has not walked");
+    const Flown flown = FlyWithFrames(layer, registry, ticks);
+    CHECK(flown.endTick >= 0 || !layer.SimLevel()->portals.flight.has_value());
+    for (int i = 0; i < 30; ++i) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(firstFrame() == facingLeft, "and it stays turned that way");
+
+    // One on its right turns it back.
+    shoot(layer, registry, screenOf(registry, at + glm::dvec2(60.0, -30.0)));
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the second tap was taken: " + lastFailure(layer));
+    CHECK_MSG(firstFrame() == facingRight, "turned to a tap on its right: frame " + std::to_string(firstFrame()));
+    layer.OnDetach(registry);
+}
+
+// A tap in a zero-gravity level shoves the player at the original's physics, which the port carries at twice
+// the velocity (Player.hpp, planning step 148): scale(1.4) is 70 units a second of a physics that steps 1/30 s
+// a frame, so 2.8 m/s of the port's 1/60 s tick - 140 units a second at 60 Hz, where F10 measured 40-44 on an
+// emulator at 17-19 frames a second.
+void ATapShovesAWeightlessPlayerAtTwiceTheOriginalsVelocity() {
+    if (!OriginalArtIsThere("ATapShovesAWeightlessPlayerAtTwiceTheOriginalsVelocity")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level1c");
+    layer.OnAttach(registry);
+    int ticks = 0;
+    if (!ReadyToShoot(layer, registry, ticks)) return;
+    CHECK(layer.SimLevel()->noGravity);
+    const entt::entity player = layer.SimLevel()->player;
+    const glm::dvec2 at = playerPx(registry, layer);
+    const glm::vec2 point = screenOf(registry, at + glm::dvec2(100.0, 0.0));
+    tap(layer, registry, point);
+    const glm::vec3 before = registry.get<RigidBodyComponent>(player).velocity;
+    lift(layer, registry, point);
+    CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap was taken: " + lastFailure(layer));
+    const glm::vec3 after = registry.get<RigidBodyComponent>(player).velocity;
+    // Aimed to the right, pushed to the left: 1.4 x 2 m/s, which is 2.333 units a tick.
+    CHECK_MSG(std::fabs((after.x - before.x) + 2.8) < 0.01,
+              "pushed left by 2.8 m/s: " + std::to_string(after.x - before.x));
+    CHECK_MSG(std::fabs(after.y - before.y) < 0.01, "and not up or down: " + std::to_string(after.y - before.y));
+    CHECK_MSG(std::fabs(-(after.x - before.x) * MagicPortals::Units::kPixelsPerMetre * MagicPortalsLayer::kTick - 7.0 / 3.0) <
+                  0.001,
+              "2.333 units a tick");
+    layer.OnDetach(registry);
+}
+
+
 // Gate 1 of 00_order 10.1: "a failed shot into a 1-7 wall gives portal_fail at z
 // 32 with one light". Footage F3's wall tap, (450, 315) of its screen.
 void AShotIntoA17WallEndsInPortalFail() {
@@ -15464,7 +15570,7 @@ void AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds() {
     // and a tap between the two; the fireball flies on along it into the agent.
     const glm::dvec2 standAt = agentAt + glm::dvec2(120.0, 0.0);
     for (int i = 0; i < 30; ++i) {
-        PutPlayerAt(registry, layer, standAt);
+        HoldPlayerAt(registry, layer, standAt);
         tickWith(layer, registry, kRest, {}, {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     }
@@ -15479,13 +15585,13 @@ void AFireDiamondsFireballAndItsDrainLeaveWhatTheScriptAdds() {
     }
     const glm::dvec2 aim = agentAt + glm::dvec2(60.0, 0.0);
     CHECK_MSG(onScreen(registry, aim), "the tap is on screen");
-    PutPlayerAt(registry, layer, standAt);
+    HoldPlayerAt(registry, layer, standAt);
     shoot(layer, registry, screenOf(registry, aim));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     bool gone = false;
     for (int i = 0; i < 180 && !gone; ++i) {
-        PutPlayerAt(registry, layer, standAt);
+        HoldPlayerAt(registry, layer, standAt);
         tickWith(layer, registry, kRest, {}, {});
         agent = layer.SimLevel()->fields.FindField("shock_agent_ent_2441");
         gone = agent != nullptr && agent->gone;
@@ -15864,8 +15970,13 @@ void AWeightlessPlayerLeavesATrail() {
         CloseTheLevelStartPopup(layer, registry);
         const entt::entity player = layer.SimLevel()->player;
         const auto trails = [&layer]() { return EffectsOf(layer, "movement_trail.ent"); };
-        const auto push = [&registry, player](float speed) {
-            registry.get<RigidBodyComponent>(player).velocity = glm::vec3(speed, 0.0f, 0.0f);
+        // addTrail reads the original's velocity, and the port carries the player at twice that (Player.hpp):
+        // `speed` is the original's metres a second, 0.4 the strict gate. Pushed LEFT: level4c's pillar stands
+        // 44 units to the right of the player, which twice the carried velocity reaches inside the case, and
+        // a player pressed against it has no speed to read.
+        const auto push = [&registry, player, &layer](float speed) {
+            const float ratio = static_cast<float>(MagicPortals::ScriptClock::SimRatio(layer.TickStep()));
+            registry.get<RigidBodyComponent>(player).velocity = glm::vec3(-speed * ratio, 0.0f, 0.0f);
         };
         for (int tick = 0; tick < 30; ++tick) {
             push(0.0f);
@@ -18101,14 +18212,33 @@ void ABeholderRockBrokenOnTheLevelIsHeard() {
             }
             CHECK_MSG(registry.valid(hit.other) && !registry.all_of<RigidBodyComponent>(hit.other),
                       where + ": on a static body");
-            CHECK_MSG(begins.size() == 1, where + ": one stone begin of it, not " + std::to_string(begins.size()));
-            if (begins.size() != 1 || read == reads.end() || !registry.valid(hit.other)) continue;
-            const ImpactRead impact = readImpact(rules, layer, *begins[0]);
+            // ONE BEGIN OF THE ROCK ON EACH BODY IT TOUCHED, AND NONE TWICE: the pair Contacts judged and
+            // the pair the watch found are one begin (planning step 142's second fix round). The case
+            // asked for exactly one begin of the rock: in the decoded movement's timeline (planning step
+            // 148: the player's walk and fall moved, and with them where the beholder's rocks land) a
+            // rock breaks on a tick it also meets a second body, so the question is that no pair is
+            // counted twice, and that one of the begins is on what it was broken on.
+            std::vector<entt::entity> others;
+            const MagicPortals::Impacts::Begin* onIt = nullptr;
+            for (const MagicPortals::Impacts::Begin* begin : begins) {
+                others.push_back(begin->other);
+                if (begin->other == hit.other) onIt = begin;
+            }
+            std::sort(others.begin(), others.end());
+            const bool distinct = std::adjacent_find(others.begin(), others.end()) == others.end();
+            CHECK_MSG(distinct && onIt != nullptr,
+                      where + ": a stone begin of it on each body and none twice, one on what it broke on: " +
+                          std::to_string(begins.size()) + " begin(s), " + (distinct ? "distinct" : "a pair twice") +
+                          (onIt == nullptr ? ", none on it" : ""));
+            if (!distinct || onIt == nullptr || read == reads.end() || !registry.valid(hit.other)) continue;
+            const ImpactRead impact = readImpact(rules, layer, *onIt);
             if (breaks == 1) {
-                // The watch never saw this one reach the floor: the begin is the one
-                // made of Contacts' judgement, with no normal of its own.
-                CHECK_MSG(begins[0]->other == hit.other && begins[0]->normal == glm::dvec2(0.0),
-                          where + ": the begin is Contacts', on what it broke the rock on");
+                // The begin is Contacts' own, with no normal, where the watch never saw this one reach what it
+                // broke on; or the watch's, a unit normal, where the rock had lain against it since before the
+                // break (as it has in this timeline).
+                CHECK_MSG(onIt->normal == glm::dvec2(0.0) || std::fabs(glm::length(onIt->normal) - 1.0) < 1e-9,
+                          where + ": the begin is Contacts' (no normal) or the watch's (a unit normal): " +
+                              Point(onIt->normal));
                 const glm::dvec2 otherPx =
                     MagicPortals::Units::ToPixels(registry.get<TransformComponent>(hit.other).position);
                 const glm::dvec2 apart = otherPx - read->atPx;
@@ -18145,12 +18275,15 @@ void ABeholderRockBrokenOnTheLevelIsHeard() {
                             read->velocitiesPx.size(), fell, fell / rules.hitPxPerUnit, want,
                             stoneHits.empty() ? -1.0 : stoneHits[0], impact.intensity);
             } else {
-                // The watch's own begin, and the one latch its gate gives.
-                const std::size_t due = impact.hit > 2.0 ? 1 : 0;
+                // The watch's own begin, and the one latch its gate gives each begin of the tick above 2.
+                std::size_t due = 0;
+                for (const auto& begin : layer.ImpactBegins()) {
+                    if (begin.kind == Kind::Stone && readImpact(rules, layer, begin).hit > 2.0) ++due;
+                }
                 CHECK_MSG(stoneHits.size() == due, where + ": " + std::to_string(stoneHits.size()) +
                                                        " stone_hit latched on a begin at " +
-                                                       std::to_string(impact.hit) + ", not one begin's " +
-                                                       std::to_string(due));
+                                                       std::to_string(impact.hit) + ", not the " +
+                                                       std::to_string(due) + " begin(s) of the tick above 2");
                 std::printf("  %s: the watch's own begin (on %s), hit %.4f, %zu stone_hit\n", where.c_str(),
                             impact.other.empty() ? "a body" : impact.other.c_str(), impact.hit, stoneHits.size());
             }
@@ -19016,6 +19149,8 @@ void runTests() {
     WithoutTheOriginalThePortalIsABox();
     ThePlayerIsTheDarkMage();
     TheWalkKeepsItsColumnAndItsTime();
+    APlayerTurnsToTheTapItTakes();
+    ATapShovesAWeightlessPlayerAtTwiceTheOriginalsVelocity();
     APlayerWalkedIntoAWallPushesIt();
     APlayerPushesATriggerItHasNotEntered();
     AWeightlessPlayerNeverPushes();

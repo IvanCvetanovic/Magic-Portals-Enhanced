@@ -275,6 +275,7 @@ void Watch::BeforeStep(entt::registry& registry, const std::vector<Watched>& bod
         now.body = watched.body;
         now.kind = watched.kind;
         now.velocityPx = Units::ToPixels(rigid->velocity);
+        now.velocityScale = watched.velocityScale;
         now.centrePx = Units::ToPixels(transform->position);
         now.atPx = now.centrePx + watched.pointOffsetPx;
         now.pointOffsetPx = watched.pointOffsetPx;
@@ -403,10 +404,11 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
                 const Gap apart = Between(before, other.shape);
                 if (!CoresMeet(apart, before, other.shape)) begin.normal = apart.normal;
             }
-            begin.velocityPx = pre.velocityPx;
+            begin.velocityPx = pre.velocityPx * pre.velocityScale;
             begin.atPx = pre.atPx + pre.dropPx;
             begin.gapPx = gap.px;
             begin.recentPx = pre.recentPx;
+            for (dvec2& velocity : begin.recentPx) velocity *= pre.velocityScale;
             begin.otherAtPx = Units::ToPixels(registry.get<TransformComponent>(other.entity).position);
             // A watched body is aimed at by its own point, as the original's
             // GetPositionXY is its entity's.
@@ -449,9 +451,10 @@ bool Watch::Carried(entt::entity body, Begin& out) const {
         if (pre.body != body) continue;
         out.body = pre.body;
         out.kind = pre.kind;
-        out.velocityPx = pre.velocityPx;
+        out.velocityPx = pre.velocityPx * pre.velocityScale;
         out.atPx = pre.atPx;
         out.recentPx = pre.readPx;
+        for (dvec2& velocity : out.recentPx) velocity *= pre.velocityScale;
         return true;
     }
     return false;

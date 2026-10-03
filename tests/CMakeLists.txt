@@ -83,6 +83,12 @@ add_mp_test(test_mp_scores)
 # what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic.
 add_mp_test(test_mp_clock)
 
+# The player's movement as the original's applyForces and its Box2D body decode: the walk set
+# outright, the air's brake, the fall and the zero-g recoil, in the port's tick through the
+# original's fixed 1/30 s physics step (planning step 148). Enhanced's player.json and the port's
+# clock.json, both committed: no converted level, so no skip.
+add_mp_test(test_mp_player)
+
 # The achievements as the original unlocks them, the saved set and its hash, and
 # the Notificator's card and the pause's popup frame (planning step 143). Pure sim
 # and a scratch directory; its checks against the original's list skip themselves

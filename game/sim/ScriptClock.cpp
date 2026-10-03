@@ -45,6 +45,11 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     read.wallFrameMs = 1000.0 / hz;
     read.frameMs = FloorMs(read.wallFrameMs);
+    if (!root["physics_step_s"].IsNumber() || !(root["physics_step_s"].AsNumber() > 0.0)) {
+        error = path + ": physics_step_s is a number above 0";
+        return false;
+    }
+    read.physicsStepS = root["physics_step_s"].AsNumber();
     out = read;
     return true;
 }
@@ -58,7 +63,8 @@ unsigned FloorMs(double frameMs) {
 Step TickStep(const Rules& rules, float physicsS) {
     // n / 1000.0 and back by * 1000.0 is exact for every whole n up to 1000 (the
     // suite checks all of them), so a sum of ticks is the original's integer sum.
-    return Step(static_cast<double>(rules.frameMs) / 1000.0, physicsS);
+    return Step(static_cast<double>(rules.frameMs) / 1000.0, physicsS, rules.physicsStepS,
+                static_cast<double>(rules.matchedHz));
 }
 
 double OfFrameMs(const Rules& rules, double frameMs, double tickMs) {

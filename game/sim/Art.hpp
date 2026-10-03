@@ -82,7 +82,6 @@ struct NoGravityMotion {
 struct Push {
     double reachFrameWidthShare = 0.0; // 0.6 of getSize().x, the frame's width
     glm::dvec2 offsetPx{0.0};          // scale(-6) on y: added to the ray's far end, in level units
-    double airVelocityShare = 0.0;     // off the ground the ray follows the body's x velocity times this
     int leftRow = 0;                   // the row pushing left draws
     int otherRow = 0;                  // the row pushing any other way draws
 };

@@ -409,6 +409,38 @@ void ItTakesTheLooseBodiesOnly() {
     CHECK(after < before);
 }
 
+// The pull is a velocity the original adds to a body's own Box2D velocity each frame, and the player's is
+// carried at ScriptClock::SimRatio times the original's (Player.hpp, planning step 148): so the player is
+// given the pull that many times over, and a body carried in the original's own units (ratio 1) is not.
+void ThePlayerIsPulledAtTheRatioItIsCarriedAt() {
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    if (!Open(kWeightless, data, registry, level)) return;
+    if (level.wells.wells.empty()) return;
+    const GravityWell::Well& well = level.wells.wells.front();
+    const glm::dvec2 startPx = well.atPx + glm::dvec2(well.radiusPx * 0.5, 0.0);
+    const glm::vec3 start = Units::ToWorld(startPx.x, startPx.y);
+    auto& transform = registry.get<TransformComponent>(level.player);
+    transform.position = glm::vec3(start.x, start.y, transform.position.z);
+    auto& rigid = registry.get<RigidBodyComponent>(level.player);
+
+    rigid.velocity = glm::vec3(0.0f);
+    level.wells.Tick(registry, 0.016);
+    const glm::vec3 once = rigid.velocity;
+    rigid.velocity = glm::vec3(0.0f);
+    level.wells.Tick(registry, 0.016, level.player, 2.0);
+    const glm::vec3 twice = rigid.velocity;
+    CHECK_MSG(glm::length(once) > 0.0f, "a pull at half the radius");
+    CHECK_MSG(glm::length(twice - 2.0f * once) < 1e-6f,
+              "the player's pull at ratio 2 is twice the body's own: " + std::to_string(glm::length(twice)) + " against " +
+                  std::to_string(glm::length(once)));
+    // A ratio for a body that is not the player's changes nothing.
+    rigid.velocity = glm::vec3(0.0f);
+    level.wells.Tick(registry, 0.016, entt::null, 2.0);
+    CHECK_MSG(glm::length(rigid.velocity - once) < 1e-6f, "and a ratio with no player named is nobody's");
+}
+
 // THE LAPS (the visuals plan's 11.2; gravitywell.json roundabout): the numbers
 // the listing states, and a file that leaves them out refused.
 void TheRoundaboutRulesRead() {
@@ -600,6 +632,7 @@ void runTests() {
     AWellRefusesNoPortal();
     AShotFliesThroughAWell();
     ItTakesTheLooseBodiesOnly();
+    ThePlayerIsPulledAtTheRatioItIsCarriedAt();
     TheRoundaboutRulesRead();
     TheAgentTurnsOnceAndSettles();
     ASweepCountsTheWayRoundAndLaps();

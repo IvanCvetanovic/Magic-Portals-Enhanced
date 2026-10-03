@@ -19,15 +19,18 @@ namespace MagicPortals::Units {
 inline constexpr double kPixelsPerMetre = 50.0;
 
 // Box2D's DEFAULT_GRAVITY, (0, 10) in its units per second squared with +y down
-// (ETHPhysicsSimulator.cpp:26, same citation). Decoded, not guessed - unlike the
-// Godot project's 1200 px/s^2 player gravity, which its own player.json marks _guess.
+// (ETHPhysicsSimulator.cpp:26, same citation). Decoded, not guessed. The original's
+// script sets the same 10, scaled (Game::preLoop: SetGravity(0, scale(10))), and the
+// player's own gravity is that times its SetGravityScale(2) in the original's physics
+// seconds (data/player.json, Player.hpp: planning step 148).
 inline constexpr double kGravity = 10.0;
 
 // The Godot project's world gravity, which is what its bodies fall at: Godot 4's
 // physics/2d/default_gravity, since the Godot project's project.godot sets none. The
-// port plays like the Godot project, so its world runs at this; the spike measured the
-// solver against the original, and runs at kGravity. The Godot project's player falls
-// at its own player.json gravity, not at either.
+// port plays like the Godot project, so its world - the crates, the stones, the minions -
+// runs at this; the spike measured the solver against the original, and runs at kGravity.
+// The player no longer falls at it: its own gravity is decoded (planning step 148), and
+// the world's time base is a row of its own.
 inline constexpr double kRemakeWorldGravityPx = 980.0;
 
 inline float ToMetres(double px) {

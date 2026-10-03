@@ -462,7 +462,7 @@ bool RequestsPortal(const Rules& rules, const TouchRelease& release) {
     return release.released && release.maxMoveUnits <= rules.releaseMaxMoveUnits;
 }
 
-bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx) {
+bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx, double velocityRatio) {
     // The two clocks' verdicts, asked first so that the record below can give
     // the original's reason whichever of the port's tests refuses the tap. Only
     // the record reads them before the port's own order does, and they change
@@ -533,8 +533,14 @@ bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx) {
     // ADDED to the velocity, never set: applyImpulse is
     // SetLinearVelocity(GetLinearVelocity() + impulse), so shots accumulate and
     // drift is the mechanic.
+    //
+    // The shove is scale(1.4) of the ORIGINAL's physics, which steps 1/30 s a frame; the shooter is
+    // carried at velocityRatio times that velocity, so a tick of the port's 1/60 s covers the distance
+    // the original's frame does (Player.hpp, clock.json physics_step_s). 140 units a second at 60 Hz,
+    // where F10 measured 40-44 on an emulator at 17-19 frames a second (zerog.json).
     if (noGravity && recoilMps > 0.0) {
-        registry.get<RigidBodyComponent>(shooter).velocity += Zerog::Impulse(fired.fromPx, fired.toPx, recoilMps);
+        registry.get<RigidBodyComponent>(shooter).velocity +=
+            Zerog::Impulse(fired.fromPx, fired.toPx, recoilMps * velocityRatio);
     }
     return true;
 }

@@ -381,7 +381,7 @@ work no step of §7 owns, and the owner's calls:
       (SE step 63 built it: the standing column turns every 280 ms, and the pivot hovers 1.2 screen px, which is
       0.4267 u at 720 px. The row stays open, as step 62's deviation, together with step 63's owner items: the hover
       at other window heights and the eyes, which stay put.)
-- [ ] **Step 62 deviation, facing a portal tap**: the original turns the player toward a portal tap and the port never
+- [x] **Step 62 deviation, facing a portal tap** *(built in step 148: `Portals::State::Shoot` returns whether the tap was taken and the layer turns the player, pinned by `test_mp_layer`'s `APlayerTurnsToTheTapItTakes`)*: the original turns the player toward a portal tap and the port never
       does. `PortalManager::managePortalInsertion` #101-124 (listing L:27784) calls `setDirection(1)` if the player is
       right of the tap, else `setDirection(2)`, on an accepted request with no `projectile.ent` alive. Not a 1.1
       regression. Next: step 1.3 or a new 1.x: `m_facingRight = !(playerX > tapX)` under the sim's acceptance, pinned
@@ -1568,9 +1568,13 @@ work no step of §7 owns, and the owner's calls:
       4-32 alone, where the dark dragon's fireballs fly. `game/sim/Torch.cpp:155`'s comment, `test_mp_torch`'s "it MOVES,
       which is what makes it a shot worth aiming" and step 30's record read it the port's way; the data notes are
       corrected. Next: the owner; gameplay no batch owns.
-- [ ] **Order 11.2, the zero-g recoil's speed** (step 110, deviation 7; found there, not its own): the port's 1.4 m/s
+- [x] **Order 11.2, the zero-g recoil's speed** (step 110, deviation 7; found there, not its own): the port's 1.4 m/s
       recoil is 70 u/s (`zerog.json`; `kPixelsPerMetre` 50, Ethanon's `DEFAULT_SCALE`), where F10 measured one at 40-44
-      u/s. Next: `zerog.json`'s owner.
+      u/s. *Closed in step 148: no conflict. The original's physics steps a fixed 1/30 s a frame, so scale(1.4) is 70 u per
+      physics second and 70 x fps / 30 of wall time: F10's emulator ran 17-19 frames a second (39.7-44.3 u/s), a 60 Hz
+      device gets 140. The port gives the shooter the decoded 1.4 at `SimRatio` (2): 140 u/s. The "m_absoluteSize 480"
+      note of `zerog.json` is corrected (256: the recoil is the same in units on every screen). "No conflict" holds
+      at the matched 60 Hz, which no clip shows: the rate itself is the owner's open call (G10-2, section 6).*
 - [ ] **Order 11.2, step 73's ring depth** (step 110, deviation 9): `gravitywell.json` `ring.z` draws the well's ring at
       -5 port units, where the area it stands for is at the bare -5 = -1.778 (step 86's rule, which `roundabout_effect`
       follows). Next: a step that touches the ring: -5 -> -1.778.
@@ -1625,7 +1629,7 @@ work no step of §7 owns, and the owner's calls:
 
 ## 4. Gameplay feel (MILESTONE_1 §3 — still guesses)
 
-- [ ] Player walk speed, acceleration, gravity (player.json all `_guess`) — measurable now from footage (rec11 walk).
+- [x] Player walk speed, acceleration, gravity (player.json all `_guess`) *(decoded and built in step 148: `data/player.json`)* — measurable now from footage (rec11 walk).
 - [ ] Camera follow lag / hold (portals.json camera `_guess`) — measurable from rec11 (the 11.25-12.0 s scroll).
       *The hold is decoded and built in step 138: 4000 ms after a drag away, behind `camera.json`'s switch, and no
       opening hold (`data/portals.json`'s guessed `hold_time_s` is gone). The lag is still the port's `_guess`
@@ -1712,7 +1716,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       burn of a minion by a flame, with no recorded attempt yet) - the last two with their mechanisms on one build
       since the merge. Nine of the 42 hold a lift door: 1-13, 1-18, 1-26, 1-31, 2-29, 3-05, 3-16, 4-22, 4-24. The
       other 39 have no recorded attempt. Open until all 128.)* *Wave 3a, step 147 (CK, local, not pushed): 41 of the 86 win on its
-      build and 45 do not (CK-2); the routes are re-authored by the wave's route phase after PIC.*
+      build and 45 do not (CK-2); the routes are re-authored by the wave's route phase after PIC.* *Step 148 (G10, local, not
+      pushed): 23 of the 86 win on its build and 63 do not (the 45, and 18 that G10's movement moved); the routes are
+      re-authored by the wave's route phase after PIC.*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1866,6 +1872,7 @@ editing a route. The engine pin stays `710bffc`.
 | Step | Row | Track | Commit | Outcome | GAMEPLAY | Routes added |
 |---|---|---|---|---|---|---|
 | 147 | CK | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 11 recorded deviations (owner-delegated); the third verifier passed 12 of 13 gates, and the one it failed, the player's ground walk-cell flipbook, is cosmetic and G10's; 49 of 50 suites, 17,717 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: every scripted motion, timer, blink and fade runs 16 ms a tick where it ran 16.667, 4.17 % slower in wall time (the 400 ms between taps takes 26 ticks, not 24; a 10 s crystal runs out on the 626th tick; the lost screen on the 88th) | none: 41 of the 86 routes still win on this build and 45 do not; **the routes are re-authored by the wave's route phase after PIC** |
+| 148 | G10 | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 13 recorded deviations (owner-delegated); the verifier passed all ten gates and listed six problems, three medium (the standing creep, a confirmed regression against the library; the unruled 60 Hz rate; the world's mixed time base) and three low, whose text findings the commit applied; 50 of 51 suites, 17,654 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: the player is the decode's - walk 144 u/s set outright, an air brake of 0.86 a tick and no steering, gravity 4000 u/s^2 under the original's fixed 1/30 s physics step, a 14-unit ground sensor, the zero-g recoil 140 u/s a shot, a turn toward a tap | none: **23 of the 86 routes still win** (CK: 41), 63 do not; **the routes are re-authored by the wave's route phase after PIC** |
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -1884,7 +1891,10 @@ editing a route. The engine pin stays `710bffc`.
       velocity they set by `elapsedTime / 33.33` (the physics' fixed 1/30 s), x 0.96 with the floor; the port leaves x 1.0. CK
       exposes it for motion bounded by a script timer (a patrol leg, a stone's flight: about 4.17 % longer than the original's), the
       INFERRED cause of the sweep residuals 1-30, 3-05, 3-23 and 3-24. Next: **G10** (the player: its row under the majors) and
-      **G1** (minions and the knight).
+      **G1** (minions and the knight). *Step 148 did the player's (applyForces: `speed x min(66, ms) / step`, in the port's units
+      through `SimRatio`). Left for G1, and found by it: `minions.json` reads `scale(1.3) x elapsed / 33.33` as 1.3 px per
+      33.3 ms (39 px/s), where the same form in applyForces is metres of the original's physics, 50 units each: 62 u/s of
+      wall time at 60 Hz.*
 - [ ] **CK-4. Looser pins**: `TheRocketLandsAfter4_19sDoor`'s door tolerance 1.0; the beholder case lost its hard branch
       (`ABeholderRockBrokenOnTheLevelIsHeard`: the first two static breaks are soft in the new timeline, so the heard-above-2 branch
       is not exercised; it needs a rock placed over the floor); the dark dragon's flash colour within 0.02; the pad-alpha check's
@@ -1910,6 +1920,39 @@ editing a route. The engine pin stays `710bffc`.
       mechanism. Next: **PIC**, which re-takes the sweep; no action unless a deterministic motion differs there.
 - [x] **CK-11. `readers.md` named `ETHTextDrawer` as the only C++ reader of the floored uint**; `ETHParticleDrawer::Draw` is the
       other, never created by this game. Closed in CK's commit (one sentence in the readers table and in step 147).
+
+**G10's recorded deviations**, each an open row for the step named (planning step 148 has the evidence, `RECORDED DEVIATIONS` 1-13):
+- [ ] **G10-1. Only the player is in the original's time base**: the original's Box2D world steps a fixed 1/30 s a frame, twice the 60 Hz
+      tick, so crates, stones, minions, lifts' carried bodies and a well's pull on them run at half the original's velocity in the port,
+      and the world's gravity is the Godot 980 where the original's is 500 u/s^2 of physics (2000 of wall time). A mixed time base wherever
+      the player touches a body. Next: **a step for the world's time base** (every dynamic body at `SimRatio`; `kRemakeWorldGravityPx` -> 500),
+      with G1's minion and knight speed (`minions.json` reads `scale(1.3) x elapsed / 33.33` as 39 px/s; it is 62 u/s at 60 Hz).
+      **The verifier (medium) wants it BEFORE the route re-author**, and notes that the census's fall from 41 to 23 winners partly
+      reflects the mixed base (a crate at 980 beside a player at 4000).
+- [ ] **G10-2. `GetFPSRate` is the matched 60** (the original's is frames x interval, 60-63 on a 60 Hz device, 30 for the first second, 17 on the
+      emulator): the air brake's one rate-dependent number. The owner's call on the rate. **The verifier (medium) widens it: the 140 u/s
+      recoil, the 4000 u/s^2 fall, the 0.86 brake and the 144 u/s walk all rest on `matched_hz` = 60, which no clip shows (F10 ran 17-19
+      frames a second, F13 about 30; at 30 the same decode gives 70, 1000, 0.43 and 148.5).** Put to the owner as its own question
+      (`clock.json` `matched_hz` / `physics_step_s`) **before PIC and the route re-author**: every route is replayed on the rate chosen.
+- [ ] **G10-3. The ground sensor is the port's approximation** (octagon against broad-phase candidates by shape; a minion's body counts,
+      the original's feet refuse a character), and **G10-4** the capsule is still the 20 x 44 guess against the original's 36.2 x 18.2.
+- [ ] **G10-5. A standing player creeps down a slope: a CONFIRMED REGRESSION against the original** (contact friction 0; 0.28 u a tick,
+      which is what a frictionless body does in the decoded physics; the verifier saw it in the sweep: 2-24's idle player slides off the
+      barrel bomb by tick 140, 1-24's down `ramp_right` to the timed crystal on tick 328, while the original's library stills of 1-24 at
+      t2.0, t4.5 and t8.0 show the idle player stationary on the same ramp; 2-24 has no stills). The missing fact is the original's
+      effective grip: the `.ent` friction values (player 0.9, ramp 0.25, platforms 0.2, `block00` 0.4, `barrel_bomb` 0.7, Box2D's square-root
+      mix 0.47 on the ramp against tan 15 degrees 0.27) would hold it, but F13's walk (142-147 u/s) loses nothing over `block00`. **Do not just
+      set the friction to 0.9** (it would fight the walk). Next, a source step **before the route re-author**: decode or measure the grip, then
+      pin "idle for 420 ticks on 1-24's ramp and on 2-24's barrel stays within 1 unit".
+- [ ] **G10-6. Box2D's `b2_maxTranslation` is applied at the 720-line reference** (35.6 units a tick); the original's is 100 screen pixels.
+- [ ] **G10-7. 1-09's playthrough puts the player on its two shelf crystals** (the decoded player cannot steer out of the far portal onto
+      them), and **G10-8** 1-32's rock case asks no pair twice, not exactly one begin. Next: the route phase, which restores the strict pins
+      (a real solve that reaches 1-09's shelf, with its three crystals confirmed reachable under the decoded movement; a rock placed over
+      the floor for 1-32).
+- [ ] **G10-9..12**: the tap's turn the tick it is taken; `air_velocity_share` removed from `art.json`; **CK-1 left to PIC**; the landing's
+      hit 8.0 for a 100-unit drop (8.94 continuous, 8.67 on the original's own frames).
+- [ ] **G10-13. `Player.cpp`'s clamp comment says a fall of 570 units reaches Box2D's clamp**; the exact figure is 586.7 (about 590, as the
+      step and `player.json` say). A comment, not edited to keep the tested binaries current; correct it at the next relink.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2104,9 +2147,19 @@ editing a route. The engine pin stays `710bffc`.
       *Routes that lean on the port's 16 (wave 1)*: 1-12 (the landing over the post is `reflect_agent_675`'s), 1-21
       (the high portal (230, 142) 24 u from `reflect_agent_826`, the bounce's shot leaving 26 u from it), 1-23 (the
       shot to (150, 80) 29.9 u from `reflect_agent_826`) - all inside 32 (step 126) - and 3-14, 2-25 (step 127).
-- [ ] **G10. The player moves as the decode says** - `speed 3`, `SetGravityScale(2)`, velocity set outright, in the
+- [x] **G10. The player moves as the decode says** - `speed 3`, `SetGravityScale(2)`, velocity set outright, in the
       air `vel.x x min(1, 0.86 x fps/60)`; the port's `move_toward` numbers are Godot-era guesses. *Every route leans on
-      it* (with G4); its step re-plays all 70 (86 since wave 2).
+      it* (with G4); its step re-plays all 70 (86 since wave 2). *Built in step 148 (wave 3a, local, not pushed): the
+      walk set outright at 144 u/s (3 x 16 ms / 33.33 ms of the original's FIXED 1/30 s physics step, carried at
+      `ScriptClock::SimRatio` 2), the air brake 0.86 a tick and no steering, gravity 20 m/s^2 = 4000 u/s^2 of wall time
+      with Box2D's clamp only, the 14-unit ground sensor (`char_feet.ent`), the zero-g recoil and a well's pull at the
+      ratio (140 u/s a shot), the turn toward a tap, and the landing's `hitIntensity` in the original's units. GAMEPLAY on
+      every level. Cross-checked on F10 (70 x fps / 30 at 17-19 fps), F13's walk (144.4 u/s), fall per frame (2.75-2.96
+      px/frame^2 against the decode's 3.125, which does not depend on the frame rate) and walk-off (84.3-84.6 against
+      80.8-84.9 at 30 to 24 fps). 23 of the 86 routes still win (CK: 41); **the routes are re-authored by the wave's route
+      phase after PIC**. Its deviations are the rows "G10's recorded deviations" in the wave 3a list above; the verifier
+      (`G10/verify1.json`, ten gates ok) wants three of them settled BEFORE the re-author: G10-5 (the standing creep, a
+      confirmed regression against the library), G10-2 (the owner's ruling on the rate) and G10-1 (the world's time base).*
 - [x] **G11. 3-32's ghost can be killed only through a rule the original lacks** (the audit's G11; KNOWN as "Order 12.2,
       THE OWNER'S TO RULE: fire against the ghost"). *Built in step 117*: a fireball passes through the ghost, a
       barrel's blast burns it, and the ghost puts the barrel back itself on every beat (the two "Order 12.2" rows and
