@@ -382,7 +382,10 @@ void takenOnOneFrameAndStrikingOnTheNext() {
         const double moved = std::hypot(strike.preyCentrePx.x - put.x, strike.preyCentrePx.y - put.y);
         const double reach = std::hypot(strike.preyCentrePx.x - strike.diamondPx.x,
                                         strike.preyCentrePx.y - strike.diamondPx.y);
-        CHECK_MSG(moved < 4.0 && reach < 30.0, "at its body's centre, " + std::to_string(moved) +
+        // (One step moved it 3.90 units before planning step 152 and moves it 4.15 now: its walk is the decoded scale(1.3)
+        // metres a second, 1.08 units a bare tick where the 39 px/s it was read as gave 0.65, and the bodies' weights are the
+        // .ent files'. The bound was a margin over the step, not a number of the original's.)
+        CHECK_MSG(moved < 5.0 && reach < 30.0, "at its body's centre, " + std::to_string(moved) +
                                                    " px from where it was put and " + std::to_string(reach) +
                                                    " from the diamond");
         std::printf("  the strike: diamond (%.3f, %.3f), prey centre (%.3f, %.3f)\n", strike.diamondPx.x,

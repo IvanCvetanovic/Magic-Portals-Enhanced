@@ -62,9 +62,10 @@ LevelBuilder::Options PortOptions() {
     return options;
 }
 
-// The port's world: the Godot project's gravity, 980 px/s^2 (Units.hpp says why).
+// The port's world: the original's gravity, 10 m/s^2 of its physics (player.json gravity.world_m_s2), at this
+// suite's bare tick - SimRatio 1, 500 units a second squared (planning step 152; the layer's own tick is 2000).
 void UseRemakeGravity(entt::registry& registry) {
-    Game::UseRemakeGravity(registry);
+    Game::UseWorldGravity(registry, g_data.tuning, ScriptClock::Step(kStep));
 }
 
 // level30's small crate, its size off its RectangleShape2D.

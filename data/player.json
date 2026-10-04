@@ -118,8 +118,10 @@
       "pixel, where a frictionless body creeps 0.278 units a tick, 114 in 420 (planning step 148, deviation 5). DECODED (what holds it): dark_mage.ent",
       "(reference/extracted/assets/entities, UTF-16) carries friction=\"0.900000\", fixedRotation=\"1\"; the original's Box2D mixes it with the floor's own",
       "by the square root (0.47 on ramp_right's 0.25, 0.42 on a platform's 0.2, 0.6 on block00's 0.4, 0.79 on barrel_bomb's 0.7) and the engine mixes",
-      "the same way. The port's statics all carry LevelBuilder::kStaticFriction 1, so `friction` here mixes to sqrt(0.9 x 1) = 0.949: a slope holds up",
-      "to atan(0.949) = 43.5 degrees, where the original's ramp lets go past 25 (RECORDED DEVIATIONS 14).",
+      "the same way. HoldTan reads the constant LevelBuilder::kStaticFriction 1, so `friction` here mixes to sqrt(0.9 x 1) = 0.949: a slope holds up",
+      "to atan(0.949) = 43.5 degrees, where the original's ramp lets go past 25 (RECORDED DEVIATIONS 14). (Since planning step 152 the port's statics",
+      "carry their own .ent's friction - platform 0.2, ramp_right 0.25, block00 0.4: game/data/materials.json - but HoldTan still reads the constant, not",
+      "the body under the player: the hold's mix is not the original's per-entity mix yet, G10-5c(2).)",
       "NOT BUILT: the original's friction also carries an idle player along a platform that moves sideways under him; this key does not (the player",
       "is still left behind), because the creep is the only thing G10-5 names and G3 (the movers) is its own step."
     ],
@@ -160,7 +162,7 @@
   },
   "body": {
     "_guess": true,
-    "_note": "Collision capsule. The original's char_feet.ent implies feet sit below the body.",
+    "_note": "Collision capsule. The original's char_feet.ent implies feet sit below the body. THE SHAPE is the guess; THE MASS is not: dark_mage.ent's density 0.5 over its two circles of radius 9.1 (game/data/materials.json, group dark_mage), 0.104, which Player::Spawn sets (planning step 152) - 4.15 times lighter than a barrel.",
     "width_px": 20.0,
     "height_px": 44.0
   }

@@ -75,6 +75,20 @@ void RaiseButton(entt::registry& registry, Level& level) {
     }
 }
 
+// Box2D's clamp on a step's translation (b2Island::Solve), on EVERY dynamic body and not only the player:
+// the engine integrates a body's velocity and has no cap of its own, so a crate or a stone that falls out of
+// a level would otherwise go on accelerating past the 2 m a step the original's world allows. The engine adds
+// the world's gravity to a body that uses it AFTER this tick's writes, so the velocity judged is written + that.
+void ClampTranslations(entt::registry& registry, const Player::Tuning& tuning, const ScriptClock::Step& step) {
+    static const Supersonic::PhysicsSettings kDefaults;
+    const Supersonic::PhysicsSettings* stored = registry.ctx().find<Supersonic::PhysicsSettings>();
+    const glm::vec3 gravityStep = (stored != nullptr ? *stored : kDefaults).gravity * step.physicsS;
+    for (auto [entity, rigid] : registry.view<Supersonic::RigidBodyComponent>().each()) {
+        if (rigid.isKinematic || rigid.isSleeping) continue;
+        Player::ClampTranslation(rigid, tuning, step, rigid.useGravity ? gravityStep : glm::vec3(0.0f));
+    }
+}
+
 } // namespace
 
 bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
@@ -84,6 +98,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Tscn::Load(levelPath, read.scene, error)) return false;
     if (!Roles::Load(dataDirectory + "/entity_roles.json", read.roles, error)) return false;
     if (!Player::LoadTuning(dataDirectory + "/player.json", read.tuning, error)) return false;
+    if (!LevelBuilder::LoadMaterials(portDataDirectory + "/materials.json", read.materials, error)) return false;
     if (!Goals::LoadRules(dataDirectory + "/portals.json", read.goals, error)) return false;
     if (!Portals::LoadRules(dataDirectory + "/portals.json", read.portals, error)) return false;
     // Enhanced's portals.json marks its transit block a guess. The port plays
@@ -143,9 +158,11 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     return true;
 }
 
-void UseRemakeGravity(entt::registry& registry) {
+void UseWorldGravity(entt::registry& registry, const Player::Tuning& tuning, const ScriptClock::Step& step) {
     Supersonic::PhysicsSettings settings;
-    settings.gravity = glm::vec3(0.0f, -Units::ToMetres(Units::kRemakeWorldGravityPx), 0.0f);
+    // Metres a second squared of the engine's second: the original's 10 of its own, at SimRatio squared.
+    settings.gravity =
+        glm::vec3(0.0f, -static_cast<float>(ScriptClock::CarriedAcceleration(tuning.worldGravity, step)), 0.0f);
     registry.ctx().insert_or_assign<Supersonic::PhysicsSettings>(std::move(settings));
 }
 
@@ -192,10 +209,15 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
         // behind it, and nothing in the simulation acts on it.
     }
 
+    // The table every body's friction and restitution is read from, before the first body is built.
+    registry.ctx().insert_or_assign<LevelBuilder::Materials>(LevelBuilder::Materials(data.materials));
     if (noGravity) {
         UseNoGravity(registry);
     } else {
-        UseRemakeGravity(registry);
+        // At ratio 1: Start has no Step, and a suite that steps the physics itself is a bare tick. Every
+        // BeforeStep writes the tick's own (UseWorldGravity), and the layer's first tick has it before its
+        // first physics step.
+        UseWorldGravity(registry, data.tuning, ScriptClock::Step{});
     }
     LevelBuilder::Options options;
     options.prismDirectory = data.prisms;
@@ -309,6 +331,10 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
 
 void BeforeStep(const Data& data, entt::registry& registry, Level& level, float direction,
                 const ScriptClock::Step& step) {
+    // THE CARRIED FRAME (ScriptClock.hpp): the world's gravity for the physics step this tick's writes are
+    // integrated by, at the square of the tick's SimRatio, beside every velocity below written at the ratio
+    // itself. A weightless level keeps the zero it was started with.
+    if (!level.noGravity) UseWorldGravity(registry, data.tuning, step);
     level.channels.Tick(registry, step);
     // A closing lift door's crush, judged where the doors now stand and where the
     // last step left the player: the contact the original's next step begins
@@ -322,9 +348,9 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // they belong here too, before the solver reads what they wrote, and after
     // the movers so a body riding a platform is not pulled off it mid-tick.
     //
-    // The pull is a velocity the original adds to a body's own Box2D velocity each frame; the player's is
-    // carried at ScriptClock::SimRatio times that (Player.hpp), so the pull it is given is too.
-    level.wells.Tick(registry, step.scriptS, level.player, ScriptClock::SimRatio(step));
+    // The pull is a velocity the original adds to a body's own Box2D velocity each frame; every dynamic body is
+    // carried at ScriptClock::SimRatio times that (ScriptClock.hpp), so the pull each is given is too.
+    level.wells.Tick(registry, step.scriptS, ScriptClock::SimRatio(step));
     // Chapter 2's boss, and it belongs on this side for all three of the reasons
     // this half exists: it sets its own position, it spits as Turrets::Fire does,
     // and it takes geometry away BEFORE the solver reads it, so no contact is
@@ -364,8 +390,8 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     level.turrets.Fire(step.scriptS);
     // The minions walk before the step, as the player is steered before it: what
     // sets a velocity belongs on this side, what judges a position on the other.
-    level.minions.Tick(registry, step.scriptS);
-    level.boss.BeforeStep(registry);
+    level.minions.Tick(registry, step);
+    level.boss.BeforeStep(registry, ScriptClock::SimRatio(step));
     // In a zero-gravity level the player is NOT STEERED AT ALL, and that single
     // absence is both halves of the original's behaviour at once:
     // MainCharacter::update skips ScreenPad::update entirely, so the two walking
@@ -379,6 +405,8 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     if (level.player != entt::null && !level.noGravity) {
         Player::Steer(registry, level.player, data.tuning, direction, step);
     }
+    // And last, what every writer above has made of every body's velocity, held to Box2D's limit.
+    ClampTranslations(registry, data.tuning, step);
 }
 
 void AfterStep(const Data& data, entt::registry& registry, Level& level, const ScriptClock::Step& step) {

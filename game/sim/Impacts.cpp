@@ -349,7 +349,7 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
         // next is steered: BeforeStep finds a teleport.)
         double reachPx = glm::length(pre.velocityPx) * dtS + real->shape.radiusPx + touchPx;
         // A crate's box has no radius, and the step's own gravity carries it
-        // g dt^2 past its velocity going in - 0.272 px at 980 px/s^2 and 60 Hz,
+        // g dt^2 past its velocity going in - 0.556 px at the layer's 2000 px/s^2 and 60 Hz,
         // over the touching distance - so without that every step of a fall was
         // a put: it lost the speed it fell at, and the step that brings it to its
         // floor, taken from rest after the solver's brake, was never looked at

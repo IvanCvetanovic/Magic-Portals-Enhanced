@@ -135,6 +135,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 
     Rules read;
     double maxHp = 0.0;
+    double recentTicks = 0.0;
     if (!word({"beholder", "entity"}, read.entity) || !number({"beholder", "max_hp"}, maxHp) ||
         !number({"beholder", "radius_px"}, read.radiusPx) || !number({"beholder", "seek", "step_px"}, read.stepPx) ||
         !number({"beholder", "seek", "wobble_px"}, read.wobblePx) ||
@@ -157,7 +158,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !number({"spike", "hit_share"}, read.spikeHitShare) || !pair({"spike", "character_px"}, read.characterPx) ||
         !pair({"spike", "cull_margin_px"}, read.cullMarginPx) ||
         !number({"rock", "crush_intensity"}, read.crushIntensity) || !number({"rock", "px_per_unit"}, read.pxPerUnit) ||
-        !number({"rock", "contact_margin_px"}, read.contactMarginPx)) {
+        !number({"rock", "contact_margin_px"}, read.contactMarginPx) || !number({"rock", "recent_ticks"}, recentTicks)) {
         return false;
     }
     if (maxHp < 1.0 || maxHp != std::floor(maxHp)) {
@@ -165,6 +166,11 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.maxHp = static_cast<int>(maxHp);
+    if (recentTicks < 1.0 || recentTicks != std::floor(recentTicks)) {
+        error = path + ": rock.recent_ticks is a whole number from 1";
+        return false;
+    }
+    read.recentTicks = static_cast<std::size_t>(recentTicks);
     // Each of these divides, or steps a loop, so none may be 0.
     if (read.glideMs <= 0.0 || read.spikeStepDeg <= 0.0 || read.pxPerUnit <= 0.0) {
         error = path + ": beholder.seek.glide_ms, beholder.got_damage.step_deg and rock.px_per_unit are each above 0";
@@ -188,11 +194,14 @@ glm::dvec2 Glide::AtPx() const {
     return fromPx + (toPx - fromPx) * bias;
 }
 
-void State::BeforeStep(entt::registry& registry) {
+void State::BeforeStep(entt::registry& registry, double ratio) {
+    velocityRatio = ratio;
     for (Rock& made : rocks) {
         if (!registry.valid(made.body)) continue;
         made.atPx = PxOf(registry, made.body);
         made.velocityPx = VelocityPx(registry, made.body);
+        made.recentPx.insert(made.recentPx.begin(), made.velocityPx);
+        if (made.recentPx.size() > rules.recentTicks) made.recentPx.pop_back();
     }
 }
 
@@ -213,13 +222,22 @@ std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity
         // Where it would have got to had nothing stopped it: the solver can turn
         // a hard hit away within the step, and BeginContact would still report it.
         const glm::dvec2 ahead = made.atPx + made.velocityPx * static_cast<double>(physicsDt);
-        // Into the player hard enough, and it dies.
+        // Into the player hard enough, and it dies: hard enough being the hardest it came at the player in the
+        // steps just gone, read in the original's units (the rock is carried at velocityRatio times them). The
+        // callback fires on the first touch with the velocity the solver has not yet taken out; the engine takes it
+        // out up to a step's travel BEFORE the touch, so the velocity of the tick the rock overlaps on can be a
+        // fraction of what it fell at (at the decoded gravity it rested on the player's head at 59 px/s of 408).
         if (hasPlayer && !playerKilled &&
             (Trigger::Overlaps(registry, player, CircleAt(at, reachPx)) ||
-             Trigger::Overlaps(registry, player, CircleAt(ahead, reachPx))) &&
-            Intensity(at, made.velocityPx, PxOf(registry, player), rules.pxPerUnit) > rules.crushIntensity) {
-            playerKilled = true;
-            killedBy = made.name;
+             Trigger::Overlaps(registry, player, CircleAt(ahead, reachPx)))) {
+            double hardest = 0.0;
+            for (const glm::dvec2& velocity : made.recentPx) {
+                hardest = std::max(hardest, Intensity(at, velocity / velocityRatio, PxOf(registry, player), rules.pxPerUnit));
+            }
+            if (hardest > rules.crushIntensity) {
+                playerKilled = true;
+                killedBy = made.name;
+            }
         }
         // Into anything static, and it breaks: destroyOnStaticHit.
         std::vector<entt::entity> near;
@@ -230,7 +248,7 @@ std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity
         }
         const auto hit = std::find_if(near.begin(), near.end(), [&](entt::entity other) {
             return !registry.all_of<RigidBodyComponent>(other) && registry.all_of<TransformComponent>(other) &&
-                   Intensity(at, made.velocityPx, PxOf(registry, other), rules.pxPerUnit) > 0.0;
+                   Intensity(at, made.velocityPx / velocityRatio, PxOf(registry, other), rules.pxPerUnit) > 0.0;
         });
         if (hit == near.end()) continue;
         staticHitsNow.push_back(StaticHit{made.body, *hit, PxOf(registry, *hit)});
@@ -392,7 +410,8 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, const std
 Rock State::drop(entt::registry& registry, const glm::dvec2& atPx) {
     Rock made;
     made.name = beholder->name + "#" + std::to_string(beholder->rocksThrown + 1);
-    made.body = LevelBuilder::BuildRigidCircle(registry, made.name, atPx, rock.radiusPx, LevelBuilder::Options{});
+    made.body = LevelBuilder::BuildRigidCircle(registry, made.name, atPx, rock.radiusPx, LevelBuilder::Options{},
+                                               rules.rockEntity);
     made.atPx = atPx;
     rocks.push_back(made);
     return made;

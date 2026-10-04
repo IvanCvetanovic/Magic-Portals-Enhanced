@@ -49,9 +49,10 @@ struct Watched {
     // its own shape reaches one of those pairs, or it is put somewhere else.
     glm::dvec2 spawnDropPx{0.0};
     // The original's own Box2D velocity per unit of this body's port velocity, which a begin reports
-    // it by: the callbacks read GetLinearVelocity of a world that steps 1/30 s a frame, and the player
-    // is carried at ScriptClock::SimRatio times that (Player.hpp), so its is 1 / SimRatio. A body the
-    // port carries in the original's own units - a stone, a minion, a crate - is 1. What the watch
+    // it by: the callbacks read GetLinearVelocity of a world that steps 1/30 s a frame, and every body
+    // is carried at ScriptClock::SimRatio times that (ScriptClock.hpp, planning step 152), so its is
+    // 1 / SimRatio: the layer sets it for the player, a stone, a minion and a crate alike. 1 is a body
+    // carried in the original's own units, which is a rig's at the suites' bare tick. What the watch
     // looks at (how far a body travels a step, where it stands) stays in the port's own.
     double velocityScale = 1.0;
 };

@@ -30,8 +30,9 @@
       "setGravity(V2_ZERO) when the flag is on. Zero is not a tunable here: the mode IS zero",
       "gravity, and Zerog::LoadRules refuses a file that says otherwise rather than obeying it.",
       "",
-      "The port sets its registry's PhysicsSettings to this, where a normal level gets",
-      "Units::kRemakeWorldGravityPx (980). Both are the WORLD's; the player's own fall came",
+      "The port sets its registry's PhysicsSettings to this, where a normal level gets the",
+      "original's 10 m/s^2 at the tick's SimRatio squared (Game::UseWorldGravity, planning step 152;",
+      "the Godot project's 980 is gone). Both are the WORLD's; the player's own fall came",
       "from Player::Steer, which these levels do not run at all."
     ],
     "gravity_px_s2": 0.0

@@ -71,6 +71,9 @@ struct Data {
     Tscn::Scene templates;
     Roles::Table roles;
     Player::Tuning tuning;
+    // The friction and restitution of every entity's bodies (the port's materials.json), which Start
+    // puts in the registry for LevelBuilder and everything that builds a body at run time.
+    LevelBuilder::Materials materials;
     Goals::Rules goals;
     Portals::Rules portals;       // Enhanced's portals.json, with the port's transit.json
     Motion::Rules motion;         // and motions.json: linearMotion's own arithmetic
@@ -109,9 +112,12 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
               const std::filesystem::path& prismDirectory, Data& out, std::string& error,
               const std::string& portDataDirectory = MAGICPORTALS_PORT_DATA_DIR);
 
-// The Godot project's world gravity, 980 px/s^2, as the registry's PhysicsSettings.
-// Units.hpp says why it is that value.
-void UseRemakeGravity(entt::registry& registry);
+// The original's world gravity as the registry's PhysicsSettings, in the carried frame of `step`
+// (ScriptClock.hpp): the 10 m/s^2 its Game::preLoop sets (player.json gravity.world_m_s2: 500 units a
+// second squared of ITS physics) at SimRatio squared - 2000 units a second squared at the decoded 60 Hz.
+// A bare-float Step is a tick whose physics is one length with the tick's (SimRatio 1), and gets 500.
+// Game::BeforeStep writes it every tick from the tick's own Step; Start writes it once at ratio 1.
+void UseWorldGravity(entt::registry& registry, const Player::Tuning& tuning, const ScriptClock::Step& step);
 
 // And none at all, for a level that sets `no_gravity`: the original's
 // setGravity(V2_ZERO). Zerog.hpp says what else that flag turns on.

@@ -23,9 +23,11 @@
 // steps its 1/60 s tick (ScriptClock::SimRatio is 2). So the player's velocity is carried at
 // SimRatio times the original's, and its gravity is applied as the velocity the original's
 // step would add a frame, times that: both cover, each tick, what the original's step covers
-// in the frame. Nothing else in the port is in that time base yet (a crate, a stone and a
-// minion fall and slide at the port's real time: planning step 148, RECORDED DEVIATIONS),
-// which is why a velocity another system hands the player is converted at that seam.
+// in the frame. Every other dynamic body is in that time base too, by the same mechanism
+// (planning step 152: ScriptClock.hpp, "THE CARRIED FRAME" - the world's gravity at the ratio
+// squared, a crate's, a stone's and a minion's velocity at the ratio), so a velocity another
+// system hands any body is converted at its own seam and read back into the original's units
+// where a callback reads it.
 //
 // Dynamic rather than kinematic because the spike measured F2: a kinematic body
 // trips no trigger. Rotation frozen and locked to the plane (S1). Its capsule is the
@@ -53,6 +55,10 @@
 
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
+
+namespace Supersonic {
+struct RigidBodyComponent;
+}
 
 namespace MagicPortals::Player {
 
@@ -146,6 +152,15 @@ glm::dvec2 PushAim(entt::registry& registry, entt::entity player, const Tuning& 
 // level.
 bool Pushing(entt::registry& registry, entt::entity player, const glm::dvec2& aimPx, double reachPx,
              const glm::dvec2& offsetPx);
+
+// Box2D's clamp of a step's translation (b2Island::Solve, b2_maxTranslation), on ANY dynamic body: the
+// whole velocity is scaled down so the step carries it no further than gravity.max_translation_m (of the
+// 720-line reference: G10-6). `addedByTheEngine` is the velocity the engine's own integration will add
+// before it moves the body (a body that uses the world's gravity: gravity times the physics step), which
+// the clamp judges the translation on and leaves in place. The player's is applied by Steer, after its
+// own gravity; Game::BeforeStep applies it to every other body.
+void ClampTranslation(Supersonic::RigidBodyComponent& rigid, const Tuning& tuning, const ScriptClock::Step& step,
+                      const glm::vec3& addedByTheEngine = glm::vec3(0.0f));
 
 // One tick of steering, before the physics step. `direction` is -1, 0 or 1: the
 // two-button pad (docs/original-gameplay.md section 1). Gravity first, as Box2D's step

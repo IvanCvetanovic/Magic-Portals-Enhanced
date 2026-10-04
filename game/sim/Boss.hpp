@@ -40,6 +40,7 @@
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -86,6 +87,8 @@ struct Rules {
     glm::dvec2 cullMarginPx{0.0};
     // its rocks
     double crushIntensity = 0.0;
+    // _guess: how many steps of a rock's velocity are kept for the crush (see Rock::recentPx)
+    std::size_t recentTicks = 0;
     double pxPerUnit = 0.0;       // _guess: the unit
     double contactMarginPx = 0.0; // _guess: how near counts as touching
 };
@@ -141,6 +144,11 @@ struct Rock {
     entt::entity body = entt::null;
     glm::dvec2 atPx{0.0};       // as the step began
     glm::dvec2 velocityPx{0.0}; // as the step began
+    // The velocities it carried into the last Rules::recentTicks steps, newest first (the one above first): what the
+    // engine's solver takes out of a closing pair BEFORE the pair meets (a speculative contact, braked in stages
+    // from as far as a step's travel), so the hardest a rock came at the player is not the velocity of the tick it
+    // touches on (Impacts.hpp, kRecentSteps, says the same of every other begin).
+    std::vector<glm::dvec2> recentPx;
 };
 
 // A rock Contacts broke on something static, and the static it judged that on
@@ -191,8 +199,12 @@ struct State {
     std::vector<StaticHit> staticHitsNow;
 
     // Before the step: where each rock is and how fast it goes, which its
-    // contacts are judged by.
-    void BeforeStep(entt::registry& registry);
+    // contacts are judged by. A rock is carried at `velocityRatio` times the original's velocity
+    // (ScriptClock::SimRatio, planning step 152): where it will be after the step is the port's own
+    // velocity times the step, but how hard it hits is the callback's hitIntensity, which reads the
+    // original's - so Contacts judges the crush on the velocity over the ratio.
+    void BeforeStep(entt::registry& registry, double velocityRatio = 1.0);
+    double velocityRatio = 1.0;
 
     // After a step of `physicsDt` - the PHYSICS step, which carried the rocks: it is
     // measured against the solver's own length, not the script's frame (planning step

@@ -287,6 +287,12 @@ bool LevelsAreThere(const char* what) {
     return false;
 }
 
+// A tick the body moved on: a quarter of a unit. It was a whole one until planning step 152, when the bodies began to weigh
+// what their .ent files say and to slide on the floors' own friction: the walk meets level30's two touching 58 x 58 crates
+// (0.538 each, the player 0.104) on tick 56 and goes on 8.9 units, at 0.94 of a unit a tick dying away to a stop in 25, and a
+// unit's threshold counted 59 moves of the 60 the walk needs (62 before).
+constexpr float kMovedM = 0.005f;
+
 // What one walk measured, in the level's metres (50 px each) and in ticks.
 struct Walk {
     int ticksMoving = 0;           // ticks the body moved by at least a pixel
@@ -372,7 +378,7 @@ Walk WalkLevel30(double frameS, bool fixedStep) {
             const double drift = std::max(std::fabs(offset.x - reference.x), std::fabs(offset.y - reference.y));
             const int percent = static_cast<int>(std::lround(alpha * 100.0f));
             // The lag is read where the walk is steady: the body moved a pixel or more, every frame of it.
-            if (std::fabs(moved) >= 0.02f) {
+            if (std::fabs(moved) >= kMovedM) {
                 const double lag = (bodyNow.x - (picture.x - reference.x)) / moved;
                 walk.lagAtAlphaPercent[percent] += lag;
                 ++walk.samples[percent];
@@ -391,7 +397,7 @@ Walk WalkLevel30(double frameS, bool fixedStep) {
                     walk.worstCameraDriftM, static_cast<double>(std::fabs(drawn.x - followNow.x)));
             }
         }
-        if (std::fabs(moved) >= 0.02f) ++walk.ticksMoving;
+        if (std::fabs(moved) >= kMovedM) ++walk.ticksMoving;
         if (layer.MenuScreen() != MagicPortalsLayer::Screen::None) break;
     }
     for (auto& [percent, sum] : walk.lagAtAlphaPercent) sum /= static_cast<double>(std::max(1, walk.samples[percent]));
@@ -534,6 +540,12 @@ struct LevelRun {
     std::map<std::string, int> movedByTag;
 };
 
+// DEV (planning step 152, WT): with `--bodies <file>`, every loose (dynamic, not kinematic) body of each level on the capture's own
+// tick, 420, one line each: label level tag x y vx vy asleep (the port's units, +y down, the velocity carried). Run on the build
+// before and the build after a physics step, the two tables say which body moved and how far in each of the 128 levels.
+std::ofstream* g_bodies = nullptr;
+std::string g_bodiesLabel;
+
 // Runs `name` for `ticks` ticks with no input - what a --fixed-step capture of the level feeds it - and holds
 // every interpolated picture to its tick's own place at alpha 0, 0.37 and 1 after each. `lastTick` is the tick
 // whose displacements are kept (the f420 sweep's).
@@ -565,6 +577,16 @@ LevelRun RunLevel(const std::string& name, int ticks, bool fiveFramesATick = fal
         layer.OnFixedUpdate(registry, MagicPortalsLayer::kTick);
         Input::EndReplayedTick();
         InterpolationSystem::EndTick(registry);
+        if (g_bodies != nullptr && tick == 420) {
+            for (auto [entity, transform, rigid] : registry.view<TransformComponent, RigidBodyComponent>().each()) {
+                if (rigid.isKinematic) continue;
+                const std::string tag = registry.all_of<TagComponent>(entity) ? registry.get<TagComponent>(entity).tag : "?";
+                const glm::dvec2 at = Units::ToPixels(transform.position);
+                *g_bodies << g_bodiesLabel << ' ' << name << ' ' << tag << ' ' << at.x << ' ' << at.y << ' '
+                          << rigid.velocity.x * Units::kPixelsPerMetre << ' ' << -rigid.velocity.y * Units::kPixelsPerMetre << ' '
+                          << (rigid.isSleeping ? 1 : 0) << '\n';
+            }
+        }
 
         int moved = 0;
         int movedOnScreen = 0;
@@ -697,8 +719,13 @@ void EveryPictureStandsWhereItsTickLeftIt() {
 
 // `--sweep <file>`: all 128 levels for 422 ticks, and what moved on each of ticks 418 to 422 - the f420 sweep's own
 // tick is among them - written as a table. Every level holds the same check as the sample's.
-void TheFullSweep(const std::string& file) {
+void TheFullSweep(const std::string& file, const std::string& bodiesFile) {
     if (!LevelsAreThere("TheFullSweep")) return;
+    std::ofstream bodies;
+    if (!bodiesFile.empty()) {
+        bodies.open(bodiesFile, std::ios::trunc);
+        g_bodies = &bodies;
+    }
     Chapters::Table table;
     std::string error;
     CHECK_MSG(Chapters::Load(kChapters, table, error), error);
@@ -709,10 +736,11 @@ void TheFullSweep(const std::string& file) {
            "largest_on_view_px largest_on_view_tag off_the_ticks_place\n";
     int mismatched = 0;
     for (const Chapters::Level& level : table.levels) {
-        const LevelRun run = RunLevel(level.name, 422, false, 418, 422);
         // "1-01", as the sweep's files are named (Chapters::Label has no zero).
         char label[16];
         std::snprintf(label, sizeof(label), "%d-%02d", level.world + 1, level.index + 1);
+        g_bodiesLabel = label;
+        const LevelRun run = RunLevel(level.name, 422, false, 418, 422);
         for (const auto& [tick, stat] : run.window) {
             std::string tag = stat.largest.tag.empty() ? "-" : stat.largest.tag;
             std::replace(tag.begin(), tag.end(), ' ', '_');
@@ -727,31 +755,35 @@ void TheFullSweep(const std::string& file) {
         CHECK_MSG(run.ticks > 0, level.name + " ran");
         if (run.mismatches != 0) ++mismatched;
     }
+    g_bodies = nullptr;
     std::printf("  the full sweep: %zu levels, %d with a picture off its tick's place; the table is %s\n", table.levels.size(),
                 mismatched, file.c_str());
 }
 
-void runTests(const std::string& sweepFile) {
+void runTests(const std::string& sweepFile, const std::string& bodiesFile) {
     ThePicturesFileIsRead();
     TheWatchSmoothsOnlyWhereTheDisplayOutrunsTheTick();
     ABodysPictureStandsOnItsBodyAtEveryAlpha();
     EveryPictureStandsWhereItsTickLeftIt();
-    if (!sweepFile.empty()) TheFullSweep(sweepFile);
+    if (!sweepFile.empty()) TheFullSweep(sweepFile, bodiesFile);
 }
 
 } // namespace
 
 MP_SUITE_MAIN_ARGS("test_mp_pictures", argc, argv) {
     std::string sweepFile;
+    std::string bodiesFile;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--sweep" && i + 1 < argc) {
             sweepFile = argv[++i];
+        } else if (arg == "--bodies" && i + 1 < argc) {
+            bodiesFile = argv[++i];
         } else {
-            std::printf("test_mp test_mp_pictures [--sweep <file for the 128-level table>]\n");
+            std::printf("test_mp test_mp_pictures [--sweep <file for the 128-level table> [--bodies <file for the loose bodies on tick 420>]]\n");
             return 2;
         }
     }
-    runTests(sweepFile);
+    runTests(sweepFile, bodiesFile);
     return ::test::summary("test_mp_pictures", 60);
 }

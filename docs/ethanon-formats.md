@@ -2665,3 +2665,37 @@ Found while building PIC, the port's picture drawn at its tick's own place; read
 - **What the port does with it** (`MagicPortalsLayer::drawPicturesAtTick`, `game/data/pictures.json`): the engine's `InterpolationSystem::Apply` draws `previousPosition -> currentPosition` at the frame's alpha, which is 0 on
   every `--fixed-step` frame, so before step 150 a body-linked picture and the camera stood one tick back (16.7 ms) while everything placed from the sim's own point (lights, emitters, effects an owner carries, the tutorial hands, the shot) stood at
   the tick's. The layer ends each tick by making the tick's end both ends of the interpolation; it keeps the engine's smoothing only where the display outruns the 60 Hz tick (the port's own choice, marked `_guess`).
+
+## 16. A body's material, its mass, and every velocity the script writes (planning step 152)
+
+Found while putting every dynamic body in the original's time base (WT); read from the engine's source and the shipped script's listing (`out/parity/asbc/all_functions.txt`,
+md5 `48fe65ce`).
+
+- **What a body is made of.** `ETHPhysicsSimulator::CreateBody` (`engine/Physics/ETHPhysicsSimulator.cpp:67-123`) builds a `b2BodyDef` with only `type` (static or dynamic by the
+  entity's `static`), `fixedRotation`, `position`, `angle`, `bullet` and `gravityScale` (`:68-78`) - **no `linearDamping` or `angularDamping`**, so Box2D's 0 - and one
+  `b2FixtureDef` per shape with `density = entity->IsStatic() ? 0 : GetDensity(idx)`, `friction = GetFriction(idx)`, `isSensor` and `restitution = GetRestitution(idx)` (`:106-110`),
+  which `ETHEntityProperties` reads off the `.ent`'s `<Entity friction= density= restitution= gravityScale=>` (`engine/Entity/ETHEntityProperties.cpp:261`; `gravityScale`
+  defaults to 1, `:105`). So a pair's friction is Box2D's `sqrt(f_a x f_b)` and its restitution `max(r_a, r_b)` of the two entities' own numbers: a crate 0.96 / 0.2 on a platform
+  0.2 / 0 slides at 0.44, a rolling stone 0.025 / 0.15 skids, a minion 0 never grips. **The port holds the frictions at 1 and applies only the zeros**: the Supersonic engine's
+  friction solve (`PhysicsSystem.cpp`, the friction block of the velocity solve) walks a resting box sideways at a combined friction of 0.4 to 0.6, which is the crate-on-platform pair
+  (planning step 152, `materials.json` `friction_applied`). The port's table is `game/data/materials.json` (52 entities + `dark_mage`, each read back from
+  its `.ent` by `test_mp_timebase`); 12 of the 128 levels' entity names have no `.ent` among the extracted assets (`moving_platform`, `moving_platform_single`, `enemy_killer`, `lava`,
+  `bounce`, `no_restitution`, `collision_128_sqr`, `single_block`, `double_block`, `square_platform_22`, `rocket_bridge`, `motor_seesaw`) and keep the old constants.
+- **Mass.** Box2D's mass is the sum of density x area over a body's fixtures (`b2Body::ResetMassData`). A compound shape's circle has radius `radius x (scale.x x 0.5)` and
+  centre `pos x scale x 0.5` (`engine/Physics/ETHCompoundShape.cpp:67-71`) over the entity's collision box, so `dark_mage.ent`, `minion.ent`, `ghost_minion.ent` and `dragon_knight.ent`
+  (14 x 36, `body {posY = -0.5; radius = 1.3}` and `feet {posY = 0.5; radius = 1.3}`) are two circles of radius 9.1 units (0.182 m) whose centres are 18 units apart: 36.2 x 18.2 units,
+  area 2 pi 0.182^2 = 0.208 m^2, mass 0.104 at density 0.5. A barrel (28.6 x 37.7 at Scale 1.3, density 1) is 0.431, a 58 x 58 crate (density 0.4) 0.538, a 30 x 30 one 0.144, a
+  stone of radius 30 (density 1) 1.131: the barrel is **4.15 times the player**, which is what keeps the idle player on 2-24's barrel (the port weighed every body 1 and he tipped it).
+- **Every velocity the script writes.** The listing has exactly 11 calls of `ETHPhysicsController::SetLinearVelocity` and **none of `ApplyForce`, `ApplyLinearImpulse` or `ApplyImpulse`**
+  (`ETHPhysicsController.cpp:136-164` has them; no script calls them): `GameStateController::checkGameEnd` (zero, the player at the end; bytes 125613..126638 ins 71), `SideScrollerCharacter::applyForces`
+  (the walk, ins 91), `PortalManager::applyImpulse` (the zero-g recoil, `GetLinearVelocity() + ...`, ins 57), `PortalManager::teleportToFirstStaticPortal` (ins 103), `invertLinearVelocity`
+  (`Portal.angelscript`, bytes 360172..360571, ins 29, 62 and 75: a character x (1, -1), anything else x -1), `ETHCallback_dragon_knight` (ins 553: scale(1.7), the 2-32 knight),
+  `ETHCallback_minion` (ins 1110 the walk, scale(1.3), and ins 1182 the hold's brake x (0.3, 1)) and `ETHCallback_gravity_area` (ins 181: `GetLinearVelocity() + force`, once a frame). There is **no
+  blast push and no fireball hit**: a barrel's explosion and a fireball move nothing (`ETHCallback_barrel_bomb` and `fireball` set no velocity, and `addFireball` only `SetGravityScale`); a
+  lift or a platform is moved by `SetPositionXY`, not by a velocity (G3). `ETHCallback_spinning_cross` writes `SetAngularVelocity` (ins 8).
+- **The minion's walk** is the player's expression (`applyForces` ins 15-36): `ETHCallback_minion` ins 1049-1068 `elapsedTime = float(min(66, getLastFrameElapsedTime()))`,
+  `speedScale = scale(1.3) x elapsedTime / GetCurrentPhysicsTimeStepMS()`, and ins 1091-1110 `SetLinearVelocity((moveVec.x x speedScale, its own y))` - **1.3 metres a second of Box2D, 65
+  units, not 1.3 pixels a step** (the earlier reading): 65 x 16 / 33.33 = 31.2 units a second of the original's physics, 1.04 a frame; and since a frame of `e` ms advances the world
+  1/30 s, it covers `65 x e / 1000` units in a frame that lasts `e` ms: **65 units a second at any frame rate up to 66 ms**, 62.4 at the 16 ms the script reads of a 16.667 ms 60 Hz frame. Checked against F9 (3-18's two
+  patrols, `out/parity/footage/work/F9/an/p3_capes.json`, at about 30 frames a second: the first over frames #336-#359, 24 frames, the second over #330-#359, 30 frames - its 24 frames
+  #336-#359 give 62.8): 63.2 and 62.3 units a second (177.7 and 175.3 px/s at 2.8125 px a unit, fit residuals 4.3 and 3.8 px). The knight (`ETHCallback_dragon_knight` ins 513-532) is the same with scale(1.7): 85 units a second at any frame rate up to 66 ms, 81.6 at the 16 ms floor (40.8 of the original's physics second, carried at 2).

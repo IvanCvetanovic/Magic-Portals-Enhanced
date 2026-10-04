@@ -67,6 +67,7 @@
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Trigger.hpp"
 #include "sim/Tscn.hpp"
 
@@ -86,8 +87,11 @@ namespace MagicPortals::Minions {
 // through the post it is meant to stand at. Minions::State::Spawn says so where
 // it does it.
 struct Rules {
-    double speedPxPerStep = 0.0; // the decoded literal, per physics step
-    double stepMs = 0.0;         // the step it is per: SetFixedTimeStepValue(1/30)
+    // The walk's own two literals: scale(1.3), which is METRES a second of the original's physics (the
+    // port's metre is 50 units), and the 66 ms its frame is capped at. What a tick carries is
+    // WalkCarried, off the step - the physics step's 33.33 ms is clock.json's, not this file's.
+    double speed = 0.0;
+    double elapsedCapMs = 0.0;
     double arrivePx = 0.0;       // minDist: the walk advances inside this
     double settlePx = 0.0;       // minDist * 2: only a lone guard stops inside this
     double brake = 0.0;          // what a minion serving its hold multiplies x by
@@ -198,7 +202,7 @@ struct State {
 
     // One tick, BEFORE the physics step: each minion serves its dwell and then
     // walks, as the player is steered before the step rather than after it.
-    void Tick(entt::registry& registry, double dt);
+    void Tick(entt::registry& registry, const ScriptClock::Step& step);
 
     // And after it: a minion left standing in a killer floor is taken. Returns
     // the bodies it took away, which the caller must pass through Forget. Split
@@ -243,10 +247,16 @@ struct State {
 
     const Minion* FindMinion(const std::string& name) const;
 
-    // What the decoded literal works out to, per second: 39, not the 60 the
-    // Godot project guesses.
-    double SpeedPxPerSecond() const;
 };
+
+// The velocity ETHCallback_minion sets a walking minion: scale(1.3) x min(66, the script's milliseconds) /
+// GetCurrentPhysicsTimeStepMS (ins 1049-1068) across its own vertical velocity (ins 1091-1110), in metres a
+// second of the original's physics - 1.3 x 16 / 33.33 = 0.624, which its 1/30 s step carries 1.04 units a
+// frame. And as the port's body carries it: at SimRatio, so a tick of the engine's covers what the
+// original's step covers in the frame - 62.4 units a second at the decoded 60 Hz, where the unit this
+// file read it in (1.3 px a 33.3 ms step, 39 a second) was a fiftieth of the metre scale() gives.
+double WalkOriginal(const Rules& rules, const ScriptClock::Step& step);
+double WalkCarried(const Rules& rules, const ScriptClock::Step& step);
 
 // A level's minion markers, the waypoints each one's prefix resolves, and the
 // killer floors.

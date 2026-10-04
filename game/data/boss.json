@@ -111,8 +111,13 @@
     "crush_intensity": 2.5,
     "px_per_unit": 50.0,
     "contact_margin_px": 2.0,
+    "recent_ticks": 30,
     "_guess": true,
     "_guess_note": [
+      "recent_ticks is a port number too (planning step 152, WT): a rock's crush is judged on the hardest of the last 30 ticks' approach,",
+      "half a second at the port's 60 Hz, because the engine's solver brakes a closing pair in stages BEFORE the pair meets (a speculative",
+      "contact, braked from as far as a step's travel), so the velocity of the tick it touches on is not the one it came in at. 30 is longer",
+      "than the braking of a rock falling the height of the beholder's levels takes; Impacts.hpp's kRecentSteps (60) is the same kind of window.",
       "The unit, and the margin; not the threshold. The script divides by the global scale a",
       "second time, so on a device the threshold moved with the screen. The port takes the",
       "scale as 1, the original's 480 px reference height (DEFAULT_SCALE_HEIGHT). The margin",

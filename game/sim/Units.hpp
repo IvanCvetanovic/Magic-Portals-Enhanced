@@ -22,16 +22,11 @@ inline constexpr double kPixelsPerMetre = 50.0;
 // (ETHPhysicsSimulator.cpp:26, same citation). Decoded, not guessed. The original's
 // script sets the same 10, scaled (Game::preLoop: SetGravity(0, scale(10))), and the
 // player's own gravity is that times its SetGravityScale(2) in the original's physics
-// seconds (data/player.json, Player.hpp: planning step 148).
+// seconds (data/player.json, Player.hpp: planning step 148). The port's world runs on
+// the same 10 - every dynamic body falls at it, in the carried frame of the tick
+// (Game::UseWorldGravity, planning step 152); the Godot project's 980 is gone. The
+// number the game reads is player.json's gravity.world_m_s2; this one is the spike's.
 inline constexpr double kGravity = 10.0;
-
-// The Godot project's world gravity, which is what its bodies fall at: Godot 4's
-// physics/2d/default_gravity, since the Godot project's project.godot sets none. The
-// port plays like the Godot project, so its world - the crates, the stones, the minions -
-// runs at this; the spike measured the solver against the original, and runs at kGravity.
-// The player no longer falls at it: its own gravity is decoded (planning step 148), and
-// the world's time base is a row of its own.
-inline constexpr double kRemakeWorldGravityPx = 980.0;
 
 inline float ToMetres(double px) {
     return static_cast<float>(px / kPixelsPerMetre);

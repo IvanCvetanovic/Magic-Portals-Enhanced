@@ -145,7 +145,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!string("dragon_knight", "spawn", knight.spawn) || !string("dragon_knight", "entity", knight.entity) ||
         !string("dragon_knight", "waypoint_prefix", knight.waypointPrefix) ||
         !string("dragon_knight", "hold_key", knight.holdKey) ||
-        !number("dragon_knight", "speed_px_per_step", knight.speedPxPerStep) ||
+        !number("dragon_knight", "speed", knight.speed) ||
+        !number("dragon_knight", "elapsed_cap_ms", knight.elapsedCapMs) ||
         !number("dragon_knight", "arrive_px", knight.arrivePx) ||
         !pair("dragon_knight", "finish_offset_px", knight.finishOffsetPx) ||
         !whole("dragon_knight", "walk_first_column", knight.walkFirstColumn) ||
@@ -161,7 +162,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     // A clock that never runs would hold a cutscene on its first frame, and a span
     // of 0 would divide by it: both are refused rather than drawn.
     if (!(launch.launchMs > 0.0) || !(launch.bridgeSpanMs > 0.0) || !(landing.launchMs > 0.0) ||
-        !(knight.speedPxPerStep > 0.0) || !(knight.arrivePx > 0.0) || !(knight.walkStrideMs > 0.0) ||
+        !(knight.speed > 0.0) || !(knight.elapsedCapMs > 0.0) || !(knight.arrivePx > 0.0) || !(knight.walkStrideMs > 0.0) ||
         knight.columns < 1 || knight.walkLastColumn < knight.walkFirstColumn || !(landing.keyScalePerFrame > 0.0)) {
         error = path + ": a span, a speed, a radius, a stride, a column count or a key scale is not above 0";
         return false;
@@ -295,7 +296,8 @@ entt::entity SpawnKnight(const Rules& rules, const Minions::Rules& body, entt::r
     // Its ENTITY point on the spawn: the body's centre that far below it.
     const glm::dvec2 centrePx = knight.spawnPx + glm::dvec2(0.0, body.EntityAboveCentrePx());
     knight.body =
-        LevelBuilder::BuildRigidCircle(registry, rules.knight.entity, centrePx, body.bodyRadiusPx, LevelBuilder::Options{});
+        LevelBuilder::BuildRigidCircle(registry, rules.knight.entity, centrePx, body.bodyRadiusPx, LevelBuilder::Options{},
+                                       rules.knight.entity);
     // dragon_knight.ent is fixedRotation="1": a circle left to turn would roll.
     if (knight.body != entt::null) registry.get<RigidBodyComponent>(knight.body).lockRotation = glm::bvec3(true);
     return knight.body;
@@ -308,9 +310,18 @@ glm::dvec2 KnightEntityPx(const Minions::Rules& body, entt::registry& registry, 
     return Units::ToPixels(transform->position) - glm::dvec2(0.0, body.EntityAboveCentrePx());
 }
 
+double KnightWalkOriginal(const Rules& rules, const ScriptClock::Step& step) {
+    return ScriptClock::ScriptSpeed(rules.knight.speed, rules.knight.elapsedCapMs, step);
+}
+
+double KnightWalkCarried(const Rules& rules, const ScriptClock::Step& step) {
+    return ScriptClock::CarriedVelocity(KnightWalkOriginal(rules, step), step);
+}
+
 void StepKnight(const Rules& rules, const Minions::Rules& body, entt::registry& registry, Knight& knight,
-                double frameMs) {
+                const ScriptClock::Step& step) {
     const Rules::Knight& rule = rules.knight;
+    const double frameMs = ScriptClock::Ms(step);
     knight.walked = false;
     knight.entered = false;
     if (!knight.spawned || knight.gone || knight.body == entt::null || !registry.valid(knight.body) ||
@@ -358,9 +369,9 @@ void StepKnight(const Rules& rules, const Minions::Rules& body, entt::registry& 
     const bool wentLeft = rigid.velocity.x < 0.0f;
     // #484-496: -1 when the two x's are equal.
     const double direction = atPx.x < destPx.x ? 1.0 : -1.0;
-    // #513-532: 1.7 px a physics step. The 66 ms cap never bites at 60 Hz.
-    const double pxPerSecond = rule.speedPxPerStep * 1000.0 / body.stepMs;
-    rigid.velocity.x = Units::ToMetres(direction * pxPerSecond);
+    // #513-532: scale(1.7) x min(66, the frame) / the physics step: the minions' expression (Minions::WalkOriginal),
+    // carried at SimRatio.
+    rigid.velocity.x = static_cast<float>(direction * KnightWalkCarried(rules, step));
     knight.row = wentLeft ? rule.leftRow : rule.rightRow;
     knight.column = knight.timer.Set(rule.walkFirstColumn, rule.walkLastColumn, rule.walkStrideMs, true, frameMs);
     knight.walked = true;

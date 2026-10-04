@@ -81,7 +81,8 @@ struct Rules {
         std::string entity;          // dragon_knight.ent
         std::string waypointPrefix;  // waypoint: waypoint0, waypoint1, ...
         std::string holdKey;         // hold
-        double speedPxPerStep = 0.0; // 1.7, per minions.json's physics step
+        double speed = 0.0;          // scale(1.7): METRES a second of the original's physics, as minions.json's
+        double elapsedCapMs = 0.0;   // 66: the frame cap of the same expression
         double arrivePx = 0.0;       // scale(16)
         glm::dvec2 finishOffsetPx{0.0}; // levelFinishedEffect's door, from the knight: (16, -16)
         int walkFirstColumn = 0;     // timer.set(0, 3, 120, true)
@@ -207,11 +208,15 @@ bool FindKnight(const Rules& rules, const Tscn::Scene& scene, Knight& out, std::
 // circle with its ENTITY point on the spawn, rotation locked. Once.
 entt::entity SpawnKnight(const Rules& rules, const Minions::Rules& body, entt::registry& registry, Knight& knight);
 
-// One run of ETHCallback_dragon_knight, of `frameMs`, before the physics step. The
+// One run of ETHCallback_dragon_knight, of the script's milliseconds of `step`, before the physics step. The
 // first sets it up; the one that finds no next waypoint destroys the body and says
-// where (entered, enteredAtPx).
+// where (entered, enteredAtPx). Its walk is carried as every body is (ScriptClock::CarriedVelocity).
 void StepKnight(const Rules& rules, const Minions::Rules& body, entt::registry& registry, Knight& knight,
-                double frameMs);
+                const ScriptClock::Step& step);
+
+// The knight's walking velocity, in metres a second of the original's physics and as the port carries it.
+double KnightWalkOriginal(const Rules& rules, const ScriptClock::Step& step);
+double KnightWalkCarried(const Rules& rules, const ScriptClock::Step& step);
 
 // Its entity point, the one GetPositionXY reads: the body's centre less
 // Minions::Rules::EntityAboveCentrePx. Zero when it has no body.

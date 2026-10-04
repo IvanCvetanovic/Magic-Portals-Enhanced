@@ -56,6 +56,63 @@ inline constexpr float kBodyRestitution = 0.0f;
 inline constexpr float kStaticFriction = 1.0f;
 inline constexpr float kStaticRestitution = 0.0f;
 
+// What an entity's bodies are made of: the friction and restitution its .ent gives the fixture
+// ETHPhysicsSimulator::CreateBody builds (entity->GetFriction(idx), GetRestitution(idx):
+// ETHPhysicsSimulator.cpp:102-109) - decoded per entity where game/data/materials.json holds the
+// entity, and the Godot project's constants above where it does not (an entity whose .ent is not in the
+// extracted assets). The solver mixes two surfaces as Box2D does: friction by the square root of the
+// product, restitution by the larger.
+//
+// `restitution` is what a body is BUILT with; `decodedRestitution` is the .ent's own. They are the same
+// while materials.json says `restitution_applied` (it does not, today: the engine bounces a pair a step's
+// travel BEFORE it touches, which stops a stone short of the wall it breaks - Materials::restitutionApplied).
+//
+// `friction` is likewise what a body is BUILT with and `decodedFriction` the .ent's own: the same while
+// materials.json says `friction_applied` (it does not, today: the engine's friction solve walks a resting box
+// sideways at a combined friction of 0.4 to 0.6, which is every crate or barrel on a platform - the
+// Materials::frictionApplied note), and otherwise the table's `held_friction`, except for a group that says
+// `apply_decoded_friction` (a friction of 0 is 0 against any surface, and no friction impulse is solved).
+//
+// `density` is the .ent's, which Box2D multiplies by the shape's area for the body's MASS (b2Body::ResetMassData):
+// 0 is an entity with none (a static, or one the table does not hold), whose body keeps the engine's mass of 1.
+// `areaM2` is the area of the ORIGINAL's shape where the port's collider is a simpler one (a minion's two
+// circles of radius 9.1 are one circle here): 0 takes the collider's own.
+struct Material {
+    float friction = kBodyFriction;
+    float decodedFriction = kBodyFriction;
+    float restitution = kBodyRestitution;
+    float decodedRestitution = kBodyRestitution;
+    float density = 0.0f;
+    float areaM2 = 0.0f;
+};
+
+struct Materials {
+    // Whether a body is built with its entity's restitution (see Material). materials.json's top-level flag.
+    bool restitutionApplied = false;
+    // Whether a body is built with its entity's friction (see Material); materials.json's top-level flag. False says every
+    // friction is `heldFriction` but a group's that applies its own, and a rig built with no table is on the constants above.
+    bool frictionApplied = false;
+    float heldFriction = kBodyFriction;
+    // By the entity's name WITHOUT ".ent": a node's entity_name carries it in some levels and not in others.
+    std::unordered_map<std::string, Material> byEntity;
+    // The material of `entityName` (with or without ".ent"), or the default.
+    Material Of(const std::string& entityName) const;
+    bool Holds(const std::string& entityName) const;
+};
+
+// Reads materials.json: `groups`, each a list of `entities` that share a `friction` and a `restitution`.
+// False, with `error`, for a missing or non-numeric value, or an entity named in two groups.
+bool LoadMaterials(const std::string& path, Materials& out, std::string& error);
+
+// A body's mass, in the units the engine takes (density x area, metres): the entity's density times the shape's
+// area - `colliderAreaM2` unless the material states the original's own - or the engine's default of 1 where the
+// entity has no density.
+float MassOf(const Material& material, double colliderAreaM2);
+
+// The material `entityName`'s bodies are built with in this registry: the table Game::Start put in its
+// context, or the default where there is none (a rig built with no level behind it).
+Material MaterialOf(entt::registry& registry, const std::string& entityName);
+
 // The 2D port's locks: every rigid body stays in the plane - no motion along z -
 // and turns about z only. Unlocked, the spike measured a resting crate 30 px out
 // of the plane in a minute and a pushed one leaving the level. S1, recorded in
@@ -111,8 +168,10 @@ bool ShapeBoundsPx(const Tscn::Scene& scene, const Tscn::Node& node, glm::dvec2&
 // A rigid circle with no node behind it, built as a RigidBody2D with a
 // CircleShape2D is: what a launcher throws (Launchers.hpp). Not added to any
 // Built; the caller owns it.
+// `entity` names the .ent it stands for (minion.ent, rolling_stone.ent, ...), which its material is read
+// by; empty is the default material.
 entt::entity BuildRigidCircle(entt::registry& registry, const std::string& tag, const glm::dvec2& atPx,
-                              double radiusPx, const Options& options);
+                              double radiusPx, const Options& options, const std::string& entity = std::string());
 
 // A STATIC box with no node behind it, which is what an entity added at run time
 // needs: the original's AddScaledEntity makes a body from the .ent itself, and

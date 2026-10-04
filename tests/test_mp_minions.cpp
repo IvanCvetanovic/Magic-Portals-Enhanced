@@ -4,10 +4,13 @@
 // What is pinned here is the DECODE. Minions.hpp cites where each number comes
 // from; the ones a test can tell apart from the Godot project's guesses are:
 //
-//   speed    1.3 px per physics step, and the game FIXES that step at 1/30 s
-//            (AverageFPSRateManager calls SetFixedTimeStep(true) with 0.0333333),
-//            so the walk is 39 px/s. The Godot project's actors.json guesses 60 and
-//            marks it _guess: true.
+//   speed    scale(1.3) - 1.3 METRES a second of the original's physics, 65 units, as the
+//            player's scale(3) is - times the script's 16 ms over the physics step the game
+//            FIXES at 1/30 s (AverageFPSRateManager calls SetFixedTimeStep(true) with
+//            0.0333333): 31.2 units a second of its physics, 1.04 a frame, carried at the
+//            tick's SimRatio as every body is (planning step 152): 62.4 a second. Until step
+//            152 this read 1.3 PIXELS a step, 39 a second. The Godot project's actors.json
+//            guessed 60 and marked it _guess: true.
 //   arrival  8 px to advance, but 16 px to stop - minDist and minDist * 2 are
 //            two separate tests in the original. Collapsing them into one
 //            constant is the easy mistake, and it gives a minion that either
@@ -49,6 +52,7 @@
 #include "sim/Game.hpp"
 #include "sim/Minions.hpp"
 #include "sim/Particles.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Tscn.hpp"
 #include "sim/Units.hpp"
 
@@ -119,16 +123,29 @@ double PixelX(entt::registry& registry, entt::entity body) {
     return Units::ToPixels(registry.get<TransformComponent>(body).position).x;
 }
 
-// 1.3 px per 33.3333 ms is 39 px/s, and the Godot project's guess is 60.
+// scale(1.3) metres x 16 / 33.3333 ms is 0.624 m/s of the original's physics, 1.04 units a frame, and the
+// walk a tick carries is 1.248 m/s: 62.4 units a second. (Not the 39 this suite pinned: 1.3 PIXELS a step.)
 void theWalkIsTheDecodedSpeedNotTheRemakesGuess() {
     Run run;
     if (!Begin(kLevel, run)) return;
 
     const Minions::Rules& rules = run.level.minions.rules;
-    CHECK(::test::nearly(static_cast<float>(rules.speedPxPerStep), 1.3f));
-    CHECK(::test::nearly(static_cast<float>(rules.stepMs), 33.3333f, 1e-3f));
-    CHECK(::test::nearly(static_cast<float>(run.level.minions.SpeedPxPerSecond()), 39.0f, 1e-2f));
-    CHECK_MSG(run.level.minions.SpeedPxPerSecond() < 60.0, "the Godot project's 60 px/s is not what is played");
+    CHECK(::test::nearly(static_cast<float>(rules.speed), 1.3f));
+    CHECK(::test::nearly(static_cast<float>(rules.elapsedCapMs), 66.0f));
+    ScriptClock::Rules clock;
+    std::string error;
+    CHECK_MSG(ScriptClock::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/clock.json", clock, error), error);
+    const ScriptClock::Step step = ScriptClock::TickStep(clock, kStep);
+    CHECK_MSG(std::fabs(Minions::WalkOriginal(rules, step) - 1.3 * 16.0 / 33.33333507180214) < 1e-9,
+              std::to_string(Minions::WalkOriginal(rules, step)));
+    CHECK(std::fabs(Minions::WalkOriginal(rules, step) - 0.624) < 1e-6);
+    const double carriedPxS = Minions::WalkCarried(rules, step) * Units::kPixelsPerMetre;
+    CHECK_MSG(std::fabs(carriedPxS - 62.4) < 1e-4, std::to_string(carriedPxS) + " units a second");
+    CHECK_MSG(std::fabs(carriedPxS / 60.0 - 1.04) < 1e-5, "1.04 units a tick, the original's 1/30 s frame's");
+    CHECK_MSG(std::fabs(carriedPxS - 39.0) > 20.0, "the 39 px/s this file once read is not what is played");
+    // At this suite's own bare tick - the physics step the tick's own length, SimRatio 1 - the same expression is
+    // scale(1.3) x 16.667 / 16.667.
+    CHECK(std::fabs(Minions::WalkCarried(rules, ScriptClock::Step(kStep)) - 1.3) < 1e-6);
 
     // Two thresholds, not one: it advances inside 8 px and stops inside 16.
     CHECK(::test::nearly(static_cast<float>(rules.arrivePx), 8.0f));
@@ -194,10 +211,12 @@ void aPatrollerWalksToItsFirstWaypoint() {
     CHECK(run.registry.valid(body));
     if (!run.registry.valid(body)) return;
 
-    // It spawns at x 546 and wayA0 is at 509, so it walks left - at 39 px/s,
-    // which is 0.78 m/s in the engine's units.
+    // It spawns at x 546 and wayA0 is at 509, so it walks left - at scale(1.3) metres a second of the original's
+    // physics times the frame over the step: 1.3 m/s on this suite's bare tick (a frame the length of the step,
+    // SimRatio 1), 1.248 on the layer's (62.4 units a second; the test above pins it).
     CHECK(VelocityX(run.registry, body) < 0.0f);
-    CHECK(::test::nearly(VelocityX(run.registry, body), -Units::ToMetres(39.0), 1e-3f));
+    CHECK(::test::nearly(VelocityX(run.registry, body),
+                         -static_cast<float>(Minions::WalkCarried(run.level.minions.rules, ScriptClock::Step(kStep))), 1e-3f));
     // And the picture's two facts (step 76): the walk arm, facing the way moveVec
     // points - which, not the velocity's sign, is what the original's row follows.
     const Minions::Minion* walked = run.level.minions.FindMinion(kPatroller);
@@ -353,10 +372,12 @@ void theEntityStandsWhereThePictureStands() {
 // with exactly one waypoint - and from there the two engines part company. The
 // original's minion is frictionless (minion.ent friction 0.000000), so it coasts
 // the last stretch in, arrives, adopts the 999999999 sentinel, and is parked by
-// the brake. This port's bodies grip (kBodyFriction 1), so its guard stops about
-// where the drive stops, inside the wider threshold and short of arriving. Either
-// way it ends up by its post and stays there, which is what is pinned here;
-// minions.json carries the difference.
+// the brake. Until planning step 152 this port's bodies gripped (kBodyFriction 1), so
+// its guard stopped about where the drive stopped, inside the wider threshold and short
+// of arriving (settled); they now carry minion.ent's own friction, 0 (materials.json),
+// and the guard does what the original's does: it coasts in past the 8 px arrival
+// radius, adopts the sentinel and holds, parked by the brake. Pinned: by its post, still
+// there for good, and held.
 void aLoneWaypointIsWalkedToAndThenHeldForGood() {
     Run run;
     if (!Begin(kLevel, run)) return;
@@ -383,9 +404,15 @@ void aLoneWaypointIsWalkedToAndThenHeldForGood() {
               "the guard stopped within the wider threshold of its post");
     CHECK_MSG(posted->waypoints.size() == 1, "and it got there on one waypoint, which is why it stopped");
     CHECK(::test::nearly(VelocityX(run.registry, body), 0.0f));
-    // shouldntMove: the settled arm, which writes no frame, still facing its walk.
-    CHECK_MSG(posted->arm == Minions::Arm::Settled && posted->facing == Minions::Facing::Right,
-              "settled, facing the way it walked in");
+    // Frictionless, it coasts through the wider threshold (the settled arm writes no velocity) to the
+    // arrival radius, adopts the sentinel dwell and is held: the hold arm, still facing its walk.
+    std::printf("  the lone guard, 180 ticks on: %.2f units from its post, arm %d, facing %d\n",
+                std::abs(PixelX(run.registry, body) - post.x), static_cast<int>(posted->arm),
+                static_cast<int>(posted->facing));
+    CHECK_MSG(posted->arm == Minions::Arm::Hold && posted->facing == Minions::Facing::Right,
+              "parked by the brake, facing the way it walked in");
+    CHECK_MSG(std::abs(PixelX(run.registry, body) - post.x) < run.level.minions.rules.arrivePx,
+              "and it ARRIVED, inside the 8 px the walk advances at");
 
     // Still there three seconds later: the wait is never restarted.
     const double atPost = PixelX(run.registry, body);

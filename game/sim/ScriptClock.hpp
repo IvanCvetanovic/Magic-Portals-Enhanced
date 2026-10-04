@@ -24,15 +24,16 @@
 //            gravity and friction, are measured against it.
 //   sim      what the ORIGINAL's physics world advances in a frame (Step::simS): a
 //            fixed 1/30 s, whatever the frame (AverageFPSRateManager, clock.json),
-//            twice the 60 Hz tick. The port's solver steps the tick, so a body the
-//            port moves in the original's own Box2D units - the player, whose
-//            velocity the script sets and whose gravity the decode gives - is
-//            carried at SimRatio() times the original's velocity to cover the
-//            distance the original's step covers in the same frame (planning step 148).
+//            twice the 60 Hz tick. The port's solver steps the tick, so EVERY dynamic
+//            body is carried at SimRatio() times the original's velocity (and the world's
+//            gravity at its square) to cover the distance the original's step covers in
+//            the same frame: the player from planning step 148, every other body from
+//            step 152 (CarriedVelocity and CarriedAcceleration, below).
 //   wall     the layer's clock, which advances by the engine's tick: what sys:GetTime
 //            and sys:GetTimeF read (the earthquake generator, the portal's 400 ms
 //            kill, the choosers' blink). Not here.
 
+#include <algorithm>
 #include <string>
 
 namespace MagicPortals::ScriptClock {
@@ -100,6 +101,37 @@ inline double Ms(const Step& step) { return step.scriptS * 1000.0; }
 inline double SimRatio(const Step& step) {
     return step.physicsS > 0.0f ? step.simS / static_cast<double>(step.physicsS) : 1.0;
 }
+// THE CARRIED FRAME (planning step 152, WT). One tick of the port is one frame of the original, and
+// the original's physics world advances simS in each, where the engine's solver advances physicsS. So
+// EVERY dynamic body is carried at SimRatio times the original's velocity and SimRatio squared times its
+// acceleration, and these three are the only places the factor is named: the world's gravity
+// (Game::UseWorldGravity), every velocity the sim writes (a walk, a pull, a recoil) and every velocity
+// it reads back into the original's own units (a hit's intensity, a trail, a push's aim). A quantity the
+// original applies once a FRAME - a pull's velocity, a brake's multiplier, a gravity well's lap - is
+// the same number a tick, and is not scaled by either.
+//
+// The velocity the original's physics holds for a body that moves `originalMps` metres of ITS second a
+// second, as the port's solver carries it (metres of the engine's second a second).
+inline double CarriedVelocity(double originalMps, const Step& step) { return originalMps * SimRatio(step); }
+// And the other way: a velocity the port's body carries, in metres of the original's physics second.
+inline double OriginalVelocity(double carriedMps, const Step& step) { return carriedMps / SimRatio(step); }
+// An acceleration of the original's world (its gravity, 10 m/s^2 of its physics) as the engine's
+// PhysicsSettings take it: SimRatio squared, because a distance goes as a half g t^2 of a clock that
+// runs SimRatio times as fast.
+inline double CarriedAcceleration(double originalMps2, const Step& step) {
+    const double ratio = SimRatio(step);
+    return originalMps2 * ratio * ratio;
+}
+// The one expression the original's scripts write a walking body's velocity with, in metres a second of
+// its physics: scale(k) x min(cap, the script's whole milliseconds) / GetCurrentPhysicsTimeStepMS
+// (SideScrollerCharacter::applyForces ins 15-36, ETHCallback_minion ins 1049-1068, and
+// ETHCallback_dragon_knight). `scaleMetres` is the literal k handed to scale(), which is metres here (the
+// port's metre is 50 units, as the original's is 50 of the screen's pixels at the 256-line design height).
+inline double ScriptSpeed(double scaleMetres, double capMs, const Step& step) {
+    const double stepMs = step.simS * 1000.0;
+    return stepMs > 0.0 ? scaleMetres * std::min(capMs, Ms(step)) / stepMs : 0.0;
+}
+
 // What the engine's tick is in wall milliseconds: the layer clock's step, and what the
 // wall-clock readers (sys:GetTime, sys:GetTimeF) see pass.
 inline double WallMs(const Step& step) { return static_cast<double>(step.physicsS) * 1000.0; }

@@ -581,6 +581,9 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
         unloadLevel(registry);
         return refuse(error);
     }
+    // The world's gravity in the carried frame of THIS layer's tick (ScriptClock.hpp), before the engine's first
+    // physics step: Start wrote it at ratio 1, and every BeforeStep rewrites it from the tick's own step.
+    if (!m_level.noGravity) Game::UseWorldGravity(registry, m_data.tuning, m_step);
     if (!PositionOf(FirstOfRole(m_data, Roles::kLevelBounds), m_boundsPx) || m_boundsPx.x <= 0.0 ||
         m_boundsPx.y <= 0.0) {
         unloadLevel(registry);
@@ -9482,7 +9485,7 @@ void MagicPortalsLayer::stepCutscenes(entt::registry& registry, double frameMs) 
         return;
     }
     if (m_knight.gone) return;
-    Cutscene::StepKnight(m_cutsceneRules, m_data.minions, registry, m_knight, frameMs);
+    Cutscene::StepKnight(m_cutsceneRules, m_data.minions, registry, m_knight, m_step);
     if (!m_knight.entered) return;
     // levelFinishedEffect(its point, its point + scale(16, -16)): the suck 16 below
     // that door point, the sparkles at the knight, playFinalDoorSound.
@@ -10031,22 +10034,23 @@ std::vector<Impacts::Watched> MagicPortalsLayer::impactBodies() const {
     const auto entityOf = [this](Call call) -> const std::string& {
         return m_quakeRules.entity[static_cast<std::size_t>(call)];
     };
+    // EVERY body's velocity is carried at SimRatio times the original's (ScriptClock.hpp, planning step 152), and
+    // every callback below reads hitIntensity of the original's: so a begin reports it by 1 / SimRatio of the
+    // body's own, for the player, a stone, a minion and a crate alike.
+    const double velocityScale = 1.0 / ScriptClock::SimRatio(m_step);
+    const auto watch = [&bodies, velocityScale](Impacts::Watched watched) {
+        watched.velocityScale = velocityScale;
+        bodies.push_back(watched);
+    };
     // ETHBeginContactCallback_dark_mage: the player's body.
-    //
-    // Its velocity is carried at SimRatio times the original's (Player.hpp), and hitIntensity is read of the
-    // original's: so a begin reports it by 1 / SimRatio of the body's own.
-    if (m_level.player != entt::null) {
-        Impacts::Watched player{m_level.player, Impacts::Kind::Player, {}};
-        player.velocityScale = 1.0 / ScriptClock::SimRatio(m_step);
-        bodies.push_back(player);
-    }
+    if (m_level.player != entt::null) watch(Impacts::Watched{m_level.player, Impacts::Kind::Player, {}});
     // ETHBeginContactCallback_rolling_stone: every rolling stone - placed, or
     // thrown, or the beholder's rock (both rolling_stone.ent, launchers.json and
     // boss.json). A placed stone of another entity has no such callback.
     for (const Demolish::Stone& stone : m_level.demolish.stones) {
         const Tscn::Node* node = m_data.scene.FindNode(stone.name);
         if (node != nullptr && !Earthquake::IsEntity(Roles::EntityName(*node), entityOf(Call::StoneImpact))) continue;
-        bodies.push_back(Impacts::Watched{stone.body, Impacts::Kind::Stone, {}});
+        watch(Impacts::Watched{stone.body, Impacts::Kind::Stone, {}});
     }
     // ETHBeginContactCallback_minion: minion.ent's, which is every minion but a
     // ghost_minion.ent. Aimed from its entity point, which stands above its circle.
@@ -10069,12 +10073,12 @@ std::vector<Impacts::Watched> MagicPortalsLayer::impactBodies() const {
         // another, and never empty - so level31b's ghost_minion.ent, which has no
         // ETHBeginContactCallback_ of its own, stays out (the merge, planning step 112).
         if (!Earthquake::IsEntity(minion.entity, entityOf(Call::MinionImpact))) continue;
-        bodies.push_back(Impacts::Watched{minion.body, Impacts::Kind::Minion, minionPoint, minionDrop});
+        watch(Impacts::Watched{minion.body, Impacts::Kind::Minion, minionPoint, minionDrop});
     }
     // crateContactCallback's six callers: every crate, whose begins are a sound
     // and no shake (planning step 142). Each pair a watched body touches is its
     // own, so watching a crate changes nothing about the player's or a stone's.
-    for (const entt::entity crate : m_crates) bodies.push_back(Impacts::Watched{crate, Impacts::Kind::Crate, {}});
+    for (const entt::entity crate : m_crates) watch(Impacts::Watched{crate, Impacts::Kind::Crate, {}});
     return bodies;
 }
 

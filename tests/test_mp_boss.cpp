@@ -471,6 +471,92 @@ void ItsRocksBreakOnTheWorldAndCrush() {
     CHECK_EQ(rig.boss.rocksBroken, 1);
 }
 
+// The crush is judged on the HARDEST a rock came at the player in the last recent_ticks steps (boss.json), read in the original's
+// units (planning step 152). The callback fires on the first touch with the velocity the solver has not yet taken out,
+// and the engine takes it out up to a step's travel BEFORE the touch: a rock that fell 100 px at the decoded gravity
+// rested on the player's head at 59 px/s of 408, and the velocity of the tick it overlapped on killed no one.
+void TheCrushReadsTheHardestRecentApproach() {
+    Portals::State portals;
+    // What a rock that was falling at 400 px/s a tick ago, 8 units a step, and now lies on the head does: it crushes.
+    {
+        Rig rig;
+        if (!MakeRig(rig, {400.0, 100.0}, {320.0, 200.0})) return;
+        Boss::Rock made;
+        made.name = "fell";
+        made.body = Stone(rig, {320.0, 120.0}, {0.0, 400.0});
+        rig.boss.rocks.push_back(made);
+        rig.boss.BeforeStep(rig.registry);
+        // The solver braked it: it now lies on the head (40 over the sphere's centre), at rest.
+        rig.registry.get<TransformComponent>(made.body).position = Units::ToWorld(320.0, 160.0);
+        rig.registry.get<RigidBodyComponent>(made.body).velocity = glm::vec3(0.0f);
+        rig.boss.BeforeStep(rig.registry);
+        rig.boss.Contacts(rig.registry, rig.player, portals, kStep);
+        CHECK_MSG(rig.boss.playerKilled && rig.boss.killedBy == "fell",
+                  "a rock that fell on the head at 8 m/s and was braked within the step crushes it");
+    }
+    // At the ratio the layer's bodies are carried at, the same fall at twice the carried velocity reads the same.
+    {
+        Rig rig;
+        if (!MakeRig(rig, {400.0, 100.0}, {320.0, 200.0})) return;
+        Boss::Rock made;
+        made.name = "carried";
+        made.body = Stone(rig, {320.0, 120.0}, {0.0, 800.0});
+        rig.boss.rocks.push_back(made);
+        rig.boss.BeforeStep(rig.registry, 2.0);
+        rig.registry.get<TransformComponent>(made.body).position = Units::ToWorld(320.0, 160.0);
+        rig.registry.get<RigidBodyComponent>(made.body).velocity = glm::vec3(0.0f);
+        rig.boss.BeforeStep(rig.registry, 2.0);
+        rig.boss.Contacts(rig.registry, rig.player, portals, kStep);
+        CHECK_MSG(rig.boss.playerKilled, "800 carried px/s at ratio 2 is the original's 400");
+        Rig slow;
+        if (!MakeRig(slow, {400.0, 100.0}, {320.0, 200.0})) return;
+        Boss::Rock gentle;
+        gentle.name = "gentle";
+        gentle.body = Stone(slow, {320.0, 120.0}, {0.0, 200.0});
+        slow.boss.rocks.push_back(gentle);
+        slow.boss.BeforeStep(slow.registry, 2.0);
+        slow.registry.get<TransformComponent>(gentle.body).position = Units::ToWorld(320.0, 160.0);
+        slow.registry.get<RigidBodyComponent>(gentle.body).velocity = glm::vec3(0.0f);
+        slow.boss.BeforeStep(slow.registry, 2.0);
+        slow.boss.Contacts(slow.registry, slow.player, portals, kStep);
+        CHECK_MSG(!slow.boss.playerKilled, "200 carried px/s at ratio 2 is the original's 100: 2, under 2.5");
+    }
+    // A rock that came at it more than the window ago, and has lain on the head since, does not: it went over a second
+    // ago (the window is half of one) and a rock resting on a character is not a crush.
+    {
+        Rig rig;
+        if (!MakeRig(rig, {400.0, 100.0}, {320.0, 200.0})) return;
+        Boss::Rock made;
+        made.name = "lay";
+        made.body = Stone(rig, {320.0, 60.0}, {0.0, 400.0});
+        rig.boss.rocks.push_back(made);
+        rig.boss.BeforeStep(rig.registry);
+        // Far above the player and at rest, for longer than the window; nothing overlaps, so nothing is judged.
+        rig.registry.get<RigidBodyComponent>(made.body).velocity = glm::vec3(0.0f);
+        for (std::size_t tick = 0; tick < rig.boss.rules.recentTicks + 1; ++tick) rig.boss.BeforeStep(rig.registry);
+        rig.registry.get<TransformComponent>(made.body).position = Units::ToWorld(320.0, 160.0);
+        rig.boss.BeforeStep(rig.registry);
+        rig.boss.Contacts(rig.registry, rig.player, portals, kStep);
+        CHECK_MSG(!rig.boss.playerKilled, "a rock whose fast approach is past the window, now lying on the head, kills no one");
+    }
+    // And one that fell fast BESIDE the player and rolls into it slowly is judged on the line between them, which the fall
+    // is across: the fast velocity is no approach, and the slow one is 0.6 against 2.5.
+    {
+        Rig rig;
+        if (!MakeRig(rig, {400.0, 100.0}, {320.0, 200.0})) return;
+        Boss::Rock made;
+        made.name = "rolled";
+        made.body = Stone(rig, {285.0, 100.0}, {0.0, 400.0});
+        rig.boss.rocks.push_back(made);
+        rig.boss.BeforeStep(rig.registry);
+        rig.registry.get<TransformComponent>(made.body).position = Units::ToWorld(285.0, 200.0);
+        rig.registry.get<RigidBodyComponent>(made.body).velocity = glm::vec3(Units::ToMetres(30.0), 0.0f, 0.0f);
+        rig.boss.BeforeStep(rig.registry);
+        rig.boss.Contacts(rig.registry, rig.player, portals, kStep);
+        CHECK_MSG(!rig.boss.playerKilled, "a rock that fell beside the player and rolls into it at 30 px/s is no crush");
+    }
+}
+
 // ---- level31 -------------------------------------------------------------------
 
 struct Run {
@@ -680,6 +766,7 @@ void runTests() {
     TheSpikesKillAndLeave();
     ThePlayerDiesWithinItsRadius();
     ItsRocksBreakOnTheWorldAndCrush();
+    TheCrushReadsTheHardestRecentApproach();
     Level31sBeholder();
     Level31ARockBreaksOnTheFloorOrCrushes();
     Level31IsWonAsTheOwnerWonIt();

@@ -296,7 +296,9 @@ void AThrownStoneBreaksTheWall(const char* levelName, const char* wallName, cons
         if (traversed == 0 && run.level.portals.traversals == 1 && body != entt::null && run.registry.valid(body)) {
             // What it fell at as it went in: this tick's gravity on top, as the
             // step added it before the portals were judged.
-            const glm::dvec2 in = before + glm::dvec2(0.0, Units::kRemakeWorldGravityPx * kStep);
+            // (this suite's tick is the bare one, SimRatio 1: the world's 10 m/s^2 of the original's physics.)
+            const glm::dvec2 in =
+                before + glm::dvec2(0.0, run.data.tuning.worldGravity * Units::kPixelsPerMetre * kStep);
             const glm::dvec2 out = VelocityPx(run, body);
             const glm::dvec2 at = PxOf(run, body);
             // The exit as THIS tick left it: a placed portal hovers two units up

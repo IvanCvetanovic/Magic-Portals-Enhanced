@@ -91,7 +91,7 @@ std::vector<Thrown> State::Throw(entt::registry& registry, double dt) {
         thrown.launcher = i;
         thrown.is = launcher.throws;
         thrown.body = LevelBuilder::BuildRigidCircle(registry, thrown.name, launcher.atPx, launcher.throws.radiusPx,
-                                                     LevelBuilder::Options{});
+                                                     LevelBuilder::Options{}, launcher.entity);
         live.push_back(thrown);
         now.push_back(thrown);
     }

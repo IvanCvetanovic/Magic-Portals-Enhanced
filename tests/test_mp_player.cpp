@@ -656,7 +656,8 @@ bool LevelIsThere(const std::string& name) {
 
 // A level started and stood in for `ticks` with no pad held, after `settle` ticks to land: the most the
 // player moved from where it stood when the count began.
-double StandingDrift(const std::string& name, int settle, int ticks, double holdFriction, double& endY) {
+double StandingDrift(const std::string& name, int settle, int ticks, double holdFriction, double& endY,
+                     bool unitMasses = false) {
     Game::Data data;
     entt::registry registry;
     Game::Level level;
@@ -668,6 +669,11 @@ double StandingDrift(const std::string& name, int settle, int ticks, double hold
         return 0.0;
     }
     data.tuning.holdFriction = holdFriction;
+    // The control of the barrel case: every body as heavy as every other, the engine's default of 1, which is how
+    // the port weighed them until planning step 152.
+    if (unitMasses) {
+        for (const entt::entity body : registry.view<RigidBodyComponent>()) registry.get<RigidBodyComponent>(body).mass = 1.0f;
+    }
     const ScriptClock::Step step = ScriptClock::TickStep(ReadRules(), kTick);
     for (int tick = 0; tick < settle; ++tick) Game::Tick(data, registry, level, 0.0f, step);
     const auto at = [&] { return Units::ToPixels(registry.get<TransformComponent>(level.player).position); };
@@ -697,15 +703,21 @@ void AnIdlePlayerStandsStillOnTheOriginalsRamp() {
     // The regression itself, so the pin cannot pass on a level that never moved him.
     CHECK_MSG(loose > 50.0, name + ": without the hold it moved " + std::to_string(loose) + " units");
 
-    // 2-24 (level23a): the player starts on barrel_bomb_ent_1135's edge and left it by tick 140 - with the barrel
-    // itself moving under him (the hold has no slope to read on a flat top). Printed, not judged: what moves is a
-    // dynamic body that the player's weight, 4000 units a second squared against the barrel's 980, tips
-    // (planning step 148's amendment, G10-1).
+    // 2-24 (level23a): the player starts on barrel_bomb_ent_1135's edge, and the port's player left it by tick 140 with the
+    // barrel itself moving under him (the hold has no slope to read on a flat top: G10-5b). Not the world's time base, which
+    // moved it from 36.0 to 36.3 units: the MASS. The engine weighed every body 1, so a player standing on a barrel's edge
+    // tipped it out from under him; the original's barrel (density 1 over 28.6 x 37.7 units) is 4.15 times the player
+    // (density 0.5 over two circles of radius 9.1), and the port's bodies now weigh what the .ent files say
+    // (materials.json). The G10 verifier's pin, as for the ramp: within 1 unit for 420 ticks.
     if (LevelIsThere("level23a")) {
         const double barrelHeld = StandingDrift("level23a", 60, 420, ReadTuning().holdFriction, endY);
-        const double barrelLoose = StandingDrift("level23a", 60, 420, kNoHold, looseEndY);
-        std::printf("  level23a idle 420 ticks: held %.3f units from where it stood (y %+.3f), without the hold %.1f (y %+.3f)\n",
-                    barrelHeld, endY, barrelLoose, looseEndY);
+        const double barrelEvenWeights = StandingDrift("level23a", 60, 420, ReadTuning().holdFriction, looseEndY, true);
+        std::printf("  level23a idle 420 ticks: %.3f units from where it stood (y %+.3f), with every body weighing 1 (the engine's, "
+                    "and the port's until step 152) %.1f (y %+.3f)\n",
+                    barrelHeld, endY, barrelEvenWeights, looseEndY);
+        CHECK_MSG(barrelHeld < 1.0, "level23a: the idle player moved " + std::to_string(barrelHeld) + " units");
+        // The regression itself, so the pin cannot pass on a level that never moved him.
+        CHECK_MSG(barrelEvenWeights > 10.0, "level23a: with even weights he moved " + std::to_string(barrelEvenWeights) + " units");
     }
 }
 

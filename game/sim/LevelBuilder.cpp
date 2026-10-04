@@ -1,9 +1,13 @@
 #include "sim/LevelBuilder.hpp"
 
 #include "core/Components.hpp"
+#include "core/Json.hpp"
 #include "sim/Prism.hpp"
 #include "sim/Units.hpp"
 
+#include <cmath>
+#include <fstream>
+#include <sstream>
 #include <vector>
 
 namespace MagicPortals::LevelBuilder {
@@ -17,6 +21,8 @@ using Supersonic::TagComponent;
 using Supersonic::TransformComponent;
 
 namespace {
+
+constexpr double kPi = 3.14159265358979323846;
 
 glm::dvec2 VectorOf(const Tscn::Value* v) {
     if (v == nullptr || v->kind != Tscn::Value::Kind::Vector2) return glm::dvec2(0.0);
@@ -47,11 +53,17 @@ entt::entity Place(entt::registry& registry, const Tscn::Node& node, const std::
 
 bool IsEntityNode(const Tscn::Node& node) { return node.parent == "." && node.type == "Node2D"; }
 
-// A RigidBody2D's body: Godot's default material, and the plane's locks.
-void MakeRigid(entt::registry& registry, entt::entity entity, const Options& options) {
+// A RigidBody2D's body: its entity's material, no damping, and the plane's locks.
+void MakeRigid(entt::registry& registry, entt::entity entity, const Options& options, const Material& material,
+               double colliderAreaM2) {
     auto& rigid = registry.emplace<RigidBodyComponent>(entity);
-    rigid.friction = kBodyFriction;
-    rigid.restitution = kBodyRestitution;
+    rigid.friction = material.friction;
+    rigid.restitution = material.restitution;
+    rigid.mass = MassOf(material, colliderAreaM2);
+    // ETHPhysicsSimulator::CreateBody sets no damping on its b2BodyDef (Box2D's linear and angular damping
+    // are 0): the engine's default of 0.05 a second on spin is not the original's, and a stone rolls on.
+    rigid.linearDamping = 0.0f;
+    rigid.angularDamping = 0.0f;
     if (options.lockToPlane) {
         rigid.lockPosition = kPlaneLockPosition;
         rigid.lockRotation = kPlaneLockRotation;
@@ -85,6 +97,8 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
 
     const Tscn::Node& shape = *shapes.front();
     const double depth = isRigid ? kBodyDepthMetres : kStaticDepthMetres;
+    const Material material = MaterialOf(registry, Roles::EntityName(node));
+    double areaM2 = 0.0; // the collider's, for a body's mass
     const glm::dvec2 offset = VectorOf(shape.Find("position"));
     const entt::entity entity = Place(registry, node, node.name);
 
@@ -112,6 +126,14 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
         for (std::size_t i = 0; i + 1 < points.size(); i += 2) {
             outline.points.emplace_back(Units::ToMetres(points[i]), Units::ToMetres(-points[i + 1]));
         }
+        // The shoelace area of the outline.
+        double twice = 0.0;
+        for (std::size_t i = 0; i < outline.points.size(); ++i) {
+            const glm::vec2& a = outline.points[i];
+            const glm::vec2& b = outline.points[(i + 1) % outline.points.size()];
+            twice += static_cast<double>(a.x) * b.y - static_cast<double>(b.x) * a.y;
+        }
+        areaM2 = std::fabs(twice) * 0.5;
         ++out.hulls;
     } else if (shape.type == "CollisionShape2D") {
         const Tscn::Value* ref = shape.Find("shape");
@@ -127,11 +149,13 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
             box.size = glm::vec3(Units::ToMetres(size.x), Units::ToMetres(size.y), static_cast<float>(depth));
             box.center = centre;
             box.isTrigger = isArea;
+            areaM2 = static_cast<double>(Units::ToMetres(size.x)) * static_cast<double>(Units::ToMetres(size.y));
         } else if (resource->type == "CircleShape2D") {
             auto& sphere = registry.emplace<SphereColliderComponent>(entity);
             sphere.radius = Units::ToMetres(NumberOf(resource->Find("radius")));
             sphere.center = centre;
             sphere.isTrigger = isArea;
+            areaM2 = kPi * static_cast<double>(sphere.radius) * static_cast<double>(sphere.radius);
         } else {
             error = node.name + ": a " + resource->type + " is not a collision shape";
             return false;
@@ -142,7 +166,7 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
     }
 
     if (isRigid) {
-        MakeRigid(registry, entity, options);
+        MakeRigid(registry, entity, options, material, areaM2);
         ++out.rigids;
     } else if (isMover) {
         // Moved by the port and carrying what stands on it: kinematic, so the
@@ -150,15 +174,15 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
         // kinematic body is moved by code and reads no locks.
         auto& rigid = registry.emplace<RigidBodyComponent>(entity);
         rigid.isKinematic = true;
-        rigid.friction = kBodyFriction;
-        rigid.restitution = kBodyRestitution;
+        rigid.friction = material.friction;
+        rigid.restitution = material.restitution;
         ++out.movers;
     } else if (isArea) {
         ++out.areas;
     } else {
         auto& surface = registry.emplace<PhysicsMaterialComponent>(entity);
-        surface.friction = kStaticFriction;
-        surface.restitution = kStaticRestitution;
+        surface.friction = material.friction;
+        surface.restitution = material.restitution;
         ++out.statics;
     }
     out.entities[node.name] = entity;
@@ -167,6 +191,117 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
 }
 
 } // namespace
+
+namespace {
+
+// "crate.ent" and "crate" are the same entity: a node's entity_name carries the extension in some levels
+// and not in others.
+std::string WithoutExtension(const std::string& entityName) {
+    const std::string extension = ".ent";
+    if (entityName.size() > extension.size() &&
+        entityName.compare(entityName.size() - extension.size(), extension.size(), extension) == 0) {
+        return entityName.substr(0, entityName.size() - extension.size());
+    }
+    return entityName;
+}
+
+} // namespace
+
+Material Materials::Of(const std::string& entityName) const {
+    const auto found = byEntity.find(WithoutExtension(entityName));
+    return found == byEntity.end() ? Material{} : found->second;
+}
+
+bool Materials::Holds(const std::string& entityName) const {
+    return byEntity.find(WithoutExtension(entityName)) != byEntity.end();
+}
+
+bool LoadMaterials(const std::string& path, Materials& out, std::string& error) {
+    namespace Json = Supersonic::Json;
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        error = path + ": cannot read";
+        return false;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    // Named, not a temporary: the parser keeps a reference to what it reads.
+    const std::string content = text.str();
+    Json::Parser parser(content);
+    Json::Value root;
+    if (!parser.Parse(root)) {
+        error = path + ": " + parser.Error();
+        return false;
+    }
+    if (!root["groups"].IsArray() || root["groups"].AsArray().empty()) {
+        error = path + ": groups is a list of at least one group";
+        return false;
+    }
+    if (!root["restitution_applied"].IsBool()) {
+        error = path + ": restitution_applied is true or false";
+        return false;
+    }
+    if (!root["friction_applied"].IsBool()) {
+        error = path + ": friction_applied is true or false";
+        return false;
+    }
+    if (!root["held_friction"].IsNumber() || !(root["held_friction"].AsFloat() >= 0.0f)) {
+        error = path + ": held_friction is a number of at least 0";
+        return false;
+    }
+    Materials read;
+    read.restitutionApplied = root["restitution_applied"].AsBool();
+    read.frictionApplied = root["friction_applied"].AsBool();
+    read.heldFriction = root["held_friction"].AsFloat();
+    for (const Json::Value& group : root["groups"].AsArray()) {
+        if (!group["friction"].IsNumber() || !group["restitution"].IsNumber() || !group["entities"].IsArray()) {
+            error = path + ": every group has a friction, a restitution and a list of entities";
+            return false;
+        }
+        Material material;
+        material.decodedFriction = group["friction"].AsFloat();
+        // The .ent's friction where the table applies it, and where this group says it is safe to while the rest is held.
+        material.friction = (read.frictionApplied || group["apply_decoded_friction"].AsBool(false)) ? material.decodedFriction
+                                                                                                   : read.heldFriction;
+        material.density = group["density"].AsFloat(0.0f);
+        material.areaM2 = group["area_m2"].AsFloat(0.0f);
+        if (!(material.density >= 0.0f) || !(material.areaM2 >= 0.0f)) {
+            error = path + ": a density and an area are at least 0";
+            return false;
+        }
+        material.decodedRestitution = group["restitution"].AsFloat();
+        material.restitution = read.restitutionApplied ? material.decodedRestitution : kBodyRestitution;
+        // A friction below zero or a restitution outside [0, 1] describes no Box2D fixture.
+        if (!(material.decodedFriction >= 0.0f) || !(material.decodedRestitution >= 0.0f) ||
+            !(material.decodedRestitution <= 1.0f)) {
+            error = path + ": a friction is at least 0 and a restitution is between 0 and 1";
+            return false;
+        }
+        for (const Json::Value& name : group["entities"].AsArray()) {
+            if (!name.IsString() || name.AsString().empty()) {
+                error = path + ": an entity is a name";
+                return false;
+            }
+            if (!read.byEntity.emplace(WithoutExtension(name.AsString()), material).second) {
+                error = path + ": " + name.AsString() + " is in two groups";
+                return false;
+            }
+        }
+    }
+    out = std::move(read);
+    return true;
+}
+
+float MassOf(const Material& material, double colliderAreaM2) {
+    if (!(material.density > 0.0f)) return 1.0f;
+    const double area = material.areaM2 > 0.0f ? static_cast<double>(material.areaM2) : colliderAreaM2;
+    return area > 0.0 ? static_cast<float>(static_cast<double>(material.density) * area) : 1.0f;
+}
+
+Material MaterialOf(entt::registry& registry, const std::string& entityName) {
+    const Materials* table = registry.ctx().find<Materials>();
+    return table != nullptr ? table->Of(entityName) : Material{};
+}
 
 bool Build(const Tscn::Scene& scene, entt::registry& registry, const Options& options, Built& out,
            std::string& error) {
@@ -218,12 +353,13 @@ bool ShapeBoundsPx(const Tscn::Scene& scene, const Tscn::Node& node, glm::dvec2&
 }
 
 entt::entity BuildRigidCircle(entt::registry& registry, const std::string& tag, const glm::dvec2& atPx,
-                              double radiusPx, const Options& options) {
+                              double radiusPx, const Options& options, const std::string& entityName) {
     const entt::entity entity = registry.create();
     registry.emplace<TransformComponent>(entity).position = Units::ToWorld(atPx.x, atPx.y);
     registry.emplace<TagComponent>(entity, TagComponent{tag});
     registry.emplace<SphereColliderComponent>(entity).radius = Units::ToMetres(radiusPx);
-    MakeRigid(registry, entity, options);
+    const double radiusM = static_cast<double>(Units::ToMetres(radiusPx));
+    MakeRigid(registry, entity, options, MaterialOf(registry, entityName), kPi * radiusM * radiusM);
     return entity;
 }
 

@@ -273,7 +273,7 @@ bool StepSweep(const Roundabout& rules, Sweep& sweep, bool first, const glm::vec
     return true;
 }
 
-void State::Tick(entt::registry& registry, double dt, entt::entity playerBody, double playerRatio) {
+void State::Tick(entt::registry& registry, double dt, double velocityRatio) {
     lapsNow.clear();
     if (wells.empty() || dt <= 0.0f) return;
 
@@ -288,7 +288,7 @@ void State::Tick(entt::registry& registry, double dt, entt::entity playerBody, d
         for (std::size_t i = 0; i < wells.size(); ++i) {
             const Well& well = wells[i];
             const glm::vec3 pull = Pull(well, rules, bodyPx, noGravity, dt);
-            rigid.velocity += entity == playerBody ? pull * static_cast<float>(playerRatio) : pull;
+            rigid.velocity += pull * static_cast<float>(velocityRatio);
 
             // And the sweep, from the same point: ETHCallback_gravity_area's
             // forceDir and inRange (#82-98), normalize in floats (GameMath.h:755-761).

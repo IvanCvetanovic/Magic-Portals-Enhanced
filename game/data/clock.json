@@ -60,7 +60,10 @@
     "measured at 40-44 u/s on an emulator running 17-19 frames a second, 70 x 17/30 = 39.7 and 70 x 19/30 = 44.3 u/s",
     "(out/parity/footage/F10.md section 3.1); at 60 frames a second the same shot is 140 u/s. The port's solver steps its own tick, so the",
     "player - the one body whose velocity and gravity the port carries in the original's Box2D units - is carried at",
-    "SimRatio = physics_step_s / tick = 2 times the original's velocity (ScriptClock::SimRatio; planning step 148)."
+    "SimRatio = physics_step_s / tick = 2 times the original's velocity (ScriptClock::SimRatio; planning step 148). From planning",
+    "step 152 EVERY dynamic body is: the world's gravity at SimRatio squared (Game::UseWorldGravity), every velocity the sim writes at",
+    "SimRatio (a minion's and a knight's walk, a gravity well's pull) and every one a callback reads divided by it (the impacts, a",
+    "beholder's rock): ScriptClock.hpp, \"THE CARRIED FRAME\"."
   ],
   "matched_hz": 60,
   "snap_ms": 0.001,

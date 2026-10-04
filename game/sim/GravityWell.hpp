@@ -178,10 +178,10 @@ struct State {
     // all. That is the port's reading of DynamicBodyChooser. Each body's sweep
     // round each well is stepped from the same point the pull is measured from.
     //
-    // `playerBody`'s velocity is carried at `playerRatio` times the original's (ScriptClock::SimRatio;
-    // Player.hpp says why), and the pull is a velocity the original adds to its own, so the player's
-    // is given that many times over. Every other body is carried at the original's own, ratio 1.
-    void Tick(entt::registry& registry, double dt, entt::entity playerBody = entt::null, double playerRatio = 1.0);
+    // Every body is carried at `velocityRatio` times the original's velocity (ScriptClock::SimRatio,
+    // planning step 152), and the pull is a velocity the original adds to its own once a frame, so each
+    // is given it that many times over: the player's, a crate's, a stone's, a minion's alike.
+    void Tick(entt::registry& registry, double dt, double velocityRatio = 1.0);
 
     const Well* Find(const std::string& name) const;
 };

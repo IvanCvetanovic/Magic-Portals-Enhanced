@@ -1,0 +1,200 @@
+{
+  "_about": [
+    "What each entity's bodies are made of: the friction and restitution of its .ent, which the original hands the fixture it",
+    "builds (planning step 152, WT). DECODED, not guessed - and BOTH HELD, not applied, because the engine's solver does not do what",
+    "Box2D does with either (friction_applied and restitution_applied below say what, measured). What the port's bodies are built with",
+    "is the table's held_friction, the Godot project's 0 restitution, and the .ent's density as mass; the .ent's own friction and",
+    "restitution are kept here, read back by test_mp_timebase against the original's files, for the engine step that makes them true.",
+    "ETHPhysicsSimulator::CreateBody (reference/ethanon/toolkit/Source/src/",
+    "engine/Physics/ETHPhysicsSimulator.cpp:102-109) sets fixtureDef.friction = entity->GetFriction(idx) and",
+    "fixtureDef.restitution = entity->GetRestitution(idx) from the <Entity friction=... restitution=...> attributes of the .ent",
+    "(ETHEntityProperties.cpp reads them), and sets nothing else a material is made of: no damping (b2BodyDef's linearDamping and",
+    "angularDamping are Box2D's 0), so the port's bodies are built with none either (LevelBuilder::MakeRigid).",
+    "",
+    "The solver mixes two surfaces as Box2D does and the engine's PhysicsSystem does: friction by the square root of the product",
+    "(CombineFriction), restitution by the larger (CombineRestitution). The port's player has friction 0 of its own (Player::kFriction:",
+    "its velocity is set every tick, and a gripping capsule fights its own walk), so a floor's friction touches only the loose bodies:",
+    "a crate, a stone, a barrel, a minion. A group whose DECODED friction is 0 (a minion, a gravity agent) applies it even while the",
+    "rest is held (apply_decoded_friction): 0 against any surface is 0, so no friction impulse is solved and the engine's solve is",
+    "not in the loop.",
+    "",
+    "Every number below was read off the .ent in reference/extracted/assets/entities (the attribute named in each group's _source),",
+    "and the _no_emissive and _low_emissive variants of an entity carry the same pair, each checked. An entity this table does not",
+    "hold is built with the Godot project's constants (LevelBuilder::kBodyFriction 1, kBodyRestitution 0): these are the entity names",
+    "of the 128 levels that have no .ent among the extracted assets - moving_platform, moving_platform_single, enemy_killer, lava, bounce,",
+    "no_restitution, collision_128_sqr, single_block, double_block, square_platform_22, rocket_bridge, motor_seesaw - so their pair is",
+    "not decoded and stays the old guess (listed in the step's LEFT FOR LATER).",
+    "",
+    "DENSITY is Box2D's mass: b2Body::ResetMassData sums density x area over a body's fixtures, and the group's `density` is the .ent's own",
+    "(a static's is 0, and `fixtureDef.density = entity->IsStatic() ? 0 : density`, ETHPhysicsSimulator.cpp:104). The port's mass is that",
+    "density times the AREA of the collider it builds - a box's, a circle's, a hull's, in metres - or `area_m2` where the port's collider is",
+    "simpler than the original's: a minion, a knight and the player are two circles of radius 1.3 x 14/2 = 9.1 units (0.182 m, the",
+    "compound `body {... radius = 1.3}` of ETHCompoundShape.cpp:69 over the 14 x 36 box), 2 x pi x 0.182^2 = 0.208139 m^2, and the port",
+    "builds one circle for a minion and a capsule for the player. So the player weighs 0.104, a barrel 0.432, a crate 0.538, a stone 1.131:",
+    "a barrel is 4.15 times the player, where every body weighed 1 before (planning step 152; it is what keeps 2-24's idle player on the",
+    "barrel, whose edge he stands on).",
+    "An entity with no density here, or that the table does not hold, keeps the engine's mass of 1."
+  ],
+
+  "friction_applied": false,
+  "_friction_applied": [
+    "WHETHER A BODY IS BUILT WITH ITS ENTITY'S FRICTION. Today it is not: every friction below is DECODED and read back from its .ent",
+    "(test_mp_timebase), but a body and a surface are built with held_friction (below), as the port's were until planning step 152's",
+    "first build, and the .ent's own friction waits for an engine step. WHY, MEASURED. The engine's friction solve walks a RESTING box",
+    "sideways at a combined friction of about 0.4 to 0.6, and the decoded pairs of the game are in it: a crate on a platform is",
+    "sqrt(0.96 x 0.2) = 0.438, a barrel on a platform sqrt(0.7 x 0.2) = 0.374, on a block00 sqrt(0.7 x 0.4) = 0.529. Nothing of the",
+    "port is in the loop on the rig (test_mp_timebase, TheEngineWalksARestingBoxSidewaysAtTheDecodedFriction): a flat 30 x 30 crate, mass 0.144",
+    "or 1, set 1 unit over a flat floor, falls, lies level (rotation 0.000 deg, no spin, the contact normal exactly vertical) and then",
+    "accelerates along the floor to 5.745 units a second in 30 ticks and keeps it for ever, awake; a 29 x 38 barrel 8.78. The same rig at",
+    "1.0 against 1.0 sleeps after 30 ticks. On level 2-08 (level7a) a scan of the combined friction, every body at one value, over an idle",
+    "420 ticks: 0.1, 0.2 and 0.3 slide a few units and stop, 0.44 and 0.5 creep at the end of the run, 0.6 and above hold. In the 128",
+    "levels (test_mp_pictures --sweep --bodies, tick 420, no input) 13 loose bodies, every one asleep at rest on the build before, were awake",
+    "at a constant 5.65 to 6.21 (nine crates) or 8.78 (four barrels) units a second with the decoded frictions: 2-05, 2-08 (two), 2-14,",
+    "2-15 (two), 2-17, 2-28, 2-32, 3-12, 3-15, 3-19, 3-30; 2-08's crate 854 reached button_827 and opened door_lift_823 on tick 264 with",
+    "nobody there. With every friction held there are none.",
+    "CAUSE, AS A HYPOTHESIS (the engine is not this step's to change). PhysicsSystem's velocity solve (PhysicsSystem.cpp, the loop",
+    "from `Velocity solve`, friction from about line 2058) derives the friction tangent AGAIN on every pass from the contact's current",
+    "relative velocity, and clamps the accumulated tangent impulse as one number against mu x the accumulated normal impulse as if along a",
+    "fixed axis, so after an overshoot the reversed direction has nothing left to give. The port's boxes have a depth in z, so a face on a",
+    "face is FOUR points, two to a corner, solved one after another (the engine's manifold count and order were NOT inspected). A Python MODEL",
+    "of that loop (out/parity/program/WT/fix1/solver_sim.py: four points, two at the left corner and then two at the right, 8 passes, gravity",
+    "40 m/s^2, no position correction) walks a 30 x 30 box at 5.55 units a second at 0.438 against the engine's 5.745, holds it at 0.3 and 1.0,",
+    "and walks it 0.00 at every friction when the tangent is held fixed per contact (Box2D's cross(normal, 1), the signed accumulation); but it",
+    "depends on that assumed point order (left, right, left, right gives 0.15) and at 0.6 it predicts 1.6 where the engine holds. A hypothesis",
+    "consistent with the measured band, not a diagnosis: the engine step that settles it is the owner's. TURN friction_applied ON WHEN",
+    "test_mp_timebase's tripwire fails (a resting crate at the decoded pair no longer creeps), then rerun every suite and the routes."
+  ],
+  "held_friction": 1.0,
+  "_held_friction": [
+    "The Godot project's friction, 1 for a RigidBody2D and a StaticBody2D alike (LevelBuilder::kBodyFriction, kStaticFriction), which the",
+    "port's bodies had before planning step 152 and wave 3a's 86 routes were flown on. A body and a surface at 1 against 1 are 1: nothing",
+    "slides, nothing creeps (the rig above sleeps after 30 ticks). Not a decoded number: a held one, with the decoded numbers beside it."
+  ],
+
+  "restitution_applied": false,
+  "_restitution_applied": [
+    "WHETHER A BODY IS BUILT WITH ITS ENTITY'S RESTITUTION. Today it is not: every restitution below is DECODED and read back from its .ent",
+    "(test_mp_timebase), but the bodies are built with the Godot project's 0 (LevelBuilder::kBodyRestitution), and friction alone is applied.",
+    "WHY: the engine's solver applies restitution to a SPECULATIVE contact - a pair that is apart but closing within one step's travel",
+    "(PhysicsSystem.cpp:1574-1631: targetVelocity = max(-restitution x approach, -allowedApproach) for a pair with a gap) - so a body",
+    "with a restitution turns round BEFORE it touches, where Box2D turns it round AT the touch (a manifold has points only when the shapes",
+    "meet). MEASURED (test_mp_timebase, TheEngineBouncesAStoneBeforeItTouches): a stone of 0.15 dropped 100 units onto a floor turns round",
+    "5.00 units over it, falling at 567 px/s; the same stone with no restitution never turns round. With the decoded values applied,",
+    "test_mp_demolish's stone broke no wall (3 checks: it turned round short of the breakable it was thrown at) and one of test_mp_pictures'",
+    "walks changed; and any code of the port that asks whether two bodies TOUCH reads that gap. The engine is not this step's to change, so the flag",
+    "stays false and the bounce is a row of its own (LEFT FOR LATER: an engine step that applies restitution at the contact). Turn it on",
+    "there, and the suites that read a touch say what else has to follow."
+  ],
+
+  "groups": [
+    {
+      "entities": ["crate", "crate_low_emissive", "crate_no_emissive", "crate_small", "crate_small_no_emissive"],
+      "friction": 0.96,
+      "restitution": 0.2,
+      "density": 0.4,
+      "_source": "crate.ent, crate_low_emissive.ent, crate_no_emissive.ent, crate_small.ent, crate_small_no_emissive.ent: <Entity friction=\"0.960000\" density=\"0.400000\" restitution=\"0.200000\">"
+    },
+    {
+      "entities": ["barrel_bomb", "barrel_bomb_low_emissive"],
+      "friction": 0.7,
+      "restitution": 0.0,
+      "density": 1.0,
+      "_source": "barrel_bomb.ent, barrel_bomb_low_emissive.ent: <Entity friction=\"0.700000\" density=\"1.000000\" restitution=\"0.000000\" gravityScale=\"1.000000\">"
+    },
+    {
+      "entities": ["rolling_stone", "rolling_stone_no_emissive"],
+      "friction": 0.025,
+      "restitution": 0.15,
+      "density": 1.0,
+      "_source": "rolling_stone.ent, rolling_stone_no_emissive.ent: <Entity friction=\"0.025000\" density=\"1.000000\" restitution=\"0.150000\"> - a stone that skids more than it grips (a launcher's, a placed one and the beholder's rock are all this entity)"
+    },
+    {
+      "entities": ["wood_piece", "wood_piece_small"],
+      "friction": 0.6,
+      "restitution": 0.0,
+      "density": 1.0,
+      "_source": "wood_piece.ent, wood_piece_small.ent: <Entity friction=\"0.600000\" density=\"1.000000\" restitution=\"0.000000\">"
+    },
+    {
+      "entities": ["seesaw", "spinning_platform", "spinning_platform_no_emissive"],
+      "friction": 1.0,
+      "restitution": 0.0,
+      "density": 1.0,
+      "_source": "seesaw.ent, spinning_platform.ent, spinning_platform_no_emissive.ent: <Entity friction=\"1.000000\" density=\"1.000000\" restitution=\"0.000000\" gravityScale=\"1.000000\">"
+    },
+    {
+      "entities": ["minion", "ghost_minion"],
+      "friction": 0.0,
+      "apply_decoded_friction": true,
+      "restitution": 0.0,
+      "density": 0.5,
+      "area_m2": 0.208139,
+      "_source": "minion.ent, ghost_minion.ent: <Entity friction=\"0.000000\" density=\"0.500000\" restitution=\"0.000000\" gravityScale=\"1.000000\"> - a frictionless body: it coasts where its drive stops (minions.json explains what that does to a lone guard)"
+    },
+    {
+      "entities": ["dragon_knight"],
+      "friction": 0.9,
+      "restitution": 0.0,
+      "density": 0.5,
+      "area_m2": 0.208139,
+      "_source": "dragon_knight.ent: <Entity friction=\"0.900000\" density=\"0.500000\" restitution=\"0.000000\" gravityScale=\"1.000000\">"
+    },
+    {
+      "entities": ["block00", "block00_low_emissive", "block00_no_emissive", "wall04", "wall04_low_emissive", "wall04_no_emissive", "collision_128x768", "collision_192x32", "collision_768x128"],
+      "friction": 0.4,
+      "restitution": 0.0,
+      "_source": "block00*.ent, wall04*.ent, collision_128x768.ent, collision_192x32.ent, collision_768x128.ent: <Entity static=\"1\" friction=\"0.400000\" density=\"0.000000\" restitution=\"0.000000\">"
+    },
+    {
+      "entities": ["platform", "platform_low_emissive", "platform_no_emissive", "double_block_plat", "double_block_plat_low_emissive", "double_block_plat_no_emissive", "single_block_plat", "single_block_plat_low_emissive", "single_block_plat_no_emissive", "carranca", "carranca_right", "breakable_wall", "breakable_wall_no_emissive", "light_wall", "lift"],
+      "friction": 0.2,
+      "restitution": 0.0,
+      "_source": "platform*.ent, double_block_plat*.ent, single_block_plat*.ent, carranca.ent, carranca_right.ent, breakable_wall*.ent, light_wall.ent, lift.ent: <Entity friction=\"0.200000\" restitution=\"0.000000\"> (lift.ent is the only one with a density, 1: a lift is a static body the script moves)"
+    },
+    {
+      "entities": ["ramp_left", "ramp_left_no_emissive", "ramp_right", "ramp_right_no_emissive"],
+      "friction": 0.25,
+      "restitution": 0.0,
+      "_source": "ramp_left*.ent, ramp_right*.ent: <Entity static=\"1\" friction=\"0.250000\" density=\"0.000000\" restitution=\"0.000000\">"
+    },
+    {
+      "entities": ["bridge01", "bridge01_no_emissive"],
+      "friction": 0.5,
+      "restitution": 0.0,
+      "_source": "bridge01.ent, bridge01_no_emissive.ent: <Entity static=\"1\" friction=\"0.500000\" density=\"0.000000\" restitution=\"0.000000\">"
+    },
+    {
+      "entities": ["door_lift", "door_locked"],
+      "friction": 1.0,
+      "restitution": 0.2,
+      "_source": "door_lift.ent, door_locked.ent: <Entity static=\"1\" friction=\"1.000000\" density=\"1.000000\" restitution=\"0.200000\">"
+    },
+    {
+      "entities": ["gravity_agent"],
+      "friction": 0.0,
+      "apply_decoded_friction": true,
+      "restitution": 0.1,
+      "_source": "gravity_agent.ent: <Entity static=\"1\" shape=\"2\" friction=\"0.000000\" density=\"0.000000\" restitution=\"0.100000\" gravityScale=\"1.000000\">"
+    },
+    {
+      "entities": ["static_sphere"],
+      "friction": 0.3,
+      "restitution": 0.04,
+      "_source": "static_sphere.ent: <Entity static=\"1\" shape=\"2\" friction=\"0.300000\" density=\"1.000000\" restitution=\"0.040000\">"
+    },
+    {
+      "entities": ["dark_mage"],
+      "friction": 0.9,
+      "restitution": 0.0,
+      "density": 0.5,
+      "area_m2": 0.208139,
+      "_source": "dark_mage.ent: <Entity friction=\"0.900000\" density=\"0.500000\" restitution=\"0.000000\" gravityScale=\"1.000000\"> - the player. Its MASS is the one number of this group the port uses (Player::Spawn); its friction is the port's own 0 (Player::kFriction: a gripping capsule fights its own walk), and the 0.9 is the hold's (player.json hold.friction)"
+    },
+    {
+      "entities": ["anchor"],
+      "friction": 1.0,
+      "restitution": 0.0,
+      "_source": "anchor.ent: <Entity static=\"1\" shape=\"2\" friction=\"1.000000\" density=\"0.000000\" restitution=\"0.000000\" gravityScale=\"1.000000\">"
+    }
+  ]
+}

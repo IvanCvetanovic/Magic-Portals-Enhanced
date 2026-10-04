@@ -417,7 +417,9 @@ void aKillerFloorAddsItToo() {
 void itFliesInOnFiveWaypoints() {
     Run run;
     if (!Begin(kLevel, run)) return;
-    Hold(run, kBehindTheLine, 10);
+    // Long enough to land on its patrol: at this suite's bare tick the world falls at the original's own 500 units a
+    // second squared (planning step 152), not the 980 it fell at, and ten ticks no longer bring the knight down.
+    Hold(run, kBehindTheLine, 30);
     // F15's knight died at about (640, 208) (its section 3, P0 of the fit).
     const double killX = 640.0;
     if (!BurnTheKnight(run, &killX)) {
@@ -428,7 +430,8 @@ void itFliesInOnFiveWaypoints() {
     const glm::dvec2 spawn = ghost.spawnPx;
     const glm::dvec2 anchor = ghost.anchorPx;
     const glm::dvec2 quarter = spawn + (anchor - spawn) * 0.25;
-    CHECK_MSG(std::fabs(spawn.x - killX) < 1.0 && std::fabs(spawn.y - 208.0) < 3.0,
+    // (Within one tick of the knight's walk of where it was put: 1.08 units at this suite's bare tick.)
+    CHECK_MSG(std::fabs(spawn.x - killX) < 1.5 && std::fabs(spawn.y - 208.0) < 3.0,
               "it is added where the knight died, on its patrol: (" + std::to_string(spawn.x) + ", " +
                   std::to_string(spawn.y) + ")");
 

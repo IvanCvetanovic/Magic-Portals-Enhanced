@@ -89,6 +89,13 @@ add_mp_test(test_mp_clock)
 # clock.json, both committed: no converted level, so no skip.
 add_mp_test(test_mp_player)
 
+# The world's time base: every dynamic body in the original's, by the one mechanism the player was carried
+# by (planning step 152) - the world's gravity at SimRatio squared, a crate's fall and a stone's roll against the
+# same solver at the original's own 1/30 s, a minion's and a knight's walk, the .ent materials, and Box2D's
+# clamp on every body. The fall, the roll and the table are pure; the level cases skip themselves without
+# the converted levels, so the suite takes no SKIPS_WITH_77.
+add_mp_test(test_mp_timebase)
+
 # Where a picture is drawn between ticks: the tick's own place, as the original draws it, the camera
 # included, and the engine's smoothing kept only where the display outruns the tick (planning step
 # 150). The rules and the rate watch are pure; the walk and the level sample read the converted levels

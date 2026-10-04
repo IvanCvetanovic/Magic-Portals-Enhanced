@@ -99,8 +99,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     };
 
     Rules read;
-    if (!number("patrol", "speed_px_per_step", read.speedPxPerStep)) return false;
-    if (!number("patrol", "step_ms", read.stepMs)) return false;
+    if (!number("patrol", "speed", read.speed)) return false;
+    if (!number("patrol", "elapsed_cap_ms", read.elapsedCapMs)) return false;
     if (!number("patrol", "arrive_px", read.arrivePx)) return false;
     if (!number("patrol", "settle_px", read.settlePx)) return false;
     if (!number("patrol", "brake", read.brake)) return false;
@@ -142,12 +142,12 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     // reached, so the walk goes past its waypoint and never turns round. And a
     // settle inside the arrival inverts the original's two tests, which is the
     // one mistake this module exists to avoid making.
-    if (read.speedPxPerStep <= 0.0) {
-        error = path + ": patrol.speed_px_per_step is above zero";
+    if (read.speed <= 0.0) {
+        error = path + ": patrol.speed is above zero";
         return false;
     }
-    if (read.stepMs <= 0.0) {
-        error = path + ": patrol.step_ms is above zero";
+    if (read.elapsedCapMs <= 0.0) {
+        error = path + ": patrol.elapsed_cap_ms is above zero";
         return false;
     }
     if (read.arrivePx <= 0.0) {
@@ -195,9 +195,12 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-double State::SpeedPxPerSecond() const {
-    if (rules.stepMs <= 0.0) return 0.0;
-    return rules.speedPxPerStep * 1000.0 / rules.stepMs;
+double WalkOriginal(const Rules& rules, const ScriptClock::Step& step) {
+    return ScriptClock::ScriptSpeed(rules.speed, rules.elapsedCapMs, step);
+}
+
+double WalkCarried(const Rules& rules, const ScriptClock::Step& step) {
+    return ScriptClock::CarriedVelocity(WalkOriginal(rules, step), step);
 }
 
 std::vector<entt::entity> State::Spawn(entt::registry& registry) {
@@ -205,7 +208,7 @@ std::vector<entt::entity> State::Spawn(entt::registry& registry) {
     for (Minion& minion : minions) {
         if (minion.body != entt::null) continue;
         minion.body = LevelBuilder::BuildRigidCircle(registry, minion.name, minion.spawnPx, rules.bodyRadiusPx,
-                                                     LevelBuilder::Options{});
+                                                     LevelBuilder::Options{}, minion.entity);
         if (minion.body == entt::null) continue;
 
         // minion.ent carries fixedRotation="1", and here that is not a detail. The
@@ -233,7 +236,7 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
     // turn rolls under friction through the post it is meant to hold.
     minion.body =
         LevelBuilder::BuildRigidCircle(registry, minion.name, minion.spawnPx, rules.bodyRadiusPx,
-                                       LevelBuilder::Options{});
+                                       LevelBuilder::Options{}, minion.entity);
     if (minion.body == entt::null) return entt::null;
     registry.get<RigidBodyComponent>(minion.body).lockRotation = glm::bvec3(true, true, true);
 
@@ -241,12 +244,13 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
     return minion.body;
 }
 
-void State::Tick(entt::registry& registry, double dt) {
+void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     // Taken first, as Turrets::Tick takes its spent fireballs: what the tick
     // after this one destroys is what the layer reads next, and the last is gone.
     deaths.clear();
-    const double ms = static_cast<double>(dt) * 1000.0;
-    const float speed = Units::ToMetres(SpeedPxPerSecond());
+    const double ms = ScriptClock::Ms(step);
+    // Metres a second the body carries: the original's walk at the tick's SimRatio (WalkCarried).
+    const float speed = static_cast<float>(WalkCarried(rules, step));
 
     for (Minion& minion : minions) {
         minion.arm = Arm::None;

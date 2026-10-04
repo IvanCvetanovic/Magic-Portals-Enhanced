@@ -97,7 +97,7 @@ void TheRulesAreTheDecode() {
     const Cutscene::Rules::Knight& knight = rules.knight;
     CHECK(knight.spawn == "dragon_knight_spawn" && knight.entity == "dragon_knight.ent");
     CHECK(knight.waypointPrefix == "waypoint" && knight.holdKey == "hold");
-    CHECK(knight.speedPxPerStep == 1.7);
+    CHECK(knight.speed == 1.7 && knight.elapsedCapMs == 66.0);
     CHECK(knight.arrivePx == 16.0);
     CHECK(knight.finishOffsetPx == glm::dvec2(16.0, -16.0));
     CHECK(knight.walkFirstColumn == 0 && knight.walkLastColumn == 3 && knight.walkStrideMs == 120.0);
@@ -130,7 +130,7 @@ void RulesThatStopACutsceneAreRefused() {
     };
     refused("\"launch_ms\": 7600.0", "\"launch_ms\": 0.0");
     refused("\"bridge_span_ms\": 3800.0", "\"bridge_span_ms\": 0.0");
-    refused("\"speed_px_per_step\": 1.7", "\"speed_px_per_step\": 0.0");
+    refused("\"speed\": 1.7", "\"speed\": 0.0");
     refused("\"walk_last_column\": 3", "\"walk_last_column\": 2.5");
     refused("\"track\": \"rocket\"", "\"track\": \"\"");
     std::filesystem::remove_all(dir, ec);
@@ -276,8 +276,9 @@ void ThreeLevelsSetADelayAndEachPlaysItsCutscene() {
 
 // 2-32's knight, through the port's own tick: added at its spawn, it falls
 // undriven, arrives at waypoint0 within 16, holds 800 ms with nothing set, walks
-// right on row 2 at 1.7 px a step and deletes itself within 16 of waypoint1 - well
-// inside the level's 6600 ms.
+// right on row 2 at scale(1.7) metres x 16 / 33.33 ms of the original's physics - 81.6 units a
+// second carried at the layer's tick (planning step 152; 51 when this read 1.7 px a step) - and
+// deletes itself within 16 of waypoint1 - well inside the level's 6600 ms.
 void TheKnightWalksInBeforeTheMedal() {
     if (!LevelsThere()) {
         std::printf("  the knight skipped: no converted levels at %s\n", kLevels.c_str());
@@ -304,6 +305,15 @@ void TheKnightWalksInBeforeTheMedal() {
     CHECK(knight.waypoints[1].atPx == glm::dvec2(2548.0, 175.0) && knight.waypoints[1].holdMs == 0.0);
     CHECK(knight.column == 0 && knight.row == 1); // startFrame 4 on a 4-wide sheet
 
+    // The layer's own tick: the script's 16 ms of the tick's 16.667, and the physics step of 1/30 s that every body
+    // is carried to (ScriptClock::SimRatio 2), which is what the decoded walk is stated in.
+    ScriptClock::Rules clock;
+    CHECK_MSG(ScriptClock::LoadRules(kPortData + "/clock.json", clock, error), error);
+    const ScriptClock::Step step = ScriptClock::TickStep(clock, kStep);
+    CHECK_MSG(Near(Cutscene::KnightWalkOriginal(rules, step), 1.7 * 16.0 / 33.33333507180214, 1e-9),
+              std::to_string(Cutscene::KnightWalkOriginal(rules, step)));
+    CHECK_MSG(Near(Cutscene::KnightWalkCarried(rules, step) * Units::kPixelsPerMetre, 81.6, 1e-4),
+              std::to_string(Cutscene::KnightWalkCarried(rules, step) * Units::kPixelsPerMetre));
     CHECK(Cutscene::SpawnKnight(rules, data.minions, registry, knight) != entt::null);
     // Its ENTITY point on the spawn.
     CHECK_MSG(glm::length(Cutscene::KnightEntityPx(data.minions, registry, knight) - knight.spawnPx) < 1e-3,
@@ -312,7 +322,7 @@ void TheKnightWalksInBeforeTheMedal() {
     const entt::entity body = knight.body;
     CHECK(Cutscene::SpawnKnight(rules, data.minions, registry, knight) == body);
 
-    const double frameMs = static_cast<double>(kStep) * 1000.0;
+    const double frameMs = ScriptClock::Ms(step);
     int arrivedTick = -1;
     int firstWalkTick = -1;
     int enteredTick = -1;
@@ -320,8 +330,8 @@ void TheKnightWalksInBeforeTheMedal() {
     bool leftRow = false;
     double walkFromX = 0.0;
     for (int tick = 1; tick <= 600 && enteredTick < 0; ++tick) {
-        Game::Tick(data, registry, level, 0.0f, kStep);
-        Cutscene::StepKnight(rules, data.minions, registry, knight, frameMs);
+        Game::Tick(data, registry, level, 0.0f, step);
+        Cutscene::StepKnight(rules, data.minions, registry, knight, step);
         if (arrivedTick < 0 && knight.hasStarted) arrivedTick = tick;
         if (knight.walked) {
             ++walks;
@@ -337,7 +347,7 @@ void TheKnightWalksInBeforeTheMedal() {
         }
     }
     // Its mean pace from the first walking update to the one it went in on: the
-    // velocity set on each is 1.7 px a 33.3333 ms step, 51 px/s.
+    // velocity set on each is 1.7 x 16 / 33.33 metres a second of the original's physics, carried at ratio 2.
     const double speedPxS = enteredTick > firstWalkTick && firstWalkTick > 0
                                 ? (knight.enteredAtPx.x - walkFromX) /
                                       (static_cast<double>(enteredTick - firstWalkTick) * static_cast<double>(kStep))
@@ -345,18 +355,19 @@ void TheKnightWalksInBeforeTheMedal() {
     std::printf("  knight: at waypoint0 on tick %d, walks from %d, in on %d at %s (%d walking ticks, %.2f px/s)\n",
                 arrivedTick, firstWalkTick, enteredTick, Show(knight.enteredAtPx).c_str(), walks, speedPxS);
     CHECK(arrivedTick > 0);
-    // The hold: 800 ms from the arrival, nothing driven before it passes.
-    CHECK_MSG(firstWalkTick - arrivedTick >= 48 && firstWalkTick - arrivedTick <= 50,
+    // The hold: 800 ms from the arrival, nothing driven before it passes - the script's 16 ms a tick, so the
+    // 51st tick after the arrival is the first past it.
+    CHECK_MSG(firstWalkTick - arrivedTick >= 50 && firstWalkTick - arrivedTick <= 52,
               std::to_string(firstWalkTick - arrivedTick) + " ticks between arriving and walking");
     CHECK(!leftRow);
-    CHECK_MSG(std::fabs(speedPxS - 51.0) < 1.0, std::to_string(speedPxS));
+    CHECK_MSG(std::fabs(speedPxS - 81.6) < 1.0, std::to_string(speedPxS));
     CHECK(enteredTick > 0);
     CHECK_MSG(enteredTick * frameMs < 6600.0, std::to_string(enteredTick * frameMs) + " ms after its spawn");
     CHECK_MSG(glm::length(knight.enteredAtPx - knight.waypoints[1].atPx) < rules.knight.arrivePx,
               Show(knight.enteredAtPx));
     CHECK(knight.gone && knight.body == entt::null && !registry.valid(body));
     // And after it has gone nothing moves it again.
-    Cutscene::StepKnight(rules, data.minions, registry, knight, frameMs);
+    Cutscene::StepKnight(rules, data.minions, registry, knight, step);
     CHECK(!knight.entered && !knight.walked);
 }
 

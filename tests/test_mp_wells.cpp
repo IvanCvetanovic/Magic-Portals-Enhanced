@@ -410,36 +410,47 @@ void ItTakesTheLooseBodiesOnly() {
     CHECK(after < before);
 }
 
-// The pull is a velocity the original adds to a body's own Box2D velocity each frame, and the player's is
-// carried at ScriptClock::SimRatio times the original's (Player.hpp, planning step 148): so the player is
-// given the pull that many times over, and a body carried in the original's own units (ratio 1) is not.
-void ThePlayerIsPulledAtTheRatioItIsCarriedAt() {
+// The pull is a velocity the original adds to a body's own Box2D velocity each frame, and EVERY body is carried at
+// ScriptClock::SimRatio times the original's (ScriptClock.hpp, planning step 152; the player's only, until then):
+// so every dynamic body is given the pull that many times over - the player's, a crate's, anything's.
+void EveryBodyIsPulledAtTheRatioItIsCarriedAt() {
     Game::Data data;
     entt::registry registry;
     Game::Level level;
     if (!Open(kWeightless, data, registry, level)) return;
     if (level.wells.wells.empty()) return;
     const GravityWell::Well& well = level.wells.wells.front();
-    const glm::dvec2 startPx = well.atPx + glm::dvec2(well.radiusPx * 0.5, 0.0);
-    const glm::vec3 start = Units::ToWorld(startPx.x, startPx.y);
-    auto& transform = registry.get<TransformComponent>(level.player);
-    transform.position = glm::vec3(start.x, start.y, transform.position.z);
-    auto& rigid = registry.get<RigidBodyComponent>(level.player);
-
-    rigid.velocity = glm::vec3(0.0f);
-    level.wells.Tick(registry, 0.016);
-    const glm::vec3 once = rigid.velocity;
-    rigid.velocity = glm::vec3(0.0f);
-    level.wells.Tick(registry, 0.016, level.player, 2.0);
-    const glm::vec3 twice = rigid.velocity;
-    CHECK_MSG(glm::length(once) > 0.0f, "a pull at half the radius");
-    CHECK_MSG(glm::length(twice - 2.0f * once) < 1e-6f,
-              "the player's pull at ratio 2 is twice the body's own: " + std::to_string(glm::length(twice)) + " against " +
-                  std::to_string(glm::length(once)));
-    // A ratio for a body that is not the player's changes nothing.
-    rigid.velocity = glm::vec3(0.0f);
-    level.wells.Tick(registry, 0.016, entt::null, 2.0);
-    CHECK_MSG(glm::length(rigid.velocity - once) < 1e-6f, "and a ratio with no player named is nobody's");
+    const auto place = [&](entt::entity body, const glm::dvec2& atPx) {
+        const glm::vec3 at = Units::ToWorld(atPx.x, atPx.y);
+        auto& transform = registry.get<TransformComponent>(body);
+        transform.position = glm::vec3(at.x, at.y, transform.position.z);
+        registry.get<RigidBodyComponent>(body).velocity = glm::vec3(0.0f);
+    };
+    // A loose body of no particular kind, in the well's reach on the other side from the player.
+    const entt::entity crate = registry.create();
+    registry.emplace<TransformComponent>(crate);
+    registry.emplace<RigidBodyComponent>(crate);
+    const glm::dvec2 playerPx = well.atPx + glm::dvec2(well.radiusPx * 0.5, 0.0);
+    const glm::dvec2 cratePx = well.atPx - glm::dvec2(0.0, well.radiusPx * 0.5);
+    const auto pulls = [&](double ratio, glm::vec3& player, glm::vec3& other) {
+        place(level.player, playerPx);
+        place(crate, cratePx);
+        level.wells.Tick(registry, 0.016, ratio);
+        player = registry.get<RigidBodyComponent>(level.player).velocity;
+        other = registry.get<RigidBodyComponent>(crate).velocity;
+    };
+    glm::vec3 playerOnce, crateOnce, playerTwice, crateTwice;
+    pulls(1.0, playerOnce, crateOnce);
+    pulls(2.0, playerTwice, crateTwice);
+    CHECK_MSG(glm::length(playerOnce) > 0.0f && glm::length(crateOnce) > 0.0f, "a pull at half the radius, on both");
+    CHECK_MSG(glm::length(playerTwice - 2.0f * playerOnce) < 1e-6f,
+              "the player's pull at ratio 2 is twice its own at 1: " + std::to_string(glm::length(playerTwice)) +
+                  " against " + std::to_string(glm::length(playerOnce)));
+    CHECK_MSG(glm::length(crateTwice - 2.0f * crateOnce) < 1e-6f,
+              "and so is a crate's: " + std::to_string(glm::length(crateTwice)) + " against " +
+                  std::to_string(glm::length(crateOnce)));
+    // Toward the well, as ever: the player right of it goes left, the crate above it goes down (the engine's y is up).
+    CHECK_MSG(playerTwice.x < 0.0f && crateTwice.y < 0.0f, "toward the well, not away");
 }
 
 // THE LAPS (the visuals plan's 11.2; gravitywell.json roundabout): the numbers
@@ -633,7 +644,7 @@ void runTests() {
     AWellRefusesNoPortal();
     AShotFliesThroughAWell();
     ItTakesTheLooseBodiesOnly();
-    ThePlayerIsPulledAtTheRatioItIsCarriedAt();
+    EveryBodyIsPulledAtTheRatioItIsCarriedAt();
     TheRoundaboutRulesRead();
     TheAgentTurnsOnceAndSettles();
     ASweepCountsTheWayRoundAndLaps();

@@ -88,14 +88,13 @@ double WalkOriginal(const Tuning& tuning, const ScriptClock::Step& step) {
     // applyForces #15-36: elapsedTime = float(min(66, getLastFrameElapsedTime())) - the script's
     // floored milliseconds - and speedScale = scale(speed) x elapsedTime / GetCurrentPhysicsTimeStepMS.
     // scale(x) is x metres here: the port's metre is 50 units, as the original's is 50 of the
-    // screen's pixels, and the 256-unit design height cancels (listing 8.12a).
-    const double elapsedMs = std::min(tuning.elapsedCapMs, ScriptClock::Ms(step));
-    const double stepMs = step.simS * 1000.0;
-    return stepMs > 0.0 ? tuning.speed * elapsedMs / stepMs : 0.0;
+    // screen's pixels, and the 256-unit design height cancels (listing 8.12a). The same expression
+    // walks a minion and a knight (ScriptClock::ScriptSpeed).
+    return ScriptClock::ScriptSpeed(tuning.speed, tuning.elapsedCapMs, step);
 }
 
 double WalkCarried(const Tuning& tuning, const ScriptClock::Step& step) {
-    return WalkOriginal(tuning, step) * ScriptClock::SimRatio(step);
+    return ScriptClock::CarriedVelocity(WalkOriginal(tuning, step), step);
 }
 
 double AirShare(const Tuning& tuning, const ScriptClock::Step& step) {
@@ -120,6 +119,9 @@ entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tunin
     rigid.lockPosition = LevelBuilder::kPlaneLockPosition;
     rigid.friction = kFriction;
     rigid.restitution = LevelBuilder::kBodyRestitution;
+    // Its mass is the .ent's: dark_mage.ent's density 0.5 over its two circles of radius 9.1 (materials.json), 0.104, where
+    // the engine's default 1 weighed it as much as a barrel (4.15 times its own weight in the original: 2-24's idle player).
+    rigid.mass = LevelBuilder::MassOf(LevelBuilder::MaterialOf(registry, "dark_mage"), 0.0);
     rigid.useGravity = false; // its own, applied in Steer
     rigid.allowSleep = false; // steered every tick
     registry.emplace<TagComponent>(entity, TagComponent{"player"});
@@ -232,14 +234,23 @@ void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, 
         rigid.velocity.x *= static_cast<float>(AirShare(tuning, step));
     }
 
+    // Box2D's clamp, on the velocity this tick's own gravity and walk have made (the engine adds none of
+    // the player's: useGravity is off).
+    ClampTranslation(rigid, tuning, step);
+}
+
+void ClampTranslation(Supersonic::RigidBodyComponent& rigid, const Tuning& tuning, const ScriptClock::Step& step,
+                      const glm::vec3& addedByTheEngine) {
     // b2Island::Solve (b2Island.cpp:286): a step's translation above b2_maxTranslation scales the whole
     // velocity down to it. In the port's metres a tick that is 2 / 2.8125 = 0.711 m, 35.6 units: a fall of
     // about 590 units (586.7) reaches it, so only a body that goes on falling does - the hidden body of a
-    // dead player.
+    // dead player. The engine adds a body's gravity AFTER the tick's writes, so the velocity the
+    // translation is judged on (and the clamp scales) is the one it will integrate: written + added.
     const double limitM = tuning.maxTranslationM / tuning.referencePxPerUnit;
-    const double translationM = std::hypot(static_cast<double>(rigid.velocity.x), static_cast<double>(rigid.velocity.y)) *
+    const glm::vec3 integrated = rigid.velocity + addedByTheEngine;
+    const double translationM = std::hypot(static_cast<double>(integrated.x), static_cast<double>(integrated.y)) *
                                 static_cast<double>(step.physicsS);
-    if (translationM > limitM) rigid.velocity *= static_cast<float>(limitM / translationM);
+    if (translationM > limitM) rigid.velocity = integrated * static_cast<float>(limitM / translationM) - addedByTheEngine;
 }
 
 } // namespace MagicPortals::Player

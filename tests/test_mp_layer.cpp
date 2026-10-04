@@ -2790,10 +2790,13 @@ void AMinionWalksOnItsSheet() {
             lastColumn = drawn->column;
         }
     }
-    CHECK_MSG(walkTicks >= 40, "it walked left for " + std::to_string(walkTicks) + " ticks");
+    // From x 546 to within 8 of wayA0 (509) is 29 units, at the decoded 1.04 a tick (scale(1.3) metres x 16 / 33.33 ms of
+    // the original's physics, carried at SimRatio 2: planning step 152) - 28 or 29 ticks, where the 39 px/s it was read
+    // as took 44.
+    CHECK_MSG(walkTicks >= 26 && walkTicks <= 32, "it walked left for " + std::to_string(walkTicks) + " ticks");
     CHECK_MSG(rowsRight, "row 1 on every tick it walked left; the first that was not: " + firstWrong);
     CHECK_MSG(feetRight, "its picture's centre 15.1 above its body's on every tick");
-    bool strides = changes.size() >= 4 && changes[0] == 9;
+    bool strides = changes.size() >= 3 && changes[0] == 9;
     for (std::size_t i = 1; i < changes.size(); ++i) {
         const int gap = changes[i] - changes[i - 1];
         if (gap != 7 && gap != 8) strides = false;
@@ -2841,13 +2844,14 @@ void AMinionWalksOnItsSheet() {
               "walking again on the column it stopped on: " + std::to_string(firstRight) + " after " +
                   std::to_string(kept));
 
-    // The guard: walked right to its post and settled, which writes no frame - it
-    // stands on the walk's last frame, facing right.
+    // The guard: walked right to its post, coasted in on its frictionless body (minion.ent's friction 0: planning step
+    // 152) past the 8 units of arrival and is parked by the brake of the hold it adopted - facing right, on the hold's
+    // column 0, as minions.json says the original's does. (Until then it stopped short and settled.)
     const MagicPortals::Minions::Minion* guard = SimMinion(layer, "minion_spawn_913");
     const MagicPortalsLayer::MinionReport* guardDrawn = MinionOf(reports, "minion_spawn_913");
-    CHECK_MSG(guard != nullptr && guard->arm == MagicPortals::Minions::Arm::Settled && guardDrawn != nullptr &&
-                  guardDrawn->row == 2,
-              "the guard settled on row 2");
+    CHECK_MSG(guard != nullptr && guard->arm == MagicPortals::Minions::Arm::Hold && guardDrawn != nullptr &&
+                  guardDrawn->row == 2 && guardDrawn->column == 0,
+              "the guard holds on column 0 of row 2");
 
     // A minion the killer floor takes takes its picture with it.
     if (const MagicPortals::Minions::Minion* sim = SimMinion(layer, patroller); sim != nullptr && registry.valid(sim->body)) {
@@ -7057,12 +7061,12 @@ void AStandingPlayerBeginsNothing() {
 
 // Rows 8 and 25 by the watch, each body dropped onto the player standing on its
 // floor, so that the line between the two entity points - the one those callbacks
-// read (D11_check C55) - runs down along the fall: 1-9's stone put 20 px over the
-// player's head and given 600 px/s down, and a knight of 3-09 let fall 20 px onto
-// it. What each comes down at is the engine's (it prints: the stone is braked to
-// about 100 px/s, hitIntensity just over 2). The stone calls 2 x hitIntensity
-// above 2, the knight 0.8 x above 0, both before the update, and each is the
-// tick's last word (the player's own begin with it is read first).
+// read (D11_check C55) - runs down along the fall: 1-9's stone let fall 30 px onto the
+// player's head (put 20 px over it at 600 px/s until planning step 152 weighed it 11 times
+// the player), and a knight of 3-09 let fall 20 px onto it. What each comes down at is the
+// engine's (the case prints it). The stone calls 2 x hitIntensity above 2, the knight
+// 0.8 x above 0, both before the update, and each is the tick's last word (the
+// player's own begin with it is read first).
 void ABodyFallingOnThePlayerShakesTheView() {
     const MagicPortals::Earthquake::Rules rules = quakeRules();
     struct Case {
@@ -7084,12 +7088,17 @@ void ABodyFallingOnThePlayerShakesTheView() {
         entt::entity body = entt::null;
         double radius = 0.0;
         glm::vec3 velocity(0.0f);
+        double fallFrom = 0.0;
         if (run.kind == MagicPortals::Impacts::Kind::Stone) {
             CHECK_MSG(!played.demolish.stones.empty(), std::string(run.row) + ": a stone");
             if (played.demolish.stones.empty()) continue;
             body = played.demolish.stones.front().body;
             radius = 30.0;
-            velocity = glm::vec3(0.0f, -MagicPortals::Units::ToMetres(600.0), 0.0f);
+            // Let go from rest, 30 px over the head, not put 20 px over it at 600 px/s: the stone weighs what its .ent says,
+            // 11 times the player (planning step 152), so put that close at that speed it is on the player in one step and
+            // the watch, which only marks the pairs of a body it has just seen put, never sees the begin. Fallen 30 px it comes
+            // down at 346 carried px/s, 173 of the original's: hitIntensity 3.5 before the engine's brake.
+            fallFrom = 10.0;
         } else {
             CHECK_MSG(!played.minions.minions.empty(), std::string(run.row) + ": a minion");
             if (played.minions.minions.empty()) continue;
@@ -7097,7 +7106,7 @@ void ABodyFallingOnThePlayerShakesTheView() {
             radius = played.minions.rules.bodyRadiusPx;
         }
         const glm::dvec2 head = playerPx(registry, layer) - glm::dvec2(0.0, 22.0);
-        const glm::vec3 above = MagicPortals::Units::ToWorld(head.x, head.y - radius - 20.0);
+        const glm::vec3 above = MagicPortals::Units::ToWorld(head.x, head.y - radius - 20.0 - fallFrom);
         auto& bodyAt = registry.get<TransformComponent>(body);
         bodyAt.position = glm::vec3(above.x, above.y, bodyAt.position.z);
         registry.get<RigidBodyComponent>(body).velocity = velocity;
@@ -18002,6 +18011,11 @@ void TheContactsAreHeardAtTheirCallbacksVolumes() {
     const double gravityPx =
         physics != nullptr ? glm::length(glm::dvec2(physics->gravity.x, physics->gravity.y)) * MagicPortals::Units::kPixelsPerMetre
                            : 0.0;
+    // The layer's own world: the original's 10 m/s^2 at the tick's SimRatio squared, 2000 units a second squared
+    // (planning step 152) - on the first tick as on every one after (Game::BeforeStep writes it again), and not the
+    // Godot project's 980.
+    CHECK_MSG(std::fabs(gravityPx - 2000.0) < 1e-3,
+              "the layer's world falls at 2000 px/s^2, not " + std::to_string(gravityPx));
     const auto bodyAtPx = [&registry](entt::entity body) {
         return MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position);
     };
@@ -18093,7 +18107,9 @@ void TheContactsAreHeardAtTheirCallbacksVolumes() {
                   where + ": let go at rest, touching nothing: its first step " + std::to_string(knock.firstMovePx) + " px");
         CHECK_MSG(knock.tick >= 0, where + ": the crate's begin with the platform, as it reaches it");
         if (knock.tick < 0) continue;
-        const double fellAt = knock.fastestDownPxS / rules.hitPxPerUnit;
+        // The crate is carried at SimRatio times the original's velocity (planning step 152), and the callback reads the
+        // original's: what it fell at is the carried speed over the ratio.
+        const double fellAt = knock.fastestDownPxS / MagicPortals::ScriptClock::SimRatio(layer.TickStep()) / rules.hitPxPerUnit;
         CHECK_MSG(knock.normal.y > 0.9999 && knock.hit > 2.0 && std::fabs(knock.hit - fellAt) <= 0.01 * fellAt,
                   where + ": along the face's normal, at the speed it fell: " + describeDrop(knock));
         const std::vector<double> knocks = [&] {
@@ -18250,10 +18266,21 @@ void ABeholderRockBrokenOnTheLevelIsHeard() {
             }
             std::sort(others.begin(), others.end());
             const bool distinct = std::adjacent_find(others.begin(), others.end()) == others.end();
-            CHECK_MSG(distinct && onIt != nullptr,
-                      where + ": a stone begin of it on each body and none twice, one on what it broke on: " +
-                          std::to_string(begins.size()) + " begin(s), " + (distinct ? "distinct" : "a pair twice") +
-                          (onIt == nullptr ? ", none on it" : ""));
+            {
+                std::string touched;
+                for (const MagicPortals::Impacts::Begin* begin : begins) touched += " " + layer.EntityNameOf(begin->other);
+                std::printf("  %s: the rock's stone begins are on:%s\n", where.c_str(), touched.c_str());
+            }
+            // Since planning step 152 the first rock comes down on the player (the player stands under it, 54 ticks after it
+            // drops; the crush is judged on the hardest recent approach and kills him, "player_died" on tick 1300) and breaks on
+            // the platform in the same tick: its one begin of that tick is on the player (the entity with no name in the line
+            // printed above), and the pair Contacts broke it on gets none of its own (the layer adds one only where the rock
+            // has no begin that tick). So the rock must have a begin on each body it touched, none twice; the numbers below
+            // are read where one is on what it broke on.
+            CHECK_MSG(distinct && !begins.empty(),
+                      where + ": a stone begin of it on each body and none twice: " + std::to_string(begins.size()) +
+                          " begin(s), " + (distinct ? "distinct" : "a pair twice") +
+                          (onIt == nullptr ? ", none on what it broke on" : ""));
             if (!distinct || onIt == nullptr || read == reads.end() || !registry.valid(hit.other)) continue;
             const ImpactRead impact = readImpact(rules, layer, *onIt);
             if (breaks == 1) {
@@ -18274,7 +18301,9 @@ void ABeholderRockBrokenOnTheLevelIsHeard() {
                 // breaks soft) came at the static as slowly as it lay.
                 double fell = 0.0;
                 for (const glm::dvec2& velocity : read->velocitiesPx) fell = std::max(fell, velocity.y);
-                const double want = glm::dot(read->velocitiesPx.back(), along) / rules.hitPxPerUnit;
+                // (Read off the body, which is carried at SimRatio times the original's velocity: planning step 152.)
+                const double want = glm::dot(read->velocitiesPx.back(), along) /
+                                    MagicPortals::ScriptClock::SimRatio(layer.TickStep()) / rules.hitPxPerUnit;
                 CHECK_MSG(std::fabs(impact.hit - want) <= 1e-6 * std::max(1.0, std::fabs(want)),
                           where + ": the begin's hit " + std::to_string(impact.hit) + " against " +
                               std::to_string(want) + " from the velocities read");
