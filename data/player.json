@@ -99,6 +99,38 @@
     "touch_px": 0.5,
     "_touch_px": "how near counts as touching: Box2D calls BeginContact on the first step a manifold has a point, within the polygons' skin (earthquake.json impacts.touch_px, the same 0.5, D11_check C47)"
   },
+  "hold": {
+    "_source": [
+      "WHY A STANDING PLAYER CREPT (planning step 148's amendment, G10-5). The engine integrates a body's velocity BEFORE it solves its contacts",
+      "(PhysicsSystem::Update: position += velocity x dt, then the contacts), and Player::Steer adds a tick of gravity to a grounded player's velocity",
+      "(Player.hpp: so a descending lift is followed). A player at rest on a slope therefore sinks FallPerTick x dt = 1.111 units straight down every",
+      "tick, and the contact pushes him out along the slope's NORMAL: the two do not cancel along the slope, and what is left is 1.111 x sin 15 degrees =",
+      "0.287 units a tick down it, 0.278 of them in x. MEASURED: 1-24's ramp_right, 0.278 units a tick in x (out/parity/program/R3/fix2/idle/, 100 units",
+      "over 420 ticks), to the digit. A friction on the body cannot touch it: friction acts on the velocity the solver sees AFTER the move (a first try at",
+      "this key, a per-tick friction of 0.9 on every idle tick, left 112.5 of 114.2 units of creep on 1-24 in 420 ticks). Box2D solves first and integrates the solved velocity,",
+      "so its body, held by friction (mu_mix >= tan of the slope), neither sinks nor slides.",
+      "THE FIX: an idle player on the ground is pressed into it ALONG its normal rather than straight down - velocity (-slope x g, -g), g one tick of",
+      "gravity - so the sink is normal to the surface, the push-out undoes it exactly and nothing is left along the slope. The slope is read from three",
+      "downward probes, one on the body's centre line and one either side of it (Player::GroundSlope); no three hits on one body in one line (a chamfer's",
+      "edge or a round top under the body: a first build with two probes drifted a player standing at a block's chamfered end inward, 2.4 units in 27 ticks),",
+      "or a slope past what friction holds, and the player is steered as before.",
+      "MEASURED (that the original holds): out/parity/original/levels/1-24_t2.0.png, _t4.5.png and _t8.0.png show the idle player on ramp_right at the same",
+      "pixel, where a frictionless body creeps 100 units in 420 ticks (planning step 148, deviation 5). DECODED (what holds it): dark_mage.ent",
+      "(reference/extracted/assets/entities, UTF-16) carries friction=\"0.900000\", fixedRotation=\"1\"; the original's Box2D mixes it with the floor's own",
+      "by the square root (0.47 on ramp_right's 0.25, 0.42 on a platform's 0.2, 0.6 on block00's 0.4, 0.79 on barrel_bomb's 0.7) and the engine mixes",
+      "the same way. The port's statics all carry LevelBuilder::kStaticFriction 1, so `friction` here mixes to sqrt(0.9 x 1) = 0.949: a slope holds up",
+      "to atan(0.949) = 43.5 degrees, where the original's ramp lets go past 25 (RECORDED DEVIATIONS 14).",
+      "NOT BUILT: the original's friction also carries an idle player along a platform that moves sideways under him; this key does not (the player",
+      "is still left behind), because the creep is the only thing G10-5 names and G3 (the movers) is its own step."
+    ],
+    "friction": 0.9,
+    "_probe_offset_px": "_guess: the two downward probes of Player::GroundSlope stand this far either side of the body's centre line, 6 units apart: a surface's slope is the difference of the two hits' heights over that.",
+    "probe_offset_px": 3.0,
+    "_probe_reach_px": "_guess: each probe starts this far above the body's bottom (inside the capsule, clear of a resting overlap) and ends this far below it (the feet sensor reaches 5 below: player.json feet).",
+    "probe_reach_px": 6.0,
+    "_probe_line_tol_px": "_guess: a third probe stands on the centre line, and the three hits lie on one line to within this many units or the ground under the player is not one plane (a chamfer's edge, a round top, a corner within the span) and the player is steered as before. A flat face or a ramp's is exact to a thousandth of it.",
+    "probe_line_tol_px": 0.05
+  },
   "jump": {
     "_guess": true,
     "_note": [

@@ -17,8 +17,14 @@
 //                 (Impacts: hitIntensity 8.9 off a 100-unit drop, whatever the port's tick).
 //   the recoil    scale(1.4) of the original's physics, 70 units a second, which is 140 a second
 //                 of wall time at 60 Hz and 40-44 on the 17-19 frames a second F10 was filmed at.
+//   the hold      an idle player on the ground is pressed into a slope along its normal, not straight
+//                 down (planning step 148's amendment, G10-5): he stands still on a 15 or 30-degree
+//                 floor for 420 ticks, as the original's does on 1-24's ramp, where the same body
+//                 without the hold creeps 0.278 units a tick, and the walk is the same with the
+//                 hold as without it.
 //
-// Pure: a floor, a capsule and the engine's solver, no level and no window.
+// Pure, but for the standing case on 1-24 at the end, which reads the converted level and skips
+// itself without it: a floor, a capsule and the engine's solver, no window.
 
 #include "TestHarness.hpp"
 #include "MpSuite.hpp"
@@ -27,6 +33,7 @@
 #include "core/PhysicsSystem.hpp"
 #include "sim/Game.hpp"
 #include "sim/Impacts.hpp"
+#include "sim/LevelBuilder.hpp"
 #include "sim/Player.hpp"
 #include "sim/ScriptClock.hpp"
 #include "sim/Units.hpp"
@@ -38,11 +45,13 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 using namespace MagicPortals;
 using Supersonic::BoxColliderComponent;
+using Supersonic::PhysicsMaterialComponent;
 using Supersonic::RigidBodyComponent;
 using Supersonic::TransformComponent;
 
@@ -50,7 +59,9 @@ namespace {
 
 const std::string kData = MAGICPORTALS_DATA_DIR;
 const std::string kPortData = MAGICPORTALS_PORT_DATA_DIR;
+const std::string kLevels = MAGICPORTALS_LEVELS_DIR;
 constexpr float kTick = 1.0f / 60.0f;
+constexpr double kPi = 3.14159265358979323846;
 
 #define CHECK_WITHIN(a, b, tolerance)                                                                       \
     do {                                                                                                    \
@@ -89,11 +100,14 @@ bool Load(const std::string& text, Player::Tuning& out, std::string& error) {
 }
 
 std::string TuningText(const std::string& speed = "3", const std::string& scale = "2",
-                       const std::string& world = "10") {
+                       const std::string& world = "10",
+                       const std::string& hold = "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, "
+                                                 "\"probe_line_tol_px\": 0.05}") {
     return "{\"movement\": {\"speed\": " + speed + ", \"elapsed_cap_ms\": 66, \"air_decay\": 0.86, "
            "\"air_decay_fps\": 60}, \"gravity\": {\"world_m_s2\": " + world + ", \"scale\": " + scale +
            ", \"max_translation_m\": 2, \"reference_px_per_unit\": 2.8125}, \"body\": {\"width_px\": 20, \"height_px\": 44}, "
-           "\"feet\": {\"width_px\": 14, \"height_px\": 10, \"chamfer\": 0.6, \"touch_px\": 0.5}}";
+           "\"feet\": {\"width_px\": 14, \"height_px\": 10, \"chamfer\": 0.6, \"touch_px\": 0.5}, "
+           "\"hold\": " + hold + "}";
 }
 
 // A solid floor whose top is at y = 0 (the port's pixels, +y down), and a world with no gravity of
@@ -140,6 +154,11 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
     CHECK_EQ(tuning.feetHeightPx, 10.0);
     CHECK_EQ(tuning.feetChamfer, 0.6);
     CHECK_EQ(tuning.feetTouchPx, 0.5);
+    // The hold: dark_mage.ent's friction (UTF-16: friction="0.900000", fixedRotation="1"), and the port's own two probes.
+    CHECK_EQ(tuning.holdFriction, 0.9);
+    CHECK_EQ(tuning.holdProbeOffsetPx, 3.0);
+    CHECK_EQ(tuning.holdProbeReachPx, 6.0);
+    CHECK_EQ(tuning.holdProbeLineTolPx, 0.05);
     // The Godot project's guesses are not carried any more.
     CHECK_MSG(tuning.widthPx == 20.0 && tuning.heightPx == 44.0, "the capsule is still the guess, and still read");
 
@@ -151,6 +170,20 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
     CHECK(!Load(TuningText("3", "0"), out, error));
     CHECK(!Load(TuningText("3", "2", "0"), out, error));
     CHECK(!Load(TuningText("-3"), out, error));
+    // A body that holds nothing is the regression this section closed (the idle creep), and a hold with no probes
+    // reads no slope: each refused, naming its key.
+    const std::pair<std::string, std::string> refusedHolds[] = {
+        {"{\"friction\": 0, \"probe_offset_px\": 3, \"probe_reach_px\": 6, \"probe_line_tol_px\": 0.05}", "hold.friction"},
+        {"{\"friction\": \"x\", \"probe_offset_px\": 3, \"probe_reach_px\": 6, \"probe_line_tol_px\": 0.05}", "hold.friction"},
+        {"{\"friction\": 0.9, \"probe_reach_px\": 6, \"probe_line_tol_px\": 0.05}", "hold.probe_offset_px"},
+        {"{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 0, \"probe_line_tol_px\": 0.05}", "hold.probe_reach_px"},
+        {"{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6}", "hold.probe_line_tol_px"},
+        {"{}", "hold.friction"},
+    };
+    for (const auto& [text, key] : refusedHolds) {
+        CHECK(!Load(TuningText("3", "2", "10", text), out, error));
+        CHECK_MSG(error.find(key) != std::string::npos, error);
+    }
     // And a number missing: the port does not invent one.
     CHECK(!Load("{\"movement\": {\"speed\": 3}, \"gravity\": {\"world_m_s2\": 10, \"scale\": 2}, "
                 "\"body\": {\"width_px\": 20, \"height_px\": 44}}",
@@ -419,6 +452,263 @@ void TheRecoilIsSeventyUnitsAPhysicsSecond() {
               "40-44 units a second, as F10 measured: " + std::to_string(at17) + " to " + std::to_string(at19));
 }
 
+// A tilted floor: a box 600 x 200 units turned by `angleRad`, a player dropped on it near its middle.
+// `holdFriction` is the tuning's hold, which a case sets to a thousandth of nothing to see what the player did
+// without it (the loader refuses a zero; a body set past it is the same as no hold: no slope passes the gate).
+struct Slope {
+    entt::registry registry;
+    entt::entity player = entt::null;
+    Player::Tuning tuning = ReadTuning();
+    ScriptClock::Step step = ScriptClock::TickStep(ReadRules(), kTick);
+
+    Slope(double angleRad, double holdFriction) {
+        tuning.holdFriction = holdFriction;
+        Game::UseNoGravity(registry);
+        const entt::entity floor = registry.create();
+        auto& transform = registry.emplace<TransformComponent>(floor);
+        transform.position = Units::ToWorld(0.0, 500.0);
+        transform.rotation.z = Units::ToWorldRotation(angleRad);
+        auto& box = registry.emplace<BoxColliderComponent>(floor);
+        box.size = glm::vec3(Units::ToMetres(600.0), Units::ToMetres(200.0), 1.0f);
+        // A level's static floor: Godot's defaults, friction 1 and no bounce, through the material
+        // LevelBuilder gives it. Left without one the engine's own would bounce the sink off.
+        auto& material = registry.emplace<PhysicsMaterialComponent>(floor);
+        material.friction = LevelBuilder::kStaticFriction;
+        material.restitution = LevelBuilder::kStaticRestitution;
+        // 12 units over the surface where the box's centre line meets it: 100 / cos above the box's centre.
+        player = Player::Spawn(registry, glm::dvec2(0.0, 500.0 - 100.0 / std::cos(angleRad) - 22.0 - 12.0), tuning);
+    }
+
+    glm::dvec2 AtPx() { return Units::ToPixels(registry.get<TransformComponent>(player).position); }
+    RigidBodyComponent& Rigid() { return registry.get<RigidBodyComponent>(player); }
+    void Tick(float direction) {
+        Player::Steer(registry, player, tuning, direction, step);
+        Supersonic::PhysicsSystem::Update(registry, kTick);
+    }
+};
+
+constexpr double kNoHold = 1e-9;
+
+void TheGroundSlopeIsReadFromTwoProbesUnderTheCentreLine() {
+    // The slope the box was turned to, on either side of the flat.
+    const double angle = 15.0 * kPi / 180.0;
+    for (const double sign : {1.0, -1.0}) {
+        Slope slope(sign * angle, ReadTuning().holdFriction);
+        for (int tick = 0; tick < 60; ++tick) slope.Tick(0.0f);
+        double read = 0.0;
+        CHECK_MSG(Player::GroundSlope(slope.registry, slope.player, slope.tuning, read), "the probes meet the box");
+        // Which way is not the case's to say (the sign of a rotation is the port's), how steep is: tan 15 degrees.
+        CHECK_WITHIN(std::fabs(read), std::tan(angle), 1e-3);
+    }
+
+    // The flat floor reads exactly 0, whatever the player's x.
+    Scene flat(true, -23.0);
+    for (int tick = 0; tick < 40; ++tick) flat.Tick(0.0f);
+    double read = 1.0;
+    CHECK_MSG(Player::GroundSlope(flat.registry, flat.player, flat.tuning, read), "the probes meet the floor");
+    CHECK_EQ(read, 0.0);
+
+    // Nothing under the centre line within the probes' reach: no slope, and the player is steered as he was.
+    Scene air(false, -300.0);
+    CHECK_MSG(!Player::GroundSlope(air.registry, air.player, air.tuning, read), "nothing under the feet");
+
+    // A round top is no plane: three probes over a sphere's crown are not in one line, so nothing is read and the
+    // player is steered as he was (a stone or a minion under him; a chamfer's corner within the probes' span the same).
+    {
+        entt::registry roundTop;
+        Game::UseNoGravity(roundTop);
+        const entt::entity ball = roundTop.create();
+        roundTop.emplace<TransformComponent>(ball).position = Units::ToWorld(0.0, 60.0);
+        roundTop.emplace<Supersonic::SphereColliderComponent>(ball).radius = Units::ToMetres(40.0);
+        const Player::Tuning ballTuning = ReadTuning();
+        // The crown is at y 20; the player's bottom is at 22: the probes (6 either way of it) meet the sphere.
+        const entt::entity rider = Player::Spawn(roundTop, glm::dvec2(0.0, 0.0), ballTuning);
+        double crown = 1.0;
+        CHECK_MSG(!Player::GroundSlope(roundTop, rider, ballTuning, crown), "a round top is not a plane");
+    }
+
+    // The floor's right edge at x = 0 and the player's centre over it: one probe meets it and the other does not.
+    entt::registry registry;
+    Game::UseNoGravity(registry);
+    const entt::entity floor = registry.create();
+    registry.emplace<TransformComponent>(floor).position = Units::ToWorld(-10000.0, 500.0);
+    auto& box = registry.emplace<BoxColliderComponent>(floor);
+    box.size = glm::vec3(Units::ToMetres(20000.0), Units::ToMetres(1000.0), 1.0f);
+    const Player::Tuning tuning = ReadTuning();
+    const entt::entity player = Player::Spawn(registry, glm::dvec2(1.0, -22.0), tuning);
+    CHECK_MSG(!Player::GroundSlope(registry, player, tuning, read), "a probe past the edge misses: not a slope");
+}
+
+void AnIdlePlayerIsPressedAlongTheGroundsNormalAndAWalkingOneIsNot() {
+    const double angle = 15.0 * kPi / 180.0;
+    Slope slope(angle, ReadTuning().holdFriction);
+    for (int tick = 0; tick < 60; ++tick) slope.Tick(0.0f);
+    CHECK_MSG(Player::Grounded(slope.registry, slope.player, slope.tuning), "standing on the slope");
+    double read = 0.0;
+    CHECK(Player::GroundSlope(slope.registry, slope.player, slope.tuning, read));
+    const double fall = Player::FallPerTick(slope.tuning, slope.step);
+
+    // Idle: x velocity -slope x g, and the tick of gravity added straight down as ever - together a sink along the
+    // normal (the slope is the ratio of the two, the sign that of a push INTO the surface).
+    const float vyBefore = slope.Rigid().velocity.y;
+    Player::Steer(slope.registry, slope.player, slope.tuning, 0.0f, slope.step);
+    CHECK_WITHIN(slope.Rigid().velocity.x, -read * fall, 1e-5);
+    CHECK_WITHIN(slope.Rigid().velocity.y - vyBefore, -fall, 1e-5);
+    CHECK_WITHIN(slope.Rigid().velocity.x / (slope.Rigid().velocity.y - vyBefore), read, 1e-5);
+    // A pad held: the walk, whole, as it was - the hold is for an idle player and nothing else.
+    for (const float pad : {1.0f, -1.0f}) {
+        Player::Steer(slope.registry, slope.player, slope.tuning, pad, slope.step);
+        CHECK_WITHIN(slope.Rigid().velocity.x, pad * Player::WalkCarried(slope.tuning, slope.step), 1e-5);
+    }
+
+    // On the flat it is the old steering exactly: x velocity 0.
+    Scene flat(true, -23.0);
+    for (int tick = 0; tick < 40; ++tick) flat.Tick(0.0f);
+    Player::Steer(flat.registry, flat.player, flat.tuning, 0.0f, flat.step);
+    CHECK_EQ(flat.Rigid().velocity.x, 0.0f);
+
+    // Past what friction holds - tan 50 degrees 1.19 against the 0.949 of the 0.9 body's mix with a floor of 1 -
+    // the player is steered as before and goes down it, as the original's does on a ramp that steep.
+    Slope steep(50.0 * kPi / 180.0, ReadTuning().holdFriction);
+    for (int tick = 0; tick < 60; ++tick) steep.Tick(0.0f);
+    if (Player::Grounded(steep.registry, steep.player, steep.tuning)) {
+        Player::Steer(steep.registry, steep.player, steep.tuning, 0.0f, steep.step);
+        CHECK_EQ(steep.Rigid().velocity.x, 0.0f);
+    }
+    CHECK_WITHIN(Player::HoldTan(ReadTuning()), std::sqrt(0.9), 1e-6);
+    // The weightless levels never call Steer, and the airborne player is not pressed anywhere: no hold in the air.
+    Scene air(false, -300.0);
+    air.Rigid().velocity.x = 2.88f;
+    Player::Steer(air.registry, air.player, air.tuning, 0.0f, air.step);
+    CHECK_WITHIN(air.Rigid().velocity.x, 2.88 * 0.86, 1e-5);
+}
+
+void AnIdlePlayerStandsStillOnASlope() {
+    // 1-24's ramp is 15 degrees. A frictionless body sinks into it a tick of gravity straight down and is pushed out
+    // along its normal: 1.111 x sin 15 x cos 15 = 0.278 units a tick in x, 117 units in 420 ticks along the slope,
+    // which is what the port's idle player did before the hold. 30 degrees (tan 0.577) is held as well.
+    for (const double degrees : {15.0, 30.0}) {
+        for (const double sign : {1.0, -1.0}) {
+            Slope held(sign * degrees * kPi / 180.0, ReadTuning().holdFriction);
+            Slope loose(sign * degrees * kPi / 180.0, kNoHold);
+            for (int tick = 0; tick < 90; ++tick) {
+                held.Tick(0.0f);
+                loose.Tick(0.0f);
+            }
+            CHECK_MSG(Player::Grounded(held.registry, held.player, held.tuning), "the held player is on the slope");
+            const glm::dvec2 from = held.AtPx();
+            const glm::dvec2 looseFrom = loose.AtPx();
+            double worst = 0.0;
+            for (int tick = 0; tick < 420; ++tick) {
+                held.Tick(0.0f);
+                loose.Tick(0.0f);
+                worst = std::max(worst, glm::length(held.AtPx() - from));
+            }
+            const double crept = glm::length(loose.AtPx() - looseFrom);
+            std::printf("  a %.0f-degree floor, idle 420 ticks: held %.3f units from where it stood, without the hold %.1f\n",
+                        degrees, worst, crept);
+            // The pin the G10 verifier asked for: within 1 unit for 420 ticks.
+            CHECK_MSG(worst < 1.0, "the idle player moved " + std::to_string(worst) + " units");
+            // And the control: without the hold it goes, so the case cannot pass on a floor that holds by itself.
+            CHECK_MSG(crept > 50.0, "the control crept " + std::to_string(crept) + " units");
+        }
+    }
+}
+
+void TheWalkIsTheSameWithTheHoldAsWithout() {
+    // A pad held is not steered by the hold at all, so the walk - which F13 shows losing nothing - is the walk of the
+    // body with no hold, from a stand on the slope as well as on the flat.
+    const double angle = 15.0 * kPi / 180.0;
+    Slope held(angle, ReadTuning().holdFriction);
+    Slope loose(angle, kNoHold);
+    for (int tick = 0; tick < 90; ++tick) {
+        held.Tick(0.0f);
+        loose.Tick(0.0f);
+    }
+    for (const float pad : {1.0f, -1.0f}) {
+        const glm::dvec2 heldFrom = held.AtPx();
+        const glm::dvec2 looseFrom = loose.AtPx();
+        for (int tick = 0; tick < 10; ++tick) {
+            held.Tick(pad);
+            loose.Tick(pad);
+        }
+        const glm::dvec2 heldWalked = held.AtPx() - heldFrom;
+        const glm::dvec2 looseWalked = loose.AtPx() - looseFrom;
+        // The two stand at other places on the slope (the loose one has crept 130 units), so a few hundredths of
+        // a unit of the solver's state differ; a grip would take up to 28 % of each step, 6.7 units of the ten.
+        CHECK_WITHIN(heldWalked.x, looseWalked.x, 0.1);
+        CHECK_WITHIN(heldWalked.y, looseWalked.y, 0.1);
+        // And it is a walk: ten ticks of 2.4 units along the slope, less its cosine.
+        CHECK_MSG(std::fabs(heldWalked.x) > 20.0, "ten ticks of the walk moved " + std::to_string(heldWalked.x));
+    }
+}
+
+bool LevelIsThere(const std::string& name) {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(kLevels + "/" + name + ".tscn", ec) &&
+        std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
+        return true;
+    }
+    std::printf("  %s SKIPPED - needs the converted level at %s/%s.tscn and Enhanced's data at %s\n", name.c_str(),
+                kLevels.c_str(), name.c_str(), kData.c_str());
+    return false;
+}
+
+// A level started and stood in for `ticks` with no pad held, after `settle` ticks to land: the most the
+// player moved from where it stood when the count began.
+double StandingDrift(const std::string& name, int settle, int ticks, double holdFriction, double& endY) {
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    std::string error;
+    const std::filesystem::path prisms = std::filesystem::temp_directory_path() / "supersonic-test-mp-player";
+    if (!Game::LoadData(kLevels + "/" + name + ".tscn", kData, prisms, data, error) ||
+        !Game::Start(data, registry, level, error)) {
+        CHECK_MSG(false, name + ": " + error);
+        return 0.0;
+    }
+    data.tuning.holdFriction = holdFriction;
+    const ScriptClock::Step step = ScriptClock::TickStep(ReadRules(), kTick);
+    for (int tick = 0; tick < settle; ++tick) Game::Tick(data, registry, level, 0.0f, step);
+    const auto at = [&] { return Units::ToPixels(registry.get<TransformComponent>(level.player).position); };
+    const glm::dvec2 from = at();
+    double worst = 0.0;
+    for (int tick = 0; tick < ticks; ++tick) {
+        Game::Tick(data, registry, level, 0.0f, step);
+        worst = std::max(worst, glm::length(at() - from));
+    }
+    endY = at().y - from.y;
+    return worst;
+}
+
+void AnIdlePlayerStandsStillOnTheOriginalsRamp() {
+    // 1-24 (level23): the original's stills at 2.0, 4.5 and 8.0 s show the idle player at the same pixel on
+    // ramp_right; the port's slid 0.278 units a tick down it and took the timed crystal on tick 328. The G10
+    // verifier's pin: within 1 unit for 420 ticks.
+    const std::string name = "level23";
+    if (!LevelIsThere(name)) return;
+    double endY = 0.0;
+    double looseEndY = 0.0;
+    const double held = StandingDrift(name, 60, 420, ReadTuning().holdFriction, endY);
+    const double loose = StandingDrift(name, 60, 420, kNoHold, looseEndY);
+    std::printf("  %s idle 420 ticks: held %.3f units from where it stood (y %+.3f), without the hold %.1f\n", name.c_str(),
+                held, endY, loose);
+    CHECK_MSG(held < 1.0, name + ": the idle player moved " + std::to_string(held) + " units");
+    // The regression itself, so the pin cannot pass on a level that never moved him.
+    CHECK_MSG(loose > 50.0, name + ": without the hold it moved " + std::to_string(loose) + " units");
+
+    // 2-24 (level23a): the player starts on barrel_bomb_ent_1135's edge and left it by tick 140 - with the barrel
+    // itself moving under him (the hold has no slope to read on a flat top). Printed, not judged: what moves is a
+    // dynamic body that the player's weight, 4000 units a second squared against the barrel's 980, tips
+    // (planning step 148's amendment, G10-1).
+    if (LevelIsThere("level23a")) {
+        const double barrelHeld = StandingDrift("level23a", 60, 420, ReadTuning().holdFriction, endY);
+        const double barrelLoose = StandingDrift("level23a", 60, 420, kNoHold, looseEndY);
+        std::printf("  level23a idle 420 ticks: held %.3f units from where it stood (y %+.3f), without the hold %.1f (y %+.3f)\n",
+                    barrelHeld, endY, barrelLoose, looseEndY);
+    }
+}
+
 void runTests() {
     TheNumbersAreTheListingsAndAFileWithoutThemIsRefused();
     TheWalkIsTwoPointFourUnitsATick();
@@ -429,6 +719,11 @@ void runTests() {
     ABodyThatFallsOnIsClampedToBox2DsMaxTranslation();
     TheLandingSpeedIsReadAsTheOriginalsCallbackReadsIt();
     TheRecoilIsSeventyUnitsAPhysicsSecond();
+    TheGroundSlopeIsReadFromTwoProbesUnderTheCentreLine();
+    AnIdlePlayerIsPressedAlongTheGroundsNormalAndAWalkingOneIsNot();
+    AnIdlePlayerStandsStillOnASlope();
+    TheWalkIsTheSameWithTheHoldAsWithout();
+    AnIdlePlayerStandsStillOnTheOriginalsRamp();
 }
 
 } // namespace

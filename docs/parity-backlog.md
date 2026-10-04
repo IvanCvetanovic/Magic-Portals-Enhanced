@@ -1950,14 +1950,25 @@ editing a route. The engine pin stays `710bffc`.
       (`clock.json` `matched_hz` / `physics_step_s`) **before PIC and the route re-author**: every route is replayed on the rate chosen.
 - [ ] **G10-3. The ground sensor is the port's approximation** (octagon against broad-phase candidates by shape; a minion's body counts,
       the original's feet refuse a character), and **G10-4** the capsule is still the 20 x 44 guess against the original's 36.2 x 18.2.
-- [ ] **G10-5. A standing player creeps down a slope: a CONFIRMED REGRESSION against the original** (contact friction 0; 0.28 u a tick,
-      which is what a frictionless body does in the decoded physics; the verifier saw it in the sweep: 2-24's idle player slides off the
-      barrel bomb by tick 140, 1-24's down `ramp_right` to the timed crystal on tick 328, while the original's library stills of 1-24 at
-      t2.0, t4.5 and t8.0 show the idle player stationary on the same ramp; 2-24 has no stills). The missing fact is the original's
-      effective grip: the `.ent` friction values (player 0.9, ramp 0.25, platforms 0.2, `block00` 0.4, `barrel_bomb` 0.7, Box2D's square-root
-      mix 0.47 on the ramp against tan 15 degrees 0.27) would hold it, but F13's walk (142-147 u/s) loses nothing over `block00`. **Do not just
-      set the friction to 0.9** (it would fight the walk). Next, a source step **before the route re-author**: decode or measure the grip, then
-      pin "idle for 420 ticks on 1-24's ramp and on 2-24's barrel stays within 1 unit".
+- [x] **G10-5. A standing player creeps down a slope: a CONFIRMED REGRESSION against the original** - *BUILT in step 148's amendment (R3 fix
+      round 2, local, not pushed).* The cause was not the friction this row named: the engine integrates a body's velocity BEFORE it solves its
+      contacts, and `Player::Steer` adds a tick of gravity to a grounded player, so an idle player sinks 1.111 units straight down into a slope each
+      tick and the contact pushes him out along its normal - 1.111 x sin 15 x cos 15 = 0.278 units a tick, to the digit what 1-24's ramp showed - and
+      a friction on the body cannot touch it (a first try, 0.9 on every idle tick, left 112.5 of 114.2 units on 1-24). An idle player on a plane he holds on (`data/player.json`
+      `hold`: dark_mage.ent's 0.9, so up to 43.5 degrees) is now pressed along the plane's normal, not straight down: 1-24's ramp 0.000 units in 420 ticks
+      (114.2 before), a 15 and a 30-degree floor 0.001 and 0.000 (129.5 and 358.9 before), the walk unchanged. GAMEPLAY on every level where a player
+      stands on a slope. The five routes that leaned on the creep (2-25, 2-31, 3-19, 3-20, 3-22) were re-flown, each
+      on its old win tick, and six more win on another tick (1-09 +13, 1-12 +2, 1-21 -1, 2-24 -1, 3-15 +2, 4-29 +1). Its deviations are the rows below.
+- [ ] **G10-5b. 2-24's idle player still leaves `barrel_bomb_ent_1135`** (36 units in 420 ticks, with or without the hold: the barrel, a dynamic
+      box, moves out from under him and he falls to the floor on tick ~85). The hold has no slope to read on a flat top, so it does not touch this: the
+      body that moves is the barrel, loaded off-centre by a player whose weight (4000 u/s^2) is four times the barrel's own gravity (980), the world's
+      mixed time base (G10-1). 2-24 has no library stills. Next: **the world's time base** (G10-1), then re-measure; `test_mp_player` prints the number.
+- [ ] **G10-5c. The hold's other limits.** (1) Within 3 units of a platform's chamfered corner, or on a round top, the three probes are not one line and
+      the player is steered as before (he creeps off a corner as he did; at the boundary he can shimmer 0.3 units a tick, 3-20's first ledge). (2) The
+      port's floors all carry friction 1 (`LevelBuilder::kStaticFriction`), so the hold's mix is 0.949, not the original's per-entity mixes (0.47 on
+      ramp_right's 0.25, 0.42 on a platform's 0.2, 0.6 on block00's 0.4): a slope between 25 and 43.5 degrees holds the player here and not there.
+      (3) The original's friction also carries an idle player along a platform that moves sideways under him; the hold does not (G3's step). (4) The
+      mechanism is the port's, not Box2D's: why the original's walk shows no loss to the same friction is still not decoded.
 - [ ] **G10-6. Box2D's `b2_maxTranslation` is applied at the 720-line reference** (35.6 units a tick); the original's is 100 screen pixels.
 - [ ] **G10-7. 1-09's playthrough puts the player on its two shelf crystals** (the decoded player cannot steer out of the far portal onto
       them), and **G10-8** 1-32's rock case asks no pair twice, not exactly one begin. Next: the route phase, which restores the strict pins
@@ -1965,8 +1976,8 @@ editing a route. The engine pin stays `710bffc`.
       the floor for 1-32).
 - [ ] **G10-9..12**: the tap's turn the tick it is taken; `air_velocity_share` removed from `art.json`; **CK-1 left to PIC** (PIC did not take it: PIC-5); the landing's
       hit 8.0 for a 100-unit drop (8.94 continuous, 8.67 on the original's own frames).
-- [ ] **G10-13. `Player.cpp`'s clamp comment says a fall of 570 units reaches Box2D's clamp**; the exact figure is 586.7 (about 590, as the
-      step and `player.json` say). A comment, not edited to keep the tested binaries current; correct it at the next relink.
+- [x] **G10-13. `Player.cpp`'s clamp comment says a fall of 570 units reaches Box2D's clamp**; the exact figure is 586.7 (about 590, as the
+      step and `player.json` say). Corrected in step 148's amendment (R3 fix round 2), which relinked anyway.
 
 **G4's recorded deviations**, each an open row for the step named (planning step 149 has the evidence, `RECORDED DEVIATIONS` 1-9):
 - [ ] **G4-1. The destination is the tap, not the tap-time ray's `finalPos`** (R23): the original's distance is `|finalPos - casterPos|` (the contact for
@@ -2248,7 +2259,8 @@ editing a route. The engine pin stays `710bffc`.
       80.8-84.9 at 30 to 24 fps). 23 of the 86 routes still win (CK: 41); **the routes are re-authored by the wave's route
       phase after PIC**. Its deviations are the rows "G10's recorded deviations" in the wave 3a list above; the verifier
       (`G10/verify1.json`, ten gates ok) wants three of them settled BEFORE the re-author: G10-5 (the standing creep, a
-      confirmed regression against the library), G10-2 (the owner's ruling on the rate) and G10-1 (the world's time base).*
+      confirmed regression against the library), G10-2 (the owner's ruling on the rate) and G10-1 (the world's time base). G10-5 was built
+      after the re-author, in the R3 fix round (step 148's amendment); the other two stand.*
 - [x] **G11. 3-32's ghost can be killed only through a rule the original lacks** (the audit's G11; KNOWN as "Order 12.2,
       THE OWNER'S TO RULE: fire against the ghost"). *Built in step 117*: a fireball passes through the ghost, a
       barrel's blast burns it, and the ghost puts the barrel back itself on every beat (the two "Order 12.2" rows and

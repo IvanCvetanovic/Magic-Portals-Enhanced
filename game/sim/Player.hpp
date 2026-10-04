@@ -41,7 +41,11 @@
 //     (dark_mage.ent), but its script sets the velocity every update; measured, a
 //     gripping player fights its own steering in the port: at friction 1 the contact takes
 //     back most of each tick's walk, and the notch where level30's first two platforms meet
-//     holds it still for 26 ticks. test_mp_play walks that seam at both and prints them.
+//     holds it still for 26 ticks. test_mp_play walks that seam at both and prints them. What the original's friction
+//     also does - an idle player stands still on a slope - is not a friction here, which the
+//     engine's integrate-then-solve order cannot make hold one: Steer presses an idle player
+//     into the ground along its normal instead (GroundSlope, Tuning::hold*; G10-5, planning
+//     step 148's amendment).
 
 #include "sim/ScriptClock.hpp"
 
@@ -71,6 +75,12 @@ struct Tuning {
     double feetHeightPx = 0.0;
     double feetChamfer = 0.0;
     double feetTouchPx = 0.0;
+    // The hold of an idle player on a slope (hold.*): dark_mage.ent's friction 0.9, which a slope up to atan of
+    // its mix with the floor's holds, and the two downward probes that read the slope.
+    double holdFriction = 0.0;
+    double holdProbeOffsetPx = 0.0;
+    double holdProbeReachPx = 0.0;
+    double holdProbeLineTolPx = 0.0;
 };
 
 // From player.json. False, with `error`, when a number is missing: player.gd falls
@@ -89,6 +99,19 @@ entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tunin
 // ledge is on the ground until its feet are 7 units clear, which F13's walk off 1-06's block shows
 // (planning step 148). A minion's body counts here, which the original's feet ignore (RECORDED DEVIATIONS).
 bool Grounded(entt::registry& registry, entt::entity player, const Tuning& tuning);
+
+// The slope of the ground under the body's centre line, in the port's pixels (+y down): the height
+// the surface falls to the right per unit of x, positive where it descends to the right. Three probes
+// that start inside the capsule and end below its bottom - on the centre line and `hold.probe_offset_px`
+// either side of it - hit the same solid body in one line (to `hold.probe_line_tol_px`); the slope is
+// the difference of the outer two over their span. False where one misses, they hit two bodies or they
+// are not collinear - an edge, a notch, a chamfer's corner, a round top, nothing under the centre line.
+bool GroundSlope(entt::registry& registry, entt::entity player, const Tuning& tuning, double& slope);
+
+// The steepest slope an idle player holds on: the engine mixes friction by the square root, so
+// sqrt(hold.friction x the port's floor friction (LevelBuilder::kStaticFriction)), the tangent of the
+// angle a body with that friction does not slide down.
+double HoldTan(const Tuning& tuning);
 
 // The original's walk speed, in metres a second of ITS physics: speedScale of applyForces,
 // speed x min(cap, the script's milliseconds) / the physics step's milliseconds.
@@ -127,7 +150,9 @@ bool Pushing(entt::registry& registry, entt::entity player, const glm::dvec2& ai
 // One tick of steering, before the physics step. `direction` is -1, 0 or 1: the
 // two-button pad (docs/original-gameplay.md section 1). Gravity first, as Box2D's step
 // integrates it before the contact; then applyForces' velocity; then Box2D's clamp of a
-// step's translation (b2_maxTranslation), which scales the whole velocity down.
+// step's translation (b2_maxTranslation), which scales the whole velocity down. A player on the
+// ground with no pad held on a slope it holds on is pressed into it along its normal: x velocity
+// -slope x one tick of gravity, so the sink the engine takes before it solves has no part along the slope.
 void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, float direction,
            const ScriptClock::Step& step);
 

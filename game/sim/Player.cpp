@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <vector>
 
@@ -58,6 +59,10 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         {"feet", "height_px", &Tuning::feetHeightPx},
         {"feet", "chamfer", &Tuning::feetChamfer},
         {"feet", "touch_px", &Tuning::feetTouchPx},
+        {"hold", "friction", &Tuning::holdFriction},
+        {"hold", "probe_offset_px", &Tuning::holdProbeOffsetPx},
+        {"hold", "probe_reach_px", &Tuning::holdProbeReachPx},
+        {"hold", "probe_line_tol_px", &Tuning::holdProbeLineTolPx},
     };
     Tuning read;
     for (const auto& field : fields) {
@@ -149,6 +154,33 @@ bool Grounded(entt::registry& registry, entt::entity player, const Tuning& tunin
     return false;
 }
 
+bool GroundSlope(entt::registry& registry, entt::entity player, const Tuning& tuning, double& slope) {
+    const glm::dvec2 centrePx = Units::ToPixels(registry.get<TransformComponent>(player).position);
+    const double bottomPx = centrePx.y + tuning.heightPx * 0.5;
+    // Left, centre, right.
+    double hitY[3];
+    entt::entity hitBody[3];
+    for (int probe = 0; probe < 3; ++probe) {
+        const double x = centrePx.x + (probe - 1) * tuning.holdProbeOffsetPx;
+        const glm::dvec2 from(x, bottomPx - tuning.holdProbeReachPx);
+        const glm::dvec2 to(x, bottomPx + tuning.holdProbeReachPx);
+        const std::optional<Shot::Hit> hit = Shot::FirstBody(registry, from, to, player);
+        if (!hit.has_value()) return false;
+        hitY[probe] = from.y + (to.y - from.y) * hit->along;
+        hitBody[probe] = hit->body;
+    }
+    if (hitBody[0] != hitBody[1] || hitBody[1] != hitBody[2]) return false;
+    // One plane: the centre hit on the line of the outer two. A chamfer's edge or a round top between them is
+    // not, and the engine's contact there is not along any line these probes could draw.
+    if (std::fabs(hitY[1] - 0.5 * (hitY[0] + hitY[2])) > tuning.holdProbeLineTolPx) return false;
+    slope = (hitY[2] - hitY[0]) / (2.0 * tuning.holdProbeOffsetPx);
+    return true;
+}
+
+double HoldTan(const Tuning& tuning) {
+    return std::sqrt(tuning.holdFriction * static_cast<double>(LevelBuilder::kStaticFriction));
+}
+
 glm::dvec2 PushAim(entt::registry& registry, entt::entity player, const Tuning& tuning, float direction,
                    const ScriptClock::Step& step) {
     const auto* rigid = registry.try_get<RigidBodyComponent>(player);
@@ -182,8 +214,19 @@ void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, 
 
     if (grounded) {
         // applyForces #38-56: set outright, the pad's -1, 0 or 1 times speedScale: no ramp, and no pad
-        // is a velocity of zero.
+        // is a velocity of zero - but for the hold below.
         rigid.velocity.x = direction * static_cast<float>(WalkCarried(tuning, step));
+        if (direction == 0.0f) {
+            // G10-5: the engine moves a body by its velocity before it solves the contacts, so the tick of gravity
+            // above sinks an idle player straight down into a slope and the contact pushes him out along its
+            // normal, 1.111 x sin x cos units a tick downhill (0.278 on 1-24's ramp) - a friction on the body
+            // is too late to stop it (Box2D solves first). Pressed along the normal instead, the sink and the
+            // push-out are the same line and nothing is left along the slope.
+            double slope = 0.0;
+            if (GroundSlope(registry, player, tuning, slope) && slope != 0.0 && std::fabs(slope) <= HoldTan(tuning)) {
+                rigid.velocity.x = static_cast<float>(-slope * FallPerTick(tuning, step));
+            }
+        }
     } else {
         // #63-84: the pad is ignored and the body keeps min(1, GetFPSRate() / 60 x 0.86) of its x.
         rigid.velocity.x *= static_cast<float>(AirShare(tuning, step));
@@ -191,7 +234,8 @@ void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, 
 
     // b2Island::Solve (b2Island.cpp:286): a step's translation above b2_maxTranslation scales the whole
     // velocity down to it. In the port's metres a tick that is 2 / 2.8125 = 0.711 m, 35.6 units: a fall of
-    // 570 units reaches it, so only a body that goes on falling does - the hidden body of a dead player.
+    // about 590 units (586.7) reaches it, so only a body that goes on falling does - the hidden body of a
+    // dead player.
     const double limitM = tuning.maxTranslationM / tuning.referencePxPerUnit;
     const double translationM = std::hypot(static_cast<double>(rigid.velocity.x), static_cast<double>(rigid.velocity.y)) *
                                 static_cast<double>(step.physicsS);
