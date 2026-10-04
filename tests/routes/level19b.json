@@ -1,36 +1,45 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-20 (R1 fix 1): antiportal_1601 (scale 5.5, 176 px at 32 x scale) holds the knight's whole walk,",
-    "the key it carries and the shock diamond, so every portal here is placed outside it (the nearest,",
-    "187 px). Right off the ledge, short, onto the floor left of destroyier_ent_1666; a portal at (305,",
-    "200) and one on the player carry it over the destroyier; right under the anchor to",
-    "shock_diamond_ent_1633 (tick 165). Back left to the floor seam (256); a portal high at (258, 40),",
-    "and one at (280, 204) walked into: out of the high one moving right, over the spinning platform's",
-    "end onto the anchor, where the diamond strikes the knight (tick 323) and the key is taken. Left off",
-    "the anchor: a portal at (185, 130) and one on the player falling off the tilting platform at (272,",
-    "150); down by the keyhole, the yellow door goes, and left into the door. Won on tick 516. Leans on",
-    "the port's 16 px destroyier box (Hazards.hpp: the original's sensor is the whole 128 x 16 shape,",
-    "which the player stands on here), G1 (the knight never sees or shoots), G10 (air control) and G4",
-    "(shot speed).",
-    "Step 137 (a shot leaves on the release): won on tick 518; the shots up on 280 and 363 are aimed",
-    "1.039 and 1.482 px off their points (the camera moved while the finger was down)."
+    "3-20 (R1 fix 1; re-authored in round 3 on the timing group's build): antiportal_1601 (scale 5.5, 176 px at 32 x scale)",
+    "holds the knight's whole walk, the key it carries and the shock diamond, so every portal here is placed outside it.",
+    "Right off the ledge (1-44: walked to its corner, where the body rolls off; the idle player no longer creeps there,",
+    "planning step 148's amendment), short, onto the floor left of destroyier_ent_1666 (the port's 16 x 16 box at x 230-246",
+    "kills on entry, so the floor from x 256 left is never walked); a portal at (305, 200) and one on the player (tick 120)",
+    "carry it over the destroyier; right under the anchor to shock_diamond_ent_1633 (tick 166). Back left to the floor seam",
+    "(175-238: the walk ends in the seam's notch itself, at x 256.4, where the old route's creep carried him; one tick more",
+    "is the destroyier). A portal high at (258, 40) (45 ticks of flight, G4; any target right of 262 is stopped by",
+    "spinning_platform_1554's underside or lies in the ring) and one at (280, 204) walked into: the air brake (G10) carries",
+    "the exit 15 units, so the player comes out above the platform's left half (tick 303) and lands on it at x 270, where",
+    "the seesaw drops it to the floor and throws the knight off (tick 316); it drifts down and lands on the floor at x 293",
+    "on tick 420. The same pair again (tick 390 and 437): out of the high one, onto the floor beside the knight, where the",
+    "diamond strikes it (tick 469) and the key is taken (470), the knight's drop. A portal at (200, 204), left of the",
+    "destroyier's box, and one on the player (tick 504): the key opens the yellow door at its keyhole (unlocked on 508, the",
+    "door gone on 600 while the player waits against it), and left into the door. Won on tick 638. KNIFE-EDGE: the second",
+    "walk wins only for an end on tick 238 (237 does not win, 239 and later die on the destroyier on tick 240); it replays",
+    "deterministically but is not robust, and the world's time base and G3 will move it. Leans on the port's 16 px",
+    "destroyier box (Hazards.hpp: the original's sensor is the whole 128 x 16 shape), G1 (the knight never sees or shoots),",
+    "G10 (air brake) and G4 (shot speed)."
   ],
   "level": "level19b",
-  "win_by": 580,
+  "win_by": 690,
   "holds": [
-    {"walk": "right", "from": 1, "to": 42},
+    {"walk": "right", "from": 1, "to": 44},
     {"walk": "right", "from": 125, "to": 168},
-    {"walk": "left", "from": 175, "to": 236},
-    {"walk": "right", "from": 270, "to": 326},
-    {"walk": "left", "from": 335, "to": 600}
+    {"walk": "left", "from": 175, "to": 238},
+    {"walk": "right", "from": 302, "to": 330},
+    {"walk": "left", "from": 375, "to": 386},
+    {"walk": "right", "from": 438, "to": 475},
+    {"walk": "left", "from": 510, "to": 640}
   ],
   "taps": [
     {"tick": 89, "at": [305, 200]},
     {"tick": 119, "at": [211.9, 202.3]},
     {"tick": 254, "at": [258, 40]},
-    {"tick": 279, "at": [280, 204]},
-    {"tick": 334, "at": [185, 130]},
-    {"tick": 362, "at": [272, 150]}
+    {"tick": 301, "at": [280, 204]},
+    {"tick": 390, "at": [258, 40]},
+    {"tick": 437, "at": [280, 204]},
+    {"tick": 476, "at": [200, 204]},
+    {"tick": 503, "at": [302.4, 202.3]}
   ]
 }

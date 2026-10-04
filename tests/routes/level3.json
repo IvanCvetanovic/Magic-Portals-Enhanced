@@ -4,17 +4,21 @@
     "1-04: from the ledge, a portal over the right-hand platform (aimed over the block at x 272-336",
     "and clear of the right walk pad's corner), one just ahead on the ledge; right into it, out over",
     "the platform; left off its end onto the ledge below; right again, down past the next ledge into",
-    "the door's room and the door. Won on tick 251 (step 113)."
+    "the door's room and the door. Won on tick 251 (step 113).",
+    "R3 round 1 (the timing group: G4's 3.2-unit shot, the 25-tick floored 400 ms): the near portal is shot first",
+    "(105, 80, down on 29, placed 37) and the far one on 56 (the first tap's 26 ticks later), because a shot to",
+    "(400, 175) now flies 103 ticks and the tap on 74 was refused; the pair opens on 160, the walk right into it",
+    "starts on 165 and the rest is the old route, won on tick 312."
   ],
   "level": "level3",
-  "win_by": 300,
+  "win_by": 360,
   "holds": [
-    {"walk": "right", "from": 85, "to": 110},
-    {"walk": "left", "from": 135, "to": 175},
-    {"walk": "right", "from": 200, "to": 300}
+    {"walk": "right", "from": 165, "to": 190},
+    {"walk": "left", "from": 210, "to": 250},
+    {"walk": "right", "from": 275, "to": 375}
   ],
   "taps": [
-    {"tick": 29, "at": [400, 175]},
-    {"tick": 74, "at": [105, 80]}
+    {"tick": 29, "at": [105, 80]},
+    {"tick": 56, "at": [400, 175]}
   ]
 }

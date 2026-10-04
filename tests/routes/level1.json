@@ -5,12 +5,12 @@
     "fires nothing; the level resumes on tick 61). Then the one portal the level grants, shot just left",
     "of the player on its ledge, where the hand points; left held. The player walks into it, comes out",
     "of the level's lone static portal in the room below and walks on to the door. Won on tick 170",
-    "(step 113)."
+    "(step 113); on the timing group's build it is won on tick 177 (win_by 220: 43 ticks of slack)."
   ],
   "level": "level1",
-  "win_by": 240,
+  "win_by": 220,
   "holds": [
-    {"walk": "left", "from": 110, "to": 240}
+    {"walk": "left", "from": 110, "to": 220}
   ],
   "taps": [
     {"tick": 1, "at": [448, 110], "shot": false},

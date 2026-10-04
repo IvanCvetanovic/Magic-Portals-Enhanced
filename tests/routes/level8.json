@@ -1,19 +1,21 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-09: test_mp_layer's Level8FromTheSpawnWithTapsAndWalking as a route. Right onto the slope and",
-    "let go; a shot over the stone to (30, 30), one just ahead of the player; right held again. The",
-    "player walks into the near portal, comes out behind the stone, pushes it off the ledge, and it",
-    "rolls into breakable_wall_625 (broken on tick 197). Won on tick 345 (step 113)."
+    "1-09: test_mp_layer's Level8FromTheSpawnWithTapsAndWalking as a route. Right onto the slope and let go; a shot over",
+    "the stone to (30, 30), one just ahead of the player; right held again. The player walks into the near portal, comes",
+    "out behind the stone, pushes it off the ledge, and it rolls into breakable_wall_625 (broken on tick 216). Re-authored",
+    "on the wave's timing build (round 1, R3): the shot to (30, 30) flies 3.2 units a tick after its 24-unit jump (192 a",
+    "second) and opens its portal on tick 117, so the second shot waits for it (tap 2 on tick 125, where it was on 99) and",
+    "the walk is held again from tick 140. Won on tick 388 (375 before the idle hold, step 113: 345)."
   ],
   "level": "level8",
   "win_by": 420,
   "holds": [
     {"walk": "right", "from": 1, "to": 25},
-    {"walk": "right", "from": 110, "to": 420}
+    {"walk": "right", "from": 140, "to": 420}
   ],
   "taps": [
     {"tick": 59, "at": [30, 30]},
-    {"tick": 99, "at": [240, 118]}
+    {"tick": 125, "at": [240, 118]}
   ]
 }

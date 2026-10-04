@@ -1,20 +1,16 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "4-11, weightless (step 127, R1: antiportal_ent_2250's 32 x 2 = 64 px lies under the hanging wall,",
-    "between the player's cell and the door). A tap up-left at the ceiling block (200, 5): its recoil",
-    "carries the player down-right onto spinning_platform_2132, which turns under it, and down past it",
-    "and the hanging wall's foot. From under the wall a portal in the door at (448, 150); its recoil",
-    "carries the player back left, and one on the player at (288, 166): into the door. Won on tick 248",
-    "(step 127)."
+    "4-11, weightless, re-authored on the timing build (wave 3a round 1). The old route fired a portal into the door at (448, 150) from under the hanging wall and then one on the player at (288, 166), where",
+    "the old 70 u/s recoil had carried him outside antiportal_ent_2250's 64 px ring at (358, 178). The recoil is now 140 u/s but the player rests at (330, 202) after the door shot, 37 px from the ring's",
+    "centre, and a portal on him there is refused (a third tap at (329.8, 201.9) fails: the tap, where no portal may open). The first tap alone does it: a tap up-left at the ceiling block (200, 5) fails",
+    "on double_block_plat_ent_2230 and its recoil of 140 u/s carries the player down-right onto spinning_platform_2132, which turns under it and carries him down past the hanging wall's foot to the",
+    "floor at tick ~350; the weightless body (the walk pads do nothing here) then drifts right along the floor at 19 u/s into the door. Won on tick 529."
   ],
   "level": "level10c",
-  "win_by": 310,
-  "holds": [
-  ],
+  "win_by": 570,
+  "holds": [],
   "taps": [
-    {"tick": 29, "at": [200, 5]},
-    {"tick": 221, "at": [448, 150]},
-    {"tick": 245, "at": [288.0, 166.0]}
+    {"tick": 29, "at": [200, 5]}
   ]
 }

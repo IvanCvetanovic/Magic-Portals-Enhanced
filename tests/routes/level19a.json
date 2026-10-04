@@ -7,10 +7,10 @@
     "crates; the flame eases after it and burns both (gone on 130). Drag 2 (140-156) lifts the handle to (345, 30), so",
     "no shot passes the flame (G8, a shot through it becoming a fireball, is not built: the route keeps clear of it).",
     "Left off the ledge to the floor, right to x 145; a portal floating in the door room at (440, 100), through the",
-    "burnt crates' gap, and one on the player. Won on tick 344. The lesson hand goes on tick 11, the first held tick."
+    "burnt crates' gap, and one on the player. Won on tick 334 on the timing group's build (win_by 375: 41 ticks of slack). The lesson hand goes on tick 11, the first held tick."
   ],
   "level": "level19a",
-  "win_by": 400,
+  "win_by": 375,
   "holds": [
     {"walk": "left", "from": 40, "to": 70},
     {"walk": "right", "from": 100, "to": 150}

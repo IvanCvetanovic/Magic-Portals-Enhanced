@@ -2,31 +2,42 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "3-03 (step 127, R1: antiportal_1018's 32 x 3.8 = 122 px holds the door's platform and the gap before",
-    "it). A portal over block00_low_emissive_ent_981 at (330, 120) and one on the player; right onto the",
-    "crate. A portal over single_block_plat_low_emissive_ent_1010 at (600, 70), one on the player; one on",
-    "the far block at (760, 125), one on the player; right to x 814. A portal high at (806, 70) and one",
-    "in the gap at (880, 200), 158 px from the ring's centre: right off the block's end, falling into the",
-    "low one and out of the high one moving up (the character's velocity turned up, as",
-    "invertLinearVelocity does), over the gap onto the door's platform and into the door. The knight",
-    "never sees or shoots (G1, not built). Won on tick 449 (step 127).",
-    "Step 137 (a shot leaves on the release): won on tick 448; the shot up on 320 is aimed 0.085 px",
-    "off its point (the camera moved while the finger was down)."
+    "it, so no portal opens there). The old way over the gap - a portal high at (806, 70), one low in the",
+    "gap, the fall through the one and the rise out of the other - no longer reaches the door's platform:",
+    "the timing group's fall is 4000 u/s2, so the player enters the gap's portal after a fall of ~30 px",
+    "and comes out rising 33 px (round 1's try: apex y 138.9 against the 122.5 he needs). This route",
+    "bridges the gap with the level's own crate instead (round 2):",
+    "it is teleportable, 58 px wide for a gap of 64, and the single block at the gap's foot lies 58 px",
+    "below both platforms, so a crate that falls into the gap lies flush with them.",
+    "The first four taps are the old route's, re-timed to the new flights (24 + 3.2 u a tick): a portal",
+    "over block00_low_emissive_ent_981 at (330, 120) and one on the player; right onto the crate; a portal",
+    "over single_block_plat_low_emissive_ent_1010 at (600, 70) and one on the player on the crate: he",
+    "comes out on that block on tick 198. Right to the end of its top (x 630.2, where the view reaches",
+    "x 857), one portal in the gap's top at (857, 150) - 130.8 u from the antiportal's centre, against",
+    "its 121.6 - which opens on tick 313; back left to x 611, where the ray to the crate clears the",
+    "block's corner, and a second portal 4 px over the crate's top at (416, 162). It opens on tick 376",
+    "with the crate inside it as it opens (an entry is an edge: a body already in a portal when the",
+    "second one opens is carried, one in a lone portal is not), so the crate goes through on that tick,",
+    "falls into the gap and lies at (861, 173) with its top on 144 from tick 391. Right again, from tick",
+    "314: off the 1010 block onto the moving platform, up with it onto the far block (tick 358), over the",
+    "crate and the door's platform and into the door. The knight never sees or shoots (G1, not built).",
+    "Won on tick 455 (round 2 of the route phase, the timing group's build); the earlier route, which",
+    "crossed the gap through two portals, won on tick 448 on the old timing."
   ],
   "level": "level2b",
-  "win_by": 510,
+  "win_by": 485,
   "holds": [
-    {"walk": "right", "from": 80, "to": 112},
-    {"walk": "right", "from": 280, "to": 300},
-    {"walk": "right", "from": 370, "to": 510}
+    {"walk": "right", "from": 100, "to": 125},
+    {"walk": "right", "from": 200, "to": 211},
+    {"walk": "left", "from": 248, "to": 255},
+    {"walk": "right", "from": 314, "to": 485}
   ],
   "taps": [
     {"tick": 29, "at": [330, 120]},
-    {"tick": 59, "at": [110, 90.3]},
-    {"tick": 149, "at": [600, 70]},
-    {"tick": 179, "at": [416, 145.1]},
-    {"tick": 229, "at": [760, 125]},
-    {"tick": 259, "at": [600, 68.3]},
-    {"tick": 319, "at": [806, 70]},
-    {"tick": 344, "at": [880, 200]}
+    {"tick": 92, "at": [110, 90.3]},
+    {"tick": 130, "at": [600, 70]},
+    {"tick": 195, "at": [393.3, 146.6]},
+    {"tick": 244, "at": [857, 150]},
+    {"tick": 314, "at": [416, 162]}
   ]
 }

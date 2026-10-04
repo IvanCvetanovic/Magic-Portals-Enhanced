@@ -1,28 +1,27 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "4-21 (step 133), won by the lift door's latch. A portal over breakable_wall_1751 at (420, 120) and one",
-    "beside rolling_stone_1759 at (70, 146) from the spawn platform: the stone drops through onto the wall",
-    "and breaks it (tick 80), then rises to gravity_agent_1758 and stays there. Right along the platform",
-    "and off its end: the player drifts over the bared button_1723 and presses it on tick 218 (218-222,",
-    "and again about 229-233), and",
-    "door_lift_1721 starts its whole 102.4 rise over its 6000 ms stride, eased (ETHCallback_door_lift",
-    "#330-440; it opens only from shut and nothing stops the rise), where the port's door before step 133",
-    "turned back as the well lifted the player off the button (B7). Right held throughout: the well's",
-    "pull bobs the player against the door's face at x 489, and once the rising door's bottom clears its",
-    "head the player drifts under it (ticks 490-575) and reaches the exit on tick 587; the door, fully",
-    "raised on 577 with the button up, starts down on 578 with the player already past it. No portal",
-    "after the first pair. Leans on the port's traversal by body overlap (the stone), G10 (air control:",
-    "the drift under the door is the held walk in the air) and the well's pull (R2, built in step 125)."
+    "4-21 (step 133, re-flown on the timing build, wave 3a round 1): a portal over breakable_wall_1751 at (420, 120)",
+    "(shot on 30, placed on 110) and one beside rolling_stone_1759 at (70, 146) (shot on 116, from the spawn",
+    "platform's x 139.6: from further right the ray meets the platform's corner): the stone drops through onto the",
+    "wall and breaks it (136), then rises to gravity_agent_1758 and stays there. Since G10 a walk off the platform's",
+    "end no longer crosses the pit to the button (the fall is 3.3 x as fast), so a second pair carries the player:",
+    "he walks right to x 250 (120-169; the view must show x 470, the camera at 242.5 or more), shoots a portal over",
+    "the bared button at (470, 115) (186, placed on 248) and one on himself (256), and comes out at (471, 123),",
+    "drops onto button_1723 (door_lift_1721 opens on 266) and, right held, walks to the door's face at x 489.8.",
+    "Once the rising door's bottom clears his head (~355) he drifts under it and reaches the exit on tick 387."
   ],
   "level": "level20c",
-  "win_by": 650,
+  "win_by": 440,
   "holds": [
     {"walk": "left", "from": 5, "to": 20},
-    {"walk": "right", "from": 90, "to": 650}
+    {"walk": "right", "from": 120, "to": 165},
+    {"walk": "right", "from": 260, "to": 700}
   ],
   "taps": [
     {"tick": 29, "at": [420, 120]},
-    {"tick": 69, "at": [70, 146]}
+    {"tick": 115, "at": [70, 146]},
+    {"tick": 185, "at": [470, 115]},
+    {"tick": 255, "at": [250, 98.5]}
   ]
 }

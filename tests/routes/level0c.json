@@ -1,23 +1,21 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "4-01, won as footage F17 wins it (out/parity/footage/F17.md 1.1): left against the locked pillar",
-    "(152.7, 140.3); a shot at (450.1, 85.0) passes 16 u from anti_portal_agent_ent_2107 (418, 108) and",
-    "kills it, and antiportal_2108 (scale 4, 128 px at 32 x scale) goes with it (tick ~140). A portal",
-    "at (200, 146), right of the player, and one at (372, 98), over the block the ring covered; right",
-    "into the first, out of the second onto the block, and on over the bridge into the rocket's door.",
-    "Won on tick 351 (step 127, R1: the old port-only way round the ring, a portal at (490, 60), is",
-    "inside the field while the agent lives)."
+    "4-01, re-authored on the timing build (wave 3a round 1: the floored script clock, the decoded walk, the shot at 200 u/s): won as footage F17 wins it (out/parity/footage/F17.md 1.1): left against the locked",
+    "pillar (152.7, 140.5), a tick earlier than before (he is there by tick 30); a shot at (450.1, 85.0) passes 16 u from anti_portal_agent_ent_2107 (418, 108) and kills it on tick 117 (a 72-tick flight at",
+    "3.2 u a tick), and antiportal_2108 (scale 4, 128 px at 32 x scale) goes with it. A portal at (200, 146), right of the player, on the very tick after the kill (in place on tick 126), and one at (372, 98),",
+    "over the block the ring covered, 26 ticks after that release - the 400 ms between taps is 25 ticks of 16 ms, refused - (a 63-tick flight, in place on tick 207). Right once it is: into the first on tick ~210,",
+    "out of the second onto the block, and on over the bridge into the rocket's door. Won on tick 365."
   ],
   "level": "level0c",
   "win_by": 410,
   "holds": [
-    {"walk": "left", "from": 1, "to": 96},
-    {"walk": "right", "from": 200, "to": 410}
+    {"walk": "left", "from": 1, "to": 60},
+    {"walk": "right", "from": 200, "to": 420}
   ],
   "taps": [
-    {"tick": 109, "at": [450.1, 85.0]},
-    {"tick": 149, "at": [200, 146]},
-    {"tick": 184, "at": [372, 98]}
+    {"tick": 44, "at": [450.1, 85.0]},
+    {"tick": 117, "at": [200, 146]},
+    {"tick": 143, "at": [372, 98]}
   ]
 }

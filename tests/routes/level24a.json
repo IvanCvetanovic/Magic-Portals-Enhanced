@@ -1,34 +1,40 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-25 (R1 fix 1): the lift up to the door's bridge lies inside antiportal_ent_1128 (scale 2, 64 px at 32 x",
-    "scale); every portal here is 78 px or more from the ring's centre. Right, a portal on button_1101 at (122,",
-    "118) and one on the player: door_lift_1100 rises; a portal through it into the middle at (400, 150) and one",
-    "on the player (tick 175); down behind the fireball carranca_right_1126 fired on 120. Right, a portal on",
-    "button_1106 at (310, 72) and one on the player: door_lift_1104 rises; a portal through it at (525, 190) and",
-    "one on the player (350), out of the fireball's lane onto lift_ent_1137, which waits at its foot; a touch",
-    "(390) sends it up to the bridge, and right into the door. Won on tick 510. The shot on tick 320 passes 20 px",
-    "from reflect_agent_1127 (the port catches at 16; G9 may change that). Re-authored in step 140 (G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a second, and the touch fires no shot (\"shot\": false),",
-    "where step 127's route rode the port's self-running lift (459)."
+    "2-25 (R1 fix 1, re-flown on the timing build, wave 3a round 1): the lift up to the door's bridge lies inside",
+    "antiportal_ent_1128 (scale 2, 64 px at 32 x scale); every portal here is 78 px or more from the ring's centre. Right",
+    "to x 151.6 (5-28), a portal on button_1101 at (122, 118) (tap 30, placed on 52) and one on the player (56): onto the",
+    "block and the button, which presses for 18 ticks, long enough for door_lift_1100 to rise and stay up ~50 ticks more.",
+    "He walks off the block's right end (84-90: the idle player no longer creeps, planning step 148's amendment) and falls",
+    "(92); a shot from him in the air (tap 96) to (400, 150), over carranca_right_1126's head (a shot from the floor ends",
+    "on its top, 171.5) and under the rising door, is placed on 171, and a portal on the player (171): into the middle of",
+    "room B, behind the fireball spat on ~125 (the next burns x 400 on ~412). Right to x 452.8 (190-211), where a shot to",
+    "(310, 72) clears block 1105's corner (tap 214, placed on 268), and one on the player (268): onto button_1106, where he",
+    "stands (no creep on it) and door_lift_1104 stays up. A shot through the door at (525, 190) (tap 300, placed on 370)",
+    "and one on the player (370): out in room C under the door, which closes on him from ~395 (it crushes), so right at",
+    "once (377-410) along the floor onto lift_ent_1137, which waits at its foot; a touch (412) sends it up to the bridge",
+    "(495) and right into the door (the walk starts while it rises, 480). Won on tick 515. The shot on tap 300 passes 19.6",
+    "px from reflect_agent_1127 (the port catches at 16; G9 may change that). Leans on G2 (a touch inside the lift sends",
+    "it, and fires no shot), G4 (a shot flies 25 to 70 ticks), G10 (the walk) and the door's closing (step 133)."
   ],
   "level": "level24a",
-  "win_by": 570,
+  "win_by": 545,
   "holds": [
-    {"walk": "right", "from": 5, "to": 26},
-    {"walk": "left", "from": 76, "to": 79},
-    {"walk": "right", "from": 196, "to": 216},
-    {"walk": "right", "from": 350, "to": 376},
-    {"walk": "right", "from": 470, "to": 570}
+    {"walk": "right", "from": 5, "to": 28},
+    {"walk": "right", "from": 84, "to": 90},
+    {"walk": "right", "from": 190, "to": 211},
+    {"walk": "right", "from": 377, "to": 410},
+    {"walk": "right", "from": 480, "to": 700}
   ],
   "taps": [
-    {"tick": 39, "at": [122, 118]},
-    {"tick": 69, "at": [150, 202.3]},
-    {"tick": 124, "at": [400, 150]},
-    {"tick": 174, "at": [129.2, 123.4]},
-    {"tick": 224, "at": [310, 72]},
-    {"tick": 254, "at": [453.2, 202.3]},
-    {"tick": 319, "at": [525, 190]},
-    {"tick": 349, "at": [310, 74.3]},
-    {"tick": 390, "at": [608, 244], "shot": false}
+    {"tick": 30, "at": [122, 118]},
+    {"tick": 56, "at": [151.6, 202.5]},
+    {"tick": 96, "at": [400, 150]},
+    {"tick": 171, "at": [148.1, 202.5]},
+    {"tick": 214, "at": [310, 72]},
+    {"tick": 268, "at": [452.8, 202.4]},
+    {"tick": 300, "at": [525, 190]},
+    {"tick": 370, "at": [311.8, 74.5]},
+    {"tick": 412, "at": [608, 244], "shot": false}
   ]
 }

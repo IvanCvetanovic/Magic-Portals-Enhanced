@@ -1,33 +1,30 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-12 (step 127, R1). Right off the spawn block to the floor; a shot at anti_portal_agent_ent_1377",
-    "(196, 164) kills it (tick ~88) and antiportal_1376 (99 px) goes with it. A portal at (100, 200) and",
-    "one beside crate_small_ent_1372 at (125, 113): the crate goes through, and rolling_stone_1198, which",
-    "it held in its nook inside antiportal_1375's field, rolls down to the floor by the left wall. A",
-    "portal over the crate at (120, 150) and one on the player, who lands on the crate. A portal against",
-    "the left face of breakable_wall_ent_1368 at (320, 140) and one over the stone at (30, 188): the",
-    "stone comes out touching the wall and breaks it (tick 380). A portal at (410, 140), outside",
-    "antiportal_1533's 42 px, and one on the player: down onto the key's shelf, left to take the key, off",
-    "the shelf's end onto the keyhole's platform, where the key opens the yellow door; right into the",
-    "door. The knights never see or shoot (G1, not built). Won on tick 636 (step 127)."
+    "3-12, re-authored on the timing build (wave 3a round 1: the floored script clock, the decoded walk, the shot at 200 u/s). Right off the spawn block to the floor; a shot at anti_portal_agent_ent_1377",
+    "(196, 164) kills it (tick 100, a 30-tick flight) and antiportal_1376 (99 px) goes with it. A portal at (100, 200) and one beside crate_small_ent_1372 at (125, 113), 26 ticks after the",
+    "last shot's release (the 400 ms between taps is 25 ticks of 16 ms, refused): the crate goes through, and rolling_stone_1198, which it held in its nook inside antiportal_1375's field, rolls down",
+    "and now comes to rest at (153, 223) beside the crate, not at the left wall. A portal over the crate at (120, 150) and one on the player, who lands on the crate. A portal against the left face of",
+    "breakable_wall_ent_1368 at (320, 140) (a 62-tick flight, in place on tick 407) and one over the resting stone at (153, 188): the stone comes out touching the wall and breaks it (tick 417). The player",
+    "drops to the floor as the crate slides off; a portal at (410, 140), outside antiportal_1533's 42 px (an 87-tick flight, in place on tick 522), and one on the player at (122.4, 234.5): down onto the key's shelf,",
+    "left to take the key, off the shelf's end onto the keyhole's platform, where the key opens the yellow door; right into the door. The knights never see or shoot (G1, not built). Won on tick 717."
   ],
   "level": "level11b",
-  "win_by": 700,
+  "win_by": 760,
   "holds": [
     {"walk": "right", "from": 1, "to": 20},
-    {"walk": "left", "from": 450, "to": 480},
-    {"walk": "right", "from": 570, "to": 700}
+    {"walk": "left", "from": 540, "to": 570},
+    {"walk": "right", "from": 660, "to": 740}
   ],
   "taps": [
     {"tick": 69, "at": [196, 164]},
     {"tick": 99, "at": [100, 200]},
-    {"tick": 124, "at": [125, 113]},
+    {"tick": 125, "at": [125, 113]},
     {"tick": 289, "at": [120, 150]},
-    {"tick": 314, "at": [83.1, 234.3]},
+    {"tick": 316, "at": [83.1, 234.3]},
     {"tick": 344, "at": [320, 140]},
-    {"tick": 369, "at": [30, 188]},
-    {"tick": 399, "at": [410, 140]},
-    {"tick": 434, "at": [117.8, 205.0]}
+    {"tick": 408, "at": [153, 188]},
+    {"tick": 434, "at": [410, 140]},
+    {"tick": 524, "at": [122.4, 234.5]}
   ]
 }

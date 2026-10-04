@@ -1,18 +1,16 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-12, as footage F6 plays it (planning step 115). A portal left of the player (tap 1) and",
-    "one above the ledge corner (tap 2); walking left through them lands the player on",
-    "button_1050, which lifts door_lift_1042. The second fireball flies through the risen door",
-    "and goes off on barrel_bomb_ent_1041 (tick 456); its blast takes breakable_wall_1040 on its",
-    "own tick (457). Off the ledge and right along the floor, ahead of the third fireball, to the",
-    "door. Won on tick 576."
+    "2-12, as footage F6 plays it (planning step 115), re-authored on the timing build (wave 3a round 1: the floored script clock, the decoded walk, the shot at 200 u/s). A portal left of the player (tap 1, a",
+    "25 px shot that is in place on tick 31) and one above the ledge corner (tap 2, a 46-tick flight, in place on 105 - the walk waits for it: left from 104 goes through on the first step); walking left lands the",
+    "player on button_1050 (tick ~125), which lifts door_lift_1042 (open on ~400). The second fireball (spat ~378) flies through the risen door and goes off on barrel_bomb_ent_1041 (tick 477); its blast takes",
+    "breakable_wall_1040 on its own tick (478). Off the ledge and right along the floor, ahead of the third fireball, to the door. Won on tick 590."
   ],
   "level": "level11a",
-  "win_by": 640,
+  "win_by": 630,
   "holds": [
-    {"walk": "left", "from": 88, "to": 130},
-    {"walk": "right", "from": 480, "to": 640}
+    {"walk": "left", "from": 104, "to": 130},
+    {"walk": "right", "from": 480, "to": 630}
   ],
   "taps": [
     {"tick": 29, "at": [182, 206]},

@@ -3,11 +3,14 @@
   "_about": [
     "4-06, weightless (step 127, R1: antiportal_2101's 32 x 6 = 192 px holds the whole corridor the",
     "player starts in, so no portal opens there). One tap behind the player at (60, 144): the shot dies",
-    "in the field, and its recoil pushes the player right at 70 u/s, down the middle of the corridor, out",
-    "past its end and into the door. Won on tick 330 (step 127)."
+    "in the field, and its recoil pushes the player right, down the middle of the corridor, out past its",
+    "end and into the door: 70 u/s when the route was written (step 127, won on tick 330), 140 u/s since",
+    "G10's zero-g recoil (step 148), which wins on tick 180. The route file is unchanged by the timing",
+    "group; its win_by was 390 and is 225 (45 ticks of slack, as the re-authored routes carry) so a",
+    "regression of the recoil cannot hide behind it."
   ],
   "level": "level5c",
-  "win_by": 390,
+  "win_by": 225,
   "holds": [
   ],
   "taps": [

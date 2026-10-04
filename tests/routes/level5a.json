@@ -10,10 +10,13 @@
     "(300, 202) (345), under the middle block. Fireball #2 goes into it (about 382), comes out of",
     "(215, 32) flying right and burns the crate (390). The pair stays. At the foot a touch sends the lift",
     "up (400); at the top (528), a portal in the pocket at (380, 30) (531; it takes the oldest end's",
-    "place) and one on the player (556): out over the door, which he falls onto. Won on tick 575. Every",
-    "one of eight nudges wins (each tap 4 to 11 ticks either way). Leans on G4 (the shot's speed). The",
-    "platform gate (step 136) holds nothing: no placed portal is within 5.6 of the lift when anything goes",
-    "through."
+    "place) and one on the player: out over the door, which he falls onto. Won on tick 575 (step 144).",
+    "Re-authored on wave 3a's timing build (R3, round 1): the pocket shot, 225 px out, now flies 63 ticks",
+    "(G4, 3.2 a tick after a 24 jump) and lands on 595, so the self-tap that follows moved from 555 to 598",
+    "(more than 25 ticks after the shot's tap, and after its landing); nothing else moved. Won on tick 610.",
+    "Every tap 3 ticks either way wins; at 8 the first tap is held off by the 400 ms from the start, the",
+    "last one finds the shot still flying. The platform gate (step 136) holds nothing: no placed portal",
+    "is within 5.6 of the lift when anything goes through."
   ],
   "level": "level5a",
   "win_by": 630,
@@ -26,6 +29,6 @@
     {"tick": 344, "at": [300, 202]},
     {"tick": 400, "at": [160, 232], "shot": false},
     {"tick": 530, "at": [380, 30]},
-    {"tick": 555, "at": [165.6, 74.3]}
+    {"tick": 598, "at": [165.6, 74.3]}
   ]
 }

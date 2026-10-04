@@ -2,29 +2,32 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-28 as the original plays it (planning step 134): the flame burns the knight and the player",
-    "carries its key. Off the spawn's left end (1-32) and a few steps right; a portal at the ramp's",
-    "foot (270, 200) mid-fall (50) and one on the player (76). A portal at (220, 70) (300) and one on",
-    "the knight's walk at (90, 206) (330): the knight walks into it on its way right (~578), comes",
-    "out 45 px right of fire_agent_ent_1919, walks left into the flame and is set alight (604) and",
-    "destroyed a tick later; the yellow key stays where it was, (207.1, 60.3). A portal at (222, 40),",
-    "25 px from the key (610), and one on the player (640): the key is taken as the player comes",
-    "out; right up the ramp, it opens keyhole_ent_1936 (732), the locked door goes (~818), and right",
-    "into the exit. Won on tick 861. No tap inside antiportal_1940's 192 px or antiportal_2024's 96;",
-    "leans on G1 (knights never shoot) and G10."
+    "carries its key. Off the spawn's left end (1-32) and a few steps right; a portal at the ramp's foot",
+    "(270, 200), the shot leaving on 59 as the player falls past the left face of",
+    "single_block_plat_no_emissive_ent_1966 (80, 112): a shot fired higher, on 50 or 54, dies in that body",
+    "(the old tick 50), and this one flies 67 ticks (G4) and lands on 126. One on the player (129): the player",
+    "comes out at the ramp's foot while the knight crowds in from the right. A portal at (220, 70) (300) and",
+    "one on the knight's walk at (90, 206) (341, after the first has landed): the knight walks into it on its",
+    "way right, comes out 43 px right of fire_agent_ent_1919 (tick 618), walks left into the flame and is burned and",
+    "gone on 642; the yellow key stays where it was, (208.5, 60.0). A portal at (222, 40), 24 px from",
+    "the key (610), and one on the player (656, after the first has landed): the key is taken as",
+    "the player comes out; right up the ramp, it opens keyhole_ent_1936 (801), the locked door goes (851), and",
+    "right into the exit. Won on tick 894 (861 before). No tap inside antiportal_1940's 192 px or",
+    "antiportal_2024's 96; leans on G1 (knights never shoot), G10 and G4."
   ],
   "level": "level27c",
-  "win_by": 920,
+  "win_by": 930,
   "holds": [
     {"walk": "left", "from": 1, "to": 32},
     {"walk": "right", "from": 62, "to": 70},
-    {"walk": "right", "from": 650, "to": 920}
+    {"walk": "right", "from": 666, "to": 920}
   ],
   "taps": [
-    {"tick": 49, "at": [270, 200]},
-    {"tick": 75, "at": [54.9, 202.3]},
+    {"tick": 58, "at": [270, 200]},
+    {"tick": 128, "at": [54.9, 202.3]},
     {"tick": 299, "at": [220, 70]},
-    {"tick": 329, "at": [90, 206]},
+    {"tick": 340, "at": [90, 206]},
     {"tick": 609, "at": [222, 40]},
-    {"tick": 639, "at": [258.5, 202.3]}
+    {"tick": 655, "at": [258.5, 202.3]}
   ]
 }

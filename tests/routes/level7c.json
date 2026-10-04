@@ -2,21 +2,29 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-08, weightless (step 127, R1: the door stands on anti_portal_agent_ent_2126, at the centre of",
-    "antiportal_2123's 32 x 3 = 96 px). A tap at the left edge (4, 116) (a portal opens there, harmless):",
-    "its recoil carries the player right at 70 u/s. A shot at the agent (328, 128) passes through",
-    "shock_agent_2121 and kills it with the ring (tick ~72), and its recoil stops the player at x 158,",
-    "clear of both shock rings. A portal in the door at (328, 134), whose recoil carries the player back",
-    "left, and one on the player at (130.3, 108.6), right of shock_agent_ent_2122's 64 px: into the door.",
-    "Won on tick 106 (step 127)."
+    "antiportal_2123's 32 x 3 = 96 px). A tap at the left (a portal opens there, harmless): its recoil carries",
+    "the player right. A shot at the agent (328, 128) kills it with the ring, and its recoil stops the player",
+    "short of shock_agent_2121's 50 px. A shot in the door (328, 134), whose recoil carries the player back",
+    "left, and one on the player, right of shock_agent_ent_2122's 64 px: into the door. Won on tick 106",
+    "(step 127).",
+    "Re-authored on wave 3a's timing build (R3, round 1): the recoil is 140 u/s (G10, was 70) and a shot flies",
+    "3.2 px a tick after a 24-unit jump (G4). The first tap aims 90 px out, at (40, 140), so that it lands (52)",
+    "before the second may go, which the 400 ms (26 ticks of 16 ms) holds to its release on 57 while the player,",
+    "carried at 140 u/s, comes to shock_agent_2121's ring: aimed below the player the recoil lifts him to the",
+    "ceiling (y 102, farther from the agent), so the ring's edge is x 197 and he is at 191 (a flat shot, as the",
+    "old route's, left 0.8 px). The shot at the agent kills it on 87 and its recoil holds him at x 190; the door",
+    "shot (tap 88) lands on 126, the player 83 px on to x 107; the tap on him (127) opens the portal on him at",
+    "(97.9, 111.6), 7 px short of shock_agent_ent_2122's ring (x 91), and he is in the door on 130. Won on tick",
+    "130. Every tap 1 tick either way wins, two for most (the first tap's later side, and the second's earlier,",
+    "are the 400 ms and the ring)."
   ],
   "level": "level7c",
-  "win_by": 170,
-  "holds": [
-  ],
+  "win_by": 145,
+  "holds": [],
   "taps": [
-    {"tick": 29, "at": [4, 116]},
-    {"tick": 53, "at": [328, 128]},
-    {"tick": 79, "at": [328, 134]},
-    {"tick": 103, "at": [130.3, 108.6]}
+    {"tick": 29, "at": [40, 140]},
+    {"tick": 56, "at": [328, 128]},
+    {"tick": 88, "at": [328, 134]},
+    {"tick": 127, "at": [97.9, 111.6]}
   ]
 }

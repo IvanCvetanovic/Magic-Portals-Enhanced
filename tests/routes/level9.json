@@ -3,24 +3,27 @@
   "_about": [
     "1-10, won by killing both anti-portal agents (step 126, R17). From the spawn a shot at",
     "anti_portal_agent_ent_599 (384, 108) kills it over the block and antiportal_574 (scale 4.5) goes",
-    "with it (tick 56), which frees the block's top: a portal there at (384, 150) and one on the player.",
-    "Right off the block to x 525, under the hanging column. The shot to the door's block at (690, 140)",
-    "passes 21 px from anti_portal_agent_ent_639 (608, 192) and kills it with antiportal_638 (tick 208);",
-    "the same tap again opens the portal, one on the player, and right into the door. Won on tick 292",
-    "(step 126)."
+    "with it (tick 102), which frees the block's top: a portal there at (384, 150) and one on the player.",
+    "Right off the block to x 512, under the hanging column. The shot to the door's block at (690, 140)",
+    "passes 21 px from anti_portal_agent_ent_639 (608, 192) and kills it with antiportal_638 (tick 293);",
+    "the same tap again opens the portal, one on the player, and right into the door. Re-authored on",
+    "the wave's timing build (round 1, R3): a shot flies 3.2 units a tick after its 24-unit jump, so each",
+    "tap waits for the shot before it (the one to (384, 150) lands on tick 180, the one to (690, 140) on",
+    "353, the last tap three ticks after it), and the player, walking 144 a second, stops at x 512.4 on the",
+    "platform below. Won on tick 367 (step 126: 292)."
   ],
   "level": "level9",
-  "win_by": 350,
+  "win_by": 400,
   "holds": [
-    {"walk": "right", "from": 130, "to": 183},
-    {"walk": "right", "from": 290, "to": 350}
+    {"walk": "right", "from": 200, "to": 255},
+    {"walk": "right", "from": 366, "to": 400}
   ],
   "taps": [
     {"tick": 29, "at": [384, 108]},
-    {"tick": 69, "at": [384, 150]},
-    {"tick": 109, "at": [127, 204]},
-    {"tick": 199, "at": [690, 140]},
-    {"tick": 229, "at": [690, 140]},
-    {"tick": 259, "at": [525.4, 202.3]}
+    {"tick": 104, "at": [384, 150]},
+    {"tick": 181, "at": [127, 204]},
+    {"tick": 272, "at": [690, 140]},
+    {"tick": 300, "at": [690, 140]},
+    {"tick": 356, "at": [512.4, 204.3]}
   ]
 }

@@ -1,17 +1,18 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-01, walking only (planning step 114, the fireball dies on the first solid thing it touches). Left",
-    "along the top floor, pushing crate_no_emissive_796 off its left end; it falls into",
-    "carranca_right_ent_792's lane and the next fireball burns it (tick 181) while the player stands",
-    "behind it on the ledge below. Right once it has burned away: down the slope, ahead of the next",
-    "fireball, to the door. Won on tick 380 (step 114)."
+    "2-01, re-authored on the timing build (wave 3a round 1: the floored script clock, the decoded walk, a fireball at |dir| x 130), walking only (planning step 114: the fireball dies on the first",
+    "solid thing it touches). Left along the top floor, pushing crate_no_emissive_796 ahead of him, and stop on tick 100 (x 187): the crate slides on alone, off the floor's left end and along the ledge",
+    "to the carranca's face, where the fireball spat on tick ~188 bursts on it at x 38 (tick ~194) and burns it, while the fireball spat on tick ~94 flies the whole lane to the pillar (x 280, tick ~193)",
+    "with the player still on the floor. Left again from 142 and off the floor's end (x ~120) onto the ledge, landing on tick ~187; right from 190, down the slope ahead of the next fireball (never",
+    "nearer than 95 px) to the door. Won on tick 302."
   ],
   "level": "level0a",
-  "win_by": 440,
+  "win_by": 350,
   "holds": [
-    {"walk": "left", "from": 1, "to": 200},
-    {"walk": "right", "from": 260, "to": 440}
+    {"walk": "left", "from": 1, "to": 100},
+    {"walk": "left", "from": 142, "to": 170},
+    {"walk": "right", "from": 190, "to": 350}
   ],
   "taps": []
 }

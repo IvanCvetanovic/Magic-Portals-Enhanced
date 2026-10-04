@@ -3,20 +3,21 @@
   "_about": [
     "4-14 (planning step 135, G6): shock_agent_2285 (areaRadius 90) stands on the door, which also lies",
     "in antiportal_2284's 160, and only a fireball removes a shock agent. carranca_ent_2287 fires left",
-    "along y 196, 100 u under the agent. In zero gravity: a portal in its lane at (320, 196) (30) and",
-    "one at (310, 120) (60), both outside the ring's 160, each tap's recoil drifting the player up and",
-    "left against the wall. Fireball #1 goes in on 167, comes out of (310, 120) flying right and",
-    "destroys the agent and itself (217). Two taps into block00_ent_2343 on the left (240, 265), whose",
-    "shots fail on it, drift the player right at 138 u/s over the pair and into the door. Won on tick",
-    "354. Leans on the port's zero-gravity recoil (70 u/s a tap, added) and G4 (the shot's speed)."
+    "along y 196, 100 u under the agent. In zero gravity: a portal in its lane at (320, 196) (30; open on 55,",
+    "its 24-unit-jump flight is 25 ticks) and one at (310, 120) (59; open on 75), both outside the ring's 160,",
+    "each tap's recoil (140 u/s since step 148) drifting the player up and left against the wall. Fireball #1",
+    "(fired on 127) goes in on 175, comes out of (310, 120) flying right and destroys the agent and itself",
+    "(227). One tap into block00_ent_2343 on the left (153, 45), whose shot fails on it, drifts the player",
+    "right at 138 u/s over the pair and into the door: the 140 u/s recoil of one tap is what the 70 u/s of two",
+    "taps was. Won on tick 342. Leans on the port's zero-gravity recoil (step 148) and G4 (the shot's speed).",
+    "Re-authored on the wave 3a timing build (R3 round 1)."
   ],
   "level": "level13c",
-  "win_by": 420,
+  "win_by": 390,
   "holds": [],
   "taps": [
     {"tick": 29, "at": [320, 196]},
     {"tick": 59, "at": [310, 120]},
-    {"tick": 239, "at": [153, 45]},
-    {"tick": 264, "at": [182, 50]}
+    {"tick": 239, "at": [153, 45]}
   ]
 }

@@ -2,38 +2,28 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-32, the dark dragon, won by three burns from barrels its own fireballs set off (planning step 116).",
-    "Left off the ledge to the seam at x 255.4 on the floor, where the dragon sees the player; tap 1 lights",
-    "the torch (the light wall goes, the summon comes 7 s later). Each wound: a portal at (171.4, 143.7) on",
-    "the fireball's line, 152 u from the antiportal's centre and within the blast's 190 u of the dragon;",
-    "then, 3 ticks after the shot leaves (1172, 1835, 2426), a portal beside the barrel on block 2219,",
-    "which comes out on the line with the fireball some 30 u short of it: wounds on 1198, 1861, 2452.",
-    "After the first two wounds the next shot at the player restocks the barrel at barrel_spawn (1619,",
-    "2246), and the player walks right out of that fireball's line and back to the seam. Dead, the",
-    "dragon drops the yellow key at (78, 208) and a platform (2993); tap 8 (2500) puts the torch out,",
-    "so the light wall is back: left to the key (3083), right to the keyhole (3295; the locked door goes",
-    "on 3384) and the door. Won on tick 3421. The portals are outside the original's 144 u antiportal (R1),",
-    "and each barrel goes through its pair before the fireball reaches the portal (G6); the summon clock,",
-    "the shot's 600 u/s (G4) and the walk (G10) are the port's, and a step that moves one re-authors this."
+    "Re-timed for the wave 3a timing build (CK, G10, G4): the walk is 2.4 u a tick, the shot takes 1 + (D - 27.2) / 3.2 ticks and the next tap waits for it to land and for the 400 ms (26 ticks).",
+    "Left off the ledge to the seam at x 255.4 on the floor (hold to 229), where the dragon sees the player; tap 1 on 262 (the camera has settled) lights the torch (lit on 305: the light wall goes, the dragon comes on 743 and is fighting from about 1205).",
+    "Each wound: a portal at (171.4, 143.7) on the fireball's line, 152 u from the antiportal's centre and within the blast's 190 u of the dragon, shot well before the fireball (1149, 1680, 2120); then the barrel's portal at (405, 64) beside the barrel on block 2219, shot 58 ticks before its landing so that the barrel goes through and comes out on A as the fireball nears it: the dragon's fireball spat on 1288 reaches A on about 1327, the portal lands on 1323 (any tap of 1251-1279 wounds), burst 1324, blast 1325.",
+    "A wound takes the portals; the next fireball (1539) goes at the torch, the one after (1765, 2204) at the player and restocks the barrel at barrel_spawn, and it is that fireball, with the barrel on its block 30 ticks later, that the second and third wounds use (B landed on 1800, wound 1802; B landed on 2239, wound 2241, dead): the player never leaves the seam and no fireball reaches him.",
+    "The fireball that follows wound 2 (2016) lights the torch again; tap 8 (2290, after the last wound) puts it out (2337), so the light wall is back under the key's side: the dragon drops the yellow key at (78, 208) on 2805; left to it (picked 2894), right to the keyhole (unlocked 3175, door_locked gone 3225) and the door. Won on tick 3263.",
+    "The portals are outside the original's 144 u antiportal (R1) and each barrel goes through its pair before the fireball reaches the portal (G6)."
   ],
   "level": "level31c",
-  "win_by": 3480,
+  "win_by": 3320,
   "holds": [
-    {"walk": "left", "from": 30, "to": 203},
-    {"walk": "right", "from": 1630, "to": 1659},
-    {"walk": "left", "from": 1740, "to": 1769},
-    {"walk": "right", "from": 2264, "to": 2293},
-    {"walk": "left", "from": 2342, "to": 2371},
-    {"walk": "left", "from": 3020, "to": 3088},
-    {"walk": "right", "from": 3100, "to": 3480}
+    {"walk": "left", "from": 30, "to": 229},
+    {"walk": "left", "from": 2830, "to": 2904},
+    {"walk": "right", "from": 2920, "to": 3430}
   ],
   "taps": [
-    {"tick": 214, "at": [210, 34]},
-    {"tick": 1119, "at": [171.4, 143.7]},
-    {"tick": 1174, "at": [405, 64]},
-    {"tick": 1789, "at": [171.4, 143.7]},
-    {"tick": 1837, "at": [405, 64]},
-    {"tick": 2389, "at": [171.4, 143.7]},
-    {"tick": 2428, "at": [405, 64]},
-    {"tick": 2499, "at": [210, 34]}
+    {"tick": 262, "at": [210, 34]},
+    {"tick": 1149, "at": [171.4, 143.7]},
+    {"tick": 1265, "at": [405, 64]},
+    {"tick": 1680, "at": [171.4, 143.7]},
+    {"tick": 1742, "at": [405, 64]},
+    {"tick": 2120, "at": [171.4, 143.7]},
+    {"tick": 2181, "at": [405, 64]},
+    {"tick": 2290, "at": [210, 34]}
   ]
 }

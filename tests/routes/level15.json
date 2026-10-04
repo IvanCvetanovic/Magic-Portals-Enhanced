@@ -6,17 +6,24 @@
     "one's reach, goes through, drops out of the first onto the button and holds door_lift_671 open.",
     "Then a portal through the emptied notch into the room beyond the pillar, and one just ahead of",
     "the player; right held, out beyond the pillar, down, through the open door and on to the exit.",
-    "Won on tick 237 (step 113)."
+    "Won on tick 237 (step 113).",
+    "Re-authored on the wave 3a timing build (R3, round 1: shot flight G4, walk G10): a shot flies 3.2 units a",
+    "tick, so each tap waits for the shot before it to land, and the three that fly far are what takes the",
+    "time: (198, 196) 165 units, opens on ~74 (the next tap is refused before 74); (215, 96) 182 units, on",
+    "~132 - the crate goes through and holds the button, the door lifts in about 80 ticks and stays; (310, 70)",
+    "307 units, on ~222. So the taps go on 76, 136 and 226 (the earliest the shot before allows are 74, 133 and",
+    "222), and the walk right starts on 230, 3 ticks after the last: through the portal beside the player and",
+    "out beyond the pillar, as before. Won on tick 301."
   ],
   "level": "level15",
-  "win_by": 300,
+  "win_by": 325,
   "holds": [
-    {"walk": "right", "from": 175, "to": 300}
+    {"walk": "right", "from": 230, "to": 320}
   ],
   "taps": [
     {"tick": 29, "at": [198, 196]},
-    {"tick": 69, "at": [215, 96]},
-    {"tick": 129, "at": [310, 70]},
-    {"tick": 164, "at": [62, 205]}
+    {"tick": 76, "at": [215, 96]},
+    {"tick": 136, "at": [310, 70]},
+    {"tick": 226, "at": [62, 205]}
   ]
 }

@@ -1,17 +1,18 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "4-30 (R1 fix 1): knight B carries the key and stands at wayB1 inside antiportal_ent_2005 (scale 2,",
+    "4-30 (R1 fix 1; re-timed in R3 round 1 for the wave's timing group): knight B carries the key and stands at wayB1 inside antiportal_ent_2005 (scale 2,",
     "64 px at 32 x scale); every portal here is 93 px or more from the ring's centre. A shot at the unlit",
     "torch lights it (tick 41) and the light wall goes (131). Right off the ledge into the middle, left",
-    "into the lower room for shock_diamond_ent_2004 while knight A holds at wayA0 (674), and back out. A",
+    "into the lower room for shock_diamond_ent_2004 while knight A holds at wayA0, and back out. A",
     "portal above the gap at (290, 100), clear of the lit torch's reach (a shot that passes it puts the",
-    "torch out and the wall back), and one on the player: right along the ceiling platform, down to the",
-    "right floor, and left into knight B, which the diamond strikes (1028); the key is taken. Right",
-    "again, a portal on the ceiling platform at (530, 50) and one on the player; left along it, down the",
-    "gap and into the lower room past knight A: the key opens the keyhole (1380) and the yellow door goes",
-    "(1468). A portal at (255, 70) and one on the player: onto the top ledge and left into the door. Won",
-    "on tick 1590. Leans on G1 (the knights never see or shoot), G10 and G4."
+    "torch out and the wall back), and one on the player 26 ticks later (the 400 ms is 25 ticks of 16 ms and 25 is refused): right along the ceiling platform, down to the",
+    "right floor, and left into knight B, which the diamond strikes (1025); the key is taken. Right",
+    "again to x 573.8 (144 u/s, so the hold runs to 1170), a portal above the ceiling platform at (530, 50), a 42-tick flight (opens 1227), then one on the player (the",
+    "first tap of the pair stays unrefused only by waiting for the far one to open); left along it, down the",
+    "gap and into the lower room past knight A: the key opens the keyhole (halo 1444) and the yellow door goes",
+    "(1494). Right to x 271.6 (right of the ledge's end at 256, so the shot clears its corner), a portal at (255, 70) and, once it has opened (1548), one on the player: onto the top ledge and left into the door. Won",
+    "on tick 1650. Leans on G1 (the knights never see or shoot), G10 (the walk is 144 u/s, no steering in the air) and G4 (the shot flies 3.2 units a tick after a 24-unit jump)."
   ],
   "level": "level29c",
   "win_by": 1700,
@@ -21,18 +22,18 @@
     {"walk": "right", "from": 700, "to": 761},
     {"walk": "right", "from": 801, "to": 925},
     {"walk": "left", "from": 940, "to": 1060},
-    {"walk": "right", "from": 1070, "to": 1160},
-    {"walk": "left", "from": 1225, "to": 1420},
-    {"walk": "right", "from": 1432, "to": 1474},
-    {"walk": "left", "from": 1516, "to": 1800}
+    {"walk": "right", "from": 1070, "to": 1170},
+    {"walk": "left", "from": 1245, "to": 1440},
+    {"walk": "right", "from": 1446, "to": 1510},
+    {"walk": "left", "from": 1570, "to": 1800}
   ],
   "taps": [
     {"tick": 29, "at": [274, 50]},
     {"tick": 774, "at": [290, 100]},
-    {"tick": 799, "at": [268.7, 202.3]},
+    {"tick": 800, "at": [268.7, 202.3]},
     {"tick": 1184, "at": [530, 50]},
-    {"tick": 1214, "at": [572.4, 202.3]},
-    {"tick": 1487, "at": [255, 70]},
-    {"tick": 1514, "at": [266.6, 202.3]}
+    {"tick": 1230, "at": [573.8, 202.4]},
+    {"tick": 1511, "at": [255, 70]},
+    {"tick": 1552, "at": [266.6, 202.3]}
   ]
 }

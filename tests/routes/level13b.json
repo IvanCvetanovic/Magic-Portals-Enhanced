@@ -1,54 +1,169 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-14 (R1 fix 2): the blue key's pocket lies wholly inside antiportal_1335 (64, 132), scale 5, 160 px",
-    "at 32 x scale, with anti_portal_agent_1334 swinging at its centre. A portal at (250, 50) (203 px",
-    "from the ring's centre) and one on the player at (284, 160) (222 px): out of the high one, and on",
-    "tick 72, falling past (250, 144) with the camera at its top, a tap at (59.4, 5) under the ceiling:",
-    "the shot passes reflect_agent_1336 (horizontal plane, y 60), comes off it toward the tap mirrored,",
-    "(59.4, 115), and kills the agent on tick 94; the ring goes with it. Then a portal in the pocket at",
-    "(45, 50) and one on the player: the blue key (144); out by a portal at (250, 20) and one on the",
-    "player; right to keyhole_1230: door_locked_1229 goes (357). A portal at (280, 120) and one on the",
-    "rolling stone's top at (476, 112): the stone drops onto breakable_wall_1200 and breaks it (409),",
-    "falls on and rolls into the pit by the yellow door; left off the block after it, onto the stone in",
-    "the pit. From there a portal over button_1344 at (465, 390) and one on the crate's corner at (175,",
-    "262): the crate presses button_1344 and door_lift_1242 rises; a portal at (330, 262) and one on the",
-    "player: onto platform_1241. A portal over button_1343 at (470, 265) through the raised lift and one",
-    "on the stone's top at (217, 408): the stone presses button_1343 and door_lift_1342 rises. A portal",
-    "at (432, 236) and one on the player: down through the yellow key (846); left off the platform into",
-    "the pit, keyhole_ent_1197 (999), door_locked_ent_1196 goes (1047), under the raised lift into the",
-    "door. Won on tick 1095. No portal after tick 94 meets a living ring (there is none). Leans on the",
-    "port's reflector (shot.json's catch radius 16 and mirror-to-the-tap, both guesses; the original's",
-    "reflected leg, G9, is at least as long), the camera's top clamp (the tap at y 5 is on the view only",
-    "while the camera sits at the level's top), the port's traversal by body overlap (the crate's centre",
-    "25.8 px and the stone's 42.3 px from their portals), the stone breaking the wall on touch (the",
-    "original tests its speed, 11.1's row), G10 (the walk held through the falls) and G4 (shot speed)."
+    "3-14: the blue key's pocket lies wholly inside antiportal_1335 (64, 132), 160 px, with anti_portal_agent_1334 swinging at",
+    "its centre. A portal at (250, 50) (tap 26: the 400 ms from the level's start allow nothing sooner; placed on tick 56) and one",
+    "beside the player at (226, 160), which he walks into: the walk is timed to the shot-to-shot gap, 26 ticks (416 ms; 25 is",
+    "refused), so that he is still falling out of the high portal when the next tap is allowed (tick 86). A tap at (59.4, 12)",
+    "then: the shot passes reflect_agent_1336 (horizontal plane, y 60), comes off it toward the tap mirrored and kills the agent",
+    "on tick 129; the ring goes with it (aims y 9 to 18 and B portals x 226 and 228 all kill; x 220 is inside the ring). Then a",
+    "portal in the pocket at (45, 50) (placed 192) and one on the player: the blue key (211); out by a portal at (250, 45) and one",
+    "on the player; right to keyhole_1230: door_locked_1229 goes (466). A portal at (280, 120) and one beside the rolling stone at",
+    "(476, 112) (placed 490): the stone drops onto breakable_wall_1200 and breaks it (503) and rolls into the pit by the yellow",
+    "door. Left through the hole onto platform_1241 and off its end onto the lower platform, stopped at x 284 (above the lower",
+    "platform's top, from where the shots clear it). A portal over button_1344 at (465, 390) (tap 572) and one on the crate's",
+    "corner at (175, 262) (tap 630): the crate presses button_1344 (684) and door_lift_1242 rises (open 744); a portal at (330,",
+    "262) and one on the player: onto platform_1241. A portal over button_1343 at (470, 265) through the raised lift and one on",
+    "the stone's top at (225, 407): the stone presses button_1343 (848) and door_lift_1342 rises. A portal at (432, 236) and one",
+    "on the player: down through the yellow key (883); left off the platform, down into the pit (the stone is gone), keyhole_ent_1197",
+    "(1088), door_locked_ent_1196 goes, under the raised lift into the door. Re-authored on the wave 3a timing build (R3 round 1):",
+    "won on tick 1138. Leans on the port's reflector (shot.json's catch radius 16 and mirror-to-the-tap, both guesses), the",
+    "camera's view (the tap at y 12 is on the view only while the falling player has the camera near its top: view top 8.0),",
+    "the port's traversal by body overlap and G4 (the shot's speed: every far portal is 30 to 100 ticks of flight)."
   ],
   "level": "level13b",
   "win_by": 1200,
   "holds": [
-    {"walk": "left", "from": 138, "to": 146},
-    {"walk": "right", "from": 215, "to": 330},
-    {"walk": "left", "from": 470, "to": 520},
-    {"walk": "left", "from": 870, "to": 1200}
+    {
+      "walk": "left",
+      "from": 62,
+      "to": 86
+    },
+    {
+      "walk": "right",
+      "from": 318,
+      "to": 398
+    },
+    {
+      "walk": "left",
+      "from": 506,
+      "to": 566
+    },
+    {
+      "walk": "left",
+      "from": 900,
+      "to": 1200
+    }
   ],
   "taps": [
-    {"tick": 23, "at": [250, 50]},
-    {"tick": 47, "at": [284, 160]},
-    {"tick": 71, "at": [59.4, 5]},
-    {"tick": 95, "at": [45, 50]},
-    {"tick": 119, "at": [250, 160]},
-    {"tick": 151, "at": [250, 20]},
-    {"tick": 185, "at": [26, 158]},
-    {"tick": 359, "at": [280, 120]},
-    {"tick": 383, "at": [476, 112]},
-    {"tick": 599, "at": [465, 390]},
-    {"tick": 623, "at": [175, 262]},
-    {"tick": 669, "at": [330, 262]},
-    {"tick": 699, "at": [246.4, 414]},
-    {"tick": 759, "at": [470, 265]},
-    {"tick": 789, "at": [217, 408]},
-    {"tick": 819, "at": [432, 236]},
-    {"tick": 843, "at": [330, 284]}
+    {
+      "tick": 26,
+      "at": [
+        250,
+        50
+      ]
+    },
+    {
+      "tick": 60,
+      "at": [
+        226,
+        160
+      ]
+    },
+    {
+      "tick": 86,
+      "at": [
+        59.4,
+        12
+      ]
+    },
+    {
+      "tick": 130,
+      "at": [
+        45,
+        50
+      ]
+    },
+    {
+      "tick": 196,
+      "at": [
+        237.3,
+        160
+      ]
+    },
+    {
+      "tick": 224,
+      "at": [
+        250,
+        45
+      ]
+    },
+    {
+      "tick": 298,
+      "at": [
+        45,
+        160
+      ]
+    },
+    {
+      "tick": 380,
+      "at": [
+        280,
+        120
+      ]
+    },
+    {
+      "tick": 468,
+      "at": [
+        476,
+        112
+      ]
+    },
+    {
+      "tick": 572,
+      "at": [
+        465,
+        390
+      ]
+    },
+    {
+      "tick": 630,
+      "at": [
+        175,
+        262
+      ]
+    },
+    {
+      "tick": 684,
+      "at": [
+        330,
+        262
+      ]
+    },
+    {
+      "tick": 728,
+      "at": [
+        284.2,
+        400
+      ]
+    },
+    {
+      "tick": 756,
+      "at": [
+        470,
+        265
+      ]
+    },
+    {
+      "tick": 798,
+      "at": [
+        225,
+        407
+      ]
+    },
+    {
+      "tick": 846,
+      "at": [
+        432,
+        236
+      ]
+    },
+    {
+      "tick": 880,
+      "at": [
+        330,
+        284
+      ]
+    }
   ]
 }

@@ -1,27 +1,26 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-03, the fire sent back (re-authored in planning step 135, G6): the door (door_lift_758, a 16 s",
-    "stride) rises from the first press of button_760 (326) and, since step 133, all the way whatever",
-    "the button does after. The button stands in carranca_ent_677's lane (y 192), so the player holds it",
-    "behind a portal pair laid in the lane between him and the carranca: (330, 192) on 345, then",
-    "(270, 192) on 372. Each fireball goes into the far end (fireball #2 on 420), comes out of the near",
+    "2-03, the fire sent back (re-authored in planning step 135, G6; re-timed in R3 round 1): the door (door_lift_758, a 16 s",
+    "stride) rises from the first press of button_760 (the walk left touches it on tick 317) and, since step 133, all the way whatever",
+    "the button does after, so the player need not stand on it: he stops at x 207, just left of it (144 u/s, so the left walk's end at 330 now",
+    "stops there). A portal pair is laid in the lane (y 192) between him and carranca_ent_677:",
+    "the NEAR end (270, 192) first (tap 344, 65 units, open about 358), then the far one (330, 192) on 371 (G4: a 123-unit shot flies 31 ticks,",
+    "opens 402; the old order, far first, left the second tap refused as a shot still in flight, and 25 ticks between taps is refused too).",
+    "Each fireball (|dir| 1.25 x 130 = 162.5 u/s) goes into the far end (fireball #2, spat 375, enters about 433), comes out of the near",
     "one flying back right, passes the far end unmoved (it goes through a pair once) and goes off on the",
     "right wall; the pair stays for the next (the original's help popup W2P3 shows a fireball sent back",
-    "through a pair). Off the button on 860, under the door (0.77 raised) and in. Won on tick 911. Step",
-    "114's route (1458, eight hops through pairs along the floor) broke under G6: its hop pair carried",
-    "the fireball onto the player. The carranca's dirX is -1.25, so the original's fireball flies at",
-    "162.5 u/s; the port's at 130 (the backlog's |dir| row) - these ticks are the port's."
+    "through a pair). Left from 860, under the door and in. Won on tick 907."
   ],
   "level": "level2a",
-  "win_by": 970,
+  "win_by": 960,
   "holds": [
     {"walk": "right", "from": 240, "to": 256},
     {"walk": "left", "from": 257, "to": 330},
     {"walk": "left", "from": 860, "to": 970}
   ],
   "taps": [
-    {"tick": 344, "at": [330, 192]},
-    {"tick": 371, "at": [270, 192]}
+    {"tick": 344, "at": [270, 192]},
+    {"tick": 371, "at": [330, 192]}
   ]
 }

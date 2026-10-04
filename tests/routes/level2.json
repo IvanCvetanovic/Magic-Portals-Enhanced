@@ -3,18 +3,21 @@
   "_about": [
     "1-03: its tutorial popup comes up as the level loads and a touch closes it (tick 1; the level",
     "resumes on tick 61). Right over the mound to the foot of the door's block, where the camera shows",
-    "the block's top; a portal on it, one on the floor just ahead; right again, in and out on the block",
-    "and on to the door. Won on tick 303 (step 113)."
+    "the block's top; a portal on it, one on the floor just ahead. The first shot flies 45 ticks (the",
+    "decoded projectile, G4) and the second may only leave once it has landed (tick 285), so the second",
+    "tap is on tick 287, 47 ticks after the first, and the walk right waits for the second portal",
+    "(opened on tick 309); in and out on the block and on to the door. Won on tick 350 (round 3, the",
+    "timing group's build)."
   ],
   "level": "level2",
-  "win_by": 360,
+  "win_by": 380,
   "holds": [
     {"walk": "right", "from": 62, "to": 228},
-    {"walk": "right", "from": 280, "to": 360}
+    {"walk": "right", "from": 300, "to": 380}
   ],
   "taps": [
     {"tick": 1, "at": [102, 206], "shot": false},
     {"tick": 239, "at": [640, 170]},
-    {"tick": 269, "at": [566, 205]}
+    {"tick": 286, "at": [566, 205]}
   ]
 }

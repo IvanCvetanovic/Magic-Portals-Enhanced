@@ -2,32 +2,42 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "2-17 (planning step 134, G8): portals from the start at (190, 200) and on barrel_bomb_ent_1205's",
-    "side (125, 125) (24, 48): the barrel falls into fire_agent_ent_1183's flame and its blast breaks",
-    "breakable_wall_1179 (~84) - the player stays right of it, off the blast's line to the wall. A",
-    "portal at (140, 180), 33.1 px from the flame, and one on the player (100, 124): left of the",
+    "side (125, 125): the barrel falls into fire_agent_ent_1183's flame and its blast breaks",
+    "breakable_wall_1179 - the player stays right of it, off the blast's line to the wall. A",
+    "portal at (140, 180), 33.1 px from the flame, and one on the player (275, 252.3): left of the",
     "flame. Left through the broken wall, pushing crate_small_no_emissive_ent_1227 onto button_1112",
-    "(183), which lifts door_lift_1111 for good; back right to x 120. Portals at (275, 170) and on",
-    "barrel_bomb_ent_1206's side at (242, 110) (250, 274) drop it into the right room at (275, 255);",
-    "a shot right through the flame (320) is burned and its fireball sets the barrel off (361), whose",
+    "which lifts door_lift_1111 for good; back right to x 125. Portals at (275, 170) and on",
+    "barrel_bomb_ent_1206's side at (242, 110) drop it into the right room at (275, 255);",
+    "a shot right through the flame is burned and its fireball sets the barrel off, whose",
     "blast takes breakable_wall_1142 under the raised door. A portal at (243, 100) and one on the",
-    "player (344, 370): right of the flame, and right into the door. Won on tick 459."
+    "player: right of the flame, and right into the door.",
+    "Re-authored on the wave 3a timing build (R3, round 1: shot flight G4, walk G10): the first release is held off by",
+    "the 400 ms until tick 26 and each later one by the 26 ticks (25 is refused) and by the shot before it, which flies",
+    "3.2 units a tick after its 24-unit jump: (190, 200) on 26 (opens ~52), (125, 125) on 52 (opens ~109; the barrel is",
+    "through on 110 and bursts on the flame on 122, wall 1179 gone on 123), (140, 180) on 109 (opens ~156), the player's",
+    "own point on 157 - down at (140, 252.5) from 175. Left from 174: the crate reaches the button on 207 (the lift is",
+    "open for good by 270), back right from 214 to x 125.2 on 245. Portals (275, 170) on 245 (opens ~293) and (242, 110)",
+    "on 293 (opens ~345); the barrel is through on 346 and at rest in the right room on 380. The shot on 345 toward (300, 252.3)",
+    "is burned on 355 at (178, 252.5) and its fireball (2.08 a tick) bursts on the barrel on 391, wall 1142 gone on 392.",
+    "A portal at (243, 100) on 372 (opens ~427), the player's point on 427: out at (243, 103), on the floor from 449, and",
+    "right from 452 through the gap to the door. Won on tick 519."
   ],
   "level": "level16a",
-  "win_by": 520,
+  "win_by": 545,
   "holds": [
-    {"walk": "left", "from": 146, "to": 190},
-    {"walk": "right", "from": 196, "to": 226},
-    {"walk": "right", "from": 372, "to": 520}
+    {"walk": "left", "from": 174, "to": 211},
+    {"walk": "right", "from": 214, "to": 244},
+    {"walk": "right", "from": 452, "to": 540}
   ],
   "taps": [
-    {"tick": 23, "at": [190, 200]},
-    {"tick": 47, "at": [125, 125]},
-    {"tick": 99, "at": [140, 180]},
-    {"tick": 123, "at": [275, 252.3]},
-    {"tick": 249, "at": [275, 170]},
-    {"tick": 273, "at": [242, 110]},
-    {"tick": 319, "at": [300, 252.3]},
-    {"tick": 343, "at": [243, 100]},
-    {"tick": 369, "at": [120.2, 252.3]}
+    {"tick": 26, "at": [190, 200]},
+    {"tick": 52, "at": [125, 125]},
+    {"tick": 109, "at": [140, 180]},
+    {"tick": 157, "at": [275, 252.3]},
+    {"tick": 245, "at": [275, 170]},
+    {"tick": 293, "at": [242, 110]},
+    {"tick": 345, "at": [300, 252.3]},
+    {"tick": 372, "at": [243, 100]},
+    {"tick": 427, "at": [125.2, 252.3]}
   ]
 }

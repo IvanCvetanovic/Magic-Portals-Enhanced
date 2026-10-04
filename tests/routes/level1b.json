@@ -3,15 +3,17 @@
   "_about": [
     "3-02, walked (step 127, R1: antiportal_1728's 32 x 6 = 192 px holds the door and everything",
     "round it, so no portal opens there). Right along the top platform, off its end onto the knights'",
-    "walk and on to the right-hand wall; left along the ledge and off its end, down onto the long",
-    "platform, left off it onto the one below, left again and down onto the door's platform. The",
-    "knights never see or shoot in the port (G1, not built). Won on tick 352 (step 127)."
+    "walk and on along it to its right end (the walk's own 144 u/s reaches it on tick 190, where the",
+    "old 160 u/s reached it before 160), off it onto the platform below (tick ~207); left along that",
+    "one and off its end onto the long platform below, left off it onto the door's platform, and in.",
+    "The knights never see or shoot in the port (G1, not built). Won on tick 389 (round 3, the timing",
+    "group's build)."
   ],
   "level": "level1b",
-  "win_by": 410,
+  "win_by": 420,
   "holds": [
-    {"walk": "right", "from": 1, "to": 155},
-    {"walk": "left", "from": 160, "to": 410}
+    {"walk": "right", "from": 1, "to": 200},
+    {"walk": "left", "from": 205, "to": 420}
   ],
   "taps": []
 }

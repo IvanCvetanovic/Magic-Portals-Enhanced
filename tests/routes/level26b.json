@@ -6,32 +6,35 @@
     "a knight does not; every portal here is 116 px or more from the ring's centre. Left off the top",
     "platform onto the middle one while knight B holds at wayB1. A portal in the key's pocket at (80,",
     "185) and one at the knight's post (232.4, 186): the knight goes into the pocket and takes the key",
-    "(tick 622; a minion carries a key). A portal on the pillar and one on the player; from the pillar a",
+    "(tick 635; a minion carries a key). A portal on the pillar and one on the player; from the pillar a",
     "portal on the middle platform at (200, 180) and one over the knight, stuck against the pillar at",
     "(89.4, 199): out it comes with the key and walks back to wayB0. A portal between the top platform",
-    "and the small block at (275, 120) and one on the player: the shock diamond is taken; left off the",
-    "block, and at the knight the diamond strikes it (tick 948) and the key drops and is taken. A portal",
-    "at (270, 120) and one walked into at (190, 186.3): out moving right, over the block and down by the",
-    "keyhole (unlocked 1045, the door gone 1132); right into the door. Won on tick 1166. Leans on G1 (the",
-    "knight never sees or shoots), G10 and G4."
+    "and the small block at (275, 120) and one on the player (the third shot is 175 px away and flies",
+    "until tick 898, so the next is on 900): the shock diamond is taken; left off the block, and at the",
+    "knight the diamond strikes it (tick 954) and the key drops and is taken. A portal at (270, 120) (its",
+    "shot flies until 1005, so the next is on 1010) and one walked into at (190, 186.3): out moving right,",
+    "over the block and down by the keyhole (key into it 1088, the door gone 1138); right into the door.",
+    "Won on tick 1172 (1166 before). Each tap is 26 ticks or more after the last release (25 ticks is the",
+    "400 ms the original refuses) and after the last shot has landed. Leans on G1 (the knight never sees or",
+    "shoots), G10 and G4."
   ],
   "level": "level26b",
-  "win_by": 1250,
+  "win_by": 1220,
   "holds": [
     {"walk": "left", "from": 490, "to": 528},
     {"walk": "left", "from": 900, "to": 948},
-    {"walk": "right", "from": 1000, "to": 1300}
+    {"walk": "right", "from": 1006, "to": 1300}
   ],
   "taps": [
     {"tick": 579, "at": [80, 185]},
-    {"tick": 604, "at": [232.4, 186]},
+    {"tick": 606, "at": [232.4, 186]},
     {"tick": 639, "at": [108, 160]},
-    {"tick": 664, "at": [148.5, 186.3]},
+    {"tick": 666, "at": [148.5, 186.3]},
     {"tick": 794, "at": [200, 180]},
-    {"tick": 819, "at": [89.4, 199]},
-    {"tick": 849, "at": [275, 120]},
-    {"tick": 874, "at": [108, 170.3]},
+    {"tick": 820, "at": [89.4, 199]},
+    {"tick": 850, "at": [275, 120]},
+    {"tick": 900, "at": [108, 170.3]},
     {"tick": 974, "at": [270, 120]},
-    {"tick": 1004, "at": [190, 186.3]}
+    {"tick": 1010, "at": [190, 186.3]}
   ]
 }

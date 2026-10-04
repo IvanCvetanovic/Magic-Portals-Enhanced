@@ -9,15 +9,23 @@
     "on the player again. It comes out at (540, 122) moving left and passes through the door. Won on",
     "tick 125 (step 125).",
     "Step 137 (a shot leaves on the release): won on tick 127; the shot up on 117 is aimed 1.137 px",
-    "off its point (the camera moved while the finger was down)."
+    "off its point (the camera moved while the finger was down).",
+    "Re-authored on the wave 3a timing build (R3, round 1: shot flight G4, player movement G10): the shot to",
+    "(320, 200) flies 220 units and its portal opens on tick 92, so the shot on the player waits for it: it",
+    "goes on tick 91, as the player bobs up through y 54.4 in the well (x 146.7), and the player leaves the",
+    "first portal at rest at (320, 202), clear of every well. The shot at (540, 120) goes on 118 (the camera",
+    "shows it, at the view's edge); its recoil (140 u/s) throws the player left into the well at (208, 192),",
+    "where it is held while the shot flies (it opens its portal on tick 185). A shot on the player on tick 188,",
+    "at (198.1, 162.9): out at (540.3, 122) falling past the door. Won on tick 203. The player's speed when",
+    "it enters the portal is what it leaves with: 187, 188, 190 and 193 win, 189, 191 and 192 do not."
   ],
   "level": "level17c",
-  "win_by": 180,
+  "win_by": 225,
   "holds": [],
   "taps": [
     {"tick": 29, "at": [320, 200]},
-    {"tick": 59, "at": [146.7, 64]},
-    {"tick": 89, "at": [540, 120]},
-    {"tick": 116, "at": [291.3, 243.5]}
+    {"tick": 91, "at": [146.7, 54.4]},
+    {"tick": 118, "at": [540, 120]},
+    {"tick": 188, "at": [198.1, 162.9]}
   ]
 }

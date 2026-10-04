@@ -5,16 +5,22 @@
     "projectile blocker kills any shot across it low). Right to x 87, clear of the low block over the",
     "spawn; a portal over the left end of the hanging structure at (140, 60) and one on the player,",
     "who comes out walking. Right along the structure's top, off its right end over the pit and the",
-    "blocker, down onto the far platform and into the door. Won on tick 180 (step 127)."
+    "blocker, down onto the far platform and into the door. Won on tick 180 (step 127).",
+    "Re-authored on wave 3a's timing build (R3, round 1): the shot at (140, 60), 153 px out, flies 40 ticks",
+    "(G4) and lands on 71, so the self-tap moved from tick 59 to 76 (after the landing: a tap while a",
+    "shot flies is the hourglass) and the right-walk that follows it from 65 to 82. Won on",
+    "tick 214. Every tap and walk edge 3 ticks either way wins (five either way, bar the first tap,",
+    "which the 400 ms from the start holds off before tick 26, and the first walk's end, which walks the",
+    "player on into a death)."
   ],
   "level": "level6",
   "win_by": 240,
   "holds": [
     {"walk": "right", "from": 1, "to": 18},
-    {"walk": "right", "from": 65, "to": 240}
+    {"walk": "right", "from": 82, "to": 240}
   ],
   "taps": [
     {"tick": 29, "at": [140, 60]},
-    {"tick": 59, "at": [87.0, 202.3]}
+    {"tick": 76, "at": [87.0, 202.3]}
   ]
 }

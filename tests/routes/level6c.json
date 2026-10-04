@@ -8,19 +8,33 @@
     "over both buttons and door_lift_2168 rises too. A tap down at the bouncer (74, 240) and one up at",
     "(74, 20): their recoils lift the player 45 px and stop it, over the crate. A portal in the door at",
     "(454, 172), through both raised doors and past shock_agent_ent_2170's 52 px, and one on the player",
-    "where its recoil has carried it: into the door. Won on tick 347 (step 127)."
+    "where its recoil has carried it: into the door. Won on tick 347 (step 127).",
+    "Re-authored on wave 3a's timing build (R3, round 1). Three things moved. The recoil is an impulse of",
+    "140 u/s now (G10, was 70) and is ADDED to the player's velocity, and a shot flies (D - 24) / 3.2 ticks",
+    "(G4): the door portal 392 px away takes 115 ticks, during which a player left drifting at 140 u/s is",
+    "off the level, so he must be still when it leaves. The lift's two recoils (up at the bouncer, 36 ticks",
+    "later down at the ceiling) cancel as before (now 86 px up, to y ~78, over the crate); the door portal is",
+    "fired with its own recoil cancelled the same way: a shot at the left edge (5, 60) first (its recoil",
+    "carries the player right along the line to the door, 31 ticks, to (152, 92)), then the door shot from",
+    "there, whose recoil takes that velocity back (8 u/s up is left). He waits there, 90 ticks",
+    "while it flies (it lands on 439), and the tap on him goes into the door. Every gap between taps is at",
+    "least 26 ticks (a tap 25 ticks after the last is refused) and each follows its predecessor's",
+    "landing: 150 -> 183 (the second shot lands on 243) -> 247 -> 283 -> 313 -> 349 -> 444. Won on tick 446.",
+    "Tick-sensitive in the two lift taps (247, 283), whose gap sets the altitude and so the cancelling",
+    "shot's aim: one tick either way wins, two do not."
   ],
   "level": "level6c",
-  "win_by": 410,
+  "win_by": 470,
   "holds": [
   ],
   "taps": [
     {"tick": 29, "at": [210, 128]},
     {"tick": 149, "at": [110, 160]},
-    {"tick": 174, "at": [286, 175]},
-    {"tick": 229, "at": [74, 240]},
-    {"tick": 265, "at": [74, 20]},
-    {"tick": 299, "at": [454, 172]},
-    {"tick": 344, "at": [21.5, 113.5]}
+    {"tick": 182, "at": [286, 175]},
+    {"tick": 246, "at": [74, 240]},
+    {"tick": 282, "at": [74, 20]},
+    {"tick": 312, "at": [5, 60]},
+    {"tick": 348, "at": [454, 172]},
+    {"tick": 443, "at": [155, 82]}
   ]
 }

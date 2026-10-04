@@ -4,32 +4,36 @@
     "3-10, added in step 140 (G2): lift_ent_1318 waits at its foot until a touch inside it sends it",
     "(ETHCallback_lift), at 60 units a second, and a touch on it fires no shot (\"shot\": false). Four portals,",
     "the level's golden score. Left off the start platform, down the ramp and onto the lift; a touch sends it up",
-    "(172). From its top a portal at (320, 60), over the pillar, and one beside rolling_stone_1198 at (65, 96):",
-    "the stone comes out over breakable_wall_1316 and breaks it (389) while knight B (minion_spawn_913), who",
-    "took key_ent_1271 on tick 125, walks along it, and the knight falls with the key to the ramp, where it",
-    "holds at its wayB1. A touch brings the lift down (400); a portal at (32, 265) over keyhole_ent_1196 and one",
-    "beside the knight at (262, 335): the knight goes through and lands by the keyhole with the key, which opens",
-    "it, and door_locked_ent_1195 goes. A touch sends the lift up (630) under the knight's way off the single",
-    "block, and it walks off into the open column and falls to enemy_killer_1140 (732). A touch brings the lift",
-    "down (790), and right down the ramp, under where the door was, into the door. Won on tick 1085. Leans on G1",
-    "(the knight never sees or shoots), on a knight carrying a key to its keyhole (keys.json), and on a knight",
-    "walking off a floor's end into a pit, as the original's does (ETHCallback_minion walks toward its",
-    "waypoint's x with no floor probe: its one ray, #943, is the sight line)."
+    "(200). From its top - the one place from which the line to the wall's side clears single_block_plat_1275 (x 162-194,",
+    "y 106-170); a shot from lower down is stopped on it - a portal at (285, 60) over the left half of",
+    "breakable_wall_1316 (tap 358; 57 ticks of flight, it opens on 416) and one beside rolling_stone_1198 at (65, 96) (tap 419,",
+    "opens on 425, and the stone goes through): the stone comes out over the wall and breaks it (458) beside knight B",
+    "(minion_spawn_913), who took key_ent_1271 on tick 125 and stands on the wall at its wayB1, serving a 15 s hold since",
+    "tick ~416, and the knight falls with the key to the ramp (landed 502). Re-authored on the wave's timing build",
+    "(round 1, R3): a shot flies 3.2 units a tick, so with step 140's two shots as early as the lift allows (taps 372 and",
+    "447, portals on 439 and 453) the wall breaks on tick 472 and the knight does NOT fall: it hangs in the air at",
+    "(277.4, 128.3) until its hold ends, on tick ~1356. Probably asleep (the engine's kSleepTime is 0.5 s) with nothing in",
+    "this port waking a body whose floor is destroyed, where the original's Box2D does (DestroyBody -> b2Contact::Destroy,",
+    "b2Contact.cpp:105-109); the hanging is observed, the sleeping is not verified. Here the stone, coming down at x 285,",
+    "rests against the knight and it falls. A touch brings the lift down (446); a portal at (32, 265) over keyhole_ent_1196",
+    "(tap 530, opens 551; sooner its point on the view is on the walk pad, a quarter circle of 64 units at the corner) and",
+    "one beside the knight at (270, 335) (tap 560, opens 618): the knight goes through (618), lands by the keyhole with",
+    "the key, which opens it, and door_locked_ent_1195 goes (627). Right (from 622) down the ramp, under where the door",
+    "was, into the door. Won on tick 778 (step 140: 1085, with the knight walked off into enemy_killer_1140, which the win",
+    "does not need). Leans on G1 (the knight never sees or shoots) and on a knight carrying a key to its keyhole (keys.json)."
   ],
   "level": "level9b",
-  "win_by": 1145,
+  "win_by": 830,
   "holds": [
-    {"walk": "left", "from": 30, "to": 168},
-    {"walk": "right", "from": 955, "to": 1145}
+    {"walk": "left", "from": 30, "to": 196},
+    {"walk": "right", "from": 622, "to": 830}
   ],
   "taps": [
-    {"tick": 172, "at": [100, 318], "shot": false},
-    {"tick": 335, "at": [320, 60]},
-    {"tick": 365, "at": [65, 96]},
-    {"tick": 400, "at": [100, 160], "shot": false},
-    {"tick": 585, "at": [32, 265]},
-    {"tick": 615, "at": [262, 335]},
-    {"tick": 630, "at": [100, 318], "shot": false},
-    {"tick": 790, "at": [100, 160], "shot": false}
+    {"tick": 200, "at": [100, 318], "shot": false},
+    {"tick": 358, "at": [285, 60]},
+    {"tick": 419, "at": [65, 96]},
+    {"tick": 446, "at": [100, 160], "shot": false},
+    {"tick": 530, "at": [32, 265]},
+    {"tick": 560, "at": [270, 335]}
   ]
 }

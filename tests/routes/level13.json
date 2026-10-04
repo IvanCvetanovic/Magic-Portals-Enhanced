@@ -2,20 +2,22 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-14: right off the ledge to the floor, left onto button_772 and stay there: door_lift_774 rises",
-    "all the way (700 ms; since step 133 it latches, as the original's does). Through the open door, a",
-    "portal on the far side; one just ahead of the player; right held, in and out beyond the door, which",
-    "falls from fully raised behind as the button comes up, and on to the exit. Won on tick 240 (step",
-    "113, and again in step 133)."
+    "all the way (700 ms). A portal just ahead of the player at (118, 205) first, while the lift rises (43",
+    "units away, it opens 6 ticks after the tap); the far one at (330, 195) only once the lift has cleared",
+    "the shot's line (tap on 125): the original's shot flies 192 units a second and a second tap is refused",
+    "while one flies, so it opens on tick 199. Right held from 210: into the near portal and out of the",
+    "far one, beyond the door, which comes down behind as the button comes up (216), and on to the exit.",
+    "Re-authored on the wave 3a timing build (R3 round 1): won on tick 265."
   ],
   "level": "level13",
   "win_by": 300,
   "holds": [
     {"walk": "right", "from": 1, "to": 30},
     {"walk": "left", "from": 60, "to": 87},
-    {"walk": "right", "from": 185, "to": 300}
+    {"walk": "right", "from": 210, "to": 300}
   ],
   "taps": [
-    {"tick": 139, "at": [330, 195]},
-    {"tick": 174, "at": [118, 205]}
+    {"tick": 90, "at": [118, 205]},
+    {"tick": 125, "at": [330, 195]}
   ]
 }

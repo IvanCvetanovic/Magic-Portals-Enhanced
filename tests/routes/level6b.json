@@ -7,19 +7,25 @@
     "(282, 310), 146 px from the ring's centre, where knight A's body reaches as it turns at the left end",
     "of its walk (tick ~575): A goes through onto the ledge, where it walks right against the hanging",
     "block and stays. A portal at (275, 298), right of knight B's walk, and one on the player; right into",
-    "the door. The knights never see or shoot (G1, not built). Won on tick 699 (step 127)."
+    "the door. The knights never see or shoot (G1, not built). Won on tick 699 (step 127).",
+    "Re-authored on wave 3a's timing build (R3, round 1): each shot now flies (D - 24) / 3.2 ticks (G4), 46",
+    "to the ledge, 53 to (282, 310) and 51 to (275, 298), so the second tap moved from 329 to 352 (the",
+    "first landed on 347), knight A goes through on tick 591 (it was ~575) and still finds the pair, and the",
+    "tap on the player waits for the third shot's landing on 672: 644 became 676, the walk right 655 became",
+    "687. Won on tick 732. Every tap 3 ticks either way wins; the two walks left are tight to the tap on",
+    "the player at x 81, as they were."
   ],
   "level": "level6b",
   "win_by": 760,
   "holds": [
     {"walk": "left", "from": 1, "to": 75},
     {"walk": "left", "from": 125, "to": 135},
-    {"walk": "right", "from": 655, "to": 900}
+    {"walk": "right", "from": 687, "to": 900}
   ],
   "taps": [
     {"tick": 299, "at": [230, 200]},
-    {"tick": 329, "at": [282, 310]},
+    {"tick": 352, "at": [282, 310]},
     {"tick": 619, "at": [275, 298]},
-    {"tick": 644, "at": [81.0, 298.3]}
+    {"tick": 676, "at": [81.0, 298.3]}
   ]
 }

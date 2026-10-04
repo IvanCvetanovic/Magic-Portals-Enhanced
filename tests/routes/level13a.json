@@ -1,23 +1,28 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-14 (planning step 115). crate_small_no_emissive_ent_1152 sent through a pair onto",
-    "button_1112 (taps 1-2), which raises door_lift_1111 and lets the fire through along y 89.",
-    "Then barrel_bomb_ent_1116 through a pair (taps 3-4) to fall past (262, 100), timed so the",
-    "second fireball meets it at the height where its blast reaches breakable_wall_1142 with a",
-    "clear line under single_block_plat 1176 (touched on tick 437, the wall gone on 438). Right",
-    "along the floor, down to the door. Won on tick 518. The meeting is tick-exact: a step that",
-    "moves the fire, the shot or the bodies' fall re-authors taps 3-4."
+    "2-14. crate_small_no_emissive_ent_1152 sent through a pair onto button_1112 (taps 1-2: the first, under",
+    "the ledge at (20, 160), open on tick 91 after its 60-tick flight; the second at (72, 95), released on 91",
+    "and open on 145, where the crate goes through), which raises door_lift_1111 (opening on 163) and lets",
+    "the fire through along y 89: fireball 1 (fired on 127) bursts on the shut lift on 170, fireball 2 is fired",
+    "on 378. A portal in that lane at (262, 100) (tap 3, 145, open on 174) and, last, the one on the floor",
+    "by barrel_bomb_ent_1116 at (118, 209) (tap 4, released on 435, open on 463): the barrel goes through",
+    "and falls from (262, 100) with fireball 2 on it (burst 464), and the blast takes breakable_wall_1142 (465).",
+    "Right along the floor to the door. Won on tick 540.",
+    "Tap 4 is not tick-exact: a release anywhere from 421 to 449 breaks the wall (the pair's completion is what",
+    "meets the fireball, and a second tap cannot hurry it: no tap while a shot flies, 26 ticks between taps);",
+    "before 421 the barrel has gone by, after 449 the fireball has. Re-authored on the wave 3a timing build",
+    "(R3 round 1)."
   ],
   "level": "level13a",
-  "win_by": 580,
+  "win_by": 590,
   "holds": [
-    {"walk": "right", "from": 450, "to": 580}
+    {"walk": "right", "from": 466, "to": 590}
   ],
   "taps": [
     {"tick": 29, "at": [20, 160]},
-    {"tick": 54, "at": [72, 95]},
-    {"tick": 379, "at": [262, 100]},
-    {"tick": 419, "at": [118, 209]}
+    {"tick": 90, "at": [72, 95]},
+    {"tick": 145, "at": [262, 100]},
+    {"tick": 434, "at": [118, 209]}
   ]
 }

@@ -1,27 +1,24 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-11 (planning step 134, G8): the static crate_no_emissive_937 seals the door's room, and only a",
-    "fireball from fire_agent_ent_930 heading right can reach it. Left to x 360.3 (ticks 1-22); a",
-    "portal at (95, 191) between the slab's tip, the platform's corner and the flame (32.8 px) (32).",
-    "Off the platform's left end (70-90) and, mid-fall, a portal under the player at (302.5, 178)",
-    "(88): falling into it at ~495 px/s the player comes out of (95, 193) going up (110, the port's",
-    "transit: a character's y turned back, its x kept), and a shot from there at (313, 205) passes",
-    "10.7 px from the agent and is burned (112); its fireball burns the crate (205; gone ~265).",
-    "Holding right, the player arcs over the flame, never nearer than 40 px, lands right of it (160)",
-    "and walks through into the door. Won on tick 314. Leans on the transit, G4 and G10; a fireball",
-    "sent through portals (G6, not built) may be the original's own way."
+    "2-11, re-authored on the timing build (wave 3a round 1: the floored script clock, the decoded walk and fall, the shot at 200 u/s, and a player who no longer steers in the air) and by the way the level seems made",
+    "for, a fireball through the pair (step 135: it goes through a placed pair once and flies on back the way it came; a fireball a flame makes of a shot never kills the player). The crate sealing the door's",
+    "room is burnable and the flame (fire_agent_ent_930, 146, 200) makes a fireball of any shot that passes within 32 px of it, heading as the shot did. Left to x 366 (ticks 1-22); a portal at (95, 191)",
+    "between the slab's tip, the platform's corner and the flame, shot from the platform so that its way passes 37 px from the flame (tap 29, in place on 119). Left off the platform's end (31-62: the walk-off",
+    "carries 14.7 u and he lands at x 298 on tick 65); a second portal on the floor at (255, 200), 43 px from him (118, pair in place on 125). A shot left along the floor at (140, 200) (144) is burned by",
+    "the flame into a fireball heading left (176); it goes into the portal at (95, 191) and comes out of (255, 200) flying back right (205), past the player, and bursts on crate_no_emissive_937 (234); the",
+    "crate is gone on 297. Right from 297, into the door. Won on tick 354."
   ],
   "level": "level10a",
-  "win_by": 380,
+  "win_by": 400,
   "holds": [
     {"walk": "left", "from": 1, "to": 22},
-    {"walk": "left", "from": 70, "to": 90},
-    {"walk": "right", "from": 112, "to": 380}
+    {"walk": "left", "from": 31, "to": 62},
+    {"walk": "right", "from": 297, "to": 400}
   ],
   "taps": [
-    {"tick": 31, "at": [95, 191]},
-    {"tick": 87, "at": [302.5, 178]},
-    {"tick": 111, "at": [313, 205]}
+    {"tick": 29, "at": [95, 191]},
+    {"tick": 118, "at": [255, 200]},
+    {"tick": 144, "at": [140, 200]}
   ]
 }

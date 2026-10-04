@@ -3,29 +3,37 @@
   "_about": [
     "1-32, the beholder, as the owner beat it (test_mp_boss Level31IsWonAsTheOwnerWonIt) with real",
     "shots in place of placed portals. Three rounds: it comes over the player and shuts its eye; the",
-    "player steps about 120 px to its left, clear of its spike rings; a portal under the beholder,",
-    "then - fired before the rock is thrown, because a shot flies and a placed portal did not - one",
-    "in the air where the rock will fall, over the player. The rock drops in, comes out under the",
-    "beholder and hits it (ticks 704, 1420, 2111); the third round stands to its right, where no spike",
+    "player steps about 90 px to its left, clear of its spike rings; a portal under the beholder,",
+    "then one in the air where the rock will fall, over the player. The rock drops in, comes out under the",
+    "beholder and hits it (ticks 769, 1484, 2192); the third round stands to its right, where no spike",
     "follows a killing hit. Dead, it raises the button to (528, 220): right onto it, held there while",
-    "door_lift_748 takes its 5000 ms to rise, then right to the door. Won on tick 2858 (step 113)."
+    "door_lift_748 takes its 5000 ms to rise, then right to the door. Won on tick 2758.",
+    "Re-timed for the wave 3a timing build (CK, G10, G4): the walk is 2.4 u a tick and a shot takes",
+    "1 + (D - 27.2) / 3.2 ticks (120 u: 31, 104 u: 26), and the next tap waits for it to land. The beholder",
+    "follows the player's x and shuts its eye (615, 1361, 2067) at the x it has glided to (295.2 in the first",
+    "round, 204.4 and 113.2 after), so the player WAITS at x 276 until it has shut it and only then",
+    "walks (the old walk, 50 ticks sooner, drew it after the player to 205): the walk ends on 650, 1399",
+    "and 2105, the exit portal goes on the beholder's x and the entry portal 10 px right of where the",
+    "player stands, each rock (739, 1455, 2162, 124, 94 and 95 ticks after the eye) falling at the",
+    "player's x into it and rising out under the beholder. The door lift is up enough to pass at about",
+    "2650 (5000 ms from the button's press on 2546): right again from 2700."
   ],
   "level": "level31",
-  "win_by": 2960,
+  "win_by": 2800,
   "holds": [
     {"walk": "right", "from": 30, "to": 110},
-    {"walk": "left", "from": 565, "to": 601},
-    {"walk": "left", "from": 1310, "to": 1348},
-    {"walk": "right", "from": 2000, "to": 2038},
-    {"walk": "right", "from": 2330, "to": 2451},
-    {"walk": "right", "from": 2800, "to": 2960}
+    {"walk": "left", "from": 614, "to": 650},
+    {"walk": "left", "from": 1362, "to": 1399},
+    {"walk": "right", "from": 2068, "to": 2105},
+    {"walk": "right", "from": 2411, "to": 2553},
+    {"walk": "right", "from": 2700, "to": 2790}
   ],
   "taps": [
-    {"tick": 639, "at": [316.6, 150]},
-    {"tick": 679, "at": [197, 100]},
-    {"tick": 1369, "at": [216.7, 136]},
-    {"tick": 1398, "at": [97, 100]},
-    {"tick": 2049, "at": [119.2, 145]},
-    {"tick": 2088, "at": [198, 100]}
+    {"tick": 658, "at": [295.2, 150]},
+    {"tick": 693, "at": [197, 100]},
+    {"tick": 1407, "at": [204.4, 150]},
+    {"tick": 1441, "at": [101, 100]},
+    {"tick": 2113, "at": [113.2, 150]},
+    {"tick": 2141, "at": [197.3, 100]}
   ]
 }

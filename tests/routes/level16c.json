@@ -6,14 +6,19 @@
     "THROUGH gravity_agent_ent_2439 (a well stops no shot since step 125, R2); a second one 76 px from",
     "the agent, where the port refused before step 125; then a shot into the bouncer, which fails but",
     "throws the player right at 70 px/s into the second portal. It comes out of the first and drifts",
-    "on into the door. Won on tick 127 (step 125)."
+    "on into the door. Won on tick 127 (step 125).",
+    "Re-authored on the wave 3a timing build (R3, round 1: shot flight G4, recoil G10): the far portal's shot",
+    "flies 276 units at 3.2 a tick and lands on tick 109, so the second shot waits for it (112; the hourglass",
+    "before), the third follows 30 ticks later (the 400 ms is 26). The recoil is 140 u/s: the first two",
+    "taps push the player into the bouncer, which stops it at x 121.7; the third throws it right into the",
+    "second portal. Won on tick 162."
   ],
   "level": "level16c",
-  "win_by": 180,
+  "win_by": 185,
   "holds": [],
   "taps": [
     {"tick": 29, "at": [400, 128]},
-    {"tick": 59, "at": [180, 128]},
-    {"tick": 89, "at": [60, 128]}
+    {"tick": 112, "at": [180, 128]},
+    {"tick": 142, "at": [60, 128]}
   ]
 }

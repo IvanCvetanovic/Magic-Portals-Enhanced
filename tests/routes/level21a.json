@@ -7,13 +7,13 @@
     "shot and of the player's way. Left along the floor to x 30, ahead of the carranca's fireballs (the floor crates",
     "take the first two); a portal floating at (160, 86) under the corridor's ceiling, shot up through the burnt",
     "crate's gap, and one on the player's head (the left walk pad covers his feet on the screen); down onto the",
-    "platform and right to the door. Won on tick 274."
+    "platform and right to the door. Won on tick 275 on the timing group's build (win_by 315: 40 ticks of slack)."
   ],
   "level": "level21a",
-  "win_by": 350,
+  "win_by": 315,
   "holds": [
     {"walk": "left", "from": 40, "to": 120},
-    {"walk": "right", "from": 240, "to": 330}
+    {"walk": "right", "from": 240, "to": 315}
   ],
   "taps": [
     {"tick": 10, "release": 31, "at": [160, 256], "to": [160, 114], "shot": false},

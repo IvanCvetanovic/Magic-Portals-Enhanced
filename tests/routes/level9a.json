@@ -3,23 +3,27 @@
   "_about": [
     "2-10 (planning step 134, G8): crate_no_emissive_937 and 938 stand 133 u right of fire_agent_ent_930",
     "across the pit and cannot be sent through a portal. A shot at 937 through the flame (tick 30,",
-    "passing 2.7 px from the agent) is burned into a fireball that burns the crate (94; gone ~154);",
-    "938 falls into its place and a second shot through the flame burns it (190; 254). A portal on",
-    "block00_no_emissive_ent_978's top (32, 138) and one on the player (215, 240): up onto the block.",
-    "From there a portal at (400, 190), passing the flame at 35 px (330), and one on the player (372):",
-    "over the pit, and right into the door. Won on tick 393. Leans on G4 (the shot's speed) and G10."
+    "passing 2.7 px from the agent) is burned into a fireball that burns the crate (98; gone ~170); 938",
+    "falls into its place (181) and a second shot through the flame burns it (190; burst 258). A portal on",
+    "block00_no_emissive_ent_978's top (32, 138) and one on the player (143, 202): up onto the block.",
+    "From there a portal at (400, 190), passing the flame at 35 px, and one on the player: over the pit,",
+    "and right into the door. Re-authored on the wave's timing build (round 1, R3): a shot flies 3.2 units",
+    "a tick after its 24-unit jump and a tap needs 26 ticks after the one before it, so the portal on the",
+    "block waits for the second burn's tap (218; lands 252), the self-tap follows (253), the far shot to",
+    "(400, 190) from the block (372 units: 109 ticks, tap 282, lands 392) and its self-tap on 394.",
+    "Won on tick 414 (step 134: 393)."
   ],
   "level": "level9a",
-  "win_by": 460,
+  "win_by": 450,
   "holds": [
-    {"walk": "right", "from": 375, "to": 460}
+    {"walk": "right", "from": 397, "to": 450}
   ],
   "taps": [
     {"tick": 29, "at": [354, 192]},
     {"tick": 189, "at": [354, 192]},
-    {"tick": 214, "at": [32, 138]},
-    {"tick": 239, "at": [143, 202.3]},
-    {"tick": 329, "at": [400, 190]},
-    {"tick": 371, "at": [32, 138.3]}
+    {"tick": 218, "at": [32, 138]},
+    {"tick": 253, "at": [143, 202.3]},
+    {"tick": 282, "at": [400, 190]},
+    {"tick": 394, "at": [32, 138.3]}
   ]
 }

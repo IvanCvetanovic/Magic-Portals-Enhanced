@@ -1,31 +1,27 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "4-29 (R1 fix 2): antiportal_1995 (576, 24), scale 5, refuses within 160 px at 32 x scale, which",
-    "holds button_2037, door_lift_2038, the keyhole's cell and the door; the knights' corridor below (y",
-    "208, 184 px or more from the centre) is free. A shot lights the torch (40) and the light wall goes",
-    "(130). A portal at (400, 60) over the upper platform (180 px from the ring's centre), from the start",
-    "ledge; right off the ledge into the corridor, where knight B pushes the player right under the upper",
-    "platform; a portal at (640, 205) in knight A's path (192 px) while it walks right toward wayA1: it",
-    "walks in with the key (866) and drops onto the upper platform, walks right toward its waypoint's x,",
-    "presses button_2037 in passing and waits against door_lift_2038. Left behind knight B to x 337; a",
-    "portal at (400, 80) (185 px) and one at (365, 204) that the player walks into: up onto the upper",
-    "platform, right onto button_2037 behind the knight. The lift rises, the knight goes under it, its",
-    "key opens keyhole_ent_1943 and door_locked_ent_1939 goes; the player stays on the button until the",
-    "lift is well up (1435), then right under it and behind the knight into the door. Since step 133 the",
-    "knight's press in passing (1066) latches the lift door all the way up (8000 ms, eased, 102.4 u) as",
-    "the original's does, so the knight goes under it sooner: the keyhole on 1217 (1353 before) and the",
-    "yellow door on 1265 (1401). Won on tick 1501 (1519 before). Leans on G1 (the knights never see or",
-    "shoot), the port's patrol (a knight lifted off its floor never comes within 8 px of its waypoint and",
-    "walks on toward that waypoint's x), the port's traversal by body overlap (the knight walks into a",
-    "portal whose centre is at the knight's head), G10 and G4 (shot speed).",
-    "Step 137 (a shot leaves on the release): won on tick 1520 on the unlatched door; the shots up on",
-    "800 and 1128 are aimed 0.306 and 0.773 px off their points (the camera moved while the finger was",
-    "down). On the merged build (step 144), with step 133's latch, won on tick 1502: step 133's 1501",
-    "and the tick the drift adds, the same 0.306 and 0.773 px."
+    "4-29 (R1 fix 2): antiportal_1995 (576, 24), scale 5, refuses within 160 px at 32 x scale, which holds button_2037,",
+    "door_lift_2038, the keyhole's cell and the door; the knights' corridor below (y 208, 184 px or more from the centre)",
+    "is free. A shot lights the torch (49) and the light wall goes (143). A portal at (400, 60) over the upper platform",
+    "(180 px from the ring's centre; the shot flies 76 ticks, to 377), from the start ledge; right off the ledge into the",
+    "corridor, where knight B pushes the player right under the upper platform; a portal at (640, 200) in knight A's path",
+    "(192 px, 52 ticks of flight, landed on 852) while it walks right toward wayA1: it walks in with the key and drops onto",
+    "the upper platform (905), walks right toward its waypoint's x, presses button_2037 in passing (the lift door latches",
+    "up, 1081) and waits against door_lift_2038. Left behind knight B; a portal at (400, 80) (185 px, 39 ticks of flight,",
+    "to 1167) and one at (365, 202), tapped on 1170 after it has landed and walked into: up onto the upper platform, right",
+    "onto button_2037 behind the knight. The knight's key opens keyhole_ent_1943 (1234) and door_locked_ent_1939 goes",
+    "(1284); the player stays on the platform until the lift door is well up (1435; it is at 0.54 of its rise on 1260, 0.91",
+    "on 1440), then right under it and behind the knight into the door. Won on tick 1515 (1514 before the idle hold, 1502",
+    "before that). The third shot's point is (640, 200), not (640, 205): the player's x of about 453 puts the camera at",
+    "450.9 and (640, 205) at view (417.6, 205), 63.3 units from the view's bottom-right corner, inside the 64-unit walk pad",
+    "(ui.json pads.hit.radius_units), which takes the release; at y 200 it is 67.4 away. Leans on G1 (the knights never see",
+    "or shoot), the port's patrol (a knight lifted off its floor never comes within 8 px of its waypoint and walks on",
+    "toward that waypoint's x), the port's traversal by body overlap (the knight walks into a portal whose centre is at the",
+    "knight's head), G10 and G4 (shot speed)."
   ],
   "level": "level28c",
-  "win_by": 1700,
+  "win_by": 1555,
   "holds": [
     {"walk": "right", "from": 470, "to": 590},
     {"walk": "left", "from": 925, "to": 1125},
@@ -35,8 +31,8 @@
   "taps": [
     {"tick": 29, "at": [88, 50]},
     {"tick": 299, "at": [400, 60]},
-    {"tick": 799, "at": [640, 205]},
+    {"tick": 799, "at": [640, 200]},
     {"tick": 1127, "at": [400, 80]},
-    {"tick": 1151, "at": [365, 202]}
+    {"tick": 1170, "at": [365, 202]}
   ]
 }

@@ -12,20 +12,31 @@
     "below); walking right off the platform, one on the player (437): out at (640, 110) at 140 u/s,",
     "onto the block and into the door. Won on tick 457, 6 shots. The platform gate holds nothing:",
     "the player's portal is 22 u over the platform's box, where the gate's reach is 5.6. Leans on the",
-    "port's swing of the platform (G3, R7 not built), G4 (shot speed) and G10 (the walk)."
+    "port's swing of the platform (G3, R7 not built), G4 (shot speed) and G10 (the walk).",
+    "Re-timed for the wave 3a timing build (CK, G10, G4), same idea. The platform swings 144 + 32 sin(1.4 t)",
+    "on the script clock now, 16 ms a tick, so its period is 280.5 ticks (269 before) and the player stands",
+    "on it at a centre y of its y - 37: the centre is 101 and rising on tick 429, 75 at its top on 491.",
+    "The second shot waits for the first (160, 126), 136 u out, to land on 66 (tap 67); the walk starts on",
+    "74 and stops at x 334.7 under the wall on 148; the platform is low (y 176 on tick 350), so the shot",
+    "to (416, 90) goes on 355 and lands on 392, the one on the player on 395 (it lands on its first",
+    "callback: out at (416, 92) onto the platform on 406). The slot shot goes on tick 429 from a centre of",
+    "100.6 (the platform rising) and lands on 493 (224 u: 64 ticks); the player rests at the platform's",
+    "top (y 74.7) and the one on him goes on 496, out at (640, 110) on 498: right onto the block and into",
+    "the door. A slot shot 7 ticks earlier (422) wins too; one 7 ticks later (436) is still flying when the",
+    "last tap comes. Won on tick 523, 6 shots."
   ],
   "level": "level5",
-  "win_by": 520,
+  "win_by": 560,
   "holds": [
-    {"walk": "right", "from": 80, "to": 166},
-    {"walk": "right", "from": 432, "to": 520}
+    {"walk": "right", "from": 74, "to": 148},
+    {"walk": "right", "from": 502, "to": 560}
   ],
   "taps": [
     {"tick": 29, "at": [160, 126]},
-    {"tick": 59, "at": [34, 74.3]},
-    {"tick": 289, "at": [416, 90]},
-    {"tick": 315, "at": [333.5, 202.3]},
-    {"tick": 411, "at": [640, 108]},
-    {"tick": 436, "at": [422, 84.6]}
+    {"tick": 67, "at": [34, 74.3]},
+    {"tick": 355, "at": [416, 90]},
+    {"tick": 395, "at": [332.3, 202.3]},
+    {"tick": 429, "at": [640, 108]},
+    {"tick": 496, "at": [416, 74.9]}
   ]
 }

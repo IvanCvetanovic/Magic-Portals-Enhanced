@@ -1,35 +1,40 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-21, won by killing the anti-portal agent (step 126, R17). Right to x 278; a shot at (250, 300)",
-    "passes within 22.4 of anti_portal_agent_ent_824 (244, 300) and kills it with antiportal_822 (tick",
-    "65); the same tap again opens a portal over the left block, one on the player. Left to the column;",
-    "a portal in the shaft at (242, 200), one on the block ahead: running right through it, the player",
-    "comes out moving right, flies into the nook and presses button_829 (tick 285); door_lift_831 rises.",
-    "From the nook (it shows the shaft through its opening alone) a portal high at (230, 142) and one low",
-    "at (205, 243); left off the ledge, down into the low one, and out of the high one moving up: at the",
-    "top of that bounce (tick 516) a shot through the lift door's opening into the room at (330, 100).",
-    "The door, off its button since tick ~487, is closing, and still clear of the shot. Down onto the",
-    "block; one on the player; right along the shelf to the door. Won on tick 625 (step 126)."
+    "1-21, won by killing the anti-portal agent (step 126, R17; re-authored in round 3 on the timing group's build). Right",
+    "to x 278; a shot at (250, 300) passes within 22.4 of anti_portal_agent_ent_824 (244, 300) and kills it with",
+    "antiportal_822 (tick 87, 37 ticks of flight, G4); the same tap again opens a portal over the left block (tick 141),",
+    "and one on the player (tick 142) puts it there. Left to the column; a portal in the shaft at (252, 200), at the",
+    "standing height of single_block_plat_ent_828's top (the air brake, G10, carries a portal's exit no further than 15",
+    "units, so the old (242, 200) now drops the player past the block's corner), and one on the block ahead (246, 330):",
+    "walking right through the second, the player comes out of the first onto the block and walks on to press button_829",
+    "(tick 320); door_lift_831 rises the whole way on its one press (3000 ms). Left along the block to x 266: a portal high",
+    "in the shaft at (230, 142) was shot from the button (tick 333), a portal low at (240, 250) is shot from here (tick",
+    "363, from the block, because the ray from the button to it meets the block). Left off the ledge, down into the low",
+    "one, and out of the high one moving up: at the top of that bounce (tick 397) a shot through the lift door's opening",
+    "into the room at (330, 100), aimed 7.9 px off (the camera moved while the finger was down). Down onto the block; one",
+    "on the player (tick 428): out of the room's portal onto the shelf, and along it to the door. Won on tick 486 (487",
+    "before the idle hold)."
   ],
   "level": "level20",
-  "win_by": 690,
+  "win_by": 540,
   "holds": [
     {"walk": "right", "from": 5, "to": 33},
-    {"walk": "left", "from": 150, "to": 175},
-    {"walk": "right", "from": 260, "to": 320},
-    {"walk": "left", "from": 470, "to": 505},
-    {"walk": "right", "from": 580, "to": 690}
+    {"walk": "left", "from": 153, "to": 178},
+    {"walk": "right", "from": 299, "to": 330},
+    {"walk": "left", "from": 342, "to": 358},
+    {"walk": "left", "from": 385, "to": 430},
+    {"walk": "right", "from": 440, "to": 500}
   ],
   "taps": [
     {"tick": 49, "at": [250, 300]},
-    {"tick": 79, "at": [250, 300]},
-    {"tick": 109, "at": [277.7, 458.3]},
-    {"tick": 199, "at": [242, 200]},
-    {"tick": 229, "at": [246, 330]},
-    {"tick": 419, "at": [230, 142]},
-    {"tick": 449, "at": [205, 243]},
-    {"tick": 515, "at": [330, 100]},
-    {"tick": 561, "at": [215, 322.2]}
+    {"tick": 95, "at": [250, 300]},
+    {"tick": 142, "at": [277.7, 458.3]},
+    {"tick": 232, "at": [252, 200]},
+    {"tick": 268, "at": [246, 330]},
+    {"tick": 332, "at": [230, 142]},
+    {"tick": 362, "at": [240, 250]},
+    {"tick": 396, "at": [330, 100]},
+    {"tick": 427, "at": [201.1, 322.5]}
   ]
 }

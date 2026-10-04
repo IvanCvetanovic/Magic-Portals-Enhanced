@@ -4,25 +4,34 @@
     "2-16 (planning step 134, G8): no straight fireball from fire_agent_ent_1190 reaches the pit's",
     "barrels where they settle (barrel_bomb_ent_1195 at y 216.4: out/parity/program/G8/burnscan.py), so",
     "barrel_bomb_ent_1187 goes into the pit first: a portal over it (176, 145) and one on its top",
-    "(288, 120) from the start (24, 48); it lands on 1195. A portal at (40, 75) and one on the player",
-    "(72, 104): onto platform_no_emissive_ent_1188 left of the flame. A shot from (40, 142.3) at 4.6",
-    "deg below level (130) is burned and its fireball sets 1187 off (171); the blast takes 1195 and",
-    "1185, and 1195's breaks breakable_wall_1142 (173). A portal in the pit at (180, 168), 34.7 px",
-    "from the flame (180), and one on the player (205): down the pit, left through the broken wall,",
-    "into the door. Won on tick 260. Leans on G4 and G10."
+    "(288, 120) from the start; it lands on 1195. A portal at (40, 75) and one on the player",
+    "(351, 90.3): onto platform_no_emissive_ent_1188 left of the flame. A shot from (40, 142.3) at 4.6",
+    "deg below level is burned and its fireball sets 1187 off; the blast takes 1195 and",
+    "1185, and 1195's breaks breakable_wall_1142. A portal in the pit at (180, 168), 34.7 px",
+    "from the flame, and one on the player: down the pit, left through the broken wall,",
+    "into the door. Leans on G4 and G10.",
+    "Re-authored on the wave 3a timing build (R3, round 1: shot flight G4, walk G10): a shot flies 3.2 units a",
+    "tick after its 24-unit jump, and the 400 ms between releases is 26 ticks (the first tap is held off the same",
+    "way: 23 and 24 were refused, the first release is on 28), so each tap waits for the shot before it. Taps: (176, 145)",
+    "on 27 (183 units: opens on ~78); (288, 120) on 79 (opens ~93, the barrel is through by 95 and rests on 1195 from",
+    "~125); (40, 75) on 105 (311 units: opens on ~200); the player's own point on 201 - out at (40, 80), standing on",
+    "the ledge at (40, 142.5) from 215, the camera settled by 249; the burn shot at (239.36, 158.34) on 249 is burned on 257 at",
+    "(86.3, 146.2) and its fireball (2.08 a tick) bursts on the barrels on ~292, the wall is gone on 295. Then the pit",
+    "portal (180, 168) on 296 (opens on ~334), the player's point on 337 and left from 345: down the pit, out of the",
+    "broken wall, into the door. Won on tick 396."
   ],
   "level": "level15a",
-  "win_by": 320,
+  "win_by": 420,
   "holds": [
-    {"walk": "left", "from": 212, "to": 320}
+    {"walk": "left", "from": 345, "to": 420}
   ],
   "taps": [
-    {"tick": 23, "at": [176, 145]},
-    {"tick": 47, "at": [288, 120]},
-    {"tick": 71, "at": [40, 75]},
-    {"tick": 103, "at": [351, 90.3]},
-    {"tick": 129, "at": [239.36, 158.34]},
-    {"tick": 179, "at": [180, 168]},
-    {"tick": 204, "at": [40, 142.3]}
+    {"tick": 27, "at": [176, 145]},
+    {"tick": 79, "at": [288, 120]},
+    {"tick": 105, "at": [40, 75]},
+    {"tick": 201, "at": [351, 90.3]},
+    {"tick": 249, "at": [239.36, 158.34]},
+    {"tick": 296, "at": [180, 168]},
+    {"tick": 337, "at": [40, 142.3]}
   ]
 }

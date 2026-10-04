@@ -6,24 +6,34 @@
     "portal opened against it (taps 3-4: the second end, and then one within 16 px of the crate, which",
     "carries it through); the player into the hole (taps 5-6), and from its floor into the corridor",
     "right of rolling_stone_808 (taps 7-8). Left, pushing the stone into the gap, where it breaks",
-    "breakable_wall_815 (tick 431); down after it, and right to the door. Won on tick 534 (step 114)."
+    "breakable_wall_815 (tick 431); down after it, and right to the door. Won on tick 534 (step 114).",
+    "Re-timed for the wave 3a timing build (CK, G10, G4): each tap waits for the shot before it to land",
+    "and for the 400 ms (26 ticks between taps), so the taps go down on 54, 84, 141, 167, 213, 270, 296",
+    "and 323 (the shots land on 84, 165, 210, 265, 320 and the self-taps at once); the player is over the",
+    "block on 87, in the hole on 272 and in the corridor at (400, 204.5) on 325. He walks left only to",
+    "x 241 (hold ends 398): the stone then rolls free at the walk's 2.4 u a tick, clips the single block's",
+    "corner (64, 226) and falls into the gap, where it breaks the wall on 446. A player still walking",
+    "left at the gap's lip (the old route's single hold to 455) pushes the falling stone over the corner",
+    "onto the single block (the wall stays), so the second walk left starts on 425 and puts him in the",
+    "gap on 474, landing on 500; right from 501. Won on tick 534."
   ],
   "level": "level3a",
-  "win_by": 600,
+  "win_by": 570,
   "holds": [
     {"walk": "right", "from": 1, "to": 40},
     {"walk": "right", "from": 95, "to": 140},
-    {"walk": "left", "from": 318, "to": 455},
-    {"walk": "right", "from": 470, "to": 600}
+    {"walk": "left", "from": 332, "to": 398},
+    {"walk": "left", "from": 425, "to": 478},
+    {"walk": "right", "from": 501, "to": 570}
   ],
   "taps": [
     {"tick": 54, "at": [220, 20]},
     {"tick": 84, "at": [150, 92]},
-    {"tick": 149, "at": [230, 10]},
-    {"tick": 179, "at": [440, 98]},
-    {"tick": 214, "at": [470, 108]},
-    {"tick": 244, "at": [288, 92]},
-    {"tick": 279, "at": [400, 205]},
-    {"tick": 309, "at": [476, 140]}
+    {"tick": 141, "at": [230, 10]},
+    {"tick": 167, "at": [440, 98]},
+    {"tick": 213, "at": [470, 108]},
+    {"tick": 270, "at": [288, 92]},
+    {"tick": 296, "at": [400, 205]},
+    {"tick": 323, "at": [476, 140]}
   ]
 }

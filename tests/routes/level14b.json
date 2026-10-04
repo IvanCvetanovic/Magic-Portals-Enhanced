@@ -1,69 +1,69 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-15, found by the third verifier of step 127 (R1), on this build: won on tick 1018.",
-    "Ticks 1-370 are fix round 2's base (d/l14b_a): knight B portalled onto button_1666, the floor",
-    "gate up from ~280, the player across into the key's half by ~380. A portal at (470, 100), shot",
-    "steeply up past the platform's end and over the seesaw's left end (110 px from antiportal_1673,",
-    "96); back through the floor gate into the start half and a portal on the player at",
-    "(256.1, 204.3): out at (470, 100), down onto the seesaw, right along it and off its end onto",
-    "the floor right of it, outside both rings. There: a portal high by wall_low_emissive_1688 at",
-    "(829, 28) (130 px from antiportal_1683, 128) and one on the floor at (760, 202); left into it,",
-    "out at the top (pushed off the wall to x 813), and while falling a portal at (728, 191) under",
-    "the key (129 px) and, 25 ticks later, one on the falling player at (813.4, 148): out at",
-    "(728, 193) moving up at ~520 px/s, steered left, the key taken on tick ~801 at its own point;",
-    "down onto the seesaw's end, right to the keyhole (unlocked), the door lift gone, the door.",
-    "Leans on: the port's body-overlap traversal (entered (760, 202) with his centre ~25 px off),",
-    "the exit by the wall pushed out of it, the self-portal while falling, G10 (air control), G4",
-    "(600 px/s shots: at 200 u/s the (728, 191) shot would still be flying at tick 784), G1 via",
-    "fix round 2's base (knight B wedged on button_1666), and the port's seesaw."
+    "3-15, re-authored on the timing build (wave 3a; first authored by the third verifier of step 127, R1).",
+    "The idea is the old one, the ticks are rebuilt around three facts of this build: a shot flies 3.2 u a",
+    "tick after a 24 u jump, a placed pair is spent by its first traversal (portals.json",
+    "consume_on_traverse, so a third portal landing while two stand takes the oldest), and a fall from the",
+    "top lasts 17 ticks (4000 u/s^2) and leaves at the speed it entered at.",
+    "Ticks 1-272: left to the ramp's top; a portal at (150, 110) (lands on 132) and one on the player there",
+    "(tick 135): through it to (150, 106) on the single block (tick 137, that pair is spent). From the block",
+    "portals at (175, 100) (lands 165) and (222, 85) (lands 207): a new pair, and knight B, walking left,",
+    "goes in at (222, 87) on tick 271 and out above button_1666, wedged on it: the floor gate door_lift_1663",
+    "up from 279. The player drops off the block and walks right along the floor, through the gate into",
+    "the key's half (x to 412), where a portal needs 96 px from antiportal_1673 and the half to its right",
+    "128 px from antiportal_1683.",
+    "A portal at (470, 100) (tick 375, lands 406, 110 px from antiportal_1673), back left through the gate",
+    "and a portal on the player at (248.8, 204.3) (tick 470): out at (470, 100) on tick 472, down onto the",
+    "seesaw, right along it and off its end onto the floor outside both rings (x 799.5).",
+    "There: a portal high on the left face of wall04_low_emissive_1688 at (829, 28) (130 px from",
+    "antiportal_1683, tick 655, lands 704), one on the floor at (760, 202) (tick 706, lands 712), and 27",
+    "ticks later the one under the key at (728, 191) (129 px, tick 733).",
+    "Its 72 u shot lands on tick 750, AFTER the walk left into (760, 202) has put the player out at the top",
+    "on tick 747 and spent that pair (landing before it would have taken the oldest of the pair).",
+    "The fall from the top is 17 ticks; on tick 760, 27 ticks after that tap, a portal on the falling player",
+    "at (810.3, 162.9) (any height from 151 to 175 does; it opens on 762 where he is at 162.9): out at",
+    "(728, 193) moving up at 933 u/s, the key taken on tick 772 at its own point (a crystal on the way up),",
+    "down onto the floor right of the seesaw's end, right to the keyhole (unlocked 835, gone 926), the door.",
+    "Every tap holds up to +-1 tick; the walks that set the player's x (487-622, 740-750) hold to +-1 tick,",
+    "because the fall and the last tap are timed to his entry into (760, 202) on tick 746."
   ],
   "level": "level14b",
-  "win_by": 1100,
+  "win_by": 1010,
   "holds": [
     {
       "walk": "left",
       "from": 1,
-      "to": 90
+      "to": 100
     },
     {
       "walk": "left",
-      "from": 180,
-      "to": 195
+      "from": 210,
+      "to": 225
     },
     {
       "walk": "right",
-      "from": 215,
-      "to": 260
-    },
-    {
-      "walk": "right",
-      "from": 300,
-      "to": 370
+      "from": 245,
+      "to": 365
     },
     {
       "walk": "left",
-      "from": 420,
-      "to": 480
+      "from": 380,
+      "to": 447
     },
     {
       "walk": "right",
-      "from": 540,
-      "to": 672
+      "from": 487,
+      "to": 622
     },
     {
       "walk": "left",
       "from": 740,
-      "to": 758
-    },
-    {
-      "walk": "left",
-      "from": 785,
-      "to": 797
+      "to": 750
     },
     {
       "walk": "right",
-      "from": 840,
+      "from": 795,
       "to": 1100
     }
   ],
@@ -76,66 +76,66 @@
       ]
     },
     {
-      "tick": 119,
+      "tick": 135,
       "at": [
-        12.2,
-        159.1
+        19.4,
+        161.1
       ]
     },
     {
-      "tick": 144,
+      "tick": 163,
       "at": [
         175,
         100
       ]
     },
     {
-      "tick": 169,
+      "tick": 190,
       "at": [
         222,
         85
       ]
     },
     {
-      "tick": 404,
+      "tick": 375,
       "at": [
         470,
         100
       ]
     },
     {
-      "tick": 499,
+      "tick": 470,
       "at": [
-        256.1,
+        248.8,
         204.3
       ]
     },
     {
-      "tick": 699,
+      "tick": 655,
       "at": [
         829,
         28
       ]
     },
     {
-      "tick": 724,
+      "tick": 706,
       "at": [
         760,
         202
       ]
     },
     {
-      "tick": 758,
+      "tick": 733,
       "at": [
         728,
         191
       ]
     },
     {
-      "tick": 783,
+      "tick": 760,
       "at": [
-        813.4,
-        148
+        810.3,
+        162.9
       ]
     }
   ]

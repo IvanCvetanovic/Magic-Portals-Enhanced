@@ -1,32 +1,40 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-23, re-routed for antiportal_878's 32 x 5.7 = 182.4 px (step 127, R1): it holds the right floor",
-    "and the upper platform, where step 126's portals were. Left to x 47; a portal over the hanging",
-    "platform's left end at (150, 80), one on the player. Right along the platform and off its right",
-    "end: the player falls against rolling_stone_ent_877 and pushes it off its pillar into the gap, and",
-    "lands on the pillar at x 392.6, 14.8 px from anti_portal_agent_ent_876, which the stone covered.",
-    "A tap at (545, 190): the shot kills the agent at once (tick ~301, the port fires from the player's",
-    "centre; the original's shot jumps 24 u along the same line and is still within 22.4 of it) and",
-    "antiportal_878 goes. The same tap again opens a portal on the right floor, over the stone's old",
-    "place and under the hanging column; one on the player. A shot up through the window between the",
-    "column and the post to (618, 50), one on the player; down beside the post and right into the door.",
-    "Won on tick 466 (step 127)."
+    "1-23 (planning step 127's idea, re-flown on the timing build, wave 3a round 1): the player can no longer reach the pillar",
+    "by walking off the hanging platform (the air brake carries a walk-off 22 u, not the 60 u of the old steering), and the",
+    "port's shot dies on rolling_stone_ent_877's surface (R23 not built), so antiportal_878 (182.4 px) is opened another way:",
+    "the stone is knocked off its pillar by the OTHER stone. A portal over the hanging platform's left end at (150, 80), one on",
+    "the player (149): onto the platform. A portal on the platform at (228, 80), 196 from the agent (outside its ring), and",
+    "then one at (70, 68) 38 from rolling_stone_ent_989 (32, 66), on the left block across the gap (the shot is stopped by a",
+    "body, so the portal lands beside it and the stone enters it by overlap, the second of the pair): the stone comes out on",
+    "the platform (225). The player walks right behind it (232-290) and pushes it along the platform; it leaves the end at",
+    "2.4 u a tick, hits 877 on the pillar (312) and both stones fall out of the level, the agent bare. The player waits at",
+    "x 324 (the end's feet creep starts at 336) and a shot through the agent's place to (420, 170), the tap in the ring so it",
+    "is a doomed shot that flies there (343), kills the agent on 365 and the ring goes. A portal on the right floor at",
+    "(545, 190), under the hanging column (shot on 369, placed on 440, inside the view: the camera is at the player's 324), one",
+    "on the player (443): onto the floor. A shot up through the window between the column and the post to (618, 50)",
+    "(470, placed on 516), one on the player (517): out above the post's right side, down and right into the door.",
+    "Won on tick 557. The kill leans on the port's sampled position along the shot (G4) and on no R23; the stone push on",
+    "the port's own solver (a pushed stone keeps the player's 2.4 u a tick)."
   ],
   "level": "level22",
-  "win_by": 530,
+  "win_by": 590,
   "holds": [
     {"walk": "left", "from": 5, "to": 70},
-    {"walk": "right", "from": 160, "to": 262},
-    {"walk": "right", "from": 440, "to": 530}
+    {"walk": "right", "from": 232, "to": 290},
+    {"walk": "right", "from": 300, "to": 313},
+    {"walk": "right", "from": 530, "to": 700}
   ],
   "taps": [
     {"tick": 109, "at": [150, 80]},
-    {"tick": 139, "at": [47.0, 202.3]},
-    {"tick": 299, "at": [545, 190]},
-    {"tick": 329, "at": [545, 190]},
-    {"tick": 359, "at": [392.6, 162.3]},
-    {"tick": 389, "at": [618, 50]},
-    {"tick": 419, "at": [545.0, 202.3]}
+    {"tick": 149, "at": [47, 202.3]},
+    {"tick": 176, "at": [228, 80]},
+    {"tick": 205, "at": [70, 68]},
+    {"tick": 342, "at": [420, 170]},
+    {"tick": 368, "at": [545, 190]},
+    {"tick": 442, "at": [324.3, 74.3]},
+    {"tick": 469, "at": [618, 50]},
+    {"tick": 516, "at": [545.0, 202.5]}
   ]
 }

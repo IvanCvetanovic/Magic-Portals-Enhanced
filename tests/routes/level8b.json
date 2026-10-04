@@ -4,30 +4,39 @@
     "3-09 (step 127, R1: the key lies at antiportal_1504's centre, 64 px of field round it, so no portal",
     "opens within reach of it). A portal at (420, 140) past the spawn block's corner and one on the",
     "player; one on the left ledge at (245, 100), right of knight B's walk, and one on the player. A",
-    "portal high by the left wall at (20, 100), 69 px from the key's ring, and one in the pit at (318,",
-    "222): right off the ledge, falling into the pit's portal and out of the high one moving up and right",
-    "(invertLinearVelocity), past the key within its 26 px (carried from tick ~240), and down onto the",
-    "corner block. When moving_platform_1429 is up out of the line (tick 405) a portal on the floor at",
-    "(400, 200), one on the player; one by the keyhole at (580, 200), one on the player: the key opens",
-    "the yellow door, and right into the door. The knights never see or shoot (G1, not built). Won on",
-    "tick 645 (step 127)."
+    "portal high by the left wall at (20, 100), 69 px from the key's ring, and one in the pit: right off the",
+    "ledge, falling into the pit's portal and out of the high one moving up (invertLinearVelocity), past the",
+    "key within its 26 px (carried from tick 328), and down onto the corner block. When moving_platform_1429",
+    "is up out of the line (it swings 192 + 32 sin(2.4 t); the shot passes its x span on ticks 421-443) a",
+    "portal on the floor at (400, 200), one on the player; one by the keyhole at (580, 200), one on the",
+    "player: the key opens the yellow door, and right into the door. The knights never see or shoot (G1,",
+    "not built). Re-authored on the wave's timing build (round 1, R3): a shot flies 3.2 units a tick after its",
+    "24-unit jump and a tap needs 26 ticks after the one before it, so each tap waits for the portal before",
+    "it (the first lands on 91, the one to (245, 100) on 179, to (20, 100) on 281, to the pit on 309, to (400,",
+    "200) on 526, to (580, 200) on 610). The player falls at 4000 a second squared, so the pit's portal is on",
+    "its path: (295, 197), shot from x 249.4 (two ticks of walk) so the ray clears the ledge's corner, and it is",
+    "entered at 677 a second up (tick 322); the portal on the player at the left edge would be a touch on the",
+    "walk pad (a quarter circle of 64 units), so the player walks 6 ticks right to x 38.5 first. Won on tick",
+    "747 (step 127: 645)."
   ],
   "level": "level8b",
-  "win_by": 710,
+  "win_by": 800,
   "holds": [
-    {"walk": "right", "from": 200, "to": 240},
-    {"walk": "right", "from": 600, "to": 800}
+    {"walk": "right", "from": 273, "to": 274},
+    {"walk": "right", "from": 308, "to": 320},
+    {"walk": "right", "from": 380, "to": 385},
+    {"walk": "right", "from": 640, "to": 800}
   ],
   "taps": [
     {"tick": 29, "at": [420, 140]},
-    {"tick": 59, "at": [617, 42.3]},
-    {"tick": 89, "at": [245, 100]},
-    {"tick": 119, "at": [420, 202.3]},
-    {"tick": 149, "at": [20, 100]},
-    {"tick": 174, "at": [318, 222]},
-    {"tick": 404, "at": [400, 200]},
-    {"tick": 444, "at": [54.0, 202.3]},
-    {"tick": 474, "at": [580, 200]},
-    {"tick": 499, "at": [400, 202.3]}
+    {"tick": 95, "at": [617, 42.3]},
+    {"tick": 122, "at": [245, 100]},
+    {"tick": 183, "at": [420, 202.3]},
+    {"tick": 217, "at": [20, 100]},
+    {"tick": 284, "at": [295, 197]},
+    {"tick": 420, "at": [400, 200]},
+    {"tick": 530, "at": [38.5, 202.3]},
+    {"tick": 560, "at": [580, 200]},
+    {"tick": 613, "at": [400, 202.3]}
   ]
 }

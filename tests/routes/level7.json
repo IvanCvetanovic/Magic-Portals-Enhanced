@@ -10,19 +10,25 @@
     "the ledge; one on the player, who comes out on the crate and walks right onto the ledge and into",
     "the door. Won on tick 422 (step 127).",
     "Step 137 (a shot leaves on the release): won on tick 423; the first shot, up on 95, is aimed",
-    "2.577 px off its point (the camera moved while the finger was down)."
+    "2.577 px off its point (the camera moved while the finger was down).",
+    "Re-authored on wave 3a's timing build (R3, round 1): the first shot, 161 px out, now flies 43 ticks (G4)",
+    "and lands on ~72, so the tap on the player moved from tick 59 to 76; every later tick of the route (the",
+    "walks, the tap under the pillar at 111, the push and the last tap at 366) is that route's plus 17,",
+    "and the player's walking (G10) and the 59-tick flight of the shelf shot (it lands on 171, in time for",
+    "the walk) leave it won on tick 444. Every tap and walk edge 3 ticks either way wins; the first shot",
+    "cannot go before tick 26 (the 400 ms from the start)."
   ],
   "level": "level7",
-  "win_by": 480,
+  "win_by": 470,
   "holds": [
-    {"walk": "left", "from": 70, "to": 130},
-    {"walk": "right", "from": 140, "to": 330},
-    {"walk": "right", "from": 360, "to": 480}
+    {"walk": "left", "from": 87, "to": 147},
+    {"walk": "right", "from": 157, "to": 347},
+    {"walk": "right", "from": 377, "to": 470}
   ],
   "taps": [
     {"tick": 29, "at": [320, 60]},
-    {"tick": 59, "at": [395.0, 202.3]},
-    {"tick": 94, "at": [472, 142]},
-    {"tick": 349, "at": [444.5, 202.3]}
+    {"tick": 76, "at": [395.0, 202.3]},
+    {"tick": 111, "at": [472, 142]},
+    {"tick": 366, "at": [444.5, 202.3]}
   ]
 }

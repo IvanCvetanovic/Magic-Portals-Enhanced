@@ -1,26 +1,29 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-27 (step 127, R1: antiportal_1194's 32 x 4.1 = 131 px holds the door's ledge). Re-authored in step 140 (G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a second, and the touch fires no shot (\"shot\": false), where step",
-    "127's route rode both lifts as the port ran them on their own. Right onto lift_ent_1122, at rest at the top;",
-    "a touch on it (45) sends it down, and at its bottom right under the hanging wall to x 215. A portal over",
-    "button_1044 at (32, 170) and one beside crate_ent_1130's left face at (287, 196): the crate goes through and",
-    "lands on the button, and door_lift_1043 rises. Right through the door onto lift_1186, at rest at its foot; a",
-    "touch (520) sends it up against the ledge's face, and right onto the ledge into the door. Won on tick 660",
-    "(step 140; 549 on step 127's self-running lifts)."
+    "1-27 (step 127, R1: antiportal_1194's 32 x 4.1 = 131 px holds the door's ledge). Re-authored in step 140",
+    "(G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a",
+    "second, and the touch fires no shot (\"shot\": false). Right onto lift_ent_1122, at rest at the top; a",
+    "touch on it (45) sends it down, and at its bottom right under the hanging wall to x 200. A portal over",
+    "button_1044 at (32, 170) and one beside crate_ent_1130's left face at (287, 196): the crate goes through",
+    "and lands on the button, and door_lift_1043 rises (tick 366). Right through the door onto lift_1186, at",
+    "rest at its foot: the walk now runs to x 539 on the lift (G10's walk is 144 u/s, not 160, step 148: the",
+    "old walk, held to tick 503, stopped at x 498 and then walked off the floor on tick 629 and fell out of the",
+    "level on 647); a touch (526) sends it up against the ledge's face, and right onto the ledge into the",
+    "door from tick 628. Won on tick 665 (round 3, the timing group's build; 660 on step 140)."
   ],
   "level": "level26",
-  "win_by": 720,
+  "win_by": 700,
   "holds": [
     {"walk": "right", "from": 1, "to": 25},
     {"walk": "right", "from": 215, "to": 260},
-    {"walk": "right", "from": 380, "to": 503},
-    {"walk": "right", "from": 625, "to": 720}
+    {"walk": "right", "from": 380, "to": 520},
+    {"walk": "right", "from": 628, "to": 700}
   ],
   "taps": [
     {"tick": 45, "at": [110, 88], "shot": false},
     {"tick": 280, "at": [32, 170]},
     {"tick": 345, "at": [287, 196]},
-    {"tick": 520, "at": [544, 240], "shot": false}
+    {"tick": 526, "at": [544, 240], "shot": false}
   ]
 }

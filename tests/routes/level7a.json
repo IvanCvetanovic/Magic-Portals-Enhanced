@@ -7,21 +7,29 @@
     "lower carranca's fire then burns crate 826 and crate 853 through the open door (the fireball",
     "stops on each: planning step 114). Down to the bridge, left to under the single block, and a",
     "portal pair over the lower carranca into the room with the exit (taps 5-6). Won on tick 722",
-    "(step 114)."
+    "(step 114).",
+    "Re-authored on wave 3a's timing build (R3, round 1): the 400 ms between taps is 26 ticks of 16 ms, so the",
+    "second tap moved from 54 to 58 (55 is the earliest; 3 ticks of slack for the first); the shot over the button",
+    "(448, 212), up on 90, flies 61 ticks (G4: 3.2 px a tick after a 24-unit jump) and lands on 151, and the",
+    "shot against the crate waits for it (114 became 153, the door lifts on 220); the pair over the lower",
+    "carranca keeps its walks (605-620, 645-655) and its first tap (671), whose shot lands on 733, so the",
+    "tap on the player moved from 696 to 735 and the left walk after it from 705 to 744. Won on tick 763.",
+    "Every tap 3 ticks either way wins (4 does not, either way: the 400 ms on one side, a shot still flying",
+    "on the other)."
   ],
   "level": "level7a",
-  "win_by": 780,
+  "win_by": 790,
   "holds": [
     {"walk": "right", "from": 605, "to": 620},
     {"walk": "left", "from": 645, "to": 655},
-    {"walk": "left", "from": 705, "to": 780}
+    {"walk": "left", "from": 744, "to": 790}
   ],
   "taps": [
     {"tick": 29, "at": [310, 20]},
-    {"tick": 54, "at": [236, 79]},
+    {"tick": 58, "at": [236, 79]},
     {"tick": 89, "at": [448, 212]},
-    {"tick": 114, "at": [478, 199]},
+    {"tick": 153, "at": [478, 199]},
     {"tick": 671, "at": [110, 155]},
-    {"tick": 696, "at": [322, 218]}
+    {"tick": 735, "at": [322, 218]}
   ]
 }

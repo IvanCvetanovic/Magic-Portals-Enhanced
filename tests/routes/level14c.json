@@ -7,17 +7,26 @@
     "portal by the keyhole at (330, 85) and one on the player (tick 176, before the ring rises to it):",
     "the key opens the yellow door. When it is gone a portal in the door at (436, 88), whose recoil",
     "carries the player back left, and one on the player at (315.2, 62.9), 67 px from antiportal_2359's",
-    "centre: into the door. Won on tick 306 (step 127)."
+    "centre: into the door. Won on tick 306 (step 127).",
+    "Re-authored on the wave 3a timing build (R3, round 1: shot flight G4, recoil G10): the first tap's recoil",
+    "is 140 u/s now and carries the player along its line (-130, -52) past the key and shock_agent_2353's ring,",
+    "which kills it in a crossing that ends by tick 127 (every first tap up to 71 dies there), so it goes on 77: key",
+    "taken on 135, the player against the left block (x 137.7) from 148. A portal at (330, 85) on 149, which the",
+    "shot opens on 202 (192 units); a shot on the player's own point on 203, aimed 0.5 to its right and 0.05",
+    "below its centre so that the recoil is a push into the block and leaves nothing (-2 u/s): out at (330, 87)",
+    "at rest, before the ring reaches the parked player (it kills one left there on 251). The key flies in (halo 248) and keyhole and door",
+    "go on 298. A portal in the exit door (436, 88) on 299 (landed by 325), the recoil carries the player left along",
+    "y 90 at 140 u/s; a shot on the player (aimed 0.5 to its right, at (262.8, 91.9), 93 from antiportal_2359's",
+    "centre) on 328: out at the door. Won on tick 331. The last tap wins from tick 325 to 339 at least."
   ],
   "level": "level14c",
-  "win_by": 370,
-  "holds": [
-  ],
+  "win_by": 355,
+  "holds": [],
   "taps": [
-    {"tick": 29, "at": [415, 186]},
+    {"tick": 77, "at": [415, 186]},
     {"tick": 149, "at": [330, 85]},
-    {"tick": 175, "at": [138.3, 86.2]},
-    {"tick": 279, "at": [436, 88]},
-    {"tick": 303, "at": [315.2, 62.9]}
+    {"tick": 203, "at": [138.2, 87.65]},
+    {"tick": 299, "at": [436, 88]},
+    {"tick": 328, "at": [262.8, 91.9]}
   ]
 }

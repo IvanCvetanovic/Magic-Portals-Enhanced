@@ -1,37 +1,114 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-13, won by killing the anti-portal agent (step 126, R17). Left off the shelf onto the crate, right",
-    "off its far side, and left again: the crate is pushed until it drops into the 64 px gap by the key's",
-    "block (released on tick 187; later and it slides over the gap and jams under the column). Over it to",
-    "the far wall, taking the blue key. From x 9.8 a shot at (70, 70) passes left of the block under the",
-    "agent and comes within 22.4 of anti_portal_agent_ent_1536 (82, 84): the agent and antiportal_1520, the",
-    "208 px field over the whole left of the level, are gone on tick ~345. A portal by the blue keyhole at",
-    "(380, 178), one on the player: the blue key opens it and the yellow key is taken. Right through where",
-    "the blue door stood, down, left to x 412. A portal over breakable_wall_1542 at (310, 360) and one",
-    "beside rolling_stone_1540 at (100, 298): the stone drops onto the wall and breaks it (tick 720). Left",
-    "into the hole, onto the stone; a portal in the corridor at (240, 466), one on the player; left past",
-    "keyhole_ent_1197 (the yellow door goes) to the door. Won on tick 1027 (step 126)."
+    "3-13, won by killing the anti-portal agent (step 126, R17). Left off the shelf onto the crate (a walk off the edge now",
+    "carries 15 units, not a steered arc), right off its far side into the 21 px gap between the crate and block00_1528, and",
+    "left again: the crate is pushed until its centre passes the platform's edge (released on tick 156; 153 to 160 drop it",
+    "clear in the 64 px gap by the key's block, later it hangs half over the edge and jams under the column, earlier it",
+    "stays on the platform), then the player waits for it to fall and walks on over it to the far wall, taking the blue key.",
+    "From x 9.8 a shot at (70, 70) comes within range of anti_portal_agent_ent_1536 and kills it with its ring on tick 288.",
+    "The shot flies 3.2 units a tick after its first-frame jump of 24, so a far portal takes 100 ticks: one at the blue",
+    "keyhole (380, 178) (tap 292, placed 401), one on the player (tap 404): the blue key opens the door and the yellow key is",
+    "taken. Right through where the blue door stood, down, left a little on the platform below. A portal over",
+    "breakable_wall_1542 at (310, 360) (tap 552) and one beside rolling_stone_1540 at (100, 298) (tap 590, placed 684): the stone",
+    "drops onto the wall and breaks it (tick 691) and rolls into the pit under the corridor. Left into the hole onto the block",
+    "at the corridor's end; a portal in the corridor at (240, 466) (tap 804, after the stone has fallen out of the shot's",
+    "line: a shot at 791 was stopped by it), one on the player (tap 842): left past keyhole_ent_1197 (the yellow door goes)",
+    "to the door. Re-authored on the wave 3a timing build (R3 round 1): won on tick 1001."
   ],
   "level": "level12b",
-  "win_by": 1090,
+  "win_by": 1060,
   "holds": [
-    {"walk": "left", "from": 1, "to": 80},
-    {"walk": "right", "from": 81, "to": 106},
-    {"walk": "left", "from": 140, "to": 187},
-    {"walk": "left", "from": 240, "to": 330},
-    {"walk": "right", "from": 525, "to": 560},
-    {"walk": "left", "from": 600, "to": 624},
-    {"walk": "left", "from": 740, "to": 760},
-    {"walk": "left", "from": 880, "to": 1090}
+    {
+      "walk": "left",
+      "from": 1,
+      "to": 85
+    },
+    {
+      "walk": "right",
+      "from": 99,
+      "to": 112
+    },
+    {
+      "walk": "left",
+      "from": 119,
+      "to": 156
+    },
+    {
+      "walk": "left",
+      "from": 180,
+      "to": 262
+    },
+    {
+      "walk": "right",
+      "from": 503,
+      "to": 531
+    },
+    {
+      "walk": "left",
+      "from": 536,
+      "to": 544
+    },
+    {
+      "walk": "left",
+      "from": 735,
+      "to": 760
+    },
+    {
+      "walk": "left",
+      "from": 850,
+      "to": 1060
+    }
   ],
   "taps": [
-    {"tick": 339, "at": [70, 70]},
-    {"tick": 369, "at": [380, 178]},
-    {"tick": 419, "at": [9.8, 170.3]},
-    {"tick": 649, "at": [310, 360]},
-    {"tick": 679, "at": [100, 298]},
-    {"tick": 829, "at": [240, 466]},
-    {"tick": 859, "at": [351.0, 401.0]}
+    {
+      "tick": 264,
+      "at": [
+        70,
+        70
+      ]
+    },
+    {
+      "tick": 292,
+      "at": [
+        380,
+        178
+      ]
+    },
+    {
+      "tick": 404,
+      "at": [
+        9.8,
+        170.3
+      ]
+    },
+    {
+      "tick": 552,
+      "at": [
+        310,
+        360
+      ]
+    },
+    {
+      "tick": 590,
+      "at": [
+        100,
+        298
+      ]
+    },
+    {
+      "tick": 804,
+      "at": [
+        240,
+        466
+      ]
+    },
+    {
+      "tick": 842,
+      "at": [
+        367.6,
+        458.5
+      ]
+    }
   ]
 }

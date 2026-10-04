@@ -2,15 +2,19 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-02, weightless (step 127, R1: antiportal_2074's 32 x 2 = 64 px lies far from the door). A portal",
-    "in the door at (344, 120); its recoil pushes the player left at 70 u/s, and one on the player where",
-    "it has drifted to, (109.1, 148.7): through it into the door. Won on tick 57 (step 127)."
+    "in the door at (344, 120), shot from the player's start on tick 26 (the first tap waits for the",
+    "400 ms, 26 ticks of 16 ms); its recoil pushes the player left at 139 u/s and the shot flies 58",
+    "ticks (the decoded projectile, G4), opening the portal on tick 84, with the player at the view's",
+    "left edge. The second tap may only follow once the first has landed: on the player where it has",
+    "drifted to, (1.5, 148.5), on tick 85, still on the view (it leaves it on tick 86 and falls out of",
+    "the level on 107): through it into the door. Won on tick 87 (round 3, the timing group's build)."
   ],
   "level": "level1c",
-  "win_by": 120,
+  "win_by": 100,
   "holds": [
   ],
   "taps": [
-    {"tick": 29, "at": [344, 120]},
-    {"tick": 54, "at": [109.1, 148.7]}
+    {"tick": 25, "at": [344, 120]},
+    {"tick": 84, "at": [1.5, 148.5]}
   ]
 }
