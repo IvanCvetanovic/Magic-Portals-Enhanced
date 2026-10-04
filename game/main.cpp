@@ -385,6 +385,10 @@ int main(int argc, char** argv) {
             }
             continue;
         }
+        // The engine's own flag, handed on: the layer is told too, because a run whose frames
+        // are the tick's own measures nothing of the display and draws every picture at its
+        // tick's place (pictures.json, planning step 150).
+        if (arg == "--fixed-step") paths.fixedStep = true;
         engineArgs.push_back(argv[i]);
     }
     // A route names its own level, and opens it unless --level says the same.

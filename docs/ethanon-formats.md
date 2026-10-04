@@ -2648,3 +2648,20 @@ listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce`, arguments pushed l
   (nine clean shots, 87 frames): the speed fitted freely from each shot's own frames pools to **193 +- 3 u/s** (plain mean 196, scatter 11, standard error 4) against the decode's 200 x ms / 1000
   (192 a second of wall time at 60 Hz, 196-199 at the clips' 17-30 frames a second), and the old 600 is out by 82 u rms against the decode's 6.7; the first frame a shot is seen on is 32.8-50.9
   units out (the jump plus 4-134 ms of that frame's advance) and never nearer; and the frame a shot's end is shown on is within -1 to +2 frames of the decode's.
+
+## 15. Where a frame draws an entity: the position it holds at draw time (planning step 150)
+
+Found while building PIC, the port's picture drawn at its tick's own place; read from the engine's source (`reference/ethanon`), and settled in the visuals plan's `decode/D10_check.md` section 4a.
+
+- **There is no interpolation and no stored draw position.** `ETHScene::Update` (`ETHScene.cpp:459-493`) runs the physics step, the always-active entities' callbacks, the script's scene-update function, maps the entities to
+  render (`MapEntitiesToBeRendered`) and then runs the static entities' callbacks (`UpdateCurrentFrameEntities`) - all of it before the frame is drawn. Mapping queues a piece that holds the ENTITY'S POINTER, not its position
+  (`ETHEntityRenderingManager::AddDecomposedPieces`, `ETHEntityRenderingManager.cpp:45-75`, makes an `ETHEntitySpriteRenderer(entity, ...)`, `ETHEntitySpriteRenderer.cpp:25-39`, and only the depth and the draw hash are computed
+  there), and the draw reads the point when it runs (`ETHEntitySpriteRenderer::RenderAmbientPass`, `:47-56`, calls `m_entity->DrawAmbientPass`, which takes `GetPosition()` at `ETHRenderEntity.cpp:106` and `:152`).
+  So a `SetPositionXY` (a `b2Body::SetTransform` plus `SetAwake`) made anywhere in the frame's update - by a dynamic callback, by the loop function, or by a static callback that ran after the entity was queued - is drawn in
+  that same frame: a body is drawn where its frame left it, never where it stood a frame ago.
+- **The camera is read the same way**: the sprite's draw subtracts the video's camera as it draws (`GLES2Sprite.cpp:174` and `:251`, `m_video->GetCameraPos()` read inside the draw call, as the D3D9 and GL sprites do; `Video::SetCameraPos`,
+  `Video.cpp:105`, is what the script's camera controller moves), and the scene culls and prints its debug text against it (`ETHScene.cpp:521`, `:669`, `:689`), so a camera moved in a frame's update is drawn in that frame.
+  A particle system or a light an entity carries is placed from the same point that frame.
+- **What the port does with it** (`MagicPortalsLayer::drawPicturesAtTick`, `game/data/pictures.json`): the engine's `InterpolationSystem::Apply` draws `previousPosition -> currentPosition` at the frame's alpha, which is 0 on
+  every `--fixed-step` frame, so before step 150 a body-linked picture and the camera stood one tick back (16.7 ms) while everything placed from the sim's own point (lights, emitters, effects an owner carries, the tutorial hands, the shot) stood at
+  the tick's. The layer ends each tick by making the tick's end both ends of the interpolation; it keeps the engine's smoothing only where the display outruns the 60 Hz tick (the port's own choice, marked `_guess`).

@@ -48,6 +48,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Notificator.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Pause.hpp"
+#include "sim/Pictures.hpp"
 #include "sim/Popup.hpp"
 #include "sim/Scores.hpp"
 #include "sim/Selector.hpp"
@@ -183,6 +184,11 @@ public:
         // Only the shipped binary passes one, from UserDataDirectory. The sound
         // and music switches are kept there too (audio.json, sim/Switches.hpp).
         std::string saveDir;
+
+        // A --fixed-step run: its frames are the tick's own, so nothing about the
+        // display is measured and every picture is drawn at its tick's place whatever
+        // pictures.json says (planning step 150). Set by main from the engine's flag.
+        bool fixedStep = false;
     };
 
     // The last level cleared: the portals spent against its golden score, which
@@ -1184,6 +1190,14 @@ public:
     // engine integrated (sim/ScriptClock.hpp, planning step 147).
     const ScriptClock::Step& TickStep() const { return m_step; }
     const ScriptClock::Rules& ClockRules() const { return m_clockRules; }
+    // Whether the engine's interpolation is kept for the frames being drawn: a real-time
+    // run whose display outruns the tick (pictures.json). False in a --fixed-step run and at
+    // the matched 60 Hz, where every picture - the camera too - is drawn at its tick's own
+    // place, as the original draws it (planning step 150).
+    bool PicturesSmoothed() const { return m_pictureRate.Smoothing(); }
+    const Pictures::Rules& PictureRules() const { return m_pictureRules; }
+    // The mean rate of the frames OnUpdate was handed, in hertz (0 before the first).
+    double FrameHz() const { return m_pictureRate.Hz(); }
     // The main menu's buttons a held touch that went down inside them is still
     // inside (MainMenu::Bit): drawn at the press tint.
     unsigned MainMenuHeld() const { return m_menuTouch.mainHeld; }
@@ -1961,6 +1975,10 @@ private:
     // (sim/ScriptClock.hpp, planning step 147).
     ScriptClock::Rules m_clockRules;
     ScriptClock::Step m_step;
+    // Where a picture is drawn between ticks (pictures.json), and what the layer has seen of
+    // the display's rate to decide it (sim/Pictures.hpp, planning step 150).
+    Pictures::Rules m_pictureRules;
+    Pictures::RateWatch m_pictureRate;
 
     Game::Data m_data;
     int m_dataIndex{-1}; // whose level m_data holds, so a retry reuses it
@@ -3294,6 +3312,11 @@ private:
     // The level's tick itself: what OnFixedUpdate ran before the earthquake,
     // which now wraps it.
     void fixedTick(entt::registry& registry, const ScriptClock::Step& step);
+    // The last thing a tick does (OnFixedUpdate): the tick's end is published as both ends
+    // of every interpolated picture and of the camera, so the frame draws each at the
+    // tick's own place, as the original does (planning step 150). Not when the display
+    // outruns the tick and pictures.json keeps the engine's smoothing.
+    void drawPicturesAtTick(entt::registry& registry);
     // What the tick after the physics step did, against what it looked like
     // before: every call site whose event is AfterStep's. Beside latchSimEffects.
     void latchSimQuakes();

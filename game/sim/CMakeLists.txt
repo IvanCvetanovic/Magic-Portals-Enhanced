@@ -49,6 +49,7 @@ add_library(MagicPortalsSim STATIC
     Mover.cpp
     Particles.cpp
     Pause.cpp
+    Pictures.cpp
     Player.cpp
     Popup.cpp
     Portal.cpp

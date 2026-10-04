@@ -89,6 +89,13 @@ add_mp_test(test_mp_clock)
 # clock.json, both committed: no converted level, so no skip.
 add_mp_test(test_mp_player)
 
+# Where a picture is drawn between ticks: the tick's own place, as the original draws it, the camera
+# included, and the engine's smoothing kept only where the display outruns the tick (planning step
+# 150). The rules and the rate watch are pure; the walk and the level sample read the converted levels
+# and skip themselves without them, so the suite takes no SKIPS_WITH_77. `test_mp test_mp_pictures
+# --sweep <file>` runs all 128 levels for 420 ticks and writes what moved on the last.
+add_mp_test(test_mp_pictures)
+
 # The achievements as the original unlocks them, the saved set and its hash, and
 # the Notificator's card and the pause's popup frame (planning step 143). Pure sim
 # and a scratch directory; its checks against the original's list skip themselves

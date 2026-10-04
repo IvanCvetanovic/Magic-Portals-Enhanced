@@ -326,7 +326,7 @@ work no step of §7 owns, and the owner's calls:
 - **The owner's calls still open**: **R24 and R25**, applied by step 76, still the owner's to rule (the "Step 76, THE
   OWNER'S TO RULE" row; the player's point is R25's other half, and 7.3, 10.1, 10.1b and 10.4 each record it again);
   **the two PORT-WIDE rows** - the script clock the original floors to whole milliseconds, and every body's picture
-  drawn a tick behind the sim; **11.2's fire signal**, applied and the owner's to rule, and step 30's put-out test at
+  drawn a tick behind the sim (both built under the program's rule: steps 147 and 150); **11.2's fire signal**, applied and the owner's to rule, and step 30's put-out test at
   the ball, which the original makes at the torch; and the gameplay rows this run filed for the owner without
   changing them - 12.1's barrel-bomb restock (4-32 cannot be won without it; built in step 116 under the program's
   rule, the original's), its summon clock and its wound's shot
@@ -547,7 +547,8 @@ work no step of §7 owns, and the owner's calls:
       Built bar one site, so the row stays open: the player's ground walk-cell flipbook is still advanced by the engine's tick
       (CK-1, section 6, G10's). 41 of the 86 routes still win on that build; the routes are re-authored by the wave's route
       phase after PIC.*
-- [ ] **PORT-WIDE, found verifying step 78 (order 3.4): the picture of any body is drawn one tick behind the sim.**
+- [x] **PORT-WIDE, found verifying step 78 (order 3.4): the picture of any body is drawn one tick behind the sim.**
+      ***BUILT by step 150 (program wave 3a, PIC, local, not pushed): see the paragraph at the end of this row.***
       `buildSprites` gives every body-linked quad an `InterpolatedTransformComponent` (`game/MagicPortalsLayer.cpp:2590`)
       and `InterpolationSystem::Apply` draws `previousPosition -> currentPosition` at the frame's alpha
       (`engine/src/core/InterpolationSystem.cpp:140-149`), which is 0 under `--fixed-step` - so the picture shows where
@@ -561,6 +562,16 @@ work no step of §7 owns, and the owner's calls:
       body-linked picture in the port, not the button's alone, which is why step 78 recorded it rather than changing
       it. Next: the owner's call on whether a body's picture is drawn at its tick's own position, then a re-capture of
       the committed baselines - it moves any frame taken while a body is moving.
+      ***Built in step 150*** (program wave 3a, PIC; the premise above that a debug box carries no interpolation did not
+      hold - `buildDrawables` has given every body's box and the player's one since step 7 - so the gate was measured against
+      the simulation's own body, which the engine never interpolates): `MagicPortalsLayer::drawPicturesAtTick` ends every
+      tick by making the tick's end both ends of every interpolated picture and of the camera, so `InterpolationSystem::Apply`
+      returns the tick's own place at any alpha; the picture's lag is **0.0000 ticks** at alpha 0 / 0.25 / 0.5 / 0.75 / 1 (the
+      control on a smoothed display reads 1 - alpha), and on the real binary the player's picture is 7 px (one tick of the
+      walk, 6.75) ahead of the old build's at the same frame. **In real time above 80 Hz the engine's smoothing is kept**
+      (`game/data/pictures.json` `smoothing.above_hz`, marked `_guess`; 0 draws at the tick's place at every rate; always off
+      under `--fixed-step`) - the owner's to confirm (planning step 150, LEFT FOR THE OWNER). No gameplay, no route and no tap
+      moves: the route census is G4's, route by route, and three traces agree tick for tick. The f420 sweep: 68 of 128 levels byte-identical against G4's, 60 changed and every one explained by a picture or the camera on the view changing on tick 420, the capture's own - the 17 space levels' turning spiral (0.12 u a tick), 13 minions' 0.65 u, three thrown stones, the beholder, 2-32's sky cover and the camera of 1-24 and 2-32 - and 59 of the identical ones had nothing on the view change at all (`PIC/explain_sweep.txt`). **The routes are re-authored by the wave's route phase after PIC**: this step moves none (8 of the 86 win, the same 8 on the same ticks as at step 149). The step's deviations are the rows PIC-1 to PIC-9 in section 6.
 - [ ] **Step 79 deviation (order 13.2): the exit's sensor does not move with the bobbing door.** `linearMotion` ends in
       `SetPosition` (ins 180-208), and `door.ent` is `static="1"` with a `<Collision>` (Position (0,20), Size (8,57)),
       so the original moves the exit's sensor body with its picture on all 18 `no_gravity` levels. The port bobs
@@ -1874,6 +1885,7 @@ editing a route. The engine pin stays `710bffc`.
 | 147 | CK | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 11 recorded deviations (owner-delegated); the third verifier passed 12 of 13 gates, and the one it failed, the player's ground walk-cell flipbook, is cosmetic and G10's; 49 of 50 suites, 17,717 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: every scripted motion, timer, blink and fade runs 16 ms a tick where it ran 16.667, 4.17 % slower in wall time (the 400 ms between taps takes 26 ticks, not 24; a 10 s crystal runs out on the 626th tick; the lost screen on the 88th) | none: 41 of the 86 routes still win on this build and 45 do not; **the routes are re-authored by the wave's route phase after PIC** |
 | 148 | G10 | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 13 recorded deviations (owner-delegated); the verifier passed all ten gates and listed six problems, three medium (the standing creep, a confirmed regression against the library; the unruled 60 Hz rate; the world's mixed time base) and three low, whose text findings the commit applied; 50 of 51 suites, 17,654 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: the player is the decode's - walk 144 u/s set outright, an air brake of 0.86 a tick and no steering, gravity 4000 u/s^2 under the original's fixed 1/30 s physics step, a 14-unit ground sensor, the zero-g recoil 140 u/s a shot, a turn toward a tap | none: **23 of the 86 routes still win** (CK: 41), 63 do not; **the routes are re-authored by the wave's route phase after PIC** |
 | 149 | G4 | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 9 recorded deviations (owner-delegated); the verifier passed all twelve gates and listed five low problems, all text only, which the commit applied (`game/data/shot.json`'s `_source` gained two comment facts after the executables were built: notes only, its keys unchanged, run by the verifier's full launch and sweep); 50 of 51 suites, 17,574 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep changes exactly the seven carranca levels (121 of 128 byte-identical), each explained by its fireballs' bursts and shakes | **yes**: every portal shot flies the original's 3.2 units a tick after a 24-unit jump (192 a second of wall time, about three times slower than before: 300 units 32 -> 87 ticks), opens its portal at its destiny when it has gone past it, and is seen by an anti-portal agent and a flame by its position once a frame; seven levels' fireballs fly at their carranca's |dir| x 130 (2-01 156, 2-03 162.5, 2-07 208, 2-15 169 and 260, 2-18 156, 2-28 156, 4-13 91) | none: **8 of the 86 routes still win** (G10: 23), 78 do not - 15 that won fail now, 14 with a second tap refused by a flight and 2-12 with a pair opened 27 ticks late; **the routes are re-authored by the wave's route phase after PIC** |
+| 150 | PIC | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 9 recorded deviations (owner-delegated); the verifier passed all fourteen gates and listed six low problems (no medium), which the commit applied as far as they are text (the moved `test_mp_layer` line told in the step's Suites row, the stale comments counted as five sites, this row's own outcome, 4-22 recorded as inferred) and recorded as open rows where they are not (the aura pin that tests only the smoothed mode, `Pictures::Rules`'s two default numbers, the unlogged smoothing flip); no gate row unmet: the picture's lag 0.0000 ticks at every alpha (the control on a smoothed display 1 - alpha), 7 px on the real binary against one tick of the walk's 6.75; the f420 sweep 68 of 128 byte-identical and the 60 changed all explained by a picture or the camera on the view moving on the capture's tick; 51 of 52 suites, 17,730 checks (`test_mp_routes` fails by design; every earlier suite's counts unchanged, `test_mp_pictures` adds 156); reachability 108 / 20 / 0 | **none**: pictures only - a body's picture and the camera are drawn at the tick's own position (16.7 ms sooner), and the lights, effects, tutorial hands and shot marks that always read the sim's point now agree with them; in real time above 80 Hz the engine's smoothing is kept (`pictures.json`, 0 turns it off) | none: **8 of the 86 routes still win**, the same 8 and the same 78 as at step 149, route by route; **the routes are re-authored by the wave's route phase after PIC** |
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -1919,6 +1931,7 @@ editing a route. The engine pin stays `710bffc`.
 - [ ] **CK-10. The sweep: four frames (1-24, 2-04, 3-16, 4-06) carry random-driven particle detail one tick off**, the levels whose
       x 16 ms crystal expires before tick 420 (its expiry 250 -> 251, 375 -> 376). The shared effects stream is the INFERRED
       mechanism. Next: **PIC**, which re-takes the sweep; no action unless a deterministic motion differs there.
+      *PIC re-took the sweep (step 150): 1-24, 3-16 and 4-06 change for a thrown stone and the camera, a patrolling minion and the spiral's turn (each explained in step 150's table), so the sweep does not separate the particle detail from the pictures' own shift, and 2-04 is byte-identical; no deterministic motion differs there. Still open for the final comparison.**
 - [x] **CK-11. `readers.md` named `ETHTextDrawer` as the only C++ reader of the floored uint**; `ETHParticleDrawer::Draw` is the
       other, never created by this game. Closed in CK's commit (one sentence in the readers table and in step 147).
 
@@ -1950,7 +1963,7 @@ editing a route. The engine pin stays `710bffc`.
       them), and **G10-8** 1-32's rock case asks no pair twice, not exactly one begin. Next: the route phase, which restores the strict pins
       (a real solve that reaches 1-09's shelf, with its three crystals confirmed reachable under the decoded movement; a rock placed over
       the floor for 1-32).
-- [ ] **G10-9..12**: the tap's turn the tick it is taken; `air_velocity_share` removed from `art.json`; **CK-1 left to PIC**; the landing's
+- [ ] **G10-9..12**: the tap's turn the tick it is taken; `air_velocity_share` removed from `art.json`; **CK-1 left to PIC** (PIC did not take it: PIC-5); the landing's
       hit 8.0 for a 100-unit drop (8.94 continuous, 8.67 on the original's own frames).
 - [ ] **G10-13. `Player.cpp`'s clamp comment says a fall of 570 units reaches Box2D's clamp**; the exact figure is 586.7 (about 590, as the
       step and `player.json` say). A comment, not edited to keep the tested binaries current; correct it at the next relink.
@@ -1982,6 +1995,38 @@ editing a route. The engine pin stays `710bffc`.
 - [ ] **G4-9. An agent is tested at its end-of-tick centre; the original tests before it moves**: `ETHCallback_anti_portal_agent` runs its kill test (#37-199)
       before its own `linearMotion` (#201-250), while `Portals::Tick` advances the agent's motion at its top and `flyOnePass` reads its centre after. About a
       unit of the agent's own motion; pre-existing, no pinned scenario flips. No owner assigned: a row for the final comparison (section 5) to weigh.
+
+**PIC's recorded deviations**, each an open row for the step named (planning step 150 has the evidence, `RECORDED DEVIATIONS` 1-9):
+- [ ] **PIC-1. The smoothing's line is a guess and unmeasured on a real fast display.** `smoothing.above_hz` 80 / `release_below_hz` 72 /
+      30 frames / 2 ticks are the port's own (`_guess`), unit-tested against simulated frame lengths and a layer fed 300 Hz frames, but no 90 /
+      120 / 144 Hz window was run: above the line the behaviour is the engine's own interpolation, exactly the build before step 150. Next: one
+      real-time look on such a screen; the owner's call whether the smoothing stays (`above_hz` 0 draws at the tick's place at every rate).
+      Nothing logs when `RateWatch` flips, so a fast screen cannot be checked by its log: log one line when `Smoothing()` flips, with the
+      measured Hz, at the next relink (the verifier's fifth problem; a source change, not applied by the commit).
+- [ ] **PIC-2. Above the line the pictures trail the sim by up to a tick again**, and the lights and effects that read the sim's point lead them
+      (2.9 px at the player's walk): the price of the smoothing, stated in `pictures.json`.
+- [ ] **PIC-3. Five comments are stale**: "between ticks" - true only above the line, in the smoothed mode - in `MagicPortalsLayer.hpp` (lines 85,
+      349 and 3305) and in `MagicPortalsLayer.cpp` (line 9825, the earthquake block's "WHAT MOVES"; the verifier's find, not on the step's first list),
+      and `drawPicturesAtTick`'s first comment (`.cpp` line 10923), which lists the HUD among what reads the sim's point; the HUD is the screen's own
+      overlay. Left to keep the tested binaries current (the G10-13 precedent). Next: correct all five at the next relink.
+- [ ] **PIC-4. The first ~20 frames of a real-time run on a fast display draw at the tick's place**: the watch starts at the matched 60 Hz and
+      walks to the rate it measures.
+- [ ] **PIC-5. CK-1 is not taken by PIC** (G10's fallback): the player's ground walk-cell flipbook still runs on the engine's unfloored tick. It
+      changes the cells of every walking frame and would mix a second cause into a one-cause sweep; no route, tick or position depends on it.
+      Next: the route phase or the final comparison.
+- [ ] **PIC-6. The 128-level explanation reads a no-input run of the suite, not the captures' own state**: the capture's 420th frame is taken as the
+      layer's 420th tick (the table keeps 418 to 422; 3-10, 3-17 and 3-21 move on 419 and 421, stand still on 420 and are byte-identical, which fixes it).
+- [ ] **PIC-7. `test_mp_layer`'s level31b aura pin measures the smoothed mode** (the verifier's first problem): the case feeds 120 Hz frames, so the
+      smoothing engages and `worstBody > 0.5` holds on a knight drawn one patrol tick (0.650 u) behind its body; the printed figure moved from 2.013 to
+      0.650. In the default mode it would read about 0 and the pin would not hold. Next, at the next test edit: feed the case whole-tick frames, or
+      assert both modes.
+- [ ] **PIC-8. `Pictures::Rules` carries two default members that duplicate `pictures.json`** (`windowFrames` 30, `hitchTicks` 2.0 in
+      `game/sim/Pictures.hpp`; the verifier's third problem): inert (a default `Rules` never smooths and `LoadRules` overwrites all four) but a tunable
+      number in code. Next, at the next relink: default them to 1 and 1.5 (or leave them unset) with a comment that the JSON is the one source.
+- [ ] **PIC-9. 4-22's byte-identical f420 frame is INFERRED, not confirmed, to be an unlit moving platform** (`moving_platform_1716` in a `darkest`
+      level, a picture moving 0.43 u a tick drawn black on black; the verifier's sixth problem): the frame is not static (f420 against f421 differ by
+      15,627 px), so the sweep cannot separate "invisible" from "not drawn". Next: capture 4-22 with the platform lit once, or leave it for the
+      final comparison.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be

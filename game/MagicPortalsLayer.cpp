@@ -316,6 +316,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     std::string error;
     const bool read = Chapters::Load(m_paths.chapters, m_chapters, error) &&
                       ScriptClock::LoadRules(m_paths.portData + "/clock.json", m_clockRules, error) &&
+                      Pictures::LoadRules(m_paths.portData + "/pictures.json", m_pictureRules, error) &&
                       Camera::LoadRules(m_paths.data + "/portals.json", m_cameraRules, error) &&
                       Camera::LoadDrag(m_paths.portData + "/camera.json", m_cameraRules, error) &&
                       Hint::LoadRules(m_paths.portData + "/camera.json", m_hintRules, error) &&
@@ -1800,14 +1801,15 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
         }
         return false;
     case EffectOwner::Kind::Minion: {
-        // WHERE ITS PICTURE STANDS THIS FRAME, and not where the tick left its
-        // body. The original has one point: the callback moves the entity, and the
-        // frame releases its particles from, and draws its sprite at, that point.
-        // The app draws a body between its last two ticks (InterpolationSystem), so
-        // the body's own point runs a tick ahead of the knight on the screen - 0.65
-        // units at the patrol's 39 a second - and systems released from it would
-        // lead their knight. The picture's centre, back out through the pivot
-        // syncMinions placed it by, is that entity point as it is drawn.
+        // WHERE ITS PICTURE STANDS THIS FRAME. The original has one point: the
+        // callback moves the entity, and the frame releases its particles from, and
+        // draws its sprite at, that point. The picture is drawn at the tick's own place
+        // (drawPicturesAtTick), so its centre, back out through the pivot syncMinions
+        // placed it by, is that entity point as it is drawn. Where the display outruns
+        // the tick and the engine draws a body between its last two ticks
+        // (pictures.json), the body's own point runs up to a tick ahead of the knight on
+        // the screen - 0.65 units at the patrol's 39 a second - and a system released from
+        // it would lead its knight: the picture's centre is what follows it.
         if (owner.index < 0 || owner.index >= static_cast<int>(m_minions.size())) return false;
         const MinionQuad& drawn = m_minions[static_cast<std::size_t>(owner.index)];
         // Taken away (a killer floor, a strike): DeleteEntity takes its systems too.
@@ -3963,7 +3965,8 @@ void MagicPortalsLayer::buildCamera(entt::registry& registry) {
     camera.updateCameraVectors();
     camera.aspect = kDefaultAspect;
     registry.emplace<TransformComponent>(m_camera);
-    // Moved on the tick and drawn between ticks, as HUSK's is.
+    // Moved on the tick and drawn at the tick's own place (drawPicturesAtTick), or between the
+    // last two ticks where the display outruns the tick, as HUSK's is.
     registry.emplace<InterpolatedCameraComponent>(m_camera);
 
     m_light = registry.create();
@@ -4075,7 +4078,7 @@ void MagicPortalsLayer::buildDrawables(entt::registry& registry) {
             colour = kStoneColour;
         }
         drawn.box = makeBox(registry, "Magic Portals Body", glm::vec3(0.0f), glm::vec3(1.0f), colour);
-        // Bodies move on the tick and are drawn between ticks.
+        // Bodies move on the tick and are drawn at its place (drawPicturesAtTick).
         registry.emplace<InterpolatedTransformComponent>(drawn.box);
         m_bodies.push_back(drawn);
     }
@@ -4775,17 +4778,18 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         }
         if (const auto body = m_level.built.entities.find(sprite.node); body != m_level.built.entities.end()) {
             drawn.body = body->second;
-            // Bodies move on the tick and are drawn between ticks, as their boxes are.
+            // Bodies move on the tick and are drawn at its place, as their boxes are.
             registry.emplace<InterpolatedTransformComponent>(drawn.quad);
         }
         if (drawn.key >= 0 || drawn.diamond >= 0) {
-            // Carried on the tick, as a body is moved, and drawn between ticks.
+            // Carried on the tick, as a body is moved, and drawn at its place.
             registry.emplace_or_replace<InterpolatedTransformComponent>(drawn.quad);
         }
         if (drawn.sky >= 0 || drawn.satellite || drawn.space != SpaceRole::None) {
-            // Placed on the tick from the camera the tick left, and drawn between
-            // ticks as the camera is: both interpolate with the same alpha, so
-            // the sky keeps its place on the screen on the frames between.
+            // Placed on the tick from the camera the tick left, and drawn as the
+            // camera is: both at the tick's place, or - where the display outruns the
+            // tick - both between ticks with the same alpha, so the sky keeps its place
+            // on the screen on the frames between.
             if (!registry.all_of<InterpolatedTransformComponent>(drawn.quad)) {
                 registry.emplace<InterpolatedTransformComponent>(drawn.quad);
             }
@@ -5372,7 +5376,7 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         // that kept one would destroy it twice.
         made.cover = entt::null;
         made.quad = makeSprite(registry, "Magic Portals Restocked Sprite", made.sprite.texture, made.sprite.additive);
-        // A body, moved on the tick and drawn between ticks, as buildSprites gives one.
+        // A body, moved on the tick and drawn at its place, as buildSprites gives one.
         registry.emplace<InterpolatedTransformComponent>(made.quad);
         m_sprites.push_back(std::move(made));
     }
@@ -7096,7 +7100,7 @@ void MagicPortalsLayer::syncMinions(entt::registry& registry) {
         }
         if (drawn.quad == entt::null) {
             drawn.quad = makeSprite(registry, "Magic Portals Minion", m_minionSheet, art.additive);
-            // Bodies move on the tick and are drawn between ticks.
+            // Bodies move on the tick and are drawn at its place.
             registry.emplace<InterpolatedTransformComponent>(drawn.quad);
         }
         // Its feet on what the port's one circle stands on, the entity the
@@ -7137,7 +7141,7 @@ void MagicPortalsLayer::syncGhost(entt::registry& registry) {
     const Art::Ghost& art = m_artRules.ghost;
     if (m_ghost.quad == entt::null) {
         m_ghost.quad = makeSprite(registry, "Magic Portals Ghost", m_ghost.sheet, art.additive);
-        // It moves on the tick - its flight, its hover - and is drawn between ticks.
+        // It moves on the tick - its flight, its hover - and is drawn at its place.
         registry.emplace<InterpolatedTransformComponent>(m_ghost.quad);
         SUPERSONIC_LOG_INFO("Magic Portals") << "the ghost is added at " << ghost.atPx.x << ", " << ghost.atPx.y
                                              << " on tick " << m_ticks << std::endl;
@@ -9503,7 +9507,7 @@ void MagicPortalsLayer::syncKnight(entt::registry& registry) {
     }
     if (m_knightQuad == entt::null) {
         m_knightQuad = makeSprite(registry, "Magic Portals Knight", m_minionSheet, m_artRules.minion.additive);
-        // It falls and walks on the tick and is drawn between ticks, as a minion.
+        // It falls and walks on the tick and is drawn at its place, as a minion.
         registry.emplace<InterpolatedTransformComponent>(m_knightQuad);
     }
     // minion.png's sheet as the minions', on its own pivot (0, 0): the picture's
@@ -10907,6 +10911,51 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
     // Then the generator's update, between what this tick's events called it
     // with from before it and what they called it with from after.
     quakeTick();
+    // And last, after every write the tick made to a picture or the camera: the frame
+    // draws them where the tick left them, as the original's frame draws its entities.
+    drawPicturesAtTick(registry);
+}
+
+void MagicPortalsLayer::drawPicturesAtTick(entt::registry& registry) {
+    using namespace Supersonic;
+    // The display outruns the tick (pictures.json), so the engine draws between the last
+    // two ticks for smoothness, as it did before planning step 150: the pictures then
+    // stand up to one tick behind what the lights, the effects and the HUD read from the
+    // sim, which is the price, and under 17 ms at 60 Hz ticks.
+    if (m_pictureRate.Smoothing()) return;
+    // WHY THIS IS AN HONEST USE OF THE ENGINE'S INTERPOLATION and not a bypass of it:
+    // BeginTick put each transform back at the last tick's end and recorded that as
+    // `previous`; the tick has since written this one's. Both ends at this one, and
+    // EndTick makes `current` the same, so Apply - a + (a - a) t - returns the tick's own
+    // place at any alpha, a --fixed-step frame's 0 and a real frame's anything between. The
+    // original has no interpolation: a body that moved in a frame is drawn moved in that
+    // frame (SetPositionXY is a SetTransform inside Update; the draw reads GetPosition at
+    // draw time, ETHRenderEntity.cpp:106; D10_check 4a).
+    // An entity that has not run a whole tick yet is left to EndTick, which seeds both
+    // ends from it.
+    for (auto [entity, interpolated, transform] :
+         registry.view<InterpolatedTransformComponent, TransformComponent>().each()) {
+        (void)entity;
+        if (!interpolated.captured) continue;
+        interpolated.previousPosition = transform.position;
+        interpolated.previousRotation = transform.rotation;
+        interpolated.previousScale = transform.scale;
+    }
+    // THE CAMERA, by the same rule and for a reason of its own: the pictures and the camera
+    // are one picture. A body drawn at the tick's place against a camera drawn a tick back
+    // stands at body(t) - camera(t - 1), which is neither what the engine drew before nor
+    // what the original draws (it reads GetCameraPos at draw time too). A tap is mapped
+    // through the camera the last tick left (BeginTick puts it back), which is now also the
+    // camera the last frame drew.
+    if (m_camera == entt::null || !registry.valid(m_camera)) return;
+    auto* camera = registry.try_get<CameraComponent>(m_camera);
+    auto* drawn = registry.try_get<InterpolatedCameraComponent>(m_camera);
+    if (camera == nullptr || drawn == nullptr || !drawn->captured) return;
+    drawn->previous.position = camera->position;
+    drawn->previous.yaw = camera->yaw;
+    drawn->previous.pitch = camera->pitch;
+    drawn->previous.fov = camera->fov;
+    drawn->previous.orthoHeight = camera->orthoHeight;
 }
 
 void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::Step& step) {
@@ -11861,6 +11910,12 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
 // ---- per frame: nothing the level or a replay depends on --------------------
 
 void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
+    // What the display's rate is, from the frame the engine has just drawn: the next ticks
+    // keep the engine's smoothing only where it outruns the tick (pictures.json). Nothing
+    // is measured in a --fixed-step run, whose frames are the tick's own.
+    if (!m_paths.fixedStep) {
+        m_pictureRate.Frame(m_pictureRules, static_cast<double>(deltaTime), static_cast<double>(kTick));
+    }
     // The entities' particles. They belong to the FRAME and not to the tick,
     // because a particle is a picture: nothing below may reach Game::Level,
     // the simulation's clock or the state hash. Carried before the camera's
