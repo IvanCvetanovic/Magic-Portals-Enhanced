@@ -1960,9 +1960,9 @@ editing a route. The engine pin stays `710bffc`.
       stands on a slope. The five routes that leaned on the creep (2-25, 2-31, 3-19, 3-20, 3-22) were re-flown, each
       on its old win tick, and six more win on another tick (1-09 +13, 1-12 +2, 1-21 -1, 2-24 -1, 3-15 +2, 4-29 +1). Its deviations are the rows below.
 - [ ] **G10-5b. 2-24's idle player still leaves `barrel_bomb_ent_1135`** (36 units in 420 ticks, with or without the hold: the barrel, a dynamic
-      box, moves out from under him and he falls to the floor on tick ~85). The hold has no slope to read on a flat top, so it does not touch this: the
-      body that moves is the barrel, loaded off-centre by a player whose weight (4000 u/s^2) is four times the barrel's own gravity (980), the world's
-      mixed time base (G10-1). 2-24 has no library stills. Next: **the world's time base** (G10-1), then re-measure; `test_mp_player` prints the number.
+      box, moves out from under him - x 123 -> 135, y 111.6 -> 108 in 90 ticks - and he falls to the floor on tick ~85). The hold has no slope to read
+      on a flat top, so it does not touch this. INFERRED, not traced: the barrel is loaded off-centre by a player whose weight (4000 u/s^2) is four times
+      its own gravity (980), the world's mixed time base (G10-1). 2-24 has no library stills. Next: **the world's time base** (G10-1), then re-measure; `test_mp_player` prints the number.
 - [ ] **G10-5c. The hold's other limits.** (1) Within 3 units of a platform's chamfered corner, or on a round top, the three probes are not one line and
       the player is steered as before (he creeps off a corner as he did; at the boundary he can shimmer 0.3 units a tick, 3-20's first ledge). (2) The
       port's floors all carry friction 1 (`LevelBuilder::kStaticFriction`), so the hold's mix is 0.949, not the original's per-entity mixes (0.47 on
