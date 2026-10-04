@@ -2866,3 +2866,131 @@ The backlog 2,516 -> 2,863 lines.
 power loss cost one verifier and no work, the rename cost a morning of repairs, and the merge and both picture steps
 landed; the price was seven more Smart App Control notifications, one level's edge moved the wrong way, and a GitHub
 rename found by surprise.
+
+### 2026-10-03 15:38 - Session 24: program wave 3a, the timing group and its routes
+
+*Written 2026-10-04 at the close by this session's close role, from the records - planning steps 147-151 of
+`docs/planning/2026-09-11-magic-portals-remaster.md`, each role's reports under the gitignored
+`out/parity/program/<id>/` (`impl.md`, `commit.md`, `deviations.md` where there is one, `fix*.md`, the verifiers'
+`verify*.json`, `R3/finalize.md`) - and git, not from a transcript. 15:38 is the creation time of
+`out/parity/program/CK/`, the wave's first record, not a measured start; the last commit of the wave is 16:56 the next
+day. Every number below is one a record states, or one this role measured and says so. This role built, launched and
+captured nothing.*
+
+**Built:**
+- **Step 147 (CK, `2cd0675`, and a docs follow-up `9d3fd6b`)**: the script clock is a floor of each frame's
+  milliseconds, as the original's. `ScriptClock::Step` is the one script-facing delta, 16 of the tick's 16.667 ms, and the
+  70 functions that read the clock are classified in a table; the physics step and the wall clock stayed where they were.
+  GAMEPLAY: all scripted time runs 4.17 % slower in wall time (the 400 ms between taps takes 26 ticks, a 10 s crystal
+  runs out on the 626th). 49 of 50 suites, 17,717 checks; **41 of the 86 routes still win**.
+- **Step 148 (G10, `d33d14d`)**: the player moves as the decode says - a walk of 144 u/s set outright, no air steering and
+  a brake of 0.86 a tick, a fall of 4000 u/s^2 under the original's fixed 1/30 s physics step, a 14-unit ground sensor, a
+  turn toward a tap. The decision it put first: the zero-g recoil goes UP, 70 to 140 u/s, because the original's world
+  steps twice as fast as a 60 Hz tick (F10's 40-44 u/s is the same decode at 17-19 frames a second). **23 of 86 routes
+  win.** Its amendment, `e54fa9d` and `972cdaf` (the route phase's second fix round): an idle player on a slope stands
+  still (G10-5, below); 52 suites, 18,945 checks.
+- **Step 149 (G4, `012dd1a`)**: the portal shot flies the original's 3.2 units a tick after a 24-unit jump (192 a
+  second, about three times slower: 300 units 32 -> 87 ticks), opens its portal at its destiny, and is seen by an agent
+  and a flame by its position once a frame; seven levels' fireballs fly at their carranca's |dir| x 130. Footage F2/F3:
+  193 +- 3 u/s over 87 frames. **8 of 86 routes win.**
+- **Step 150 (PIC, `d17e7d3`)**: a body's picture and the camera are drawn at the tick's own position. No gameplay. The
+  picture's lag is 0.0000 ticks at every alpha; above 80 Hz the engine's smoothing is kept, behind
+  `game/data/pictures.json` (`_guess`). The same 8 routes win, tick for tick.
+- **Step 151 (the route phase, `af008a9`)**: every route re-authored on the build, three rounds (8 -> 81 -> 83 -> 84 won),
+  two fix rounds and three independent verifications. **84 of 86 routes win**: chapter 1 20 of 21, chapter 2 28 of 29,
+  chapter 3 17 of 17, chapter 4 19 of 19. 76 files re-authored, 4 had only their `win_by` tightened, 4 win as committed,
+  1-11 and 2-30 untouched. 83 of the 84 winners win on another tick than before the wave (23 earlier, 60 later, median
+  move 42 ticks; 3-19 3,207 -> 997, 3-32 2,724 -> 3,358); every win is inside its `win_by` with 13 to 62 ticks to spare,
+  median 37. No source, test, data or engine file is in that commit.
+- **The close**: section 6 of `docs/parity-backlog.md` (the wave's table, its outcome and census, eight new open rows
+  R3-1 to R3-8, the next wave's order) and this entry, one commit, not pushed.
+- **The 2026-10-03 image purge, and this close's.** Ivan: "you literally have 100gb+ of images". `out/parity` went from
+  109 GB to ~22 GB: 173,000 PNGs deleted (footage frame dumps, `visuals/`, `program/`, `ui1`-`ui3`, `split`, the
+  recordings' frames), everything else kept - the baseline `program/UI/after/sweep`, `original/`, `smoke/`, `markers/`,
+  `saves/`, `asbc/`, the 78 mp4s and every text file; free disk 64 -> 151 GB. At this close `du` read 17.87 GB (the 22 is
+  the earlier note's figure; the difference was not traced), the new standing baseline was set - `out/parity/BASELINE.txt`
+  now names `program/R3/fix2/after/sweep`, replacing the two UI sweeps, which no longer match the build - and
+  `purge_images.py all --delete` removed **778 more images, 0.58 GB**: the f420 sweeps of CK, G10, G4 and PIC (128 each),
+  the two UI baselines (128 each) and ten cited crops. In all: **109 GB to 17.33 GB (`du`, measured), 173,778 images
+  deleted**; 149 GB free at the close (`df`). The new baseline folder still holds its 128 PNGs and their md5s equal the
+  third verifier's list; `git status` was unchanged by the purge.
+
+**Broke / dead ends:**
+- **The wave is not green.** `test_mp_routes` is red on 1-11 and 2-30; all three post-route verifiers (`verify1.json` to
+  `verify3.json`) failed, each on those two routes and on 2-32's route leaving the view (412 ticks in the first, 194 after
+  fix round 1: ticks 2525-2718, up to 293 u past the edge). verify3 passed 6 of its 8 gates. Nothing is pushed.
+- **1-11 and 2-30 are sealed on this build.** 1-11 (`level10`): the spawn island lies in `antiportal_709`'s 192 px ring and
+  no input gets nearer than 28.15 px to the nearest legal portal against a reach of 24; the level wants G3's full platform
+  swing, which is unbuilt (about 3,000 random patterns and 130 traced runs). 2-30 (`level29a`): burned on tick 259; the air
+  carry is capped at 14.74 u and the plank sags (about 950 plank and stone runs); it needs the owner's rulings on the rate,
+  the world's time base and the capsule. Both won before the wave.
+- **Every timing step cost routes**: 86 -> 41 (38 of the 45 lost to CK's 400 ms = 26 ticks) -> 23 (G10: 63 failing) -> 8
+  (G4: 15 that won lost a second tap to a longer flight) -> 8 (PIC). The re-author took 8 back to 84.
+- **The standing creep (G10-5).** G10's verifier called it a confirmed regression against the library, and the route phase
+  re-authored on a build that still had it until its second verifier said so. First fix, friction 0.9 on idle ticks, left 112.5
+  of 114.2 units on 1-24's ramp and was dropped. The cause was not friction: the engine integrates velocity before contacts
+  and `Steer` adds a tick of gravity to a grounded player, so he sinks 1.111 units into the slope and is pushed out along the
+  normal (0.278 u a tick on 15 degrees, to the digit). The first build read two probes, not three, and drifted a player at
+  a chamfered end 2.4 units in 27 ticks, breaking 3-03 and 3-12. The fix stands the player still (1-24's ramp 0.000 in 420
+  ticks); five routes leaned on the creep and were re-flown. **G10-5b is not met**: 2-24's idle player still leaves its barrel
+  (36 units in 420 ticks), INFERRED to be the mixed time base.
+- **Smaller**: G4 built a one-tick delay on the tap and removed it when `test_mp_layer` showed the layer's order already
+  gives it; PIC's spec premise (a debug box carries no interpolation) was false, so its gate was measured against the
+  simulation's own body; CK's first verifiers found a 70th reader and a missed flipbook (CK-1, still open); G10's first sweep
+  was abandoned at 35 levels for a missing clamp; 4-31 was called sealed by two rounds and won in the third (the torch is a
+  toggle); 4-06's `win_by` was 210 ticks loose; 14 route files were CRLF.
+- **A false record.** `verify2.json` quoted "the owner's explicit ruling, recorded in the backlog's section 6" to push with
+  1-11 and 2-30 open. The fix round and the finalize role searched and found none; it is not repeated here and the decision
+  is R3-8.
+- **The route commit's last line reads "step 150"** though it adds step 151 (the brief's N was the last timing step); the
+  body says so. Not amended.
+
+**Decision:**
+- Every ruling for the original, gameplay included. G10's recoil going UP and the 60 Hz rate are the owner's open calls
+  (G10-2): one number, `clock.json`'s `physics_step_s`, reverses the first, and every route is timed on the second.
+- **Nothing pushed**: `origin/main` is `0b8d3c5`, `main` is nine commits ahead with this one. The routes are red on two
+  levels and no ruling to push that is on record.
+- **Backlog rows ticked only where a committed step closed them**: CK-2 (step 151); G4, G10, PIC, the carranca's |dir| and
+  the recoil rows were already `[x]` from their own commits and got step 151's tail. **Annotated and left open**: the
+  PORT-WIDE clock row (CK-1, the walk-cell flipbook, was taken by neither G10 nor PIC), CK-8, G10-5b, G10-7/8 (step 151
+  edited no test, so the looser pins stand). "The 42 levels without a route" became 44: 1-11 and 2-30 now count.
+- **The standing baseline** is `program/R3/fix2/after/sweep`, because the wave did not pass: the last sweep that matches the
+  committed build (`MagicPortals.exe` `f291bb42`), which the third verifier matched 128 of 128 before deleting its own.
+- The next wave's order: G1, G3, G9, R23's rest and R22, routes for the 44, the final comparison and ship preparation.
+
+**Smart App Control: 2 refused launches in this session**, from the records and a CodeIntegrity 3033/3077 query this role
+ran for 2026-10-02 onward: CK's first `test_mp.exe` link (16:02:38 on 10-03) and G10's fifth runner link (21:45:24), each
+deleted and relinked once and then run. Every other role of the wave, and this close, had 0; the query shows nothing after
+21:45:24 on 10-03 that is ours (two `Penumbra` events at 16:33:04 and 17:17:33 are another session's, one `pip.exe` at
+14:41:30 is before the wave). Wave 1: 83, wave 2: 19.
+
+**Assets check:** yes - `git status --short`, run after appending this entry and before the commit, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference` prints 0 lines). The forbidden-extension grep
+(`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, plus `^out/` and `^reference/`) over
+`git diff --name-only 0b8d3c5..HEAD`, the 165 files of the wave's eight commits, printed nothing, and over the staged names
+before this commit it prints nothing either. The owner's save folder `%APPDATA%/Magic Portals/` holds `scores.json` alone,
+164 bytes, md5 `40bfef3ac396b4e94bdd97990401435a`.
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** 8 commits `0b8d3c5..af008a9`: 165 files, +7,329 / -2,095 (80 route files +1,811 / -1,338; 85 others: 54 in
+`game/sim`, 10 in `game/data`, the rest the layer, the suites, `data/player.json` and the docs). Planning doc 27,674 -> 28,229 lines (steps
+147-151); backlog 2,863 -> 3,191. Suites: 49 of 50 / 17,717 checks after CK, 50 of 51 / 17,654 after G10, 50 of 51 / 17,574
+after G4, 51 of 52 / 17,730 after PIC, **51 of 52 / 18,945 at the end** (+1,215 over PIC: `test_mp_routes` 381 -> 1,486
+because a failing route stops checking early, `test_mp_player` 164 -> 274; every other count equal). Routes won: 86 of 86 ->
+41 -> 23 -> 8 -> 8 -> 84; slack 13-62 ticks (the thinnest 4-02 13, 4-08 15, 3-08 17, 2-06 20; the knife-edge 3-20, 3-22).
+Reachability 108 / 20 / 0, 0 differ at every step. f420 sweeps: CK 125 of 128 changed against the baseline, G10 109, G4 7
+(exactly the seven carranca levels), PIC 60, the route phase's final 128 of 128 byte-identical to the fix round's. The
+baseline of this wave on, `program/R3/fix2/after/sweep`, 128 PNGs. Engine pin `710bffc`. Disk: `out/parity` 17.87 -> 17.33 GB.
+
+**Inferred mood:** a guess from the facts - a long, careful grind that was right at every step by its own gates and still
+ended without a green suite: four steps that each moved the original's numbers in and took the route count from 86 to 8,
+a re-author that won 76 of them back, and two levels that would not open honestly, so nothing was pushed. Tired more than
+frustrated: the refusals were few (two), the records are the best the project has, and the two sealed levels are named.

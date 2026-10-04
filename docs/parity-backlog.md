@@ -1,6 +1,6 @@
 # Magic Portals parity — backlog
 
-State at 2026-10-01 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
+State at 2026-10-04 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
 match the original, in the order it should be done. Every spec named here lives under
 `Magic-Portals-Enhanced/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
 
@@ -547,6 +547,9 @@ work no step of §7 owns, and the owner's calls:
       Built bar one site, so the row stays open: the player's ground walk-cell flipbook is still advanced by the engine's tick
       (CK-1, section 6, G10's). 41 of the 86 routes still win on that build; the routes are re-authored by the wave's route
       phase after PIC.*
+      *Wave 3a's close: the row stays open for that one site. G10 did not take CK-1 and PIC declined it (PIC-5), so the walk
+      cycle still runs on the engine's tick until the final comparison or a step of its own. The 86 routes were re-authored on
+      the floored clock in step 151 (`af008a9`): 84 win.*
 - [x] **PORT-WIDE, found verifying step 78 (order 3.4): the picture of any body is drawn one tick behind the sim.**
       ***BUILT by step 150 (program wave 3a, PIC, local, not pushed): see the paragraph at the end of this row.***
       `buildSprites` gives every body-linked quad an `InterpolatedTransformComponent` (`game/MagicPortalsLayer.cpp:2590`)
@@ -571,7 +574,8 @@ work no step of §7 owns, and the owner's calls:
       walk, 6.75) ahead of the old build's at the same frame. **In real time above 80 Hz the engine's smoothing is kept**
       (`game/data/pictures.json` `smoothing.above_hz`, marked `_guess`; 0 draws at the tick's place at every rate; always off
       under `--fixed-step`) - the owner's to confirm (planning step 150, LEFT FOR THE OWNER). No gameplay, no route and no tap
-      moves: the route census is G4's, route by route, and three traces agree tick for tick. The f420 sweep: 68 of 128 levels byte-identical against G4's, 60 changed and every one explained by a picture or the camera on the view changing on tick 420, the capture's own - the 17 space levels' turning spiral (0.12 u a tick), 13 minions' 0.65 u, three thrown stones, the beholder, 2-32's sky cover and the camera of 1-24 and 2-32 - and 59 of the identical ones had nothing on the view change at all (`PIC/explain_sweep.txt`). **The routes are re-authored by the wave's route phase after PIC**: this step moves none (8 of the 86 win, the same 8 on the same ticks as at step 149). The step's deviations are the rows PIC-1 to PIC-9 in section 6.
+      moves: the route census is G4's, route by route, and three traces agree tick for tick. The f420 sweep: 68 of 128 levels byte-identical against G4's, 60 changed and every one explained by a picture or the camera on the view changing on tick 420, the capture's own - the 17 space levels' turning spiral (0.12 u a tick), 13 minions' 0.65 u, three thrown stones, the beholder, 2-32's sky cover and the camera of 1-24 and 2-32 - and 59 of the identical ones had nothing on the view change at all (`PIC/explain_sweep.txt`). **The routes are re-authored by the wave's route phase after PIC**: this step moves none (8 of the 86 win, the same 8 on the same ticks as at step 149). The step's deviations are the rows PIC-1 to PIC-9 in section 6. *Committed `d17e7d3`; the routes were re-authored in step
+      151 (`af008a9`) with the picture at the tick's own place: 84 of 86 win.*
 - [ ] **Step 79 deviation (order 13.2): the exit's sensor does not move with the bobbing door.** `linearMotion` ends in
       `SetPosition` (ins 180-208), and `door.ent` is `static="1"` with a `<Collision>` (Position (0,20), Size (8,57)),
       so the original moves the exit's sensor body with its picture on all 18 `no_gravity` levels. The port bobs
@@ -1585,7 +1589,8 @@ work no step of §7 owns, and the owner's calls:
       physics second and 70 x fps / 30 of wall time: F10's emulator ran 17-19 frames a second (39.7-44.3 u/s), a 60 Hz
       device gets 140. The port gives the shooter the decoded 1.4 at `SimRatio` (2): 140 u/s. The "m_absoluteSize 480"
       note of `zerog.json` is corrected (256: the recoil is the same in units on every screen). "No conflict" holds
-      at the matched 60 Hz, which no clip shows: the rate itself is the owner's open call (G10-2, section 6).*
+      at the matched 60 Hz, which no clip shows: the rate itself is the owner's open call (G10-2, section 6).* *The route phase (step 151) re-flew
+      chapter 4 at the 140 u/s recoil: all 19 of its routes win, the zero-g levels among them.*
 - [ ] **Order 11.2, step 73's ring depth** (step 110, deviation 9): `gravitywell.json` `ring.z` draws the well's ring at
       -5 port units, where the area it stands for is at the bare -5 = -1.778 (step 86's rule, which `roundabout_effect`
       follows). Next: a step that touches the ring: -5 -> -1.778.
@@ -1729,7 +1734,13 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       other 39 have no recorded attempt. Open until all 128.)* *Wave 3a, step 147 (CK, local, not pushed): 41 of the 86 win on its
       build and 45 do not (CK-2); the routes are re-authored by the wave's route phase after PIC.* *Step 148 (G10, local, not
       pushed): 23 of the 86 win on its build and 63 do not (the 45, and 18 that G10's movement moved); the routes are
-      re-authored by the wave's route phase after PIC.*
+      re-authored by the wave's route phase after PIC.* *Step 149 (G4): 8 of the 86 win and 78 do not; step 150 (PIC): the
+      same 8. **Step 151 (the route phase, `af008a9`, local, not pushed) re-authors the routes on the final build: 84 of 128
+      levels are won by a route `test_mp_routes` replays** (1,486 checks, 4 failures). The two routes that do not win are
+      1-11 and 2-30, which won before wave 3a and are sealed on this build (R3-1 and R3-2 below). Chapter 1: 20, chapter 2:
+      28, chapter 3: 17, chapter 4: 19. Of the 86 files, 76 were re-authored, 4 that already won (1-02, 2-20, 2-22, 4-06) had
+      their `win_by` tightened, 4 win as committed (1-01, 1-15, 2-02, 2-07) and the two sealed ones are untouched. **The 44
+      not won:** the 42 listed above, and 1-11 and 2-30. Open until all 128.*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1754,6 +1765,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       camera, handle, lift send, medal, sound or achievement, so none of wave 2's changes can move a verdict, and
       their routes are their evidence. Its `FREE_ROLES['lift']` text is stale since step 140 (the merge's verifier;
       the row "Step 144's recorded deviations").)*
+      *Wave 3a: 108 / 20 / 0 with 0 differ at each of steps 147-150 and in the third verifier's run on the final build. The flood
+      models no timing, no movement and no shot, so none of the timing group's changes can move a verdict, and it cannot see
+      the two routes that do not win (1-11, 2-30); the routes are the evidence there.*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1871,21 +1885,64 @@ stealth achievements; (3) G3 (R7), with 1-06, 1-11, 2-26 and the platform gate; 
 (5) R23's rest; (6) routes for the 42 levels without one, 2-27 and 3-23 first (their mechanisms are on one build now);
 (7) the final comparison (section 5), with the pixel-centre rule for every picture at the frame's edge (step 145's
 deviation 1) before it, and the ship preparation: the grant in `docs/permission.md`, the play build, the owner's calls
-below.
+below. *(1) is done by wave 3a (steps 147-151, below); (2) onwards are the next wave's.*
 
-**Wave 3a (the timing group; 2026-10-03, in progress).** Four steps on `main`, run alone because each moves every frame and every
-route tick: the script clock's floor (CK), the player's decoded movement (G10), the portal shot's decoded flight (G4) and the picture
-of a body drawn at its tick's own position (PIC), in that order. They commit locally and are not pushed; after PIC the wave
-re-authors all 86 routes on the final build, an independent verifier checks the whole build, and only then is it pushed. So inside a
-timing step `test_mp_routes` is expected to fail on the routes the new timing moves, and each step records a census instead of
-editing a route. The engine pin stays `710bffc`.
+**Wave 3a (the timing group and its route phase; 2026-10-03 15:38 to 2026-10-04 17:00; closed 2026-10-04, committed locally,
+NOT pushed).** Five steps on `main`, run alone because each moves every frame and every route tick: the script clock's floor
+(CK), the player's decoded movement (G10), the portal shot's decoded flight (G4) and the picture of a body drawn at its tick's
+own position (PIC), in that order, then the route phase (step 151), which re-authored the routes on the final build. The steps
+committed locally; inside a timing step `test_mp_routes` was expected to fail on the routes the new timing moved, and each step
+recorded a census instead of editing a route. Three independent verifier rounds checked the whole build after the route phase;
+none passed (`R3/verify1.json` to `verify3.json`: the same two routes red, and 2-32's route out of the view), so **nothing is
+pushed: `origin/main` is still `0b8d3c5` and `main` is nine commits ahead** (the wave's eight and the closing docs commit). The
+engine pin stays `710bffc`; no converter change, so `out/levels`, `out/assets` and `out/data` are the ones the wave started from.
 
 | Step | Row | Track | Commit | Outcome | GAMEPLAY | Routes added |
 |---|---|---|---|---|---|---|
-| 147 | CK | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 11 recorded deviations (owner-delegated); the third verifier passed 12 of 13 gates, and the one it failed, the player's ground walk-cell flipbook, is cosmetic and G10's; 49 of 50 suites, 17,717 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: every scripted motion, timer, blink and fade runs 16 ms a tick where it ran 16.667, 4.17 % slower in wall time (the 400 ms between taps takes 26 ticks, not 24; a 10 s crystal runs out on the 626th tick; the lost screen on the 88th) | none: 41 of the 86 routes still win on this build and 45 do not; **the routes are re-authored by the wave's route phase after PIC** |
-| 148 | G10 | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 13 recorded deviations (owner-delegated); the verifier passed all ten gates and listed six problems, three medium (the standing creep, a confirmed regression against the library; the unruled 60 Hz rate; the world's mixed time base) and three low, whose text findings the commit applied; 50 of 51 suites, 17,654 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: the player is the decode's - walk 144 u/s set outright, an air brake of 0.86 a tick and no steering, gravity 4000 u/s^2 under the original's fixed 1/30 s physics step, a 14-unit ground sensor, the zero-g recoil 140 u/s a shot, a turn toward a tap | none: **23 of the 86 routes still win** (CK: 41), 63 do not; **the routes are re-authored by the wave's route phase after PIC** |
-| 149 | G4 | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 9 recorded deviations (owner-delegated); the verifier passed all twelve gates and listed five low problems, all text only, which the commit applied (`game/data/shot.json`'s `_source` gained two comment facts after the executables were built: notes only, its keys unchanged, run by the verifier's full launch and sweep); 50 of 51 suites, 17,574 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep changes exactly the seven carranca levels (121 of 128 byte-identical), each explained by its fireballs' bursts and shakes | **yes**: every portal shot flies the original's 3.2 units a tick after a 24-unit jump (192 a second of wall time, about three times slower than before: 300 units 32 -> 87 ticks), opens its portal at its destiny when it has gone past it, and is seen by an anti-portal agent and a flame by its position once a frame; seven levels' fireballs fly at their carranca's |dir| x 130 (2-01 156, 2-03 162.5, 2-07 208, 2-15 169 and 260, 2-18 156, 2-28 156, 4-13 91) | none: **8 of the 86 routes still win** (G10: 23), 78 do not - 15 that won fail now, 14 with a second tap refused by a flight and 2-12 with a pair opened 27 ticks late; **the routes are re-authored by the wave's route phase after PIC** |
-| 150 | PIC | main | local, not pushed (the wave's finalize role pushes after the routes are green) | built and committed with 9 recorded deviations (owner-delegated); the verifier passed all fourteen gates and listed six low problems (no medium), which the commit applied as far as they are text (the moved `test_mp_layer` line told in the step's Suites row, the stale comments counted as five sites, this row's own outcome, 4-22 recorded as inferred) and recorded as open rows where they are not (the aura pin that tests only the smoothed mode, `Pictures::Rules`'s two default numbers, the unlogged smoothing flip); no gate row unmet: the picture's lag 0.0000 ticks at every alpha (the control on a smoothed display 1 - alpha), 7 px on the real binary against one tick of the walk's 6.75; the f420 sweep 68 of 128 byte-identical and the 60 changed all explained by a picture or the camera on the view moving on the capture's tick; 51 of 52 suites, 17,730 checks (`test_mp_routes` fails by design; every earlier suite's counts unchanged, `test_mp_pictures` adds 156); reachability 108 / 20 / 0 | **none**: pictures only - a body's picture and the camera are drawn at the tick's own position (16.7 ms sooner), and the lights, effects, tutorial hands and shot marks that always read the sim's point now agree with them; in real time above 80 Hz the engine's smoothing is kept (`pictures.json`, 0 turns it off) | none: **8 of the 86 routes still win**, the same 8 and the same 78 as at step 149, route by route; **the routes are re-authored by the wave's route phase after PIC** |
+| 147 | CK | main | `2cd0675` (a docs follow-up, `9d3fd6b`); local, not pushed | built and committed with 11 recorded deviations (owner-delegated); the third verifier passed 12 of 13 gates, and the one it failed, the player's ground walk-cell flipbook, is cosmetic and G10's; 49 of 50 suites, 17,717 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0 | **yes**: every scripted motion, timer, blink and fade runs 16 ms a tick where it ran 16.667, 4.17 % slower in wall time (the 400 ms between taps takes 26 ticks, not 24; a 10 s crystal runs out on the 626th tick; the lost screen on the 88th) | none: 41 of the 86 routes still win on this build and 45 do not; re-authored in step 151 (84 of 86 win) |
+| 148 | G10 | main | `d33d14d`, and the amendment of the R3 fix round (G10-5, the standing creep) `e54fa9d` and `972cdaf`; local, not pushed | built and committed with 13 recorded deviations (owner-delegated); the verifier passed all ten gates and listed six problems, three medium (the standing creep, a confirmed regression against the library; the unruled 60 Hz rate; the world's mixed time base) and three low, whose text findings the commit applied; 50 of 51 suites, 17,654 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0. The amendment (built in the R3 fix round, after the route phase's second verifier flagged that the routes had been re-authored on a build that still crept): 52 suites, 51 passed, 18,945 checks, `test_mp_player` 164 -> 274; 1-24 and 2-24 change in the sweep | **yes**: the player is the decode's - walk 144 u/s set outright, an air brake of 0.86 a tick and no steering, gravity 4000 u/s^2 under the original's fixed 1/30 s physics step, a 14-unit ground sensor, the zero-g recoil 140 u/s a shot, a turn toward a tap; and, in the amendment, an idle player on a slope stands still (it was pressed down into the slope and crept 0.28 units a tick on a 15 degree ramp) | none: **23 of the 86 routes still win** (CK: 41), 63 do not; re-authored in step 151 (84 of 86 win) |
+| 149 | G4 | main | `012dd1a`; local, not pushed | built and committed with 9 recorded deviations (owner-delegated); the verifier passed all twelve gates and listed five low problems, all text only, which the commit applied (`game/data/shot.json`'s `_source` gained two comment facts after the executables were built: notes only, its keys unchanged, run by the verifier's full launch and sweep); 50 of 51 suites, 17,574 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep changes exactly the seven carranca levels (121 of 128 byte-identical), each explained by its fireballs' bursts and shakes | **yes**: every portal shot flies the original's 3.2 units a tick after a 24-unit jump (192 a second of wall time, about three times slower than before: 300 units 32 -> 87 ticks), opens its portal at its destiny when it has gone past it, and is seen by an anti-portal agent and a flame by its position once a frame; seven levels' fireballs fly at their carranca's |dir| x 130 (2-01 156, 2-03 162.5, 2-07 208, 2-15 169 and 260, 2-18 156, 2-28 156, 4-13 91) | none: **8 of the 86 routes still win** (G10: 23), 78 do not - 15 that won fail now, 14 with a second tap refused by a flight and 2-12 with a pair opened 27 ticks late; re-authored in step 151 (84 of 86 win) |
+| 150 | PIC | main | `d17e7d3`; local, not pushed | built and committed with 9 recorded deviations (owner-delegated); the verifier passed all fourteen gates and listed six low problems (no medium), which the commit applied as far as they are text (the moved `test_mp_layer` line told in the step's Suites row, the stale comments counted as five sites, this row's own outcome, 4-22 recorded as inferred) and recorded as open rows where they are not (the aura pin that tests only the smoothed mode, `Pictures::Rules`'s two default numbers, the unlogged smoothing flip); no gate row unmet: the picture's lag 0.0000 ticks at every alpha (the control on a smoothed display 1 - alpha), 7 px on the real binary against one tick of the walk's 6.75; the f420 sweep 68 of 128 byte-identical and the 60 changed all explained by a picture or the camera on the view moving on the capture's tick; 51 of 52 suites, 17,730 checks (`test_mp_routes` fails by design; every earlier suite's counts unchanged, `test_mp_pictures` adds 156); reachability 108 / 20 / 0 | **none**: pictures only - a body's picture and the camera are drawn at the tick's own position (16.7 ms sooner), and the lights, effects, tutorial hands and shot marks that always read the sim's point now agree with them; in real time above 80 Hz the engine's smoothing is kept (`pictures.json`, 0 turns it off) | none: **8 of the 86 routes still win**, the same 8 and the same 78 as at step 149, route by route; re-authored in step 151 (84 of 86 win) |
+| 151 | routes | main | `af008a9` (its Record line reads step 150; the commit adds step 151 and says so in its body); local, not pushed | the route phase: every route re-authored on the PIC build in three rounds (81, 83, then 84 of 86 won), a first fix round (four `win_by` tightened, 14 CRLF files, 2-32's first stretch) and a second (the standing creep, five routes re-flown); 84 of 86 win and the two sealed ones, 1-11 and 2-30, stay open with their causes (R3-1, R3-2); three verifiers, none passed: the third (`verify3.json`) passed 6 of its 8 gates and failed `test_mp_routes` (84 of 86) and route sanity (2-32's route is outside the view for 194 ticks, R3-3); 52 suites, 51 passed, 18,945 checks; reachability 108 / 20 / 0; the f420 sweep 128 of 128 byte-identical to the fix round's, and 126 of 128 to PIC's (1-24 and 2-24, the amendment's) | **none**: test data only (holds and taps) | **86 files: 76 re-authored, 4 tightened, 4 as committed, 2 untouched; 84 of 86 win** (23 earlier and 60 later than before the wave, median move 42 ticks; slack 13 to 62, median 37) |
+
+**Routes** (step 151, `af008a9`): 84 of 128 levels are won by a route `test_mp_routes` replays on the final build (1,486 checks,
+4 failures): chapter 1 20 of 21, chapter 2 28 of 29, chapter 3 17 of 17, chapter 4 19 of 19. The census went 86 of 86 (wave 2) ->
+41 (CK) -> 23 (G10) -> 8 (G4) -> 8 (PIC), and the re-author's rounds took it 8 -> 81 -> 83 -> 84, with the creep fix of step 148's
+amendment re-flying five routes on the way. Of the 86 files, 76 were re-authored on the final build, 4 that already won (1-02,
+2-20, 2-22, 4-06) had their `win_by` tightened, 4 win as committed (1-01, 1-15, 2-02, 2-07) and 1-11 and 2-30 are untouched.
+**Ticks moved**: against each route's own tick before the wave, 83 of the 84 winners win on another tick (23 earlier, 60 later,
+median move 42 ticks; 2-04 on 534 is the one unmoved); the extremes are 3-19 3,207 -> 997, 2-26 827 -> 367, 3-10 1,085 -> 778
+and 3-32 2,724 -> 3,358, 4-11 248 -> 529. Win ticks run 87 (4-02) to 3,358 (3-32) and every win is inside its `win_by`, with 13 to
+62 ticks of slack (median 37); **the thin ones** are 4-02 (13), 4-08 (15), 3-08 (17) and 2-06 (20), and **the knife-edge ones**
+3-20 (a second walk that must end on tick 238) and 3-22 (a walk of 428-430), which say so in their own notes. Wave 2's thin set
+all win, each on another tick (2-11 on 354, 2-14 540, 2-16 396, 2-17 519, 2-18 983, 2-23 727, 4-19 662, 4-32 3,263); their
+margins in pixels were not re-measured. **Failed, and why**: 1-11 (sealed at its first crossing: the spawn island lies inside
+`antiportal_709`'s 192 px ring and no input reaches nearer than 28.15 px to the nearest legal portal against a reach of 24; it
+needs G3 / R7) and 2-30 (burned by `fire_agent_ent_918` on tick 259: the air carry is capped at 14.74 u by the 0.86 brake and
+the plank sags once the stone leaves its arm; it needs G10-1, G10-2, G10-4 and the owner). 4-31, called sealed in rounds 1 and
+2, was won in round 3 (tick 1,262: the torch is a toggle, and a shot near its flame puts it out, which brings the burnt light wall
+back for the climb). 2-32's route runs ahead of the dragon's camera for its last 194 ticks (R3-3).
+**Suites**: 52 suites, 51 passed, 18,945 checks, against PIC's 17,730: `test_mp_routes` 381 -> 1,486 (a failing route stops
+checking early, so the count grew with the wins), `test_mp_player` 164 -> 274 (the amendment), every other suite's count equal.
+**Reachability**: 108 / 20 / 0, 0 differ at every step. **Smart App Control**: 2 refused launches in the wave, both the first
+launch of a fresh `test_mp.exe` (CK's at 16:02:38 and G10's at 21:45:24 on 2026-10-03, each deleted and relinked once and then
+run), against wave 1's 83 and wave 2's 19; every other role of the wave and this close: 0. **The standing f420 baseline** is
+now `out/parity/program/R3/fix2/after/sweep` (`MagicPortals.exe` `f291bb42`, the binary `build/` holds; the third verifier's own
+sweep matched it 128 of 128 and was deleted after hashing); `out/parity/BASELINE.txt` names it, and the images of every earlier
+step were purged at the close.
+**GAMEPLAY changed in wave 3a**, each as the original does and each in its planning step: CK (all scripted time runs 16 ms a tick
+where it ran 16.667), G10 (the player's walk, air, fall, feet, recoil and turn; and, in the amendment, an idle player on a slope
+stands still), G4 (every portal shot about three times slower, the portal opened at its destiny, seven levels' fireballs at their
+carranca's |dir| x 130). None in PIC (pictures and the camera) or in the route phase (test data). R24 and R25 were not touched.
+
+**What the next wave should take**, in the program's order: (1) G1, the knights - its fifteen routes, 3-08's and 3-10's, and the
+seven stealth achievements; (2) G3 (R7), with 1-06, 1-11, 2-26 and the platform gate (it should also re-check 2-31, 3-03, 3-09
+and 3-14, and the knife-edge 3-20 and 3-22); (3) G9, with 2-27's reflector in mind; (4) R23's rest and R22; (5) routes for the 44
+levels not won - the 42 with no route, and 1-11 and 2-30, whose routes are sealed on this build; (6) the final comparison, with
+the pixel-centre rule for every picture at the frame's edge (step 145's deviation 1), and the ship preparation: the grant in
+`docs/permission.md`, the play build, the owner's calls below. **Before any of them**, the owner's rulings on G10-2 (the rate
+the program matches), and with G10-1 (the world's time base) and G10-4 (the capsule) they gate 2-30 and re-time every route
+again; and the decision whether wave 3a may be pushed with `test_mp_routes` red on 1-11 and 2-30 (R3-8).
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -1894,12 +1951,14 @@ editing a route. The engine pin stays `710bffc`.
       (`MagicPortalsLayer.cpp:4175-4181`, `:6266`) is 4.17 % fast in wall time. Next: **G10** (it relinks anyway; fallback
       PIC) steps the cell with the `FrameTimer` logic on `Ms(step)` in `stepLevel`, as `m_shotFrames` does, and re-pins
       `test_mp_layer`'s walk case (6 ticks add 96 ms, 6 over).
-- [ ] **CK-2. 45 of the 86 routes no longer win on CK's build** (41 do: 34 on the same tick; 1-03 +3, 2-24 -1, 3-08 +4, 3-13 +6,
+- [x] **CK-2. 45 of the 86 routes no longer win on CK's build** (41 do: 34 on the same tick; 1-03 +3, 2-24 -1, 3-08 +4, 3-13 +6,
       4-18 +2, 4-28 +4; 4-21 on 438 against 587). 38 are refused by the 400 ms between taps (DECODED: strictly above 400 of the
       script clock, so 26 ticks, not 24); seven first causes are INFERRED and untraced: 2-18 (a shot in flight), 3-09 and 2-32 (the
       tap off the view: the camera's follow share), 1-11 (a moving no-portal zone), 1-32, 3-32 and 4-32 (the bosses' timers); 4-21's
       149 ticks sooner is the gravity agent's 0.96 pull (INFERRED). Next: **the wave's route re-author phase after PIC**, each route
       replayed on the final build so every cause is traced or the route replaced (G4 moves the shot-flight and view-edge rows).
+      *Done in step 151 (`af008a9`): every route was replayed on the final build and 84 of 86 win; the two that do not are
+      carried with their causes as R3-1 (1-11) and R3-2 (2-30).*
 - [ ] **CK-3. Three velocity readers carry no 0.96**: `applyForces`, `ETHCallback_minion` and `ETHCallback_dragon_knight` scale the
       velocity they set by `elapsedTime / 33.33` (the physics' fixed 1/30 s), x 0.96 with the floor; the port leaves x 1.0. CK
       exposes it for motion bounded by a script timer (a patrol leg, a stone's flight: about 4.17 % longer than the original's), the
@@ -1926,6 +1985,8 @@ editing a route. The engine pin stays `710bffc`.
 - [ ] **CK-8. 2-32's dragon schedule runs on one clock basis and is not re-gated** (the "Step 77 deviation, two clock bases" row
       above, done as to the unification): step 77's f180 / f240 / f420 / f444 frames are not re-measured. Next: **the route
       re-author phase** (2-32's route is among the 45) **and the final comparison**.
+      *Step 151 re-authored 2-32's route (it wins on 2,718, 42 ticks of slack, and runs ahead of the view for its last 194 ticks,
+      R3-3); the schedule's frames are still not re-gated, so the row stays open.*
 - [ ] **CK-9. The per-frame paths scale a frame's milliseconds by 16 / 16.667** where the original floors each frame's own: exact at
       the 60 Hz tick, a limit at any other rate. No owner unless the port gains a variable-rate mode.
 - [ ] **CK-10. The sweep: four frames (1-24, 2-04, 3-16, 4-06) carry random-driven particle detail one tick off**, the levels whose
@@ -1974,6 +2035,8 @@ editing a route. The engine pin stays `710bffc`.
       them), and **G10-8** 1-32's rock case asks no pair twice, not exactly one begin. Next: the route phase, which restores the strict pins
       (a real solve that reaches 1-09's shelf, with its three crystals confirmed reachable under the decoded movement; a rock placed over
       the floor for 1-32).
+      *Step 151 won 1-09 (388) and 1-32 (2,758) on the decoded movement but edited no test, so `test_mp_layer`'s two looser
+      pins were not restored and both rows stay open.*
 - [ ] **G10-9..12**: the tap's turn the tick it is taken; `air_velocity_share` removed from `art.json`; **CK-1 left to PIC** (PIC did not take it: PIC-5); the landing's
       hit 8.0 for a 100-unit drop (8.94 continuous, 8.67 on the original's own frames).
 - [x] **G10-13. `Player.cpp`'s clamp comment says a fall of 570 units reaches Box2D's clamp**; the exact figure is 586.7 (about 590, as the
@@ -2038,6 +2101,37 @@ editing a route. The engine pin stays `710bffc`.
       level, a picture moving 0.43 u a tick drawn black on black; the verifier's sixth problem): the frame is not static (f420 against f421 differ by
       15,627 px), so the sweep cannot separate "invisible" from "not drawn". Next: capture 4-22 with the platform lit once, or leave it for the
       final comparison.
+
+**The route phase's recorded deviations** (step 151), each an open row for the step named (planning step 151 has the evidence,
+`RECORDED DEVIATIONS` 1-8; `out/parity/program/R3/finalize.md` the rest):
+- [ ] **R3-1. 1-11 is not won by a route** (`level10`; sealed on the timing build: the island lies in antiportal_709's 192 px
+      ring and no input reaches nearer than 28.15 px to the nearest legal portal against a reach of 24). Needs G3 / R7 (the
+      platforms' full cosine swing), then a route; geometry derived, not measured on a G3 build. (planning step 151, deviation 1)
+- [ ] **R3-2. 2-30 is not won by a route** (`level29a`; the player is burned on tick 259 by fire_agent_ent_918). The air carry is
+      capped at 14.74 u (AirShare 0.86 at the matched 60 Hz), the plank sags once the stone leaves its arm (INFERRED: G10-1 time
+      base, G10-4 capsule mass). Needs the owner's rulings on G10-2 / G10-1 / G10-4 and a source step or two, then every route
+      re-timed. (planning step 151, deviation 2)
+- [ ] **R3-3. 2-32's route runs ahead of the view for its last 194 ticks** (2525-2718, up to 293 u past the right edge; the
+      dragon's camera, 45 u/s, shows the door at x 2554 only from about tick 3126, extrapolated). The original has no rule against
+      it (ETHCallback_dragon_claw takes only what lies left of the view and never the player; AutoCameraController follows the
+      dragon between camMin and camMax; checkGameLost reads minPos / maxPos). A route that waits in view dies to the dragon's
+      fireballs on tick 2643 (low block) or 2845 (high block). Owner or footage: would a person play it so? If not, the route
+      needs a dodging author. (planning step 151, deviation 3)
+- [ ] **R3-4. Two routes are knife-edge**: 3-20 (`level19b`) wins only for a second walk ending on tick 238 (237 does not win,
+      239 dies on tick 240) and 3-22 (`level21b`) only for a walk of 428-430 (its neighbours do not win). Both replay
+      deterministically and say so in their notes. Next: re-flow them when the time base or G3 moves them, or give each a walk
+      with margin. (deviation 4)
+- [ ] **R3-5. Brief camera lags outside the view after a portal exit**: 4-18 (ticks 190-194, up to 292.6 u from the camera centre,
+      65 u past the edge), 1-21 (429-431) and 3-09 (322-325); the follow catches up in 3 to 5 ticks. Not a route fault. Next: the
+      final comparison against footage. (deviation 5)
+- [ ] **R3-6. G10-5b stays open**: an idle player still leaves 2-24's barrel (36 units in 420 ticks; the route wins on 446). See
+      G10-5b above; the world's time base (G10-1) is the next. (deviation 6)
+- [ ] **R3-7. Every route is timed at the matched 60 Hz** (`clock.json` `matched_hz`), the rate the owner has not ruled (G10-2): a
+      ruling that moves it re-times all 84 again. (deviation 7)
+- [ ] **R3-8. `test_mp_routes` is red on 1-11 and 2-30, and no owner ruling to push with it red is on record.** The second
+      verifier (`verify2.json`) quoted one as recorded in this section as two open rows; there was none (searched by the fix
+      round and by the finalize role). Wave 3a is committed locally, `origin/main` is still `0b8d3c5`. Owner: push now with
+      R3-1 and R3-2 open, or build G3 and settle the 2-30 rows first. (deviation 8)
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2192,7 +2286,8 @@ editing a route. The engine pin stays `710bffc`.
       nine arrivals within -0.064..+0.030 s of `(D - 24) / 192`. **8 of the 86 routes still win** (G10: 23): 15 that won
       fail now (14 on a second tap refused by a flight, 2-12 on a pair opened 27 ticks late) and 38 routes in all are refused
       by a flight (`census.md`); no route file was edited, **the routes are re-authored by the wave's route phase after PIC**.
-      Its recorded deviations are the block "G4's recorded deviations".*
+      Commit `012dd1a`. The routes were re-authored in step 151 (`af008a9`): 84 of 86 win, every second tap spaced past the
+      flight and past CK's 26 ticks. Its recorded deviations are the block "G4's recorded deviations".*
 - [x] **G5. Fireballs pass walls and closed doors** (`ETHBeginContactCallback_fireball` L85862 #152 dies on anything
       solid that is not a carranca, a sensor or a spared character). On 2-12 the player dies at the spawn (tick 180).
       *Built in step 114*: the fireball's body is fireball.ent's circle, radius 9.6; every solid body it touches spends
@@ -2260,7 +2355,9 @@ editing a route. The engine pin stays `710bffc`.
       phase after PIC**. Its deviations are the rows "G10's recorded deviations" in the wave 3a list above; the verifier
       (`G10/verify1.json`, ten gates ok) wants three of them settled BEFORE the re-author: G10-5 (the standing creep, a
       confirmed regression against the library), G10-2 (the owner's ruling on the rate) and G10-1 (the world's time base). G10-5 was built
-      after the re-author, in the R3 fix round (step 148's amendment); the other two stand.*
+      after the re-author, in the R3 fix round (step 148's amendment); the other two stand. Commits `d33d14d`, and `e54fa9d` /
+      `972cdaf` for G10-5. The routes were re-authored in step 151: 84 of 86 win; 2-30 stays unwon on G10-1, G10-2 and G10-4
+      (R3-2), the rows still to settle.*
 - [x] **G11. 3-32's ghost can be killed only through a rule the original lacks** (the audit's G11; KNOWN as "Order 12.2,
       THE OWNER'S TO RULE: fire against the ghost"). *Built in step 117*: a fireball passes through the ghost, a
       barrel's blast burns it, and the ghost puts the barrel back itself on every beat (the two "Order 12.2" rows and
@@ -2836,7 +2933,8 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       GAMEPLAY when built). *Built in step 149 (G4): `Turrets` keeps the node's (dirX, dirY) as written and a fireball's
       velocity is that times 130; pinned level by level in `test_mp_turrets` (`TheEightCarrancasFlyAtTheirDirsLength`);
       the other 20 carrancas, every converted shot and the dragons' fireballs are unit, 130 as before; the routes of
-      2-01, 2-03, 2-07, 2-15 and 2-18 are the wave's route phase's.* `ETHCallback_fireball` (418524..418930, #1-43) moves the fireball by
+      2-01, 2-03, 2-07, 2-15 and 2-18 were re-authored in step 151 and win on 302, 907, 1128, 532 and 983 (2-28 and 4-13 have
+      no route). Commit `012dd1a`.* `ETHCallback_fireball` (418524..418930, #1-43) moves the fireball by
       `GetVector2('dir')` x `scaledUnitsPerSecond(speed)` every frame, and a carranca's 'dir' is its node's
       (dirX, dirY) as written (`carrancaCallback`, `addFireball` `SetVector2`), never normalised. Eight of the 28
       carrancas carry one that is not 1 (`out/parity/program/G6/carrancas.txt`): `level0a` 1.2 (2-01, 156 u/s),
@@ -3063,7 +3161,10 @@ longer loses it, and a run that reaches a door writes its medal into the player'
 (or the level has none), unless it is given `--saves`. In play since wave 2: a shot leaves when the mouse button comes
 up (step 137); a drag pans the camera (step
 138; `game/data/camera.json` `drag.drag_pan_enabled` false gives back his 2026-09-11 ruling); a handle is dragged
-(step 139); a press inside a lift sends it (step 140). There is no play build: `build-play\` went with `w1b` and wave
+(step 139); a press inside a lift sends it (step 140). In play since wave 3a (local, not pushed): the script clock's 16 ms floor, the player's decoded movement (a walk of 144 u/s, no
+air steering and a brake of 0.86 a tick, a fall of 4000 u/s^2, a 14-unit ground sensor, the zero-g recoil at 140 u/s, a turn
+toward a tap, and standing still on a slope), the portal shot's decoded flight (about three times slower than before; seven
+levels' fireballs at their carranca's |dir| x 130) and every body's picture and the camera at the tick's own place. There is no play build: `build-play\` went with `w1b` and wave
 2 made none; run `tools\parity\play_build.bat` in `C:\Users\icvet\Desktop\Magic-Portals-Enhanced` to build one from
 `main` (a fresh link, whose first launch Smart App Control may refuse once).
 
@@ -3081,5 +3182,10 @@ resuming the track the game had stopped, as the original does (step 121); whethe
 committed under `game/data/` - "move the camera around" (step 138), 'Achievement unlocked! ' and 'This level is
 locked!' (step 143) - while `docs/permission.md` is a stub; the seven stealth achievements that unlock while sight is
 not built (step 143); his ruling on the pause's Achievements button, kept on the 69 levels where it opens nothing
-(step 143); a carranca's fireball at its dir's length x 130 (step 135's finding, GAMEPLAY when built); and the routes
+(step 143); a carranca's fireball at its dir's length x 130 (step 135's finding; built in step 149); and the routes
 that lean on the port where no clip shows the original (the Tests rows on the routes' leans).
+*Added by wave 3a*: the rate the program matches (`clock.json` `matched_hz` 60; the 144 u/s walk, the 4000 u/s^2 fall, the 140 u/s
+recoil, the 0.86 brake, the 3.2-unit shot and every route's timing rest on it; no clip shows 60 Hz: G10-2); whether the smoothing
+above 80 Hz stays (`game/data/pictures.json`, `smoothing.above_hz`, `_guess`; 0 draws at the tick's place at every rate: PIC-1);
+whether wave 3a may be pushed with `test_mp_routes` red on 1-11 and 2-30 (R3-8); the rulings that gate 2-30 (G10-1, G10-2,
+G10-4); and whether a person would play 2-32 ahead of the dragon's camera, as its route does (R3-3).
