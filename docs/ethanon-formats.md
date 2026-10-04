@@ -2699,3 +2699,38 @@ md5 `48fe65ce`).
   1/30 s, it covers `65 x e / 1000` units in a frame that lasts `e` ms: **65 units a second at any frame rate up to 66 ms**, 62.4 at the 16 ms the script reads of a 16.667 ms 60 Hz frame. Checked against F9 (3-18's two
   patrols, `out/parity/footage/work/F9/an/p3_capes.json`, at about 30 frames a second: the first over frames #336-#359, 24 frames, the second over #330-#359, 30 frames - its 24 frames
   #336-#359 give 62.8): 63.2 and 62.3 units a second (177.7 and 175.3 px/s at 2.8125 px a unit, fit residuals 4.3 and 3.8 px). The knight (`ETHCallback_dragon_knight` ins 513-532) is the same with scale(1.7): 85 units a second at any frame rate up to 66 ms, 81.6 at the 16 ms floor (40.8 of the original's physics second, carried at 2).
+
+## 17. The player's body, its feet and the clamp's screen (planning step 153)
+
+Found while giving the player the original's collision shape (CAP, G10-3, G10-4, G10-6); read from the engine's source (`reference/ethanon`), Box2D's (`reference/ethanon/toolkit/Source/src/box2d`) and the shipped script's
+listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce`).
+
+- **The body is two circles.** `dark_mage.ent` is `shape="4"` (`BS_COMPOUND`) with `<Collision><Size x=14 y=36 z=1>` and `<Compound>body { shape = circle; posX = 0.0; posY =-0.5; radius = 1.3; } feet { shape = circle;
+  posX = 0.0; posY = 0.5; radius = 1.3; }`. `ETHPhysicsSimulator::CreateBody` (`engine/Physics/ETHPhysicsSimulator.cpp:65-123`) scales the box by the entity's scale and, for `BS_COMPOUND`, hands
+  `ETHCompoundShape::GetShapes` the box SIZE as the scale (`:91-92`); `ETHCompoundShape::GetShape` (`ETHCompoundShape.cpp:51-72`, the circle at `:65-71`) turns a circle into `posX x size.x x 0.5`, `posY x size.y x 0.5` and
+  `radius x (size.x x 0.5)`, and `GetCircleShape` (`ETHPhysicsSimulator.cpp:56-62`) into a `b2CircleShape` of radius `(size.x + size.y) / 4` at that point, in Box2D metres (50 units). So the body is **two
+  circles of radius 1.3 x 7 = 9.1 units centred 0.5 x 18 = 9 units above and below the entity's position** (`<Position>` is 0 and `CreateBody` places the body at `GetPositionXY()`): **18.2 wide and
+  36.2 tall**, the entity's point its middle, each circle a fixture of the `.ent`'s density 0.5, friction 0.9 and restitution 0 (`fixedRotation="1"`). The two circles overlap by 0.2 units (centres 18 apart,
+  radii 9.1), so their union is 2 x sqrt(9.1^2 - 9^2) = **2.69 units wide at the waist**, where a capsule of the same top, bottom and width is 18.2. The port's engine has one collider per entity
+  (`engine/src/core/PhysicsSystem.cpp:835-853`: a box before a capsule before a sphere) and no compound, so the port builds the **hull**, a capsule of radius 9.1 and height 36.2 with no offset - extreme points and cap
+  centres the circles' own - and fills the waist.
+- **The ground sensor** (`char_feet.ent`: `sensor="1"`, `<Size x=14 y=10>`, an octagon of corners cut at 0.6) is moved by `manageFeet` (bytes 131341..131709) ins 14-40 to the entity's position +
+  `feetOffset`, which `addFeetOffset` (bytes 128877..129480) ins 56-74 sets to `collisionBox.pos + (0, collisionBox.size.y x 0.5)`: **18 units below the entity for the 14 x 36 box**, not the 18.1 of the
+  circles' lowest point. It counts every contact `shouldBeIgnoredByFeet` (bytes 361584..361843) does not refuse: `ETHPhysicsController::IsSensor` (ins 5), `isCharacter` (ins 17), the name `fireball.ent` (ins
+  24-39, `opEquals`) and a name that begins `anti_sight_wall` (`prefixMatches`, bytes 361843..361966; ins 44-59). **`isCharacter` is the player alone**: `isCharacter` (`GameCharacter.angelscript`, bytes
+  337748..337852) reads the custom uint, `GameCharacter::GameCharacter` (bytes 119493..119839) ins 43-56 is the only `SetUInt('isCharacter', 1)` in the listing, `SideScrollerCharacter`'s constructor (bytes
+  152667..153096) calls it at ins 34 and `MainCharacter`'s (bytes 126650..127790) calls that at ins 35; the only `ALLOC`s of the three classes are theirs (L23012, L29953, L24676) and no `.ent` of the
+  extracted assets carries the datum. A minion is `AddEntity('minion.ent')` (`spawnMinion`, bytes 426876..427194, ins 39) and `minion.ent`, `ghost_minion.ent` and `dragon_knight.ent` are `sensor="0"`: **the
+  feet count a minion's or a knight's body as ground**, as they count a crate, a stone, a barrel, a platform and a lift. What the refusal of `isCharacter` is for is the player's own body: the feet's sensor
+  touches the capsule it is moved to. The ten `.ent` files that say `sensor="1"` are `anti_sight_wall`, `button`, `char_feet`, `dark_dragon`, `death_area`, `destroyier`, `destroyier_`, `fireball`, `ghost` and
+  `shock_agent`; the 128 converted levels place six names of them 90 times (anti_sight_wall 17, button 46, death_area 2, destroyier 4, shock_agent 21) and **every one is an `Area2D`**, which the port
+  builds as a trigger the sensor never sees (`test_mp_player`, `NoSensorOfTheOriginalIsBuiltAsASolidBody`; `out/parity/program/CAP/sensor_audit.py`).
+- **Where Box2D leaves a body at rest.** `b2PolygonShape` has a skin `m_radius = b2_polygonRadius` (`b2Settings.h:76`, 2 x `b2_linearSlop`, 0.005 m: `:67`), a circle's `m_radius` is its own, and the
+  position solver (`b2ContactSolver.cpp:628-649`, `:712`) drives each contact's `separation` (the distance between the shapes less the two radii) to `-b2_linearSlop`: **a circle rests on a polygon
+  0.01 - 0.005 = 0.005 m = 0.25 units ABOVE its surface, a polygon on a polygon 2 x 0.01 - 0.005 = 0.75 above, a circle on a circle 0.25 INTO the other** (no skin). The Supersonic engine's solver rests the
+  player's capsule 0.46 units into a floor, 0.55 into a ramp and 0.73 into a small crate (`test_mp_player`, `ThePlayerRestsAtHisBodysHeightOnAFloorARampAndACrate`, printed), so a body at rest is about 0.7
+  units, 2 px at 720 lines, lower than the original's: measured on the library stills at 1.7-1.8 px (planning step 153). There is no contact-margin setting in `PhysicsSettings`.
+- **`b2_maxTranslation` is 100 screen pixels.** `b2Settings.h:101` is 2 m, `b2Island.cpp:286` and `:484` scale a step's whole velocity down to it, and `ETHPhysicsSimulator::DEFAULT_SCALE` (`:27`) makes
+  a metre 50 screen pixels: 100 pixels, whatever the screen. A level unit is H / 256 pixels (`SGlobalScale::updateScaleFactor(256)`, briefs 00_order 8.12a), so **the original's limit is 100 x 256 / H
+  units**: 35.6 at the 720 lines every capture of it is at, 23.7 at 1080, 17.8 at 1440, 11.9 at 2160 (a 63-unit fall reaches it on a 4K screen). It is the one number of Box2D's that does not scale with the
+  screen: a velocity set with `scale()` is proportional to H, as the world's gravity `scale(10)` is, so in units they are the same on every screen.

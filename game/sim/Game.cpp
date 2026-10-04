@@ -598,10 +598,10 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, const S
     //
     // Each is offered at its entity point, which the key measures from and trails
     // (Carry::Carrier). A minion's is its body's centre less EntityAboveCentrePx,
-    // the point its patrol arrives by. The player's is left at its capsule's
-    // centre: that body is the Godot project's 20 x 44, whose centre stands 22 over the
-    // feet where the original's entity stands 18.1 (dark_mage.ent's compound is
-    // minion.ent's), a deviation of the player's body and not decided here.
+    // the point its patrol arrives by. The player's is its capsule's centre, which IS
+    // the original's entity point: since planning step 153 the body is dark_mage.ent's
+    // own shape (two circles of radius 9.1 at +-9 from the entity, a capsule 36.2 tall
+    // here), so the entity stands 18.1 over the feet as the original's does.
     {
         std::vector<Carry::Carrier> carriers;
         carriers.reserve(level.minions.minions.size() + 1);

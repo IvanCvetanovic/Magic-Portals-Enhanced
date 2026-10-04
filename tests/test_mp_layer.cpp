@@ -251,6 +251,24 @@ int CloseTheLevelStartPopup(MagicPortalsLayer& layer, entt::registry& registry) 
     return ticks;
 }
 
+// The player starts where the level's marker puts him, a few units over the floor, and lands in the first ticks - and any landing
+// with a positive hit shakes (earthquake.json player_impact, hit_above 0). With the original's own body (3.9 units shorter than
+// the Godot project's guess, planning step 153) he falls 3.9 units further, and the landing's tremble is below the generator's
+// stop (1 px), so it is a forth and no back: EarthquakeGenerator keeps its `forth` flag, as the original's does, and the NEXT
+// quake of the level begins with the back of that one. A case that measures a quake's own sequence runs one out first, which
+// leaves the generator where a level's first real quake finds it in the original - on a forth, with nothing pending.
+void LetTheLandingPass(MagicPortalsLayer& layer, entt::registry& registry, int ticks = 90) {
+    const auto run = [&](int count) {
+        for (int tick = 0; tick < count; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick); // the generator is stepped by the frame
+        }
+    };
+    run(ticks);
+    layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
+    run(80);
+}
+
 std::string lastFailure(const MagicPortalsLayer& layer) {
     return layer.SimLevel() != nullptr ? layer.SimLevel()->portals.lastFailure : std::string("no level");
 }
@@ -6062,6 +6080,7 @@ void TheShakeMovesTheDrawnCameraAndTheSkyWithIt() {
             seen.tapsAtRest = seen.tapsAtRest && mapped && glm::length(at - point) < 1e-3;
         }
     };
+    LetTheLandingPass(layer, registry);
     tickAndDraw(1);
 
     layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
@@ -6440,6 +6459,43 @@ void AFallShakesTheView() {
         CHECK_MSG(edge.tick > 0, std::string(fall.row) + ": the player fell out, killed by " +
                                      layer.SimLevel()->hazards.killedBy);
         checkQuakeRow(layer, registry, ticks, edge, fall.row, fall.intensity, true);
+        layer.OnDetach(registry);
+    }
+}
+
+// G10-6 (planning step 153): b2_maxTranslation is 100 SCREEN pixels, so a body's step is held to 100 x 256 / the viewport's
+// height units - the layer tells the sim the screen it is shown on. A crate put in free air at 100 m/s: the first tick's physics
+// step moves it at what it was given, the layer's clamp then scales the velocity, and the second step is the limit.
+void TheClampFollowsTheViewportsHeight() {
+    struct ScreenRow {
+        glm::vec2 size;
+        double lines;
+    };
+    for (const ScreenRow& window : {ScreenRow{glm::vec2(1280.0f, 720.0f), 720.0}, ScreenRow{glm::vec2(1920.0f, 1080.0f), 1080.0},
+                                    ScreenRow{glm::vec2(3840.0f, 2160.0f), 2160.0}}) {
+        entt::registry registry;
+        publishViewport(registry, window.size);
+        MagicPortalsLayer layer(TestPaths(), "level0a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) continue;
+        CloseTheLevelStartPopup(layer, registry);
+        const auto found = layer.SimLevel()->built.entities.find("crate_no_emissive_796");
+        CHECK(found != layer.SimLevel()->built.entities.end());
+        if (found == layer.SimLevel()->built.entities.end()) continue;
+        auto& transform = registry.get<TransformComponent>(found->second);
+        auto& rigid = registry.get<RigidBodyComponent>(found->second);
+        const glm::vec3 world = MagicPortals::Units::ToWorld(layer.BoundsPx().x * 0.5, -3000.0);
+        transform.position = glm::vec3(world.x, world.y, transform.position.z);
+        rigid.velocity = glm::vec3(0.0f, -100.0f, 0.0f);
+        tickWith(layer, registry, kRest, {}, {});
+        const double before = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(found->second).position).y;
+        tickWith(layer, registry, kRest, {}, {});
+        const double moved = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(found->second).position).y - before;
+        std::printf("  %.0f lines: a crate at 100 m/s moves %.3f units in a step (100 x 256 / %.0f = %.3f)\n", window.lines, moved,
+                    window.lines, 100.0 * 256.0 / window.lines);
+        CHECK_MSG(std::fabs(moved - 100.0 * 256.0 / window.lines) < 0.05,
+                  std::to_string(window.lines) + " lines: the step is " + std::to_string(moved) + " units");
         layer.OnDetach(registry);
     }
 }
@@ -6870,6 +6926,7 @@ void ATrembleIsDrawnWhateverTicksAFrameRuns() {
         glm::dvec2 at(0.0);
         seen.tapsAtRest = seen.tapsAtRest && layer.ScreenToLevelPx(registry, pixel, at) && glm::length(at - point) < 1e-3;
     };
+    LetTheLandingPass(layer, registry);
     frame(1);
     for (const int ticksPerFrame : {2, 5}) {
         seen = Seen{};
@@ -7105,7 +7162,8 @@ void ABodyFallingOnThePlayerShakesTheView() {
             body = played.minions.minions.front().body;
             radius = played.minions.rules.bodyRadiusPx;
         }
-        const glm::dvec2 head = playerPx(registry, layer) - glm::dvec2(0.0, 22.0);
+        // The top of the capsule: 18.1 over its centre (dark_mage.ent's two circles, planning step 153).
+        const glm::dvec2 head = playerPx(registry, layer) - glm::dvec2(0.0, 18.1);
         const glm::vec3 above = MagicPortals::Units::ToWorld(head.x, head.y - radius - 20.0 - fallFrom);
         auto& bodyAt = registry.get<TransformComponent>(body);
         bodyAt.position = glm::vec3(above.x, above.y, bodyAt.position.z);
@@ -12010,7 +12068,10 @@ void AnEffectFollowsItsOwnerAndNothingHappensOnATick() {
 
     double worst = 0.0;
     for (int frame = 0; frame < 300; ++frame) {
-        tickWith(layer, registry, kRest, frame < 150 ? std::vector<std::string>{MagicPortalsLayer::kRight}
+        // Right for 120 ticks, back left for the rest: through level0's first portal pair on tick 45 and out along the lower
+        // floor. (Right for 150 once walked on into the second pair and back out over the pit at the left; the original's body
+        // is 3.9 units shorter and lands 2 ticks later, which moved that walk off the ledge it had cleared: planning step 153.)
+        tickWith(layer, registry, kRest, frame < 120 ? std::vector<std::string>{MagicPortalsLayer::kRight}
                                                      : std::vector<std::string>{MagicPortalsLayer::kLeft},
                  {});
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
@@ -14438,7 +14499,9 @@ void AShotKillsF17sAgentWithItsBurstShakeAndSound() {
         ++ticks;
     }
     const glm::dvec2 stood = playerPx(registry, layer);
-    CHECK_MSG(std::fabs(stood.x - 153.0) < 1.0, "against the pillar: " + Point(stood));
+    // F17 measured the hood's median: "about 153". The body's own edge is what stops him: the pillar's face at x 143 (the
+    // old 20-wide capsule stood at exactly 153) and the capsule's radius 9.1 (planning step 153), 152.1 less the engine's skin.
+    CHECK_MSG(std::fabs(stood.x - (143.0 + 9.1)) < 0.6, "against the pillar: " + Point(stood));
     const glm::dvec2 aim(450.1, 85.0);
     CHECK_MSG(onScreen(registry, aim), "F17's tap is on the screen");
     shoot(layer, registry, screenOf(registry, aim));
@@ -18304,15 +18367,21 @@ void ABeholderRockBrokenOnTheLevelIsHeard() {
                 // (Read off the body, which is carried at SimRatio times the original's velocity: planning step 152.)
                 const double want = glm::dot(read->velocitiesPx.back(), along) /
                                     MagicPortals::ScriptClock::SimRatio(layer.TickStep()) / rules.hitPxPerUnit;
-                CHECK_MSG(std::fabs(impact.hit - want) <= 1e-6 * std::max(1.0, std::fabs(want)),
-                          where + ": the begin's hit " + std::to_string(impact.hit) + " against " +
-                              std::to_string(want) + " from the velocities read");
-                if (want > 2.0) {
+                // The begin's hit is the fastest recent approach along its normal (Begin::Approaching), so it lies between the
+                // last velocity read along the line to the body and the rock's fastest fall: exactly the last one where the rock
+                // came down on the body, more where it lay against it first - and since planning step 153's body (the player
+                // 3.9 units shorter, a longer fall to the floor, the rocks' timeline moved) both rocks break on the platform's
+                // edge after lying against it, at 0.88 and not the 0.23 of the line to its centre.
+                CHECK_MSG(impact.hit + 1e-6 >= want && impact.hit <= fell / MagicPortals::ScriptClock::SimRatio(layer.TickStep()) /
+                                                                         rules.hitPxPerUnit + 1e-6,
+                          where + ": the begin's hit " + std::to_string(impact.hit) + " between " + std::to_string(want) +
+                              " (the last velocity read along the line) and the fastest fall");
+                if (impact.hit > 2.0) {
                     // Above 2 the original's is heard.
-                    CHECK_MSG(stoneHits.size() == 1 && std::fabs(stoneHits[0] - want / 3.0) <= 1e-6 * std::fabs(want),
+                    CHECK_MSG(stoneHits.size() == 1 && std::fabs(stoneHits[0] - impact.hit / 3.0) <= 1e-6 * std::fabs(impact.hit),
                               where + ": playStoneHitSound(hit / 3) once: " + std::to_string(stoneHits.size()) +
                                   " latched" + (stoneHits.empty() ? "" : ", the first at " + std::to_string(stoneHits[0])));
-                    CHECK_MSG(impact.calls && std::fabs(impact.intensity - 2.0 * want) <= 1e-6 * std::fabs(want),
+                    CHECK_MSG(impact.calls && std::fabs(impact.intensity - 2.0 * impact.hit) <= 1e-6 * std::fabs(impact.hit),
                               where + ": and startEarthquake(hit x 2): " + std::to_string(impact.intensity));
                 } else {
                     // At or below it the row's gate is shut: no stone_hit, no startEarthquake.
@@ -19126,6 +19195,7 @@ void runTests() {
     AShakeDrawnOutsideTheEngineLoopDoesNotPileUp();
     TheLightWallGoingShakesTheView();
     AFallShakesTheView();
+    TheClampFollowsTheViewportsHeight();
     ADiamondTakenAndStruckShakesTheView();
     TheGhostsShotEndingShakesTheView();
     ASwitchedDoorShakesTheViewAsItGoes();

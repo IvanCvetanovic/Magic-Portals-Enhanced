@@ -134,19 +134,21 @@ bool JudgedAt(const glm::dvec2& atPx) {
 }
 
 void TheWholeOctagonKills() {
-    // The player's collider: a capsule 20 wide (player.json, a guess), so its sides
-    // are 10 from its centre. The octagon spans x 483..543, its ends x 483 and 543
-    // over y 99.2..108.8, its top y 96 over x 495..531.
+    // The player's collider: dark_mage.ent's two circles' hull (player.json, planning step 153), a capsule 18.2 wide, so its
+    // sides are 9.1 from its centre, and 36.2 tall, so its foot is 18.1 below it. The octagon spans x 483..543, its ends x 483
+    // and 543 over y 99.2..108.8, its top y 96 over x 495..531.
+    constexpr double kSide = 9.1;
+    constexpr double kFoot = 18.1;
     // Beside the old 16 px box (x 505..521), inside the octagon: it dies now.
-    CHECK_MSG(JudgedAt({513.0 - 8.0 - 2.0 - 10.0, 104.0}), "beside the old box, inside the octagon, the player dies");
-    CHECK_MSG(JudgedAt({474.0, 104.0}), "its side 1 u into the octagon's end: dies");
-    CHECK_MSG(!JudgedAt({472.0, 104.0}), "its side 1 u short of the octagon's end: lives");
-    CHECK_MSG(JudgedAt({552.0, 104.0}), "the same at the other end: dies");
-    CHECK_MSG(!JudgedAt({554.0, 104.0}), "and lives 1 u short of it");
+    CHECK_MSG(JudgedAt({513.0 - 8.0 - 2.0 - kSide, 104.0}), "beside the old box, inside the octagon, the player dies");
+    CHECK_MSG(JudgedAt({483.0 + 1.0 - kSide, 104.0}), "its side 1 u into the octagon's end: dies");
+    CHECK_MSG(!JudgedAt({483.0 - 1.0 - kSide, 104.0}), "its side 1 u short of the octagon's end: lives");
+    CHECK_MSG(JudgedAt({543.0 - 1.0 + kSide, 104.0}), "the same at the other end: dies");
+    CHECK_MSG(!JudgedAt({543.0 + 1.0 + kSide, 104.0}), "and lives 1 u short of it");
     // Inside the octagon's bounds, past its cut corner: the capsule's foot at (484,
     // 97.5), 1.05 off the chamfer from (483, 99.2) to (495, 96).
-    CHECK_MSG(!JudgedAt({484.0, 97.5 - 22.0}), "in the bounds, over the cut corner: lives");
-    CHECK_MSG(JudgedAt({513.0, 97.5 - 22.0}), "the same foot over its middle: dies");
+    CHECK_MSG(!JudgedAt({484.0, 97.5 - kFoot}), "in the bounds, over the cut corner: lives");
+    CHECK_MSG(JudgedAt({513.0, 97.5 - kFoot}), "the same foot over its middle: dies");
     // In the middle, through the whole tick: it dies on that tick, and says where.
     {
         Run run;

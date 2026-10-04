@@ -49,8 +49,8 @@
       "port's body centre, so Game offers each minion to the keys at that point (Carry::Carrier)",
       "and a key a knight carries rides at its chest, drawn behind it (the keys are placed at",
       "eth_z 0 or below, the minion at world 2). The player is offered at its capsule's centre,",
-      "22 over its feet against the original's 18.1 (dark_mage.ent's compound is minion.ent's):",
-      "a deviation of the player's body, recorded in docs/parity-backlog.md, not applied here."
+      "18.1 over its feet since step 153, the original's (dark_mage.ent's compound is minion.ent's):",
+      "the same point as a minion's entity point, so there is no deviation left to apply here."
     ]
   },
 

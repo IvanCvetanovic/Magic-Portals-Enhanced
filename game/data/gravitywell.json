@@ -205,8 +205,8 @@
       "its spin only while its bucket is drawn (00_order 8.12c); the port's runs from the lap.",
       "",
       "THE POINT. The original measures from the body's GetPositionXY(); the port from its body's",
-      "centre, as the pull does - for the player 22 units over its feet against the original's 18.1",
-      "(the carrier-point divergence 00_order 8.15 R25 leaves with the player's owner)."
+      "centre, as the pull does - for the player 18.1 units over its feet since step 153, the original's",
+      "point (R25's player half, 00_order 8.15, is gone; R25 itself stays the owner's)."
     ],
     "step_dot_below": 0.98,
     "lap_degrees": 360.0,

@@ -53,11 +53,16 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         {"gravity", "scale", &Tuning::gravityScale},
         {"gravity", "max_translation_m", &Tuning::maxTranslationM},
         {"gravity", "reference_px_per_unit", &Tuning::referencePxPerUnit},
+        {"body", "box_width_px", &Tuning::boxWidthPx},
+        {"body", "box_height_px", &Tuning::boxHeightPx},
+        {"body", "circle_radius_share", &Tuning::circleRadiusShare},
+        {"body", "circle_pos_share", &Tuning::circlePosShare},
         {"body", "width_px", &Tuning::widthPx},
         {"body", "height_px", &Tuning::heightPx},
         {"feet", "width_px", &Tuning::feetWidthPx},
         {"feet", "height_px", &Tuning::feetHeightPx},
         {"feet", "chamfer", &Tuning::feetChamfer},
+        {"feet", "offset_box_share", &Tuning::feetOffsetShare},
         {"feet", "touch_px", &Tuning::feetTouchPx},
         {"hold", "friction", &Tuning::holdFriction},
         {"hold", "probe_offset_px", &Tuning::holdProbeOffsetPx},
@@ -80,6 +85,23 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         }
         read.*(field.field) = value.AsNumber();
     }
+    // The capsule is the hull of dark_mage.ent's two circles, and the two numbers a reader sees are what they come to: a
+    // circle's radius is its share of half the box's width, its centre its share of half the box's height (ETHCompoundShape.cpp:
+    // 65-71), so the hull is 2 x radius wide and 2 x (centre + radius) tall. A file whose width and height say otherwise is
+    // not the original's body and is refused, naming the key.
+    const double radiusPx = read.circleRadiusShare * read.boxWidthPx * 0.5;
+    const double centrePx = read.circlePosShare * read.boxHeightPx * 0.5;
+    constexpr double kSameTo = 1e-9;
+    if (std::fabs(read.widthPx - 2.0 * radiusPx) > kSameTo) {
+        error = path + ": body.width_px is not the two circles' width, 2 x circle_radius_share x box_width_px / 2";
+        return false;
+    }
+    if (std::fabs(read.heightPx - 2.0 * (centrePx + radiusPx)) > kSameTo) {
+        error = path + ": body.height_px is not the two circles' height, 2 x (circle_pos_share x box_height_px / 2 + the radius)";
+        return false;
+    }
+    // Until a screen says otherwise the clamp is judged at the reference's.
+    read.screenPxPerUnit = read.referencePxPerUnit;
     out = read;
     return true;
 }
@@ -108,9 +130,14 @@ double FallPerTick(const Tuning& tuning, const ScriptClock::Step& step) {
     return tuning.worldGravity * tuning.gravityScale * step.simS * ScriptClock::SimRatio(step);
 }
 
+double FeetOffsetPx(const Tuning& tuning) { return tuning.boxHeightPx * tuning.feetOffsetShare; }
+
+double ClampLimitM(const Tuning& tuning) { return tuning.maxTranslationM / tuning.screenPxPerUnit; }
+
 entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tuning& tuning) {
     const entt::entity entity = registry.create();
     registry.emplace<TransformComponent>(entity).position = Units::ToWorld(atPx.x, atPx.y);
+    // The hull of the original's two circles (player.json body): 9.1 of radius, 36.2 in all, the entity's position its middle.
     auto& capsule = registry.emplace<CapsuleColliderComponent>(entity);
     capsule.radius = Units::ToMetres(tuning.widthPx * 0.5);
     capsule.height = Units::ToMetres(tuning.heightPx);
@@ -130,9 +157,9 @@ entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tunin
 
 bool Grounded(entt::registry& registry, entt::entity player, const Tuning& tuning) {
     // char_feet.ent's octagon (Size 14 x 10, vertices (+-chamfer, +-1) and (+-1, +-chamfer) of its half
-    // size), centred on the bottom of the body.
+    // size), where addFeetOffset puts it: the entity's position + (0, collisionBox.size.y x 0.5), 18 below it.
     const glm::dvec2 bottomPx = Units::ToPixels(registry.get<TransformComponent>(player).position) +
-                                glm::dvec2(0.0, tuning.heightPx * 0.5);
+                                glm::dvec2(0.0, FeetOffsetPx(tuning));
     const glm::dvec2 half(tuning.feetWidthPx * 0.5, tuning.feetHeightPx * 0.5);
     Impacts::Shape feet;
     for (const glm::dvec2 corner : {glm::dvec2(-tuning.feetChamfer, 1.0), glm::dvec2(-1.0, tuning.feetChamfer),
@@ -142,8 +169,10 @@ bool Grounded(entt::registry& registry, entt::entity player, const Tuning& tunin
         feet.core.push_back(bottomPx + corner * half);
     }
     // The engine's own broad phase names what stands near the sensor (solid colliders only: a trigger is a
-    // sensor, which numTouches ignores); each is then tested by its shape, a hull by its outline, against the
-    // octagon - the broad phase answers by bounds, so it can only name more than touch.
+    // sensor, which numTouches ignores - and no sensor of the original is built as anything else here, a fireball is
+    // no body and the player's own is passed as the one to leave out: shouldBeIgnoredByFeet's four refusals); each is
+    // then tested by its shape, a hull by its outline, against the octagon - the broad phase answers by bounds, so it
+    // can only name more than touch. Everything else counts, a minion's body included.
     std::vector<entt::entity> candidates;
     const double reachPx = std::hypot(half.x, half.y) + tuning.feetTouchPx + 1.0;
     Supersonic::PhysicsSystem::OverlapSphere(registry, Units::ToWorld(bottomPx.x, bottomPx.y),
@@ -242,11 +271,11 @@ void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, 
 void ClampTranslation(Supersonic::RigidBodyComponent& rigid, const Tuning& tuning, const ScriptClock::Step& step,
                       const glm::vec3& addedByTheEngine) {
     // b2Island::Solve (b2Island.cpp:286): a step's translation above b2_maxTranslation scales the whole
-    // velocity down to it. In the port's metres a tick that is 2 / 2.8125 = 0.711 m, 35.6 units: a fall of
-    // about 590 units (586.7) reaches it, so only a body that goes on falling does - the hidden body of a
-    // dead player. The engine adds a body's gravity AFTER the tick's writes, so the velocity the
+    // velocity down to it. In the port's metres a tick that is 2 / the screen's pixels a unit: 0.711 m, 35.6
+    // units at the 720-line reference (23.7 at 1080: G10-6): a fall of about 590 units (586.7) reaches the
+    // reference's, so only a body that goes on falling does - the hidden body of a dead player. The engine adds a body's gravity AFTER the tick's writes, so the velocity the
     // translation is judged on (and the clamp scales) is the one it will integrate: written + added.
-    const double limitM = tuning.maxTranslationM / tuning.referencePxPerUnit;
+    const double limitM = ClampLimitM(tuning);
     const glm::vec3 integrated = rigid.velocity + addedByTheEngine;
     const double translationM = std::hypot(static_cast<double>(integrated.x), static_cast<double>(integrated.y)) *
                                 static_cast<double>(step.physicsS);

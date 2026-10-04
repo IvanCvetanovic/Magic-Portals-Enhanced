@@ -62,7 +62,7 @@ PINNED = Path(__file__).resolve().with_name("reachability.json")
 # can leak, which is the optimistic side of the question.
 CELL_PX = 4.0
 # How near the door's trigger box a reached cell must lie: a point flood carries no body, and the
-# player's own half-width is 10 px (data/player.json), so 8 keeps the test inside it.
+# player's own half-width is 9.1 px (data/player.json body.width_px 18.2), so 8 keeps the test inside it.
 DOOR_TOLERANCE_PX = 8.0
 # The cost of crossing a conditional body on the way: one the port opens, one it does not.
 COST_OPENED = 1

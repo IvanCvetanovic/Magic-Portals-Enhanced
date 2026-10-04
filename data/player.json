@@ -1,7 +1,7 @@
 {
   "_about": [
-    "Character movement values. The walk and the fall are DECODED from the original's listing (planning step 148, G10);",
-    "the capsule is still the Godot project's guess.",
+    "Character movement values. The walk and the fall are DECODED from the original's listing (planning step 148, G10); the body (the",
+    "capsule, the ground sensor's place and the clamp's screen) is DECODED from dark_mage.ent and the engine's source (planning step 153, CAP).",
     "",
     "The listing is out/parity/asbc/all_functions.txt (md5 48fe65ce8baea16b94ed84d8d7be84b0), cited as bytes a..b and",
     "instruction numbers; arguments are pushed last-first (docs/ethanon-formats.md; briefs 00_order 8.0). The Godot",
@@ -75,7 +75,16 @@
     "scale": 2.0,
     "max_translation_m": 2.0,
     "reference_px_per_unit": 2.8125,
-    "_max_translation": "b2_maxTranslation (b2Settings.h:101), in Box2D metres a step; the limit in the port's metres a tick is max_translation_m / reference_px_per_unit (2 / 2.8125 = 0.711 m = 35.6 units): Box2D's metre is 50 screen pixels and the port's 50 units, so the screen's pixels a unit decide it. reference_px_per_unit is 720 / 256, the line count every capture of the original is at (briefs 00_order 8.12a; D6 measured 2.8125); on a taller screen the original's limit is fewer units."
+    "_reference_px_per_unit": "720 / 256, the line count every capture of the original is at (briefs 00_order 8.12a; D6 measured 2.8125): the screen's pixels a unit when no screen is known (the suites, the route replays, a headless run).",
+    "_max_translation": [
+      "b2_maxTranslation (b2Settings.h:101), 2 Box2D metres a step = 100 SCREEN PIXELS (ETHPhysicsSimulator.cpp:27, DEFAULT_SCALE 50 pixels a metre). The limit in",
+      "the port's metres a tick is max_translation_m / (the screen's pixels a unit): a level unit is H / 256 pixels (SGlobalScale::updateScaleFactor(256),",
+      "briefs 00_order 8.12a), and a velocity the script sets with scale() is proportional to H, so only this one number of Box2D's does not scale with the",
+      "screen - the original's limit is 100 x 256 / H units: 35.6 at the 720 lines every capture of it is at, 23.7 at 1080, 17.8 at 1440, 11.9 at 2160",
+      "(a 63-unit fall already reaches it on a 4K screen). THE PORT (planning step 153, CAP, G10-6) reads the screen's own: Tuning::screenPxPerUnit, which the",
+      "layer sets every tick from the viewport's height over the view's 256 lines (MagicPortalsLayer::stepLevel) and which stands at reference_px_per_unit when",
+      "there is no screen - every suite and every route replay, so the sim they run does not depend on a window."
+    ]
   },
   "feet": {
     "_source": [
@@ -87,8 +96,18 @@
       "ins 42-87 sets the entity's isTouchingGround to whether its numTouches (ETHBeginContactCallback_char_feet / ETHEndContactCallback_char_feet,",
       "bytes 361966..362396: +1 / -1 for every contact shouldBeIgnoredByFeet does not refuse) is above 0. shouldBeIgnoredByFeet (bytes",
       "361584..361843) refuses a sensor, a character (isCharacter), `fireball.ent` and any name beginning `anti_sight_wall`.",
-      "The port centres the octagon on the bottom of its own capsule (body.height_px / 2 below the centre: the original's 18 against the circles'",
-      "18.1) and tests it against every solid collider but the player's (Player::Grounded; a minion's body is not refused: RECORDED DEVIATIONS).",
+      "THE PORT (planning step 153, CAP, G10-3) stands the octagon where the original does, at offset_box_share x body.box_height_px = 0.5 x 36 = 18",
+      "units below the entity's position - NOT at the bottom of its capsule (18.1), which is 0.1 lower - and tests it",
+      "against every solid collider but the player's own (Player::Grounded). WHAT REFUSES, each against the listing: a SENSOR is refused, and the port",
+      "builds no sensor as a solid collider (every .ent with sensor=\"1\" that a level places - anti_sight_wall, button, death_area, destroyier,",
+      "shock_agent - is an Area2D, a trigger the sensor never sees: out/parity/program/CAP/sensor_audit.py over the 128 converted levels, and",
+      "test_mp_player pins it); `fireball.ent` has no body in the port (a point and a radius, Fire/Turrets); `anti_sight_wall` is a sensor, so the same",
+      "as the first; and a CHARACTER - the entity whose custom uint `isCharacter` is set - is the PLAYER ALONE: only GameCharacter::GameCharacter",
+      "(bytes 119493..119839, ins 43-56) sets it, SideScrollerCharacter's constructor calls it (ins 34) and MainCharacter's calls that (ins 35); no",
+      "other class in the listing derives from them, no .ent carries the datum, and a minion is AddEntity('minion.ent') (spawnMinion, bytes",
+      "426876..427194). So the player's own body is what the character test refuses (the feet's sensor touches the capsule it is bolted to),",
+      "and A MINION'S OR A KNIGHT'S BODY IS GROUND, as is a crate, a stone, a barrel, a platform and a lift: the port already counts them. (Step 148",
+      "and the backlog read 'a character' as 'a minion'; the listing does not.)",
       "MEASURED: F13's 1-06 walk off the start block (out/parity/program/G10/f13/): the player's centre ends 84.3-84.6 units along, 20 past the block's",
       "edge at 64. The decoded walk, air brake and fall replayed offline at the clip's 24 to 30 frames a second end at 80.8-84.9 with the 14-unit feet",
       "(half width 7: the body is on the ground until its feet are 7 clear of the edge) and at 72.8-78.8 with a point for a foot."
@@ -96,6 +115,8 @@
     "width_px": 14.0,
     "height_px": 10.0,
     "chamfer": 0.6,
+    "offset_box_share": 0.5,
+    "_offset_box_share": "addFeetOffset ins 56-74: collisionBox.pos + (0, collisionBox.size.y x 0.5), a share of body.box_height_px (36): the octagon's centre is 18 units below the entity's position.",
     "touch_px": 0.5,
     "_touch_px": "how near counts as touching: Box2D calls BeginContact on the first step a manifold has a point, within the polygons' skin (earthquake.json impacts.touch_px, the same 0.5, D11_check C47)"
   },
@@ -161,9 +182,34 @@
     ]
   },
   "body": {
-    "_guess": true,
-    "_note": "Collision capsule. The original's char_feet.ent implies feet sit below the body. THE SHAPE is the guess; THE MASS is not: dark_mage.ent's density 0.5 over its two circles of radius 9.1 (game/data/materials.json, group dark_mage), 0.104, which Player::Spawn sets (planning step 152) - 4.15 times lighter than a barrel.",
-    "width_px": 20.0,
-    "height_px": 44.0
+    "_source": [
+      "DECODED (planning step 153, CAP). dark_mage.ent (reference/extracted/assets/entities, UTF-16) is <Entity shape=\"4\"> (BS_COMPOUND) with",
+      "<Collision><Size x=\"14\" y=\"36\" z=\"1\"/><Compound>body { shape = circle; posX = 0.0; posY =-0.5; radius = 1.3; } feet { shape = circle;",
+      "posX = 0.0; posY = 0.5; radius = 1.3; }</Compound>. ETHPhysicsSimulator::CreateBody (ETHPhysicsSimulator.cpp:65-123) scales the box by the",
+      "entity's scale (1) and hands ETHCompoundShape::GetShapes the box SIZE as the scale (:91-92); ETHCompoundShape::GetShape (ETHCompoundShape.cpp:65-71)",
+      "turns a circle into posX x size.x x 0.5, posY x size.y x 0.5 and radius x (size.x x 0.5), and ETHPhysicsSimulator::GetCircleShape",
+      "(:56-62) makes it a b2CircleShape of radius (size.x + size.y) / 4 at that point. So the body is TWO CIRCLES of radius 1.3 x 7 = 9.1 units",
+      "centred 0.5 x 18 = 9 above and below the entity's position (+y is down: `body` at -9, `feet` at +9), each its own fixture of the .ent's",
+      "density, friction and restitution: 18.2 wide and 2 x (9 + 9.1) = 36.2 tall, and the entity's position is the middle of it (the .ent's",
+      "<Collision><Position> is 0 and the body is created at entity->GetPositionXY()). Not the Godot project's 20 x 44 guess.",
+      "THE PORT'S SHAPE is the engine's one collider per entity, a capsule: the HULL of the two circles - radius 9.1, 36.2 tall, no offset - which",
+      "is both circles' extreme points exactly (the top, the bottom and the full width at y = +-9) and FILLS THE WAIST: the two circles overlap by",
+      "0.2 units (centres 18 apart, radii 9.1), so at the middle their union is 2 x sqrt(9.1^2 - 9^2) = 2.69 units wide where a capsule is 18.2",
+      "(RECORDED DEVIATIONS, planning step 153: a corner at the player's waist can nest in the original's notch up to 7.75 units, and not here).",
+      "THE MASS is the .ent's, not the capsule's: dark_mage.ent's density 0.5 over the two circles' area (game/data/materials.json, group dark_mage,",
+      "area_m2 0.208139), 0.104, which Player::Spawn sets (planning step 152) - 4.15 times lighter than a barrel. THE FRICTION stays the port's 0",
+      "(Player::kFriction, player.hpp: the walk is set outright every tick and a gripping capsule fights it) and the .ent's 0.9 is hold.friction's.",
+      "LoadTuning derives the box's circles from the four numbers below and REFUSES a file whose width_px / height_px disagree with them, so the",
+      "two keys the spike and the suites read cannot drift from the .ent."
+    ],
+    "box_width_px": 14.0,
+    "box_height_px": 36.0,
+    "_box": "dark_mage.ent <Collision><Size x=14 y=36>: the box the compound's circles are shares of, and (box_height_px / 2) where the feet sensor stands (feet.offset_box_share).",
+    "circle_radius_share": 1.3,
+    "circle_pos_share": 0.5,
+    "_circle": "the compound's `radius = 1.3` (a share of half the box's WIDTH) and `posY = +-0.5` (a share of half the box's HEIGHT).",
+    "width_px": 18.2,
+    "height_px": 36.2,
+    "_derived": "width_px = 2 x circle_radius_share x box_width_px / 2 = 18.2; height_px = 2 x (circle_pos_share x box_height_px / 2 + circle_radius_share x box_width_px / 2) = 36.2. The capsule Player::Spawn builds."
   }
 }

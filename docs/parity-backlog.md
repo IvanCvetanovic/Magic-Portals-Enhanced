@@ -693,6 +693,9 @@ work no step of §7 owns, and the owner's calls:
       So a key or a diamond the player carries rides 3.9 u low, and both its 26 and the diamond's 30 are polled from
       3.9 u low. Not applied here: the capsule is the player's body to settle, not the carry's. Next: the player's
       body, with `Carry::Carrier`'s point already in place to take it.
+      *Closed by step 153 (CAP, local, not pushed): the body is `dark_mage.ent`'s own (36.2 tall), so its centre IS the original's entity point, 18.1 over the
+      feet, and `Carry::Carrier`'s (0, 0) is right; the picture's residual is no longer the 3.9 u but the engine's rest skin (CAP-2, 1.6-1.8 px low). R25 itself,
+      the carrier point as the decode has it, is still the owner's.*
       **Evidence from the batches 8-13 run, nothing changed**: 10.1b (step 105) finds the standing player DRAWN 9.75 px
       (3.47 u) higher on the screen than the original's on 1-03 and 1-07 (cell 8 placed by correlation at top-left y
       484.75 against 494.5 on nine lossless library stills and F2 / F3 #20; the scene aligned at (0, 0)), against the
@@ -1118,8 +1121,8 @@ work no step of §7 owns, and the owner's calls:
       the F12 sparkles their dim, left-shifted look. Next: nothing for the lights; the 4.0 u is R25's player half, the
       7.75 u is the exit row below, and the door frame is the frame-order row. Re-take the row when any of the three
       lands.
-- [ ] **Order 11.3 deviation, the character's point is its capsule centre** (step 96): the door's sparkles and a
-      character's blood sit about 3.9 u high (22 u over the feet against the original's 18.1). R25's player half.
+- [x] **Order 11.3 deviation, the character's point is its capsule centre** (step 96): the door's sparkles and a
+      character's blood sit about 3.9 u high (22 u over the feet against the original's 18.1). R25's player half. *Gone for the player in step 153 (CAP): his capsule's centre is 18.1 over his feet.*
 - [ ] **Merge finding, the skull reads the rest camera** (step 112): step 96 places both skulls from `cameraCornerPx()`,
       the follow's view, which step 101's shake never moves; the original reads the shaken camera for both
       (`checkGameLost` #257 this frame's, `ETHBeginContactCallback_enemy_killer` #35 the previous frame's; D11 section 2,
@@ -1163,7 +1166,7 @@ work no step of §7 owns, and the owner's calls:
       cause is INFERRED, not compared box for box: the port's exit is its player body overlapping the level's trigger
       box (`Goals::State::Tick`) - on 1-01 the character is at 679.011 u on the door tick, the first tick past 693 - 4 - 10 = 679 (a tick's walk is about 2.7 u):
       the trigger's left edge (`trigger_size` 8 wide) less the capsule's radius (`player.json` `body.width_px` 20, a
-      `_guess`; fix round 2) - where the original's is `scaledCollide(finalDoor, character)`, a plain overlap of the two
+      `_guess`; fix round 2; the decoded 18.2 since step 153) - where the original's is `scaledCollide(finalDoor, character)`, a plain overlap of the two
       entities' absolute collision boxes (`checkGameEnd` #15-32; `utilCollide.angelscript` 330795..331560;
       `door.ent`'s box 8 x 57 at (0, 20)). It moves where the door's sparks, light and a finished level's last
       frame stand. Next: the owner of the exit (Goals).
@@ -1956,6 +1959,7 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
 | Step | Row | Track | Commit | Outcome | GAMEPLAY | Routes added |
 |---|---|---|---|---|---|---|
 | 152 | WT | main | the WT commit, "Magic Portals: every dynamic body is in the original's time base" (its hash is in `git log`); local, not pushed | built and committed with 9 recorded deviations (owner-delegated); the first verifier failed it (the decoded frictions walked 13 resting crates and barrels along their floors at 5.65 to 8.78 units a second and solved 2-08 by itself), the fix held the frictions at 1 (G10-14) and the second verifier passed all thirteen gates and listed seven problems, three medium and four low, whose text findings the commit applied and whose source findings are rows WT-2, WT-10, WT-11 and WT-12; 53 suites, 52 passed, 19,026 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep 46 of 128 byte-identical to the standing baseline, the 82 changed explained (the 33 levels with no loose body 33 of 33 identical; 2-29 and 3-12 only in part, WT-10); the falling crate 258.333 units in 30 ticks as the original's, a minion 1.0400 units a tick, 2-24's idle player 0.000 units in 420 ticks | **yes**: the world falls at the original's 2000 u/s^2 at the layer's tick (a crate 258 units in 30 ticks where it fell 127), a minion walks 62.4 u/s (was 39) and a 2-32 knight 81.6 (51), a well pulls every body, every body weighs its `.ent`'s weight (a stone or crate landing on the player embeds him, level30's two big crates cannot be pushed: WT-2, WT-3), no body has damping, a beholder's rock kills on the hardest approach of the last 30 ticks, Box2D's clamp holds every body; friction and restitution are NOT changed (held: G10-14, WT-1) | none: **62 of the 86 routes win** (84 before: 56 on the same tick, 6 on another), 24 do not (1-11 and 2-30 as before, and 22 that won); no route file touched, the routes are re-authored by the wave's route phase after PIC, CAP and G3 |
+| 153 | CAP | main | the CAP commit, "Magic Portals: the player's body is the original's" (its hash is in `git log`); local, not pushed | built, owner-delegated, 11 recorded deviations (CAP-1 to CAP-10 below, WT-10 to WT-12 not taken); **the spec's "a minion's body is not ground" gate is reversed by the listing and was not built** (a minion is not an `isCharacter`: only the player is; the feet refuse a sensor, the player's own body, `fireball.ent` and `anti_sight_wall*`); 53 suites, 52 passed, 19,030 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep 16 of 128 byte-identical to the WT build (14 weightless levels and the two popup levels), the 112 changed explained (98 by the player's picture 10.98 px lower, 11 by the camera following him, 4-16, 4-18 and 2-32 named); the player's picture against the library stills on 13 flat floors -9.19 -> +1.75 px, on 1-24's ramp -9.84 -> +1.56, on 2-24's barrel -6.48 -> +4.53 (+1.58 against the barrel, which is itself 2.95 px low) | **yes**: the player is the original's two circles as a capsule 18.2 wide and 36.2 tall (20 x 44 before), 3.9 units lower on whatever he stands on, his ground sensor 18 below the entity, triggers judge the real shape, every level opens with a 3.9-unit fall and a 0.3-unit landing tremble, and a fall is held to 100 screen pixels a step on the window it is played on (23.7 units at 1080); his weight, friction, walk and fall are unchanged | none: **53 of the 86 routes win** (62 before: 25 on the same tick, 20 later by 1 to 3, 8 earlier), 33 do not (1-11, 2-30 and 22 as before, and 9 that won: 1-12, 2-09, 2-11, 2-12, 2-17, 3-31, 4-07, 4-18, 4-25); no route file touched: the routes are re-authored by the wave's route phase after PIC, CAP and G3 (the time-base group's last step; PIC is wave 3a's, done), not by this step |
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -2030,9 +2034,19 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
       recoil, the 4000 u/s^2 fall, the 0.86 brake and the 144 u/s walk all rest on `matched_hz` = 60, which no clip shows (F10 ran 17-19
       frames a second, F13 about 30; at 30 the same decode gives 70, 1000, 0.43 and 148.5).** Put to the owner as its own question
       (`clock.json` `matched_hz` / `physics_step_s`) **before PIC and the route re-author**: every route is replayed on the rate chosen.
-- [ ] **G10-3. The ground sensor is the port's approximation** (octagon against broad-phase candidates by shape; a minion's body counts,
-      the original's feet refuse a character), and **G10-4** the capsule is still the 20 x 44 guess against the original's 36.2 x 18.2.
-      *Step 152 took G10-4's MASS (the player weighs dark_mage.ent's 0.104, `materials.json`); the capsule's shape is still the guess.*
+- [x] **G10-3. The ground sensor** - *BUILT in step 153 (CAP, local, not pushed): the octagon stands where `addFeetOffset` puts it, 18 below the
+      entity (`collisionBox.size.y x 0.5`, not the capsule's 18.1), and counts what `shouldBeIgnoredByFeet` lets through. **The row's premise was wrong
+      and its gate was not built as written: the feet refuse a SENSOR, `isCharacter`, `fireball.ent` and `anti_sight_wall*`, and `isCharacter` is the
+      player alone (set only by `GameCharacter::GameCharacter`, which only `MainCharacter` reaches; a minion is `AddEntity('minion.ent')`, `sensor="0"`), so a
+      minion's or a knight's body IS ground, as the port already had it.** The audit: ten `.ent` files are `sensor="1"`, the 128 levels place six names of
+      them 90 times and every one is an `Area2D` (a trigger), none solid; `fireball.ent` has no body. Pinned by `test_mp_player`
+      (`AMinionsBodyIsGroundAsACrateAndAPlatformAre`, `NoSensorOfTheOriginalIsBuiltAsASolidBody`). Still the port's: the octagon is tested by shape each
+      tick, not by Box2D's contact begin and end.*
+- [x] **G10-4. The capsule is the original's** - *BUILT in step 153 (CAP, local, not pushed): `dark_mage.ent`'s two circles of radius 1.3 x 7 = 9.1 at
+      +-0.5 x 18 = +-9 (`ETHCompoundShape.cpp:65-71`) as their hull, a capsule 18.2 wide and 36.2 tall, the entity's point its middle; the mass is step 152's
+      0.104 and the friction the port's 0. Its numbers are `data/player.json` `body` (the box and the two shares; `LoadTuning` refuses a width or height
+      that disagrees with them) and `test_mp_player` reads them back from `dark_mage.ent`. GAMEPLAY on every level: 20 x 44 -> 18.2 x 36.2, 3.9 units lower at
+      rest (the sprite follows), triggers judge the real shape. Open as CAP-1 (the waist) and CAP-2 (the engine's rest skin).*
 - [x] **G10-5. A standing player creeps down a slope: a CONFIRMED REGRESSION against the original** - *BUILT in step 148's amendment (R3 fix
       round 2, local, not pushed).* The cause was not the friction this row named: the engine integrates a body's velocity BEFORE it solves its
       contacts, and `Player::Steer` adds a tick of gravity to a grounded player, so an idle player sinks 1.111 units straight down into a slope each
@@ -2054,16 +2068,26 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
       ramp_right's 0.25, 0.42 on a platform's 0.2, 0.6 on block00's 0.4): a slope between 25 and 43.5 degrees holds the player here and not there.
       (3) The original's friction also carries an idle player along a platform that moves sideways under him; the hold does not (G3's step). (4) The
       mechanism is the port's, not Box2D's: why the original's walk shows no loss to the same friction is still not decoded.
-- [ ] **G10-6. Box2D's `b2_maxTranslation` is applied at the 720-line reference** (35.6 units a tick); the original's is 100 screen pixels.
-      *Step 152 applies it to EVERY dynamic body (`Game::BeforeStep`, `Player::ClampTranslation`: the velocity the engine will integrate,
-      written + one step of the world's gravity, scaled to the limit), not only the player's; the limit is still the 720-line reference
-      (`player.json` `reference_px_per_unit`), so the screen dependence stays open: CAP's.*
+      *Step 153 (CAP) scanned (2) (`out/parity/program/CAP/slope_scan.py`, the 128 levels' sloped static tops against `sqrt(0.9 x the decoded floor
+      friction)`: platform 23.0 degrees, ramps 25.4, bridge01 33.9, block00 31.0) and built nothing: the 16 ramps (14.0 degrees) and bridge01's 46 at 14 hold either
+      way; **five levels have a surface between 30 and 40 degrees the decoded mix would not hold and the port's 0.949 does - 1-29 (block00 40, 50), 2-11
+      (single_block_plat 35, 55), 2-22 (bridge01 34, 0.1 over), 3-20 (block00 40, 50) and 3-29 (single_block_plat 30, 60)**; 1-02's 24 block00s at 45 degrees
+      and 4-15's two double_block_plats are past 43.5 either way. Beyond the limit the player is steered as before, the frictionless creep (0.48 units a tick at
+      30 degrees), which is not the original's slow slide (its idle x is set to 0 every update and friction acts on the rest; no footage of it): swapping a
+      too-sticky hold for a too-slippery creep is not a gain, so the row stays open with both numbers. (1), (3) and (4) are unchanged.*
+- [x] **G10-6. Box2D's `b2_maxTranslation` is 100 screen pixels** - *BUILT in step 153 (CAP, local, not pushed). Step 152 applied it to EVERY dynamic body at
+      the 720-line reference (35.6 units a tick); the original's limit is 100 x 256 / H units (`ETHPhysicsSimulator.cpp:27`: a metre is 50 pixels, a unit
+      H / 256), 35.6 at 720, 23.7 at 1080, 17.8 at 1440, 11.9 at 2160. `Tuning::screenPxPerUnit` stands at the reference (`player.json` `reference_px_per_unit`) until
+      `MagicPortalsLayer::stepLevel` sets it from the viewport's height over the view's 256 lines, so every suite and route replay (1280 x 720 or no viewport) flies
+      as before and a player's own window sets his. Pinned at 480 to 2160 lines through the solver and through the layer. Route-neutral at 720 (a fall of 590 units);
+      on a 4K window a fall of 63 units reaches it. Open as CAP-4 (whether the port should be fixed at the rig's 720).*
 - [ ] **G10-7. 1-09's playthrough puts the player on its two shelf crystals** (the decoded player cannot steer out of the far portal onto
       them), and **G10-8** 1-32's rock case asks no pair twice, not exactly one begin. Next: the route phase, which restores the strict pins
       (a real solve that reaches 1-09's shelf, with its three crystals confirmed reachable under the decoded movement; a rock placed over
       the floor for 1-32).
       *Step 151 won 1-09 (388) and 1-32 (2,758) on the decoded movement but edited no test, so `test_mp_layer`'s two looser
-      pins were not restored and both rows stay open.*
+      pins were not restored and both rows stay open.* *Step 153 (CAP) loosened the rock case further for the new body (the begin is bounded by the last velocity read and the fastest fall,
+      where it asserted equality) and re-pinned 4-01's pillar and a shot seam: CAP-10 holds the restore.*
 - [ ] **G10-9..12**: the tap's turn the tick it is taken; `air_velocity_share` removed from `art.json`; **CK-1 left to PIC** (PIC did not take it: PIC-5); the landing's
       hit 8.0 for a 100-unit drop (8.94 continuous, 8.67 on the original's own frames).
 - [x] **G10-13. `Player.cpp`'s clamp comment says a fall of 570 units reaches Box2D's clamp**; the exact figure is 586.7 (about 590, as the
@@ -2149,7 +2173,10 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
       capped at 14.74 u (AirShare 0.86 at the matched 60 Hz), the plank sags once the stone leaves its arm (INFERRED: G10-1 time
       base, G10-4 capsule mass). Needs the owner's rulings on G10-2 / G10-1 / G10-4 and a source step or two, then every route
       re-timed. (planning step 151, deviation 2) *Step 152 (WT) built G10-1 and the mass half of G10-4: the route still dies, on
-      tick 270 (259 before); G10-2's ruling and CAP's capsule stand, and the route phase after G3 re-authors it.*
+      tick 270 (259 before); G10-2's ruling and CAP's capsule stand, and the route phase after G3 re-authors it.* *Step 153 (CAP) built the capsule
+      and measured the plank (`CAP/plank_route.py`): the committed route still dies on tick 270, the stone lying at (356, 175) on the right arm; the idle player on the plank
+      (x 263) holds at y 166.3 from tick 100 to 420, and walking left he is carried up the raised left end and off it (y 133 at x 135 on tick 260), landing at (115, 187) in
+      `fire_agent_ent_918`'s circle. The plank does not sag under him with the stone on its arm; the airborne carry (G10-2's AirShare) is what is left.*
 - [ ] **R3-3. 2-32's route runs ahead of the view for its last 194 ticks** (2525-2718, up to 293 u past the right edge; the
       dragon's camera, 45 u/s, shows the door at x 2554 only from about tick 3126, extrapolated). The original has no rule against
       it (ETHCallback_dragon_claw takes only what lies left of the view and never the player; AutoCameraController follows the
@@ -2196,8 +2223,8 @@ physics moved are re-authored by the wave's route phase after PIC, CAP and G3:
       `enemy_killer`, `lava`, `bounce`, `no_restitution`, `collision_128_sqr`, `single_block`, `double_block`, `square_platform_22`, `rocket_bridge`,
       `motor_seesaw`; deviation 4), and **G10-5c(2) stays open**: `Player::HoldTan` still reads `kStaticFriction` 1. Next: their own values where the
       original's data can be found; `HoldTan` from the body under the player.
-- [ ] **WT-5. The clamp holds every body but at the 720-line reference** (35.6 units a tick; deviation 5; G10-6 above): the original's limit is 100
-      screen pixels, fewer units on a taller screen. Next: CAP.
+- [x] **WT-5. The clamp holds every body but at the 720-line reference** (35.6 units a tick; deviation 5; G10-6 above): the original's limit is 100
+      screen pixels, fewer units on a taller screen. *Built in step 153 (CAP): the layer tells the sim the screen's pixels a unit.*
 - [x] **WT-6. The first build's sweep was re-taken and then replaced** (deviation 6): a control run overwrote `materials.json` for about a minute while it
       ran; every sweep, table and census cited is the fixed build's. Record only, nothing to build.
 - [ ] **WT-7. Awake piles never sleep, and 2-20's stacked crate creeps** (deviation 7; the second verifier's seventh problem, low): 32 loose bodies are awake at
@@ -2220,6 +2247,45 @@ physics moved are re-authored by the wave's route phase after PIC, CAP and G3:
 - [ ] **WT-12. `test_mp_timebase`'s `kStillMoving` strings for 3-12 carry the inference the second verifier's trace contradicts** (`tests/test_mp_timebase.cpp`, the
       comment and the two reasons for `crate_small_ent_1372` and `rolling_stone_1198`: "pushed by the walking minion behind it", "pushed by that crate against the left
       wall"; the comment says INFERRED, not traced). Left, to keep the tested runner current. Next, at the next test edit: say "awake, cause not known" and cite WT-10.
+
+**CAP's recorded deviations**, each an open row for the step named (planning step 153 has the evidence, `RECORDED DEVIATIONS` 1-11):
+- [ ] **CAP-1. The waist of the original's body is filled.** The engine has one collider per entity and no compound, so the two circles of radius 9.1 at +-9 are built as
+      their hull, a capsule 18.2 x 36.2; their union is 2.69 units wide at the middle, so a corner at the player's waist can nest in the original's notch up to 7.75
+      units and cannot here. Next: an engine step for a compound collider (two spheres on one body), then the capsule becomes them.
+- [ ] **CAP-2. The engine's contact skin: the player at rest is 1.6 to 1.8 px (0.6 units) lower than the library stills'.** The engine rests the capsule 0.46 units
+      into a floor, 0.55 into a ramp and 0.73 into a small crate; Box2D rests a circle 0.25 units above a polygon (`b2_polygonRadius` less `b2_linearSlop`,
+      `b2ContactSolver.cpp:712`), a polygon on a polygon 0.75 above and a circle on a circle 0.25 into it. Measured on 13 flat floors (+1.75, +1.53 to +1.86), a ramp
+      (+1.56) and a barrel (+1.58 against the barrel, which is itself 2.95 px low). Every body shares it (the crates' sprites too), so a picture lift for the player alone
+      was not built. **The same skin at a wall, and a footage gap that is NOT settled**: 4-01's pillar (face at x 143) stops him at 151.85 (0.25 into the wall), Box2D's decoded
+      rest is 152.35, and F17's "about 153" (hood-mask median 432 px / 2.8125; the same mask on the port's frame, `CAP/pillar/4-01_left_f300.png`, has its median 1.9 px
+      right of the entity) implies about 152.9: 1.05 units (3 px) more than the port, 0.5 of it the wall skin, the rest inside a hood median's accuracy (the two masks may
+      differ; not verified). The old 20-wide capsule matched it exactly (10 + 143). Next: an engine step for a contact margin (`PhysicsSettings` has none), then a recorded
+      probe of the pillar stop in the final comparison.
+- [ ] **CAP-3. Every level opens with a fall of 3.9 units more, and a level's first quake begins with a back.** The markers stand where the old capsule rested; the
+      original's body is 3.9 units shorter and falls to the floor (level30: lands on tick 3, `player_impact` 1.333, a 0.28-unit tremble), and the decoded generator's
+      `forth` flag survives a quake that stopped before its back, so the next one starts with the back of that forth. Nothing to build: the original does it; four layer cases
+      run one quake out first (`LetTheLandingPass`). Next: the final comparison against a level start's footage.
+- [ ] **CAP-4. The sim reads the window's height through the layer** (G10-6): a 1080 window holds a fall at 23.7 units a tick, a 720 one at 35.6, a suite or a headless run is
+      at 720. The owner's call whether the port should be fixed at the capture rig's 720 instead.
+- [ ] **CAP-5. G10-5c(2) is open, with its scan**: five levels (1-29, 2-11, 2-22, 3-20, 3-29) have a surface between 30 and 40 degrees the decoded floor friction would not hold.
+      Next: the original's slide on such a slope, measured, then `HoldTan` from the body under the player (the row above).
+- [ ] **CAP-6. Triggers and portals judge the hull.** A death area, a goal, a portal's entry and the other overlap tests read the 18.2 x 36.2 capsule; the original's portal has no
+      body (`portal.ent` is `shape="0"`) and tests the player by script, and how it measures his compound is not decoded here: whether the hull's width matches is NOT checked. It moved
+      2-12's walk (the entry edge before the pair exists). Next: the portals' entry decode (G3's neighbour), with 2-12's route.
+- [ ] **CAP-7. The sources are newer than the executables by comment and note edits, and the executables are not relinked.** The commit corrected `game/sim/Player.cpp` (`ETHCompoundShape.cpp: 66-71` is `:65-71`),
+      `tests/test_mp_player.cpp` (`GetCircleShape (:41-47)` is `ETHPhysicsSimulator.cpp:56-62`) and four stale "22 over his feet" notes (`game/sim/Portals.hpp`, `game/sim/Puzzle.hpp`, `game/data/keys.json`,
+      `game/data/gravitywell.json`: 18.1 since step 153), comments and note strings only, no line added or removed. The four touched objects compile with 0 warnings; `MagicPortals.exe` `106a38c4` and `test_mp.exe`
+      `f25cc632` (what the gates measured) predate the edits. Next, G3's relink compiles them: re-run `test_mp.exe` once then, and close this row. `data/player.json`'s `_source` carries the right
+      citations since 22:34:06, three minutes into the sweep (keys and numbers identical).
+- [ ] **CAP-8. The spec's "a minion's body is not ground" gate was not built** (the listing says the feet count it: G10-3 above). Record only; if the owner reads the original
+      differently, the one test that pins it is `AMinionsBodyIsGroundAsACrateAndAPlatformAre`.
+- [ ] **CAP-9. The player's friction is the port's 0, not `dark_mage.ent`'s 0.9** (found by step 153's verifier; the spec said "mass and friction"). The mass is decoded (0.104069, step 152) and the friction is not
+      applied: `Player::kFriction = 0` stays in code, as since step 3, because a gripping player fights his own steering here, and what the original's friction does (an idle player stands still on a slope) is `Steer`'s hold.
+      Next: with CAP-5 and G10-5c, `HoldTan` from the body under him once the original's slide on a slope its friction cannot hold is measured; then the friction can be the .ent's.
+- [ ] **CAP-10. Three pins were loosened or re-pinned to the new body, and 4-01's pillar disagrees with footage** (found by step 153's verifier): `test_mp_shot` accepts a seam within 0.5 as either body, `test_mp_layer`'s 1-32 rock
+      case asserts `impact.hit` between the last velocity read and the fastest fall (G10-8's equality is gone), and 4-01's pillar pin is the computed 152.1 +-0.6, not F17's 153.0 +-1.0 (port 151.85, Box2D's decoded rest
+      152.35, footage-implied about 152.9: CAP-2). Next: restore the strict equality and the footage pin in the route phase (G10-8) or after an engine contact-margin step, and re-measure F17 against the pillar by a
+      second method before deciding that the capsule's width is exact.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2446,7 +2512,7 @@ physics moved are re-authored by the wave's route phase after PIC, CAP and G3:
       after the re-author, in the R3 fix round (step 148's amendment); the other two stand. Commits `d33d14d`, and `e54fa9d` /
       `972cdaf` for G10-5. The routes were re-authored in step 151: 84 of 86 win; 2-30 stays unwon on G10-1, G10-2 and G10-4
       (R3-2), the rows still to settle.* *G10-1 and the mass half of G10-4 are built in step 152 (WT, local, not pushed); G10-2
-      and the capsule's shape (CAP) stand.*
+      stands; the capsule's shape, the sensor and the clamp's screen are built in step 153 (CAP, local, not pushed).*
 - [x] **G11. 3-32's ghost can be killed only through a rule the original lacks** (the audit's G11; KNOWN as "Order 12.2,
       THE OWNER'S TO RULE: fire against the ghost"). *Built in step 117*: a fireball passes through the ghost, a
       barrel's blast burns it, and the ghost puts the barrel back itself on every beat (the two "Order 12.2" rows and
@@ -2957,7 +3023,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       crate's 15-tick press now raises `door_lift_2498` all the way (to 25.6) and it falls from there on 113 (98
       before, from 65); the route wins on its old tick 581 unchanged. The shot's half (G4) stays.*
 - [ ] **Step 133's recorded deviations** (the lift door, 1-6). (1) The crush's point is the player's capsule centre,
-      22 over the feet, where the original's entity point stands 18.1 over; under a falling door either is far below
+      22 over the feet (18.1 since step 153, the original's), where the original's entity point stands 18.1 over; under a falling door either is far below
       the 70.4 the callback asks. (2) A contact begins on the first tick of an overlap, with no Box2D skin. (3) The
       door's clock is the fixed step in milliseconds (a float step summed in double), where the original adds whole
       milliseconds a frame (section 2's PORT-WIDE clock row). (4) `awakeEntitiesAround` is not modelled. (5) The door's
@@ -3051,7 +3117,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
 - [ ] **Step 136's recorded deviations** (HZ, the death area and the platform gate). (1) The gate reads the port's
       platforms and lifts: G3's half swing and G2's self-running lifts, not the original's; each of those steps
       re-verifies the gate's routes (1-28 is held today). (2) The death area meets the port's player capsule, 20 x 44
-      (player.json, a guess; R25), not the original's character body, and Box2D's polygon skin (`b2_polygonRadius`)
+      (player.json, a guess; R25; since step 153 the hull of the original's two circles, 18.2 x 36.2), not the original's character body, and Box2D's polygon skin (`b2_polygonRadius`)
       is not added: a first overlap kills, not a touch. (3) A held entry is the port's per-traveller
       entry offered again each tick; the original's `isThereAnythingInPortal` takes one object per portal per frame
       (step 135, deviation 2), which differs only with two travellers at one portal on one tick. (4) The reachability

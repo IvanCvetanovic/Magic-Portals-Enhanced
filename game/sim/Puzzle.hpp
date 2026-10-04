@@ -112,8 +112,8 @@ struct Channels {
     // status, and the player where the last step left it. A door the player
     // begins to overlap while it is closing, with the player's centre more than
     // crushShare x its height below its centre and strictly within crushShare x
-    // its width of it across, kills it. The player's centre is its capsule's, 22
-    // over the feet where the original's entity point stands 18.1 (Keys says so).
+    // its width of it across, kills it. The player's centre is its capsule's, 18.1
+    // over the feet since step 153: the original's entity point (Keys says so).
     void Crush(entt::registry& registry, entt::entity player);
 
     // Whether any button on the channel is pressed.

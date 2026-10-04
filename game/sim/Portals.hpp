@@ -347,11 +347,11 @@ struct Reflector {
 // appear_effect rows).
 struct Traversal {
     // vanishEffect's objectPos: where the traveller stood, its own point. The
-    // port's is its body's centre, which for the PLAYER is 22 units over its feet
-    // (player.json's capsule, a guess) against the original's character point at
-    // 18.1 - the divergence 00_order 8.15 R25 leaves with the player's owner. So
-    // the sparkles, and the direction the suck effect is placed along, both sit
-    // about 4 units high on a teleporting player.
+    // port's is its body's centre, which for the PLAYER is 18.1 units over its
+    // feet (player.json's capsule, the original's since step 153), the original's
+    // character point: R25's player half (00_order 8.15) is gone, so his sparkles
+    // and the direction the suck effect is placed along start from the original's
+    // own point.
     glm::dvec2 travellerPx{0.0};
     glm::dvec2 entryPx{0.0}; // vanishEffect's portalPos: the end it went in by
     glm::dvec2 exitPx{0.0};  // appearEffect's argument: the end it came out of

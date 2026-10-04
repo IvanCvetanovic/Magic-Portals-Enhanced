@@ -544,7 +544,7 @@ void EveryDynamicBodyIsHeldToBox2DsMaxTranslation() {
     const ScriptClock::Step step = LayerStep();
     auto& rigid = run.registry.get<RigidBodyComponent>(found->second);
     const Player::Tuning tuning = run.data.tuning;
-    const double limitM = tuning.maxTranslationM / tuning.referencePxPerUnit;
+    const double limitM = Player::ClampLimitM(tuning);
     // A crate falling at 100 m/s - 5000 units a second, 83 a tick, past the 35.6 the original's world allows.
     rigid.velocity = glm::vec3(0.0f, -100.0f, 0.0f);
     Game::BeforeStep(run.data, run.registry, run.level, 0.0f, step);
@@ -677,7 +677,7 @@ double PushedAt(bool unitMasses) {
     rigid.angularDamping = 0.0f;
     rigid.lockPosition = LevelBuilder::kPlaneLockPosition;
     rigid.lockRotation = LevelBuilder::kPlaneLockRotation;
-    const entt::entity player = Player::Spawn(registry, glm::dvec2(0.0, 100.0 - 22.0 - 0.1), tuning);
+    const entt::entity player = Player::Spawn(registry, glm::dvec2(0.0, 100.0 - tuning.heightPx * 0.5 - 0.1), tuning);
     if (unitMasses) {
         registry.get<RigidBodyComponent>(crate).mass = 1.0f;
         registry.get<RigidBodyComponent>(player).mass = 1.0f;

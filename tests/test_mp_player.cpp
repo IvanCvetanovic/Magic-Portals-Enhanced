@@ -22,6 +22,11 @@
 //                 floor for 420 ticks, as the original's does on 1-24's ramp, where the same body
 //                 without the hold creeps 0.278 units a tick, and the walk is the same with the
 //                 hold as without it.
+//   the body      dark_mage.ent's two circles of radius 9.1 at +-9, which the engine holds as their hull, a
+//                 capsule 18.2 wide and 36.2 tall (planning step 153, CAP, G10-4): read back from the .ent,
+//                 the mass the .ent's density gives it, the ground sensor standing 18 below the entity (not at
+//                 the capsule's bottom) and counting what shouldBeIgnoredByFeet lets through - a crate, a
+//                 platform AND a minion's body - and the clamp judged at the screen's own 100 pixels (G10-6).
 //
 // Pure, but for the standing case on 1-24 at the end, which reads the converted level and skips
 // itself without it: a floor, a capsule and the engine's solver, no window.
@@ -34,8 +39,11 @@
 #include "sim/Game.hpp"
 #include "sim/Impacts.hpp"
 #include "sim/LevelBuilder.hpp"
+#include "sim/Minions.hpp"
+#include "sim/Particles.hpp"
 #include "sim/Player.hpp"
 #include "sim/ScriptClock.hpp"
+#include "sim/Tscn.hpp"
 #include "sim/Units.hpp"
 #include "sim/Zerog.hpp"
 
@@ -46,13 +54,16 @@
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 using namespace MagicPortals;
 using Supersonic::BoxColliderComponent;
+using Supersonic::CapsuleColliderComponent;
 using Supersonic::PhysicsMaterialComponent;
 using Supersonic::RigidBodyComponent;
+using Supersonic::SphereColliderComponent;
 using Supersonic::TransformComponent;
 
 namespace {
@@ -60,6 +71,7 @@ namespace {
 const std::string kData = MAGICPORTALS_DATA_DIR;
 const std::string kPortData = MAGICPORTALS_PORT_DATA_DIR;
 const std::string kLevels = MAGICPORTALS_LEVELS_DIR;
+const std::string kOriginal = MAGICPORTALS_ORIGINAL_DIR;
 constexpr float kTick = 1.0f / 60.0f;
 constexpr double kPi = 3.14159265358979323846;
 
@@ -79,12 +91,20 @@ Player::Tuning ReadTuning() {
     return tuning;
 }
 
+// Half the capsule's height: how far its centre stands over the floor it rests on (the engine's own contact skin aside).
+double HalfPx() { return ReadTuning().heightPx * 0.5; }
+
 ScriptClock::Rules ReadRules() {
     ScriptClock::Rules rules;
     std::string error;
     CHECK_MSG(ScriptClock::LoadRules(kPortData + "/clock.json", rules, error), error);
     return rules;
 }
+
+// dark_mage.ent's body as player.json says it: the box, the circles' shares of it, and the hull they come to.
+const std::string kBody =
+    "{\"box_width_px\": 14, \"box_height_px\": 36, \"circle_radius_share\": 1.3, \"circle_pos_share\": 0.5, "
+    "\"width_px\": 18.2, \"height_px\": 36.2}";
 
 // A player.json to be refused or taken, written to a scratch file.
 bool Load(const std::string& text, Player::Tuning& out, std::string& error) {
@@ -102,11 +122,12 @@ bool Load(const std::string& text, Player::Tuning& out, std::string& error) {
 std::string TuningText(const std::string& speed = "3", const std::string& scale = "2",
                        const std::string& world = "10",
                        const std::string& hold = "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, "
-                                                 "\"probe_line_tol_px\": 0.05}") {
+                                                 "\"probe_line_tol_px\": 0.05}",
+                       const std::string& body = kBody) {
     return "{\"movement\": {\"speed\": " + speed + ", \"elapsed_cap_ms\": 66, \"air_decay\": 0.86, "
            "\"air_decay_fps\": 60}, \"gravity\": {\"world_m_s2\": " + world + ", \"scale\": " + scale +
-           ", \"max_translation_m\": 2, \"reference_px_per_unit\": 2.8125}, \"body\": {\"width_px\": 20, \"height_px\": 44}, "
-           "\"feet\": {\"width_px\": 14, \"height_px\": 10, \"chamfer\": 0.6, \"touch_px\": 0.5}, "
+           ", \"max_translation_m\": 2, \"reference_px_per_unit\": 2.8125}, \"body\": " + body + ", "
+           "\"feet\": {\"width_px\": 14, \"height_px\": 10, \"chamfer\": 0.6, \"offset_box_share\": 0.5, \"touch_px\": 0.5}, "
            "\"hold\": " + hold + "}";
 }
 
@@ -118,6 +139,7 @@ struct Scene {
     Player::Tuning tuning = ReadTuning();
     ScriptClock::Step step = ScriptClock::TickStep(ReadRules(), kTick);
 
+    // `playerYPx` is the centre's y, the floor's top being y 0 (a capsule resting on it stands HalfPx() above it).
     explicit Scene(bool withFloor, double playerYPx) {
         Game::UseNoGravity(registry);
         if (withFloor) {
@@ -149,18 +171,28 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
     CHECK_EQ(tuning.gravityScale, 2.0);       // SideScrollerCharacter ctor ins 58: SetGravityScale(2)
     CHECK_EQ(tuning.maxTranslationM, 2.0);       // b2_maxTranslation (b2Settings.h:101)
     CHECK_EQ(tuning.referencePxPerUnit, 2.8125); // 720 / 256, the line count of every capture
+    CHECK_EQ(tuning.screenPxPerUnit, 2.8125);    // until a screen says otherwise: the suites and the route replays
     // The ground sensor, char_feet.ent: 14 x 10, corners cut at 0.6, touching within Box2D's skin.
     CHECK_EQ(tuning.feetWidthPx, 14.0);
     CHECK_EQ(tuning.feetHeightPx, 10.0);
     CHECK_EQ(tuning.feetChamfer, 0.6);
     CHECK_EQ(tuning.feetTouchPx, 0.5);
+    // ... standing where addFeetOffset puts it: the collision box's size.y x 0.5 below the entity, 18 - not the capsule's 18.1.
+    CHECK_EQ(tuning.feetOffsetShare, 0.5);
+    CHECK_EQ(Player::FeetOffsetPx(tuning), 18.0);
     // The hold: dark_mage.ent's friction (UTF-16: friction="0.900000", fixedRotation="1"), and the port's own two probes.
     CHECK_EQ(tuning.holdFriction, 0.9);
     CHECK_EQ(tuning.holdProbeOffsetPx, 3.0);
     CHECK_EQ(tuning.holdProbeReachPx, 6.0);
     CHECK_EQ(tuning.holdProbeLineTolPx, 0.05);
-    // The Godot project's guesses are not carried any more.
-    CHECK_MSG(tuning.widthPx == 20.0 && tuning.heightPx == 44.0, "the capsule is still the guess, and still read");
+    // The body: dark_mage.ent's box 14 x 36 and its two circles (radius 1.3 of half the width, posY +-0.5 of half the height),
+    // and the capsule that is their hull - 18.2 wide, 36.2 tall - not the Godot project's 20 x 44.
+    CHECK_EQ(tuning.boxWidthPx, 14.0);
+    CHECK_EQ(tuning.boxHeightPx, 36.0);
+    CHECK_EQ(tuning.circleRadiusShare, 1.3);
+    CHECK_EQ(tuning.circlePosShare, 0.5);
+    CHECK_WITHIN(tuning.widthPx, 18.2, 1e-9);
+    CHECK_WITHIN(tuning.heightPx, 36.2, 1e-9);
 
     Player::Tuning out;
     std::string error;
@@ -184,9 +216,25 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
         CHECK(!Load(TuningText("3", "2", "10", text), out, error));
         CHECK_MSG(error.find(key) != std::string::npos, error);
     }
+    // A body whose width or height is not what its own circles come to is not the original's, and each is refused naming its key
+    // (a file that still said 20 x 44 would put the old guess back under the new provenance).
+    const std::pair<std::string, std::string> refusedBodies[] = {
+        {"{\"box_width_px\": 14, \"box_height_px\": 36, \"circle_radius_share\": 1.3, \"circle_pos_share\": 0.5, "
+         "\"width_px\": 20, \"height_px\": 36.2}", "body.width_px"},
+        {"{\"box_width_px\": 14, \"box_height_px\": 36, \"circle_radius_share\": 1.3, \"circle_pos_share\": 0.5, "
+         "\"width_px\": 18.2, \"height_px\": 44}", "body.height_px"},
+        {"{\"box_height_px\": 36, \"circle_radius_share\": 1.3, \"circle_pos_share\": 0.5, \"width_px\": 18.2, \"height_px\": 36.2}",
+         "body.box_width_px"},
+        {"{\"width_px\": 20, \"height_px\": 44}", "body.box_width_px"},
+    };
+    for (const auto& [body, key] : refusedBodies) {
+        CHECK(!Load(TuningText("3", "2", "10", "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, "
+                                                "\"probe_line_tol_px\": 0.05}", body), out, error));
+        CHECK_MSG(error.find(key) != std::string::npos, error);
+    }
     // And a number missing: the port does not invent one.
     CHECK(!Load("{\"movement\": {\"speed\": 3}, \"gravity\": {\"world_m_s2\": 10, \"scale\": 2}, "
-                "\"body\": {\"width_px\": 20, \"height_px\": 44}}",
+                "\"body\": " + kBody + "}",
                 out, error));
     CHECK_MSG(error.find("elapsed_cap_ms") != std::string::npos, error);
     CHECK(!Player::LoadTuning(kData + "/no_such_player.json", out, error));
@@ -224,11 +272,11 @@ void TheWalkIsTwoPointFourUnitsATick() {
 }
 
 void TheWalkIsSetOutrightAndStopsDead() {
-    Scene scene(true, -23.0);
+    Scene scene(true, -HalfPx() - 1.0);
     // Settle onto the floor: the fall into it is taken by the contact.
     for (int tick = 0; tick < 40; ++tick) scene.Tick(0.0f);
     const double restY = scene.AtPx().y;
-    CHECK_WITHIN(restY, -22.0, 1.5);
+    CHECK_WITHIN(restY, -HalfPx(), 1.0);
     CHECK_MSG(Player::Grounded(scene.registry, scene.player, scene.tuning), "standing on the floor");
 
     const double fromX = scene.AtPx().x;
@@ -326,7 +374,7 @@ void ABodyThatFallsOnIsClampedToBox2DsMaxTranslation() {
     const ScriptClock::Step step = ScriptClock::TickStep(ReadRules(), kTick);
     // 2 m of Box2D's a step is 100 screen pixels, 35.6 units at the 720-line reference: 0.711 m of the
     // port's a tick, 42.7 m/s. A fall of 256 units never reaches it (23.9 units a tick)...
-    const double limitM = tuning.maxTranslationM / tuning.referencePxPerUnit;
+    const double limitM = Player::ClampLimitM(tuning);
     CHECK_WITHIN(limitM, 0.7111111, 1e-6);
     CHECK_WITHIN(limitM * Units::kPixelsPerMetre, 35.5556, 1e-3);
     Scene scene(false, -2500.0);
@@ -358,7 +406,8 @@ void TheLandingSpeedIsReadAsTheOriginalsCallbackReadsIt() {
     // squared of its physics, so 447 units a second and a hitIntensity (over 50) of 8.94 - whatever frame
     // rate it runs at, since its step is the fixed 1/30 s. The port carries twice that, and a begin
     // reports the player's velocity by 1 / SimRatio.
-    Scene scene(true, -122.0);
+    // The capsule's bottom 100 units over the floor, whatever its height.
+    Scene scene(true, -100.0 - HalfPx());
     Impacts::Watch watch;
     Impacts::Watched watched{scene.player, Impacts::Kind::Player, {}};
     watched.velocityScale = 1.0 / ScriptClock::SimRatio(scene.step);
@@ -400,23 +449,30 @@ void TheFeetAreAnOctagonFourteenWideAndAWalkerLeavesTheGroundSevenClear() {
     auto& box = registry.emplace<BoxColliderComponent>(floor);
     box.size = glm::vec3(Units::ToMetres(20000.0), Units::ToMetres(1000.0), 1.0f);
     const Player::Tuning tuning = ReadTuning();
-    const entt::entity player = Player::Spawn(registry, glm::dvec2(0.0, -22.0), tuning);
+    const double half = tuning.heightPx * 0.5; // the capsule's bottom is this far below its centre: 18.1
+    const entt::entity player = Player::Spawn(registry, glm::dvec2(0.0, -half), tuning);
     const auto groundedAt = [&](double xPx, double yPx) {
         registry.get<TransformComponent>(player).position = Units::ToWorld(xPx, yPx);
         return Player::Grounded(registry, player, tuning);
     };
     // Standing on it, anywhere over it: the sensor is 14 wide, so the centre may be 7 past the edge
     // (the octagon is full width at the floor's plane) and the player is still on the ground...
-    CHECK(groundedAt(-30.0, -22.0));
-    CHECK(groundedAt(0.0, -22.0));
-    CHECK_MSG(groundedAt(6.9, -22.0), "feet 7 wide: the centre 6.9 past the edge is still on it");
+    CHECK(groundedAt(-30.0, -half));
+    CHECK(groundedAt(0.0, -half));
+    CHECK_MSG(groundedAt(6.9, -half), "feet 7 wide: the centre 6.9 past the edge is still on it");
     // ... and off it once the whole sensor is clear (7 and the skin).
-    CHECK_MSG(!groundedAt(7.6, -22.0), "7.6 past the edge, the feet are clear");
-    // It reaches 5 below the bottom of the body and 5 above: hovering 4 units over the floor is on it,
-    // 6 is not; sunk 4 into it is.
-    CHECK(groundedAt(-30.0, -26.0));
-    CHECK_MSG(!groundedAt(-30.0, -28.5), "6.5 over the floor is not");
-    CHECK(groundedAt(-30.0, -18.0));
+    CHECK_MSG(!groundedAt(7.6, -half), "7.6 past the edge, the feet are clear");
+    // It stands 18 below the entity (FeetOffsetPx, addFeetOffset: the box's 36 x 0.5), 5 either way of that: so it reaches 4.9
+    // below the capsule's bottom (18.1) and 5.1 above it. Hovering with the bottom 4 over the floor is on it, 6 is not;
+    // sunk 4 into it is.
+    CHECK(groundedAt(-30.0, -half - 4.0));
+    CHECK_MSG(!groundedAt(-30.0, -half - 6.0), "6 over the floor is not");
+    CHECK(groundedAt(-30.0, -half + 4.0));
+    // The edge of the reach is the sensor's 18 + 5 = 23 below the entity, not the capsule's 18.1 + 5: the centre 23.4 over the
+    // floor (the octagon's bottom 0.4 short of it, inside the 0.5 skin) is on it, 23.7 over is not. A sensor at the
+    // capsule's bottom would reach 0.1 further.
+    CHECK_MSG(groundedAt(-30.0, -(Player::FeetOffsetPx(tuning) + 0.5 * tuning.feetHeightPx + 0.4)), "the octagon's bottom 0.4 short of the floor: touching");
+    CHECK_MSG(!groundedAt(-30.0, -(Player::FeetOffsetPx(tuning) + 0.5 * tuning.feetHeightPx + 0.7)), "0.7 short: not");
     // A body beside the sensor's side: the floor's edge is a face, and falling along it, within 7 of it,
     // the player is still touching it, where a ray from the centre would have left it a step ago.
     CHECK_MSG(groundedAt(5.0, 40.0), "falling past the floor's side face within 7 of it is still on it");
@@ -427,7 +483,7 @@ void TheFeetAreAnOctagonFourteenWideAndAWalkerLeavesTheGroundSevenClear() {
     auto& area = registry.emplace<BoxColliderComponent>(trigger);
     area.size = glm::vec3(Units::ToMetres(200.0), Units::ToMetres(40.0), 1.0f);
     area.isTrigger = true;
-    CHECK_MSG(!groundedAt(100.0, -22.0), "standing in a trigger over nothing is not on the ground");
+    CHECK_MSG(!groundedAt(100.0, -half), "standing in a trigger over nothing is not on the ground");
     // And the player's own capsule never counts.
     CHECK_MSG(!groundedAt(500.0, -500.0), "in the air, nothing");
 }
@@ -476,7 +532,7 @@ struct Slope {
         material.friction = LevelBuilder::kStaticFriction;
         material.restitution = LevelBuilder::kStaticRestitution;
         // 12 units over the surface where the box's centre line meets it: 100 / cos above the box's centre.
-        player = Player::Spawn(registry, glm::dvec2(0.0, 500.0 - 100.0 / std::cos(angleRad) - 22.0 - 12.0), tuning);
+        player = Player::Spawn(registry, glm::dvec2(0.0, 500.0 - 100.0 / std::cos(angleRad) - tuning.heightPx * 0.5 - 12.0), tuning);
     }
 
     glm::dvec2 AtPx() { return Units::ToPixels(registry.get<TransformComponent>(player).position); }
@@ -502,7 +558,7 @@ void TheGroundSlopeIsReadFromTwoProbesUnderTheCentreLine() {
     }
 
     // The flat floor reads exactly 0, whatever the player's x.
-    Scene flat(true, -23.0);
+    Scene flat(true, -HalfPx() - 1.0);
     for (int tick = 0; tick < 40; ++tick) flat.Tick(0.0f);
     double read = 1.0;
     CHECK_MSG(Player::GroundSlope(flat.registry, flat.player, flat.tuning, read), "the probes meet the floor");
@@ -521,7 +577,7 @@ void TheGroundSlopeIsReadFromTwoProbesUnderTheCentreLine() {
         roundTop.emplace<TransformComponent>(ball).position = Units::ToWorld(0.0, 60.0);
         roundTop.emplace<Supersonic::SphereColliderComponent>(ball).radius = Units::ToMetres(40.0);
         const Player::Tuning ballTuning = ReadTuning();
-        // The crown is at y 20; the player's bottom is at 22: the probes (6 either way of it) meet the sphere.
+        // The crown is at y 20; the player's bottom is at 18.1: the probes (6 either way of it) meet the sphere.
         const entt::entity rider = Player::Spawn(roundTop, glm::dvec2(0.0, 0.0), ballTuning);
         double crown = 1.0;
         CHECK_MSG(!Player::GroundSlope(roundTop, rider, ballTuning, crown), "a round top is not a plane");
@@ -535,7 +591,7 @@ void TheGroundSlopeIsReadFromTwoProbesUnderTheCentreLine() {
     auto& box = registry.emplace<BoxColliderComponent>(floor);
     box.size = glm::vec3(Units::ToMetres(20000.0), Units::ToMetres(1000.0), 1.0f);
     const Player::Tuning tuning = ReadTuning();
-    const entt::entity player = Player::Spawn(registry, glm::dvec2(1.0, -22.0), tuning);
+    const entt::entity player = Player::Spawn(registry, glm::dvec2(1.0, -tuning.heightPx * 0.5), tuning);
     CHECK_MSG(!Player::GroundSlope(registry, player, tuning, read), "a probe past the edge misses: not a slope");
 }
 
@@ -562,7 +618,7 @@ void AnIdlePlayerIsPressedAlongTheGroundsNormalAndAWalkingOneIsNot() {
     }
 
     // On the flat it is the old steering exactly: x velocity 0.
-    Scene flat(true, -23.0);
+    Scene flat(true, -HalfPx() - 1.0);
     for (int tick = 0; tick < 40; ++tick) flat.Tick(0.0f);
     Player::Steer(flat.registry, flat.player, flat.tuning, 0.0f, flat.step);
     CHECK_EQ(flat.Rigid().velocity.x, 0.0f);
@@ -721,14 +777,364 @@ void AnIdlePlayerStandsStillOnTheOriginalsRamp() {
     }
 }
 
+
+// ---- planning step 153, CAP ----------------------------------------------------------------------------------------------------
+
+// The number after a key in a string (the .ent's own text): enough to read back what the body is made of.
+double NumberAfter(const std::string& text, const std::string& key, std::size_t from = 0, std::size_t* at = nullptr) {
+    const std::size_t found = text.find(key, from);
+    if (found == std::string::npos) return -1e9;
+    if (at != nullptr) *at = found + key.size();
+    return std::strtod(text.c_str() + found + key.size(), nullptr);
+}
+
+void TheBodyIsDarkMagesTwoCirclesAndTheCapsuleIsTheirHull() {
+    const Player::Tuning tuning = ReadTuning();
+
+    // READ BACK from the original's own .ent files, which a clone without them skips.
+    std::string ent;
+    std::string error;
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(kOriginal + "/entities/dark_mage.ent", ec) &&
+        Particles::ReadEnt(kOriginal + "/entities/dark_mage.ent", ent, error)) {
+        const std::size_t collision = ent.find("<Collision>");
+        CHECK_MSG(collision != std::string::npos, "dark_mage.ent has a <Collision>");
+        // The shape is BS_COMPOUND (4): ETHEntityProperties' enum, shape="4".
+        CHECK_MSG(ent.find("shape=\"4\"") != std::string::npos, "dark_mage.ent is a compound");
+        const std::size_t size = ent.find("<Size ", collision);
+        const double boxX = NumberAfter(ent, "x=\"", size);
+        const double boxY = NumberAfter(ent, "y=\"", size);
+        CHECK_WITHIN(boxX, tuning.boxWidthPx, 1e-9);
+        CHECK_WITHIN(boxY, tuning.boxHeightPx, 1e-9);
+        // The compound: two circles, `body` at posY -0.5 and `feet` at posY 0.5, each of radius 1.3.
+        const std::size_t compound = ent.find("<Compound>", collision);
+        CHECK(compound != std::string::npos);
+        std::size_t cursor = compound;
+        double radius[2] = {0.0, 0.0};
+        double posY[2] = {0.0, 0.0};
+        for (int circle = 0; circle < 2; ++circle) {
+            std::size_t after = 0;
+            posY[circle] = NumberAfter(ent, "posY =", cursor, &after);
+            cursor = after;
+            radius[circle] = NumberAfter(ent, "radius =", cursor, &after);
+            cursor = after;
+        }
+        CHECK_WITHIN(posY[0], -0.5, 1e-12);
+        CHECK_WITHIN(posY[1], 0.5, 1e-12);
+        CHECK_WITHIN(radius[0], 1.3, 1e-12);
+        CHECK_WITHIN(radius[1], 1.3, 1e-12);
+        CHECK_WITHIN(radius[0], tuning.circleRadiusShare, 1e-12);
+        CHECK_WITHIN(posY[1], tuning.circlePosShare, 1e-12);
+        // ETHCompoundShape.cpp:65-71 and GetCircleShape (ETHPhysicsSimulator.cpp:56-62): a circle's radius is its share of half the box's
+        // width and its centre a share of half the box's height, so two circles of 9.1 at +-9: 18.2 wide, 36.2 tall.
+        const double circleRadius = radius[0] * boxX * 0.5;
+        const double circleCentre = posY[1] * boxY * 0.5;
+        CHECK_WITHIN(circleRadius, 9.1, 1e-9);
+        CHECK_WITHIN(circleCentre, 9.0, 1e-9);
+        CHECK_WITHIN(tuning.widthPx, 2.0 * circleRadius, 1e-9);
+        CHECK_WITHIN(tuning.heightPx, 2.0 * (circleCentre + circleRadius), 1e-9);
+        // Its material: density 0.5 and friction 0.9, a body that does not turn.
+        CHECK(ent.find("density=\"0.500000\"") != std::string::npos);
+        CHECK(ent.find("friction=\"0.900000\"") != std::string::npos);
+        CHECK(ent.find("fixedRotation=\"1\"") != std::string::npos);
+        // And the sensor beside it: char_feet.ent is a sensor, 14 x 10.
+        std::string feet;
+        CHECK_MSG(Particles::ReadEnt(kOriginal + "/entities/char_feet.ent", feet, error), error);
+        CHECK(feet.find("sensor=\"1\"") != std::string::npos);
+        const std::size_t feetSize = feet.find("<Size ");
+        CHECK_WITHIN(NumberAfter(feet, "x=\"", feetSize), tuning.feetWidthPx, 1e-9);
+        CHECK_WITHIN(NumberAfter(feet, "y=\"", feetSize), tuning.feetHeightPx, 1e-9);
+    } else {
+        std::printf("  the .ent read-back SKIPPED - needs the original's entities at %s/entities\n", kOriginal.c_str());
+    }
+
+    // THE CAPSULE the player is spawned with: radius 9.1, 36.2 tall, the entity's position its middle, which is the hull of the
+    // two circles - its two cap centres are the circles' own, 9 either side, and its radius theirs.
+    entt::registry registry;
+    const entt::entity player = Player::Spawn(registry, glm::dvec2(100.0, 200.0), tuning);
+    const auto& capsule = registry.get<CapsuleColliderComponent>(player);
+    CHECK_WITHIN(static_cast<double>(capsule.radius) * Units::kPixelsPerMetre, 9.1, 1e-4);
+    CHECK_WITHIN(static_cast<double>(capsule.height) * Units::kPixelsPerMetre, 36.2, 1e-4);
+    CHECK_MSG(capsule.center == glm::vec3(0.0f), "the entity's position is the middle of the capsule");
+    Impacts::Shape shape;
+    CHECK(Impacts::ShapeOf(registry, player, shape));
+    CHECK_EQ(shape.core.size(), static_cast<std::size_t>(2));
+    CHECK_WITHIN(shape.radiusPx, 9.1, 1e-4);
+    CHECK_WITHIN(std::min(shape.core[0].y, shape.core[1].y), 200.0 - 9.0, 1e-3);
+    CHECK_WITHIN(std::max(shape.core[0].y, shape.core[1].y), 200.0 + 9.0, 1e-3);
+    CHECK_WITHIN(shape.core[0].x, 100.0, 1e-3);
+    const auto& rigid = registry.get<RigidBodyComponent>(player);
+    CHECK(rigid.freezeRotation);
+    // The friction is the port's own 0 (the .ent's 0.9 is the hold's).
+    CHECK_EQ(rigid.friction, Player::kFriction);
+    // THE MASS is the .ent's density over the TWO CIRCLES' area (0.104069), not the capsule's volume, and the engine's 1 with no table.
+    CHECK_WITHIN(static_cast<double>(rigid.mass), 1.0, 0.0);
+    entt::registry weighed;
+    LevelBuilder::Materials materials;
+    CHECK_MSG(LevelBuilder::LoadMaterials(kPortData + "/materials.json", materials, error), error);
+    weighed.ctx().insert_or_assign<LevelBuilder::Materials>(std::move(materials));
+    const entt::entity heavy = Player::Spawn(weighed, glm::dvec2(0.0, 0.0), tuning);
+    CHECK_WITHIN(static_cast<double>(weighed.get<RigidBodyComponent>(heavy).mass), 0.5 * 2.0 * kPi * 0.182 * 0.182, 1e-5);
+    CHECK_WITHIN(static_cast<double>(weighed.get<RigidBodyComponent>(heavy).mass), 0.104069, 1e-5);
+}
+
+// Something solid put with its top at y 0 and the player's capsule hovering `overPx` above it: the sensor's answer.
+enum class Under { StaticBox, RigidBox, RigidSphere, Trigger };
+
+bool GroundedOver(Under under, double sphereRadiusPx, double overPx) {
+    entt::registry registry;
+    Game::UseNoGravity(registry);
+    const entt::entity thing = registry.create();
+    if (under == Under::RigidSphere) {
+        registry.emplace<TransformComponent>(thing).position = Units::ToWorld(0.0, sphereRadiusPx);
+        registry.emplace<SphereColliderComponent>(thing).radius = Units::ToMetres(sphereRadiusPx);
+        registry.emplace<RigidBodyComponent>(thing);
+    } else {
+        const double heightPx = under == Under::RigidBox ? 30.0 : 200.0;
+        registry.emplace<TransformComponent>(thing).position = Units::ToWorld(0.0, heightPx * 0.5);
+        auto& box = registry.emplace<BoxColliderComponent>(thing);
+        box.size = glm::vec3(Units::ToMetres(under == Under::RigidBox ? 30.0 : 400.0), Units::ToMetres(heightPx), 1.0f);
+        box.isTrigger = under == Under::Trigger;
+        if (under == Under::RigidBox) registry.emplace<RigidBodyComponent>(thing);
+    }
+    const Player::Tuning tuning = ReadTuning();
+    const entt::entity player = Player::Spawn(registry, glm::dvec2(0.0, -tuning.heightPx * 0.5 - overPx), tuning);
+    return Player::Grounded(registry, player, tuning);
+}
+
+void AMinionsBodyIsGroundAsACrateAndAPlatformAre() {
+    // shouldBeIgnoredByFeet refuses a sensor, an isCharacter (the player's own body), fireball.ent and anti_sight_wall*, and
+    // nothing else: so a platform (a static), a crate (a rigid box), a stone and a minion (rigid spheres) all hold a standing
+    // character. The step-148 note read "character" as "minion"; a minion is AddEntity('minion.ent'), no GameCharacter.
+    CHECK_MSG(GroundedOver(Under::StaticBox, 0.0, 1.0), "a platform is ground");
+    CHECK_MSG(GroundedOver(Under::RigidBox, 0.0, 1.0), "a crate is ground");
+    CHECK_MSG(GroundedOver(Under::RigidSphere, 7.0, 1.0), "a minion's body (one circle, radius 7) is ground: its feet do not refuse it");
+    CHECK_MSG(GroundedOver(Under::RigidSphere, 30.0, 1.0), "a stone (radius 30) is ground");
+    // A trigger is the sensor the feet refuse: standing on a death area, a button or an anti_sight_wall is standing on nothing.
+    CHECK_MSG(!GroundedOver(Under::Trigger, 0.0, 1.0), "a trigger is not ground");
+    // And out of reach none of them is: 8 units over.
+    CHECK_MSG(!GroundedOver(Under::StaticBox, 0.0, 8.0), "8 over a platform is off it");
+    CHECK_MSG(!GroundedOver(Under::RigidSphere, 7.0, 8.0), "8 over a minion is off it");
+
+    // THE PLAYER'S OWN BODY is the one character, and the feet never count it: what isCharacter refuses in the original (the
+    // feet's own sensor touches the capsule it hangs from).
+    {
+        entt::registry registry;
+        Game::UseNoGravity(registry);
+        const Player::Tuning tuning = ReadTuning();
+        const entt::entity player = Player::Spawn(registry, glm::dvec2(0.0, 0.0), tuning);
+        CHECK_MSG(!Player::Grounded(registry, player, tuning), "its own body is not ground");
+    }
+
+    // A REAL MINION: level0b has them. The player put over the first so that his feet reach its top, then the minion's
+    // collider taken away: the sensor answered for the minion, and for nothing else.
+    const std::string name = "level0b";
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(kLevels + "/" + name + ".tscn", ec) ||
+        !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec)) {
+        std::printf("  a real minion SKIPPED - needs the converted level %s\n", name.c_str());
+        return;
+    }
+    Game::Data data;
+    entt::registry played;
+    Game::Level level;
+    std::string error;
+    const std::filesystem::path prisms = std::filesystem::temp_directory_path() / "supersonic-test-mp-player";
+    if (!Game::LoadData(kLevels + "/" + name + ".tscn", kData, prisms, data, error) ||
+        !Game::Start(data, played, level, error)) {
+        CHECK_MSG(false, name + ": " + error);
+        return;
+    }
+    CHECK(!level.minions.minions.empty());
+    if (level.minions.minions.empty()) return;
+    const Minions::Minion& minion = level.minions.minions.front();
+    const glm::dvec2 minionAt = Units::ToPixels(played.get<TransformComponent>(minion.body).position);
+    const double top = minionAt.y - level.minions.rules.bodyRadiusPx;
+    // The player over its top: the capsule's bottom 2 above it, the sensor's octagon reaching 2.9 into it.
+    played.get<TransformComponent>(level.player).position = Units::ToWorld(minionAt.x, top - data.tuning.heightPx * 0.5 - 2.0);
+    played.get<RigidBodyComponent>(level.player).velocity = glm::vec3(0.0f);
+    const bool onMinion = Player::Grounded(played, level.player, data.tuning);
+    played.remove<SphereColliderComponent>(minion.body);
+    const bool withoutIt = Player::Grounded(played, level.player, data.tuning);
+    std::printf("  %s: the player over a minion's top: on the ground %s, with the minion's collider taken away %s\n", name.c_str(),
+                onMinion ? "yes" : "no", withoutIt ? "yes" : "no");
+    CHECK_MSG(onMinion, "a real minion's body holds the player's feet");
+    CHECK_MSG(!withoutIt, "and it was the minion that did (nothing else is within the sensor's reach)");
+}
+
+void NoSensorOfTheOriginalIsBuiltAsASolidBody() {
+    // The feet refuse a sensor, so the port must never make one solid. Every .ent of the original that says sensor="1" and that
+    // a level places - read from the 128 converted levels against the .ent files - is an Area2D, which LevelBuilder builds as a
+    // trigger the sensor never sees. (The audit: out/parity/program/CAP/sensor_audit.py.)
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(kOriginal + "/entities/crate.ent", ec) || !std::filesystem::is_directory(kLevels, ec)) {
+        std::printf("  NoSensorOfTheOriginalIsBuiltAsASolidBody SKIPPED - needs the original's entities and the converted levels\n");
+        return;
+    }
+    std::vector<std::filesystem::path> files;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (entry.path().extension() == ".tscn") files.push_back(entry.path());
+    }
+    std::sort(files.begin(), files.end());
+    std::unordered_map<std::string, int> sensorOf; // .ent name -> 1 sensor, 0 not, -1 no such file
+    const auto isSensor = [&](std::string name) {
+        if (name.size() < 4 || name.compare(name.size() - 4, 4, ".ent") != 0) name += ".ent";
+        const auto known = sensorOf.find(name);
+        if (known != sensorOf.end()) return known->second == 1;
+        std::string text;
+        std::string error;
+        int value = -1;
+        if (Particles::ReadEnt(kOriginal + "/entities/" + name, text, error)) {
+            const std::size_t open = text.find("<Entity ");
+            const std::string head = open == std::string::npos ? std::string() : text.substr(open, text.find('>', open) - open);
+            value = head.find(" sensor=\"1\"") != std::string::npos ? 1 : 0;
+        }
+        sensorOf[name] = value;
+        return value == 1;
+    };
+    int placed = 0;
+    int solid = 0;
+    std::string offender;
+    std::unordered_map<std::string, int> kinds;
+    for (const std::filesystem::path& file : files) {
+        Tscn::Scene scene;
+        std::string error;
+        if (!Tscn::Load(file.string(), scene, error)) {
+            CHECK_MSG(false, error);
+            continue;
+        }
+        for (const Tscn::Node& node : scene.nodes) {
+            const Tscn::Value* named = node.Meta("entity_name");
+            if (named == nullptr || node.parent != "." || !isSensor(named->text)) continue;
+            const Tscn::Node* body = scene.Child(node, "Body");
+            if (body == nullptr) continue;
+            ++placed;
+            ++kinds[named->text];
+            if (body->type != "Area2D") {
+                ++solid;
+                offender = file.filename().string() + ": " + node.name + " is a " + body->type;
+            }
+        }
+    }
+    std::printf("  %zu levels: %d placements of %zu sensor entities, %d built solid\n", files.size(), placed, kinds.size(), solid);
+    CHECK_MSG(solid == 0, offender);
+    CHECK_MSG(placed >= 20 && kinds.size() >= 4, "the audit found " + std::to_string(placed) + " sensor placements");
+}
+
+void TheClampIsJudgedAtTheScreensOwnHundredPixels() {
+    // b2_maxTranslation is 2 Box2D metres = 100 screen pixels; a unit is H / 256 pixels, so the limit in units is 100 x 256 / H.
+    Player::Tuning tuning = ReadTuning();
+    CHECK_WITHIN(Player::ClampLimitM(tuning) * Units::kPixelsPerMetre, 100.0 * 256.0 / 720.0, 1e-9); // the reference: 35.56
+    for (const double lines : {480.0, 720.0, 1080.0, 1440.0, 2160.0}) {
+        tuning.screenPxPerUnit = lines / 256.0;
+        CHECK_WITHIN(Player::ClampLimitM(tuning) * Units::kPixelsPerMetre, 100.0 * 256.0 / lines, 1e-9);
+    }
+    tuning.screenPxPerUnit = 1080.0 / 256.0;
+    CHECK_WITHIN(Player::ClampLimitM(tuning) * Units::kPixelsPerMetre, 23.7037, 1e-3);
+
+    // Through the solver: a fall at 1080 lines tops out at 23.7 units a tick where at 720 it goes on to 35.6.
+    const auto fastestFall = [&](double lines) {
+        Scene scene(false, -2500.0);
+        scene.tuning.screenPxPerUnit = lines / 256.0;
+        double fastest = 0.0;
+        for (int tick = 1; tick <= 200; ++tick) {
+            scene.Tick(0.0f);
+            fastest = std::max(fastest, -static_cast<double>(scene.Rigid().velocity.y) * Units::kPixelsPerMetre *
+                                            static_cast<double>(kTick));
+        }
+        return fastest;
+    };
+    CHECK_WITHIN(fastestFall(1080.0), 23.7037, 1e-3);
+    CHECK_WITHIN(fastestFall(720.0), 35.5556, 1e-3);
+    CHECK_WITHIN(fastestFall(2160.0), 11.8519, 1e-3);
+}
+
+// What a capsule of the original's size does at rest, in the engine's own contact: its centre's height over the surface under it,
+// against the geometry. Printed with the numbers, and pinned to the skin the engine leaves.
+void ThePlayerRestsAtHisBodysHeightOnAFloorARampAndACrate() {
+    const Player::Tuning tuning = ReadTuning();
+    const ScriptClock::Step step = ScriptClock::TickStep(ReadRules(), kTick);
+    // THE FLOOR: the centre 18.1 over it (the bottom cap's centre 9 down, its radius 9.1), less the solver's resting overlap.
+    Scene flat(true, -HalfPx() - 1.0);
+    for (int tick = 0; tick < 60; ++tick) flat.Tick(0.0f);
+    const double overFloor = -flat.AtPx().y;
+    // A RAMP of 14.04 degrees (ramp_right's: a rise of 64 over 256): the bottom cap's centre stands 9.1 / cos over the
+    // surface straight above it, and the capsule's centre 9 higher.
+    const double angle = std::atan(64.0 / 256.0);
+    Slope ramp(angle, ReadTuning().holdFriction);
+    for (int tick = 0; tick < 60; ++tick) ramp.Tick(0.0f);
+    // The box's top face passes 100 / cos over its centre (0, 500) and slopes by tan(angle): the surface's y straight under x.
+    const glm::dvec2 rampAt = ramp.AtPx();
+    const double surfaceY = 500.0 - 100.0 / std::cos(angle) + std::fabs(rampAt.x) * 0.0;
+    double slopeRead = 0.0;
+    CHECK(Player::GroundSlope(ramp.registry, ramp.player, ramp.tuning, slopeRead));
+    const double overRamp = surfaceY + rampAt.x * slopeRead - rampAt.y;
+    const double wantedRamp = tuning.circleRadiusShare * tuning.boxWidthPx * 0.5 / std::cos(angle) + 9.0;
+    // A SMALL CRATE (30 x 30, the .ent's 0.144 - the lightest crate under him: 1.4 times his weight) on the floor, in the world's
+    // own gravity so it presses the floor as in a level.
+    entt::registry registry;
+    {
+        // The masses of a level (materials.json): the player's 0.104 against this crate's 0.144.
+        LevelBuilder::Materials materials;
+        std::string error;
+        CHECK_MSG(LevelBuilder::LoadMaterials(kPortData + "/materials.json", materials, error), error);
+        registry.ctx().insert_or_assign<LevelBuilder::Materials>(std::move(materials));
+    }
+    Game::UseWorldGravity(registry, tuning, step);
+    const entt::entity floor = registry.create();
+    registry.emplace<TransformComponent>(floor).position = Units::ToWorld(0.0, 500.0);
+    auto& slab = registry.emplace<BoxColliderComponent>(floor);
+    slab.size = glm::vec3(Units::ToMetres(4000.0), Units::ToMetres(1000.0), 2.0f);
+    auto& surface = registry.emplace<PhysicsMaterialComponent>(floor);
+    surface.friction = LevelBuilder::kStaticFriction;
+    surface.restitution = 0.0f;
+    const entt::entity crate = registry.create();
+    registry.emplace<TransformComponent>(crate).position = Units::ToWorld(0.0, -15.0);
+    auto& box = registry.emplace<BoxColliderComponent>(crate);
+    box.size = glm::vec3(Units::ToMetres(30.0), Units::ToMetres(30.0), static_cast<float>(LevelBuilder::kBodyDepthMetres));
+    auto& body = registry.emplace<RigidBodyComponent>(crate);
+    body.mass = 0.144f;
+    body.friction = LevelBuilder::kStaticFriction;
+    body.restitution = 0.0f;
+    body.lockPosition = LevelBuilder::kPlaneLockPosition;
+    body.lockRotation = LevelBuilder::kPlaneLockRotation;
+    // The floor's top is y 0 here as in the other scenes (a 1000-deep slab centred on y 500); the crate's top is y -30. The
+    // crate is first let settle, then he is put down on it.
+    const entt::entity rider = Player::Spawn(registry, glm::dvec2(0.0, -30.0 - HalfPx() - 1.0), tuning);
+    for (int tick = 0; tick < 90; ++tick) {
+        Player::Steer(registry, rider, tuning, 0.0f, step);
+        Supersonic::PhysicsSystem::Update(registry, kTick);
+    }
+    // Over the crate's own top, wherever its own weight and his have pressed it.
+    const double crateTop = Units::ToPixels(registry.get<TransformComponent>(crate).position).y - 15.0;
+    const double overCrate = crateTop - Units::ToPixels(registry.get<TransformComponent>(rider).position).y;
+    std::printf("  the capsule's centre over a floor %.3f, a 14-degree ramp %.3f (geometry %.3f), a crate's top %.3f; "
+                "the original's body: 18.1 and 18.38\n",
+                overFloor, overRamp, wantedRamp, overCrate);
+    // The engine rests a body a little INTO what holds it (0.46 into a floor, 0.55 into the ramp, 0.73 into a crate, measured
+    // above), where Box2D rests a circle 0.25 above a polygon (b2_polygonRadius 0.01 m less b2_linearSlop 0.005 m: b2Settings.h
+    // :67-76): the picture of a player at rest is therefore about 0.7 units, 2 px at 720 lines, below the original's - an
+    // engine contact skin, which every body of the port shares (planning step 153, LEFT FOR THE OWNER).
+    CHECK_WITHIN(overFloor, HalfPx(), 0.6);
+    CHECK_WITHIN(overRamp, wantedRamp, 0.8);
+    CHECK_WITHIN(overCrate, HalfPx(), 0.9);
+    CHECK_MSG(Player::Grounded(flat.registry, flat.player, flat.tuning), "standing on the floor");
+    CHECK_MSG(Player::Grounded(ramp.registry, ramp.player, ramp.tuning), "standing on the ramp");
+    CHECK_MSG(Player::Grounded(registry, rider, tuning), "standing on the crate");
+}
+
 void runTests() {
     TheNumbersAreTheListingsAndAFileWithoutThemIsRefused();
     TheWalkIsTwoPointFourUnitsATick();
     TheWalkIsSetOutrightAndStopsDead();
     InTheAirThePadIsIgnoredAndTheXVelocityDecays();
+    TheBodyIsDarkMagesTwoCirclesAndTheCapsuleIsTheirHull();
     TheFeetAreAnOctagonFourteenWideAndAWalkerLeavesTheGroundSevenClear();
+    AMinionsBodyIsGroundAsACrateAndAPlatformAre();
+    NoSensorOfTheOriginalIsBuiltAsASolidBody();
     TheFallIsFourThousandUnitsASecondSquared();
     ABodyThatFallsOnIsClampedToBox2DsMaxTranslation();
+    TheClampIsJudgedAtTheScreensOwnHundredPixels();
     TheLandingSpeedIsReadAsTheOriginalsCallbackReadsIt();
     TheRecoilIsSeventyUnitsAPhysicsSecond();
     TheGroundSlopeIsReadFromTwoProbesUnderTheCentreLine();
@@ -736,6 +1142,7 @@ void runTests() {
     AnIdlePlayerStandsStillOnASlope();
     TheWalkIsTheSameWithTheHoldAsWithout();
     AnIdlePlayerStandsStillOnTheOriginalsRamp();
+    ThePlayerRestsAtHisBodysHeightOnAFloorARampAndACrate();
 }
 
 } // namespace

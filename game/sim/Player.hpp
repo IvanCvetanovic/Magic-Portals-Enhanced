@@ -31,7 +31,9 @@
 //
 // Dynamic rather than kinematic because the spike measured F2: a kinematic body
 // trips no trigger. Rotation frozen and locked to the plane (S1). Its capsule is the
-// Godot project's guess (player.json body, marked _guess).
+// original's own shape (planning step 153, CAP): dark_mage.ent's two circles of radius 9.1 at
+// +-9 from the entity's position (player.json body), which the engine's one-collider-per-entity
+// holds as their hull, a capsule 18.2 wide and 36.2 tall - the Godot project's 20 x 44 guess is gone.
 //
 // Two places it cannot be the original line for line, both because the port's solver
 // is not Box2D:
@@ -73,13 +75,24 @@ struct Tuning {
     double gravityScale = 0.0;  // gravity.scale: SetGravityScale(2)
     double maxTranslationM = 0.0;       // gravity.max_translation_m: b2_maxTranslation, Box2D metres a step
     double referencePxPerUnit = 0.0;    // gravity.reference_px_per_unit: the screen pixels a unit is at 720 lines
-    double widthPx = 0.0;       // body.width_px
-    double heightPx = 0.0;      // body.height_px
+    // The screen pixels a unit is NOW: b2_maxTranslation is 100 screen pixels, so the clamp's limit in units goes with the
+    // screen (G10-6). LoadTuning sets it to the reference; the layer overwrites it every tick from the viewport.
+    double screenPxPerUnit = 0.0;
+    // The body: dark_mage.ent's compound of two circles (body.*). The box is the .ent's <Collision><Size>, the circles'
+    // radius and offsets are shares of it, and widthPx / heightPx are the capsule that is their hull, which LoadTuning
+    // derives from the four and refuses a file that disagrees with.
+    double boxWidthPx = 0.0;         // body.box_width_px: the .ent's Size x, 14
+    double boxHeightPx = 0.0;        // body.box_height_px: the .ent's Size y, 36
+    double circleRadiusShare = 0.0;  // body.circle_radius_share: radius 1.3 of half the box's width
+    double circlePosShare = 0.0;     // body.circle_pos_share: posY +-0.5 of half the box's height
+    double widthPx = 0.0;            // body.width_px: 18.2, the circles' full width
+    double heightPx = 0.0;           // body.height_px: 36.2, the circles' full height
     // The ground sensor: char_feet.ent, a polygon the body carries below it, which counts what it
     // touches (feet.*): its size, the chamfer of its octagon's corners, and how near counts as touching.
     double feetWidthPx = 0.0;
     double feetHeightPx = 0.0;
     double feetChamfer = 0.0;
+    double feetOffsetShare = 0.0;  // feet.offset_box_share: addFeetOffset's collisionBox.size.y x 0.5
     double feetTouchPx = 0.0;
     // The hold of an idle player on a slope (hold.*): dark_mage.ent's friction 0.9, which a slope up to atan of
     // its mix with the floor's holds, and the two downward probes that read the slope.
@@ -96,15 +109,25 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error);
 entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tuning& tuning);
 
 // isTouchingGround: the feet sensor touches something solid. The original's char_feet.ent is a sensor
-// octagon 14 units wide and 10 tall (feet.*) centred on the bottom of the body (SideScrollerCharacter::
-// addFeetOffset, ins 56-74: the collision box's pos + (0, size.y / 2)), its numTouches counted by the
+// octagon 14 units wide and 10 tall (feet.*) standing 18 units below the entity's position (FeetOffsetPx:
+// SideScrollerCharacter::addFeetOffset, ins 56-74: the collision box's pos + (0, size.y / 2)), its numTouches counted by the
 // contact callbacks that ignore sensors, characters, fireballs and anti_sight_wall (shouldBeIgnoredByFeet,
 // bytes 361584..361843); manageFeet sets the flag at the end of each update. Here the octagon is tested
 // against every solid collider but the player's own (Impacts::Between), each tick, so it reads the state
 // the last physics step left, as the flag does. Wider than the old one-ray test: a player walking off a
 // ledge is on the ground until its feet are 7 units clear, which F13's walk off 1-06's block shows
-// (planning step 148). A minion's body counts here, which the original's feet ignore (RECORDED DEVIATIONS).
+// (planning step 148).
+// WHAT COUNTS, as shouldBeIgnoredByFeet decides it: every contact but a sensor's (a trigger here: the port builds no sensor as
+// a solid collider), the player's own body (isCharacter: set by GameCharacter's constructor, built for the main character
+// alone), `fireball.ent` (no body in the port) and an `anti_sight_wall*` (a sensor). So a minion's or a knight's body IS ground,
+// as a crate, a stone, a barrel, a platform and a lift are (planning step 153: step 148 and the backlog read the refused
+// "character" as a minion; the listing does not).
 bool Grounded(entt::registry& registry, entt::entity player, const Tuning& tuning);
+
+// Where the ground sensor's octagon stands, in units below the entity's position: addFeetOffset's
+// collisionBox.size.y x 0.5 (SideScrollerCharacter bytes 128877..129480, ins 56-74), 18 for dark_mage.ent's 14 x 36 box.
+// Not the capsule's bottom (18.1): the original's sensor sits 0.1 above the lowest point of its circles.
+double FeetOffsetPx(const Tuning& tuning);
 
 // The slope of the ground under the body's centre line, in the port's pixels (+y down): the height
 // the surface falls to the right per unit of x, positive where it descends to the right. Three probes
@@ -153,9 +176,13 @@ glm::dvec2 PushAim(entt::registry& registry, entt::entity player, const Tuning& 
 bool Pushing(entt::registry& registry, entt::entity player, const glm::dvec2& aimPx, double reachPx,
              const glm::dvec2& offsetPx);
 
+// b2_maxTranslation in the port's metres a tick: 2 Box2D metres are 100 SCREEN pixels, so the limit in units is
+// 100 x 256 / the screen's height - 35.6 at 720 lines, 23.7 at 1080 (G10-6; planning step 153). Read off
+// `tuning.screenPxPerUnit`, which the layer keeps at the viewport's own and everything else leaves at the 720 reference.
+double ClampLimitM(const Tuning& tuning);
+
 // Box2D's clamp of a step's translation (b2Island::Solve, b2_maxTranslation), on ANY dynamic body: the
-// whole velocity is scaled down so the step carries it no further than gravity.max_translation_m (of the
-// 720-line reference: G10-6). `addedByTheEngine` is the velocity the engine's own integration will add
+// whole velocity is scaled down so the step carries it no further than ClampLimitM. `addedByTheEngine` is the velocity the engine's own integration will add
 // before it moves the body (a body that uses the world's gravity: gravity times the physics step), which
 // the clamp judges the translation on and leaves in place. The player's is applied by Steer, after its
 // own gravity; Game::BeforeStep applies it to every other body.

@@ -545,7 +545,11 @@ void TheTapTimeRayOnF3sTaps() {
             // The body the port's flight met is the one the tap-time ray met, and
             // the tap-time ray's contact is on the same line a little further on:
             // it starts 8 units out and the flight at the centre.
-            CHECK_MSG(run.level.portals.lastFailure == Named(run.registry, said.closest),
+            // At the SEAM of two bodies either is the body met: from the original's own body (planning step 153: the player
+            // 3.9 units lower) the wall case's flight ends on y 128, where single_block_plat_ent_785 meets
+            // collision_192x32_ent_822, and the ray names the other of the two. The contact below is what the two must share.
+            CHECK_MSG(run.level.portals.lastFailure == Named(run.registry, said.closest) ||
+                          glm::distance(ends[0].atPx, said.atPx) < 0.5,
                       "the ray met " + Named(run.registry, said.closest) + ", the flight " +
                           run.level.portals.lastFailure);
             CHECK_MSG(glm::distance(ends[0].atPx, said.atPx) < 1.0,
