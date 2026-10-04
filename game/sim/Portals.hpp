@@ -175,19 +175,16 @@ bool LoadGate(const std::string& path, Rules& out, std::string& error);
 bool LoadPlacement(const std::string& path, Rules& out, std::string& error);
 
 // An antiportal. A tap within collision_radius_px times its `scale` is refused
-// (portal_system.gd:136-146). A zone with a speed and a stride patrols: it swings
-// as a moving platform does, on the axis its `direction` names, vertical where it
-// names none (behaviours.gd:48-51, 113-127). No placed zone of the game does
-// since the anti_portal_agents stopped being zones (Agent, below).
+// (portal_system.gd:136-146). It stands where the level places it: no antiportal callback
+// calls linearMotion (ETHCallback_antiportal, bytes 335020..335206), and no placed ring has
+// patrolled since the anti_portal_agents stopped being zones (Agent, below).
 //
 // A zone an agent's death deleted is `gone`, and refuses nothing: the original's
 // isPointInAntiPortalField returns false for an entity that is not IsAlive.
 struct NoPortalZone {
     glm::dvec2 centrePx{0.0}; // where the level places it
     double scale = 1.0;
-    bool moving = false;
-    Mover::Oscillation motion; // when it patrols
-    std::string name;          // last, so {centre, scale} still makes a zone
+    std::string name;         // last, so {centre, scale} still makes a zone
     // An EXPLICIT radius, for a zone that is not an antiportal the level placed.
     // Zero means the old arithmetic - antiportalRadiusPx times this node's own
     // scale - which is every antiportal in the game. Nothing the port builds sets
@@ -199,7 +196,7 @@ struct NoPortalZone {
     std::string entity;
     bool gone = false; // deleted by an agent's death: it refuses nothing, and is drawn no more
 
-    glm::dvec2 CentreNowPx() const { return moving ? motion.AtPx() : centrePx; }
+    glm::dvec2 CentreNowPx() const { return centrePx; }
 };
 
 // AN ANTI-PORTAL AGENT: the red orb that holds a ring open (placement.json
@@ -207,9 +204,14 @@ struct NoPortalZone {
 // refuses no portal and has no body. A portal shot that comes within
 // killShare x its size while still in flight dies there, and so does the agent,
 // and the agent takes one ring with it (State::Tick). One with a speed and a
-// stride patrols as a zone once did (Mover::Oscillation, the port's swing: R7 is
-// not built): two in level10 and one in level13b, each inside its own ring's
-// field all the way.
+// stride patrols as a zone once did (Mover::Oscillation, linearMotion as the callback calls it:
+// the full stride either side of where the level places it, at `speed` radians a second, planning
+// step 154): two in level10 and one in level13b, each inside its own ring's field all the way.
+//
+// WHEN IT MOVES. ETHCallback_anti_portal_agent tests the shot first and calls linearMotion last
+// (#200-250), so a shot meets the agent where its LAST frame wrote it: State::Tick advances an agent
+// after the shots it flew that tick, and `centreBeforePx` is where it stood before that advance, which
+// the spawn pass of a tap's own frame reads (that frame's static callback ran before this tick's).
 struct Agent {
     std::string name;
     glm::dvec2 centrePx{0.0}; // where the level places it
@@ -217,8 +219,16 @@ struct Agent {
     bool moving = false;
     Mover::Oscillation motion; // when it patrols
     bool gone = false;         // a shot killed it
+    glm::dvec2 centreBeforePx{0.0}; // Advance's own: what BeforeLastMovePx reads once it has made one
 
     glm::dvec2 CentreNowPx() const { return moving ? motion.AtPx() : centrePx; }
+    // Where it stood before its last advance: the placed point until it has made one.
+    glm::dvec2 BeforeLastMovePx() const { return moving && motion.Started() ? centreBeforePx : CentreNowPx(); }
+    // One call of the agent's linearMotion over `frameMs` of the script's clock.
+    void Advance(const Motion::Rules& rules, double frameMs) {
+        centreBeforePx = CentreNowPx();
+        motion.Advance(rules, frameMs);
+    }
 };
 
 // An agent a shot killed this tick, for the frame to draw and play: the

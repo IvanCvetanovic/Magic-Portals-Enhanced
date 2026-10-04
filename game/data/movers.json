@@ -1,23 +1,76 @@
 {
   "_about": [
-    "The Magic Portals port's movers. `oscillation` is the Godot project's guess, carried from",
-    "behaviours.gd so it can be retuned without touching code (Enhanced's own CLAUDE.md rule 1).",
-    "`lift`, `button` and `door` are decoded; `button` and `door` are read by sim/Puzzle rather",
-    "than sim/Mover. See docs/planning/2026-09-11-magic-portals-remaster.md,",
-    "steps 4, 78, 133 and 140: `door` is step 133's, and `lift` is step 140's, which replaced",
-    "the Godot project's self-running shuttle and its guessed 120 px/s."
+    "The Magic Portals port's movers. `linear_motion`, `lift`, `button` and `door` are all decoded;",
+    "`button` and `door` are read by sim/Puzzle rather than sim/Mover. See",
+    "docs/planning/2026-09-11-magic-portals-remaster.md, steps 4, 78, 133, 140 and 154: `door` is",
+    "step 133's, `lift` is step 140's, which replaced the Godot project's self-running shuttle and",
+    "its guessed 120 px/s, and `linear_motion` is step 154's, which replaced the Godot project's",
+    "guessed swing (RATE_SCALE_K 2, half the amplitude at twice the rate) with linearMotion's own."
   ],
 
-  "oscillation": {
+  "linear_motion": {
     "_note": [
-      "RATE_SCALE_K (behaviours.gd:22-26). An oscillating mover - a moving platform, a",
-      "patrolling no-portal zone - swings by sin(rate_scale * speed * t) * stride / 2 about",
-      "where the level places it. `speed` is a frequency: across the moving_platform",
-      "placements speed x stride clusters in a narrow band while each alone varies widely.",
-      "The absolute scale is the Godot project's guess; the bytecode constant is not decoded."
+      "WHAT SWINGS A MOVING PLATFORM AND A PATROLLING ANTI-PORTAL AGENT: the engine's own linearMotion,",
+      "called once a frame with the node's `speed` and `stride` (the swing's rate in radians a second and its",
+      "AMPLITUDE in the level's units) - motions.json linear_motion has that function decoded line by line and",
+      "its two constants (the 200 ms frame cap and the one turn it wraps at), which Mover::Movers and",
+      "Portals::State read from there. position = where the node stands + cos(angle) x stride along the axis, the",
+      "angle stepped by speed x the script's milliseconds / 1000 BEFORE the offset is read, from a start angle of 0:",
+      "so the swing is the node's point +- the FULL stride, it starts a stride along the axis (cos 0 = 1), and its",
+      "rate is `speed`. Planning step 154 replaced the Godot project's guess here (sin(2 x speed x t) x stride / 2:",
+      "half the amplitude at twice the rate, R7) with this decode. Measured on the original's own library stills",
+      "(1-11, three frames a level, out/parity/program/G3/library_fit.md): the left block's CENTRE is 60 units",
+      "above its placed point in the second frame, beyond the old swing's 35 either way; one phase fits it and the",
+      "level's horizontal agent to 1.75 units rms.",
+      "THE CALLBACKS' ARGUMENTS are the three numbers a row holds: `vertical`, `axis_deg` (linearMotion's `angle`:",
+      "the axis turned counter-clockwise by it on the +y-down screen) and `start_angle`. The node supplies the rest.",
+      "A PLATFORM'S BODY is `static=\"1\"` in all 15 placements, so the engine builds a b2_staticBody and linearMotion's",
+      "SetPosition is a SetTransform that leaves it no velocity (ETHPhysicsSimulator.cpp:68;",
+      "ETHPhysicsEntityController.cpp:98-103). It teleports a frame's travel and carries what stands on it only by",
+      "the contact's push-out (INFERRED from the decode, no clip of a rider): a rising platform pushes a rider out",
+      "along the contact normal, a falling one leaves him to fall under gravity, and no friction carries a rider",
+      "sideways (and no platform moves sideways: its axis is 0, vertical). The port moves the body with the velocity",
+      "that gets it there (Mover::MoveKinematic), which the engine's solver reads, so the port carries a rider up AND",
+      "down by that velocity, his feet within 0.01 unit of the top: the port's carry, NOT the original's push-out and",
+      "fall (planning step 154, decision 1; backlog G3-1 and G3-4). The first call, which jumps the body a stride",
+      "from where the level placed it, is a bare teleport with no velocity."
     ],
-    "_guess": true,
-    "rate_scale": 2.0
+    "_source": [
+      "ETHCallback_moving_platform (assets/MovingPlatforms.angelscript, listing L74234, bytes 371816..371942), in",
+      "out/parity/asbc/all_functions.txt (md5 48fe65ce8baea16b94ed84d8d7be84b0; 00_order 8.0: a call pushes its",
+      "last argument first):",
+      "  ins 1-2    PshC4 0, PshC4 0: linearMotion's startAngle 0 and axis angle 0",
+      "  ins 3-4    SetV1 v3, 1; PshV4 v3: `vertical` true",
+      "  ins 5-10   thisEntity; CALL linearMotion",
+      "  ins 12-17  awakeEntitiesAround(thisEntity): wakes every non-static body with a physics controller in the",
+      "             buckets round it, since a static body's SetTransform wakes nothing (recorded, not built here: the",
+      "             port's solver wakes what rests on a kinematic body itself)",
+      "ETHCallback_anti_portal_agent (assets/AntiPortalManager.angelscript, L66304, bytes 336011..337087):",
+      "  ins 1-199  the shot-in-flight arm (kills the agent and one ring), which comes FIRST",
+      "  ins 200-212 CheckCustomData('speed'): the whole motion is skipped without it",
+      "  ins 213-250 PshC4 0 (startAngle 0); GetString('direction') == 'horizontal' picks the axis angle, 90f (ins 239,",
+      "             SetV4 1119092736) or 0f (ins 241); SetV1 v13, 1 (`vertical` true); CALL linearMotion",
+      "  so an agent tests the shot against the position its LAST frame wrote, and moves after (Portals::State::Tick).",
+      "linearMotion itself: motions.json linear_motion._source (utilEntityEffect.angelscript 327527..328407).",
+      "The three anti_portal_agents that carry a speed and a stride are level10's anti_portal_agent_639 (vertical, 3 x 48)",
+      "and _599 (horizontal, 2 x 36) and level13b's anti_portal_agent_1334 (horizontal, 2 x 32). No antiportal callback",
+      "calls linearMotion (ETHCallback_antiportal, L66084, bytes 335020..335206), so no ring patrols. The `anchor`",
+      "(level14b, level21b) and `platform` (level31a) nodes that carry a speed and a stride have no callback at all",
+      "(no ETHCallback_anchor or ETHCallback_platform in the listing): they stand still.",
+      "The bodies: ETHPhysicsSimulator::CreateBody, bodyDef.type = IsStatic() ? b2_staticBody : b2_dynamicBody",
+      "(ETHPhysicsSimulator.cpp:68); ETHPhysicsEntityController::SetPosXY, SetTransform and SetAwake on the body",
+      "(ETHPhysicsEntityController.cpp:98-103); ETHActiveEntityHandler::ShouldEntityBeAlwaysActive needs !IsStatic",
+      "(:70-74), so a static entity's callback runs only from the visible-bucket loop of MapEntitiesToBeRendered",
+      "(ETHScene.cpp:541-574) - which the port does not model for any static callback (planning step 154, deviation 2)."
+    ],
+    "platform": { "vertical": true, "axis_deg": 0.0, "start_angle": 0.0 },
+    "agent": {
+      "vertical": true,
+      "axis_deg": 0.0,
+      "direction_sideways": "horizontal",
+      "axis_deg_sideways": 90.0,
+      "start_angle": 0.0
+    }
   },
 
   "lift": {

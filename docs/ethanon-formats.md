@@ -2734,3 +2734,42 @@ listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce`).
   a metre 50 screen pixels: 100 pixels, whatever the screen. A level unit is H / 256 pixels (`SGlobalScale::updateScaleFactor(256)`, briefs 00_order 8.12a), so **the original's limit is 100 x 256 / H
   units**: 35.6 at the 720 lines every capture of it is at, 23.7 at 1080, 17.8 at 1440, 11.9 at 2160 (a 63-unit fall reaches it on a 4K screen). It is the one number of Box2D's that does not scale with the
   screen: a velocity set with `scale()` is proportional to H, as the world's gravity `scale(10)` is, so in units they are the same on every screen.
+
+## 18. A static entity that moves: linearMotion, SetTransform, and the callback that runs only where the bucket is drawn (planning step 154)
+
+Found while building the moving platforms and the patrolling anti-portal agents (G3); read from the engine's source (`reference/ethanon`), Box2D's and the shipped script's listing
+(`out/parity/asbc/all_functions.txt`, md5 `48fe65ce`).
+
+- **The swing is `linearMotion`, with the node's own `speed` and `stride`.** `ETHCallback_moving_platform` (`MovingPlatforms.angelscript`, bytes 371816..371942) ins 1-10 calls
+  `linearMotion(thisEntity, vertical = true, angle = 0, startAngle = 0)` (ins 1-2 push the two 0s, ins 3-4 the `true`) and ins 12-17 `awakeEntitiesAround(thisEntity)`;
+  `ETHCallback_anti_portal_agent` (`AntiPortalManager.angelscript`, bytes 336011..337087) ins 200-250, after its whole shot-in-flight arm (ins 1-199), calls it when `CheckCustomData('speed')`
+  with the same arguments but an `angle` of 90 where `GetString('direction') == 'horizontal'` (ins 239 `SetV4 1119092736` = 90f, ins 241 0f). `linearMotion` itself (`utilEntityEffect.angelscript`,
+  bytes 327527..328407; line by line in `game/data/motions.json` `linear_motion._source`) writes `originalPos = GetPosition()` and `angle = startAngle` on its first call and on every call
+  `angle += speed x min(200, the script's milliseconds) / 1000`, one turn off once above 2 PI, and puts the entity at `originalPos + turned(cos(angle) x stride x sign(speed))`: **the node's point is
+  the MIDDLE of the swing and `stride` its AMPLITUDE** (the full stride either side), `speed` its rate in radians a second, and the position the first call writes is already one step in: **a stride along
+  the axis, not at the placed point**. The Godot project's reading (`sin(2 x speed x t) x stride / 2`, behaviours.gd) had half the amplitude at twice the rate. 15 `moving_platform` nodes stand on 11 levels
+  (level5, 10, 2b, 5b, 8b, 11c x2, 21c, 25a x2, 27a, 27b x2, 30a x2: 1-06, 1-11, 3-03, 3-06, 3-09, 4-12, 4-22, 2-26, 2-28, 3-28, 2-31) and 3 anti-portal agents carry a speed and a stride (level10's
+  `_639` vertical 3 x 48 and `_599` horizontal 2 x 36, level13b's `_1334` horizontal 2 x 32); `anchor` (level14b, level21b) and `platform` (level31a) nodes carry the data and no callback
+  (the listing has no `ETHCallback_anchor` or `ETHCallback_platform`), and no `antiportal` ring patrols (`ETHCallback_antiportal`, bytes 335020..335206, calls nothing of the kind). A shock agent calls
+  it too (`ETHCallback_shock_agent` ins 265-287, `if GetFloat('speed') > 0`, vertical whatever its `direction` says), which `Fields` already built.
+- **Checked on the original's own stills** (`out/parity/original/levels/<W>-<LL>_h0.3 / _h2.8 / _h6.3.png`, 2.8125 px a unit; `out/parity/program/G3/library_fit.py`, `library_fit_agent.py`,
+  `library_fit.md`): the left block of 1-11 (origin y 184, speed 1, stride 70) stands at y 208.7, 124.1 and 230.0 - **60 units above its placed point in the second frame, where the half swing reaches 35** - and
+  the horizontal agent of the same level (384, speed 2, stride 36) at x 355.3, 398.0 and 376.6: ONE phase, 0.88 s, fits both to 1.75 units rms (residuals within 2.4); the half swing's best single phase leaves 30.8.
+  Three more platforms agree (1-06 0.7 x 64: 1.34 rms at 1.57 s; 2-26's `_942`: 0.70 at 0.96 s; 3-28's `_2123`: 1.64 at 0.75 s) where the old model leaves 20 to 39.
+- **Its body is static, and a `SetPosition` is a `SetTransform`.** All 15 placements say `static="1"`, and `ETHPhysicsSimulator::CreateBody` (`ETHPhysicsSimulator.cpp:68`) makes `IsStatic()` a `b2_staticBody` with
+  density 0 (`:107`); `ETHEntity::SetPosition` (`ETHEntity.cpp:363-368`) reaches `ETHPhysicsEntityController::SetPosXY` (`ETHPhysicsEntityController.cpp:98-103`), which is `b2Body::SetTransform` and
+  `SetAwake(true)` on that body alone. **A static body teleported that way has no velocity**: Box2D's contact friction acts on the relative TANGENT velocity (the static body's is 0), so nothing is
+  carried by friction, and what stands on the body is pushed along the contact's normal by the position solver (a rising platform) or falls under gravity (a falling one) - which is why the callback
+  has to `awakeEntitiesAround` (it wakes the non-static bodies with a physics controller in the buckets round it: ins 22-57 of `awakeEntitiesAround`, `MiscCallbacks.angelscript` bytes 351878..352213).
+  A moving platform's axis is vertical (`vertical = true`, `angle = 0`), so there is no sideways travel to carry anything along; `lift.ent` is `static=1` too (`SetPositionXY` by `AddToPositionXY`).
+- **A static entity's callback runs only while its bucket is drawn.** `ETHActiveEntityHandler::ShouldEntityBeAlwaysActive` (`ETHActiveEntityHandler.cpp:70-74`) needs `!IsStatic()`; a static one's callback is queued
+  by `AddStaticCallbackWhenEligible` (`:76-88`) from the visible-bucket loop of `ETHScene::MapEntitiesToBeRendered` (`ETHScene.cpp:541-574`) and runs last in the frame (`ETHScene::Update`, `:464-490`:
+  the physics step, the always-active callbacks, `onSceneUpdate`, the mapping, then the static ones). The buckets drawn are those that intersect the camera's screen rectangle (less a clearance of
+  `GetBucketSize() x m_bucketClearenceFactor`, which starts at 0 and no script sets: `ETHScene.cpp:98`, `:517-524`) PLUS ONE RING round them (`GetIntersectingBuckets` with both seams,
+  `ETHBucketManager.cpp:52-90`; the scene builds its manager with `drawingBorderBuckets` true, `ETHScene.cpp:54` and `:69`, and no script calls `SetBorderBucketsDrawing`), in buckets of 128 units
+  (`game/data/keys.json` `bucket_units`). **A platform whose bucket is not drawn has made no first call**: it stands at the placed point, `originalPos` unwritten, and starts its swing - from a stride
+  along - the first frame it is drawn; it stops while the camera is away and goes on when it comes back. **The original's camera opens on `camera_start`, near the exit, and eases to the player from its
+  first frame** (`Game::readCameraStartPos`; the layer's own note at `MagicPortalsLayer.cpp:657-665`; the port opens on the player by the owner's choice), so a mover near the exit runs during that pan
+  and not after it. With the camera on the player at the spawn (left edge clamped at 0 or at spawn x less half the 455-unit view), four of the 18 movers stand outside the drawn buckets (computed from the
+  level files, the level's `max` node as its right limit): 3-03's and 3-06's `moving_platform_1011` (x 672; camera_start at x 868), 1-11's `anti_portal_agent_639` (x 674; camera_start (550, 10)) and 3-09's
+  `moving_platform_1429` (x 96; the spawn at x 617). Not modelled by the port for any static callback (backlog; planning step 154, deviation 2).

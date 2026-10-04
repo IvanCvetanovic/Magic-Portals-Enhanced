@@ -3,10 +3,14 @@
 //
 // Pinned exactly, because the files say it: which of chapter 1's levels have
 // which, where each stands, its speed, its stride and its end markers, and the
-// game's fourteen lifts. Judged by threshold: a platform swings by its stride with
-// the velocity that gets it there, a lift waits on its marker a until a touch sends
-// it and reaches the other when 60 units a second says (the record's step 140), and
-// a patrolling agent swings on its axis and refuses no tap itself - the ring it
+// game's fourteen lifts and fifteen moving platforms. A platform and a patrolling agent
+// swing as the engine's linearMotion does (planning step 154): the node's point plus
+// cos(angle) x stride, the angle stepped by speed x 16 ms a tick, so the FULL stride
+// either side at `speed` radians a second, starting a stride along the axis; the
+// platform's body is moved with the velocity that gets it there (but for its first
+// call's teleport), and a rider is carried up and down. A lift waits on its marker a
+// until a touch sends it and reaches the other when 60 units a second says (the
+// record's step 140), and a patrolling agent refuses no tap itself - the ring it
 // stands in does (the remaster record's step 126).
 //
 // AND WHAT BECOMES OF AN AGENT (step 126, R17): a portal shot still in flight
@@ -14,8 +18,7 @@
 // round it. These cases would sit in test_mp_shot beside the shot's other ends;
 // they are here because Smart App Control refused both of step 126's links of
 // test_mp_shot, and a suite that is launched anyway costs no second refusal. The number behind
-// the swings - movers.json's rate scale - is the Godot project's guess, carried as
-// data, so the thresholds are computed from it; the lift's are decoded and pinned.
+// the swings - movers.json's linear_motion, the lift's block - are decoded and pinned.
 //
 // AND THE PLATFORM GATE (step 136): nothing goes through a placed pair while a
 // moving platform or a lift is at any placed portal, and a static pair is never
@@ -78,6 +81,20 @@ void Tick(Run& run) {
     Game::Tick(run.data, run.registry, run.level, 0.0f, kStep);
 }
 
+// The layer's own tick: the script's 16 ms of the engine's 16.667, a physics step of the original's 1/30 s
+// over the engine's 1/60 (clock.json). The swings are judged on THIS clock: a bare float's tick is one
+// length for the script and the physics, 16.667 ms to a platform's angle.
+ScriptClock::Step LayerStep() {
+    ScriptClock::Rules rules;
+    std::string error;
+    CHECK_MSG(ScriptClock::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/clock.json", rules, error), error);
+    return ScriptClock::TickStep(rules, kStep);
+}
+
+void LayerTick(Run& run, const ScriptClock::Step& step) {
+    Game::Tick(run.data, run.registry, run.level, 0.0f, step);
+}
+
 glm::dvec2 BodyPx(const Run& run, entt::entity entity) {
     return Units::ToPixels(run.registry.get<TransformComponent>(entity).position);
 }
@@ -90,12 +107,24 @@ std::string Px(const glm::dvec2& p) {
 
 // ---- What the levels say ------------------------------------------------------
 
-void MoversJsonCarriesTheSwingsGuessAndTheDecodedLift() {
+void MoversJsonCarriesTheDecodedSwingsAndLift() {
     Mover::Rules rules;
     std::string error;
-    CHECK_MSG(Mover::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/movers.json", rules, error), error);
-    // The swing is a guess, carried and not pinned: only that there is one.
-    CHECK(rules.oscillationRateScale > 0.0);
+    const std::string file = std::string(MAGICPORTALS_PORT_DATA_DIR) + "/movers.json";
+    CHECK_MSG(Mover::LoadRules(file, rules, error), error);
+    // The swing is decoded (planning step 154; movers.json linear_motion._source): ETHCallback_moving_platform
+    // passes linearMotion vertical, axis 0, start angle 0 (ins 1-10), and ETHCallback_anti_portal_agent the same
+    // but for an axis of 90 where its `direction` is "horizontal" (ins 213-250).
+    CHECK_MSG(rules.platform.vertical && rules.platform.axisDeg == 0.0 && rules.platform.startAngle == 0.0,
+              "a platform's linearMotion is vertical, axis 0, from angle 0");
+    CHECK_MSG(rules.agent.vertical && rules.agent.axisDeg == 0.0 && rules.agent.startAngle == 0.0,
+              "an agent's is the same");
+    CHECK_MSG(rules.agentSideways.vertical && rules.agentSideways.axisDeg == 90.0 &&
+                  rules.agentSideways.startAngle == 0.0 && rules.directionSideways == "horizontal",
+              "and its axis is turned 90 degrees where its direction is horizontal");
+    CHECK_MSG(&rules.AgentCall("horizontal") == &rules.agentSideways && &rules.AgentCall("vertical") == &rules.agent &&
+                  &rules.AgentCall("") == &rules.agent,
+              "only that word turns it: the callback compares for it and nothing else");
     // The lift is decoded (planning step 140; movers.json lift._source): the literal
     // 60 at ETHCallback_lift #286, lift.png's 64 x 32, and blinkColor's two globals
     // and stride.
@@ -104,6 +133,37 @@ void MoversJsonCarriesTheSwingsGuessAndTheDecodedLift() {
     CHECK_MSG(rules.liftBlinkFrom == glm::dvec3(0.6) && rules.liftBlinkTo == glm::dvec3(1.0) &&
                   rules.liftBlinkStrideMs == 300.0,
               "and blinks 0.6 grey to white and back, 300 ms a leg");
+
+    // Read strictly: a file that lost a number of either call, or the word, is refused, naming it.
+    std::ifstream in(file, std::ios::binary);
+    const std::string good((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const std::filesystem::path directory = std::filesystem::temp_directory_path() / "supersonic-test-mp-movers";
+    std::filesystem::create_directories(directory);
+    struct Break {
+        const char* from;
+        const char* to;
+    };
+    const Break breaks[] = {
+        {"\"linear_motion\"", "\"linear_motionX\""},
+        {"\"platform\": { \"vertical\": true,", "\"platform\": { \"vertical\": \"yes\","},
+        {"\"axis_deg_sideways\": 90.0", "\"axis_deg_sideways\": \"90\""},
+        {"\"direction_sideways\": \"horizontal\"", "\"direction_sideways\": 7"},
+        {"\"direction_sideways\": \"horizontal\"", "\"direction_sideways\": \"\""},
+        {"\"start_angle\": 0.0 },", "},"},
+    };
+    for (const Break& one : breaks) {
+        std::string text = good;
+        const std::size_t at = text.find(one.from);
+        CHECK_MSG(at != std::string::npos, std::string("movers.json still has ") + one.from);
+        if (at == std::string::npos) continue;
+        text.replace(at, std::string(one.from).size(), one.to);
+        const std::filesystem::path bad = directory / "movers_bad.json";
+        std::ofstream(bad, std::ios::binary) << text;
+        Mover::Rules refused;
+        error.clear();
+        CHECK_MSG(!Mover::LoadRules(bad.string(), refused, error) && !error.empty(),
+                  std::string("refused: ") + one.from + " -> " + one.to);
+    }
 }
 
 void ChapterOnesMovers() {
@@ -116,9 +176,10 @@ void ChapterOnesMovers() {
             if (platforms.size() == 1) {
                 CHECK(platforms[0].name == "moving_platform_764");
                 CHECK(platforms[0].motion.originPx == glm::dvec2(416.0, 144.0));
-                CHECK(platforms[0].motion.speed == 0.7);
-                CHECK(platforms[0].motion.stridePx == 64.0);
-                CHECK(platforms[0].motion.axis == glm::dvec2(0.0, 1.0));
+                CHECK(platforms[0].motion.linear.speed == 0.7);
+                CHECK(platforms[0].motion.linear.stride == 64.0);
+                CHECK(platforms[0].motion.linear.vertical && platforms[0].motion.linear.axisDeg == 0.0 &&
+                      platforms[0].motion.linear.startAngle == 0.0 && !platforms[0].motion.Started());
             }
             CHECK(run.level.movers.lifts.empty());
         }
@@ -128,7 +189,7 @@ void ChapterOnesMovers() {
         if (Begin("level10", run)) {
             const Mover::Platform* platform = run.level.movers.FindPlatform("moving_platform_707");
             CHECK(platform != nullptr && platform->motion.originPx == glm::dvec2(32.0, 184.0) &&
-                  platform->motion.speed == 1.0 && platform->motion.stridePx == 70.0);
+                  platform->motion.linear.speed == 1.0 && platform->motion.linear.stride == 70.0);
             const Portals::State& portals = run.level.portals;
             // Agents, and no zone (step 126).
             const Portals::Agent* up = portals.FindAgent("anti_portal_agent_639");
@@ -136,10 +197,11 @@ void ChapterOnesMovers() {
             const Portals::Agent* still = portals.FindAgent("anti_portal_agent_710");
             CHECK(portals.FindZone("anti_portal_agent_639") == nullptr && portals.agents.size() == 3);
             CHECK(up != nullptr && up->centrePx == glm::dvec2(674.0, 60.0) && up->moving &&
-                  up->motion.axis == glm::dvec2(0.0, 1.0) && up->motion.speed == 3.0 && up->motion.stridePx == 48.0);
+                  up->motion.linear.vertical && up->motion.linear.axisDeg == 0.0 && up->motion.linear.speed == 3.0 &&
+                  up->motion.linear.stride == 48.0);
             CHECK(side != nullptr && side->centrePx == glm::dvec2(384.0, 80.0) && side->moving &&
-                  side->motion.axis == glm::dvec2(1.0, 0.0) && side->motion.speed == 2.0 &&
-                  side->motion.stridePx == 36.0);
+                  side->motion.linear.vertical && side->motion.linear.axisDeg == 90.0 &&
+                  side->motion.linear.speed == 2.0 && side->motion.linear.stride == 36.0);
             CHECK(still != nullptr && still->centrePx == glm::dvec2(128.0, 100.0) && !still->moving && !still->gone);
             // And each agent stands on a static antiportal of its own.
             struct Field {
@@ -155,7 +217,7 @@ void ChapterOnesMovers() {
             for (const Field& expected : fields) {
                 const Portals::NoPortalZone* field = portals.FindZone(expected.name);
                 CHECK_MSG(field != nullptr && field->centrePx == expected.at && field->scale == expected.scale &&
-                              !field->moving && field->entity == "antiportal" && !field->gone,
+                              field->entity == "antiportal" && !field->gone,
                           expected.name);
             }
         }
@@ -254,36 +316,204 @@ void TheFourteenLiftsWaitOnTheirMarkers() {
 
 // ---- Moving -------------------------------------------------------------------
 
-void APlatformSwingsByItsStride() {
-    Run run;
-    if (!Begin("level5", run) || run.level.movers.platforms.empty()) return;
-    const Mover::Platform& platform = run.level.movers.platforms.front();
-    const double period = 2.0 * kPi / (run.data.movers.oscillationRateScale * platform.motion.speed);
-    const int ticks = static_cast<int>(std::ceil(period / kStep)) + 1;
-    double lo = std::numeric_limits<double>::max();
-    double hi = std::numeric_limits<double>::lowest();
-    bool where = true;
-    bool upright = true;
-    bool velocity = true;
-    for (int i = 0; i < ticks; ++i) {
-        const glm::vec3 before = run.registry.get<TransformComponent>(platform.entity).position;
-        Tick(run);
-        const glm::vec3 after = run.registry.get<TransformComponent>(platform.entity).position;
-        const glm::dvec2 at = BodyPx(run, platform.entity);
-        lo = std::min(lo, at.y);
-        hi = std::max(hi, at.y);
-        where = where && glm::distance(at, platform.motion.AtPx()) < 0.01;
-        upright = upright && std::fabs(at.x - 416.0) < 0.01;
-        // It moves with the velocity that gets it there, as a mover must to carry
-        // what stands on it (Mover.hpp).
-        const glm::vec3 v = run.registry.get<RigidBodyComponent>(platform.entity).velocity;
-        velocity = velocity && glm::length(v - (after - before) / kStep) < 1e-3f;
+// A moving platform as the level places it, read off the scene and not off the port's own Platform, so that
+// the swing below is judged against the data and not against itself.
+struct PlatformMark {
+    std::string name;
+    glm::dvec2 originPx{0.0};
+    double speed = 0.0;
+    double stride = 0.0;
+};
+
+std::vector<PlatformMark> PlatformsOf(const Run& run) {
+    std::vector<PlatformMark> marks;
+    for (const Tscn::Node& node : run.data.scene.nodes) {
+        if (node.parent != "." || Roles::RoleOf(run.data.roles, node) != Roles::kMovingPlatform) continue;
+        PlatformMark mark;
+        mark.name = node.name;
+        const Tscn::Value* position = node.Find("position");
+        const Tscn::Value* speed = node.Meta("speed");
+        const Tscn::Value* stride = node.Meta("stride");
+        const bool ok = position != nullptr && position->kind == Tscn::Value::Kind::Vector2 && speed != nullptr &&
+                        speed->AsNumber(mark.speed) && stride != nullptr && stride->AsNumber(mark.stride);
+        CHECK_MSG(ok, node.name + " carries a position, a speed and a stride");
+        if (!ok) continue;
+        mark.originPx = glm::dvec2(position->numbers[0], position->numbers[1]);
+        marks.push_back(mark);
     }
-    std::printf("  level5's platform: swung %.2f px over %.2f s, from y %.2f to %.2f\n", hi - lo, period, lo, hi);
-    CHECK_MSG(hi - lo > 63.0 && hi - lo <= 64.0 + 1e-6, "a swing of its stride, 64 px");
-    CHECK(where);
-    CHECK(upright);
-    CHECK(velocity);
+    return marks;
+}
+
+// THE GAME'S FIFTEEN MOVING PLATFORMS (planning step 154), read off the 128 level files: 15 on 11 levels, each
+// listed here, and every other node that carries a speed and a stride beside them stays where it was put.
+void TheFifteenPlatformsAreTheListedOnes() {
+    struct Placed {
+        const char* level;
+        int platforms;
+    };
+    const Placed placed[] = {
+        {"level5", 1},   {"level10", 1},  {"level2b", 1},  {"level5b", 1},  {"level8b", 1},  {"level11c", 2},
+        {"level21c", 1}, {"level25a", 2}, {"level27a", 1}, {"level27b", 2}, {"level30a", 2},
+    };
+    int levels = 0;
+    int platforms = 0;
+    int unlisted = 0;
+    std::set<std::string> platformLevels;
+    std::error_code ec;
+    for (const auto& file : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (file.path().extension() != ".tscn") continue;
+        Tscn::Scene scene;
+        Roles::Table roles;
+        std::string error;
+        if (!Tscn::Load(file.path().string(), scene, error) || !Roles::Load(kData + "/entity_roles.json", roles, error)) {
+            continue;
+        }
+        ++levels;
+        const std::string level = file.path().stem().string();
+        int here = 0;
+        for (const Tscn::Node& node : scene.nodes) {
+            if (node.parent != "." || Roles::RoleOf(roles, node) != Roles::kMovingPlatform) continue;
+            ++here;
+        }
+        platforms += here;
+        if (here > 0) platformLevels.insert(level);
+        const bool listed = std::any_of(std::begin(placed), std::end(placed),
+                                        [&](const Placed& p) { return level == p.level && here == p.platforms; });
+        if (here > 0 && !listed) ++unlisted;
+    }
+    CHECK_MSG(levels == 128, "the 128 converted levels read: " + std::to_string(levels));
+    CHECK_MSG(platforms == 15 && platformLevels.size() == 11u && unlisted == 0,
+              "15 moving platforms on 11 levels, each one listed here: " + std::to_string(platforms) + " on " +
+                  std::to_string(platformLevels.size()) + ", " + std::to_string(unlisted) + " unlisted");
+    // The nodes that carry a speed and a stride and no callback - level14b's and level21b's anchors, level31a's
+    // platforms - are no mover (no ETHCallback_anchor or ETHCallback_platform in the listing).
+    for (const char* name : {"level14b", "level21b", "level31a"}) {
+        Run run;
+        if (Begin(name, run)) CHECK_MSG(run.level.movers.platforms.empty(), std::string(name) + " has no moving platform");
+    }
+}
+
+// EVERY PLATFORM SWINGS AS linearMotion DOES, by its tick: the node's point plus cos(speed x 16 ms x n) x stride
+// down the screen, n the ticks gone - tick 0 is the placed point (no callback has run), tick 1 is already a stride
+// along (cos 0 = 1, one frame's step in), and the whole stride either side in the end. Judged on the body's own
+// transform, against the data the level files give, on the layer's tick (16 ms of the script clock).
+void EveryPlatformSwingsItsFullStrideAtItsOwnRate() {
+    const ScriptClock::Step step = LayerStep();
+    struct Placed {
+        const char* level;
+        int platforms;
+    };
+    const Placed placed[] = {
+        {"level5", 1},   {"level10", 1},  {"level2b", 1},  {"level5b", 1},  {"level8b", 1},  {"level11c", 2},
+        {"level21c", 1}, {"level25a", 2}, {"level27a", 1}, {"level27b", 2}, {"level30a", 2},
+    };
+    constexpr int kTicks = 600;
+    for (const Placed& expected : placed) {
+        Run run;
+        if (!Begin(expected.level, run)) continue;
+        const std::vector<PlatformMark> marks = PlatformsOf(run);
+        CHECK_MSG(static_cast<int>(marks.size()) == expected.platforms && marks.size() == run.level.movers.platforms.size(),
+                  std::string(expected.level) + " has " + std::to_string(expected.platforms) + " moving platforms");
+        if (marks.size() != run.level.movers.platforms.size()) continue;
+        std::vector<entt::entity> bodies;
+        for (const PlatformMark& mark : marks) bodies.push_back(run.level.built.entities.at(mark.name));
+        // Tick 0: where the level put each, and no callback has run.
+        for (std::size_t i = 0; i < marks.size(); ++i) {
+            CHECK_MSG(glm::distance(BodyPx(run, bodies[i]), marks[i].originPx) < 0.01 &&
+                          !run.level.movers.platforms[i].motion.Started(),
+                      marks[i].name + " stands at its placed point before the first tick");
+        }
+        std::vector<double> worst(marks.size(), 0.0);
+        std::vector<double> lowest(marks.size(), 1e9);
+        std::vector<double> highest(marks.size(), -1e9);
+        std::vector<glm::vec3> before(marks.size());
+        for (int n = 1; n <= kTicks; ++n) {
+            for (std::size_t i = 0; i < marks.size(); ++i) before[i] = run.registry.get<TransformComponent>(bodies[i]).position;
+            LayerTick(run, step);
+            for (std::size_t i = 0; i < marks.size(); ++i) {
+                const PlatformMark& mark = marks[i];
+                const double want = mark.originPx.y + mark.stride * std::cos(mark.speed * 0.016 * n);
+                const glm::dvec2 at = BodyPx(run, bodies[i]);
+                worst[i] = std::max(worst[i], glm::distance(at, glm::dvec2(mark.originPx.x, want)));
+                lowest[i] = std::min(lowest[i], at.y - mark.originPx.y);
+                highest[i] = std::max(highest[i], at.y - mark.originPx.y);
+                // The first call is a teleport (a SetTransform of a static body: no velocity); every one after
+                // it carries the body by the velocity that gets it there in the physics step.
+                const glm::vec3 v = run.registry.get<RigidBodyComponent>(bodies[i]).velocity;
+                const glm::vec3 after = run.registry.get<TransformComponent>(bodies[i]).position;
+                if (n == 1) {
+                    CHECK_MSG(v == glm::vec3(0.0f), mark.name + "'s first call leaves it no velocity");
+                    CHECK_MSG(std::fabs(at.y - mark.originPx.y - mark.stride) < 0.05,
+                              mark.name + " starts a stride along its axis: " + std::to_string(at.y - mark.originPx.y));
+                } else {
+                    CHECK_MSG(glm::length(v - (after - before[i]) / kStep) < 1e-3f,
+                              mark.name + " is carried by the velocity that gets it there, tick " + std::to_string(n));
+                }
+            }
+        }
+        for (std::size_t i = 0; i < marks.size(); ++i) {
+            const PlatformMark& mark = marks[i];
+            CHECK_MSG(worst[i] < 0.02, mark.name + " follows cos(speed x 16 ms x n) x stride within " +
+                                           std::to_string(worst[i]) + " for " + std::to_string(kTicks) + " ticks");
+            // Over 600 ticks (9.6 s) every platform but the slowest has swung past its far end; the stride
+            // is the amplitude, not half of it: a platform that reaches its stride reaches more than the old
+            // swing's half.
+            const double period = 2.0 * kPi / mark.speed;
+            const bool wholePeriod = period <= 9.6;
+            CHECK_MSG(highest[i] > 0.98 * mark.stride, mark.name + " reaches its full stride along the axis");
+            if (wholePeriod) {
+                CHECK_MSG(lowest[i] < -0.98 * mark.stride, mark.name + " and the same on the other side of its point");
+            }
+            std::printf("  %s %s: speed %.2f stride %.0f: %.1f to %.1f from its point in %d ticks, worst error %.4f\n",
+                        expected.level, mark.name.c_str(), mark.speed, mark.stride, lowest[i], highest[i], kTicks,
+                        worst[i]);
+        }
+    }
+}
+
+// A RIDER IS CARRIED UP AND DOWN. The original's body is a static one teleported a frame's travel, which carries what
+// stands on it by the contact's push-out; the port's carries it with the velocity that gets it there, so a player who
+// stands on 1-11's block is raised and lowered with it through a whole swing, his feet on its top throughout and no
+// drift sideways (the platform moves vertically only: no friction carries a rider along x, as nothing does in the
+// original). 1-11's moving_platform_707 swings y 184 +- 70 at 1 rad/s: a period of 393 ticks.
+void ARiderOnAPlatformIsCarriedUpAndDown() {
+    const ScriptClock::Step step = LayerStep();
+    Run run;
+    if (!Begin("level10", run)) return;
+    const Mover::Platform* platform = run.level.movers.FindPlatform("moving_platform_707");
+    CHECK(platform != nullptr);
+    if (platform == nullptr) return;
+    // The first call has jumped it a stride down; stand the player on its top, a little above it.
+    for (int tick = 0; tick < 3; ++tick) LayerTick(run, step);
+    const glm::dvec2 platformAt = BodyPx(run, platform->entity);
+    const double halfHeightPx = 18.1; // the player's capsule, 36.2 tall (data/player.json)
+    auto& transform = run.registry.get<TransformComponent>(run.level.player);
+    const glm::vec3 put = Units::ToWorld(platformAt.x, platformAt.y - 16.0 - halfHeightPx - 3.0);
+    transform.position = glm::vec3(put.x, put.y, transform.position.z);
+    run.registry.get<RigidBodyComponent>(run.level.player).velocity = glm::vec3(0.0f);
+    // Let him settle, then take the standing offset between the two as the baseline.
+    for (int tick = 0; tick < 20; ++tick) LayerTick(run, step);
+    const double baseline = BodyPx(run, run.level.player).y - BodyPx(run, platform->entity).y;
+    const double standX = BodyPx(run, run.level.player).x;
+    double worstOffset = 0.0;
+    double worstDrift = 0.0;
+    double lowest = 1e9;
+    double highest = -1e9;
+    for (int tick = 0; tick < 400; ++tick) {
+        LayerTick(run, step);
+        const glm::dvec2 rider = BodyPx(run, run.level.player);
+        const glm::dvec2 block = BodyPx(run, platform->entity);
+        worstOffset = std::max(worstOffset, std::fabs((rider.y - block.y) - baseline));
+        worstDrift = std::max(worstDrift, std::fabs(rider.x - standX));
+        lowest = std::min(lowest, block.y);
+        highest = std::max(highest, block.y);
+    }
+    std::printf("  level10: a rider stood %.2f over the block's centre; the block went from y %.1f to %.1f in 400 ticks, "
+                "his feet kept within %.2f of that, drift in x %.3f\n",
+                baseline, lowest, highest, worstOffset, worstDrift);
+    CHECK_MSG(highest - lowest > 120.0, "the block swung most of its 140 units while he rode it");
+    CHECK_MSG(worstOffset < 2.0, "his feet stayed on its top through the swing, within " + std::to_string(worstOffset));
+    CHECK_MSG(worstDrift < 1.0, "and he was carried nowhere sideways: " + std::to_string(worstDrift));
 }
 
 // A LIFT WAITS UNTIL A TOUCH SENDS IT (ETHCallback_lift; planning step 140): at rest
@@ -419,23 +649,27 @@ void ATouchInsideALiftsPictureSendsIt() {
 }
 
 void APatrollingAgentSwingsAndRefusesNothing() {
+    const ScriptClock::Step step = LayerStep();
     Run run;
     if (!Begin("level10", run)) return;
     const Portals::Agent* agent = run.level.portals.FindAgent("anti_portal_agent_639");
     const Portals::NoPortalZone* field = run.level.portals.FindZone("antiportal_638");
     CHECK(agent != nullptr && agent->moving);
-    CHECK(field != nullptr && !field->moving);
+    CHECK(field != nullptr);
     if (agent == nullptr || field == nullptr) return;
     const double radius = run.level.portals.rules.antiportalRadiusPx;
     const glm::dvec2 stood(674.0, 60.0);
 
-    // It swings: a quarter of its period on, it is half its stride from where
-    // the level placed it, down the screen.
-    const double quarter = kPi / 2.0 / (run.data.movers.oscillationRateScale * agent->motion.speed);
-    const int ticks = static_cast<int>(std::lround(quarter / kStep));
-    for (int i = 0; i < ticks; ++i) Tick(run);
+    // It swings as linearMotion does: 40 ticks on, 60 + 48 cos(3 x 16 ms x 40) down the screen of where the level
+    // placed it - the FULL stride either side, not the old swing's half - and x where it was.
+    for (int i = 0; i < 40; ++i) LayerTick(run, step);
     const glm::dvec2 now = agent->CentreNowPx();
-    CHECK_MSG(now.x == 674.0 && std::fabs(now.y - (60.0 + 24.0)) < 0.5, "at " + Px(now));
+    const double want = 60.0 + 48.0 * std::cos(3.0 * 0.016 * 40.0);
+    CHECK_MSG(now.x == 674.0 && std::fabs(now.y - want) < 0.01, "at " + Px(now) + ", wanted y " + std::to_string(want));
+    // The agent moves LAST in its frame: a shot that looks this tick meets where the tick before wrote it.
+    const double wasAt = 60.0 + 48.0 * std::cos(3.0 * 0.016 * 39.0);
+    CHECK_MSG(std::fabs(agent->BeforeLastMovePx().y - wasAt) < 0.01 && agent->BeforeLastMovePx().x == 674.0,
+              "and stood at " + Px(agent->BeforeLastMovePx()) + " before its last move");
 
     // IT REFUSES NOTHING ITSELF (step 126): with the agent alone and no zone, a
     // portal opens where it is and where it stood. The original's
@@ -449,13 +683,67 @@ void APatrollingAgentSwingsAndRefusesNothing() {
 
     // In level10 the ring it stands in refuses both, all the while: antiportal_638
     // holds its whole swing, at the port's radius.
-    CHECK(agent->motion.stridePx * 0.5 < radius * field->scale);
+    CHECK(agent->motion.linear.stride < radius * field->scale);
     CHECK(!run.level.portals.TryPlace(now));
     CHECK(!run.level.portals.TryPlace(stood));
 
-    // The sideways one moves along x and only x.
+    // The sideways one moves along x and only x, 36 either side of 384.
     const Portals::Agent* side = run.level.portals.FindAgent("anti_portal_agent_599");
-    CHECK(side != nullptr && side->CentreNowPx().y == 80.0 && side->CentreNowPx().x != 384.0);
+    const double sideWant = 384.0 + 36.0 * std::cos(2.0 * 0.016 * 40.0);
+    CHECK(side != nullptr && std::fabs(side->CentreNowPx().y - 80.0) < 1e-9 &&
+          std::fabs(side->CentreNowPx().x - sideWant) < 0.01);
+}
+
+// EVERY PATROLLING AGENT, by its tick: the node's point plus cos(speed x 16 ms x n) x stride along its axis - the
+// two of level10 (vertical 3 x 48, and horizontal 2 x 36) and level13b's (horizontal 2 x 32) - judged against the
+// data the level file gives. The one the level does not move stays put.
+void ThePatrollingAgentsFollowLinearMotionByTheTick() {
+    const ScriptClock::Step step = LayerStep();
+    struct Case {
+        const char* level;
+        const char* agent;
+        glm::dvec2 at;
+        bool sideways;
+        double speed;
+        double stride;
+    };
+    const Case cases[] = {
+        {"level10", "anti_portal_agent_639", {674.0, 60.0}, false, 3.0, 48.0},
+        {"level10", "anti_portal_agent_599", {384.0, 80.0}, true, 2.0, 36.0},
+        {"level13b", "anti_portal_agent_1334", {64.0, 132.0}, true, 2.0, 32.0},
+    };
+    for (const Case& one : cases) {
+        Run run;
+        if (!Begin(one.level, run)) continue;
+        const Portals::Agent* agent = run.level.portals.FindAgent(one.agent);
+        CHECK_MSG(agent != nullptr && agent->moving && agent->centrePx == one.at, std::string(one.agent) + " is placed");
+        if (agent == nullptr) continue;
+        CHECK_MSG(agent->CentreNowPx() == one.at, std::string(one.agent) + " stands at its placed point before the first tick");
+        double worst = 0.0;
+        double lowest = 1e9;
+        double highest = -1e9;
+        for (int n = 1; n <= 400; ++n) {
+            LayerTick(run, step);
+            const double offset = one.stride * std::cos(one.speed * 0.016 * n);
+            const glm::dvec2 want = one.sideways ? one.at + glm::dvec2(offset, 0.0) : one.at + glm::dvec2(0.0, offset);
+            worst = std::max(worst, glm::distance(agent->CentreNowPx(), want));
+            const double along = one.sideways ? agent->CentreNowPx().x - one.at.x : agent->CentreNowPx().y - one.at.y;
+            lowest = std::min(lowest, along);
+            highest = std::max(highest, along);
+        }
+        CHECK_MSG(worst < 0.01, std::string(one.agent) + " follows cos(speed x 16 ms x n) x stride within " + std::to_string(worst));
+        CHECK_MSG(highest > 0.98 * one.stride && lowest < -0.98 * one.stride,
+                  std::string(one.agent) + " swings its full stride either side of its point");
+        std::printf("  %s %s: %.1f to %.1f along its axis in 400 ticks, worst error %.4f\n", one.level, one.agent, lowest,
+                    highest, worst);
+    }
+    // 3-14's second agent, and level10's third, stand still.
+    Run run;
+    if (Begin("level10", run)) {
+        for (int n = 0; n < 50; ++n) LayerTick(run, step);
+        const Portals::Agent* still = run.level.portals.FindAgent("anti_portal_agent_710");
+        CHECK(still != nullptr && !still->moving && still->CentreNowPx() == glm::dvec2(128.0, 100.0));
+    }
 }
 
 // ---- The anti-portal agent's death (step 126, R17) --------------------------------
@@ -582,6 +870,42 @@ void AnAgentKillsAShotStillInFlightAndItsRing() {
     CHECK(rig.state.TryPlace(glm::dvec2(300.0, 240.0)));
     std::printf("  an agent killed a shot on its tick %d at %s and took %s\n", killedOn, Px(kill.shotPx).c_str(),
                 kill.ring.c_str());
+}
+
+// THE SPAWN PASS READS WHERE THE AGENT STOOD BEFORE ITS LAST MOVE (planning step 154). A tap's own frame runs
+// its static callbacks before this tick's advance, so an agent that moved since is seen where it was: a shot
+// fired from 22.0 behind the point the agent has just left, with the agent moving away from it, kills it on the
+// spawn pass (inside 22.4 of where it stood), where the point it stands at now is 24 away.
+void AnAgentIsSeenOnTheSpawnPassWhereItStoodBeforeItsLastMove() {
+    const ScriptClock::Step step = LayerStep();
+    Rig rig;
+    if (!MakeRig(rig)) return;
+    rig.state.zones.clear();
+    Portals::Agent& agent = rig.state.agents[0];
+    agent.moving = true;
+    agent.motion.originPx = agent.centrePx;
+    agent.motion.linear.speed = 3.0;
+    agent.motion.linear.stride = 48.0;
+    agent.motion.linear.vertical = true;
+    // ticks of the agent alone, as the layer runs them, to the middle of a swing where it is quick
+    for (int n = 0; n < 20; ++n) rig.state.Tick(rig.registry, step);
+    const glm::dvec2 was = agent.BeforeLastMovePx();
+    const glm::dvec2 now = agent.CentreNowPx();
+    const double stepUnits = glm::distance(was, now);
+    CHECK_MSG(stepUnits > 1.5 && stepUnits < 2.4, "the agent moves about 1.9 units a tick here: " + std::to_string(stepUnits));
+    // 22.0 behind where it stood, on the far side from where it has gone.
+    const glm::dvec2 back = glm::normalize(was - now);
+    const glm::dvec2 from = was + back * 22.0;
+    rig.registry.get<TransformComponent>(rig.state.shooter).position = Units::ToWorld(from.x, from.y);
+    CHECK_MSG(glm::distance(from, now) > 22.4 && glm::distance(from, was) < 22.4,
+              "set up: out of reach of where it is, in reach of where it was");
+    CHECK(rig.state.Shoot(rig.registry, was + glm::dvec2(300.0, 0.0)));
+    rig.state.Tick(rig.registry, step);
+    CHECK_MSG(rig.state.agentsKilled == 1 && rig.state.agentKills.size() == 1 && agent.gone,
+              "the spawn pass killed it, where it stood before its last move");
+    if (rig.state.agentKills.size() == 1) {
+        CHECK_MSG(glm::distance(rig.state.agentKills[0].atPx, was) < 1e-9, "and the explosion is where it was seen");
+    }
 }
 
 void AnAgentRefusesNothingAndLetsAWideShotBy() {
@@ -969,9 +1293,10 @@ void AFireballIsHeldAsATravellerIs() {
 }
 
 void Level5sPlatformHoldsThePlayerUntilItSwingsAway() {
-    // level5's moving_platform_764 swings y 144 + 32 sin(2 x 0.7 t) (the port's swing,
-    // movers.json; R7 is not built). A portal at (416, 100), which its box comes within
-    // 5.6 of while its centre is above y 121.6, and one on the player at the spawn.
+    // level5's moving_platform_764 swings y 144 + 64 cos(0.7 t) (linearMotion, movers.json
+    // linear_motion; step 154): it starts at the bottom, y 208, and takes about 280 ticks to the top, y 80.
+    // A portal at (416, 100), which its box comes within 5.6 of while its centre is above y 121.6, and
+    // one on the player at the spawn.
     Run run;
     if (!Begin("level5", run) || run.level.movers.platforms.empty()) return;
     Portals::State& portals = run.level.portals;
@@ -993,7 +1318,8 @@ void Level5sPlatformHoldsThePlayerUntilItSwingsAway() {
     int transitTick = -1;
     bool gateUpWhileHeld = true;
     glm::dvec2 lastAPx = portals.placed[0].atPx; // A where the last tick left it, hover and all
-    for (int more = 0; more < 200 && transitTick < 0; ++more) {
+    // Its box stays within 5.6 of A from y 121.6 up through the top and back down: about 210 ticks.
+    for (int more = 0; more < 500 && transitTick < 0; ++more) {
         const int before = portals.transitsHeld;
         Tick(run);
         if (portals.traversals > 0) {
@@ -1022,16 +1348,20 @@ void Level5sPlatformHoldsThePlayerUntilItSwingsAway() {
 }
 
 void runTests() {
-    MoversJsonCarriesTheSwingsGuessAndTheDecodedLift();
+    MoversJsonCarriesTheDecodedSwingsAndLift();
     ChapterOnesMovers();
     TheFourteenLiftsWaitOnTheirMarkers();
-    APlatformSwingsByItsStride();
+    TheFifteenPlatformsAreTheListedOnes();
+    EveryPlatformSwingsItsFullStrideAtItsOwnRate();
+    ARiderOnAPlatformIsCarriedUpAndDown();
     ALiftWaitsOnItsMarkerUntilSentAndStopsAtTheOther();
     ATouchOnAMovingLiftSendsItBackToItsMarkerA();
     ATouchInsideALiftsPictureSendsIt();
     APatrollingAgentSwingsAndRefusesNothing();
+    ThePatrollingAgentsFollowLinearMotionByTheTick();
     TheAgentsNumbersAreTheDecodedOnes();
     AnAgentKillsAShotStillInFlightAndItsRing();
+    AnAgentIsSeenOnTheSpawnPassWhereItStoodBeforeItsLastMove();
     AnAgentRefusesNothingAndLetsAWideShotBy();
     TheRingIsSoughtInTheAgentsBucketThenItsNeighbours();
     F17sShotKillsTheAgentOn401();

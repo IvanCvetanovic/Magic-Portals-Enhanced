@@ -241,8 +241,12 @@ void Advance(const Rules& rules, Linear& motion, double frameMs) {
 
 glm::dvec2 OffsetPx(const Linear& motion) {
     if (!motion.started) return glm::dvec2(0.0);
+    return OffsetPxWithCosine(motion, std::cos(motion.angle));
+}
+
+glm::dvec2 OffsetPxWithCosine(const Linear& motion, double cosine) {
     // Ins 112-129: cos(angle) x stride x sign(speed).
-    const double offset = std::cos(motion.angle) * motion.stride * Sign(motion.speed);
+    const double offset = cosine * motion.stride * Sign(motion.speed);
     // Ins 131-178: the vector along its axis, times rotateZ(degreeToRadian(angle))
     // as multiply(vector3, matrix4x4) takes it: (x cos a + y sin a, -x sin a + y cos a)
     // (Ethanon GameMath.h RotateZ and Multiply(Vector3, Matrix4x4)). So a positive

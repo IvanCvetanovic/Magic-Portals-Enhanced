@@ -22,6 +22,11 @@ void MoveKinematic(entt::registry& registry, entt::entity entity, const glm::vec
     transform.position = target;
 }
 
+void PlaceKinematic(entt::registry& registry, entt::entity entity, const glm::vec3& target) {
+    registry.get<Supersonic::TransformComponent>(entity).position = target;
+    registry.get<Supersonic::RigidBodyComponent>(entity).velocity = glm::vec3(0.0f);
+}
+
 glm::dvec2 Door::InterpolatedPx() const {
     // getCurrentPos (20104 #3-18): m_b when m_elapsedTime > m_time; getBias clamps
     // the fraction before the filter (18855 #9-31). As the button reads it
@@ -147,8 +152,38 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     double sizeRead[2] = {0.0, 0.0};
     double fromRead[3] = {0.0, 0.0, 0.0};
     double toRead[3] = {0.0, 0.0, 0.0};
-    if (!number("oscillation", "rate_scale", read.oscillationRateScale) ||
-        !number("lift", "speed_units_per_s", read.liftSpeedUnitsPerS) ||
+    // linearMotion's two calls: three numbers each, and the direction that turns the agent's axis. Read
+    // strictly, as the lift's are: a missing one is an error, not a default (a default is a guess in code).
+    const auto call = [&](const char* name, const char* axisKey, LinearCall& into) {
+        const std::string where = std::string("linear_motion.") + name;
+        const Json::Value* block = root.IsObject() && root.Has("linear_motion") && root["linear_motion"].IsObject() &&
+                                           root["linear_motion"].Has(name) && root["linear_motion"][name].IsObject()
+                                       ? &root["linear_motion"][name]
+                                       : nullptr;
+        if (block == nullptr || !block->Has("vertical") || !(*block)["vertical"].IsBool() || !block->Has(axisKey) ||
+            !(*block)[axisKey].IsNumber() || !block->Has("start_angle") || !(*block)["start_angle"].IsNumber()) {
+            error = path + ": " + where + " needs vertical (true or false), " + axisKey + " and start_angle (numbers)";
+            return false;
+        }
+        into.vertical = (*block)["vertical"].AsBool();
+        into.axisDeg = (*block)[axisKey].AsNumber();
+        into.startAngle = (*block)["start_angle"].AsNumber();
+        return true;
+    };
+    if (!call("platform", "axis_deg", read.platform) || !call("agent", "axis_deg", read.agent) ||
+        !call("agent", "axis_deg_sideways", read.agentSideways)) {
+        return false;
+    }
+    {
+        const Json::Value& agent = root["linear_motion"]["agent"];
+        if (!agent.Has("direction_sideways") || !agent["direction_sideways"].IsString() ||
+            agent["direction_sideways"].AsString().empty()) {
+            error = path + ": linear_motion.agent.direction_sideways is missing or not a name";
+            return false;
+        }
+        read.directionSideways = agent["direction_sideways"].AsString();
+    }
+    if (!number("lift", "speed_units_per_s", read.liftSpeedUnitsPerS) ||
         !numbers("lift", nullptr, "size_units", 2, sizeRead) || !numbers("lift", "blink", "from", 3, fromRead) ||
         !numbers("lift", "blink", "to", 3, toRead)) {
         return false;
@@ -171,19 +206,28 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-glm::dvec2 Oscillation::AtPx() const {
-    // DetMath rather than the platform's sin, so that a swing comes out the same
-    // on every C runtime, as the transit's turn does (Portal.cpp).
-    const double wave = static_cast<double>(Supersonic::DetMath::sin(static_cast<float>(rateScale * speed * t)));
-    return originPx + axis * (wave * stridePx * 0.5);
+void Oscillation::Advance(const Motion::Rules& rules, double frameMs) {
+    // linearMotion ins 1-98: the first call writes the start angle, every call steps it and takes off one
+    // turn once past it. The original's m_factor 0 (a pause) is a frame of 0.
+    Motion::Advance(rules, linear, frameMs);
 }
 
-bool OscillationFromNode(const Tscn::Node& node, const glm::dvec2& axis, double rateScale, Oscillation& out,
-                         std::string& error) {
+glm::dvec2 Oscillation::AtPx() const {
+    // Until the first call the entity is where the level put it.
+    if (!linear.started) return originPx;
+    // DetMath rather than the platform's cos, so that a swing comes out the same on every C runtime, as
+    // the transit's turn does (Portal.cpp); the rest of linearMotion's arithmetic is Motion's one copy.
+    const double cosine = static_cast<double>(Supersonic::DetMath::cos(static_cast<float>(linear.angle)));
+    return originPx + Motion::OffsetPxWithCosine(linear, cosine);
+}
+
+bool OscillationFromNode(const Tscn::Node& node, const LinearCall& call, Oscillation& out, std::string& error) {
     Oscillation read;
+    // linearMotion ins 41-51 and 100-110: GetFloat('speed') and GetFloat('stride'), the node's own data.
     const Tscn::Value* speed = node.Meta("speed");
     const Tscn::Value* stride = node.Meta("stride");
-    if (speed == nullptr || !speed->AsNumber(read.speed) || stride == nullptr || !stride->AsNumber(read.stridePx)) {
+    if (speed == nullptr || !speed->AsNumber(read.linear.speed) || stride == nullptr ||
+        !stride->AsNumber(read.linear.stride)) {
         error = node.name + " has no speed and stride to swing by";
         return false;
     }
@@ -193,8 +237,9 @@ bool OscillationFromNode(const Tscn::Node& node, const glm::dvec2& axis, double 
         return false;
     }
     read.originPx = glm::dvec2(position->numbers[0], position->numbers[1]);
-    read.axis = axis;
-    read.rateScale = rateScale;
+    read.linear.vertical = call.vertical;
+    read.linear.axisDeg = call.axisDeg;
+    read.linear.startAngle = call.startAngle;
     out = read;
     return true;
 }
@@ -240,9 +285,19 @@ bool Travel::Holds(const glm::dvec2& pointPx, const glm::dvec2& sizeUnits) const
 
 void Movers::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     for (Platform& platform : platforms) {
-        platform.motion.t += step.scriptS;
+        // ETHCallback_moving_platform calls linearMotion once a frame, with the script's whole milliseconds.
+        const bool first = !platform.motion.Started();
+        platform.motion.Advance(motion, ScriptClock::Ms(step));
         const glm::dvec2 at = platform.motion.AtPx();
-        MoveKinematic(registry, platform.entity, Units::ToWorld(at.x, at.y), step.physicsS);
+        const glm::vec3 target = Units::ToWorld(at.x, at.y);
+        // The first call jumps it a stride from where the level placed it: a SetTransform of a static
+        // body, which has no velocity (ETHPhysicsEntityController.cpp:98-103). Written as the velocity
+        // that gets it there it would throw whatever touches it a stride in one step.
+        if (first) {
+            PlaceKinematic(registry, platform.entity, target);
+        } else {
+            MoveKinematic(registry, platform.entity, target, step.physicsS);
+        }
     }
     for (Lift& lift : lifts) {
         lift.motion.Advance(step.scriptS);
@@ -277,6 +332,7 @@ const Lift* Movers::FindLift(const std::string& name) const {
 bool Wire(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built, const Rules& rules,
           Movers& out, std::string& error) {
     out = Movers{};
+    out.motion = rules.motion;
     const auto positionOf = [](const Tscn::Node& node, glm::dvec2& to) {
         const Tscn::Value* position = node.Find("position");
         if (position == nullptr || position->kind != Tscn::Value::Kind::Vector2) return false;
@@ -311,8 +367,8 @@ bool Wire(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         if (role == Roles::kMovingPlatform) {
             Platform platform;
             platform.name = node.name;
-            // Vertical, always (behaviours.gd:105-108).
-            if (!OscillationFromNode(node, glm::dvec2(0.0, 1.0), rules.oscillationRateScale, platform.motion, error) ||
+            // ETHCallback_moving_platform's call to linearMotion: vertical, axis 0, start angle 0.
+            if (!OscillationFromNode(node, rules.platform, platform.motion, error) ||
                 !entityOf(node, platform.entity)) {
                 return false;
             }

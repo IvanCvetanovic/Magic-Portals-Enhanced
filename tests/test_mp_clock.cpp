@@ -308,14 +308,16 @@ void APlatformAndALiftStepOnTheScriptAndAreCarriedByThePhysicsStep() {
     const entt::entity body = registry.create();
     registry.emplace<TransformComponent>(body);
     registry.emplace<RigidBodyComponent>(body);
+    // linearMotion's own frame cap and turn, as the layer's rules carry them (motions.json).
+    std::string motionError;
+    CHECK_MSG(Motion::LoadRules(kPortData + "/motions.json", movers.motion, motionError), motionError);
     Mover::Platform platform;
     platform.name = "platform";
     platform.entity = body;
     platform.motion.originPx = glm::dvec2(0.0, 0.0);
-    platform.motion.axis = glm::dvec2(0.0, 1.0);
-    platform.motion.stridePx = 64.0;
-    platform.motion.speed = 1.0;
-    platform.motion.rateScale = 1.0;
+    platform.motion.linear.vertical = true;
+    platform.motion.linear.stride = 64.0;
+    platform.motion.linear.speed = 1.0;
     movers.platforms.push_back(platform);
 
     // A lift sent to its far marker: 60 units a second is 0.96 units a script tick.
@@ -335,9 +337,10 @@ void APlatformAndALiftStepOnTheScriptAndAreCarriedByThePhysicsStep() {
     movers.lifts.push_back(lift);
 
     for (int tick = 1; tick <= 620; ++tick) movers.Tick(registry, step);
-    // 620 ticks of 16 ms: 9.92 s of the script's clock on the swing, and the lift 595.2 of its 600
-    // units out at 0.96 a tick (60 u/s x 16 ms).
-    CHECK_NEARD(movers.platforms.front().motion.t, 620.0 * 0.016);
+    // 620 ticks of 16 ms: 9.92 s of the script's clock on the swing - its angle is that much of a radian a
+    // second at speed 1, less the one turn linearMotion takes off once it is past 2 PI (on the 393rd tick) -
+    // and the lift 595.2 of its 600 units out at 0.96 a tick (60 u/s x 16 ms).
+    CHECK_NEARD(movers.platforms.front().motion.linear.angle, 620.0 * 0.016 - movers.motion.wrapRad);
     CHECK_NEARD(movers.lifts.front().motion.atPx.y, 620.0 * 0.96);
     CHECK(movers.lifts.front().motion.Moving());
     for (int tick = 621; tick <= 626; ++tick) movers.Tick(registry, step);

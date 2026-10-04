@@ -118,6 +118,8 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Motion::LoadRules(portDataDirectory + "/motions.json", read.motion, error)) return false;
     read.portals.motion = read.motion;
     if (!Mover::LoadRules(portDataDirectory + "/movers.json", read.movers, error)) return false;
+    // The platforms' and the patrolling agents' linearMotion steps by the same two constants.
+    read.movers.motion = read.motion;
     // The same file, its `button` block: a button's sink is not a mover's swing,
     // and its numbers are decoded where the other two are the Godot project's guesses.
     if (!Puzzle::LoadRules(portDataDirectory + "/movers.json", read.puzzle, error)) return false;

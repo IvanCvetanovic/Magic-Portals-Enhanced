@@ -127,6 +127,12 @@ void Advance(const Rules& rules, Linear& motion, double frameMs);
 // entity is where the level put it.
 glm::dvec2 OffsetPx(const Linear& motion);
 
+// The same arithmetic from linearMotion's ins 112 on, with the cosine of the angle handed in: for a
+// caller whose position a solver integrates, which must come out the same on every C runtime and
+// so reads the cosine from DetMath (Mover.cpp), where OffsetPx reads std::cos. `motion.angle` is
+// not read; the sign of the speed, the stride, the axis and the turn are.
+glm::dvec2 OffsetPxWithCosine(const Linear& motion, double cosine);
+
 // A placed picture's linearMotion, from its row and its node: the node's own
 // `speed` and `stride` (quoted numbers, as the converter writes custom data) and,
 // for a row whose axis is the node's, the node's angle - Ethanon's, which the

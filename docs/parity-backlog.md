@@ -1746,7 +1746,10 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       not won:** the 42 listed above, and 1-11 and 2-30. Open until all 128.* *Step 152 (WT, wave 3b-1, local, not pushed): 62 of
       the 86 win on its build and 24 do not (1-11 and 2-30 as before, and 22 that won at wave 3a; 56 win on the same tick, 6 on
       another); `test_mp_routes` is red by design inside the time-base group, and the routes are re-authored by the wave's route
-      phase after PIC (step 150, built) and after the group's CAP and G3 - no route file was touched.*
+      phase after PIC (step 150, built) and after the group's CAP and G3 - no route file was touched.* *Step 153 (CAP): 53 of the 86 win
+      and 33 do not.* *Step 154 (G3, local, not pushed): 49 of the 86 win on its build and 37 do not (the 33 that did not win on CAP's build,
+      unchanged, and 1-06, 2-26, 3-03 and 3-14, the four whose platform or patrolling agent G3 moved); every one of the 49 wins on the same
+      tick as on CAP's build; the routes are re-authored by the wave's route phase after PIC (step 150, built), CAP and G3.*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1960,6 +1963,7 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
 |---|---|---|---|---|---|---|
 | 152 | WT | main | the WT commit, "Magic Portals: every dynamic body is in the original's time base" (its hash is in `git log`); local, not pushed | built and committed with 9 recorded deviations (owner-delegated); the first verifier failed it (the decoded frictions walked 13 resting crates and barrels along their floors at 5.65 to 8.78 units a second and solved 2-08 by itself), the fix held the frictions at 1 (G10-14) and the second verifier passed all thirteen gates and listed seven problems, three medium and four low, whose text findings the commit applied and whose source findings are rows WT-2, WT-10, WT-11 and WT-12; 53 suites, 52 passed, 19,026 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep 46 of 128 byte-identical to the standing baseline, the 82 changed explained (the 33 levels with no loose body 33 of 33 identical; 2-29 and 3-12 only in part, WT-10); the falling crate 258.333 units in 30 ticks as the original's, a minion 1.0400 units a tick, 2-24's idle player 0.000 units in 420 ticks | **yes**: the world falls at the original's 2000 u/s^2 at the layer's tick (a crate 258 units in 30 ticks where it fell 127), a minion walks 62.4 u/s (was 39) and a 2-32 knight 81.6 (51), a well pulls every body, every body weighs its `.ent`'s weight (a stone or crate landing on the player embeds him, level30's two big crates cannot be pushed: WT-2, WT-3), no body has damping, a beholder's rock kills on the hardest approach of the last 30 ticks, Box2D's clamp holds every body; friction and restitution are NOT changed (held: G10-14, WT-1) | none: **62 of the 86 routes win** (84 before: 56 on the same tick, 6 on another), 24 do not (1-11 and 2-30 as before, and 22 that won); no route file touched, the routes are re-authored by the wave's route phase after PIC, CAP and G3 |
 | 153 | CAP | main | the CAP commit, "Magic Portals: the player's body is the original's" (its hash is in `git log`); local, not pushed | built, owner-delegated, 11 recorded deviations (CAP-1 to CAP-10 below, WT-10 to WT-12 not taken); **the spec's "a minion's body is not ground" gate is reversed by the listing and was not built** (a minion is not an `isCharacter`: only the player is; the feet refuse a sensor, the player's own body, `fireball.ent` and `anti_sight_wall*`); 53 suites, 52 passed, 19,030 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep 16 of 128 byte-identical to the WT build (14 weightless levels and the two popup levels), the 112 changed explained (98 by the player's picture 10.98 px lower, 11 by the camera following him, 4-16, 4-18 and 2-32 named); the player's picture against the library stills on 13 flat floors -9.19 -> +1.75 px, on 1-24's ramp -9.84 -> +1.56, on 2-24's barrel -6.48 -> +4.53 (+1.58 against the barrel, which is itself 2.95 px low) | **yes**: the player is the original's two circles as a capsule 18.2 wide and 36.2 tall (20 x 44 before), 3.9 units lower on whatever he stands on, his ground sensor 18 below the entity, triggers judge the real shape, every level opens with a 3.9-unit fall and a 0.3-unit landing tremble, and a fall is held to 100 screen pixels a step on the window it is played on (23.7 units at 1080); his weight, friction, walk and fall are unchanged | none: **53 of the 86 routes win** (62 before: 25 on the same tick, 20 later by 1 to 3, 8 earlier), 33 do not (1-11, 2-30 and 22 as before, and 9 that won: 1-12, 2-09, 2-11, 2-12, 2-17, 3-31, 4-07, 4-18, 4-25); no route file touched: the routes are re-authored by the wave's route phase after PIC, CAP and G3 (the time-base group's last step; PIC is wave 3a's, done), not by this step |
+| 154 | G3 | main | the G3 commit, "Magic Portals: the original's moving platforms and patrolling agents" (its hash is in `git log`); local, not pushed | built, owner-delegated, 8 recorded deviations (G3-1 to G3-8 below); **the spec's "carried by friction" premise is refuted by the decode and was not built** (a platform is a `b2_staticBody` moved by `SetTransform`: no velocity, vertical only; G10-5c(3) closes); 53 suites, 52 passed, 28,137 checks (`test_mp_routes` fails by design); reachability 108 / 20 / 0; the f420 sweep 120 of 128 byte-identical to CAP's, the 8 changed (1-06, 1-11, 2-26, 2-28, 2-31, 3-14, 3-28, 4-12) each explained by the formula at tick 420, 4-22's moved platform not visible in its identical frame; the 15 platforms and 3 agents within 0.0001 unit of `cos(angle) x stride` on every tick of 600; the library's stills fit 1-11's block and agent to 1.75 u rms on one phase (the old swing 30.8) | **yes**: every moving platform on 11 levels swings twice as far (the full stride either side, was half) at half the rate (`speed` rad/s, was twice) and starts a stride down the screen from its placed point (1-11's block y 114 to 254, was 149 to 219); the three patrolling anti-portal agents likewise (1-11's two, 3-14's); a shot meets an agent where its last frame put it; a rider is carried as before, by velocity both ways (the original pushes him up and drops him down: G3-1, G3-4) | none: **49 of the 86 routes win** (53 before: all 49 on the same tick), 37 do not (1-06, 2-26, 3-03 and 3-14 lost; the 33 that did not win on CAP's build unchanged); no route file touched: the routes are re-authored by the wave's route phase after PIC, CAP and G3 (the time-base group's last step; PIC is wave 3a's, done), not by this step |
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -2066,7 +2070,8 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
       the player is steered as before (he creeps off a corner as he did; at the boundary he can shimmer 0.3 units a tick, 3-20's first ledge). (2) The
       port's floors all carry friction 1 (`LevelBuilder::kStaticFriction`; step 152 holds the decoded ones at 1, G10-14), so the hold's mix is 0.949, not the original's per-entity mixes (0.47 on
       ramp_right's 0.25, 0.42 on a platform's 0.2, 0.6 on block00's 0.4): a slope between 25 and 43.5 degrees holds the player here and not there.
-      (3) The original's friction also carries an idle player along a platform that moves sideways under him; the hold does not (G3's step). (4) The
+      (3) ~~The original's friction also carries an idle player along a platform that moves sideways under him; the hold does not (G3's step).~~ *Refuted by step 154 (G3): a platform is a static body moved by
+      `SetTransform` (no velocity), its axis is vertical, and a lift is the same: no friction carries a rider sideways in the original (INFERRED from the decode; no clip of a rider). Nothing to build; see G3-1.* (4) The
       mechanism is the port's, not Box2D's: why the original's walk shows no loss to the same friction is still not decoded.
       *Step 153 (CAP) scanned (2) (`out/parity/program/CAP/slope_scan.py`, the 128 levels' sloped static tops against `sqrt(0.9 x the decoded floor
       friction)`: platform 23.0 degrees, ramps 25.4, bridge01 33.9, block00 31.0) and built nothing: the 16 ramps (14.0 degrees) and bridge01's 46 at 14 hold either
@@ -2169,6 +2174,11 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
 - [ ] **R3-1. 1-11 is not won by a route** (`level10`; sealed on the timing build: the island lies in antiportal_709's 192 px
       ring and no input reaches nearer than 28.15 px to the nearest legal portal against a reach of 24). Needs G3 / R7 (the
       platforms' full cosine swing), then a route; geometry derived, not measured on a G3 build. (planning step 151, deviation 1)
+      *Step 154 (G3, local, not pushed) built the full swing: `moving_platform_707` now runs y 254 -> 114 (top 238 -> 98), pinned by
+      `test_mp_movers`; its top starts 14 u under the island floor (y 224) and ends 14 u over `double_block_plat_ent_708`'s top (112),
+      the step round 3 hypothesised, so the 28.15 px geometry (computed on the half swing, which never reached the island floor) no longer
+      describes the level. The committed route still fails on tick 59 (a shot still in flight, as on CAP's build); a route that uses the
+      block is the route phase's, and `anti_portal_agent_639` starts its swing only once the camera has come near in the original (G3-2).*
 - [ ] **R3-2. 2-30 is not won by a route** (`level29a`; the player is burned on tick 259 by fire_agent_ent_918). The air carry is
       capped at 14.74 u (AirShare 0.86 at the matched 60 Hz), the plank sags once the stone leaves its arm (INFERRED: G10-1 time
       base, G10-4 capsule mass). Needs the owner's rulings on G10-2 / G10-1 / G10-4 and a source step or two, then every route
@@ -2272,7 +2282,7 @@ physics moved are re-authored by the wave's route phase after PIC, CAP and G3:
 - [ ] **CAP-6. Triggers and portals judge the hull.** A death area, a goal, a portal's entry and the other overlap tests read the 18.2 x 36.2 capsule; the original's portal has no
       body (`portal.ent` is `shape="0"`) and tests the player by script, and how it measures his compound is not decoded here: whether the hull's width matches is NOT checked. It moved
       2-12's walk (the entry edge before the pair exists). Next: the portals' entry decode (G3's neighbour), with 2-12's route.
-- [ ] **CAP-7. The sources are newer than the executables by comment and note edits, and the executables are not relinked.** The commit corrected `game/sim/Player.cpp` (`ETHCompoundShape.cpp: 66-71` is `:65-71`),
+- [x] **CAP-7. The sources are newer than the executables by comment and note edits, and the executables are not relinked.** *Closed by step 154 (G3): its relink compiled them (`MagicPortals.exe` `aa85e2b9`, `test_mp.exe` `a72d460d`, one launch with no argument: 52 of 53 suites pass, the one failure `test_mp_routes` by design).* The commit corrected `game/sim/Player.cpp` (`ETHCompoundShape.cpp: 66-71` is `:65-71`),
       `tests/test_mp_player.cpp` (`GetCircleShape (:41-47)` is `ETHPhysicsSimulator.cpp:56-62`) and four stale "22 over his feet" notes (`game/sim/Portals.hpp`, `game/sim/Puzzle.hpp`, `game/data/keys.json`,
       `game/data/gravitywell.json`: 18.1 since step 153), comments and note strings only, no line added or removed. The four touched objects compile with 0 warnings; `MagicPortals.exe` `106a38c4` and `test_mp.exe`
       `f25cc632` (what the gates measured) predate the edits. Next, G3's relink compiles them: re-run `test_mp.exe` once then, and close this row. `data/player.json`'s `_source` carries the right
@@ -2286,6 +2296,35 @@ physics moved are re-authored by the wave's route phase after PIC, CAP and G3:
       case asserts `impact.hit` between the last velocity read and the fastest fall (G10-8's equality is gone), and 4-01's pillar pin is the computed 152.1 +-0.6, not F17's 153.0 +-1.0 (port 151.85, Box2D's decoded rest
       152.35, footage-implied about 152.9: CAP-2). Next: restore the strict equality and the footage pin in the route phase (G10-8) or after an engine contact-margin step, and re-measure F17 against the pillar by a
       second method before deciding that the capsule's width is exact.
+
+**G3's recorded deviations** (step 154), each an open row for the step named (planning step 154 has the evidence, `RECORDED DEVIATIONS` 1-8):
+- [ ] **G3-1. The spec's "carried by friction" is refuted, not built.** A moving platform is `static="1"`: `CreateBody` makes it a `b2_staticBody` (`ETHPhysicsSimulator.cpp:68`) and
+      `linearMotion`'s `SetPosition` is `b2Body::SetTransform` (`ETHPhysicsEntityController.cpp:98-103`), which leaves it no velocity; friction acts on relative tangent velocity, so nothing is
+      carried sideways, and what stands on it is pushed out along the contact normal (a rising platform) or falls (a falling one). Its axis is vertical, so it has no sideways travel; `lift.ent` is
+      static too. The port carries a rider by the velocity that gets the body there (the player's friction is 0, the platform's held at 1): a rider on 1-11's block keeps his feet within 0.01 unit
+      of its top through a swing. INFERRED from the decode: no clip shows a rider, so the original's push-out lag (about 1.5 units into a rising platform at the fastest, Box2D's solver) is
+      not compared. Next: a clip of a rider on a platform or a lift.
+- [ ] **G3-2. The bucket clock is not modelled, and four movers are affected.** A static entity's callback runs only from the visible-bucket loop (buckets of 128 units intersecting the screen
+      plus one ring: `ETHScene.cpp:54`, `:69`, `:541-574`, `ETHBucketManager.cpp:52-90`), and the original's camera opens on `camera_start`, near the exit, and eases to the player
+      (`MagicPortalsLayer.cpp:657-665`; the port opens on the player, the owner's choice), so a mover runs while the camera is near it and stops after. With the camera on the player at the spawn four of
+      the 18 movers stand outside the drawn buckets (computed from the level files): **3-03's and 3-06's `moving_platform_1011` (x 672), 1-11's `anti_portal_agent_639` (x 674) and 3-09's
+      `moving_platform_1429` (x 96, the spawn at x 617)**. The port runs every mover from tick 1 and never pauses it (every static callback is in the same project-wide row: crystals, the ghost, the lifts,
+      the handle). Next: one step for the row, with the camera's rectangle in the sim and the opening pan, if the route phase finds the four phases matter; the route phase should know it for those levels: the routes of 3-03, 3-06, 3-09 and 1-11 are authored on the port's convention (every static callback from tick 1), not on the original's phase, and are marked so, so that the owner does not take their timing as the original's (the second verifier's finding, `out/parity/program/G3/verify1.json`).
+- [ ] **G3-3. A platform moves before its step, a frame ahead of the original's contact.** The original's callbacks run after its physics step (`ETHScene.cpp:464-490`), so a step meets the
+      position the frame before wrote; every mover here moves its body before the step (door, slab, lift). At most one tick's travel (1.15 units); the picture drawn after the tick is the original's.
+- [ ] **G3-4. The port carries by velocity, the original by push-out.** A body pressed against a platform's SIDE would be dragged by the port's contact friction where the original's static body
+      drags nothing; the player's friction is 0 so he is not, a crate's (held at 1) would be; not measured on any body but the player's. A rider on a DESCENDING platform is carried down by the port and, by the decode, would fall in the original
+      (the second verifier's arithmetic, not measured: gravity adds 0.556 unit a tick of speed each tick against the block's fastest descent of 1.17 units a tick, so he is airborne a few ticks of each
+      landing). **Next:** a throwaway build that places a platform's body with no velocity every tick (`PlaceKinematic`), the player measured on 1-11's block: if the engine's push-out holds him,
+      adopt the original's behaviour; otherwise record an engine gap with the number (a source edit and one relink).
+- [ ] **G3-5. The phase is not confirmed by the stills.** The rate and the amplitude are (`out/parity/program/G3/library_fit.md`); a still's zero is the HUD's, not the script clock's, and the fitted
+      phases differ by level (0.75 to 1.57 s; 1-06's 1.57 s unexplained). The tick-1-is-a-stride-along phase follows from the decode. *Softened by the second verifier (`verify1.json`, problem 3): its fit of 1-11's t-series stills (t2.0, t4.5, t8.0; block centres
+      163.2, 157.2, 187.9 units) gives the full swing at 2.13 u rms with a phase of -0.17 s, about the port's level-start phase (the old swing 18.2), so on 1-11 the phase is confirmed to about 0.2 s; only 1-11
+      is fitted that way.*
+- [ ] **G3-6. `awakeEntitiesAround` is not built**: the engine wakes what rests on a kinematic body itself (`engine/src/core/PhysicsSystem.cpp:1089-1095`).
+- [ ] **G3-7. The first call's overlap is scanned for dynamic bodies only**: none of the 11 levels' dynamic bodies stands within 20 units of a platform's tick-1 box; the player's start is not a
+      node and was not scanned. A body inside it would be shoved out by the engine's solver, where the original's position solver pushes it over a few frames.
+- [ ] **G3-8. `test_mp_movers` carries 9,478 checks, 9,000 of them one velocity check per platform per tick.** Aggregating them is a test edit that relinks the runner (done at the next one).
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2414,12 +2453,25 @@ physics moved are re-authored by the wave's route phase after PIC, CAP and G3:
       (1552), 2-18 (1194, then 1191 at the merge), 2-25 (510), 3-31 (1248); **won by new routes: 3-08 (1643) and 3-10
       (1085)**. The merge (step 144) re-authored 2-06 (575: two touches send `lift_ent_832` down and up). No route is
       held by step 136's gate on the merged build. 3-23 is not won (the row "Step 140's recorded deviations").*
-- [ ] **G3. Moving platforms swing half as far at twice the rate** (R7: `linearMotion` cos(angle) x stride from
+- [x] **G3. Moving platforms swing half as far at twice the rate** (R7: `linearMotion` cos(angle) x stride from
       +stride; the port sin(2 x speed x t) x stride / 2). 15 platforms on 11 levels, 3 patrolling agents. *Routes that
       lean on it (wave 1)*: 1-11 (step 126: the kill of `anti_portal_agent_599` works at any point of the port's half
       swing and is phase-dependent under the original's; its door-block shot to (740, 108) passes 0.6 px from the
       lowest point of `anti_portal_agent_639`'s original swing, where it would kill that agent and open nothing) and
       2-26 (step 127: a shot through the slot from the moving platform's edge; the full swing would widen it).
+      *Built in step 154 (wave 3b-1, local, not pushed): `Mover::Oscillation` is `Motion::Linear` over the node's own `speed` and
+      `stride` (movers.json `linear_motion`, decoded: `ETHCallback_moving_platform` ins 1-17, `ETHCallback_anti_portal_agent` ins
+      200-250): the node's point plus `cos(angle) x stride`, the angle stepped by `speed x 16 ms` BEFORE the cosine, from 0 - the
+      FULL stride either side at `speed` rad/s, the first call already a stride along (down the screen), a bare teleport with no
+      velocity; every later tick `MoveKinematic`. An agent is tested before it moves (its callback's order) and the spawn pass of a
+      tap's own frame reads where it stood before its last move. The dead zone-patrol branch is removed (no antiportal callback
+      moves a ring). GAMEPLAY on 12 levels (1-06, 1-11, 2-26, 2-28, 2-31, 3-03, 3-06, 3-09, 3-28, 4-12, 4-22; 3-14's agent): every
+      platform swings twice as far at half the rate from a stride down, the three agents likewise (1-11's block y 114 to 254, was 149
+      to 219). Measured on the original's own stills: 1-11's block and horizontal agent fit ONE phase to 1.75 u rms (the old swing
+      30.8); 1-06, 2-26 and 3-28 to 1.34, 0.70 and 1.64 u. **The spec's friction carry is refuted by the decode** (a static body moved
+      by `SetTransform`, vertical only: G3-1). Routes: 49 of 86 win, 1-06, 2-26, 3-03 and 3-14 now fail on the new geometry (the wave's route
+      phase re-authors them after PIC, CAP and G3); 1-11 now has the step R3-1 hypothesised (the block starts 14 u under the island floor and ends 14 over
+      `double_block_plat_ent_708`) and no route yet. The shock agents already swung as `cos x stride` (`Fields`).*
 - [x] **G4. The portal shot flies 600 u/s against 200** (`ETHCallback_projectile` L71109 #113-125, with a 24 u jump
       on its first frame, #29-55). *Every route leans on it* (with G10), and 2-14's, 4-19's and 4-32's are tick-exact
       on it (their rows). *And a first-tick kill* (step 126): a shot fired from within 22.4 u of an anti-portal agent

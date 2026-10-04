@@ -9,6 +9,7 @@
 // MoveKinematic, which writes both.
 
 #include "sim/LevelBuilder.hpp"
+#include "sim/Motion.hpp"
 #include "sim/Roles.hpp"
 #include "sim/ScriptClock.hpp"
 #include "sim/Tscn.hpp"
@@ -24,6 +25,12 @@ namespace MagicPortals::Mover {
 // Puts a kinematic body at `target` for the step about to be taken, with the
 // velocity that gets it there in `dt`: (target - where it is) / dt.
 void MoveKinematic(entt::registry& registry, entt::entity entity, const glm::vec3& target, float physicsDt);
+
+// Puts a kinematic body at `target` and leaves it no velocity: the original's own SetTransform on a static
+// body (ETHPhysicsEntityController::SetPosXY), a displacement the solver pushes what it overlaps out of and
+// carries nothing by. The one call a moving platform makes it with is its first, which jumps it a stride from
+// where the level placed it (Mover::Movers::Tick).
+void PlaceKinematic(entt::registry& registry, entt::entity entity, const glm::vec3& target);
 
 // A lift door (door_lift.ent), as ETHCallback_door_lift runs it (movers.json
 // `door`, planning step 133). Until then the port ran the Godot project's
@@ -89,10 +96,21 @@ struct Door {
 // when the node has no stride.
 bool DoorFromNode(const Tscn::Node& node, const DoorRules& rules, Door& out, std::string& error);
 
-// The port's own mover numbers, game/data/movers.json: the Godot project's guessed
-// swing, and the lift as ETHCallback_lift runs it (decoded).
+// What one callback passes linearMotion besides the node's own `speed` and `stride`: the three
+// arguments (movers.json `linear_motion`, decoded).
+struct LinearCall {
+    bool vertical = true;
+    double axisDeg = 0.0;    // linearMotion's `angle`: the axis turned by it
+    double startAngle = 0.0; // linearMotion's `startAngle`
+};
+
+// The port's own mover numbers, game/data/movers.json: linearMotion's two calls (a moving platform's and
+// an anti-portal agent's) and the lift as ETHCallback_lift runs it, all decoded.
 struct Rules {
-    double oscillationRateScale = 0.0; // RATE_SCALE_K, _guess
+    LinearCall platform;           // ETHCallback_moving_platform: vertical, axis 0, start 0
+    LinearCall agent;              // ETHCallback_anti_portal_agent: vertical, axis 0, start 0 ...
+    LinearCall agentSideways;      // ... and axis_deg_sideways when its `direction` is directionSideways
+    std::string directionSideways; // the string the callback compares `direction` with
     double liftSpeedUnitsPerS = 0.0;   // the callback's literal 60
     glm::dvec2 liftSizeUnits{0.0};     // lift.png's 64 x 32: the rect a touch sends it from
     // blinkColor(this, (0.6, 0.6, 0.6), (1, 1, 1), 300): a triangle between the two
@@ -100,32 +118,41 @@ struct Rules {
     glm::dvec3 liftBlinkFrom{1.0};
     glm::dvec3 liftBlinkTo{1.0};
     double liftBlinkStrideMs = 0.0;
+    // linearMotion's own frame cap and turn (motions.json linear_motion): Game::LoadData copies them in, so
+    // that one reading of that file serves every motion and no second copy of two decoded numbers is kept.
+    Motion::Rules motion;
+
+    // The call a patrolling agent with this `direction` makes ("" when its node names none).
+    const LinearCall& AgentCall(const std::string& direction) const {
+        return !directionSideways.empty() && direction == directionSideways ? agentSideways : agent;
+    }
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
-// A swing about where the level places something, behaviours.gd's OSCILLATE
-// profile (:158-164), along an axis, by half its stride either way:
-//   offset = sin(rateScale * speed * t) * stride / 2.
-// `speed` is a frequency, not a velocity, by the Godot project's reading of the data.
-// It starts at the level's place, t = 0. Moving platforms swing vertically, and
-// patrolling no-portal zones on the axis their `direction` names.
+// A swing about where the level places something, as the engine's linearMotion runs it for a callback
+// that gives it the node's `speed` and `stride` (motions.json linear_motion, planning step 154):
+//   first call  originalPos = where the node stands; angle = startAngle
+//   every call  angle += speed x min(200, frame ms) / 1000 (Motion::Advance), one turn off once past 2 PI
+//   position    originalPos + turned(cos(angle) x stride x sign(speed))
+// So it swings the FULL stride either side of the node's point, at `speed` radians a second, and it
+// starts a stride along its axis: the first call writes the position already one frame's step in. Until
+// that call the entity is where the level put it. The cosine is DetMath's, the contract the swing keeps so
+// that it comes out the same on every C runtime (Motion::OffsetPxWithCosine).
 struct Oscillation {
-    glm::dvec2 originPx{0.0};
-    glm::dvec2 axis{0.0, 1.0}; // in the Godot project's pixels, +y down: its Vector2.DOWN
-    double stridePx = 0.0;
-    double speed = 0.0;
-    double rateScale = 0.0;
-    double t = 0.0;
+    glm::dvec2 originPx{0.0}; // 'originalPos': the node's own point, the middle of the swing
+    Motion::Linear linear;    // speed, stride, axis and the angle so far
 
+    // One call of linearMotion over `frameMs` of the script's clock.
+    void Advance(const Motion::Rules& rules, double frameMs);
+    // Where the last call put it, or where the level stands it before the first.
     glm::dvec2 AtPx() const;
+    bool Started() const { return linear.started; }
 };
 
-// From a node's position, speed and stride. False, with `error`, when it has no
-// speed or no stride: the Godot project falls back to literals, the port does not
-// invent them.
-bool OscillationFromNode(const Tscn::Node& node, const glm::dvec2& axis, double rateScale, Oscillation& out,
-                         std::string& error);
+// From a node's position, speed and stride, with the callback's arguments. False, with `error`, when it
+// has no speed or no stride: the port does not invent either.
+bool OscillationFromNode(const Tscn::Node& node, const LinearCall& call, Oscillation& out, std::string& error);
 
 // A lift as ETHCallback_lift runs it (movers.json `lift`): at rest on its marker `a`
 // from the first frame, until a touch goes down inside its picture and SENDS it
@@ -173,11 +200,18 @@ struct Lift {
 struct Movers {
     std::vector<Platform> platforms;
     std::vector<Lift> lifts;
+    Motion::Rules motion; // linearMotion's frame cap and turn, from Rules::motion (Wire)
 
     // One step of each, before the physics step, every body moved with
     // MoveKinematic so that it carries what stands on it. Where it goes is the script's
-    // clock (linearMotion's unitsPerSecond); the velocity that carries it there is the
-    // physics step's.
+    // clock (linearMotion's unitsPerSecond: the angle steps by the tick's whole milliseconds);
+    // the velocity that carries it there is the physics step's. A platform's first call, which jumps
+    // it a stride from where the level placed it, is a bare teleport (PlaceKinematic).
+    //
+    // WHEN. The original's callbacks run after its physics step, so what a step meets is the position
+    // the frame before wrote; the port moves a body before its step, like every other mover here (a
+    // door, a bobbing slab, a lift): a body is a frame ahead of the original's for the step that
+    // follows (planning step 154, deviation 4), and the picture drawn after the tick is the original's.
     void Tick(entt::registry& registry, const ScriptClock::Step& step);
 
     // A touch gone down this frame at `pointPx`, a point of the level: every lift

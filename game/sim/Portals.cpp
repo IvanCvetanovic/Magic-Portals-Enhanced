@@ -693,12 +693,6 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     const double elapsedMs = ScriptClock::Ms(step);
     sinceStartMs += elapsedMs;
     sinceTapMs += elapsedMs;
-    for (NoPortalZone& zone : zones) {
-        if (zone.moving) zone.motion.t += step.scriptS;
-    }
-    for (Agent& agent : agents) {
-        if (agent.moving && !agent.gone) agent.motion.t += step.scriptS;
-    }
 
     // EVERY PLACED PORTAL'S OWN CALLBACK, before anything reads where it is
     // (ETHCallback_portal, the visuals plan's 7.4). Its first arm hovers it, and
@@ -835,12 +829,20 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
         // player's centre (so an agent within reach of the player dies at once); on its first callback,
         // 24 + 3.2 units out and never in between; then each advance. A shot that arrives, or is
         // stopped, first is the projectile's own callback's and never reaches the agent's.
+        //
+        // WHERE THE AGENT IS when it looks: the position its previous frame's linearMotion wrote. The
+        // callback pass is the frame after the one the agents last advanced in (Tick moves them last), so
+        // it reads where they stand; the spawn pass is the tap's own frame, whose static callback ran
+        // before that advance, so it reads where they stood before it.
         int killedBy = -1;
+        glm::dvec2 killedAtPx{0.0};
         for (std::size_t i = 0; i < agents.size() && inFlight; ++i) {
             const Agent& agent = agents[i];
             if (agent.gone || arrives) continue;
-            if (Reaches(next, agent.CentreNowPx(), AgentReachPx(agent)) && sampleAlong < first) {
+            const glm::dvec2 agentAt = callback ? agent.CentreNowPx() : agent.BeforeLastMovePx();
+            if (Reaches(next, agentAt, AgentReachPx(agent)) && sampleAlong < first) {
                 killedBy = static_cast<int>(i);
+                killedAtPx = agentAt;
                 first = sampleAlong;
             }
         }
@@ -875,7 +877,7 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             Agent& agent = agents[static_cast<std::size_t>(killedBy)];
             AgentKill kill;
             kill.agent = agent.name;
-            kill.atPx = agent.CentreNowPx();
+            kill.atPx = killedAtPx;
             kill.shotPx = pointAt(first);
             agent.gone = true;
             kill.ring = DeleteRingAt(kill.atPx);
@@ -928,6 +930,14 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
         flyOnePass(false);
     }
     if (flight) flyOnePass(true);
+
+    // THE AGENTS MOVE LAST. ETHCallback_anti_portal_agent flies no shot and tests one before its
+    // linearMotion (#200-250): the agent a shot meets is where the frame before wrote it, and this
+    // frame's move is the position the picture is drawn at and the next frame's shots meet. One call
+    // a frame, over the script's whole milliseconds, for an agent a shot has not killed.
+    for (Agent& agent : agents) {
+        if (agent.moving && !agent.gone) agent.Advance(rules.motion, elapsedMs);
+    }
 
     // An end of a traversal: a static portal by its place in `statics`, which
     // never moves, or a placed one by its id, since placed portals come and go.
@@ -1248,17 +1258,14 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
                 error = node.name + "'s scale is not a number";
                 return false;
             }
-            // ETHCallback_anti_portal_agent #200-250: linearMotion where the node
-            // has a speed, horizontal where its direction says so.
+            // ETHCallback_anti_portal_agent #200-250: linearMotion where the node has a speed, its axis
+            // turned 90 degrees where its `direction` is "horizontal" (movers.json linear_motion.agent).
             if (node.Meta("speed") != nullptr && node.Meta("stride") != nullptr) {
                 const Tscn::Value* direction = node.Meta("direction");
-                const bool sideways = direction != nullptr && direction->kind == Tscn::Value::Kind::String &&
-                                      direction->text == "horizontal";
+                const std::string heading =
+                    direction != nullptr && direction->kind == Tscn::Value::Kind::String ? direction->text : "";
                 agent.moving = true;
-                if (!Mover::OscillationFromNode(node, sideways ? glm::dvec2(1.0, 0.0) : glm::dvec2(0.0, 1.0),
-                                                movers.oscillationRateScale, agent.motion, error)) {
-                    return false;
-                }
+                if (!Mover::OscillationFromNode(node, movers.AgentCall(heading), agent.motion, error)) return false;
             }
             out.agents.push_back(agent);
         } else if (role == Roles::kNoPortalZone) {
@@ -1273,18 +1280,8 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
                 error = node.name + "'s scale is not a number";
                 return false;
             }
-            // Only a zone with both a speed and a stride patrols; a plain antiportal
-            // stands still (behaviours.gd:48-51).
-            if (node.Meta("speed") != nullptr && node.Meta("stride") != nullptr) {
-                const Tscn::Value* direction = node.Meta("direction");
-                const bool sideways = direction != nullptr && direction->kind == Tscn::Value::Kind::String &&
-                                      direction->text == "horizontal";
-                zone.moving = true;
-                if (!Mover::OscillationFromNode(node, sideways ? glm::dvec2(1.0, 0.0) : glm::dvec2(0.0, 1.0),
-                                                movers.oscillationRateScale, zone.motion, error)) {
-                    return false;
-                }
-            }
+            // A ring stands where the level places it: no antiportal callback moves it, whatever speed
+            // and stride its node carries (none does).
             out.zones.push_back(zone);
         }
 
