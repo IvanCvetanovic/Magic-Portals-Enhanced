@@ -3136,3 +3136,79 @@ CAP's, R3B FIX 1 125 of 128 to G3's, the third verifier 128 of 128 to R3B FIX 1'
 that each took the original's numbers in and the routes from 86 down to 49, a re-author and two fix rounds that won all 86
 back, and one level, 2-30, that cannot honestly be opened until the owner picks a rate or a friction. Steadier than wave 3a:
 four refusals, three specs corrected by the listing, the records the best they have been, and the one open question named.
+
+### 2026-10-05 11:20 - Session 26: the images purged, waves 3a and 3b-1 pushed, wave 3b-2 started and stopped for usage
+
+*Written at the end of the session by the lead (this conversation), from the waves' own records and git. Wave 3a and wave 3b-1 have
+their own entries (sessions 24 and 25, written by their close roles); this one covers what the lead did around them and where
+everything stands. The owner asked: "pls check where you left off and continue, also pls delete images you dont need anymore" and
+later "once you finish with the images and you dont need them, just delete them"; at the end "finish what you started and
+remember what you did, we are running out of usage".*
+
+**Built:**
+- **The image purge (2026-10-03).** `out/` was 109 GB and the disk had 64 GB free. About 173,000 image files under `out/parity`
+  were deleted in four tiers, each dry-run first: footage frame dumps next to their mp4 (19.8 GB), `visuals/` (52.7 GB), `program/`
+  (16.2 GB, baseline excluded), the UI capture folders and the recordings' frame dumps (8.9 GB). Kept: `original/` (the emulator
+  reference library), `smoke/`, `markers/`, `saves/`, `asbc/`, the audit, all 78 mp4s, every text/json/script file, and the baseline
+  sweeps. The tool is `out/parity/purge_images.py` (dry run by default, refuses paths outside `out/parity`), the protected baselines
+  are listed in `out/parity/BASELINE.txt`. Free disk 64 -> 151 GB. The owner's standing order (2026-10-03): delete images once finished
+  with them; every wave's roles delete their own scratch and its close role purges.
+- **Wave 3a** (`wf_ea5ad3eb-be8`, 46 agents, 25.5 h): CK 147, G10 148 (+ amendment), G4 149, PIC 150, routes 151: 84 of 86 routes.
+- **Wave 3b-1** (`wf_76f8b2d5-06b`, 33 agents, 14.7 h): WT 152, CAP 153, G3 154, amendments, routes 155: 86 of 86 routes.
+- **The push.** The close roles had held both waves back (one verifier gate failed: 2-30 won on a held-friction creep, R3-2). After
+  the suite went green (86 of 86 routes, 53 of 53 suites) I judged the single documented medium an owner question, not a defect,
+  ran the hard-rule checks over the whole range myself (no forbidden extension, nothing from `out/` or `reference/`, no trailers,
+  18 commits all authored as the owner, a fast-forward) and pushed `0b8d3c5..00de2b1` to `origin/main` (the renamed repository).
+- **Wave 3b-2** (`wf_00147096-d57`): started on main - R23 (the portal tap as the original), G9 (the reflector), G1a (the knights
+  see), G1b (the knights shoot) - and **stopped by me about 1.5 hours in**, to save usage, at a clean point: R23 is built, verified
+  13 of 13 and committed (`8e81ccf`, planning step 156, local, NOT pushed); G9 was mid-implementation.
+  Its tree was saved, unverified, as `ae65e34` on the local branch `wip/wave3b2-g9-interrupted`; `main` is clean at the DEVLOG
+  commit on top of `8e81ccf`. A ready-to-run resume script that starts at G9 is `out/parity/program/wave_scripts/mp-wave3b2-resume.js`.
+
+**Broke / dead ends:**
+- **My wave script had no world-time-base step**, so wave 3a's routes were flown on a mixed time base (the player in the original's
+  1/30 s physics step, every other body in the Godot-era one); wave 3a's verifier had asked for it first. Cost: wave 3b-1 re-timed
+  and re-authored the routes a second time (84 -> 62 -> 53 -> 49 won before the route phase brought all 86 back).
+- **Windows line endings.** Python's text-mode write on Windows made CRLF in a workflow script and the Workflow tool refused it
+  ("control characters ... hidden in the approval dialog"); `newline="
+"` fixed it. Also an apostrophe in a single-quoted string.
+- **`build/` is stale.** The interrupted G9 attempt left binaries built from its unverified code; the next role must rebuild first.
+- **2-30 stays an owner question** (R3-2): it wins only on a stone's creep that a port artifact makes; the honest jump needs a
+  different air-brake rate (G10-2), the stone's decoded friction (an engine step), or the owner's acceptance.
+
+**Decision:**
+- Stopped wave 3b-2 rather than let it run to the end (the knights steps, the route re-authoring, the verification: many more
+  hours of agent usage) because the owner said usage was running out. Nothing was discarded: the interrupted step is on a branch.
+- Not pushed: R23's routes are not re-authored yet (80 of 86 win; 1-23, 2-10, 2-17, 2-19, 3-13 and 3-15 are stopped by the
+  tap-time ray), so main stays ahead of `origin/main` by R23 and this entry. `origin/main` (`00de2b1`) is the green state.
+- Kept the R23 sweep (`program/R23/after/sweep`) beside `R3b/fix1/after/sweep` in `BASELINE.txt` so a resume has its "before".
+
+**Where it stands / next:** resume with the script above (G9, G1a, G1b, then the census and re-author loop, a verify, a push if
+green, a close), then wave 4: routes for the 42 levels with none, the final comparison (the pixel-centre edge rule first), the
+ship preparation. The owner's open calls: 2-30's creep (R3-2), the engine's friction and restitution steps (own step, the other
+engine session reviews), G10-2's rate (60 Hz kept), the CAP/WT guesses (crate friction 0.08).
+
+**Smart App Control: 2 refused launches in the stopped wave** (R23's runner, relinked twice per its record); none caused by the
+lead. Wave 3a: 2, wave 3b-1: 4.
+
+**Assets check:** yes - `git status --short`, run after appending this entry, lists exactly:
+
+```
+ M DEVLOG.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference` prints 0 lines). The forbidden-extension grep over the
+staged names printed nothing; `git diff --name-only 0b8d3c5..00de2b1` (the pushed range, 194 files) printed nothing for
+`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, `^out/` or `^reference/`. The owner's save folder holds
+`scores.json` alone (md5 `40bfef3ac396b4e94bdd97990401435a`).
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** pushed 18 commits (`0b8d3c5..00de2b1`, 194 files, +12,364 / -2,507); one local commit (`8e81ccf`, 19 files, +895 / -305)
+and this entry; a 10-file WIP commit on a side branch. Routes won: 86 of 86 at the pushed state, 80 of 86 after R23. Disk: free
+64 -> 151 GB at the purge, 147.6 GB at the end; `out/parity` about 17 GB.
+
+**Inferred mood:** a guess from the facts - a very long run of long runs that mostly worked: the disk freed, two big waves landed
+and pushed, one honest owner question left standing, and then a deliberate stop with everything saved because the budget, not
+the work, ran out.
