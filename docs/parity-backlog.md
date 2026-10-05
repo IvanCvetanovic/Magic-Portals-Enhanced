@@ -2199,7 +2199,7 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
       the flame's circle on tick 264 - the leap that is 0.4 u short). DIAGNOSTIC, data edits for the run: that same walk WINS on tick 278 with `air_decay` 1.0 and with `air_decay_fps`
       30 or 45, and dies at 0.93 and at the shipped 0.86, so the designed solution exists and G10-2's matched rate is what stops it. Open; the owner's to rule on (planning step 152's amendment, 3).*
       *R3b fix 2 (the second verifier's one medium finding, NOT fixed: it waits on the owner; planning step 152's R3B FIX 2): re-measured on the current 86 routes
-      and round 1's counterweight route (`R3b/fix2/cw_r1.json`, outside `tests/routes`): it dies on tick 270 at `air_decay` 0.86, 0.90 and 0.93 and wins on tick
+      and round 1's counterweight route (`R3b/fix2/cw_r1.json`, outside `tests/routes`; its win tick 284 and the 278 above are two variants of the same walk): it dies on tick 270 at `air_decay` 0.86, 0.90 and 0.93 and wins on tick
       284 at 1.0, `air_decay_fps` 45 and 30; the stone's decoded friction fails 2-30 (burned on 1346) and 3-12 (falls on 493) and nothing else (1-09 +2, 2-07 -1).
       The route's `_about` now says all of this. The three choices are in the planning step's table: settle G10-2, apply the stone's friction, or keep the creep
       until the engine's friction step.*
