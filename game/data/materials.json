@@ -100,6 +100,7 @@
       "restitution": 0.2,
       "density": 0.4,
       "held_friction": 0.08,
+      "_guess": true,
       "_source": "crate_low_emissive.ent: <Entity friction=\"0.960000\" density=\"0.400000\" restitution=\"0.200000\"> - the same pair as the crate group above; the group is its own only for the held_friction below",
       "_held_friction": [
         "A GUESS (_guess true), not a decoded number: the friction this entity is BUILT with while friction_applied is false, in place of the",
