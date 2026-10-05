@@ -3,20 +3,20 @@
 // Portals: portal_system.gd's placement and traversal (:69-282), on the transit
 // arithmetic in Portal.hpp.
 //
-// - A tap fires a shot (Shot.hpp) from the player's centre toward the tap. It
-//   flies as ETHCallback_projectile does (shot.json `flight`, decoded; planning
-//   step 149): a jump of 24 units and an advance of 200 x the script's
-//   milliseconds / 1000 on its first callback, the advance alone after, and
-//   it fails on the first solid body or
-//   projectile blocker it meets. Where it arrives a portal opens, a circle,
-//   against a budget. The budget is the level's max_portals or portals.json's
-//   default, and never more than a pair. At the cap the oldest portal gives
-//   way, or with that switched off the shot fails. A shot that arrives inside
-//   a no-portal zone fails too. A failed shot costs nothing. One shot flies at
-//   a time. A shot that comes near an anti-portal agent on its way dies there
-//   and kills it, and the agent's ring goes with it (Agent). One that comes
-//   within a fire agent's reach is burned, and Game makes a fireball of it
-//   (Flame).
+// - A tap fires a shot (Shot.hpp) from the player's centre. What the original works out AT THE TAP is the
+//   whole of what the shot does (planning step 156, R23): computePortalFinalPos's ray, with its head-height
+//   retry, says where the shot is to go (its finalPos: the contact for a wall or a body a portal may not open
+//   on, 10 units past the contact for one it may) and whether it is doomed (willDie). The shot flies there as
+//   ETHCallback_projectile does (shot.json `flight`, decoded; planning step 149): a jump of 24 units and an
+//   advance of 200 x the script's milliseconds / 1000 on its first callback, the advance alone after. It has
+//   NO BODY and meets none: a wall, a crate, a platform that moves into its way, none stops it. Where it
+//   arrives a doomed shot opens portal_fail and any other opens a portal (insertPortal: no field test of its
+//   own), a circle, against a budget. The budget is the level's max_portals or portals.json's default, and
+//   never more than a pair. At the cap the oldest portal gives way, or with that switched off the shot fails.
+//   A failed shot costs nothing. One shot flies at a time. What a shot in flight does meet are the static
+//   callbacks that sample its POSITION once a frame: an anti_projectile_wall's rectangle (it dies there), an
+//   anti-portal agent (it dies there and kills the agent, and the agent's ring goes with it: Agent), a fire
+//   agent's flame (it is burned, and Game makes a fireball of it: Flame) and a reflector (it is turned: G9).
 // - A level may also ship static portals (portal_static), which pair by index.
 // - Whatever comes into a portal goes out of its partner, as the original sends
 //   it (transit.json, decoded): at the partner itself, its velocity turned back,
@@ -118,16 +118,19 @@ struct Rules {
     Motion::Rules motion;
 
     // WHAT THE ORIGINAL WORKS OUT AT THE TAP (placement.json final_pos, decoded):
-    // computePortalFinalPos's ray and its head-height retry, which decide the
-    // mark a tap leaves - red_cross or portal_mark - and red_waves (A). Read for
-    // the PICTURE only (the owner's standing ruling R15): where a shot goes and
-    // how it ends is still Tick's.
+    // computePortalFinalPos's ray and its head-height retry, which decide where a
+    // shot goes (its finalPos), whether it is doomed, the mark a tap leaves - red_cross
+    // or portal_mark - and red_waves (A). Shoot runs it once, and the shot flies by it
+    // (planning step 156, R23; until then it decided the pictures alone, R15).
     struct FinalPosRules {
         double rayStartUnits = 0.0;          // the ray starts this far out along the aim
         std::vector<std::string> rayIgnores; // the entity names it passes through, exactly as spelled
         double pushUnits = 0.0;              // jumpForth: past a body it may open on, short of one it may not
         glm::dvec2 retryFromUnits{0.0};      // the retry's origin, from the caster's
         double retryBackUnits = 0.0;         // and how far back off its aim it starts
+        // The method's fire-diamond branch (#21-64), which casts no ray: the shot is aimed at
+        // origin + (destPos - origin) x g_scale.scale(64), a point so far out that it never arrives.
+        double fireDiamondReach = 0.0;
     };
     FinalPosRules finalPos;
     // The entity whose presence turns a budget-0 tap into red_waves and a shake
@@ -367,11 +370,30 @@ struct Traversal {
     glm::dvec2 exitPx{0.0};  // appearEffect's argument: the end it came out of
 };
 
+// WHAT computePortalFinalPos ANSWERS: the global (bytes 355236..356384) and
+// PortalManager's method with its head-height retry over it (141090..142200),
+// run on the port's own bodies and fields (placement.json final_pos). What it
+// gives is PortalPosition's pos and closestEntity, *hasFailed - the shot's
+// willDie, so red_cross or portal_mark - and whether it added red_waves (A).
+// Shoot calls it at the tap and the shot FLIES BY IT (planning step 156, R23): its pos
+// is the shot's destiny and its willDie is what the shot does where it arrives.
+struct FinalPos {
+    glm::dvec2 atPx{0.0};              // PortalPosition.pos: where the shot is to go, its finalPos
+    bool willDie = false;              // *hasFailed
+    bool redWaves = false;             // the ray met nothing and the aim is in a field: red_waves (A) there
+    bool preferred = false;            // *preferedTeleportEntity was set: it ended on a body a portal may open on
+    entt::entity closest = entt::null; // PortalPosition.closestEntity: what the ray met first
+    bool retried = false;              // the method's head-height retry ran
+};
+
 // A portal shot on its way.
 struct Flight {
     glm::dvec2 fromPx{0.0}; // the player's centre when it was fired
-    glm::dvec2 toPx{0.0};   // where it opens a portal: the tap, mirrored by each reflector it came off
+    glm::dvec2 toPx{0.0};   // its destiny: where the tap-time ray ended (said.atPx), which a reflector's turn replaces
     glm::dvec2 atPx{0.0};   // where it is now
+    // What the ray said of this leg: whether the shot is doomed (arrival opens portal_fail and not a portal), what it
+    // met, and the rest of the record the pictures read. A hand-built flight has none: it opens a portal where it ends.
+    FinalPos said;
     int reflections = 0;    // how many reflectors it has come off
     int lastReflector = -1; // the last of them, which cannot turn it again at once
     // Whether this leg has had its first callback - ETHCallback_projectile's first
@@ -387,34 +409,17 @@ struct Flight {
     bool fresh = false;
 };
 
-// WHAT computePortalFinalPos ANSWERS: the global (bytes 355236..356384) and
-// PortalManager's method with its head-height retry over it (141090..142200),
-// run on the port's own bodies and fields (placement.json final_pos). What it
-// gives is PortalPosition's pos and closestEntity, *hasFailed - the shot's
-// willDie, so red_cross or portal_mark - and whether it added red_waves (A).
-// READ FOR THE PICTURES ONLY, by the owner's standing ruling R15: where the
-// port's shot flies and how it ends is still Tick's, and the two can disagree
-// where the port's flight is not the original's (R23, not built).
-struct FinalPos {
-    glm::dvec2 atPx{0.0};              // PortalPosition.pos: where the original would send its shot
-    bool willDie = false;              // *hasFailed
-    bool redWaves = false;             // the ray met nothing and the aim is in a field: red_waves (A) there
-    bool preferred = false;            // *preferedTeleportEntity was set: it ended on a body a portal may open on
-    entt::entity closest = entt::null; // PortalPosition.closestEntity: what the ray met first
-    bool retried = false;              // the method's head-height retry ran
-};
-
 // WHY A TAP DID WHAT IT DID - the refused-tap record (00_order 8.13's 10.1 row).
 // Written by every Shoot call, whatever it decides, and read by the layer the
 // moment the call returns. The reasons are the original's, in its own order:
 // PortalManager::update returns before either tap path while the level is
 // younger than first_ms (TooEarly); a budget of 0 goes to blockPortalEffects
-// (NoBudget: red_waves (B) where the sign is); managePortalInsertion then holds
-// a tap off for next_ms, drawing nothing (Cooldown), and shows the hourglass for
-// one that passes while a shot still flies (InFlight). The port's own refusals
-// and their results are unchanged - Shoot returns what it returned, and neither
-// clock moves on a refusal: the original's hourglass tap restarts the 400 ms,
-// which is 00_order 8.15's R23 and not played here.
+// (NoBudget: red_waves (B) where the sign is, with no 400 ms gate); managePortalInsertion
+// then holds a tap off for next_ms, drawing nothing and moving no clock (Cooldown),
+// and for one that passes RESTARTS the 400 ms clock (#75-78) before it asks whether a
+// projectile.ent still exists: the hourglass if one does (InFlight), a shot if none (Fired).
+// So only the hourglass tap moves the clock besides a shot (planning step 156, R23: the
+// decode; the program's spec said every refusal, and the cooldown and budget-0 taps do not).
 //
 // field_clear_ray, 8.13's third reason, is not a refusal in either game: the
 // shot fires, and computePortalFinalPos adds red_waves (A) for it - and for a
@@ -424,6 +429,9 @@ enum class TapReason { Fired, NoShooter, TooEarly, NoBudget, Cooldown, InFlight 
 struct Tap {
     glm::dvec2 atPx{0.0};
     TapReason reason = TapReason::Fired;
+    // What the ray said of a tap that fired: the shot's destiny and whether it is doomed, which
+    // the layer's mark and red_waves (A) read, and the shot flies by. Unset for a refused tap.
+    FinalPos said;
 };
 
 // THE TOUCH A SHOT IS FIRED BY (placement.json `release`, decoded). The original
@@ -483,26 +491,23 @@ struct Reflection {
 };
 // How a shot ended without a portal, and where.
 enum class FailKind {
-    Body,    // the first solid body on its way
-    Blocker, // an anti_projectile_wall's box (ETHCallback_anti_projectile_wall)
-    Refused, // it arrived where TryPlace opens nothing: a no-portal zone
+    Body,    // it arrived doomed by a body the tap-time ray met first (ETHCallback_projectile's willDie arm)
+    Blocker, // an anti_projectile_wall's rectangle held its position (ETHCallback_anti_projectile_wall)
+    Refused, // it arrived doomed with the ray having met nothing: the aim was in a no-portal field (red_waves (A))
 };
 struct Failure {
-    glm::dvec2 atPx{0.0};
+    glm::dvec2 atPx{0.0}; // where the failure is drawn: the destiny, or the position a blocker found the shot at
     FailKind kind = FailKind::Body;
-    bool inField = false; // the point is inside a zone the port plays (InField)
+    // A doomed arrival asks isPointInAntiPortalField of the shot's POSITION after its last advance, which is up to one
+    // advance past the destiny (ETHCallback_projectile #201-211), not of the destiny itself (planning step 156, G4-8).
+    bool inField = false;
 };
 
 struct State {
     Rules rules;
     Shot::Rules shot;
     int budget = 0;
-    entt::entity shooter = entt::null; // the player: where a shot leaves from, and what it passes through
-    // What else a flying shot passes through: each gravity well's agent, set by
-    // Game::Start (00_order R2). The original's projectile.ent has no shape and
-    // meets nothing on its way, and the ray that judges its tap passes
-    // gravity_agent by name, so a well stops no shot.
-    std::vector<entt::entity> shotPasses;
+    entt::entity shooter = entt::null; // the player: where a shot leaves from, and what the tap-time ray passes through
     std::vector<NoPortalZone> zones;
     std::vector<Agent> agents;
     std::vector<Flame> flames; // the fire agents, set by Game::Start
@@ -566,11 +571,12 @@ struct State {
     bool noGravity = false;
     double recoilMps = 0.0;
 
-    // THE PICTURES' RECORDS (the visuals plan's 10.1), none of which the
+    // THE RECORDS THE PICTURES READ (the visuals plan's 10.1), none of which the
     // simulation reads. The bodies the tap-time ray passes through by name
-    // (Find, from rules.finalPos.rayIgnores); whether the level places the
-    // no-portal sign (Find, rules.noPortalSignEntity); what the last Shoot call
-    // did with its tap; and what this tick's shot did (Tick).
+    // (Find, from rules.finalPos.rayIgnores - the ray itself IS read by the simulation
+    // since planning step 156); whether the level places the no-portal sign (Find,
+    // rules.noPortalSignEntity); what the last Shoot call did with its tap; and what
+    // this tick's shot did (Tick).
     std::vector<entt::entity> rayIgnored;
     bool noPortalSign = false;
     Tap lastTap;
@@ -580,21 +586,30 @@ struct State {
     std::vector<AgentKill> agentKills; // this tick's alone, as failures are
     std::vector<Burn> burns;           // this tick's alone: the shot a flame burned
 
-    // A tap at a point in the level: a shot fired toward it. False when none
-    // goes, because the level allows no portal or a shot is already flying.
-    // Either way it writes lastTap, and nothing else it writes on a refusal.
+    // A tap at a point in the level, through managePortalInsertion's own order of tests (planning
+    // step 156). False when no shot goes; either way it writes lastTap, and the one thing it moves
+    // besides on a refusal is the 400 ms clock, restarted by the tap that gets as far as the hourglass.
+    //   - update's first gate (TooEarly), then a budget of 0 (NoBudget, which has no clock);
+    //   - the 400 ms since the last tap taken (Cooldown: silent, and the clock is not restarted);
+    //   - the clock restarts (#75-78), before anything is known of the shot;
+    //   - a shot still flying: the hourglass (InFlight);
+    //   - otherwise the tap-time ray (Predict, or the fire-diamond branch when `fireDiamondWillDie` is
+    //     set: the leftover byte the caller reads off the tap's x) says where the shot goes and whether
+    //     it is doomed, and the shot is fired at that point, which is also what the zero-gravity recoil
+    //     aims at (#158-166).
     //
     // `velocityRatio` is how many times the original's own Box2D velocity the shooter's is carried at
     // (ScriptClock::SimRatio, which the layer passes; Player.hpp says why): the recoil is a velocity
     // the original adds to its own, so the shooter is given that many times over. 1 is a body
     // carried in the original's own units, which is what a suite that calls this bare means.
-    bool Shoot(entt::registry& registry, const glm::dvec2& atPx, double velocityRatio = 1.0);
+    bool Shoot(entt::registry& registry, const glm::dvec2& atPx, double velocityRatio = 1.0,
+               std::optional<bool> fireDiamondWillDie = std::nullopt);
 
     // Whether a point is inside a zone the port plays - the test TryPlace
     // refuses by, exactly: an antiportal's radius times its scale, or a zone's
     // own radius, and never a zone that is gone. It stands in for
-    // isPointInAntiPortalField in computePortalFinalPos, so the pictures follow the
-    // fields the port plays (R1 is not built).
+    // isPointInAntiPortalField in computePortalFinalPos and in the failure's look at the
+    // shot's position, so the shot follows the fields the port plays (R1, step 127).
     bool InField(const glm::dvec2& atPx) const;
     // The same test on one zone: isPointInAntiPortalField, the port's radius.
     bool Holds(const NoPortalZone& zone, const glm::dvec2& atPx) const;
@@ -628,9 +643,14 @@ struct State {
     // original's world pixels: the level's units times its scale factor.
     static bool FireDiamondWillDie(double touchXScreenPx);
 
-    // A portal opened at a point at once, as an arriving shot opens one. The
-    // suites use it to put portals where a test needs them. False when refused.
+    // A portal opened at a point at once. The suites use it to put portals where a test needs them. False
+    // when refused: no budget, a point InField (the port's own refusal, which an arriving shot does not
+    // make: the ray decided it at the tap), or the cap with recycling off.
     bool TryPlace(const glm::dvec2& atPx);
+    // PortalManager::insertPortal (bytes 142281..142841), which an arriving shot that is not doomed calls:
+    // the portal is added at the point, and when that makes more than the budget the oldest is killed
+    // (#127-146). It tests no field (the original's refusals are the ray's, at the tap).
+    bool Insert(const glm::dvec2& atPx);
 
     // hasMovingPlatformInAnyPortal (bytes 147042..147305): whether any gate body
     // reaches within rules.gate.radiusShare x rules.entryRadiusPx of any placed

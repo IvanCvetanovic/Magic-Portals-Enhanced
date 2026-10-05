@@ -226,21 +226,24 @@ bool LoadPlacement(const std::string& path, Rules& out, std::string& error) {
     const Json::Value& finalPos = root["final_pos"];
     if (!finalPos.IsObject() || !finalPos["ray_start_units"].IsNumber() || !finalPos["push_units"].IsNumber() ||
         !finalPos["retry_back_units"].IsNumber() || !finalPos["ray_ignores"].IsArray() ||
+        !finalPos["fire_diamond_reach"].IsNumber() ||
         !finalPos["retry_from_units"].IsArray() || finalPos["retry_from_units"].AsArray().size() != 2 ||
         !finalPos["retry_from_units"].AsArray()[0].IsNumber() || !finalPos["retry_from_units"].AsArray()[1].IsNumber()) {
-        error = path + ": final_pos needs ray_start_units, ray_ignores, push_units, retry_from_units [x, y] and "
-                       "retry_back_units";
+        error = path + ": final_pos needs ray_start_units, ray_ignores, push_units, retry_from_units [x, y], "
+                       "retry_back_units and fire_diamond_reach";
         return false;
     }
     Rules::FinalPosRules readFinal;
     readFinal.rayStartUnits = finalPos["ray_start_units"].AsNumber(-1.0);
     readFinal.pushUnits = finalPos["push_units"].AsNumber(-1.0);
     readFinal.retryBackUnits = finalPos["retry_back_units"].AsNumber(-1.0);
+    readFinal.fireDiamondReach = finalPos["fire_diamond_reach"].AsNumber(-1.0);
     readFinal.retryFromUnits = glm::dvec2(finalPos["retry_from_units"].AsArray()[0].AsNumber(0.0),
                                           finalPos["retry_from_units"].AsArray()[1].AsNumber(0.0));
     if (!(readFinal.rayStartUnits > 0.0) || !(readFinal.pushUnits > 0.0) || !(readFinal.retryBackUnits > 0.0) ||
-        readFinal.retryFromUnits == glm::dvec2(0.0)) {
-        error = path + ": final_pos's distances are each above zero, and its retry starts somewhere else";
+        !(readFinal.fireDiamondReach > 1.0) || readFinal.retryFromUnits == glm::dvec2(0.0)) {
+        error = path + ": final_pos's distances are each above zero, its fire-diamond reach is above 1, and its "
+                       "retry starts somewhere else";
         return false;
     }
     for (const Json::Value& name : finalPos["ray_ignores"].AsArray()) {
@@ -412,6 +415,11 @@ const Agent* State::FindAgent(const std::string& name) const {
 bool State::TryPlace(const glm::dvec2& atPx) {
     if (budget <= 0) return false;
     if (InField(atPx)) return false;
+    return Insert(atPx);
+}
+
+bool State::Insert(const glm::dvec2& atPx) {
+    if (budget <= 0) return false;
     if (static_cast<int>(placed.size()) >= budget) {
         if (!rules.recycleOldestAtCap) return false;
         placed.erase(placed.begin());
@@ -473,63 +481,74 @@ bool RequestsPortal(const Rules& rules, const TouchRelease& release) {
     return release.released && release.maxMoveUnits <= rules.releaseMaxMoveUnits;
 }
 
-bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx, double velocityRatio) {
-    // The two clocks' verdicts, asked first so that the record below can give
-    // the original's reason whichever of the port's tests refuses the tap. Only
-    // the record reads them before the port's own order does, and they change
-    // nothing.
+bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx, double velocityRatio,
+                  std::optional<bool> fireDiamondWillDie) {
+    // The two clocks' verdicts. update's first gate is a strict "less than" and managePortalInsertion's
+    // is a "more than", so a tap exactly at either limit is refused by the second and passes the first.
     const bool tooEarly = rules.firstPortalMinMs > 0.0 && sinceStartMs < rules.firstPortalMinMs;
     const bool tooSoon = rules.nextPortalMinMs > 0.0 && sinceTapMs <= rules.nextPortalMinMs;
     lastTap = Tap{};
     lastTap.atPx = atPx;
-    if (budget <= 0 || flight || shooter == entt::null || !registry.valid(shooter)) {
-        // The original's order (Tap): update's first gate, then the budget, then
-        // the 400 ms, and the hourglass last.
-        if (shooter == entt::null || !registry.valid(shooter)) lastTap.reason = TapReason::NoShooter;
-        else if (tooEarly) lastTap.reason = TapReason::TooEarly;
-        else if (budget <= 0) lastTap.reason = TapReason::NoBudget;
-        else if (tooSoon) lastTap.reason = TapReason::Cooldown;
-        else lastTap.reason = TapReason::InFlight;
+
+    // THE ORIGINAL'S ORDER OF TESTS (PortalManager::update 138545..139692, then managePortalInsertion
+    // 143178..144166 or blockPortalEffects 137862..138545), planning step 156.
+    //
+    // No character to shoot from: the port's own case.
+    if (shooter == entt::null || !registry.valid(shooter)) {
+        lastTap.reason = TapReason::NoShooter;
+        return false;
+    }
+    // update #16-46: the level's first FIRST_PORTAL_MIN_TIME. Nothing is drawn and no clock moves.
+    if (tooEarly) {
+        lastTap.reason = TapReason::TooEarly;
+        return false;
+    }
+    // update #48-56: a budget of 0 hands the tap to blockPortalEffects, which never reads the 400 ms
+    // clock (lastPortalTimer) and never restarts it: red_waves (B) and a shake where the level places
+    // the sign (the layer's), every tap.
+    if (budget <= 0) {
+        lastTap.reason = TapReason::NoBudget;
+        return false;
+    }
+    // managePortalInsertion #43-73: a tap inside 400 ms of the last it took draws nothing and moves no
+    // clock - it is the next touch's turn - so this refusal is silent and the clock runs on.
+    if (tooSoon) {
+        lastTap.reason = TapReason::Cooldown;
         return false;
     }
 
-    // THE COOLDOWNS, and they gate the TAP rather than the placement.
-    //
-    // The original holds a whole level's taps off for FIRST_PORTAL_MIN_TIME -
-    // PortalManager::update skips managePortalInsertion entirely until its
-    // gameTimer passes it - and then holds each tap off for
-    // NEXT_PORTAL_MIN_TIME since the last one it took.
-    //
-    // Here rather than in TryPlace on purpose. TryPlace is what an arriving shot
-    // calls AND what the suites call to put a portal where a test needs one; a
-    // clock there would refuse them for a reason none of them is about. The
-    // layer's only tap path is this function (readInput), so this is the seam
-    // the original gates.
-    //
-    // The comparisons are the original's own, and they differ: update refuses
-    // while gameTimer is BELOW FIRST_PORTAL_MIN_TIME (a strict less-than), while
-    // managePortalInsertion proceeds only when lastPortalTimer is ABOVE
-    // NEXT_PORTAL_MIN_TIME - so it refuses on equal.
-    // ZERO MEANS OFF, stated rather than implied. sinceTapMs starts at zero, so
-    // a bare `sinceTapMs <= nextPortalMinMs` refuses the very first tap even
-    // when the cooldown is nothing - which silently disarmed the suites that
-    // turn it off and cost a whole build to find. (tooEarly and tooSoon are
-    // worked out at the top, for the record.)
-    if (tooEarly || tooSoon) {
-        lastTap.reason = tooEarly ? TapReason::TooEarly : TapReason::Cooldown;
+    // THE TAP IS TAKEN, and "taken" is all that has happened. lastPortalTimer.reset() (#75-78) comes
+    // before anything is known of the shot - before the test for a projectile that is still alive - so
+    // the 400 ms is spent by a tap that goes on to show the hourglass or to hit a wall, and
+    // placement.json says why that does not contradict "a failed shot costs nothing" (that is about
+    // the budget). THE SPEC OF THIS STEP SAID EVERY REFUSAL RESTARTS IT; the decode says this one does
+    // and the two above do not.
+    sinceTapMs = 0.0;
+    // #80-99 and #181-210: a projectile.ent exists, so the tap shows the hourglass and fires nothing
+    // (the character is not turned toward it either: #101-124 are on the other arm).
+    if (flight) {
+        lastTap.reason = TapReason::InFlight;
         return false;
     }
     lastTap.reason = TapReason::Fired;
 
-    // Taken, so it is spent - even if the shot goes on to hit a wall and open
-    // nothing. The original resets lastPortalTimer before it has any idea
-    // whether the shot will land. placement.json says why that does not
-    // contradict "a failed shot costs nothing", which is about the budget.
-    sinceTapMs = 0.0;
     Flight fired;
     fired.fromPx = Units::ToPixels(registry.get<TransformComponent>(shooter).position);
-    fired.toPx = atPx;
     fired.atPx = fired.fromPx;
+    // #127-145: computePortalFinalPos(absTouchPos, ...) from the character. Its answer is the whole of
+    // the shot: where it goes (finalPos), and whether it is doomed (hasFailed).
+    //
+    // A fire diamond carried is the method's own branch (#21-64): no ray, finalPos 64 x scale out along
+    // the aim, and hasFailed is the caller's leftover byte - which the layer reads off the tap's x and
+    // hands in. The shot never arrives: Game turns it into a fireball on its first tick.
+    if (fireDiamondWillDie.has_value()) {
+        fired.said.atPx = fired.fromPx + (atPx - fired.fromPx) * rules.finalPos.fireDiamondReach;
+        fired.said.willDie = *fireDiamondWillDie;
+    } else {
+        fired.said = Predict(registry, fired.fromPx, atPx);
+    }
+    fired.toPx = fired.said.atPx;
+    lastTap.said = fired.said;
     // The tap's AddEntity is in `loop`, after this frame's dynamic callbacks: the static callbacks of
     // this frame see the shot where it was spawned, and its own first callback is the next frame's
     // (Tick's first pass, then its second). The layer takes the tap after its tick's AfterStep, so
@@ -546,6 +565,10 @@ bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx, double veloc
     // shove is spent on a tap that goes on to hit a wall, exactly as it is on
     // one that opens a portal - the flight below has not resolved yet.
     //
+    // IT AIMS AT finalPos, NOT AT THE TAP (#158-166: `applyImpulse(finalPos)`): a tap beyond a wall
+    // pushes the shooter away from the wall's face, and a tap the head-height retry clears pushes it
+    // away from the point the retry chose.
+    //
     // ADDED to the velocity, never set: applyImpulse is
     // SetLinearVelocity(GetLinearVelocity() + impulse), so shots accumulate and
     // drift is the mechanic.
@@ -561,24 +584,21 @@ bool State::Shoot(entt::registry& registry, const glm::dvec2& atPx, double veloc
     return true;
 }
 
-// ---- computePortalFinalPos, for the pictures (the visuals plan's 10.1) --------
+// ---- computePortalFinalPos: where the tap sends the shot, and whether it is doomed ----
 //
 // The original works out at the tap where its shot is to go and whether it is
 // already doomed, and never looks again: its projectile has no body and flies a
-// straight line to that point. The port's shot flies and ends by Tick, which
-// this does not touch. What this is read for is the mark the tap leaves -
-// red_cross for a doomed shot, portal_mark otherwise - and red_waves (A), both of
-// them pictures: the owner's standing ruling R15.
+// straight line to that point (ETHCallback_projectile). Shoot calls this, and the
+// shot flies by its answer (planning step 156, R23) - which is also the mark the tap
+// leaves, red_cross for a doomed shot and portal_mark otherwise, and red_waves (A).
 //
 // It runs the original's ray over the PORT'S world. The bodies are the port's
 // colliders, a trigger as well as a solid one, less the shooter and the bodies
 // the ray's ignore list names (Find); "static" is a body with no dynamic rigid
 // body (a StaticBody2D, a sensor, or a static the port moves kinematically), and
 // "teleportable" is a body Tick carries through a portal (travellers). The
-// fields are the zones the port plays (InField), so a tap's picture tells the
-// truth about the port's own refusal - R1's radius not being built, the
-// original's fields are not yet the port's. (R2's wells, which were the other
-// difference, are not zones since step 125.)
+// fields are the zones the port plays (InField): antiportals at the original's radius
+// (R1, step 127) and nothing else (R2, step 125: a well is no field; R17: an agent is none).
 
 FinalPos State::FinalPosFrom(entt::registry& registry, const glm::dvec2& destPx, const glm::dvec2& casterPx,
                              bool hasBeenReflected) const {
@@ -729,6 +749,12 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     // (#113-125) and asks whether it has gone FARTHER than its destiny (#127-156, a strict compare:
     // the shot overshoots, and the portal opens at the destiny, never at the shot).
     //
+    // THE DESTINY IS THE TAP-TIME RAY'S finalPos (planning step 156, R23), which Shoot stored: the
+    // shot has NO BODY (projectile.ent is shape 0) and meets no wall, crate, platform or placed
+    // portal on its way - the ray decided all of those at the tap, and a doomed shot simply flies
+    // to where the ray ended and fails there. What it does meet are the other entities' STATIC
+    // callbacks, which see its position once a frame.
+    //
     // WHEN, and what the other callbacks see. ETHScene::Update runs the dynamic callbacks (the
     // shot's), then `loop` (the tap and its AddEntity), then the static ones (an agent, a flame, a
     // reflector, a blocker). So on the frame a tap fires it the shot has no callback yet - it exists,
@@ -739,15 +765,13 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     // pass (`Flight::fresh`). A static callback of a frame the shot's own callback ended on finds
     // nothing: DeleteEntity erases it from its bucket at once. And a static callback samples the
     // shot's POSITION once a frame, never the way between two: the spawn, then the point after the
-    // jump and first advance, then each advance. The agents and flames below are tested so. What the
-    // original has no counterpart for - a solid body on the way, a blocker's box and a reflector's
-    // reach, the port's own rules (R23, G9 not built) - are still tested along the way, from where
-    // the shot started the tick, and not on the jump alone: the tap-time ray the original decides
-    // a wall by starts 8 units out and sees every wall on the way.
+    // jump and first advance, then each advance. The blockers, agents and flames below are tested
+    // so. The one thing still swept along the way is a reflector's reach (G9 rebuilds it).
     const auto flyOnePass = [&](bool callback) {
         const glm::dvec2 startPx = flight->atPx; // initialPos on the first callback
         glm::dvec2 afterJumpPx = startPx;        // where what the original samples begins
         glm::dvec2 next = startPx;
+        glm::dvec2 positionPx = startPx; // GetPositionXY once the callback has advanced it: past the destiny on an arrival
         bool arrives = false;
         bool pastEnd = false;  // the jump alone carried it beyond its destiny
         bool inFlight = false; // short of the end of its way when the static callbacks look
@@ -769,7 +793,8 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             arrives = reach > remaining;
             pastEnd = remaining < 0.0;
             inFlight = reach < remaining;
-            next = arrives ? flight->toPx : afterJumpPx + heading * reach;
+            positionPx = afterJumpPx + heading * reach;
+            next = arrives ? flight->toPx : positionPx;
         } else {
             // s = 0 < the stored squaredDistance: in flight, unless it was fired at its own spawn point.
             inFlight = glm::length(flight->toPx - startPx) > 0.0;
@@ -787,28 +812,23 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
 
         double first = 2.0; // along the stretch, from 0 to 1: past its end until something is met
         std::string stoppedBy;
-        FailKind stopKind = FailKind::Body; // what stoppedBy is, for the picture
-        std::vector<entt::entity> passes = shotPasses;
-        passes.push_back(shooter);
-        if (const auto hit = Shot::FirstBodyPassing(registry, startPx, next, passes)) {
-            const auto* tag = registry.try_get<Supersonic::TagComponent>(hit->body);
-            stoppedBy = tag != nullptr ? tag->tag : std::string("a body");
-            first = hit->along;
-        }
-        // From the point after the jump; none when the jump alone passed the destiny (the shot is gone
-        // that frame before any static callback looks).
-        const bool swept = !(arrives && pastEnd);
+        // AN ANTI-PROJECTILE WALL KILLS A SHOT whose position its rectangle holds when its static callback
+        // looks (ETHCallback_anti_projectile_wall #1-115): isPointInRect(projectile.GetPositionXY(), the wall's
+        // position, collisionBox.size x scale, V2_HALF) - a closed rectangle - for every projectile.ent, with no
+        // in-flight test and no memory of the way between two frames. It sees the shot where the callback and
+        // the jump left it, so a shot that crosses a box between two samples is not seen; a shot that arrives
+        // is deleted before it looks; and a shot fired from inside the rectangle is killed at its spawn.
         for (const Blocker& blocker : blockers) {
-            if (!swept) break;
-            if (const auto along = Shot::Enters(afterJumpPx, next, blocker.box)) {
-                const double at = alongStretch(afterJumpPx, *along);
-                if (at < first) {
-                    stoppedBy = blocker.name;
-                    first = at;
-                    stopKind = FailKind::Blocker;
-                }
+            if (arrives) break;
+            if (Shot::InsideBox(next, blocker.box) && sampleAlong < first) {
+                stoppedBy = blocker.name;
+                first = sampleAlong;
             }
         }
+        // A REFLECTOR is still swept along the way, from the point after the jump (G9 rebuilds the catch:
+        // the original's is a position sample within size.x of the agent, and its leg starts at the agent).
+        // None when the jump alone passed the destiny (the shot is gone that frame before any static callback).
+        const bool swept = !(arrives && pastEnd);
         int turnedBy = -1;
         if (swept && flight->reflections < shot.maxReflections) {
             for (std::size_t i = 0; i < reflectors.size(); ++i) {
@@ -820,6 +840,7 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
                 if (at < first) {
                     turnedBy = static_cast<int>(i);
                     first = at;
+                    stoppedBy.clear();
                 }
             }
         }
@@ -847,6 +868,8 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
                 killedBy = static_cast<int>(i);
                 killedAtPx = agentAt;
                 first = sampleAlong;
+                turnedBy = -1;
+                stoppedBy.clear();
             }
         }
         // A FIRE AGENT'S FLAME BURNS A SHOT whose position is within its reach (ETHCallback_fire_agent
@@ -860,6 +883,9 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             if (Reaches(next, flame.centrePx, flame.reachPx) && sampleAlong < first) {
                 burnedBy = static_cast<int>(i);
                 first = sampleAlong;
+                killedBy = -1;
+                turnedBy = -1;
+                stoppedBy.clear();
             }
         }
         if (burnedBy >= 0) {
@@ -896,35 +922,58 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             } else {
                 onward.y = -onward.y;
             }
+            // ETHCallback_reflect_agent runs computePortalFinalPos for the new leg as a REFLECTED shot
+            // (#198-215, hasBeenReflected true): its ray starts at the turn, a static body it meets does not
+            // doom the shot (it lands 10 units short of the contact), and its answer - not the mirrored
+            // point - is where the new projectile is aimed and whether it is doomed (#216-235; planning
+            // step 156). G9 decodes the rest of the leg (newDest, the catch, the leg's start).
+            const glm::dvec2 newDest = at + onward;
+            const FinalPos leg = FinalPosFrom(registry, newDest, at, true);
             flight->atPx = at;
-            flight->toPx = at + onward;
+            flight->toPx = leg.atPx;
+            flight->said = leg;
             flight->lastReflector = turnedBy;
             ++flight->reflections;
             ++reflections;
-            // For the pictures: ETHCallback_reflect_agent works the new leg out as a reflected shot and
-            // marks its end, and the new leg is a new projectile, which flashes on its own first
-            // callback - the next tick's, as a shot a static callback adds always is.
-            reflected.push_back(Reflection{at, flight->toPx, FinalPosFrom(registry, flight->toPx, at, true)});
+            // For the pictures: the new leg's mark is at its clipped end, and the new leg is a new
+            // projectile, which flashes on its own first callback - the next tick's, as a shot a static
+            // callback adds always is.
+            reflected.push_back(Reflection{at, newDest, leg});
             flight->launched = false;
-        } else {
-            bool refused = false;
-            if (stoppedBy.empty() && arrives && !TryPlace(flight->toPx)) {
-                stoppedBy = "the tap, where no portal may open";
-                refused = true;
-            }
-            if (!stoppedBy.empty()) {
-                // Where it ended, for the picture: the point it met a body or a blocker's box at, or the
-                // tap it could open nothing at.
-                const glm::dvec2 endPx = refused ? flight->toPx : pointAt(first);
-                failures.push_back(Failure{endPx, refused ? FailKind::Refused : stopKind, InField(endPx)});
+        } else if (!stoppedBy.empty()) {
+            // The blocker's callback: portal_fail_in_antiportal at the position it found the shot at,
+            // the failed sound and DeleteEntity (#69-115).
+            const glm::dvec2 endPx = pointAt(first);
+            failures.push_back(Failure{endPx, FailKind::Blocker, InField(endPx)});
+            ++shotsFailed;
+            lastFailure = stoppedBy;
+            flight.reset();
+        } else if (arrives) {
+            // ETHCallback_projectile #127-272: it has gone past its destiny, so it is the shot's own callback
+            // that ends it, and the tap-time ray's verdict is what happens.
+            if (flight->said.willDie) {
+                // #201-263: portal_fail at the destiny - or portal_fail_in_antiportal, with a shake of 5,
+                // when the shot's POSITION (up to one advance past the destiny: positionPx) is in a field
+                // (G4-8: the port asked the destiny) - and the failed sound; the entity is deleted.
+                const bool metBody = flight->said.closest != entt::null;
+                const auto* tag = metBody && registry.valid(flight->said.closest)
+                                      ? registry.try_get<Supersonic::TagComponent>(flight->said.closest)
+                                      : nullptr;
+                failures.push_back(
+                    Failure{flight->toPx, metBody ? FailKind::Body : FailKind::Refused, InField(positionPx)});
                 ++shotsFailed;
-                lastFailure = stoppedBy;
-                flight.reset();
-            } else if (arrives) {
-                flight.reset();
-            } else {
-                flight->atPx = next;
+                lastFailure = tag != nullptr ? tag->tag
+                              : metBody      ? std::string("a body")
+                                             : std::string("the tap, where no portal may open");
+            } else if (!Insert(flight->toPx)) {
+                // The port's own cap with recycling off (portals.json's guess): the original always recycles.
+                failures.push_back(Failure{flight->toPx, FailKind::Refused, InField(positionPx)});
+                ++shotsFailed;
+                lastFailure = "no portal left to open";
             }
+            flight.reset();
+        } else {
+            flight->atPx = next;
         }
     };
     if (flight && flight->fresh) {

@@ -57,11 +57,6 @@ struct Hit {
 std::optional<Hit> FirstBody(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
                              entt::entity ignore);
 
-// The same, passing through every body in `ignore`: the shooter and what a shot
-// flies through (Portals::State::shotPasses, the gravity wells).
-std::optional<Hit> FirstBodyPassing(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
-                                    std::span<const entt::entity> ignore);
-
 // The first body the segment meets as the original's GetClosestContact finds it
 // (ETHPhysicsSimulator.cpp:251-268): every body but `ignore`, a trigger as well
 // as a solid one - Box2D's world ray cast asks no fixture whether it is a sensor
@@ -97,6 +92,11 @@ std::vector<entt::entity> SolidBodiesIn(entt::registry& registry, const glm::dve
 
 // How far along the segment it first enters the box, or none.
 std::optional<double> Enters(const glm::dvec2& fromPx, const glm::dvec2& toPx, const Trigger::Box& box);
+
+// Whether a point is inside the box, its edges included: isPointInRect's closed rectangle
+// (utilIntersections 319410..319788, which is false only for a point past a side), as
+// ETHCallback_anti_projectile_wall asks it of a shot's position (#32-68).
+bool InsideBox(const glm::dvec2& pointPx, const Trigger::Box& box);
 
 // How far along the segment it first comes within `radiusPx` of `centrePx`, or
 // none. Zero for a segment that starts within it.

@@ -153,9 +153,11 @@
       "WHAT THE ORIGINAL WORKS OUT AT THE TAP: computePortalFinalPos, the global (PortalManager.angelscript,",
       "bytes 355236..356384) and PortalManager's method over it (141090..142200), read in 00_order section 8.4",
       "(decode D3 with D3_check, which wins) and re-read for the visuals plan's 10.1 (planning step 103).",
-      "It decides `willDie` - so red_cross or portal_mark at the tap - and whether red_waves (A) is added.",
-      "The port reads it for those PICTURES ONLY (the owner's standing ruling R15): the shot it fires still",
-      "flies and ends by the port's own Portals::Tick, which this block does not touch.",
+      "It decides `willDie` - so red_cross or portal_mark at the tap - whether red_waves (A) is added, and",
+      "WHERE THE SHOT GOES: the shot's destiny is its finalPos, and it opens a portal there or fails there",
+      "(ETHCallback_projectile #127-272). Until planning step 156 the port read it for the pictures only (the",
+      "owner's standing ruling R15) and flew its own shot to the tap; the owner's ruling of the program is",
+      "that the original decides, and the shot now flies by this block (Portals::State::Shoot, R23).",
       "  ray_start_units: global #5-28, origin = normalize(destPos - casterPos) x g_scale.scale(8): the ray",
       "    starts 8 units out from the caster, along the aim.",
       "  ray_ignores: global #30-51, the string GetClosestContact is given, one name per entry, matched",
@@ -172,14 +174,19 @@
       "    (#148-189). Both tests are EntityGrabber(point, 0, grabAllObstacles) (EntityGrabber::EntityGrabber",
       "    23924..24990 #66-212, grabAllObstacles 361404..361475 returns true for any entity): every body",
       "    whose shape holds the point, sensors included. #231-236 write the retry's hasFailed whatever it",
-      "    is, and #242-251 keep the retry's position only when it did not fail (D3_check B)."
+      "    is, and #242-251 keep the retry's position only when it did not fail (D3_check B).",
+      "  fire_diamond_reach: the method's fire-diamond branch (#21-64), which casts no ray and never writes",
+      "    *hasFailed: it returns origin + (destPos - origin) x g_scale.scale(64) - 64 times the tap's offset,",
+      "    with the factor at 1.0 (D3 section 1, 'Scale convention') - so the shot is aimed far out and the",
+      "    burn (turnProjectilesIntoFireBalls) takes it before it can arrive (D3 section 3)."
     ],
     "ray_start_units": 8,
     "ray_ignores": ["char_feet.ent", "dark_mage.ent", "death_area.ent", "anti_sight_wall.ent", "shock_agent",
                     "shock_agent.ent", "fireball.ent", "gravity_agent", "gravity_agent.ent"],
     "push_units": 10,
     "retry_from_units": [0, -30],
-    "retry_back_units": 6
+    "retry_back_units": 6,
+    "fire_diamond_reach": 64
   },
 
   "no_budget": {
@@ -264,11 +271,13 @@
       "",
       "Every field is ONE circle, drawn and played: the ring the layer draws, 128 x",
       "manager.scale x the node's scale across, is twice this radius x the node's scale.",
-      "A `no_portal` node is in the port's no_portal_zone role and is tested with this",
+      "A `no_portal` node was in the port's no_portal_zone role and tested with this",
       "radius too, though AntiPortalManager gathers only antiportal and antiportal.ent",
-      "(`manager`). The game places one, 1-07's no_portal_705 at (232, 194): its 32 u lies",
+      "(`manager`). The game places one, 1-07's no_portal_705 at (232, 194): its 32 u lay",
       "wholly inside antiportal_687's 96 u field (56 u between the centres, 56 + 32 < 96),",
-      "so it refuses no tap the antiportal does not."
+      "so it refused no tap the antiportal did not. Since planning step 156 it is in",
+      "scenery_hint (data/entity_roles.json) and refuses nothing, as the original's does:",
+      "no tap's answer moves."
     ],
     "_measured": [
       "Footage F3 (Enhanced's out/parity/footage/F3.md sections 2 and 6.1), 1-7 (level6),",

@@ -2792,3 +2792,42 @@ The original's Box2D is 2.2.x (`reference/ethanon/toolkit/Source/src/box2d/Box2D
 - The library stills `3-12_t2.0.png` and `3-12_t8.0.png` show the stone cradled between the crate's top-right corner and the column's top-left corner and the crate on its ledge,
   identical at 2 and 8 seconds: the original's pile is at rest from its first frame, which the engine's solver cannot hold (a stone of 1.131 on corners presses a crate of 0.144
   sideways every tick; the pair still drifts at equal weights, and at a fifth of the world's gravity), so `resting.json` puts it to sleep where the level places it.
+
+## 20. The portal tap: its order of tests, the shot's destination, and what ends it (planning step 156, R23)
+
+Decode D3 with its check (`out/parity/visuals/briefs/decode/D3.md`, `D3_check.md`), re-read against the listing for the port's tap; every `#n` is an instruction index in
+`out/parity/asbc/all_functions.txt` (md5 `48fe65ce`, arguments pushed last-first).
+
+- **The order of a tap's tests** (`PortalManager::update`, bytes 138545..139692, then `managePortalInsertion`, 143178..144166, or `blockPortalEffects`, 137862..138545). `update` #16-46 returns while
+  the level is younger than `FIRST_PORTAL_MIN_TIME` (300 ms, a strict `<` on `gameTimer`); #48-56 hands a `maxPortals` of 0 to `blockPortalEffects` (`red_waves` at the tap, `startEarthquake(7, 40)`,
+  at most one a frame, no 400 ms test: it never reads `lastPortalTimer`); #58-59 otherwise `managePortalInsertion`. There, per touch: #43-73 `lastPortalTimer.getTime() > NEXT_PORTAL_MIN_TIME`
+  (400 ms, strict, so a tap exactly 400 ms after the last is refused) and the pad and button tests - any false and **nothing happens and no clock moves** (`JLowZ -> 224`, the next touch); then #75-78
+  **`lastPortalTimer.reset()`, before anything is known of a shot**; then #80-99 `SeekEntity('projectile.ent')` - found: #181-210 the hourglass at `absTouchPos` and nothing else (no sound, no
+  vibration, the character not turned: #101-124 are on the other arm); not found: #101-124 `setDirection` toward the tap, #127-145 `computePortalFinalPos`, #147-156 `vibrate 30` on `hasFailed`,
+  #158-166 `applyImpulse(finalPos)` when `m_noGravity`, #168-175 `addProjectile(finalPos, hasFailed, absTouchPos, pref)`, #177-179 the launch sound. So **only a tap that gets as far as the
+  hourglass restarts the 400 ms besides one that fires**; the cooldown refusal and the budget-0 tap do not (the program's spec said every refusal; the listing does not).
+- **The destination.** `addProjectile` (bytes 354113..355121 #112-125) stores `destiny = finalPos`, `casterPos`, `squaredDistance(finalPos, casterPos)` and `willDie`; `ETHCallback_projectile`
+  (358053..359141, section 14) flies a straight line there. `finalPos` is `computePortalFinalPos`'s `PortalPosition.pos` (355236..356384 #194-271): with no hit, the aim itself; at a static body
+  or one `isTeleportable` is false, the contact point (`hasBeenReflected` false: #136-175, `hasFailed`); at a teleportable one `point + normalize(destPos - casterPos) x scale(10)` (`jumpForth`,
+  #194-248: 10 units past the contact, inside the body); for a reflected shot (`hasBeenReflected` true) a static body is `pushOut`: `point - 10 x aim`, and it does not doom the shot (#150-156,
+  #194-215). The method's head-height retry (141090..142200 #103-251) can replace the first answer, and `*hasFailed` is overwritten by the retry's whatever it says (#231-236, D3_check B). With a fire
+  diamond carried the method's own branch (#21-64) returns `origin + (destPos - origin) x scale(64)` and never writes `hasFailed`.
+- **`isTeleportable`** (`MiscCallbacks`, bytes 343470..343661): `GetUInt('teleportable') != 0` - a body whose entity says `teleportable` (crates, stones, minions, thrown things) - and the
+  `nonTeleportable` branch (#17-35) returns false too. **`ent.IsStatic()`** is the entity's `static` property (`ETHEntityProperties`): every platform, wall and sensor is static.
+  `GetClosestContact` (`ETHPhysicsSimulator.cpp:251-267`) reports any fixture not named in its ignore list, a sensor as well as a solid one (`ETHRayCastCallback.cpp:40-50`): a `button`, a
+  `destroyier.ent` (`static="1" shape="1" sensor="1"`) and an `anchor` (`shape="2"`) stop the ray and doom the shot.
+- **The arrival** (`ETHCallback_projectile` #127-272). `squaredDistance(initialPos, GetPositionXY()) > squaredDistance` (strict) after the advance, so the shot's position is up to one advance **past**
+  the destiny: `willDie == 0` calls `insertPortal(destiny, pref)` (#172-199), and **`insertPortal` (bytes 142281..142841) tests no field and no budget of its own**: it adds `portal.ent`,
+  `incrementPortalCounter`, sets `preferedTeleportEntity` on the portal, `setActive(true)`, pushes it and kills `portals[0]` when `portals.size() > maxPortals` (#127-146). Otherwise (#201-263)
+  `isPointInAntiPortalField(GetPositionXY())` - the shot's **position**, not the destiny - picks `portal_fail_in_antiportal.ent` at `vector3(destiny, 0)` with `startEarthquake(5, 0)`, else
+  `portal_fail.ent` at `vector3(destiny, scale(32))`, then `playPortalFailedSound`; #264-272 `DeleteEntity`.
+- **`ETHCallback_anti_projectile_wall`** (bytes 344990..345591): for every `projectile.ent` (`GetEntityArray`, no in-flight test) `isPointInRect(projectile.GetPositionXY(), wall.GetPositionXY(),
+  collisionBox.size x scale, V2_HALF)` (#32-68) - `isPointInRect` (`utilIntersections`, 319410..319788) is false only for a point **past a side** (`p.x < left`, `p.x > left + w`, likewise y), so the
+  rectangle is closed and centred on the wall's point - then `startEarthquake(5, 0)`, `portal_fail_in_antiportal.ent` at the shot's position, `playPortalFailedSound`, `DeleteEntity` (#69-115).
+  It samples a position once a frame, like every static callback (section 14).
+- **The fields** are the entities named `antiportal` and `antiportal.ent`, gathered by `AntiPortalManager`'s constructor (bytes 104925..105343 #16-35) and no others: 1-07's inline `no_portal`
+  (id 705, the sign's picture, shape 0, no data) is none, and `gravity_area` (renamed on insertion) is none.
+- **The recoil** (`applyImpulse`, 142841..143178): `normalize(entity.GetPositionXY() - projectileDestiny) x scale(1.4)` added to the linear velocity, where `projectileDestiny` is the `finalPos`
+  `managePortalInsertion` passes at #163 - not the tap.
+- **Not decoded or not built here:** `preferedTeleportEntity` is read by `getObjectInPortal` (357583..358053 #25-50, #65-70: of the bodies in a portal, the one with that id is teleported first);
+  `blockPortalEffects` tests the button with `absTouchPos` (#62-78, a world-space point against screen-space buttons); `no_portal_sign.ent`'s `stride = 4` has no reader.

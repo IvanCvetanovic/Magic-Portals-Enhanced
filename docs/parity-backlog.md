@@ -323,6 +323,11 @@ work no step of §7 owns, and the owner's calls:
   script lever explains - is a gate choice for System 2's follow-up (the "Step 59" row), also unbuilt.
   *Wave 1 of the program built three of them, each as the original does: R2 in step 125, R17 (the anti-portal agent's
   kill, one of R23's in-flight kills) in step 126, R1 in step 127. R23's other items and R22 are still unbuilt.*
+  *Wave 3b-2's step 156 (local, not pushed) built R23's tap: the order of its tests and the 400 ms clock (only the tap that
+  reaches the hourglass restarts it; the cooldown and budget-0 taps do not, by the listing), the destination at the ray's
+  `finalPos`, the head-height retry as the shot's own, a reflected leg that lands 10 short of a wall, the blocker read at the
+  shot's position, the field flag read at the shot's position (G4-8), and the zero-g recoil aimed at `finalPos`; `light_off`'s
+  kill, G8's flame and R17's agent were already built. What is left of it: the "Step 156's recorded deviations" rows.*
 - **The owner's calls still open**: **R24 and R25**, applied by step 76, still the owner's to rule (the "Step 76, THE
   OWNER'S TO RULE" row; the player's point is R25's other half, and 7.3, 10.1, 10.1b and 10.4 each record it again);
   **the two PORT-WIDE rows** - the script clock the original floors to whole milliseconds, and every body's picture
@@ -619,7 +624,7 @@ work no step of §7 owns, and the owner's calls:
       that place the 71 antiportals. 44 of them won by new or re-authored routes in the step, 6 by track A's; 4-28
       and 4-14 not won (section 6, Tests). The f420 sweep 128 of 128 byte-identical (no level taps by f420). Left:
       the strict `<` at the edge (`placement.json` `_not_modelled`), `no_portal_705` a port-only zone inside
-      `antiportal_687`'s field, and stale comments (`game/sim/Portals.hpp:61-63, 66-69, 149-150, 463-466`,
+      `antiportal_687`'s field (*gone in step 156*), and stale comments (`game/sim/Portals.hpp:61-63, 66-69, 149-150, 463-466`,
       `game/MagicPortalsLayer.cpp:5141-5143`) for the next code edit of those files.
 - [x] **Gravity wells, the refusal (R2)** — the green ring is **built, SE step 73** (order 4.3, `6949cc3`, made as
       step 85 on `visuals-b`; drawn from `hd/white_ring.png` since step 74); the gameplay half is not. Decided for the
@@ -1466,7 +1471,10 @@ work no step of §7 owns, and the owner's calls:
       is R23's, R1's, R2's or R17's gameplay. Next: those rulings built. *Wave 1 built R2 (step 125), R17 (126, the
       agent's in-flight kill) and R1 (127): the fields are now the original's for antiportals, wells and agents. Open
       for R23: the hourglass's clock, the sensor and teleportable-body disagreements, the head-height retry, the
-      reflected shot at a wall, and the flame's in-flight snuff (G8's `burnProjectile`); and `no_portal_705`.*
+      reflected shot at a wall, and the flame's in-flight snuff (G8's `burnProjectile`); and `no_portal_705`.* *Step 156 (R23) built
+      them: the shot flies by the ray, so the mark and the shot's end are one answer; `no_portal_705` is no zone (it is the sign's picture
+      and `AntiPortalManager` gathers only `antiportal` and `antiportal.ent`; it lay inside `antiportal_687`'s field, so no tap's answer moved);
+      the in-flight kills not played before are G8's and R17's (built) and `light_off`'s (built, step 30; its `portal_death` at the shot, step 110).*
 - [ ] **Order 10.1 deviations, recorded** (step 103, 5-10): no vibration; the fire-diamond tap's mark follows the
       leftover byte of `absTouchPos.x`, which the port's camera cannot reproduce (D3's unsettled item); the ghost's mark
       at the player's body centre (R25); `red_cross` looks UNDER `red_waves` in F3 where the add order puts it over (an
@@ -2055,6 +2063,21 @@ friction, or the creep accepted until the engine's friction step (R3-2, R3-8) - 
 steps (G10-14, WT-1) are queued with the Penumbra port's engine work. **With the wave**: R3-3 (2-32 ahead of the dragon's camera)
 and R3b-6 (`win_by` tightened, 3-20 widened) once G1 has moved the routes it moves.
 
+**Wave 3b-2 (the portal tap, the reflector and the knights: R23, G9, G1a, G1b; IN PROGRESS, each step a local commit, nothing pushed
+until the wave's route phase has re-authored the routes and an independent verifier has checked the whole build).** **Step 156 (R23,
+the portal tap as the original handles it) is built, verified and committed locally**: the independent verifier passed all thirteen
+gates (`out/parity/program/R23/verify1.json`; five low problems, whose text findings the commit applied); 53 suites, 52 passed,
+29,723 checks, `test_mp_routes` red on six routes by design (1-23, 2-10, 2-17, 2-19, 3-13 and 3-15; 80 of 86 win, each on step 155's
+tick) - **the routes are re-authored by the wave's route phase, which follows G1b (PIC's pictures are already in this build)**, no route
+file was touched; reachability 108 / 20 / 0; the f420 sweep 128 of 128 byte-identical to the standing baseline; zero warnings; 2 Smart
+App Control refusals (the runner's two first launches, both relinked). **GAMEPLAY changed, plainly, on every tap**: the shot flies to
+the tap-time ray's `finalPos` and opens a portal there or fails there as the ray said (a crate, a stone or a minion takes the portal 10
+units in; a button, a `destroyier.ent` and the anchor doom the shot at their face; the head-height retry is the shot's own; a reflected
+leg lands 10 short of a wall); a blocker reads the shot's position; a portal can open inside a no-portal field when the ray's end is 10
+units inside a body whose contact lay outside it; only the tap that reaches the hourglass restarts the 400 ms (the program's spec said
+every refusal; the listing says not); the zero-g recoil is away from `finalPos`; `no_portal_705` is no zone. The recorded deviations are
+the rows "Step 156's recorded deviations" (R23-1 to R23-11), under G4's. R24 and R25 were not touched.
+
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
       third verifier; cosmetic, no physics, route or sweep frame depends on it). The original's `FrameTimer::set(0, 3, 90)`
@@ -2208,12 +2231,17 @@ and R3b-6 (`win_by` tightened, 3-20 widened) once G1 has moved the routes it mov
       value): 3-13, and the crates of 3-03, 3-05 and 4-09, are pushed at 1.89 u/tick. Drop it, and re-fly 3-13, when `friction_applied` goes true.* *R3b fix 2 measured the stone's decoded friction on the 86 current routes: 84 win, 2-30 (burned on tick 1346) and 3-12 (falls on 493) do not, 1-09 +2, 2-07 -1; R3b-3 and R3-2 carry the rest.*
 
 **G4's recorded deviations**, each an open row for the step named (planning step 149 has the evidence, `RECORDED DEVIATIONS` 1-9):
-- [ ] **G4-1. The destination is the tap, not the tap-time ray's `finalPos`** (R23): the original's distance is `|finalPos - casterPos|` (the contact for
-      a wall or a body a portal may not open on, 10 units past it for one it may); the port's shot flies to the tap and fails on the first body along the
-      way. The marks already follow the ray. Next: **R23's step** (with G9), which also decides the sensor and teleportable-body disagreements.
+- [x] **G4-1. The destination is the tap, not the tap-time ray's `finalPos`** (R23): the original's distance is `|finalPos - casterPos|` (the contact for
+      a wall or a body a portal may not open on, 10 units past it for one it may); the port's shot flew to the tap and failed on the first body along the
+      way. *Built in step 156 (wave 3b-2, local): `Portals::State::Shoot` runs the tap-time ray once and the shot flies to its `finalPos`, doomed or not as the
+      ray said, and opens a portal there (`insertPortal`, no field test) or fails there (`portal_fail` at the destiny). The sensor and teleportable-body
+      disagreements are gone with it (a button, a `destroyier.ent` or the anchor dooms the shot at its face; a crate, a stone or a minion takes the portal 10
+      units in), and so are the head-height retry's and the reflected shot's.*
 - [ ] **G4-2. Bodies, blockers and reflectors are swept along the tick's way, not sampled** (the original has no body in flight; its blocker and reflector
       callbacks sample a position): a graze of at most 3.2 units at a blocker (64 x 128) or a reflector (16; G9's 32), and on an arrival tick they are
-      still swept up to the destination where the original's static callbacks find nothing. Next: **G9 / R23**.
+      still swept up to the destination where the original's static callbacks find nothing. *Step 156 (R23) built two of the three: the shot meets no body
+      at all, and an `anti_projectile_wall` reads the shot's POSITION once a frame (`isPointInRect`, closed, a shot that arrives is gone before it looks).
+      The reflector is still swept, with the port's 16 and its own leg: Next: **G9**.*
 - [ ] **G4-3. The spawn pass runs on the first tick after the tap**, one tick after the original's static frame (the layer reads a tap after `AfterStep`): an
       agent within 22.4 of the player dies, and a flame within 32 burns the shot, 16 ms later. No owner unless the layer's order changes (PIC).
 - [ ] **G4-4. A reflected leg starts at the catch point**, not at the reflector (the original's new projectile spawns at the agent's point and jumps 24 from
@@ -2227,13 +2255,48 @@ and R3b-6 (`win_by` tightened, 3-20 widened) once G1 has moved the routes it mov
       about +-5 % pooled and cannot separate 192 from 200; F2 shot A and F3 take a1's second shot have too few clean frames to fit a slope. No clip shows the
       shot at 60 Hz. The arrival agreement is -0.064..+0.030 s (mean +0.002) on the continuous `(D - 24) / 192` and -0.049..+0.045 s (mean +0.011) against the
       discrete 60 Hz decode: both inside one clip gap. Next: **the final comparison** (section 5).
-- [ ] **G4-8. The failure picture's anti-portal-field flag reads the destiny, not the shot's overshot position**: `ETHCallback_projectile` #201-211 asks
-      `isPointInAntiPortalField(GetPositionXY())` of the position after the last advance, up to 3.2 units past the destiny; `Portals.cpp` asks `InField` of the
+- [x] **G4-8. The failure picture's anti-portal-field flag reads the destiny, not the shot's overshot position**: `ETHCallback_projectile` #201-211 asks
+      `isPointInAntiPortalField(GetPositionXY())` of the position after the last advance, up to 3.2 units past the destiny; `Portals.cpp` asked `InField` of the
       destiny. A tap within 3.2 units of a field's edge could draw `portal_fail_in_antiportal` (and queue the field's shake) where the original draws
-      `portal_fail`, or the reverse; the picture and shake only. Next: **R23's step** (with G4-1).
+      `portal_fail`, or the reverse; the picture and shake only. *Built in step 156: the flag is `InField` of the position the last advance left, pinned in
+      `test_mp_shot` (a wall face 1.5 units short of a field's edge, the shot 2.7 past it).*
 - [ ] **G4-9. An agent is tested at its end-of-tick centre; the original tests before it moves**: `ETHCallback_anti_portal_agent` runs its kill test (#37-199)
       before its own `linearMotion` (#201-250), while `Portals::Tick` advances the agent's motion at its top and `flyOnePass` reads its centre after. About a
       unit of the agent's own motion; pre-existing, no pinned scenario flips. No owner assigned: a row for the final comparison (section 5) to weigh.
+
+**Step 156's recorded deviations (R23: the portal tap as the original), each an open row** (planning step 156 has the evidence):
+- [ ] **R23-1. The reflector is still swept, with the port's 16 and its own leg** (G4-2's third part, G4-4): `flyOnePass` finds a reflector's reach along the tick's way
+      from the point after the jump, turns the shot at the entry, and the new leg's ray (`hasBeenReflected`) now decides where that leg goes and whether it is
+      doomed. The original's catch is a position sample within `size.x` (32) of the agent and the new projectile starts at the agent. Next: **G9**,
+      which also pins 1-12's new leg's end and verdict (red_cross or portal_mark) as numbers from the listing's `newDest` / clip arithmetic:
+      `test_mp_layer`'s reflector case (`AShotTurnedByAReflectorMarksItsNewEnd`) now follows the sim's own verdict (`turn.said.willDie`), so it holds layer = sim
+      and not the geometry (the verifier's low finding).
+- [ ] **R23-2. A static callback (a blocker, an agent, a flame) runs only while its bucket is drawn**, and the port's always do (section 15 of `docs/ethanon-formats.md`; step 154,
+      deviation 2): a long shot past the screen's drawn buckets meets a blocker the original's callback never looks for.
+- [ ] **R23-3. `light_off` reads the shot's position before the tick's move**, one tick later than the original's static look (`Game::AfterStep` runs the torch before
+      `Portals::Tick`); the effects and the torch's state land one tick (16 ms) late. Not changed: no route or test moves by it.
+- [ ] **R23-4. A tap exactly on the player's point**: the original's `normalize` of a zero vector is zero, so its projectile never moves and never arrives and holds the hourglass up
+      for ever; the port's shot arrives on its first callback and opens a portal there. A measure-zero tap; not built.
+- [ ] **R23-5. `preferedTeleportEntity` is stored by nothing**: `getObjectInPortal` (357583..358053 #25-50) teleports first, of the bodies in a portal, the one the shot landed on; the
+      port teleports every traveller in a portal in its own order.
+- [ ] **R23-6. `blockPortalEffects` tests the button with the world point** (`absTouchPos`, #62-78), the port with the screen point; the vibration (`vibrate 30` on a doomed tap,
+      `vibrate 40` on a budget-0 tap) has no motor on the desktop; `no_portal_sign.ent`'s `stride = 4` has no reader.
+- [ ] **R23-7. The ray's world is the registry's**: the bodies the port keeps as modules (the ghost's static sensor box, `dark_dragon.ent`'s sensor circle, `dragon_knight.ent`,
+      `ghost_minion.ent`) are not in it, so a tap through the boss of 3-32 or 4-32 is not doomed there where the original's would be (the old flight did not meet them either).
+- [ ] **R23-8. The field test is `<=` and in double** (`Holds`; R1's `_not_modelled`): the original's is strict and in float32, so a tap or a position exactly 32 x scale from a ring's centre is a
+      refusal here and an acceptance there.
+- [ ] **R23-9. Six routes lose their win on this build** (the census in step 156: 1-23, 2-10, 2-17, 2-19, 3-13, 3-15; no route file was touched): each has a tap the ray ends short of or
+      behind the tap (a doomed shot at a field-held stone, a burning crate, a teleportable body 10 units in), and 80 of 86 win on the same tick. **The routes are
+      re-authored by the wave's route phase, after G1b** (PIC's pictures are already in this build), not in a step. Residual risk to carry into it (the verifier's low): the
+      head-height retry now moves shots (126 of the 180 grid taps ran it) and four of the six (2-17, 2-19, 3-13, 3-15) end "after the retry"; its trigger rests on step 103's
+      grabber reading and on the registry as the ray's world (R23-7), and whether those taps were wrong in the original cannot be checked without the emulator. Prefer taps
+      whose ray end is the intended point (the log's `to (x, y)`), and spot-check one on the original in the emulator rig if a route hinges on a retry's end.
+- [ ] **R23-10. The clock's rule rests on the listing alone**: the program's spec said every refusal restarts the 400 ms, the decode says only the tap that reaches the hourglass
+      (or fires) does; built as decoded. No clip shows the restart after an hourglass tap or budget 0's tap (F3's take a2 follows by 2.8 s) and the emulator rig was not run for
+      either. Next: the final comparison (section 5), one capture of two taps within 400 ms of an hourglass tap.
+- [ ] **R23-11. A stale comment in `game/sim/Game.cpp` (about lines 655-666)** still says the port has "nothing to scale" for a fire-diamond shot, where `Shoot` now aims it
+      at `final_pos.fire_diamond_reach` x the aim (harmless: the layer's conversion still runs before `Tick`). Left to keep the tested binaries current (a comment edit relinks both
+      executables and every refused launch notifies the owner). Next: the next edit of `Game.cpp`.
 
 **PIC's recorded deviations**, each an open row for the step named (planning step 150 has the evidence, `RECORDED DEVIATIONS` 1-9):
 - [ ] **PIC-1. The smoothing's line is a guess and unmeasured on a real fast display.** `smoothing.above_hz` 80 / `release_below_hz` 72 /
@@ -2601,7 +2664,10 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       1-11, 1-12, 1-21 and 1-23. R1 followed in step 127, and 4-01 is won by that step's route (tick 351). Left: 1-23's agent sits inside `rolling_stone_ent_877` (r 30 > 22.4), where the port's shot dies on
       the stone and the original's tap-time ray ends 10 u inside a teleportable body and would kill it (R23; the route
       wins without the kill); the static callback runs only while the agent's bucket is drawn (not modelled); a shot
-      fired from within 22.4 kills at once (G4's row).
+      fired from within 22.4 kills at once (G4's row). *Step 156 (R23, wave 3b-2, local) built the ray's end as the shot's
+      destination: a shot at a teleportable stone now flies 10 u inside it and does not die on it. Whether it then kills
+      the agent inside `rolling_stone_ent_877` was not re-measured; 1-23's route is one of the six that lose their win on
+      that build (R23-9).*
 - [x] **B7. 4-21 at risk: R2** - the well's port-only zone (248 px) covers the button, the wall and the door. KNOWN.
       *The port-only zone is gone (step 125, R2), and 4-21 (`level20c`) is still not won.* The cause is now the port's
       lift door, which has no latch: portal resets over `button_1723` raise `door_lift_1721` 5.6 px at most (y 106 to

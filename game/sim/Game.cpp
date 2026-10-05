@@ -310,16 +310,12 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     // (ETHScene.cpp:264-266), after AntiPortalManager's constructor has gathered
     // its fields by name (104925..105343 #16-35), so no tap is ever tested
     // against it: it is the ring and the force, and no zone. And the shot flies
-    // through the agent's own body: projectile.ent has no shape, and the ray
-    // that judges a tap passes gravity_agent by name (placement.json
-    // final_pos.ray_ignores). The agent stays solid to everything else.
+    // through the agent's own body: projectile.ent has no shape and meets no
+    // body at all (planning step 156), and the ray that judges a tap passes
+    // gravity_agent by name (placement.json final_pos.ray_ignores). The agent
+    // stays solid to everything else.
     if (!GravityWell::Find(data.scene, data.roles, data.wells, out.wells, error)) return false;
     out.wells.noGravity = noGravity;
-    for (const GravityWell::Well& well : out.wells.wells) {
-        if (const auto body = out.built.entities.find(well.name); body != out.built.entities.end()) {
-            out.portals.shotPasses.push_back(body->second);
-        }
-    }
 
     // Chapter 2's boss. It needs the BUILT level, not just the scene: the claw's
     // whitelist is four scenery names, and what it takes away are those bodies.

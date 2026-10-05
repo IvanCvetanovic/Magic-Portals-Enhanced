@@ -3,10 +3,13 @@
 // What the owner said on 11 September is tested as it stands:
 //   - the shot flies from the character toward the tap, and the portal opens
 //     where it arrives;
-//   - a wall on the way stops it, and so does a crate or a stone;
+//   - a wall on the way stops it (a crate or a stone a portal may open on does not: it opens there);
 //   - a failed shot costs nothing.
 // What the level files say is pinned: level6's projectile blocker and its box.
-// The flight is the original's, decoded (shot.json `flight`, planning step 149):
+// The shot is the original's, decoded. WHERE IT GOES and whether it is doomed are the tap-time ray's
+// answer (computePortalFinalPos; planning step 156, R23): the contact for a wall or a body a portal may
+// not open on, 10 units past it for one it may, and the shot meets no body on its way - the ray decided
+// all of those at the tap. HOW IT FLIES is shot.json `flight` (planning step 149):
 // TheShotFliesAsTheOriginalsProjectileDoes pins its ticks over stated distances,
 // its jump, its advance and its clock, and what an agent and a flame see of it.
 // The segment test is checked on its own against a turned box, a hull's polygon
@@ -24,6 +27,7 @@
 #include "sim/ScriptClock.hpp"
 #include "sim/Shot.hpp"
 #include "sim/Units.hpp"
+#include "sim/Zerog.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -103,6 +107,12 @@ std::string Px(const glm::dvec2& at) {
     char text[48];
     std::snprintf(text, sizeof text, "(%.1f, %.1f)", at.x, at.y);
     return text;
+}
+
+std::string Named(entt::registry& registry, entt::entity body) {
+    if (body == entt::null) return "nothing";
+    const auto* tag = registry.try_get<Supersonic::TagComponent>(body);
+    return tag != nullptr ? tag->tag : std::string("a body");
 }
 
 // How many Ticks the decoded flight takes over `distance`, counted from the Shoot that fires it
@@ -195,16 +205,27 @@ void AWallStopsIt() {
     CHECK_MSG(run.level.portals.placed.size() == 1, "the second failed on " + run.level.portals.lastFailure);
 }
 
-void AStoneStopsIt() {
-    // level8: from the spawn at the hint arrow behind the stone. The stone,
-    // rolling_stone_ent_597, is in the way.
+void AStoneIsWhereAPortalOpens() {
+    // level8: from the spawn at the hint arrow behind the stone. The stone, rolling_stone_ent_597, is in
+    // the way - and its entity says teleportable 1, so the original's ray (isTeleportable) lets the shot
+    // through it: the portal opens ON the stone, 10 units past the ray's contact along the aim
+    // (computePortalFinalPos #194-248). Until step 156 the port's shot stopped on it and failed.
     Run run;
     if (!Begin("level8", run)) return;
-    CHECK(run.level.portals.Shoot(run.registry, glm::dvec2(30.0, 106.0)));
+    const glm::dvec2 tap(30.0, 106.0);
+    const glm::dvec2 from = PlayerPx(run);
+    const Portals::FinalPos said = run.level.portals.Predict(run.registry, from, tap);
+    CHECK_MSG(said.closest != entt::null && Named(run.registry, said.closest) == "rolling_stone_ent_597",
+              "the ray meets the stone first: " + Named(run.registry, said.closest));
+    CHECK_MSG(!said.willDie && said.preferred, "and a teleportable body is where it may open");
+    CHECK(run.level.portals.Shoot(run.registry, tap));
+    CHECK_MSG(run.level.portals.flight && run.level.portals.flight->toPx == said.atPx,
+              "the shot is aimed at the ray's finalPos, not at the tap");
     Fly(run);
-    CHECK(run.level.portals.placed.empty());
-    CHECK_MSG(run.level.portals.lastFailure == "rolling_stone_ent_597", run.level.portals.lastFailure);
-    CHECK_EQ(run.level.portals.portalsUsed, 0);
+    CHECK_MSG(run.level.portals.placed.size() == 1 && run.level.portals.placed[0].basePx == said.atPx,
+              "a portal opens at the ray's end on the stone: " + run.level.portals.lastFailure);
+    CHECK_EQ(run.level.portals.shotsFailed, 0);
+    CHECK_EQ(run.level.portals.portalsUsed, 1);
 }
 
 void TheBlockerStopsIt() {
@@ -445,17 +466,11 @@ void AReflectorWithNoPlaneTakesTheDefault() {
 
 // ---- What the original works out at the tap (the visuals plan's 10.1) -----------
 //
-// computePortalFinalPos, run on the port's world for the PICTURES a tap leaves
-// (placement.json final_pos; the owner's standing ruling R15): whether the shot
-// is already doomed - red_cross rather than portal_mark - and whether red_waves
-// (A) goes at the aim. Pinned on 1-07 against footage F3's own taps, where the
-// port's flight agrees, and on a bare rig for the retry, where it cannot.
-
-std::string Named(entt::registry& registry, entt::entity body) {
-    if (body == entt::null) return "nothing";
-    const auto* tag = registry.try_get<Supersonic::TagComponent>(body);
-    return tag != nullptr ? tag->tag : std::string("a body");
-}
+// computePortalFinalPos, run on the port's world at the tap (placement.json final_pos): where the
+// shot goes, whether it is already doomed - red_cross rather than portal_mark - and whether
+// red_waves (A) goes at the aim. Pinned on 1-07 against footage F3's own taps, and on a bare rig for
+// the retry. Until step 156 it decided the pictures alone (the owner's standing ruling R15) and the
+// port's flight could disagree with it; the shot now flies by it, so the two agree by construction.
 
 void TheFinalPosRulesAreTheDecodedOnes() {
     Run run;
@@ -525,8 +540,8 @@ void TheTapTimeRayOnF3sTaps() {
             for (const Portals::Failure& f : run.level.portals.failures) ends.push_back(f);
             for (const Portals::Launch& l : run.level.portals.launches) launches.push_back(l);
         }
-        CHECK_MSG(launches.size() == 1 && launches[0].fromPx == from && launches[0].towardPx == c.tapPx,
-                  std::string(c.what) + ": one launch, on the shot's first tick, from where it left: " +
+        CHECK_MSG(launches.size() == 1 && launches[0].fromPx == from && launches[0].towardPx == said.atPx,
+                  std::string(c.what) + ": one launch, on the shot's first tick, from where it left toward the ray's end: " +
                       std::to_string(launches.size()));
         if (c.opens) {
             CHECK_MSG(ends.empty() && run.level.portals.placed.size() == 1,
@@ -578,11 +593,15 @@ void TheRetryFromOverTheHead() {
     const Portals::FinalPos said = rig.state.Predict(rig.registry, glm::dvec2(100.0, 200.0), tap);
     CHECK_MSG(said.retried && !said.willDie && said.atPx == tap,
               "the retry over the head clears it: portal_mark, " + Px(said.atPx));
-    // The port's flight does not retry: its shot runs into the box. The mark
-    // and the end disagree here, and that is R23's, not this picture's.
+    // The shot flies by the retry's answer (step 156): over the box, to the tap, where it opens a portal.
+    // Until then the port's flight did not retry and its shot ran into the box while the mark said
+    // portal_mark.
     CHECK(rig.state.Shoot(rig.registry, tap));
+    CHECK_MSG(rig.state.lastTap.said.retried && rig.state.flight && rig.state.flight->toPx == tap,
+              "aimed at the tap, after the retry");
     FlyOut(rig);
-    CHECK_MSG(rig.state.placed.empty() && rig.state.lastFailure == "low", "the port's shot stops on it");
+    CHECK_MSG(rig.state.placed.size() == 1 && rig.state.placed[0].basePx == tap && rig.state.shotsFailed == 0,
+              "and the shot passes over the box and opens at the tap");
 
     // AND THE RETRY CAN DOOM A SHOT THE FIRST RAY LET THROUGH (D3_check B): a
     // crate the first ray ends on - teleportable, so it may open there - with
@@ -677,22 +696,34 @@ void ATapSaysWhyItWasRefused() {
     tick(25); // 416.7 ms: past both gates
     CHECK(rig.state.Shoot(rig.registry, far));
     CHECK(rig.state.lastTap.reason == Portals::TapReason::Fired);
+    CHECK_MSG(rig.state.sinceTapMs == 0.0, "a tap taken restarts the 400 ms (#75-78)");
     tick(10); // 166.7 ms since the tap, the shot still flying
+    double before = rig.state.sinceTapMs;
     CHECK(!rig.state.Shoot(rig.registry, glm::dvec2(0.0, 0.0)));
     CHECK_MSG(rig.state.lastTap.reason == Portals::TapReason::Cooldown,
               "within 400 ms of the last tap taken: the original's silent refusal, before its hourglass test");
+    CHECK_MSG(rig.state.sinceTapMs == before, "and it moves no clock: the 400 ms runs on");
     tick(20); // 500 ms since the tap taken, the shot still flying
-    const double before = rig.state.sinceTapMs;
     CHECK(!rig.state.Shoot(rig.registry, glm::dvec2(0.0, 0.0)));
     CHECK_MSG(rig.state.lastTap.reason == Portals::TapReason::InFlight, "past 400 ms with a shot flying: the hourglass");
-    CHECK_MSG(rig.state.sinceTapMs == before && rig.state.flight.has_value(),
-              "and the 400 ms is NOT restarted, as the original's is (R23, not played)");
+    CHECK_MSG(rig.state.sinceTapMs == 0.0 && rig.state.flight.has_value(),
+              "and the tap RESTARTS the 400 ms, as the original's does before it looks for a projectile (step 156, R23)");
+    tick(10); // 166.7 ms after the hourglass tap
+    CHECK(!rig.state.Shoot(rig.registry, glm::dvec2(0.0, 0.0)));
+    CHECK_MSG(rig.state.lastTap.reason == Portals::TapReason::Cooldown,
+              "so a second tap soon after an hourglass tap draws nothing there");
+    tick(25); // 583 ms after it
+    CHECK(!rig.state.Shoot(rig.registry, glm::dvec2(0.0, 0.0)));
+    CHECK_MSG(rig.state.lastTap.reason == Portals::TapReason::InFlight, "and one past 400 ms is an hourglass again");
     rig.state.budget = 0;
+    before = rig.state.sinceTapMs;
     CHECK(!rig.state.Shoot(rig.registry, glm::dvec2(0.0, 0.0)));
     CHECK_MSG(rig.state.lastTap.reason == Portals::TapReason::NoBudget, "a budget of 0: blockPortalEffects' tap");
+    CHECK_MSG(rig.state.sinceTapMs == before, "which never reads the 400 ms clock and never restarts it");
     rig.state.sinceStartMs = 100.0;
     CHECK(!rig.state.Shoot(rig.registry, glm::dvec2(0.0, 0.0)));
     CHECK_MSG(rig.state.lastTap.reason == Portals::TapReason::TooEarly, "update's first gate comes before the budget");
+    CHECK_MSG(rig.state.sinceTapMs == before, "and moves no clock either");
 }
 
 void AReflectionIsRecordedForItsPictures() {
@@ -970,8 +1001,9 @@ void AFlameSeesTheShotWhereItIsSampled() {
 
 void AWallInTheJumpStillStopsTheShot() {
     // The original decides a wall at the tap, by a ray from 8 units out that sees every wall on the way,
-    // and the port stops its shot on the first body along the way: the jump is not a gap in it. A box 10
-    // units from the shooter, inside the first 24, stops the shot on its first callback.
+    // and its shot flies to the contact and fails there: the jump is not a gap in it. A box 10
+    // units from the shooter, inside the first 24, ends the shot on its first callback (it arrives, past
+    // its destiny at the box's face).
     Rig rig;
     if (!MakeRig(rig)) return;
     const entt::entity wall = rig.registry.create();
@@ -985,6 +1017,280 @@ void AWallInTheJumpStillStopsTheShot() {
               "stopped on tick " + std::to_string(ticks) + " by '" + rig.state.lastFailure + "'");
 }
 
+// ---- The shot flies by the tap-time ray (planning step 156, R23) ---------------------------------------------
+//
+// computePortalFinalPos decides at the tap where the shot goes and whether it is doomed, and the shot, which
+// has no body, flies there and does what the ray said where it arrives (ETHCallback_projectile #127-272).
+// Every case is on the bare rig: a shooter at (100, 200) in an empty plane, a few boxes, the floored 16 ms.
+
+// The boxes are held in metres, floats: a face at 190 or 300.5 reads within a hundred-thousandth of a unit.
+bool Near(const glm::dvec2& a, const glm::dvec2& b, double tolerance = 1e-3) { return glm::distance(a, b) < tolerance; }
+
+entt::entity PutBox(Rig& rig, const char* tag, const glm::dvec2& centre, const glm::dvec2& size, bool looseTeleportable,
+                    bool trigger = false) {
+    const entt::entity box = rig.registry.create();
+    rig.registry.emplace<Supersonic::TagComponent>(box, tag);
+    rig.registry.emplace<TransformComponent>(box).position = Units::ToWorld(centre.x, centre.y);
+    auto& collider = rig.registry.emplace<BoxColliderComponent>(box);
+    collider.size = glm::vec3(Units::ToMetres(size.x), Units::ToMetres(size.y), 1.0f);
+    collider.isTrigger = trigger;
+    if (looseTeleportable) {
+        rig.registry.emplace<RigidBodyComponent>(box);
+        rig.state.travellers.push_back(box);
+    }
+    return box;
+}
+
+void TheShotGoesToTheRaysEndAndFailsOrOpensThere() {
+    // A wall a portal may not open on: the contact, and the shot fails there. A crate it may: 10 units past the
+    // contact, and a portal opens on the crate. Until step 156 the tap was the destination and the shot stopped
+    // on the first body it met; here the tap is 300 units out and the ray stops at x 190.
+    const glm::dvec2 tap(400.0, 200.0);
+    {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        PutBox(rig, "wall", glm::dvec2(200.0, 200.0), glm::dvec2(20.0, 100.0), false);
+        CHECK(rig.state.Shoot(rig.registry, tap));
+        CHECK_MSG(rig.state.flight && Near(rig.state.flight->toPx, glm::dvec2(190.0, 200.0)) && rig.state.flight->said.willDie,
+                  "a wall: aimed at its face, doomed");
+        const int ticks = FlyFloored(rig);
+        CHECK_MSG(ticks == FlightTicks(rig.state.shot, 90.0, 16.0), "it flies the 90 units to the face: " + std::to_string(ticks));
+        CHECK_MSG(rig.state.failures.size() == 1 && Near(rig.state.failures[0].atPx, glm::dvec2(190.0, 200.0)) &&
+                      rig.state.failures[0].kind == Portals::FailKind::Body && rig.state.lastFailure == "wall",
+                  "portal_fail at the contact, a body's");
+        CHECK(rig.state.placed.empty() && rig.state.shotsFailed == 1 && rig.state.portalsUsed == 0);
+    }
+    {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        PutBox(rig, "crate", glm::dvec2(200.0, 200.0), glm::dvec2(20.0, 100.0), true);
+        // The tap is ON the crate: with nothing at the tap the head-height retry would run (D3_check B), and with it
+        // the first ray's end, which is what this case pins, is the retry's.
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(205.0, 200.0)));
+        CHECK_MSG(rig.state.flight && Near(rig.state.flight->toPx, glm::dvec2(200.0, 200.0)) && !rig.state.flight->said.willDie,
+                  "a body a portal may open on: aimed 10 units past its face");
+        const int ticks = FlyFloored(rig);
+        CHECK_MSG(ticks == FlightTicks(rig.state.shot, 100.0, 16.0), "it flies the 100 units: " + std::to_string(ticks));
+        CHECK_MSG(rig.state.placed.size() == 1 && Near(rig.state.placed[0].basePx, glm::dvec2(200.0, 200.0)) &&
+                      rig.state.failures.empty(),
+                  "and opens a portal there, inside the crate");
+    }
+    {
+        // A SENSOR on no ignore list is a body to the ray (a button; 46 of them, in 37 levels): the shot is doomed at
+        // its face (a tall one, which the head-height retry cannot hop), where the port's old flight passed through
+        // it and opened a portal beyond. One the ray is told to
+        // pass (shock_agent, death_area, anti_sight_wall, gravity_agent) is no body at all.
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        const entt::entity button = PutBox(rig, "button", glm::dvec2(200.0, 200.0), glm::dvec2(20.0, 100.0), false, true);
+        CHECK(rig.state.Predict(rig.registry, glm::dvec2(100.0, 200.0), tap).willDie);
+        rig.state.rayIgnored.push_back(button);
+        const Portals::FinalPos passed = rig.state.Predict(rig.registry, glm::dvec2(100.0, 200.0), tap);
+        CHECK_MSG(!passed.willDie && passed.atPx == tap, "an ignored sensor is passed: " + Px(passed.atPx));
+        rig.state.rayIgnored.clear();
+        CHECK(rig.state.Shoot(rig.registry, tap));
+        FlyFloored(rig);
+        CHECK_MSG(rig.state.placed.empty() && rig.state.lastFailure == "button" && rig.state.shotsFailed == 1,
+                  "the button dooms the shot at the tap: " + rig.state.lastFailure);
+    }
+}
+
+void TheShotMeetsNoBodyOnItsWay() {
+    // projectile.ent has no shape: a wall that comes into the way AFTER the tap (a platform, a loose crate, a door
+    // opening) does not stop it, and the ray, which looked once, is not asked again.
+    Rig rig;
+    if (!MakeRig(rig)) return;
+    const glm::dvec2 tap(300.0, 200.0);
+    CHECK(rig.state.Shoot(rig.registry, tap));
+    for (int tick = 0; tick < 5; ++tick) rig.state.Tick(rig.registry, kFloored);
+    CHECK(rig.state.flight.has_value());
+    PutBox(rig, "late wall", glm::dvec2(200.0, 200.0), glm::dvec2(20.0, 100.0), false);
+    FlyFloored(rig);
+    CHECK_MSG(rig.state.placed.size() == 1 && rig.state.placed[0].basePx == tap && rig.state.shotsFailed == 0,
+              "it flew through the wall that arrived after the tap and opened at the tap");
+}
+
+void AReflectedShotNeverDiesOnAWall() {
+    // The first leg of AReflectorTurnsAShotMirrored's shot, with a wall on the reflected leg's way only. A reflected
+    // shot's ray (hasBeenReflected) takes a static body as pushOut: it lands 10 units SHORT of the wall instead of
+    // dying on it (computePortalFinalPos #136-156, #194-215). Fired straight at the same wall it is doomed.
+    Rig rig;
+    if (!MakeRig(rig)) return;
+    rig.state.shot.maxReflections = 1;
+    rig.state.reflectors.push_back({"mirror", glm::dvec2(200.0, 100.0), false});
+    PutBox(rig, "wall", glm::dvec2(270.0, 260.0), glm::dvec2(20.0, 200.0), false);
+    CHECK(rig.state.Shoot(rig.registry, glm::dvec2(300.0, 0.0)));
+    FlyFloored(rig);
+    const double k = rig.state.shot.reflectRadiusPx / std::sqrt(2.0);
+    // The new leg runs (1, 1) / sqrt 2 from the turn at (200 - k, 100 + k) and meets the wall's face x 260 at
+    // (260, 160 + 2k); it lands 10 short along the aim.
+    const glm::dvec2 expected = glm::dvec2(260.0, 160.0 + 2.0 * k) - glm::dvec2(1.0, 1.0) / std::sqrt(2.0) * 10.0;
+    CHECK_EQ(rig.state.reflections, 1);
+    CHECK_MSG(rig.state.shotsFailed == 0 && rig.state.placed.size() == 1 &&
+                  glm::distance(rig.state.placed[0].basePx, expected) < 1e-3,
+              "the reflected shot lands 10 short of the wall and opens: " +
+                  (rig.state.placed.empty() ? rig.state.lastFailure : Where(rig.state.placed[0].basePx)) + " for " +
+                  Where(expected));
+    Rig direct;
+    if (!MakeRig(direct)) return;
+    PutBox(direct, "wall", glm::dvec2(270.0, 260.0), glm::dvec2(20.0, 200.0), false);
+    CHECK(direct.state.Shoot(direct.registry, glm::dvec2(400.0, 300.0)));
+    CHECK_MSG(direct.state.flight && direct.state.flight->said.willDie, "the same wall dooms an unreflected shot");
+}
+
+void TheRecoilAimsAtFinalPos() {
+    // managePortalInsertion #158-166: applyImpulse(finalPos). The retry here clears a low static box and meets a
+    // crate on its own, higher line, so finalPos is 10 past that crate's face - a few degrees off the tap's
+    // direction, which the recoil follows.
+    Rig rig;
+    if (!MakeRig(rig)) return;
+    rig.registry.emplace<RigidBodyComponent>(rig.state.shooter);
+    rig.state.noGravity = true;
+    rig.state.recoilMps = 2.0;
+    PutBox(rig, "low", glm::dvec2(150.0, 205.0), glm::dvec2(20.0, 20.0), false);
+    PutBox(rig, "crate", glm::dvec2(250.0, 190.0), glm::dvec2(20.0, 20.0), true);
+    const glm::dvec2 from(100.0, 200.0);
+    const glm::dvec2 tap(300.0, 200.0);
+    CHECK(rig.state.Shoot(rig.registry, tap));
+    CHECK_MSG(rig.state.lastTap.said.retried && !rig.state.lastTap.said.willDie && rig.state.flight &&
+                  rig.state.flight->toPx != tap && rig.state.flight->toPx.x > 240.0 && rig.state.flight->toPx.x < 260.0,
+              "the retry's ray ends on the crate, not at the tap: " +
+                  Px(rig.state.flight ? rig.state.flight->toPx : glm::dvec2(0.0)));
+    if (!rig.state.flight) return;
+    const glm::vec3 pushed = rig.registry.get<RigidBodyComponent>(rig.state.shooter).velocity;
+    const glm::vec3 atFinal = Zerog::Impulse(from, rig.state.flight->toPx, 2.0);
+    const glm::vec3 atTap = Zerog::Impulse(from, tap, 2.0);
+    CHECK_MSG(glm::distance(pushed, atFinal) < 1e-6, "the recoil is away from finalPos");
+    CHECK_MSG(glm::distance(pushed, atTap) > 1e-3, "and not away from the tap, which the retry moved it off");
+}
+
+void AnArrivalAsksTheFieldOfTheShotsPosition() {
+    // G4-8. A doomed shot's portal_fail is portal_fail_in_antiportal (and a shake) when the shot's POSITION after
+    // its last advance is in a field (ETHCallback_projectile #201-211) - up to one advance past the destiny, which
+    // the port asked of the destiny itself. The wall's face is at x 300.5; the callbacks are at 124 + 3.2 m, so the
+    // shot arrives on m = 56 at 303.2, 2.7 past it; the field's edge lies 1.5 beyond the face.
+    Rig probe;
+    if (!MakeRig(probe)) return;
+    const double radius = probe.state.rules.antiportalRadiusPx;
+    probe.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(300.5 + radius + 1.5, 200.0), 1.0, "ring"});
+    CHECK_MSG(!probe.state.InField(glm::dvec2(300.5, 200.0)) && probe.state.InField(glm::dvec2(303.2, 200.0)),
+              "the destiny is outside the field and the overshot position inside it");
+    Rig watched;
+    if (!MakeRig(watched)) return;
+    PutBox(watched, "wall", glm::dvec2(310.5, 200.0), glm::dvec2(20.0, 100.0), false);
+    watched.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(300.5 + radius + 1.5, 200.0), 1.0, "ring"});
+    CHECK(watched.state.Shoot(watched.registry, glm::dvec2(450.0, 200.0)));
+    CHECK_MSG(watched.state.flight && Near(watched.state.flight->toPx, glm::dvec2(300.5, 200.0)), "aimed at the face");
+    std::vector<Portals::Failure> ends;
+    for (int tick = 0; tick < 600 && watched.state.flight; ++tick) {
+        watched.state.Tick(watched.registry, kFloored);
+        for (const Portals::Failure& f : watched.state.failures) ends.push_back(f);
+    }
+    CHECK_MSG(ends.size() == 1 && Near(ends[0].atPx, glm::dvec2(300.5, 200.0)) && ends[0].kind == Portals::FailKind::Body &&
+                  ends[0].inField,
+              "drawn at the destiny, and in the field by the position the shot had reached");
+}
+
+void ANonDoomedArrivalOpensWhereTheRayEnded() {
+    // insertPortal has no field test: the ray tested the CONTACT, and the portal opens 10 units past it. A crate whose
+    // face (150) is outside a field and whose 10-in point (160) is inside it: the tap is in the crate, so no retry.
+    Rig rig;
+    if (!MakeRig(rig)) return;
+    const double radius = rig.state.rules.antiportalRadiusPx;
+    CHECK_MSG(radius > 25.0 && radius < 35.0, "the field's radius, " + std::to_string(radius) + ", puts 150 out and 160 in");
+    PutBox(rig, "crate", glm::dvec2(160.0, 200.0), glm::dvec2(20.0, 20.0), true);
+    rig.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(185.0, 200.0), 1.0, "ring"});
+    const glm::dvec2 tap(165.0, 200.0);
+    const Portals::FinalPos said = rig.state.Predict(rig.registry, glm::dvec2(100.0, 200.0), tap);
+    CHECK_MSG(!said.willDie && Near(said.atPx, glm::dvec2(160.0, 200.0)), "not doomed: " + Px(said.atPx));
+    CHECK(rig.state.Shoot(rig.registry, tap));
+    FlyFloored(rig);
+    CHECK_MSG(rig.state.placed.size() == 1 && Near(rig.state.placed[0].basePx, glm::dvec2(160.0, 200.0)) &&
+                  rig.state.shotsFailed == 0,
+              "the portal opens inside the field: " + rig.state.lastFailure);
+    // A portal put there by hand is still refused: TryPlace is the port's own test for the suites.
+    Rig by_hand;
+    if (!MakeRig(by_hand)) return;
+    by_hand.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(185.0, 200.0), 1.0, "ring"});
+    CHECK(!by_hand.state.TryPlace(glm::dvec2(160.0, 200.0)) && by_hand.state.Insert(glm::dvec2(160.0, 200.0)));
+}
+
+// A grid of taps on real levels: whatever the ray says at the tap is what the shot does where it arrives. Every
+// tap fires from the same settled player, and the level is left as it is between shots. A shot that a static
+// callback took (an agent, a flame, a reflector's turn, a blocker) is counted apart: its end was not the ray's.
+void EveryShotEndsAsTheRaySaidItWould() {
+    int doomed = 0;
+    int opened = 0;
+    int taken = 0;
+    int retried = 0;
+    int fieldFlags = 0;
+    for (const char* levelName : {"level6", "level8", "level11", "level12", "level3", "level5"}) {
+        Run run;
+        if (!Begin(levelName, run)) return;
+        for (int tick = 0; tick < 40; ++tick) Tick(run);
+        Portals::State& portals = run.level.portals;
+        const glm::dvec2 from = PlayerPx(run);
+        int tapsOfLevel = 0;
+        for (const double dx : {-220.0, -90.0, -30.0, 30.0, 90.0, 220.0}) {
+            for (const double dy : {-120.0, -50.0, 0.0, 50.0, 120.0}) {
+                portals.KillAll(false);
+                portals.flight.reset();
+                const glm::dvec2 tap = from + glm::dvec2(dx, dy);
+                const glm::dvec2 stood = PlayerPx(run);
+                if (!portals.Shoot(run.registry, tap)) continue;
+                ++tapsOfLevel;
+                const Portals::FinalPos said = portals.lastTap.said;
+                const Portals::FinalPos again = portals.Predict(run.registry, portals.flight->fromPx, tap);
+                CHECK_MSG(again.atPx == said.atPx && again.willDie == said.willDie,
+                          std::string(levelName) + " " + Px(tap) + ": the ray gives one answer");
+                CHECK_MSG(portals.flight && portals.flight->toPx == said.atPx && portals.flight->said.willDie == said.willDie,
+                          std::string(levelName) + " " + Px(tap) + ": the shot is aimed by the ray's answer");
+                std::vector<Portals::Failure> ends;
+                bool interfered = false;
+                const std::size_t before = portals.placed.size();
+                for (int tick = 0; tick < 700 && portals.flight; ++tick) {
+                    Tick(run);
+                    for (const Portals::Failure& f : portals.failures) ends.push_back(f);
+                    if (!portals.agentKills.empty() || !portals.burns.empty() || !portals.reflected.empty()) interfered = true;
+                }
+                CHECK_MSG(!portals.flight, std::string(levelName) + " " + Px(tap) + ": the shot ended within 700 ticks");
+                if (said.retried) ++retried;
+                const std::string where = std::string(levelName) + " " + Px(tap) + " from " + Px(stood);
+                if (interfered) {
+                    ++taken;
+                    continue;
+                }
+                if (!ends.empty() && ends.back().kind == Portals::FailKind::Blocker) {
+                    ++taken;
+                    continue;
+                }
+                if (ends.empty()) {
+                    // A portal opened: where the ray ended, and the ray had not doomed it. (A torch or a fire diamond
+                    // may have spent the shot on these levels: none is in the list.)
+                    CHECK_MSG(!said.willDie, where + ": a doomed shot opened a portal");
+                    CHECK_MSG(portals.placed.size() >= 1 && portals.placed.back().basePx == said.atPx,
+                              where + ": the portal is at the ray's end " + Px(said.atPx) + " (" +
+                                  std::to_string(before) + " before)");
+                    ++opened;
+                } else {
+                    CHECK_MSG(said.willDie, where + ": a shot the ray did not doom failed at " + Px(ends.back().atPx));
+                    CHECK_MSG(ends.size() == 1 && ends[0].atPx == said.atPx,
+                              where + ": it fails at the ray's end " + Px(said.atPx) + ", not " + Px(ends.back().atPx));
+                    CHECK_MSG(ends[0].kind == (said.closest != entt::null ? Portals::FailKind::Body : Portals::FailKind::Refused),
+                              where + ": the kind says whether the ray met a body");
+                    if (ends[0].inField) ++fieldFlags;
+                    ++doomed;
+                }
+            }
+        }
+        std::printf("  %s: %d taps fired" "\n", levelName, tapsOfLevel);
+    }
+    std::printf("  a grid of taps: %d opened a portal at the ray's end, %d failed there (%d in a field, %d after the head-height retry), "
+                "%d taken by a static callback" "\n",
+                opened, doomed, fieldFlags, retried, taken);
+    CHECK_MSG(opened > 20 && doomed > 20, "the grid exercises both outcomes");
+}
+
 void runTests() {
     Level6sBlocker();
     TheDecodedFlightNumbersAreShotJsons();
@@ -996,7 +1302,7 @@ void runTests() {
     AWallInTheJumpStillStopsTheShot();
     AShotOpensAPortalWhereItArrives();
     AWallStopsIt();
-    AStoneStopsIt();
+    AStoneIsWhereAPortalOpens();
     TheBlockerStopsIt();
     ANoPortalZoneAtTheTapFailsIt();
     NoPortalsNoShot();
@@ -1013,6 +1319,13 @@ void runTests() {
     AFireDiamondsMarkIsALeftoverByte();
     ATapSaysWhyItWasRefused();
     AReflectionIsRecordedForItsPictures();
+    TheShotGoesToTheRaysEndAndFailsOrOpensThere();
+    TheShotMeetsNoBodyOnItsWay();
+    AReflectedShotNeverDiesOnAWall();
+    TheRecoilAimsAtFinalPos();
+    AnArrivalAsksTheFieldOfTheShotsPosition();
+    ANonDoomedArrivalOpensWhereTheRayEnded();
+    EveryShotEndsAsTheRaySaidItWould();
 }
 
 } // namespace

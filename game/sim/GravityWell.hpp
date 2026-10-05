@@ -7,9 +7,9 @@
 // A well is these things at once, and the port already had the first:
 //   - a SOLID CIRCLE. The node is a StaticBody2D with a CircleShape2D, so it is
 //     an obstacle to the player and to every loose body. NOT TO A SHOT: the
-//     original's projectile.ent has no shape, and the ray that judges a tap
-//     passes gravity_agent by name, so Game::Start hands each agent's body to
-//     Portals::State::shotPasses and a shot flies through it (00_order R2).
+//     original's projectile.ent has no shape and meets no body, and the ray that
+//     judges a tap passes gravity_agent by name, so a shot flies through it
+//     (00_order R2; the flight has met no body since planning step 156).
 //   - an ATTRACTOR, which is this module: every DYNAMIC body inside its radius
 //     is pulled toward the centre. The original's DynamicBodyChooser rejects
 //     statics and anything with no physics controller, so platforms and walls

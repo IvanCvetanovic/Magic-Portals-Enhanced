@@ -8232,8 +8232,14 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     if (touch.over && Portals::RequestsPortal(m_level.portals.rules, release)) {
         glm::dvec2 atPx(0.0);
         if (ViewportToLevelPx(registry, glm::vec2(touch.atPx), atPx)) {
-            if (m_level.portals.Shoot(registry, atPx, ScriptClock::SimRatio(m_step)) && m_level.player != entt::null &&
-                registry.valid(m_level.player)) {
+            // With a fire diamond carried the method casts no ray (#21-64) and the mark follows the leftover low
+            // byte of absTouchPos.x in the original's screen pixels (D3 section 3), which only the layer knows.
+            std::optional<bool> fireDiamondWillDie;
+            if (m_level.diamonds.carrierHasFire) {
+                fireDiamondWillDie = Portals::State::FireDiamondWillDie(atPx.x * m_artRules.scaleFactor);
+            }
+            if (m_level.portals.Shoot(registry, atPx, ScriptClock::SimRatio(m_step), fireDiamondWillDie) &&
+                m_level.player != entt::null && registry.valid(m_level.player)) {
                 // managePortalInsertion #101-124, on a tap it takes with no projectile alive: the character
                 // is turned toward the tap - setDirection(1), left, where its x is above the tap's, else
                 // setDirection(2), right (F10 3.2: faces the tap and glides away from it). A walking update
@@ -8243,7 +8249,7 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
             }
             // What the tap leaves behind, read off the record Shoot has just
             // written - a picture, whatever the shot does next.
-            queueTapEffects(registry);
+            queueTapEffects();
         }
     }
     return direction;
@@ -9752,24 +9758,18 @@ bool MagicPortalsLayer::isBreakableWall(const std::string& node) const {
     return found != nullptr && Earthquake::IsEntity(Roles::EntityName(*found), m_quakeRules.wallEntity);
 }
 
-void MagicPortalsLayer::queueTapEffects(entt::registry& registry) {
+void MagicPortalsLayer::queueTapEffects() {
     if (!m_loaded) return;
     const Portals::State& portals = m_level.portals;
     const Portals::Tap& tap = portals.lastTap;
     switch (tap.reason) {
     case Portals::TapReason::Fired: {
         if (!portals.flight) return;
-        // computePortalFinalPos at the tap, as managePortalInsertion calls it
-        // (#127-145) from the character toward absTouchPos - or, with a fire
-        // diamond carried, the method's own branch (#21-64), which casts no ray
-        // and leaves willDie the leftover low byte of absTouchPos.x in the
-        // original's screen pixels.
-        Portals::FinalPos said;
-        if (m_level.diamonds.carrierHasFire) {
-            said.willDie = Portals::State::FireDiamondWillDie(tap.atPx.x * m_artRules.scaleFactor);
-        } else {
-            said = portals.Predict(registry, portals.flight->fromPx, tap.atPx);
-        }
+        // What computePortalFinalPos said at the tap, as managePortalInsertion calls it (#127-145) and Shoot
+        // stored it: the shot flies by the same answer, so the mark and the shot's end cannot disagree
+        // (planning step 156, R23). With a fire diamond carried it is the method's own branch (#21-64), which
+        // casts no ray and leaves willDie the leftover low byte of absTouchPos.x.
+        const Portals::FinalPos& said = tap.said;
         // red_waves (A) is added inside computePortalFinalPos, so before the
         // mark addProjectile adds after it (#167-243); both at absTouchPos, z
         // scale(32).
@@ -9777,7 +9777,8 @@ void MagicPortalsLayer::queueTapEffects(entt::registry& registry) {
         const Effects::Rule& mark = said.willDie ? m_effectRules.redCross : m_effectRules.portalMark;
         m_effectQueue.push_back(effectAdd(Effects::At(mark, tap.atPx)));
         SUPERSONIC_LOG_INFO("Magic Portals") << "shot fired on tick " << m_ticks << " toward (" << tap.atPx.x << ", "
-                                             << tap.atPx.y << "): " << mark.entity
+                                             << tap.atPx.y << "), to (" << said.atPx.x << ", " << said.atPx.y
+                                             << "): " << mark.entity
                                              << (said.redWaves ? " and red_waves (A)" : "")
                                              << (said.retried ? ", after the head-height retry" : "")
                                              << (m_level.diamonds.carrierHasFire ? ", a fire diamond's" : "")
@@ -9785,8 +9786,8 @@ void MagicPortalsLayer::queueTapEffects(entt::registry& registry) {
         return;
     }
     case Portals::TapReason::InFlight:
-        // managePortalInsertion #181-210: past the 400 ms, a shot still flying.
-        // The original resets that clock here too; the port does not (R23).
+        // managePortalInsertion #181-210: past the 400 ms, a shot still flying. The tap restarted the 400 ms
+        // clock on its way here (#75-78; Shoot, planning step 156).
         m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.hourglass, tap.atPx)));
         SUPERSONIC_LOG_INFO("Magic Portals") << "tap refused on tick " << m_ticks << " at (" << tap.atPx.x << ", "
                                              << tap.atPx.y << "): a shot still flies, hourglass" << std::endl;

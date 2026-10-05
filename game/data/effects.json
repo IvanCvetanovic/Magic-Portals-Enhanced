@@ -619,8 +619,9 @@
       "on no pad and no button (#54-71), while SeekEntity('projectile.ent') finds one (#80-99) - a player's",
       "or a reflected shot still flying, not an enemy's - AddEntity('hourglass.ent', vector3(absTouchPos,",
       "g_scale.scale(32)), 0, @out, '', getScale()), and no shot. #75-78 reset lastPortalTimer BEFORE that",
-      "test, so the hourglass tap restarts the 400 ms: 00_order 8.15's R23, NOT played by the port, which",
-      "draws the hourglass on its own in-flight refusal and leaves the clock alone. No sound and no vibrate",
+      "test, so the hourglass tap restarts the 400 ms: 00_order 8.15's R23, played by the port since planning",
+      "step 156 (Portals::State::Shoot): the tap that passes the gates restarts the clock, then draws the",
+      "hourglass on its in-flight refusal. No sound and no vibrate",
       "on this branch. ITS .ent: one hourglass_icon_small.png, a0, rep1, life 650, size 24, growth 0.35,",
       "alpha 0.6 to 0. Temporary."
     ]

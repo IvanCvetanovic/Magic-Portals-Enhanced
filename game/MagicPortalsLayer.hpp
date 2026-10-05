@@ -1697,10 +1697,10 @@ private:
     // What a tap the shot was offered leaves behind (the visuals plan's 10.1),
     // queued the moment Portals::State::Shoot returns: the mark a fired shot
     // leaves at the tap - red_cross or portal_mark by computePortalFinalPos's
-    // willDie (R15), and red_waves (A) where that adds them - the hourglass for a
+    // willDie, which Shoot stored and the shot flies by (R23), and red_waves (A) where that adds them - the hourglass for a
     // tap refused while a shot flies, and red_waves (B) with its shake for one
     // refused for a budget of 0 on a level with the no-portal sign.
-    void queueTapEffects(entt::registry& registry);
+    void queueTapEffects();
     // THE LEVEL'S END AND A DEATH (the visuals plan's 11.3), queued by the tick
     // that ends the level: levelFinishedEffect's suck at the door and sparkles at
     // the character, or checkGameLost's blood (killed) or skull (fallen). Called

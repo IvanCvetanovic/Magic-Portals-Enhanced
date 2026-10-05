@@ -220,11 +220,6 @@ std::optional<Hit> FirstBody(entt::registry& registry, const glm::dvec2& fromPx,
     return Meets(registry, fromPx, toPx, std::span<const entt::entity>(&ignore, 1), false, true);
 }
 
-std::optional<Hit> FirstBodyPassing(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
-                                    std::span<const entt::entity> ignore) {
-    return Meets(registry, fromPx, toPx, ignore, false, true);
-}
-
 std::optional<Hit> ClosestContact(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
                                   entt::entity ignore) {
     return Meets(registry, fromPx, toPx, std::span<const entt::entity>(&ignore, 1), true, false);
@@ -287,6 +282,12 @@ std::optional<double> Enters(const glm::dvec2& fromPx, const glm::dvec2& toPx, c
     const dvec2 lo = dvec2(box.centre) - dvec2(box.half);
     const dvec2 hi = dvec2(box.centre) + dvec2(box.half);
     return IntoPolygon(Metres(fromPx), Metres(toPx), {lo, dvec2(hi.x, lo.y), hi, dvec2(lo.x, hi.y)});
+}
+
+bool InsideBox(const glm::dvec2& pointPx, const Trigger::Box& box) {
+    const dvec2 p = Metres(pointPx);
+    const dvec2 gap = glm::abs(p - dvec2(box.centre));
+    return gap.x <= static_cast<double>(box.half.x) && gap.y <= static_cast<double>(box.half.y);
 }
 
 std::optional<double> EntersCircle(const glm::dvec2& fromPx, const glm::dvec2& toPx, const glm::dvec2& centrePx,

@@ -14303,7 +14303,12 @@ void AShotIntoA17WallEndsInPortalFail() {
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
     if (!layer.SimLevel()->portals.flight) return;
     const glm::dvec2 from = layer.SimLevel()->portals.flight->fromPx;
-    const glm::dvec2 aim = layer.SimLevel()->portals.flight->toPx;
+    // The mark is at the TAP (absTouchPos); the shot's way is to the ray's end, the block's underside, which the shot
+    // fails at (planning step 156: until then the shot flew to the tap and stopped on the first body).
+    const glm::dvec2 aim = layer.SimLevel()->portals.lastTap.atPx;
+    const glm::dvec2 destiny = layer.SimLevel()->portals.flight->toPx;
+    CHECK_MSG(glm::distance(destiny, aim) > 5.0 && layer.SimLevel()->portals.flight->said.willDie,
+              "the shot is aimed short of the tap, at the ray's end: " + Point(destiny));
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     // The mark: the tap-time ray meets the block's underside, so red_cross -
     // F3 #28 - at the tap, z scale(32); and no portal_mark, no waves.
@@ -14316,7 +14321,7 @@ void AShotIntoA17WallEndsInPortalFail() {
     // projectile_shoot on the shot's first tick, 24 out along its way, at the
     // projectile's z 0.
     CHECK_EQ(flown.launches.size(), std::size_t{1});
-    const glm::dvec2 dir = glm::normalize(aim - from);
+    const glm::dvec2 dir = glm::normalize(destiny - from);
     const auto& flashes = flown.flashes;
     CHECK_MSG(flashes.size() == 1 && glm::distance(flashes[0].atPx, from + dir * 24.0) < 1e-4 &&
                   flashes[0].zUnits == 0.0,
@@ -14327,6 +14332,7 @@ void AShotIntoA17WallEndsInPortalFail() {
               "the shot ended on a body: " + lastFailure(layer));
     if (flown.ends.size() != 1) return;
     const glm::dvec2 endPx = flown.ends[0].atPx;
+    CHECK_MSG(endPx == destiny, "and it ended at the ray's end: " + Point(endPx) + " for " + Point(destiny));
     const auto fails = EffectsOf(layer, "portal_fail.ent");
     CHECK_MSG(fails.size() == 1, "one portal_fail: " + std::to_string(fails.size()));
     CHECK(EffectsOf(layer, "portal_fail_in_antiportal.ent").empty());
@@ -14409,8 +14415,8 @@ void AnAntiportalTapOn17EndsRedAtZeroAndShakes() {
 
 // F3's long shot, (1100, 450) of its screen: past the field, so portal_mark at
 // the tap - the tap-time ray cannot see the anti_projectile_wall, a shape-0
-// entity - and killed in flight by it: the red end where the wall took it, and
-// the wall's own shake of 5, a static entity's, after the update.
+// entity - and killed in flight by it: the red end where the wall's rectangle held the
+// shot's position on a frame, and the wall's own shake of 5, a static entity's, after the update.
 void TheBlockerKillsF3sLongShotRedAndShakesAfter() {
     if (!OriginalArtIsThere("TheBlockerKillsF3sLongShotRedAndShakesAfter")) return;
     entt::registry registry;
@@ -14441,9 +14447,12 @@ void TheBlockerKillsF3sLongShotRedAndShakesAfter() {
     CHECK_MSG(reds.size() == 1 && !ends.empty() && reds[0].atPx == ends[0].atPx && reds[0].zUnits == 0.0,
               "portal_fail_in_antiportal where the wall took it: " + std::to_string(reds.size()));
     if (!ends.empty()) {
-        // The blocker's box is x 281 to 345: the shot is taken on entering it.
+        // The blocker's box is x 281 to 345: ETHCallback_anti_projectile_wall asks isPointInRect of the shot's POSITION
+        // once a frame, so the shot is taken at the first position the callback's advance leaves inside the box - at
+        // most one advance (3.2 units) past its edge (planning step 156; the swept test took it at the edge itself).
         // (The box is held in metres, a float: its edge reads 281.00001.)
-        CHECK_MSG(std::fabs(ends[0].atPx.x - 281.0) < 1e-3, "taken at the box's edge: " + Point(ends[0].atPx));
+        CHECK_MSG(ends[0].atPx.x >= 281.0 - 1e-3 && ends[0].atPx.x < 281.0 + 3.2 + 1e-3,
+                  "taken at the first position inside the box: " + Point(ends[0].atPx));
         std::printf("  1-07 long shot: portal_mark at %s, killed by the blocker at %s on tick %d\n",
                     Point(aim).c_str(), Point(ends[0].atPx).c_str(), killed.tick);
     }
@@ -14542,10 +14551,10 @@ void AShotKillsF17sAgentWithItsBurstShakeAndSound() {
 }
 
 // F3's hourglass: a tap past the 400 ms while a shot still flies. On 1-04
-// (level3), whose open air lets a shot fly longer than 400 ms at the port's 600
-// units a second (1-07's longest clear flight is shorter: the blocker is 240
-// units out). The tap draws the hourglass and fires nothing, and - the port's
-// R23 difference - leaves the 400 ms clock where it was.
+// (level3), whose open air lets a shot fly longer than 400 ms (1-07's longest clear
+// flight is shorter: the blocker is 240 units out). The tap draws the hourglass and
+// fires nothing, and RESTARTS the 400 ms clock, as the original's does before it
+// asks whether a projectile exists (managePortalInsertion #75-78; planning step 156).
 void ATapWhileAShotFliesShowsTheHourglass() {
     if (!OriginalArtIsThere("ATapWhileAShotFliesShowsTheHourglass")) return;
     entt::registry registry;
@@ -14587,9 +14596,19 @@ void ATapWhileAShotFliesShowsTheHourglass() {
     CHECK_MSG(glasses.size() == 1 && glm::distance(glasses[0].atPx, aside) < 1e-3 && glasses[0].zUnits == 32.0,
               "the hourglass at the tap, z 32: " + std::to_string(glasses.size()));
     CHECK_MSG(layer.SimLevel()->portals.shotsFired == 1, "and no second shot");
-    CHECK_MSG(std::fabs(clockAfter - clockBefore - kScriptMs) < 1e-6,
-              "the 400 ms clock ran on through the tap, not restarted: " + std::to_string(clockBefore) + " -> " +
+    CHECK_MSG(clockBefore > 400.0 && clockAfter == 0.0,
+              "the 400 ms clock was restarted by the hourglass tap: " + std::to_string(clockBefore) + " -> " +
                   std::to_string(clockAfter));
+    // So a tap soon after it is the silent refusal, not a second hourglass.
+    for (int i = 0; i < 8; ++i) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    shoot(layer, registry, screenOf(registry, aside));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Cooldown &&
+                  EffectsOf(layer, "hourglass.ent").size() == 1,
+              "and a tap ten ticks after it draws nothing: " + std::to_string(EffectsOf(layer, "hourglass.ent").size()));
     layer.OnDetach(registry);
 }
 
@@ -14770,11 +14789,21 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
     }
     CHECK_MSG(turnTick >= 0, "the shot was turned: " + lastFailure(layer));
     if (turnTick < 0) return;
-    CHECK_MSG(!turn.said.willDie && !turn.said.redWaves && turn.said.atPx == turn.toPx,
-              "the new leg's ray is clear: " + Point(turn.said.atPx));
-    const auto marks = EffectsOf(layer, "portal_mark.ent");
-    CHECK_MSG(marks.size() == 1 && marks[0].atPx == turn.said.atPx && marks[0].zUnits == 32.0,
-              "portal_mark at the new leg's end, " + Point(turn.said.atPx) + ": " + std::to_string(marks.size()));
+    // The first leg is aimed at the ray's end under the wall (planning step 156), so the rest of its way - which the
+    // turn mirrors - is the short way to it, and the new leg's own ray answers for the mark: red_cross where it is
+    // doomed (and red_waves (A) where it met nothing and its end is in a field), portal_mark where it is clear.
+    // The first leg's own mark is a red_cross at the tap.
+    const char* markEntity = turn.said.willDie ? "red_cross.ent" : "portal_mark.ent";
+    const auto marks = EffectsOf(layer, markEntity);
+    int atNewEnd = 0;
+    for (const auto& mark : marks) atNewEnd += (mark.atPx == turn.said.atPx && mark.zUnits == 32.0) ? 1 : 0;
+    CHECK_MSG(atNewEnd == 1, std::string(markEntity) + " at the new leg's end, " + Point(turn.said.atPx) + ": " +
+                                 std::to_string(atNewEnd) + " of " + std::to_string(marks.size()));
+    const auto waves = EffectsOf(layer, "red_waves.ent");
+    CHECK_MSG(waves.size() == (turn.said.redWaves ? 1u : 0u) &&
+                  (waves.empty() || (waves[0].atPx == turn.toPx && waves[0].zUnits == 32.0)),
+              "and red_waves (A) at the new destination exactly where its ray met nothing in a field: " +
+                  std::to_string(waves.size()));
     auto flashes = seenFlashes;
     bool atTurn = false;
     for (const auto& flash : flashes) atTurn = atTurn || (flash.atPx == turn.atPx && flash.zUnits == 0.0);
@@ -14793,8 +14822,9 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
     for (const auto& flash : flashes) out24 = out24 || glm::distance(flash.atPx, turn.atPx + way * 24.0) < 1e-4;
     CHECK_MSG(flashes.size() == 3 && out24, "and flashes 24 out along its way: " + std::to_string(flashes.size()));
     landShot(layer, registry);
-    std::printf("  1-12: a shot turned at %s by reflect_agent_761, portal_mark at %s, %zu portal(s) placed\n",
-                Point(turn.atPx).c_str(), Point(turn.said.atPx).c_str(), layer.SimLevel()->portals.placed.size());
+    std::printf("  1-12: a shot turned at %s by reflect_agent_761, %s at %s, %zu portal(s) placed\n",
+                Point(turn.atPx).c_str(), markEntity, Point(turn.said.atPx).c_str(),
+                layer.SimLevel()->portals.placed.size());
     layer.OnDetach(registry);
 }
 

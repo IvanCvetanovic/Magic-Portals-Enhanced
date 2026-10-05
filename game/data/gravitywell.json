@@ -10,7 +10,7 @@
     "     obstacle to the player and to every loose body. Not to a portal shot: the original's",
     "     projectile.ent has no shape and meets nothing in flight, and the ray that judges a",
     "     tap passes gravity_agent by name (placement.json final_pos.ray_ignores), so the",
-    "     port's shot flies through the agent (Portals::State::shotPasses; 00_order R2).",
+    "     port's shot flies through the agent (it meets no body at all since planning step 156; 00_order R2).",
     "  2. an ATTRACTOR. Every dynamic body inside its radius is pulled toward the centre.",
     "  3. a GREEN RING. ETHCallback_gravity_agent ADDS an antiportal.ent at its own position",
     "     on its first tick, and that is what is drawn round the agent (`ring` below).",

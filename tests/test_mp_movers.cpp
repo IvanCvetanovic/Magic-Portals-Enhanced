@@ -1068,16 +1068,11 @@ void F3sTapsBracketTheFieldOn107() {
         CHECK(portals.TryPlace(tap));
     }
     CHECK_EQ(portals.portalsUsed, 2);
-    // The port's one no_portal zone, no_portal_705 at (232, 194): not the
-    // manager's, but tested at the same radius x its scale of 1 - and all of it
-    // inside antiportal_687's field, so it refuses nothing the ring does not.
-    const Portals::NoPortalZone* sign = portals.FindZone("no_portal_705");
-    CHECK(sign != nullptr);
-    if (sign != nullptr) {
-        CHECK(sign->scale == 1.0);
-        CHECK(glm::distance(sign->centrePx, ring->centrePx) + portals.rules.antiportalRadiusPx * sign->scale <
-              portals.rules.antiportalRadiusPx * ring->scale);
-    }
+    // 1-07's no_portal_705 at (232, 194) is the sign's picture as an inline entity, and AntiPortalManager gathers
+    // only antiportal and antiportal.ent: it is no zone (planning step 156; it lay wholly inside antiportal_687's
+    // field, so no tap's answer moved).
+    CHECK_MSG(portals.FindZone("no_portal_705") == nullptr, "no_portal_705 refuses nothing");
+    CHECK_EQ(static_cast<int>(portals.zones.size()), 1);
 }
 
 // ---- The platform gate (planning step 136) ----------------------------------

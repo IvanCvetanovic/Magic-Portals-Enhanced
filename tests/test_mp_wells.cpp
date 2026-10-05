@@ -331,8 +331,9 @@ void AWellRefusesNoPortal() {
 // shape and meets nothing on its way (00_order section 8.4, D3 with its check),
 // and the tap-time ray passes gravity_agent by name (computePortalFinalPos #30-51,
 // placement.json final_pos.ray_ignores). So the agent - solid to the player and to
-// every loose body - is handed to Portals::State::shotPasses, and a shot aimed
-// through it opens its portal beyond. Until step 125 the port's shot died on it.
+// every loose body - is a body the ray passes, and a shot aimed through it opens its
+// portal beyond. Until step 125 the port's shot died on it; since step 156 the shot
+// meets no body at all, and the ray is the only thing that could have stopped it.
 void AShotFliesThroughAWell() {
     Game::Data data;
     entt::registry registry;
@@ -345,10 +346,9 @@ void AShotFliesThroughAWell() {
     CHECK_MSG(found != level.built.entities.end(), well.name + " was built");
     if (found == level.built.entities.end()) return;
     const entt::entity agent = found->second;
-    CHECK_MSG(std::find(level.portals.shotPasses.begin(), level.portals.shotPasses.end(), agent) !=
-                  level.portals.shotPasses.end(),
-              well.name + " is a body a shot passes");
-    CHECK_EQ(static_cast<int>(level.portals.shotPasses.size()), 1);
+    CHECK_MSG(std::find(level.portals.rayIgnored.begin(), level.portals.rayIgnored.end(), agent) !=
+                  level.portals.rayIgnored.end(),
+              well.name + " is a body the tap-time ray passes by name");
 
     // Past the 400 ms a level holds its first tap off for. Nothing moves the
     // player meanwhile: level16c has no gravity, and the spawn is outside the
@@ -358,17 +358,14 @@ void AShotFliesThroughAWell() {
     // Through the agent's centre, and as far again beyond it as half the way to it.
     const glm::dvec2 tapPx = fromPx + (well.atPx - fromPx) * 1.5;
 
-    // The agent IS on the way: the first solid body the shot's own test meets,
-    // passing the player alone - which is what stopped the port's shot before.
+    // The agent IS on the way: the first solid body a ray that passes the player alone meets - which is
+    // what stopped the port's shot before.
     const auto blocked = Shot::FirstBody(registry, fromPx, tapPx, level.player);
     CHECK_MSG(blocked.has_value() && blocked->body == agent, "the agent is the first solid body on the shot's way");
-    std::vector<entt::entity> passes = level.portals.shotPasses;
-    passes.push_back(level.player);
-    CHECK_MSG(!Shot::FirstBodyPassing(registry, fromPx, tapPx, passes).has_value(), "and nothing else is");
 
-    // The tap's picture already said so: the ray passes the agent, so portal_mark.
+    // And the tap-time ray, which passes it by name, meets nothing at all: portal_mark, finalPos the tap.
     const Portals::FinalPos predicted = level.portals.Predict(registry, fromPx, tapPx);
-    CHECK(!predicted.willDie && !predicted.redWaves);
+    CHECK(!predicted.willDie && !predicted.redWaves && predicted.closest == entt::null && predicted.atPx == tapPx);
 
     // And the shot, fired as a tap fires it and flown by the level's own tick.
     CHECK(level.portals.Shoot(registry, tapPx));
