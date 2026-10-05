@@ -6,37 +6,33 @@
     "now, where the port's 16 px box did. A portal shot is no body to it, so the way is shot through",
     "the slot. From the spawn a pair onto block00_ent_761 (160, 126) and the player (30, 60); right",
     "off its end, down wall04_ent_762's face onto double_block_plat_ent_789 and under the wall to x",
-    "333.5 (80-166). A portal at (416, 90) over moving_platform_764 while it swings low (290), one on",
+    "333.5 (80-166). A portal at (416, 90) over moving_platform_764 while it swings low, one on",
     "the player (316): down onto the platform. Riding it up, at a centre of y 101 a shot through the",
     "slot to (640, 108) over the door's block (412, 13 u clear of the wall above and 9 of the one",
-    "below); walking right off the platform, one on the player (437): out at (640, 110) at 140 u/s,",
-    "onto the block and into the door. Won on tick 457, 6 shots. The platform gate holds nothing:",
-    "the player's portal is 22 u over the platform's box, where the gate's reach is 5.6. Leans on the",
-    "port's swing of the platform (G3, R7 not built), G4 (shot speed) and G10 (the walk).",
-    "Re-timed for the wave 3a timing build (CK, G10, G4), same idea. The platform swings 144 + 32 sin(1.4 t)",
-    "on the script clock now, 16 ms a tick, so its period is 280.5 ticks (269 before) and the player stands",
-    "on it at a centre y of its y - 37: the centre is 101 and rising on tick 429, 75 at its top on 491.",
-    "The second shot waits for the first (160, 126), 136 u out, to land on 66 (tap 67); the walk starts on",
-    "74 and stops at x 334.7 under the wall on 148; the platform is low (y 176 on tick 350), so the shot",
-    "to (416, 90) goes on 355 and lands on 392, the one on the player on 395 (it lands on its first",
-    "callback: out at (416, 92) onto the platform on 406). The slot shot goes on tick 429 from a centre of",
-    "100.6 (the platform rising) and lands on 493 (224 u: 64 ticks); the player rests at the platform's",
-    "top (y 74.7) and the one on him goes on 496, out at (640, 110) on 498: right onto the block and into",
-    "the door. A slot shot 7 ticks earlier (422) wins too; one 7 ticks later (436) is still flying when the",
-    "last tap comes. Won on tick 523, 6 shots."
+    "below); one on the player: out at (640, 110) at 140 u/s, onto the block and into the door.",
+    "Re-timed for the wave 3b-1 time-base build (WT, CAP, G3), same idea. The platform swings the",
+    "original's full cosine now, y = 144 + 64 cos(0.7 x the script clock), from its bottom (208) on the first",
+    "tick: it is at 138 and rising when the player stands under the wall (tick 148), so the route waits for the",
+    "next low stretch. The shot to (416, 90) is clear of the platform only while the platform is below its line",
+    "at x 384 (y over 142, computed: ticks 424 to 704 of the cycle), so it goes on 555 and lands on 594 (a tap",
+    "from 408 to 640 wins, scanned every second tick); the one on the player goes on 597, 3 ticks after, and lands on its first callback",
+    "(599): out at (416, 93) onto the platform (landed on 610), which carries him up at 0.7 u a tick. At a",
+    "centre of y 101 (tick 708; a slot shot from 693 to 718 wins with the last tap on 781, a later one is still",
+    "flying then) the shot to (640, 108) lands on 772, the one on the player on 781 (out at (640, 114) on 783),",
+    "right onto the block and into the door. Won on tick 808, 6 shots."
   ],
   "level": "level5",
-  "win_by": 560,
+  "win_by": 830,
   "holds": [
     {"walk": "right", "from": 74, "to": 148},
-    {"walk": "right", "from": 502, "to": 560}
+    {"walk": "right", "from": 785, "to": 830}
   ],
   "taps": [
     {"tick": 29, "at": [160, 126]},
     {"tick": 67, "at": [34, 74.3]},
-    {"tick": 355, "at": [416, 90]},
-    {"tick": 395, "at": [332.3, 202.3]},
-    {"tick": 429, "at": [640, 108]},
-    {"tick": 496, "at": [416, 74.9]}
+    {"tick": 555, "at": [416, 90]},
+    {"tick": 597, "at": [332.3, 202.3]},
+    {"tick": 708, "at": [640, 108]},
+    {"tick": 781, "at": [416, 60.5]}
   ]
 }

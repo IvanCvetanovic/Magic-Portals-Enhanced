@@ -1,37 +1,31 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-12, re-authored on the timing build (wave 3a round 1: the floored script clock, the decoded walk, the shot at 200",
-    "u/s) for antiportal_574's 32 x 2.5 = 80 px (step 127, R1), which holds the block by the gap. Each portal pair is now a",
-    "far shot and a shot on the player, 26 ticks apart (the 400 ms between taps is 25 ticks of 16 ms, refused) and never",
-    "while a shot flies. A portal over the left platform's end at (300, 160) (a 65-tick flight, in place on tick 95), one",
-    "on the player (tick 94, through on 96): he lands on the platform's end and creeps right 0.14 u a tick toward the pit.",
-    "A portal on the floor between the stub and the block at (380, 205) (in place on 138), one on the player (146, through",
-    "on 148). From there a shot up past the block's corner toward (459.8, 36.7) comes within 16 of reflect_agent_623 (422,",
-    "115), horizontal, and its mirrored leg passes 21 px from anti_portal_agent_ent_599 (464, 184): the agent and",
-    "antiportal_574 go on tick 203. A portal on the block at (410, 150) (in place on 215), one on the player (228, through",
-    "on 230). A portal on the ramp at (600, 190), under the hanging column (a 54-tick flight, in place on 309), one on the",
-    "player (308, through on 310); he slides slowly down the slope. A shot at the top of the view, (644.4, 2), comes within",
-    "16 of reflect_agent_675 (638, 26) and lands mirrored over the post at (645, 80.7) on tick 380: one on the player on",
-    "the very tick it is taken (380, through on 382), down onto the post, right off it into the door. Won on tick 419 (417",
-    "before the idle hold)."
+    "1-12, re-authored on the time-base build (wave 3a round 1 and 3b-1: the floored script clock, the decoded walk, the shot at 200 u/s, the shorter capsule) for antiportal_574's 32 x 2.5 = 80 px (step 127, R1), which holds the block by the gap.",
+    "Each portal pair is a far shot and a shot on the player, 26 ticks apart (the 400 ms between taps is 25 ticks of 16 ms, refused) and never while a shot flies; every tap here waits three ticks past that, so each can move two ticks earlier or three later alone and still win.",
+    "A portal over the left platform's end at (300, 160) (a 65-tick flight, in place on tick 95), one on the player (tap 98, through on 100): he lands on the platform's end at (300, 207) and stays. A portal on the floor between the stub and the block at (380, 205)",
+    "(in place on 147), one on the player (158, through on 160). From there a shot up past the block's corner toward (459.8, 36.7) comes within 16 of reflect_agent_623 (422, 115), horizontal (reflected on 208), and its mirrored leg passes 21 px from",
+    "anti_portal_agent_ent_599 (464, 184): the agent and antiportal_574 go on tick 220, 32 ticks after the tap (the old route's next tap came 30 after it and found the shot still flying). A portal on the block at (410, 150) (in place on 237), one on the player",
+    "(253, through on 255). A portal on the ramp at (600, 190), under the hanging column (a 54-tick flight, in place on 337), one on the player (340, through on 342); he stands on the ramp at (599, 188). A shot at the top of the view, (644.4, 2), comes within 16 of reflect_agent_675 (638, 26)",
+    "and lands mirrored over the post at (645, 81) on tick 417: one on the player on tick 420 (through on 422), down onto the post, right from 430 off it into the door. The self taps are aimed at where the player stands (his centre is 3.9 units lower than before: y 206.4 on the floor).",
+    "11 shots, none failed. Won on tick 461."
   ],
   "level": "level11",
-  "win_by": 460,
+  "win_by": 500,
   "holds": [
-    {"walk": "right", "from": 384, "to": 460}
+    {"walk": "right", "from": 430, "to": 500}
   ],
   "taps": [
     {"tick": 29, "at": [300, 160]},
-    {"tick": 94, "at": [73.0, 202.5]},
-    {"tick": 120, "at": [380, 205]},
-    {"tick": 146, "at": [305.7, 203.8]},
-    {"tick": 172, "at": [459.8, 36.7]},
-    {"tick": 202, "at": [410, 150]},
-    {"tick": 228, "at": [380.4, 202.5]},
-    {"tick": 254, "at": [600, 190]},
-    {"tick": 308, "at": [410.0, 150.5]},
-    {"tick": 334, "at": [644.4, 2]},
-    {"tick": 380, "at": [578.9, 189.5]}
+    {"tick": 98, "at": [73.0, 206.4]},
+    {"tick": 128, "at": [380, 205]},
+    {"tick": 158, "at": [299.6, 206.9]},
+    {"tick": 188, "at": [459.8, 36.7]},
+    {"tick": 223, "at": [410, 150]},
+    {"tick": 253, "at": [380.2, 206.4]},
+    {"tick": 283, "at": [600, 190]},
+    {"tick": 340, "at": [410.0, 154.4]},
+    {"tick": 370, "at": [644.4, 2]},
+    {"tick": 420, "at": [599.2, 188.4]}
   ]
 }

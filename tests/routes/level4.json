@@ -5,18 +5,21 @@
     "the edge; the crate falls away. A portal over the door's ledge across the pit, and one close ahead,",
     "which the player's body already overlaps, so it goes through at once; right to the door. Won on",
     "tick 157 (step 113).",
-    "Re-timed for the wave 3a timing build (CK, G10, G4): the first shot, 198 u out, flies 54 ticks and",
-    "opens its portal on tick 135, so the second tap (17 u from the player, which lands on its first",
-    "callback) goes down on 136 where it went down on 114; the walk right resumes on 142. Won on tick 174."
+    "Re-timed for the wave 3b-1 time-base build (WT, CAP, G3): the crate is heavy now (the player's",
+    "push slows to 0.56 u a tick against 2.4 free), so the hold runs to tick 88, where the crate tips",
+    "over the edge, and it falls at the original's gravity, so it is still across the first shot's line",
+    "until about tick 104 (a first shot on 100 ends against it at (177.5, 204.1), no portal opens across the pit and the walk ends in it: the fall). The first shot goes down on",
+    "108, flies 58 ticks and opens its portal on tick 167; the second tap goes down on 168, which lands",
+    "on its first callback (171); the walk right resumes on 172. Won on tick 207."
   ],
   "level": "level4",
-  "win_by": 200,
+  "win_by": 225,
   "holds": [
-    {"walk": "right", "from": 1, "to": 52},
-    {"walk": "right", "from": 142, "to": 200}
+    {"walk": "right", "from": 1, "to": 88},
+    {"walk": "right", "from": 172, "to": 225}
   ],
   "taps": [
-    {"tick": 79, "at": [360, 188]},
-    {"tick": 136, "at": [180, 205]}
+    {"tick": 108, "at": [360, 188]},
+    {"tick": 168, "at": [180, 205]}
   ]
 }

@@ -1,29 +1,37 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-19 (step 127, R1: the key's pocket behind spinning_platform_1554 lies inside antiportal_1555's 32 x 3.4 = 109 px, so",
-    "no portal opens on its floor; re-authored in round 3 on the timing group's build). Left (1-74: the idle player no",
-    "longer creeps down the anchor, planning step 148's amendment) off the anchor's end and down to the floor (a shot fired",
-    "from the lower platform on the way passes fire_agent_ent_1557's flame at (354, 101) and is burned, so the first shot",
-    "waits for the floor): a portal on the anchor's right part at (240, 68) (56 ticks of flight, G4, tick 113), one on the",
-    "player (tick 173, at (388.1, 202.5) where he landed). A portal at the top of the pocket at (140, 22), 121 px from the",
-    "ring's centre, shot from the anchor (tick 201), and one on the player (tick 233): down into the pocket, taking the key",
-    "(tick ~262). Right against the spinning platform, whose joint's limits (lower -3.1415, upper 0) let it turn only this",
-    "way: the push (the walk sets 144 u/s outright now, G10) carries the player from x 147 on tick 280 to x 175 on tick 600",
-    "and over the platform on ~650, off the anchor on 694 (step 127's creep took until 2800); along the floor pushing the",
-    "barrel, the key opens the yellow door at its keyhole (tick 944), and into the door. How fast the platform turns under",
-    "the push is the port's hinge, not measured against the original. Won on tick 997."
+    "3-19 (step 127, R1: the key's pocket behind spinning_platform_1554 lies inside antiportal_1555's 32 x 3.4 = 109 px, so no portal opens on its floor; re-authored in round 3 on the timing group's build, and",
+    "again in wave 3b-1 round 2 on the time-base group's build, by another way). THE OLD WAY IS GONE: the bar (x 150.4-169.6, y 48-176, pinned at (160, 112), limits -pi..0 from its rest) now stands jammed from both sides. By the scene's",
+    "numbers its lower half is 1.4 px from breakable_wall_1556's face (x 119-149, y 129-255), and turning the one way its limit allows (top toward +x, the way a push from the pocket turns it) swings that half into the wall after about",
+    "1.3 degrees; the other way is its upper limit. A player walking into it stops at once (x 143.1 from the left for 790 ticks, x 177.5 from the right); the creep that carried round 3's route through was most likely the old solver",
+    "leaking the bar through a static wall, which WT and CAP closed. So the wall goes first, with the level's own pieces. Left (1-74) off the start platform onto the floor (tick 88). A portal at (208, 205) under the anchor (tick 93, placed",
+    "141) and one at (531, 205), 7 px inside the barrel's reach beside its left face (a tap ON the barrel ends against it; tick 147, placed 186): barrel_bomb_1560 goes through and rests at (207.5, 205.5) in the corridor under the anchor,",
+    "58 px from the wall's face. Left to x 327.6 (150-172): a shot up to the start platform from x 382 would end on single_block_plat's corner. A portal at (476, 40) on the start platform (tick 192, placed 255) and one on the",
+    "player (tick 263, through on 264): up at (476, 48.4). From there a shot to (350, 122), 22 px under fire_agent_ent_1557's centre (tick 294), is burned on tick 320 at (383.3, 102.6) and its fireball flies down-left under the",
+    "anchor's end into the barrel's right face: it goes off and the wall is gone on tick 406 (windows tried: that aim x 336-364 and y 108-132, the barrel's first portal x 200-220, the start-platform portal x 470-480 and y 30-50).",
+    "Left off the platform (298-337) to the floor and round 3's hop: (240, 68) on tick 357 (placed 412) and the player's own point on 418 (through on 419), onto the anchor at (239.5, 78.4). The pocket as before: a portal at (140, 22)",
+    "(tick 449, placed 478) and one on the player (484): down into the pocket and the key on tick 493. Right from 496: the bar, free of the wall, turns under the push (the player at x 142 on tick 498, 176 on 525) and he walks over it,",
+    "off the anchor's end (tick ~560) and along the floor (the barrel is gone) to the keyhole (key in on 744) and into the door. Each tap has a window of at least 4 ticks either way (the shots queue behind each other's flight and the",
+    "400 ms between taps, so a tap before its window is refused). Leans on the port's hinge direction and the masses of the bar and the barrel (not measured against the original). Won on tick 832."
   ],
   "level": "level18b",
-  "win_by": 1050,
+  "win_by": 865,
   "holds": [
     {"walk": "left", "from": 1, "to": 74},
-    {"walk": "right", "from": 260, "to": 1050}
+    {"walk": "left", "from": 150, "to": 172},
+    {"walk": "left", "from": 298, "to": 337},
+    {"walk": "right", "from": 496, "to": 865}
   ],
   "taps": [
-    {"tick": 112, "at": [240, 68]},
-    {"tick": 172, "at": [388.1, 202.5]},
-    {"tick": 200, "at": [140, 22]},
-    {"tick": 232, "at": [239.6, 74.5]}
+    {"tick": 92, "at": [208, 205]},
+    {"tick": 146, "at": [531, 205]},
+    {"tick": 191, "at": [476, 40]},
+    {"tick": 262, "at": [327.6, 206.4]},
+    {"tick": 293, "at": [350, 122]},
+    {"tick": 356, "at": [240, 68]},
+    {"tick": 417, "at": [388.1, 202.5]},
+    {"tick": 448, "at": [140, 22]},
+    {"tick": 483, "at": [239.6, 74.5]}
   ]
 }

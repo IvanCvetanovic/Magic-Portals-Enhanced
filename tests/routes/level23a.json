@@ -1,28 +1,32 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-24 (planning step 139, re-flown on the timing build, wave 3a round 1): seven barrels, two breakable walls,",
-    "button_1144 behind breakable_wall_1141 and door_lift_1145 before the door; one barrel set off sets off all within 80",
-    "of it. Drag 1 (10-31) parks the flame at (150, 20) (it eases there until ~100: the first shot waits for tick 52, or it",
-    "is burned). The player starts on barrel 1135, which rolls from under him by ~140 (it did not on the old build), so he",
-    "walks left at once (33-48) onto the lying barrel 1087's top, 6 u lower: from there every ray clears barrel 1135 and",
-    "block00. Pairs (15, 40) + over barrel 1170 (169, 79) (shots on 53 and 79), and (15, 10) + over barrel 1197 (207, 44)",
-    "(105 and 131; a shot flies about 25 ticks, and the next waits for it and for the 400 ms), send the two that join the",
-    "cluster by the wall to the left end: then barrels 1171 and 1136 alone reach the wall. Drag 2 (145-166) brings the",
-    "flame over 1171, after barrel 1197 is through (167): the two go off (196) and wall 1141 breaks, the row untouched. A",
-    "portal floating over the button (305, 60) (shot on 201, the gap of the broken wall) and one above barrel 1135 (266):",
-    "it drops onto the button (289) and the lift door opens. Drags 3 and 4 (292-348) take the flame along the ceiling and",
-    "down onto the row: the row goes off and 1087's blast takes breakable_wall_1131 (355), the floor under it. Left off the",
-    "block (360-373), down the hole into the lower room, and right under the risen door to the exit. Won on tick 446 (447",
-    "before the idle hold). The lift door opens only while a barrel holds the button here (no latch: B7, not in this tree);",
-    "the original's latch would hold it as well. No shot passes within 32 of the flame (G8 not built)."
+    "2-24 (planning step 139, re-flown on the timing build, wave 3a round 1, and again on the time-base group's build, wave",
+    "3b-1 round 1): seven barrels, two breakable walls, button_1144 behind breakable_wall_1141 and door_lift_1145 before the door;",
+    "one barrel set off sets off all within 80 of it. Drag 1 (10-31) parks the flame at (150, 20) (it eases there until ~100: the",
+    "first shot waits for tick 52, or it is burned). The player starts on barrel 1135, which rolls from under him by ~140 (it did",
+    "not on the old build), so he walks left at once (33-48) onto the lying barrel 1087's top, 6 u lower: from there every ray",
+    "clears barrel 1135 and block00. Pairs (15, 40) + over barrel 1170 (169, 79) (shots on 53 and 79, placed on 69 and 101: a shot",
+    "flies 16 to 22 ticks here), and (15, 10) + over barrel 1197 (207, 44) (105 and 131; the next waits for the shot and for the",
+    "400 ms), send the two that join the cluster by the wall to the left end: then barrels 1171 and 1136 alone reach the wall.",
+    "Drag 2 (145-166) brings the flame over 1171, after barrel 1197 is through (167): the two go off (198) and wall 1141 breaks, the",
+    "row untouched. A portal floating over the button (305, 60) (shot on 201, the gap of the broken wall) and one above barrel 1135",
+    "(266): it drops onto the button (275) and the lift door opens (287). Drags 3 and 4 (292-348) take the flame along the ceiling",
+    "and down onto the row, to (28, 98): the barrels of the row now lie at y 110 to 115, 50 u lower than the old build left them,",
+    "so the flame stops 12 u over them, where (15, 60) lit nothing. The row goes off and 1087's blast takes breakable_wall_1131,",
+    "the floor under it (373). The player is no longer where the old walk left him: the push of barrel 1197 (274) carried him to",
+    "x 104 on the block, so he walks left from 360 to 405 (the old 360-373 left him over the block, on its top at y 110, not over",
+    "the hole west of x 64), drops through the hole into the lower room and walks right under the risen door (408-) to the",
+    "exit. Won on tick 471 (a drag end of (25-30, 95-100) with a walk end of 395-415 wins in all 15 combinations tried for each; (20, 95) and (22, 92) lose three). The lift door opens only while a",
+    "barrel holds the button here (no latch: B7, not in this tree); the original's latch would hold it as well. No shot passes",
+    "within 32 of the flame (G8 not built)."
   ],
   "level": "level23a",
-  "win_by": 480,
+  "win_by": 500,
   "holds": [
     {"walk": "left", "from": 33, "to": 48},
-    {"walk": "left", "from": 360, "to": 373},
-    {"walk": "right", "from": 385, "to": 700}
+    {"walk": "left", "from": 360, "to": 405},
+    {"walk": "right", "from": 408, "to": 700}
   ],
   "taps": [
     {"tick": 10, "release": 31, "at": [48, 40], "to": [150, 20], "shot": false},
@@ -34,6 +38,6 @@
     {"tick": 200, "at": [305, 60]},
     {"tick": 265, "at": [125, 80]},
     {"tick": 292, "release": 323, "at": [239, 12], "to": [15, 12], "shot": false},
-    {"tick": 327, "release": 348, "at": [15, 12], "to": [15, 60], "shot": false}
+    {"tick": 327, "release": 348, "at": [15, 12], "to": [28, 98], "shot": false}
   ]
 }

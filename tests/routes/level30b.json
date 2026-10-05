@@ -1,14 +1,14 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-31, re-routed by step 128 (the merge) and again by step 140; re-timed in R3 round 1 for the timing group (G4's 3.2-unit shot, the 25-tick 400 ms,",
+    "3-31, re-routed by step 128 (the merge) and again by step 140; re-timed in R3 round 1 for the timing group and in 3b-1's round 1 for the time-base group (G4's 3.2-unit shot, the 25-tick 400 ms,",
     "G10's 144 u/s walk with no steering in the air). A portal on the gutter block at (384, 118) (a 75-tick flight, open on 107) and, once it",
     "is open, one on the player (tap 106): fire_diamond_ent_2199 is taken (109). Right off the block, landing right of the drain (the",
     "gutter's 10-unit slot at x 379-389 would take the diamond): from the right platform at (431, 234) a fireball",
     "left burns knight B (it is burned on 533 at the left end of its patrol, so the key drops at x 64), whose key drops on the left platform. Right onto lift_ent_2438, which waits at the top;",
     "a touch (450) sends it down, and at its bottom left onto single_block_plat_low_emissive_ent_2442, level with",
-    "it (the walk left ends at x 431.2); from there a fireball at the shock agent destroys it and its ring (710), and one aimed at (224,",
-    "421) clears the block's corner by 1.4 units and burns crate_2355 at its top corner, baring",
+    "it (the walk left ends at x 431.2; a fireball from there at the shock agent destroys it and its ring (709); a walk left of 10 more ticks, 630 to 640, puts him at x 404.6 for the next fireball), and one aimed at (224,",
+    "421 from x 404.6 clears the block's corner and burns crate_2355 at its top corner (from x 431 his y is 366.4 on this build and the line to the corner meets the single block's top before its left edge: the fireball bursts there, the crate stays and the later shot at the agent ends against it; from x 395 to 414 it burns), baring",
     "anti_portal_agent_ent_2430. Back onto the lift, which waits at the bottom; a touch (745) sends it up; left",
     "off it and under the gutter: the diamond is drained (929). A portal at the key (70, 228) (a 85-tick flight) and, once it is open, one on the",
     "player: the key is taken (1027). Right to the ledge's end (x 166, past the corner of the platform at x 192), a portal over the single block at (404, 321) -",
@@ -20,11 +20,12 @@
     "self-running lift (1046). Leans on G1 (the knight never sees or shoots), G10 and G4."
   ],
   "level": "level30b",
-  "win_by": 1510,
+  "win_by": 1490,
   "holds": [
     {"walk": "right", "from": 135, "to": 151},
     {"walk": "right", "from": 420, "to": 440},
     {"walk": "left", "from": 585, "to": 607},
+    {"walk": "left", "from": 630, "to": 640},
     {"walk": "right", "from": 697, "to": 737},
     {"walk": "left", "from": 875, "to": 935},
     {"walk": "right", "from": 1034, "to": 1073},

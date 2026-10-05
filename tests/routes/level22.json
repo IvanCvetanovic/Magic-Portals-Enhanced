@@ -1,40 +1,41 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-23 (planning step 127's idea, re-flown on the timing build, wave 3a round 1): the player can no longer reach the pillar",
-    "by walking off the hanging platform (the air brake carries a walk-off 22 u, not the 60 u of the old steering), and the",
-    "port's shot dies on rolling_stone_ent_877's surface (R23 not built), so antiportal_878 (182.4 px) is opened another way:",
-    "the stone is knocked off its pillar by the OTHER stone. A portal over the hanging platform's left end at (150, 80), one on",
-    "the player (149): onto the platform. A portal on the platform at (228, 80), 196 from the agent (outside its ring), and",
-    "then one at (70, 68) 38 from rolling_stone_ent_989 (32, 66), on the left block across the gap (the shot is stopped by a",
-    "body, so the portal lands beside it and the stone enters it by overlap, the second of the pair): the stone comes out on",
-    "the platform (225). The player walks right behind it (232-290) and pushes it along the platform; it leaves the end at",
-    "2.4 u a tick, hits 877 on the pillar (312) and both stones fall out of the level, the agent bare. The player waits at",
-    "x 324 (the end's feet creep starts at 336) and a shot through the agent's place to (420, 170), the tap in the ring so it",
-    "is a doomed shot that flies there (343), kills the agent on 365 and the ring goes. A portal on the right floor at",
-    "(545, 190), under the hanging column (shot on 369, placed on 440, inside the view: the camera is at the player's 324), one",
-    "on the player (443): onto the floor. A shot up through the window between the column and the post to (618, 50)",
-    "(470, placed on 516), one on the player (517): out above the post's right side, down and right into the door.",
-    "Won on tick 557. The kill leans on the port's sampled position along the shot (G4) and on no R23; the stone push on",
-    "the port's own solver (a pushed stone keeps the player's 2.4 u a tick)."
+    "1-23 (planning step 127's idea, re-flown on the timing build, wave 3a round 1, and again on the time-base group's build, wave",
+    "3b-1 round 1): the player can no longer reach the pillar by walking off the hanging platform (the air brake carries a walk-off",
+    "22 u, not the 60 u of the old steering), and the port's shot dies on rolling_stone_ent_877's surface (R23 not built), so",
+    "antiportal_878 (182.4 px) is opened another way: the stone is knocked off its pillar by the OTHER stone. A portal over the",
+    "hanging platform's left end at (150, 80), one on the player (tap 152, a tick after the first shot's landing on 151): onto",
+    "the platform. A portal on the platform at (228, 80), 196 from the agent (outside its ring), and then one at (70, 68) 38 from",
+    "rolling_stone_ent_989 (32, 66), on the left block across the gap (the shot is stopped by a body, so the portal lands beside it",
+    "and the stone enters it by overlap, the second of the pair): the stone comes out on the platform (227). The player walks right",
+    "behind it (235-293, 303-331) and pushes it along the platform; it leaves the end, hits 877 on the pillar (327) and both stones",
+    "fall out of the level, the agent bare. The player waits at x 328.6 (the end's feet creep starts at 336; the hold's end has a",
+    "window of 328 to 334, a shorter walk leaves the camera too far left for the tap at x 545 and a longer one dies on 373) and a",
+    "shot through the agent's place to (420, 170), the tap in the ring so it is a doomed shot that flies there (345), kills the",
+    "agent on 366 and the ring goes. A portal on the right floor at (545, 190), under the hanging column (shot on 371, placed on",
+    "441, inside the view: the camera is at the player's 328.6), one on the player (445): onto the floor. A shot up through the window",
+    "between the column and the post to (618, 50) (472), one on the player (519): out above the post's right side, down and right",
+    "into the door. Won on tick 560. The kill leans on the port's sampled position along the shot (G4) and on no R23; the stone push",
+    "on the port's own solver (a pushed stone keeps the player's 2.4 u a tick)."
   ],
   "level": "level22",
   "win_by": 590,
   "holds": [
     {"walk": "left", "from": 5, "to": 70},
-    {"walk": "right", "from": 232, "to": 290},
-    {"walk": "right", "from": 300, "to": 313},
-    {"walk": "right", "from": 530, "to": 700}
+    {"walk": "right", "from": 235, "to": 293},
+    {"walk": "right", "from": 303, "to": 331},
+    {"walk": "right", "from": 533, "to": 703}
   ],
   "taps": [
     {"tick": 109, "at": [150, 80]},
-    {"tick": 149, "at": [47, 202.3]},
-    {"tick": 176, "at": [228, 80]},
-    {"tick": 205, "at": [70, 68]},
-    {"tick": 342, "at": [420, 170]},
-    {"tick": 368, "at": [545, 190]},
-    {"tick": 442, "at": [324.3, 74.3]},
-    {"tick": 469, "at": [618, 50]},
-    {"tick": 516, "at": [545.0, 202.5]}
+    {"tick": 152, "at": [47, 202.3]},
+    {"tick": 179, "at": [228, 80]},
+    {"tick": 208, "at": [70, 68]},
+    {"tick": 345, "at": [420, 170]},
+    {"tick": 371, "at": [545, 190]},
+    {"tick": 445, "at": [324.3, 74.3]},
+    {"tick": 472, "at": [618, 50]},
+    {"tick": 519, "at": [545.0, 202.5]}
   ]
 }

@@ -20,20 +20,34 @@
     "one beside the knight at (270, 335) (tap 560, opens 618): the knight goes through (618), lands by the keyhole with",
     "the key, which opens it, and door_locked_ent_1195 goes (627). Right (from 622) down the ramp, under where the door",
     "was, into the door. Won on tick 778 (step 140: 1085, with the knight walked off into enemy_killer_1140, which the win",
-    "does not need). Leans on G1 (the knight never sees or shoots) and on a knight carrying a key to its keyhole (keys.json)."
+    "does not need). Leans on G1 (the knight never sees or shoots) and on a knight carrying a key to its keyhole (keys.json).",
+    "Re-flown for the wave 3b-1 time-base build (WT, CAP, G3), same idea and the same four portals. The walk and the lift's",
+    "send (200) are the last route's. The lift reaches its top on ~366 and the player stands on it at a centre of y 126.4",
+    "from 369; from there the line to (285, 60) is stopped by the corner of single_block_plat_low_emissive_ent_1275 (the shot",
+    "ends at (163.2, 111.9)). Aimed at (285, 55), 5 units higher, it clears, so the wall shot goes on 370 (a tap from 364 to",
+    "376 wins; 360 is stopped on the platform) and opens on 422. The stone shot (428; 424 to 480 win, 420 is refused, the",
+    "wall shot being in flight) opens on 440, the stone comes out at (285, 57) and breaks the wall on 457, and this time the",
+    "knight falls at once (it lands on the ramp on ~488) and walks right 0.2 u a tick to rest at x 292.2 from tick ~636. The",
+    "lift is sent down on 446 (430 to 450 win; from 470 the keyhole shot below has the walk pad or the lift in its way). From the",
+    "lift the keyhole shot to (32, 265) is stopped by the lift itself while the player is high (a tap on 530, his centre at y 208.0, ends at (82.9, 229.4); at y 214.7 it still fails, at 222.4 it clears),",
+    "and before tick 540 its point is on the walk pad; it goes on 545 (540 to 550 win) and opens on 568. The shot beside the",
+    "knight goes on 590 (580 to 630 win), aimed at (277, 335): the knight at rest is 15 u to its right; a shot to x 287 or",
+    "more ends against his body, and he does not go through below x 275. It opens on 640 and the knight goes through at",
+    "once, lands by the keyhole with the key (unlocked 647; the keyhole and door_locked_ent_1195 gone on 739). Right from",
+    "660 (640 to 670 give the same win), into the door. Won on tick 804."
   ],
   "level": "level9b",
-  "win_by": 830,
+  "win_by": 825,
   "holds": [
     {"walk": "left", "from": 30, "to": 196},
-    {"walk": "right", "from": 622, "to": 830}
+    {"walk": "right", "from": 660, "to": 825}
   ],
   "taps": [
     {"tick": 200, "at": [100, 318], "shot": false},
-    {"tick": 358, "at": [285, 60]},
-    {"tick": 419, "at": [65, 96]},
+    {"tick": 370, "at": [285, 55]},
+    {"tick": 428, "at": [65, 96]},
     {"tick": 446, "at": [100, 160], "shot": false},
-    {"tick": 530, "at": [32, 265]},
-    {"tick": 560, "at": [270, 335]}
+    {"tick": 545, "at": [32, 265]},
+    {"tick": 590, "at": [277, 335]}
   ]
 }

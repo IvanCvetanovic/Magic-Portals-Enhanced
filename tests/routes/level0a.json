@@ -1,18 +1,16 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-01, re-authored on the timing build (wave 3a round 1: the floored script clock, the decoded walk, a fireball at |dir| x 130), walking only (planning step 114: the fireball dies on the first",
-    "solid thing it touches). Left along the top floor, pushing crate_no_emissive_796 ahead of him, and stop on tick 100 (x 187): the crate slides on alone, off the floor's left end and along the ledge",
-    "to the carranca's face, where the fireball spat on tick ~188 bursts on it at x 38 (tick ~194) and burns it, while the fireball spat on tick ~94 flies the whole lane to the pillar (x 280, tick ~193)",
-    "with the player still on the floor. Left again from 142 and off the floor's end (x ~120) onto the ledge, landing on tick ~187; right from 190, down the slope ahead of the next fireball (never",
-    "nearer than 95 px) to the door. Won on tick 302."
+    "2-01, re-authored on the time-base build (wave 3b-1: every body in the original's 1/30 s step, the player's real capsule and mass), walking only. crate_no_emissive_796 is five times the player's weight now (0.538 against 0.104) and is pushed at about a fifth of",
+    "his pace from tick 61 (x 276), so there is no outrunning it: left along the top floor, the crate creeping ahead of him from x 238 to the floor's end, where it drops into the carranca's lane (tick ~305) and is burned by the fireball spat on tick 283",
+    "(burst and burn on 307). He steps off the same end (x ~120) on tick ~308 and lands on the ledge on tick ~331, into a lane the fireball has just emptied: the next is spat on 377, and he is 221 px ahead of it. Right from 330 down the ramp (the pillar at x 288 takes every",
+    "fireball; the nearest any comes to him over the whole run is 93 px, on the top floor, tick 252). Any left end from 308 to 335 and any right start from 320 to 360 wins. Won on tick 444."
   ],
   "level": "level0a",
-  "win_by": 350,
+  "win_by": 480,
   "holds": [
-    {"walk": "left", "from": 1, "to": 100},
-    {"walk": "left", "from": 142, "to": 170},
-    {"walk": "right", "from": 190, "to": 350}
+    {"walk": "left", "from": 1, "to": 320},
+    {"walk": "right", "from": 330, "to": 480}
   ],
   "taps": []
 }

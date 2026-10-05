@@ -20,10 +20,16 @@
     "on 293 (opens ~345); the barrel is through on 346 and at rest in the right room on 380. The shot on 345 toward (300, 252.3)",
     "is burned on 355 at (178, 252.5) and its fireball (2.08 a tick) bursts on the barrel on 391, wall 1142 gone on 392.",
     "A portal at (243, 100) on 372 (opens ~427), the player's point on 427: out at (243, 103), on the floor from 449, and",
-    "right from 452 through the gap to the door. Won on tick 519."
+    "right from 452 through the gap to the door. Won on tick 519.",
+    "Re-authored on the wave 3b-1 build (R3b round 1: the world in the original's time base, the player's capsule): the third shot,",
+    "toward (140, 180), now passes 31.3 px from the flame's centre and is burned on tick 119 (a sample of its flight 31.9 px from the centre; the flame",
+    "reads the shot once a tick), so it is aimed at (140, 170), which clears it: placed on 153, the player's own shot",
+    "on 157 brings him out at (140, 173), still left of the flame. Every other tap and walk is as on the 3a build and the route",
+    "wins on tick 519 again. Each tap's window to win_by 535 (at least): 25-26, 52-54, 107-113, 153-161, 241-247, 291-294,",
+    "344-346, 371-373, 426-431; the three holds move 4 ticks either way."
   ],
   "level": "level16a",
-  "win_by": 545,
+  "win_by": 535,
   "holds": [
     {"walk": "left", "from": 174, "to": 211},
     {"walk": "right", "from": 214, "to": 244},
@@ -32,7 +38,7 @@
   "taps": [
     {"tick": 26, "at": [190, 200]},
     {"tick": 52, "at": [125, 125]},
-    {"tick": 109, "at": [140, 180]},
+    {"tick": 109, "at": [140, 170]},
     {"tick": 157, "at": [275, 252.3]},
     {"tick": 245, "at": [275, 170]},
     {"tick": 293, "at": [242, 110]},

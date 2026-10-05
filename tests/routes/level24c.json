@@ -2,32 +2,34 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-25 (step 127, R1: the yellow key's pocket lies wholly inside antiportal_1813's 32 x 2.4 = 77 px, where at 16 x scale its",
-    "corners were outside, so it is entered through door_lift_1798; re-flown on the timing build, wave 3a round 1). A portal",
-    "over button_1796 at (80, 200) (tap 29, placed on 82) and one beside crate_small_no_emissive_ent_1797 at (275, 48) (82,",
-    "placed on 124): the crate drops onto the button and the door lift rises. A portal on the upper platform at (186, 90) (124,",
-    "placed on 162; the old (198, 90) is now past the platform's end, where the player creeps off) and one on the player (162):",
-    "onto the platform; left along it through the raised door lift (172-234), taking the key (233), and back right to x 180",
-    "(238-299). A portal by the keyhole at (300, 200) (301, placed on 346) and one on the player (346): the key flies into the",
-    "keyhole (349) and the yellow door is gone on 442. A shot at (380, 48) (443, placed on 491) passes through the corner gap",
-    "between square_platform_22_1814 and the pillar, 2 px under the platform's corner, so the player stands at exactly",
-    "(300, 202.5); one on the player (491), who comes out over the pillar, falls off its far side (500) and walks into the door.",
-    "Knight B never sees or shoots (G1, not built). Won on tick 534."
+    "corners were outside, so it is entered through door_lift_1798; re-flown on the timing build, wave 3a round 1, and again on the",
+    "time-base group's build, wave 3b-1 round 1: the shot to the crate now flies 43 ticks and lands on 126, a tick after the old",
+    "route's next tap, which was refused; every tap from that one on is 3 ticks later, nothing else changed). A portal over",
+    "button_1796 at (80, 200) (tap 29, placed on 82) and one beside crate_small_no_emissive_ent_1797 at (275, 48) (82, placed on",
+    "126): the crate drops onto the button and the door lift rises (127). A portal on the upper platform at (186, 90) (127, placed",
+    "on 166) and one on the player (165): onto the platform; left along it through the raised door lift (175-237), taking the key",
+    "(236), and back right to x 180 (241-302). A portal by the keyhole at (300, 200) (304, placed on 348) and one on the player",
+    "(349): the key flies into the keyhole (395) and the yellow door is gone on 445. A shot at (380, 48) (446, placed on 495)",
+    "passes through the corner gap between square_platform_22_1814 and the pillar, 2 px under the platform's corner, so the",
+    "player stands at exactly (300, 202.5); one on the player (494), who comes out over the pillar, falls off its far side and",
+    "walks into the door. Knight B never sees or shoots (G1, not built). Won on tick 540; any shift of the taps from the third on",
+    "by 1 to 20 ticks wins as well (a win 537 + the shift)."
   ],
   "level": "level24c",
   "win_by": 565,
   "holds": [
-    {"walk": "left", "from": 172, "to": 234},
-    {"walk": "right", "from": 238, "to": 299},
-    {"walk": "right", "from": 500, "to": 700}
+    {"walk": "left", "from": 175, "to": 237},
+    {"walk": "right", "from": 241, "to": 302},
+    {"walk": "right", "from": 503, "to": 703}
   ],
   "taps": [
     {"tick": 29, "at": [80, 200]},
     {"tick": 82, "at": [275, 48]},
-    {"tick": 124, "at": [186, 90]},
-    {"tick": 162, "at": [270.0, 202.5]},
-    {"tick": 301, "at": [300, 200]},
-    {"tick": 346, "at": [180.2, 90.5]},
-    {"tick": 443, "at": [380, 48]},
-    {"tick": 491, "at": [300.0, 202.5]}
+    {"tick": 127, "at": [186, 90]},
+    {"tick": 165, "at": [270.0, 202.5]},
+    {"tick": 304, "at": [300, 200]},
+    {"tick": 349, "at": [180.2, 90.5]},
+    {"tick": 446, "at": [380, 48]},
+    {"tick": 494, "at": [300.0, 202.5]}
   ]
 }

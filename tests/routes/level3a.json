@@ -9,22 +9,26 @@
     "breakable_wall_815 (tick 431); down after it, and right to the door. Won on tick 534 (step 114).",
     "Re-timed for the wave 3a timing build (CK, G10, G4): each tap waits for the shot before it to land",
     "and for the 400 ms (26 ticks between taps), so the taps go down on 54, 84, 141, 167, 213, 270, 296",
-    "and 323 (the shots land on 84, 165, 210, 265, 320 and the self-taps at once); the player is over the",
-    "block on 87, in the hole on 272 and in the corridor at (400, 204.5) on 325. He walks left only to",
-    "x 241 (hold ends 398): the stone then rolls free at the walk's 2.4 u a tick, clips the single block's",
-    "corner (64, 226) and falls into the gap, where it breaks the wall on 446. A player still walking",
-    "left at the gap's lip (the old route's single hold to 455) pushes the falling stone over the corner",
-    "onto the single block (the wall stays), so the second walk left starts on 425 and puts him in the",
-    "gap on 474, landing on 500; right from 501. Won on tick 534."
+    "and 323 (the shots land on 84, 168, 210, 265, 320 and the self-taps at once); the player is over the",
+    "block on 87, in the hole on 272 and in the corridor at (400, 208.4) on 330.",
+    "Re-timed again for the 3b-1 time-base build (round 1 of its route phase): the first walk right ends on 126, not 140: the",
+    "player is then at x 288.5 on tick 141, and the shot to (230, 10) clears the corner (294, 82) of",
+    "single_block_plat_803 above him (from x 322, where the longer walk left him, it ended against that corner, and every",
+    "shot after it with it). He walks left only to x 241 (hold ends 398): the stone then rolls free at the walk's 2.4 u a tick, clips the single block's",
+    "corner (64, 226) and falls into the gap, where it breaks the wall on 468. A player still walking",
+    "left at the gap's lip pushes the falling stone over the corner onto the single block (the wall stays), so the second",
+    "walk left, from 425, runs to 496 (the first run of it ended on 478, 50 u short of the gap's mouth at x 93) and puts him in",
+    "the gap, landing on the stone on 506 and on the floor on 516; right from 502 into the door. Won on tick 535, no shot",
+    "failed (8 shots)."
   ],
   "level": "level3a",
-  "win_by": 570,
+  "win_by": 565,
   "holds": [
     {"walk": "right", "from": 1, "to": 40},
-    {"walk": "right", "from": 95, "to": 140},
+    {"walk": "right", "from": 95, "to": 126},
     {"walk": "left", "from": 332, "to": 398},
-    {"walk": "left", "from": 425, "to": 478},
-    {"walk": "right", "from": 501, "to": 570}
+    {"walk": "left", "from": 425, "to": 496},
+    {"walk": "right", "from": 502, "to": 565}
   ],
   "taps": [
     {"tick": 54, "at": [220, 20]},

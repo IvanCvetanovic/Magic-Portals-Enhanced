@@ -2,15 +2,20 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "1-15: walking only - the level grants no portal (max_portals 0). Right held: the player pushes",
-    "crate_ent_654 along the corridor into static portal_static_582, which puts it in the room above,",
-    "and follows it through. Left, pushing the crate onto button_687, which raises door_lift_671; right",
-    "again, through the door, down into the corridor beyond and on to the exit. Won on tick 504 (step 113)."
+    "crate_ent_654 along the corridor (it moves at about 35 u/s while he walks at 144) into static portal_static_582, which",
+    "puts it in the room above (tick 337), and follows it through (tick 362), taking the crystals as he falls out of",
+    "portal_static_583 to the right of the crate. Left from 389: he pushes the crate along the upper floor onto button_687",
+    "(the door lift begins to open on tick 566) and, with the crate left holding the button, walks right from 575",
+    "through the lift (open by tick 611, the player reaches it at about 640), down into the corridor beyond and on to",
+    "the exit. Won on tick 504 (step 113); on the wave 3b-1 build (R3b round 1: the crate is pushed at about a third of the old speed)",
+    "the push takes the crate 300 ticks, and the route wins on tick 762. The left hold may start from 384 to 394 and the right hold from 570 to 580 (to win_by 780) and",
+    "still win."
   ],
   "level": "level14",
-  "win_by": 560,
+  "win_by": 780,
   "holds": [
-    {"walk": "right", "from": 1, "to": 200},
-    {"walk": "left", "from": 210, "to": 290},
-    {"walk": "right", "from": 330, "to": 560}
+    {"walk": "right", "from": 1, "to": 388},
+    {"walk": "left", "from": 389, "to": 574},
+    {"walk": "right", "from": 575, "to": 780}
   ]
 }

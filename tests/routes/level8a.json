@@ -22,17 +22,23 @@
     "its 24-unit jump, so each tap that lands on the player waits for the portal before it (the far shot to (420, 450) from the lift's",
     "bottom opens its portal 117 ticks after its tap), two shots keep 26 ticks between them, and every later tap moves with them: against",
     "step 140's timing tap 2 is 21 ticks later, tap 5 36, tap 8 110, tap 12 142 and tap 17 162.",
-    "Won on tick 1721 (step 140: 1552; 1319 on the self-running lift)."
+    "Won on tick 1721 (step 140: 1552; 1319 on the self-running lift).",
+    "Re-flown for the wave 3b-1 time-base build (WT, CAP, G3): every tap and walk before the shot over",
+    "single_block_plat_no_emissive_ent_1060 lands as it did, but that shot (tap 1412, from the player at (420, 462.4)),",
+    "aimed at (470, 300), now ends at (448, 371.9) against the platform's upper-left corner and opens no portal. Aimed",
+    "at (460, 300) it opens its portal on 1458 (any x from 452 to 468 at y 300 does: x 450 and below meets",
+    "single_block_plat_no_emissive_ent_1097, 470 and above the platform's corner); the tap on the player (1462) lands",
+    "on 1464 and the route goes on as it did, with no failed shot. Won on tick 1722."
   ],
   "level": "level8a",
-  "win_by": 1770,
+  "win_by": 1750,
   "holds": [
     {"walk": "right", "from": 1, "to": 80},
     {"walk": "left", "from": 110, "to": 401},
     {"walk": "left", "from": 1036, "to": 1090},
     {"walk": "right", "from": 1479, "to": 1499},
     {"walk": "left", "from": 1611, "to": 1655},
-    {"walk": "right", "from": 1691, "to": 1774}
+    {"walk": "right", "from": 1691, "to": 1750}
   ],
   "taps": [
     {"tick": 321, "at": [30, 340]},
@@ -43,7 +49,7 @@
     {"tick": 916, "at": [40, 106], "shot": false},
     {"tick": 1261, "at": [420, 450]},
     {"tick": 1385, "at": [9.7, 397.4]},
-    {"tick": 1412, "at": [470, 300]},
+    {"tick": 1412, "at": [460, 300]},
     {"tick": 1462, "at": [420, 458.3]},
     {"tick": 1501, "at": [435, 250]},
     {"tick": 1534, "at": [502.3, 346.3]},

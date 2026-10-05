@@ -1,16 +1,17 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "4-11, weightless, re-authored on the timing build (wave 3a round 1). The old route fired a portal into the door at (448, 150) from under the hanging wall and then one on the player at (288, 166), where",
-    "the old 70 u/s recoil had carried him outside antiportal_ent_2250's 64 px ring at (358, 178). The recoil is now 140 u/s but the player rests at (330, 202) after the door shot, 37 px from the ring's",
-    "centre, and a portal on him there is refused (a third tap at (329.8, 201.9) fails: the tap, where no portal may open). The first tap alone does it: a tap up-left at the ceiling block (200, 5) fails",
-    "on double_block_plat_ent_2230 and its recoil of 140 u/s carries the player down-right onto spinning_platform_2132, which turns under it and carries him down past the hanging wall's foot to the",
-    "floor at tick ~350; the weightless body (the walk pads do nothing here) then drifts right along the floor at 19 u/s into the door. Won on tick 529."
+    "4-11, weightless, re-authored on the time-base build (wave 3b-1: the player's real capsule and mass, every body in the original's 1/30 s step). The first tap is the old one: a tap up-left at the ceiling block (200, 5) fails",
+    "on double_block_plat_ent_2230 and its recoil of 140 u/s carries the player down-right across the shaft onto the free end of spinning_platform_2132 and against the hanging wall (x 316, y 100 on tick 80). The weightless body no longer rides the bar",
+    "down to the floor in a few hundred ticks: it shares its momentum with the bar (the capsule is lighter than the bar) and sinks along the wall at 12 u/s, past the hanging wall's foot (y 162) from tick ~410 and to y 171 on tick 460,",
+    "and from there it drifts right at 4 u/s, too slow to count. The second tap, any tick from 420 to 600 and any aim to the left along the tunnel, is the other recoil: (150, 171) on tick 460 fails against the bar and pushes him",
+    "right at 144 u/s along y 171-182 under the hanging wall, past antiportal_ent_2250's ring (no shot is aimed into it), to the door. Both shots fail by design (the recoil is all a weightless player moves by; no portal is wanted here). Won on tick 512."
   ],
   "level": "level10c",
-  "win_by": 570,
+  "win_by": 550,
   "holds": [],
   "taps": [
-    {"tick": 29, "at": [200, 5]}
+    {"tick": 29, "at": [200, 5]},
+    {"tick": 460, "at": [150, 171]}
   ]
 }

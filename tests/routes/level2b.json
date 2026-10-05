@@ -18,19 +18,25 @@
     "block's corner, and a second portal 4 px over the crate's top at (416, 162). It opens on tick 376",
     "with the crate inside it as it opens (an entry is an edge: a body already in a portal when the",
     "second one opens is carried, one in a lone portal is not), so the crate goes through on that tick,",
-    "falls into the gap and lies at (861, 173) with its top on 144 from tick 391. Right again, from tick",
-    "314: off the 1010 block onto the moving platform, up with it onto the far block (tick 358), over the",
-    "crate and the door's platform and into the door. The knight never sees or shoots (G1, not built).",
-    "Won on tick 455 (round 2 of the route phase, the timing group's build); the earlier route, which",
-    "crossed the gap through two portals, won on tick 448 on the old timing."
+    "falls into the gap and lies at (861, 173) with its top on 144 from tick 391.",
+    "The moving platform (step 154: it swings 68 either side of y 172 at 1 rad a second from a stride DOWN,",
+    "y = 172 + 68 cos(0.016 x tick), carries a rider up and down and not sideways) is boarded where the walk off",
+    "the 1010 block drops him on it (tick 340) and the walk is let go on 328, so he stands on it and rides it to its",
+    "bottom (tick 393) and back up; right again from tick 485, with its top at 144 on 502 (level with the far block's top),",
+    "onto the far block (tick 501), over the crate and the door's platform and into the door. Walking on, as the",
+    "timing group's route did, carries him off the platform's far end while it is still low.",
+    "The knight never sees or shoots (G1, not built).",
+    "Won on tick 607 (round 1 of the 3b-1 route phase, the time-base group's build: every body in the original's 1/30 s",
+    "step, the player's capsule, the platforms as linearMotion swings them); the walk's start on 480-495 wins on 605-619. Leans on the port's rider carry (a rider is carried up and down by the platform's velocity, his feet within 0.01 unit of its top: the port's carry, not the original's push-out and fall, planning step 154 decision 1, deviations 1 and 4), on the platform swinging from the level's first tick (step 154 deviation 2, the bucket clock is not modelled); the original's platform is outside its drawn buckets at the spawn (step 154 decision 6) and may not swing until the camera comes near, which would move this route's boarding and walk-off ticks."
   ],
   "level": "level2b",
-  "win_by": 485,
+  "win_by": 635,
   "holds": [
     {"walk": "right", "from": 100, "to": 125},
     {"walk": "right", "from": 200, "to": 211},
     {"walk": "left", "from": 248, "to": 255},
-    {"walk": "right", "from": 314, "to": 485}
+    {"walk": "right", "from": 314, "to": 328},
+    {"walk": "right", "from": 485, "to": 635}
   ],
   "taps": [
     {"tick": 29, "at": [330, 120]},

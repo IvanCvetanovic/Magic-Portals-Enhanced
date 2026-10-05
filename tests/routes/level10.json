@@ -1,35 +1,42 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-11, re-routed for antiportal_709's 32 x 6 = 192 px (step 127, R1), which holds the whole spawn",
-    "island (step 126's self-tap there is refused). Right to the island's edge; a portal on the ledge at",
-    "(335, 195), right of the hanging column and 125 px from antiportal_574 (112 px), and one down in",
-    "the gap at (250, 250), 193 px from antiportal_709's centre. Right off the edge into the gap's",
-    "portal, out of the ledge's moving up, and down onto the ledge. Left under the column to x 307 and",
-    "a shot up the slot at (400, 44.5): it kills anti_portal_agent_599 with antiportal_574 (tick ~192).",
-    "A portal over the freed pillar at (384, 70), one on the player; one on the block at (544, 110),",
-    "one on the player. A shot at (674, 60) kills the patrolling anti_portal_agent_639 with",
-    "antiportal_638 (tick ~350), which frees the door's bridge: a portal on it at (740, 108), one on",
-    "the player, and left into the door. Won on tick 431 (step 127)."
+    "1-11, solved on the time-base build (wave 3b-1) by the way the level is made: the moving platform. Under G3 (step 154) moving_platform_707 swings its whole 70 about y 184, a 393-tick period, and carries a rider up and down by the velocity that moves it.",
+    "The spawn island is inside antiportal_709's 192 px, so no portal may open where the player stands until anti_portal_agent_710 is dead, and the agent sits on top of double_block_plat_ent_708: so he rides the platform up. Left from tick 1 onto it (he boards on tick ~25 and",
+    "stands against the wall at x 9), up to the block's top level on tick ~157; right from 150 (any start from 135) steps onto the block and walks to x 109, where the agent's own body stops him (tick ~195). A shot at the agent",
+    "(tap 205: its first position, 24 units along the aim, is 5 from the agent, which dies within 22.4) kills it on 207 and antiportal_709 goes with it. He waits for the platform to come down: left from 236 (any start 222-258) onto it as it falls past the block,",
+    "right from 344 (336-356) onto the island at tick ~353, standing at x 94 from 364. A portal on the ledge at (335, 195), shot under the hanging column (tap 380, a 68-tick flight, in place on 449), one on the player (455, through on 457): he drops onto the ledge at (335, 206).",
+    "Left 470-482 to x 303.8, the one standing x (13 steps; 313.4 and 293.2 end on the slot's corners) from which a shot up the slot at (400, 44.5) clears both and meets anti_portal_agent_599 as it swings through x 366: it dies on 532 with antiportal_574 (tap 500;",
+    "the swing opens that for taps 486-516, 576-636, 672-696 and every 98 ticks on). A portal over the freed pillar at (384, 70) (535, in place on 578), one on the player (581, through on 583): onto the pillar's top at y 110. One on the block at (544, 110)",
+    "(611, in place on 655), one on the player (658, through on 660). A shot at (674, 60) kills the patrolling anti_portal_agent_639 with antiportal_638 (tap 719; its windows are 708-730, 780-790 and 838-862, the kill on 751): a portal on the bridge at (740, 108)",
+    "(754, in place on 809), one on the player (812, through on 814), and left from 825 into the door. From tap 535 on each tap is the earliest the 26-tick rule and the flight before it allow, plus three (719 is the middle of its window), and any tap may move three ticks either way. 11 shots, none failed",
+    "(three of them end on an agent). Won on tick 835.",
+    "AUTHORED ON THE PORT'S TICK-1 CONVENTION (planning step 154, deviation 2: the bucket clock is not modelled): moving_platform_707 and the patrolling agents swing from the level's first tick, as every static",
+    "callback does here, while the original runs a static entity's callback only while its bucket (128 units, plus one ring) is drawn, its camera opening on camera_start near the exit; step 154 computes",
+    "anti_portal_agent_639 (x 674) outside the drawn buckets at the spawn. So the ride's phase (boards ~25, up to the block ~157) and the agents' windows above are the port's, not the original's, and",
+    "not measured against it: do not take this route's timing as the original's."
   ],
   "level": "level10",
-  "win_by": 490,
+  "win_by": 880,
   "holds": [
-    {"walk": "right", "from": 1, "to": 20},
-    {"walk": "right", "from": 90, "to": 140},
-    {"walk": "left", "from": 150, "to": 163},
-    {"walk": "left", "from": 420, "to": 490}
+    {"walk": "left", "from": 1, "to": 60},
+    {"walk": "right", "from": 150, "to": 190},
+    {"walk": "left", "from": 236, "to": 262},
+    {"walk": "right", "from": 344, "to": 364},
+    {"walk": "left", "from": 470, "to": 482},
+    {"walk": "left", "from": 825, "to": 880}
   ],
   "taps": [
-    {"tick": 29, "at": [335, 195]},
-    {"tick": 59, "at": [250, 250]},
-    {"tick": 179, "at": [400, 44.5]},
-    {"tick": 209, "at": [384, 70]},
-    {"tick": 239, "at": [306.9, 202.3]},
-    {"tick": 269, "at": [544, 110]},
-    {"tick": 299, "at": [384, 106.3]},
-    {"tick": 329, "at": [674, 60]},
-    {"tick": 359, "at": [740, 108]},
-    {"tick": 389, "at": [544, 106.3]}
+    {"tick": 205, "at": [128, 100]},
+    {"tick": 380, "at": [335, 195]},
+    {"tick": 455, "at": [93.9, 206.4]},
+    {"tick": 500, "at": [400, 44.5]},
+    {"tick": 535, "at": [384, 70]},
+    {"tick": 581, "at": [303.8, 206.4]},
+    {"tick": 611, "at": [544, 110]},
+    {"tick": 658, "at": [384.0, 110.4]},
+    {"tick": 719, "at": [674, 60]},
+    {"tick": 754, "at": [740, 108]},
+    {"tick": 812, "at": [544.2, 110.4]}
   ]
 }

@@ -1,25 +1,27 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "4-28 as the original plays it (planning step 134): the flame burns the knight and the player",
-    "carries its key. Off the spawn's left end (1-32) and a few steps right; a portal at the ramp's foot",
-    "(270, 200), the shot leaving on 59 as the player falls past the left face of",
-    "single_block_plat_no_emissive_ent_1966 (80, 112): a shot fired higher, on 50 or 54, dies in that body",
-    "(the old tick 50), and this one flies 67 ticks (G4) and lands on 126. One on the player (129): the player",
-    "comes out at the ramp's foot while the knight crowds in from the right. A portal at (220, 70) (300) and",
-    "one on the knight's walk at (90, 206) (341, after the first has landed): the knight walks into it on its",
-    "way right, comes out 43 px right of fire_agent_ent_1919 (tick 618), walks left into the flame and is burned and",
-    "gone on 642; the yellow key stays where it was, (208.5, 60.0). A portal at (222, 40), 24 px from",
-    "the key (610), and one on the player (656, after the first has landed): the key is taken as",
-    "the player comes out; right up the ramp, it opens keyhole_ent_1936 (801), the locked door goes (851), and",
-    "right into the exit. Won on tick 894 (861 before). No tap inside antiportal_1940's 192 px or",
-    "antiportal_2024's 96; leans on G1 (knights never shoot), G10 and G4."
+    "4-28 as the original plays it (planning step 134): the flame burns the knight and the player carries its key. Off the spawn's",
+    "left end (1-32), then right (62-88: re-flown on the time-base group's build, wave 3b-1 round 1; the walk was 62-70). The knight",
+    "walks left along the floor from its spawn with the key; with the player standing still it pushes him along the floor to the",
+    "wall (x 14 by tick 130), where the tap on himself would land on the left walk pad, which takes the release; held right until",
+    "88 the player pushes the knight back and stands at x 73.7 (a hold's end of 84 to 92 wins; 83 and before, 93 and after die).",
+    "A portal at the ramp's foot (270, 200), the shot leaving on 59 as the player falls past the left face of",
+    "single_block_plat_no_emissive_ent_1966 (80, 112): a shot fired higher, on 50 or 54, dies in that body, and this one flies 66",
+    "ticks (G4) and lands on 125. One on the player (128, placed on 130, 19 u left of him): the player comes out at the ramp's",
+    "foot while the knight is left behind. A portal at (220, 70) (299, placed on 338) and one on the knight's walk at (90, 206)",
+    "(340, after the first has landed, placed on 390): the knight walks into it (553) and comes out by the first, 43 px right of",
+    "fire_agent_ent_1919, walks left into the flame and is burned (570); the yellow key stays where it was, (208.5, 60.0). A",
+    "portal at (222, 40), 24 px from the key (609), and one on the player (655, after the first has landed): the key is taken as",
+    "the player comes out (658); right up the ramp, it opens keyhole_ent_1936 (803), the locked door goes (853), and right into",
+    "the exit. Won on tick 896 (894 before). No tap inside antiportal_1940's 192 px or antiportal_2024's 96; leans on G1",
+    "(knights never shoot), G10 and G4."
   ],
   "level": "level27c",
   "win_by": 930,
   "holds": [
     {"walk": "left", "from": 1, "to": 32},
-    {"walk": "right", "from": 62, "to": 70},
+    {"walk": "right", "from": 62, "to": 88},
     {"walk": "right", "from": 666, "to": 920}
   ],
   "taps": [

@@ -21,7 +21,14 @@
     "least 26 ticks (a tap 25 ticks after the last is refused) and each follows its predecessor's",
     "landing: 150 -> 183 (the second shot lands on 243) -> 247 -> 283 -> 313 -> 349 -> 444. Won on tick 446.",
     "Tick-sensitive in the two lift taps (247, 283), whose gap sets the altitude and so the cancelling",
-    "shot's aim: one tick either way wins, two do not."
+    "shot's aim: one tick either way wins, two do not.",
+    "Re-flown for the wave 3b-1 time-base build (WT, CAP, G3): every tap but the last lands on the same tick as",
+    "before, and the weightless player moves as he did (the lifts' two recoils leave him at (72.6, 86.2) on 283,",
+    "the left-edge shot carries him to (147.9, 114.6) on 349 and the door shot's recoil leaves him drifting at",
+    "(4, 12) u/s), but he is 43 px lower than the last note's (152, 92) when the door portal lands (439): at",
+    "(153.5, 135.0) on 444. The tap that puts a portal on him is moved down to (155, 125), 10 u above his",
+    "centre as it was, so it lands on its first callback and he goes through (445) and into the door on 446. A",
+    "tap on 438, 439, 440, 441, 450 or 460 wins too; one on 436 is refused, the door shot being still in flight."
   ],
   "level": "level6c",
   "win_by": 470,
@@ -35,6 +42,6 @@
     {"tick": 282, "at": [74, 20]},
     {"tick": 312, "at": [5, 60]},
     {"tick": 348, "at": [454, 172]},
-    {"tick": 443, "at": [155, 82]}
+    {"tick": 443, "at": [155, 125]}
   ]
 }

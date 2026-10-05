@@ -17,7 +17,13 @@
     "its path: (295, 197), shot from x 249.4 (two ticks of walk) so the ray clears the ledge's corner, and it is",
     "entered at 677 a second up (tick 322); the portal on the player at the left edge would be a touch on the",
     "walk pad (a quarter circle of 64 units), so the player walks 6 ticks right to x 38.5 first. Won on tick",
-    "747 (step 127: 645)."
+    "747 (step 127: 645).",
+    "AUTHORED ON THE PORT'S TICK-1 CONVENTION (planning step 154, deviation 2: the bucket clock is not",
+    "modelled): moving_platform_1429 swings from the level's first tick, as every static callback does",
+    "here, while the original runs its callback only while its bucket is drawn, and it is outside the",
+    "drawn buckets at the spawn (x 96 against x 617, computed from the level file). So its phase, and the",
+    "window for the shot above (ticks 421-443), are the port's, not the original's, and not measured",
+    "against it: do not take this route's timing as the original's."
   ],
   "level": "level8b",
   "win_by": 800,

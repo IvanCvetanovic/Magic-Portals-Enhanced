@@ -1,15 +1,16 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-12, as footage F6 plays it (planning step 115), re-authored on the timing build (wave 3a round 1: the floored script clock, the decoded walk, the shot at 200 u/s). A portal left of the player (tap 1, a",
-    "25 px shot that is in place on tick 31) and one above the ledge corner (tap 2, a 46-tick flight, in place on 105 - the walk waits for it: left from 104 goes through on the first step); walking left lands the",
-    "player on button_1050 (tick ~125), which lifts door_lift_1042 (open on ~400). The second fireball (spat ~378) flies through the risen door and goes off on barrel_bomb_ent_1041 (tick 477); its blast takes",
-    "breakable_wall_1040 on its own tick (478). Off the ledge and right along the floor, ahead of the third fireball, to the door. Won on tick 590."
+    "2-12, as footage F6 plays it (planning step 115), re-authored on the time-base build (wave 3b-1). A portal left of the player (tap 1, a 25 px shot that is in place on tick 31) and one above the ledge corner (tap 2, a 46-tick flight,",
+    "in place on tick 107): the walk waits for it, because a player already inside the first portal when its partner opens is not carried (the old left from 104 walks through it unmoved, as it does from 105). Left from 110 (any start from 106",
+    "to 124 does the same) goes through on the first step and lands the player on button_1050, which lifts door_lift_1042 (it starts to open on tick 119). The second fireball (spat ~378) flies through the risen door and goes off on",
+    "barrel_bomb_ent_1041 (tick 477); its blast takes breakable_wall_1040 on its own tick (478). Off the ledge and right along the floor from 480, ahead of the third fireball (never nearer than 119 px), to the door.",
+    "Any right start from 464 to 518 wins within win_by, 112 ticks after it. Won on tick 592."
   ],
   "level": "level11a",
   "win_by": 630,
   "holds": [
-    {"walk": "left", "from": 104, "to": 130},
+    {"walk": "left", "from": 110, "to": 136},
     {"walk": "right", "from": 480, "to": 630}
   ],
   "taps": [

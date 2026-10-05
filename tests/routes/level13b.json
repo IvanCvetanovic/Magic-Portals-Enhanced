@@ -17,153 +17,37 @@
     "the stone's top at (225, 407): the stone presses button_1343 (848) and door_lift_1342 rises. A portal at (432, 236) and one",
     "on the player: down through the yellow key (883); left off the platform, down into the pit (the stone is gone), keyhole_ent_1197",
     "(1088), door_locked_ent_1196 goes, under the raised lift into the door. Re-authored on the wave 3a timing build (R3 round 1):",
-    "won on tick 1138. Leans on the port's reflector (shot.json's catch radius 16 and mirror-to-the-tap, both guesses), the",
+    "won on tick 1138. Re-authored on the wave 3b-1 build (R3b round 1: the world in the original's time base, the player's capsule):",
+    "the reflected shot kills the agent on tick 134, not 129 (cause not traced), so every tap and walk from the fourth tap",
+    "on is 6 ticks later than on the 3a build; won on tick 1141. Leans on the port's reflector (shot.json's catch radius 16 and mirror-to-the-tap, both guesses), the",
     "camera's view (the tap at y 12 is on the view only while the falling player has the camera near its top: view top 8.0),",
     "the port's traversal by body overlap and G4 (the shot's speed: every far portal is 30 to 100 ticks of flight)."
   ],
   "level": "level13b",
-  "win_by": 1200,
+  "win_by": 1160,
   "holds": [
-    {
-      "walk": "left",
-      "from": 62,
-      "to": 86
-    },
-    {
-      "walk": "right",
-      "from": 318,
-      "to": 398
-    },
-    {
-      "walk": "left",
-      "from": 506,
-      "to": 566
-    },
-    {
-      "walk": "left",
-      "from": 900,
-      "to": 1200
-    }
+    {"walk": "left", "from": 62, "to": 86},
+    {"walk": "right", "from": 324, "to": 404},
+    {"walk": "left", "from": 512, "to": 572},
+    {"walk": "left", "from": 906, "to": 1160}
   ],
   "taps": [
-    {
-      "tick": 26,
-      "at": [
-        250,
-        50
-      ]
-    },
-    {
-      "tick": 60,
-      "at": [
-        226,
-        160
-      ]
-    },
-    {
-      "tick": 86,
-      "at": [
-        59.4,
-        12
-      ]
-    },
-    {
-      "tick": 130,
-      "at": [
-        45,
-        50
-      ]
-    },
-    {
-      "tick": 196,
-      "at": [
-        237.3,
-        160
-      ]
-    },
-    {
-      "tick": 224,
-      "at": [
-        250,
-        45
-      ]
-    },
-    {
-      "tick": 298,
-      "at": [
-        45,
-        160
-      ]
-    },
-    {
-      "tick": 380,
-      "at": [
-        280,
-        120
-      ]
-    },
-    {
-      "tick": 468,
-      "at": [
-        476,
-        112
-      ]
-    },
-    {
-      "tick": 572,
-      "at": [
-        465,
-        390
-      ]
-    },
-    {
-      "tick": 630,
-      "at": [
-        175,
-        262
-      ]
-    },
-    {
-      "tick": 684,
-      "at": [
-        330,
-        262
-      ]
-    },
-    {
-      "tick": 728,
-      "at": [
-        284.2,
-        400
-      ]
-    },
-    {
-      "tick": 756,
-      "at": [
-        470,
-        265
-      ]
-    },
-    {
-      "tick": 798,
-      "at": [
-        225,
-        407
-      ]
-    },
-    {
-      "tick": 846,
-      "at": [
-        432,
-        236
-      ]
-    },
-    {
-      "tick": 880,
-      "at": [
-        330,
-        284
-      ]
-    }
+    {"tick": 26, "at": [250, 50]},
+    {"tick": 60, "at": [226, 160]},
+    {"tick": 86, "at": [59.4, 12]},
+    {"tick": 136, "at": [45, 50]},
+    {"tick": 202, "at": [237.3, 160]},
+    {"tick": 230, "at": [250, 45]},
+    {"tick": 304, "at": [45, 160]},
+    {"tick": 386, "at": [280, 120]},
+    {"tick": 474, "at": [476, 112]},
+    {"tick": 578, "at": [465, 390]},
+    {"tick": 636, "at": [175, 262]},
+    {"tick": 690, "at": [330, 262]},
+    {"tick": 734, "at": [284.2, 400]},
+    {"tick": 762, "at": [470, 265]},
+    {"tick": 804, "at": [225, 407]},
+    {"tick": 852, "at": [432, 236]},
+    {"tick": 886, "at": [330, 284]}
   ]
 }

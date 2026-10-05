@@ -14,18 +14,20 @@
     "(320, 200) flies 220 units and its portal opens on tick 92, so the shot on the player waits for it: it",
     "goes on tick 91, as the player bobs up through y 54.4 in the well (x 146.7), and the player leaves the",
     "first portal at rest at (320, 202), clear of every well. The shot at (540, 120) goes on 118 (the camera",
-    "shows it, at the view's edge); its recoil (140 u/s) throws the player left into the well at (208, 192),",
-    "where it is held while the shot flies (it opens its portal on tick 185). A shot on the player on tick 188,",
-    "at (198.1, 162.9): out at (540.3, 122) falling past the door. Won on tick 203. The player's speed when",
-    "it enters the portal is what it leaves with: 187, 188, 190 and 193 win, 189, 191 and 192 do not."
+    "shows it, at the view's edge); its recoil (140 u/s) throws the player left, where the well at (208, 192) holds",
+    "it while the shot flies (it opens its portal on tick 185).",
+    "Re-authored on the wave 3b-1 build (R3b, round 1: the world in the original's 1/30 s time base, the player's own",
+    "capsule): the well's body now stops the player against its right side at x 225.8, bobbing between y 177 and 201,",
+    "not at the well's centre. The last shot, on the player there (225.8, 190) on tick 188, opens its portal on 194 and the player",
+    "leaves the other at (540.3, 122) and passes through the door on tick 206 (that shot's tick can be any from 183 to 193 and still win by 215)."
   ],
   "level": "level17c",
-  "win_by": 225,
+  "win_by": 215,
   "holds": [],
   "taps": [
     {"tick": 29, "at": [320, 200]},
     {"tick": 91, "at": [146.7, 54.4]},
     {"tick": 118, "at": [540, 120]},
-    {"tick": 188, "at": [198.1, 162.9]}
+    {"tick": 188, "at": [225.8, 190]}
   ]
 }

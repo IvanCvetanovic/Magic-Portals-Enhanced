@@ -16,19 +16,26 @@
     "walks, the tap under the pillar at 111, the push and the last tap at 366) is that route's plus 17,",
     "and the player's walking (G10) and the 59-tick flight of the shelf shot (it lands on 171, in time for",
     "the walk) leave it won on tick 444. Every tap and walk edge 3 ticks either way wins; the first shot",
-    "cannot go before tick 26 (the 400 ms from the start)."
+    "cannot go before tick 26 (the 400 ms from the start).",
+    "Re-flown for the wave 3b-1 time-base build (WT, CAP, G3): the crate has its own weight now, and the walk",
+    "pushes it at 0.64 u a tick (38 u/s; 2.4 free), so from x 276 it takes until tick 535 to reach single_block_plat_ent_743",
+    "(x 483.2): the last note's push stopped on 347 with the crate at 370, 113 units short. The first three taps",
+    "and the first two walks are the last route's and land on the same ticks (the shelf shot on 74, the one on",
+    "the player, the pillar shot on 170); the right walk is held on through the push, with the player blocked",
+    "at x 446.5 behind the crate from 536, and the last tap, on the player at (446.5, 202.3), goes on 540 (taps on 520 to 560",
+    "win; 505 is too early for the crate, 580 too late for win_by): out at (469.6, 143.9) on 542 over the crate, right",
+    "along the ledge to the door. Won on tick 609."
   ],
   "level": "level7",
-  "win_by": 470,
+  "win_by": 630,
   "holds": [
     {"walk": "left", "from": 87, "to": 147},
-    {"walk": "right", "from": 157, "to": 347},
-    {"walk": "right", "from": 377, "to": 470}
+    {"walk": "right", "from": 157, "to": 630}
   ],
   "taps": [
     {"tick": 29, "at": [320, 60]},
     {"tick": 76, "at": [395.0, 202.3]},
     {"tick": 111, "at": [472, 142]},
-    {"tick": 366, "at": [444.5, 202.3]}
+    {"tick": 540, "at": [446.5, 202.3]}
   ]
 }

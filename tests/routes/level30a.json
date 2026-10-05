@@ -1,25 +1,27 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-31, re-authored in planning step 134 (G8) and re-timed in R3 round 1 for the timing group (G4's shot, G10's decoded",
-    "walk and fall). The way comes at the agent from UNDER its pocket, over seesaw_915. A portal at (437, 205) (a 252-unit",
+    "2-31, re-authored in planning step 134 (G8), re-timed in R3 round 1 for the timing group (G4's shot, G10's decoded",
+    "walk and fall) and in 3b-1's round 1 for the time-base group (the walk is let go earlier). The way comes at the agent from UNDER its pocket, over seesaw_915. A portal at (437, 205) (a 252-unit",
     "shot, open on 102; 1.3 u outside antiportal_958's 192 (193.3 from its centre; 2 at the y 207 it is placed at), so it",
     "is the route's thin margin) and, once it is open, one ON the player on the start platform (tap 108: the old route's",
     "second portal 'under him' as he fell off the platform cannot be had - a shot at (598, 276) from the platform runs into",
     "it, and from the edge it opens after he has fallen past): he comes out of (437, 205) at once, falls onto the plank",
     "near its right end and, walking left from tick 110, climbs it (the plank takes his weight: the walk must be on as he",
     "lands - waiting for him to stand first, or landing from (445, 200) or lower, tips the plank to its stop and he slides",
-    "off its end), and once he is past the pivot (x 342, tick ~255) the plank tips left-down and he slides onto anchor_957",
-    "and walks to x 278 (stopping on 283: the idle player holds there, where the old route's crept on from 283 to 267 by",
-    "tick 399). From there a shot at the agent (286) kills it on 311, 18 px clear of 1013, the ring goes. A portal at (60,",
-    "90) over the door's ledge (320; a 77-tick flight, open on 395) and one on the player (399, at (278.2, 232.6) where he",
-    "stands): into the door. Won on tick 405, no shot burned. Leans on the port's hinge solver (the plank's tip), G10 (the",
-    "player's walk up the plank and his weight on it) and G4."
+    "off its end), and once he is past the pivot (x 342) the plank tips left-down and he slides onto anchor_957",
+    "(lands on it on tick 222 at x 272.3, and stands: the idle player holds there). The walk is let go on tick 218,",
+    "as he drops toward the anchor: on the build before the time-base group it ran to 283 and stopped him at x 278,",
+    "but he now lands sooner and a walk past 224 takes him on to x 220.4, from where the shot to (60, 90) ends against a body at (180, 204)",
+    "go (the hold's end on 214-224 wins, on 226 and later it does not). From there a shot at the agent (286) kills it on 313,",
+    "the ring goes. A portal at (60, 90) over the door's ledge (320; a 75-tick flight, open on 395) and one on the player",
+    "(399, at (278.2, 232.6), 6 u from where he stands): into the door. Won on tick 405, no shot burned. Leans on the port's",
+    "hinge solver (the plank's tip), G10 (the player's walk up the plank and his weight on it) and G4."
   ],
   "level": "level30a",
-  "win_by": 450,
+  "win_by": 435,
   "holds": [
-    {"walk": "left", "from": 110, "to": 283}
+    {"walk": "left", "from": 110, "to": 218}
   ],
   "taps": [
     {"tick": 29, "at": [437, 205]},
