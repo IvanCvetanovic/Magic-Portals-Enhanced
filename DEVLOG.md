@@ -2994,3 +2994,145 @@ baseline of this wave on, `program/R3/fix2/after/sweep`, 128 PNGs. Engine pin `7
 ended without a green suite: four steps that each moved the original's numbers in and took the route count from 86 to 8,
 a re-author that won 76 of them back, and two levels that would not open honestly, so nothing was pushed. Tired more than
 frustrated: the refusals were few (two), the records are the best the project has, and the two sealed levels are named.
+
+### 2026-10-04 17:28 - Session 25: program wave 3b-1, the time-base group and its routes
+
+*Written 2026-10-05 at the close by this session's close role, from the records - planning steps 152-155 of
+`docs/planning/2026-09-11-magic-portals-remaster.md`, each role's reports under the gitignored
+`out/parity/program/<id>/` (`impl.md`, `commit.md`, `fix*.md`, the verifiers' `verify*.json`, `R3b/finalize.md`) - and git, not
+from a transcript. 17:28 is the creation time of `out/parity/program/WT/`, the wave's first record, not a measured start; the
+last commit of the wave is 07:37 the next morning. Every number below is one a record states, or one this role measured and says
+so. This role built, launched and captured nothing; it ran the image purge.*
+
+**Built:**
+- **Step 152 (WT, `df5c542`)**: every dynamic body is in the original's time base. The world falls at the original's 10 m/s^2
+  carried at the tick (2000 u/s^2: a crate 258.333 units in 30 ticks, the original's formula, where it fell 127), a minion walks
+  62.4 u/s (was 39) and a 2-32 knight 81.6 (51), a gravity well pulls every body, every body weighs its `.ent`'s weight
+  (`game/data/materials.json`, 53 entities read back from the original by a suite), no body has damping, Box2D's clamp holds every
+  body. 2-24's idle player holds 0.000 units for 420 ticks (36 before): the cause was the barrel's weight, not the time base.
+  The decoded friction and restitution are decoded and HELD, not applied (below). 53 suites, 52 passed, 19,026 checks; **62 of
+  86 routes win**.
+- **Step 153 (CAP, `0e0c046`)**: the player's body is the original's - two circles as a capsule 18.2 x 36.2 (20 x 44 before),
+  3.9 units lower on whatever he stands on, the ground sensor 18 below the entity, triggers judge the real shape, a fall held to
+  100 screen pixels a step. The spec's "a minion's body is not ground" gate was reversed by the listing and not built. 52 of 53
+  suites, 19,030 checks; **53 of 86 routes win**.
+- **Step 154 (G3, `5cc4a09`)**: the original's moving platforms and patrolling agents - `cos(angle) x stride`, the full swing
+  either side at half the old rate, starting a stride down the screen (1-11's block y 114 to 254, was 149 to 219); the 15
+  platforms and 3 agents are within 0.0001 unit of the formula on every tick of 600. The spec's "carried by friction" was
+  refuted by the decode and not built. 52 of 53 suites, 28,137 checks; **49 of 86 routes win**.
+- **Step 152's two amendments (R3B FIX 1, `95aee3f` and `cf37763`; R3B FIX 2, `3994867` and `556bcec`)**, from the whole-build
+  verifier's first two rounds: 3-13 held a crate at friction 0.08 (a guess) so the level can be won, 3-12's pile is put to
+  sleep where the original's stills show it and a portal's teleport wakes what lay on the traveller (Box2D's own rule,
+  `resting.json`), `held_friction` marked `_guess`, 2-30's route marked a stop-gap and the owner's three choices measured. 53
+  suites, 53 passed, 28,723 checks; **86 of 86 routes win**.
+- **Step 155 (the route phase, `7c843c7`)**: 37 route files re-authored or re-flown (36 holds or taps changed, 3-09 a note) and
+  the planning step for the phase. **86 of 86 routes win** (chapter 1 21, chapter 2 29, chapter 3 17, chapter 4 19; 1,514
+  checks, 0 failures): 49 won at the start of the phase, 83 after its first round, 85 after the fourth, 86 after R3B FIX 1. Of
+  wave 3a's 84 winners 56 win on another tick (16 earlier, 40 later, median move 3, the largest 2-32 2,718 -> 3,205) and 28 on
+  the same; 24 of the 47 files nobody edited moved on their own (median 2 ticks, at most 17). Win ticks 87 (4-02) to 3,376
+  (3-32), slack 9 (4-18) to 70 (4-21), median 31. 1-11 (835) and 2-30 (1,386) are won now. No source, test, data or engine file.
+- **The close**: section 6 of `docs/parity-backlog.md` (the wave's table filled with hashes and the two amendments and step 155
+  added, its census, GAMEPLAY and next-wave order, R3-1 ticked, R3-2 to R3-8 annotated, eight new open rows R3b-1 to R3b-8,
+  the owner's calls) and this entry, one commit, **not pushed**.
+- **The image purge of this close** (the owner's standing order, 2026-10-03: delete images once finished with them).
+  `out/parity/BASELINE.txt` now names `program/R3b/fix1/after/sweep`, replacing `program/R3/fix2/after/sweep`: the wave did not
+  pass, so the baseline is the last sweep that matches the committed build. The third verifier had deleted its own PNGs after
+  hashing them; this role proved the link instead of asserting it - the 128 PNGs' md5s equal the third verifier's
+  `sweep_md5.txt` and R3B FIX 1's capture log, all 128 are valid 1280 x 720 PNGs, and the md5s still equal after the purge.
+  `purge_images.py all` (dry run) listed 533 files, 0.39 GB; `--delete` removed all 533: the f420 sweeps of the old baseline
+  `R3/fix2` and of WT, CAP and G3 (128 each, 512) and 21 cited crops (WT 8, G3 6, CAP 7). Freed: `du -sk out/parity` 18,786,879
+  -> 18,400,755 KiB (17.92 -> 17.55 GiB), `df` free 154,729,884 -> 155,116,068 KiB (about 148 GiB free at the close). Earlier
+  roles' deletions this wave, recorded by them without sizes: R3B FIX 1's 80 images and the third verifier's 128-PNG sweep (the
+  first two verifiers' sweep folders also hold 0 PNGs; no count was recorded). Sum, counts only: at least 741 images in the
+  wave, of which this close measured 533 and 0.39 GB. `program/` now holds 128 PNGs, the new baseline's; `git status` was
+  unchanged by the purge. `out/parity` grew 17.33 -> 17.92 GiB between wave 3a's close and this one (not traced).
+
+**Broke / dead ends:**
+- **The wave is not green by its verifier.** All three whole-build rounds after the route phase returned `pass: false`:
+  `verify1.json` (8 of 11 gates; 3-13 not won, a high finding, and 2-30 and 3-12 won on loose-body motion nobody had established
+  as the original's), `verify2.json` and `verify3.json` (9 of 10 gates each, both on 2-30). **2-30 is won only by a creep.** The
+  stone drifts 0.0867 u a tick on a flat floor (x 32.1 to 113.4) while the player stands at (268.8, 167.5) from tick 270 to
+  1,290 with no input; R3B FIX 1 traced it to the held friction's traction (the stone's decoded 0.025 leaves it resting at the
+  wall). The designed counterweight leap dies on tick 270 at the shipped 0.86 air brake and wins on tick 284 at an air brake of
+  1.0 or at 45 or 30 frames a second, so the rate the owner has not ruled (G10-2) is what stops it. Five earlier rounds found no
+  honest route and none was searched for in R3B FIX 2 (not a proof that none exists). All three ways out are the owner's.
+- **WT's first build failed its verifier.** It applied every decoded friction and 13 resting crates and barrels walked along
+  their floors at a constant 5.65 to 8.78 units a second; on 2-08 crate 854 reached `button_827` and opened `door_lift_823` on
+  tick 264 with nobody there. The engine's friction solve is the suspect (a rig with no level walks a resting 30 x 30 box to
+  5.745 u/s and keeps it, awake; a Python model of the solver's loop reproduces it only with an assumed point order), so the
+  fix holds every friction at 1 and the decoded half of the step is **blocked on an engine step**, as restitution is (the
+  engine bounces a stone 5 units before it touches). A control run also overwrote `materials.json` for about a minute while the
+  first build's sweep ran, and the sweep was retaken.
+- **Three spec premises were wrong and not built**: G10-5b's cause (the mass, not the time base), CAP's "a minion's body is not
+  ground" (a minion is not an `isCharacter`: only the player is) and G3's "carried by friction" (a platform is a static body
+  moved by `SetTransform`: no velocity, vertical only). Each was found from the listing before a line was written.
+- **3-13 was sealed by the new frictions**, and the first fix was a guess: with the held 1 its crate wedges in the 64 px slot as a
+  diamond on all 4,242 round-4 replays; the decoded friction would not open it either (one release tick of 75). The wedge lets go
+  only at 0.079 to 0.082, so 0.08 is a knife-edge in the friction and a marked guess. **3-12**: a stone of 1.131 on two corners
+  over a crate of 0.144 is not held by the engine's eight solver iterations (the pair drifts with the crate as heavy as the stone, with the
+  stone as light as the crate and at a fifth of the gravity); the fix puts the pile to sleep from the stills. R3B FIX 1 first read Box2D's wake rule as begin-only and corrected the header, the data note and the docs before
+  its commit (it wakes both bodies when a contact ends, which the engine lacks).
+- **The route phase's first reading of the 37 was wrong in places**: 3-19's spinning plank no longer turned under the push on the
+  time-base build (997 -> 832); 1-11's old "28.15 px" geometry no longer described the level once G3 built the full swing.
+- **Smaller**: a verifier's `port_build.bat` run relinked a stale `MagicPortalsSpike.exe` (never launched); CAP's comment-only
+  header fixes meant G3's first build recompiled about 40 objects (the task's rule against editing widely included headers
+  collided with the verifier's fix list; stated in its report); the WT task text said the routes are re-authored "after PIC" when
+  PIC was already built and the order is CAP and G3 first; the route commit's Record line names step 155, not 154 (R3b-7);
+  WT's `"dark_mage"` string literal in `Player::Spawn` is still there (WT-11).
+
+**Decision:**
+- Every ruling for the original, gameplay included; friction and restitution held, not applied, until an engine step; G10-2
+  kept at 60 and not reopened (the order). The gameplay of the wave is stated in its planning steps and in the backlog.
+- **Nothing pushed**: `origin/main` is `0b8d3c5`, `main` is 17 commits ahead before this one and 18 with it (wave 3a's nine,
+  wave 3b-1's eight and this commit). Whether to push with 86 of 86 won and one failed verification gate, or settle 2-30 first,
+  is the owner's (R3-8).
+- **Backlog rows ticked only where a committed step closed them**: R3-1 (step 155 won 1-11, with its platform phase the port's
+  tick-1 convention) and WT-12 (R3B FIX 1; this role grepped `tests/test_mp_timebase.cpp`: the 3-12 entries and their inference
+  are gone) and CK-3 (all three velocity readers are built: the player's in step 148, the minion's and the 2-32 knight's in step
+  152's `ScriptSpeed`; its inferred link to four sweep residuals was not re-checked). G10-1, G10-3, G10-4, G10-5b, G10-6, G3, R3-6, WT-5, WT-6 and CAP-7 were already `[x]` from their own commits and got
+  step 155's tail. **Annotated and left open**: R3-2 (won on an artifact), R3-3, R3-4, R3-5, R3-7, R3-8 (the suite is green, the
+  push decision stands), the PORT-WIDE clock row (CK-1 still open), G10-2, G10-7/8, G10-14, CAP-10, G3-2, G1 (the walk speed
+  built, not the sight). **New rows**: R3b-1 to R3b-8 (3-22's creep, 3-12's break rule, the 0.08 guess, the wake reach, one pile
+  named from a still, `win_by` slack, the Record line, the verification's limits).
+- **The standing baseline** is `program/R3b/fix1/after/sweep` (128 PNGs, `MagicPortals.exe` `814f08b5` at capture; the third
+  verifier matched the committed build's `098e51b4` to it 128 of 128).
+- The next wave's order: G1 (the knights' sight, shooting and portal-killing, with 17 routes and the seven stealth
+  achievements), G9, R23's rest and R22, routes for the 42 levels without one (and 2-30's honest one), the final comparison and
+  the ship preparation.
+
+**Smart App Control: 4 refused launches in this session**, from the records and a CodeIntegrity 3033/3077 query this role ran
+from 2026-10-04 17:00: WT's first `MagicPortals.exe` (18:32:07), CAP's `test_mp.exe` (22:21:20), G3's `MagicPortals.exe`
+(00:15:32) and R3B FIX 1's first `MagicPortals.exe` (05:21:13), each deleted and relinked once and then run. No verifier, the
+route phase, either commit pass or this close was refused (0 events after 05:21:13). Wave 1: 83, wave 2: 19, wave 3a: 2.
+
+**Assets check:** yes - `git status --short`, run after appending this entry and before the commit, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference` prints 0 lines). The forbidden-extension grep
+(`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, plus `^out/` and `^reference/`) over
+`git diff --name-only ee878bb..HEAD`, the 101 files of the wave's eight commits, printed nothing, and over
+`0b8d3c5..HEAD` (194 files, both waves) it prints nothing either; over the staged names before this commit it prints nothing.
+The owner's save folder `%APPDATA%/Magic Portals/` holds `scores.json` alone, 164 bytes, md5
+`40bfef3ac396b4e94bdd97990401435a`.
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** 8 commits `ee878bb..7c843c7`: 101 files, +5,346 / -1,281 (39 route files +802 / -771; 40 in `game/` +1,291 / -252;
+17 other test files +2,447 / -214, `tests/test_mp_timebase.cpp` alone 1,192 lines; 3 docs +746 / -32; `data/player.json`,
+`tools/parity/reachability.py`). Planning doc 28,229 -> 28,582 lines (steps 152-155); backlog 3,191 -> 3,425 over the eight commits (3,603 with this close's own edit). Suites: 52 of 53 /
+19,026 checks after WT, 52 of 53 / 19,030 after CAP, 52 of 53 / 28,137 after G3, **53 of 53 / 28,723 at the end**. Routes won:
+84 of 86 -> 62 -> 53 -> 49 -> 86; slack 9-70 (median 31; the thinnest 4-18 9, 3-12 12, 3-13 13, 4-02 13, 4-08 15; the
+knife-edges 3-20, 3-22 and 3-13's friction). Reachability 108 / 20 / 0, 0 differ at every step. f420 sweeps: WT 46 of 128
+byte-identical to the wave's baseline (the 33 levels with no loose body 33 of 33), CAP 16 of 128 to WT's, G3 120 of 128 to
+CAP's, R3B FIX 1 125 of 128 to G3's, the third verifier 128 of 128 to R3B FIX 1's. Baseline from this wave on,
+`program/R3b/fix1/after/sweep`, 128 PNGs. Engine pin `710bffc`. Disk: `out/parity` 17.92 -> 17.55 GiB, about 148 GiB free.
+
+**Inferred mood:** a guess from the facts - a long night's careful grind that again ended one gate short of green: three steps
+that each took the original's numbers in and the routes from 86 down to 49, a re-author and two fix rounds that won all 86
+back, and one level, 2-30, that cannot honestly be opened until the owner picks a rate or a friction. Steadier than wave 3a:
+four refusals, three specs corrected by the listing, the records the best they have been, and the one open question named.
