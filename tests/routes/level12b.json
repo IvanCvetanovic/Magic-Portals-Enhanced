@@ -1,28 +1,34 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-13, won by killing the anti-portal agent (step 126, R17). Left off the shelf onto the crate (a walk off the edge now",
-    "carries 15 units, not a steered arc), right off its far side into the 21 px gap between the crate and block00_1528, and",
-    "left again: the crate is pushed until its centre passes the platform's edge (released on tick 156; 153 to 160 drop it",
-    "clear in the 64 px gap by the key's block, later it hangs half over the edge and jams under the column, earlier it",
-    "stays on the platform), then the player waits for it to fall and walks on over it to the far wall, taking the blue key.",
-    "From x 9.8 a shot at (70, 70) comes within range of anti_portal_agent_ent_1536 and kills it with its ring on tick 288.",
+    "3-13, won by killing the anti-portal agent (step 126, R17). Re-authored on the wave 3b-1 build (R3b fix 1, planning step 152's amendment: the",
+    "crate of this slot is held at friction 0.08, materials.json's guess). Left off the shelf onto the crate (a walk off the edge carries 15 units,",
+    "not a steered arc), right off its far side (the player lands on the crate at tick 92) and left again, and the walk then simply goes on: it pushes the",
+    "crate off the platform's edge (x 160) at 1.89 u/tick, it tips into the 64 px slot against the key's block as a diamond under wall04, and the",
+    "push that goes on flattens it into the slot, the player walking over it (tick ~200) and on to the far wall (x 8, tick ~255). Every end of the walk",
+    "from tick 250 on does it (the walk from 119 is good for 107-131), where the 3a build needed its release inside 153-160 and the held-friction-1 build",
+    "(a push of 0.58 u/tick) never got the crate out of the diamond: the slot's crate is the one entity held at a friction of its own (a combined 0.283",
+    "against the platform), the plateau of 0.079 to 0.082 being the value at which the diamond lets go (out/parity/program/R3b/fix1, grid3.py).",
+    "From x 8.2 a shot at (70, 70) comes within range of anti_portal_agent_ent_1536 and kills it with its ring on tick 288.",
     "The shot flies 3.2 units a tick after its first-frame jump of 24, so a far portal takes 100 ticks: one at the blue",
-    "keyhole (380, 178) (tap 292, placed 401), one on the player (tap 404): the blue key opens the door and the yellow key is",
+    "keyhole (380, 178) (tap 292, placed 401), one on the player (tap 408): the blue key opens the door and the yellow key is",
     "taken. Right through where the blue door stood, down, left a little on the platform below. A portal over",
-    "breakable_wall_1542 at (310, 360) (tap 552) and one beside rolling_stone_1540 at (100, 298) (tap 590, placed 684): the stone",
-    "drops onto the wall and breaks it (tick 691) and rolls into the pit under the corridor. Left into the hole onto the block",
-    "at the corridor's end; a portal in the corridor at (240, 466) (tap 804, after the stone has fallen out of the shot's",
-    "line: a shot at 791 was stopped by it), one on the player (tap 842): left past keyhole_ent_1197 (the yellow door goes)",
-    "to the door. Re-authored on the wave 3a timing build (R3 round 1): won on tick 1001."
+    "breakable_wall_1542 at (310, 360) (tap 552) and one beside rolling_stone_1540 at (100, 298) (tap 592, placed ~684): the stone",
+    "drops onto the wall and breaks it (tick ~691) and rolls into the corridor, to its end at x 360 and then slowly back and over its",
+    "edge into the pit (tick ~825). Left into the hole onto the block at the corridor's end; a portal in the corridor at (240, 466) (tap 828,",
+    "after the stone has fallen out of the shot's line: a shot while it is still in the corridor fails against it, the first tick that does not is",
+    "~819), one on the player (tap 876): left past keyhole_ent_1197 (the yellow door goes) to the door.",
+    "Windows (the others fixed, win kept): the first walk's start 1-8 (its end 84-97), the right walk 494-538, the left walk 522-552, the wait for the",
+    "stone's fall 816-840 for tap 828, the walk to the door 872-896; the taps 248-266, 286-299, 401-420, 542-563, 581-604, 816-840, 864-888.",
+    "Won on tick 1035."
   ],
   "level": "level12b",
-  "win_by": 1060,
+  "win_by": 1048,
   "holds": [
     {
       "walk": "left",
       "from": 1,
-      "to": 85
+      "to": 90
     },
     {
       "walk": "right",
@@ -32,37 +38,32 @@
     {
       "walk": "left",
       "from": 119,
-      "to": 156
-    },
-    {
-      "walk": "left",
-      "from": 180,
       "to": 262
     },
     {
       "walk": "right",
-      "from": 503,
-      "to": 531
+      "from": 506,
+      "to": 526
     },
     {
       "walk": "left",
-      "from": 536,
-      "to": 544
+      "from": 534,
+      "to": 545
     },
     {
       "walk": "left",
-      "from": 735,
-      "to": 760
+      "from": 738,
+      "to": 756
     },
     {
       "walk": "left",
-      "from": 850,
+      "from": 884,
       "to": 1060
     }
   ],
   "taps": [
     {
-      "tick": 264,
+      "tick": 260,
       "at": [
         70,
         70
@@ -76,7 +77,7 @@
       ]
     },
     {
-      "tick": 404,
+      "tick": 408,
       "at": [
         9.8,
         170.3
@@ -90,21 +91,21 @@
       ]
     },
     {
-      "tick": 590,
+      "tick": 592,
       "at": [
         100,
         298
       ]
     },
     {
-      "tick": 804,
+      "tick": 828,
       "at": [
         240,
         466
       ]
     },
     {
-      "tick": 842,
+      "tick": 876,
       "at": [
         367.6,
         458.5

@@ -88,11 +88,37 @@
 
   "groups": [
     {
-      "entities": ["crate", "crate_low_emissive", "crate_no_emissive", "crate_small", "crate_small_no_emissive"],
+      "entities": ["crate", "crate_no_emissive", "crate_small", "crate_small_no_emissive"],
       "friction": 0.96,
       "restitution": 0.2,
       "density": 0.4,
-      "_source": "crate.ent, crate_low_emissive.ent, crate_no_emissive.ent, crate_small.ent, crate_small_no_emissive.ent: <Entity friction=\"0.960000\" density=\"0.400000\" restitution=\"0.200000\">"
+      "_source": "crate.ent, crate_no_emissive.ent, crate_small.ent, crate_small_no_emissive.ent: <Entity friction=\"0.960000\" density=\"0.400000\" restitution=\"0.200000\">"
+    },
+    {
+      "entities": ["crate_low_emissive"],
+      "friction": 0.96,
+      "restitution": 0.2,
+      "density": 0.4,
+      "held_friction": 0.08,
+      "_source": "crate_low_emissive.ent: <Entity friction=\"0.960000\" density=\"0.400000\" restitution=\"0.200000\"> - the same pair as the crate group above; the group is its own only for the held_friction below",
+      "_held_friction": [
+        "A GUESS (_guess true), not a decoded number: the friction this entity is BUILT with while friction_applied is false, in place of the",
+        "table's held_friction 1. crate_low_emissive is the crate of 3-13's slot (level12b; also level2b, level4b and level8c, where it is a",
+        "plain crate). WHY: the level is won by pushing this crate off its platform's edge into a 64 px slot between the platform (x 160) and",
+        "block00_1528 (x 96), where it must lie flat as a bridge (a 58 px crate in 64 px, a 2 px clearance under wall04): the player's walk is set",
+        "outright every tick, so a crate pushed along its platform moves at v = walk - mu x G / s, with mu the combined friction against the held",
+        "1 of the platform (sqrt(this x 1)), G 0.2954 u/tick^2 and s the player's share of the pair's mass 0.162 (R3b round 3, arithmetic checked",
+        "against traces): 0.58 u/tick at the held 1 (34.7 u/s), the decoded sqrt(0.96 x 0.2) = 0.438 would give 1.6 (96 u/s, the pace the 3a build won",
+        "at, release window 153-160) but is in the engine's creep band, and the crate then wedges as a 45 degree diamond under wall04 (bottom 132, a",
+        "top corner at y 142) on every release tick of 4,242 replays (R3b round 4). MEASURED on this build (out/parity/program/R3b/fix1/grid3.py:",
+        "the route's walk, the release tick scanned 125-260 at each value, 'won' = the player on the far side at the platform's level): the wedge",
+        "lets go, and the held walk pushes the crate down flat into the slot, for EVERY release from tick 180 to 259 at a value of 0.079 to 0.082 (a",
+        "combined 0.281 to 0.286), and only on isolated ticks at any other value tried except 0 (0.01-0.075: 0 to 7 of 55; 0.083-0.2: 0 to 7 of 135;",
+        "0.0: 47 of 75, a crate that slides for ever, not taken). 0.08 is the plateau's middle. The cost of a combined 0.283 against the decoded 0.438:",
+        "the push is 1.89 u/tick (113 u/s) where the decoded pair would give 1.6, and a released crate slides a little further; a resting crate does not",
+        "creep (test_mp_timebase, NoLooseBodyOfAnyLevelCreepsAtRest: the same 106 asleep in the 128 levels). To be dropped when the engine's",
+        "friction solve is fixed and friction_applied goes true: the decoded 0.96 then applies to this entity as to every other."
+      ]
     },
     {
       "entities": ["barrel_bomb", "barrel_bomb_low_emissive"],

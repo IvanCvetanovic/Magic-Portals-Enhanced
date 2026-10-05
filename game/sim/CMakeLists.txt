@@ -57,6 +57,7 @@ add_library(MagicPortalsSim STATIC
     Prism.cpp
     Puzzle.cpp
     RedKey.cpp
+    Resting.cpp
     Restock.cpp
     Roles.cpp
     Scores.cpp

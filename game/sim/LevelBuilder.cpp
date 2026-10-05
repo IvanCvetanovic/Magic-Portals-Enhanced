@@ -260,9 +260,20 @@ bool LoadMaterials(const std::string& path, Materials& out, std::string& error) 
         }
         Material material;
         material.decodedFriction = group["friction"].AsFloat();
+        // The friction a group is held at while the table holds friction: the table's, unless the group names one of its own
+        // (planning step 152's amendment: the one crate of 3-13's slot, held lower than the rest so a held walk can push it
+        // over the edge and on down; it is a guess marked in the file, not a decoded number).
+        float held = read.heldFriction;
+        if (group.Has("held_friction")) {
+            if (!group["held_friction"].IsNumber() || !(group["held_friction"].AsFloat() >= 0.0f)) {
+                error = path + ": a group's held_friction is a number of at least 0";
+                return false;
+            }
+            held = group["held_friction"].AsFloat();
+        }
         // The .ent's friction where the table applies it, and where this group says it is safe to while the rest is held.
         material.friction = (read.frictionApplied || group["apply_decoded_friction"].AsBool(false)) ? material.decodedFriction
-                                                                                                   : read.heldFriction;
+                                                                                                   : held;
         material.density = group["density"].AsFloat(0.0f);
         material.areaM2 = group["area_m2"].AsFloat(0.0f);
         if (!(material.density >= 0.0f) || !(material.areaM2 >= 0.0f)) {

@@ -2773,3 +2773,22 @@ Found while building the moving platforms and the patrolling anti-portal agents 
   and not after it. With the camera on the player at the spawn (left edge clamped at 0 or at spawn x less half the 455-unit view), four of the 18 movers stand outside the drawn buckets (computed from the
   level files, the level's `max` node as its right limit): 3-03's and 3-06's `moving_platform_1011` (x 672; camera_start at x 868), 1-11's `anti_portal_agent_639` (x 674; camera_start (550, 10)) and 3-09's
   `moving_platform_1429` (x 96; the spawn at x 617). Not modelled by the port for any static callback (backlog; planning step 154, deviation 2).
+
+## 19. Sleeping, and what wakes a body (planning step 152's amendment, R3b fix 1)
+
+The original's Box2D is 2.2.x (`reference/ethanon/toolkit/Source/src/box2d/Box2D/`), with sleeping on: `ETHPhysicsSimulator::CreateBody` sets no `allowSleep` (the
+`b2BodyDef` default, true), and a body that has been still for `b2_timeToSleep` (0.5 s) sleeps with the rest of its island.
+
+- **A contact beginning or ending wakes both its bodies**: `b2Contact::Update` ends `if (touching != wasTouching) { bodyA->SetAwake(true); bodyB->SetAwake(true); }`
+  (`Dynamics/Contacts/b2Contact.cpp:210-214`), `b2ContactManager::AddPair` wakes both of a new pair (`b2ContactManager.cpp:289-290`), and `b2Contact::Destroy` wakes both of a
+  contact that had manifold points (`b2Contact.cpp:105-109`). A sleeper also joins the island of an awake body through a TOUCHING contact (`b2World::Solve`, `b2World.cpp:396-431`,
+  `b->SetAwake(true)`).
+- **Moving a body wakes that body**: `ETHPhysicsEntityController::SetPosXY` is `SetTransform` then `SetAwake(true)` (`ETHPhysicsEntityController.cpp:99-104`), and a portal's
+  `teleportToOther` moves a traveller with it (PortalManager, `SetPositionXY(other.GetPositionXY())`). What lay on the body is woken by the contact's end, above.
+- **The engine does not do the second half.** `PhysicsSystem` wakes a sleeper when a contact begins with a stirring body, or a joint's neighbour stirs, or it is moved
+  (`PhysicsSystem.cpp:1072-1115`, `:504-523`), and not when a contact ends: a stone asleep on a crate that a portal takes away would hang in the air. The port wakes what lies on or
+  against a traveller before it goes (`Resting::WakeAround`, `game/data/resting.json` `wake_reach_px`, 2 units: a guess), which is Box2D's rule, not an addition to it. 3-12 needs it:
+  its stone is held inside the permanent `antiportal_1375`'s field by the small crate, so taking the crate away is the only way to free it.
+- The library stills `3-12_t2.0.png` and `3-12_t8.0.png` show the stone cradled between the crate's top-right corner and the column's top-left corner and the crate on its ledge,
+  identical at 2 and 8 seconds: the original's pile is at rest from its first frame, which the engine's solver cannot hold (a stone of 1.131 on corners presses a crate of 0.144
+  sideways every tick; the pair still drifts at equal weights, and at a fifth of the world's gravity), so `resting.json` puts it to sleep where the level places it.

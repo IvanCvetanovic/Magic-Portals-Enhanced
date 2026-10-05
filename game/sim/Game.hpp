@@ -47,6 +47,7 @@
 #include "sim/Puzzle.hpp"
 #include "sim/RedKey.hpp"
 #include "sim/Restock.hpp"
+#include "sim/Resting.hpp"
 #include "sim/ScriptClock.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Torch.hpp"
@@ -101,6 +102,8 @@ struct Data {
     GravityWell::Rules wells;     // and gravitywell.json
     Handle::Rules handle;         // and handle.json: the draggable handle and what follows it
     Hazards::Rules hazards;       // and hazards.json, which is what the role table got wrong
+    Resting::Rules resting;       // and resting.json: the piles the original shows at rest, put to sleep at the start
+    std::string levelName;        // the level's file name without its extension, which resting.json is keyed by
     std::filesystem::path prisms; // where LevelBuilder writes the platforms' prisms
 };
 

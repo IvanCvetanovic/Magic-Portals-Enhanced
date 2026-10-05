@@ -2,6 +2,7 @@
 
 #include "core/Components.hpp"
 #include "core/Json.hpp"
+#include "sim/Resting.hpp"
 #include "sim/Units.hpp"
 #include "sim/Zerog.hpp"
 
@@ -28,6 +29,8 @@ void Teleport(entt::registry& registry, entt::entity body, const glm::dvec2& exi
               bool character) {
     auto& transform = registry.get<TransformComponent>(body);
     auto& rigid = registry.get<RigidBodyComponent>(body);
+    // What lies on or against the traveller wakes before it goes (sim/Resting): a sleeper whose support leaves would hang in the air.
+    Resting::WakeAround(registry, body);
     const glm::dvec2 velocityPx(rigid.velocity.x * Units::kPixelsPerMetre, -rigid.velocity.y * Units::kPixelsPerMetre);
     const glm::dvec2 exitVelocityPx = Portal::ExitVelocity(velocityPx, 0.0, 0.0, transit, character);
     const glm::dvec2 destinationPx = Portal::ExitPosition(exitPx, exitVelocityPx, transit);

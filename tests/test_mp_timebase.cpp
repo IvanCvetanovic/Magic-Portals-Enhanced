@@ -34,6 +34,7 @@
 #include "sim/Minions.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Player.hpp"
+#include "sim/Resting.hpp"
 #include "sim/ScriptClock.hpp"
 #include "sim/Units.hpp"
 
@@ -394,6 +395,19 @@ void TheMaterialTableIsRead() {
     for (const char* name : {"crate", "barrel_bomb", "rolling_stone", "platform", "block00", "dragon_knight", "ramp_right", "lift"}) {
         CHECK_WITHIN(materials.Of(name).friction, 1.0, 0.0);
     }
+    // The one entity held lower than the rest, a guess marked in the file (planning step 152's amendment): the crate of 3-13's
+    // slot. Its decoded friction, restitution and weight are the crate's own; only what it is built with differs, and only
+    // while friction_applied is false.
+    for (const char* name : {"crate_low_emissive"}) {
+        CHECK_MSG(materials.Holds(name), std::string(name) + " is in the table");
+        CHECK_WITHIN(materials.Of(name).decodedFriction, 0.96, 1e-6);
+        CHECK_WITHIN(materials.Of(name).decodedRestitution, 0.2, 1e-6);
+        CHECK_WITHIN(materials.Of(name).density, 0.4, 1e-6);
+        CHECK_WITHIN(materials.Of(name).friction, 0.08, 1e-6);
+    }
+    for (const char* name : {"crate_no_emissive", "crate_small", "crate_small_no_emissive"}) {
+        CHECK_WITHIN(materials.Of(name).friction, 1.0, 0.0);
+    }
     // The three that apply their own, because 0 against any surface is 0 and the solve has no friction impulse to get wrong.
     for (const char* name : {"minion", "ghost_minion", "gravity_agent"}) {
         CHECK_WITHIN(materials.Of(name).friction, 0.0, 0.0);
@@ -436,12 +450,30 @@ void AMaterialFileThatDescribesNoFixtureIsRefused() {
         CHECK_MSG(LevelBuilder::LoadMaterials(file.string(), mixed, error), "a group that applies its own is taken: " + error);
         CHECK_WITHIN(mixed.Of("a").friction, 1.0, 0.0);
         CHECK_WITHIN(mixed.Of("b").friction, 0.0, 0.0);
+        // A group's own held friction replaces the table's for that group while friction is held, and the decoded number is kept;
+        // once the table applies friction the group's held number is not read and the decoded one applies.
+        const std::string own = R"("groups": [{"entities": ["a"], "friction": 0.5, "restitution": 0.1}, )"
+                                R"({"entities": ["c"], "friction": 0.9, "restitution": 0.1, "held_friction": 0.08}]})";
+        LevelBuilder::Materials held;
+        std::ofstream(file, std::ios::binary) << "{" << flags << own;
+        CHECK_MSG(LevelBuilder::LoadMaterials(file.string(), held, error), "a group with its own held friction is taken: " + error);
+        CHECK_WITHIN(held.Of("a").friction, 1.0, 0.0);
+        CHECK_WITHIN(held.Of("c").friction, 0.08, 1e-6);
+        CHECK_WITHIN(held.Of("c").decodedFriction, 0.9, 1e-6);
+        LevelBuilder::Materials appliedOwn;
+        std::ofstream(file, std::ios::binary) << R"({"restitution_applied": false, "friction_applied": true, "held_friction": 1.0, )" << own;
+        CHECK_MSG(LevelBuilder::LoadMaterials(file.string(), appliedOwn, error), "friction applied with a group's held friction is taken: " + error);
+        CHECK_WITHIN(appliedOwn.Of("c").friction, 0.9, 1e-6);
     }
     refused("{" + flags + R"("groups": [{"entities": ["a"], "friction": 0.5, "restitution": 0.1}, {"entities": ["a.ent"], "friction": 0.2, "restitution": 0.0}]})",
             "an entity in two groups");
     refused("{" + flags + R"("groups": [{"entities": ["a"], "friction": -0.5, "restitution": 0.1}]})", "a friction below zero");
     refused("{" + flags + R"("groups": [{"entities": ["a"], "friction": 0.5, "restitution": 1.5}]})", "a restitution above one");
     refused("{" + flags + R"("groups": [{"entities": ["a"], "friction": 0.5}]})", "a group with no restitution");
+    refused("{" + flags + R"("groups": [{"entities": ["a"], "friction": 0.5, "restitution": 0.1, "held_friction": -0.1}]})",
+            "a group's held friction below zero");
+    refused("{" + flags + R"("groups": [{"entities": ["a"], "friction": 0.5, "restitution": 0.1, "held_friction": "low"}]})",
+            "a group's held friction that is not a number");
     refused("{" + flags + R"("groups": []})", "no groups");
     refused("{" + flags + R"("groups": [{"entities": [""], "friction": 0.5, "restitution": 0.1}]})", "a nameless entity");
     refused("{" + std::string(R"("friction_applied": false, "held_friction": 1.0, )") + plain + zero, "a file with no restitution_applied");
@@ -808,7 +840,12 @@ void ABoxBuiltFromTheTableRestsAndSleeps() {
                 "a barrel %.3f, %.0f\n",
                 static_cast<double>(materials.heldFriction), crate.driftUnits, crate.asleepFromTick, bigCrate.driftUnits,
                 bigCrate.asleepFromTick, barrel.driftUnits, barrel.asleepFromTick);
-    for (const RestingBox* box : {&crate, &bigCrate, &barrel}) {
+    // The crate of 3-13's slot, held at the table's own guess of 0.08 against the platform's held 1 (a combined 0.283, inside the
+    // band the engine's solve does not walk: the creep is 0.4 to 0.6): it rests as the rest do.
+    const RestingBox slotCrate = LetGoOnAFlatFloor(materials.Of("crate_low_emissive").friction, platform, 29.0, 29.0, 0.538f);
+    std::printf("  the slot's crate (friction %.2f, mass 0.538): %.3f along, asleep from tick %.0f\n",
+                static_cast<double>(materials.Of("crate_low_emissive").friction), slotCrate.driftUnits, slotCrate.asleepFromTick);
+    for (const RestingBox* box : {&crate, &bigCrate, &barrel, &slotCrate}) {
         CHECK_MSG(box->asleep && box->asleepFromTick > 0.0 && box->asleepFromTick < 120.0,
                   "a box built from the table sleeps within two seconds: " + std::to_string(box->asleepFromTick));
         CHECK_MSG(box->driftUnits < 1.0 && box->speedUnitsPerSecond < 0.01, "and has not moved: " + std::to_string(box->driftUnits));
@@ -886,11 +923,8 @@ const StillMoving kStillMoving[] = {
      "2-20's small crate stacked on the big one below it creeps at 0.3 units a second (observed, cause not diagnosed)"},
     // OBSERVED: the stone rolls 165 units in the last 120 ticks (61 units a second): it is rolling free.
     {"level28a", "rolling_stone_892", "2-29's stone is rolling at 61 units a second, 165 units in the last 120 ticks"},
-    // 3-12, INFERRED from the positions and velocities of tick 420 (not traced): a minion (minion_spawn_908, walking left at 62.4 units a second, its decoded walk, 20 units from the crate's centre) walks into
-    // the crate in front of it and the crate into the stone against the left wall, so the chain is pushed every tick by a body whose
-    // velocity is set outright: they vibrate against the wall (7.8 and 5.1 units in 120 ticks at 14.5 and 12.6 units a second).
-    {"level11b", "crate_small_ent_1372", "3-12's crate is pushed by the walking minion behind it (the minion stands 20 units away, walking at 62.4)"},
-    {"level11b", "rolling_stone_1198", "3-12's stone is pushed by that crate against the left wall"},
+    // 3-12's stone and crate were named here until resting.json put them to sleep where the original's stills show them (R3b fix 1):
+    // the reading that a walking minion pushed them against the wall was an inference and the trace did not bear it out.
 };
 
 bool IsLooseAndPlaced(const std::string& tag) {
@@ -995,6 +1029,138 @@ void NoLooseBodyOfAnyLevelCreepsAtRest() {
     CHECK_MSG(asleep > bodies / 2, "most loose bodies are asleep at tick 420: " + std::to_string(asleep) + " of " + std::to_string(bodies));
 }
 
+// ---- the piles the original shows at rest ---------------------------------------------------------------------
+
+// 3-12's stone and small crate (game/data/resting.json): the original's stills at 2 and 8 seconds show them as the level places them, and
+// the engine cannot hold the pile (it creeps the crate off its ledge from tick 4), so the table puts both to sleep where they stand.
+void The312PileStartsAtRestAsTheOriginalsStillShowsIt() {
+    if (!LevelIsThere("level11b")) return;
+    const ScriptClock::Step step = LayerStep();
+    const auto place = [](Started& run, const char* node) {
+        return Units::ToPixels(run.registry.get<TransformComponent>(run.level.built.entities.at(node)).position);
+    };
+    const char* const kNodes[] = {"rolling_stone_1198", "crate_small_ent_1372"};
+    {
+        Started run;
+        if (!Start("level11b", run)) return;
+        glm::dvec2 from[2];
+        for (int i = 0; i < 2; ++i) {
+            from[i] = place(run, kNodes[i]);
+            CHECK_MSG(run.registry.get<RigidBodyComponent>(run.level.built.entities.at(kNodes[i])).isSleeping,
+                      std::string(kNodes[i]) + " starts asleep");
+        }
+        for (int tick = 1; tick <= 480; ++tick) Game::Tick(run.data, run.registry, run.level, 0.0f, step);
+        double worst = 0.0;
+        for (int i = 0; i < 2; ++i) {
+            worst = std::max(worst, glm::distance(place(run, kNodes[i]), from[i]));
+            CHECK_MSG(run.registry.get<RigidBodyComponent>(run.level.built.entities.at(kNodes[i])).isSleeping,
+                      std::string(kNodes[i]) + " is still asleep on tick 480");
+        }
+        std::printf("  3-12 with resting.json: the stone and the crate are %.4f units from where the level puts them on tick 480, asleep\n", worst);
+        CHECK_MSG(worst < 0.01, "the pile has not moved: " + std::to_string(worst));
+    }
+    {
+        // The control: the same level with an empty table. The crate leaves its ledge, so it is the table that holds the pile.
+        Started run;
+        std::string error;
+        const std::filesystem::path prisms = std::filesystem::temp_directory_path() / "supersonic-test-mp-timebase";
+        if (!Game::LoadData(kLevels + "/level11b.tscn", kData, prisms, run.data, error)) {
+            CHECK_MSG(false, error);
+            return;
+        }
+        run.data.resting.byLevel.clear();
+        CHECK_MSG(Game::Start(run.data, run.registry, run.level, error), error);
+        const glm::dvec2 crate = place(run, "crate_small_ent_1372");
+        for (int tick = 1; tick <= 120; ++tick) Game::Tick(run.data, run.registry, run.level, 0.0f, step);
+        const double moved = glm::distance(place(run, "crate_small_ent_1372"), crate);
+        std::printf("  3-12 with no table: the crate is %.1f units from its ledge on tick 120\n", moved);
+        CHECK_MSG(moved > 5.0, "without the table the crate is pushed off its ledge: " + std::to_string(moved));
+    }
+}
+
+// Something the pile is touched by wakes it as it would wake any sleeper: the player's own body walking into the crate, and a
+// body let fall on the stone.
+void ASleepingPileWakesWhenItIsTouched() {
+    if (!LevelIsThere("level11b")) return;
+    Started run;
+    if (!Start("level11b", run)) return;
+    const entt::entity crate = run.level.built.entities.at("crate_small_ent_1372");
+    auto& rigid = run.registry.get<RigidBodyComponent>(crate);
+    CHECK(rigid.isSleeping);
+    // The port moving it, as a portal's exit does: the engine reads a moved sleeper as a request to move.
+    run.registry.get<TransformComponent>(crate).position.x += 0.5f;
+    Game::Tick(run.data, run.registry, run.level, 0.0f, LayerStep());
+    CHECK_MSG(!rigid.isSleeping, "a crate the port moved is awake");
+}
+
+void AFileOfRestingBodiesIsReadAndRefusesWhatItCannotPut() {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-timebase-resting";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const std::filesystem::path file = dir / "resting.json";
+    const auto read = [&](const std::string& text, Resting::Rules& rules, std::string& error) {
+        std::ofstream(file, std::ios::binary) << text;
+        return Resting::LoadRules(file.string(), rules, error);
+    };
+    Resting::Rules rules;
+    std::string error;
+    CHECK_MSG(read(R"({"wake_reach_px": 2.0, "levels": {"levelx": {"bodies": ["a", "b"]}}})", rules, error), "a file with one level is taken: " + error);
+    CHECK_WITHIN(rules.wakeReachPx, 2.0, 0.0);
+    CHECK_MSG(rules.byLevel.count("levelx") == 1 && rules.byLevel.at("levelx").size() == 2, "and keeps its two bodies");
+    Resting::Rules refused;
+    CHECK_MSG(!read(R"({"wake_reach_px": 2.0, "levels": []})", refused, error), "levels that is not an object was taken");
+    CHECK_MSG(!read(R"({"wake_reach_px": 2.0, "levels": {"levelx": {"bodies": []}}})", refused, error), "a level with no bodies was taken");
+    CHECK_MSG(!read(R"({"wake_reach_px": 2.0, "levels": {"levelx": {"bodies": [""]}}})", refused, error), "a nameless body was taken");
+    CHECK_MSG(!read(R"({"wake_reach_px": 2.0, "levels": {"levelx": {"bodies": [3]}}})", refused, error), "a body that is not a name was taken");
+    CHECK_MSG(!read(R"({"levels": {"levelx": {"bodies": ["a"]}}})", refused, error), "a file with no wake_reach_px was taken");
+    CHECK_MSG(!read(R"({"wake_reach_px": -1.0, "levels": {"levelx": {"bodies": ["a"]}}})", refused, error), "a wake reach below zero was taken");
+    // Apply: a level that is not listed is untouched, a name the level did not build is refused.
+    entt::registry registry;
+    const entt::entity crate = registry.create();
+    registry.emplace<TransformComponent>(crate);
+    registry.emplace<RigidBodyComponent>(crate);
+    std::unordered_map<std::string, entt::entity> built{{"a", crate}};
+    CHECK_MSG(Resting::Apply(registry, rules, "levely", built, error), "an unlisted level is left alone");
+    CHECK(!registry.get<RigidBodyComponent>(crate).isSleeping);
+    CHECK_MSG(!Resting::Apply(registry, rules, "levelx", built, error), "a listed body the level did not build is refused");
+    registry.get<RigidBodyComponent>(crate).isSleeping = false;
+    built["b"] = crate;
+    CHECK_MSG(Resting::Apply(registry, rules, "levelx", built, error), "and both are put to sleep once built: " + error);
+    CHECK(registry.get<RigidBodyComponent>(crate).isSleeping);
+    registry.get<RigidBodyComponent>(crate).isKinematic = true;
+    CHECK_MSG(!Resting::Apply(registry, rules, "levelx", built, error), "a kinematic body is not a loose one");
+    std::filesystem::remove_all(dir, ec);
+}
+
+// WakeAround: what touches a body the port is about to move wakes, and what is further than the reach, or is not asleep, does not.
+void AWakeAroundBodyWakesWhatLiesOnIt() {
+    entt::registry registry;
+    const auto box = [&](double xPx, double yPx, bool asleep) {
+        const entt::entity entity = registry.create();
+        registry.emplace<TransformComponent>(entity).position = Units::ToWorld(xPx, yPx);
+        auto& shape = registry.emplace<BoxColliderComponent>(entity);
+        shape.size = glm::vec3(Units::ToMetres(30.0), Units::ToMetres(30.0), 1.0f);
+        auto& rigid = registry.emplace<RigidBodyComponent>(entity);
+        rigid.isSleeping = asleep;
+        return entity;
+    };
+    const entt::entity crate = box(0.0, 0.0, false);
+    const entt::entity onIt = box(0.0, -30.5, true);    // 0.5 units above the crate's top: touching
+    const entt::entity apart = box(0.0, -40.0, true);   // 10 units clear
+    const entt::entity awake = box(30.5, 0.0, false);   // beside it, awake already
+    Resting::Rules rules;
+    rules.wakeReachPx = 2.0;
+    // With no rules in the registry nothing wakes: a rig that never loaded resting.json is the engine's own.
+    CHECK_MSG(Resting::WakeAround(registry, crate) == 0, "no rules, no waking");
+    CHECK(registry.get<RigidBodyComponent>(onIt).isSleeping);
+    registry.ctx().insert_or_assign<Resting::Rules>(Resting::Rules(rules));
+    CHECK_MSG(Resting::WakeAround(registry, crate) == 1, "one sleeper lies on the crate");
+    CHECK_MSG(!registry.get<RigidBodyComponent>(onIt).isSleeping, "the body on the crate is awake");
+    CHECK_MSG(registry.get<RigidBodyComponent>(apart).isSleeping, "the body 10 units clear sleeps on");
+    CHECK(!registry.get<RigidBodyComponent>(awake).isSleeping);
+    CHECK_MSG(Resting::WakeAround(registry, crate) == 0, "and nothing is left to wake");
+}
+
 void runTests() {
     TheWorldsGravityIsTheOriginalsAtTheTicksRatio();
     BeforeStepWritesTheTicksOwnGravityAndAWeightlessLevelKeepsZero();
@@ -1015,6 +1181,10 @@ void runTests() {
     ABoxBuiltFromTheTableRestsAndSleeps();
     AnIdleLevelSevenAKeepsItsCratesAndItsDoorShut();
     NoLooseBodyOfAnyLevelCreepsAtRest();
+    The312PileStartsAtRestAsTheOriginalsStillShowsIt();
+    ASleepingPileWakesWhenItIsTouched();
+    AFileOfRestingBodiesIsReadAndRefusesWhatItCannotPut();
+    AWakeAroundBodyWakesWhatLiesOnIt();
 }
 
 } // namespace

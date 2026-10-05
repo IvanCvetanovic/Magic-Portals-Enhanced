@@ -149,6 +149,9 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Handle::LoadRules(portDataDirectory + "/handle.json", read.handle, error)) return false;
     // And what Enhanced's role table calls a hazard but the original does not.
     if (!Hazards::LoadRules(portDataDirectory + "/hazards.json", read.hazards, error)) return false;
+    // The piles the original shows at rest from its first frame (sim/Resting), by the level's file name.
+    if (!Resting::LoadRules(portDataDirectory + "/resting.json", read.resting, error)) return false;
+    read.levelName = std::filesystem::path(levelPath).stem().string();
     // The entities a boss adds that no level places (sim/Restock): read beside the
     // level, whose root lighting the table's scene takes, and built by no one until
     // a restock asks for one.
@@ -213,6 +216,8 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
 
     // The table every body's friction and restitution is read from, before the first body is built.
     registry.ctx().insert_or_assign<LevelBuilder::Materials>(LevelBuilder::Materials(data.materials));
+    // And the rest rules, which what the portals move away asks (Resting::WakeAround).
+    registry.ctx().insert_or_assign<Resting::Rules>(Resting::Rules(data.resting));
     if (noGravity) {
         UseNoGravity(registry);
     } else {
@@ -323,6 +328,10 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     // Chapter 4's boss. It places no body and reads five markers by name, so it
     // needs the scene and nothing the builder made.
     if (!DarkDragon::Find(data.scene, data.roles, data.darkDragon, out.darkDragon, error)) return false;
+
+    // The piles the original shows at rest, put to sleep where the level places them: after every body is built and wired,
+    // before a physics step has moved one.
+    if (!Resting::Apply(registry, data.resting, data.levelName, out.built.entities, error)) return false;
 
     // And the minions the markers ask for, built last: a minion is teleportable,
     // so it joins the portals' travellers the way what a launcher throws does -
