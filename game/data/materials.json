@@ -113,11 +113,15 @@
         "top corner at y 142) on every release tick of 4,242 replays (R3b round 4). MEASURED on this build (out/parity/program/R3b/fix1/grid3.py:",
         "the route's walk, the release tick scanned 125-260 at each value, 'won' = the player on the far side at the platform's level): the wedge",
         "lets go, and the held walk pushes the crate down flat into the slot, for EVERY release from tick 180 to 259 at a value of 0.079 to 0.082 (a",
-        "combined 0.281 to 0.286), and only on isolated ticks at any other value tried except 0 (0.01-0.075: 0 to 7 of 55; 0.083-0.2: 0 to 7 of 135;",
-        "0.0: 47 of 75, a crate that slides for ever, not taken). 0.08 is the plateau's middle. The cost of a combined 0.283 against the decoded 0.438:",
-        "the push is 1.89 u/tick (113 u/s) where the decoded pair would give 1.6, and a released crate slides a little further; a resting crate does not",
-        "creep (test_mp_timebase, NoLooseBodyOfAnyLevelCreepsAtRest: the same 106 asleep in the 128 levels). To be dropped when the engine's",
-        "friction solve is fixed and friction_applied goes true: the decoded 0.96 then applies to this entity as to every other."
+        "combined 0.281 to 0.286), and only on isolated ticks at any other value tried except 0 (0.01-0.075: 0 to 7 of 55 or of 135; 0.083-0.4: 0 to",
+        "11; 0.0: 47 of 75, a crate that slides for ever, not taken). 0.08 is the plateau's middle. So the value is a knife-edge in the friction, and",
+        "the window in the INPUT holds for a continuous push and for a pause from tick 180 on (once the crate's centre is over the edge); a pause",
+        "in the push before tick 180 wedges the crate again but on isolated ticks (the restart button recovers it). The cost of a combined 0.283",
+        "against the decoded 0.438: the push is 1.89 u/tick (113 u/s) where the decoded pair would give 1.6, and a released crate slides a little",
+        "further; a resting crate does not creep (test_mp_timebase, NoLooseBodyOfAnyLevelCreepsAtRest: 108 asleep in the 128 levels, the 106 of",
+        "before and 3-12's two). To be dropped when the engine's friction solve is fixed and friction_applied goes true: the decoded 0.96 then",
+        "applies to this entity as to every other, and 3-13 is re-flown (at the decoded combined 0.436 the route's walk reaches the far side on at",
+        "most 1 release tick of 75)."
       ]
     },
     {

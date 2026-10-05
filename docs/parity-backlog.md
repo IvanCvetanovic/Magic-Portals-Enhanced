@@ -2195,8 +2195,9 @@ whole build and wave 3a and 3b-1 are pushed together (`origin/main` is still `0b
       re-authored it on the stone's creep back from the wall (a win on tick 1386). R3b fix 1 established the creep's cause by a data edit of the run: the stone's
       decoded friction (0.025, mixing to 0.158 against the held floor) leaves it resting at x 30.1 for the 1,100 ticks that remain, so the creep is the HELD friction's
       traction (G10-14), and with the decoded friction applied the census moves four routes only (2-30 and the old 3-12 stop winning, 2-07 -1 tick, 1-09 +2). Not applied:
-      2-30 has no other route (the stone dropped on the right arm counterweights the plank left-up; the player walks up it to (143, 136) and off its raised end at x 134 into
-      the flame's circle on tick 264 - the leap that is 0.4 u short, G10-2). Open; the owner's to rule on (planning step 152's amendment, 3).*
+      2-30 has no other route under the shipped air brake (the stone dropped on the right arm counterweights the plank left-up; the player walks up it to (143, 136) and off its raised end at x 134 into
+      the flame's circle on tick 264 - the leap that is 0.4 u short). DIAGNOSTIC, data edits for the run: that same walk WINS on tick 278 with `air_decay` 1.0 and with `air_decay_fps`
+      30 or 45, and dies at 0.93 and at the shipped 0.86, so the designed solution exists and G10-2's matched rate is what stops it. Open; the owner's to rule on (planning step 152's amendment, 3).*
 - [ ] **R3-3. 2-32's route runs ahead of the view for its last 194 ticks** (2525-2718, up to 293 u past the right edge; the
       dragon's camera, 45 u/s, shows the door at x 2554 only from about tick 3126, extrapolated). The original has no rule against
       it (ETHCallback_dragon_claw takes only what lies left of the view and never the player; AutoCameraController follows the
