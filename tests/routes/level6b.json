@@ -13,19 +13,26 @@
     "first landed on 347), knight A goes through on tick 591 (it was ~575) and still finds the pair, and the",
     "tap on the player waits for the third shot's landing on 672: 644 became 676, the walk right 655 became",
     "687. Won on tick 732. Every tap 3 ticks either way wins; the two walks left are tight to the tap on",
-    "the player at x 81, as they were."
+    "the player at x 81, as they were.",
+    "Re-authored on wave 3b-2's build (R3c, round 1: the knights see and shoot, planning steps 158-159; the stone's kill, step",
+    "160). The portals of this route are gone, and so is the long wait at x 81: a portal anywhere in a knight's row ahead of it",
+    "is sighted and shot, and the old wait stood in knight B's view (it faces left from tick 635). A knight sees only the three",
+    "128-unit buckets of its row that it FACES, and A (the lane's right end) and B (its left end) both face right from the",
+    "start: A from its first walk (tick 75) until it turns at its hold's end on tick 405, B from tick ~5 until 405 (B holds at",
+    "x 138.6 from tick 30; C, on the ledge, is in row 1 and faces right until 235). So the route walks left along the top",
+    "floor and drops to the lane at x 89.6 (tick ~150) BEHIND both knights, and walks right along the lane to the door, reached",
+    "from behind A's back too (A holds at the lane's end, 11 units before the door): no knight ever has him in its cone (the log has no 'spots' line) and nothing shoots. Knight",
+    "B stands in the lane, so the player pushes it along in front of him (the knights are solid: the player slows from 2.4 to",
+    "1.7 units a tick, B is pushed ahead at his speed with its brake on); the door is reached on tick 351, 54 ticks before A and",
+    "B turn round (a walk begun on tick 300 is sighted by A as it turns on 410 and killed on 456; one begun on 430, on 506). The",
+    "stone (404, 112), the button and the lift door are untouched. Every walk edge 3 ticks either way wins."
   ],
   "level": "level6b",
-  "win_by": 760,
+  "win_by": 380,
   "holds": [
     {"walk": "left", "from": 1, "to": 75},
     {"walk": "left", "from": 125, "to": 135},
-    {"walk": "right", "from": 687, "to": 900}
+    {"walk": "right", "from": 160, "to": 400}
   ],
-  "taps": [
-    {"tick": 299, "at": [230, 200]},
-    {"tick": 352, "at": [282, 310]},
-    {"tick": 619, "at": [275, 298]},
-    {"tick": 676, "at": [81.0, 298.3]}
-  ]
+  "taps": []
 }

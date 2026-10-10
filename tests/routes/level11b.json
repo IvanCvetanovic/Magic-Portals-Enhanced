@@ -1,92 +1,35 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-12, re-authored on the wave 3b-1 build with the level's start as the original shows it (R3b fix 1: game/data/resting.json puts the stone and the small",
-    "crate to sleep where the level places them, the stone cradled between the crate's corner and the column's, as the library stills at 2 and 8 seconds",
-    "show them; the route it replaces stood on the pair being pushed apart from tick 4, which the engine's solver does and the original does not).",
-    "Right off the spawn block to the floor (lands at x 67 on tick 31). A portal at (20, 200) (tap 33, in place about tick 100: the crate's exit, far to the left",
-    "of the player), a shot at anti_portal_agent_ent_1377 (196, 164) (tap 66: it kills the agent and antiportal_1376 with it), and a portal beside",
-    "crate_small_ent_1372 at (125, 113) (tap 105): the crate goes through to (20, 200) and falls to the floor at the left wall, the pair goes with it, and the",
-    "stone, with nothing under its left side, is woken by the crate leaving (Resting::WakeAround), rolls left along the ledge, falls at x ~90 and rolls right to",
-    "rest at (152, 226) against the block at x 182. A portal at (335, 115) (tap 147, in place about tick 235) and one over the resting stone at (152, 190)",
-    "(tap 266: the stone's top is at 196): the stone comes out of the first at rest at (335, 115), already touching the left end of breakable_wall_ent_1368",
-    "(a horizontal slab, x 339 to 465, y 129 to 159), which breaks (demolish.json: a stone breaks what it touches), and it falls on to the keyhole's platform.",
-    "A portal at (415, 155) in the slab's place (tap 298, a 100-tick flight, outside antiportal_1533's 42 px) and one on the player at (59.2, 236) (tap 411):",
-    "down on to the key's shelf at x 415, left to take the key (tick ~432) and to the shelf's end (the walk ends 447 to 467 so that the player drops",
-    "on to the keyhole's platform beside the stone, not on it), where the key goes into the keyhole (tick ~520) and the yellow door goes (~570); right from",
-    "574 to 594 into the door. The knights never see or shoot (G1, not built). 7 shots, none failed.",
-    "Windows (the others fixed, win kept): the walk's first start 1-9 (its end 10-30), the left walk 408-428 to 447-467, the right walk 574-594 to 694-714;",
-    "the taps 25-40, 59-72, 99-111, 141-157, 256-271, 292-304, 405-421. Each tap waits a few ticks past the 26-tick rule and the flight before it.",
-    "Won on tick 624."
+    "3-12, re-authored on the wave 3b-2 build (R23's tap-time ray, G1a's sight, G1b's shot, STK: a rolling stone that begins to touch the player fast enough kills him). The route it replaces stood at x 67 below the stone's fall,",
+    "where the stone now kills him (tick 200), and counted on the stone being turned right by his body. Right off the spawn block to the floor (lands at x 67 on tick 31), left on the floor to x 45.2 (32-40: the stone falls at x ~88 and a player",
+    "from x 47.6 right is struck by it; the small crate lies against the wall at x 20). A portal at (20, 205) (tap 32, in place on 43: the crate's exit), a shot at anti_portal_agent_ent_1377 (196, 164) (tap 61: it kills the agent and antiportal_1376",
+    "with it on 101), and a portal beside crate_small_ent_1372 at (125, 113) (tap 104, through on 144): the crate goes to (20, 205) and falls to the floor, and the stone, with nothing under its left side, is woken by the crate leaving",
+    "(Resting::WakeAround), rolls left along the ledge, falls at x ~88 (lands on 210) and creeps right at 0.2 u/tick, between the player and knight minion_spawn_908: that knight stands at x 129 until its hold ends on ~375 and sees nothing past the stone",
+    "(the sight ray meets every body but the knights' and the player's). A portal at (335, 115) (tap 146, in place on 238, a 91-tick flight) and one over the resting stone (tap 256, aimed at (152, 190): the ray ends on the stone's flank and the portal",
+    "opens at (88, 201) after the head-height retry): the stone comes out of the first at rest at (335, 115), touching breakable_wall_ent_1368, which breaks on 269, and falls to the keyhole's platform, where it crushes",
+    "knight minion_spawn_913 on 302 and rolls on to the locked door (x 324.6). A portal at (415, 155) in the slab's place (tap 302: the stone has cleared the line from about 293; a 111-tick flight, in place on 414) and one on the player at",
+    "(45.2, 238.4) (tap 418, through on 420): down on to the key's shelf at x 415, left to take the key (436) and off the shelf's end (the walk ends 456 to 459) on to the stone's right shoulder, from which he slides to the platform at x 346",
+    "beside it (the stone is pushed left to x 291), the key goes into the keyhole (552) and the yellow door goes (602); right from 560 into the door. The stone's rest decides this: a portal over it before the first one is in place (tap 4 before 239)",
+    "is refused, and any from 240 to 266 wins. Knight minion_spawn_908 spots him on 377 (his hold at x 129 ends and he looks left) and fires on 418, two ticks before the self portal takes the player up; the shot ends on 452 and he is out of its way.",
+    "7 shots, none failed. Windows (the others fixed, win kept): the walk's first end 12-28, the floor walk's start 31-32 and end 40-41 (x 45.2 or 42.8), the taps 25-35, 58-65, 100-107, 143-165, 240-266, 292-307, 413-424,",
+    "the left walk's start 427-430 and end 456-459, the right walk's start 520-623. Won on tick 639."
   ],
   "level": "level11b",
-  "win_by": 636,
+  "win_by": 661,
   "holds": [
-    {
-      "walk": "right",
-      "from": 1,
-      "to": 20
-    },
-    {
-      "walk": "left",
-      "from": 418,
-      "to": 457
-    },
-    {
-      "walk": "right",
-      "from": 584,
-      "to": 704
-    }
+    {"walk": "right", "from": 1, "to": 20},
+    {"walk": "left", "from": 32, "to": 40},
+    {"walk": "left", "from": 428, "to": 458},
+    {"walk": "right", "from": 560, "to": 700}
   ],
   "taps": [
-    {
-      "tick": 33,
-      "at": [
-        20,
-        200
-      ]
-    },
-    {
-      "tick": 66,
-      "at": [
-        196,
-        164
-      ]
-    },
-    {
-      "tick": 105,
-      "at": [
-        125,
-        113
-      ]
-    },
-    {
-      "tick": 147,
-      "at": [
-        335,
-        115
-      ]
-    },
-    {
-      "tick": 266,
-      "at": [
-        152,
-        190
-      ]
-    },
-    {
-      "tick": 298,
-      "at": [
-        415,
-        155
-      ]
-    },
-    {
-      "tick": 411,
-      "at": [
-        59.2,
-        236
-      ]
-    }
+    {"tick": 32, "at": [20, 200]},
+    {"tick": 61, "at": [196, 164]},
+    {"tick": 104, "at": [125, 113]},
+    {"tick": 146, "at": [335, 115]},
+    {"tick": 256, "at": [152, 190]},
+    {"tick": 302, "at": [415, 155]},
+    {"tick": 418, "at": [45.2, 238.4]}
   ]
 }

@@ -18,7 +18,15 @@
     "the ledge at (40, 142.5) from 215, the camera settled by 249; the burn shot at (239.36, 158.34) on 249 is burned on 257 at",
     "(86.3, 146.2) and its fireball (2.08 a tick) bursts on the barrels on ~292, the wall is gone on 295. Then the pit",
     "portal (180, 168) on 296 (opens on ~334), the player's point on 337 and left from 345: down the pit, out of the",
-    "broken wall, into the door. Won on tick 396."
+    "broken wall, into the door. Won on tick 396.",
+    "Re-authored on the wave 3b-2 build (R3c round 1: the reflector's catch and the tap-time ray): reflect_agent_1191 (26, 86) now catches a",
+    "shot whose position comes within 32 units of it, so the third shot, toward (40, 75), was turned on tick 191 and flew on as a",
+    "long reflected leg (the tap at 201 was refused, hourglass). The same shot is aimed at (62, 75), 36 units from the reflector, so",
+    "that its last sample (3.2 units past the point) is still outside the 32; it opens on 190 and the player comes out at (62, 80) and",
+    "lands on the ledge at x 62, 38 units from the flame (reach 32): x 56 to 66 all do (70 and more burn the",
+    "player on the way down). The burn shot from (62, 146.4) toward (239.36, 158.36) is burned on 252 at (90.3, 148.4), on the same line as before. Every other tap and walk is as before (the portal is open from 190 now, the player's own",
+    "shot stays on 201): won on tick 397. Each tap's window to win_by 420 (the others as they are; a + is past the 8 ticks tried): 25-29,",
+    "77-79, 105-113+, 193-209+, 241-257+, 288-304+, 329-345+."
   ],
   "level": "level15a",
   "win_by": 420,
@@ -28,7 +36,7 @@
   "taps": [
     {"tick": 27, "at": [176, 145]},
     {"tick": 79, "at": [288, 120]},
-    {"tick": 105, "at": [40, 75]},
+    {"tick": 105, "at": [62, 75]},
     {"tick": 201, "at": [351, 90.3]},
     {"tick": 249, "at": [239.36, 158.34]},
     {"tick": 296, "at": [180, 168]},

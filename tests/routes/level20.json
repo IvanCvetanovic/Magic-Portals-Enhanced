@@ -1,20 +1,25 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-21, won by killing the anti-portal agent (step 126, R17; re-authored in round 3 on the timing group's build). Right",
+    "1-21, won by killing the anti-portal agent (step 126, R17; re-authored in round 3 on the timing group's build, and in wave 3b-2's route phase on the build with G9's reflector). Right",
     "to x 278; a shot at (250, 300) passes within 22.4 of anti_portal_agent_ent_824 (244, 300) and kills it with",
     "antiportal_822 (tick 87, 37 ticks of flight, G4); the same tap again opens a portal over the left block (tick 141),",
     "and one on the player (tick 142) puts it there. Left to the column; a portal in the shaft at (252, 200), at the",
     "standing height of single_block_plat_ent_828's top (the air brake, G10, carries a portal's exit no further than 15",
     "units, so the old (242, 200) now drops the player past the block's corner), and one on the block ahead (246, 330):",
     "walking right through the second, the player comes out of the first onto the block and walks on to press button_829",
-    "(tick 320); door_lift_831 rises the whole way on its one press (3000 ms). Left along the block to x 266: a portal high",
-    "in the shaft at (230, 142) was shot from the button (tick 333), a portal low at (240, 250) is shot from here (tick",
-    "363, from the block, because the ray from the button to it meets the block). Left off the ledge, down into the low",
-    "one, and out of the high one moving up: at the top of that bounce (tick 397) a shot through the lift door's opening",
-    "into the room at (330, 100), aimed 7.9 px off (the camera moved while the finger was down). Down onto the block; one",
-    "on the player (tick 428): out of the room's portal onto the shelf, and along it to the door. Won on tick 486 (487",
-    "before the idle hold)."
+    "(tick 320); door_lift_831 rises the whole way on its one press (3000 ms).",
+    "G9 (step 157): reflect_agent_826 at (206, 142) turns any shot one position sample of which is within 32 of it, and one fired from",
+    "within 32 on the spot. The old high portal (230, 142) was 24 from it and the old top of the bounce (x 235) 29: that shot was turned (its",
+    "new leg was still in the air at the next tap, on 362: the hourglass), and the shot into the room would be turned back. Now: left along",
+    "the block to its edge (342-358), x 261.4, and the high portal shot from there to (247, 142) (tick 360; no head-height retry, the ray ends",
+    "at the tap's point; it lands at (245.2, 142.1), 39 from the reflector; placed 374), then the low one at (240, 250) 25 ticks later (the",
+    "400 ms; tick 387, placed 396). A three-tick step off the ledge (400-403) and then no hold: down into the low portal (tick 407), out of the high one",
+    "at (245.2, 143.8) moving up, to the top (tick 412, (243.9, 133.6); 38 from the reflector at the shot's tick, 6 outside its circle). There a shot through",
+    "the lift door's opening into the room, aimed 5.3 px off (the camera moved while the finger was down), to (329.2, 94.7) (tick 414, placed 438).",
+    "Down the shaft onto single_block_plat_ent_827 (tick 436), where he stands; one on the player (tick 443): out of the room's portal at",
+    "(329.2, 96.7) and along the shelf to the door. Won on tick 498. The room shot's tick is good for -1 to +3, the first walk-off (400-403)",
+    "and the shots 359 and 386 for +-1 or 2; the walk 342-358 is the knife-edge it always was (its end -2 or its start -1 walks off the block)."
   ],
   "level": "level20",
   "win_by": 540,
@@ -23,8 +28,8 @@
     {"walk": "left", "from": 153, "to": 178},
     {"walk": "right", "from": 299, "to": 330},
     {"walk": "left", "from": 342, "to": 358},
-    {"walk": "left", "from": 385, "to": 430},
-    {"walk": "right", "from": 440, "to": 500}
+    {"walk": "left", "from": 400, "to": 403},
+    {"walk": "right", "from": 452, "to": 540}
   ],
   "taps": [
     {"tick": 49, "at": [250, 300]},
@@ -32,9 +37,9 @@
     {"tick": 142, "at": [277.7, 458.3]},
     {"tick": 232, "at": [252, 200]},
     {"tick": 268, "at": [246, 330]},
-    {"tick": 332, "at": [230, 142]},
-    {"tick": 362, "at": [240, 250]},
-    {"tick": 396, "at": [330, 100]},
-    {"tick": 427, "at": [201.1, 322.5]}
+    {"tick": 359, "at": [247, 142]},
+    {"tick": 386, "at": [240, 250]},
+    {"tick": 413, "at": [330, 100]},
+    {"tick": 442, "at": [242.3, 322.5]}
   ]
 }

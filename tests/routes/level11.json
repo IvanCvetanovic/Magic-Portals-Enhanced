@@ -1,19 +1,22 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-12, re-authored on the time-base build (wave 3a round 1 and 3b-1: the floored script clock, the decoded walk, the shot at 200 u/s, the shorter capsule) for antiportal_574's 32 x 2.5 = 80 px (step 127, R1), which holds the block by the gap.",
+    "1-12, re-authored on the time-base build (wave 3a round 1 and 3b-1: the floored script clock, the decoded walk, the shot at 200 u/s, the shorter capsule) for antiportal_574's 32 x 2.5 = 80 px (step 127, R1), which holds the block by the gap. Wave 3b-2 round 1: only the last tap (420 -> 454) and the walk to the door moved, for G9's longer leg.",
     "Each portal pair is a far shot and a shot on the player, 26 ticks apart (the 400 ms between taps is 25 ticks of 16 ms, refused) and never while a shot flies; every tap here waits three ticks past that, so each can move two ticks earlier or three later alone and still win.",
     "A portal over the left platform's end at (300, 160) (a 65-tick flight, in place on tick 95), one on the player (tap 98, through on 100): he lands on the platform's end at (300, 207) and stays. A portal on the floor between the stub and the block at (380, 205)",
-    "(in place on 147), one on the player (158, through on 160). From there a shot up past the block's corner toward (459.8, 36.7) comes within 16 of reflect_agent_623 (422, 115), horizontal (reflected on 208), and its mirrored leg passes 21 px from",
-    "anti_portal_agent_ent_599 (464, 184): the agent and antiportal_574 go on tick 220, 32 ticks after the tap (the old route's next tap came 30 after it and found the shot still flying). A portal on the block at (410, 150) (in place on 237), one on the player",
-    "(253, through on 255). A portal on the ramp at (600, 190), under the hanging column (a 54-tick flight, in place on 337), one on the player (340, through on 342); he stands on the ramp at (599, 188). A shot at the top of the view, (644.4, 2), comes within 16 of reflect_agent_675 (638, 26)",
-    "and lands mirrored over the post at (645, 81) on tick 417: one on the player on tick 420 (through on 422), down onto the post, right from 430 off it into the door. The self taps are aimed at where the player stands (his centre is 3.9 units lower than before: y 206.4 on the floor).",
-    "11 shots, none failed. Won on tick 461."
+    "(in place on 147), one on the player (158, through on 160). From there a shot up past the block's corner toward (459.8, 36.7) comes within 32 of reflect_agent_623 (422, 115), horizontal (reflected on 203, the leg flying on from the reflector), and its mirrored leg passes 21 px from",
+    "anti_portal_agent_ent_599 (464, 184): the agent and antiportal_574 go on tick 215, 27 ticks after the tap (the next tap, 223, comes after it). A portal on the block at (410, 150) (in place on 237), one on the player",
+    "(253, through on 255). A portal on the ramp at (600, 190), under the hanging column (a 54-tick flight, in place on 337), one on the player (340, through on 342); he stands on the ramp at (599, 188).",
+    "A shot at the top of the view, (644.4, 2), comes within 32 of reflect_agent_675 (638, 26), horizontal (reflected on 406; G9: a position sample within 32, the new leg flying on from the reflector for the whole way",
+    "the shot came, 166 px): the leg is the player's own spot mirrored in x about the reflector, and its portal opens at (677.6, 188) on tick 450, 44 ticks on, where the old leg of 80 px ended over the post at",
+    "(645, 81) on 417. One on the player on tick 454 (the shot of 371 flies until 450: a tap before it is refused, any from 450 to 480 wins within win_by; through on 455), he comes out at (677.6, 188), falls to the floor",
+    "and walks right from 462 (any start from 455 to 489 wins) into the door. The self taps are aimed at where the player stands (his centre is 3.9 units lower than before: y 206.4 on the floor).",
+    "11 shots, none failed. Won on tick 473."
   ],
   "level": "level11",
   "win_by": 500,
   "holds": [
-    {"walk": "right", "from": 430, "to": 500}
+    {"walk": "right", "from": 462, "to": 530}
   ],
   "taps": [
     {"tick": 29, "at": [300, 160]},
@@ -26,6 +29,6 @@
     {"tick": 283, "at": [600, 190]},
     {"tick": 340, "at": [410.0, 154.4]},
     {"tick": 370, "at": [644.4, 2]},
-    {"tick": 420, "at": [599.2, 188.4]}
+    {"tick": 454, "at": [599.2, 188.4]}
   ]
 }

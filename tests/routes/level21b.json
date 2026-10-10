@@ -1,8 +1,7 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-22 (R1 fix 1, re-flown on the timing build, wave 3a round 1, and re-solved on the time-base group's build, wave 3b-1",
-    "round 1, by another way to the key): the key floats at (490, 106), 44 px from antiportal_1673's centre (scale 4.5, 144 px at",
+    "3-22 (R1 fix 1, re-flown on the timing build, wave 3a round 1, re-solved on the time-base group's build, wave 3b-1 round 1, and re-timed in wave 3b-2's route phase, on the build with the knights' sight and shot, G1a and G1b): the key floats at (490, 106), 44 px from antiportal_1673's centre (scale 4.5, 144 px at",
     "32 x scale), so no portal opens near it; every portal here is 168 px or more from the ring. THE FLING: on this build the",
     "seesaw raises the knight no higher than y 148 whatever the player drops from (a fall 40 u deeper moves it 4 u): the arm stops",
     "at its horizontal limit (motor_seesaw is limited to 0 .. 1.57 from its placed 0.33) and the knight's pickup point is then",
@@ -15,32 +14,43 @@
     "enters it by overlap and comes out over the arm (261), falls 130 u onto its left end (281, impact 2.39) and the knight is",
     "thrown to y 74 and takes the key at (490, 104.5) on 288; the stone falls off the level (333). The start is as before: a portal",
     "at (170, 40) (tap 29) and one on the player (95): onto the left platform (97), where the first shot waits; left off its end",
-    "(140-170) onto the lone block (crystals on 170). The knight comes down on the arm's right end (324, 479), waits there for its",
-    "hold and walks right with the key at about 880: keyhole_ent_1690 opens on 953 (door_unlocked), the key is spent on 995 and",
-    "the yellow door goes. The player then drops once, as the old route did: a portal at (285, 105) (tap 724, placed on 775) and",
-    "one below the block's right edge at (165, 225) (806, placed on 830): he walks off the block's right end (799-806, 824-844),",
-    "falls into the low one and rises out of the high one (837), falls back onto the arm's left end, which tips under him, and",
-    "walks right at once (873-): up and over the pivot as the arm swings back, along the floor and into the door. Won on tick 1181",
-    "(1470 before). The drop wins on its own clock (the whole of it, from the tap at 724, moved by -30 to +30 ticks wins on",
-    "ticks 1180 to 1206: the door's opening is the limit) and every parameter of the route is good for +-1 tick (7 of the 56",
-    "+-3 variants die on the seesaw or fall). The old knife-edge walk 428-430 is gone with the old first fling. Leans on the",
-    "port's traversal by body overlap for the stone (its centre is 38 px from that portal), G1 (the knight never sees or shoots),",
-    "G10 (the walk) and G4 (a shot flies 10 to 60 ticks)."
+    "The knight lands, takes the key and stands at (510.1, 220.7) from about tick 510 to 885: wayB1's hold is 10000 ms, and G1a gives it a",
+    "look (60 degrees each side, three 128-unit buckets along its facing - left, here - in its own row y 128..255) that a sighting",
+    "stands still: the old drop, which put the player on the arm's left end in that row on 862, was spotted there and the knight never left",
+    "(it fell off the level on 947). So the player waits on the lone block, in bucket 0 (x 104.8, outside the three), and the whole drop",
+    "is 40 ticks later: a portal at (285, 105) (tap 764, placed on 815) and one below the block's right edge at (165, 225) (846, placed on 870):",
+    "he walks off the block's right end (839-846, 864-884), falls into the low one and rises out of the high one (877) above the knight's row",
+    "(y 76 to 51), and comes down onto the arm's left end (905) after the knight has walked right with the key since 886, its back to him.",
+    "He waits there to 929 and walks right: up and over the pivot as the arm swings back, along the floor. keyhole_ent_1690 opens on 959",
+    "(door_unlocked) and the key is spent on 1001. The knight stands at wayB0 (600.7) from 980, turned back along the floor: it sees him on",
+    "1010 (the exclamation; he is at x 458.7, 142 off, the arm no longer between them). Its shot is due once 650 ms of the sighting have gone",
+    "(1000 ms with him within 42 units, 3650 while the knight itself moves) and 2000 ms since its last shot. He runs on without stopping,",
+    "is within 42 units at about tick 1050 (x 559, 41.7 off; the 650 ms are up on 1051) and touches it on 1061 (its hold is capped to 1000 ms",
+    "and it walks on, pushed ahead of him), so the gate never opens: no knight shot is made in the run (one sighting, the player's, and no",
+    "portal seen). The yellow door goes on 1051. Along the floor to the door: won on tick 1219.",
+    "THE KNIGHT IS PASSED BY A RUSH, NOT UNSEEN, AND ON A KNIFE-EDGE: on the floor there is no other way to the door past it, the walk from",
+    "the sighting to 'within 42 units' is shift-invariant (the run stays 1 tick inside the far gate whatever the start), and a pause of 1 to 3",
+    "ticks in the walk anywhere from 1021 to 1048 is shot (measured on this file: 12 pauses, 12 shots). The last walk's start is free from 905",
+    "to 973 (nine starts tried) and 901 and earlier is shot at once; the drop's taps and the first walks are good for +-2 or 3 ticks (22",
+    "variants); the drop and the last walk moved together by 24 to 110 ticks later than the old one wins (24, 26, 28, 30, 40, 50, 60, 70, 90",
+    "and 110 tried; 20 is spotted at the knight's hold, on 882, and it never leaves; 22 fails as well). Leans on the port's traversal by body overlap for",
+    "the stone (its centre is 38 px from that portal), G1a and G1b (the knight's look and gate), G10 (the walk) and G4 (a shot flies 10 to 60",
+    "ticks)."
   ],
   "level": "level21b",
-  "win_by": 1210,
+  "win_by": 1255,
   "holds": [
     {"walk": "left", "from": 140, "to": 170},
-    {"walk": "right", "from": 799, "to": 806},
-    {"walk": "right", "from": 824, "to": 844},
-    {"walk": "right", "from": 873, "to": 1484}
+    {"walk": "right", "from": 839, "to": 846},
+    {"walk": "right", "from": 864, "to": 884},
+    {"walk": "right", "from": 929, "to": 1540}
   ],
   "taps": [
     {"tick": 29, "at": [170, 40]},
     {"tick": 95, "at": [388, 34.3]},
     {"tick": 125, "at": [285, 40]},
     {"tick": 215, "at": [258, 205]},
-    {"tick": 724, "at": [285, 105]},
-    {"tick": 806, "at": [165, 225]}
+    {"tick": 764, "at": [285, 105]},
+    {"tick": 846, "at": [165, 225]}
   ]
 }

@@ -11,19 +11,28 @@
     "a tick after its 24-unit jump and a tap needs 26 ticks after the one before it, so the portal on the",
     "block waits for the second burn's tap (218; lands 252), the self-tap follows (253), the far shot to",
     "(400, 190) from the block (372 units: 109 ticks, tap 282, lands 392) and its self-tap on 394.",
-    "Won on tick 414 (step 134: 393)."
+    "Won on tick 414 (step 134: 393).",
+    "Re-authored on wave 3b-2's build (R3c, round 1): the shot's destination is now the tap-time ray's finalPos",
+    "(R23, step 156), and crate_no_emissive_938 is still a body while it burns (until tick 321), so the far shot",
+    "to (400, 190) from the block, tapped on 282, ended at (324.9, 180.3) by a body (portal_fail) and the pair",
+    "never formed. It waits for the crate to be gone: tap 330 (the earliest that flies to (400, 190) is ~320),",
+    "landing on 440; the portal on the block waits only for the 26 ticks after the second burn (216, lands",
+    "250) and the self-tap follows on 253; the last self-tap is 442 (two after the landing), the walk right 445.",
+    "The two shots at the flame are burned in flight by it, as the route means (the fireballs burn 937 and 938).",
+    "Won on tick 463. Every tap and walk edge 3 ticks either way wins bar the later side of a shot whose follower",
+    "waits on its landing (tap 216 +3) and the earlier side of a tap held by the 26 ticks (216 -3, 189 +3)."
   ],
   "level": "level9a",
-  "win_by": 450,
+  "win_by": 485,
   "holds": [
-    {"walk": "right", "from": 397, "to": 450}
+    {"walk": "right", "from": 445, "to": 520}
   ],
   "taps": [
     {"tick": 29, "at": [354, 192]},
     {"tick": 189, "at": [354, 192]},
-    {"tick": 218, "at": [32, 138]},
+    {"tick": 216, "at": [32, 138]},
     {"tick": 253, "at": [143, 202.3]},
-    {"tick": 282, "at": [400, 190]},
-    {"tick": 394, "at": [32, 138.3]}
+    {"tick": 330, "at": [400, 190]},
+    {"tick": 442, "at": [32, 138.3]}
   ]
 }

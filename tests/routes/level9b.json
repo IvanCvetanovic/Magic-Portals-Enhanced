@@ -34,20 +34,38 @@
     "knight goes on 590 (580 to 630 win), aimed at (277, 335): the knight at rest is 15 u to its right; a shot to x 287 or",
     "more ends against his body, and he does not go through below x 275. It opens on 640 and the knight goes through at",
     "once, lands by the keyhole with the key (unlocked 647; the keyhole and door_locked_ent_1195 gone on 739). Right from",
-    "660 (640 to 670 give the same win), into the door. Won on tick 804."
+    "660 (640 to 670 give the same win), into the door. Won on tick 804.",
+    "Re-flown for wave 3b-2's build (R23 the tap's destination, G1a/G1b the knights see, shoot and are crushed, STK), the same four",
+    "portals and the same lift, but a different solution. The stone may no longer come out over the knight: knight B stands on the wall's",
+    "left end at (276.6, 128.4) from tick ~290, and a stone dropped at x 285 crushes it (a stone's hit above 1.23 kills a knight, G1b: the",
+    "key stays in the air where it died). So the wall portal is aimed at the wall's right half, at (340, 30), on a line from the lift's top",
+    "that still clears single_block_plat_1275 (tap 342 to 380 win; 362 here, the shot flies 70 ticks and opens on 434), and the stone",
+    "shot at (65, 96) goes on 450 (434 to 458 and 462 to 508 win): the stone comes out at (340, 30) and breaks the wall on 483 (hit 4.3),",
+    "clear of the knight. The lift goes down on 460 (425 to 447 and 453 to 477 win); the keyhole shot to (32, 265) on 565 (548 to 594 win;",
+    "sooner the lift is in its way and the shot fails, no keyhole portal opens) and the shot at (277, 335), where the knight will fall,",
+    "on 620 (592 to 696 win). The knight does NOT fall when its wall goes: it hangs at (276.6, 128.4) with its floor destroyed until its",
+    "15 s hold ends (tick ~1215), where the original's Box2D wakes a body whose floor is destroyed (b2Contact.cpp:105-109) and this port",
+    "wakes a sleeper only for a portal's traveller (sim/Resting) - a port gap, observed, not the route's idea; the route waits it out.",
+    "Then the knight walks on, falls through the portal at (277, 335) (1249) and out of the one at (32, 265), lands by the keyhole (1281), and",
+    "its key opens it (1320), the door going on 1370. The player waits on the lift's foot or a few steps right of it (the hold to 684",
+    "leaves him at x ~170; at x 258 or more the knight's fall lands on him and he dies on ~1374): a knight in his row sees him on its",
+    "landing (spots 1276), shoots on 1317, and the shot, 2 u a tick to where he stood, ends there on 1386; he walks right from 1320",
+    "(1225 to 1355 win; earlier he is under the knight's fall and dies on 1330-1350), 2.4 u a tick, ahead of a shot at 2.0 and gone from",
+    "the spot when it ends, on to the stone against the door, which he pushes ahead when the door goes (1370), into the door on 1435."
   ],
   "level": "level9b",
-  "win_by": 825,
+  "win_by": 1460,
   "holds": [
     {"walk": "left", "from": 30, "to": 196},
-    {"walk": "right", "from": 660, "to": 825}
+    {"walk": "right", "from": 660, "to": 684},
+    {"walk": "right", "from": 1320, "to": 1460}
   ],
   "taps": [
     {"tick": 200, "at": [100, 318], "shot": false},
-    {"tick": 370, "at": [285, 55]},
-    {"tick": 428, "at": [65, 96]},
-    {"tick": 446, "at": [100, 160], "shot": false},
-    {"tick": 545, "at": [32, 265]},
-    {"tick": 590, "at": [277, 335]}
+    {"tick": 362, "at": [340, 30]},
+    {"tick": 450, "at": [65, 96]},
+    {"tick": 460, "at": [100, 160], "shot": false},
+    {"tick": 565, "at": [32, 265]},
+    {"tick": 620, "at": [277, 335]}
   ]
 }

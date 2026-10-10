@@ -1,24 +1,26 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-11, re-authored on the time-base build (wave 3a round 1 and 3b-1: the floored script clock, the decoded walk and fall, the shot at 200 u/s, the shorter capsule), and by the way the level seems made for, a fireball through the pair (step 135: it goes through a placed",
-    "pair once and flies on back the way it came; a fireball a flame makes of a shot never kills the player). The crate sealing the door's room is a static burnable body, so it cannot be pushed; the flame (fire_agent_ent_930, 146, 200) makes a fireball of any",
-    "shot that passes within 32 px of it, heading as the shot did. Left to x 357 (ticks 1-25) and a portal at (95, 191) between the slab's tip, the platform's corner and the flame, shot from the platform so that its way passes 37 px from the flame (tap 28, in",
-    "place on 120). The standing x is the one thing this route has no room in: the player is 3.9 units lower now, so the line to (95, 191) clears the platform's left corner only from x 357.0 or 354.6 (a walk stops on multiples of 2.4: 359.4 ends on the",
-    "corner at (327, 64), 352.2 and left graze the slab's corner at (198, 132)); any tap from tick 26 to 31 does the same. Left off the platform's end (36-60: he lands at x 297 on tick ~70); a second portal on the floor at (255, 200),",
-    "43 px from him (tap 120, in place on 130; any tick from 116 to 125 wins on 355). A shot left along the floor at (140, 200) (150; any from 144 to 200) is burned by the flame into a fireball heading left (176); it goes into the portal at (95, 191) and comes out of",
-    "(255, 200) flying back right, past the player, and bursts on crate_no_emissive_937 (it burns from tick 241 and is gone on 304). Right from 297 (any start from 250 to 340 wins within win_by), into the door. Won on tick 355."
+    "2-11, re-authored on the wave 3b-2 build (R23's tap-time ray, G9's reflector: a shot whose position sample comes within 32 units of reflect_agent_1024 (146, 128), horizontal plane, is turned there and flies on from the reflector",
+    "for the shorter of the length it was fired and the way it came). The old route's first shot, from the start platform to (95, 191), passes 30 px from the reflector and is now turned away. The level's own use of the reflector is the way",
+    "to a far portal: a shot aimed at it from the floor opens a portal at the mirror of the player's spot in x about the reflector, (292 - x, y). Left to x 357 (ticks 1-25) and off the platform (36-60, lands at x 299 on tick ~70);",
+    "left along the floor to x 251 (80-100); a shot at the reflector (tap 106, caught on 130, its leg's portal in place on 163) opens the first portal at (41, 206), in the air beyond the floor's end and far left of the flame (146, 200).",
+    "A second portal 40 px left of him at (211, 200) (tap 168, in place on 174), then, 29 ticks after it (the 400 ms rule is 26), a shot left along the floor at (140, 200) (tap 197): the flame burns it into a fireball heading left (213),",
+    "which goes into the portal at (41, 206) (269) and comes out of (211, 200) flying back right, past the player, and bursts on crate_no_emissive_937 (319; a fireball a flame makes never kills the player). The crate burns away; right",
+    "from 340 (any start from 290 to 382 wins within win_by) into the door. 3 shots, none failed or refused. Windows (the others fixed, win kept): the walks 16-30 to 26-45 to 50-72, the floor walk 74-85 to 95-106, taps 98-112, 162-185",
+    "(tap 3 moving with it), 194-225. Won on tick 433."
   ],
   "level": "level10a",
-  "win_by": 400,
+  "win_by": 460,
   "holds": [
     {"walk": "left", "from": 1, "to": 25},
     {"walk": "left", "from": 36, "to": 60},
-    {"walk": "right", "from": 297, "to": 400}
+    {"walk": "left", "from": 80, "to": 100},
+    {"walk": "right", "from": 340, "to": 470}
   ],
   "taps": [
-    {"tick": 28, "at": [95, 191]},
-    {"tick": 120, "at": [255, 200]},
-    {"tick": 150, "at": [140, 200]}
+    {"tick": 106, "at": [146, 128]},
+    {"tick": 168, "at": [211.1, 200]},
+    {"tick": 197, "at": [140, 200]}
   ]
 }

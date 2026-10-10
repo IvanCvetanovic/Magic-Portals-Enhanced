@@ -26,7 +26,14 @@
     "reads the shot once a tick), so it is aimed at (140, 170), which clears it: placed on 153, the player's own shot",
     "on 157 brings him out at (140, 173), still left of the flame. Every other tap and walk is as on the 3a build and the route",
     "wins on tick 519 again. Each tap's window to win_by 535 (at least): 25-26, 52-54, 107-113, 153-161, 241-247, 291-294,",
-    "344-346, 371-373, 426-431; the three holds move 4 ticks either way."
+    "344-346, 371-373, 426-431; the three holds move 4 ticks either way.",
+    "Re-authored on the wave 3b-2 build (R3c round 1: the tap-time ray decides where a shot goes): on tick 109 the barrel has just come out",
+    "of the portal at (190, 202) and falls to the flame, and the ray of the third shot, toward (140, 170), crosses its box: it ended at",
+    "(195.1, 193.0), 10 units inside the barrel, a portal opened there and the player, walking into it, was burned on tick 166. The shot is",
+    "aimed higher, at (148, 145), a ray that clears the barrel's top (x 144 to 152 at y 145, or y 142 to 150 at x 150, end at the tap itself;",
+    "y 152 and below ends on the barrel again and 140 or less is a flight too long for the next tap); the player comes out at (148, 148) and",
+    "falls to the left room's floor, 60 units from the flame. Every other tap and walk is as on the 3b-1 build, won on tick 519.",
+    "Each tap's window to win_by 535 (the others as they are; a + is past the 8 ticks tried): 25-26, 52-54, 107-111, 155-159, 237-249, 289-295, 343-346, 371-375, 424-435+."
   ],
   "level": "level16a",
   "win_by": 535,
@@ -38,7 +45,7 @@
   "taps": [
     {"tick": 26, "at": [190, 200]},
     {"tick": 52, "at": [125, 125]},
-    {"tick": 109, "at": [140, 170]},
+    {"tick": 109, "at": [148, 145]},
     {"tick": 157, "at": [275, 252.3]},
     {"tick": 245, "at": [275, 170]},
     {"tick": 293, "at": [242, 110]},

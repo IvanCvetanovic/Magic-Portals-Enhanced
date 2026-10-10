@@ -1,10 +1,10 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-23 (planning step 127's idea, re-flown on the timing build, wave 3a round 1, and again on the time-base group's build, wave",
-    "3b-1 round 1): the player can no longer reach the pillar by walking off the hanging platform (the air brake carries a walk-off",
-    "22 u, not the 60 u of the old steering), and the port's shot dies on rolling_stone_ent_877's surface (R23 not built), so",
-    "antiportal_878 (182.4 px) is opened another way: the stone is knocked off its pillar by the OTHER stone. A portal over the",
+    "1-23 (planning step 127's idea, re-flown on the timing build, wave 3a round 1, on the time-base group's build, wave 3b-1 round 1, and in",
+    "wave 3b-2's route phase on the build with R23's tap rules): the player can no longer reach the pillar by walking off the hanging",
+    "platform (the air brake carries a walk-off 22 u, not the 60 u of the old steering), so antiportal_878 (182.4 px) is opened another",
+    "way: the stone is knocked off its pillar by the OTHER stone. A portal over the",
     "hanging platform's left end at (150, 80), one on the player (tap 152, a tick after the first shot's landing on 151): onto",
     "the platform. A portal on the platform at (228, 80), 196 from the agent (outside its ring), and then one at (70, 68) 38 from",
     "rolling_stone_ent_989 (32, 66), on the left block across the gap (the shot is stopped by a body, so the portal lands beside it",
@@ -12,30 +12,35 @@
     "behind it (235-293, 303-331) and pushes it along the platform; it leaves the end, hits 877 on the pillar (327) and both stones",
     "fall out of the level, the agent bare. The player waits at x 328.6 (the end's feet creep starts at 336; the hold's end has a",
     "window of 328 to 334, a shorter walk leaves the camera too far left for the tap at x 545 and a longer one dies on 373) and a",
-    "shot through the agent's place to (420, 170), the tap in the ring so it is a doomed shot that flies there (345), kills the",
-    "agent on 366 and the ring goes. A portal on the right floor at (545, 190), under the hanging column (shot on 371, placed on",
-    "441, inside the view: the camera is at the player's 328.6), one on the player (445): onto the floor. A shot up through the window",
-    "between the column and the post to (618, 50) (472), one on the player (519): out above the post's right side, down and right",
-    "into the door. Won on tick 560. The kill leans on the port's sampled position along the shot (G4) and on no R23; the stone push",
-    "on the port's own solver (a pushed stone keeps the player's 2.4 u a tick)."
+    "shot through the agent's place to (420, 170), the tap in the ring so it is a doomed shot that flies there, kills the agent and",
+    "the ring goes. R23 (step 156) ends a shot where the tap-time ray ends, and the ray meets a stone that is falling past its line:",
+    "the old tap at 345 ended at (354.1, 103.7) on rolling_stone_ent_989 and failed (the shot never reached the agent); the",
+    "shots tapped at 366 and 369 end at (411.3, 161.3) and (417.4, 167.4), on a body short of the tap, and from 373 the ray ends at the tap",
+    "(420, 170). So the tap waits until both stones are gone (375): the",
+    "first sample within 22.4 of the agent kills it on 396, at (390.7, 140.6), and the ring goes. A portal on the right floor at",
+    "(545, 190), under the hanging column (tap 403, 28 ticks after the first, the 400 ms and two over; placed on 473, inside the view: the camera is",
+    "at the player's 328.6), one on the player (477): onto the floor. A shot up through the window between the column and the post to",
+    "(618, 50) (505, 28 after; placed 553), one on the player (555): out above the post's right side, down and right into the door. Won on tick 597.",
+    "The kill leans on the port's sampled position along the shot (G4); the stone push on the port's own solver (a pushed stone keeps",
+    "the player's 2.4 u a tick). Every tap and the last walk are good for +-2 ticks (12 variants wins on 595 to 599)."
   ],
   "level": "level22",
-  "win_by": 590,
+  "win_by": 630,
   "holds": [
     {"walk": "left", "from": 5, "to": 70},
     {"walk": "right", "from": 235, "to": 293},
     {"walk": "right", "from": 303, "to": 331},
-    {"walk": "right", "from": 533, "to": 703}
+    {"walk": "right", "from": 569, "to": 739}
   ],
   "taps": [
     {"tick": 109, "at": [150, 80]},
     {"tick": 152, "at": [47, 202.3]},
     {"tick": 179, "at": [228, 80]},
     {"tick": 208, "at": [70, 68]},
-    {"tick": 345, "at": [420, 170]},
-    {"tick": 371, "at": [545, 190]},
-    {"tick": 445, "at": [324.3, 74.3]},
-    {"tick": 472, "at": [618, 50]},
-    {"tick": 519, "at": [545.0, 202.5]}
+    {"tick": 375, "at": [420, 170]},
+    {"tick": 403, "at": [545, 190]},
+    {"tick": 477, "at": [324.3, 74.3]},
+    {"tick": 505, "at": [618, 50]},
+    {"tick": 555, "at": [545.0, 202.5]}
   ]
 }

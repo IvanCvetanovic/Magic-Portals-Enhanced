@@ -1,7 +1,7 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "3-13, won by killing the anti-portal agent (step 126, R17). Re-authored on the wave 3b-1 build (R3b fix 1, planning step 152's amendment: the",
+    "3-13, won by killing the anti-portal agent (step 126, R17). Re-authored on the wave 3b-1 build (R3b fix 1, planning step 152's amendment: the Wave 3b-2 round 1: the corridor tap (828 -> 836), the self tap (876 -> 884) and the walk to the door moved, nothing else.",
     "crate of this slot is held at friction 0.08, materials.json's guess). Left off the shelf onto the crate (a walk off the edge carries 15 units,",
     "not a steered arc), right off its far side (the player lands on the crate at tick 92) and left again, and the walk then simply goes on: it pushes the",
     "crate off the platform's edge (x 160) at 1.89 u/tick, it tips into the 64 px slot against the key's block as a diamond under wall04, and the",
@@ -15,15 +15,15 @@
     "taken. Right through where the blue door stood, down, left a little on the platform below. A portal over",
     "breakable_wall_1542 at (310, 360) (tap 552) and one beside rolling_stone_1540 at (100, 298) (tap 592, placed ~684): the stone",
     "drops onto the wall and breaks it (tick ~691) and rolls into the corridor, to its end at x 360 and then slowly back and over its",
-    "edge into the pit (tick ~825). Left into the hole onto the block at the corridor's end; a portal in the corridor at (240, 466) (tap 828,",
-    "after the stone has fallen out of the shot's line: a shot while it is still in the corridor fails against it, the first tick that does not is",
-    "~819), one on the player (tap 876): left past keyhole_ent_1197 (the yellow door goes) to the door.",
+    "edge into the pit (tick ~826). Left into the hole onto the block at the corridor's end; a portal in the corridor at (240, 466) (tap 836,",
+    "after the stone has fallen out of the shot's line: R23's tap-time ray ends a shot at the first body it meets, and the stone, still in the pit's mouth at (288, 484) on 829, stops it at (279, 457) and the shot fails;",
+    "830 lands on (240, 466) after the head-height retry, 832 without it; any from 829 to 848 wins), one on the player (tap 884, through on 886): left past keyhole_ent_1197 (the yellow door goes) to the door.",
     "Windows (the others fixed, win kept): the first walk's start 1-8 (its end 84-97), the right walk 494-538, the left walk 522-552, the wait for the",
-    "stone's fall 816-840 for tap 828, the walk to the door 872-896; the taps 248-266, 286-299, 401-420, 542-563, 581-604, 816-840, 864-888.",
-    "Won on tick 1035."
+    "stone's fall 829-848 for tap 836, the walk to the door 880-905 (end 1050-1090); the taps 248-266, 286-299, 401-420, 542-563, 581-604, 829-848, 872-900.",
+    "Won on tick 1043."
   ],
   "level": "level12b",
-  "win_by": 1048,
+  "win_by": 1057,
   "holds": [
     {
       "walk": "left",
@@ -57,8 +57,8 @@
     },
     {
       "walk": "left",
-      "from": 884,
-      "to": 1060
+      "from": 892,
+      "to": 1072
     }
   ],
   "taps": [
@@ -98,14 +98,14 @@
       ]
     },
     {
-      "tick": 828,
+      "tick": 836,
       "at": [
         240,
         466
       ]
     },
     {
-      "tick": 876,
+      "tick": 884,
       "at": [
         367.6,
         458.5

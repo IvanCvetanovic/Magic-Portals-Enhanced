@@ -1,14 +1,14 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-19 (planning step 134, G8; re-authored in round 3 on the timing group's build): crate_no_emissive_ent_1109 stands where the barrel must go, so a portal at (100, 150) and one on its side at (250, 60) (24, 48) drop it to the floor (tick 100); portals at (300, 55) and on barrel_bomb_ent_1087's side at (180, 200) (80, 104) put the barrel on wall04_no_emissive_ent_1082's top beside breakable_wall_1040 (tick 169).",
-    "A portal at (100, 40) (46 ticks of flight, the decoded projectile, G4) and one on the player (146, 202.3) put the player on the crate's top (tick 258). A shot from there 26.7 deg above level, to (279.4, 55.3), is burned by fire_agent_ent_1086 on tick 292 (at (188.9, 100.7), 31.3 from the flame) and its fireball sets the barrel off (tick 339); the blast breaks the wall (342).",
-    "The next shot leaves on tick 296, once the burned one is gone, and reaches the barrel's place after the blast (the wall is solid to a shot until then): a portal at (400, 40) through the gap it leaves (93 ticks of flight), and one on the player (94, 146): down to the right floor and into the door. Won on tick 430."
+    "2-19 (planning step 134, G8; re-authored in round 3 on the timing group's build, and in wave 3b-2's route phase on the build with R23's tap rules): crate_no_emissive_ent_1109 stands where the barrel must go, so a portal at (100, 150) and one on its side at (250, 60) (24, 48) drop it to the floor (tick 100); portals at (300, 55) and on barrel_bomb_ent_1087's side at (180, 200) (80, 104) put the barrel on wall04_no_emissive_ent_1082's top beside breakable_wall_1040 (tick 169).",
+    "A portal at (100, 40) (46 ticks of flight, the decoded projectile, G4) and one on the player (146, 202.3) put the player on the crate's top (tick 258). A shot from there 26.7 deg above level, to (279.4, 55.3), is burned by fire_agent_ent_1086 on tick 294 (at (195.0, 99.4)) and its fireball sets the barrel off (tick 337, the blast and the broken wall on 338).",
+    "R23 (step 156) decides a shot's end at the tap, not in flight: a shot fired while the barrel stands is stopped by the ray on it (the old tap at 295 toward (400, 40) ended 10 units inside the barrel, after the head-height retry, at (292.7, 68.3)). So the next shot waits for the blast: a portal at (400, 40) through the gap (tick 345, no retry, the ray ends at the tap; 93 ticks of flight, placed on 439), and one on the player (94, 146) the tick after (440, placed 456): down to the right floor and into the door. Won on tick 478."
   ],
   "level": "level18a",
-  "win_by": 480,
+  "win_by": 500,
   "holds": [
-    {"walk": "right", "from": 420, "to": 480}
+    {"walk": "right", "from": 468, "to": 500}
   ],
   "taps": [
     {"tick": 25, "at": [100, 150]},
@@ -18,7 +18,7 @@
     {"tick": 190, "at": [100, 40]},
     {"tick": 240, "at": [146, 202.3]},
     {"tick": 267, "at": [279.4, 55.3]},
-    {"tick": 295, "at": [400, 40]},
-    {"tick": 392, "at": [94, 146]}
+    {"tick": 345, "at": [400, 40]},
+    {"tick": 440, "at": [94, 146]}
   ]
 }

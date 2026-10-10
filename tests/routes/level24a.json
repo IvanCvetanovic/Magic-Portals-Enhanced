@@ -1,30 +1,32 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-25 (R1 fix 1, re-flown on the timing build, wave 3a round 1): the lift up to the door's bridge lies inside",
-    "antiportal_ent_1128 (scale 2, 64 px at 32 x scale); every portal here is 78 px or more from the ring's centre. Right",
-    "to x 151.6 (5-28), a portal on button_1101 at (122, 118) (tap 30, placed on 52) and one on the player (56): onto the",
-    "block and the button, which presses for 18 ticks, long enough for door_lift_1100 to rise and stay up ~50 ticks more.",
-    "He walks off the block's right end (84-90: the idle player no longer creeps, planning step 148's amendment) and falls",
-    "(92); a shot from him in the air (tap 96) to (400, 150), over carranca_right_1126's head (a shot from the floor ends",
-    "on its top, 171.5) and under the rising door, is placed on 171, and a portal on the player (171): into the middle of",
-    "room B, behind the fireball spat on ~125 (the next burns x 400 on ~412). Right to x 452.8 (190-211), where a shot to",
-    "(310, 72) clears block 1105's corner (tap 214, placed on 268), and one on the player (268): onto button_1106, where he",
-    "stands (no creep on it) and door_lift_1104 stays up. A shot through the door at (525, 190) (tap 300, placed on 370)",
-    "and one on the player (370): out in room C under the door, which closes on him from ~395 (it crushes), so right at",
-    "once (377-410) along the floor onto lift_ent_1137, which waits at its foot; a touch (412) sends it up to the bridge",
-    "(495) and right into the door (the walk starts while it rises, 480). Won on tick 515. The shot on tap 300 passes 19.6",
-    "px from reflect_agent_1127 (the port catches at 16; G9 may change that). Leans on G2 (a touch inside the lift sends",
-    "it, and fires no shot), G4 (a shot flies 25 to 70 ticks), G10 (the walk) and the door's closing (step 133)."
+    "2-25 (R1 fix 1; re-flown for the reflector's catch of 32 px, wave 3b-2 round 1): the lift up to the door's bridge lies inside antiportal_ent_1128 (scale 2, 64 px at",
+    "32 x scale); every portal here is 78 px or more from the ring's centre. Right to x 151.6 (5-28), a portal on button_1101 at (122, 118) (tap 30, placed on 52) and one on",
+    "the player (56): onto the block and the button, which presses for 18 ticks, long enough for door_lift_1100 to rise and stay up ~50 ticks more. He walks off the block's",
+    "right end (84-90) and falls (92); a shot from him in the air (tap 96) to (400, 150), over carranca_right_1126's head and under the rising door, is placed on 171, and a",
+    "portal on the player (171): into the middle of room B, behind the fireball spat on ~125 (the next burns x 400 on ~412). Right to x 452.8 (190-211), where a shot to (310, 72)",
+    "clears block 1105's corner (tap 214, placed on 268). The portal on the player of the old route (268) is now one BEHIND him, on the floor at (360, 206) (tap 270, placed",
+    "293), and he walks left into it (276-306): out on button_1106 on tick 305 with the camera still 70 units to his right, the door rising from 305. Why: reflect_agent_1127, at (400, 100), now catches (G9) every shot whose position comes within 32 px of it and sends it back from its own point (the old shot to (525, 190)",
+    "passed 19.6 px from it and ended at (319.6, 144), where the player came out under the carranca's fireball and burned on 383). From x 307 a shot has to leave more than",
+    "34 degrees below the horizontal to clear it, which ends it at the floor of the door's own column (x 497-527), not in room C beyond: a tap there (x 540 and more) lies in",
+    "the right walk pad, 64 units round the view's corner, on any tick but the few in which the camera still leads the player after a teleport. So the player is not teleported by",
+    "a tap (it would start the camera's return and the 400 ms of the next tap together) but WALKS into the portal behind him, and taps on 313, while the camera is 30 units",
+    "ahead of him and the door's bottom edge (status 0.2) has risen above the line: to (505, 222), which the camera's last tick of travel moves to (501, 222), 38 px from the",
+    "reflector's centre; it lands on 382. A portal on the player (tap 384): out in the doorway at (501, 224) on 386 as the door starts down (it takes 26 ticks, to 412, to reach his",
+    "head), right at once (386-430) along the floor, out from under the door by 401, onto lift_ent_1137 at its foot (the walk ends x 609); a touch inside the lift (436) sends",
+    "it up to the bridge (520) and right into the door (the walk starts while it rises, 504). Won on tick 538. Leans on G9 (the reflector's catch), G2 (a touch inside the lift",
+    "sends it, and fires no shot), G4 (a shot flies 25 to 70 ticks), G10 (the walk), the door's closing (step 133) and the 400 ms between taps (a walk into a portal needs no tap)."
   ],
   "level": "level24a",
-  "win_by": 545,
+  "win_by": 570,
   "holds": [
     {"walk": "right", "from": 5, "to": 28},
     {"walk": "right", "from": 84, "to": 90},
     {"walk": "right", "from": 190, "to": 211},
-    {"walk": "right", "from": 377, "to": 410},
-    {"walk": "right", "from": 480, "to": 700}
+    {"walk": "left", "from": 276, "to": 306},
+    {"walk": "right", "from": 386, "to": 430},
+    {"walk": "right", "from": 504, "to": 800}
   ],
   "taps": [
     {"tick": 30, "at": [122, 118]},
@@ -32,9 +34,9 @@
     {"tick": 96, "at": [400, 150]},
     {"tick": 171, "at": [148.1, 202.5]},
     {"tick": 214, "at": [310, 72]},
-    {"tick": 268, "at": [452.8, 202.4]},
-    {"tick": 300, "at": [525, 190]},
-    {"tick": 370, "at": [311.8, 74.5]},
-    {"tick": 412, "at": [608, 244], "shot": false}
+    {"tick": 270, "at": [360, 206]},
+    {"tick": 313, "at": [505, 222]},
+    {"tick": 384, "at": [307, 78.4]},
+    {"tick": 436, "at": [608, 244], "shot": false}
   ]
 }

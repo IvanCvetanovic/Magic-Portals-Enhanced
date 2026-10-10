@@ -21,7 +21,17 @@
     "the reflected shot kills the agent on tick 134, not 129 (cause not traced), so every tap and walk from the fourth tap",
     "on is 6 ticks later than on the 3a build; won on tick 1141. Leans on the port's reflector (shot.json's catch radius 16 and mirror-to-the-tap, both guesses), the",
     "camera's view (the tap at y 12 is on the view only while the falling player has the camera near its top: view top 8.0),",
-    "the port's traversal by body overlap and G4 (the shot's speed: every far portal is 30 to 100 ticks of flight)."
+    "the port's traversal by body overlap and G4 (the shot's speed: every far portal is 30 to 100 ticks of flight).",
+    "Re-authored on the wave 3b-2 build (R3c round 1: the reflector's catch): reflect_agent_1244 (256, 320, vertical) now catches a shot",
+    "whose position comes within 32 units of it (G9; the port's old catch was 16). The shot toward (175, 262) from x 291.5 passes 25.6 units",
+    "from it (the closest approach, near x 240), was turned on tick 651 and flew on as a leg that put its portal at (313, 253), away from",
+    "the crate. The player now walks 8 ticks further left after the tap over button_1344 (the extra hold 582 to 590: it stands at x 269.9",
+    "instead of 291.5, still on platform_1240 whose end is x 256), and the shot toward (175, 262) passes 34 units or more from the reflector",
+    "(x 265 to 275 do; 279.5 and more are caught, and the platform's end is at 265). The tap over the player on tick 734 is at his x, 270.",
+    "The tap at (175, 262) cannot be moved up (the view's top is y 256 there) and a target farther from the reflector is off the crate.",
+    "Every other tap and walk is as on the 3b-1 build (the tap at (470, 265) now ends at its own point, the lift being up); won on tick 1141.",
+    "Each tap's window to win_by 1160 (the others as they are; a + is past the 8 ticks tried): 25-31, 55-60, 86-89, 128-140, 198-204,",
+    "228-238+, 296-309, 378-394+, 471-482+, 570-585, 628-644+, 682-693, 731-736, 760-767, 799-809, 847-857, 881-894+."
   ],
   "level": "level13b",
   "win_by": 1160,
@@ -29,6 +39,7 @@
     {"walk": "left", "from": 62, "to": 86},
     {"walk": "right", "from": 324, "to": 404},
     {"walk": "left", "from": 512, "to": 572},
+    {"walk": "left", "from": 582, "to": 590},
     {"walk": "left", "from": 906, "to": 1160}
   ],
   "taps": [
@@ -44,7 +55,7 @@
     {"tick": 578, "at": [465, 390]},
     {"tick": 636, "at": [175, 262]},
     {"tick": 690, "at": [330, 262]},
-    {"tick": 734, "at": [284.2, 400]},
+    {"tick": 734, "at": [270, 400]},
     {"tick": 762, "at": [470, 265]},
     {"tick": 804, "at": [225, 407]},
     {"tick": 852, "at": [432, 236]},

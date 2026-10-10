@@ -26,7 +26,20 @@
     "(728, 193) moving up at 933 u/s, the key taken on tick 772 at its own point (a crystal on the way up),",
     "down onto the floor right of the seesaw's end, right to the keyhole (unlocked 835, gone 926), the door.",
     "Every tap holds up to +-1 tick; the walks that set the player's x (487-622, 740-750) hold to +-1 tick,",
-    "because the fall and the last tap are timed to his entry into (760, 202) on tick 746."
+    "because the fall and the last tap are timed to his entry into (760, 202) on tick 746.",
+    "Re-authored on the wave 3b-2 build (R3c round 1: the tap-time ray, the knights' sight and shot). Two rules moved the second portal",
+    "of the knight's pair. The ray of a shot toward (222, 85) meets button_1656 (x 197 to 223, y 84 to 100: a sensor the ray stops on)",
+    "and dooms the shot at its face, (197, 93.8): no portal can open on the button now. And a knight sees a portal in front of it",
+    "(findEntityInSight: its row, 120 degrees, no body between), stands while it does, and shoots it dead after 650 ms: a portal at",
+    "(230, 82), which the ray does reach, was spotted on tick 218 and shot, and the knight never walked into it. The portal that the",
+    "knight can walk into and not see is one inside anti_sight_wall_ent_1699 (x 68 to 196, y 90 to 114), whose box hides it from a",
+    "knight outside the box, and within the knight's reach of the walk's left end (it stops at x 213.5; a portal's 14 plus its 7):",
+    "the tap is at (195, 92) (x 194 to 196 do, 193 leaves him out of reach, 197 is outside the box and seen; y 88 to 95 do).",
+    "The knight goes in on tick 269 and out of (175, 100) onto button_1666, gate 1663 opens on 275, and the knight, which asks but never",
+    "spots (the player is under the platform, in another row, and the block's top is inside the wall's box), holds the button for good.",
+    "Every other tap and walk is as before (the first tap's ray and the three after the knight need no change); won on tick 976.",
+    "Each tap's window to win_by 1010 (the others as they are; a + is past the 8 ticks tried): 86-96, 132-137, 161-164, 189-198+,",
+    "367-383+, 462-476, 647-657, 704-707, 732-734, 760-762."
   ],
   "level": "level14b",
   "win_by": 1010,
@@ -92,8 +105,8 @@
     {
       "tick": 190,
       "at": [
-        222,
-        85
+        195,
+        92
       ]
     },
     {
