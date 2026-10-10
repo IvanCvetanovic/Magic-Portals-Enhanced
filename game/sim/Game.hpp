@@ -213,6 +213,13 @@ void Forget(Level& level, entt::entity body);
 // at a hitIntensity above minions.json `crush.hit_above`.
 void Crush(entt::registry& registry, Level& level, const std::vector<entt::entity>& bodies);
 
+// A rolling stone's begin against the PLAYER (ETHBeginContactCallback_rolling_stone #107-129, planning step 160): where its
+// hitIntensity is above demolish.json `stone.kills_player_above` it sets his hp to 0, which Demolish::State::HitPlayer records
+// and AfterStep folds into Hazards. `stone` is the stone's body, which must be one of the level's stones; the beholder's rocks
+// are the same callback and Boss::Contacts kills with them by its own reading of it, so a rock of the boss is NOT judged here.
+// Returns whether this call killed him.
+bool StoneHitsPlayer(Level& level, entt::entity stone, double hitIntensity);
+
 // Puts the level into the registry: the Godot project's gravity, the bodies built with
 // the role table, and the player at the level's player_spawn. Then its buttons,
 // doors, crystals, exit and portals are found. withStatics false leaves the

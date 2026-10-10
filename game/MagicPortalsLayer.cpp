@@ -10265,7 +10265,7 @@ void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable
             latch(sound.event, 0.0, volume);
         }
         // ETHBeginContactCallback_rolling_stone #131-168, after its own row above: the knight it crushed is destroyed
-        // with playMinionSmashSound and startEarthquake(25, 0) (crushMinions took it).
+        // with playMinionSmashSound and startEarthquake(25, 0) (stoneHits took it).
         if (begin.kind == Impacts::Kind::Stone &&
             std::find(m_crushedNow.begin(), m_crushedNow.end(), begin.other) != m_crushedNow.end()) {
             QueueQuake(Call::MinionCrushed);
@@ -10274,22 +10274,33 @@ void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable
     }
 }
 
-void MagicPortalsLayer::crushMinions(entt::registry& registry) {
+void MagicPortalsLayer::stoneHits(entt::registry& registry) {
     using Earthquake::Call;
     m_crushedNow.clear();
     for (const Impacts::Begin& begin : m_impactBegins) {
         if (begin.kind != Impacts::Kind::Stone) continue;
-        const bool aKnight = std::any_of(m_level.minions.minions.begin(), m_level.minions.minions.end(),
-                                         [&begin](const Minions::Minion& minion) {
-                                             return !minion.gone && minion.body == begin.other;
-                                         });
-        if (!aKnight || std::find(m_crushedNow.begin(), m_crushedNow.end(), begin.other) != m_crushedNow.end()) continue;
+        const bool thePlayer = m_level.player != entt::null && begin.other == m_level.player;
+        const bool aKnight = !thePlayer && std::any_of(m_level.minions.minions.begin(), m_level.minions.minions.end(),
+                                                       [&begin](const Minions::Minion& minion) {
+                                                           return !minion.gone && minion.body == begin.other;
+                                                       });
+        if (!thePlayer && !aKnight) continue;
+        if (aKnight && std::find(m_crushedNow.begin(), m_crushedNow.end(), begin.other) != m_crushedNow.end()) continue;
         // The stone's callback overwrites the contact normal with the line between the two entity points (D11_check
         // C55) and reads hitIntensity along it: the number its own impact row is called on.
         const glm::dvec2 apart = begin.otherAtPx - begin.atPx;
         const double length = glm::length(apart);
         const glm::dvec2 along = length > 0.0 ? apart / length : glm::dvec2(0.0);
         const double hit = Earthquake::HitIntensity(m_quakeRules, begin.Approaching(along), along);
+        if (thePlayer) {
+            // #107-129: isCharacter(other) - the player alone - and hitIntensity above 2.5 set his hp to 0. His death is
+            // a death area's (Hazards), the stone's shake and hit sound the row's own, latchImpacts'.
+            if (Game::StoneHitsPlayer(m_level, begin.body, hit)) {
+                SUPERSONIC_LOG_INFO("Magic Portals") << "stone kill of the player by " << m_level.demolish.killedBy << " at hit "
+                                                     << hit << " on tick " << m_ticks << std::endl;
+            }
+            continue;
+        }
         if (Minions::Crushes(m_level.minions.rules, hit)) m_crushedNow.push_back(begin.other);
     }
     if (m_crushedNow.empty()) return;
@@ -11202,7 +11213,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
                                              static_cast<double>(step.physicsS));
         // A stone that began to touch a knight hard enough crushes it in that same callback (planning step 159), before
         // anything after the step reads the knights.
-        crushMinions(registry);
+        stoneHits(registry);
         // So first what follows a step...
         Game::AfterStep(m_data, registry, m_level, step);
         // What the tick just did, remembered for the frame to play. Before the

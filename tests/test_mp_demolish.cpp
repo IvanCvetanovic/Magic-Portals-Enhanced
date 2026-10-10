@@ -19,6 +19,7 @@
 #include "MpSuite.hpp"
 
 #include "core/Components.hpp"
+#include "sim/Boss.hpp"
 #include "sim/Demolish.hpp"
 #include "sim/Game.hpp"
 #include "sim/Units.hpp"
@@ -375,6 +376,68 @@ void BreakAndRestoreByName() {
     CHECK(!wall->broken && wall->brokenBy.empty() && wall->body == again);
 }
 
+// ---- planning step 160 (STK): a stone that begins to touch the player fast enough kills him ----------------
+
+// ETHBeginContactCallback_rolling_stone #107-129: where isCharacter(other) and hitIntensity > 2.5 (CMPIf against 2.5f, JNP skips: STRICTLY
+// above), other.SetInt('hp', 0). The number is demolish.json's, with its citation; the beholder's rocks run the same callback and
+// boss.json keeps the same 2.5 for Boss::Contacts, which is the one thing here that is checked against the other.
+void AStoneKillsThePlayerAboveTwoAndAHalfAndNotAtIt() {
+    Demolish::Rules rules;
+    std::string error;
+    CHECK_MSG(Demolish::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/demolish.json", rules, error), error);
+    CHECK_MSG(rules.killsPlayerAbove == 2.5, "#115-116: CMPIf 1075838976 = 2.5f");
+    Boss::Rules boss;
+    CHECK_MSG(Boss::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/boss.json", boss, error), error);
+    CHECK_MSG(boss.crushIntensity == rules.killsPlayerAbove,
+              "the beholder's rocks are the same callback: boss.json's copy of the number is this one");
+
+    const double under = std::nextafter(2.5, 0.0);
+    const double over = std::nextafter(2.5, 3.0);
+    CHECK_MSG(!Demolish::KillsPlayer(rules, 0.0) && !Demolish::KillsPlayer(rules, -3.0) && !Demolish::KillsPlayer(rules, 2.49) &&
+                  !Demolish::KillsPlayer(rules, under) && !Demolish::KillsPlayer(rules, 2.5),
+              "a stone at rest, moving away, just under 2.5 and exactly 2.5 kill nothing");
+    CHECK_MSG(Demolish::KillsPlayer(rules, over) && Demolish::KillsPlayer(rules, 2.51) && Demolish::KillsPlayer(rules, 9.0),
+              "the next float above 2.5, 2.51 and a hard hit kill");
+
+    // The state: only a kill names the death, and the first one does.
+    Demolish::State state;
+    state.rules = rules;
+    CHECK_MSG(!state.HitPlayer("a_stone", under) && !state.HitPlayer("a_stone", 2.5) && !state.playerKilled && state.killedBy.empty(),
+              "hits at or under 2.5 leave him alive and the death unnamed");
+    CHECK_MSG(state.HitPlayer("stone_1", over) && state.playerKilled && state.killedBy == "stone_1", "a hit just over kills, naming the stone");
+    CHECK_MSG(!state.HitPlayer("stone_2", 9.0) && state.killedBy == "stone_1", "the first to kill names it");
+}
+
+// Game::StoneHitsPlayer on 1-09's real stone: a hit over 2.5 records the kill and the next AfterStep folds it into Hazards as a death
+// area's - not a fall, named for the stone; a body that is not the level's stone, and a rock of the beholder's (Boss::Contacts' own
+// kill), are not judged here.
+void AStonesKillIsFoldedIntoHazardsAndTheBeholdersRocksAreLeftToBoss() {
+    Run run;
+    if (!Begin("level8", run)) return;
+    if (run.level.demolish.stones.empty()) {
+        CHECK_MSG(false, "1-09 places a stone");
+        return;
+    }
+    const Demolish::Stone stone = run.level.demolish.stones.front();
+    CHECK_MSG(!Game::StoneHitsPlayer(run.level, stone.body, 2.4) && !run.level.demolish.playerKilled, "a hit of 2.4 kills nothing");
+    CHECK_MSG(!Game::StoneHitsPlayer(run.level, run.level.player, 9.0) && !run.level.demolish.playerKilled,
+              "a body that is not one of the level's stones is not judged");
+    // The same body listed as one of the beholder's rocks: Boss::Contacts' to judge.
+    Boss::Rock rock;
+    rock.name = stone.name;
+    rock.body = stone.body;
+    run.level.boss.rocks.push_back(rock);
+    CHECK_MSG(!Game::StoneHitsPlayer(run.level, stone.body, 9.0) && !run.level.demolish.playerKilled,
+              "a beholder's rock is left to Boss::Contacts, however hard it hit");
+    run.level.boss.rocks.clear();
+
+    CHECK_MSG(Game::StoneHitsPlayer(run.level, stone.body, 2.6) && run.level.demolish.killedBy == stone.name, "a stone at 2.6 kills");
+    CHECK_MSG(!run.level.hazards.playerDied, "the fold is AfterStep's: not yet");
+    Tick(run);
+    CHECK_MSG(run.level.hazards.playerDied && !run.level.hazards.diedByFalling && run.level.hazards.killedBy == stone.name,
+              "folded in as a death area's death, named for the stone: " + run.level.hazards.killedBy);
+}
+
 // ---- level 1-9, played -------------------------------------------------------
 
 // Fires a shot and waits for it to land or fail. True when a portal opened.
@@ -441,6 +504,8 @@ void runTests() {
     TheMarginIsTheEdge();
     ABlastGrabsByTheFlag();
     BreakAndRestoreByName();
+    AStoneKillsThePlayerAboveTwoAndAHalfAndNotAtIt();
+    AStonesKillIsFoldedIntoHazardsAndTheBeholdersRocksAreLeftToBoss();
     Level8WithTwoShots();
 }
 

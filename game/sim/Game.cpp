@@ -30,6 +30,18 @@ void Crush(entt::registry& registry, Level& level, const std::vector<entt::entit
     for (const entt::entity gone : level.minions.Take(registry, bodies)) Forget(level, gone);
 }
 
+bool StoneHitsPlayer(Level& level, entt::entity stone, double hitIntensity) {
+    // The beholder's rocks run the same callback and the port already kills with them (Boss::Contacts, its own 30-tick
+    // reading of the same 2.5): one death path each, so a rock of the boss is left to it.
+    for (const Boss::Rock& rock : level.boss.rocks) {
+        if (rock.body == stone) return false;
+    }
+    for (const Demolish::Stone& placed : level.demolish.stones) {
+        if (placed.body == stone) return level.demolish.HitPlayer(placed.name, hitIntensity);
+    }
+    return false;
+}
+
 namespace {
 
 // What a restock added, taken on as Fire::Find and Portals::Find take a placed
@@ -1073,6 +1085,12 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, const S
     if (level.minions.playerKilled && !level.hazards.playerDied) {
         level.hazards.playerDied = true;
         level.hazards.killedBy = level.minions.killedBy;
+    }
+    // A rolling stone that began to touch him at a hitIntensity above 2.5 is the ninth source: the callback writes the same hp 0
+    // (ETHBeginContactCallback_rolling_stone #107-129; the layer's impact watch reads the begin, StoneHitsPlayer judges it).
+    if (level.demolish.playerKilled && !level.hazards.playerDied) {
+        level.hazards.playerDied = true;
+        level.hazards.killedBy = level.demolish.killedBy;
     }
 }
 

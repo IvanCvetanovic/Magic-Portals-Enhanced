@@ -7320,6 +7320,12 @@ void ABodyFallingOnThePlayerShakesTheView() {
         CHECK_MSG(last == read.intensity, std::string(run.row) + ": the body's own call is the tick's last");
         const std::string landedRow = quakeLanded(hitSeen, last, false);
         CHECK_MSG(landedRow.empty(), std::string(run.row) + " on tick " + std::to_string(hitOn) + ": " + landedRow);
+        // Since planning step 160 a stone that begins to touch the player above hitIntensity 2.5 also kills him (the callback's #107-129),
+        // on this same tick: this one's 3.5 does, and the shake above is no less the row's own.
+        if (run.kind == MagicPortals::Impacts::Kind::Stone) {
+            CHECK_MSG(played.hazards.playerDied == (read.hit > 2.5),
+                      std::string(run.row) + ": killed exactly where the hit is above 2.5: hit " + std::to_string(read.hit));
+        }
         layer.OnDetach(registry);
     }
 }
@@ -19395,6 +19401,343 @@ void AStoneThatFallsOnAKnightCrushesIt() {
     layer.OnDetach(registry);
 }
 
+// ---- planning step 160 (STK): a rolling stone that begins to touch the player fast enough kills him ---------------------
+//
+// ETHBeginContactCallback_rolling_stone #107-129 sets the player's hp to 0 where the stone's hitIntensity - the stone's own
+// speed along the line to his entity point, over 50 px a unit (D11_check C47) - is above 2.5 (STRICTLY: CMPIf, JNP skips). The
+// port reads that number as it reads the stone's own shake and the knights' crush: the impact watch's begin. His death is a
+// death area's: blood, no sound of its own, the lost screen; the stone's shake and hit sound are its impact row's, and the
+// knights' crush's cues (the smash sound, the shake of 25) are not made for him.
+
+// One of 1-09's stones (level8) let go straight over the player's head with `gapPx` clear between its foot and his crown:
+// what its begin on him read, and what that tick did to him.
+struct StoneOnPlayer {
+    bool began = false;
+    double hit = 0.0;
+    bool died = false;        // Hazards::playerDied on the tick the begin came
+    bool dying = false;       // the layer's Dying()
+    bool byFall = false;      // diedByFalling
+    std::string killedBy;
+    std::string stone;
+    bool stoneHeard = false;  // stone_hit: the row's own sound
+    bool fallHeard = false;   // player_fell: the FALL's cue, not an hp death's
+    bool smashHeard = false;  // minion_smashed: the knights' crush's
+    double rowIntensity = 0.0;  // 2 x hit: the stone's shake
+    std::string landed;       // quakeLanded of the row's call on the generator (empty: it landed as the row says)
+    int blood = 0;            // blood.ent the next frame added
+};
+
+StoneOnPlayer LetAStoneFallOnThePlayer(double gapPx) {
+    StoneOnPlayer out;
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level8");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return out;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    for (int i = 0; i < 30; ++i) quakeTickWith(layer, registry, ticks);
+    const PlayedLevel& played = *layer.SimLevel();
+    CHECK_MSG(!played.demolish.stones.empty(), "1-09 places a stone");
+    if (played.demolish.stones.empty()) return out;
+    const entt::entity body = played.demolish.stones.front().body;
+    out.stone = played.demolish.stones.front().name;
+    // The top of the capsule: 18.1 over its centre (dark_mage.ent's two circles, planning step 153); the stone's circle is 30.
+    const glm::dvec2 head = playerPx(registry, layer) - glm::dvec2(0.0, 18.1);
+    PutBodyAt(registry, body, glm::dvec2(head.x, head.y - 30.0 - gapPx));
+    for (int i = 0; i < 90 && !out.began; ++i) {
+        const int before = layer.EffectsSpawned();
+        const QuakeTick seen = quakeTickWith(layer, registry, ticks);
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.body != body || begin.other != played.player) continue;
+            const ImpactRead read = readImpact(rules, layer, begin);
+            out.began = true;
+            out.hit = read.hit;
+            out.rowIntensity = read.intensity;
+            out.landed = quakeLanded(seen, lastImpactCall(rules, layer), false);
+        }
+        if (!out.began) continue;
+        out.died = played.hazards.playerDied;
+        out.dying = layer.Dying();
+        out.byFall = played.hazards.diedByFalling;
+        out.killedBy = played.hazards.killedBy;
+        const std::vector<std::string> heard = layer.LatchedSounds();
+        const auto has = [&heard](const char* name) { return std::find(heard.begin(), heard.end(), name) != heard.end(); };
+        out.stoneHeard = has("stone_hit");
+        out.fallHeard = has("player_fell");
+        out.smashHeard = has("minion_smashed");
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        for (const MagicPortalsLayer::EffectReport& added : AddedAfter(layer, before)) {
+            if (added.entity == "blood.ent") ++out.blood;
+        }
+    }
+    layer.OnDetach(registry);
+    return out;
+}
+
+// The stone kills the player it begins to touch above 2.5 and not at or below it, by what it carried into the step - the sweep
+// of falls straddles the number, and every fall's outcome is the rule's. Where it kills it is a death area's death (no fall
+// sound; blood the frame after; the death named for the stone) with the row's own shake and sound, and none of the crush's.
+void AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone() {
+    if (!OriginalArtIsThere("AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone")) return;
+    int under = 0;
+    int over = 0;
+    double highestUnder = 0.0;
+    double lowestOver = 1e9;
+    double last = -1.0;
+    for (const double gapPx : {2.0, 6.0, 10.0, 14.0, 18.0, 24.0, 40.0}) {
+        const StoneOnPlayer run = LetAStoneFallOnThePlayer(gapPx);
+        const std::string what = "a stone let go " + std::to_string(gapPx) + " px over his head";
+        CHECK_MSG(run.began, what + " came down on the player");
+        if (!run.began) continue;
+        const bool kills = run.hit > 2.5;
+        std::printf("  %s: hit %.4f -> %s\n", what.c_str(), run.hit, run.died ? "killed" : "not killed");
+        CHECK_MSG(run.died == kills && run.dying == kills,
+                  what + ": hit " + std::to_string(run.hit) + (kills ? " is above 2.5 and kills" : " is not above 2.5 and does not") +
+                      ": died " + std::to_string(run.died) + ", dying " + std::to_string(run.dying));
+        CHECK_MSG(run.hit >= last - 1e-9, what + ": the harder the fall the harder the hit: " + std::to_string(run.hit));
+        last = run.hit;
+        if (kills) {
+            ++over;
+            lowestOver = std::min(lowestOver, run.hit);
+            CHECK_MSG(!run.byFall && run.killedBy == run.stone, what + ": a death area's death, named for the stone: " + run.killedBy);
+            CHECK_MSG(run.stoneHeard, what + ": the stone's own hit sound (hit above 2)");
+            CHECK_MSG(!run.fallHeard, what + ": no player_fell - an hp death has no sound of its own");
+            CHECK_MSG(!run.smashHeard, what + ": none of the knights' crush: no minion_smashed");
+            CHECK_MSG(run.landed.empty(), what + ": the tick's last shake is the stone's row (2 x hit), not the crush's 25: " + run.landed);
+            CHECK_MSG(run.blood == 1, what + ": one blood.ent the frame after: " + std::to_string(run.blood));
+        } else {
+            ++under;
+            highestUnder = std::max(highestUnder, run.hit);
+            CHECK_MSG(!run.byFall && run.killedBy.empty(), what + ": nothing named");
+        }
+    }
+    CHECK_MSG(under >= 1 && over >= 1, "the falls straddle 2.5: " + std::to_string(under) + " under, " + std::to_string(over) + " over");
+    std::printf("  the hardest fall that did not kill read %.4f, the softest that did %.4f\n", highestUnder, lowestOver);
+    CHECK_MSG(highestUnder <= 2.5 && lowestOver > 2.5, "and none is on the wrong side");
+}
+
+// A stone that RESTS against the player kills nothing, however hard it fell before: a begin is the stone's velocity as the step finds it
+// (#34-35: no length, no callback), and what it carried before it met the floor is spent (Impacts: a body that has met or left something
+// starts its velocities afresh). 1-09's stone is let go 100 px over its own place, so it lands at some 700 carried px/s and comes to rest
+// where the level put it; the player is then put against its side, a pixel into it, and his begin on it reads the stone at rest.
+void AStoneRestingAgainstThePlayerKillsNothing() {
+    if (!OriginalArtIsThere("AStoneRestingAgainstThePlayerKillsNothing")) return;
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level8");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    for (int i = 0; i < 30; ++i) quakeTickWith(layer, registry, ticks);
+    const PlayedLevel& played = *layer.SimLevel();
+    if (played.demolish.stones.empty()) {
+        CHECK_MSG(false, "1-09 places a stone");
+        return;
+    }
+    const entt::entity body = played.demolish.stones.front().body;
+    const glm::dvec2 place = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position);
+    // Fast first: let go over its own place, the player standing where he spawned (58 px away: clear of it).
+    PutBodyAt(registry, body, place - glm::dvec2(0.0, 100.0));
+    double fastest = 0.0;
+    for (int i = 0; i < 150; ++i) {
+        quakeTickWith(layer, registry, ticks);
+        const glm::vec3 v = registry.get<RigidBodyComponent>(body).velocity;
+        fastest = std::max(fastest, static_cast<double>(glm::length(glm::vec2(v.x, v.y))) / MagicPortals::Units::ToMetres(1.0));
+    }
+    const glm::vec3 v = registry.get<RigidBodyComponent>(body).velocity;
+    const double resting = static_cast<double>(glm::length(glm::vec2(v.x, v.y))) / MagicPortals::Units::ToMetres(1.0);
+    // 100 px of fall at the layer's 2000 px/s^2 is 632 px/s of a free body; the engine's solver carries it at 466 (printed) - 233 of the
+    // original's units a second, a hit of 4.7 straight down, 1.9 times the kill's 2.5 - and the log shows it landing at hit 4.05 on its floor.
+    CHECK_MSG(fastest > 300.0 && resting < 5.0,
+              "it fell fast (" + std::to_string(fastest) + " px/s at most) and is at rest now (" + std::to_string(resting) + " px/s)");
+    CHECK_MSG(!played.hazards.playerDied, "and it hurt nobody on the way down");
+    // The player put against its left side, a pixel into it: the stone's circle is 30, the capsule's 9.1 wide.
+    const glm::dvec2 stoneAt = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position);
+    HoldPlayerAt(registry, layer, glm::dvec2(stoneAt.x - 30.0 - 9.1 + 1.0, stoneAt.y + 30.0 - 18.1));
+    bool began = false;
+    double hit = 1e9;
+    for (int i = 0; i < 20 && !began; ++i) {
+        quakeTickWith(layer, registry, ticks);
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.body != body || begin.other != played.player) continue;
+            began = true;
+            hit = readImpact(rules, layer, begin).hit;
+        }
+    }
+    std::printf("  a stone at rest, put against by the player: begin %d, hit %.4f\n", began ? 1 : 0, hit);
+    CHECK_MSG(began, "the player's touch of the resting stone is a begin of the stone's");
+    CHECK_MSG(began && std::fabs(hit) < 0.5, "read at the velocity it rests at, not the one it fell at: " + std::to_string(hit));
+    CHECK_MSG(!played.hazards.playerDied && !layer.Dying(), "and it kills nothing");
+    layer.OnDetach(registry);
+}
+
+// G1b-10: the layer's world answers the stealth achievements' spottedCount() with the knights' own sighting count. 3-02 (level1b) is
+// achievement 24's: exactly two knights, none of them having seen anyone, at the door (Achievements.cpp: Count(minion) == 2 and
+// SpottedCount() == 0). The same sequence - the three crystals, then the door, the player put on each - is played four times: three
+// controls after different waits, in which nobody is put in front of a knight, and once with a knight made to see him first (he is held
+// in front of it, whichever way it looks, until it has).
+//
+// The rule pinned is read through the door, with both knights alive there so that their count is not what decides it: 24 is dispatched
+// exactly when no knight has sighted him. A control nobody saw must dispatch it (so the harness CAN unlock 24, and the seen run's silence
+// means something); the seen run must not. A SpottedCount() that returned 0 would dispatch 24 in the seen run too and fail it.
+//
+// The controls differ by the wait only because the knights walk past the crystals while the sequence is played, and a sighting on the way
+// is the knights' business, not this case's: whatever each run turns out to be, the rule must hold for it, and at least one of them must
+// have gone unseen. Each run carries where the knights stood and what they had sighted, so that a failure names the knight.
+struct StealthRun {
+    bool beSeen = false;
+    int idleTicks = 0;          // the wait before the crystals (the controls)
+    bool sighted = false;       // a knight had sighted him before the crystals began
+    int spotBeforeCrystals = 0; // SimLevel()->minions.SpotCount() then
+    int spotBeforeDoor = 0;     // and once the crystals are taken, before the door's first tick
+    int spotCount = 0;          // and once the door is reached
+    bool finished = false;
+    bool unlocked24 = false;
+    int knights = 0;            // placed
+    int liveKnights = 0;        // at the door, as the world's Count() counts minion.ent
+    int firstSightTick = -1;    // the level's tick on which SpotCount() first read above 0; -1 where it never did
+    std::string firstSight;     // the knights then
+    std::string atTheDoor;      // and at the door
+};
+
+// Each knight by its spawner's name: where it stands (pixels), what it has sighted, and whether it is gone.
+std::string KnightsAccount(const entt::registry& registry, const PlayedLevel& played) {
+    std::string out;
+    for (const MagicPortals::Minions::Minion& minion : played.minions.minions) {
+        char at[64] = "no body";
+        if (minion.body != entt::null && registry.valid(minion.body)) {
+            const glm::dvec2 px = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(minion.body).position);
+            std::snprintf(at, sizeof at, "(%.1f, %.1f)", px.x, px.y);
+        }
+        char line[192];
+        std::snprintf(line, sizeof line, "%s%s at %s, %d sighting%s%s", out.empty() ? "" : "; ", minion.name.c_str(), at, minion.spotCount,
+                      minion.spotCount == 1 ? "" : "s", minion.gone ? ", gone" : "");
+        out += line;
+    }
+    return out;
+}
+
+StealthRun PlayThreeTwoToTheDoor(bool beSeen, int idleTicks) {
+    StealthRun out;
+    out.beSeen = beSeen;
+    out.idleTicks = idleTicks;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level1b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return out;
+    CloseTheLevelStartPopup(layer, registry);
+    const PlayedLevel& played = *layer.SimLevel();
+    out.knights = static_cast<int>(played.minions.minions.size());
+    // One tick of the level, noting the first on which a knight has a sighting to its name and where they all stood then.
+    int levelTick = 0;
+    const auto advance = [&]() {
+        tickWith(layer, registry, kRest, {}, {});
+        ++levelTick;
+        if (out.firstSightTick < 0 && played.minions.SpotCount() > 0) {
+            out.firstSightTick = levelTick;
+            out.firstSight = KnightsAccount(registry, played);
+        }
+    };
+    if (beSeen) {
+        // In front of the first knight, alternating the side every few ticks: the sight reads the facing it had a frame ago and its
+        // cone is 120 degrees (minions.json sight.fov_cos), so the side it looks to is found by trying both. It does not look at all
+        // for the first ~100 ticks (it serves its first hold), so this runs on until it has.
+        const MagicPortals::Minions::Minion& knight = played.minions.minions.front();
+        for (int tick = 0; tick < 900 && played.minions.SpotCount() == 0; ++tick) {
+            const glm::dvec2 bodyAt = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(knight.body).position);
+            // The player's centre stands level with the knight's entity point on the same floor: 11.1 over the knight's circle.
+            const double side = (tick / 3) % 2 == 0 ? 1.0 : -1.0;
+            HoldPlayerAt(registry, layer, glm::dvec2(bodyAt.x + side * 30.0, bodyAt.y - played.minions.rules.EntityAboveCentrePx()));
+            advance();
+        }
+    }
+    // The control waits: the knights stand where they were made for the level's first ticks, and the second of them holds beside the
+    // third crystal looking at it, so a player put on the crystals at once is in its cone (the first run of this case: tick 1 to 3, one
+    // sighting). The wait lets both walk on before the crystals are taken. It is the wait, not a cure: the run is judged as it came out.
+    for (int tick = 0; tick < idleTicks; ++tick) advance();
+    out.spotBeforeCrystals = played.minions.SpotCount();
+    out.sighted = out.spotBeforeCrystals > 0;
+    // The crystals, then the door: each put on the player, 12 over its centre as the scout put him (a capsule 36.2 tall reaches it), a tick
+    // on it and a tick let go.
+    for (const MagicPortals::Goals::Crystal& crystal : played.goals.crystals) {
+        if (crystal.collected) continue;
+        HoldPlayerAt(registry, layer, MagicPortals::Units::ToPixels(glm::vec3(crystal.box.centre, 0.0f)) - glm::dvec2(0.0, 12.0));
+        advance();
+        advance();
+    }
+    out.spotBeforeDoor = played.minions.SpotCount();
+    for (int tick = 0; tick < 12 && !layer.Finishing(); ++tick) {
+        HoldPlayerAt(registry, layer, MagicPortals::Units::ToPixels(glm::vec3(played.goals.exit.centre, 0.0f)));
+        advance();
+    }
+    out.finished = layer.Finishing();
+    for (const MagicPortalsLayer::Unlock& unlock : layer.Unlocks()) {
+        if (unlock.id == 24) out.unlocked24 = true;
+    }
+    // The seen run's count must still be there at the door (a sighting is for the level), and an unseen run's must still be 0.
+    out.spotCount = played.minions.SpotCount();
+    // Count(minion.ent) as the world counts it: placed, not gone, with a body.
+    for (const MagicPortals::Minions::Minion& minion : played.minions.minions) {
+        if (!minion.gone && minion.entity == played.minions.rules.defaultEntity && minion.body != entt::null && registry.valid(minion.body)) {
+            ++out.liveKnights;
+        }
+    }
+    out.atTheDoor = KnightsAccount(registry, played);
+    layer.OnDetach(registry);
+    return out;
+}
+
+void AKnightsSightingKeepsTheStealthAchievementFromTheDoor() {
+    if (!OriginalArtIsThere("AKnightsSightingKeepsTheStealthAchievementFromTheDoor")) return;
+    std::vector<StealthRun> runs;
+    for (const int idle : {20, 30, 40}) runs.push_back(PlayThreeTwoToTheDoor(false, idle));
+    runs.push_back(PlayThreeTwoToTheDoor(true, 0));
+    const StealthRun& seen = runs.back();
+
+    bool aControlWentUnseen = false;
+    std::string accounts;
+    for (const StealthRun& run : runs) {
+        const std::string which = run.beSeen ? std::string("the seen run") : "the control that waits " + std::to_string(run.idleTicks) + " ticks";
+        std::printf("  3-02, %s: sightings %d before the crystals, %d before the door, %d at it; 24 %s; knights: %s\n", which.c_str(),
+                    run.spotBeforeCrystals, run.spotBeforeDoor, run.spotCount, run.unlocked24 ? "dispatched" : "not dispatched",
+                    run.atTheDoor.c_str());
+        if (run.firstSightTick >= 0) {
+            std::printf("    the first sighting was on tick %d, the knights then: %s\n", run.firstSightTick, run.firstSight.c_str());
+        }
+        accounts += "[" + which + ": " + run.atTheDoor;
+        if (run.firstSightTick >= 0) accounts += "; first sighting on tick " + std::to_string(run.firstSightTick) + ", " + run.firstSight;
+        accounts += "] ";
+
+        CHECK_MSG(run.knights == 2, which + ": 3-02 places two knights: " + std::to_string(run.knights));
+        CHECK_MSG(run.finished, which + " reaches the door: " + run.atTheDoor);
+        CHECK_MSG(run.liveKnights == 2,
+                  which + ": both knights are alive at the door, so that what decides 24 is the sightings and not their count: " +
+                      std::to_string(run.liveKnights) + " alive; " + run.atTheDoor);
+        if (run.spotBeforeDoor > 0) {
+            CHECK_MSG(!run.unlocked24, which + ": a knight had sighted him before the door (" + std::to_string(run.spotBeforeDoor) +
+                                           ") and the door dispatched 24: " + run.atTheDoor);
+        } else if (run.spotCount == 0) {
+            CHECK_MSG(run.unlocked24, which + ": no knight sighted him and the door did not dispatch 24 (exactly two knights, SpottedCount() 0): " +
+                                          run.atTheDoor);
+            if (run.unlocked24) aControlWentUnseen = true;
+        }
+    }
+    CHECK_MSG(aControlWentUnseen,
+              "at least one run reached the door unseen and the door dispatched 24, so that the harness CAN unlock it: " + accounts);
+
+    CHECK_MSG(seen.sighted, "a knight sighted the player: SimLevel()->minions.SpotCount() " + std::to_string(seen.spotCount) + " > 0");
+    CHECK_MSG(seen.finished && seen.spotCount > 0, "and the count is still there at the door: " + std::to_string(seen.spotCount));
+    CHECK_MSG(!seen.unlocked24,
+              "the door does NOT dispatch 24 for the same two knights once one has seen: the layer's world answered SpottedCount() "
+              "with the sum above 0 (a world that answered 0 would have unlocked it, as the control's did)");
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -19620,6 +19963,9 @@ void runTests() {
     ATappedHandGoesWithItsSmoke();
     AShockAgentPulsesOnItsBounce();
     AStoneThatFallsOnAKnightCrushesIt();
+    AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone();
+    AStoneRestingAgainstThePlayerKillsNothing();
+    AKnightsSightingKeepsTheStealthAchievementFromTheDoor();
 }
 
 } // namespace

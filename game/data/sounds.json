@@ -554,7 +554,7 @@
       "plays only ONE cue, and only for a fall: past the level's bounds it logs",
       "GAME_CHARACTER_DIED_BY_FALLING, calls playDieByFallSound(), Hide()s the character",
       "and calls finishGame(true). The hp death above it plays NOTHING - it drops a",
-      "blood.ent, hides the character and calls finishGame(false).",
+      "blood.ent, hides the character and calls finishGame(true).",
       "",
       "playDeathSound comes later and from somewhere else: checkGameEnd counts",
       "gameEndElapsedTime against gameLostDelay - 1400 ms, the same register that feeds",

@@ -3342,10 +3342,13 @@ private:
     // a stone's touch of a breakable that Demolish took this tick (`struck`),
     // which the watch cannot see once the breakable is gone.
     void latchImpacts(const std::vector<const Demolish::Breakable*>& struck);
-    // ETHBeginContactCallback_rolling_stone's crush (planning step 159): the knights a stone began to touch this step at a
-    // hitIntensity above minions.json `crush.hit_above` are taken (Game::Crush), BEFORE Game::AfterStep reads them, and
-    // their bodies are kept in m_crushedNow for latchImpacts to shake and sound on the same contact.
-    void crushMinions(entt::registry& registry);
+    // ETHBeginContactCallback_rolling_stone's two kills, read from the begins of the stones the step made, BEFORE
+    // Game::AfterStep reads what they set: the knights a stone began to touch at a hitIntensity above minions.json
+    // `crush.hit_above` are taken (Game::Crush; planning step 159), their bodies kept in m_crushedNow for latchImpacts to
+    // shake and sound on the same contact; and the player it began to touch above demolish.json `stone.kills_player_above`
+    // is killed (Game::StoneHitsPlayer, folded into Hazards by AfterStep; planning step 160). Both read the number the
+    // stone's own impact row reads.
+    void stoneHits(entt::registry& registry);
     std::vector<entt::entity> m_crushedNow;
     // Who the impact rows watch, as the step is about to be taken.
     std::vector<Impacts::Watched> impactBodies() const;

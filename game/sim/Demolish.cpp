@@ -80,7 +80,24 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         }
         read.blastEntities.push_back(entity.AsString());
     }
+    if (!has("stone", "kills_player_above")) return false;
+    if (!root["stone"]["kills_player_above"].IsNumber() || !(root["stone"]["kills_player_above"].AsNumber() > 0.0)) {
+        error = path + ": stone.kills_player_above is not a number above 0";
+        return false;
+    }
+    read.killsPlayerAbove = root["stone"]["kills_player_above"].AsNumber();
     out = std::move(read);
+    return true;
+}
+
+bool KillsPlayer(const Rules& rules, double hitIntensity) {
+    return hitIntensity > rules.killsPlayerAbove;
+}
+
+bool State::HitPlayer(const std::string& stone, double hitIntensity) {
+    if (playerKilled || !KillsPlayer(rules, hitIntensity)) return false;
+    playerKilled = true;
+    killedBy = stone;
     return true;
 }
 

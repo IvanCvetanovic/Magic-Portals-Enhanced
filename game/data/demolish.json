@@ -27,6 +27,30 @@
     "names": ["breakable_wall"]
   },
 
+  "stone": {
+    "_note": [
+      "What a rolling stone does to the PLAYER it begins to touch (planning step 160, STK). ETHBeginContactCallback_rolling_stone",
+      "(listing L68515, MiscCallbacks bytes 346486..347456) #107-129: where isCharacter(other) - the player is the only",
+      "entity with that datum (GameCharacter::GameCharacter L22977, built by one class, MainCharacter) - and the stone's",
+      "hitIntensity is above 2.5 (CMPIf against 0x40200000, JNP skips, so STRICTLY above), other.SetInt('hp', 0): the same",
+      "write a death area makes (L66942 #9-18), so the death is a death area's - blood, the player hidden, the lost screen,",
+      "no sound of its own (GameStateController::checkGameLost L23649 #3-63). hitIntensity is #6-56:",
+      "dp2(the STONE's own GetLinearVelocity, normalize(other.GetPositionXY() - thisEntity.GetPositionXY())) / getScale()",
+      "- the stone's speed toward the player's entity point, over 50 px a unit (D11_check C47: 2.5 is 125 level units a",
+      "second of the original's physics). A stone at rest (#34-35: length 0 skips the whole callback) or moving away kills",
+      "nothing, and the player's own movement is not in the number. A begin-contact only. The stone is untouched. Carried by",
+      "rolling_stone.ent in both spellings, placed, launched or dropped by the beholder - not rolling_stone_no_emissive.ent",
+      "(2-30), which has no callback of its own. The beholder's rocks are the same callback, and the port kills with them in",
+      "Boss::Contacts (boss.json rock.crush_intensity, the same 2.5), which this does not replace.",
+      "",
+      "The number the port tests is the impact watch's, the one the stone's own shake reads (Impacts::Begin::Approaching):",
+      "the fastest the stone came along that line since it last met or left something. INFERRED equal to the callback's, not",
+      "measured: no footage shows a stone against the player (docs/parity-backlog.md STK-1)."
+    ],
+    "_source": "ETHBeginContactCallback_rolling_stone L68515 #6-56 (hitIntensity), #107-129 (the kill, 2.5); isCharacter L66695; GameCharacter::GameCharacter L22977; ETHBeginContactCallback_death_area L66942; checkGameLost L23649 (out/parity/asbc/all_functions.txt, md5 48fe65ce)",
+    "kills_player_above": 2.5
+  },
+
   "contact": {
     "_note": [
       "How near a stone must come to a breakable's box to touch it. The Godot project's stone",

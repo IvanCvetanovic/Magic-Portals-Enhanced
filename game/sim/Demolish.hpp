@@ -5,9 +5,11 @@
 //
 // - A stone (role demolisher) breaks whatever breakable thing it touches.
 //   Breaking takes the entity away entirely, collision included, as
-//   Hazards.destroy frees the node. A stone is not a hazard: it kills nothing,
-//   and the player may stand beside one (level 1-9 spawns the player 58 px from
-//   one).
+//   Hazards.destroy frees the node. A stone is not a hazard that kills where it
+//   stands, and the player may stand beside one (level 1-9 spawns the player 58 px
+//   from one) - but one that BEGINS to touch the player at a hitIntensity above
+//   demolish.json `stone.kills_player_above` kills him, as the original's stone
+//   callback sets his hp to 0 (planning step 160; HitPlayer).
 // - What is breakable: an entity whose metadata/breakable is set, which is all
 //   the Godot project reads, or one whose name demolish.json lists. Eight
 //   breakable_wall placements carry no flag, and that is in the original's own
@@ -59,9 +61,16 @@ struct Rules {
     // The entities whose own callback deletes them once a blast has set their
     // `destroy` datum: demolish.json `blast.entities`, either spelling.
     std::vector<std::string> blastEntities;
+    // ETHBeginContactCallback_rolling_stone #107-129: the hitIntensity a stone's begin against the
+    // player must be ABOVE to set his hp to 0 (demolish.json `stone.kills_player_above`).
+    double killsPlayerAbove = 0.0;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
+
+// Whether a stone whose begin against the player reads `hitIntensity` kills him: STRICTLY above the rule's number
+// (#115-116: CMPIf, JNP skips).
+bool KillsPlayer(const Rules& rules, double hitIntensity);
 
 struct Stone {
     std::string name;
@@ -87,6 +96,14 @@ struct State {
     Rules rules;
     std::vector<Stone> stones;
     std::vector<Breakable> breakables;
+    // A stone's begin against the player at a hitIntensity above rules.killsPlayerAbove (HitPlayer): the stone's
+    // name. Game::AfterStep folds it into Hazards, as every other death is.
+    bool playerKilled = false;
+    std::string killedBy;
+
+    // The stone `stone`'s begin against the player, read at `hitIntensity`: kills him where KillsPlayer says so
+    // (the first to do so names the death). Returns whether this call killed him.
+    bool HitPlayer(const std::string& stone, double hitIntensity);
 
     // One tick, after the physics step: each stone breaks what it touches. The
     // wall's body goes and its handle is kept, which the layer's impact watch

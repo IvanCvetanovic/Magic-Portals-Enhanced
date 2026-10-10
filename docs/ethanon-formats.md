@@ -2944,6 +2944,17 @@ the engine's side is `ETHBucketManager.cpp:193-252, 505-523, 636-645` and `ETHSc
 - **What kills a minion** (`minion.ent` and `ghost_minion.ent` alike; the minion's own callback turns `destroy` into `blood.ent` and `DeleteEntity`, `burn` into `addFlames` first): the killer floor, a fireball, a fire agent, a
   shock diamond - built before - and `explode` (#111-152: `destroy` set on, and `burn` of, every entity its `isBreakableOrExplosiveOrBurnable` grabber of radius `scale(80)` takes with a clear ray) and a rolling stone that
   begins to touch it at `hitIntensity > 1.23` (`ETHBeginContactCallback_rolling_stone` #131-168: `hp = 0`, `destroy`, `playMinionSmashSound`, `startEarthquake(25, 0)`), which step 159 builds. `ETHBeginContactCallback_lava` burns a
-  burnable too (#1-19), and only 4-32 places lava. The shot kills only the player and portals. There is no sword or melee in the listing. Side finding, NOT built (recorded): the same stone callback sets the PLAYER's `hp`
-  to 0 above `hitIntensity` 2.5 (#107-129) - `docs/parity-backlog.md` G1b-5.
+  burnable too (#1-19), and only 4-32 places lava. The shot kills only the player and portals. There is no sword or melee in the listing. The same stone callback kills the PLAYER (next bullet; built in step 160).
+- **A rolling stone's kill of the player** (planning step 160, STK; decode line by line in `out/parity/program/STK/decode.md`). `ETHBeginContactCallback_rolling_stone` (346486..347456, listing line 68515) runs
+  on the BEGIN of every contact of a `rolling_stone.ent` (both spellings, placed, launched or the beholder's; not `rolling_stone_no_emissive.ent`, which has no callback of its own: the listing's only
+  `ETHBeginContactCallback_rolling*` is this one). The engine hands it `(thisEntity, other, point0, point1, normal)` (`ETHPhysicsEntityController.cpp:210-223`) and the script overwrites `normal` with
+  `normalize(other.GetPositionXY() - thisEntity.GetPositionXY())` (#6-26; `opSub` is called on the OTHER's point with this's as the argument, D11_check C55). Where the stone's own `GetLinearVelocity()` has any length (#28-35: no
+  length, no rest of the callback) `hitIntensity = dp2(thisController.GetLinearVelocity(), normal) / g_scale.getScale()` (#36-56): the STONE's velocity along that line, never a relative one, so the player's own movement is
+  not in it; with the units of C47, 2.5 is 125 level units a second of the original's 1/30 s physics. Then, in this order: above 2 the shake and `playStoneHitSound(hitIntensity / 3)` (#57-71); the despawner (#73-105);
+  **`if (isCharacter(other) && hitIntensity > 2.5f) other.SetInt('hp', 0)` (#106-130: `isCharacter` is `GetUInt('isCharacter') != 0`, `CMPIf` against `0x40200000`, `JNP` skips, so STRICTLY above)**; the knights' crush (#131-168);
+  `destroyOnStaticHit` (#169-208). The stone is not touched by the kill arm. `isCharacter` is written once, in `GameCharacter::GameCharacter` (L22977), which one constructor calls (`SideScrollerCharacter`, L29893, itself built only by
+  `MainCharacter`, L24433): **the player is the only character**. `hp` 0 is what `ETHBeginContactCallback_death_area` writes (L66942 #9-18), and `GameStateController::checkGameLost` (L23649 #3-116) turns it into blood at the
+  character, `Hide()`, `Scale(0.05)`, `finishGame` and a `GAME_CHARACTER_DIED_BY_HP` log line, with no sound and no shake (those two are the fall arm's, #244-271); `shallLeave` (L91631) and the shock field read `isCharacterDead`
+  (L66714) to let a carried key go and to stop hurting him. The beholder's rocks are this entity: the port kills with them in `Boss::Contacts` (boss.json `rock.crush_intensity`, the same 2.5, a 30-tick window of its own), and
+  the layer's impact watch kills with every other stone (demolish.json `stone.kills_player_above`). No footage shows a stone against the player; the number is the bytecode's alone.
 
