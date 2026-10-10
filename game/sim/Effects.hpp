@@ -355,6 +355,10 @@ struct Rules {
     // ETHCallback_hand_tap's smoke_vanish.ent: a fixed offset turned by the hand,
     // and the reach a release must come within.
     Rule handTapSmoke;
+    // The marks a knight shows over its head (planning step 158, ETHCallback_minion #686-754 and #1338-1407): both
+    // at the knight's GetPosition() less (0, scale(36), scale(32)), so the row's offset is the 36 and its z the 32.
+    Rule exclamation;
+    Rule question;
     double handTapReachUnits = 0.0;
     std::string handTapEntity; // the entity whose callback it is, without .ent: hand_tap
 };
@@ -541,6 +545,12 @@ Spawn FinishSparkles(const Rules& rules, const glm::dvec2& characterPx);
 // whole vector3, so its z is the victim's own depth (on the level's axis) plus the
 // row's 0, and AddScaledEntity's angle is 0.
 Spawn Blood(const Rules& rules, const glm::dvec2& victimPx, double victimZ);
+
+// AddScaledEntity('exclamation.ent' / 'question.ent', GetPosition() - vector3(0, scale(36), scale(32)), getScale())
+// for a knight whose entity point is `knightPx` and whose own depth is `knightZ` (on the level's axis, as Blood's
+// victim's is): the row's offset puts the mark above the knight and its z, added to the knight's, behind it.
+Spawn ExclamationMark(const Rules& rules, const glm::dvec2& knightPx, double knightZ);
+Spawn QuestionMark(const Rules& rules, const glm::dvec2& knightPx, double knightZ);
 
 // Where checkGameLost puts the skull of a character that left the level
 // (#255-361), from the character's GetPositionXY, the camera's top-left corner

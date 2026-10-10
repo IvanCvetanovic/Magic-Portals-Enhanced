@@ -2884,6 +2884,59 @@ void AMinionWalksOnItsSheet() {
     CHECK_MSG(Tagged(registry, "Magic Portals Minion") == 0, "no minion outlives the layer");
 }
 
+// A knight that sees the player (planning step 158, G1a): the first sighting, past the exclamation's 4000 ms, adds
+// exclamation.ent above it and latches the spotted sound; the sim's marks are the layer's only source.
+// level0b (3-01): the patroller minion_spawn_1811 walks left from (546, 106) to wayA0 (509, 112) and holds there 4000 ms,
+// facing left. The player is held behind it (to its right, outside its cone) for 60 ticks - the exclamation's clock
+// passes 4000 at the 32nd - and then in plain view 60 units to its left.
+void AKnightThatSeesThePlayerAddsItsExclamationAndPlaysItsSound() {
+    if (!OriginalArtIsThere("AKnightThatSeesThePlayerAddsItsExclamationAndPlaysItsSound")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Minions::Minion* knight = SimMinion(layer, "minion_spawn_1811");
+    CHECK(knight != nullptr);
+    if (knight == nullptr) return;
+    const glm::dvec2 behind(640.0, 109.9);
+    const glm::dvec2 inView(450.0, 109.9);
+    int heardAt = -1;
+    int markedAt = -1;
+    glm::dvec2 markAt(0.0);
+    double markZ = 0.0;
+    bool beforeHeard = false;
+    for (int tick = 0; tick < 130; ++tick) {
+        HoldPlayerAt(registry, layer, tick < 60 ? behind : inView);
+        tickWith(layer, registry, kRest, {}, {});
+        for (const std::string& name : layer.LatchedSounds()) {
+            if (name != "enemy_spotted") continue;
+            if (heardAt < 0) heardAt = tick;
+            if (tick < 60) beforeHeard = true;
+        }
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+            if (report.entity != "exclamation.ent" || markedAt >= 0) continue;
+            markedAt = tick;
+            markAt = report.atPx;
+            markZ = report.zUnits;
+        }
+    }
+    CHECK_MSG(!beforeHeard, "nothing is heard while the player stands behind it");
+    CHECK_MSG(knight->spotCount >= 1, "the knight counted its sighting: " + std::to_string(knight->spotCount));
+    CHECK_MSG(heardAt >= 60 && heardAt < 70, "the sound is the tick of the sighting: " + std::to_string(heardAt));
+    CHECK_MSG(markedAt == heardAt, "with the mark, on the same frame: " + std::to_string(markedAt));
+    // 36 above the knight's entity point, 32 behind its own depth: the knight stands 3-01's floor over its feet.
+    const glm::dvec2 entityPx = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(knight->body).position) -
+                                glm::dvec2(0.0, layer.SimLevel()->minions.rules.EntityAboveCentrePx());
+    CHECK_MSG(std::fabs(markAt.x - entityPx.x) < 0.5 && std::fabs(markAt.y - (entityPx.y - 36.0)) < 0.5,
+              "the mark stands 36 above the knight: " + Point(markAt) + " over " + Point(entityPx));
+    CHECK_MSG(markZ < 0.0, "behind the minion's depth 2 by 32: " + std::to_string(markZ));
+    layer.OnDetach(registry);
+}
+
 void TheMinionsStandBehindThePlayerAndTheArtAtTwo() {
     // R10 and minion_spawn's 2, both raw depths over the scale factor the level's
     // own nodes were multiplied by (art.json depth): the player at 1.42 and a minion
@@ -19289,6 +19342,7 @@ void runTests() {
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();
+    AKnightThatSeesThePlayerAddsItsExclamationAndPlaysItsSound();
     ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack();
     ATapLandsWhereItPoints();
     AScheduledTapFiresTheShotARealPressFires();

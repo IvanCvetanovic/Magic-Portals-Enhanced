@@ -184,12 +184,16 @@ struct Level {
     // in, and refuses a portal anywhere inside its reach.
     GravityWell::State wells;
     // The level sets `darkest`: its ambient light is DARKEST_AMBIENT_LIGHT,
-    // (0.01, 0.01, 0.01), in place of its file's. Nothing in the simulation acts
-    // on it: the layer draws with it (Lighting::Ambient, lighting.json), and that
-    // is presentation, off the state hash. Its one gameplay consequence is that a
-    // minion in such a level is blind, which minion sight must honour when it is
-    // built, by comparing the same Lighting::Ambient the layer draws with.
+    // (0.01, 0.01, 0.01), in place of its file's. The layer draws with it
+    // (Lighting::Ambient, lighting.json), and that is presentation, off the state
+    // hash. Its gameplay consequence is that a minion in such a level is blind
+    // (planning step 158): BeforeStep hands Minions `canSeeAnything`, which is the
+    // ambient Lighting::Ambient gives - the one function the layer draws with - not
+    // being the darkest value, so a lit torch gives the knights their sight and the
+    // player back, and a torch put out takes it again.
     bool darkest = false;
+    // The level file's own <Ambient> (the root's eth_ambient), which that function starts from.
+    glm::dvec3 fileAmbient{1.0};
     // The level sets `no_gravity`: the world's gravity is zero, the walking
     // buttons do nothing, and the recoil of a portal shot is how the player
     // moves. Zerog.hpp holds the decode. Unlike `darkest` this one is ACTED ON,
@@ -205,6 +209,11 @@ struct Level {
 // statics out, which is the landing check's mutation. That leaves out the doors
 // too, so there is nothing to wire.
 bool Start(const Data& data, entt::registry& registry, Level& out, std::string& error, bool withStatics = true);
+
+// What ETHCallback_minion asks the engine each frame (planning step 158): whether a knight can see anything (the
+// ambient is not the darkest value), whether the game is finished, and where the player and the placed portals stand.
+// BeforeStep hands it to Minions::State::Tick; a suite asks it directly.
+Minions::Senses SensesOf(const Data& data, entt::registry& registry, const Level& level);
 
 void BeforeStep(const Data& data, entt::registry& registry, Level& level, float direction,
                 const ScriptClock::Step& step);

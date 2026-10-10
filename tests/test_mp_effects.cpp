@@ -1309,6 +1309,33 @@ void ATappedHandsSmokeTurnsWithIt() {
               "at 95 degrees: (-37.855, +3.312) off it, the smoke itself unturned: " + At(turned.atPx));
 }
 
+// A knight's marks (planning step 158, ETHCallback_minion #686-754 and #1338-1407): AddScaledEntity(name,
+// GetPosition() - vector3(0, scale(36), scale(32)), getScale()) - 36 above the knight (+y down) and the row's z, 32 less,
+// added to the knight's own depth; unturned, at the script's size.
+void TheKnightsMarksAreAddedAboveAndBehindThem() {
+    const Effects::Rules rules = TheRules();
+    CHECK_MSG(rules.exclamation.entity == "exclamation.ent" && rules.question.entity == "question.ent",
+              "the two entities");
+    for (const Effects::Rule* row : {&rules.exclamation, &rules.question}) {
+        CHECK_MSG(row->offsetFixedUnits == glm::dvec2(0.0, -36.0) && row->offsetUnits == 0.0,
+                  row->entity + " is added 36 above the knight's point");
+        CHECK_MSG(row->z == -32.0 && row->zScaled, row->entity + "'s z is the knight's own less scale(32)");
+        CHECK_MSG(row->turn == Effects::Turn::Fixed && row->angleDeg == 0.0 && row->scale == 1.0,
+                  row->entity + " is unturned and at the script's size (AddScaledEntity's 0f)");
+    }
+    // A knight at (300, 64) on the depth 2 minion_spawn adds it at: the mark at (300, 28), z -30.
+    const glm::dvec2 knight(300.0, 64.0);
+    const Effects::Spawn bang = Effects::ExclamationMark(rules, knight, 2.0);
+    CHECK_MSG(bang.entity == "exclamation.ent" && bang.atPx == glm::dvec2(300.0, 28.0) && bang.z == -30.0 &&
+                  bang.zScaled && bang.angleDeg == 0.0f && bang.scale == 1.0,
+              "the exclamation: " + At(bang.atPx) + " z " + std::to_string(bang.z));
+    const Effects::Spawn ask = Effects::QuestionMark(rules, knight, 2.0);
+    CHECK_MSG(ask.entity == "question.ent" && ask.atPx == glm::dvec2(300.0, 28.0) && ask.z == -30.0 && ask.zScaled,
+              "the question: " + At(ask.atPx) + " z " + std::to_string(ask.z));
+    // The depth is the knight's OWN: an escort at another depth carries its marks to it.
+    CHECK_MSG(Effects::ExclamationMark(rules, knight, 0.0).z == -32.0, "an escort at depth 0: -32");
+}
+
 void ARowMissingAFactIsRefused() {
     const std::string good = Read(kEffects);
     CHECK_MSG(!good.empty(), "effects.json is where the build says: " + kEffects);
@@ -1569,6 +1596,19 @@ void ARowMissingAFactIsRefused() {
     refused("hand_with_ent.json", "\"hand_entity\": \"hand_tap\",", "\"hand_entity\": \"hand_tap.ent\",",
             "smoke_vanish_hand_tap.hand_entity");
     refused("no_utility.json", "\"ghost_utility_spawn\": {", "\"ghost_utility_gone\": {", "ghost_utility_spawn");
+    // The knights' marks: each required, added above (a pair with a negative y) and behind (a negative scaled z).
+    refused("no_exclamation.json", "\"exclamation\": {", "\"exclamation_gone\": {", "exclamation");
+    refused("no_question.json", "\"question\": {", "\"question_gone\": {", "question");
+    refused("exclamation_below.json",
+            "\"entity\": \"exclamation.ent\",\n    \"offset_units\": [0, -36],",
+            "\"entity\": \"exclamation.ent\",\n    \"offset_units\": [0, 36],", "exclamation");
+    refused("question_in_front.json",
+            "\"entity\": \"question.ent\",\n    \"offset_units\": [0, -36],\n    \"z\": {\"value\": -32,",
+            "\"entity\": \"question.ent\",\n    \"offset_units\": [0, -36],\n    \"z\": {\"value\": 32,", "question");
+    refused("question_bare.json",
+            "\"entity\": \"question.ent\",\n    \"offset_units\": [0, -36],\n    \"z\": {\"value\": -32, \"scaled\": true},",
+            "\"entity\": \"question.ent\",\n    \"offset_units\": [0, -36],\n    \"z\": {\"value\": -32, \"scaled\": false},",
+            "question");
 
     Effects::Rules rules;
     std::string why;
@@ -1601,6 +1641,7 @@ MP_SUITE_MAIN("test_mp_effects") {
     TheSmallerPicturesRowsAreTheDecodedCalls();
     TheBossesScatterIsTheAddersClockAndTheirRandomPoint();
     ATappedHandsSmokeTurnsWithIt();
+    TheKnightsMarksAreAddedAboveAndBehindThem();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

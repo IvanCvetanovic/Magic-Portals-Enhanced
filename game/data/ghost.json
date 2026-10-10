@@ -153,8 +153,10 @@
       "z_offset_units is scale(-1): one level unit behind its knight at any screen (00_order 8.13 K13).",
       "scale is scale(0.3): the entity's scale at its init, which waypoint 0 reads back (appear below).",
       "deletes_entity_id: level31b's entity 1430, anti_sight_wall.ent at (528, 192), a sensor with no",
-      "sprite; the converter names its node anti_sight_wall_ent_1430 (tscn.py _node_name). The port has",
-      "no minion sight, so taking it away changes nothing the port plays (planning step 98)."
+      "sprite; the converter names its node anti_sight_wall_ent_1430 (tscn.py _node_name). Taking it away",
+      "changed nothing the port played in planning step 98, which built no minion sight; since step 158 (G1a)",
+      "it matters: the sensor blocks the knights' look and way rays like any body, so level31b's knights",
+      "cannot see through it, nor walk or search past it, until the black knight's death deletes it."
     ],
     "_first_callback": [
       "INFERRED, and pinned by test_mp_ghost: ghost.ent is static=1, so its callback is queued from a",

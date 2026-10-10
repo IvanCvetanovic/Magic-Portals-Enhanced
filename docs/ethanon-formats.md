@@ -2872,3 +2872,47 @@ last-first); D3 and its check had the callback's shape (`decode/D3.md` section 3
 - **Not decoded, so not built:** the order in which two static callbacks that catch the same sample run (the scene walk's: a reflector, an anti-portal agent, a flame or a blocker on one frame) - the
   port takes a blocker, then a reflector, then an agent, then a flame; and whether a static callback that runs after this one in the frame sees the new shot at its spawn (it does in the original, at the
   agent's point; the port runs the new leg's first callback on the next tick and no static look in between).
+
+## 22. The knights' sight: findEntityInSight, the way probe, the marks and the dark levels (planning step 158, G1a)
+
+`ETHCallback_minion` (`ETHCallback_minion.angelscript`, bytes 427194..433047), `findEntityInSight` (433047..434575), `addEnemyShoot` (434575..435266), `isPointInScreen`
+(`utilIntersections`, 318801..319089), `dp2` (`utilMath`, 315703..315805), `equalsAny` and `splitString` (`utilString`), `GameStateController::isFinished` (123074..123132) and `finishGame` (122645..122773),
+read against the listing (md5 `48fe65ce`, arguments pushed last-first); the engine's side is `ETHPhysicsSimulator.cpp:251-268`, `ETHRayCastCallback.cpp:35-57`, `ETHEntityChooser.cpp:49-63` and
+`ETHBucketManager.cpp:47-50, 505-523`. Every `#n` is an instruction index. The whole state machine, line by line, is `out/parity/program/G1a/decode.md`.
+
+- **Who runs it.** One script: `minion.ent`'s callback, which `ETHCallback_ghost_minion` (#25) also runs whole after `SetColor(V3_ZERO)`. `findEntityInSight` has one caller (#613) and `addEnemyShoot`
+  two (#884 and the ghost's); `ETHCallback_dragon_knight` (2-32's cutscene knight) calls neither, so it never sees. `anti_sight_wall.ent` (static, shape 1, **sensor 1**, collision 128 x 24 x 3, no sprite, no
+  custom data) and the two marks have no callback.
+- **The look.** #578-615: `targets = 'portal.ent'`, `+= ';dark_mage.ent'` only `if (canSeeAnything)`; `findEntityInSight(thisEntity, targets, 0.5f, canSeeAnything)` (the fourth argument is never read).
+  Inside it: `viewingDirection = GetVector2('moveVec')` (#1-13), the facing as the LAST walk or search wrote it (it is written later in the same frame), and if `dp2(v, v) != 1.0f` it prints
+  `'Warning: enemy aims nowhere'` and returns null (#15-55): a knight that has never walked sees nothing. #56-99: the entities stored in **three buckets**, the agent's `GetBucket(GetPositionXY())`, the next
+  along `moveVec` and the one after; the bucket is `vector2(128, 128) x getScale()` (Game::start #3-17, #49, section 4; NOT the default 256), so the knight sees only what is in its own 128-unit row
+  and within about 256-384 units ahead - there is no radius, the buckets are the range. #131-267, for each, in order: `equalsAny(GetEntityName(), targets)`; `targetVector = normalize(target - agent)`; skip unless
+  `dp2(viewingDirection, targetVector) > 0.5` (#203-204, strictly: **a 120 degree cone**, 60 each side); then `GetClosestContact(agentPos, targetPos, p, n, 'ghost_minion.ent;minion.ent;dark_mage.ent')` (#205-252)
+  and the target is returned only if that is **null**.
+- **`GetClosestContact` with a list** (`ETHPhysicsSimulator.cpp:251-268`): `a == b` is null; Box2D's `RayCast` reports every fixture on the segment, a sensor's included (`ETHRayCastCallback::ReportFixture` asks
+  nothing of the fixture); the chooser accepts an entity unless its `GetEntityName()` equals a listed name EXACTLY (`ETHEntityChooser.cpp:49-63`); the nearest accepted contact is returned, and a shape the segment
+  starts inside is not reported (`b2CircleShape::RayCast`, `b2PolygonShape::RayCast`). So the look is blocked by any body but the knights', the player's and `portal.ent`'s (shape 0, no body): walls, doors, crates, stones, lifts,
+  and every sensor, `anti_sight_wall.ent` first among them, whose whole purpose this is.
+- **A sighting** (#616-767): `entityInSight != null && !g_stateController.isFinished()` (`gameFinished`, set by `finishGame(lost)`: the level's end and a death alike). With `targetSpotted == 0` (#633-645):
+  `targetSpotted = 1`, `elapsedTime = 0`, `enemySpotCount += 1` (#646-684), and if `exclamationElapsedTime > 4000` (#686-697; it starts at **3500**, #64-75): zero it and
+  `AddScaledEntity('exclamation.ent', GetPosition() - vector3(0, scale(36), scale(32)), getScale())` (#711-748; the three pushes are z, y, x) and `playEnemySpottedSound` (#751-754, inside the same block, no screen test).
+  So a mark is shown only for a NEW sighting once the timer has passed 4000; a sighting that goes on shows nothing. Then (#755-884, true on the first frame too) `shootWaitTime = distance(target, knight) < scale(42) ? 1000 : 650`,
+  `+ 3000` if the KNIGHT'S OWN `length(GetLinearVelocity() / getScale()) > 0.3` (#791-811), and when `elapsedTime > shootWaitTime && shootElapsedTime > 2000` both are zeroed and `addEnemyShoot(knightPos, targetPos, target)` is
+  called (G1b). Otherwise `targetSpotted = 0` (#886-898). The knight neither turns nor runs at what it sees: it stands because its dwell clock is zero.
+- **The way** (#899-996): `GetClosestContact(currentPos, destPos, p, n, 'ghost_minion.ent;minion.ent;char_feet.ent;crate_small;shock_agent;shock_agent.ent' + (canSeeAnything ? ';dark_mage.ent' : ''))`; its `== null`
+  is the local `isInSight` (the name misleads: it is "the way is clear"), and when it is, the datum `'isInSight'` is set to 1 (#961-975). The walk (#977-1163) needs **the way clear and `elapsedTime` (read at #562-572,
+  before a sighting resets it) above `holdTime`**; it writes `cantReach = 0` (the one occurrence of that string in the whole listing: it is read nowhere) and `moveVec = (currentPos.x < destPos.x ? 1 : -1, 0)` BEFORE the
+  lone guard's `shouldntMove` (#1070-1084). Everything else is the hold arm: the velocity times `(0.3, 1)`, the standing frame only `if (entityInSight == null)` (#1183-1205).
+- **The search arm** (#1206-1449): the hold arm with `!isInSight && targetSpotted == 0`: `moveVec = (elapsedTime % 4000 > 2000 ? 1 : -1, 0)` (two seconds each way), `dirRow` from it and `SetFrame(dirRow, 0)`;
+  `questionElapsedTime += ms` (here only; it starts at **3000**), and past 4000: zero it, `AddScaledEntity('question.ent', GetPosition() - vector3(0, scale(36), scale(32)), getScale())` and, if
+  `isPointInScreen(toVector2(that))` and `GetUInt('isInSight') != 0`, `playMinionQuestionMarkSound`, then `'isInSight' = 0`. `isPointInScreen`: the point less `GetCameraPos()` is not past a side of `GetScreenSize()`, edges inside.
+- **Blind.** `canSeeAnything = !(DARKEST_AMBIENT_LIGHT == GetAmbientLight())` (#20-37): the ambient is the level file's, `(0.01, 0.01, 0.01)` on a `darkest` level, `(0.1, 0.1, 0.25)` once a torch is lit, the darkest again once a torch is put
+  out. Blind, a knight sees **a portal and not the player**, its emissive is zero (#267-283), and its way is blocked by the player's body (the list loses `dark_mage.ent`; the player is two circles of radius 9.1 at +-9). The six levels that
+  are `darkest` and place a knight: 4-25, 4-26, 4-27, 4-29, 4-30, 4-31. `entities/exclamation.ent` and `question.ent`: shape 0, no sprite, one particle system (`exclamation_mark.png` / `question_mark.png`, life 550, size 1 to 22, growth 1.4,
+  white to transparent, repeat 1).
+- **The contact's hold cap - decoded, NOT built** (recorded after step 158's independent check; `docs/parity-backlog.md` G1a-10). `ETHBeginContactCallback_minion` (bytes 437083..437789): when a minion begins contact with an entity
+  that is not a sensor (#0-11 return on `other.GetPhysicsController().IsSensor()`) and is named `dark_mage.ent` (#12-29), its own `holdTime` becomes `min(holdTime, 1000)` (#30-55; the pushes are last-first, so `min`'s two
+  arguments are the datum and 1000). A knight the player touches while it holds, or while it sees him, therefore walks on after at most 1000 ms of dwell instead of serving a longer hold. It meets the sight's dwell reset (`elapsedTime`
+  zeroed on every sighting and every shot gate): a knight that is touched and still sees the player keeps being held up by its reset clock. The rest of the callback (#56-142, for a contact with anything but
+  `enemy_killer`: `startEarthquake` from the hit intensity and, past 3.5, `playFallSound` #132-140) is on record under the backlog's Order 11.4 rows: the tremble was built in step 112, the fall sound and this cap stay open.

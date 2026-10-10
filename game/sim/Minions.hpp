@@ -56,8 +56,18 @@
 // original's sensor does). A kill floor shrunk to 16 px would miss everything that
 // fell past it.
 //
-// NOT built here, and deliberately: sight, shooting, and a minion being
-// breakable. minion.ent carries breakable=1, burnable=1 and teleportable=1;
+// SIGHT, built in planning step 158 (G1a; out/parity/program/G1a/decode.md has the whole state machine). A knight looks
+// every frame (findEntityInSight): the entities in the three 128-unit buckets of its row that its facing runs
+// through, inside a 120 degree cone, with nothing between them and it but another knight or the player. It does not turn
+// or run at what it sees: it stands (its dwell clock reset), shows an exclamation mark and plays a sound the first time,
+// and waits to shoot. It also casts a ray to the waypoint it walks to, and a way that is blocked is not walked: it
+// searches, looking right and then left, with a question mark every 4000 ms. Blind on a `darkest` level (the ambient is
+// DARKEST_AMBIENT_LIGHT), it sees a portal and not the player, and the player's body blocks its way.
+//
+// NOT built here, and deliberately: SHOOTING (G1b). The timers that gate a shot ARE built, because a shot resets
+// elapsedTime and so decides when a knight walks again; what the shot is - the enemy_shoot.ent, its mark, its sound, the
+// kill of the player or of a portal - is not, and State::shotsDue is the one hook for it. And a minion being breakable.
+// minion.ent carries breakable=1, burnable=1 and teleportable=1;
 // teleportable is wired, since a portalled minion landing on the killer floor is
 // how the "kill all minions" achievements are won, and so is burnable against a
 // fireball (Burn, planning step 98: the black knight's death by fire is what adds
@@ -71,7 +81,9 @@
 #include "sim/Trigger.hpp"
 #include "sim/Tscn.hpp"
 
+#include <array>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -79,6 +91,33 @@
 #include <glm/glm.hpp>
 
 namespace MagicPortals::Minions {
+
+// What a knight sees by, and when: minions.json `sight`, every number cited there.
+struct Sight {
+    double fovCos = 0.0;      // findEntityInSight's 0.5: a target is seen above it
+    double bucketUnits = 0.0; // the scene's bucket, 128 level units
+    std::string targetPlayer; // 'dark_mage.ent'
+    std::string targetPortal; // 'portal.ent'
+    // GetClosestContact's ignore lists, by entity name as spelled (ETHEntityNameArrayChooser).
+    std::vector<std::string> sightRayIgnores; // the look's ray, agent to target
+    std::vector<std::string> wayRayIgnores;   // the walk's ray, knight to waypoint
+    std::vector<std::string> wayRayIgnoresWhenSeeing; // added to the walk's while canSeeAnything
+    double exclamationStartMs = 0.0;
+    double exclamationGateMs = 0.0;
+    double questionStartMs = 0.0;
+    double questionGateMs = 0.0;
+    double searchPeriodMs = 0.0;
+    double searchRightAfterMs = 0.0;
+    double markAboveUnits = 0.0;  // the mark's y offset above the knight
+    double markBehindUnits = 0.0; // and its z offset (the vector3's z, subtracted)
+    // addEnemyShoot's gate (ETHCallback_minion #769-842): the timers that move the knight, not the shot itself.
+    double waitNearMs = 0.0;
+    double waitFarMs = 0.0;
+    double nearUnits = 0.0;
+    double movingSpeed = 0.0;
+    double movingAddMs = 0.0;
+    double minIntervalMs = 0.0;
+};
 
 // The port's minions.json.
 // The body is a circle where the original's is a capsule of two, and it is built
@@ -108,6 +147,7 @@ struct Rules {
     // body, so LoadRules takes no other scale.
     double spawnAngleDeg = 0.0;
     double spawnScale = 1.0;
+    Sight sight;
 
     // The body's centre less this is the original's entity point, which arrivePx
     // and settlePx are measured from (minions.json body.entity_above_feet_px).
@@ -131,8 +171,10 @@ enum class Facing { None, Left, Right };
 enum class Arm {
     None,    // not ticked: gone, bodiless, or with no waypoints
     Walk,    // its velocity set toward its destination
-    Hold,    // serving its hold: braked
+    Hold,    // serving its hold: braked, and its standing frame set (#1183-1205: nothing is in sight)
     Settled, // a lone guard inside the wider threshold: left alone
+    Watch,   // braked as Hold is, with something in sight: the frame is NOT set (#1184-1190)
+    Search,  // its way to the waypoint is blocked and it has seen nothing: it looks right, then left (#1229-1321)
 };
 
 struct Minion {
@@ -158,6 +200,67 @@ struct Minion {
     bool gone = false;         // killed, by the floor
     Facing facing = Facing::None; // set only where the walk sets the velocity
     Arm arm = Arm::None;          // the last Tick's
+
+    // WHAT IT SEES BY (ETHCallback_minion's custom data; planning step 158).
+    //
+    // moveVec: the direction it is looking, (+-1, 0), written in the walk arm (even where the lone guard is
+    // left alone: #1028 sets it before shouldntMove is asked) and in the search arm, and absent - (0, 0) - until
+    // then. findEntityInSight reads it BEFORE the walk arm writes it, so it looks the way it looked a frame ago, and a
+    // knight whose moveVec is still (0, 0) sees nothing ('Warning: enemy aims nowhere').
+    glm::dvec2 moveVec{0.0, 0.0};
+    bool spotted = false;      // targetSpotted
+    int spotCount = 0;         // enemySpotCount: every sighting that began with targetSpotted at 0
+    double exclamationMs = 0.0; // exclamationElapsedTime, from Sight::exclamationStartMs
+    double questionMs = 0.0;    // questionElapsedTime, from Sight::questionStartMs
+    double shootMs = 0.0;       // shootElapsedTime
+    bool wayWasClear = false;   // the 'isInSight' datum: set whenever the way is clear, cleared by each question mark
+    bool wayClear = false;      // this tick's probe: the ray to the waypoint met nothing
+    bool seeing = false;        // this tick's findEntityInSight found something (before isFinished is asked)
+};
+
+// What a knight can see this tick, which the caller gathers: ETHCallback_minion asks the engine for
+// GetAmbientLight(), the scene's entities and g_stateController.isFinished(); the simulation hands them over.
+struct Senses {
+    // GetAmbientLight() != DARKEST_AMBIENT_LIGHT (Lighting::Ambient is the port's one function for the ambient).
+    bool canSeeAnything = true;
+    // GameStateController::isFinished: the level is won or the player is dead.
+    bool finished = false;
+    // dark_mage.ent, as an entity the buckets hold: its GetPositionXY() is the capsule's centre.
+    bool playerPresent = false;
+    glm::dvec2 playerPx{0.0, 0.0};
+    entt::entity playerBody = entt::null;
+    // The two circles of dark_mage.ent's body (centre, radius), which Shot::ClosestContact does not read: the
+    // probe of a blind knight is blocked by them (the player's name leaves its ignore list).
+    struct Circle {
+        glm::dvec2 centrePx{0.0, 0.0};
+        double radiusPx = 0.0;
+    };
+    std::array<Circle, 2> playerBodyCircles{};
+    // Every placed portal.ent, oldest first: no body, a point.
+    std::vector<glm::dvec2> portalsPx;
+};
+
+// What a tick's knights added, for the layer and for G1b: cleared by every Tick, as `deaths` is.
+struct Mark {
+    enum class Kind { Exclamation, Question };
+    std::size_t minion = 0;
+    Kind kind = Kind::Exclamation;
+    // The knight's ENTITY point (GetPosition()); the mark is added Sight::markAboveUnits above it and
+    // Sight::markBehindUnits less in z.
+    glm::dvec2 entityPx{0.0, 0.0};
+    // playEnemySpottedSound with the exclamation, always; playMinionQuestionMarkSound with the question only when
+    // the mark's point is on screen (the layer's test) AND the way had been clear since the last one.
+    bool sound = false;
+    bool soundNeedsScreen = false;
+};
+
+// The shot a knight is due to fire (addEnemyShoot's arguments, #869-884): the hook for G1b.
+struct ShotDue {
+    std::size_t minion = 0;
+    glm::dvec2 casterPx{0.0, 0.0}; // the knight's entity point
+    glm::dvec2 finalPx{0.0, 0.0};  // the target's
+    std::string targetName;        // 'dark_mage.ent' or 'portal.ent'
+    int portalIndex = -1;          // the placed portal's place in Senses::portalsPx; -1 for the player
 };
 
 // An invisible solid floor that destroys a minion and nothing else.
@@ -194,15 +297,39 @@ struct State {
     // and written: a record for the layer, which nothing in the simulation reads.
     std::vector<Death> deaths;
 
+    // What this tick's knights added: the marks they show and the shots they are due to fire. Cleared by Tick.
+    std::vector<Mark> marks;
+    std::vector<ShotDue> shotsDue;
+
+    // The placed bodies the knights' two rays pass through by NAME, as the original's ignore lists name them
+    // (Sight::sightRayIgnores, wayRayIgnores): bound once by BindSight, from the nodes the level places. The
+    // knights' own bodies are the other half of those lists, and Tick adds them as they stand.
+    std::vector<entt::entity> sightIgnoredPlaced;
+    std::vector<entt::entity> wayIgnoredPlaced;
+
+    // Finds the placed bodies the two ignore lists name, by the entity name each node is spelled with ('crate_small' is
+    // passed and 'crate_small.ent' is not). After Find, with the level's built bodies.
+    void BindSight(const Tscn::Scene& scene, const LevelBuilder::Built& built);
+
+    // Every sighting the `minion.ent` knights have made: spottedCount (ScoreDashboard 401234..401465), which
+    // hasBeenUnnoticed reads for the seven stealth achievements. The black knight is not counted (it is a
+    // ghost_minion.ent, and the original's GetEntityArray asks for 'minion.ent' alone). G1b wires it to the layer's
+    // SpottedCount(); nothing in the simulation reads it.
+    int SpotCount() const;
+
     // Every minion its marker asks for, built where the marker stands. Returns
     // the bodies it made, which the caller hands to the systems that carry a
     // body it did not build - a minion is teleportable, so Game puts it among
     // the portals' travellers, as it does what a launcher throws.
     std::vector<entt::entity> Spawn(entt::registry& registry);
 
-    // One tick, BEFORE the physics step: each minion serves its dwell and then
-    // walks, as the player is steered before the step rather than after it.
+    // One tick, BEFORE the physics step: each minion looks, then serves its dwell and then
+    // walks, as the player is steered before the step rather than after it. `senses` is what the engine
+    // would tell its callback: the ambient light, whether the game is finished, and where the player and the
+    // placed portals stand. The first form sees nothing (no player, no portal) and finds its way as a knight in
+    // a lit room does.
     void Tick(entt::registry& registry, const ScriptClock::Step& step);
+    void Tick(entt::registry& registry, const ScriptClock::Step& step, const Senses& senses);
 
     // And after it: a minion left standing in a killer floor is taken. Returns
     // the bodies it took away, which the caller must pass through Forget. Split
@@ -248,6 +375,30 @@ struct State {
     const Minion* FindMinion(const std::string& name) const;
 
 };
+
+// A bucket: GetBucket(p) = floor(p / bucketUnits) per axis (ETHBucketManager.cpp:47-50).
+glm::ivec2 BucketOf(const glm::dvec2& point, double bucketUnits);
+
+// What findEntityInSight returned.
+struct Seen {
+    glm::dvec2 atPx{0.0, 0.0};
+    std::string name;      // 'dark_mage.ent' or 'portal.ent'
+    int portalIndex = -1;  // its place in Senses::portalsPx; -1 for the player
+};
+
+// findEntityInSight (bytes 433047..434575) for a knight whose entity point is `agentPx` and whose last moveVec is
+// `moveVec`: the first candidate, in the order the original walks its buckets (the agent's, the next, the one after;
+// the player before the portals inside one), whose name is a target (the player's only while canSeeAnything), whose
+// direction from the knight is above rules.sight.fovCos of the facing, and whose ray from the knight meets no body
+// but `ignore` (the knights' own bodies and the named placed ones). Nothing when moveVec is not a unit vector.
+std::optional<Seen> Look(entt::registry& registry, const Rules& rules, const glm::dvec2& agentPx,
+                         const glm::dvec2& moveVec, const Senses& senses, const std::vector<entt::entity>& ignore);
+
+// Whether GetClosestContact(from, to, ..., list) returns nothing: the ray meets no body but `ignore`, and - when
+// `blindToPlayer` - not the player's two circles either (the walk probe of a knight that cannot see: its ignore list
+// then lacks 'dark_mage.ent').
+bool RayClear(entt::registry& registry, const glm::dvec2& fromPx, const glm::dvec2& toPx,
+              const std::vector<entt::entity>& ignore, const Senses& senses, bool playerBlocks);
 
 // The velocity ETHCallback_minion sets a walking minion: scale(1.3) x min(66, the script's milliseconds) /
 // GetCurrentPhysicsTimeStepMS (ins 1049-1068) across its own vertical velocity (ins 1091-1110), in metres a

@@ -2087,6 +2087,12 @@ portal opens elsewhere and a longer leg keeps it in the air (a second tap meets 
 and six more: 1-12, 1-21, 2-11, 2-16, 2-25, 3-14; 74 of 86 win, every one on its step-155 tick) - the wave's route phase re-authors them; reachability 108 / 20 / 0; the f420 sweep is in
 planning step 157 (128 of 128 byte-identical to R23's). The rows are "Step 157's recorded deviations" (G9-1 to G9-7), under R23's. The Build Tools' MSVC moved from 14.50 to 14.51 on 2026-10-05 (the old toolset is gone), so `build/` was
 deleted and reconfigured by `port_build.bat`; the three-level check against the R23 sweep (1-01, 1-12, 2-25) was byte-identical before the step's first edit.
+**Step 158 (G1a, the knights see) is built, measured, independently verified (13 gates passed, six low findings, the text ones applied) and committed locally, NOT pushed**: the perception half of G1 (above), 35 levels' worth of GAMEPLAY change, said plainly in planning step 158: a knight that sees stands (its
+dwell clock zeroed on each sighting and each shot gate, so a hold of 2000 ms or more is never served out while the sighting lasts), shows its `!` and plays its sound, searches when its way is blocked (a knight lifted off its floor by a portal no
+longer walks on toward its waypoint's x), and is blind to the player on the dark levels until a torch is lit; `anti_sight_wall.ent` blocks sight. `test_mp_routes` is red on 17 routes (the twelve of step 157 with the same first problems and five new -
+3-07, 3-22, 3-32, 4-28, 4-29: routes written for knights that never see or never stop; 3-02 wins 13 ticks later, on 401; 69 of 86 win) - the wave's route phase re-authors them after G1b; reachability 108 / 20 / 0; the f420 sweep is 125 of 128
+byte-identical to step 157's (3-16, 3-23 and 3-29 differ: a knight that sees the player at tick 372 to 398 stands, and 3-29's `!` is on screen, within about 6 px of the original's still); 54 suites (the new `test_mp_sight`, 383 checks), 30,125
+checks, zero warnings (read from the build logs by the verifier, not rebuilt); one Smart App Control refusal (`MagicPortals.exe`'s first launch, relinked once). The rows are "Step 158's recorded deviations" (G1a-1 to G1a-11), under G9's.
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -2337,6 +2343,34 @@ deleted and reconfigured by `port_build.bat`; the three-level check against the 
       stands within 32 of a reflector, `flyOnePass(false)` turns the shot and `flyOnePass(true)` launches the new leg in the same `Tick`, and `MagicPortalsLayer` queues the launches (the new leg's
       `projectile_shoot`) before the reflected record's waves, mark and flash; the original adds the reflector's effects on the tap's frame and the new leg's flash on the frame after. Not measured,
       and none of the 23 placements or the 86 routes was observed to reach it. Next: the next edit of `MagicPortalsLayer.cpp`, ordering a `Reflection` recorded before a `Launch` of the same `Tick` first.
+
+**Step 158's recorded deviations (G1a: the knights see), each an open row** (planning step 158 has the evidence; `out/parity/program/G1a/decode.md` the machine):
+- [ ] **G1a-1. Which target `findEntityInSight` returns when two are in sight** (the player and a portal): the port walks the buckets in the original's order (the agent's, the next, the one after) and puts the player before the
+      portals inside one; the original's order inside a bucket is the bucket list's (a mover is moved to the FRONT of its new bucket, an added static to the back), undecoded. It decides G1b's shot target, not G1a's sighting. Next: G1b.
+- [ ] **G1a-2. The bucket a mover is stored in lags its position by a frame** (`ETHBucketManager::MoveEntity` queues the move); the port uses the tick's own position. At most one frame at a bucket line.
+- [ ] **G1a-3. `char_feet.ent` is not a body here**: the original's look, which does not ignore it, can meet the feet octagon (14 x 10, 18 under the player's point) of a player more than 13 units below the ray's end; the port's
+      ray cannot. Only a steep ray from below passes it.
+- [ ] **G1a-4. `isFinished` is `goals.completed || hazards.playerDied`**, both set a tick later than the original's `finishGame` (the level's end and a death). It matters on the tick a sighting begins.
+- [ ] **G1a-5. The cone and the ray are in doubles**, the original's in floats: a target within a float's rounding of the cone's edge, or a ray ending within one of a body's edge, can go either way.
+- [ ] **G1a-6. The torch gives the sight back one frame early** (`Lighting.hpp`: the port has the lit ambient from the tick the torch is shot, the original on the next frame), and a torch put out takes it at once.
+- [ ] **G1a-7. The seven stealth achievements are still wrong**: `MagicPortalsLayer`'s `SpottedCount()` returns 0, so 24, 26, 28, 32, 42, 66 and 76 unlock whenever the knights all stand, though a knight may have spotted the player
+      (3-02's route unlocks 24 on 401 with a sighting on 194). `Minions::State::SpotCount()` (the sum of every sighting the `minion.ent` knights alive have made; the black knight is not counted, as `spottedCount` asks for 'minion.ent' alone) is the hook. Next: **G1b**.
+- [ ] **G1a-8. No footage shows a `?` or the sound of either mark**, and the one library still with a `!` (3-29's `h6.3`) fixes its place to within about 6 px at 1280x720 (the implementer's figure, 3.4 px in x and 0.0 in y, is the difference of the two sweeps' pixels above the knight's head; the independent check's,
+      4 to 6 px in x and 1 to 2 px in y, is the port's mark's bounding-box centre and intensity centroid against the still's white-pixel centre; the knights are not at the same spot of their walk) and not its size
+      or age; the 128-unit bucket rests on the listing and the formats doc, corroborated by that still (the `!` stands at x 382.0, one step inside the bucket line at 384; 256-unit buckets would put it near 398). The library stills `3-16_h6.3` and `3-23_t8.0` show the original's knight
+      standing where the port stands it, with its first shot's flash (G1b). `F14.md`'s "about 4 s after the HUD" for 3-16's first shot does not fit that still's 6.3 s: G1b reconciles. The mark's depth is the effects' stream's (knight z - 32), seen above the knight; its order against other sprites is not
+      measured. Next: the final comparison (section 5), one capture of a knight turning to face the player across a bucket line and of a blocked way's `?` on the emulator rig.
+- [ ] **G1a-9. Seventeen routes fail and no route file was touched** (planning step 158's census, `G1a/census.md`): the twelve of step 157 and 3-07, 3-22, 3-32, 4-28 and 4-29 (3-02 wins 13 ticks later). Their first problems: 3-07 knights
+      that see and stand, with knight A walking ahead of the player; 3-22 the key knight's dwell zeroed by its sighting; 3-32 the boss's escort drops straight down because its ray to its waypoint is blocked by the double block (the old
+      port drifted it onto the block); 4-28 the key knight standing at the wall while it sees the player; 4-29 a knight lifted onto the upper platform that searches instead of walking on to `button_2037`. 3-02's 13 ticks (388 to 401) are INFERRED from the traces of this build (no step-157 build
+      remained to retrace them); re-measure them when the route is looked at. **The wave's route phase re-authors all 86 after G1b.**
+- [ ] **G1a-10. The contact's hold cap is not built** (found by the independent check; decoded here from the listing, `docs/ethanon-formats.md` section 22's last bullet): `ETHBeginContactCallback_minion` #12-55 caps a
+      knight's own `holdTime` at `min(holdTime, 1000)` when it begins contact with a non-sensor `dark_mage.ent`. It has been open since step 97 (Order 11.4's "the dark mage's `holdTime` cap (#12-55)" row above) and interacts with the sight's
+      dwell reset: a knight the player touches while it sees him would walk on after at most 1000 ms of dwell where the port stands it through a long hold, which moves the routes that brush a knight (3-02's "held up by a
+      standing body", 3-07). Not built in G1a (one system a step). **Next: build it in G1b, before the route phase, so the routes are re-authored against the final rule.**
+- [ ] **G1a-11. The player is drawn lit on the six `darkest` levels** (found by the independent check, which read the library stills h6.3 of 4-25, 4-26, 4-27, 4-29, 4-30 and 4-31 against the port's frames; 4-25's pair was
+      looked at again at the commit): the original shows the player as a black silhouette with its red eye (or not at all), and the port draws him purple and lit; 4-25's exit arch is drawn lit in the port too. Unchanged by
+      this step (125 of 128 byte-identical to step 157's) and not G1's. Next: the final comparison (section 5).
 
 **PIC's recorded deviations**, each an open row for the step named (planning step 150 has the evidence, `RECORDED DEVIATIONS` 1-9):
 - [ ] **PIC-1. The smoothing's line is a guess and unmeasured on a real fast display.** `smoothing.above_hz` 80 / `release_below_hz` 72 /
@@ -2736,6 +2770,18 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       *Wave 3b-1: step 152 (WT) built the walk's speed (a minion 62.4 u/s, a 2-32 knight 81.6: CK-3's G1 half) and not the sight,
       the shot or the kill, so the row stays open. Step 155's routes of 3-22 (1,181, a drop good for one tick) and 3-20 (555) assume
       a knight that never sees; G1 moves them.*
+      *Wave 3b-2, step 158 (G1a, local, not pushed) built the PERCEPTION half: a knight looks every frame through the three
+      128-unit buckets of its row along its facing, inside a 120 degree cone, past a ray that every body but the knights'
+      and the player's blocks (an `anti_sight_wall.ent` sensor first among them); a sighting zeroes its dwell clock, shows
+      `exclamation.ent` (once its clock is past 4000) with `enemy_spotted`, and counts; a way to its waypoint that the ray finds
+      blocked is searched (`question.ent`, `minion_question`), not walked; on the six `darkest` levels it is blind to the
+      player (not to a portal) until a torch is lit. The row stays OPEN for G1b: the shot (`addEnemyShoot`,
+      `ETHCallback_enemy_shoot`, `killPortal`, `playEnemyShootSound`), the wiring of `Minions::State::SpotCount()` to the seven
+      stealth achievements (still unlocked whenever the knights all stand), the consumer of the `ShotDue` records the gate
+      already writes, and the contact's hold cap (G1a-10, `ETHBeginContactCallback_minion` #12-55). The step's GAMEPLAY change is
+      on the 35 levels that place a knight (planning step 158); the independent check passed 13 gates. **`test_mp_routes` is red
+      on 17 routes (the twelve of steps 156-157 and 3-07, 3-22, 3-32, 4-28, 4-29; 3-02 wins 13 ticks later; 69 of 86 win) and no
+      route file was touched: the routes are re-authored by the wave's route phase, after G1b.** The rows are G1a-1 to G1a-11.*
 - [x] **G2. Lifts run on their own**; the original's idle at marker `a`, and a tap inside their rect sends them at
       60 u/s (`ETHCallback_lift` L83504, `sendLiftToOtherPoint`) and fires no portal. 14 lifts on 13 levels. *Routes
       that ride the self-running lifts, which its step re-authors*: 2-02, 2-07, 2-09 (step 114; the Tests row), 1-27,

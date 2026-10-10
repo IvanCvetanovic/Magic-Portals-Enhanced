@@ -403,6 +403,9 @@ void ThePortsOwnTableIsTheOriginals() {
     playsFor("ghost_burst", "playExplosionSound(true)");
     playsFor("enemy_shot", "playEnemyShootSound");
     playsFor("enemy_shot_ended", "playEnemyShootExplodeSound");
+    // A knight's sight (planning step 158, G1a): the spotted sound with the exclamation, the question sound with the question.
+    playsFor("enemy_spotted", "playEnemySpottedSound");
+    playsFor("minion_question", "playMinionQuestionMarkSound");
     playsFor("dark_dragon_appeared", "playDarkDragonAppearSound");
     playsFor("dark_dragon_mouth", "playDarkDragonOpenMouthSound");
     playsFor("dark_dragon_hurt", "playDarkDragonDamageSound");

@@ -234,8 +234,10 @@
       "port keeps the node and marks it lit, and the fire signal that puts one back out adds a FRESH",
       "`signal_torch` (ETHCallback_fire_signal; torch.json), whatever the first was named - so",
       "SeekEntity('light_off.ent') finds an unlit torch placed under that name or one a signal put out.",
-      "spottedCount reads every minion's enemySpotCount, which only sight raises; the port builds no",
-      "sight (minions.json), so it is 0 and a level's minions count as never having noticed the player."
+      "spottedCount reads every minion's enemySpotCount, which only sight raises. The port's sight is built",
+      "since planning step 158 (G1a, minions.json `sight`) and counts each sighting in Minions::State::SpotCount(),",
+      "but MagicPortalsLayer::SpottedCount() is still not wired to it (G1b's), so it stays 0 and a level's",
+      "minions count as never having noticed the player."
     ],
     "signal_torch": "light_off.ent"
   },

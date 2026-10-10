@@ -1014,7 +1014,10 @@ public:
     }
 
     int SpottedCount() const override {
-        // Sight is not built (minions.json): no minion has noticed anything.
+        // Minions::State::SpotCount is every sighting the minion.ent knights have made (G1a, planning step 158), and
+        // hasBeenUnnoticed would read it - but the seven stealth achievements are G1b's: until then this stays 0, so
+        // they unlock whenever the knights all stand, as they did, and a route's unlock census does not move with
+        // the perception alone.
         return 0;
     }
 
@@ -7071,14 +7074,17 @@ void MagicPortalsLayer::advanceMinions(const ScriptClock::Step& step) {
     const double ms = ScriptClock::Ms(step);
     for (std::size_t i = 0; i < minions.size(); ++i) {
         const Minions::Minion& minion = minions[i];
-        // The sim's arms, one for one; the blocked-way Search arm is not among
-        // them, since the port's minion casts no ray to its waypoint
-        // (minions.json _destination_reachability_not_built).
+        // The sim's arms, one for one. A knight that holds with something in sight is NOT given its standing
+        // frame (ETHCallback_minion #1184-1190: SetFrame only `if (entityInSight == null)`), so Watch sets nothing,
+        // as the lone guard's Settled does; and a knight whose way is blocked searches (#1229-1321), the arm
+        // art.json minion.search was written for.
         Art::MinionArm arm = Art::MinionArm::None;
         switch (minion.arm) {
         case Minions::Arm::Walk: arm = Art::MinionArm::Walk; break;
         case Minions::Arm::Hold: arm = Art::MinionArm::Hold; break;
         case Minions::Arm::Settled: arm = Art::MinionArm::Settled; break;
+        case Minions::Arm::Watch: arm = Art::MinionArm::Settled; break;
+        case Minions::Arm::Search: arm = Art::MinionArm::Search; break;
         case Minions::Arm::None: break;
         }
         Art::UpdateMinion(art, m_minions[i].pose, arm, minion.facing == Minions::Facing::Right, ms, minion.elapsedMs);
@@ -9057,6 +9063,37 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, const Sc
     // #542-555, then ETHCallback_minion #1478-1504) - and the order two callbacks
     // add their entities in shows only in the effects' stream (00_order K8).
     //
+    // THE KNIGHTS' MARKS (planning step 158, G1a): what ETHCallback_minion's sight and search arms added this
+    // tick, in the order they came. An exclamation is the first frame of a sighting once its timer has passed 4000,
+    // with playEnemySpottedSound (#751-754); a question is the search arm's, with playMinionQuestionMarkSound only if
+    // its point is on screen (isPointInScreen of the mark's point, #1408-1436) and the knight's way had been clear
+    // since its last (the sim's `sound`). Each is a particle-only entity at the knight's point less (0, 36), 32 behind
+    // its depth (effects.json exclamation, question).
+    if (!m_level.minions.marks.empty()) {
+        matchMinions();
+        for (const Minions::Mark& mark : m_level.minions.marks) {
+            const double knightZ = mark.minion < m_minions.size() ? m_minions[mark.minion].lookZ
+                                                                  : m_artRules.LevelDepth(m_artRules.minion.z);
+            const bool question = mark.kind == Minions::Mark::Kind::Question;
+            const Effects::Spawn spawn = question ? Effects::QuestionMark(m_effectRules, mark.entityPx, knightZ)
+                                                  : Effects::ExclamationMark(m_effectRules, mark.entityPx, knightZ);
+            m_effectQueue.push_back(effectAdd(spawn));
+            bool heard = mark.sound;
+            if (question && heard) {
+                // isPointInScreen (utilIntersections 318801..319089): the point less the camera's corner is not
+                // past a side of the screen, the edges inside.
+                const glm::dvec2 at = spawn.atPx - cameraCornerPx();
+                const glm::dvec2 view = ViewPx();
+                heard = !(at.x < 0.0 || at.y < 0.0 || at.x > view.x || at.y > view.y);
+            }
+            if (heard) latch(question ? "minion_question" : "enemy_spotted");
+            SUPERSONIC_LOG_INFO("Magic Portals") << "knight " << m_level.minions.minions[mark.minion].name
+                                                 << (question ? " asks" : " spots") << " on tick " << m_ticks << ": "
+                                                 << spawn.entity << " at (" << spawn.atPx.x << ", " << spawn.atPx.y
+                                                 << ") z " << spawn.z << (heard ? ", heard" : ", silent") << std::endl;
+        }
+    }
+
     // A MINION THE TICK DESTROYED (the visuals plan's 11.3), in the order it went
     // (Minions::State::deaths). A killer floor's contact callback adds a skull at
     // the view's foot under it before anything else, and the minion's own callback

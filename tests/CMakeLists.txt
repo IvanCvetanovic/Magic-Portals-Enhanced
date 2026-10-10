@@ -135,6 +135,10 @@ add_mp_test(test_mp_hinge SKIPS_WITH_77)
 # The minions of worlds 3 and 4: spawned from a marker, walking a prefix of
 # waypoints, and taken by the floor that kills them and nothing else.
 add_mp_test(test_mp_minions SKIPS_WITH_77)
+# What a knight sees and what it does about it (planning step 158): the cone, the three buckets of its row, the ray, the marks,
+# the shot's gate, the search, the dark levels' torch rule and every patrol leg of every level. Its rig cases need no data;
+# its level cases skip without it (a part of the suite, so no 77).
+add_mp_test(test_mp_sight)
 # Chapter 3's boss: the ghost of level 3-32, which only fire can hurt and which
 # drops the only key its level has.
 add_mp_test(test_mp_ghost SKIPS_WITH_77)

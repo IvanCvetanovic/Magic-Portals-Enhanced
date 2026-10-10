@@ -91,6 +91,36 @@ void ClampTranslations(entt::registry& registry, const Player::Tuning& tuning, c
 
 } // namespace
 
+// What ETHCallback_minion asks the engine each frame (planning step 158), gathered where the level is.
+//  - canSeeAnything: `!(DARKEST_AMBIENT_LIGHT == GetAmbientLight())` (#20-37). The ambient is Lighting::Ambient's, the
+//    one function the layer draws with: the file's, the darkest value on a `darkest` level, a torch's lit one, the
+//    darkest again once a torch is put out.
+//  - isFinished: GameStateController.gameFinished, which finishGame(lost) sets for the level's end and for a death.
+//  - where dark_mage.ent stands - its GetPositionXY() is the capsule's centre - and the two circles its body is made of
+//    (player.json body: radius circle_radius_share x half the box's width, at +-circle_pos_share x half its height),
+//    and every placed portal.ent.
+Minions::Senses SensesOf(const Data& data, entt::registry& registry, const Level& level) {
+    Minions::Senses senses;
+    const glm::dvec3 ambient =
+        Lighting::Ambient(data.lighting, level.fileAmbient, level.darkest, level.torch, level.redKey);
+    senses.canSeeAnything = !(ambient == data.lighting.darkestAmbient);
+    senses.finished = level.goals.completed || level.hazards.playerDied;
+    if (level.player != entt::null && registry.valid(level.player)) {
+        if (const auto* transform = registry.try_get<Supersonic::TransformComponent>(level.player)) {
+            senses.playerPresent = true;
+            senses.playerBody = level.player;
+            senses.playerPx = Units::ToPixels(transform->position);
+            const double radius = data.tuning.circleRadiusShare * data.tuning.boxWidthPx * 0.5;
+            const double apart = data.tuning.circlePosShare * data.tuning.boxHeightPx * 0.5;
+            senses.playerBodyCircles[0] = Minions::Senses::Circle{senses.playerPx - glm::dvec2(0.0, apart), radius};
+            senses.playerBodyCircles[1] = Minions::Senses::Circle{senses.playerPx + glm::dvec2(0.0, apart), radius};
+        }
+    }
+    senses.portalsPx.reserve(level.portals.placed.size());
+    for (const Portals::Placed& placed : level.portals.placed) senses.portalsPx.push_back(placed.atPx);
+    return senses;
+}
+
 bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
               const std::filesystem::path& prismDirectory, Data& out, std::string& error,
               const std::string& portDataDirectory) {
@@ -266,6 +296,11 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     if (!Fire::Find(data.scene, data.roles, out.built, data.fire, out.fire, error)) return false;
     if (!Hinge::Find(data.scene, data.roles, out.built, registry, data.hinge, out.hinge, error)) return false;
     if (!Minions::Find(data.scene, data.roles, data.minions, out.minions, error)) return false;
+    // The bodies the knights' two rays pass through by name (crate_small, shock_agent...), which the level
+    // places and Minions::Find knows nothing of.
+    out.minions.BindSight(data.scene, out.built);
+    // What canSeeAnything starts from. A scene whose root names no ambient keeps the engine's default, white.
+    Lighting::FileAmbient(data.scene, out.fileAmbient);
     if (!Keys::Find(data.scene, data.roles, out.built, data.keys, out.keys, error)) return false;
     if (!RedKey::Find(data.scene, data.roles, data.redKey, out.redKey, error)) return false;
     if (!Diamonds::Find(data.scene, data.roles, data.diamonds, out.diamonds, error)) return false;
@@ -397,7 +432,7 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     level.turrets.Fire(step.scriptS);
     // The minions walk before the step, as the player is steered before it: what
     // sets a velocity belongs on this side, what judges a position on the other.
-    level.minions.Tick(registry, step);
+    level.minions.Tick(registry, step, SensesOf(data, registry, level));
     level.boss.BeforeStep(registry, ScriptClock::SimRatio(step));
     // In a zero-gravity level the player is NOT STEERED AT ALL, and that single
     // absence is both halves of the original's behaviour at once:

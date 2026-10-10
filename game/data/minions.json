@@ -41,7 +41,7 @@
     "port carries it as every body is carried (ScriptClock::CarriedVelocity, planning step 152): at SimRatio",
     "times that, 1.248 m/s a tick of 1.04 units. This file used to read it as 1.3 PIXELS per 33.33 ms, 39 a",
     "second - a fiftieth of the metre scale() gives and the physics step's frame the other way round - and",
-    "actors.json's 60 was the nearer number. (NOT BUILT: its sight, its shot and its killing of a portal.)",
+    "actors.json's 60 was the nearer number. (Its sight is built since planning step 158, `sight` below; its shot and its killing of a portal are G1b's.)",
     "",
     "elapsedTime is min(66, lastFrameElapsed) - twice the step. Below 15 fps the original",
     "therefore walks SLOWER rather than skipping ahead. Nothing to apply under a fixed",
@@ -187,39 +187,88 @@
     ]
   },
 
-  "_destination_reachability_not_built": [
-    "Movement has a third gate the port does not model. The whole move block is skipped",
-    "unless a GetClosestContact probe towards the destination comes back null, and a minion",
-    "that does move clears a 'cantReach' flag on itself. So the original stands still when",
-    "something is in the way of the waypoint it is walking to, and remembers that it could",
-    "not get there.",
-    "",
-    "Not built, deliberately. A ray between two points that both sit close to a platform can",
-    "clip the floor, and a false positive here does not degrade gracefully - it freezes every",
-    "minion in all seven chapter-3 levels that currently play. What the ray ignores, and where",
-    "it is cast from, want reading properly first; the sight cone below has the same question",
-    "and they belong in one step."
+  "_destination_reachability_built": [
+    "Built in planning step 158 (G1a). Movement has a third gate, and it is a RAY: ETHCallback_minion #899-996 casts",
+    "GetClosestContact(currentPos, destPos, point, normal, ignoreList) from the knight's entity point to the waypoint it",
+    "is walking to, and walks only if that returns null AND its dwell is served (#977-996). A way that is blocked is not a",
+    "stop to wait: it is the SEARCH arm (#1206-1449): the knight faces right for 2000 ms and left for 2000 ms by",
+    "elapsedTime % 4000, shows a question mark every 4000 ms of its own timer, and plays the question sound when that",
+    "mark is on screen and its way had been clear since the last one. 'cantReach' is written 0 on a walk (#997-1009) and",
+    "READ NOWHERE in the whole listing (one occurrence of the string): the original's name for what the probe finds, with",
+    "no flag of its own. The ignore list is by NAME, exactly as spelled: a crate_small placed as 'crate_small' is passed,",
+    "one placed as 'crate_small.ent' blocks (the converted game places 7 of those and 4 spelled 'crate_small'; of the 35",
+    "knight levels, one each: 3-12 has a 'crate_small.ent' and 3-30 a 'crate_small').",
+    "The earlier note here feared that a false positive freezes every minion in all seven chapter-3 levels that play; the",
+    "census in test_mp_minions (every patrol leg of every level, both ways, from the knight's entity point to the next",
+    "waypoint, through the original's ignore list) says what the static levels do."
   ],
 
-  "_sight_not_built": [
-    "Decoded and deliberately not built in this step. The cone: moveVec's direction (which",
-    "must be unit), the agent's own bucket plus the two along it (bucket = 256), targets",
-    "filtered by equalsAny against a semicolon-separated list, dp2 > fovAngleCos where the",
-    "call site pushes 0.5 - a 120 degree cone - and then GetClosestContact for occlusion,",
-    "ignoring 'ghost_minion.ent;minion.ent;dark_mage.ent'.",
+  "_sight_built": [
+    "Built in planning step 158 (G1a); out/parity/program/G1a/decode.md has the whole state machine. The earlier note",
+    "here said 'there is NO sight RANGE anywhere in it ... what bounds the cone is the bucket walk, not a radius' and",
+    "put the bucket at 256: the bucket walk IS the range, and the bucket is 128 level units (Game::start #3-17,",
+    "docs/ethanon-formats.md), so a knight sees only an entity whose own 128-unit bucket is one of THREE consecutive",
+    "buckets in ITS row (same floor(y / 128)): its own, then the next and the one after in the way it faces (moveVec).",
+    "Within them, a 120 degree cone (dot with the facing above 0.5) and a ray that meets nothing but another knight or the",
+    "player (GetClosestContact, which asks no fixture whether it is a sensor: an anti_sight_wall.ent blocks it, so do",
+    "walls, doors, crates and every other body).",
     "",
-    "There is NO sight RANGE anywhere in it. The Godot project's sight_range_px: 220 is invented,",
-    "and marked _guess: true in its own file. What bounds the cone is the bucket walk, not",
-    "a radius. Building it as a radius would be a different mechanic wearing the same name.",
-    "",
-    "canSeeAnything = GetAmbientLight() != DARKEST_AMBIENT_LIGHT: a minion in a `darkest`",
-    "level is BLIND, and zeroes its own emissive colour too. Nothing to build against until",
-    "`darkest` exists, which currently refuses 12 levels outright."
+    "canSeeAnything = GetAmbientLight() != DARKEST_AMBIENT_LIGHT: a knight is blind exactly when the ambient is the darkest",
+    "value (a `darkest` level before its torch is lit, or after it is put out). Blind, it still sees a PORTAL (the target",
+    "list is 'portal.ent', and ';dark_mage.ent' only while it can see), it does not see the player, and its way is",
+    "blocked by the player's body (the walk probe adds ';dark_mage.ent' to its ignore list only while it can see)."
   ],
+
+  "sight": {
+    "_source": [
+      "ETHCallback_minion (assets/ETHCallback_minion.angelscript, bytes 427194..433047) and findEntityInSight (433047..434575);",
+      "every number's instruction is named beside it. Arguments are pushed last-first (00_order 8.0 rule 3). The listing is",
+      "out/parity/asbc/all_functions.txt (md5 48fe65ce8baea16b94ed84d8d7be84b0)."
+    ],
+    "fov_cos": 0.5,
+    "_fov_cos": "findEntityInSight's third argument, PshC4 1056964608 (0.5f) at ETHCallback_minion #605; the target is seen when dp2(facing, normalize(target - agent)) is ABOVE it (#203-204 CMPf, JNP skips): 60 degrees each side, a 120 degree cone, the edge excluded",
+    "bucket_units": 128.0,
+    "_bucket_units": "Game::start (bytes 112200..112536) #3-17 vector2(128, 128) x getScale() pushed as LoadScene's last argument (#49), the engine scale 1 (docs/ethanon-formats.md; keys.json red_key_state.bucket_units): GetBucket is floor(position / bucketSize) (ETHBucketManager.cpp:47-50). findEntityInSight #56-99 gathers the entities of the agent's bucket, the next and the one after, along moveVec",
+    "target_player": "dark_mage.ent",
+    "target_portal": "portal.ent",
+    "_targets": "ETHCallback_minion #578-602: targets = 'portal.ent', and += ';dark_mage.ent' only if canSeeAnything; equalsAny is exact string equality (utilString 325604..325832)",
+    "sight_ray_ignores": ["ghost_minion.ent", "minion.ent", "dark_mage.ent"],
+    "_sight_ray_ignores": "findEntityInSight #211: the literal 'ghost_minion.ent;minion.ent;dark_mage.ent' handed to GetClosestContact(agentPos, targetPos, point, normal, list) (#205-252); the target is seen only if that returns null",
+    "way_ray_ignores": ["ghost_minion.ent", "minion.ent", "char_feet.ent", "crate_small", "shock_agent", "shock_agent.ent"],
+    "way_ray_ignores_when_seeing": ["dark_mage.ent"],
+    "_way_ray_ignores": "ETHCallback_minion #899-943: 'ghost_minion.ent;minion.ent;char_feet.ent;crate_small;shock_agent;shock_agent.ent', plus ';dark_mage.ent' only if canSeeAnything (#917-928); GetClosestContact(currentPos, destPos, point, normal, list), and the local isInSight is that call's `== null` (#945-959)",
+    "exclamation_start_ms": 3500.0,
+    "exclamation_gate_ms": 4000.0,
+    "question_start_ms": 3000.0,
+    "question_gate_ms": 4000.0,
+    "_timers": "init block #64-75 exclamationElapsedTime 3500, #90-101 questionElapsedTime 3000; the exclamation block runs when exclamationElapsedTime is above 4000 (#696-697 CMPIu v4000, JNP skips), the question block when questionElapsedTime is (#1349-1350); the exclamation timer is added to every frame (#337-351), the question timer only in the search arm (#1322-1337), both by the script clock's whole milliseconds",
+    "search_period_ms": 4000.0,
+    "search_right_after_ms": 2000.0,
+    "_search": "#1243-1277: moveVec = (1, 0) when elapsedTime % 4000 is above 2000 (MODu, CMPIu v2000, JNP -> the (-1, 0) arm), else (-1, 0); art.json minion.search holds the same two numbers for the picture",
+    "mark_above_units": 36.0,
+    "mark_behind_units": 32.0,
+    "_mark_offset": "#711-742 and #1365-1392: GetPosition() - vector3(0, g_scale.scale(36), g_scale.scale(32)): the three values are pushed z first (scale(32)), then y (scale(36)), then x (0); the mark is added 36 units above the knight and 32 units nearer to the lower z, unturned, at g_scale.getScale() (AddScaledEntity, ETHScriptWrapper.Scene.cpp:176-178). effects.json exclamation and question",
+    "shoot": {
+      "wait_near_ms": 1000.0,
+      "wait_far_ms": 650.0,
+      "near_units": 42.0,
+      "moving_speed": 0.3,
+      "moving_add_ms": 3000.0,
+      "min_interval_ms": 2000.0,
+      "_source": [
+        "ETHCallback_minion #769-842, read for its TIMERS, which G1a builds because they move the knight: a shot resets",
+        "elapsedTime and shootElapsedTime to 0 (#843-868), and elapsedTime above holdTime is what lets it walk on.",
+        "shootWaitTime = distance(target, knight) < scale(42) ? 1000 : 650 (#769-790); + 3000 when the KNIGHT'S OWN linear velocity,",
+        "length(GetLinearVelocity() / getScale()), is above 0.3 (#791-811); the shot is due when elapsedTime > shootWaitTime and",
+        "shootElapsedTime > 2000 (#812-842), both as unsigned ints read fresh. What the shot DOES (addEnemyShoot, #869-884: the",
+        "enemy_shoot.ent, its portal_mark, playEnemyShootSound, the kill) is G1b's: G1a records a ShotDue and spawns nothing."
+      ]
+    }
+  },
 
   "_shooting_not_built": [
-    "elapsedTime > shootWaitTime AND shootElapsedTime > 2000 resets both and calls",
-    "addEnemyShoot, which spawns enemy_shoot.ent (z = 10 * scale) carrying direction,",
+    "STILL NOT BUILT after planning step 158 (G1b's): elapsedTime > shootWaitTime AND shootElapsedTime > 2000 resets both and",
+    "calls addEnemyShoot, which spawns enemy_shoot.ent (z = 10 * scale) carrying direction,",
     "destiny, casterPos, targetName and targetID, plus portal_mark.ent (z = 32 * scale).",
     "ETHCallback_enemy_shoot kills with fakeRadius = scale(16): within that of its target,",
     "an isCharacter target has hp set to 0, and a target named portal.ent is killPortal'd,",
@@ -229,7 +278,8 @@
     "else in this port writes from outside, and it deserves its own attention rather than",
     "riding along with a patrol.",
     "",
-    "Contact with a minion does NOT kill the player. Only the shot does."
+    "Contact with a minion does NOT kill the player. Only the shot does. G1a's side of it is State::shotsDue: one record for",
+    "each time the gate above opens, the timers already reset as the original resets them."
   ],
 
   "_burnable_breakable_not_wired": [

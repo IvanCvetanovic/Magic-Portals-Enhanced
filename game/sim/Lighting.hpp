@@ -241,6 +241,12 @@ glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darke
 glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darkest, const Torch::State& torch,
                    const RedKey::State& redKey);
 
+// The level file's own <Ambient>: the root's metadata/eth_ambient, which Read demands and the layer draws
+// from. Here for the simulation, which needs the ambient light a knight's sight asks about
+// (Minions: canSeeAnything is `GetAmbientLight() != DARKEST_AMBIENT_LIGHT`) without the sprites and files
+// Read checks. False, and `out` left alone, for a scene whose root carries no three-number eth_ambient.
+bool FileAmbient(const Tscn::Scene& scene, glm::dvec3& out);
+
 // What a sprite's colour is multiplied by before anything is added:
 // min(1, ambient + emissive), per channel (ETHRenderEntity.cpp:113-117), for
 // every sprite whether or not it applies light, and whatever its blend.

@@ -29,8 +29,9 @@
       "",
       "Its ONE decoded gameplay consequence is not drawing at all:",
       "canSeeAnything = GetAmbientLight() != DARKEST_AMBIENT_LIGHT, so a minion in a darkest",
-      "level is BLIND. minions.json records minion sight as not built. Lighting::Ambient is the",
-      "number sight must compare when it lands."
+      "level is BLIND. The sight is built (planning step 158, G1a; minions.json `sight`): Game::SensesOf",
+      "compares Lighting::Ambient with the darkest value and hands the result to the knights as",
+      "canSeeAnything."
     ]
   },
 
@@ -788,8 +789,9 @@
     "hold_column": 0,
     "_hold_column": [
       "ETHCallback_minion ins 1164-1205: a minion not walking - serving its hold, or with its way blocked -",
-      "has its velocity times (0.3, 1) and, while nothing is in its sight (entityInSight null, always in",
-      "the port, which builds no sight), SetFrame(0, dirRow): column 0 of the last row it walked. A lone",
+      "has its velocity times (0.3, 1) and, while nothing is in its sight (entityInSight null; the port's",
+      "sight is built since planning step 158, G1a, minions.json `sight`: a knight that holds with something",
+      "in sight keeps its stride's frame), SetFrame(0, dirRow): column 0 of the last row it walked. A lone",
       "guard inside minDist x 2 (shouldntMove, ins 1089 -> 1163 -> 1450) writes no frame at all"
     ],
     "start_row": 0,

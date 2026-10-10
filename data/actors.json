@@ -35,7 +35,12 @@
       "Sight drives the 'without getting noticed by any minion' achievements, so range and",
       "occlusion matter to scoring - but neither number is measured. The original occludes",
       "sight with anti_sight_wall.ent, an invisible bar; modelled here as a physics raycast",
-      "against level geometry, which is the closest honest equivalent."
+      "against level geometry, which is the closest honest equivalent.",
+      "SUPERSEDED by planning step 158 (G1a): the port's sight is built from the original's decoded",
+      "findEntityInSight (three 128-unit buckets of the knight's row, a 120 degree cone, a ray that every",
+      "body but the knights' and the player's blocks) and its numbers are game/data/minions.json `sight`.",
+      "sight_range_px below is an invented guess nothing reads; it is kept only so this old table still",
+      "parses, and is not the range."
     ],
     "patrol_speed_px_s": 60.0,
     "sight_range_px": 220.0

@@ -315,7 +315,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !ReadRule(root, "ghost_utility_spawn", read.ghostUtilitySpawn, why) ||
         !ReadRule(root, "fire32", read.flames, why) ||
         !ReadRule(root, "carranca_destroy", read.carrancaDestroy, why) ||
-        !ReadRule(root, "smoke_vanish_hand_tap", read.handTapSmoke, why)) {
+        !ReadRule(root, "smoke_vanish_hand_tap", read.handTapSmoke, why) ||
+        !ReadRule(root, "exclamation", read.exclamation, why) || !ReadRule(root, "question", read.question, why)) {
         error = path + ": " + (why.empty() ? std::string("is not an object") : why);
         return false;
     }
@@ -355,6 +356,18 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         read.ghostAppearFollow.rateMs = follow["rate_ms"].AsNumber();
         read.ghostAppearFollow.dontPause = follow["dont_pause"].AsBool();
         read.ghostAppearScalePerFrame = grow.AsNumber();
+    }
+    // A knight's marks are added at ITS GetPosition() less (0, scale(36), scale(32)): the z is the knight's own
+    // depth with the row's z beside it, kept scaled and negative (behind by 32), and the offset above is 36 units.
+    for (const auto& mark : {std::pair<const char*, const Rule*>{"exclamation", &read.exclamation},
+                             std::pair<const char*, const Rule*>{"question", &read.question}}) {
+        if (!(mark.second->z < 0.0) || !mark.second->zScaled || !(mark.second->offsetFixedUnits.y < 0.0) ||
+            mark.second->offsetFixedUnits.x != 0.0) {
+            error = path + ": " + mark.first +
+                    " is added at the knight's point less (0, scale(36), scale(32)): offset_units [0, -y] and a "
+                    "negative scaled z";
+            return false;
+        }
     }
     // The shot's flash, like blood, is added at its OWNER's own vector3: 0 over it.
     if (read.enemyShootFlash.z != 0.0 || !read.enemyShootFlash.zScaled) {
@@ -458,7 +471,9 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
                      {"movement_trail", &read.movementTrail},
                      {"roundabout_effect", &read.roundabout},
                      {"antiportal_explosion", &read.antiportalExplosion},
-                     {"smoke_vanish", &read.smokeVanish}};
+                     {"smoke_vanish", &read.smokeVanish},
+                     {"exclamation", &read.exclamation},
+                     {"question", &read.question}};
     for (const auto& row : pointOnly) {
         if (row.rule->turn != Turn::Fixed || row.rule->offsetUnits != 0.0) {
             error = path + ": " + row.name + " has no direction: its angle is a number and its offset_units 0";
@@ -1086,6 +1101,21 @@ Spawn Blood(const Rules& rules, const glm::dvec2& victimPx, double victimZ) {
     // GetPosition() is the victim's vector3, so the depth is the victim's own - a
     // number already on the level's axis - and nothing the call writes.
     spawn.z = victimZ + rules.blood.z;
+    spawn.zScaled = true;
+    return spawn;
+}
+
+Spawn ExclamationMark(const Rules& rules, const glm::dvec2& knightPx, double knightZ) {
+    Spawn spawn = SpawnOf(rules.exclamation, knightPx, glm::dvec2(0.0));
+    // GetPosition() is the knight's vector3: its own depth, less the row's 32 (#711-742 push scale(32) as the z).
+    spawn.z = knightZ + rules.exclamation.z;
+    spawn.zScaled = true;
+    return spawn;
+}
+
+Spawn QuestionMark(const Rules& rules, const glm::dvec2& knightPx, double knightZ) {
+    Spawn spawn = SpawnOf(rules.question, knightPx, glm::dvec2(0.0));
+    spawn.z = knightZ + rules.question.z;
     spawn.zScaled = true;
     return spawn;
 }

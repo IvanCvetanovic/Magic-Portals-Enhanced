@@ -1616,5 +1616,44 @@
       "hand. hand_tap.ent, static 0: 7 placements, on 1-02, 1-03 (two), 1-16 (two, one at 95 degrees) and",
       "1-27 (two). The shot the same release fires is the portal manager's: the hand takes nothing from it."
     ]
+  },
+
+  "exclamation": {
+    "entity": "exclamation.ent",
+    "offset_units": [0, -36],
+    "z": {"value": -32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_minion (assets/ETHCallback_minion.angelscript, bytes 427194..433047) #686-754, on a knight's first frame of",
+      "a sighting (targetSpotted going 0 to 1) once its exclamationElapsedTime is above 4000 (#696-697; the timer starts at",
+      "3500 and is zeroed here, #698-710): AddScaledEntity('exclamation.ent', GetPosition() - vector3(0, scale(36), scale(32)),",
+      "getScale()). The three components are pushed z first (#711-729: scale(32), scale(36), 0), so the mark stands 36 units",
+      "ABOVE the knight (+y down: -36) and its z is the KNIGHT'S OWN less 32 (Effects::Mark adds this row's z to the",
+      "knight's depth, as Blood adds blood's), unturned, at the script's size (AddScaledEntity: AddEntity(file, pos, 0f, 0,",
+      "'', scale), ETHScriptWrapper.Scene.cpp:176-178). playEnemySpottedSound follows it inside the same block (#751-754).",
+      "ITS .ent (entities/exclamation.ent): shape 0, no sprite, no light, no custom data; one particle system, 1",
+      "exclamation_mark.png (1 x 1 cut; particles/hd's exclamation_mark_.png has no 1x name and is never chosen), alphaMode 0,",
+      "repeat 1, animationMode 1, life 550 ms, size 1, growth 1.4, minSize 0, maxSize 22, colour (1, 1, 1, 1) to (1, 1, 1, 0),",
+      "no gravity and no direction: one white mark that grows from its start point and fades over 0.55 s. Temporary: nothing",
+      "removes it but the engine, which drops an entity whose systems have ended."
+    ]
+  },
+
+  "question": {
+    "entity": "question.ent",
+    "offset_units": [0, -36],
+    "z": {"value": -32, "scaled": true},
+    "angle": 0,
+    "scale": 1,
+    "_source": [
+      "ETHCallback_minion #1338-1407, in its search arm (its way to its waypoint blocked, nothing in sight) once its own",
+      "questionElapsedTime is above 4000 (#1349-1350; starts at 3000, added to only in this arm, zeroed here): questionMarkPos =",
+      "GetPosition() - vector3(0, scale(36), scale(32)) (#1365-1392, the same offset the exclamation takes) and",
+      "AddScaledEntity('question.ent', questionMarkPos, getScale()) (#1393-1407). The sound that follows (#1408-1436) is the",
+      "layer's: isPointInScreen(that point) and the knight's 'isInSight' latch.",
+      "ITS .ent (entities/question.ent): the exclamation's twin with question_mark.png (particles/hd has a 2x of it),",
+      "life 550, growth 1.4, maxSize 22, white to transparent."
+    ]
   }
 }

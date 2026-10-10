@@ -475,6 +475,16 @@
       "else (AudioManager bytes 199212..199292). The wall it breaks 6000 ms later is wall_broken."
     ],
     "red_key_got": "playRedKeyGotSound",
+    "_note_knights_sight": [
+      "A KNIGHT'S MARKS (planning step 158, G1a). ETHCallback_minion (427194..433047) #751-754: playEnemySpottedSound as it adds",
+      "exclamation.ent - inside the block that needs exclamationElapsedTime above 4000, so only the sighting that shows a",
+      "mark is heard, and with no test of the screen. #1408-1436: playMinionQuestionMarkSound as it adds question.ent in the",
+      "search arm, only if isPointInScreen(the mark's point) and its 'isInSight' datum is set (its way had been clear since",
+      "the last question mark). Both play on a hook with no timer of its own (AudioManager bytes 197976..198056 and its",
+      "neighbour: PlaySample, one file each). The knights' SHOT (playEnemyShootSound, addEnemyShoot #172) is G1b's."
+    ],
+    "enemy_spotted": "playEnemySpottedSound",
+    "minion_question": "playMinionQuestionMarkSound",
     "_note_stone_thrown": [
       "SILENT (step 142). ETHCallback_entity_launcher calls no audio function at all: only",
       "AddEntity, custom data, a scale and the time. playStoneAppearSound, which this named, is",

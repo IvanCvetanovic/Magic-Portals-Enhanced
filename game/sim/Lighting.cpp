@@ -449,6 +449,21 @@ Light OwnerScaled(const Light& light, const glm::dvec2& ownerScale) {
     return scaled;
 }
 
+bool FileAmbient(const Tscn::Scene& scene, glm::dvec3& out) {
+    for (const Tscn::Node& node : scene.nodes) {
+        if (node.path != ".") continue;
+        const Tscn::Value* value = node.Meta("eth_ambient");
+        glm::dvec3 read(0.0);
+        std::string why;
+        if (value == nullptr || value->kind != Tscn::Value::Kind::String || !Vector(value->text, read, why)) {
+            return false;
+        }
+        out = read;
+        return true;
+    }
+    return false;
+}
+
 glm::dvec3 Ambient(const Rules& rules, const glm::dvec3& fileAmbient, bool darkest, const Torch::State& torch) {
     const bool litNow = std::any_of(torch.lights.begin(), torch.lights.end(),
                                     [](const Torch::Light& light) { return light.lit; });
