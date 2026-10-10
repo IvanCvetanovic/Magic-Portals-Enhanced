@@ -765,21 +765,20 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     // pass (`Flight::fresh`). A static callback of a frame the shot's own callback ended on finds
     // nothing: DeleteEntity erases it from its bucket at once. And a static callback samples the
     // shot's POSITION once a frame, never the way between two: the spawn, then the point after the
-    // jump and first advance, then each advance. The blockers, agents and flames below are tested
-    // so. The one thing still swept along the way is a reflector's reach (G9 rebuilds it).
+    // jump and first advance, then each advance. The blockers, reflectors, agents and flames below
+    // are all tested so (a reflector's catch is G9's, planning step 157).
     const auto flyOnePass = [&](bool callback) {
         const glm::dvec2 startPx = flight->atPx; // initialPos on the first callback
-        glm::dvec2 afterJumpPx = startPx;        // where what the original samples begins
         glm::dvec2 next = startPx;
         glm::dvec2 positionPx = startPx; // GetPositionXY once the callback has advanced it: past the destiny on an arrival
         bool arrives = false;
-        bool pastEnd = false;  // the jump alone carried it beyond its destiny
         bool inFlight = false; // short of the end of its way when the static callbacks look
         if (callback) {
             const glm::dvec2 left = flight->toPx - startPx;
             const double length = glm::length(left);
             const glm::dvec2 heading = length > 0.0 ? left / length : glm::dvec2(0.0);
             double remaining = length;
+            glm::dvec2 afterJumpPx = startPx; // where the advance begins
             if (!flight->launched) {
                 // The leg's first callback, for the picture too: projectile_shoot is added after the
                 // jump and before the shot moves on, so a leg that ends on this tick has flashed.
@@ -791,7 +790,6 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             const double reach =
                 shot.speedUnits * std::min(shot.frameCapMs, std::max(0.0, ScriptClock::Ms(step))) / 1000.0;
             arrives = reach > remaining;
-            pastEnd = remaining < 0.0;
             inFlight = reach < remaining;
             positionPx = afterJumpPx + heading * reach;
             next = arrives ? flight->toPx : positionPx;
@@ -799,14 +797,10 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             // s = 0 < the stored squaredDistance: in flight, unless it was fired at its own spawn point.
             inFlight = glm::length(flight->toPx - startPx) > 0.0;
         }
-        // Every along below is measured on the pass's whole stretch, startPx to next; a sample is at its
-        // end (or, with no callback, at the spawn point where the stretch has no length).
-        const double span = glm::length(next - startPx);
-        const auto alongStretch = [&](const glm::dvec2& from, double along) {
-            if (!(span > 0.0)) return 0.0;
-            const double lead = glm::length(from - startPx) / span;
-            return lead + along * (1.0 - lead);
-        };
+        // What every static callback below reads is ONE sample of the shot's position: the pass's end,
+        // `next` (or, with no callback, the spawn point). `first` and `sampleAlong` only say which of the
+        // two samples this pass is, and a tie between two callbacks that catch the same one is settled in
+        // the order below (the original's is its scene walk's, undecoded).
         const double sampleAlong = callback ? 1.0 : 0.0;
         const auto pointAt = [&](double along) { return startPx + (next - startPx) * along; };
 
@@ -825,22 +819,23 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
                 first = sampleAlong;
             }
         }
-        // A REFLECTOR is still swept along the way, from the point after the jump (G9 rebuilds the catch:
-        // the original's is a position sample within size.x of the agent, and its leg starts at the agent).
-        // None when the jump alone passed the destiny (the shot is gone that frame before any static callback).
-        const bool swept = !(arrives && pastEnd);
+        // A REFLECTOR CATCHES A SHOT BY ITS POSITION (ETHCallback_reflect_agent #1-84, planning step 157): the
+        // first projectile.ent in its bucket and the eight round it, if its `reflect` is set (#39-54: the
+        // tap's shot has it and the one a reflector adds does not, so a shot is turned once), is caught when
+        // squaredDistance(its position, the agent's) is STRICTLY below size.x x size.x (#55-84, centre to
+        // centre, size.x = the sprite's 32 x the placement's scale). It is the static callback's sample, like
+        // the blocker's and the agent's: the spawn on the frame the tap fires from beside a reflector, then
+        // where the callback and the jump left it, then each advance - never the way between two - and never
+        // a shot that has arrived, which deleted itself in its own callback before this one looked.
         int turnedBy = -1;
-        if (swept && flight->reflections < shot.maxReflections) {
+        if (!arrives && flight->reflections < shot.maxReflections) {
             for (std::size_t i = 0; i < reflectors.size(); ++i) {
-                if (static_cast<int>(i) == flight->lastReflector) continue;
-                const auto along =
-                    Shot::EntersCircle(afterJumpPx, next, reflectors[i].centrePx, shot.reflectRadiusPx);
-                if (!along) continue;
-                const double at = alongStretch(afterJumpPx, *along);
-                if (at < first) {
+                const Reflector& reflector = reflectors[i];
+                if (Reaches(next, reflector.centrePx, shot.reflectSizeUnits * reflector.scale) && sampleAlong < first) {
                     turnedBy = static_cast<int>(i);
-                    first = at;
+                    first = sampleAlong;
                     stoppedBy.clear();
+                    break;
                 }
             }
         }
@@ -914,31 +909,37 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
             ++agentsKilled;
             flight.reset();
         } else if (turnedBy >= 0) {
-            // Off the reflector where the shot reached it, mirrored, for the rest of its way.
-            const glm::dvec2 at = pointAt(first);
-            glm::dvec2 onward = flight->toPx - at;
-            if (reflectors[static_cast<std::size_t>(turnedBy)].vertical) {
-                onward.x = -onward.x;
-            } else {
-                onward.y = -onward.y;
-            }
-            // ETHCallback_reflect_agent runs computePortalFinalPos for the new leg as a REFLECTED shot
-            // (#198-215, hasBeenReflected true): its ray starts at the turn, a static body it meets does not
-            // doom the shot (it lands 10 units short of the contact), and its answer - not the mirrored
-            // point - is where the new projectile is aimed and whether it is doomed (#216-235; planning
-            // step 156). G9 decodes the rest of the leg (newDest, the catch, the leg's start).
-            const glm::dvec2 newDest = at + onward;
-            const FinalPos leg = FinalPosFrom(registry, newDest, at, true);
-            flight->atPx = at;
+            // ETHCallback_reflect_agent #92-243. The new shot leaves the REFLECTOR'S point, not where the old one
+            // was caught: its heading is the old shot's stored direction (the unit vector from its casterPos to
+            // its destiny, #58-66) mirrored by the plane's normal (computeReflectVector, reflect: #107-146); its
+            // length is the whole length that shot was fired, or the way from where its leg began to the reflector,
+            // whichever is less (#148-180: min(sqrt(squaredDistance), distance(casterPos, agent))); and newDest is
+            // the agent's point that far along it (#182-196), which computePortalFinalPos then answers for as a
+            // REFLECTED shot from the agent (#198-221: a static body is pushOut, 10 short, never a doom).
+            const Reflector& agent = reflectors[static_cast<std::size_t>(turnedBy)];
+            const glm::dvec2 caught = next; // projectilePos: the old shot's position, where its flash is (#245-260)
+            const glm::dvec2 along = flight->toPx - flight->fromPx;
+            const double legLength = glm::length(along); // sqrt(squaredDistance)
+            const glm::dvec2 dir = legLength > 0.0 ? along / legLength : glm::dvec2(0.0);
+            const glm::dvec2 gap = caught - agent.centrePx;
+            const double gapLength = glm::length(gap);
+            const glm::dvec2 toShot = gapLength > 0.0 ? gap / gapLength : glm::dvec2(0.0); // normalize: zero stays zero
+            const glm::dvec2 newDir = Shot::Reflect(dir, Shot::ReflectNormal(agent.plane, toShot));
+            const double length = std::min(legLength, glm::distance(flight->fromPx, agent.centrePx));
+            const glm::dvec2 newDest = agent.centrePx + newDir * length;
+            const FinalPos leg = FinalPosFrom(registry, newDest, agent.centrePx, true);
+            // #224-235 addProjectile(newDest, hasFailed, newDest, agentPos, ...) spawns it AT the agent: its own
+            // first callback (the next tick's: a shot a static callback adds is always one frame behind) stores
+            // that as initialPos and jumps 24 from it.
+            flight->fromPx = agent.centrePx;
+            flight->atPx = agent.centrePx;
             flight->toPx = leg.atPx;
             flight->said = leg;
-            flight->lastReflector = turnedBy;
             ++flight->reflections;
             ++reflections;
             // For the pictures: the new leg's mark is at its clipped end, and the new leg is a new
-            // projectile, which flashes on its own first callback - the next tick's, as a shot a static
-            // callback adds always is.
-            reflected.push_back(Reflection{at, newDest, leg});
+            // projectile, which flashes on its own first callback.
+            reflected.push_back(Reflection{caught, newDest, agent.centrePx, leg});
             flight->launched = false;
         } else if (!stoppedBy.empty()) {
             // The blocker's callback: portal_fail_in_antiportal at the position it found the shot at,
@@ -1282,9 +1283,16 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
                 return false;
             }
             reflector.centrePx = glm::dvec2(position->numbers[0], position->numbers[1]);
-            // One placement in the game gives no plane (level26a's); it takes
-            // shot.json's default, the Godot project's reading.
-            reflector.vertical = plane != nullptr ? plane->text == "vertical" : shot.defaultPlaneVertical;
+            // computeReflectVector reads GetString('plane'): '' is a placement that gives none (2-27's
+            // reflect_agent_ent_961, the handle's), 'vertical' is a vertical mirror and any other string the
+            // horizontal arm (the check above admits only the two the levels use).
+            reflector.plane = plane == nullptr            ? Shot::Plane::Snap
+                              : plane->text == "vertical" ? Shot::Plane::Vertical
+                                                          : Shot::Plane::Horizontal;
+            if (const Tscn::Value* scale = node.Meta("scale"); scale != nullptr && !scale->AsNumber(reflector.scale)) {
+                error = node.name + "'s scale is not a number";
+                return false;
+            }
             out.reflectors.push_back(reflector);
             continue;
         }

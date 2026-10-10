@@ -39,9 +39,12 @@ struct Rules {
     double speedUnits = 0.0;
     double jumpUnits = 0.0;
     double frameCapMs = 0.0;
-    double reflectRadiusPx = 0.0; // _guess: how near a reflector a shot has to pass
-    int maxReflections = 0;       // _guess: how many reflectors one shot comes off
-    bool defaultPlaneVertical = true; // _guess: the plane of a reflector whose level gives none
+    // A reflector's catch, DECODED (ETHCallback_reflect_agent; planning step 157): a shot is turned
+    // when its position is STRICTLY within `reflectSizeUnits` x the reflector's scale of the
+    // reflector's point (size.x, the sprite's 32), and by `maxReflections` reflectors at most (1: the
+    // shot a reflector adds has reflect 0).
+    double reflectSizeUnits = 0.0;
+    int maxReflections = 0;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -98,9 +101,25 @@ std::optional<double> Enters(const glm::dvec2& fromPx, const glm::dvec2& toPx, c
 // ETHCallback_anti_projectile_wall asks it of a shot's position (#32-68).
 bool InsideBox(const glm::dvec2& pointPx, const Trigger::Box& box);
 
-// How far along the segment it first comes within `radiusPx` of `centrePx`, or
-// none. Zero for a segment that starts within it.
-std::optional<double> EntersCircle(const glm::dvec2& fromPx, const glm::dvec2& toPx, const glm::dvec2& centrePx,
-                                   double radiusPx);
+// WHAT A REFLECTOR DOES TO A SHOT'S HEADING (ETHCallback_reflect_agent, planning step 157; shot.json
+// `reflection` has the citations). The reflector's `plane` string is read by computeReflectVector
+// (bytes 348584..349003): '' is a reflector whose level gives none, 'vertical' a vertical mirror and any
+// other string the horizontal arm.
+enum class Plane { Snap, Vertical, Horizontal };
+
+// getRightAngleVector (utilMath.angelscript 316280..316768 #1-102): the axis a vector is nearest, by
+// getAngle(v) = atan2(v.x, v.y) taken from 0 to 2 PI (ETHScriptObjRegister.cpp:103-107): (PI/4, 3 PI/4] is
+// (1, 0), (3 PI/4, 5 PI/4] (0, -1), (5 PI/4, 7 PI/4] (-1, 0) and the rest (0, 1). A zero vector (a shot
+// exactly on the reflector's point: normalize of zero is zero) is angle 0, (0, 1).
+glm::dvec2 SnapToAxis(const glm::dvec2& v);
+
+// computeReflectVector(v, plane): the mirror's normal, v being normalize(shot's position - the
+// reflector's point). The plane-less one snaps v to an axis; a vertical plane is (+-1, 0) by the sign of
+// v.x (a negative x gives -1, zero gives +1) and a horizontal one (0, +-1) by the sign of v.y. The sign
+// never matters to Reflect - the normal's axis does.
+glm::dvec2 ReflectNormal(Plane plane, const glm::dvec2& v);
+
+// reflect(dir, normal) (utilMath.angelscript 315805..315988): dir - 2 (dir . normal) normal.
+glm::dvec2 Reflect(const glm::dvec2& dir, const glm::dvec2& normal);
 
 } // namespace MagicPortals::Shot

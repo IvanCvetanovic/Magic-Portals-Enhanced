@@ -2831,3 +2831,44 @@ Decode D3 with its check (`out/parity/visuals/briefs/decode/D3.md`, `D3_check.md
   `managePortalInsertion` passes at #163 - not the tap.
 - **Not decoded or not built here:** `preferedTeleportEntity` is read by `getObjectInPortal` (357583..358053 #25-50, #65-70: of the bodies in a portal, the one with that id is teleported first);
   `blockPortalEffects` tests the button with `absTouchPos` (#62-78, a world-space point against screen-space buttons); `no_portal_sign.ent`'s `stride = 4` has no reader.
+
+## 21. The reflector: its catch, its mirror and the leg it adds (planning step 157, G9)
+
+`ETHCallback_reflect_agent` (`MiscCallbacks.angelscript`, bytes 349003..350254), `computeReflectVector` (348584..349003), `getRightAngleVector` (`utilMath`, 316280..316768), `reflect` (315805..315988),
+`seekNeighbourEntity` (`utilEntitySeeker`, 322033..322827) and `addProjectile` (354113..355121), read against the listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce`, arguments pushed
+last-first); D3 and its check had the callback's shape (`decode/D3.md` section 3.1 "Reflected shots", `D3_check.md` "Reflection"), this section has the rest. Every `#n` is an instruction index.
+
+- **What runs, and when.** `reflect_agent.ent` is `static="1" shape="0"` (no body), so its callback is a static one: it runs after the dynamic callbacks of the frame (section 14), samples the shot's
+  POSITION, and never sees a shot that deleted itself in its own callback that frame. #1-6 `doFollow(thisEntity)` first (the handle's reflector moves, then looks). #8-27
+  `seekNeighbourEntity(GetBucket(GetPositionXY()), g_projectileChooser)`: the FIRST entity named `projectile.ent` in the agent's bucket, then the eight round it, in the order of
+  `__neighbourBucketSearchPriority` (#7-96); `ProjectileChooser::choose` (135141..135265) is a name test. None: return (#28-38).
+- **One reflection per shot.** #39-54 `projectile.GetUInt('reflect')` zero: return. `addProjectile` stores `reflect` as 0 or 1 (#129-144) and has two callers: the tap's
+  (`PortalManager::addProjectile` #21-33, `reflect` 1, D3_check) and this callback's #224-235 (`reflect` 0). So a shot comes off ONE reflector and flies through every other; the shot a reflector adds is
+  never caught by any (not even the one that added it, which stands within its own size of the new shot at its spawn). `addProjectile` has no other caller in the whole listing, and its seventh argument (0 from the tap, 1 from this callback: #21-24 against #224-227) is read by nothing in its body (#0-258 name `reflect` at v-5 and `preferedTeleportEntity` at v-4 and no v-6), so the two callers differ in `reflect` alone.
+- **The catch.** #55-84: `size = thisEntity.GetSize()` (#63-68), `squaredDistance(projectile.GetPositionXY(), thisEntity.GetPositionXY()) < size.x x size.x` (`CMPf`, `JNS -> 267` is the return, so a
+  STRICT `<`), centre to centre, at the one sample the callback takes. `GetSize` is `ETHScriptEntity::GetCurrentSize` (`ETHScriptObjRegister.generic.cpp:222`, `:358`), which for a sprite entity is the
+  sprite's frame size x `m_properties.scale` (`ETHSpriteEntity.cpp:652-682`): `reflect_agent.png` is 32 x 32 (`SpriteCut` 1 x 1, `Scale` 1.0 in `reflect_agent.ent`), and none of the 23 placements in
+  the 19 levels carries a scale of its own (the `.esc` files, and the converted levels), so **size.x is 32** where the port's guess was 16 (half the sprite). The fire agent's reach is the same
+  `GetSize().x` (`fire.json`).
+- **The mirror.** #92-146: `projectileDir = projectile.GetVector2('direction')` (the unit vector `addProjectile` stored: `normalize(finalPos - casterPos)`, #1-12, #58-66), then
+  `normal = computeReflectVector(normalize(projectilePos - agentPos), thisEntity.GetString('plane'))` and `newDir = reflect(projectileDir, normal)`, with `reflect(dir, n) = dir - 2 (dir . n) n`.
+  `computeReflectVector` (#1-89): `plane == ''` goes to `getRightAngleVector(v)`; `'vertical'` gives `(-1, 0)` for `v.x < 0` and `(1, 0)` otherwise; any other string gives `(0, -1)` for `v.y < 0`
+  and `(0, 1)` otherwise (the constructor's arguments are pushed y first, then x). `getRightAngleVector` is `getAngle(v) = atan2(v.x, v.y)` (note the order; `ETHScriptObjRegister.cpp:103-107`, plus
+  2 PI when negative) cut at PI/4, 3 PI/4, 5 PI/4 and 7 PI/4: `(PI/4, 3 PI/4]` is `(1, 0)`, `(3 PI/4, 5 PI/4]` is `(0, -1)`, `(5 PI/4, 7 PI/4]` is `(-1, 0)` and the rest, `(0, 1)` (#7-35, #36-65,
+  #66-93, #94-101). So a vertical plane flips the heading's x, a horizontal one its y, and **a placement with no plane - `GetString` of a name the entity does not carry is `''`
+  (`ETHEntity.cpp:872-877`) - flips x or y by which side of the reflector the shot is on**: the nearest of the four axes to `normalize(shot - agent)`. The one such placement is 2-27's
+  `reflect_agent_ent_961` (its `.esc` custom data is `follow` alone); the port read it as vertical.
+- **The leg.** #148-196: `dist = min(sqrt(projectile.GetFloat('squaredDistance')), distance(projectile.GetVector2('casterPos'), agentPos))` and `newDest = agentPos + newDir x dist`. The stored
+  `squaredDistance` is `addProjectile`'s `squaredDistance(finalPos, casterPos)` (#94-110) and is never written again (`ETHCallback_projectile` only reads it, #127-156): it is the WHOLE length the shot was
+  fired, not what is left of it. `casterPos` is where the leg began: the character's point for the tap's shot, the agent's own point for a leg an agent added. So the new leg is as long as the old one was
+  fired, or as far as the shot has come from where its leg began, whichever is less. (The program's spec and the port said "the rest of the distance"; the listing says otherwise.)
+- **Where the new shot starts.** #198-221 `computePortalFinalPos(newDest, &hasFailed, casterPos = agentPos, &pref, hasBeenReflected = true)` clips `newDest` (the ray starts `scale(8)` out from the agent;
+  a static body is `pushOut`, 10 short, never a doom: section 20), `newDest = r.pos`; #224-235 `addProjectile(newDest, hasFailed, touchPos = newDest, casterPos = agentPos, pref, reflect 0, 1)`, which adds
+  `projectile.ent` at `vector3(casterPos, 0)` (`addProjectile` #26-40) - **the agent's point, not where the old shot was caught** - with `direction`, `destiny`, `casterPos` and `squaredDistance` from the new
+  leg and its mark (`red_cross` or `portal_mark`) at `touchPos`. Its own first callback (the next frame's: a shot a static callback adds is one frame behind) jumps 24 from there and flashes
+  `projectile_shoot` (section 14).
+- **What else it does.** #237-243 `DeleteEntity(projectile)` (erased from its bucket at once, so a static callback after this one sees only the new shot, at the agent's point), #245-260
+  `AddScaledEntity('projectile_shoot.ent', projectile.GetPosition(), getScale())` at the OLD shot's position - where it was caught - and #264-266 `playReflectSound` (`projectile_reflect.mp3`).
+- **Not decoded, so not built:** the order in which two static callbacks that catch the same sample run (the scene walk's: a reflector, an anti-portal agent, a flame or a blocker on one frame) - the
+  port takes a blocker, then a reflector, then an agent, then a flame; and whether a static callback that runs after this one in the frame sees the new shot at its spawn (it does in the original, at the
+  agent's point; the port runs the new leg's first callback on the next tick and no static look in between).

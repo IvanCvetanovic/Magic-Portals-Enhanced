@@ -344,7 +344,10 @@ void TheReflectorsAreTheLevelsOwn() {
                                   Expected{"reflect_agent_623", 422.0, 115.0}}) {
             bool found = false;
             for (const Portals::Reflector& r : reflectors) {
-                if (r.name == e.name && r.centrePx == glm::dvec2(e.x, e.y) && !r.vertical) found = true;
+                if (r.name == e.name && r.centrePx == glm::dvec2(e.x, e.y) && r.plane == Shot::Plane::Horizontal &&
+                    r.scale == 1.0) {
+                    found = true;
+                }
             }
             if (!found) pinned = false;
         }
@@ -354,7 +357,7 @@ void TheReflectorsAreTheLevelsOwn() {
     if (Begin("level12", twelve)) {
         const std::vector<Portals::Reflector>& reflectors = twelve.level.portals.reflectors;
         CHECK_MSG(reflectors.size() == 1 && reflectors[0].name == "reflect_agent_584" &&
-                      reflectors[0].centrePx == glm::dvec2(248.0, 149.0) && reflectors[0].vertical,
+                      reflectors[0].centrePx == glm::dvec2(248.0, 149.0) && reflectors[0].plane == Shot::Plane::Vertical,
                   "level12's one, vertical");
     }
 }
@@ -379,89 +382,6 @@ bool MakeRig(Rig& rig) {
 
 void FlyOut(Rig& rig) {
     for (int tick = 0; tick < 600 && rig.state.flight; ++tick) rig.state.Tick(rig.registry, kStep);
-}
-
-void AReflectorTurnsAShotMirrored() {
-    // A horizontal reflector at (200, 100), on the line from (100, 200) to a tap
-    // at (300, 0). The shot comes within the catch radius at E, turns its y back,
-    // and goes on for the rest of its way: the portal opens at the tap mirrored
-    // across the line through E, at the end of a way as long as the one fired.
-    Rig rig;
-    if (!MakeRig(rig)) return;
-    rig.state.shot.maxReflections = 1;
-    rig.state.reflectors.push_back({"mirror", glm::dvec2(200.0, 100.0), false});
-    CHECK(rig.state.Shoot(rig.registry, glm::dvec2(300.0, 0.0)));
-    FlyOut(rig);
-    const double k = rig.state.shot.reflectRadiusPx / std::sqrt(2.0);
-    const glm::dvec2 entry(200.0 - k, 100.0 + k);
-    const glm::dvec2 expected(300.0, 2.0 * entry.y);
-    CHECK_EQ(rig.state.reflections, 1);
-    CHECK_MSG(rig.state.placed.size() == 1, "it opened a portal: " + rig.state.lastFailure);
-    if (rig.state.placed.empty()) return;
-    const glm::dvec2 at = rig.state.placed[0].atPx;
-    CHECK_MSG(glm::distance(at, expected) < 1e-6, Where(at) + " for " + Where(expected));
-    const double way = glm::distance(glm::dvec2(100.0, 200.0), entry) + glm::distance(entry, at);
-    const double fired = glm::distance(glm::dvec2(100.0, 200.0), glm::dvec2(300.0, 0.0));
-    CHECK_MSG(std::fabs(way - fired) < 1e-6, "a way of " + std::to_string(way) + " for " + std::to_string(fired));
-
-    // Without the reflector, the same tap opens at the tap.
-    Rig bare;
-    if (!MakeRig(bare)) return;
-    CHECK(bare.state.Shoot(bare.registry, glm::dvec2(300.0, 0.0)));
-    FlyOut(bare);
-    CHECK_MSG(bare.state.placed.size() == 1 && glm::distance(bare.state.placed[0].atPx, glm::dvec2(300.0, 0.0)) < 1e-6,
-              "no reflector, no turn");
-}
-
-void AShotComesOffOneReflectorAtMost() {
-    // Two vertical reflectors on one line, at x 200 and 60, and a shot from 100
-    // toward 400. The first turns it back toward the second. Allowed one
-    // reflection - shot.json's reading of hasBeenReflected - it passes the second
-    // and opens at x -32. Allowed two, the second turns it again, and it opens at
-    // x 184, where its way runs out.
-    for (const int allowed : {1, 2}) {
-        Rig rig;
-        if (!MakeRig(rig)) return;
-        rig.state.shot.reflectRadiusPx = 16.0;
-        rig.state.shot.maxReflections = allowed;
-        rig.state.reflectors.push_back({"first", glm::dvec2(200.0, 200.0), true});
-        rig.state.reflectors.push_back({"second", glm::dvec2(60.0, 200.0), true});
-        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(400.0, 200.0)));
-        FlyOut(rig);
-        CHECK_EQ(rig.state.reflections, allowed);
-        const double expectedX = allowed == 1 ? -32.0 : 184.0;
-        const bool landed = rig.state.placed.size() == 1 &&
-                            glm::distance(rig.state.placed[0].atPx, glm::dvec2(expectedX, 200.0)) < 1e-6;
-        CHECK_MSG(landed, std::to_string(allowed) + " allowed: " +
-                              (rig.state.placed.empty() ? rig.state.lastFailure : Where(rig.state.placed[0].atPx)));
-    }
-    // shot.json allows one, as its note says; the test above holds either way.
-    Rig rig;
-    if (MakeRig(rig)) CHECK(rig.state.shot.maxReflections >= 0 && rig.state.shot.reflectRadiusPx > 0.0);
-}
-
-void AReflectorWithNoPlaneTakesTheDefault() {
-    // level26a's reflect_agent_ent_961 is the one placement in the game that
-    // gives no plane. The level starts, and the reflector takes shot.json's
-    // default, whichever way it is set.
-    for (const bool vertical : {true, false}) {
-        Run run;
-        std::string error;
-        bool ok = Game::LoadData(kLevels + "/level26a.tscn", kData,
-                                 std::filesystem::temp_directory_path() / "supersonic-test-mp-shot", run.data, error);
-        if (ok) {
-            run.data.shot.defaultPlaneVertical = vertical;
-            ok = Game::Start(run.data, run.registry, run.level, error);
-        }
-        CHECK_MSG(ok, "level26a: " + error);
-        if (!ok) continue;
-        const Portals::Reflector* found = nullptr;
-        for (const Portals::Reflector& r : run.level.portals.reflectors) {
-            if (r.name == "reflect_agent_ent_961") found = &r;
-        }
-        CHECK_MSG(found != nullptr && found->vertical == vertical,
-                  std::string("the default, ") + (vertical ? "vertical" : "horizontal"));
-    }
 }
 
 // ---- What the original works out at the tap (the visuals plan's 10.1) -----------
@@ -724,52 +644,6 @@ void ATapSaysWhyItWasRefused() {
     CHECK(!rig.state.Shoot(rig.registry, glm::dvec2(0.0, 0.0)));
     CHECK_MSG(rig.state.lastTap.reason == Portals::TapReason::TooEarly, "update's first gate comes before the budget");
     CHECK_MSG(rig.state.sinceTapMs == before, "and moves no clock either");
-}
-
-void AReflectionIsRecordedForItsPictures() {
-    // AReflectorTurnsAShotMirrored's shot, watched tick by tick: one launch from
-    // the shooter on its first tick, one turn where it met the reflector - worked
-    // out as a reflected shot to its new destination, which nothing blocks - and
-    // one more launch, the new leg's, on the tick after.
-    Rig rig;
-    if (!MakeRig(rig)) return;
-    rig.state.shot.maxReflections = 1;
-    rig.state.reflectors.push_back({"mirror", glm::dvec2(200.0, 100.0), false});
-    CHECK(rig.state.Shoot(rig.registry, glm::dvec2(300.0, 0.0)));
-    std::vector<std::pair<int, Portals::Launch>> launches;
-    std::vector<std::pair<int, Portals::Reflection>> turns;
-    for (int tick = 0; tick < 600 && rig.state.flight; ++tick) {
-        rig.state.Tick(rig.registry, kStep);
-        for (const Portals::Launch& l : rig.state.launches) launches.emplace_back(tick, l);
-        for (const Portals::Reflection& r : rig.state.reflected) turns.emplace_back(tick, r);
-    }
-    CHECK_EQ(launches.size(), std::size_t{2});
-    CHECK_EQ(turns.size(), std::size_t{1});
-    if (launches.size() != 2 || turns.size() != 1) return;
-    const double k = rig.state.shot.reflectRadiusPx / std::sqrt(2.0);
-    const glm::dvec2 entry(200.0 - k, 100.0 + k);
-    CHECK_MSG(launches[0].first == 0 && launches[0].second.fromPx == glm::dvec2(100.0, 200.0),
-              "the first leg launches on the shot's first callback, from the shooter");
-    CHECK_MSG(glm::distance(turns[0].second.atPx, entry) < 1e-6, "turned where it met the reflector: " +
-                                                                      Px(turns[0].second.atPx));
-    CHECK_MSG(launches[1].first == turns[0].first + 1 && launches[1].second.fromPx == turns[0].second.atPx &&
-                  launches[1].second.towardPx == turns[0].second.toPx,
-              "the new leg launches on the tick after the turn, from where it turned");
-    const Portals::FinalPos& said = turns[0].second.said;
-    CHECK_MSG(!said.willDie && !said.redWaves && said.atPx == turns[0].second.toPx,
-              "nothing in the new leg's way: portal_mark at its end, " + Px(said.atPx));
-    // The rig's lists are this tick's alone: the tick after the shot is over has none.
-    rig.state.Tick(rig.registry, kStep);
-    CHECK(rig.state.launches.empty() && rig.state.reflected.empty() && rig.state.failures.empty());
-}
-
-void EnteringACircle() {
-    const auto across = Shot::EntersCircle({0.0, 0.0}, {100.0, 0.0}, {50.0, 0.0}, 10.0);
-    CHECK_MSG(across && std::fabs(*across - 0.4) < 1e-12, "met where it first comes within 10 px");
-    CHECK_MSG(!Shot::EntersCircle({0.0, 0.0}, {100.0, 0.0}, {50.0, 11.0}, 10.0), "passing 11 px off, never");
-    CHECK_MSG(!Shot::EntersCircle({0.0, 0.0}, {30.0, 0.0}, {50.0, 0.0}, 10.0), "stopping short, never");
-    const auto inside = Shot::EntersCircle({50.0, 5.0}, {100.0, 0.0}, {50.0, 0.0}, 10.0);
-    CHECK_MSG(inside && *inside == 0.0, "starting within it, at once");
 }
 
 // ---- The decoded flight (planning step 149) ---------------------------------------------
@@ -1111,20 +985,19 @@ void TheShotMeetsNoBodyOnItsWay() {
 }
 
 void AReflectedShotNeverDiesOnAWall() {
-    // The first leg of AReflectorTurnsAShotMirrored's shot, with a wall on the reflected leg's way only. A reflected
-    // shot's ray (hasBeenReflected) takes a static body as pushOut: it lands 10 units SHORT of the wall instead of
-    // dying on it (computePortalFinalPos #136-156, #194-215). Fired straight at the same wall it is doomed.
+    // A horizontal reflector at (200, 100) on the line from (100, 200) to the tap (300, 0) sends the shot out of ITS OWN
+    // point toward (300, 200) (planning step 157: the whole 141.4 from the shooter to the reflector, flipped in y), with a
+    // wall on the reflected leg's way only. A reflected shot's ray (hasBeenReflected) takes a static body as pushOut: it
+    // lands 10 units SHORT of the wall instead of dying on it (computePortalFinalPos #136-156, #194-215). Fired straight at
+    // the same wall it is doomed.
     Rig rig;
     if (!MakeRig(rig)) return;
-    rig.state.shot.maxReflections = 1;
-    rig.state.reflectors.push_back({"mirror", glm::dvec2(200.0, 100.0), false});
-    PutBox(rig, "wall", glm::dvec2(270.0, 260.0), glm::dvec2(20.0, 200.0), false);
+    rig.state.reflectors.push_back({"mirror", glm::dvec2(200.0, 100.0), Shot::Plane::Horizontal, 1.0});
+    PutBox(rig, "wall", glm::dvec2(270.0, 230.0), glm::dvec2(40.0, 260.0), false);
     CHECK(rig.state.Shoot(rig.registry, glm::dvec2(300.0, 0.0)));
     FlyFloored(rig);
-    const double k = rig.state.shot.reflectRadiusPx / std::sqrt(2.0);
-    // The new leg runs (1, 1) / sqrt 2 from the turn at (200 - k, 100 + k) and meets the wall's face x 260 at
-    // (260, 160 + 2k); it lands 10 short along the aim.
-    const glm::dvec2 expected = glm::dvec2(260.0, 160.0 + 2.0 * k) - glm::dvec2(1.0, 1.0) / std::sqrt(2.0) * 10.0;
+    // The new leg runs (1, 1) / sqrt 2 from (200, 100) and meets the wall's face x 250 at (250, 150): 10 short of it.
+    const glm::dvec2 expected = glm::dvec2(250.0, 150.0) - glm::dvec2(1.0, 1.0) / std::sqrt(2.0) * 10.0;
     CHECK_EQ(rig.state.reflections, 1);
     CHECK_MSG(rig.state.shotsFailed == 0 && rig.state.placed.size() == 1 &&
                   glm::distance(rig.state.placed[0].basePx, expected) < 1e-3,
@@ -1133,9 +1006,449 @@ void AReflectedShotNeverDiesOnAWall() {
                   Where(expected));
     Rig direct;
     if (!MakeRig(direct)) return;
-    PutBox(direct, "wall", glm::dvec2(270.0, 260.0), glm::dvec2(20.0, 200.0), false);
+    PutBox(direct, "wall", glm::dvec2(270.0, 230.0), glm::dvec2(40.0, 260.0), false);
     CHECK(direct.state.Shoot(direct.registry, glm::dvec2(400.0, 300.0)));
     CHECK_MSG(direct.state.flight && direct.state.flight->said.willDie, "the same wall dooms an unreflected shot");
+}
+
+// ---- The reflector as the original catches and turns (planning step 157, G9) -------------------------------
+//
+// ETHCallback_reflect_agent (MiscCallbacks 349003..350254; shot.json `reflection` has the listing's lines): a SAMPLE of
+// the shot's position STRICTLY within size.x (32) of the agent's point catches it - never the way between two samples,
+// never a shot that has arrived - and the shot the agent adds leaves the AGENT'S point, along the mirrored heading, for
+// min(the length the old one was fired, the way from where its leg began to the agent). The rig is the flight's own:
+// a shooter at (100, 200) in an empty plane and the program's floored 16 ms, so the callbacks sample a shot fired along
+// +x from x0 at x0 + 24 + 3.2 n (n = 1 for the first callback, which is the first Tick after the Shoot).
+
+void PutShooter(Rig& rig, const glm::dvec2& atPx) {
+    rig.registry.get<TransformComponent>(rig.state.shooter).position = Units::ToWorld(atPx.x, atPx.y);
+}
+
+Portals::Reflector Mirror(const char* name, const glm::dvec2& at, Shot::Plane plane) {
+    return Portals::Reflector{name, at, plane, 1.0};
+}
+
+// What flying a rig's shot to its end showed: the Tick (counted from 1, after the Shoot) of the first turn, every turn, and
+// how many Ticks the flight took in all.
+struct TurnSeen {
+    int tick = -1;
+    int turns = 0;
+    int ticks = 0;
+    Portals::Reflection first;
+    std::vector<std::pair<int, Portals::Launch>> launches;
+};
+
+TurnSeen FlyAndWatch(Rig& rig, int limit = 1200) {
+    TurnSeen seen;
+    while (rig.state.flight && seen.ticks < limit) {
+        rig.state.Tick(rig.registry, kFloored);
+        ++seen.ticks;
+        for (const Portals::Launch& launch : rig.state.launches) seen.launches.emplace_back(seen.ticks, launch);
+        for (const Portals::Reflection& turn : rig.state.reflected) {
+            if (seen.turns++ == 0) {
+                seen.tick = seen.ticks;
+                seen.first = turn;
+            }
+        }
+    }
+    return seen;
+}
+
+// The x a shot fired along +x from `x0` is sampled at by its n-th callback.
+double SampleX(const Rig& rig, double x0, int callback) {
+    return x0 + rig.state.shot.jumpUnits + callback * rig.state.shot.speedUnits * 16.0 / 1000.0;
+}
+
+std::string At(const glm::dvec2& p) { return Where(p); }
+
+void TheReflectorsAreTheLevelsOwnCensus() {
+    // Every reflect_agent of the 128 levels, as the .esc files carry them (reference/extracted/assets/scenes; the
+    // converted levels agree): 23 placements in 19 levels, none with a scale of its own, 9 horizontal, 13 vertical and one
+    // with no plane at all - 2-27's reflect_agent_ent_961, whose only custom data is `follow`: GetString('plane') is the
+    // empty string there (ETHEntity.cpp:872-877), computeReflectVector's first arm.
+    struct Row {
+        const char* level; // the file, and the level's W-LL
+        const char* world;
+        int horizontal;
+        int vertical;
+        int planeless;
+    };
+    int horizontal = 0;
+    int vertical = 0;
+    int planeless = 0;
+    for (const Row& row : {Row{"level10a", "2-11", 1, 0, 0}, Row{"level11", "1-12", 3, 0, 0}, Row{"level12", "1-13", 0, 1, 0},
+                           Row{"level13b", "3-14", 1, 1, 0}, Row{"level15a", "2-16", 0, 1, 0},
+                           Row{"level17a", "2-18", 1, 0, 0}, Row{"level19", "1-20", 0, 1, 0},
+                           Row{"level20", "1-21", 0, 2, 0}, Row{"level22", "1-23", 0, 1, 0},
+                           Row{"level22c", "4-23", 0, 1, 0}, Row{"level24a", "2-25", 0, 1, 0},
+                           Row{"level24b", "3-25", 0, 1, 0}, Row{"level25b", "3-26", 1, 0, 0},
+                           Row{"level26a", "2-27", 0, 0, 1}, Row{"level28", "1-29", 0, 1, 0},
+                           Row{"level2b", "3-03", 0, 1, 0}, Row{"level4b", "3-05", 0, 1, 0},
+                           Row{"level9a", "2-10", 1, 0, 0}, Row{"level9c", "4-10", 1, 0, 0}}) {
+        Run run;
+        if (!Begin(row.level, run)) return;
+        int h = 0;
+        int v = 0;
+        int n = 0;
+        for (const Portals::Reflector& r : run.level.portals.reflectors) {
+            CHECK_MSG(r.scale == 1.0, std::string(row.world) + " " + r.name + " carries a scale of its own");
+            h += r.plane == Shot::Plane::Horizontal ? 1 : 0;
+            v += r.plane == Shot::Plane::Vertical ? 1 : 0;
+            n += r.plane == Shot::Plane::Snap ? 1 : 0;
+        }
+        CHECK_MSG(h == row.horizontal && v == row.vertical && n == row.planeless,
+                  std::string(row.world) + " (" + row.level + "): " + std::to_string(h) + " horizontal, " +
+                      std::to_string(v) + " vertical, " + std::to_string(n) + " with no plane");
+        horizontal += h;
+        vertical += v;
+        planeless += n;
+    }
+    CHECK_EQ(horizontal, 9);
+    CHECK_EQ(vertical, 13);
+    CHECK_EQ(planeless, 1);
+}
+
+void TheMirrorLawIsTheListings() {
+    // reflect (utilMath 315805..315988): dir - 2 (dir . normal) normal. The normal's sign never matters, its axis does.
+    const glm::dvec2 dir(0.6, 0.8);
+    CHECK_MSG(glm::distance(Shot::Reflect(dir, {1.0, 0.0}), glm::dvec2(-0.6, 0.8)) < 1e-12, "a vertical mirror flips x");
+    CHECK_MSG(glm::distance(Shot::Reflect(dir, {-1.0, 0.0}), glm::dvec2(-0.6, 0.8)) < 1e-12, "whichever way its normal points");
+    CHECK_MSG(glm::distance(Shot::Reflect(dir, {0.0, -1.0}), glm::dvec2(0.6, -0.8)) < 1e-12, "a horizontal one flips y");
+
+    // computeReflectVector (348584..349003): vertical is (+-1, 0) by the sign of v.x, any other plane (0, +-1) by v.y's,
+    // a zero going to +1.
+    CHECK(Shot::ReflectNormal(Shot::Plane::Vertical, {-0.3, 0.9}) == glm::dvec2(-1.0, 0.0));
+    CHECK(Shot::ReflectNormal(Shot::Plane::Vertical, {0.3, 0.9}) == glm::dvec2(1.0, 0.0));
+    CHECK(Shot::ReflectNormal(Shot::Plane::Vertical, {0.0, -1.0}) == glm::dvec2(1.0, 0.0));
+    CHECK(Shot::ReflectNormal(Shot::Plane::Horizontal, {0.9, -0.3}) == glm::dvec2(0.0, -1.0));
+    CHECK(Shot::ReflectNormal(Shot::Plane::Horizontal, {0.9, 0.3}) == glm::dvec2(0.0, 1.0));
+    CHECK(Shot::ReflectNormal(Shot::Plane::Horizontal, {-1.0, 0.0}) == glm::dvec2(0.0, 1.0));
+
+    // getRightAngleVector (316280..316768): getAngle(v) = atan2(v.x, v.y) from 0 to 2 PI, snapped to the nearest of four
+    // axes: a vector toward +y (angle 0) is (0, 1), toward +x (PI/2) is (1, 0), toward -y (PI) is (0, -1) and toward -x
+    // (3 PI/2) is (-1, 0), each owning the 90 degrees round it.
+    CHECK(Shot::SnapToAxis({0.0, 1.0}) == glm::dvec2(0.0, 1.0));
+    CHECK(Shot::SnapToAxis({1.0, 0.0}) == glm::dvec2(1.0, 0.0));
+    CHECK(Shot::SnapToAxis({0.0, -1.0}) == glm::dvec2(0.0, -1.0));
+    CHECK(Shot::SnapToAxis({-1.0, 0.0}) == glm::dvec2(-1.0, 0.0));
+    CHECK_MSG(Shot::SnapToAxis({0.9, 0.5}) == glm::dvec2(1.0, 0.0), "61 degrees round from +y is the +x axis's");
+    CHECK_MSG(Shot::SnapToAxis({0.5, 0.9}) == glm::dvec2(0.0, 1.0), "29 degrees is +y's");
+    CHECK_MSG(Shot::SnapToAxis({0.5, -0.9}) == glm::dvec2(0.0, -1.0), "151 degrees is -y's");
+    CHECK_MSG(Shot::SnapToAxis({-0.9, -0.5}) == glm::dvec2(-1.0, 0.0), "241 degrees is -x's");
+    CHECK_MSG(Shot::SnapToAxis({-0.5, 0.9}) == glm::dvec2(0.0, 1.0), "331 degrees is +y's again");
+    CHECK_MSG(Shot::SnapToAxis({0.0, 0.0}) == glm::dvec2(0.0, 1.0), "a shot exactly on the point: angle 0");
+}
+
+void TheCatchIsAPositionSampleWithinSizeX() {
+    // size.x is the sprite's frame x the entity's scale: reflect_agent.png is 32 x 32 at Scale 1.0 (the port's 16 was a
+    // guess), and a shot comes off one reflector at most (reflect 0 on the shot it adds).
+    Rig numbers;
+    if (!MakeRig(numbers)) return;
+    CHECK_EQ(numbers.state.shot.reflectSizeUnits, 32.0);
+    CHECK_EQ(numbers.state.shot.maxReflections, 1);
+
+    // A vertical reflector 31 units off the line of a shot fired along y 200 is passed by a sample inside 32 (the window
+    // is sqrt(32^2 - 31^2) = 7.9 units each side of it, wider than the 3.2 a callback moves), 33 units off never: the
+    // catch is a circle of 32 and not the old 16.
+    for (const double off : {31.0, 33.0}) {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        const glm::dvec2 at(260.0, 200.0 - off);
+        rig.state.reflectors.push_back(Mirror("mirror", at, Shot::Plane::Vertical));
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(400.0, 200.0)));
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(rig.state.placed.size() == 1, std::to_string(off) + " off: " + rig.state.lastFailure);
+        if (rig.state.placed.empty()) continue;
+        if (off < 32.0) {
+            // The leg is the way from the shooter to the reflector, flipped in x, from the reflector.
+            const glm::dvec2 expected(at.x - glm::distance(glm::dvec2(100.0, 200.0), at), at.y);
+            CHECK_MSG(seen.turns == 1 && glm::distance(rig.state.placed[0].basePx, expected) < 1e-9,
+                      "31 off is caught: it opens at " + At(rig.state.placed[0].basePx) + " for " + At(expected));
+            CHECK_MSG(glm::distance(seen.first.atPx, glm::dvec2(SampleX(rig, 100.0, 41), 200.0)) < 1e-9 &&
+                          glm::distance(seen.first.atPx, at) < 32.0,
+                      "on the 41st callback, 255.2 along, " + At(seen.first.atPx));
+        } else {
+            CHECK_MSG(seen.turns == 0 && glm::distance(rig.state.placed[0].basePx, glm::dvec2(400.0, 200.0)) < 1e-9,
+                      "33 off is not: it opens at the tap, " + At(rig.state.placed[0].basePx));
+        }
+    }
+}
+
+void TheCatchIsStrictlyBelowSizeXAndSizeIsTheEntitysScaled() {
+    // CMPf v6, v8 / JNS -> 267 (#83-84) returns when squaredDistance >= size.x x size.x: a sample EXACTLY 32.0 from the
+    // agent is not caught, one a hair inside is. The reflector stands straight above the 40th callback's sample, 32.0 up
+    // (the sample's x is 252.0 to within 1e-13, so its dx squared is lost in 1024.0): a `<=` would turn the shot there, the
+    // listing's `<` lets it by and it opens at the tap. 31.999 up turns it on that callback (the 40th Tick after the Shoot).
+    for (const double up : {32.0, 31.999}) {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        rig.state.reflectors.push_back(
+            Mirror("mirror", glm::dvec2(SampleX(rig, 100.0, 40), 200.0 - up), Shot::Plane::Vertical));
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(400.0, 200.0)));
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(rig.state.placed.size() == 1, std::to_string(up) + " up: " + rig.state.lastFailure);
+        if (rig.state.placed.empty()) continue;
+        if (up == 32.0) {
+            CHECK_MSG(seen.turns == 0 && glm::distance(rig.state.placed[0].basePx, glm::dvec2(400.0, 200.0)) < 1e-9,
+                      "exactly size.x away is not caught: it opens at the tap, " + At(rig.state.placed[0].basePx));
+        } else {
+            CHECK_MSG(seen.turns == 1 && seen.tick == 40,
+                      "31.999 away is caught on the 40th callback: tick " + std::to_string(seen.tick));
+        }
+    }
+    // size = GetSize() = the sprite's frame x the placement's own scale (ETHSpriteEntity::GetCurrentSize): a reflector
+    // placed at scale 2 catches within 64, so one 63 off turns the shot and one 65 off does not.
+    for (const double off : {63.0, 65.0}) {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        rig.state.reflectors.push_back(Portals::Reflector{"big", glm::dvec2(260.0, 200.0 - off), Shot::Plane::Vertical, 2.0});
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(400.0, 200.0)));
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(rig.state.placed.size() == 1, std::to_string(off) + " off at scale 2: " + rig.state.lastFailure);
+        CHECK_MSG(seen.turns == (off < 64.0 ? 1 : 0), std::to_string(off) + " off at scale 2: " + std::to_string(seen.turns) +
+                                                          " turn(s)");
+    }
+}
+
+void TheFirstSampleWithinSizeXTurnsTheShotFromTheReflector() {
+    // A vertical reflector at (200, 200), a shot fired along y 200 from x 100 toward (400, 200). The sample of the 13th
+    // callback, 165.6, is 34.4 away; the 14th's, 168.8, is 31.2: it is caught there, 14 Ticks after the Shoot. The new
+    // shot is spawned AT THE REFLECTOR and flies min(300, |(100, 200) - (200, 200)| = 100) back along -x: it opens at
+    // (100, 200), after the 24 Ticks a flight of 100 takes (a jump of 24 from the reflector, 3.2 a Tick).
+    Rig rig;
+    if (!MakeRig(rig)) return;
+    rig.state.reflectors.push_back(Mirror("mirror", glm::dvec2(200.0, 200.0), Shot::Plane::Vertical));
+    CHECK(rig.state.Shoot(rig.registry, glm::dvec2(400.0, 200.0)));
+    CHECK(200.0 - SampleX(rig, 100.0, 13) >= 32.0 && 200.0 - SampleX(rig, 100.0, 14) < 32.0);
+    const TurnSeen seen = FlyAndWatch(rig);
+    CHECK_EQ(seen.tick, 14);
+    CHECK_EQ(seen.turns, 1);
+    CHECK_MSG(glm::distance(seen.first.atPx, glm::dvec2(168.8, 200.0)) < 1e-9, "caught at " + At(seen.first.atPx));
+    CHECK_MSG(seen.first.agentPx == glm::dvec2(200.0, 200.0), "the new shot is spawned at the reflector");
+    CHECK_MSG(glm::distance(seen.first.toPx, glm::dvec2(100.0, 200.0)) < 1e-9, "newDest " + At(seen.first.toPx));
+    CHECK_MSG(rig.state.placed.size() == 1 && glm::distance(rig.state.placed[0].basePx, glm::dvec2(100.0, 200.0)) < 1e-9,
+              "it opens at newDest");
+    CHECK_EQ(seen.ticks, 14 + FlightTicks(rig.state.shot, 100.0, 16.0));
+    CHECK_EQ(rig.state.reflections, 1);
+}
+
+void TheLegIsTheLessOfTheWayFromItsCasterAndTheLengthItWasFired() {
+    // dist = min(sqrt(squaredDistance), distance(casterPos, agent)) (#148-180). The stored squaredDistance is the whole
+    // length the shot was fired (never decremented), so a shot caught after a few steps does not "go on for the rest of
+    // its way": it goes the whole of it, or back the whole way it came. Both are shown on the head-on case above.
+    struct Case {
+        double tapX;     // the tap, and so the length fired
+        double expectedX; // where the new shot opens, from the reflector at x 200 going -x
+        const char* what;
+    };
+    for (const Case& c : {Case{400.0, 100.0, "fired 300, the reflector 100 from the shooter: 100 back"},
+                          Case{190.0, 110.0, "fired 90, the reflector 100 from the shooter: 90 back"}}) {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        rig.state.reflectors.push_back(Mirror("mirror", glm::dvec2(200.0, 200.0), Shot::Plane::Vertical));
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(c.tapX, 200.0)));
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(seen.turns == 1 && rig.state.placed.size() == 1 &&
+                      glm::distance(rig.state.placed[0].basePx, glm::dvec2(c.expectedX, 200.0)) < 1e-9,
+                  std::string(c.what) + ": " +
+                      (rig.state.placed.empty() ? rig.state.lastFailure : At(rig.state.placed[0].basePx)));
+    }
+}
+
+void NoCatchOnTheArrivalTick() {
+    // The shot deletes itself in its own callback on the frame it passes its destiny, before the static reflector looks:
+    // a reflector 31.0 from the arrival sample catches nothing, and one 3.2 units further along the shot's way - the
+    // destiny moved from 100 to 103 - catches the sample before it. Fired along y 200 from x 100 to x 200 (arrival on the
+    // 24th callback, 200.8, its predecessor 197.6 being 34.2 from the reflector at 231.8) or to x 203 (arrival on the
+    // 25th, 204.0; the 24th's 200.8 is 31.0 away: caught, 24 Ticks after the Shoot).
+    for (const double length : {100.0, 103.0}) {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        rig.state.reflectors.push_back(Mirror("mirror", glm::dvec2(231.8, 200.0), Shot::Plane::Vertical));
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(100.0 + length, 200.0)));
+        CHECK(231.8 - SampleX(rig, 100.0, 23) >= 32.0 && 231.8 - SampleX(rig, 100.0, 24) < 32.0);
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(rig.state.placed.size() == 1, std::to_string(length) + ": " + rig.state.lastFailure);
+        if (rig.state.placed.empty()) continue;
+        if (length == 100.0) {
+            CHECK_MSG(seen.turns == 0 && glm::distance(rig.state.placed[0].basePx, glm::dvec2(200.0, 200.0)) < 1e-9 &&
+                          seen.ticks == FlightTicks(rig.state.shot, 100.0, 16.0),
+                      "a reflector within reach of the arrival sample only: no turn, the portal opens at the destiny " +
+                          At(rig.state.placed[0].basePx));
+        } else {
+            CHECK_MSG(seen.turns == 1 && seen.tick == 24 &&
+                          glm::distance(rig.state.placed[0].basePx, glm::dvec2(231.8 - 103.0, 200.0)) < 1e-9,
+                      "the sample before the arrival: turned on the 24th Tick, the new shot goes the 103 fired: " +
+                          At(rig.state.placed[0].basePx));
+        }
+    }
+}
+
+void ASpawnBesideAReflectorIsCaughtOnTheTapsFrame() {
+    // A reflector's static callback runs on the frame the tap fires on, and sees the shot at its spawn: the shooter's
+    // point. One within 32 of it catches the shot at once - on the first Tick after the Shoot, which runs the tap's frame
+    // as its spawn pass - and the new shot, spawned at the reflector, goes min(200 fired, 10 from the shooter to it).
+    {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        rig.state.reflectors.push_back(Mirror("mirror", glm::dvec2(110.0, 200.0), Shot::Plane::Horizontal));
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(300.0, 200.0)));
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(seen.tick == 1 && seen.turns == 1, "caught on the first Tick, at the spawn");
+        CHECK_MSG(glm::distance(seen.first.atPx, glm::dvec2(100.0, 200.0)) < 1e-3 &&
+                      seen.first.agentPx == glm::dvec2(110.0, 200.0),
+                  "the old shot where it was spawned, the new one at the reflector: " + At(seen.first.atPx));
+        CHECK_MSG(rig.state.placed.size() == 1 && glm::distance(rig.state.placed[0].basePx, glm::dvec2(120.0, 200.0)) < 1e-9,
+                  "it opens 10 on from the reflector: " +
+                      (rig.state.placed.empty() ? rig.state.lastFailure : At(rig.state.placed[0].basePx)));
+        CHECK_EQ(seen.ticks, 1);
+    }
+    // 35 away it is not caught at the spawn, and the first callback's sample (127.2) is 7.8 from it: caught there.
+    {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        rig.state.reflectors.push_back(Mirror("mirror", glm::dvec2(135.0, 200.0), Shot::Plane::Horizontal));
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(300.0, 200.0)));
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(seen.turns == 1 && seen.tick == 1 && glm::distance(seen.first.atPx, glm::dvec2(127.2, 200.0)) < 1e-9,
+                  "caught by the first callback's sample, not the spawn: " + At(seen.first.atPx));
+    }
+}
+
+void AReflectedShotIsNeverTurnedAgain() {
+    // The shot a reflector adds has reflect 0 (#224-227) and every reflector returns on a shot with none (#39-54): the
+    // shot comes off one reflector at most. A horizontal reflector at (200, 100) sends the shot of (100, 200) -> (300, 0)
+    // toward (300, 200); a second one at (250, 150) stands ON that leg (70.7 from the first, 70.7 off the first leg's
+    // line) and lets it through. The same second reflector alone catches a fresh shot fired along that leg.
+    {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        rig.state.reflectors.push_back(Mirror("first", glm::dvec2(200.0, 100.0), Shot::Plane::Horizontal));
+        rig.state.reflectors.push_back(Mirror("second", glm::dvec2(250.0, 150.0), Shot::Plane::Horizontal));
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(300.0, 0.0)));
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(seen.turns == 1 && rig.state.reflections == 1, "turned once, by the first");
+        CHECK_MSG(rig.state.placed.size() == 1 && glm::distance(rig.state.placed[0].basePx, glm::dvec2(300.0, 200.0)) < 1e-6,
+                  "and through the second to the end of its leg: " +
+                      (rig.state.placed.empty() ? rig.state.lastFailure : At(rig.state.placed[0].basePx)));
+        CHECK_MSG(seen.first.agentPx == glm::dvec2(200.0, 100.0), "the first's");
+    }
+    {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        PutShooter(rig, glm::dvec2(200.0, 100.0));
+        rig.state.reflectors.push_back(Mirror("second", glm::dvec2(250.0, 150.0), Shot::Plane::Horizontal));
+        CHECK(rig.state.Shoot(rig.registry, glm::dvec2(300.0, 200.0)));
+        const TurnSeen seen = FlyAndWatch(rig);
+        // Fired 141.4, the reflector 70.7 from the shooter: back up 70.7 from it, to (300, 100).
+        CHECK_MSG(seen.turns == 1 && rig.state.placed.size() == 1 &&
+                      glm::distance(rig.state.placed[0].basePx, glm::dvec2(300.0, 100.0)) < 1e-6,
+                  "a fresh shot along the same leg is turned by it: " +
+                      (rig.state.placed.empty() ? rig.state.lastFailure : At(rig.state.placed[0].basePx)));
+    }
+}
+
+void APlanelessReflectorTurnsTheShotOffTheSideItCameFrom() {
+    // 2-27's reflector has no plane: computeReflectVector hands the shot's side of it, normalize(shot - reflector), to
+    // getRightAngleVector, which snaps it to an axis, and the shot's x or y flips accordingly. From the left it is a
+    // vertical mirror's turn; from above a horizontal one's. The reflector at (200, 200), 100 and 111.8 from the shooter.
+    struct Case {
+        glm::dvec2 shooter;
+        glm::dvec2 tap;
+        Shot::Plane plane;
+        glm::dvec2 expected;
+        const char* what;
+    };
+    const glm::dvec2 left = glm::dvec2(200.0, -50.0) / std::hypot(200.0, 50.0); // (100, 200) toward (300, 150)
+    const glm::dvec2 fromLeft = glm::dvec2(200.0, 200.0) + glm::dvec2(-left.x, left.y) * 100.0;
+    for (const Case& c : {Case{{100.0, 200.0}, {300.0, 150.0}, Shot::Plane::Snap, fromLeft, "from the left: x flips"},
+                          Case{{100.0, 200.0}, {300.0, 150.0}, Shot::Plane::Vertical, fromLeft, "a vertical plane: the same"},
+                          Case{{100.0, 200.0}, {300.0, 150.0}, Shot::Plane::Horizontal,
+                               glm::dvec2(200.0, 200.0) + glm::dvec2(left.x, -left.y) * 100.0,
+                               "a horizontal plane flips y instead"},
+                          Case{{150.0, 100.0}, {250.0, 300.0}, Shot::Plane::Snap, {250.0, 100.0}, "from above: y flips"},
+                          Case{{150.0, 100.0}, {250.0, 300.0}, Shot::Plane::Vertical, {150.0, 300.0},
+                               "a vertical plane would flip x"}}) {
+        Rig rig;
+        if (!MakeRig(rig)) return;
+        PutShooter(rig, c.shooter);
+        rig.state.reflectors.push_back(Mirror("mirror", glm::dvec2(200.0, 200.0), c.plane));
+        CHECK(rig.state.Shoot(rig.registry, c.tap));
+        const TurnSeen seen = FlyAndWatch(rig);
+        CHECK_MSG(seen.turns == 1 && rig.state.placed.size() == 1 &&
+                      glm::distance(rig.state.placed[0].basePx, c.expected) < 1e-6,
+                  std::string(c.what) + ": " +
+                      (rig.state.placed.empty() ? rig.state.lastFailure : At(rig.state.placed[0].basePx)) + " for " +
+                      At(c.expected));
+    }
+}
+
+void TheTurnIsRecordedForItsPictures() {
+    // The head-on case again, watched for what the layer draws: the first leg launches from the shooter on the first Tick,
+    // the turn is recorded on the 14th with the OLD shot's flash point (where it was caught), the new leg's mark at its
+    // clipped end (portal_mark: nothing in its way) and red_waves nowhere; the new leg launches on the Tick after, from
+    // the reflector, toward its end.
+    Rig rig;
+    if (!MakeRig(rig)) return;
+    rig.state.reflectors.push_back(Mirror("mirror", glm::dvec2(200.0, 200.0), Shot::Plane::Vertical));
+    CHECK(rig.state.Shoot(rig.registry, glm::dvec2(400.0, 200.0)));
+    const TurnSeen seen = FlyAndWatch(rig);
+    CHECK_EQ(seen.launches.size(), std::size_t{2});
+    if (seen.launches.size() != 2) return;
+    CHECK_MSG(seen.launches[0].first == 1 && seen.launches[0].second.fromPx == glm::dvec2(100.0, 200.0),
+              "the first leg launches on the first callback, from the shooter");
+    CHECK_MSG(seen.launches[1].first == seen.tick + 1 && seen.launches[1].second.fromPx == seen.first.agentPx &&
+                  glm::distance(seen.launches[1].second.towardPx, seen.first.said.atPx) < 1e-12,
+              "the new leg launches on the Tick after the turn, from the reflector, toward its clipped end");
+    CHECK_MSG(!seen.first.said.willDie && !seen.first.said.redWaves && seen.first.said.atPx == seen.first.toPx,
+              "nothing in the new leg's way: portal_mark at its end, " + At(seen.first.said.atPx));
+    // The rig's lists are one Tick's: the Tick after the shot is over has none.
+    rig.state.Tick(rig.registry, kFloored);
+    CHECK(rig.state.launches.empty() && rig.state.reflected.empty() && rig.state.failures.empty());
+}
+
+void OneTwelvesReflectorSendsTheShotToNumbersWorkedOutByHand() {
+    // 1-12 (level11), reflect_agent_761 at (180, 140), horizontal, with the player at the level's start point (73, 204) and
+    // a tap on the line through it, at 1.5 times the way there: (233.5, 108). The numbers are worked out from the listing
+    // by hand, not read back from the sim:
+    //  - the tap-time ray meets the underside of wall04_ent_759 (x 148..212, down to y 128) at x = 73 + 76/96 x 160.5
+    //    = 200.0625 (the line is y = 204 - 0.5981 (x - 73)), so the first leg is aimed at (200.0625, 128), 148.06 long,
+    //    and is doomed there - it never gets so far;
+    //  - a sample of it within 32 of the reflector catches it (from 94.4 along: 30.3 away); the reflector is 124.68 from
+    //    the player, which is less than 148.06, so dist = 124.68, and the horizontal plane flips the heading's y:
+    //    newDest = (180, 140) + (0.8582, +0.5133) x 124.68 = (287, 204), exactly (107, 64) on from the reflector;
+    //  - nothing stands on the way from (188, 144.6) to it (the platform's top is y 224, single_block_plat_ent_760 is
+    //    x 164..196 from y 190), no field holds (287, 204), and a reflected shot takes no doom from a wall (#150-156):
+    //    portal_mark there, and a portal opens at (287, 204).
+    Run run;
+    if (!Begin("level11", run)) return;
+    PutPlayer(run, glm::dvec2(73.0, 204.0));
+    CHECK(run.level.portals.Shoot(run.registry, glm::dvec2(233.5, 108.0)));
+    if (!run.level.portals.flight) return;
+    const glm::dvec2 first = run.level.portals.flight->toPx;
+    CHECK_MSG(glm::distance(first, glm::dvec2(200.0 + 1.0 / 16.0, 128.0)) < 1e-3 && run.level.portals.flight->said.willDie,
+              "the first leg is aimed at the wall's underside, doomed: " + Px(first));
+    int turnTick = -1;
+    Portals::Reflection turn;
+    for (int tick = 1; tick <= 400 && run.level.portals.flight; ++tick) {
+        Tick(run);
+        if (turnTick < 0 && !run.level.portals.reflected.empty()) {
+            turnTick = tick;
+            turn = run.level.portals.reflected.front();
+        }
+    }
+    CHECK_MSG(turnTick > 0, "the shot was turned: " + run.level.portals.lastFailure);
+    if (turnTick < 0) return;
+    CHECK_MSG(glm::distance(turn.agentPx, glm::dvec2(180.0, 140.0)) < 1e-3, "by reflect_agent_761: " + Px(turn.agentPx));
+    CHECK_MSG(glm::distance(turn.atPx, glm::dvec2(180.0, 140.0)) < 32.0, "caught within 32: " + Px(turn.atPx));
+    CHECK_MSG(glm::distance(turn.toPx, glm::dvec2(287.0, 204.0)) < 1e-3, "newDest " + Px(turn.toPx));
+    CHECK_MSG(glm::distance(turn.said.atPx, glm::dvec2(287.0, 204.0)) < 1e-3 && !turn.said.willDie && !turn.said.redWaves,
+              "clipped to itself, not doomed: portal_mark at " + Px(turn.said.atPx));
+    CHECK_MSG(run.level.portals.placed.size() == 1 &&
+                  glm::distance(run.level.portals.placed[0].basePx, glm::dvec2(287.0, 204.0)) < 1e-3,
+              "a portal opens there: " +
+                  (run.level.portals.placed.empty() ? run.level.portals.lastFailure
+                                                   : Px(run.level.portals.placed[0].basePx)));
 }
 
 void TheRecoilAimsAtFinalPos() {
@@ -1308,20 +1621,27 @@ void runTests() {
     NoPortalsNoShot();
     ExactInThePlane();
     TheReflectorsAreTheLevelsOwn();
-    AReflectorTurnsAShotMirrored();
-    AShotComesOffOneReflectorAtMost();
-    EnteringACircle();
-    AReflectorWithNoPlaneTakesTheDefault();
     TheFinalPosRulesAreTheDecodedOnes();
     TheTapTimeRayOnF3sTaps();
     TheRetryFromOverTheHead();
     TheGrabberHoldsWhatHoldsThePoint();
     AFireDiamondsMarkIsALeftoverByte();
     ATapSaysWhyItWasRefused();
-    AReflectionIsRecordedForItsPictures();
     TheShotGoesToTheRaysEndAndFailsOrOpensThere();
     TheShotMeetsNoBodyOnItsWay();
     AReflectedShotNeverDiesOnAWall();
+    TheReflectorsAreTheLevelsOwnCensus();
+    TheMirrorLawIsTheListings();
+    TheCatchIsAPositionSampleWithinSizeX();
+    TheCatchIsStrictlyBelowSizeXAndSizeIsTheEntitysScaled();
+    TheFirstSampleWithinSizeXTurnsTheShotFromTheReflector();
+    TheLegIsTheLessOfTheWayFromItsCasterAndTheLengthItWasFired();
+    NoCatchOnTheArrivalTick();
+    ASpawnBesideAReflectorIsCaughtOnTheTapsFrame();
+    AReflectedShotIsNeverTurnedAgain();
+    APlanelessReflectorTurnsTheShotOffTheSideItCameFrom();
+    TheTurnIsRecordedForItsPictures();
+    OneTwelvesReflectorSendsTheShotToNumbersWorkedOutByHand();
     TheRecoilAimsAtFinalPos();
     AnArrivalAsksTheFieldOfTheShotsPosition();
     ANonDoomedArrivalOpensWhereTheRayEnded();

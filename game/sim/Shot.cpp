@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <numbers>
 #include <sstream>
 #include <vector>
 
@@ -135,21 +136,15 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     const Json::Value& reflection = root["reflection"];
-    if (!reflection.IsObject() || !reflection.Has("catch_radius_px") || !reflection["catch_radius_px"].IsNumber() ||
-        reflection["catch_radius_px"].AsNumber() <= 0.0 || !reflection.Has("max_reflections") ||
+    if (!reflection.IsObject() || !reflection.Has("size_units") || !reflection["size_units"].IsNumber() ||
+        reflection["size_units"].AsNumber() <= 0.0 || !reflection.Has("max_reflections") ||
         !reflection["max_reflections"].IsNumber() || reflection["max_reflections"].AsNumber() < 0.0 ||
         reflection["max_reflections"].AsNumber() != std::floor(reflection["max_reflections"].AsNumber())) {
-        error = path + ": reflection needs catch_radius_px above 0 and a whole max_reflections from 0";
+        error = path + ": reflection needs size_units above 0 and a whole max_reflections from 0";
         return false;
     }
-    read.reflectRadiusPx = reflection["catch_radius_px"].AsNumber();
+    read.reflectSizeUnits = reflection["size_units"].AsNumber();
     read.maxReflections = static_cast<int>(reflection["max_reflections"].AsNumber());
-    const Json::Value& plane = reflection["default_plane"];
-    if (!plane.IsString() || (plane.AsString("") != "vertical" && plane.AsString("") != "horizontal")) {
-        error = path + ": reflection.default_plane is vertical or horizontal";
-        return false;
-    }
-    read.defaultPlaneVertical = plane.AsString("") == "vertical";
     out = read;
     return true;
 }
@@ -290,20 +285,26 @@ bool InsideBox(const glm::dvec2& pointPx, const Trigger::Box& box) {
     return gap.x <= static_cast<double>(box.half.x) && gap.y <= static_cast<double>(box.half.y);
 }
 
-std::optional<double> EntersCircle(const glm::dvec2& fromPx, const glm::dvec2& toPx, const glm::dvec2& centrePx,
-                                   double radiusPx) {
-    const glm::dvec2 d = toPx - fromPx;
-    const glm::dvec2 f = fromPx - centrePx;
-    const double c = glm::dot(f, f) - radiusPx * radiusPx;
-    if (c <= 0.0) return 0.0;
-    const double a = glm::dot(d, d);
-    if (a <= 0.0) return std::nullopt;
-    const double b = 2.0 * glm::dot(f, d);
-    const double discriminant = b * b - 4.0 * a * c;
-    if (discriminant < 0.0) return std::nullopt;
-    const double along = (-b - std::sqrt(discriminant)) / (2.0 * a);
-    if (along < 0.0 || along > 1.0) return std::nullopt;
-    return along;
+glm::dvec2 SnapToAxis(const glm::dvec2& v) {
+    // PIb / 2, the listing's quarter turn (utilMath's PIb is the constant 1.570796327f).
+    constexpr double kQuarterTurn = std::numbers::pi / 4.0;
+    double angle = std::atan2(v.x, v.y);
+    if (angle < 0.0) angle += 2.0 * std::numbers::pi;
+    if (angle > 3.0 * kQuarterTurn && angle <= 5.0 * kQuarterTurn) return {0.0, -1.0}; // #7-35
+    if (angle > 7.0 * kQuarterTurn || angle <= kQuarterTurn) return {0.0, 1.0};        // #36-65
+    if (angle > kQuarterTurn && angle <= 3.0 * kQuarterTurn) return {1.0, 0.0};        // #66-93
+    return {-1.0, 0.0};                                                                // #94-101
+}
+
+glm::dvec2 ReflectNormal(Plane plane, const glm::dvec2& v) {
+    // computeReflectVector #1-20: the empty plane; #21-61: 'vertical'; #62-88: any other.
+    if (plane == Plane::Snap) return SnapToAxis(v);
+    if (plane == Plane::Vertical) return {v.x < 0.0 ? -1.0 : 1.0, 0.0};
+    return {0.0, v.y < 0.0 ? -1.0 : 1.0};
+}
+
+glm::dvec2 Reflect(const glm::dvec2& dir, const glm::dvec2& normal) {
+    return dir - normal * (2.0 * glm::dot(dir, normal));
 }
 
 } // namespace MagicPortals::Shot

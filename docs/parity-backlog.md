@@ -2077,6 +2077,16 @@ leg lands 10 short of a wall); a blocker reads the shot's position; a portal can
 units inside a body whose contact lay outside it; only the tap that reaches the hourglass restarts the 400 ms (the program's spec said
 every refusal; the listing says not); the zero-g recoil is away from `finalPos`; `no_portal_705` is no zone. The recorded deviations are
 the rows "Step 156's recorded deviations" (R23-1 to R23-11), under G4's. R24 and R25 were not touched.
+**Step 157 (G9, the reflector as the original has it) is built, measured, independently verified (13 gates passed, three low findings, text applied) and committed locally, NOT pushed (re-done from an interrupted first attempt, `wip/wave3b2-g9-interrupted`)**: a shot is caught by a position
+sample STRICTLY within 32 units of a reflector's point (the sprite's `GetSize().x`; the port's 16 was a guess, swept along the way), mirrored on the plane's axis
+- or, for a placement with no plane (2-27's), on the side of the reflector it came from - and sent on from the REFLECTOR'S point for `min(the length it was fired, the way from where its
+leg began to the reflector)`, by one reflector at most; no clip shows a reflected shot, so it rests on the listing. **GAMEPLAY changed, plainly, on the 19 levels with a reflector**
+(1-12, 1-13, 1-20, 1-21, 1-23, 1-29, 2-10, 2-11, 2-16, 2-18, 2-25, 2-27, 3-03, 3-05, 3-14, 3-25, 3-26, 4-10, 4-23): a shot passing 16 to 32 units from one is now turned, and a turned shot's leg is
+the whole length it was fired or the way it came (much longer where the tap was at or short of the reflector, shorter where it was far beyond it) from the reflector's own point, so its
+portal opens elsewhere and a longer leg keeps it in the air (a second tap meets the hourglass). `test_mp_routes` is red on 12 routes (R23's six
+and six more: 1-12, 1-21, 2-11, 2-16, 2-25, 3-14; 74 of 86 win, every one on its step-155 tick) - the wave's route phase re-authors them; reachability 108 / 20 / 0; the f420 sweep is in
+planning step 157 (128 of 128 byte-identical to R23's). The rows are "Step 157's recorded deviations" (G9-1 to G9-7), under R23's. The Build Tools' MSVC moved from 14.50 to 14.51 on 2026-10-05 (the old toolset is gone), so `build/` was
+deleted and reconfigured by `port_build.bat`; the three-level check against the R23 sweep (1-01, 1-12, 2-25) was byte-identical before the step's first edit.
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -2237,15 +2247,17 @@ the rows "Step 156's recorded deviations" (R23-1 to R23-11), under G4's. R24 and
       ray said, and opens a portal there (`insertPortal`, no field test) or fails there (`portal_fail` at the destiny). The sensor and teleportable-body
       disagreements are gone with it (a button, a `destroyier.ent` or the anchor dooms the shot at its face; a crate, a stone or a minion takes the portal 10
       units in), and so are the head-height retry's and the reflected shot's.*
-- [ ] **G4-2. Bodies, blockers and reflectors are swept along the tick's way, not sampled** (the original has no body in flight; its blocker and reflector
+- [x] **G4-2. Bodies, blockers and reflectors are swept along the tick's way, not sampled** (the original has no body in flight; its blocker and reflector
       callbacks sample a position): a graze of at most 3.2 units at a blocker (64 x 128) or a reflector (16; G9's 32), and on an arrival tick they are
       still swept up to the destination where the original's static callbacks find nothing. *Step 156 (R23) built two of the three: the shot meets no body
       at all, and an `anti_projectile_wall` reads the shot's POSITION once a frame (`isPointInRect`, closed, a shot that arrives is gone before it looks).
-      The reflector is still swept, with the port's 16 and its own leg: Next: **G9**.*
+      The reflector is still swept, with the port's 16 and its own leg: Next: **G9**.* *Built in step 157: a reflector reads the shot's POSITION once a frame, strictly within 32 x its
+      scale, and never a shot that has arrived: all three are sampled now.*
 - [ ] **G4-3. The spawn pass runs on the first tick after the tap**, one tick after the original's static frame (the layer reads a tap after `AfterStep`): an
       agent within 22.4 of the player dies, and a flame within 32 burns the shot, 16 ms later. No owner unless the layer's order changes (PIC).
-- [ ] **G4-4. A reflected leg starts at the catch point**, not at the reflector (the original's new projectile spawns at the agent's point and jumps 24 from
-      there). Next: **G9**.
+- [x] **G4-4. A reflected leg starts at the catch point**, not at the reflector (the original's new projectile spawns at the agent's point and jumps 24 from
+      there). Next: **G9**. *Built in step 157: the new shot is spawned at the reflector's point, its first callback jumps 24 from it, and its `projectile_shoot` flash is 24 out from the reflector;
+      the OLD shot's flash is where it was caught (#245-260).*
 - [ ] **G4-5. The sampled test is in double**; the original's squared distances are float32, so an exact tie is not pinned.
 - [ ] **G4-6. The shot's cell timer steps on a tick the callback ran** (the tap's tick and a reflected leg's creation tick call it in no original frame);
       its stride, its one global timer and the ghost's shots are as they were. Two cosmetic one-tick differences of the picture ride with it: the original sets
@@ -2265,12 +2277,15 @@ the rows "Step 156's recorded deviations" (R23-1 to R23-11), under G4's. R24 and
       unit of the agent's own motion; pre-existing, no pinned scenario flips. No owner assigned: a row for the final comparison (section 5) to weigh.
 
 **Step 156's recorded deviations (R23: the portal tap as the original), each an open row** (planning step 156 has the evidence):
-- [ ] **R23-1. The reflector is still swept, with the port's 16 and its own leg** (G4-2's third part, G4-4): `flyOnePass` finds a reflector's reach along the tick's way
+- [x] **R23-1. The reflector is still swept, with the port's 16 and its own leg** (G4-2's third part, G4-4): `flyOnePass` finds a reflector's reach along the tick's way
       from the point after the jump, turns the shot at the entry, and the new leg's ray (`hasBeenReflected`) now decides where that leg goes and whether it is
       doomed. The original's catch is a position sample within `size.x` (32) of the agent and the new projectile starts at the agent. Next: **G9**,
       which also pins 1-12's new leg's end and verdict (red_cross or portal_mark) as numbers from the listing's `newDest` / clip arithmetic:
       `test_mp_layer`'s reflector case (`AShotTurnedByAReflectorMarksItsNewEnd`) now follows the sim's own verdict (`turn.said.willDie`), so it holds layer = sim
-      and not the geometry (the verifier's low finding).
+      and not the geometry (the verifier's low finding). *Built in step 157: 1-12's reflect_agent_761 with the player at (73, 204) and a tap on the line through it sends the shot to
+      (287, 204), worked out by hand in `OneTwelvesReflectorSendsTheShotToNumbersWorkedOutByHand` (the first leg aimed at the wall's underside (200.0625, 128), the reflector 124.68 from the
+      player, newDest the reflector's point + (107, 64), clipped to itself: portal_mark, a portal at (287, 204)), and the layer case computes the same arithmetic itself instead of reading
+      `turn.said` back.*
 - [ ] **R23-2. A static callback (a blocker, an agent, a flame) runs only while its bucket is drawn**, and the port's always do (section 15 of `docs/ethanon-formats.md`; step 154,
       deviation 2): a long shot past the screen's drawn buckets meets a blocker the original's callback never looks for.
 - [ ] **R23-3. `light_off` reads the shot's position before the tick's move**, one tick later than the original's static look (`Game::AfterStep` runs the torch before
@@ -2297,6 +2312,31 @@ the rows "Step 156's recorded deviations" (R23-1 to R23-11), under G4's. R24 and
 - [ ] **R23-11. A stale comment in `game/sim/Game.cpp` (about lines 655-666)** still says the port has "nothing to scale" for a fire-diamond shot, where `Shoot` now aims it
       at `final_pos.fire_diamond_reach` x the aim (harmless: the layer's conversion still runs before `Tick`). Left to keep the tested binaries current (a comment edit relinks both
       executables and every refused launch notifies the owner). Next: the next edit of `Game.cpp`.
+
+**Step 157's recorded deviations (G9: the reflector as the original), each an open row** (planning step 157 has the evidence):
+- [ ] **G9-1. A tie between two static callbacks that catch the same sample is settled by the port's order**: a blocker, then a reflector, then an anti-portal agent, then a flame. The original's is
+      the scene walk's (its buckets' order, then the entities' in each), undecoded; the same sample is held by two only where two static callbacks stand within 64 units of each other, and in the 19 levels with a reflector none does: no `anti_projectile_wall` stands in any of them and no anti-portal agent or fire agent
+      lies within 64 units of any of the 23 reflectors by node point (`G9/scan_near.py`; 1-12's reflector 761 and its co-located antiportal ring are a field, not a callback). Of two reflectors both catching one sample the port takes the first in the level's order.
+- [ ] **G9-2. A static callback after the reflector's own, in the same frame, sees the new shot at the reflector's point** in the original (and no longer the old one: `DeleteEntity` erased it from its
+      bucket at once); the port runs no look between the new shot's creation and its first callback on the next tick. Only an anti-portal agent, a flame, a blocker or a second reflector standing at a
+      reflector's point could tell the two apart: none lies within 64 units of any of the 23 placements (a scan of the converted levels, `out/parity/program/G9/scan_near.py`).
+- [ ] **G9-3. R23-2 holds for reflectors too**: the original's callback runs only while its bucket is drawn; the port's always does, so a shot far off the view can pass a reflector the original does
+      not look at.
+- [ ] **G9-4. No clip shows a reflected shot**, so the 32, the leg and the mirror rest on the listing and on the sprite's frame size (`reflect_agent.png` is 32 x 32, Scale 1.0; the hd copy is the same
+      entity at the device's scale): the footage gate is NOT RUN. Next: the final comparison (section 5), one capture of a shot passing 24 units from a reflector on the emulator rig (1-12's
+      reflect_agent_761, or 1-21's reflect_agent_826, which the route of 1-21 passed at 24 u). The radius is not a free number: the route shot of 1-21's tick 333 sits on the boundary (its
+      callback-20 sample is 31.92-32.04 u from reflect_agent_826 across the 0.05 rounding of the printed player point), so a true radius a little over or under 32 would flip that one catch.
+- [ ] **G9-5. The plane-less reflector's snap is at exact multiples of PI/4 in double**; the original's constants are float32 (`PIb` 1.570796327f), so a shot exactly on a diagonal of a plane-less
+      reflector can go either way. The one such placement is 2-27's, which no route reaches yet (its reflector follows the handle, step 139; a route for 2-27 will find which side its shot comes from).
+- [ ] **G9-6. Twelve routes fail on this build and no route file was touched**: R23's six (R23-9) and 1-12, 1-21, 2-11, 2-16, 2-25, 3-14 (planning step 157's census, `G9/impl.md`): in the first four the
+      route's reflected shot is still flying at the next tap (the new leg starts at the reflector and is as long as the old one was fired, or as far as it came: the hourglass), in 2-25 the reflected shot
+      opens its portal at (319.6, 144) where R23's opened at the tap (524.7, 190), and the player is burned by a carranca's fireball on tick 383, and in 3-14 the shot of tick 637 toward (175, 262)
+      passes reflect_agent_1244 at 25.3 units (over the old 16, under 32), is turned, and opens its portal at (313.3, 252.9): the two later taps fail. The other 74 win on their step-155 ticks with the same shots. **The wave's route phase re-authors all 86
+      after G1b**; prefer a shot that passes a reflector at 32 or more, or one the route means to turn (the log's "sound shot_reflected").
+- [ ] **G9-7. A turn on the spawn pass queues its effects in the wrong order inside the tick** (found by the verifier, `G9/verify1.json` problem 3, by code reading only; low, cosmetic): when a shooter
+      stands within 32 of a reflector, `flyOnePass(false)` turns the shot and `flyOnePass(true)` launches the new leg in the same `Tick`, and `MagicPortalsLayer` queues the launches (the new leg's
+      `projectile_shoot`) before the reflected record's waves, mark and flash; the original adds the reflector's effects on the tap's frame and the new leg's flash on the frame after. Not measured,
+      and none of the 23 placements or the 86 routes was observed to reach it. Next: the next edit of `MagicPortalsLayer.cpp`, ordering a `Reflection` recorded before a `Launch` of the same `Tick` first.
 
 **PIC's recorded deviations**, each an open row for the step named (planning step 150 has the evidence, `RECORDED DEVIATIONS` 1-9):
 - [ ] **PIC-1. The smoothing's line is a guess and unmeasured on a real fast display.** `smoothing.above_hz` 80 / `release_below_hz` 72 /
@@ -2804,11 +2844,19 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       (`Fire::State::minionsAlight`, `Minions::Burn`); a minion is no character, so the burn is all a flame does to
       it. GAMEPLAY on 3-19, 3-23 and 4-28. **4-28 won** (861): the knight, portalled beside the flame, walks into it,
       and the player takes the key it drops.
-- [ ] **G9. The reflector catches within `size.x` (32) and its leg is `min(|caster - agent|, remaining)`**
+- [x] **G9. The reflector catches within `size.x` (32) and its leg is `min(|caster - agent|, remaining)`**
       (`ETHCallback_reflect_agent` L69063 #56-84, #148-196); the port's 16 is a guess and it mirrors the whole rest.
+      *Built in step 157 (wave 3b-2, local, not pushed). The listing says the leg is `min(sqrt(squaredDistance), |casterPos - agent|)` - the WHOLE length the shot was fired, which the callback
+      never decrements, not what is left of it - so that is what is built; a shot is caught by a position sample strictly within 32 x the placement's scale of the reflector (never on the tick it
+      arrives, and on the tap's frame if the shooter stands within 32 of it), turned on the plane's axis (a plane-less placement: the side it came from), spawned at the reflector's point, and turned by
+      one reflector at most (reflect 0 on the shot a reflector adds: "two reflectors in a row" pins that the second does not catch it). `docs/ethanon-formats.md` section 21 has the citations.
+      GAMEPLAY on the 19 levels with a reflector; 12 routes now fail (R23's six and 1-12, 1-21, 2-11, 2-16, 2-25, 3-14: each has a shot passing 16 to 32 units from a reflector or a
+      reflected leg longer than the old one): no route file was touched, and **the routes are re-authored by the wave's route phase after G1b**. The rows are G9-1 to G9-7, under R23's.*
       *Routes that lean on the port's 16 (wave 1)*: 1-12 (the landing over the post is `reflect_agent_675`'s), 1-21
       (the high portal (230, 142) 24 u from `reflect_agent_826`, the bounce's shot leaving 26 u from it), 1-23 (the
       shot to (150, 80) 29.9 u from `reflect_agent_826`) - all inside 32 (step 126) - and 3-14, 2-25 (step 127).
+      *Measured in step 157: of the 86 routes exactly six have a reflected shot on this build - 1-12, 1-21, 2-11, 2-16, 2-25 and 3-14 (2-11 and 2-16 were not on this list) - and 1-23 has none: its tick-110 shot
+      from (62.6, 206.4) toward (150, 80) passes 36.1 u from level22's `reflect_agent_826` at (84, 112), outside 32 (the step-126 figure of 29.9 u does not hold for the route as it is now). 2-27 has no route.*
 - [x] **G10. The player moves as the decode says** - `speed 3`, `SetGravityScale(2)`, velocity set outright, in the
       air `vel.x x min(1, 0.86 x fps/60)`; the port's `move_toward` numbers are Godot-era guesses. *Every route leans on
       it* (with G4); its step re-plays all 70 (86 since wave 2). *Built in step 148 (wave 3a, local, not pushed): the

@@ -16,7 +16,8 @@
 //   A failed shot costs nothing. One shot flies at a time. What a shot in flight does meet are the static
 //   callbacks that sample its POSITION once a frame: an anti_projectile_wall's rectangle (it dies there), an
 //   anti-portal agent (it dies there and kills the agent, and the agent's ring goes with it: Agent), a fire
-//   agent's flame (it is burned, and Game makes a fireball of it: Flame) and a reflector (it is turned: G9).
+//   agent's flame (it is burned, and Game makes a fireball of it: Flame) and a reflector (it is caught by a
+//   position sample within its size.x and sent on from the reflector's own point: planning step 157, G9).
 // - A level may also ship static portals (portal_static), which pair by index.
 // - Whatever comes into a portal goes out of its partner, as the original sends
 //   it (transit.json, decoded): at the partner itself, its velocity turned back,
@@ -331,15 +332,17 @@ struct Blocker {
     Trigger::Box box;
 };
 
-// A reflector: reflect_agent, a marker with no body that a portal shot comes
-// off, mirrored across its plane (the owner, 11 September). How near a shot has
-// to pass, and how many reflectors one shot comes off, are shot.json's guesses.
-// The shot goes on for the rest of the distance it was fired, so a flat
-// reflector sends it to the tap mirrored across it.
+// A reflector: reflect_agent, a marker with no body (static=1, shape 0) that catches a portal shot by
+// its POSITION, once a frame, within shot.json's size_units x `scale` of its point
+// (ETHCallback_reflect_agent #55-84: size.x = GetSize().x, the sprite's 32 x the entity's scale), and
+// sends it on from its own point (planning step 157, G9). `plane` is the placement's `plane` string
+// (computeReflectVector); a placement with none (2-27's, the handle's) snaps the mirror to the side the
+// shot came from. A shot comes off one reflector at most: the shot a reflector adds has reflect 0.
 struct Reflector {
     std::string name;
     glm::dvec2 centrePx{0.0};
-    bool vertical = false; // its plane: a vertical one turns a shot's x back, a horizontal one its y
+    Shot::Plane plane = Shot::Plane::Snap;
+    double scale = 1.0; // the placement's own scale, which multiplies size.x
 };
 
 // A traversal this tick: the three points the original's teleport has in hand
@@ -388,14 +391,15 @@ struct FinalPos {
 
 // A portal shot on its way.
 struct Flight {
-    glm::dvec2 fromPx{0.0}; // the player's centre when it was fired
+    // casterPos: where THIS LEG was added - the player's centre when it was fired, a reflector's point for the
+    // leg that reflector adds. The original stores it (addProjectile #82-92) and a reflector reads it (#148-161).
+    glm::dvec2 fromPx{0.0};
     glm::dvec2 toPx{0.0};   // its destiny: where the tap-time ray ended (said.atPx), which a reflector's turn replaces
     glm::dvec2 atPx{0.0};   // where it is now
     // What the ray said of this leg: whether the shot is doomed (arrival opens portal_fail and not a portal), what it
     // met, and the rest of the record the pictures read. A hand-built flight has none: it opens a portal where it ends.
     FinalPos said;
-    int reflections = 0;    // how many reflectors it has come off
-    int lastReflector = -1; // the last of them, which cannot turn it again at once
+    int reflections = 0;    // how many reflectors it has come off (shot.json max_reflections: 1, reflect 0 after)
     // Whether this leg has had its first callback - ETHCallback_projectile's first
     // frame, which stores initialPos, jumps the shot 24 units and flashes
     // projectile_shoot - since it was fired or last turned. A leg that has not jumps
@@ -485,8 +489,9 @@ struct Launch {
 // computePortalFinalPos for the new leg as a reflected shot (so a wall does not
 // doom it), marks its end and flashes where the old one was.
 struct Reflection {
-    glm::dvec2 atPx{0.0}; // where it turned
-    glm::dvec2 toPx{0.0}; // the new destination, before the original would clip it
+    glm::dvec2 atPx{0.0};    // where the old shot was when it was caught: the flash (#245-260)
+    glm::dvec2 toPx{0.0};    // the new destination, before the original would clip it (newDest, #182-196)
+    glm::dvec2 agentPx{0.0}; // the reflector's point: where the new shot is spawned and its first callback jumps from
     FinalPos said;
 };
 // How a shot ended without a portal, and where.

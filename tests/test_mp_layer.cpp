@@ -14755,11 +14755,13 @@ void TheShotLeavesFromBehindThePlayer() {
 }
 
 // A turn off a reflector, through the layer: 1-12 (level11)'s reflect_agent_761 at
-// (180, 140), horizontal. A tap on the line from the player through it is turned
-// at its catch circle, under the wall that hangs to y 128, and the new leg opens a
-// portal. ETHCallback_reflect_agent's pictures: the old shot's flash where it
-// turned, the new leg's mark at its end (a clear ray, so portal_mark), and the new
-// leg's own flash on its first tick, 24 out along its way.
+// (180, 140), horizontal. A tap on the line from the player through it is caught
+// by a position sample within 32 of it, under the wall that hangs to y 128, and the
+// new leg - spawned AT the reflector, min(the length fired, the way from the player
+// to it) long, the heading's y flipped (planning step 157, G9) - opens a portal.
+// ETHCallback_reflect_agent's pictures: the old shot's flash where it was caught,
+// the new leg's mark at its end (a clear ray, so portal_mark), and the new leg's
+// own flash on its first tick, 24 out from the reflector along its way.
 void AShotTurnedByAReflectorMarksItsNewEnd() {
     if (!OriginalArtIsThere("AShotTurnedByAReflectorMarksItsNewEnd")) return;
     entt::registry registry;
@@ -14774,6 +14776,10 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
     CHECK(onScreen(registry, aim));
     shoot(layer, registry, screenOf(registry, aim));
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap fired: " + lastFailure(layer));
+    if (!layer.SimLevel()->portals.flight) return;
+    // The first leg: where it started (its casterPos) and where the tap-time ray ended it.
+    const glm::dvec2 firstFrom = layer.SimLevel()->portals.flight->fromPx;
+    const glm::dvec2 firstTo = layer.SimLevel()->portals.flight->toPx;
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
     int turnTick = -1;
     MagicPortals::Portals::Reflection turn;
@@ -14789,10 +14795,20 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
     }
     CHECK_MSG(turnTick >= 0, "the shot was turned: " + lastFailure(layer));
     if (turnTick < 0) return;
-    // The first leg is aimed at the ray's end under the wall (planning step 156), so the rest of its way - which the
-    // turn mirrors - is the short way to it, and the new leg's own ray answers for the mark: red_cross where it is
-    // doomed (and red_waves (A) where it met nothing and its end is in a field), portal_mark where it is clear.
-    // The first leg's own mark is a red_cross at the tap.
+    // The new leg, worked out here from the listing and not read back from the sim (planning step 157): the first leg's
+    // stored direction with its y flipped (a horizontal plane), for min(the length that leg was fired, the way from
+    // where it began to the reflector), from the reflector. The first leg is aimed at the ray's end under the wall
+    // (planning step 156); the new leg's own ray answers for the mark: red_cross where it is doomed (and red_waves (A)
+    // where it met nothing and its end is in a field), portal_mark where it is clear. The first leg's own mark is a
+    // red_cross at the tap.
+    const glm::dvec2 aimedAt = (firstTo - firstFrom) / glm::distance(firstTo, firstFrom);
+    const glm::dvec2 expectedDest =
+        mirror + glm::dvec2(aimedAt.x, -aimedAt.y) *
+                     std::min(glm::distance(firstTo, firstFrom), glm::distance(firstFrom, mirror));
+    CHECK_MSG(turn.agentPx == mirror && glm::distance(turn.toPx, expectedDest) < 1e-6,
+              "the new leg leaves reflect_agent_761 for " + Point(expectedDest) + ": " + Point(turn.toPx));
+    CHECK_MSG(glm::distance(turn.atPx, mirror) < 32.0,
+              "and the shot was caught within its size.x of 32: " + Point(turn.atPx));
     const char* markEntity = turn.said.willDie ? "red_cross.ent" : "portal_mark.ent";
     const auto marks = EffectsOf(layer, markEntity);
     int atNewEnd = 0;
@@ -14812,17 +14828,18 @@ void AShotTurnedByAReflectorMarksItsNewEnd() {
     // The new leg's own first tick.
     tickWith(layer, registry, kRest, {}, {});
     const bool launched = layer.SimLevel()->portals.launches.size() == 1 &&
-                          layer.SimLevel()->portals.launches.front().fromPx == turn.atPx;
+                          layer.SimLevel()->portals.launches.front().fromPx == turn.agentPx;
     layer.OnUpdate(registry, MagicPortalsLayer::kTick);
-    CHECK_MSG(launched, "the new leg launches on the tick after its turn, from where it turned");
+    CHECK_MSG(launched, "the new leg launches on the tick after its turn, from the reflector");
     NoteFlashes(layer, seenFlashes);
     flashes = seenFlashes;
-    const glm::dvec2 way = glm::normalize(turn.toPx - turn.atPx);
+    const glm::dvec2 way = glm::normalize(turn.said.atPx - turn.agentPx);
     bool out24 = false;
-    for (const auto& flash : flashes) out24 = out24 || glm::distance(flash.atPx, turn.atPx + way * 24.0) < 1e-4;
-    CHECK_MSG(flashes.size() == 3 && out24, "and flashes 24 out along its way: " + std::to_string(flashes.size()));
+    for (const auto& flash : flashes) out24 = out24 || glm::distance(flash.atPx, turn.agentPx + way * 24.0) < 1e-4;
+    CHECK_MSG(flashes.size() == 3 && out24,
+              "and flashes 24 out from the reflector along its way: " + std::to_string(flashes.size()));
     landShot(layer, registry);
-    std::printf("  1-12: a shot turned at %s by reflect_agent_761, %s at %s, %zu portal(s) placed\n",
+    std::printf("  1-12: a shot caught at %s by reflect_agent_761 and sent on from it, %s at %s, %zu portal(s) placed\n",
                 Point(turn.atPx).c_str(), markEntity, Point(turn.said.atPx).c_str(),
                 layer.SimLevel()->portals.placed.size());
     layer.OnDetach(registry);
