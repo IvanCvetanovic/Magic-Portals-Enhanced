@@ -1,5 +1,6 @@
 #include "sim/Minions.hpp"
 
+#include "sim/Impacts.hpp"
 #include "sim/Shot.hpp"
 #include "sim/Units.hpp"
 
@@ -243,6 +244,68 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
 
+    // The enemy shot (planning step 159): every number named, none defaulted.
+    const Json::Value& shotBlock = root["shot"];
+    if (!shotBlock.IsObject() || !shotBlock.Has("entity_name") || !shotBlock["entity_name"].IsString() ||
+        shotBlock["entity_name"].AsString().empty()) {
+        error = path + ": shot.entity_name is missing or not a name";
+        return false;
+    }
+    read.shot.entityName = shotBlock["entity_name"].AsString();
+    const auto shotNumberOf = [&](const char* key, double& into) -> bool {
+        if (!shotBlock.Has(key) || !shotBlock[key].IsNumber()) {
+            error = path + ": shot." + key + " is missing or not a number";
+            return false;
+        }
+        into = shotBlock[key].AsNumber();
+        return true;
+    };
+    if (!shotNumberOf("speed_px_s", read.shot.speedPxS) || !shotNumberOf("hit_px", read.shot.hitPx) ||
+        !shotNumberOf("nudge_px", read.shot.nudgePx)) {
+        return false;
+    }
+    const Json::Value& cells = shotBlock["cells"];
+    if (!cells.IsObject() || !cells.Has("first") || !cells["first"].IsNumber() || !cells.Has("last") ||
+        !cells["last"].IsNumber() || !cells.Has("stride_ms") || !cells["stride_ms"].IsNumber()) {
+        error = path + ": shot.cells needs first, last and stride_ms";
+        return false;
+    }
+    read.shot.firstCell = static_cast<int>(cells["first"].AsNumber());
+    read.shot.lastCell = static_cast<int>(cells["last"].AsNumber());
+    read.shot.cellStrideMs = cells["stride_ms"].AsNumber();
+    // A shot that does not move never ends, one that reaches nothing kills nothing, and a timer of nothing never steps.
+    if (!(read.shot.speedPxS > 0.0) || !(read.shot.hitPx > 0.0) || !(read.shot.nudgePx >= 0.0) ||
+        read.shot.firstCell < 0 || read.shot.lastCell < read.shot.firstCell || !(read.shot.cellStrideMs > 0.0)) {
+        error = path + ": shot.speed_px_s and hit_px are above zero, nudge_px is not below it, and cells run first to last at a stride";
+        return false;
+    }
+
+    // What the player's body does to a knight, and what a stone does to one.
+    const Json::Value& contactBlock = root["contact"];
+    if (!contactBlock.IsObject() || !contactBlock.Has("hold_cap_ms") || !contactBlock["hold_cap_ms"].IsNumber() ||
+        !contactBlock.Has("touch_units") || !contactBlock["touch_units"].IsNumber()) {
+        error = path + ": contact needs hold_cap_ms and touch_units";
+        return false;
+    }
+    read.contact.holdCapMs = contactBlock["hold_cap_ms"].AsNumber();
+    read.contact.touchUnits = contactBlock["touch_units"].AsNumber();
+    if (!(read.contact.holdCapMs >= 0.0) || !(read.contact.touchUnits >= 0.0)) {
+        error = path + ": contact.hold_cap_ms and touch_units are not below zero";
+        return false;
+    }
+    const Json::Value& crushBlock = root["crush"];
+    if (!crushBlock.IsObject() || !crushBlock.Has("entity") || !crushBlock["entity"].IsString() ||
+        crushBlock["entity"].AsString().empty() || !crushBlock.Has("hit_above") || !crushBlock["hit_above"].IsNumber()) {
+        error = path + ": crush needs entity and hit_above";
+        return false;
+    }
+    read.crush.entity = crushBlock["entity"].AsString();
+    read.crush.hitAbove = crushBlock["hit_above"].AsNumber();
+    if (!(read.crush.hitAbove >= 0.0)) {
+        error = path + ": crush.hit_above is not below zero";
+        return false;
+    }
+
     // Each of these would look like a level that works. A speed of nothing is a
     // minion that stands where it spawned; a step of nothing divides by zero
     // turning that speed into one per second; an arrival of nothing is never
@@ -353,6 +416,10 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
     return minion.body;
 }
 
+bool Crushes(const Rules& rules, double hitIntensity) {
+    return hitIntensity > rules.crush.hitAbove;
+}
+
 glm::ivec2 BucketOf(const glm::dvec2& point, double bucketUnits) {
     return glm::ivec2(static_cast<int>(std::floor(point.x / bucketUnits)),
                       static_cast<int>(std::floor(point.y / bucketUnits)));
@@ -395,6 +462,12 @@ std::optional<Seen> Look(entt::registry& registry, const Rules& rules, const glm
         candidates.push_back(Candidate{senses.portalsPx[i], &sight.targetPortal, static_cast<int>(i)});
     }
 
+    // The order inside a bucket is the bucket list's, which GetEntityArrayFromBucket returns as it stands (ETHBucketManager.cpp:
+    // 505-523): Add pushes BACK (ETHScene.cpp:277) and MoveEntity pushes FRONT for an ET_HORIZONTAL entity
+    // (ETHBucketManager.cpp:243-252), and dark_mage.ent and portal.ent are both type 0 (the .ent files). So the player - added
+    // at the start, or moved in - is before a portal placed after it, and older portals are before newer: the order the
+    // candidates are made in above. The one case that reverses it, a portal whose hover has carried it across a bucket line
+    // into the player's bucket (a MOVE, to the front), is not modelled (planning step 159, G1a-1).
     for (const glm::dvec2& bucket : buckets) {
         for (const Candidate& candidate : candidates) {
             if (glm::dvec2(BucketOf(candidate.atPx, sight.bucketUnits)) != bucket) continue;
@@ -437,6 +510,71 @@ int State::SpotCount() const {
         if (!minion.gone && minion.entity == rules.defaultEntity) total += minion.spotCount;
     }
     return total;
+}
+
+void State::FlyShots(const ScriptClock::Step& step, const Senses& senses) {
+    spentPx.clear();
+    killedPortalIds.clear();
+    if (shots.empty()) return;
+    const double seconds = step.scriptS;
+    const double hit2 = rules.shot.hitPx * rules.shot.hitPx;
+    const auto squared = [](const glm::dvec2& v) { return v.x * v.x + v.y * v.y; };
+
+    std::vector<EnemyShot> living;
+    living.reserve(shots.size());
+    for (EnemyShot& shot : shots) {
+        if (shot.fresh) {
+            shot.fresh = false;
+            living.push_back(shot);
+            continue;
+        }
+        // #150-162: AddToPositionXY(direction x scaledUnitsPerSecond(120)) on every call.
+        shot.atPx += shot.velocityPx * seconds;
+
+        // #164-200: destroyed once it is FARTHER from where it started than its destiny is (a strict compare of
+        // squared distances, so it overshoots: it ends where it stands, not at the destiny).
+        bool ended = squared(shot.atPx - shot.fromPx) > squared(shot.destinyPx - shot.fromPx);
+
+        // #201-314: the stored target, by id. A target that is gone is not found and the shot flies on; one within
+        // fakeRadius of it (strict) is killed, and the shot is destroyed with it.
+        bool found = false;
+        glm::dvec2 targetPx(0.0, 0.0);
+        const bool aimedAtPortal = shot.targetName == rules.sight.targetPortal;
+        if (aimedAtPortal) {
+            for (std::size_t i = 0; i < senses.portalIds.size() && i < senses.portalsPx.size(); ++i) {
+                if (senses.portalIds[i] != shot.targetPortalId) continue;
+                found = true;
+                targetPx = senses.portalsPx[i];
+                break;
+            }
+        } else if (senses.playerPresent) {
+            found = true;
+            targetPx = senses.playerPx;
+        }
+        if (found && squared(shot.atPx - targetPx) < hit2) {
+            if (aimedAtPortal) {
+                // killPortal (Portal.angelscript 357278..357358): once, however many shots find it.
+                if (std::find(killedPortalIds.begin(), killedPortalIds.end(), shot.targetPortalId) ==
+                    killedPortalIds.end()) {
+                    killedPortalIds.push_back(shot.targetPortalId);
+                }
+            } else if (!playerKilled) {
+                // isCharacter: hp = 0, which is what a death area writes too.
+                playerKilled = true;
+                killedBy = (shot.minion < minions.size() ? minions[shot.minion].name : std::string("a knight")) + " shot";
+            }
+            ended = true;
+        }
+
+        if (ended) {
+            // #315-366: isDestroyed - its explosion at where it stands, then DeleteEntity.
+            spentPx.push_back(shot.atPx);
+            ++shotsEnded;
+            continue;
+        }
+        living.push_back(shot);
+    }
+    shots = std::move(living);
 }
 
 void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
@@ -514,6 +652,22 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step, const 
         }
         const glm::dvec2 destPx = minion.waypoints[minion.dest].atPx;
 
+        // ETHBeginContactCallback_minion #12-55: a pair that has begun to touch the player's body (a non-sensor
+        // dark_mage.ent) caps the knight's own hold, and ONLY on that edge - a hold adopted at an arrival while the
+        // two still touch is not capped again. minion.ent's callback alone: the black knight has none. The contact
+        // is judged as the last step left the two, which is the begin Box2D called inside it.
+        if (minion.entity == rules.defaultEntity && senses.playerBody != entt::null && registry.valid(senses.playerBody)) {
+            Impacts::Shape knightShape;
+            Impacts::Shape playerShape;
+            bool touching = false;
+            if (Impacts::ShapeOf(registry, minion.body, knightShape) &&
+                Impacts::ShapeOf(registry, senses.playerBody, playerShape)) {
+                touching = Impacts::Between(knightShape, playerShape).px <= rules.contact.touchUnits;
+            }
+            if (touching && !minion.touchingPlayer) minion.holdMs = std::min(minion.holdMs, rules.contact.holdCapMs);
+            minion.touchingPlayer = touching;
+        }
+
         // #562-572: the dwell the walk is judged by is read HERE, before a sighting below resets the datum.
         const double elapsedBefore = minion.elapsedMs;
 
@@ -556,7 +710,27 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step, const 
                 due.finalPx = seen->atPx;
                 due.targetName = seen->name;
                 due.portalIndex = seen->portalIndex;
+                if (seen->portalIndex >= 0 && static_cast<std::size_t>(seen->portalIndex) < senses.portalIds.size()) {
+                    due.portalId = senses.portalIds[static_cast<std::size_t>(seen->portalIndex)];
+                }
                 shotsDue.push_back(due);
+                // addEnemyShoot (#1-176): the shot's own, with its direction toward where the entity stood.
+                EnemyShot made;
+                made.id = ++shotsMade;
+                made.minion = index;
+                made.fromPx = entityPx;
+                made.destinyPx = seen->atPx;
+                const glm::dvec2 along = seen->atPx - entityPx;
+                const double reach = Length(along);
+                // normalize(): a zero vector stays zero (GameMath.h:755-761).
+                made.directionPx = reach > 0.0 ? along / reach : glm::dvec2(0.0, 0.0);
+                // ETHCallback_enemy_shoot's first call: AddToPositionXY(scale(direction x 16)) before it first flies.
+                made.atPx = entityPx + made.directionPx * rules.shot.nudgePx;
+                made.velocityPx = made.directionPx * rules.shot.speedPxS;
+                made.targetName = seen->name;
+                made.targetPortalId = due.portalId;
+                shots.push_back(made);
+                ++shotsFired;
             }
         } else {
             minion.spotted = false;

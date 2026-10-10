@@ -208,12 +208,14 @@ void CheckCensus(const std::string& label, const Census& census, const Moments& 
         pin(heard("dragon_appeared") == 1, "the dragon appears once");
         pin(heard("dragon_took_off") == (level.dragon.tookOff ? 1 : 0), "dragon_took_off as it takes off");
     }
+    // An enemy_shot as each shot leaves and an enemy_shot_ended as it ends: the chapter-3 ghost's and, since planning step 159,
+    // every knight's (the same two sounds), on every level.
+    pin(heard("enemy_shot") == level.ghost.shotsFired + level.minions.shotsFired, "an enemy_shot per shot");
     if (level.ghost.present && level.ghost.spawned) {
         const auto& ghost = level.ghost;
         pin(heard("ghost_appeared") == 1, "the ghost appears once");
         pin(heard("ghost_item") == ghost.beats + ghost.summons, "a ghost_item per beat and summon");
         pin(heard("ghost_hurt") >= ghost.hits, "a ghost_hurt per burn, and per rage left");
-        pin(heard("enemy_shot") == ghost.shotsFired, "an enemy_shot per shot");
         pin(heard("ghost_burst") == (ghost.gone ? 1 : 0), "its burst as it goes");
         pin(heard("ghost_dead") == (ghost.phase == MagicPortals::Ghost::Phase::Death ? 1 : 0), "its death, once");
     }

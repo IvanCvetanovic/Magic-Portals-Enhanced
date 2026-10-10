@@ -481,7 +481,7 @@
       "mark is heard, and with no test of the screen. #1408-1436: playMinionQuestionMarkSound as it adds question.ent in the",
       "search arm, only if isPointInScreen(the mark's point) and its 'isInSight' datum is set (its way had been clear since",
       "the last question mark). Both play on a hook with no timer of its own (AudioManager bytes 197976..198056 and its",
-      "neighbour: PlaySample, one file each). The knights' SHOT (playEnemyShootSound, addEnemyShoot #172) is G1b's."
+      "neighbour: PlaySample, one file each). The knights' SHOT is the ghost's two events below (enemy_shot as addEnemyShoot #169-172 adds it, enemy_shot_ended as ETHCallback_enemy_shoot #354-356 ends it): planning step 159, one of each per shot."
     ],
     "enemy_spotted": "playEnemySpottedSound",
     "minion_question": "playMinionQuestionMarkSound",
@@ -518,6 +518,8 @@
     "fire_diamond_drained": "playFireExtinguishSound",
     "_note_minion_fell": "ETHBeginContactCallback_enemy_killer (436701..437083) #1-22: a minion on the killer floor destroyed, the shake of 20, playMinionFallSound (step 142).",
     "minion_fell": "playMinionFallSound",
+    "_note_minion_smashed": "ETHBeginContactCallback_rolling_stone (346486..347456) #162-164: a rolling stone that crushes a minion (hitIntensity above 1.23, #131-168) plays playMinionSmashSound, then startEarthquake(25, 0) (planning step 159; AudioManager bytes 190470..190574).",
+    "minion_smashed": "playMinionSmashSound",
     "_note_shock": [
       "SHOCK (step 142). ETHCallback_shock_diamond (444545..446781) #178-180 playShockDiamondPickSound",
       "as it is taken, and #445-447 playShockStrikeSound as it strikes; ETHCallback_shock_agent",

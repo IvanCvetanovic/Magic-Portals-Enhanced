@@ -139,6 +139,9 @@ add_mp_test(test_mp_minions SKIPS_WITH_77)
 # the shot's gate, the search, the dark levels' torch rule and every patrol leg of every level. Its rig cases need no data;
 # its level cases skip without it (a part of the suite, so no 77).
 add_mp_test(test_mp_sight)
+# What a knight does once it has seen (planning step 159): the shot's flight and its kills, the contact's hold cap, the order a
+# knight's target is chosen in, a stone's crush and a barrel's blast. Its rig cases need no data; its level cases skip without it.
+add_mp_test(test_mp_shoot)
 # Chapter 3's boss: the ghost of level 3-32, which only fire can hurt and which
 # drops the only key its level has.
 add_mp_test(test_mp_ghost SKIPS_WITH_77)

@@ -1014,11 +1014,10 @@ public:
     }
 
     int SpottedCount() const override {
-        // Minions::State::SpotCount is every sighting the minion.ent knights have made (G1a, planning step 158), and
-        // hasBeenUnnoticed would read it - but the seven stealth achievements are G1b's: until then this stays 0, so
-        // they unlock whenever the knights all stand, as they did, and a route's unlock census does not move with
-        // the perception alone.
-        return 0;
+        // ScoreDashboard's spottedCount (401234..401465): every live minion.ent's enemySpotCount, summed - the sightings
+        // Minions::State::Tick counts (G1a, planning step 158), the black knight's not among them. hasBeenUnnoticed (the
+        // seven stealth achievements: 24, 26, 28, 32, 42, 66, 76) asks for it to be 0 (G1b, planning step 159).
+        return m_level.minions.SpotCount();
     }
 
     int Laps() const override {
@@ -1846,6 +1845,14 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
             return true;
         }
         return false;
+    case EffectOwner::Kind::MinionShot:
+        // By the id the sim gave it, as a ghost's is.
+        for (const Minions::EnemyShot& shot : m_level.minions.shots) {
+            if (shot.id != owner.index) continue;
+            atPx = shot.atPx + owner.offsetPx;
+            return true;
+        }
+        return false;
     case EffectOwner::Kind::Key: {
         // Where the carry left it and its bob put it, as a level key's picture is
         // (syncSprites): it goes, sparkles and all, when the keyhole it opened goes.
@@ -2114,6 +2121,8 @@ void MagicPortalsLayer::unloadEffects(entt::registry& registry) {
     m_fireballEffects.clear();
     m_ghostShotEffects.clear();
     m_ghostShotCells.clear();
+    m_minionShotEffects.clear();
+    m_minionShotCells.clear();
     m_droppedKeys.clear();
     m_ghostAppearQueued = false;
     m_darkDragonQueued = false;
@@ -2201,6 +2210,11 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
             // gave it on the last tick (stepLevel).
             if (effect.follow.kind == EffectOwner::Kind::GhostShot) {
                 if (const auto cell = m_ghostShotCells.find(effect.follow.index); cell != m_ghostShotCells.end()) {
+                    effect.cell = cell->second;
+                }
+            }
+            if (effect.follow.kind == EffectOwner::Kind::MinionShot) {
+                if (const auto cell = m_minionShotCells.find(effect.follow.index); cell != m_minionShotCells.end()) {
                     effect.cell = cell->second;
                 }
             }
@@ -9182,6 +9196,33 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, const Sc
     for (const glm::dvec2& atPx : ghost.spentPx) {
         m_effectQueue.push_back(effectAdd(Effects::EnemyShootBurst(m_effectRules, atPx)));
     }
+    // THE KNIGHTS' SHOTS (planning step 159): the same three entities addEnemyShoot and the shot's first call add, once each
+    // by the sim's id - the shot, the portal_mark where it is going (the sighted entity's point as it was fired) and the
+    // projectile_shoot flash where the nudge left it - and the same burst where one ends.
+    std::vector<int> flyingMinionShots;
+    flyingMinionShots.reserve(m_level.minions.shots.size());
+    for (const Minions::EnemyShot& shot : m_level.minions.shots) {
+        flyingMinionShots.push_back(shot.id);
+        if (std::find(m_minionShotEffects.begin(), m_minionShotEffects.end(), shot.id) != m_minionShotEffects.end()) {
+            continue;
+        }
+        EffectSpawn add = effectAdd(Effects::EnemyShoot(m_effectRules, shot.atPx, shot.directionPx));
+        add.follow.kind = EffectOwner::Kind::MinionShot;
+        add.follow.index = shot.id;
+        m_effectQueue.push_back(add);
+        m_effectQueue.push_back(effectAdd(Effects::At(m_effectRules.portalMark, shot.destinyPx)));
+        m_effectQueue.push_back(effectAdd(Effects::EnemyShootFlash(m_effectRules, shot.atPx, shotZ)));
+        m_minionShotEffects.push_back(shot.id);
+    }
+    m_minionShotEffects.erase(std::remove_if(m_minionShotEffects.begin(), m_minionShotEffects.end(),
+                                             [&flyingMinionShots](int id) {
+                                                 return std::find(flyingMinionShots.begin(), flyingMinionShots.end(),
+                                                                  id) == flyingMinionShots.end();
+                                             }),
+                              m_minionShotEffects.end());
+    for (const glm::dvec2& atPx : m_level.minions.spentPx) {
+        m_effectQueue.push_back(effectAdd(Effects::EnemyShootBurst(m_effectRules, atPx)));
+    }
     // CHAPTER 4'S BOSS (the visuals plan's 12.1, planning step 99): the
     // dark_dragon.ent the summon adds (AddScaledEntity at the spawn, getScale()),
     // drawn whole by the runtime - dragon_boss.png cut 2 x 2 on its pivot, lit
@@ -9905,6 +9946,7 @@ void MagicPortalsLayer::latchSimQuakes() {
     // A ghost's shot ends by striking or by reaching its range, and either way
     // leaves the list it was fired into.
     now.ghostShotsEnded = level.ghost.shotsFired - static_cast<int>(level.ghost.shots.size());
+    now.minionShotsEnded = level.minions.shotsEnded;
     now.breakablesBroken.reserve(level.demolish.breakables.size());
     for (const Demolish::Breakable& breakable : level.demolish.breakables) {
         now.breakablesBroken.push_back(breakable.broken ? char{1} : char{0});
@@ -9970,6 +10012,7 @@ void MagicPortalsLayer::latchSimQuakes() {
     }
     if (now.darkDragonGone && !was.darkDragonGone) QueueQuake(Call::DarkDragonDeath);
     for (int i = was.ghostShotsEnded; i < now.ghostShotsEnded; ++i) QueueQuake(Call::EnemyShotEnd);
+    for (int i = was.minionShotsEnded; i < now.minionShotsEnded; ++i) QueueQuake(Call::EnemyShotEnd);
     // A doomed shot's arrival inside a field (ETHCallback_projectile #211-215; a
     // dynamic entity's). Tick's own record, which is this tick's alone.
     for (const Portals::Failure& ended : level.portals.failures) {
@@ -10221,7 +10264,38 @@ void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable
             Sounds::ImpactVolume(sound, hit, volume)) {
             latch(sound.event, 0.0, volume);
         }
+        // ETHBeginContactCallback_rolling_stone #131-168, after its own row above: the knight it crushed is destroyed
+        // with playMinionSmashSound and startEarthquake(25, 0) (crushMinions took it).
+        if (begin.kind == Impacts::Kind::Stone &&
+            std::find(m_crushedNow.begin(), m_crushedNow.end(), begin.other) != m_crushedNow.end()) {
+            QueueQuake(Call::MinionCrushed);
+            latch("minion_smashed");
+        }
     }
+}
+
+void MagicPortalsLayer::crushMinions(entt::registry& registry) {
+    using Earthquake::Call;
+    m_crushedNow.clear();
+    for (const Impacts::Begin& begin : m_impactBegins) {
+        if (begin.kind != Impacts::Kind::Stone) continue;
+        const bool aKnight = std::any_of(m_level.minions.minions.begin(), m_level.minions.minions.end(),
+                                         [&begin](const Minions::Minion& minion) {
+                                             return !minion.gone && minion.body == begin.other;
+                                         });
+        if (!aKnight || std::find(m_crushedNow.begin(), m_crushedNow.end(), begin.other) != m_crushedNow.end()) continue;
+        // The stone's callback overwrites the contact normal with the line between the two entity points (D11_check
+        // C55) and reads hitIntensity along it: the number its own impact row is called on.
+        const glm::dvec2 apart = begin.otherAtPx - begin.atPx;
+        const double length = glm::length(apart);
+        const glm::dvec2 along = length > 0.0 ? apart / length : glm::dvec2(0.0);
+        const double hit = Earthquake::HitIntensity(m_quakeRules, begin.Approaching(along), along);
+        if (Minions::Crushes(m_level.minions.rules, hit)) m_crushedNow.push_back(begin.other);
+    }
+    if (m_crushedNow.empty()) return;
+    SUPERSONIC_LOG_INFO("Magic Portals") << "crush of " << m_crushedNow.size() << " knight(s) by a stone on tick " << m_ticks
+                                         << std::endl;
+    Game::Crush(registry, m_level, m_crushedNow);
 }
 
 void MagicPortalsLayer::quakeTick() {
@@ -10393,6 +10467,8 @@ void MagicPortalsLayer::latchSimSounds(const ScriptClock::Step& step) {
     now.ghostHits = ghost.hits;
     now.ghostShotsFired = ghost.shotsFired;
     now.ghostShotsEnded = ghost.shotsFired - static_cast<int>(ghost.shots.size());
+    now.minionShotsFired = m_level.minions.shotsFired;
+    now.minionShotsEnded = m_level.minions.shotsEnded;
     const DarkDragon::State& dark = m_level.darkDragon;
     now.darkSummoned = dark.present && dark.summoned;
     now.darkAlive = dark.Alive();
@@ -10674,6 +10750,9 @@ void MagicPortalsLayer::latchLateBossSounds(const Watch& was, const Watch& now) 
     // they leave and as they end.
     if (now.ghostSpawned && !was.ghostSpawned) latch("ghost_appeared");
     for (int i = was.ghostShotsFired; i < now.ghostShotsFired; ++i) latch("enemy_shot");
+    // A knight's shot, as it leaves and as it ends: addEnemyShoot #172 and ETHCallback_enemy_shoot #354-356, the same two
+    // sounds (planning step 159).
+    for (int i = was.minionShotsFired; i < now.minionShotsFired; ++i) latch("enemy_shot");
     for (int i = was.ghostBeats; i < now.ghostBeats; ++i) latch("ghost_item");
     for (int i = was.ghostHits; i < now.ghostHits; ++i) latch("ghost_hurt");
     for (int i = was.ghostSummons; i < now.ghostSummons; ++i) latch("ghost_item");
@@ -10681,6 +10760,7 @@ void MagicPortalsLayer::latchLateBossSounds(const Watch& was, const Watch& now) 
     if (was.ghostPhase == Ghost::Phase::Damage && now.ghostPhase == Ghost::Phase::Death) latch("ghost_dead");
     if (now.ghostGone && !was.ghostGone) latch("ghost_burst");
     for (int i = was.ghostShotsEnded; i < now.ghostShotsEnded; ++i) latch("enemy_shot_ended");
+    for (int i = was.minionShotsEnded; i < now.minionShotsEnded; ++i) latch("enemy_shot_ended");
     // 4-32's dark dragon (sounds.json _note_dark_dragon): added by its spawn;
     // burned, playDarkDragonDamageSound, playGhostItemAppearSound and killAll's
     // playPortalKilledSound; DAMAGE's last waypoint back to FIGHTING, the damage
@@ -11120,6 +11200,9 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
         // body - Box2D calls a begin-contact callback inside the step itself.
         m_impactBegins = m_impacts.AfterStep(registry, Earthquake::ToUnits(m_quakeRules, m_quakeRules.touchPx),
                                              static_cast<double>(step.physicsS));
+        // A stone that began to touch a knight hard enough crushes it in that same callback (planning step 159), before
+        // anything after the step reads the knights.
+        crushMinions(registry);
         // So first what follows a step...
         Game::AfterStep(m_data, registry, m_level, step);
         // What the tick just did, remembered for the frame to play. Before the
@@ -11360,6 +11443,14 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, con
         const Ghost::Rules& rules = m_level.ghost.rules;
         m_ghostShotCells[shot.id] = m_shotFrames.Set(rules.shotFirstCell, rules.shotLastCell, rules.shotCellStrideMs,
                                                      true, ScriptClock::Ms(step));
+    }
+    // And a knight's shot's, on the same timer (the ghost's before them: the sim's order among the dynamic entities is
+    // INFERRED), stepped from the tick the shot is made as the ghost's are.
+    m_minionShotCells.clear();
+    for (const Minions::EnemyShot& shot : m_level.minions.shots) {
+        const Minions::ShotRules& rules = m_level.minions.rules.shot;
+        m_minionShotCells[shot.id] = m_shotFrames.Set(rules.firstCell, rules.lastCell, rules.cellStrideMs, true,
+                                                      ScriptClock::Ms(step));
     }
     // linearMotion's calls BEFORE the pictures are placed: a call steps the angle and
     // writes the position in one, and the frame draws what it wrote (motions.json).

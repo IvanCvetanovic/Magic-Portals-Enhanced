@@ -370,6 +370,7 @@ void ThePortsOwnTableIsTheOriginals() {
     playsFor("player_landed", "playFallSound");
     playsFor("minion_landed", "playFallSound");
     playsFor("minion_fell", "playMinionFallSound");
+    playsFor("minion_smashed", "playMinionSmashSound"); // a stone's crush of a knight (planning step 159)
     playsFor("crate_knocked", "playRandomWoodSound");
     playsFor("crate_dragged", "playWoodDragSound");
     playsFor("stone_hit", "playStoneHitSound");

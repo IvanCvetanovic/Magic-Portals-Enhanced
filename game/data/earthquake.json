@@ -188,7 +188,7 @@
     "enemy_shot_end": {
       "intensity": 10.0,
       "when": "before_update",
-      "_source": "ETHCallback_enemy_shoot (435266..436701) #331-333, startEarthquake(10, 0), when an enemy shot ends (#240-314). The port's enemy shots are the ghost's alone (Ghost::shots). enemy_shoot.ent static 0."
+      "_source": "ETHCallback_enemy_shoot (435266..436701) #331-333, startEarthquake(10, 0), when an enemy shot ends (#240-314). The port's enemy shots are the chapter-3 ghost's (Ghost::shots) and, since planning step 159, the knights' (Minions::State::shots): each one's end, by its range or by its target, calls it once. enemy_shoot.ent static 0."
     },
     "minion_killed": {
       "intensity": 20.0,
@@ -273,6 +273,12 @@
       "intensity": 3.0,
       "when": "after_update",
       "_source": "D11 row 30 (D11_check C42). ETHCallback_rocket_launch (462571..464080) #241-256, startEarthquake(3, 0), on each won frame its eqCounter (+= getLastFrameElapsedTime, #192-206) has passed 100 (#230-231, CMPIu then JP) while endElapsedTime is below 6000 (#234-235, TS); the counter is then zeroed (#241-252). rocket_launch is static=\"1\" in level0c.esc (id 2057), so its callback runs after the game state and the call lands on the next update: after_update. 0.35 x 3 x 2.8125 = 2.95 px, F17 r1's +-3 px from #229. The re-arm and its clock are cutscenes.json rocket_launch's (planning step 123)."
+    },
+
+    "minion_crushed": {
+      "intensity": 25.0,
+      "when": "before_update",
+      "_source": "D11 row 10. ETHBeginContactCallback_rolling_stone (346486..347456) #166-168, startEarthquake(25, 0) (PshC4 0, PshC4 1103626240 = 25f), after #141-153 set the minion's hp to 0, #155-160 destroy() it and #162-164 playMinionSmashSound: a rolling stone that begins to touch an isMinion other (minion.ent or ghost_minion.ent) at a hitIntensity above 1.23 (#139-140, minions.json `crush`). A begin-contact callback, before the update. Planning step 159 (Game::Crush); the stone's own impact row (stone_impact) is called on the same contact first."
     }
   },
 
@@ -308,8 +314,8 @@
     "the port ALREADY plays, and rows 4, 8 and 25 (every player, stone and minion impact) by",
     "step 104, on contacts the port finds itself (sim/Impacts.hpp, D11_check C48). Row 3 (a",
     "shot killed by an anti_portal_agent in flight, with antiportal_explosion.ent) by step 126,",
-    "which built the kill (R17): agent_killed. Row 10 (a stone crushing a minion, 25) needs a minion a stone",
-    "can kill, which the port does not have (Minions.hpp: not breakable), and that is gameplay.",
+    "which built the kill (R17): agent_killed. Row 10 (a stone crushing a minion, 25) is wired by step 159 as",
+    "minion_crushed: Game::Crush takes the knight the stone's begin-contact found at a hitIntensity above 1.23 (gameplay).",
     "Row 21 (a burned carranca) needs a system the port does not have; row 30 (4-01's rocket) is",
     "wired by step 123 (the program's P2) as rocket_launch, with the launch it shakes;",
     "row 13 (shaker) is placed by no level. Row 9 is wired for THROWN stones only: the port's",

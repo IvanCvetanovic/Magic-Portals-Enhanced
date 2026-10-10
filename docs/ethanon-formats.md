@@ -2898,8 +2898,8 @@ read against the listing (md5 `48fe65ce`, arguments pushed last-first); the engi
   `targetSpotted = 1`, `elapsedTime = 0`, `enemySpotCount += 1` (#646-684), and if `exclamationElapsedTime > 4000` (#686-697; it starts at **3500**, #64-75): zero it and
   `AddScaledEntity('exclamation.ent', GetPosition() - vector3(0, scale(36), scale(32)), getScale())` (#711-748; the three pushes are z, y, x) and `playEnemySpottedSound` (#751-754, inside the same block, no screen test).
   So a mark is shown only for a NEW sighting once the timer has passed 4000; a sighting that goes on shows nothing. Then (#755-884, true on the first frame too) `shootWaitTime = distance(target, knight) < scale(42) ? 1000 : 650`,
-  `+ 3000` if the KNIGHT'S OWN `length(GetLinearVelocity() / getScale()) > 0.3` (#791-811), and when `elapsedTime > shootWaitTime && shootElapsedTime > 2000` both are zeroed and `addEnemyShoot(knightPos, targetPos, target)` is
-  called (G1b). Otherwise `targetSpotted = 0` (#886-898). The knight neither turns nor runs at what it sees: it stands because its dwell clock is zero.
+  `+ 3000` if the KNIGHT'S OWN `length(GetLinearVelocity() / getScale()) > 0.3` (#791-811), and when `elapsedTime > shootWaitTime && shootElapsedTime > 2000` both are zeroed and `addEnemyShoot(targetPos, knightPos, target)` is
+  called (its parameters are `(finalPos, casterPos, target)`: G1a's text had the first two the wrong way round; section 23). Otherwise `targetSpotted = 0` (#886-898). The knight neither turns nor runs at what it sees: it stands because its dwell clock is zero.
 - **The way** (#899-996): `GetClosestContact(currentPos, destPos, p, n, 'ghost_minion.ent;minion.ent;char_feet.ent;crate_small;shock_agent;shock_agent.ent' + (canSeeAnything ? ';dark_mage.ent' : ''))`; its `== null`
   is the local `isInSight` (the name misleads: it is "the way is clear"), and when it is, the datum `'isInSight'` is set to 1 (#961-975). The walk (#977-1163) needs **the way clear and `elapsedTime` (read at #562-572,
   before a sighting resets it) above `holdTime`**; it writes `cantReach = 0` (the one occurrence of that string in the whole listing: it is read nowhere) and `moveVec = (currentPos.x < destPos.x ? 1 : -1, 0)` BEFORE the
@@ -2911,8 +2911,39 @@ read against the listing (md5 `48fe65ce`, arguments pushed last-first); the engi
   out. Blind, a knight sees **a portal and not the player**, its emissive is zero (#267-283), and its way is blocked by the player's body (the list loses `dark_mage.ent`; the player is two circles of radius 9.1 at +-9). The six levels that
   are `darkest` and place a knight: 4-25, 4-26, 4-27, 4-29, 4-30, 4-31. `entities/exclamation.ent` and `question.ent`: shape 0, no sprite, one particle system (`exclamation_mark.png` / `question_mark.png`, life 550, size 1 to 22, growth 1.4,
   white to transparent, repeat 1).
-- **The contact's hold cap - decoded, NOT built** (recorded after step 158's independent check; `docs/parity-backlog.md` G1a-10). `ETHBeginContactCallback_minion` (bytes 437083..437789): when a minion begins contact with an entity
+- **The contact's hold cap - decoded in step 158, BUILT in step 159** (section 23; `docs/parity-backlog.md` G1a-10). `ETHBeginContactCallback_minion` (bytes 437083..437789): when a minion begins contact with an entity
   that is not a sensor (#0-11 return on `other.GetPhysicsController().IsSensor()`) and is named `dark_mage.ent` (#12-29), its own `holdTime` becomes `min(holdTime, 1000)` (#30-55; the pushes are last-first, so `min`'s two
   arguments are the datum and 1000). A knight the player touches while it holds, or while it sees him, therefore walks on after at most 1000 ms of dwell instead of serving a longer hold. It meets the sight's dwell reset (`elapsedTime`
   zeroed on every sighting and every shot gate): a knight that is touched and still sees the player keeps being held up by its reset clock. The rest of the callback (#56-142, for a contact with anything but
-  `enemy_killer`: `startEarthquake` from the hit intensity and, past 3.5, `playFallSound` #132-140) is on record under the backlog's Order 11.4 rows: the tremble was built in step 112, the fall sound and this cap stay open.
+  `enemy_killer`: `startEarthquake` from the hit intensity and, past 3.5, `playFallSound` #132-140) is on record under the backlog's Order 11.4 rows: the tremble was built in step 112, the fall sound in step 142 and this cap in step 159.
+
+## 23. What a knight does once it has seen: the shot, killPortal, the contact's cap and the deaths (planning step 159, G1b)
+
+`addEnemyShoot` (434575..435266), `ETHCallback_enemy_shoot` (435266..436701), `killPortal` (`Portal.angelscript`, 357278..357358), `ETHCallback_portal` (359141..359885), `ETHBeginContactCallback_minion` (437083..437789),
+`ETHBeginContactCallback_rolling_stone` (346486..347456), `explode` (342023..342895), `seekNeighbourEntity` (322033..322827), `STimeManager::unitsPerSecond` (8045..8162), read against the listing (md5 `48fe65ce`);
+the engine's side is `ETHBucketManager.cpp:193-252, 505-523, 636-645` and `ETHScene.cpp:277`. The whole machine, line by line, is `out/parity/program/G1b/decode.md`.
+
+- **The call.** `addEnemyShoot(finalPos, casterPos, target)`: the arguments are pushed last-first (#869-884), so the call is `addEnemyShoot(entityInSight.GetPositionXY(), thisEntity.GetPositionXY(), entityInSight)`.
+  It adds `enemy_shoot.ent` at `vector3(casterPos, scale(10))` (#15-57), writes `direction = normalize(finalPos - casterPos)`, `destiny = finalPos`, `casterPos`, `targetName` and `targetID` on it (#59-126), adds
+  `portal_mark.ent` at `vector3(finalPos, scale(32))` (#127-168) and plays `playEnemyShootSound` (#169-172): no on-screen test, no cap on live shots.
+- **The shot's callback**, one call a frame, `enemy_shoot.ent` having NO body (`shape 0`): on its first call (no `initialPos`) `initialPos = GetPositionXY()`, `AddToPositionXY(scale(direction x 16))`, `projectile_shoot.ent`
+  at the moved point and `squaredDistance = squaredDistance(initialPos, destiny)` (#13-110); every call (the first included) `SetFrame(_projectileFrameTimer.set(0, 5, 30, true))`, `SetAngle`, `AddToPositionXY(dir x
+  scaledUnitsPerSecond(120))` - `speed x min(200, frame ms) / 1000`, 120 units a second of the script's clock - and `destroy(thisEntity)` once `squaredDistance(initialPos, position) > squaredDistance` (strict: it overshoots).
+- **Its kill is by the STORED target alone** (#201-314): `seekNeighbourEntity(GetBucket(position), ByIDChooser(GetInt('targetID')))` finds the entity with that id in the shot's bucket and its eight neighbours; within `scale(16)`
+  of it (`squaredDistance < fakeRadius^2`, strict) an `isCharacter` target has `hp` set to 0 - the write `ETHBeginContactCallback_death_area` makes (66935..66990) - and a target named `portal.ent` is `killPortal`'d, and
+  the shot is destroyed. The player in the line of a shot aimed at a portal is not looked at; a target that is gone is not found and the shot flies on. Every shot ENDS the same way (#315-366: `isDestroyed`):
+  `startEarthquake(10, 0)`, `portal_fail_in_antiportal.ent` at `vector3(position, 0)`, `playEnemyShootExplodeSound`, `DeleteEntity`.
+- **killPortal** is `KillParticleSystem(0)` and `(1)` and nothing else: no `active` write, no refund, no sound. `ETHCallback_portal` then fades the entity by 0.9 a frame from the frame its systems are killed (the first
+  neither fades nor counts) and 400 ms later adds `portal_death.ent` and deletes it; `PortalManager::update` pops a killed `portals[0]` and `portals[1]` from its array in the same call. The port removes the portal from
+  `Portals::State::placed` by id (the path a recycle takes) and the layer plays the rest.
+- **The contact's hold cap** (`ETHBeginContactCallback_minion` #12-55): on the BEGIN of a contact with a non-sensor `dark_mage.ent`, the knight's `holdTime = min(holdTime, 1000)`. `minion.ent`'s callback only (bound by name,
+  `ETHPhysicsEntityController.cpp:59, :66-70`). The player's callback does nothing else to a knight.
+- **Which target when two are in sight.** `findEntityInSight` returns the first candidate that passes in bucket order (the agent's, the next, the one after) and, inside a bucket, in the bucket list's order:
+  `Add` pushes BACK (`ETHScene.cpp:277`) and `MoveEntity` pushes FRONT for an `ET_HORIZONTAL` entity (= 0, `ETHEntityProperties.h:84`), and `dark_mage.ent` and `portal.ent` are both `type="0"`: the player is before a portal
+  placed after it, older portals before newer, a nearer bucket before a farther one; a portal whose hover carries it across a bucket line into the player's bucket (a move, to the front) is the one case that reverses it.
+- **What kills a minion** (`minion.ent` and `ghost_minion.ent` alike; the minion's own callback turns `destroy` into `blood.ent` and `DeleteEntity`, `burn` into `addFlames` first): the killer floor, a fireball, a fire agent, a
+  shock diamond - built before - and `explode` (#111-152: `destroy` set on, and `burn` of, every entity its `isBreakableOrExplosiveOrBurnable` grabber of radius `scale(80)` takes with a clear ray) and a rolling stone that
+  begins to touch it at `hitIntensity > 1.23` (`ETHBeginContactCallback_rolling_stone` #131-168: `hp = 0`, `destroy`, `playMinionSmashSound`, `startEarthquake(25, 0)`), which step 159 builds. `ETHBeginContactCallback_lava` burns a
+  burnable too (#1-19), and only 4-32 places lava. The shot kills only the player and portals. There is no sword or melee in the listing. Side finding, NOT built (recorded): the same stone callback sets the PLAYER's `hp`
+  to 0 above `hitIntensity` 2.5 (#107-129) - `docs/parity-backlog.md` G1b-5.
+

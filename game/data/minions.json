@@ -41,7 +41,7 @@
     "port carries it as every body is carried (ScriptClock::CarriedVelocity, planning step 152): at SimRatio",
     "times that, 1.248 m/s a tick of 1.04 units. This file used to read it as 1.3 PIXELS per 33.33 ms, 39 a",
     "second - a fiftieth of the metre scale() gives and the physics step's frame the other way round - and",
-    "actors.json's 60 was the nearer number. (Its sight is built since planning step 158, `sight` below; its shot and its killing of a portal are G1b's.)",
+    "actors.json's 60 was the nearer number. (Its sight is built since planning step 158, `sight` below; its shot, its killing of a portal and the contact's hold cap since planning step 159, `shot` and `contact` below.)",
     "",
     "elapsedTime is min(66, lastFrameElapsed) - twice the step. Below 15 fps the original",
     "therefore walks SLOWER rather than skipping ahead. Nothing to apply under a fixed",
@@ -261,26 +261,73 @@
         "shootWaitTime = distance(target, knight) < scale(42) ? 1000 : 650 (#769-790); + 3000 when the KNIGHT'S OWN linear velocity,",
         "length(GetLinearVelocity() / getScale()), is above 0.3 (#791-811); the shot is due when elapsedTime > shootWaitTime and",
         "shootElapsedTime > 2000 (#812-842), both as unsigned ints read fresh. What the shot DOES (addEnemyShoot, #869-884: the",
-        "enemy_shoot.ent, its portal_mark, playEnemyShootSound, the kill) is G1b's: G1a records a ShotDue and spawns nothing."
+        "enemy_shoot.ent, its portal_mark, playEnemyShootSound, the kill) is `shot` below, built in planning step 159: the gate records a",
+        "ShotDue and State::Tick makes the shot of it."
       ]
     }
   },
 
-  "_shooting_not_built": [
-    "STILL NOT BUILT after planning step 158 (G1b's): elapsedTime > shootWaitTime AND shootElapsedTime > 2000 resets both and",
-    "calls addEnemyShoot, which spawns enemy_shoot.ent (z = 10 * scale) carrying direction,",
-    "destiny, casterPos, targetName and targetID, plus portal_mark.ent (z = 32 * scale).",
-    "ETHCallback_enemy_shoot kills with fakeRadius = scale(16): within that of its target,",
-    "an isCharacter target has hp set to 0, and a target named portal.ent is killPortal'd,",
-    "then the shot destroys itself.",
+  "_shooting_built": [
+    "Built in planning step 159 (G1b); out/parity/program/G1b/decode.md has the whole machine. When the gate above opens",
+    "(elapsedTime > shootWaitTime AND shootElapsedTime > 2000, both reset to 0) ETHCallback_minion calls",
+    "addEnemyShoot(finalPos = the sighted entity's GetPositionXY(), casterPos = its own, target = the sighted entity) -",
+    "the arguments are pushed last-first (#869-884), so the listing's order is (finalPos, casterPos, target), not the order",
+    "G1a's decode.md wrote them in. It adds enemy_shoot.ent at vector3(casterPos, scale(10)) carrying direction = normalize(",
+    "finalPos - casterPos), destiny = finalPos, casterPos, targetName and targetID (addEnemyShoot #1-126), portal_mark.ent at",
+    "vector3(finalPos, scale(32)) (#127-168) and plays playEnemyShootSound (#169-172). ETHCallback_enemy_shoot kills with",
+    "fakeRadius = scale(16) by the STORED target's id alone: within it of that entity (by squaredDistance, strict), an",
+    "isCharacter target has hp set to 0 - the same write ETHBeginContactCallback_death_area makes - and a target named",
+    "portal.ent is killPortal'd, then the shot destroys itself; a shot whose target is gone flies on to its destiny. The shot",
+    "has no body and meets nothing on the way. `shot` below has its numbers; the ghost's shots (ghost.json `shot`) are the",
+    "same entity and callback with the same numbers.",
     "",
-    "killPortal is why this is a step of its own: it reaches into portal state that nothing",
-    "else in this port writes from outside, and it deserves its own attention rather than",
-    "riding along with a patrol.",
-    "",
-    "Contact with a minion does NOT kill the player. Only the shot does. G1a's side of it is State::shotsDue: one record for",
-    "each time the gate above opens, the timers already reset as the original resets them."
+    "killPortal (Portal.angelscript 357278..357358) is two KillParticleSystem calls and nothing else: no `active` write, no",
+    "refund, no sound. The portal's own callback then fades it by 0.9 a frame and, 400 ms after its systems died, adds",
+    "portal_death.ent and deletes it (ETHCallback_portal #54-186), and PortalManager::update pops it from its array: the",
+    "port removes it from Portals::State::placed by id, as an oldest-portal recycle does, and the layer plays the fade."
   ],
+
+  "shot": {
+    "entity_name": "enemy_shoot.ent",
+    "speed_px_s": 120.0,
+    "hit_px": 16.0,
+    "nudge_px": 16.0,
+    "cells": { "first": 0, "last": 5, "stride_ms": 30.0 },
+    "_source": [
+      "ETHCallback_enemy_shoot (bytes 435266..436701), read in full in planning step 159 and equal to ghost.json `shot` (the ghost",
+      "calls the same addEnemyShoot, #592 of ETHCallback_ghost; test_mp_sight pins the two blocks equal).",
+      "speed_px_s: #150-162 AddToPositionXY(dir x g_timeManager.scaledUnitsPerSecond(120)), 120 units a second of the script's",
+      "clock (STimeManager::unitsPerSecond 8045..8162: speed x min(200, the frame's ms) / 1000 x the time factor) - the port flies it",
+      "on the tick's script seconds. hit_px: #239-260, fakeRadius = scale(16), the shot is within it when squaredDistance(shot,",
+      "target) < fakeRadius x fakeRadius (CMPf, JNS skips). nudge_px: #29-55, on the first call only (`initialPos` absent),",
+      "AddToPositionXY(scale(direction x 16)) before it first flies, and its range - squaredDistance(initialPos, destiny), #75-108 -",
+      "is measured from where it STARTED, not from where the nudge left it. cells: #126-137 SetFrame(_projectileFrameTimer.set(0, 5,",
+      "30, true)), the one script-global timer the player's shot steps too."
+    ]
+  },
+
+  "contact": {
+    "hold_cap_ms": 1000.0,
+    "touch_units": 0.17777777777777778,
+    "_source": [
+      "ETHBeginContactCallback_minion (437083..437789): nothing for a sensor (#1-11); where the other's name is 'dark_mage.ent'",
+      "(#12-29) the knight's own `holdTime` becomes min(holdTime, 1000) (#30-55: min(GetUInt('holdTime'), 1000) written back by",
+      "SetUInt). minion.ent's callback alone: ghost_minion.ent has none (ETHPhysicsEntityController.cpp:59, :66-70).",
+      "touch_units: a begin is the first step a pair is within the contact's skin; earthquake.json impacts.touch_px, 0.5 screen px at",
+      "R12's 720 px screen = 0.5 / 2.8125 = 0.1777... level units."
+    ]
+  },
+
+  "crush": {
+    "entity": "rolling_stone.ent",
+    "hit_above": 1.23,
+    "_source": [
+      "ETHBeginContactCallback_rolling_stone (346486..347456) #131-168: where the other isMinion (minion.ent or ghost_minion.ent) and",
+      "the stone's hitIntensity (#56, dp2(velocity, normal) / getScale(), the same number its impact row reads) is above 1.23 (CMPIf",
+      "1067282596, JNP skips): the minion's hp is set to 0 and it is destroy()ed, playMinionSmashSound plays and startEarthquake(25, 0)",
+      "shakes (earthquake.json minion_crushed). The minion's own callback then adds its blood and deletes it, as a strike does."
+    ]
+  },
 
   "_burnable_breakable_not_wired": [
     "minion.ent carries breakable=1, burnable=1 and teleportable=1. Teleportable is wired,",
@@ -297,8 +344,11 @@
     "Either way the minion's own callback adds addFlames' fire32.ent before its blood, which the",
     "layer draws since planning step 146 (effects.json fire32).",
     "A GAMEPLAY change on the three levels that place a fire agent and minions (3-19, 3-23, 4-28).",
-    "What is still not wired is an explosion's burn (explode() burns what it grabs; level18b's bombs",
-    "stand near a minion) and breakable.",
+    "Since planning step 159 so is an EXPLOSION's: explode() sets `destroy` on every entity its grabber takes with a clear ray",
+    "and burns the burnable ones (#111-152), so a barrel's blast within its radius of a knight kills it the way a flame does",
+    "(Game::AfterStep hands the grabbed knights to the same one-tick-later burn a flame's takes; level18b's bombs stand near a",
+    "minion). And a rolling stone's crush (`crush` above). Lava would burn one too (ETHBeginContactCallback_lava #1-19), but",
+    "only 4-32 places lava and it places no knight.",
     "",
     "Fire::Burnable and Demolish::Breakable are both filled by their Find from the scene,",
     "and a minion does not exist when those run. Demolish::Breakable also wants a",

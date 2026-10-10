@@ -83,6 +83,9 @@ enum class Call : std::size_t {
     // 4-01's rocket launch (D11 row 30; the program's P2, planning step 123): a static
     // callback's startEarthquake(3, 0), re-armed past 100 ms for the launch's first 6 s.
     RocketLaunch,
+    // A rolling stone that crushes a knight (D11 row 10; planning step 159): ETHBeginContactCallback_rolling_stone's
+    // startEarthquake(25, 0), a begin-contact callback, on the contact the stone's own impact row is called on too.
+    MinionCrushed,
     Count
 };
 

@@ -16,8 +16,6 @@
 
 namespace MagicPortals::Game {
 
-namespace {
-
 // A body a launcher threw and has taken back, dropped from what tracked it.
 void Forget(Level& level, entt::entity body) {
     auto& travellers = level.portals.travellers;
@@ -27,6 +25,12 @@ void Forget(Level& level, entt::entity body) {
                                 [body](const Demolish::Stone& stone) { return stone.body == body; }),
                  stones.end());
 }
+
+void Crush(entt::registry& registry, Level& level, const std::vector<entt::entity>& bodies) {
+    for (const entt::entity gone : level.minions.Take(registry, bodies)) Forget(level, gone);
+}
+
+namespace {
 
 // What a restock added, taken on as Fire::Find and Portals::Find take a placed
 // body: a bomb or a burnable by its node's flags, and a traveller when its node
@@ -117,7 +121,11 @@ Minions::Senses SensesOf(const Data& data, entt::registry& registry, const Level
         }
     }
     senses.portalsPx.reserve(level.portals.placed.size());
-    for (const Portals::Placed& placed : level.portals.placed) senses.portalsPx.push_back(placed.atPx);
+    senses.portalIds.reserve(level.portals.placed.size());
+    for (const Portals::Placed& placed : level.portals.placed) {
+        senses.portalsPx.push_back(placed.atPx);
+        senses.portalIds.push_back(placed.id);
+    }
     return senses;
 }
 
@@ -524,6 +532,21 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, const S
     // static entities' callbacks after the dynamic ones (ETHScene.cpp:464-491).
     // Demolish owns the breaking, and says which breakables a blast breaks.
     for (const Fire::Grab& grab : level.fire.grabbedNow) level.demolish.Grab(grab.body, grab.by);
+    // And a knight it grabbed (planning step 159). explode() sets `destroy` on every entity its grabber takes with a clear ray
+    // and burns the burnable ones (#111-152): minion.ent and ghost_minion.ent are burnable, so a barrel's blast kills a knight
+    // within its radius as a flame does, and its callback reads both flags on its next frame - the same one-tick-later burn a
+    // flame's takes (Fire::State::minionsAlight, which the top of this function runs through Minions::Burn). Fire::Blast has
+    // grabbed minion bodies all along, as it grabs every collider; nothing read them.
+    for (const Fire::Grab& grab : level.fire.grabbedNow) {
+        for (const Minions::Minion& minion : level.minions.minions) {
+            if (minion.gone || minion.body != grab.body) continue;
+            if (std::find(level.fire.minionsAlight.begin(), level.fire.minionsAlight.end(), minion.body) ==
+                level.fire.minionsAlight.end()) {
+                level.fire.minionsAlight.push_back(minion.body);
+            }
+            break;
+        }
+    }
     for (const entt::entity gone : level.demolish.Destroyed(registry)) Forget(level, gone);
     // A blast within reach of chapter 4's boss burns it, which is the ONLY thing
     // that can hurt it. Done here rather than inside Fire because Fire::Blast
@@ -975,6 +998,11 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, const S
 
     // The beholder's rocks, against what the step ran them into.
     for (const entt::entity gone : level.boss.Contacts(registry, level.player, level.portals, step.physicsS)) Forget(level, gone);
+    // THE KNIGHTS' SHOTS (planning step 159), after the step, where it left the player and the portals - the same moment
+    // the ghost's are judged at - and BEFORE the portals' own tick: a portal a shot has killPortal'd is out of the manager's
+    // array and carries nothing through. Each is judged against the entity it was aimed at alone.
+    level.minions.FlyShots(step, SensesOf(data, registry, level));
+    for (const int id : level.minions.killedPortalIds) level.portals.KillPlaced(id);
     level.portals.Tick(registry, step);
     // Each fireball in a placed portal goes to its partner, ONCE (planning step
     // 135; Turrets.hpp has the decode): PortalManager::mayTeleport refuses
@@ -1040,6 +1068,11 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, const S
     if (level.channels.playerKilled && !level.hazards.playerDied) {
         level.hazards.playerDied = true;
         level.hazards.killedBy = level.channels.killedBy;
+    }
+    // A knight's shot is the eighth: enemy_shoot.ent writes hp 0 on the player as a death area does.
+    if (level.minions.playerKilled && !level.hazards.playerDied) {
+        level.hazards.playerDied = true;
+        level.hazards.killedBy = level.minions.killedBy;
     }
 }
 

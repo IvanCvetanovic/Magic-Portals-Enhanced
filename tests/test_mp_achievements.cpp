@@ -337,6 +337,54 @@ void EveryTermIsTheOriginalsTest() {
     Is(Ids(Achievements::Dispatches(rules, PlayAt(2, 1, 3, 0), nullptr)), "[]", 332);
 }
 
+// THE SEVEN STEALTH ACHIEVEMENTS (planning step 159, G1b): hasBeenUnnoticed(N) is exactly N 'minion.ent' alive AND spottedCount() ==
+// 0 (ScoreDashboard 401465..401641), and spottedCount is the sum of the live knights' enemySpotCount - which the layer returns
+// from Minions::State::SpotCount() since this step. Each of the seven is true with its knights standing and none having seen, and
+// false with one sighting (a knight that saw and then died is out of the sum), with a knight too few or too many, and, where the
+// rule asks for them, without its gold medal or with its torch lit.
+void TheSevenStealthAchievementsAreTrueAndFalse() {
+    const Achievements::Rules rules = TheRules();
+    const auto at = [&rules](const Achievements::Play& play, const FakeWorld& world) {
+        return Ids(Achievements::Dispatches(rules, play, &world));
+    };
+    struct Stealth {
+        int id;
+        int world;
+        int level;
+        int knights;
+        int minMedal; // the medal the rule asks for (0 where it has no medal test)
+        bool dark;    // 66 asks for NO torch to exist (the level lit by none); the others do not look
+    };
+    const Stealth seven[] = {{24, 2, 1, 2, 0, false},  {26, 2, 3, 2, 0, false},  {28, 2, 4, 2, 0, false},
+                             {32, 2, 10, 2, 0, false}, {42, 2, 23, 1, 0, false}, {66, 3, 24, 1, 0, true},
+                             {76, 3, 29, 1, 3, false}};
+    for (const Stealth& rule : seven) {
+        const std::string name = "achievement " + std::to_string(rule.id);
+        const int medal = rule.minMedal > 0 ? rule.minMedal : 1;
+        const auto fires = [&](const FakeWorld& world, int play) {
+            const std::vector<int> got = Achievements::Dispatches(rules, PlayAt(rule.world, rule.level, play, 9), &world);
+            return std::find(got.begin(), got.end(), rule.id) != got.end();
+        };
+        FakeWorld world;
+        world.counts["minion.ent"] = rule.knights;
+        if (rule.dark) world.present.clear(); // light_off.ent absent: the torch has been lit
+        CHECK_MSG(fires(world, medal), name + ": its knights stand and none has seen");
+        world.spotted = 1;
+        CHECK_MSG(!fires(world, medal), name + ": one sighting spoils it");
+        world.spotted = 0;
+        world.counts["minion.ent"] = rule.knights - 1;
+        CHECK_MSG(!fires(world, medal), name + ": a knight too few");
+        world.counts["minion.ent"] = rule.knights + 1;
+        CHECK_MSG(!fires(world, medal), name + ": a knight too many");
+        world.counts["minion.ent"] = rule.knights;
+        if (rule.minMedal > 0) CHECK_MSG(!fires(world, rule.minMedal - 1), name + ": below its medal");
+        if (rule.dark) {
+            world.present.insert("light_off.ent");
+            CHECK_MSG(!fires(world, medal), name + ": with the torch still unlit it is not this one");
+        }
+    }
+}
+
 void TheHashIsTheOriginals() {
     const Achievements::Rules rules = TheRules();
     // Worked by hand from generateAchivementHashCode: sum of id x (t + 2), less 27,
@@ -547,6 +595,7 @@ void runTests() {
     TheRulesMatchTheList();
     TheMenusPassIsTheToolsWalk();
     EveryTermIsTheOriginalsTest();
+    TheSevenStealthAchievementsAreTrueAndFalse();
     TheHashIsTheOriginals();
     TheSavedSetIsKept();
     TheNotificatorShowsOneCardAtATime();

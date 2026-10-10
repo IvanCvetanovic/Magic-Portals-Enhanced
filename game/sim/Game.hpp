@@ -203,6 +203,16 @@ struct Level {
     entt::entity player = entt::null;
 };
 
+// A body the simulation has taken away, dropped from what tracked it: the portals' travellers and the stones that break
+// walls. Every module that removes a body of the level's goes through it; the layer's stone crush (below) does too.
+void Forget(Level& level, entt::entity body);
+
+// What a rolling stone's crush does to the knights it hit (ETHBeginContactCallback_rolling_stone #131-168: hp 0 and
+// destroy(), which the minion's own callback turns into its blood): each body that is a minion of the level is taken
+// (Minions::Take) and forgotten. The layer calls it with the minions its impact watch found a stone beginning to touch
+// at a hitIntensity above minions.json `crush.hit_above`.
+void Crush(entt::registry& registry, Level& level, const std::vector<entt::entity>& bodies);
+
 // Puts the level into the registry: the Godot project's gravity, the bodies built with
 // the role table, and the player at the level's player_spawn. Then its buttons,
 // doors, crystals, exit and portals are found. withStatics false leaves the

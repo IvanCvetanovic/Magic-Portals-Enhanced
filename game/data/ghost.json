@@ -262,13 +262,13 @@
     "nudge_px": 16.0,
     "_note": [
       "addEnemyShoot and ETHCallback_enemy_shoot are in ETHCallback_minion.angelscript, and",
-      "minions.json's _shooting_not_built already decoded them: enemy_shoot.ent carries",
+      "minions.json's _shooting_built (and its `shot` block, the same numbers) decode them: enemy_shoot.ent carries",
       "direction, destiny, casterPos, targetName and targetID, moves 120 units a second, and",
       "kills with fakeRadius = scale(16) - an isCharacter target within that has hp set to 0.",
       "",
       "killPortal is NOT reachable from this boss. That branch fires only when the shot's",
       "target is named portal.ent, and the ghost always passes the player as its target. So",
-      "the step minions.json deferred stays deferred, and this shot only kills the player."
+      "the knights' kill of a portal (planning step 159, minions.json `shot`) is theirs, and this shot only kills the player."
     ],
     "_nudge_px": [
       "ETHCallback_enemy_shoot (bytes 435266..436701) #1-56, on its first call: initialPos = GetPositionXY()",

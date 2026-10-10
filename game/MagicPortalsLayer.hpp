@@ -632,6 +632,9 @@ public:
             Ghost,
             // One of its shots in flight, by the id the sim gave it (`index`).
             GhostShot,
+            // One of a KNIGHT's shots in flight (Minions::State::shots), by the id the sim gave it (`index`): the same
+            // enemy_shoot.ent, in a list of its own because 3-32 has both a ghost and knights (planning step 159).
+            MinionShot,
             // A key with no node of its own - the one the ghost or the dark dragon
             // drops - by its place in Keys::State::keys (`index`), where the carry left
             // it and its bob put it (m_droppedKeys).
@@ -2277,6 +2280,9 @@ private:
     // each on the last tick (stepLevel).
     std::vector<int> m_ghostShotEffects;
     std::map<int, int> m_ghostShotCells;
+    // And the knights' (planning step 159): the same three entities, by Minions::Shot's id.
+    std::vector<int> m_minionShotEffects;
+    std::map<int, int> m_minionShotCells;
     // A key with no node - the one the ghost drops - drawn as the key.ent the script
     // adds: its place in Keys::State::keys, the effect that draws it, and the bob its
     // callback gives it while it lies unowned (ETHCallback_key's linearMotion, from a
@@ -2695,6 +2701,9 @@ private:
         int ghostHits = 0;
         int ghostShotsFired = 0;
         int ghostShotsEnded = 0;
+        // The knights' (planning step 159): each shot's leaving and its end are the same two sounds and the same shake.
+        int minionShotsFired = 0;
+        int minionShotsEnded = 0;
         bool darkSummoned = false;
         bool darkAlive = false;
         bool darkGone = false;
@@ -3333,6 +3342,11 @@ private:
     // a stone's touch of a breakable that Demolish took this tick (`struck`),
     // which the watch cannot see once the breakable is gone.
     void latchImpacts(const std::vector<const Demolish::Breakable*>& struck);
+    // ETHBeginContactCallback_rolling_stone's crush (planning step 159): the knights a stone began to touch this step at a
+    // hitIntensity above minions.json `crush.hit_above` are taken (Game::Crush), BEFORE Game::AfterStep reads them, and
+    // their bodies are kept in m_crushedNow for latchImpacts to shake and sound on the same contact.
+    void crushMinions(entt::registry& registry);
+    std::vector<entt::entity> m_crushedNow;
     // Who the impact rows watch, as the step is about to be taken.
     std::vector<Impacts::Watched> impactBodies() const;
     // The update, between the tick's two sides of calls; on a tick with no level
@@ -3382,6 +3396,7 @@ private:
         DarkDragon::Phase darkDragonPhase = DarkDragon::Phase::Appearing;
         bool ghostGone = false;
         int ghostShotsEnded = 0;
+        int minionShotsEnded = 0;
         std::vector<char> breakablesBroken; // char, not bool: see Watch
         int despawned = 0;
         int minionsKilled = 0;

@@ -698,6 +698,13 @@ struct State {
     // went.
     int KillAll(bool refund);
 
+    // killPortal on ONE placed portal (Portal.angelscript 357278..357358: its two particle systems killed, nothing else - no
+    // refund, no `active` write, no sound), as a knight's shot does to the portal it was aimed at (planning step 159): the
+    // portal leaves `placed` by its id, which is what an oldest-portal recycle (Insert) and a portal the player has spent do
+    // too, and the layer then plays its fade and its portal_death (syncPlacedPortals). portalsUsed is left as it is - the
+    // golden score counts a portal that was killed. False where no placed portal has the id.
+    bool KillPlaced(int id);
+
     const NoPortalZone* FindZone(const std::string& name) const;
 
     // One tick, after the physics step. The lockout runs down, a patrolling zone

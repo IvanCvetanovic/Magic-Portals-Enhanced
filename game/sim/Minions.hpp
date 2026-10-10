@@ -64,16 +64,20 @@
 // searches, looking right and then left, with a question mark every 4000 ms. Blind on a `darkest` level (the ambient is
 // DARKEST_AMBIENT_LIGHT), it sees a portal and not the player, and the player's body blocks its way.
 //
-// NOT built here, and deliberately: SHOOTING (G1b). The timers that gate a shot ARE built, because a shot resets
-// elapsedTime and so decides when a knight walks again; what the shot is - the enemy_shoot.ent, its mark, its sound, the
-// kill of the player or of a portal - is not, and State::shotsDue is the one hook for it. And a minion being breakable.
-// minion.ent carries breakable=1, burnable=1 and teleportable=1;
-// teleportable is wired, since a portalled minion landing on the killer floor is
-// how the "kill all minions" achievements are won, and so is burnable against a
-// fireball (Burn, planning step 98: the black knight's death by fire is what adds
-// chapter 3's ghost, R4) and a fire agent's flame (planning step 134, a tick
-// later: Fire::State::minionsAlight). An explosion's burn is not. data/minions.json records
-// the rest against what it would take to build them.
+// SHOOTING, built in planning step 159 (G1b; out/parity/program/G1b/decode.md). When its gate opens a knight calls
+// addEnemyShoot: an enemy_shoot.ent is added at its point, flying 120 units a second of the script's clock toward where the
+// sighted entity stood, 16 units out to begin with, with no body - it meets nothing on the way. It is judged by the STORED
+// target alone (ETHCallback_enemy_shoot looks the target up by id): within 16 units of it, the player has hp set to 0 and a
+// portal is killPortal'd, and the shot spends itself; a target that is gone leaves it flying on to its destiny, where it also
+// ends. Contact with the player caps a knight's own hold at 1000 ms (ETHBeginContactCallback_minion #12-55), the one thing the
+// player's body does to it.
+//
+// And a minion being breakable: minion.ent carries breakable=1, burnable=1 and teleportable=1; teleportable is wired, since a
+// portalled minion landing on the killer floor is how the "kill all minions" achievements are won, and so is burnable against
+// a fireball (Burn, planning step 98: the black knight's death by fire is what adds chapter 3's ghost, R4), a fire agent's
+// flame (planning step 134, a tick later: Fire::State::minionsAlight), a barrel's blast (planning step 159: explode() destroys
+// and burns what its grabber takes) and a rolling stone's crush (Game::Crush, the stone's own begin-contact callback). data/
+// minions.json records the rest against what it would take to build them.
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
@@ -119,6 +123,29 @@ struct Sight {
     double minIntervalMs = 0.0;
 };
 
+// What an enemy_shoot.ent is (minions.json `shot`; the same numbers as ghost.json's, which is the same callback).
+struct ShotRules {
+    std::string entityName;    // 'enemy_shoot.ent'
+    double speedPxS = 0.0;     // 120 units a second of the script's clock
+    double hitPx = 0.0;        // fakeRadius = scale(16)
+    double nudgePx = 0.0;      // its first call moves it this far along its way
+    int firstCell = 0;         // _projectileFrameTimer.set(first, last, stride, true)
+    int lastCell = 0;
+    double cellStrideMs = 0.0;
+};
+
+// What the player's body does to a knight (minions.json `contact`): ETHBeginContactCallback_minion #12-55.
+struct ContactRules {
+    double holdCapMs = 0.0;  // holdTime = min(holdTime, 1000)
+    double touchUnits = 0.0; // a pair has begun to touch within this of the surfaces (earthquake.json impacts.touch_px)
+};
+
+// What a rolling stone does to a knight it hits (minions.json `crush`): ETHBeginContactCallback_rolling_stone #131-168.
+struct CrushRules {
+    std::string entity;     // rolling_stone.ent: the callback's owner
+    double hitAbove = 0.0;  // hitIntensity must exceed this
+};
+
 // The port's minions.json.
 // The body is a circle where the original's is a capsule of two, and it is built
 // with z rotation LOCKED: minion.ent is fixedRotation="1", and a circle that may
@@ -148,6 +175,9 @@ struct Rules {
     double spawnAngleDeg = 0.0;
     double spawnScale = 1.0;
     Sight sight;
+    ShotRules shot;
+    ContactRules contact;
+    CrushRules crush;
 
     // The body's centre less this is the original's entity point, which arrivePx
     // and settlePx are measured from (minions.json body.entity_above_feet_px).
@@ -216,6 +246,9 @@ struct Minion {
     bool wayWasClear = false;   // the 'isInSight' datum: set whenever the way is clear, cleared by each question mark
     bool wayClear = false;      // this tick's probe: the ray to the waypoint met nothing
     bool seeing = false;        // this tick's findEntityInSight found something (before isFinished is asked)
+    // ETHBeginContactCallback_minion's begin: whether the player's body touched this knight at the last judging, so that a
+    // pair that is touching now and was not then is a begin (the hold cap runs on that edge alone).
+    bool touchingPlayer = false;
 };
 
 // What a knight can see this tick, which the caller gathers: ETHCallback_minion asks the engine for
@@ -236,8 +269,10 @@ struct Senses {
         double radiusPx = 0.0;
     };
     std::array<Circle, 2> playerBodyCircles{};
-    // Every placed portal.ent, oldest first: no body, a point.
+    // Every placed portal.ent, oldest first: no body, a point. Each has the id Portals::Placed gave it, which is what a shot
+    // aimed at it is judged by (the original stores the target's entity id).
     std::vector<glm::dvec2> portalsPx;
+    std::vector<int> portalIds;
 };
 
 // What a tick's knights added, for the layer and for G1b: cleared by every Tick, as `deaths` is.
@@ -261,6 +296,24 @@ struct ShotDue {
     glm::dvec2 finalPx{0.0, 0.0};  // the target's
     std::string targetName;        // 'dark_mage.ent' or 'portal.ent'
     int portalIndex = -1;          // the placed portal's place in Senses::portalsPx; -1 for the player
+    int portalId = -1;             // and its Portals::Placed id, which the shot keeps; -1 for the player
+};
+
+// One enemy_shoot.ent in the air (addEnemyShoot, ETHCallback_enemy_shoot): a point that flies straight toward `destinyPx` and
+// is judged against its STORED target alone. It has no body and meets nothing on the way.
+struct EnemyShot {
+    int id = 0;                    // counted from 1 over the level, never reused: what the layer follows
+    std::size_t minion = 0;        // the knight that fired it (its place in State::minions)
+    glm::dvec2 atPx{0.0, 0.0};
+    glm::dvec2 velocityPx{0.0, 0.0}; // units a second of the script's clock: direction x ShotRules::speedPxS
+    glm::dvec2 directionPx{0.0, 0.0}; // its `direction`: normalize(destiny - casterPos), zero if they are the same point
+    glm::dvec2 fromPx{0.0, 0.0};   // casterPos, and initialPos: where its range is measured from
+    glm::dvec2 destinyPx{0.0, 0.0}; // finalPos: where the sighted entity stood as it was fired
+    std::string targetName;        // 'dark_mage.ent' or 'portal.ent'
+    int targetPortalId = -1;       // the placed portal it was aimed at; -1 for the player
+    // Made this tick and not yet flown: its first callback is the next frame's, which adds the nudge's step (the port nudges it
+    // as it is made, and flies it from the next tick).
+    bool fresh = true;
 };
 
 // An invisible solid floor that destroys a minion and nothing else.
@@ -301,6 +354,19 @@ struct State {
     std::vector<Mark> marks;
     std::vector<ShotDue> shotsDue;
 
+    // The shots in the air, and what they have done. `shotsFired` and `shotsEnded` count every shot of the level (the layer's
+    // sounds and shakes are each one per count); `spentPx` is where each shot that ended THIS tick stood as it was destroyed,
+    // by reaching its destiny or its target, and `killedPortalIds` the placed portals it killPortal'd, both refilled by every
+    // FlyShots. The player's death is reported, not acted on: Game folds it into Hazards as the boss's and the ghost's are.
+    std::vector<EnemyShot> shots;
+    int shotsMade = 0;
+    int shotsFired = 0;
+    int shotsEnded = 0;
+    std::vector<glm::dvec2> spentPx;
+    std::vector<int> killedPortalIds;
+    bool playerKilled = false;
+    std::string killedBy;
+
     // The placed bodies the knights' two rays pass through by NAME, as the original's ignore lists name them
     // (Sight::sightRayIgnores, wayRayIgnores): bound once by BindSight, from the nodes the level places. The
     // knights' own bodies are the other half of those lists, and Tick adds them as they stand.
@@ -331,6 +397,14 @@ struct State {
     void Tick(entt::registry& registry, const ScriptClock::Step& step);
     void Tick(entt::registry& registry, const ScriptClock::Step& step, const Senses& senses);
 
+    // The shots fly on, AFTER the physics step, where it left the player and the portals (ETHCallback_enemy_shoot, listing
+    // 435266..436701): each moves speedPxS x the tick's script seconds along its direction, ends once it has gone FARTHER from
+    // where it started than its destiny is (squaredDistance, a strict compare), and is judged against the entity it was
+    // aimed at, found by its stored id: within hitPx of it (strict), the player is killed (playerKilled) and a portal's id is
+    // put in killedPortalIds - and the shot ends there. A shot made this tick does not fly yet. Clears spentPx and
+    // killedPortalIds first.
+    void FlyShots(const ScriptClock::Step& step, const Senses& senses);
+
     // And after it: a minion left standing in a killer floor is taken. Returns
     // the bodies it took away, which the caller must pass through Forget. Split
     // from Tick for the reason Launchers::Throw and ::Cull are - what moves a
@@ -353,7 +427,7 @@ struct State {
     entt::entity Summon(entt::registry& registry, const std::string& name, const glm::dvec2& atPx,
                         const std::vector<Waypoint>& patrol);
 
-    // A minion taken by something that is not a killer floor: a shock diamond's
+    // A minion taken by something that is not a killer floor: a rolling stone's crush (Game::Crush), a shock diamond's
     // strike, which the original does with the same destroy() the floor calls.
     // Removal lives here rather than in the module that struck it, because Tick
     // walks this list every frame - a minion destroyed behind this one's back
@@ -375,6 +449,10 @@ struct State {
     const Minion* FindMinion(const std::string& name) const;
 
 };
+
+// ETHBeginContactCallback_rolling_stone #131-168: a stone that begins to touch a knight at `hitIntensity` (dp2(its velocity,
+// the normal between the two entity points) / getScale()) crushes it only ABOVE minions.json `crush.hit_above` (CMPIf, JNP skips).
+bool Crushes(const Rules& rules, double hitIntensity);
 
 // A bucket: GetBucket(p) = floor(p / bucketUnits) per axis (ETHBucketManager.cpp:47-50).
 glm::ivec2 BucketOf(const glm::dvec2& point, double bucketUnits);

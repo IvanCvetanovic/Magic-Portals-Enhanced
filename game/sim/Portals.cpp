@@ -1134,6 +1134,13 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     }
 }
 
+bool State::KillPlaced(int id) {
+    const auto at = std::find_if(placed.begin(), placed.end(), [id](const Placed& portal) { return portal.id == id; });
+    if (at == placed.end()) return false;
+    placed.erase(at);
+    return true;
+}
+
 int State::KillAll(bool refund) {
     const int killed = static_cast<int>(placed.size());
     if (refund) {

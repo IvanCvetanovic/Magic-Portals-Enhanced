@@ -6666,6 +6666,78 @@ void TheGhostsShotEndingShakesTheView() {
     layer.OnDetach(registry);
 }
 
+// A knight's SHOT (planning step 159, G1b): addEnemyShoot adds enemy_shoot.ent at the knight, portal_mark.ent where the
+// player stood and - from its first call - projectile_shoot.ent, and plays playEnemyShootSound; the shot ends in a
+// portal_fail_in_antiportal.ent with startEarthquake(10, 0) and playEnemyShootExplodeSound. level0b (3-01): the player held in
+// plain view 60 units left of the patroller, which sees him on tick ~60 and shoots 650 ms later (and 2000 ms after the level's
+// start, which binds: tick ~126). The shot kills him (hp 0), and the layer plays its own death after.
+void AKnightsShotIsDrawnHeardAndShakesTheView() {
+    if (!OriginalArtIsThere("AKnightsShotIsDrawnHeardAndShakesTheView")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    const glm::dvec2 inView(450.0, 109.9);
+    const auto hold = [&]() { HoldPlayerAt(registry, layer, inView); };
+    const auto heardNow = [&layer](const std::string& event) {
+        const std::vector<std::string> sounds = layer.LatchedSounds();
+        return std::count(sounds.begin(), sounds.end(), event);
+    };
+    const QuakeEdge fired = tickUntilUp(layer, registry, ticks, 400,
+                                        [](const PlayedLevel& played) { return played.minions.shotsFired; }, hold);
+    CHECK_MSG(fired.tick > 0, "the patroller shot at the player standing in plain view");
+    if (fired.tick <= 0) return;
+    // The knight's callback is the tick's BEFORE-step half, so the sim's shot is made at its end and the layer latches what
+    // follows a step (the sound, the pictures) on the NEXT tick, as it does the exclamation's.
+    CHECK_MSG(heardNow("enemy_shot") == 0, "nothing is latched on the tick the sim made it");
+    hold();
+    quakeTickWith(layer, registry, ticks);
+    CHECK_MSG(heardNow("enemy_shot") == 1, "playEnemyShootSound on the tick after");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int shots = 0;
+    int marks = 0;
+    int flashes = 0;
+    MagicPortalsLayer::EffectReport shot;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity == "enemy_shoot.ent") {
+            ++shots;
+            shot = report;
+        }
+        if (report.entity == "portal_mark.ent") ++marks;
+        if (report.entity == "projectile_shoot.ent") ++flashes;
+    }
+    CHECK_MSG(shots == 1 && marks == 1 && flashes == 1,
+              "enemy_shoot.ent, portal_mark.ent and projectile_shoot.ent: " + std::to_string(shots) + ", " +
+                  std::to_string(marks) + ", " + std::to_string(flashes));
+    const MagicPortals::Minions::State& minions = layer.SimLevel()->minions;
+    if (shots == 1 && !minions.shots.empty()) {
+        CHECK_MSG(shot.followKind == MagicPortalsLayer::EffectOwner::Kind::MinionShot &&
+                      glm::distance(shot.atPx, minions.shots.front().atPx) < 1e-6,
+                  "carried by the knight's shot, in a list of its own: " + Point(shot.atPx));
+        CHECK_MSG(NearD(shot.zUnits, 10.0, 1e-12) && shot.drawn && shot.hasLight, "at scale(10), drawn and lit");
+    }
+    // It flies and ends: the burst, the sound, and the shake of 10.
+    const QuakeEdge ended = tickUntilUp(layer, registry, ticks, 400,
+                                        [](const PlayedLevel& played) { return played.minions.shotsEnded; }, hold);
+    CHECK_MSG(ended.tick > fired.tick, "the shot ended");
+    CHECK_MSG(heardNow("enemy_shot_ended") == 1, "playEnemyShootExplodeSound on the tick it ended");
+    checkQuakeRow(layer, registry, ticks, ended, "3-01 a knight's enemy_shot_end", 10.0, false);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    int bursts = 0;
+    for (const MagicPortalsLayer::EffectReport& report : layer.EffectReports()) {
+        if (report.entity == "portal_fail_in_antiportal.ent") ++bursts;
+    }
+    CHECK_MSG(bursts == 1, "and ends in a portal_fail_in_antiportal.ent: " + std::to_string(bursts));
+    CHECK_MSG(layer.SimLevel()->hazards.playerDied && !layer.SimLevel()->hazards.killedBy.empty(),
+              "it killed the player it was aimed at: " + layer.SimLevel()->hazards.killedBy);
+    layer.OnDetach(registry);
+}
+
 // Rows 18, 19 and 20: a switched door starting up, starting down and landing shut,
 // 4 each: door_lift's static callback, after the update. 3-15 left to run, where
 // step 76's knight rides onto its button and off it again.
@@ -19282,6 +19354,47 @@ void AShockAgentPulsesOnItsBounce() {
     layer.OnDetach(registry);
 }
 
+// A rolling stone that begins to touch a knight hard enough crushes it (planning step 159, G1b): ETHBeginContactCallback_rolling_stone
+// #131-168 sets its hp to 0 and destroy()s it, plays playMinionSmashSound and shakes the view by 25 - the minion's own callback then adds
+// its blood and deletes it. level9b (3-10): the placed stone rolling_stone_1198 let fall from 70 units above the key-carrying knight
+// minion_spawn_913, which holds at (276.6, 128.4); at the speed a 70 unit drop gives it, hitIntensity is far above 1.23.
+void AStoneThatFallsOnAKnightCrushesIt() {
+    if (!OriginalArtIsThere("AStoneThatFallsOnAKnightCrushesIt")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level9b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    quakeTickWith(layer, registry, ticks);
+    quakeTickWith(layer, registry, ticks);
+    const MagicPortals::Minions::Minion* knight = SimMinion(layer, "minion_spawn_913");
+    const MagicPortals::Demolish::Stone* stone = layer.SimLevel()->demolish.FindStone("rolling_stone_1198");
+    CHECK_MSG(knight != nullptr && stone != nullptr, "3-10 places the knight and the stone");
+    if (knight == nullptr || stone == nullptr) return;
+    const entt::entity stoneBody = stone->body;
+    const glm::dvec2 knightPx = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(knight->body).position);
+    // The knight is held where it stands (it is serving a long hold) and the stone put straight above it, at rest.
+    PutBodyAt(registry, stoneBody, glm::dvec2(knightPx.x, knightPx.y - 70.0));
+    int smashedAt = -1;
+    int crushedAt = -1;
+    for (int tick = 0; tick < 90 && crushedAt < 0; ++tick) {
+        quakeTickWith(layer, registry, ticks);
+        for (const std::string& name : layer.LatchedSounds()) {
+            if (name == "minion_smashed" && smashedAt < 0) smashedAt = tick;
+        }
+        if (knight->gone) crushedAt = tick;
+    }
+    CHECK_MSG(crushedAt >= 0, "the stone crushed the knight it fell on");
+    CHECK_MSG(layer.SimLevel()->minions.taken == 1 && layer.SimLevel()->minions.killed == 0,
+              "taken by something that is not the killer floor");
+    CHECK_MSG(smashedAt == crushedAt, "playMinionSmashSound on that tick: " + std::to_string(smashedAt));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(!layer.SimLevel()->minions.deaths.empty() || knight->gone, "and its death is recorded for the blood");
+    layer.OnDetach(registry);
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -19298,6 +19411,7 @@ void runTests() {
     TheClampFollowsTheViewportsHeight();
     ADiamondTakenAndStruckShakesTheView();
     TheGhostsShotEndingShakesTheView();
+    AKnightsShotIsDrawnHeardAndShakesTheView();
     ASwitchedDoorShakesTheViewAsItGoes();
     EventsALevelMakesOnItsOwnShakeTheView();
     ABarrelBesideItsWallGoesAsF6();
@@ -19505,6 +19619,7 @@ void runTests() {
     ACarrancaBrokenLeavesItsDust();
     ATappedHandGoesWithItsSmoke();
     AShockAgentPulsesOnItsBounce();
+    AStoneThatFallsOnAKnightCrushesIt();
 }
 
 } // namespace
