@@ -3316,3 +3316,100 @@ G1b 10, STK 9, R3c 13), 12 closed. Smart App Control refusals 9. Images: 653 del
 **Inferred mood:** a guess from the facts - steady and a little relieved: a long run in which each step's gates mostly held, the one verifier that failed
 (STK, twice) was fixed rather than argued with, the routes came back 86 of 86 in a single round, and the wave was pushed; what is left standing is a short
 list of honest questions for the owner and the emulator, not unfinished work.
+
+### 2026-10-11 02:29 - Session 28: program wave 4a - the free fall, the sleepers' wake, a route for all 128 levels, pushed
+
+*Written 2026-10-11 at the close by this run's close role, from the records - planning steps 162-164 of
+`docs/planning/2026-09-11-magic-portals-remaster.md`, each role's reports under the gitignored `out/parity/program/<id>/` (`impl.md`, `commit.md`, the verifiers'
+`verify*.json`, `R4/finalize.md`, the census files and round notes) - and git, not from a transcript. 02:29 is the creation time of
+`out/parity/program/STK9/start_time.txt`, the first record of the run, not a measured start; the route commit is 09:09. The run was on the owner's standing order of
+2026-10-10 ("just continue doing each step until you are finished or until i tell you to stop"). Every number below is one a record states, or one this role measured
+and says so. This role built nothing, launched no executable and captured nothing; it checked the baseline, ran the image purge and edited the two tracked files and
+`out/parity/BASELINE.txt`.*
+
+**Built:**
+- **Step 162 (STK9, `11d0be4`)**: the impact watch reads a rolling stone's free fall as Box2D's step does - the velocity after the first step whose free position is within
+  the pair's skin, replayed from the last step the engine had not braked. GAMEPLAY changed on the 26 stone levels: a stone that falls on the player kills him from a drop over
+  15.56 level units (it was about 25 to 30), one that falls on a knight crushes it from over 3.33 u, and the stone's shake and hit sound read one to two steps higher. 55 suites,
+  55 passed, 30,812 checks; the 86 routes win on the same ticks. Closes STK-9 and R3c-1; opens STK9-1 to STK9-8.
+- **Step 163 (WAKE, `f20f0a4`)**: a sleeper whose support is destroyed, stops being solid or is moved by the port is woken before the next physics step (Box2D's contact rule,
+  `b2Contact.cpp:101-109`); `wake_reach_px` is gone for `touch_units` 0.5 (a measured plateau), `moved_m` and the level's `rests_on`. GAMEPLAY changed: 3-10's knight falls on tick
+  484 where it hung 730 ticks; the census names 2-23, 2-24, 2-32, 4-07 and 3-12 and the verifier's adds 1-30 (and two more 2-32 pairs) as the same exposure. 56 suites (the new `test_mp_wake`, 200 checks), 55 passed, 31,005
+  checks; `test_mp_routes` red on 3-10 only, by design. Closes R3b-4 and R3c-5's port gap; opens WAKE-1 to WAKE-7.
+- **Step 164 (the route phase, `8fe8374`)**: 42 new route files and 3-10 re-flown. **128 of 128 levels are won by a route the suite replays** (2,366 checks, 0 failures;
+  chapters 1 to 4 each 32 of 32, from 21, 29, 17 and 19). The 42 win on ticks 83 (4-05) to 1,136 (3-05), median 379, each with `win_by` won + 11 to 15; 3-10 on 1,017 (was
+  1,435); the other 85 on exactly the ticks of step 163's census. The four stealth levels show achievements 26 (3-04, tick 297), 27 and 28 (3-05, 1,136), 32 (3-11, 215) and
+  42 (3-24, 142), each unseen: R3c-8 is closed. Ten of the 42 are sighted by a knight at least once, in five a knight shoots, and none is hit. No level is without a route
+  and no finding file was needed. No source, test, data, converter or engine file is in the commit; GAMEPLAY: none.
+- **The push**: the finalize role pushed `36a52e6..8fe8374` (a fast-forward, 3 commits, 62 files, +3,404 / -145; no force). `git rev-parse HEAD origin/main` agreed at the close
+  after a fresh fetch; the three commits are by IvanCvetanovic, no trailer.
+- **The close (this role)**: `docs/parity-backlog.md` updated - the two Definition-of-done bullets (the routes' is met; the reachability one says it has no destroyier term),
+  rows R3c-8 and WAKE-1 ticked, the hashes and the push put into the STK-9, R3b-4 and table rows, annotations on Order 11.1, R3-2, STK-8, R3b-2, R3b-5, WT-10, R3c-4 and R3c-9
+  (the routes that lean on each), twelve new open rows R4a-1 to R4a-12 (step 164's eleven deviations and the last verification's limits), the "Wave 4a" paragraph with its table,
+  census, suites, Smart App Control, baseline, GAMEPLAY and wave 4b's list, and the owner's calls; and this entry. 27 rows opened by the wave (STK9 8, WAKE 7, R4a 12), 1 of
+  them closed; older rows closed: STK-9, R3c-1, R3b-4, R3c-5, R3c-8.
+- **The wave's image purge** (the owner's standing order, 2026-10-03: delete images once finished with them). Each role had deleted its own scratch as it went (the counts were
+  not recorded). At the close the new standing baseline is the final build's f420 sweep, `program/WAKE/after/sweep` (128 PNGs, 1280 x 720, taken on `MagicPortals.exe`
+  `1c3c00a2`, the build the committed sources make; the route phase's verifier took 128 fresh launches whose md5s equal it 128 of 128). This role checked all 128 (PNG signature,
+  IEND tail with no NUL padding, 1280 x 720, md5 equal to its line of `WAKE/after/capture.txt` and to the verifier's list) before and after the purge, wrote it as the only
+  non-comment line of `out/parity/BASELINE.txt` (replacing `program/STK/after/sweep`), dry-ran `purge_images.py all` (256 files, 0.19 GB, 0 refused: the STK and STK9 sweeps,
+  nothing else under `program/` held an image) and ran it with `--delete` (256 deleted). **Freed 0.19 GB; free disk 113.988 -> 114.169 GiB; `out/parity` 17.851 -> 17.671
+  GiB.** Kept: the baseline sweep, `original/`, `smoke/`, `markers/`, `saves/`, `asbc/`, the audit, every mp4, every text, json, script and log file; about 11,000 older images
+  outside `program/` stay because the purge tool's tiers keep them by design (not this wave's). `R4/verify2/saves/` (128 scratch save copies, JSON, no images) was left in
+  place: the verifier's bulk remove of it was blocked and the owner's disk rule is for images. `git status` was unchanged by the purge.
+
+**Broke / dead ends:**
+- **Smart App Control refused 3 launches of this repository's executables** (counted at this close from a CodeIntegrity 3033/3077 query from 2026-10-11 00:00; its only events are
+  these): STK9's runner at 02:53:49 and 03:59:17 (one in each round) and WAKE's runner at 05:36:06; each was deleted and relinked once and the relinked one ran. None in the route
+  phase, the verifiers, the finalize or this close. Wave 1: 83, wave 2: 19, wave 3a: 2, wave 3b-1: 4, wave 3b-2: 9.
+- **STK9 started from a wrong figure.** The backlog's table for 2 and 6 px (0.667, 1.333) took Box2D's polygon skin as 0.5 level units; the stone against the player is circle
+  against circle with no skin, and the right figures are 1.000 and 1.667. The decode also said the world steps 5 velocity and 2 position iterations (the class's defaults); the
+  game's `preLoop` calls `SetNumIterations(8, 5)`. No reading moved. The first round's one medium: two judgments that sort the engine's steps into "this pair's brake" and
+  "something else" were numbers in code, not in JSON and not marked guesses; they are in `earthquake.json` now, `_guess`, on a measured plateau. A new case let a stone fall on a
+  knight still settling, which the replay reads by where the knight stands now; it waits 40 ticks. One compile of it stopped on a newline in a format string (8 errors, 1 C4473).
+- **WAKE's first text named 1-09 as a changing level.** Its platform is inert (the listing has no `ETHCallback_moving_platform_single`); the verifier found it and the commit
+  corrected it. Two comments of `game/sim/Resting.hpp` stay wrong on purpose: a comment-only edit of a widely included header relinks both executables and risks a refused launch.
+- **The route phase's first verifier round failed one gate**: two untracked scratch directories inside `tests/routes/` (`pert_level4c/`, `pert_level8c/`, perturbed copies of the 4-05
+  and 4-09 routes). No suite replays them (the loader's directory walk is not recursive) but a `git add tests/routes` would have committed them; the fix round moved them out.
+  The finalize's pre-commit review also corrected the step's text against the census files (13 gate rows, not 11; ten routes are sighted, not one; several mechanics lists grew).
+- **Routes bent around rules no clip shows**, every one stated in its own `_about` and now a row: 1-19 and 1-20 win because the destroyable stone outlives the wall it breaks;
+  4-10 and 4-12 on the friction-0 player's wall-slide (4-10 is a knife-edge); 1-22 on a stone creeping below the wall's gate; 1-24's door is reached only over destroyier's kill
+  box, and **the reachability check has no destroyier term, so 108 / 20 / 0 does not cover it**; 1-30 on a solver shove out of a pile; 2-29 on the port's stone clock; 3-10 as a
+  workaround for the crushed knight. 3-01's first try stood in a lone portal for ever (a body already standing in it when its far end opens is not carried).
+- **My own slip, caught**: the first script that compared the baseline sweep with the verifier's md5 list keyed the list by `sweep/<name>`, so the comparison checked nothing and
+  said "bad 0"; I redid it by basename (128 compared, 0 mismatches) before the purge.
+
+**Decision:**
+- The new baseline is `WAKE/after/sweep`, not a fresh capture: the route phase changed no source and its verifier's own 128 launches matched it byte for byte. This close built and
+  launched nothing, so it could not cause a refusal.
+- The close left planning steps 162 and 163 as their commits wrote them ("committed locally, not pushed (the hash goes in at the wave's close)"); the hashes are in the backlog and
+  R4a-12 says so. The backlog's "State at" date was already 2026-10-11.
+- Rows for findings follow step 164's eleven deviations one to one (R4a-1 to R4a-11) plus one for the verifier's limits; there is no row for an unwon level because there is none.
+
+**Where it stands / next:** wave 4b - the final comparison against the original's library with the pixel-centre rule for edge pictures first (G1a-11, G1a-8, R3c-11's rig checks and
+R4a-8's unmeasured routes recorded as residuals), then the ship preparation: the grant in `docs/permission.md` (still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder),
+the play build (`tools\parity\play_build.bat` exists, none built) and the owner's calls - 2-30's creep (R3-2), the engine's friction and restitution steps (G10-14, WT-1), G10-2's
+60 Hz, R24 and R25, the guessed 0.08 crate friction (R3b-3), 2-32 ahead of the dragon's camera (R3-3), STK-8 (now also 1-24's door), PIC-1 - and the repository's going public, which
+needs the owner's explicit word. The next build re-runs CMake (the 42 new route files are globbed) and may relink the runner: one refusal risk (R4a-11).
+
+**Assets check:** yes - `git status --short`, run after appending this entry and the backlog edits, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference | wc -l` prints 0). The forbidden-extension grep over the staged names printed nothing; `git diff --name-only
+36a52e6..8fe8374` (the pushed range, 62 files) printed nothing for `png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, `^out/` or `^reference/`. The owner's save folder holds
+`scores.json` alone (164 bytes, md5 `40bfef3ac396b4e94bdd97990401435a`).
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** `36a52e6..8fe8374`: 3 commits, 62 files, +3,404 / -145; this close's commit is two files. Routes won 128 of 128 (2,366 checks; 42 new files, 3-10 re-flown, 85 untouched).
+56 suites, 31,788 checks (30,714 at the start). Reachability 108 / 20 / 0. Rows opened by the wave 27 (STK9 8, WAKE 7, R4a 12), 1 closed, 5 older rows closed. Smart App Control
+refusals 3. Images: 256 deleted, 0.19 GB; free disk 113.988 -> 114.169 GiB.
+
+**Inferred mood:** a guess from the facts - a calm, productive run: two mechanics steps that each corrected an earlier assumption in the verifier's favour, a route phase that
+brought the last 42 levels in with one failed gate of the git state and nothing else, and a push; what is left is the comparison with the original and the owner's calls, and
+the routes' honest list of what rests on the port.
