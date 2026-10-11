@@ -37,12 +37,16 @@
 #include "sim/RedKey.hpp"
 #include "sim/Units.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <system_error>
+#include <vector>
 
 using namespace MagicPortals;
 using Supersonic::RigidBodyComponent;
@@ -542,7 +546,73 @@ void theRedKeysWallIsSoughtByItsExactName() {
     CHECK(run.level.demolish.SeekAndDestroy("breakable_wall", "a test").empty());
 }
 
+// ---- the red key's own light (planning step 168; keys.json red_light) ----------------------
+//
+// ETHCallback_key #119-186: for a key whose `color` datum is 'red' and that is not hidden, every call adds
+// AddLight(GetPosition() + (0, 0, 6 x scale), (1, 0, 0), 48 x scale, false). The numbers are read from the file;
+// the rule is the colour test, and the census says which keys of the 128 levels it reaches.
+
+void theRedKeysOwnLightIsTheDecodedRule() {
+    Run run;
+    if (!Begin(kRedLevel, run)) return;
+    const Keys::Rules::OwnLight& light = run.level.keys.rules.ownLight;
+    CHECK_MSG(light.colourName == "red", "the datum it tests for: " + light.colourName);
+    CHECK_MSG(light.colour == glm::dvec3(1.0, 0.0, 0.0), "AddLight's colour is red (#162-166, pushed z, y, x)");
+    CHECK_MSG(light.rangeUnits == 48.0, "the range, 48 x scale (#160)");
+    // 6, and over the key's z: #168-173 push (6 x scale, 0, 0) for a vector3 built z first, so it is a height
+    // (planning step 69 read it as an x offset).
+    CHECK_MSG(light.heightUnits == 6.0, "the height over the key's own z, 6 x scale (#168)");
+    const Keys::Key* red = run.level.keys.FindKey(kRedKey);
+    CHECK(red != nullptr);
+    if (red != nullptr) CHECK_MSG(Keys::HasOwnLight(run.level.keys.rules, *red), "level18c's red key has it");
+    Run yellow;
+    if (Begin(kLevel, yellow)) {
+        const Keys::Key* key = yellow.level.keys.FindKey(kKey);
+        CHECK(key != nullptr);
+        if (key != nullptr) CHECK_MSG(!Keys::HasOwnLight(yellow.level.keys.rules, *key), "a yellow key does not");
+    }
+}
+
+// WHICH KEYS: of the 128 levels' 39 keys exactly two are red - level18c's key_2701 (4-19) and level19c's key_1335
+// (4-20) - and none is hidden (the datum #64-88 of scaleEntities read), which is why the port carries no hidden
+// flag; the boss's drops are yellow (ghost.json, darkdragon.json). A converted level that placed a third red key,
+// or hid one, would have to be looked at.
+void onlyTwoKeysAreRedAndNoneIsHidden() {
+    int keys = 0;
+    std::vector<std::string> red;
+    int hidden = 0;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (entry.path().extension() != ".tscn") continue;
+        std::ifstream file(entry.path(), std::ios::binary);
+        std::ostringstream text;
+        text << file.rdbuf();
+        Tscn::Scene scene;
+        std::string error;
+        if (!Tscn::Parse(text.str(), scene, error)) {
+            CHECK_MSG(false, entry.path().filename().string() + ": " + error);
+            continue;
+        }
+        for (const Tscn::Node& node : scene.nodes) {
+            if (node.parent != ".") continue;
+            const Tscn::Value* name = node.Meta("entity_name");
+            if (name == nullptr || (name->text != "key" && name->text != "key.ent")) continue;
+            ++keys;
+            if (node.Meta("hidden") != nullptr) ++hidden;
+            const Tscn::Value* colour = node.Meta("color");
+            if (colour != nullptr && colour->text == "red") red.push_back(entry.path().stem().string() + "/" + node.name);
+        }
+    }
+    std::sort(red.begin(), red.end());
+    CHECK_MSG(keys == 39, std::to_string(keys) + " keys placed in the levels (keys.json counts 39)");
+    CHECK_MSG(red.size() == 2 && red[0] == std::string("level18c/") + kRedKey && red[1] == "level19c/key_1335",
+              "the red keys: " + std::to_string(red.size()));
+    CHECK_MSG(hidden == 0, std::to_string(hidden) + " hidden key(s)");
+}
+
 void runTests() {
+    theRedKeysOwnLightIsTheDecodedRule();
+    onlyTwoKeysAreRedAndNoneIsHidden();
     theOneRangeServesBothTests();
     aKeyIsTakenAtTwentySixPixels();
     aCarriedKeyTrailsItsOwner();

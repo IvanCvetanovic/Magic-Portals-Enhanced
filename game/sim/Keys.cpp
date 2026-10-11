@@ -5,6 +5,7 @@
 #include "core/Json.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -78,6 +79,41 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!number("keyhole", "fade_start_ms", read.fadeStartMs)) return false;
     if (!number("keyhole", "fade_ms", read.fadeMs)) return false;
 
+    // The light a red key adds (red_light): a colour name to test the key's datum against, AddLight's colour, and
+    // its range and height in the port's units.
+    {
+        const Json::Value& block = root["red_light"];
+        const Json::Value& channels = block["colour"];
+        bool ok = block.IsObject() && block.Has("colour_name") && block["colour_name"].IsString() &&
+                  !block["colour_name"].AsString("").empty() && block.Has("range_units") &&
+                  block["range_units"].IsNumber() && block.Has("height_units") && block["height_units"].IsNumber() &&
+                  channels.IsArray() && channels.AsArray().size() == 3;
+        for (std::size_t i = 0; ok && i < 3; ++i) {
+            const Json::Value& channel = channels.AsArray()[i];
+            ok = channel.IsNumber() && std::isfinite(channel.AsNumber()) && channel.AsNumber() >= 0.0;
+            if (ok) read.ownLight.colour[static_cast<glm::length_t>(i)] = channel.AsNumber();
+        }
+        if (!ok) {
+            error = path + ": red_light needs a colour_name, a colour of three numbers from 0 up, a range_units and a "
+                           "height_units";
+            return false;
+        }
+        read.ownLight.colourName = block["colour_name"].AsString("");
+        read.ownLight.rangeUnits = block["range_units"].AsNumber();
+        read.ownLight.heightUnits = block["height_units"].AsNumber();
+        // A light of no range lights nothing, and a colour of none is AddLight's own early return
+        // (ETHEntityRenderingManager.cpp:161-164): either would be a rule that reads as built and draws nothing.
+        if (!std::isfinite(read.ownLight.rangeUnits) || read.ownLight.rangeUnits <= 0.0 ||
+            !std::isfinite(read.ownLight.heightUnits)) {
+            error = path + ": red_light.range_units is above zero and red_light.height_units a number";
+            return false;
+        }
+        if (read.ownLight.colour == glm::dvec3(0.0)) {
+            error = path + ": red_light.colour is not black, which AddLight drops";
+            return false;
+        }
+    }
+
     // Each of these would look like a level that works. A range of nothing is a
     // key that can never be picked up and a door that can never be opened; a
     // leash shorter than the range would snap a key onto its owner before it
@@ -111,6 +147,10 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 
     out = std::move(read);
     return true;
+}
+
+bool HasOwnLight(const Rules& rules, const Key& key) {
+    return !rules.ownLight.colourName.empty() && key.colour == rules.ownLight.colourName;
 }
 
 std::vector<entt::entity> State::Tick(entt::registry& registry, const std::vector<Carry::Carrier>& carriers, double dt) {

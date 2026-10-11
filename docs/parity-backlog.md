@@ -3252,6 +3252,38 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       loop (the repository's rule) and the reconciliation of its static predictor (34 levels) with the implementer's (47). Next: run the column-major mutation once when the runner
       is next relinked for a real change; nothing for the others.
 
+**Step 168's recorded deviations** (the red key's own light, CMP-7, wave 4c-1; planning step 168 has the evidence, `RECORDED DEVIATIONS` 1-6; `out/parity/program/CMP7/` the reports, `deviations.md` (the owner-delegated disposition after the third verification) and `verify1.json` to `verify3.json`; GAMEPLAY: none; the row CMP-7 is closed by it):
+- [ ] **CMP7-1. Gate 2: the raw reading is 1 to 2 percent low in every lit box of 4-20** (deviation 1; the third verification's medium). Required: the group's box R 49.4 (the reader's
+      box 57 / 19 / 22; the strip 86.3) to the tolerance of the six stills' spread, which is nil (0 to 0.05 grey). Measured: group box (760,255)-(1040,465) 48.36 / 21.13 / 23.64
+      against 49.42 / 21.31 / 24.02; reader's box 55.90 / 18.84 / 21.08 against 56.87 / 19.03 / 21.49; strip 84.50 against 86.32; player box 34.74 against 35.14; disc 34.79
+      against 35.43. The part of the same frame the light cannot reach (r >= 180 px from the light's centre) reads 0.979 / 0.992 / 0.982 of the original's, and each lit box divided
+      by it reads 0.9995 to 1.004: **the same size, not a shown cause** (the unlit sky's median pixel ratio is 1.000 and the strip's shortfall is spatially structured, rows y300-315
+      0.868 rising to 1.006 at y435-450, so the two are not shown to be one gain). Position is exact to 0.7 px (centroids); every whole-pixel shift is worse. The stated bar is
+      unreachable by any renderer; waived at the commit as "within 2 percent of the original's added red, equal to the same-frame unlit ratio 0.979" (owner-delegated). Nothing was
+      tuned: colour (1, 0, 0), range 48, height 6 and the one tick behind are decoded, and must not be moved to this. Next: nothing for the light; the unlit shortfall is CMP-low (e)
+      TONE ("1-1.5 percent darker blue and grey on 4-09 to 4-16", cause unknown), a footage read when a step next touches the sky or the tone.
+- [x] **CMP7-2. Settled at the commit: the record said as fact that the shortfall "is the frame's own baseline and not the light's amplitude"** (deviation 2; the third verification's
+      lows 2 and 4). The data show only the same size (CMP7-1). Reworded in step 168's intro, gate 2 row, deviation 1 and LEFT FOR LATER (and fix round 2's note), docs only. The
+      `hidden` census wording ("only `level_select0-3` and `loading_screen` hold the word", in step 168 and `keys.json` `red_light._source`) is corrected to what the 133 scenes hold:
+      none contains the word `hidden`, `hide="0"` stands only in `level_select0-3` and `loading_screen`, no key entity has `hide="1"` (39 keys, 133 scenes, recounted at the commit);
+      no key is hidden, as before. `keys.json` is `74099cc1` after the text edit (parses, equal to `0d223d73` apart from `red_light._source`; `test_mp_keys` 182 checks, 0 failures
+      on the same runner). Nothing is left to do.
+- [ ] **CMP7-3. Gate 3: the two rules of the code were never mutation-tested** (deviation 3; the verification's low 3). The one tick behind and the no-particle-share rules fail by
+      construction (297 of 300 and 24 of 300 moving ticks; 300 colour ticks), as the verifier read them; `keys.json`'s four values were mutated (`colour_name` 2 and 2 failures in
+      `test_mp_keys` and `test_mp_layer`, `height_units` 1 and 2, `range_units` 1 and 2, `colour` 1 and 4). A code mutation relinks the runner under Smart App Control and a refused
+      launch notifies the owner. Next: run the two mutations once when a relink is allowed anyway (the next step that must relink the runner).
+- [ ] **CMP7-4. 4-19's light is shown by no frame** (deviation 4; the verification's low 5). The f420 frame is byte-identical by geometry (the breakable wall, the one lit
+      neighbour within 48 units, is off the frame); no original frame near the wall exists; `test_mp_layer` pins 4-19's position, height 4, range and colour on 300 ticks; at f640 on
+      its route the carried key lights the booster red, like footage frame #371. One capture with `--hold right` did not move the player in 260 frames (cause not looked into).
+      Next: take a frame with the wall in view when the level can be played to there on a route, if the owner wants the second level shown.
+- [ ] **CMP7-5. The key's fly-in is not built** (deviation 5; `keys.json` `_not_built`, `_deviation`). A key that found its keyhole flies in and is deleted at the fly-in's last
+      frame (#646), taking its light; the port holds the key's picture where it opened its keyhole until that keyhole is gone, so a spent key's light lasts as long as that picture.
+      Next: the light ends at frame #646 when the fly-in's own step builds it.
+- [ ] **CMP7-6. Gate 6 (zero warnings) rests on scratch compiles and the build logs** (deviation 6). The implementer's four build logs hold 0 warning lines; the verifier recompiled
+      the four changed units (`Keys.cpp`, `MagicPortalsLayer.cpp`, `test_mp_keys.cpp`, `test_mp_layer.cpp`) with the build's own /W4 lines (0 warnings) and did not re-run
+      `port_build.bat` (it could relink and notify the owner; `ninja -n` showed a CMake re-check step, cause not investigated). Every source is older than the executables
+      `08469442` and `23a7d823`. Next: the wave's verify role runs `port_build.bat` once.
+
 **The final comparison's rows** (wave 4b; 128 levels, 18 causes and CMP-low; GAMEPLAY: none in the comparison itself, each row says its fix's). Evidence is under
 `out/parity/program/R4b/CMP/` (`residuals.md` has every reader's line with its box, `groups.json` the causes and proposals, `per_level.md` the table): the pair images
 `pairs/<id>_h63_pair.png` (the original above the port, half scale) and `pairs/<id>_h63_overlay.png`, port frames `port_f420/<id>_f420.png`, are kept (named in
@@ -3362,13 +3394,31 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       static), one `minion_spawn_`. Next: remove the two names from `enemy_spawn` (or mark them no-spawn with the citation); `test_mp_minions` pins the census (60
       spawning markers); re-fly 4-29 (its route was flown for the knights A and B, B being `minion_spawn6_1766`) and re-check 3-09's. Gate: 4-29 f420 shows no knight at
       the gem, reachability 108 / 20 / 0, `test_mp_routes` 128 of 128. GAMEPLAY: yes (one knight fewer on 4-29, the 3-09 guard gone).
-- [ ] **CMP-7. The red key's own light is not built** (high; light; `decoded`; moves no route). Levels: 4-20 (seen), 4-19 (holds the other red key; reads `match`, its
+- [x] **CMP-7. The red key's own light is not built** (high; light; `decoded`; moves no route). Levels: 4-20 (seen), 4-19 (holds the other red key; reads `match`, its
       light not separated from `red_key_state`'s halo). Evidence: 4-20 box 760,255,1040,465 (`pairs/4-20_h63_pair.png`: RGB 57,19,22 in the original against 26,25,35 in
       the port; the strip beside him 86,0,0 against 0,0,0; the key lies at the spawn and is taken on tick 1). Cause (listing): `ETHCallback_key` #119-186 (bytes
       438490..442683): for a visible key whose `color` is `red`, every frame `AddLight(position + (0,0,6 x scale), (1,0,0), range 48 x scale)`; `game/data/keys.json`
       `_not_built` names it. Joins planning step 69; no backlog row. Next: `sim/Keys` and the layer add the point light while a red key is visible (the torches' own
       `AddLight` path), the numbers in `keys.json` with the citation. Gate: 4-20 f420 box from (26,25,35) to the original's (57,19,22), 4-19 unchanged within noise, the
       lighting suites. GAMEPLAY: none.
+      *Closed by step 168 (CMP7, wave 4c-1), 2026-10-12; committed locally, the hash goes in at the wave's close. GAMEPLAY: none (the 128 routes win on exactly the census's
+      ticks). Committed WITH RECORDED DEVIATIONS (owner-delegated): gate 2 is not met to the letter.* Built as the Next says: a key whose `color` datum is `red` adds, on every
+      call, a point light (1, 0, 0), range 48, 6 over the key's own z, at the key's place of the PREVIOUS tick, so it follows a carried key and stays while the key's
+      picture does (`Keys::Rules::OwnLight` and `HasOwnLight`, `game/data/keys.json` `red_light` with its citations, the layer's `KeyLight`; a script's light, so no owner scale and
+      no particle share). **The offset is a height, `(0, 0, 6 x scale)`: planning step 69's "(6 x scale, 0, 0)" and the old `_not_built` note had it as an x offset, and were
+      wrong** (the listing pushes the arguments last-first, #168-173; step 69's text is not rewritten). Pins: `test_mp_keys` 169 -> 182, `test_mp_layer` 3,987 -> 4,017.
+      Measured: the f420 sweep changed 1 level of 128, 4-20 (24,611 px, the light's reach, red channel only), 127 byte-identical; 4-20's group box (760,255)-(1040,465) R
+      17.3 -> 48.4 against the original's 49.4 (mean abs against h6.3 11.24 -> 1.27), the reader's box 15.5 -> 55.9 against 56.9, the strip 0 -> 84.5 against 86.3, the player's
+      box 9.2 -> 34.7 against 35.1; 4-19 is byte-identical by geometry (its one lit neighbour, the breakable wall, is off the frame); 57 suites, 32,612 checks, `test_mp_routes`
+      128 of 128 on the census's ticks, reachability 108 / 20 / 0, 0 warnings (scratch compiles). Independently verified three times (`CMP7/verify1.json` to `verify3.json`:
+      the third read 7 of 8 gates ok, gate 2 not met to the letter). **What it leaves**: (a) the group's "57,19,22 against 26,25,35" is the reader's mean box and the port's
+      figure a frame from before steps 166-167; the box the group names reads 49.4 / 21.3 / 24.0 in the original against 17.3 / 21.1 / 23.6 before, G and B already the original's;
+      (b) the raw 1 to 2 percent low in every lit box is the same size as the unlit part of the same frame reads (0.979), cause untraced (CMP7-1; the record's wording of it is
+      CMP7-2); (c) 4-19's light is shown by no frame (CMP7-4); (d) the key's fly-in is not built, so a spent key's light lasts as long as its held picture (CMP7-5); (e) the two code
+      mutations were never run (CMP7-3) and the full build's zero warnings rests on scratch compiles (CMP7-6); (f) 4-20's player (CMP1-5's piece, "1.3 against 4.4: CMP-7") now reads R 34.7
+      against the original's 35.1 in its box (855,330)-(945,465), G and B 0.96 of the original's before and after the light (the silhouette's dark pixels and the carried key's
+      sliver, not traced); the carried key's resting side of the player (CMP-low g) and the achievement card (a capture condition) stand. The deviations are rows CMP7-1 to
+      CMP7-6 above.
 - [ ] **CMP-8. Lights and halos read weaker than the original on about 50 levels** (medium, mostly low-to-medium per level; light; `owner-call`; moves no route).
       Levels: 1-01, 1-02, 1-04 to 1-07, 1-09 to 1-12, 1-14 to 1-18, 1-22, 1-28, 1-29, 1-31, 2-10, 2-11, 2-16, 2-17, 2-19, 2-24, 3-01, 3-02, 3-04 to 3-08, 3-10 to 3-12,
       3-14, 3-17 to 3-29, 3-31. Evidence: 1-01 box (700,30)-(900,380) (`pairs/1-01_h63_overlay.png`; torch box R 190 against 221); 1-12 box 560,0,900,330 (R 189-205

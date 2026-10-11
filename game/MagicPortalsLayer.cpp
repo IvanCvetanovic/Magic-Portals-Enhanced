@@ -5858,6 +5858,10 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             gone = key.spent && key.opened >= 0 && key.opened < static_cast<int>(m_level.keys.keyholes.size()) &&
                    m_level.keys.keyholes[static_cast<std::size_t>(key.opened)].gone;
             centrePx += key.atPx - sprite.atPx;
+            // The light its callback adds stands where the PREVIOUS call left the key (AddLight is before
+            // linearMotion and the carry, #119-186 against #666-679 and #932-976), and drawn.ownerPx still
+            // holds that: it is written at the end of this loop.
+            if (drawn.keyLight >= 0) m_keyLights[static_cast<std::size_t>(drawn.keyLight)].atPx = drawn.ownerPx;
             ownerPx = key.atPx;
             // Lying unowned, it bobs about where it lies: where the level put it, or
             // where it was dropped (ETHCallback_key rewrites originalPos on every
@@ -7202,6 +7206,30 @@ void MagicPortalsLayer::buildLights(entt::registry& registry) {
         }
         m_placedLights.push_back(std::move(placed));
     }
+
+    // THE KEYS' OWN LIGHT (keys.json red_light, planning step 168): ETHCallback_key's AddLight for a key of the
+    // colour the rule names - the red keys of 4-19 and 4-20. Not a <Light> of the node, so not in m_look: made from
+    // the rule, at the key's picture, over the key node's own depth.
+    const Keys::Rules::OwnLight& ownLight = m_level.keys.rules.ownLight;
+    for (std::size_t i = 0; i < m_sprites.size(); ++i) {
+        DrawnSprite& drawn = m_sprites[i];
+        if (drawn.key < 0 || drawn.key >= static_cast<int>(m_level.keys.keys.size())) continue;
+        if (!Keys::HasOwnLight(m_level.keys.rules, m_level.keys.keys[static_cast<std::size_t>(drawn.key)])) continue;
+        KeyLight lit;
+        lit.sprite = static_cast<int>(i);
+        lit.light.offset = glm::dvec3(0.0, 0.0, ownLight.heightUnits);
+        lit.light.colour = ownLight.colour;
+        lit.light.range = ownLight.rangeUnits;
+        lit.ownerZ = drawn.lookZ;
+        // Where the key stands before any call has moved it: the first call's AddLight reads the node's position.
+        lit.atPx = drawn.ownerPx;
+        lit.entity = registry.create();
+        registry.emplace<TagComponent>(lit.entity, "Magic Portals Key Light");
+        registry.emplace<TransformComponent>(lit.entity);
+        registry.emplace<Light2DComponent>(lit.entity);
+        drawn.keyLight = static_cast<int>(m_keyLights.size());
+        m_keyLights.push_back(std::move(lit));
+    }
 }
 
 void MagicPortalsLayer::unloadLights(entt::registry& registry) {
@@ -7214,6 +7242,9 @@ void MagicPortalsLayer::unloadLights(entt::registry& registry) {
         destroy(placed.halo);
     }
     m_placedLights.clear();
+    for (KeyLight& lit : m_keyLights) destroy(lit.entity);
+    m_keyLights.clear();
+    for (DrawnSprite& drawn : m_sprites) drawn.keyLight = -1;
     destroy(m_shotLight);
     destroy(m_shotHalo);
 }
@@ -7285,6 +7316,16 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
         // A level placement: its <Scale> is in its light already (K7).
         place(placed.entity, placed.halo, placed.light, ownerPx, placed.ownerZ, placed.ownerStatic,
               particleRatioOf(placed.emitter), placed.haloZ, present, glm::dvec2(1.0));
+    }
+
+    // THE KEYS' OWN: a script's light (AddLight), so the live layer, no particle share and no owner scale - the
+    // key's sparkles do not dim it (ETHEntityRenderingManager.cpp:111-114 is for a light an entity owns) - while
+    // the key's picture is there, wherever the carry has put it. Before the shot's block, which returns.
+    for (const KeyLight& lit : m_keyLights) {
+        const DrawnSprite& owner = m_sprites[static_cast<std::size_t>(lit.sprite)];
+        const bool present = owner.quad != entt::null && registry.valid(owner.quad);
+        place(lit.entity, entt::null, lit.light, lit.atPx, lit.ownerZ, false, Lighting::ParticleRatio(0, 0), 0.0f,
+              present, glm::dvec2(1.0));
     }
 
     // (light_from_projectile.ent's light and halo stand at a lit torch as the

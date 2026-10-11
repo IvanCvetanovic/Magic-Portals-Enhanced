@@ -21026,6 +21026,116 @@ void AKnightsSightingKeepsTheStealthAchievementFromTheDoor() {
               "with the sum above 0 (a world that answered 0 would have unlocked it, as the control's did)");
 }
 
+// ---- the red key's own light (planning step 168; keys.json red_light) -----------------------
+//
+// ETHCallback_key #119-186 adds, on every call of a red key that is not hidden, AddLight(GetPosition() + (0, 0,
+// 6 x scale), (1, 0, 0), 48 x scale, false) - BEFORE the same call's linearMotion and carry move the key, so the
+// light stands where the previous frame left it, one tick behind the picture. It is a script's light: the live
+// layer, the scene's intensity and nothing else in its colour (ETHEntityRenderingManager.cpp:111-114's particle
+// share is for a light an entity owns, so the key's sparkles do not dim it), no picture of its own. Only
+// level18c's key_2701 (4-19, z -2, intensity 2.5) and level19c's key_1335 (4-20, z -6, intensity 3.5) are red.
+
+void ARedKeyAddsItsOwnLightOneTickBehindItsPicture() {
+    if (!OriginalArtIsThere("ARedKeyAddsItsOwnLightOneTickBehindItsPicture")) return;
+    namespace Lighting = MagicPortals::Lighting;
+    using MagicPortals::Units::ToMetres;
+    struct Row {
+        const char* level;
+        const char* key;
+        double z;
+        double intensity;
+    };
+    const Row rows[] = {{"level18c", "key_2701", -2.0, 2.5}, {"level19c", "key_1335", -6.0, 3.5}};
+    for (const Row& row : rows) {
+        const std::string where = std::string(row.level) + ": ";
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), row.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty() && layer.LightingError().empty(),
+                  where + layer.LoadError() + layer.ArtError() + layer.LightingError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || !layer.LightingError().empty()) continue;
+
+        // One light, a script's: no <Light> of any node is placed on these levels, so it is the only one.
+        CHECK_MSG(Tagged(registry, "Magic Portals Key Light") == 1 && LightsOf(registry).size() == 1,
+                  where + "one light, the key's");
+        const entt::entity light = FirstTagged(registry, "Magic Portals Key Light");
+        if (light == entt::null) continue;
+        CHECK_MSG(!registry.all_of<RenderableComponent>(light) && Tagged(registry, "Magic Portals Halo") == 0,
+                  where + "a light and nothing to draw: not red_key_state's halo, which is a picture");
+        const auto standsAt = [&]() {
+            return MagicPortals::Units::ToPixels(registry.get<TransformComponent>(light).position);
+        };
+        const auto readLight = [&]() -> const Light2DComponent& { return registry.get<Light2DComponent>(light); };
+        {
+            const Light2DComponent& lamp = readLight();
+            CHECK_MSG(lamp.layers == Lighting::kLiveLights, where + "the live layer: staticLight is false");
+            CHECK_MSG(lamp.enabled, where + "on while its key is drawn");
+            CHECK_MSG(::test::nearly(lamp.range, ToMetres(48.0), 1e-6f),
+                      where + "range 48 units: " + std::to_string(lamp.range));
+            CHECK_MSG(::test::nearly(lamp.height, ToMetres(row.z + 6.0), 1e-6f),
+                      where + "6 units over the key's z of " + std::to_string(row.z) + ": " + std::to_string(lamp.height));
+            CHECK_MSG(NearV(lamp.color * lamp.intensity,
+                            glm::vec3(static_cast<float>(row.intensity), 0.0f, 0.0f)),
+                      where + "(1, 0, 0) x the level's intensity: " + ShowV(lamp.color * lamp.intensity));
+        }
+        const std::optional<MagicPortalsLayer::MotionReport> atLoad = MotionOf(layer, row.key);
+        CHECK_MSG(atLoad.has_value() && !atLoad->crystal, where + "the key is there");
+        if (!atLoad) continue;
+        CHECK_MSG(glm::distance(standsAt(), atLoad->ownerPx) < 1e-3,
+                  where + "before any call, where the level put the key: " + Point(standsAt()));
+        CloseTheLevelStartPopup(layer, registry);
+
+        // Every tick it is where the PREVIOUS tick left the key's entity, and that is not where the picture is
+        // when the key moved; its colour is the intensity alone, whatever the key's sparkles are doing.
+        glm::dvec2 previous = atLoad->ownerPx;
+        int wrong = 0;
+        int behind = 0;
+        int away = 0;
+        std::string first;
+        for (int tick = 0; tick < 300; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            const std::optional<MagicPortalsLayer::MotionReport> now = MotionOf(layer, row.key);
+            if (!now) {
+                ++wrong;
+                break;
+            }
+            const Light2DComponent& lamp = readLight();
+            const bool atPrevious = glm::distance(standsAt(), previous) < 1e-3;
+            const bool colour = NearV(lamp.color * lamp.intensity, glm::vec3(static_cast<float>(row.intensity), 0.0f, 0.0f));
+            if (!atPrevious || !colour || !lamp.enabled) {
+                if (wrong++ == 0) {
+                    first = "tick " + std::to_string(tick) + ": at " + Point(standsAt()) + ", the previous tick's " +
+                            Point(previous) + ", colour " + ShowV(lamp.color * lamp.intensity);
+                }
+            }
+            if (glm::distance(standsAt(), now->ownerPx) > 1e-3) ++behind;
+            if (glm::distance(standsAt(), atLoad->ownerPx) > 0.5) ++away;
+            previous = now->ownerPx;
+        }
+        std::printf("  %s's red key light: %d of 300 ticks a tick behind its key, %d away from the node's place\n",
+                    row.level, behind, away);
+        CHECK_MSG(wrong == 0, where + std::to_string(wrong) + " wrong; the first " + first);
+        // A bobbing or a carried key does move, and the light is then not where the picture is.
+        CHECK_MSG(behind > 0, where + "the light lags the picture on the ticks it moves");
+        CHECK_MSG(away > 0, where + "and it follows the key off the node's place");
+        layer.OnDetach(registry);
+    }
+
+    // A level whose keys are yellow, and one with none, add none.
+    for (const char* level : {"level7b", "level0"}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), std::string(level) + ": " + layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr) continue;
+        CHECK_MSG(Tagged(registry, "Magic Portals Key Light") == 0, std::string(level) + " adds no key light");
+        layer.OnDetach(registry);
+    }
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -21265,6 +21375,7 @@ void runTests() {
     AStoneThatFallsOnAKnightReadsTheFreeFlightAndCrushesAbove1Point23();
     AStoneRestingAgainstThePlayerKillsNothing();
     AKnightsSightingKeepsTheStealthAchievementFromTheDoor();
+    ARedKeyAddsItsOwnLightOneTickBehindItsPicture();
 }
 
 } // namespace

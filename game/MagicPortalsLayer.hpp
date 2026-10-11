@@ -1547,6 +1547,7 @@ private:
         double ownerAngleDeg{0.0};
         entt::entity body{entt::null};
         int key{-1};          // in keys.keys: drawn where the key is, carried or not
+        int keyLight{-1};     // in m_keyLights: the light the key's own callback adds (keys.json red_light)
         int keyhole{-1};      // in keys.keyholes: faded as it fades, and gone with it
         int diamond{-1};      // in diamonds.diamonds: drawn where it is, gone once spent
         int crystal{-1};      // in goals.crystals
@@ -2195,6 +2196,19 @@ private:
         entt::entity halo{entt::null};
     };
     std::vector<PlacedLight> m_placedLights;
+
+    // THE LIGHT A KEY OF THE RIGHT COLOUR ADDS FROM ITS OWN CALLBACK (keys.json red_light, ETHCallback_key
+    // #119-186): AddLight, a script's light, not an entity's - no particle share, no owner scale, the live layer
+    // - at the key's position as the previous call left it (it is added before linearMotion and the carry move
+    // it). `atPx` is that position: syncSprites copies drawn.ownerPx into it before this tick's is written.
+    struct KeyLight {
+        int sprite{-1};       // the key's picture in m_sprites
+        Lighting::Light light;
+        double ownerZ{0.0};   // the key node's eth_z, which the height is over
+        glm::dvec2 atPx{0.0};
+        entt::entity entity{entt::null};
+    };
+    std::vector<KeyLight> m_keyLights;
     entt::entity m_shotLight{entt::null}; // the shot's own light while it flies
     entt::entity m_shotHalo{entt::null};  // and its halo, when its image is there
     bool m_lightMasksOff{false};          // ForceLightMasksOff

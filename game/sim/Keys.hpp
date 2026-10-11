@@ -68,6 +68,17 @@ namespace MagicPortals::Keys {
 struct Rules : Carry::Rules {
     double fadeStartMs = 0.0; // an unlocked keyhole holds still this long
     double fadeMs = 0.0;      // and then fades away over this
+
+    // The light a key of one colour adds to every frame it stands (keys.json
+    // red_light; ETHCallback_key #119-186): AddLight(position + (0, 0, height),
+    // colour, range, false) from the callback's top, whatever the key is doing.
+    struct OwnLight {
+        std::string colourName;   // the `color` datum a key must carry to have it
+        glm::dvec3 colour{0.0};   // AddLight's colour, before the scene's lightIntensity
+        double rangeUnits = 0.0;  // x the key's scale, which is 1 in the port's units
+        double heightUnits = 0.0; // over the key's own z, x the same scale
+    };
+    OwnLight ownLight;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -83,6 +94,11 @@ struct Key : Carry::Carried {
     // when that keyhole goes.
     int opened = -1;
 };
+
+// Whether the key adds the light `rules.ownLight` describes: its colour is the one the
+// callback tests for. (The callback also asks `!IsHidden()`; no key of the 128 levels
+// is hidden, keys.json red_light, so the port does not carry the flag.)
+bool HasOwnLight(const Rules& rules, const Key& key);
 
 struct Keyhole {
     std::string name;
