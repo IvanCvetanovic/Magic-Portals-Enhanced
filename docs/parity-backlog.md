@@ -2998,6 +2998,46 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       not delete them: its disk rule is for images). Planning steps 162 and 163 still say "committed locally, not pushed (the hash goes in at the wave's close)": the hashes are
       `11d0be4` and `f20f0a4`, pushed as `36a52e6..8fe8374`, and the doc is left as the commits wrote it. Next: the final comparison.
 
+**Step 165's recorded deviations** (the pixel-centre rule at the frame's edge, wave 4b; planning step 165 has the evidence, `RECORDED DEVIATIONS` 1-10; `out/parity/program/PX/` the reports and `verify1.json` to `verify3.json`, the three verifications; GAMEPLAY: none; the row "Step 145's recorded deviations" above is partly closed by it):
+- [x] **PX-1. Settled history** (deviations 1, 2, 3, 5 and 8). The first build, made on demand, failed gate 3 (133 px outside the ring on five levels) and was replaced by
+      the pool build; round 1 reported "suites not run" where they pass, and the level walk failed on two causes in turn (a hidden strip keeping its picture's lightmaps:
+      fixed in the code; a strip's ids a frame behind its picture's in the harness: fixed in `LevelVisit::measure`); the fix's game gates were first measured by the
+      second verification; the complement is on as shipped, measured on the game; the second verification's own disturbances (the JSON toggled in place and restored, its
+      window minimised twice, 2-02's stray shot). Nothing is left to do.
+- [ ] **PX-2. A picture that goes on inward from an edge in the pixel's inner half stays an MSAA blend** (deviation 6; the "slivers"). 1,631 `edge sliver` log lines in
+      113 of the 128 route logs and 206 in 35 sweep logs (3-03 ticks 280-287, 3-14 frames 604-607 and 3-16 frame 44 among them). A strip adds samples and a cull takes a
+      whole quad, so neither takes those samples away; no f420 pixel and no pixel outside the ring is affected. Next: the final comparison attributes the pixels; if a
+      later step wants them, move the sliver's quad by a fraction of a pixel with its uv carried (its own byte-identical gate), or give a strip the picture's own gather
+      position so it stops losing same-depth ties to its neighbour.
+- [ ] **PX-3. 1-12's right columns at frames 113-115 are unattributed, and the code does not move them** (deviation 6). They are byte-identical with the switch off, the first half
+      alone and the complement, and the log names no picture with an edge in the band there. The third verification reads them as scene content, a soft dark band sliding
+      in under the horizontal shake (column means 69, 66, 56, 41 across columns 1276-1279 at frame 113): INFERRED, not proven. Next: the final comparison; gate 4 was read
+      against the rule, never against the original's own tremble or pan footage.
+- [ ] **PX-4. Of step 145's deviation 1 only 2-05 is closed; 2,047 edge rows above 12 remain** (deviation 6). Left and right 614 (777 before), all four sides 2,047 (left
+      260, right 354, top 515, bottom 918; 2,210 before); 398 have the blend's signature (left 83, right 82, top 62, bottom 171). The rows the backlog named (1-21 and
+      1-23 right, 4-01 left, 4-09 right) are single 5/6/5 steps with equal inner pixels, not a quad edge in the band; the first suspect is a sub-pixel difference in where
+      a picture's edge falls (INFERRED, not measured). Next: the final comparison groups the rows by cause.
+- [ ] **PX-5. Two pixel-neutral effects, no code change** (deviation 7). A strip loses a same-depth, same-key tie to its neighbour because the pool stands first in the
+      stores (3-14 frames 604-607: no pixel changes), and a quad whose edge sits at the frame's boundary within 1e-5 px is culled every frame (2-23: 633 cull lines per
+      bar), which no pixel shows. Next: a guard that leaves such a quad alone, only if a later step wants the log quiet.
+- [ ] **PX-6. The rule always runs against 1280 x 720 in the shipped game** (deviation 9; the third verification's low 1). The frame is 1280 x 720 unless a `ViewportInfo`
+      says otherwise and nothing in `game/` sets one (the editor does), so at 1920 x 1080 a strip still lands (columns 1918 and 1919 equal) but the band, the first sample
+      and the cull's outer pixel are 1280-pixel units: a bar's edge 0.6 real pixels in would be culled though it covers its pixel's centre. A flipbook on its own clock is
+      read at the component's frame (no level has one). Only 2-05 was captured at another size, and no original frame exists there. Next: when a step touches other window
+      sizes, read the window's real pixel size; nothing at 1280 x 720 moves.
+- [ ] **PX-7. What the verifications did not run** (deviation 10; the third verification's `notRun`). The peak number of strips on one tick against the pool of 24 (the
+      second verification's "at most 10: 3-21 tick 8 and 3-15 tick 106" stands), a strips-off A/B for 1-12, 3-03 and 3-19 (the switch is read from
+      `game/data/edge_cover.json` by absolute path and `--data` moves only Enhanced's `data/`, so a clean A/B needs a launch option for the port's own data directory),
+      pixel parity at any window size but 1280 x 720, 112 of the 128 route replays through the window (the runner replayed all 128; round 1 and the second verification
+      did all 128 through the window) and the first frame a lightmapped strip is drawn (3-14 tick 6, under the fade-in). Next: the launch option, if a later step needs an
+      A/B.
+- [ ] **PX-8. The pool's size and its explanation are the port's own, and `edge_cover.json`'s notes were edited after the gates** (deviation 4). The pool of 24 is a
+      `_guess` (the most any replay needed was 10); why a late strip moved 133 px (EnTT's swap-and-pop moving the renderer's gather-order tie between one particle
+      system's draws) is INFERRED, the gather order was never dumped; `turn_rad` is marked `_guess` too since the third verification's low 5. The file's `_` notes were
+      edited after the second verification (md5 `4b313617`, the file every gate measured) and again by the commit (`d7484711`: the `_about` frame sentence and
+      `turn_rad`'s `_guess` line); the non-underscore keys are equal throughout and no launch followed the last edit. Next: dump the gather order if the pool is ever
+      questioned; the next launch of the runner or the game reads `d7484711`.
+
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
       won (VERIFIED by a free-space flood; the mechanism was KNOWN in the "Order 11.1" rows). `explode` (listing L67590)
@@ -4039,11 +4079,29 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       (0.8, 0.8, 1.0) -> (8.9, 14.6, 16.7) against the original's (1.0, 1.2, 1.3), the right edge's ratio 0.974 -> 1.049
       (the original's 0.964). The same wall draws so on any level whose sky covers the frame, as any quad edge does
       against the sky (the general MSAA blend, step 102's note). The other 5 rows are one or two 5/6/5 steps at a
-      picture's edge (2-04, 2-19, 2-25 and 2-32's two). Next, its own step since it touches the 84 levels' frames:
+      picture's edge (2-04, 2-19, 2-25 and 2-32's two). Next was its own step (step 165, PX: partly closed, below) since it touches the 84 levels' frames:
       the pixel-centre rule for every level picture at the frame's edge (a quad whose edge lies in the frame's outer
       half pixel drawn out to it, or given a cover like the sky's); gates: 2-05's column 1279, rows 421-586, back to
       (0-1, 0-1, 0-1), and the 84 levels' 566 scattered edge rows above 12 (1-21 and 1-23 right, 4-01 left and 4-09
-      right among them). (2) `sky.json`'s two `_` notes were reworded after the implementer's sweep: *settled by the
+      right among them).
+      *Partly closed by step 165 (PX, wave 4b), 2026-10-11*: **2-05 only.** The pixel-centre rule is built: a strip of a
+      picture's own material over the gap its edge leaves in the frame's outer pixel (`edge_cover.json`;
+      `EdgeCover::StripsOf`, `MagicPortalsLayer::syncEdgeCovers`), from a pool made before any other entity so the
+      renderer's tie order does not move (the first build, made on demand, moved 133 px outside the ring on five levels),
+      and its complement (a bar's inward edge in the outer pixel: a strip, or a cull of a picture that covers no pixel
+      centre of the frame). Gate 1 is met: 2-05's column 1279, rows 421-586, (8.92, 14.63, 16.66) -> (0.98, 1.16, 1.29)
+      against the original's (1.04, 1.16, 1.34), 164 of 166 rows equal. The f420 sweep is byte-identical to the baseline
+      on 127 of 128 levels (2-05's 211 px in column 1279 aside), 0 px outside the ring on all 128, and 0 px outside it on
+      every frame of the moves taken (the second verification's 2,161, the third's 240 of 2-24). **The second gate is NOT
+      met**: edge rows above 12 fall 777 -> 614 on the left and right columns (2,210 -> 2,047 on all four sides), and the
+      whole fall is 2-05's right column; the 84 levels' 572 rows, the ones named here (1-21 and 1-23 right, 4-01 left,
+      4-09 right) among them, did not move: their inner pixels equal the original's and the edge column is one 5/6/5 step
+      apart, so they are not a quad edge in the band. GAMEPLAY: none (128 of 128 routes win on the census's ticks; 57
+      suites, 32,314 checks; the level walk 134 / 1,460 / 1,100 / peak 109 / 0 failures; reachability 108 / 20 / 0). A pan
+      and a shake flat through the move is PARTIAL (the third verification read the shipped build's frames against the
+      rule, not against the original's own footage). Left, as rows PX-1 to PX-8 (the block before "Blockers"): the 2,047 rows (398 with the
+      blend's signature), the slivers, 1-12's right columns, the window sizes; the final comparison groups them by cause.
+      (2) `sky.json`'s two `_` notes were reworded after the implementer's sweep: *settled by the
       verification*, whose sweep on the file as it is matched the implementer's 128 of 128.
 - [ ] **Step 146's recorded deviations** (UI, the smaller pictures the original adds; GAMEPLAY: none). (1) The
       implementer's sweep and probes ran on `564f657e`, a link without the hands' own touch record (Smart App Control

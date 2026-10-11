@@ -91,6 +91,7 @@
 using namespace Supersonic;
 using MagicPortals::MagicPortalsLayer;
 namespace Selector = MagicPortals::Selector;
+namespace EdgeCover = MagicPortals::EdgeCover;
 namespace Hud = MagicPortals::Hud;
 namespace ScriptClock = MagicPortals::ScriptClock;
 
@@ -8068,6 +8069,651 @@ void ADarkSkyIsCoveredToTheFramesEdges() {
         CHECK_MSG(Tagged(registry, MagicPortalsLayer::kSkyCoverTag) == 0, "1-31's 512 u sky has no cover");
         layer.OnDetach(registry);
     }
+}
+
+// THE PIXEL-CENTRE RULE AT THE FRAME'S EDGE (edge_cover.json, planning step 165): a picture
+// whose edge lies in the frame's outer half pixel is drawn out to the frame's pixel boundary by
+// a strip of its own material, decided each frame from the camera and the quads as they are
+// drawn. A picture the way a level's quads are made, put on the frame at the pixels given.
+entt::entity MakeEdgePicture(entt::registry& registry, const char* tag) {
+    const entt::entity picture = registry.create();
+    registry.emplace<TagComponent>(picture, tag);
+    registry.emplace<TransformComponent>(picture);
+    registry.emplace<MeshComponent>(picture).primitiveType = "Quad";
+    auto& material = registry.emplace<MaterialComponent>(picture);
+    material.unlit = true;
+    material.transparent = true;
+    material.clampToEdge = true;
+    material.albedoTexturePath = "edge_cover_test.png";
+    material.albedoColor = glm::vec4(0.5f, 0.6f, 0.7f, 0.8f);
+    material.uvScale = glm::vec2(0.5f, 0.25f);
+    material.uvOffset = glm::vec2(0.25f, 0.5f);
+    registry.emplace<RenderableComponent>(picture).castsShadow = false;
+    return picture;
+}
+
+// The camera's view of the world, as the layer's own orthographic camera frames it at 1280 x 720.
+struct EdgeFrame {
+    double leftM = 0.0;
+    double topM = 0.0;
+    double perMetreX = 1.0;
+    double perMetreY = 1.0;
+};
+EdgeFrame EdgeFrameOf(entt::registry& registry) {
+    const auto& camera = registry.get<CameraComponent>(primaryCamera(registry));
+    const double halfH = static_cast<double>(camera.orthoHeight) * 0.5;
+    const double halfW = halfH * 1280.0 / 720.0;
+    EdgeFrame frame;
+    frame.leftM = static_cast<double>(camera.position.x) - halfW;
+    frame.topM = static_cast<double>(camera.position.y) + halfH;
+    frame.perMetreX = 1280.0 / (2.0 * halfW);
+    frame.perMetreY = 720.0 / (2.0 * halfH);
+    return frame;
+}
+
+void PlaceOnTheFrame(entt::registry& registry, entt::entity quad, double left, double right, double top,
+                     double bottom, float z) {
+    const EdgeFrame frame = EdgeFrameOf(registry);
+    auto& transform = registry.get<TransformComponent>(quad);
+    transform.position = glm::vec3(static_cast<float>(frame.leftM + 0.5 * (left + right) / frame.perMetreX),
+                                   static_cast<float>(frame.topM - 0.5 * (top + bottom) / frame.perMetreY), z);
+    transform.scale = glm::vec3(static_cast<float>((right - left) / frame.perMetreX),
+                                static_cast<float>((bottom - top) / frame.perMetreY), 1.0f);
+    transform.rotation = glm::vec3(0.0f);
+}
+
+std::vector<MagicPortalsLayer::EdgeCoverReport> EdgeStripsOf(const MagicPortalsLayer& layer, entt::entity picture) {
+    std::vector<MagicPortalsLayer::EdgeCoverReport> found;
+    for (const MagicPortalsLayer::EdgeCoverReport& report : layer.EdgeCovers()) {
+        if (report.picture == picture) found.push_back(report);
+    }
+    return found;
+}
+
+bool EdgeNear(double a, double b, double eps = 2e-3) { return std::fabs(a - b) <= eps; }
+
+void APictureAtTheFramesEdgeIsDrawnOutToIt() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    // THE POOL IS MADE FIRST OF ALL, hidden: in the Transform store and the Renderable store - the
+    // two the renderer's gather walks, whose order breaks its ties - every strip stands in front of
+    // every other entity, so none made or destroyed after them is ever moved by a strip.
+    const std::size_t pool = static_cast<std::size_t>(Tagged(registry, MagicPortalsLayer::kEdgeCoverTag));
+    CHECK_MSG(pool == 24, "edge_cover.json's 24 strips are ready at attach: " + std::to_string(pool));
+    CHECK_MSG(layer.EdgeCovers().empty(), "and none is drawn before a frame has asked");
+    CHECK_EQ(Shown(registry, MagicPortalsLayer::kEdgeCoverTag), 0);
+    const auto strippedFirst = [&registry](const auto& store) {
+        std::size_t strips = 0;
+        bool others = false;
+        bool first = true;
+        for (std::size_t i = 0; i < store.size(); ++i) {
+            const entt::entity entity = store.data()[i];
+            const auto* tag = registry.try_get<TagComponent>(entity);
+            const bool strip = tag != nullptr && tag->tag == MagicPortalsLayer::kEdgeCoverTag;
+            if (strip) {
+                ++strips;
+                if (others) first = false;
+            } else {
+                others = true;
+            }
+        }
+        return first && strips == 24;
+    };
+    CHECK_MSG(strippedFirst(registry.storage<TransformComponent>()), "the strips are the first of the Transform store");
+    CHECK_MSG(strippedFirst(registry.storage<RenderableComponent>()), "and of the Renderable store");
+    CloseTheLevelStartPopup(layer, registry);
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    // The level's own pictures at the frame's edge have strips of their own.
+    const std::size_t real = layer.EdgeCovers().size();
+    const entt::entity picture = MakeEdgePicture(registry, "Edge Test Picture");
+    const float z = -0.2f;
+    const auto update = [&] { layer.OnUpdate(registry, MagicPortalsLayer::kTick); };
+
+    // A LEFT EDGE AT 0.3 PX over rows 100 to 200: one strip, the 0.3 px to the frame's side.
+    PlaceOnTheFrame(registry, picture, 0.3, 600.0, 100.0, 200.0, z);
+    update();
+    auto strips = EdgeStripsOf(layer, picture);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(1));
+    entt::entity first = entt::null;
+    if (strips.size() == 1) {
+        const auto& report = strips[0];
+        first = report.strip;
+        CHECK(report.side == EdgeCover::Side::Left);
+        CHECK(report.tag == "Edge Test Picture");
+        CHECK_MSG(EdgeNear(report.stripRect.x.lo, 0.0) && EdgeNear(report.stripRect.x.hi, 0.3) &&
+                      EdgeNear(report.stripRect.y.lo, 100.0) && EdgeNear(report.stripRect.y.hi, 200.0),
+                  "the strip is x 0 to 0.3 and the picture's rows: " + std::to_string(report.stripRect.x.lo) + ".." +
+                      std::to_string(report.stripRect.x.hi) + " x " + std::to_string(report.stripRect.y.lo) + ".." +
+                      std::to_string(report.stripRect.y.hi));
+        CHECK_MSG(EdgeNear(report.pictureRect.x.lo, 0.3) && EdgeNear(report.pictureRect.x.hi, 600.0),
+                  "the picture read where it was put");
+        // The quad itself, as the renderer's own camera places it, and what it wears.
+        const auto [x, y] = screenRectOf(registry, report.strip);
+        CHECK_MSG(std::fabs(x.lo) < 1e-2 && std::fabs(x.hi - 0.3) < 1e-2 && std::fabs(y.lo - 100.0) < 1e-2 &&
+                      std::fabs(y.hi - 200.0) < 1e-2,
+                  "on the frame: " + std::to_string(x.lo) + ".." + std::to_string(x.hi) + " x " + std::to_string(y.lo) +
+                      ".." + std::to_string(y.hi));
+        CHECK_EQ(layer.EdgeCovers().size(), real + 1);
+        CHECK(registry.get<TagComponent>(report.strip).tag == MagicPortalsLayer::kEdgeCoverTag);
+        CHECK_MSG(registry.get<TransformComponent>(report.strip).position.z == z,
+                  "at its picture's own z, so it sorts where the picture does");
+        CHECK(registry.get<RenderableComponent>(report.strip).isVisible);
+        CHECK(registry.get<TransformComponent>(report.strip).rotation == glm::vec3(0.0f));
+        const auto& look = registry.get<MaterialComponent>(report.strip);
+        const auto& own = registry.get<MaterialComponent>(picture);
+        CHECK_MSG(look.albedoTexturePath == own.albedoTexturePath && look.albedoColor == own.albedoColor &&
+                      look.blend == own.blend && look.unlit == own.unlit && look.transparent == own.transparent &&
+                      look.clampToEdge == own.clampToEdge && look.sprite2D == own.sprite2D &&
+                      look.overlayTexturePath == own.overlayTexturePath &&
+                      look.normalTexturePath == own.normalTexturePath,
+                  "the strip is drawn as its picture is");
+        // The picture's own uv map carried on: u runs from the picture's offset 0.25 over 0.5
+        // across its 599.7 px, so the 0.3 px before it end at 0.25 and begin 0.3/599.7 of 0.5 earlier.
+        const double width = 600.0 - 0.3;
+        CHECK_MSG(std::fabs(look.uvScale.x - 0.5 * 0.3 / width) < 1e-6 && std::fabs(look.uvOffset.x - (0.25 - 0.5 * 0.3 / width)) < 1e-6 &&
+                      std::fabs(look.uvScale.y - 0.25) < 1e-6 && std::fabs(look.uvOffset.y - 0.5) < 1e-6,
+                  "its uv, " + std::to_string(look.uvScale.x) + " + " + std::to_string(look.uvOffset.x));
+        // And the picture itself is untouched.
+        CHECK(own.uvScale == glm::vec2(0.5f, 0.25f) && own.uvOffset == glm::vec2(0.25f, 0.5f));
+    }
+
+    // 0.6 PX IS NOT THE ORIGINAL'S PIXEL: its centre is not covered. No strip, and the one the
+    // pool held is put away, not left on the frame.
+    PlaceOnTheFrame(registry, picture, 0.6, 600.0, 100.0, 200.0, z);
+    update();
+    CHECK_EQ(EdgeStripsOf(layer, picture).size(), static_cast<std::size_t>(0));
+    if (first != entt::null) {
+        CHECK_MSG(!registry.get<RenderableComponent>(first).isVisible, "the strip of the frame before is hidden");
+    }
+    PlaceOnTheFrame(registry, picture, 0.1, 600.0, 100.0, 200.0, z);
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, picture).empty(), "an edge that leaves every sample covered needs no strip");
+
+    // THE RIGHT EDGE AT 1279.69 PX, 2-05's wall: its rows, the 0.31 px to the frame's far side.
+    PlaceOnTheFrame(registry, picture, 700.0, 1279.6875, 421.0, 586.0, z);
+    update();
+    strips = EdgeStripsOf(layer, picture);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(1));
+    if (strips.size() == 1) {
+        CHECK(strips[0].side == EdgeCover::Side::Right);
+        CHECK_MSG(EdgeNear(strips[0].stripRect.x.lo, 1279.6875) && EdgeNear(strips[0].stripRect.x.hi, 1280.0) &&
+                      EdgeNear(strips[0].stripRect.y.lo, 421.0) && EdgeNear(strips[0].stripRect.y.hi, 586.0),
+                  "the strip is 1279.6875 to 1280");
+        const auto [x, y] = screenRectOf(registry, strips[0].strip);
+        CHECK_MSG(std::fabs(x.lo - 1279.6875) < 1e-2 && std::fabs(x.hi - 1280.0) < 1e-2 &&
+                      std::fabs(y.lo - 421.0) < 1e-2 && std::fabs(y.hi - 586.0) < 1e-2,
+                  "and on the frame");
+        const auto& look = registry.get<MaterialComponent>(strips[0].strip);
+        const double width = 1279.6875 - 700.0;
+        CHECK_MSG(std::fabs(look.uvOffset.x - (0.25 + 0.5)) < 1e-6 && std::fabs(look.uvScale.x - 0.5 * 0.3125 / width) < 1e-6,
+                  "its u begins where the picture's ends");
+    }
+
+    // TOP, BOTTOM AND BOTH CORNERS: a picture at all four edges and its strips are the frame.
+    PlaceOnTheFrame(registry, picture, 0.3, 1279.7, 0.2, 719.8, z);
+    update();
+    strips = EdgeStripsOf(layer, picture);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(4));
+    double covered = (1279.7 - 0.3) * (719.8 - 0.2);
+    double apartOverlap = 0.0;
+    for (std::size_t i = 0; i < strips.size(); ++i) {
+        const auto& r = strips[i].stripRect;
+        covered += (r.x.hi - r.x.lo) * (r.y.hi - r.y.lo);
+        for (std::size_t j = i + 1; j < strips.size(); ++j) {
+            const auto& q = strips[j].stripRect;
+            const double w = std::min(r.x.hi, q.x.hi) - std::max(r.x.lo, q.x.lo);
+            const double h = std::min(r.y.hi, q.y.hi) - std::max(r.y.lo, q.y.lo);
+            if (w > 1e-6 && h > 1e-6) apartOverlap += w * h;
+        }
+    }
+    CHECK_MSG(std::fabs(covered - 1280.0 * 720.0) < 0.05 && apartOverlap == 0.0,
+              "the picture and its four strips are the whole frame, none over another: " + std::to_string(covered) +
+                  " px2, overlap " + std::to_string(apartOverlap));
+    CHECK_EQ(layer.EdgeCovers().size(), real + 4);
+    CHECK_MSG(static_cast<std::size_t>(Tagged(registry, MagicPortalsLayer::kEdgeCoverTag)) == pool,
+              "four strips and the level's own come out of the pool, which stays 24");
+    // MORE THAN THE POOL ASKS FOR is made on demand, and every one is drawn: seven pictures at all four edges.
+    std::vector<entt::entity> crowd;
+    for (int i = 0; i < 7; ++i) {
+        const entt::entity extra = MakeEdgePicture(registry, "Edge Test Crowd");
+        PlaceOnTheFrame(registry, extra, 0.3, 1279.7, 0.2, 719.8, z + 0.01f * static_cast<float>(i + 1));
+        crowd.push_back(extra);
+    }
+    update();
+    CHECK_MSG(layer.EdgeCovers().size() == real + 4 + 28 && Tagged(registry, MagicPortalsLayer::kEdgeCoverTag) >= 32,
+              "past the pool the rest are made on demand: " + std::to_string(layer.EdgeCovers().size()) + " strips");
+    for (const entt::entity extra : crowd) registry.destroy(extra);
+    update();
+    CHECK_EQ(layer.EdgeCovers().size(), real + 4);
+
+    // WHAT IS NOT A PICTURE OF THE FRAME'S OWN ROWS AND COLUMNS GETS NONE: a quad turned, one
+    // mirrored, one not drawn, one with no alpha, one whose uv is turned.
+    PlaceOnTheFrame(registry, picture, 0.3, 600.0, 100.0, 200.0, z);
+    update();
+    CHECK_EQ(EdgeStripsOf(layer, picture).size(), static_cast<std::size_t>(1));
+    registry.get<TransformComponent>(picture).rotation.z = 0.3f;
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, picture).empty(), "a turned quad keeps the MSAA blend");
+    registry.get<TransformComponent>(picture).rotation.z = 1e-8f;
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, picture).size() == 1, "a turn below turn_rad is no turn");
+    registry.get<TransformComponent>(picture).rotation.z = 0.0f;
+    registry.get<TransformComponent>(picture).scale.x *= -1.0f;
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, picture).empty(), "a mirrored quad is not read");
+    registry.get<TransformComponent>(picture).scale.x *= -1.0f;
+    registry.get<RenderableComponent>(picture).isVisible = false;
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, picture).empty(), "a quad not drawn has none");
+    registry.get<RenderableComponent>(picture).isVisible = true;
+    registry.get<MaterialComponent>(picture).albedoColor.a = 0.0f;
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, picture).empty(), "a quad with no alpha has none");
+    registry.get<MaterialComponent>(picture).albedoColor.a = 0.8f;
+    registry.get<MaterialComponent>(picture).uvRotation = 0.1f;
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, picture).empty(), "a quad whose uv is turned has none");
+    registry.get<MaterialComponent>(picture).uvRotation = 0.0f;
+    update();
+    CHECK_EQ(EdgeStripsOf(layer, picture).size(), static_cast<std::size_t>(1));
+
+    // A FLIPBOOK'S CELL is written by the engine after the layers: the strip carries the cell the
+    // engine is about to write, not the one the material still holds.
+    auto& animation = registry.emplace<SpriteAnimationComponent>(picture);
+    animation.columns = 4;
+    animation.rows = 2;
+    animation.firstFrame = 0;
+    animation.frameCount = 0;
+    animation.playing = false;
+    animation.frame = 3;
+    update();
+    strips = EdgeStripsOf(layer, picture);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(1));
+    if (strips.size() == 1) {
+        const auto& look = registry.get<MaterialComponent>(strips[0].strip);
+        const double width = 600.0 - 0.3;
+        CHECK_MSG(std::fabs(look.uvScale.x - 0.25 * 0.3 / width) < 1e-6 &&
+                      std::fabs(look.uvOffset.x - (0.75 - 0.25 * 0.3 / width)) < 1e-6 &&
+                      std::fabs(look.uvScale.y - 0.5) < 1e-6 && std::fabs(look.uvOffset.y - 0.0) < 1e-6,
+                  "cell 3 of a 4 x 2 sheet: " + std::to_string(look.uvScale.x) + " + " + std::to_string(look.uvOffset.x));
+    }
+    registry.remove<SpriteAnimationComponent>(picture);
+
+    // THE BAND AS THE CAMERA PANS: the picture stays where the world put it and the camera
+    // moves, so its left edge slides across the frame's outer pixel. A strip is there exactly while
+    // the edge lies in (an eighth of a pixel, half a pixel], and runs from the frame's side to the edge.
+    PlaceOnTheFrame(registry, picture, 0.3, 600.0, 100.0, 200.0, z);
+    const EdgeFrame start = EdgeFrameOf(registry);
+    int withStrip = 0;
+    int without = 0;
+    int wrong = 0;
+    std::string why;
+    auto& camera = registry.get<CameraComponent>(primaryCamera(registry));
+    const float cameraAtRest = camera.position.x;
+    for (int step = -10; step <= 30; ++step) {
+        const double edge = 0.3 + 0.05 * step; // where the left edge lands on the frame
+        camera.position.x = cameraAtRest - static_cast<float>((edge - 0.3) / start.perMetreX);
+        update();
+        const auto [x, y] = screenRectOf(registry, picture);
+        const bool inBand = x.lo > 0.125 + 1e-3 && x.lo <= 0.5 - 1e-3;
+        const bool outOfBand = x.lo <= 0.125 - 1e-3 || x.lo >= 0.5 + 1e-3;
+        const auto now = EdgeStripsOf(layer, picture);
+        if (inBand) {
+            const bool ok = now.size() == 1 && std::fabs(now[0].stripRect.x.lo) < 2e-3 &&
+                            std::fabs(now[0].stripRect.x.hi - x.lo) < 2e-3;
+            if (ok) ++withStrip;
+            else {
+                ++wrong;
+                why = "edge " + std::to_string(x.lo) + ": " + std::to_string(now.size()) + " strips";
+            }
+        } else if (outOfBand) {
+            if (now.empty()) ++without;
+            else {
+                ++wrong;
+                why = "edge " + std::to_string(x.lo) + " has a strip";
+            }
+        }
+        (void)y;
+    }
+    camera.position.x = cameraAtRest;
+    CHECK_MSG(wrong == 0 && withStrip >= 6 && without >= 10,
+              "a strip exactly while the edge is in the band: " + std::to_string(withStrip) + " with, " +
+                  std::to_string(without) + " without, " + std::to_string(wrong) + " wrong; " + why);
+
+    // THE EARTHQUAKE MOVES THE CAMERA and not the pictures, so a top edge in the band is in it on
+    // some frames of a tremble and out of it on others, and each frame's strip is its own: from
+    // the camera the frame is drawn through.
+    PlaceOnTheFrame(registry, picture, 100.0, 600.0, 0.3, 300.0, z);
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, picture).size() == 1, "a top edge at 0.3 px at rest has its strip");
+    layer.QueueQuake(MagicPortals::Earthquake::Call::LightWallGone);
+    int shaken = 0;
+    int inside = 0;
+    int outside = 0;
+    int off = 0;
+    std::string shakeWhy;
+    for (int tick = 0; tick < 60; ++tick) {
+        InterpolationSystem::BeginTick(registry);
+        tickWith(layer, registry, kRest, {}, {});
+        InterpolationSystem::EndTick(registry);
+        InterpolationSystem::Apply(registry, 0.5f);
+        update();
+        if (layer.QuakeOffsetUnits() != 0.0) ++shaken;
+        const auto [x, y] = screenRectOf(registry, picture);
+        const bool inBand = y.lo > 0.125 + 1e-3 && y.lo <= 0.5 - 1e-3;
+        const bool outOfBand = y.lo <= 0.125 - 1e-3 || y.lo >= 0.5 + 1e-3;
+        const auto now = EdgeStripsOf(layer, picture);
+        if (inBand) {
+            ++inside;
+            if (!(now.size() == 1 && now[0].side == EdgeCover::Side::Top && std::fabs(now[0].stripRect.y.lo) < 2e-3 &&
+                  std::fabs(now[0].stripRect.y.hi - y.lo) < 2e-3)) {
+                ++off;
+                shakeWhy = "tick " + std::to_string(tick) + " top edge " + std::to_string(y.lo);
+            }
+        } else if (outOfBand) {
+            ++outside;
+            if (!now.empty()) {
+                ++off;
+                shakeWhy = "tick " + std::to_string(tick) + " has a strip at top edge " + std::to_string(y.lo);
+            }
+        }
+        (void)x;
+    }
+    CHECK_MSG(shaken > 0 && inside > 0 && outside > 0 && off == 0,
+              "through a tremble the strip follows the camera it is drawn through: " + std::to_string(shaken) +
+                  " shaken frames, " + std::to_string(inside) + " in the band, " + std::to_string(outside) +
+                  " out, " + std::to_string(off) + " off; " + shakeWhy);
+    registry.destroy(picture);
+    update();
+    CHECK_MSG(layer.EdgeCovers().empty() || std::none_of(layer.EdgeCovers().begin(), layer.EdgeCovers().end(),
+                                                         [&](const auto& r) { return r.picture == picture; }),
+              "a picture that is gone has no strip");
+
+    // THEY GO WITH THE LEVEL.
+    CHECK_MSG(Tagged(registry, MagicPortalsLayer::kEdgeCoverTag) > 0, "the pool is there before the level goes");
+    layer.OnDetach(registry);
+    CHECK_MSG(Tagged(registry, MagicPortalsLayer::kEdgeCoverTag) == 0, "the strips go with the level");
+}
+
+// 2-05'S WALL, the measured case (step 145's deviation 1): bar4_contrast.png ends at 1279.69 px, and
+// the level's real quad gets its strip from the real camera. And a dark sky, narrower than the view by
+// 0.16 px a side, has its cover and no strip of this rule.
+void TwoOhFivesWallIsDrawnOutToTheFrame() {
+    if (!OriginalArtIsThere("TwoOhFivesWallIsDrawnOutToTheFrame")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level4a");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 60; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    int wall = 0;
+    bool wallOk = false;
+    bool skyHasStrip = false;
+    for (const MagicPortalsLayer::EdgeCoverReport& report : layer.EdgeCovers()) {
+        if (EndsWith(report.texture, "/bar4_contrast.png") && report.side == EdgeCover::Side::Right) {
+            ++wall;
+            wallOk = wallOk || (std::fabs(report.stripRect.x.lo - 1279.6875) < 5e-3 &&
+                                std::fabs(report.stripRect.x.hi - 1280.0) < 1e-9);
+        }
+        if (EndsWith(report.texture, "/dark_sky.png")) skyHasStrip = true;
+    }
+    std::printf("  level4a: %zu strips over the pictures at the frame's edge, %d of them bar4_contrast.png's right\n",
+                layer.EdgeCovers().size(), wall);
+    CHECK_MSG(wall >= 1 && wallOk, "2-05's wall ends at 1279.6875 px and is drawn out to 1280");
+    CHECK_MSG(!skyHasStrip, "the dark sky has its cover and no strip");
+    CHECK_EQ(Tagged(registry, MagicPortalsLayer::kSkyCoverTag), 1);
+    layer.OnDetach(registry);
+    CHECK_EQ(Tagged(registry, MagicPortalsLayer::kEdgeCoverTag), 0);
+}
+
+// THE COMPLEMENTARY HALF OF THE RULE (edge_cover.json complement, step 165's fix after its verification):
+// a picture whose INWARD edge lies in the frame's outer pixel - the black bars a tremble moves past the
+// top or the bottom, a picture sliding in from a side - is drawn whole where it covers the pixel's centre
+// (a strip over the rest of the pixel) and left out of the frame where it covers samples and not the
+// centre; the quad it hides is shown again before any code of the next frame runs. And a level's unload
+// clears every strip's texture paths, so a hidden strip does not hold the last level's lightmap.
+void TheComplementaryHalfDrawsAnInwardEdgeWholeAndLeavesOutASliver() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    CloseTheLevelStartPopup(layer, registry);
+    const auto update = [&] { layer.OnUpdate(registry, MagicPortalsLayer::kTick); };
+    update();
+    const entt::entity picture = MakeEdgePicture(registry, "Edge Test Bar");
+    const float z = 1.0f;
+    const auto culled = [&](entt::entity quad) {
+        const auto& all = layer.EdgeCulled();
+        return std::find(all.begin(), all.end(), quad) != all.end();
+    };
+    const auto visible = [&](entt::entity quad) { return registry.get<RenderableComponent>(quad).isVisible; };
+
+    // A TOP BAR whose inward edge is 0.7 px down covers the first row's centre and three samples of
+    // it: the strip draws the last 0.3 px of that row, from the picture's own uv map carried on.
+    PlaceOnTheFrame(registry, picture, -100.0, 1400.0, -500.0, 0.7, z);
+    update();
+    auto strips = EdgeStripsOf(layer, picture);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(1));
+    if (strips.size() == 1) {
+        CHECK(strips[0].side == EdgeCover::Side::Bottom);
+        CHECK_MSG(EdgeNear(strips[0].stripRect.y.lo, 0.7) && EdgeNear(strips[0].stripRect.y.hi, 1.0) &&
+                      EdgeNear(strips[0].stripRect.x.lo, -1.0) && EdgeNear(strips[0].stripRect.x.hi, 1281.0),
+                  "the strip is y 0.7 to 1, over the picture's columns cut a pixel past the frame");
+        const auto [x, y] = screenRectOf(registry, strips[0].strip);
+        CHECK_MSG(std::fabs(y.lo - 0.7) < 1e-2 && std::fabs(y.hi - 1.0) < 1e-2, "and on the frame");
+        const auto& look = registry.get<MaterialComponent>(strips[0].strip);
+        const double height = 0.7 + 500.0;
+        CHECK_MSG(std::fabs(look.uvScale.y - 0.25 * 0.3 / height) < 1e-6 &&
+                      std::fabs(look.uvOffset.y - (0.5 + 0.25 * height / height)) < 1e-5,
+                  "its v begins where the picture's ends: " + std::to_string(look.uvOffset.y));
+    }
+    CHECK_MSG(!culled(picture) && visible(picture), "a picture that draws the pixel's centre is not left out");
+
+    // 0.4 PX covers two samples of the row and not its centre: the original draws none of the bar
+    // there, so the bar is left out of the frame, and is shown again before the next tick's code.
+    PlaceOnTheFrame(registry, picture, -100.0, 1400.0, -500.0, 0.4, z);
+    update();
+    CHECK_MSG(culled(picture) && !visible(picture), "a bar that ends at 0.4 px is left out of the frame");
+    CHECK_MSG(EdgeStripsOf(layer, picture).empty(), "and has no strip");
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(visible(picture) && !culled(picture),
+              "the tick's first line shows it again, before any of the game's code reads it");
+    update();
+    CHECK_MSG(culled(picture), "and the frame leaves it out again while it is still a sliver");
+    PlaceOnTheFrame(registry, picture, -100.0, 1400.0, -500.0, 1.3, z);
+    update();
+    CHECK_MSG(visible(picture) && !culled(picture) && EdgeStripsOf(layer, picture).empty(),
+              "past the first row the bar is drawn as it is: its edge is inside the frame");
+
+    // A picture the game hid is the game's: never culled, never brought back.
+    PlaceOnTheFrame(registry, picture, -100.0, 1400.0, -500.0, 0.4, z);
+    update();
+    CHECK(culled(picture));
+    tickWith(layer, registry, kRest, {}, {});
+    registry.get<RenderableComponent>(picture).isVisible = false; // the game's own code, in its tick
+    update();
+    CHECK_MSG(!culled(picture) && !visible(picture), "a quad the game has hidden is left as the game left it");
+    update();
+    CHECK_MSG(!visible(picture), "frame after frame");
+    registry.get<RenderableComponent>(picture).isVisible = true;
+    update();
+    CHECK(culled(picture));
+    // A culled quad the game destroys is simply gone.
+    registry.destroy(picture);
+    update();
+    CHECK_MSG(registry.valid(picture) == false && std::none_of(layer.EdgeCulled().begin(), layer.EdgeCulled().end(),
+                                                               [&](entt::entity quad) { return quad == picture; }),
+              "a culled quad that is destroyed leaves nothing behind");
+
+    // THE OTHER THREE SIDES.
+    const entt::entity side = MakeEdgePicture(registry, "Edge Test Side");
+    PlaceOnTheFrame(registry, side, -100.0, 1400.0, 719.3, 1200.0, z); // a bottom bar, its top edge 0.7 px up
+    update();
+    strips = EdgeStripsOf(layer, side);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(1));
+    if (strips.size() == 1) {
+        CHECK(strips[0].side == EdgeCover::Side::Top);
+        CHECK_MSG(EdgeNear(strips[0].stripRect.y.lo, 719.0) && EdgeNear(strips[0].stripRect.y.hi, 719.3),
+                  "a bottom bar's strip is the 0.3 px above it, down from the row's boundary");
+    }
+    PlaceOnTheFrame(registry, side, -100.0, 1400.0, 719.6, 1200.0, z);
+    update();
+    CHECK_MSG(culled(side), "a bottom bar's edge 0.4 px up leaves the last row's centre uncovered");
+    PlaceOnTheFrame(registry, side, -50.0, 0.7, 100.0, 200.0, z); // the left side
+    update();
+    strips = EdgeStripsOf(layer, side);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(1));
+    if (strips.size() == 1) {
+        CHECK(strips[0].side == EdgeCover::Side::Right);
+        CHECK_MSG(EdgeNear(strips[0].stripRect.x.lo, 0.7) && EdgeNear(strips[0].stripRect.x.hi, 1.0) &&
+                      EdgeNear(strips[0].stripRect.y.lo, 100.0) && EdgeNear(strips[0].stripRect.y.hi, 200.0),
+                  "a picture that comes in from the left has its strip at the side, over its rows");
+    }
+    PlaceOnTheFrame(registry, side, -50.0, 0.3, 100.0, 200.0, z);
+    update();
+    CHECK_MSG(culled(side), "and is left out while its edge is short of the first column's centre");
+    PlaceOnTheFrame(registry, side, 1279.3, 1500.0, 100.0, 200.0, z); // the right side
+    update();
+    strips = EdgeStripsOf(layer, side);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(1));
+    if (strips.size() == 1) {
+        CHECK(strips[0].side == EdgeCover::Side::Left);
+        CHECK_MSG(EdgeNear(strips[0].stripRect.x.lo, 1279.0) && EdgeNear(strips[0].stripRect.x.hi, 1279.3),
+                  "a picture that comes in from the right: the 0.3 px of its column");
+    }
+    PlaceOnTheFrame(registry, side, 1279.8, 1500.0, 100.0, 200.0, z);
+    update();
+    CHECK_MSG(culled(side), "and is left out while its edge is past the last column's centre");
+
+    // WHAT NEITHER CAN TAKE AWAY: a picture that goes on inward from an edge in the pixel's inner half
+    // keeps its samples of that pixel. It is not left out (the rest of it shows) and has no strip.
+    PlaceOnTheFrame(registry, side, 0.7, 500.0, 100.0, 200.0, z);
+    update();
+    CHECK_MSG(!culled(side) && visible(side) && EdgeStripsOf(layer, side).empty(),
+              "a picture that begins 0.7 px in and goes on is left as it is");
+    // A picture inside the first column covering its centre: both ends are drawn out to the column.
+    PlaceOnTheFrame(registry, side, 0.2, 0.7, 100.0, 200.0, z);
+    update();
+    CHECK_EQ(EdgeStripsOf(layer, side).size(), static_cast<std::size_t>(2));
+    // One that covers no centre, inside the frame, is the MSAA blend it always was.
+    PlaceOnTheFrame(registry, side, 100.1, 100.4, 100.0, 200.0, z);
+    update();
+    CHECK_MSG(!culled(side) && visible(side) && EdgeStripsOf(layer, side).empty(), "a hairline inside the frame is not the rule's");
+    // A turned quad is not a picture of the frame's rows and columns: neither strip nor cull.
+    PlaceOnTheFrame(registry, side, -100.0, 1400.0, -500.0, 0.4, z);
+    registry.get<TransformComponent>(side).rotation.z = 0.3f;
+    update();
+    CHECK_MSG(!culled(side) && visible(side), "a turned quad is left alone");
+    registry.get<TransformComponent>(side).rotation.z = 0.0f;
+    // A mirrored one is a rectangle on the frame, which the cull may leave out; it has no strip.
+    registry.get<TransformComponent>(side).scale.x *= -1.0f;
+    update();
+    CHECK_MSG(culled(side), "a mirrored sliver is left out like any other");
+    PlaceOnTheFrame(registry, side, -100.0, 1400.0, -500.0, 0.7, z);
+    registry.get<TransformComponent>(side).scale.x *= -1.0f;
+    update();
+    CHECK_MSG(EdgeStripsOf(layer, side).empty() && !culled(side), "and a mirrored bar at 0.7 px has no strip");
+    registry.get<TransformComponent>(side).scale.x *= -1.0f;
+
+    // THE LEVEL'S OWN BLACK BAR, the case the program met: placed once and never moved, so the test moves
+    // it across the first row as a tremble would.
+    const std::vector<MagicPortalsLayer::BlackBarReport> bars = layer.BlackBars();
+    CHECK_MSG(!bars.empty(), "1-01 has its black bars");
+    if (!bars.empty() && registry.valid(bars[0].quad)) {
+        const entt::entity bar = bars[0].quad;
+        const double edges[] = {-0.5, 0.1, 0.3, 0.45, 0.55, 0.7, 0.85, 1.2};
+        const bool wantCulled[] = {false, true, true, true, false, false, false, false};
+        const bool wantStrip[] = {false, false, false, false, true, true, true, false};
+        for (std::size_t i = 0; i < sizeof(edges) / sizeof(edges[0]); ++i) {
+            PlaceOnTheFrame(registry, bar, -100.0, 1400.0, -500.0, edges[i], MagicPortalsLayer::kLayerableTopZ);
+            update();
+            const bool hasStrip = !EdgeStripsOf(layer, bar).empty();
+            CHECK_MSG(culled(bar) == wantCulled[i] && hasStrip == wantStrip[i],
+                      "the black bar's inward edge at " + std::to_string(edges[i]) + " px: " +
+                          (culled(bar) ? "left out" : "drawn") + (hasStrip ? " with a strip" : " without"));
+            CHECK_MSG(visible(bar) == !culled(bar), "and the quad's visibility says the same");
+        }
+        // Down to the next frame's first line.
+        tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(visible(bar), "the bar is the game's again before the tick runs");
+    }
+    registry.destroy(side);
+    update();
+
+    // A LEVEL'S UNLOAD CLEARS EVERY STRIP'S TEXTURE PATHS and keeps the pool where it is: a hidden strip
+    // that kept a lightmapped picture's paths would load the lightmap the level gave back, and the
+    // level walk (--visit-levels) counts exactly that.
+    const entt::entity lit = MakeEdgePicture(registry, "Edge Test Lit");
+    {
+        auto& material = registry.get<MaterialComponent>(lit);
+        material.normalTexturePath = "edge_cover_test_normal.png";
+        material.ormTexturePath = "edge_cover_test_orm.png";
+        material.overlayTexturePath = "edge_cover_test_lightmap.png";
+        material.glossTexturePath = "edge_cover_test_gloss.png";
+    }
+    PlaceOnTheFrame(registry, lit, 0.3, 600.0, 100.0, 200.0, z);
+    update();
+    strips = EdgeStripsOf(layer, lit);
+    CHECK_EQ(strips.size(), static_cast<std::size_t>(1));
+    if (strips.size() == 1) {
+        const auto& look = registry.get<MaterialComponent>(strips[0].strip);
+        CHECK_MSG(look.overlayTexturePath == "edge_cover_test_lightmap.png" && look.glossTexturePath == "edge_cover_test_gloss.png",
+                  "a strip wears its picture's lightmap and gloss while it is drawn");
+    }
+    const std::size_t pool = static_cast<std::size_t>(Tagged(registry, MagicPortalsLayer::kEdgeCoverTag));
+    MagicPortalsLayer::MenuButton list;
+    list.kind = MagicPortalsLayer::MenuButton::Kind::List;
+    layer.PressMenu(registry, list);
+    int named = 0;
+    for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+        (void)entity;
+        if (tag.tag != MagicPortalsLayer::kEdgeCoverTag) continue;
+        if (!material.albedoTexturePath.empty() || !material.normalTexturePath.empty() || !material.ormTexturePath.empty() ||
+            !material.overlayTexturePath.empty() || !material.glossTexturePath.empty() || !material.materialPath.empty()) {
+            ++named;
+        }
+    }
+    CHECK_MSG(named == 0, "no strip names a texture once the level has gone: " + std::to_string(named));
+    CHECK_MSG(static_cast<std::size_t>(Tagged(registry, MagicPortalsLayer::kEdgeCoverTag)) == pool,
+              "and the pool is where it was: the entities are not destroyed");
+    CHECK_EQ(Shown(registry, MagicPortalsLayer::kEdgeCoverTag), 0);
+    const auto strippedFirst = [&registry, pool](const auto& store) {
+        std::size_t strippedCount = 0;
+        bool others = false;
+        bool first = true;
+        for (std::size_t i = 0; i < store.size(); ++i) {
+            const auto* tag = registry.try_get<TagComponent>(store.data()[i]);
+            if (tag != nullptr && tag->tag == MagicPortalsLayer::kEdgeCoverTag) {
+                ++strippedCount;
+                if (others) first = false;
+            } else {
+                others = true;
+            }
+        }
+        return first && strippedCount == pool;
+    };
+    CHECK_MSG(strippedFirst(registry.storage<TransformComponent>()) && strippedFirst(registry.storage<RenderableComponent>()),
+              "still the first of the Transform and Renderable stores");
+    registry.destroy(lit);
+    layer.OnDetach(registry);
+    CHECK_EQ(Tagged(registry, MagicPortalsLayer::kEdgeCoverTag), 0);
 }
 
 // On a scene wider than the bars reach they stop at x 768 (00_order 8.13; D11
@@ -19987,6 +20633,9 @@ void runTests() {
     TheF14RouteLandsOnTheBlock();
     TheSceneHasFourBlackBarsInFrontOfEverything();
     ADarkSkyIsCoveredToTheFramesEdges();
+    APictureAtTheFramesEdgeIsDrawnOutToIt();
+    TwoOhFivesWallIsDrawnOutToTheFrame();
+    TheComplementaryHalfDrawsAnInwardEdgeWholeAndLeavesOutASliver();
     TheBlackBarsStopAt768OnAWideScene();
     TheBetweenSlotTableSaysWhereEachClassStands();
     TheTableIsTheFractionTheLayerDrawsAt();

@@ -32,6 +32,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Cutscene.hpp"
 #include "sim/Dashboard.hpp"
 #include "sim/Earthquake.hpp"
+#include "sim/EdgeCover.hpp"
 #include "sim/Effects.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
@@ -595,6 +596,17 @@ public:
     // does not see it.
     static constexpr const char* kSkyCoverTag = "Magic Portals Sky Cover";
 
+    // The tag of a picture's edge strip (edge_cover.json, step 165): a quad that is not
+    // one of the level's pictures either, and no count of "Magic Portals Sprite" sees it.
+    static constexpr const char* kEdgeCoverTag = "Magic Portals Edge Cover";
+    // A level says each (picture, side) the first frame it has a strip, at most this many times, so the log
+    // can name the picture of every strip a sweep drew without a pan filling it.
+    static constexpr int kEdgeCoverLogCap = 64;
+    // What the edge log's keys say besides a strip's side (0 to 3): that a picture was left out of the
+    // frame (kEdgeCullCode), or kept as an MSAA sliver on a side (kEdgeSliverCode + side).
+    static constexpr int kEdgeCullCode = 4;
+    static constexpr int kEdgeSliverCode = 8;
+
     // ---- the effects the script ADDS (system_7 7a-2) ------------------------
     //
     // One AddEntity call of the original's, as the layer draws it: an entity read
@@ -1027,6 +1039,28 @@ public:
         float z{0.0f};             // kLayerableTopZ
     };
     std::vector<BlackBarReport> BlackBars() const;
+
+    // THE PIXEL-CENTRE RULE AT THE FRAME'S EDGE (edge_cover.json, planning step 165): the
+    // strips the last frame drew, one for each side of a picture whose edge lay in the
+    // frame's outer half pixel. A strip is a second quad of its picture's material over the
+    // gap between that edge and the frame's pixel boundary, so the edge pixel the original
+    // draws whole is whole here too (EdgeCover.hpp). Empty on a frame with none, and while
+    // no level is shown.
+    struct EdgeCoverReport {
+        entt::entity strip{entt::null};   // the strip's quad
+        entt::entity picture{entt::null}; // the picture it extends
+        std::string tag;                  // the picture's tag
+        std::string texture;              // the picture's albedo
+        EdgeCover::Side side{EdgeCover::Side::Left};
+        EdgeCover::Rect pictureRect;      // the picture on the frame, in pixels
+        EdgeCover::Rect stripRect;        // the strip on the frame, in pixels
+    };
+    const std::vector<EdgeCoverReport>& EdgeCovers() const { return m_edgeReports; }
+    // And the pictures the complementary half left out of the frame this frame (edge_cover.json
+    // complement): quads whose part on the frame lies in one outer pixel and covers its centre
+    // nowhere, hidden from the draw until the next frame's first line of code shows them again.
+    // Empty on a frame with none, and while no level is shown.
+    const std::vector<entt::entity>& EdgeCulled() const { return m_edgeCulled; }
 
     // The ring each shock agent adds round itself (art.json shock_ring, the visuals
     // plan's 13.1): shock_area.ent at the field's point, the lethal diameter across,
@@ -1909,6 +1943,22 @@ private:
     // down, the sky's own rows; just behind it (Slot::SkyCover).
     void placeSkyCover(entt::registry& registry, const DrawnSprite& drawn, const glm::dvec2& centrePx,
                        const glm::dvec2& sizePx, float rotation) const;
+    // THE EDGE STRIPS (edge_cover.json), once a frame at the end of OnUpdate: from the camera
+    // and the quads as they are about to be drawn, the strips of every visible axis-aligned
+    // quad whose edge lies in the frame's outer half pixel; the pool's unused strips hidden.
+    void syncEdgeCovers(entt::registry& registry);
+    // The pool, made ready first of all when the layer attaches (edge_cover.json pool_size: a strip
+    // made on demand late in a run reorders the registry's stores, and the renderer's ties go by that
+    // order); hidden with the level, destroyed with the layer.
+    void buildEdgeCoverPool(entt::registry& registry);
+    void hideEdgeCovers(entt::registry& registry);
+    void unloadEdgeCovers(entt::registry& registry);
+    // A level's unload clears every strip's texture paths, keeping the entities (the pool stays first in the
+    // stores): a hidden strip that kept a lightmapped picture's paths would load the lightmap again after
+    // the level gave it back.
+    void clearEdgeCoverLooks(entt::registry& registry);
+    // Shows what the last frame's cull hid: the first line of OnFixedUpdate and of OnUpdate, and the unload.
+    void restoreEdgeCulls(entt::registry& registry);
     // An image's size, read once per file (Sprites::ImageSize); zero when it
     // cannot be read.
     glm::dvec2 imageSizePx(const std::string& path);
@@ -2021,6 +2071,12 @@ private:
     std::map<std::string, Sprites::Image> m_drawnImages; // drawnImage's, by the name asked for
     Art::Rules m_artRules;                  // the port's art.json
     Sky::Rules m_skyRules;                  // the port's sky.json
+    EdgeCover::Rules m_edgeRules;           // the port's edge_cover.json
+    std::vector<entt::entity> m_edgeStrips; // the pool of edge strips; those past the frame's use are hidden
+    std::vector<EdgeCoverReport> m_edgeReports; // what the last frame's strips extend
+    std::vector<entt::entity> m_edgeCulled; // the quads the last frame's cull hid, to show again
+    std::vector<std::pair<entt::entity, int>> m_edgeSeen; // the last frame's (picture, strip side or note code), to say what is new
+    int m_edgeLogged{0};                    // how many strips this level has said (kEdgeCoverLogCap)
     Tiers::Rules m_tierRules;               // the port's tiers.json: which file of a level's image is drawn
     Sky::Controller m_sky;                  // the level's StaticSky, built with its sprites
     Sky::SpaceRules m_spaceRules;           // the port's sky.json, space_sky

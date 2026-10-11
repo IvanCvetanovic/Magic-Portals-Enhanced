@@ -203,6 +203,9 @@ add_mp_test(test_mp_lighting)
 # and a census of what the converted levels place, which is skipped without them
 # and never with 77.
 add_mp_test(test_mp_sky)
+# The pixel-centre rule at the frame's edge: edge_cover.json and sim/EdgeCover's snap, strips and uv,
+# pure arithmetic and files the suite writes: it runs anywhere.
+add_mp_test(test_mp_edgecover)
 # The texture tiers and the one cut rule: tiers.json and sim/Tiers - which file of an
 # image the original draws, its size in units and its frames' uv - on files the suite
 # writes, and over the original's own tier folders, which are skipped without them and

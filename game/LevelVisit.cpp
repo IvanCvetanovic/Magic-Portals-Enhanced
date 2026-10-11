@@ -218,9 +218,19 @@ bool LevelVisitLayer::measure(entt::registry& registry, const Visit& visit, bool
     // reads clamped (makeSprite), and one asked for the other way is another set.
     std::set<std::pair<std::array<uint32_t, 4>, bool>> keys;
     for (auto [entity, material, renderable] : registry.view<MaterialComponent, RenderableComponent>().each()) {
-        (void)entity;
         if (material.overlayTexturePath.empty()) continue;
         drawnLightmaps.insert(material.overlayTexturePath);
+        // A picture's edge strip (step 165) takes its picture's material, lightmap among it, in
+        // the frame's own OnUpdate, and RenderSystem::SyncResources gives it its ids afterwards in
+        // that same frame: so the frame this walk measures in, between the two, a strip that has
+        // just been drawn names a lightmap its ids do not hold yet. Its path stays in the set
+        // above - a strip that kept the PREVIOUS level's lightmap is exactly what the walk's
+        // "the sprites draw N lightmaps, the level names M" line caught - but the ids and the
+        // material set are its picture's, which this loop reads, so the strip's own are not read.
+        if (const auto* tag = registry.try_get<Supersonic::TagComponent>(entity);
+            tag != nullptr && tag->tag == MagicPortalsLayer::kEdgeCoverTag) {
+            continue;
+        }
         if (renderable.overlayTextureID == textures.GetBlackTexture()) {
             fail(visit.name + ": " + material.overlayTexturePath + " did not load");
             continue;

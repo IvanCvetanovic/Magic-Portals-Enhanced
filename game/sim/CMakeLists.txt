@@ -19,6 +19,7 @@ add_library(MagicPortalsSim STATIC
     Demolish.cpp
     Diamonds.cpp
     Earthquake.cpp
+    EdgeCover.cpp
     Ease.cpp
     Effects.cpp
     Fields.cpp

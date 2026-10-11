@@ -23,6 +23,7 @@
 #include "core/RenderSystem.hpp"
 #include "core/ScreenOverlay.hpp"
 #include "core/SimulationClock.hpp"
+#include "core/SpriteAnimationSystem.hpp"
 #include "core/ViewportInfo.hpp"
 // For handing a level's lightmaps back when it goes. Only through the pointer the
 // app publishes in the registry's context, which a suite's bare registry has not.
@@ -49,6 +50,8 @@ constexpr float kDefaultAspect = 16.0f / 9.0f;
 // And its width in the frame's own pixels: main.cpp's 1280 x 720 window, which a
 // sky's cover snaps its edges to (placeSkyCover).
 constexpr double kDefaultFrameWidthPx = 1280.0;
+// And its height, for the edge strips (syncEdgeCovers).
+constexpr double kDefaultFrameHeightPx = 720.0;
 
 // sounds.json's tracks, by the calls that ask for them: playMenuMusic,
 // playGameMusic(false) and playGameMusic(true), which is getBossMusicName's.
@@ -324,6 +327,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Art::LoadRules(m_paths.portData + "/art.json", m_artRules, error) &&
                       Sky::LoadRules(m_paths.portData + "/sky.json", m_skyRules, error) &&
                       Sky::LoadSpaceRules(m_paths.portData + "/sky.json", m_spaceRules, error) &&
+                      EdgeCover::LoadRules(m_paths.portData + "/edge_cover.json", m_edgeRules, error) &&
                       Tiers::LoadRules(m_paths.portData + "/tiers.json", m_tierRules, error) &&
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
                       Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
@@ -348,6 +352,8 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     m_tickMs = ScriptClock::Ms(m_step);
     // As EarthquakeGenerator's constructor leaves it, once for the whole run.
     m_quake.Reset(m_quakeRules);
+    // The edge strips' pool, before the camera or anything else is made: see buildEdgeCoverPool.
+    if (read) buildEdgeCoverPool(registry);
     if (!read) {
         m_loadError = error;
         m_hudError = error;
@@ -461,6 +467,7 @@ void MagicPortalsLayer::OnDetach(entt::registry& registry) {
     stopMusic(registry);
     unloadLevel(registry);
     unloadMenu(registry);
+    unloadEdgeCovers(registry);
     auto destroy = [&registry](entt::entity& e) {
         if (e != entt::null && registry.valid(e)) registry.destroy(e);
         e = entt::null;
@@ -699,6 +706,7 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
 
 void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps) {
     m_achievementKeyOwners.clear();
+    restoreEdgeCulls(registry);
     // THE LIGHTMAPS GO BACK WITH THE LEVEL. Each lightmapped sprite holds a
     // texture and a material set of its own (730 across the game), and the
     // registry keeps both until told to drop them; a session walking the chapters
@@ -735,6 +743,10 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
         destroy(drawn.cover);
     }
     m_sprites.clear();
+    hideEdgeCovers(registry);
+    clearEdgeCoverLooks(registry);
+    m_edgeSeen.clear();
+    m_edgeLogged = 0;
     m_motions.clear();
     m_placed.clear();
     m_antiportalTurn = Motion::Turn{};
@@ -4276,6 +4288,298 @@ void MagicPortalsLayer::placeSkyCover(entt::registry& registry, const DrawnSprit
     auto& material = registry.get<MaterialComponent>(drawn.cover);
     material.uvScale = glm::vec2(static_cast<float>(widthPx / sizePx.x), 1.0f);
     material.uvOffset = glm::vec2(static_cast<float>((span.lowPx - skyLowPx) / sizePx.x), 0.0f);
+}
+
+// THE STRIPS' POOL, made before any other entity of the layer. The renderer breaks a tie between two
+// draws of one depth and key by the order the registry stores them in (RenderSystem's `gathered`), and
+// a level has such ties: the particles of one system share a depth and a key, and the glow they add
+// is summed in half floats, so the order they are drawn in moves a pixel by a step. EnTT keeps each
+// store packed: destroying an entity moves the LAST one into its place. A strip made on demand in the
+// middle of a run is the last one of every store, so the next particle destroyed would be replaced
+// by it and the others would keep their old places: the order of the particles would not be the
+// order they were drawn in without strips (the first sweep of step 165 moved 133 px on five levels
+// so). Made first, the strips stand in front of every other entity in every store, never the last
+// while anything else is, and what is made and destroyed after them moves exactly as it moved
+// before. Hidden, they are not gathered, so they cost the frame nothing.
+void MagicPortalsLayer::buildEdgeCoverPool(entt::registry& registry) {
+    if (!m_edgeRules.enabled) return;
+    m_edgeStrips.assign(m_edgeRules.poolSize, entt::null);
+    for (entt::entity& strip : m_edgeStrips) {
+        strip = makeSprite(registry, kEdgeCoverTag, std::string(), false);
+        registry.get<Supersonic::RenderableComponent>(strip).isVisible = false;
+    }
+}
+
+void MagicPortalsLayer::hideEdgeCovers(entt::registry& registry) {
+    for (const entt::entity strip : m_edgeStrips) {
+        if (strip != entt::null && registry.valid(strip)) registry.get<Supersonic::RenderableComponent>(strip).isVisible = false;
+    }
+    m_edgeReports.clear();
+}
+
+// A HIDDEN STRIP IS NOT GATHERED BUT IT IS STILL AN ENTITY WITH A MATERIAL, and its material is
+// the copy of the last picture it drew: the albedo, normal, orm, overlay and gloss paths of
+// that picture, a lightmap among them. A level's unload invalidates its lightmaps' paths
+// (releaseLightmaps), and the renderer re-resolves every entity whose texture generation moved,
+// hidden or not, so a hidden strip that still names a lightmap loads it again and holds a material
+// set for it: the next level then draws the last one's lightmaps, and the unload that follows
+// gives back fewer sets than it was told (the level walk's 259 failures on the first build of
+// step 165). So the strips' looks are cleared when a level goes. The ENTITIES stay: the pool is
+// first in the registry's stores for a reason (buildEdgeCoverPool), and a strip is rewritten, whole,
+// from its picture the next frame it is used.
+void MagicPortalsLayer::clearEdgeCoverLooks(entt::registry& registry) {
+    for (const entt::entity strip : m_edgeStrips) {
+        if (strip == entt::null || !registry.valid(strip)) continue;
+        if (auto* material = registry.try_get<Supersonic::MaterialComponent>(strip)) {
+            *material = Supersonic::MaterialComponent{};
+        }
+    }
+}
+
+// What the last frame's cull hid is shown again before anything else of the next frame runs
+// (the first line of OnFixedUpdate and of OnUpdate, and the level's unload): the game's own code
+// writes and reads a picture's visibility - a pooled particle is put away and brought back,
+// reportSprites says what is on screen - and every one of them must see the state the game
+// left, never the cull's. A quad the game has destroyed since is simply not there.
+void MagicPortalsLayer::restoreEdgeCulls(entt::registry& registry) {
+    for (const entt::entity quad : m_edgeCulled) {
+        if (quad == entt::null || !registry.valid(quad)) continue;
+        if (auto* renderable = registry.try_get<Supersonic::RenderableComponent>(quad)) renderable->isVisible = true;
+    }
+    m_edgeCulled.clear();
+}
+
+void MagicPortalsLayer::unloadEdgeCovers(entt::registry& registry) {
+    for (entt::entity& strip : m_edgeStrips) {
+        if (strip != entt::null && registry.valid(strip)) registry.destroy(strip);
+        strip = entt::null;
+    }
+    m_edgeStrips.clear();
+    m_edgeReports.clear();
+}
+
+// THE PIXEL-CENTRE RULE AT THE FRAME'S EDGE (edge_cover.json; sim/EdgeCover.hpp). It runs
+// last in OnUpdate, after the engine's interpolation has written the pictures and the
+// camera and shakeView has moved the camera, so the rectangles it reads are the ones the
+// renderer is about to draw - at the tick's own place or between two ticks, shaken or not,
+// in whatever window - and each frame decides afresh which pictures are at the frame's edge.
+//
+// A strip is the picture's own material over the gap its edge leaves, with the uv map the
+// picture has carried on across it. Written after every tint, so whatever a picture was
+// given this frame - its colour, light, lightmap, fade or cell - the strip has too.
+//
+// THE COMPLEMENTARY HALF (edge_cover.json complement): a picture whose part on the frame lies
+// wholly in one outer pixel and covers that pixel's centre nowhere is left out of the frame for
+// this frame, its quad hidden (the original draws none of it where the MSAA would draw the samples
+// it covers), and the next frame's first line of code shows it again (restoreEdgeCulls). The
+// strips of a picture's INWARD edge are the same strips, found by the same rule (EdgeCover::Snap).
+void MagicPortalsLayer::syncEdgeCovers(entt::registry& registry) {
+    using namespace Supersonic;
+    restoreEdgeCulls(registry);
+    hideEdgeCovers(registry);
+    if (!m_edgeRules.enabled || !levelShown() || m_camera == entt::null || !registry.valid(m_camera)) return;
+
+    // The frame, and where the quads land on it: the orthographic camera shows
+    // orthoHeight metres down the frame and that times the aspect across it, centred on the
+    // camera, y up the world and down the frame.
+    const auto* viewport = registry.ctx().find<ViewportInfo>();
+    const glm::vec2 size = viewport != nullptr ? viewport->Size() : glm::vec2(0.0f);
+    const double frameW = size.x > 0.0f ? static_cast<double>(size.x) : kDefaultFrameWidthPx;
+    const double frameH = size.y > 0.0f ? static_cast<double>(size.y) : kDefaultFrameHeightPx;
+    const auto& camera = registry.get<CameraComponent>(m_camera);
+    const double halfH = static_cast<double>(camera.orthoHeight) * 0.5;
+    const double halfW = halfH * static_cast<double>(viewportAspect(registry));
+    if (!(halfH > 0.0) || !(halfW > 0.0)) return;
+    const double perMetreX = frameW / (2.0 * halfW);
+    const double perMetreY = frameH / (2.0 * halfH);
+    const double leftM = static_cast<double>(camera.position.x) - halfW;
+    const double topM = static_cast<double>(camera.position.y) + halfH;
+
+    // A sky has its cover already (sky.json pixel_cover), which is the whole of its remedy.
+    std::vector<entt::entity> covered;
+    for (const DrawnSprite& drawn : m_sprites) {
+        if (drawn.cover != entt::null && drawn.quad != entt::null) covered.push_back(drawn.quad);
+    }
+
+    // Found first and built after: a strip is an entity with the components this walks.
+    struct Wanted {
+        entt::entity picture{entt::null};
+        EdgeCover::Rect rect;
+        EdgeCover::Strips strips;
+        glm::dvec2 uvScale{1.0};
+        glm::dvec2 uvOffset{0.0};
+    };
+    // What the log is to say of a picture that is culled or kept: the cull (kEdgeCullCode) or a
+    // side (kEdgeSliverCode + side).
+    struct Note {
+        entt::entity picture{entt::null};
+        int code{0};
+        EdgeCover::Rect rect;
+    };
+    std::vector<Wanted> wanted;
+    std::vector<entt::entity> culls;
+    std::vector<Note> notes;
+    for (auto [entity, mesh, transform, material, renderable] :
+         registry.view<MeshComponent, TransformComponent, MaterialComponent, RenderableComponent>().each()) {
+        if (!renderable.isVisible || mesh.primitiveType != "Quad") continue;
+        // An axis-aligned picture: a turned one has no rows and columns of the frame's, and
+        // a transparent one shows nothing.
+        if (std::fabs(transform.rotation.x) > m_edgeRules.turnRad ||
+            std::fabs(transform.rotation.y) > m_edgeRules.turnRad ||
+            std::fabs(transform.rotation.z) > m_edgeRules.turnRad) {
+            continue;
+        }
+        if (!(material.albedoColor.a > 0.0f) || !(std::fabs(transform.scale.x) > 0.0f) ||
+            !(std::fabs(transform.scale.y) > 0.0f)) {
+            continue;
+        }
+        // The right way up, with a uv the strip can carry on: a mirrored picture runs its uv
+        // backwards and a sheet with a turned uv has no rows and columns of its own. Such a
+        // picture is still a rectangle on the frame, which the cull may leave out.
+        const bool plain = transform.scale.x > 0.0f && transform.scale.y > 0.0f && material.uvRotation == 0.0f;
+        const double halfWidthM = static_cast<double>(std::fabs(transform.scale.x)) * 0.5;
+        const double halfHeightM = static_cast<double>(std::fabs(transform.scale.y)) * 0.5;
+        const double x = static_cast<double>(transform.position.x);
+        const double y = static_cast<double>(transform.position.y);
+        EdgeCover::Rect rect;
+        rect.x = EdgeCover::Interval{(x - halfWidthM - leftM) * perMetreX, (x + halfWidthM - leftM) * perMetreX};
+        rect.y = EdgeCover::Interval{(topM - (y + halfHeightM)) * perMetreY, (topM - (y - halfHeightM)) * perMetreY};
+        if (!std::isfinite(rect.x.lo) || !std::isfinite(rect.x.hi) || !std::isfinite(rect.y.lo) ||
+            !std::isfinite(rect.y.hi)) {
+            continue;
+        }
+        const bool left = EdgeCover::Culled(m_edgeRules, rect, frameW, frameH);
+        const EdgeCover::Strips strips = plain && !left ? EdgeCover::StripsOf(m_edgeRules, rect, frameW, frameH)
+                                                        : EdgeCover::Strips{};
+        const EdgeCover::Slivers slivers =
+            left ? EdgeCover::Slivers{} : EdgeCover::SliversOf(m_edgeRules, rect, frameW, frameH);
+        if (!left && strips.count == 0 && !slivers.Any()) continue;
+        if (const auto* tag = registry.try_get<TagComponent>(entity);
+            tag != nullptr && (tag->tag == kEdgeCoverTag || tag->tag == kSkyCoverTag)) {
+            continue;
+        }
+        if (std::find(covered.begin(), covered.end(), entity) != covered.end()) continue;
+        if (left) {
+            culls.push_back(entity);
+            notes.push_back(Note{entity, kEdgeCullCode, rect});
+            continue;
+        }
+        for (int side = 0; side < 4; ++side) {
+            if (slivers.side[static_cast<std::size_t>(side)]) notes.push_back(Note{entity, kEdgeSliverCode + side, rect});
+        }
+        if (strips.count == 0) continue;
+        Wanted found;
+        found.picture = entity;
+        found.rect = rect;
+        found.strips = strips;
+        found.uvScale = glm::dvec2(material.uvScale);
+        found.uvOffset = glm::dvec2(material.uvOffset);
+        // A flipbook's cell is written by the engine after the layers update, from the
+        // component's frame as the tick left it: the same cell, by the same arithmetic.
+        if (const auto* animation = registry.try_get<SpriteAnimationComponent>(entity)) {
+            const std::uint32_t count = animation->resolvedFrameCount();
+            if (count != 0) {
+                glm::vec2 cellScale(1.0f);
+                glm::vec2 cellOffset(0.0f);
+                SpriteAnimationSystem::CellTransform(animation->columns, animation->rows,
+                                                     animation->firstFrame + (animation->frame % count), cellScale,
+                                                     cellOffset);
+                found.uvScale = glm::dvec2(cellScale);
+                found.uvOffset = glm::dvec2(cellOffset);
+            }
+        }
+        wanted.push_back(found);
+    }
+
+    // The pictures the rule leaves out of the frame: hidden here, shown again by restoreEdgeCulls.
+    for (const entt::entity quad : culls) {
+        registry.get<RenderableComponent>(quad).isVisible = false;
+        m_edgeCulled.push_back(quad);
+    }
+
+    std::size_t used = 0;
+    for (const Wanted& found : wanted) {
+        const MaterialComponent look = registry.get<MaterialComponent>(found.picture);
+        const float z = registry.get<TransformComponent>(found.picture).position.z;
+        const auto pictureSortKey = registry.get<RenderableComponent>(found.picture).sortKey;
+        const std::string tag =
+            registry.all_of<TagComponent>(found.picture) ? registry.get<TagComponent>(found.picture).tag : std::string();
+        for (std::size_t i = 0; i < found.strips.count; ++i) {
+            const EdgeCover::Strip& strip = found.strips.strip[i];
+            if (used == m_edgeStrips.size()) m_edgeStrips.push_back(entt::null);
+            const std::size_t at = used++;
+            if (m_edgeStrips[at] == entt::null || !registry.valid(m_edgeStrips[at])) {
+                m_edgeStrips[at] = makeSprite(registry, kEdgeCoverTag, look.albedoTexturePath, false);
+            }
+            const entt::entity quad = m_edgeStrips[at];
+            // Where it lies, back from the frame's pixels to the world's metres.
+            auto& transform = registry.get<TransformComponent>(quad);
+            transform.position =
+                glm::vec3(static_cast<float>(leftM + (strip.rect.x.lo + strip.rect.x.hi) * 0.5 / perMetreX),
+                          static_cast<float>(topM - (strip.rect.y.lo + strip.rect.y.hi) * 0.5 / perMetreY), z);
+            transform.scale = glm::vec3(static_cast<float>((strip.rect.x.hi - strip.rect.x.lo) / perMetreX),
+                                        static_cast<float>((strip.rect.y.hi - strip.rect.y.lo) / perMetreY), 1.0f);
+            transform.rotation = glm::vec3(0.0f);
+            // The picture's own material - its colour, light, lightmap, fade, blend - with the
+            // uv map carried on across the gap.
+            auto& material = registry.get<MaterialComponent>(quad);
+            material = look;
+            const EdgeCover::Uv uv = EdgeCover::UvOf(found.rect, strip.rect, found.uvScale, found.uvOffset);
+            material.uvScale = glm::vec2(uv.scale);
+            material.uvOffset = glm::vec2(uv.offset);
+            material.uvRotation = 0.0f;
+            auto& renderable = registry.get<RenderableComponent>(quad);
+            renderable.sortKey = pictureSortKey;
+            renderable.isVisible = true;
+            EdgeCoverReport report;
+            report.strip = quad;
+            report.picture = found.picture;
+            report.tag = tag;
+            report.texture = look.albedoTexturePath;
+            report.side = strip.side;
+            report.pictureRect = found.rect;
+            report.stripRect = strip.rect;
+            m_edgeReports.push_back(std::move(report));
+        }
+    }
+
+    // What is new this frame is said once, so the log names the picture of each strip, cull and kept
+    // edge a capture drew.
+    std::vector<std::pair<entt::entity, int>> now;
+    now.reserve(m_edgeReports.size() + notes.size());
+    const auto isNew = [this](const std::pair<entt::entity, int>& key) {
+        // log_every_frame is a measuring switch: every one of them every frame, with no cap.
+        if (m_edgeRules.logEveryFrame) return true;
+        return m_edgeLogged < kEdgeCoverLogCap &&
+               std::find(m_edgeSeen.begin(), m_edgeSeen.end(), key) == m_edgeSeen.end();
+    };
+    static constexpr const char* sides[] = {"left", "right", "top", "bottom"};
+    for (const EdgeCoverReport& report : m_edgeReports) {
+        const std::pair<entt::entity, int> key(report.picture, static_cast<int>(report.side));
+        now.push_back(key);
+        if (!isNew(key)) continue;
+        ++m_edgeLogged;
+        SUPERSONIC_LOG_INFO("Magic Portals")
+            << "edge strip " << sides[static_cast<int>(report.side)] << " on tick " << m_ticks << ": " << report.tag << " "
+            << report.texture << " picture x " << report.pictureRect.x.lo << ".." << report.pictureRect.x.hi << " y "
+            << report.pictureRect.y.lo << ".." << report.pictureRect.y.hi << " px, strip x " << report.stripRect.x.lo
+            << ".." << report.stripRect.x.hi << " y " << report.stripRect.y.lo << ".." << report.stripRect.y.hi << std::endl;
+    }
+    for (const Note& note : notes) {
+        const std::pair<entt::entity, int> key(note.picture, note.code);
+        now.push_back(key);
+        if (!isNew(key)) continue;
+        ++m_edgeLogged;
+        const auto* tag = registry.try_get<TagComponent>(note.picture);
+        const auto* look = registry.try_get<MaterialComponent>(note.picture);
+        SUPERSONIC_LOG_INFO("Magic Portals")
+            << (note.code == kEdgeCullCode ? std::string("edge cull")
+                                           : std::string("edge sliver ") + sides[note.code - kEdgeSliverCode])
+            << " on tick " << m_ticks << ": " << (tag != nullptr ? tag->tag : std::string()) << " "
+            << (look != nullptr ? look->albedoTexturePath : std::string()) << " picture x " << note.rect.x.lo << ".."
+            << note.rect.x.hi << " y " << note.rect.y.lo << ".." << note.rect.y.hi << " px" << std::endl;
+    }
+    m_edgeSeen = std::move(now);
 }
 
 glm::dvec2 MagicPortalsLayer::imageSizePx(const std::string& path) {
@@ -11043,6 +11347,9 @@ void MagicPortalsLayer::stopMusic(entt::registry& registry) {
 }
 
 void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta) {
+    // What the last frame's edge cull hid is shown again before any of this tick's code reads or
+    // writes a picture's visibility (restoreEdgeCulls).
+    restoreEdgeCulls(registry);
     // `fixedDelta` is the engine's tick, which the physics integrates and the layer
     // does not touch. What the SCRIPTS see of it is the original's floor: the whole
     // milliseconds of a frame, 16 of the tick's 16.667 (sim/ScriptClock.hpp).
@@ -12093,6 +12400,8 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
 // ---- per frame: nothing the level or a replay depends on --------------------
 
 void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
+    // As OnFixedUpdate's first line, for a frame that ran no tick.
+    restoreEdgeCulls(registry);
     // What the display's rate is, from the frame the engine has just drawn: the next ticks
     // keep the engine's smoothing only where it outruns the tick (pictures.json). Nothing
     // is measured in a --fixed-step run, whose frames are the tick's own.
@@ -12134,6 +12443,10 @@ void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
     // just drawn, and to the sky pinned to it. After everything above, which
     // places the world and never the camera; before the HUD, whose sign it moves.
     shakeView(registry);
+    // And the pixel-centre rule at the frame's edge: the strips of the pictures whose edge lies in
+    // its outer half pixel, from the camera and the quads exactly as they are drawn - so after the
+    // shake, which is the last thing to move either.
+    syncEdgeCovers(registry);
     // And the HUD, once a FRAME: the screen overlay is drawn and cleared every
     // frame, so a HUD emitted on the tick would vanish from a frame with no tick
     // and double on one with two. It reads the last tick's state and changes
