@@ -409,8 +409,62 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.framebufferRgb565 = rgb565.AsBool();
+
+    // The script's emissive overrides: two datum names and the character's two values, each a light from 0 to 1
+    // (the original's are 0, 0.1 and 0.2), and the world the second one belongs to.
+    const Json::Value& script = root["script_emissive"];
+    const auto name = [&](const char* key, std::string& into) {
+        const bool ok = script.IsObject() && script.Has(key) && script[key].IsString() &&
+                        !script[key].AsString("").empty();
+        if (ok) {
+            into = script[key].AsString("");
+        } else {
+            error = path + ": script_emissive." + key + " is not a name";
+        }
+        return ok;
+    };
+    const auto channels = [&](const Json::Value& value, const char* what, glm::dvec3& into) {
+        bool ok = value.IsArray() && value.AsArray().size() == 3;
+        for (std::size_t i = 0; ok && i < 3; ++i) {
+            const Json::Value& channel = value.AsArray()[i];
+            ok = channel.IsNumber() && std::isfinite(channel.AsNumber()) && channel.AsNumber() >= 0.0 &&
+                 channel.AsNumber() <= 1.0;
+            if (ok) into[static_cast<glm::length_t>(i)] = channel.AsNumber();
+        }
+        if (!ok) error = path + ": script_emissive." + what + " is not three numbers from 0 to 1";
+        return ok;
+    };
+    if (!name("flag", read.ignoreEmissiveKey) || !name("door_key", read.doorEmissiveKey)) return false;
+    const Json::Value& player = script["player"];
+    if (!player.IsObject()) {
+        error = path + ": script_emissive.player is not an object";
+        return false;
+    }
+    if (!channels(player["value"], "player.value", read.playerEmissive) ||
+        !channels(player["lit_value"], "player.lit_value", read.playerLitEmissive)) {
+        return false;
+    }
+    const Json::Value& litWorld = player["lit_world"];
+    if (!litWorld.IsNumber() || litWorld.AsNumber() != std::floor(litWorld.AsNumber()) ||
+        litWorld.AsNumber() < 0.0 || litWorld.AsNumber() > 3.0) {
+        error = path + ": script_emissive.player.lit_world is not a whole number from 0 to 3";
+        return false;
+    }
+    read.playerLitWorld = static_cast<int>(litWorld.AsNumber());
     out = read;
     return true;
+}
+
+ScriptOverride ScriptEmissive(const Rules& rules, const Tscn::Node* properties, int world) {
+    ScriptOverride out;
+    if (properties == nullptr || properties->Meta(rules.ignoreEmissiveKey) == nullptr) return out;
+    out.ignore = true;
+    // door_emissive is read inside the flag's branch and nowhere else; absent it is emissiveValue's start, 0.
+    double door = 0.0;
+    if (const Tscn::Value* value = properties->Meta(rules.doorEmissiveKey); value != nullptr) value->AsNumber(door);
+    out.door = glm::dvec3(door);
+    out.player = world == rules.playerLitWorld ? rules.playerLitEmissive : rules.playerEmissive;
+    return out;
 }
 
 std::uint8_t ReceiverMask(bool isStatic, bool applyLight, bool runtimeBake) {

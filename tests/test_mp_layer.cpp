@@ -9989,6 +9989,123 @@ void AShotIsDimmedAndADarkLevelIsDark() {
     layer.OnDetach(registry);
 }
 
+// ---- the script's emissive on a level that sets ignore_emissive (planning step 166, CMP-1) ----------
+//
+// Game::readProperties (#55-82, #285-300) and Game::preLoop (#355-393) replace two emissive values on the 78
+// levels whose `properties` carry ignore_emissive: the exit door's (door.ent, 0.7) becomes door_emissive, 0 when
+// the level has none, and the character's (dark_mage.ent, 1) becomes 0, or 0.2 in chapter 3. On the others -
+// chapter 1 and 4-02 to 4-19, whose door_emissive 0 is never read - they stay as the files say. Read here as
+// the colour each is DRAWN at: its colour times min(1, ambient + emissive), the engine's own packing.
+
+// What a quad is drawn with, through the engine's packing of its colour and 2D ambient (ColoursOf's, for one entity).
+glm::vec4 DrawnColourOf(entt::registry& registry, entt::entity quad) {
+    if (quad == entt::null || !registry.valid(quad)) return glm::vec4(-1.0f);
+    const auto& material = registry.get<MaterialComponent>(quad);
+    PushConstantData push{};
+    push.albedoColor = material.albedoColor;
+    RenderSystem::ApplySprite2D(material, push);
+    return push.albedoColor;
+}
+
+// The player's quad, whichever sheet it wears (the weightless levels' is another file), or none.
+entt::entity PlayerQuadOf(entt::registry& registry) {
+    entt::entity found = entt::null;
+    for (auto [entity, t] : registry.view<TagComponent>().each()) {
+        if (t.tag == "Magic Portals Player Sprite") found = entity;
+    }
+    return found;
+}
+
+void TheScriptSetsTheDoorAndThePlayerEmissiveOnIgnoreEmissiveLevels() {
+    // The door and the player of one level: drawn at min(1, ambient + the emissive the rule gives), per channel.
+    struct Case {
+        const char* level;
+        const char* name;
+        glm::dvec3 ambient;
+        glm::dvec3 doorEmissive;
+        glm::dvec3 playerEmissive;
+    };
+    // 2-01: chapter 2 sets the flag and has no door_emissive, so the door is at the ambient alone, not 0.7 above it,
+    // and the character is a silhouette. 3-05: chapter 3, door_emissive 0.1 and the character at 0.2. 4-01: the
+    // flag with door_emissive 0.1 in chapter 4, whose character is back at 0. 4-22: and a `darkest` level, whose
+    // ambient the script sets as well.
+    const Case cases[] = {
+        {"level0a", "2-01", {0.15, 0.15, 0.15}, glm::dvec3(0.0), glm::dvec3(0.0)},
+        {"level4b", "3-05", {0.1, 0.1, 0.2}, glm::dvec3(0.1), glm::dvec3(0.2)},
+        {"level0c", "4-01", {0.7, 0.7, 1.0}, glm::dvec3(0.1), glm::dvec3(0.0)},
+        {"level21c", "4-22", {0.01, 0.01, 0.01}, glm::dvec3(0.1), glm::dvec3(0.0)},
+    };
+    const bool original = OriginalArtIsThere("TheScriptSetsTheDoorAndThePlayerEmissiveOnIgnoreEmissiveLevels (the player)");
+    for (const Case& c : cases) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), c.level);
+        layer.OnAttach(registry);
+        const std::string at = std::string(c.name) + " (" + c.level + ")";
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty() && layer.LightingError().empty(),
+                  at + ": " + layer.LoadError() + layer.ArtError() + layer.LightingError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || !layer.LightingError().empty()) continue;
+        CHECK_MSG(layer.AmbientNow() == c.ambient, at + "'s ambient");
+        CHECK_MSG(layer.ScriptEmissiveNow().ignore && layer.ScriptEmissiveNow().door == c.doorEmissive &&
+                      layer.ScriptEmissiveNow().player == c.playerEmissive,
+                  at + " sets ignore_emissive: the door's and the character's emissive");
+
+        const glm::vec4 door = DrawnColourOf(registry, layer.DoorPicture().quad);
+        const glm::dvec3 doorWant = MagicPortals::Lighting::AmbientTerm(c.ambient, c.doorEmissive);
+        CHECK_MSG(AllAre({door}, static_cast<float>(doorWant.r), static_cast<float>(doorWant.g),
+                         static_cast<float>(doorWant.b)),
+                  at + "'s door at ambient + door_emissive, not door.ent's 0.7: " + Show({door}));
+        if (original) {
+            const glm::vec4 player = DrawnColourOf(registry, PlayerQuadOf(registry));
+            const glm::dvec3 playerWant = MagicPortals::Lighting::AmbientTerm(c.ambient, c.playerEmissive);
+            CHECK_MSG(AllAre({player}, static_cast<float>(playerWant.r), static_cast<float>(playerWant.g),
+                             static_cast<float>(playerWant.b)),
+                      at + "'s player at ambient + 0 (0.2 in chapter 3), not dark_mage.ent's 1: " + Show({player}));
+        }
+        layer.OnDetach(registry);
+    }
+
+    // The control: 4-01 sets the flag and its next level, 4-02, does not (its properties carry door_emissive 0 alone,
+    // which the script never reads), so it keeps door.ent's 0.7 and dark_mage.ent's 1 - and what 4-01 set is gone.
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty() && layer.ScriptEmissiveNow().ignore,
+              "4-01 sets ignore_emissive: " + layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    press(layer, registry, MagicPortalsLayer::kSkip);
+    CHECK(IsAt(layer, "level1c"));
+    CHECK_MSG(layer.AmbientNow() == glm::dvec3(0.8, 0.8, 0.9), "4-02's own ambient");
+    CHECK_MSG(!layer.ScriptEmissiveNow().ignore, "4-02 sets no ignore_emissive, and holds nothing of 4-01's");
+    // min(1, 0.8 + 0.7) is 1 and 0.8 alone is not: the door of a level whose door_emissive 0 was wrongly read.
+    const glm::vec4 door = DrawnColourOf(registry, layer.DoorPicture().quad);
+    CHECK_MSG(AllAre({door}, 1.0f, 1.0f, 1.0f), "4-02's door at door.ent's 0.7, whole: " + Show({door}));
+    if (original) {
+        const glm::vec4 player = DrawnColourOf(registry, PlayerQuadOf(registry));
+        CHECK_MSG(AllAre({player}, 1.0f, 1.0f, 1.0f), "4-02's player at dark_mage.ent's 1, whole: " + Show({player}));
+    }
+    // And a retry of it, which draws the level again.
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CHECK_MSG(!layer.ScriptEmissiveNow().ignore &&
+                  AllAre({DrawnColourOf(registry, layer.DoorPicture().quad)}, 1.0f, 1.0f, 1.0f),
+              "and after its retry");
+    layer.OnDetach(registry);
+
+    // Chapter 1 carries neither key: 1-01's door and player stay as the files say.
+    entt::registry first;
+    publishViewport(first);
+    MagicPortalsLayer one(TestPaths(), "level0");
+    one.OnAttach(first);
+    CHECK_MSG(one.SimLevel() != nullptr && one.ArtError().empty() && !one.ScriptEmissiveNow().ignore,
+              "1-01 sets no ignore_emissive: " + one.LoadError() + one.ArtError());
+    if (one.SimLevel() != nullptr && one.ArtError().empty() && original) {
+        CHECK_MSG(AllAre({DrawnColourOf(first, PlayerQuadOf(first))}, 1.0f, 1.0f, 1.0f),
+                  "1-01's player at dark_mage.ent's 1");
+    }
+    one.OnDetach(first);
+}
+
 // ---- the timed crystals' dials (the visuals plan's 3.1) -------------------------
 //
 // The original never fades a timed crystal. addTimerToCrystal adds timer.ent 2
@@ -20755,6 +20872,7 @@ void runTests() {
     TheSceneHoldsDisplayValues();
     EverySpriteIsDrawnAtItsAmbient();
     AShotIsDimmedAndADarkLevelIsDark();
+    TheScriptSetsTheDoorAndThePlayerEmissiveOnIgnoreEmissiveLevels();
     EveryTimedCrystalHasADialBehindIt();
     ATimedCrystalCountsDownOnItsDialAndNeverFades();
     ATakenCrystalsDialShrinksAway();

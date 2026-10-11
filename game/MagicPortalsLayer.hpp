@@ -266,6 +266,10 @@ public:
     // not read, which multiplies nothing.
     glm::dvec3 AmbientNow() const { return m_ambient; }
 
+    // What the script sets over the level's emissive (lighting.json script_emissive): whether the level carries
+    // ignore_emissive, and the emissive then given to its exit door and its character. Not `ignore`: the .ents' own.
+    const Lighting::ScriptOverride& ScriptEmissiveNow() const { return m_scriptEmissive; }
+
     // The lightmap files of the level being drawn, which the layer hands back to
     // the engine's texture registry when the level goes (TextureRegistry::
     // Invalidate). Kept across a retry, which draws the same level again, and
@@ -2107,6 +2111,10 @@ private:
     // The level's properties carry `shadowless_door`: its door is drawn on the
     // other sheet and, where the bob runs too, a glow is added behind it.
     bool m_shadowlessDoor{false};
+    // The same properties' `ignore_emissive`, and what the script then sets the door's and the character's
+    // emissive to (Game::readProperties #55-82 and #285-300, Game::preLoop #355-393); read in buildSprites,
+    // which resets it, applied to the door's picture there and to the player's in syncLighting.
+    Lighting::ScriptOverride m_scriptEmissive;
     int m_doorSprite{-1};      // in m_sprites: the exit door, as SeekEntity finds it
     int m_doorBgSprite{-1};    // and the doorway's black
     int m_doorHighlight{-1};   // and door_highlight.ent, which no level places

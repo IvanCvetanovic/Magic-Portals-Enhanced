@@ -310,16 +310,94 @@ void TheScriptsAmbientIsReadAndFollowsTheTorch() {
     refused("{" + both + green + scale + "}", "framebuffer_rgb565");
     refused("{" + both + green + scale + R"(, "framebuffer_rgb565": {"value": 1})" + "}", "framebuffer_rgb565");
     refused("{" + both + green + scale + R"(, "framebuffer_rgb565": true)" + "}", "framebuffer_rgb565");
+
+    // Since step 166 (CMP-1): the script's emissive overrides, required, and what the file says.
+    CHECK_MSG(rules.ignoreEmissiveKey == "ignore_emissive" && rules.doorEmissiveKey == "door_emissive",
+              "the two datum names Game::readProperties asks for, #55-82");
+    CHECK_MSG(Is(rules.playerEmissive, 0.0, 0.0, 0.0) && rules.playerLitWorld == 2 &&
+                  Is(rules.playerLitEmissive, 0.2, 0.2, 0.2),
+              "Game::preLoop #360-381: the character's emissive is 0, and 0.2 when g_currentWorld is 2");
+    const std::string rgb = R"(, "framebuffer_rgb565": {"value": true})";
+    const std::string base = "{" + both + green + scale + rgb;
+    const std::string player = R"("player": {"value": [0, 0, 0], "lit_world": 2, "lit_value": [0.2, 0.2, 0.2]})";
+    const auto script = [&](const std::string& body) { return base + R"(, "script_emissive": {)" + body + "}}"; };
+    const std::string names = R"("flag": "ignore_emissive", "door_key": "door_emissive")";
+    refused(base + "}", "script_emissive.flag");
+    refused(script(R"("door_key": "door_emissive", )" + player), "script_emissive.flag");
+    refused(script(R"("flag": "", "door_key": "door_emissive", )" + player), "script_emissive.flag");
+    refused(script(R"("flag": "ignore_emissive", "door_key": 1, )" + player), "script_emissive.door_key");
+    refused(script(names), "script_emissive.player");
+    refused(script(names + R"(, "player": {"value": [0, 0], "lit_world": 2, "lit_value": [0.2, 0.2, 0.2]})"),
+            "player.value");
+    refused(script(names + R"(, "player": {"value": [0, 0, 0], "lit_world": 2, "lit_value": [0.2, 0.2, 1.2]})"),
+            "player.lit_value");
+    refused(script(names + R"(, "player": {"value": [0, 0, 0], "lit_world": 2.5, "lit_value": [0.2, 0.2, 0.2]})"),
+            "lit_world");
+    refused(script(names + R"(, "player": {"value": [0, 0, 0], "lit_world": 4, "lit_value": [0.2, 0.2, 0.2]})"),
+            "lit_world");
     {
         const std::string text = "{" + both + R"(, "normal_map_green_down": {"value": false})" + scale +
-                                 R"(, "framebuffer_rgb565": {"value": false})" + "}";
+                                 R"(, "framebuffer_rgb565": {"value": false})" + R"(, "script_emissive": {)" + names +
+                                 R"(, "player": {"value": [0.1, 0.1, 0.1], "lit_world": 1, "lit_value": [0.3, 0.3, 0.3]}}})";
         Write(path, std::vector<unsigned char>(text.begin(), text.end()));
         Lighting::Rules read;
         std::string why;
         CHECK_MSG(Lighting::LoadRules(path.string(), read, why), why);
         CHECK_MSG(!read.normalMapGreenDown && read.haloBrightnessScale == 0.5 && !read.framebufferRgb565,
                   "and read as written");
+        CHECK_MSG(Is(read.playerEmissive, 0.1, 0.1, 0.1) && read.playerLitWorld == 1 &&
+                      Is(read.playerLitEmissive, 0.3, 0.3, 0.3),
+                  "the character's two emissives and the world of the second, as written");
     }
+}
+
+// ---- what the script sets over the emissive of a level that sets ignore_emissive (step 166) -------------------
+
+void TheScriptSetsTheDoorAndTheCharactersEmissiveOnlyOnAnIgnoreEmissiveLevel() {
+    Lighting::Rules rules;
+    std::string error;
+    CHECK_MSG(Lighting::LoadRules(kPortData + "/lighting.json", rules, error), error);
+    // A level's `properties` node as the converter writes it: the keys are quoted strings, `door_emissive` a float.
+    const auto properties = [&](const std::string& keys) {
+        Tscn::Scene scene;
+        std::string why;
+        const std::string text = "[gd_scene load_steps=1 format=3]\n\n[node name=\"room\" type=\"Node2D\"]\n\n"
+                                 "[node name=\"properties_689\" type=\"Node2D\" parent=\".\"]\n"
+                                 "metadata/entity_name = \"properties\"\nmetadata/ad_at_bottom = \"1\"\n" + keys;
+        CHECK_MSG(Tscn::Parse(text, scene, why), why);
+        return scene;
+    };
+    const auto read = [&](const std::string& keys, int world) {
+        const Tscn::Scene scene = properties(keys);
+        const Tscn::Node* node = scene.FindNode("properties_689");
+        CHECK_MSG(node != nullptr, "the fixture's properties node");
+        return Lighting::ScriptEmissive(rules, node, world);
+    };
+
+    // Chapter 2 (world 1): the flag alone. The door goes to door_emissive's absence, 0: not door.ent's 0.7.
+    const Lighting::ScriptOverride two = read("metadata/ignore_emissive = \"1\"\n", 1);
+    CHECK_MSG(two.ignore && Is(two.door, 0.0, 0.0, 0.0) && Is(two.player, 0.0, 0.0, 0.0),
+              "2-01 (level0a): ignore_emissive and no door_emissive: door 0, character 0");
+    // Chapter 3 (world 2): the door at door_emissive and the character at 0.2.
+    const Lighting::ScriptOverride three =
+        read("metadata/door_emissive = \"0.1\"\nmetadata/ignore_emissive = \"1\"\n", 2);
+    CHECK_MSG(three.ignore && Is(three.door, 0.1, 0.1, 0.1) && Is(three.player, 0.2, 0.2, 0.2),
+              "3-05 (level4b): door_emissive 0.1 on the door, 0.2 on the character");
+    // Chapter 4 (world 3), 4-01 and 4-20 to 4-32: the door as chapter 3's, the character back to 0.
+    const Lighting::ScriptOverride four =
+        read("metadata/door_emissive = \"0.1\"\nmetadata/ignore_emissive = \"1\"\n", 3);
+    CHECK_MSG(four.ignore && Is(four.door, 0.1, 0.1, 0.1) && Is(four.player, 0.0, 0.0, 0.0),
+              "4-01 (level0c): door 0.1, character 0 - the 0.2 is world 2's alone");
+    // A level that sets no flag leaves both alone, door_emissive or not: #66 jumps over #72-82, so 4-02 to 4-19's
+    // door_emissive 0 is never read and their doors keep door.ent's 0.7.
+    const Lighting::ScriptOverride control = read("metadata/door_emissive = \"0\"\n", 3);
+    CHECK_MSG(!control.ignore, "4-02 (level1c): door_emissive 0 on its own is never read");
+    CHECK_MSG(!read("", 0).ignore && !Lighting::ScriptEmissive(rules, nullptr, 0).ignore &&
+                  !Lighting::ScriptEmissive(rules, nullptr, -1).ignore,
+              "chapter 1's properties, or no properties node at all: nothing");
+    // Without a chapter the world is none, which is not 2.
+    CHECK_MSG(Is(read("metadata/ignore_emissive = \"1\"\n", -1).player, 0.0, 0.0, 0.0),
+              "a level outside any chapter has no world, so not world 2's 0.2");
 }
 
 // ---- which light reaches which sprite, and in what colour (step 49) ---------------
@@ -964,6 +1042,7 @@ void LevelsCarryWhatTheConverterReported() {
 
 MP_SUITE_MAIN("test_mp_lighting") {
     TheScriptsAmbientIsReadAndFollowsTheTorch();
+    TheScriptSetsTheDoorAndTheCharactersEmissiveOnlyOnAnIgnoreEmissiveLevel();
     EveryKeyIsReadAndEveryAbsenceIsTheDefault();
     AnythingElseIsRefusedNamingTheLine();
     EachLightReachesTheSpritesItShould();

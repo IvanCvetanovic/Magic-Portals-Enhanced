@@ -4666,6 +4666,12 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     m_shadowlessDoor =
         properties != nullptr && properties->Meta(m_artRules.door.shadowlessFlag.c_str()) != nullptr;
     m_doorBobRuns = m_level.noGravity;
+    // `ignore_emissive` on the same node, and the world the level is in: what the script sets the door's and the
+    // character's emissive to (lighting.json script_emissive). Read before the art, so a level drawn as boxes holds
+    // it too, and reset by it, so a level that sets none does not inherit the last one's.
+    m_scriptEmissive = Lighting::ScriptEmissive(
+        m_data.lighting, properties,
+        m_current >= 0 ? m_chapters.levels[static_cast<std::size_t>(m_current)].world : -1);
     if (!Sprites::Find(m_data.scene, m_paths.art, m_tierRules, sprites, m_artError)) {
         // Played anyway, as boxes: the art is the original's, and a machine
         // without it can still play the port.
@@ -4879,6 +4885,9 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         if (const auto look = m_look.nodes.find(sprite.node); m_lit && look != m_look.nodes.end()) {
             drawn.colour = glm::vec4(look->second.colour);
             drawn.emissive = look->second.emissive;
+            // THE EXIT DOOR OF AN `ignore_emissive` LEVEL has the emissive its level's door_emissive says instead of
+            // door.ent's 0.7: readProperties #285-300, on the door SeekEntity found (lighting.json script_emissive).
+            if (isDoor && m_scriptEmissive.ignore) drawn.emissive = m_scriptEmissive.door;
             // Its baked light, when the original draws one for it: static and
             // applying light (the design's section 3.1). Lighting::Read
             // already refuses a lightmap anywhere else; the condition is kept
@@ -6917,8 +6926,10 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         receiver.z = z;
         return receiver;
     };
-    tint(registry, m_playerQuad, white, m_artRules.character.emissive, {},
-         receiverOf(m_artRules.character, m_playerZ));
+    // The player at dark_mage.ent's emissive 1, or, on an `ignore_emissive` level, the one Game::preLoop sets it to
+    // (#355-393: 0, or 0.2 in chapter 3), which is what makes it a silhouette in a dark room.
+    tint(registry, m_playerQuad, white, m_scriptEmissive.ignore ? m_scriptEmissive.player : m_artRules.character.emissive,
+         {}, receiverOf(m_artRules.character, m_playerZ));
     // A timed crystal's dial at its alpha, which the sprite path weights its base
     // by (shader.frag:477-478), as a keyhole's fade is. timer.ent's emissive 1
     // makes min(1, ambient + 1) whole on every level, chapter 4's dark ones too.

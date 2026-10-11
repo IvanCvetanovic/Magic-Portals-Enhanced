@@ -6,8 +6,8 @@
     "docs/planning/2026-09-11-magic-portals-remaster.md, step 45 (the design's G3).",
     "",
     "Only what a built step reads is here: the two ambient lights the script sets (G3, step 45), and",
-    "the normal maps' green and the halo scale (G5, step 49), and the 16-bit framebuffer (G6, step 55).",
-    "The design's other row - the script emissive overrides - arrives with the step that reads it."
+    "the normal maps' green and the halo scale (G5, step 49), the 16-bit framebuffer (G6, step 55), and",
+    "the script's emissive overrides on the levels that set ignore_emissive (CMP-1, planning step 166)."
   ],
 
   "darkest_ambient": {
@@ -85,5 +85,47 @@
       "drawn after it - the HUD, the pause, the menus - is not quantised."
     ],
     "value": true
+  },
+
+  "script_emissive": {
+    "_source": [
+      "THE SCRIPT'S EMISSIVE OVERRIDES (CMP-1, planning step 166; the design's section 5.8). From Enhanced's",
+      "out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0:",
+      "  Game::readProperties (Game.angelscript bytes 116676..118260), called by Game::preLoop #33 before",
+      "    anything is scaled: #53 emissiveValue = 0; #55-66 CheckCustomData('ignore_emissive') == 3 (the",
+      "    uint datum type, ETHCustomDataManager.h:34-42: DT_UINT = 3), and only then #68-70",
+      "    Game.ignoreEmissive = true and #72-82 emissiveValue = GetFloat('door_emissive') - the jump at #66",
+      "    skips #72-82 too, so a level that carries door_emissive WITHOUT ignore_emissive (4-02 to 4-19, all",
+      "    at 0) never has it read; #223-237 Game.door = SeekEntity('door.ent'), #268-283 SeekEntity('door')",
+      "    when that is null; #285-300, when Game.ignoreEmissive is set, door.SetEmissiveColor(vector3(",
+      "    emissiveValue, emissiveValue, emissiveValue)). The datum's VALUE is never read, only its type, so",
+      "    the port's test is the key's presence on the first `properties` node, which is the same test on",
+      "    every shipped level: the original's .esc files carry it as <Type>uint</Type><Value>1</Value> on",
+      "    exactly 78 levels (2-01 to 2-32, 3-01 to 3-32, 4-01 and 4-20 to 4-32), door_emissive as float 0.1",
+      "    on the 46 of those in chapters 3 and 4 and not at all on chapter 2's 32 (read as 0, #72-82's",
+      "    GetFloat of an absent datum and emissiveValue's own #53 start).",
+      "  Game::preLoop (bytes 112536..114414) #355-393, after the character is built (#75) and the layers",
+      "    are added: when Game.ignoreEmissive is set, #360-364 emissiveValue = vector3(0, 0, 0), #366-381",
+      "    vector3(0.2, 0.2, 0.2) when g_currentWorld == 2 (#367 CMPIi 2, #368 JP past it, #370 JZ into it),",
+      "    #384-392 character.getEntity().SetEmissiveColor(emissiveValue). g_currentWorld is the 0-based",
+      "    world openLevel passes (main.angelscript bytes 312129..312230, openWorld 312230..312318, and its",
+      "    own start at 0, bytes 296495..296532), so 2 is chapter 3.",
+      "  Game::Game (bytes 110437..111736) #304-305 starts Game.ignoreEmissive false.",
+      "Nothing else of the listing writes the character's emissive (the only SetEmissiveColor call sites are",
+      "blinkEmissive, ETHCallback_dark_dragon, ETHCallback_minion, setBackgroundTilesEmissiveColor, which",
+      "paints pilar.ent alone, and these two), and the door's only here. It replaces the .ent's own values,",
+      "which stay what art.json and the level's node say on every other level: dark_mage.ent's (1, 1, 1)",
+      "and door.ent's 0.7. door_bg.ent (black.bmp and the red flame, emissive 1) is left alone by the script.",
+      "Fits (Enhanced's out/parity/program/R4b/CMP, the comparison of step 165): 4-01's player reads",
+      "0.70 / 0.70 / 1.00 = its ambient (0.7, 0.7, 1) at emissive 0; 3-05's 0.33 / 0.31 / 0.41 = its ambient",
+      "(0.1, 0.1, 0.2) + 0.2; 3-09's arch 0.373 / 0.368 / 0.559 = (ambient + 0.1) / min(1, ambient + 0.7)."
+    ],
+    "flag": "ignore_emissive",
+    "door_key": "door_emissive",
+    "player": {
+      "value": [0.0, 0.0, 0.0],
+      "lit_world": 2,
+      "lit_value": [0.2, 0.2, 0.2]
+    }
   }
 }

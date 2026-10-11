@@ -161,6 +161,8 @@ after a torch is lit (step 55; 4-22 noLM_E<1 vs original 0.95 → 0.13). The des
 Open after the plan (design §8):
 - [ ] **Script-driven emissive** — the largest remaining lighting error in chapters 2-4. Decode `ignore_emissive`,
       `door_emissive`, the crate callbacks, the player spawn and three background functions with `tools/asbc`.
+      *Partly closed by step 166 (CMP-1, wave 4c-1), 2026-10-11*: `ignore_emissive`, `door_emissive` and the character's emissive in `Game::preLoop` (#355-393) are decoded,
+      built and measured (`game/data/lighting.json` `script_emissive`); the crate callbacks (CMP-9) and the rest of this list are not touched by it, so the row stays open.
 - [ ] **Camera at 1-13**: port offset (0,−10) px against the original; the lighting gate refuses this level until fixed.
 - [ ] Halo magnitude: formula × particle ratio; the fit's ×0.5 on one entity may need a `_guess` scale.
 - [ ] Vertical entities (`vPixelLight`, XZ plane) not ported (10 `light_off` instances).
@@ -2640,9 +2642,12 @@ them: a widely included header) and WAKE-7's tests, with R4a-10's one check.
       knight's own `holdTime` at `min(holdTime, 1000)` when it begins contact with a non-sensor `dark_mage.ent`. It has been open since step 97 (Order 11.4's "the dark mage's `holdTime` cap (#12-55)" row above) and interacts with the sight's
       dwell reset: a knight the player touches while it sees him would walk on after at most 1000 ms of dwell where the port stands it through a long hold, which moves the routes that brush a knight (3-02's "held up by a
       standing body", 3-07). Not built in G1a (one system a step). 
-- [ ] **G1a-11. The player is drawn lit on the six `darkest` levels** (found by the independent check, which read the library stills h6.3 of 4-25, 4-26, 4-27, 4-29, 4-30 and 4-31 against the port's frames; 4-25's pair was
+- [x] **G1a-11. The player is drawn lit on the six `darkest` levels** (found by the independent check, which read the library stills h6.3 of 4-25, 4-26, 4-27, 4-29, 4-30 and 4-31 against the port's frames; 4-25's pair was
       looked at again at the commit): the original shows the player as a black silhouette with its red eye (or not at all), and the port draws him purple and lit; 4-25's exit arch is drawn lit in the port too. Unchanged by
       this step (125 of 128 byte-identical to step 157's) and not G1's. Next: the final comparison (section 5).
+      *Closed by step 166 (CMP1, wave 4c-1), 2026-10-11, as the general case CMP-1*: the six levels' players read the original's to 0.0-0.7 of 255 per channel (4-25 (2.4, 0.9, 1.0)
+      against (2.9, 1.5, 1.6); 4-26 (2.0, 0.4, 0.4) against (2.0, 0.4, 0.4); 4-27, 4-29, 4-30 and 4-31 the same), 4-25's arch (9.6, 8.5, 10.0) against (9.8, 8.6, 10.1), and 4-22's
+      and 4-27's crops show the black figure with its red eye as bright as the original's. 4-20's player stays red-lit in the original and not in the port (CMP-7).
 
 **Step 159's recorded deviations (G1b: the knights shoot), each an open row** (planning step 159 has the evidence; `out/parity/program/G1b/decode.md` the machine):
 - [ ] **G1b-1. The footage's two screencap-polled HUD markers are INFERRED to be late, never measured.** F14's take r1 (console-polled every ~75 ms, the OLD HUD awaited) has knight B turn left at HUD + 6.05 s where the rule says script 6.0 s: **0.05 s, no offset, nothing tuned**.
@@ -3175,6 +3180,32 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       `turn_rad`'s `_guess` line); the non-underscore keys are equal throughout and no launch followed the last edit. Next: dump the gather order if the pool is ever
       questioned; the next launch of the runner or the game reads `d7484711`.
 
+**Step 166's recorded deviations** (the script's emissive override, CMP-1, wave 4c-1; planning step 166 has the evidence, `RECORDED DEVIATIONS` 1-5; `out/parity/program/CMP1/` the reports and `verify1.json`; GAMEPLAY: none; the rows CMP-1 and G1a-11 are closed by it):
+- [x] **CMP1-1. Settled history** (deviations 1, 3 and 4). The group's gate figure "chapter 2 player RGB 8-35, arch 5-12 grey" is a summary, not a bound (see CMP-1's note
+      below: the gate used the six stills' spread); the sweep's own image of 2-32 cannot show the rule (its player is dead at tick 301 and no arch is in frame: the f200
+      capture and the layer's pinned colours are the evidence); the pairs and crops are kept for the named levels only (the overlays, the f200 frames, the montages and the gold
+      frames, equal to `after/sweep` byte for byte, were deleted). Nothing is left to do.
+- [ ] **CMP1-2. Step 45's 4-22 door reading disagrees with the rule and with the comparison** (deviation 2). Step 45 read 3.3 / 3.9 / 4.6 of 255 over four unnamed blocks
+      ("about 0.01 of the texel"); the rule gives, and the comparison's reader box on 4-22 (x 1128-1212, y 120-390) reads, (11.1, 11.2, 14.1) in the original against
+      (11.8, 11.8, 14.4) after. Step 45's four blocks are not named, so the difference is not traced; nothing was tuned to either. Next: nothing, unless the blocks are named
+      and re-read on the original; no code.
+- [ ] **CMP1-3. The flag is tested by presence, the original tests the uint type** (the verification's low 1). `Game::readProperties` #61-66 asks `CheckCustomData` for the
+      uint type and never reads the value; the port asks `Meta(key) != nullptr`. Identical on all 128 shipped levels (the census of the original's `.esc` files: 78 flag
+      levels, each `<Type>uint</Type><Value>1</Value>`), not in general. Next: test the value's type if a level ever carries the key as another type.
+- [ ] **CMP1-4. Two small source leftovers, neither moves a pixel** (the verification's low 2 and the implementer's note 3). The absent `door_emissive`'s 0.0 is a literal in
+      `ScriptEmissive` (the listing's start value, #53, cited in `_source`, not a tunable key), and `m_scriptEmissive` is not cleared by `unloadLevel` (the next `buildSprites`
+      resets it and the menu reads nothing from it). Next: a `script_emissive` key for the default and a clear in `unloadLevel`, when `game/sim/Lighting.cpp` and the layer
+      are next edited for a real change (an edit relinks both executables, and every refused launch notifies the owner).
+- [ ] **CMP1-5. Five boxes the step does not bring to the original's, each another cause** (planning step 166's gate 2; the verification's low 4). 2-28's arch (20.3 against 8.3:
+      an orange particle cloud over the door at f420, INFERRED from the pair image), 3-25's and 3-26's arches (28.0 against 30.5: the door's red halo, CMP-8, INFERRED from the
+      pair images and the reds of the readings, not separately measured), 4-20's player (1.3 against 4.4: the red key's own light, CMP-7) and, inside its stills' range, 2-02's
+      player ((46.4, 27.1, 33.0) against (29.6, 24.0, 30.1), luminance error 7.6, the largest player error left: a light on the figure). Next: read them again after CMP-7,
+      CMP-8 and the effects' phase (CMP-low a); nothing of CMP-1's rule moves them.
+- [ ] **CMP1-6. What the verification did not run** (the verification's `notRun`). The mutation launches (a verifier does not edit sources: it read the implementer's logs,
+      `flag` renamed 13 failures, chapter 3's `lit_value` 0 -> 2, `player.value` 1 -> 6, `flag` = `door_emissive` 7) and a rebuild for the zero-warnings gate (a relink under
+      Smart App Control: read from `build1.log` and `build2.log`, 0 `warning` lines; the executables `4240c9bd` and `b9430d66` are newer than every compiled source). Next: the
+      next build of these sources reads the second; nothing for the first unless the pins are questioned.
+
 **The final comparison's rows** (wave 4b; 128 levels, 18 causes and CMP-low; GAMEPLAY: none in the comparison itself, each row says its fix's). Evidence is under
 `out/parity/program/R4b/CMP/` (`residuals.md` has every reader's line with its box, `groups.json` the causes and proposals, `per_level.md` the table): the pair images
 `pairs/<id>_h63_pair.png` (the original above the port, half scale) and `pairs/<id>_h63_overlay.png`, port frames `port_f420/<id>_f420.png`, are kept (named in
@@ -3183,7 +3214,7 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
 below was CHECKED by the comparison's triage against the listing or the Ethanon source (its own re-derivation of 11 reader attributions: 10 held); the independent
 verification re-derived only CMP-1's census (78 levels carry `ignore_emissive`, 0 hits in `game/`, the converter, `data/` and `tests/`) and re-read six pair images.
 Fixability: `decoded` (the mechanism is read from the listing and a fix can be specified), `needs-rig` (a clip of the original is needed), `owner-call`, `unknown`.
-- [ ] **CMP-1. Script-driven emissive: the player and the exit arch are drawn lit on the 78 levels that carry `ignore_emissive`** (high; light; `decoded`; moves no
+- [x] **CMP-1. Script-driven emissive: the player and the exit arch are drawn lit on the 78 levels that carry `ignore_emissive`** (high; light; `decoded`; moves no
       route). Levels: 2-01 to 2-32, 3-01 to 3-32, 4-01 and 4-20 to 4-32 (the player in all 78; the arch in frame on 45). Evidence: 2-01 player box [965,60,1060,195] and
       arch [915,275,1190,645] in `pairs/2-01_h63_pair.png`; 2-05 arch [1030,0,1280,330]; 2-03 arch [0,260,205,640]; the player is a black silhouette in the original on
       chapter 2 and on 4-20 to 4-27 and 4-29 to 4-32 (high), dim and matte on chapter 3, 4-01 and 4-28 (medium). Measured ratios fit the rule: 4-01's player
@@ -3197,6 +3228,19 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       only), the rule and its citations in `game/data/lighting.json`. Gate: the f420 sweep changes only the 78 levels (the other 50 byte-identical to `PX/after/sweep`),
       the player and arch boxes read the original's (chapter 2 player RGB 8-35, arch 5-12 grey); pin 2-01, 3-05, 4-01 and 4-22 in `test_mp_art` or `test_mp_layer`.
       GAMEPLAY: none. Of the 58 `differs` levels, 52 differ by this cause alone.
+      *Closed by step 166 (CMP1, wave 4c-1), 2026-10-11; committed locally, the hash goes in at the wave's close. GAMEPLAY: none (the 128 routes win on exactly the census's
+      ticks).* Built as the Next says: the port reads `ignore_emissive` and `door_emissive` from the level's first `properties` node and the chapter's 0-based world; the flag
+      gates both writes (4-02 to 4-19's `door_emissive` 0 is never read); on a flag level `door.ent` is drawn at `door_emissive` (0 when absent) and the player at 0 (0.2 in
+      chapter 3). The rule and its citations: `game/data/lighting.json` `script_emissive`; pins in `test_mp_lighting` (548 -> 588 checks) and `test_mp_layer` (3,876 -> 3,905).
+      Measured: the f420 sweep changed 77 levels, all inside the 78, and 51 are byte-identical (the 50 outside and 2-32: its player burns at tick 301 and no arch is in frame,
+      so its rule is shown at f200 only); the readers' boxes read the original's, mean abs luminance error player 43.8 -> 0.7 and arch 31.6 -> 0.7, `compare.py` `mean_abs`
+      against h6.3 down on 77 of 78 (4.64 -> 3.43), up on none; 57 suites, 32,383 checks, `test_mp_routes` 128 of 128. Independently verified (`CMP1/verify1.json`: 9 gates,
+      4 low). **What it leaves**: (a) the gate's "chapter 2 player RGB 8-35, arch 5-12 grey" was a summary, not a bound (the original's own arch boxes read 70.9 on 2-16, 69.1
+      on 2-30, 25.0 on 2-05; 26 of 31 chapter-2 player boxes read 35 or under), so the gate used the six stills' spread; (b) outside that spread, each another cause: 2-28's
+      arch (an orange particle cloud over the door at f420, INFERRED from the pair image), 3-25's and 3-26's arches (the door's red halo, CMP-8, INFERRED), 4-20's player (the
+      red key's light, CMP-7); (c) 2-02's player is redder than the original's, (46.4, 27.1, 33.0) against (29.6, 24.0, 30.1), inside its stills' range 27.7-41.8: a light on the
+      figure, read with CMP-7 and CMP-8; (d) the 52 `differs` levels that differed by this cause alone are read again after the groups that remain. The deviations are rows
+      CMP1-1 to CMP1-6 above. Closes G1a-11; section 1's "Script-driven emissive" stays open for its other items.
 - [ ] **CMP-2. Revolute-joint pose: the port drops attach point B, so a plank or arm stands where it was placed, not where the original's joint pulls it** (high;
       structural; `decoded`; MOVES ROUTES). Seen: 2-31 (box [0,480,520,720], `pairs/2-31_h63_pair.png`, identical in all three original stills and every port frame, so
       a static pose), 3-20 (box x720-1090 y395-505; best shift (+6, 0) on the plank, box x845-960 y395-505), 4-31 (box [960,190,1170,285], the bar's edges 9 px off,

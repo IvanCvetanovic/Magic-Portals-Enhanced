@@ -142,7 +142,7 @@
     "sprite": "magic_portals_hd.png",
     "additive": false,
     "emissive": [1.0, 1.0, 1.0],
-    "_emissive": "dark_mage.ent's <EmissiveColor r=1 g=1 b=1>: never dimmed by the ambient (what script sets over it is the lighting design's section 5.8, not built)",
+    "_emissive": "dark_mage.ent's <EmissiveColor r=1 g=1 b=1>: never dimmed by the ambient. On a level that sets ignore_emissive the script sets it to 0, or 0.2 in chapter 3, instead (Game::preLoop #355-393; lighting.json script_emissive, planning step 166)",
     "static": false,
     "apply_light": true,
     "normal": "normalmap_77.png",

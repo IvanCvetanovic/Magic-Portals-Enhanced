@@ -141,6 +141,13 @@ struct Rules {
     double haloBrightnessScale = 1.0;
     // The original draws into a 16-bit 5/6/5 surface without dithering.
     bool framebufferRgb565 = true;
+
+    // THE SCRIPT'S EMISSIVE OVERRIDES (script_emissive; ScriptEmissive below).
+    std::string ignoreEmissiveKey;     // the `properties` datum that switches them on
+    std::string doorEmissiveKey;       // the datum that holds the door's emissive
+    glm::dvec3 playerEmissive{0.0};    // the character's, on a level that sets the flag
+    int playerLitWorld = -1;           // the 0-based world whose character is given...
+    glm::dvec3 playerLitEmissive{0.0}; // ...this one instead
 };
 
 // False, with `error`, unless both lights are three finite numbers from 0 to 1,
@@ -148,8 +155,31 @@ struct Rules {
 // 0 to 1. The original's ambients are well inside that, and an ambient above 1 is
 // clipped by AmbientTerm anyway, so a value outside it is a typing mistake, not a
 // light; a halo scale above the formula's own brightness is not one the design
-// considers.
+// considers. And script_emissive: two datum names, the character's emissive and the
+// one it has in its lit world, each three numbers from 0 to 1, and that world a
+// whole number from 0 to 3.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
+
+// ---- what the script sets over a level's emissive ---------------------------------
+//
+// A level whose `properties` entity carries ignore_emissive (78 of the 128:
+// chapters 2 and 3, chapter 4's 4-01 and 4-20 to 4-32) has the script replace two
+// emissive values after the level is read: the character's, which Game::preLoop
+// sets to 0, or to 0.2 in world 2 (chapter 3), and the exit door's (door.ent), which
+// Game::readProperties sets to the level's door_emissive, 0 when it has none. On
+// any other level neither is touched - door_emissive on its own is never read -
+// and the character and the door are drawn with their .ent's and their node's own
+// emissive (dark_mage.ent's 1, door.ent's 0.7). Decoded in lighting.json.
+struct ScriptOverride {
+    bool ignore = false;         // Game.ignoreEmissive
+    glm::dvec3 door{0.0};        // the door's emissive, only when `ignore`
+    glm::dvec3 player{0.0};      // the character's, only when `ignore`
+};
+
+// `properties` is the level's first `properties` node, as SeekEntity finds it (null: none), and `world` the
+// level's 0-based world (-1: none). The flag counts by being PRESENT, which is the original's test on every
+// shipped level (it asks for the uint datum type and never reads the value).
+ScriptOverride ScriptEmissive(const Rules& rules, const Tscn::Node* properties, int world);
 
 // ---- which light reaches which sprite -------------------------------------------
 //
