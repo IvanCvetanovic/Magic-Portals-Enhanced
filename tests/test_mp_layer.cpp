@@ -19476,9 +19476,15 @@ StoneOnPlayer LetAStoneFallOnThePlayer(double gapPx) {
     return out;
 }
 
-// The stone kills the player it begins to touch above 2.5 and not at or below it, by what it carried into the step - the sweep
-// of falls straddles the number, and every fall's outcome is the rule's. Where it kills it is a death area's death (no fall
-// sound; blood the frame after; the death named for the stone) with the row's own shake and sound, and none of the crush's.
+// The stone kills the player it begins to touch above 2.5 and not at or below it - the sweep of falls straddles the number, and
+// every fall's outcome is the rule's. Where it kills it is a death area's death (no fall sound; blood the frame after; the death
+// named for the stone) with the row's own shake and sound, and none of the crush's.
+//
+// What each fall reads is what Box2D's own step reads (planning step 162, STK-9; out/parity/program/STK9/derive.py): v += g dt, then
+// x += v dt, and BeginContact in the next step's Collide with the velocity that step left, the first step k whose free position
+// y_k = 0.5556 k (k + 1) / 2 is within the skin - none, a stone and the player's two circles being circles (b2CollideCircles) - so
+// k / 3 in hitIntensity. The row of STK-9 gave 0.667 and 1.333 for the first two, taking a skin of 0.5 level units where Box2D's
+// polygon skin is 0.5 SCREEN px (0.178 u) and a circle has none; 10 px and up are the row's own.
 void AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone() {
     if (!OriginalArtIsThere("AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone")) return;
     int under = 0;
@@ -19486,11 +19492,20 @@ void AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone() {
     double highestUnder = 0.0;
     double lowestOver = 1e9;
     double last = -1.0;
-    for (const double gapPx : {2.0, 6.0, 10.0, 14.0, 18.0, 24.0, 40.0}) {
+    struct Fall {
+        double gapPx;
+        int step; // the first step whose free position is within the skin
+    };
+    const std::vector<Fall> falls{{2.0, 3}, {6.0, 5}, {10.0, 6}, {14.0, 7}, {18.0, 8}, {24.0, 9}, {40.0, 12}};
+    for (const Fall& fall : falls) {
+        const double gapPx = fall.gapPx;
         const StoneOnPlayer run = LetAStoneFallOnThePlayer(gapPx);
         const std::string what = "a stone let go " + std::to_string(gapPx) + " px over his head";
         CHECK_MSG(run.began, what + " came down on the player");
         if (!run.began) continue;
+        CHECK_MSG(std::fabs(run.hit - fall.step / 3.0) < 0.01,
+                  what + " reads " + std::to_string(run.hit) + " where the original's Box2D reads " + std::to_string(fall.step / 3.0) +
+                      " (step " + std::to_string(fall.step) + ")");
         const bool kills = run.hit > 2.5;
         std::printf("  %s: hit %.4f -> %s\n", what.c_str(), run.hit, run.died ? "killed" : "not killed");
         CHECK_MSG(run.died == kills && run.dying == kills,
@@ -19516,6 +19531,207 @@ void AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone() {
     CHECK_MSG(under >= 1 && over >= 1, "the falls straddle 2.5: " + std::to_string(under) + " under, " + std::to_string(over) + " over");
     std::printf("  the hardest fall that did not kill read %.4f, the softest that did %.4f\n", highestUnder, lowestOver);
     CHECK_MSG(highestUnder <= 2.5 && lowestOver > 2.5, "and none is on the wrong side");
+}
+
+// The edge of 2.5 (STK-9), where the fall's own steps put it. hitIntensity is k / 3 on the k-th step of a fall from rest and the
+// first step above 2.5 is the 8th (2.667; the 7th reads 2.333), so what kills is a fall that the 7th step's free position
+// y_7 = 0.5556 x 7 x 8 / 2 = 15.556 u does not cover: a drop of 15 px is within it (the 7th step reaches, 2.333, no kill), a drop of
+// 17 px is not (the 7th falls 1.56 short and the 8th, y_8 = 20.0, reaches: 2.667, the kill). The stone and the player's circles have no
+// skin; a polygon's 0.178 u would move the edge to 15.73.
+void AStoneDroppedFifteenPxDoesNotKillAndSeventeenDoes() {
+    if (!OriginalArtIsThere("AStoneDroppedFifteenPxDoesNotKillAndSeventeenDoes")) return;
+    const double quantumPx = 500.0 / 900.0; // g dt^2 in level units: 500 u/s^2 over a 1/30 s step
+    const auto freeFall = [quantumPx](int k) { return quantumPx * k * (k + 1) / 2.0; };
+    std::printf("  y_6 %.4f, y_7 %.4f, y_8 %.4f u: 15 px is within y_7, 17 px is past it and within y_8\n", freeFall(6), freeFall(7),
+                freeFall(8));
+    CHECK_MSG(freeFall(7) > 15.0 && freeFall(7) < 17.0 && freeFall(8) > 17.0, "the arithmetic puts 15 on the 7th step and 17 on the 8th");
+    const StoneOnPlayer soft = LetAStoneFallOnThePlayer(15.0);
+    const StoneOnPlayer hard = LetAStoneFallOnThePlayer(17.0);
+    std::printf("  15 px: hit %.4f %s; 17 px: hit %.4f %s\n", soft.hit, soft.died ? "killed" : "not killed", hard.hit,
+                hard.died ? "killed" : "not killed");
+    CHECK_MSG(soft.began && std::fabs(soft.hit - 7.0 / 3.0) < 0.01, "15 px reads the 7th step: " + std::to_string(soft.hit));
+    CHECK_MSG(hard.began && std::fabs(hard.hit - 8.0 / 3.0) < 0.01, "17 px reads the 8th step: " + std::to_string(hard.hit));
+    CHECK_MSG(soft.began && !soft.died && !soft.dying, "15 px does not kill");
+    CHECK_MSG(hard.began && hard.died && hard.dying && hard.killedBy == hard.stone, "17 px kills, named for the stone: " + hard.killedBy);
+}
+
+// The same reading against a floor, which is a polygon (STK-9): Box2D's skin there is b2_polygonRadius, 0.5 screen px = 0.178 u, and a
+// static other's begin is the same step's (SolveTOI reads the velocity Solve left, b2World.cpp:717). 1-09's stone, let go over its own
+// resting place - on the floor it lies on - falls `gapPx` onto it: the begin on that floor reads k / 3 for the first step k whose free
+// position 0.5556 k (k + 1) / 2 is within 0.178 of the gap, along the floor's normal. (The gaps keep clear of the steps' own: 4 is 0.5
+// past y_3, 10 is 1.7 short of y_6, 21 is 0.8 past y_8, 40 is 3.3 short of y_12, where the stone's own 0.25 of rest in the floor is not
+// in question.)
+void AStoneThatLandsOnItsFloorReadsTheFreeFlight() {
+    if (!OriginalArtIsThere("AStoneThatLandsOnItsFloorReadsTheFreeFlight")) return;
+    const double skinPx = 0.5 / 2.8125;
+    const double quantumPx = 500.0 / 900.0;
+    struct Landing {
+        double gapPx;
+        int step;
+    };
+    std::vector<Landing> landings;
+    for (const double gapPx : {4.0, 10.0, 21.0, 40.0}) {
+        int step = 1;
+        while (quantumPx * step * (step + 1) / 2.0 < gapPx - skinPx) ++step;
+        landings.push_back({gapPx, step});
+    }
+    for (const Landing& landing : landings) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level8");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        int ticks = CloseTheLevelStartPopup(layer, registry);
+        for (int i = 0; i < 30; ++i) quakeTickWith(layer, registry, ticks);
+        const PlayedLevel& played = *layer.SimLevel();
+        if (played.demolish.stones.empty()) {
+            CHECK_MSG(false, "1-09 places a stone");
+            return;
+        }
+        const entt::entity body = played.demolish.stones.front().body;
+        const glm::dvec2 place = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(body).position);
+        PutBodyAt(registry, body, place - glm::dvec2(0.0, landing.gapPx));
+        bool began = false;
+        double hit = 0.0;
+        glm::dvec2 normal(0.0);
+        for (int i = 0; i < 90 && !began; ++i) {
+            quakeTickWith(layer, registry, ticks);
+            for (const auto& begin : layer.ImpactBegins()) {
+                if (begin.body != body || begin.other == played.player || began) continue;
+                began = true;
+                normal = begin.normal;
+                hit = glm::dot(begin.Approaching(begin.normal), begin.normal) / 50.0;
+            }
+        }
+        const std::string what = "1-09's stone let go " + std::to_string(landing.gapPx) + " px over its floor";
+        std::printf("  %s: hit %.4f along (%.3f, %.3f), the original's step %d reads %.4f\n", what.c_str(), hit, normal.x, normal.y,
+                    landing.step, landing.step / 3.0);
+        CHECK_MSG(began, what + " begins on something");
+        CHECK_MSG(began && normal.y > 0.99, what + ": onto a flat floor: " + std::to_string(normal.y));
+        CHECK_MSG(began && std::fabs(hit - landing.step / 3.0) < 0.01,
+                  what + " reads " + std::to_string(hit) + " where the original's Box2D reads " + std::to_string(landing.step / 3.0));
+        layer.OnDetach(registry);
+    }
+}
+
+// The same reading against a knight (planning step 162, the verifier's round 1): level9b's (3-10) stone let go `gapPx` over the key-carrying
+// knight minion_spawn_913, which holds where it stands, begins on it at the velocity Box2D's own step reads - k / 3 in hitIntensity, k the
+// first step whose free position 0.5556 k (k + 1) / 2 is within the skin, none for the circle against circle it is (the port's knight is
+// ONE circle where the original's is two of 9.1: this pins the port's own shape, so the crown the stone meets stands lower than the
+// original's, STK9-7) - and the knight is crushed where that is above minions.json's crush (1.23, strictly): the 4th step's 1.333 is the
+// first, the 3rd's 1.000 is not. The free positions are y_2 1.667, y_3 3.333, y_4 5.556 u: a gap of 2.5 px reads the 3rd, one of 4.5 px the
+// 4th (each more than 0.8 px from a step's own position). What the callback reads is that velocity along the line between the two entity
+// points (C55), which leans a few degrees from the vertical here (the knight's point stands above and beside its circle's centre), so a
+// reading is k / 3 times the line's vertical share, and the case says it so.
+struct StoneOnKnight {
+    bool began = false;
+    bool freeFlight = false;
+    double hit = 0.0;
+    glm::dvec2 along{0.0}; // the line between the two entity points, which the callback reads the velocity along
+    bool crushed = false;
+    double stoneRadiusPx = 0.0;
+    double knightRadiusPx = 0.0;
+    std::string trace; // each tick's stone and knight, then the begin's history: what a failing reading is read against
+};
+
+StoneOnKnight LetAStoneFallOnAKnight(double gapPx) {
+    StoneOnKnight out;
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level9b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return out;
+    int ticks = CloseTheLevelStartPopup(layer, registry);
+    // Long enough for the knight to come down to its floor and stand: it is still settling for the first few ticks, and a stone
+    // let go over where it was would fall on a knight that has moved on.
+    for (int i = 0; i < 40; ++i) quakeTickWith(layer, registry, ticks);
+    const MagicPortals::Minions::Minion* knight = SimMinion(layer, "minion_spawn_913");
+    const MagicPortals::Demolish::Stone* stone = layer.SimLevel()->demolish.FindStone("rolling_stone_1198");
+    CHECK_MSG(knight != nullptr && stone != nullptr, "3-10 places the knight and the stone");
+    if (knight == nullptr || stone == nullptr) return out;
+    MagicPortals::Impacts::Shape knightShape;
+    MagicPortals::Impacts::Shape stoneShape;
+    if (!MagicPortals::Impacts::ShapeOf(registry, knight->body, knightShape) ||
+        !MagicPortals::Impacts::ShapeOf(registry, stone->body, stoneShape)) {
+        CHECK_MSG(false, "the knight and the stone have solid shapes");
+        return out;
+    }
+    out.knightRadiusPx = knightShape.radiusPx;
+    out.stoneRadiusPx = stoneShape.radiusPx;
+    // The stone straight over the knight, its foot `gapPx` over the knight's crown, at rest.
+    double crownPx = 1e9;
+    for (const glm::dvec2& point : knightShape.core) crownPx = std::min(crownPx, point.y - knightShape.radiusPx);
+    double stoneCoreY = 0.0;
+    for (const glm::dvec2& point : stoneShape.core) stoneCoreY += point.y / static_cast<double>(stoneShape.core.size());
+    const glm::dvec2 stoneAt = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(stone->body).position);
+    const glm::dvec2 knightAt = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(knight->body).position);
+    // The stone's body centre against its core's centre, so a body whose collider is offset is still placed by its foot.
+    const double footBelowBodyPx = (stoneCoreY - stoneAt.y) + stoneShape.radiusPx;
+    PutBodyAt(registry, stone->body, glm::dvec2(knightAt.x, crownPx - gapPx - footBelowBodyPx));
+    char line[200];
+    const double perMetre = 1.0 / MagicPortals::Units::ToMetres(1.0);
+    for (int tick = 0; tick < 90 && !out.began; ++tick) {
+        quakeTickWith(layer, registry, ticks);
+        // The knight's body is gone on the tick it is crushed.
+        const glm::dvec2 stoneNow = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(stone->body).position);
+        const TransformComponent* knightTransform =
+            registry.valid(knight->body) ? registry.try_get<TransformComponent>(knight->body) : nullptr;
+        const glm::dvec2 knightNow = knightTransform != nullptr ? MagicPortals::Units::ToPixels(knightTransform->position) : glm::dvec2(0.0);
+        std::snprintf(line, sizeof line, " [t%d stone y %.2f vy %.1f, knight y %.2f]", tick, stoneNow.y,
+                      -registry.get<RigidBodyComponent>(stone->body).velocity.y * perMetre, knightNow.y);
+        out.trace += line;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.body != stone->body || begin.other != knight->body) continue;
+            out.began = true;
+            out.freeFlight = begin.freeFlight;
+            const ImpactRead read = readImpact(rules, layer, begin);
+            out.hit = read.hit;
+            out.along = read.along;
+            out.trace += " history (newest first, vy px/s):";
+            for (const glm::dvec2& was : begin.recentPx) {
+                std::snprintf(line, sizeof line, " %.1f", was.y);
+                out.trace += line;
+            }
+            std::snprintf(line, sizeof line, "; replayed %d, free flight %.1f", begin.replayedSteps, begin.freeFlightPx.y);
+            out.trace += line;
+        }
+        if (out.began) out.crushed = knight->gone;
+    }
+    layer.OnDetach(registry);
+    return out;
+}
+
+void AStoneThatFallsOnAKnightReadsTheFreeFlightAndCrushesAbove1Point23() {
+    if (!OriginalArtIsThere("AStoneThatFallsOnAKnightReadsTheFreeFlightAndCrushesAbove1Point23")) return;
+    const double quantumPx = 500.0 / 900.0; // g dt^2 in level units
+    struct Fall {
+        double gapPx;
+        int step; // the first step whose free position is within the circles' skin (none)
+        bool crush;
+    };
+    for (const Fall& fall : {Fall{2.5, 3, false}, Fall{4.5, 4, true}}) {
+        // The arithmetic first: the step is the first whose free position covers the gap.
+        int step = 1;
+        while (quantumPx * step * (step + 1) / 2.0 < fall.gapPx) ++step;
+        CHECK_MSG(step == fall.step, "the arithmetic puts " + std::to_string(fall.gapPx) + " px on step " + std::to_string(fall.step));
+        const StoneOnKnight run = LetAStoneFallOnAKnight(fall.gapPx);
+        const std::string what = "a stone let go " + std::to_string(fall.gapPx) + " px over the knight";
+        std::printf("  %s: hit %.4f (the original's step %d reads %.4f), knight %s; stone radius %.2f, knight's %.2f\n", what.c_str(), run.hit,
+                    fall.step, fall.step / 3.0, run.crushed ? "crushed" : "not crushed", run.stoneRadiusPx, run.knightRadiusPx);
+        CHECK_MSG(run.began && run.freeFlight, what + " begins on the knight in a free flight");
+        // The callback reads the velocity along the line between the entity points (C55), and a knight's point stands above and a little
+        // beside its circle's centre: the line leans, and a fall straight down is read at the cosine of the lean.
+        const double expected = fall.step / 3.0 * run.along.y;
+        CHECK_MSG(run.began && run.along.y > 0.9 && std::fabs(run.hit - expected) < 0.01,
+                  what + " reads " + std::to_string(run.hit) + " where Box2D's step reads " + std::to_string(fall.step / 3.0) + " x " +
+                      std::to_string(run.along.y) + " along the line to the knight" + run.trace);
+        CHECK_MSG(run.began && run.crushed == fall.crush,
+                  what + (fall.crush ? " is above 1.23 and crushes it" : " is not above 1.23 and does not") + ": crushed " +
+                      std::to_string(run.crushed));
+    }
 }
 
 // A stone that RESTS against the player kills nothing, however hard it fell before: a begin is the stone's velocity as the step finds it
@@ -19964,6 +20180,9 @@ void runTests() {
     AShockAgentPulsesOnItsBounce();
     AStoneThatFallsOnAKnightCrushesIt();
     AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone();
+    AStoneDroppedFifteenPxDoesNotKillAndSeventeenDoes();
+    AStoneThatLandsOnItsFloorReadsTheFreeFlight();
+    AStoneThatFallsOnAKnightReadsTheFreeFlightAndCrushesAbove1Point23();
     AStoneRestingAgainstThePlayerKillsNothing();
     AKnightsSightingKeepsTheStealthAchievementFromTheDoor();
 }

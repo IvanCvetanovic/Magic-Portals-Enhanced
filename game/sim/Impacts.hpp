@@ -19,6 +19,11 @@
 // body carried into the steps since it last met or left something, because the
 // engine's solver brakes a closing pair before the pair meets (kRecentSteps).
 //
+// A body that came to a pair in a free flight (Watched::freeFlight) is read by what Box2D's own step would have
+// read: the velocity of the first step whose free position leaves it within the pair's skin, which the begin
+// replays from the last step the engine had not yet braked - each tick's centre is kept beside its velocity for
+// that, and for no other reader (FreeFlightVelocity in Impacts.cpp; planning step 162).
+//
 // Read only: nothing here writes the registry, draws a random number or reaches
 // Game::Level, so nothing the simulation does can change.
 
@@ -55,6 +60,14 @@ struct Watched {
     // carried in the original's own units, which is a rig's at the suites' bare tick. What the watch
     // looks at (how far a body travels a step, where it stands) stays in the port's own.
     double velocityScale = 1.0;
+    // Whether a begin of this body is read as Box2D's own step reads it where the body came to it in a free
+    // flight under the engine's gravity (planning step 162, STK-9): the speed the free flight itself would have
+    // had on the step it first reached the other, which is what the original's callback reads, and not the
+    // earlier speed the solver's early braking leaves in the history (see FreeFlightVelocity in Impacts.cpp). Set by
+    // the layer for a rolling stone: the player's own gravity is the layer's (useGravity is off for him) and was
+    // matched against F14's landing as it is, a knight is steered and a crate pushed, and none of them is read
+    // this way. Off, a begin keeps reading the fastest approach since the body last met or left something.
+    bool freeFlight = false;
 };
 
 // A collider in the plane, in the port's pixels (+y down): a convex core of one
@@ -103,11 +116,35 @@ struct Begin {
     // The velocities the body carried into this step and the steps before it,
     // newest first, back to when it last met or left something.
     std::vector<glm::dvec2> recentPx;
+    // Where the body came to the other in a free flight (Watched::freeFlight): the velocity the callback reads
+    // on the step the free flight first reaches the other - the body's own, unbraked, as the original's Box2D
+    // leaves it - in the same units as velocityPx. Else not set, and Approaching reads the history.
+    bool freeFlight = false;
+    glm::dvec2 freeFlightPx{0.0};
+    int replayedSteps = 0; // the steps the replay went on past the one the engine braked after
 
-    // Of those, the one that came along `along` (a unit vector) fastest: what the
-    // pair closed at before the solver took the approach out. The newest where
-    // none came along it at all.
+    // What the callback reads along `along` (a unit vector): the free flight's own velocity where there is
+    // one, else the history's.
     glm::dvec2 Approaching(const glm::dvec2& along) const;
+    // Of the history, the velocity that came along `along` fastest: what the pair closed at before the
+    // solver took the approach out. The newest where none came along it at all.
+    glm::dvec2 HistoryApproaching(const glm::dvec2& along) const;
+};
+
+// What the free-flight replay (Watched::freeFlight) judges the engine's steps by: earthquake.json's `impacts` block, so
+// that no number of it sits in code. Zero is "none" of each, which is what a rig that never sets freeFlight leaves.
+struct FreeFlightRules {
+    // Box2D's skin of a circle against a circle, in the units of AfterStep's touchPx: none (b2CollideCircles has no
+    // radius to add). Decoded (earthquake.json impacts.circle_touch_px).
+    double circleTouchPx = 0.0;
+    // How far past the engine's own reach a pair may stand for a change of a body's velocity to still be taken as the
+    // other's brake, in the watch's units. A GUESS (impacts.free_flight, marked _guess): the reach is the two bodies'
+    // travel in the step, as PhysicsSystem.cpp:1164 has it, but the replay measures the other's travel from the speed
+    // it has now.
+    double brakeReachSlackPx = 0.0;
+    // How much of a change of velocity may lie along the surfaces for it to be the other's brake and not a push of
+    // something else's, per unit of what it took out of the approach. A GUESS too (impacts.free_flight).
+    double brakeFrictionCone = 0.0;
 };
 
 class Watch {
@@ -128,7 +165,12 @@ public:
     // carry it - only has its pairs marked; one with a spawn drop is looked at
     // where the original's stands until its own shape reaches one of the pairs
     // that holds (Watched::spawnDropPx).
-    std::vector<Begin> AfterStep(entt::registry& registry, double touchPx, double dtS);
+    //
+    // `touchPx` is the skin of a circle against a polygon (Box2D's b2_polygonRadius); `flight.circleTouchPx` that of a
+    // circle against a circle, which has none (b2CollideCircles). The begin is looked for within `touchPx` of any
+    // pair, as it was; `flight` only tells a free flight where Box2D's own step would have touched and which change
+    // of velocity was the other's brake (Watched::freeFlight, FreeFlightRules).
+    std::vector<Begin> AfterStep(entt::registry& registry, double touchPx, double dtS, const FreeFlightRules& flight = {});
 
     // What a begin of `body` would carry, after AfterStep: for a contact the port
     // judges elsewhere, as Demolish judges a stone against what it breaks. False
@@ -152,6 +194,8 @@ private:
         glm::dvec2 atPx{0.0};     // its entity point
         glm::dvec2 pointOffsetPx{0.0};
         std::vector<glm::dvec2> recentPx; // newest first, for the steps to come
+        std::vector<glm::dvec2> recentCentresPx; // its transform going into each of those steps: as long as recentPx
+        bool freeFlight = false;          // Watched::freeFlight
         std::vector<glm::dvec2> readPx;   // as this step's begins read them
         glm::dvec2 dropPx{0.0};           // Watched::spawnDropPx while it holds; 0 after
         bool standing = false;            // the dropped shape has come to stand on something...

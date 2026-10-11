@@ -159,6 +159,25 @@ double GravityPx(entt::registry& registry, entt::entity body) {
     return glm::length(dvec2(gravity.x, gravity.y)) * Units::kPixelsPerMetre;
 }
 
+// What a step of `dtS` seconds adds to the velocity of `body`, as the engine's gravity does and GravityPx's
+// magnitude says: px a second, +y down, none for a body that is kinematic or let off gravity.
+dvec2 GravityStepPx(entt::registry& registry, entt::entity body, double dtS) {
+    const auto* rigid = registry.try_get<RigidBodyComponent>(body);
+    if (rigid == nullptr || rigid->isKinematic || !rigid->useGravity) return dvec2(0.0);
+    static const Supersonic::PhysicsSettings kDefaults;
+    const Supersonic::PhysicsSettings* stored = registry.ctx().find<Supersonic::PhysicsSettings>();
+    const glm::vec3 gravity = (stored != nullptr ? *stored : kDefaults).gravity;
+    return dvec2(gravity.x, -gravity.y) * Units::kPixelsPerMetre * dtS;
+}
+
+// Whether a step left the body where its velocity alone takes it, and gave it what gravity does: the float state
+// of the engine's integration, not a game number (a velocity of 1000 px/s is 1e-4 px/s of rounding, a step's
+// gravity 33 px/s, and a brake is as much as the approach it takes out). The two guesses of the replay - how far past
+// its reach the engine still brakes a pair, and how much of a change may lie along the surfaces - are FreeFlightRules',
+// from earthquake.json.
+constexpr double kFreePositionPx = 0.01;
+constexpr double kFreeVelocityPxS = 0.05;
+
 } // namespace
 
 bool ShapeOf(entt::registry& registry, entt::entity entity, Shape& out) {
@@ -255,7 +274,103 @@ Gap Between(const Shape& a, const Shape& b) {
     return gap;
 }
 
+namespace {
+
+// The velocity Box2D's callback reads of a body that came to `other` in a free flight (Watched::freeFlight), which
+// `velocities` and `centres` - newest first, the velocity it carried into each step and where that step began, back
+// to when it last met or left something - say it did.
+//
+// Box2D steps the world (b2World.cpp:879-930) by finding each contact's manifold at the positions the last step
+// left and calling BeginContact on a pair just come within its skin (b2Contact.cpp:154-229), at once and with the
+// body's velocity as that last step's Solve left it (ETHContactListener.cpp:86-105, ETHPhysicsController.cpp:117-123):
+// v += g dt, then x += v dt, and no braking. So the callback reads the velocity after the first step k whose FREE
+// position is within the skin of the other - a free fall from rest reads k g dt, 0.333 a step in hitIntensity.
+// The engine's solver instead moves the body first and then takes a closing pair's approach out before the pair
+// meets, in stages, so the history holds a speed from a step or two earlier and the begin comes later; but the
+// engine's integration is the same as Box2D's, so up to the first step whose end it altered the body's path is the
+// free flight's, and the rest of it can be replayed against where the other stands.
+//
+// Steps are told apart by what they did: a step is free where it left the body at its centre plus its velocity
+// (after gravity) times dt, and carried that velocity on. One that moved it as a free step does and carried a
+// different velocity on was altered at its end - the position is the free flight's still, the solver having moved the
+// body before it changed it - and it is the engine's BRAKE of this pair where the pair was inside its reach then
+// (PhysicsSystem.cpp:1142-1164: a pair apart but closer than the two bodies' sweeps) and what it took away was
+// approach toward the other (`normal`, from the body to it), and no more than a friction cone's worth of anything
+// else (`rules.brakeFrictionCone` and the reach's slack are guesses, in earthquake.json). Any other step - one that
+// left the body elsewhere (a glancing contact the watch never saw touch, a push-out), or a velocity changed by
+// something else (a contact with another body, a gravity well's pull) - is a push the body took as it was: the state
+// it carried on is real, and a free flight begins again from it. A body pushed on the step before the begin's own,
+// which says nothing of whether that one was free as well, is not replayed (false).
+//
+// The scan stops at the OLDEST brake, so a push that comes AFTER it is not looked at: the replay flies on past it with
+// the engine's gravity alone. A stone a gravity well pulls after its first brake (4-21's, tick 159: 1.21 replayed where
+// the history read 2.20, neither checked against the well's script) is replayed as if nothing had pulled it (STK9-8). A
+// push BEFORE the brake is harmless: the replay starts from the braked step's own velocity.
+//
+// The replay is from the start of the oldest braked step: one free step after another, each carrying `gravityStepPx`
+// more, up to and including the begin's own step, and ends at the first whose position has the body's surface within
+// `skinPx` of the other's - the one Box2D's Collide would have found touching - or at the begin's own step, which
+// is the only one where nothing braked it. `replayed` is how many steps the begin came after the braked one.
+bool FreeFlightVelocity(const std::vector<dvec2>& velocities, const std::vector<dvec2>& centres,
+                        const dvec2& gravityStepPx, double dtS, const Shape& self, const dvec2& selfAtPx, const Shape& other,
+                        double otherSpeedPxS, double skinPx, const FreeFlightRules& rules, const dvec2& normal, dvec2& out,
+                        int& replayed) {
+    const std::size_t steps = velocities.size();
+    if (steps == 0 || centres.size() != steps || !(glm::dot(gravityStepPx, gravityStepPx) > 0.0)) return false;
+    const auto placed = [&](const dvec2& centre) {
+        Shape ghost = self;
+        for (dvec2& point : ghost.core) point += centre - selfAtPx;
+        return ghost;
+    };
+    std::size_t braked = 0;  // the oldest step the other's brake altered; the begin's own, none
+    std::size_t pushed = 0;  // the newest step something else altered; 0, none
+    bool brakedIt = false;
+    for (std::size_t i = steps - 1; i > 0; --i) {
+        const dvec2 flown = velocities[i] + gravityStepPx;
+        if (glm::length(centres[i] + flown * dtS - centres[i - 1]) > kFreePositionPx) {
+            pushed = i;
+            continue;
+        }
+        const dvec2 changed = velocities[i - 1] - flown;
+        if (!(glm::length(changed) > kFreeVelocityPxS)) continue;
+        const double closing = glm::dot(changed, normal);
+        bool brake = closing < 0.0 && glm::length(changed - normal * closing) <= -closing * rules.brakeFrictionCone;
+        if (brake) {
+            // Inside the reach the engine brakes a pair from: the two bodies' travel in the step, the other's a step
+            // more for each since (it has moved), and the guessed slack of earthquake.json's impacts.free_flight.
+            const double reachPx =
+                glm::length(flown) * dtS + otherSpeedPxS * dtS * static_cast<double>(i + 1) + rules.brakeReachSlackPx;
+            brake = Between(placed(centres[i - 1]), other).px <= reachPx;
+        }
+        if (brake) {
+            braked = i;
+            brakedIt = true;
+            break;
+        }
+        pushed = i;
+    }
+    if (!brakedIt && pushed == 1) return false;
+    dvec2 centre = centres[braked];
+    for (std::size_t after = 0; after <= braked; ++after) {
+        // After the step `after` places on from the braked one: carried gravity's `after + 1` steps.
+        const dvec2 velocity = velocities[braked] + gravityStepPx * static_cast<double>(after + 1);
+        centre += velocity * dtS;
+        if (after == braked || Between(placed(centre), other).px <= skinPx) {
+            out = velocity;
+            replayed = static_cast<int>(braked);
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 glm::dvec2 Begin::Approaching(const glm::dvec2& along) const {
+    return freeFlight ? freeFlightPx : HistoryApproaching(along);
+}
+
+glm::dvec2 Begin::HistoryApproaching(const glm::dvec2& along) const {
     if (recentPx.empty()) return velocityPx;
     glm::dvec2 best = recentPx.front();
     for (const glm::dvec2& velocity : recentPx) {
@@ -299,10 +414,13 @@ void Watch::BeforeStep(entt::registry& registry, const std::vector<Watched>& bod
         // Where the original's stands on its floor while the port's comes down to
         // it, the original's carries none of that fall.
         now.recentPx.push_back(now.standing ? dvec2(now.velocityPx.x, 0.0) : now.velocityPx);
+        now.recentCentresPx.push_back(now.centrePx);
+        now.freeFlight = watched.freeFlight;
         if (was != m_pre.end() && !put) {
-            for (const glm::dvec2& velocity : was->recentPx) {
+            for (std::size_t i = 0; i < was->recentPx.size() && i < was->recentCentresPx.size(); ++i) {
                 if (now.recentPx.size() >= kRecentSteps) break;
-                now.recentPx.push_back(velocity);
+                now.recentPx.push_back(was->recentPx[i]);
+                now.recentCentresPx.push_back(was->recentCentresPx[i]);
             }
         }
         now.readPx = now.recentPx;
@@ -311,7 +429,7 @@ void Watch::BeforeStep(entt::registry& registry, const std::vector<Watched>& bod
     m_pre = std::move(pre);
 }
 
-std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, double dtS) {
+std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, double dtS, const FreeFlightRules& flight) {
     std::vector<Begin> begins;
     // Every solid collider, once.
     std::vector<Solid> solids;
@@ -359,11 +477,16 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
         const bool carried = glm::length(pre.centrePx - nowCentre) <= reachPx;
         if (!carried) {
             pre.recentPx.assign(1, pre.velocityPx);
+            pre.recentCentresPx.assign(1, pre.centrePx);
             pre.dropPx = dvec2(0.0);
             pre.standing = false;
         }
         pre.readPx = pre.recentPx;
         const bool looked = carried && std::binary_search(m_seen.begin(), m_seen.end(), pre.body);
+        // Touching nothing since its velocities began: the contact set is what clears them (below), and a
+        // body in one is not in the free flight the replay needs.
+        const bool airborne = std::none_of(m_touching.begin(), m_touching.end(),
+                                           [&pre](const Pair& pair) { return pair.first == pre.body; });
         seen.push_back(pre.body);
         // Where the watch looks at it: its own shape, or while its spawn drop
         // holds, that shape where the original's body stands - which, once it
@@ -409,6 +532,28 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
             begin.gapPx = gap.px;
             begin.recentPx = pre.recentPx;
             for (dvec2& velocity : begin.recentPx) velocity *= pre.velocityScale;
+            // A body that came to the pair through the air is read as Box2D's step reads it, not as the engine's solver
+            // left its history. The skin is a polygon's (touchPx) against anything but another circle's; a polygon
+            // against a polygon has two of them, which no body that is replayed - a circle - is.
+            if (pre.freeFlight && pre.dropPx == dvec2(0.0) && airborne) {
+                const double skinPx = (real->shape.radiusPx > 0.0 && other.shape.radiusPx > 0.0) ? flight.circleTouchPx : touchPx;
+                dvec2 velocity(0.0);
+                int replayed = 0;
+                // How fast the other travelled in the steps the replay looks back over: what it carried into this one if the
+                // watch has it (the step's own contact has since thrown it about), else the velocity it has.
+                const auto* otherRigid = registry.try_get<RigidBodyComponent>(other.entity);
+                double otherSpeedPxS = otherRigid != nullptr ? glm::length(Units::ToPixels(otherRigid->velocity)) : 0.0;
+                for (const Pre& watched : m_pre) {
+                    if (watched.body == other.entity) otherSpeedPxS = glm::length(watched.velocityPx);
+                }
+                if (FreeFlightVelocity(pre.recentPx, pre.recentCentresPx, GravityStepPx(registry, pre.body, dtS), dtS,
+                                       real->shape, nowCentre, other.shape, otherSpeedPxS, skinPx, flight, begin.normal,
+                                       velocity, replayed)) {
+                    begin.freeFlight = true;
+                    begin.freeFlightPx = velocity * pre.velocityScale;
+                    begin.replayedSteps = replayed;
+                }
+            }
             begin.otherAtPx = Units::ToPixels(registry.get<TransformComponent>(other.entity).position);
             // A watched body is aimed at by its own point, as the original's
             // GetPositionXY is its entity's.
@@ -438,7 +583,10 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
                 return pair.first == pre.body && !std::binary_search(in.begin(), in.end(), pair);
             });
         };
-        if (changed(m_touching, touching) || changed(touching, m_touching)) pre.recentPx.clear();
+        if (changed(m_touching, touching) || changed(touching, m_touching)) {
+            pre.recentPx.clear();
+            pre.recentCentresPx.clear();
+        }
     }
     std::sort(seen.begin(), seen.end());
     m_touching = std::move(touching);

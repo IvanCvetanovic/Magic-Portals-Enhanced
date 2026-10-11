@@ -21,6 +21,7 @@
 #include "MpSuite.hpp"
 
 #include "core/Components.hpp"
+#include "core/PhysicsSettings.hpp"
 #include "sim/Camera.hpp"
 #include "sim/DarkDragon.hpp"
 #include "sim/Earthquake.hpp"
@@ -887,6 +888,8 @@ struct WatchedStep {
     entt::registry& registry;
     Impacts::Watch& watch;
     std::vector<Impacts::Watched> watched;
+    // The free-flight replay's judgments: none (zero) unless a case hands it the layer's, which are earthquake.json's.
+    Impacts::FreeFlightRules rules{};
     std::vector<Impacts::Begin> operator()(const glm::dvec2& from, const glm::dvec2& velocityPx, const glm::dvec2& to) {
         const entt::entity body = watched.front().body;
         registry.get<Supersonic::TransformComponent>(body).position = Units::ToWorld(from.x, from.y);
@@ -894,7 +897,7 @@ struct WatchedStep {
             glm::vec3(Units::ToMetres(velocityPx.x), -Units::ToMetres(velocityPx.y), 0.0f);
         watch.BeforeStep(registry, watched);
         registry.get<Supersonic::TransformComponent>(body).position = Units::ToWorld(to.x, to.y);
-        return watch.AfterStep(registry, 0.5 / 2.8125, 1.0 / 60.0);
+        return watch.AfterStep(registry, 0.5 / 2.8125, 1.0 / 60.0, rules);
     }
 };
 
@@ -947,6 +950,245 @@ void ATeleportedBodyKeepsNothingItCarriedIn() {
     begins = step({0.0, 80.0}, {0.0, 60.0}, {0.0, 90.05});
     CHECK_MSG(begins.size() == 1 && Near(begins.front().Approaching({0.0, 1.0}), {0.0, 600.0}, 1e-4),
               std::to_string(begins.size()) + " begins, the fall kept");
+}
+
+// ---- planning step 162 (STK-9): a free fall read as the original's Box2D step reads it ----------------------------------
+//
+// Box2D finds a pair touching (b2Contact::Update, in Collide) at the positions the last step left and runs BeginContact
+// at once, with the body's velocity as that step's Solve left it: v += g dt, then x += v dt, no braking. A body let go
+// at rest `gapPx` over a surface is therefore read at k g dt, k the first step whose FREE position y_k = g dt^2 k (k + 1) / 2
+// is within the pair's skin (a circle against a circle has none, against a polygon b2_polygonRadius). The engine's
+// solver brakes the pair before it meets, and the begin comes some steps later: Watched::freeFlight replays the free flight
+// from the last step the engine had not braked and reads what Box2D's step would have.
+//
+// The rig is the layer's own gravity (2000 px/s^2 on a 1/60 s tick, 33.33 px/s a step, 0.5556 px of position a step squared).
+
+constexpr double kStepS = 1.0 / 60.0;
+constexpr double kGravityStepPx = 2000.0 * kStepS;
+
+// The first step k whose free position, from rest, is at least `gapPx` less `skinPx` down: the step Box2D's Collide
+// finds the pair touching after, and the velocity it reads, in px a second.
+struct FreeRead {
+    int step = 0;
+    double velocityPx = 0.0;
+    double travelPx = 0.0;
+};
+
+FreeRead FirstFreeStepWithin(double gapPx, double skinPx) {
+    FreeRead read;
+    double travel = 0.0;
+    double velocity = 0.0;
+    for (int k = 1; k < 1000; ++k) {
+        velocity += kGravityStepPx;
+        travel += velocity * kStepS;
+        if (travel >= gapPx - skinPx) {
+            read.step = k;
+            read.velocityPx = velocity;
+            read.travelPx = travel;
+            return read;
+        }
+    }
+    return read;
+}
+
+// What the stone's velocity went through after step `brakeAfter` (1 is the first step): nothing, the engine's solver taking
+// half of the approach out, a stop dead for `parked` steps (the staged braking step 104's trace shows), a push sideways once
+// (a knock of something else's, which the stone then flies on from), or every step from then on (a gravity well's pull).
+enum class Brake { None, Half, Stopped, Pushed, Pulled, Sliding };
+
+// The free-flight replay's judgments as MagicPortalsLayer::fixedTick hands them to the watch: earthquake.json's, the circle skin
+// converted from screen px and the two guesses in the watch's own units.
+Impacts::FreeFlightRules FlightRulesOf(const Earthquake::Rules& rules) {
+    return {Earthquake::ToUnits(rules, rules.circleTouchPx), rules.brakeReachSlackUnits, rules.brakeFrictionCone};
+}
+
+Impacts::FreeFlightRules FileFlightRules() { return FlightRulesOf(LoadQuake()); }
+
+struct DropRun {
+    bool began = false;
+    int step = 0;             // the step the watch found the pair begin after
+    Impacts::Begin begin;
+    double oldReadPx = 0.0;   // what the begin's history gives without the replay: the fastest it carried, down
+};
+
+// A stone of radius 10 let go `gapPx` over a floor (its top at y 100) or over a circle of 10 (its top at y 100), each step
+// taken by hand as the engine would: gravity, then the position, then the brake. Its first step is its first look. The replay
+// judges the engine's steps by `rules`, earthquake.json's unless a case says otherwise.
+DropRun DropAStone(bool freeFlight, double gapPx, bool roundTarget, Brake brake, int brakeAfter, int parked,
+                   const Impacts::FreeFlightRules& rules = FileFlightRules()) {
+    DropRun run;
+    entt::registry registry;
+    Supersonic::PhysicsSettings settings;
+    settings.gravity = glm::vec3(0.0f, -static_cast<float>(Units::ToMetres(2000.0)), 0.0f);
+    registry.ctx().emplace<Supersonic::PhysicsSettings>(settings);
+    const entt::entity target =
+        roundTarget ? SolidCircle(registry, {0.0, 110.0}, 10.0) : SolidBox(registry, {0.0, 120.0}, {400.0, 40.0});
+    const entt::entity stone = SolidCircle(registry, {0.0, 90.0 - gapPx}, 10.0);
+    Impacts::Watched watched{stone, Impacts::Kind::Stone, {0.0, 0.0}};
+    watched.freeFlight = freeFlight;
+    Impacts::Watch watch;
+    WatchedStep step{registry, watch, {watched}, rules};
+    glm::dvec2 at(0.0, 90.0 - gapPx);
+    glm::dvec2 carried(0.0);
+    int stopped = 0;
+    for (int k = 1; k < 80 && !run.began; ++k) {
+        const glm::dvec2 velocity = carried + glm::dvec2(0.0, kGravityStepPx);
+        const glm::dvec2 to = at + velocity * kStepS;
+        const std::vector<Impacts::Begin> begins = step(at, carried, to);
+        for (const Impacts::Begin& begin : begins) {
+            if (begin.body != stone || begin.other != target) continue;
+            run.began = true;
+            run.step = k;
+            run.begin = begin;
+            for (const glm::dvec2& was : begin.recentPx) run.oldReadPx = std::max(run.oldReadPx, was.y);
+        }
+        at = to;
+        carried = velocity;
+        // The solver's brake, taken out of what the step carries on.
+        if (brake == Brake::Half && k == brakeAfter) carried.y = velocity.y * 0.5;
+        if (brake == Brake::Pushed && k == brakeAfter) carried.x += 60.0;
+        // Half of the approach taken out and a quarter of it slid along the floor: a sideways part of half of what was taken out.
+        if (brake == Brake::Sliding && k == brakeAfter) {
+            carried.y = velocity.y * 0.5;
+            carried.x += velocity.y * 0.25;
+        }
+        if (brake == Brake::Pulled && k >= brakeAfter) carried.x += 20.0;
+        if (brake == Brake::Stopped && k >= brakeAfter && stopped < parked) {
+            carried.y = 0.0;
+            ++stopped;
+        }
+    }
+    return run;
+}
+
+void AFreeFallIsReadAsTheOriginalsStepReadsIt() {
+    // Let go at rest 14 px over a floor: the original's reading is the velocity after the first step whose free position
+    // is within b2_polygonRadius (0.1778 u) of the floor: y_6 = 11.667 is 2.33 short, y_7 = 15.556 is 1.56 in - the 7th,
+    // 7 g dt = 233.33 px/s (hit 2.333 at the layer's half velocity scale).
+    const double polygonSkin = 0.5 / 2.8125;
+    const FreeRead expected = FirstFreeStepWithin(14.0, polygonSkin);
+    CHECK_MSG(expected.step == 7 && std::fabs(expected.velocityPx - 7.0 * kGravityStepPx) < 1e-9 &&
+                  std::fabs(expected.travelPx - 15.5556) < 1e-3,
+              "the arithmetic: step " + std::to_string(expected.step) + " at " + std::to_string(expected.velocityPx));
+    const glm::dvec2 down(0.0, 1.0);
+
+    // 1. Nothing brakes it: the step that has it within the skin is the begin's own, and it reads that step's velocity,
+    // the one the step ended on - one gravity step above what it carried into it, which is what the history reads.
+    DropRun run = DropAStone(true, 14.0, false, Brake::None, 0, 0);
+    CHECK_MSG(run.began && run.step == expected.step, "an unbraked fall begins on step " + std::to_string(run.step));
+    CHECK_MSG(run.began && run.begin.freeFlight && std::fabs(run.begin.Approaching(down).y - expected.velocityPx) < 1e-3,
+              "an unbraked fall reads " + std::to_string(run.begin.Approaching(down).y) + " where the original reads " +
+                  std::to_string(expected.velocityPx));
+    CHECK_MSG(std::fabs(run.oldReadPx - (expected.velocityPx - kGravityStepPx)) < 1e-3,
+              "the history alone reads a step low: " + std::to_string(run.oldReadPx));
+
+    // 2. The same fall without the flag keeps the history's reading: nothing else moves.
+    run = DropAStone(false, 14.0, false, Brake::None, 0, 0);
+    CHECK_MSG(run.began && !run.begin.freeFlight &&
+                  std::fabs(run.begin.Approaching(down).y - (expected.velocityPx - kGravityStepPx)) < 1e-3,
+              "without the flag " + std::to_string(run.begin.Approaching(down).y));
+
+    // 3. The solver takes half of the approach out at the end of step 6, the one before the free flight reaches the
+    // floor: the stone carries 100 into step 7 where the free flight would, and begins on step 7 within the skin - and
+    // the history's fastest is the 166.67 it carried into step 6, a step and a half low.
+    run = DropAStone(true, 14.0, false, Brake::Half, 6, 0);
+    CHECK_MSG(run.began && run.begin.freeFlight && std::fabs(run.begin.Approaching(down).y - expected.velocityPx) < 1e-3,
+              "braked at the end of step 6 (begin on step " + std::to_string(run.step) + ") it reads " +
+                  std::to_string(run.begin.Approaching(down).y));
+    CHECK_MSG(std::fabs(run.oldReadPx - 5.0 * kGravityStepPx) < 1e-3, "the history alone: " + std::to_string(run.oldReadPx));
+
+    // 4. Stopped dead for three steps and then falling again from rest, the engine's staged braking (step 104's trace:
+    // a 460 px/s fall stopped on tick 54 and touching on tick 62): the begin comes at step 9, two steps after the free
+    // flight's, and reads the free flight's 7th all the same - counting the steps the stone was parked would read 9.
+    run = DropAStone(true, 14.0, false, Brake::Stopped, 6, 3);
+    CHECK_MSG(run.began && run.step > expected.step, "a parked stone begins later than the free flight: step " + std::to_string(run.step));
+    CHECK_MSG(run.began && run.begin.freeFlight && std::fabs(run.begin.Approaching(down).y - expected.velocityPx) < 1e-3,
+              "stopped dead, begun on step " + std::to_string(run.step) + ", it reads " + std::to_string(run.begin.Approaching(down).y));
+
+    // 5. A circle against a circle has no skin: with the free flight 0.1 px short of the surface after step 6 (a fall of
+    // 11.767), a floor's skin has it touching there (6 g dt), a circle's has it reach on the next (7 g dt). The brake is at
+    // step 5 and the stone is parked for four steps, so the replay passes both.
+    const FreeRead polygon = FirstFreeStepWithin(11.7667, polygonSkin);
+    const FreeRead circle = FirstFreeStepWithin(11.7667, 0.0);
+    CHECK_MSG(polygon.step == 6 && circle.step == 7, "the arithmetic: " + std::to_string(polygon.step) + ", " + std::to_string(circle.step));
+    run = DropAStone(true, 11.7667, false, Brake::Stopped, 5, 4);
+    CHECK_MSG(run.began && run.begin.freeFlight && std::fabs(run.begin.Approaching(down).y - polygon.velocityPx) < 1e-3,
+              "a floor's skin: " + std::to_string(run.begin.Approaching(down).y) + " against " + std::to_string(polygon.velocityPx));
+    run = DropAStone(true, 11.7667, true, Brake::Stopped, 5, 4);
+    CHECK_MSG(run.began && run.begin.freeFlight && std::fabs(run.begin.Approaching(down).y - circle.velocityPx) < 1e-3,
+              "a circle's none: " + std::to_string(run.begin.Approaching(down).y) + " against " + std::to_string(circle.velocityPx));
+
+    // 6. A change of velocity that is not the other's brake is the stone's own state from then on, and it flies free again from
+    // it: a push sideways at the end of step 3 leaves the fall onto the floor the same step, read the same (7 g dt).
+    run = DropAStone(true, 14.0, false, Brake::Pushed, 3, 0);
+    CHECK_MSG(run.began && run.step == expected.step && run.begin.freeFlight &&
+                  std::fabs(run.begin.Approaching(down).y - expected.velocityPx) < 1e-3,
+              "a push that is no contact's, begun on step " + std::to_string(run.step) + ": " + std::to_string(run.begin.Approaching(down).y));
+    // The same where it is a brake, far from the other: half of the stone's speed taken out at the end of step 2, 12 px from the
+    // floor and nowhere near its reach, is the stone's own and not the floor's. It falls on slower, begins later, and the reading
+    // is the step it begins on - its own carried speed and one gravity more - not the 7 g dt of a stone never slowed.
+    run = DropAStone(true, 14.0, false, Brake::Half, 2, 0);
+    CHECK_MSG(run.began && run.step > expected.step && run.begin.freeFlight &&
+                  std::fabs(run.begin.Approaching(down).y - (run.begin.recentPx.front().y + kGravityStepPx)) < 1e-3,
+              "a brake far from the other is the stone's own: begun on step " + std::to_string(run.step) + ", reads " +
+                  std::to_string(run.begin.Approaching(down).y) + " after carrying " + std::to_string(run.begin.recentPx.front().y));
+    // And a pull every step from step 3 on (a gravity well) leaves no free step to say the last was free: the history's reading.
+    run = DropAStone(true, 14.0, false, Brake::Pulled, 3, 0);
+    CHECK_MSG(run.began && !run.begin.freeFlight, "a body pulled every step is not replayed");
+    CHECK_MSG(run.began && std::fabs(run.begin.Approaching(down).y - run.oldReadPx) < 1e-3,
+              "and reads the history: " + std::to_string(run.begin.Approaching(down).y));
+
+    // 7. The two guesses that sort the engine's steps into the other's brake and anything else are earthquake.json's (impacts.free_flight,
+    // marked _guess), handed to the watch, and each decides a case. The slack is what takes the stop at the end of step 5 in case 5 (a
+    // gap of 3.43 against the engine's reach of 2.78) for the floor's brake: with none the stop is a push of something else's, and the
+    // begin is not read as the free flight's 6th step. The cone is what takes a brake with a sideways part (half the approach taken out,
+    // a quarter of it slid along the floor: a sideways part of half of what was taken out) for a brake: with a cone of a quarter it is a
+    // push, and the begin is read at its own step's velocity, not the free flight's 7th.
+    const Impacts::FreeFlightRules file = FileFlightRules();
+    CHECK_MSG(file.brakeReachSlackPx > 0.0 && file.brakeFrictionCone > 0.0, "earthquake.json's two guesses are read into the rules");
+    Impacts::FreeFlightRules noSlack = file;
+    noSlack.brakeReachSlackPx = 0.0;
+    run = DropAStone(true, 11.7667, false, Brake::Stopped, 5, 4, noSlack);
+    CHECK_MSG(run.began && std::fabs(run.begin.Approaching(down).y - polygon.velocityPx) > 1.0,
+              "with no slack the stop at gap 3.43 is no brake of the floor's: it reads " + std::to_string(run.begin.Approaching(down).y) +
+                  " where the file's slack reads " + std::to_string(polygon.velocityPx));
+    run = DropAStone(true, 14.0, false, Brake::Sliding, 6, 0);
+    CHECK_MSG(run.began && run.begin.freeFlight && std::fabs(run.begin.Approaching(down).y - expected.velocityPx) < 1e-3,
+              "a brake with a sideways part of half what it took out is the floor's under the file's cone: " +
+                  std::to_string(run.begin.Approaching(down).y));
+    Impacts::FreeFlightRules narrow = file;
+    narrow.brakeFrictionCone = 0.25;
+    run = DropAStone(true, 14.0, false, Brake::Sliding, 6, 0, narrow);
+    CHECK_MSG(run.began && std::fabs(run.begin.Approaching(down).y - expected.velocityPx) > 1.0,
+              "and a push under a cone of a quarter: " + std::to_string(run.begin.Approaching(down).y));
+}
+
+// What is not a free flight is read as before: a stone resting on a floor that a circle comes against (touching something
+// already, its velocity pressed down by gravity each step), and one that rolls.
+void AStoneThatIsNotInAFreeFlightIsReadAsBefore() {
+    entt::registry registry;
+    Supersonic::PhysicsSettings settings;
+    settings.gravity = glm::vec3(0.0f, -static_cast<float>(Units::ToMetres(2000.0)), 0.0f);
+    registry.ctx().emplace<Supersonic::PhysicsSettings>(settings);
+    SolidBox(registry, {0.0, 120.0}, {800.0, 40.0}); // its top at y 100
+    const entt::entity stone = SolidCircle(registry, {0.0, 90.0}, 10.0);
+    const entt::entity other = SolidCircle(registry, {1000.0, 90.0}, 10.0);
+    Impacts::Watched watched{stone, Impacts::Kind::Stone, {0.0, 0.0}};
+    watched.freeFlight = true;
+    Impacts::Watch watch;
+    WatchedStep step{registry, watch, {watched}};
+    // The first look; then lying on the floor, gravity's 33.33 pressed back each step.
+    CHECK(step({0.0, 90.0}, {0.0, 0.0}, {0.0, 90.0}).empty());
+    for (int i = 0; i < 5; ++i) CHECK(step({0.0, 90.0}, {0.0, kGravityStepPx}, {0.0, 90.0}).empty());
+    // A circle comes against its side, the stone rolling at 60 px/s into it.
+    registry.get<Supersonic::TransformComponent>(other).position = Units::ToWorld(20.0, 90.0);
+    const std::vector<Impacts::Begin> begins = step({0.0, 90.0}, {60.0, kGravityStepPx}, {0.0, 90.0});
+    CHECK_MSG(begins.size() == 1, std::to_string(begins.size()) + " begins");
+    for (const Impacts::Begin& begin : begins) {
+        if (begin.other != other) continue;
+        CHECK_MSG(!begin.freeFlight, "a stone resting on a floor is not in a free flight");
+        CHECK_MSG(Near(begin.Approaching({1.0, 0.0}), {60.0, kGravityStepPx}, 1e-3), Px(begin.Approaching({1.0, 0.0})));
+    }
 }
 
 // A minion's spawn drop (Watched::spawnDropPx): the port centres its 7 px circle
@@ -1247,6 +1489,8 @@ void runTests() {
     TheContactNormalIsBetweenTheNearestPoints();
     APairIsABeginOnceUntilItParts();
     ATeleportedBodyKeepsNothingItCarriedIn();
+    AFreeFallIsReadAsTheOriginalsStepReadsIt();
+    AStoneThatIsNotInAFreeFlightIsReadAsBefore();
     ASpawnedMinionIsLookedAtWhereTheOriginalsStands();
 }
 

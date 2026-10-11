@@ -10131,7 +10131,11 @@ std::vector<Impacts::Watched> MagicPortalsLayer::impactBodies() const {
     for (const Demolish::Stone& stone : m_level.demolish.stones) {
         const Tscn::Node* node = m_data.scene.FindNode(stone.name);
         if (node != nullptr && !Earthquake::IsEntity(Roles::EntityName(*node), entityOf(Call::StoneImpact))) continue;
-        watch(Impacts::Watched{stone.body, Impacts::Kind::Stone, {}});
+        // Read as Box2D's step reads a free fall (planning step 162, STK-9): a stone is the one body of the four
+        // that nothing but the engine's gravity and its contacts moves.
+        Impacts::Watched watched{stone.body, Impacts::Kind::Stone, {}};
+        watched.freeFlight = true;
+        watch(watched);
     }
     // ETHBeginContactCallback_minion: minion.ent's, which is every minion but a
     // ghost_minion.ent. Aimed from its entity point, which stands above its circle.
@@ -10245,14 +10249,24 @@ void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable
             along = length > 0.0 ? apart / length : glm::dvec2(0.0);
         }
         const std::string other = EntityNameOf(begin.other);
-        // At what it came along that line fastest since it last met or left
-        // anything: the engine's solver brakes a closing pair before it meets
-        // (Impacts::kRecentSteps).
+        // What the callback reads along that line (Begin::Approaching): a stone's
+        // free flight, as Box2D's own step would have read it (planning step 162);
+        // any other body at what it came along that line fastest since it last met
+        // or left anything, because the engine's solver brakes a closing pair
+        // before it meets (Impacts::kRecentSteps).
         const double hit = Earthquake::HitIntensity(m_quakeRules, begin.Approaching(along), along);
         const bool calls = Earthquake::ImpactCalls(m_quakeRules, call, hit, other);
         SUPERSONIC_LOG_INFO("Magic Portals") << "impact " << Earthquake::KeyOf(call) << " of " << nameOf(begin)
                                              << " on " << (other.empty() ? std::string("a body") : other) << " hit " << hit
                                              << (calls ? "" : ", no call") << " on tick " << m_ticks << std::endl;
+        if (begin.freeFlight) {
+            // What the history alone would have read (planning step 162): the replay's reading is the one above.
+            SUPERSONIC_LOG_INFO("Magic Portals") << "free flight read of " << nameOf(begin) << " on "
+                                                 << (other.empty() ? std::string("a body") : other) << ": the history's "
+                                                 << Earthquake::HitIntensity(m_quakeRules, begin.HistoryApproaching(along), along)
+                                                 << ", replayed " << begin.replayedSteps << " step(s) past the brake, on tick "
+                                                 << m_ticks << std::endl;
+        }
         if (calls) QueueQuake(call, hit);
         // The same callback's sound, after its shake: the player's on no crate
         // test (#82-90), the minion's past the same enemy_killer test (#132-140),
@@ -11209,8 +11223,12 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
         // The app has just stepped physics. The pairs it has just brought
         // together first, read before anything after the step moves or breaks a
         // body - Box2D calls a begin-contact callback inside the step itself.
+        // The free-flight replay's judgments are earthquake.json's: the circle skin in screen px (converted as touchPx
+        // is), the two guesses in the watch's own units.
+        const Impacts::FreeFlightRules flight{Earthquake::ToUnits(m_quakeRules, m_quakeRules.circleTouchPx),
+                                              m_quakeRules.brakeReachSlackUnits, m_quakeRules.brakeFrictionCone};
         m_impactBegins = m_impacts.AfterStep(registry, Earthquake::ToUnits(m_quakeRules, m_quakeRules.touchPx),
-                                             static_cast<double>(step.physicsS));
+                                             static_cast<double>(step.physicsS), flight);
         // A stone that began to touch a knight hard enough crushes it in that same callback (planning step 159), before
         // anything after the step reads the knights.
         stoneHits(registry);

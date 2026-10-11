@@ -169,11 +169,25 @@ bool ReadImpacts(const Json::Value& root, Rules& read, std::string& error) {
         return false;
     }
     if (!Number(impacts, "impacts", "hit_px_per_unit", read.hitPxPerUnit, error) ||
-        !Number(impacts, "impacts", "touch_px", read.touchPx, error)) {
+        !Number(impacts, "impacts", "touch_px", read.touchPx, error) ||
+        !Number(impacts, "impacts", "circle_touch_px", read.circleTouchPx, error)) {
         return false;
     }
-    if (!(read.hitPxPerUnit > 0.0) || read.touchPx < 0.0) {
-        error = "impacts.hit_px_per_unit must be above 0, and impacts.touch_px not below it";
+    if (!(read.hitPxPerUnit > 0.0) || read.touchPx < 0.0 || read.circleTouchPx < 0.0) {
+        error = "impacts.hit_px_per_unit must be above 0, and impacts.touch_px and circle_touch_px not below it";
+        return false;
+    }
+    const Json::Value& flight = impacts["free_flight"];
+    if (!flight.IsObject()) {
+        error = "no \"impacts.free_flight\" object: the free-flight replay's two guesses";
+        return false;
+    }
+    if (!Number(flight, "impacts.free_flight", "brake_reach_slack_units", read.brakeReachSlackUnits, error) ||
+        !Number(flight, "impacts.free_flight", "brake_friction_cone", read.brakeFrictionCone, error)) {
+        return false;
+    }
+    if (read.brakeReachSlackUnits < 0.0 || read.brakeFrictionCone < 0.0) {
+        error = "impacts.free_flight.brake_reach_slack_units and brake_friction_cone must not be below 0";
         return false;
     }
     const Json::Value& calls = root["calls"];

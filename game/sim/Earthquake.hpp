@@ -124,6 +124,14 @@ struct Rules {
     // surfaces are touching, a bare literal in screen px as capPx is.
     double hitPxPerUnit = 0.0;
     double touchPx = 0.0;
+    // How near a circle must be to another circle for Box2D to touch them: none, a circle has no skin
+    // (b2CollideCircles). Read only to tell a free flight where Box2D's own step would have touched (Impacts::Watch).
+    double circleTouchPx = 0.0;
+    // The free-flight replay's two guesses (earthquake.json impacts.free_flight, marked _guess; Impacts::FreeFlightRules): how far
+    // past the engine's own reach (level units, NOT screen px: not run through ToUnits) a pair may stand for a change of a stone's
+    // velocity to count as the other's brake, and how much of it may lie along the surfaces per unit taken out of the approach.
+    double brakeReachSlackUnits = 0.0;
+    double brakeFrictionCone = 0.0;
     std::array<double, kCalls> hitAbove{};
     std::array<std::vector<std::string>, kCalls> spares{}; // entity names a row's callback passes over, exactly
     std::array<std::string, kCalls> entity{};              // the entity whose callback a row is

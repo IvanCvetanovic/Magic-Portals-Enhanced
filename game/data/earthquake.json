@@ -285,6 +285,18 @@
   "impacts": {
     "hit_px_per_unit": 50.0,
     "touch_px": 0.5,
+    "circle_touch_px": 0.0,
+    "free_flight": {
+      "_guess": true,
+      "brake_reach_slack_units": 1.0,
+      "brake_friction_cone": 1.0,
+      "_source": [
+        "The free-flight replay's two GUESSES (planning step 162, STK9-4; _guess true): the port's own, not numbers of the original's. The replay has to tell which step of a stone's history the engine's solver braked for this pair, and that solver is the port's engine's, not the original's, so no capture of the original can say how it does it.",
+        "brake_reach_slack_units (LEVEL UNITS, not screen px: it is not run through ToUnits as touch_px is): the engine brakes a closing pair only while it stands within the two bodies' travel in the step (engine/src/core/PhysicsSystem.cpp:1164, pairMargin = |a.sweep| + |b.sweep|, a sweep being |velocity| x dt, :809-813). The replay measures that reach from the stone's travel after gravity and the other's CURRENT speed over the steps since, which is an estimate (the other has moved), and counts a change of velocity as the other's brake while the surfaces stand within that reach plus this slack. It decides which steps are the brake and so how many the replay flies free: AFreeFallIsReadAsTheOriginalsStepReadsIt's stop after step 5 (a gap of 3.43 against a reach of 2.78) is taken as a brake only through it.",
+        "brake_friction_cone: a change of velocity is the brake of this pair, and not a push of something else's, where the part of it along the surfaces is at most this much of what it took out of the approach; 1 is a friction coefficient of 1 (a 45 degree cone). The engine's own friction is not read from here: this only sorts a step's change into 'the pair's brake' or 'something else', which no capture of the original can show.",
+        "Measured over the 86 route replays and test_mp_layer (planning step 162, round 1): the readings are identical for a slack of 0 to 1.5 and a cone of 0.5 to 1.0; a slack of 2 or 4 moves one begin (3-10's 70 px knight case, 2.68 to 4.15), a cone of 0.25 two, a cone of 1.5 or 2 two and a cone of 0 about 45. Retune either only against the original's reading of a stone's fall (STK-1)."
+      ]
+    },
     "_source": [
       "What the three impact rows read a contact by (D11 section 4 notes, D11_check C47). hit_px_per_unit:",
       "hitIntensity is the approach speed in level units a second over 50 - GetLinearVelocity is",
@@ -303,7 +315,30 @@
       "its pairs marked (sim/Impacts.hpp). The velocity is the one the tick left the body to take",
       "into the step, as the callback reads the one the last frame left it; a body a portal has",
       "moved since the last step keeps none it carried before (the teleport sets its velocity, as",
-      "the original's does: step 104)."
+      "the original's does: step 104).",
+      "",
+      "circle_touch_px: the skin of a circle against a circle, none: b2CollideCircles has a point while",
+      "distSqr <= (rA + rB)^2 (box2d/Box2D/Collision/b2CollideCircle.cpp:23-46), where a circle against",
+      "a polygon has the polygon's radius (touch_px above). A rolling stone is shape 2 (a circle) and",
+      "so are the two fixtures of dark_mage.ent's compound and of minion.ent's (Physics/ETHCompoundShape.cpp:",
+      "69-71, ETHPhysicsSimulator.cpp:56-62), so a stone against the player or a knight touches at 0 and",
+      "against a floor, a ramp, a crate or a wall at touch_px. Read only by Impacts::Watch's free-flight",
+      "replay (step 162): a begin is still found within touch_px of any pair.",
+      "",
+      "The free flight (Watched::freeFlight, set for a rolling stone; planning step 162, STK-9): the original's",
+      "world steps a fixed 1/30 s (AverageFPSRateManager::AverageFPSRateManager #1, SetV4 1023969417 =",
+      "0.0333333f, manageFixedTimeStep #3-10; ETHPhysicsSimulator::Update, ETHPhysicsSimulator.cpp:157-160),",
+      "b2World::Step finds each contact's manifold at the positions the last step left (Collide) and calls",
+      "BeginContact on a pair just inside its skin, with the body's velocity as that last step's Solve left",
+      "it (b2World.cpp:879-930, b2Contact.cpp:154-229, ETHContactListener.cpp:86-105, ETHPhysicsController.cpp:",
+      "117-123); Solve is v += g dt then x += v dt, no speculative braking, and SolveTOI (b2World.cpp:559-877)",
+      "only adds a static or bullet pair's begin on the step whose free position crosses the target, reading",
+      "the same velocity. So the callback reads the velocity after the first step whose FREE position is within",
+      "the skin - a fall from rest of D units reads k/3 for the first k with 0.5556 k (k + 1) / 2 >= D - skin.",
+      "The engine's own solver takes the approach out before the pair meets, so Approaching replays the free",
+      "flight from the last step it had not braked (Impacts.cpp FreeFlightVelocity) with the engine's own gravity",
+      "(PhysicsSettings). Which of a stone's steps was the engine's brake is judged by free_flight's two guesses (above);",
+      "no number is tuned against the original's reading of a fall."
     ]
   },
 
