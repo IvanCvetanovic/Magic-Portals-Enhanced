@@ -1,12 +1,17 @@
 {
   "_about": [
-    "The loose bodies a level starts with AT REST, because the original shows them so from its first frame (planning step 152's amendment,",
-    "R3b fix 1; sim/Resting). The key is the level's file name without its extension, `bodies` the nodes' names in its .tscn: each is put to",
+    "Two things about bodies at rest (sim/Resting): the loose bodies a level starts with AT REST, because the original shows them so from its first frame",
+    "(planning step 152's amendment, R3b fix 1), and what wakes a sleeper when the body it rests on goes (planning step 163, R3b-4 and R3c-5).",
+    "",
+    "THE PILES (`levels`). The key is the level's file name without its extension, `bodies` the nodes' names in its .tscn: each is put to",
     "sleep where the level places it, with the position it sleeps at, as the engine itself writes a body that has been still long enough",
-    "(PhysicsSystem's sleep test), so it wakes by the engine's own rules - a body it touches that moves, or the port moving it (a portal's exit).",
+    "(PhysicsSystem's sleep test), so it wakes by the engine's own rules - a body it touches that moves - and by sim/Resting's: the body it rests on",
+    "destroyed, no longer solid or moved by the port (a portal's entry, a lift). `rests_on` names, per body, the nodes its still shows it resting on, which",
+    "the port cannot find by looking at the gap between them: the port places the body where the level does, and the original's Box2D would have settled it",
+    "onto them in its first frames. A body with no `rests_on` rests on whatever touches it.",
     "",
     "WHY a body needs this. A pile of a heavy body on a light one, resting on corners, is not held by the engine's eight solver iterations: the",
-    "stone of 3-12 (1.131, the .ent's density over its 30 radius) rests on the small crate's corner (0.144) and the column's, presses the crate",
+    "stone of 3-12 (1.131, the .ent's density over its 30 radius) rests on the small crate's corner (0.144) and, in step 152's reading of the still, a column's (not checked against the level's placements: see _source), presses the crate",
     "sideways along the contact's normal every tick, and the crate creeps off its ledge from tick 4 with the stone after it (R3b fix 1: the",
     "pair drifts at an equal weight too, 154 -> 144.6 in 180 ticks, and at 2 m/s^2 of gravity, a fifth of the world's, the stone is off its",
     "perch by tick 300). Box2D holds it, as the original's stills show. A body listed here is what the original shows and the engine cannot keep.",
@@ -14,22 +19,34 @@
     "Only a pile named from a still of the original belongs here; the others that are awake at tick 420 (test_mp_timebase's list) are not",
     "listed, because no still of theirs has been compared."
   ],
-  "wake_reach_px": 6.0,
-  "_wake_reach_px": [
-    "How near a sleeping body must lie to a body the port is about to move away (a portal's entry) for it to wake with it. A GUESS (_guess true):",
-    "no number of the original's decides it. MEASURED on 3-12's route (R3b fix 1): the stone cradled in the nook lies 1.95 units off the crate's",
-    "corner on the port's geometry (a circle of radius 30 whose centre is 31.95 from the corner), and the route wins on tick 624 for every reach",
-    "from 2 to the 40 tried and not for 1.8 or less, so 6 is a few units of margin over that gap, not a knife-edge. WHY it wakes at all: the stone of",
-    "3-12 is held in a nook inside a permanent antiportal's field by the small crate, and the way to free it is to take the crate away through a",
-    "portal - which only works if the stone then rolls. Box2D 2.2.1 (the original's) wakes both bodies of a contact when it ends (b2Contact::Update,",
-    "b2Contact.cpp:210-214, and b2Contact::Destroy, :105-109), so in the original a stone asleep on a crate that goes is woken as the contact goes;",
-    "the engine wakes a sleeper only when a contact begins or a neighbour stirs, so the port supplies the original's rule where it moves a body itself."
+  "touch_units": 0.5,
+  "_touch_units": [
+    "What counts as TOUCHING when the port asks what a sleeper rests on (Resting::Watch, Resting::WakeAround), in level units, the units of Impacts::Between: the gap between the two surfaces, at most this. A GUESS (_guess true) as a NUMBER; the rule is decoded.",
+    "THE RULE is Box2D's: a contact between two bodies lasts while its manifold has points (b2Contact::Update, b2Contact.cpp:154-229), a destroyed body's contacts wake both their bodies when they had points (b2Contact::Destroy, :101-109), and a manifold has points within the shapes' radii:",
+    "two polygons the sum of their b2_polygonRadius (2 x b2_linearSlop = 0.01 m each, b2Settings.h:67, 76), a polygon against a circle the polygon's alone (b2CollideCircle.cpp:65-74), two circles none (:23-46) - at the original's 720-line screen, as earthquake.json's touch_px reads it, 0.356, 0.178 and 0 level units.",
+    "THE NUMBER is the port's: the engine's solver exposes no manifold, and it rests a body OVERLAPPING its support. MEASURED over the 86 route replays (planning step 163, out/parity/program/WAKE/routes_after1.txt: 205 looks, 219 supports): the gaps of the supports a scan found run -0.427 to +0.490 (a settled knight, stone or crate overlaps its floor by about 0.39).",
+    "MEASURED on the same replays, and no knife-edge: 0.178, 0.3, 0.5 and 1.0 give the same 5 wakes and the same routes; 2.0 gives 10, 4.0 gives 19 and 8.0 gives 23 (bodies merely near a door lift or a breakable, none of which moves a route).",
+    "The one body whose support a touch cannot find is 3-12's stone, which the port places 1.953 off the crate's corner where the level does (the original's Box2D would have settled it in its first frames): `rests_on` names its crate."
+  ],
+  "moved_m": 0.0001,
+  "_moved_m": [
+    "How far a body a sleeper rests on has to be moved by the port for the sleeper to be left without it, in the engine's metres. A GUESS (_guess true): Box2D has no distance - SetPosXY is SetTransform and SetAwake(true) whatever the distance (ETHPhysicsEntityController.cpp:98-103) - so the value is the engine's own, the distance past which it takes a SLEEPING body to have been put somewhere else and wakes it (PhysicsSystem.cpp kSleepWakeDistance 1e-4, :88, tested at :516-518).",
+    "MEASURED on the 86 route replays (planning step 163): 1e-5 and 1e-4 give the same 5 wakes; 1e-3, 1e-2 and 1e-1 give 4 - the bobbing slab of 4-07 moves under a millimetre a tick, and the crate asleep on it is not woken by a move that small. The port's other writes to a support's place (a mover's stride, a portal's exit) are far above either."
   ],
   "_guess": true,
+  "_guess_note": "touch_units and moved_m are the port's own numbers, not the original's (Box2D has no distance for either): the rule they serve is decoded, and each is measured to sit on a plateau (see their notes). wake_reach_px, the 6 units this replaces, was a guess too (R3b-4).",
   "levels": {
     "level11b": {
-      "bodies": ["rolling_stone_1198", "crate_small_ent_1372"],
-      "_source": "3-12: out/parity/original/levels/3-12_t2.0.png and 3-12_t8.0.png (MEASURED on the original in the emulator, level library capture): the stone cradled between the crate's top-right corner and the column's top-left corner, the crate on its ledge, at both 2 and 8 seconds and identical"
+      "bodies": [
+        "rolling_stone_1198",
+        "crate_small_ent_1372"
+      ],
+      "rests_on": {
+        "rolling_stone_1198": [
+          "crate_small_ent_1372"
+        ]
+      },
+      "_source": "3-12: out/parity/original/levels/3-12_t2.0.png and 3-12_t8.0.png (MEASURED on the original in the emulator, level library capture): the stone cradled on the small crate's top-right corner, the crate on its ledge, at both 2 and 8 seconds and identical. (Step 152's reading added the corner of a 'column' beside the stone; what the column is was not established: a static block at the stone's height to its right is double_block_plat_low_emissive_ent_1535 at (238, 64), and the locked door, at (370, 286), is not it - it is far from the stone at (180, 68) - so the word is kept above only as that step's wording.) rests_on: the crate, the only body of the stone's supports that can go (the route takes it through a portal, and Box2D wakes the stone as the contact goes, b2Contact.cpp:101-109); the port places the stone 1.953 units off the crate's corner, outside what a scan of the touch can find (_touch_units)"
     }
   }
 }

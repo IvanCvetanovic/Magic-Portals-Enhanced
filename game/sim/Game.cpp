@@ -469,6 +469,11 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     }
     // And last, what every writer above has made of every body's velocity, held to Box2D's limit.
     ClampTranslations(registry, data.tuning, step);
+    // THE SLEEPERS WHOSE SUPPORT IS GONE (planning step 163), after everything that destroys or moves a body - this tick's AfterStep
+    // before it, the movers and the kills above - and before the physics step: Box2D wakes a body when the contact that held it is
+    // destroyed (b2Contact::Destroy, b2Contact.cpp:105-109), so a knight over a wall that broke falls in the next step, as here.
+    level.restingLooked.clear();
+    level.restingWoken = Resting::Watch(registry, &level.restingLooked);
 }
 
 void AfterStep(const Data& data, entt::registry& registry, Level& level, const ScriptClock::Step& step) {

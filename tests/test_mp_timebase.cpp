@@ -1104,16 +1104,29 @@ void AFileOfRestingBodiesIsReadAndRefusesWhatItCannotPut() {
     };
     Resting::Rules rules;
     std::string error;
-    CHECK_MSG(read(R"({"wake_reach_px": 2.0, "levels": {"levelx": {"bodies": ["a", "b"]}}})", rules, error), "a file with one level is taken: " + error);
-    CHECK_WITHIN(rules.wakeReachPx, 2.0, 0.0);
+    CHECK_MSG(read(R"({"touch_units": 2.0, "moved_m": 0.001, "levels": {"levelx": {"bodies": ["a", "b"], "rests_on": {"a": ["b"]}}}})", rules, error),
+              "a file with one level is taken: " + error);
+    CHECK_WITHIN(rules.touchUnits, 2.0, 0.0);
+    CHECK_WITHIN(rules.movedMetres, 0.001, 1e-9);
     CHECK_MSG(rules.byLevel.count("levelx") == 1 && rules.byLevel.at("levelx").size() == 2, "and keeps its two bodies");
+    CHECK_MSG(rules.restsOn.count("levelx") == 1 && rules.restsOn.at("levelx").count("a") == 1 &&
+                  rules.restsOn.at("levelx").at("a") == std::vector<std::string>{"b"},
+              "and what a rests on");
     Resting::Rules refused;
-    CHECK_MSG(!read(R"({"wake_reach_px": 2.0, "levels": []})", refused, error), "levels that is not an object was taken");
-    CHECK_MSG(!read(R"({"wake_reach_px": 2.0, "levels": {"levelx": {"bodies": []}}})", refused, error), "a level with no bodies was taken");
-    CHECK_MSG(!read(R"({"wake_reach_px": 2.0, "levels": {"levelx": {"bodies": [""]}}})", refused, error), "a nameless body was taken");
-    CHECK_MSG(!read(R"({"wake_reach_px": 2.0, "levels": {"levelx": {"bodies": [3]}}})", refused, error), "a body that is not a name was taken");
-    CHECK_MSG(!read(R"({"levels": {"levelx": {"bodies": ["a"]}}})", refused, error), "a file with no wake_reach_px was taken");
-    CHECK_MSG(!read(R"({"wake_reach_px": -1.0, "levels": {"levelx": {"bodies": ["a"]}}})", refused, error), "a wake reach below zero was taken");
+    const std::string head = R"({"touch_units": 2.0, "moved_m": 0.001, )";
+    CHECK_MSG(!read(head + R"("levels": []})", refused, error), "levels that is not an object was taken");
+    CHECK_MSG(!read(head + R"("levels": {"levelx": {"bodies": []}}})", refused, error), "a level with no bodies was taken");
+    CHECK_MSG(!read(head + R"("levels": {"levelx": {"bodies": [""]}}})", refused, error), "a nameless body was taken");
+    CHECK_MSG(!read(head + R"("levels": {"levelx": {"bodies": [3]}}})", refused, error), "a body that is not a name was taken");
+    CHECK_MSG(!read(head + R"("levels": {"levelx": {"bodies": ["a"], "rests_on": []}}})", refused, error), "rests_on that is not an object was taken");
+    CHECK_MSG(!read(head + R"("levels": {"levelx": {"bodies": ["a"], "rests_on": {"c": ["a"]}}}})", refused, error),
+              "a support list for a body the level does not list was taken");
+    CHECK_MSG(!read(head + R"("levels": {"levelx": {"bodies": ["a"], "rests_on": {"a": []}}}})", refused, error), "an empty support list was taken");
+    CHECK_MSG(!read(head + R"("levels": {"levelx": {"bodies": ["a"], "rests_on": {"a": [""]}}}})", refused, error), "a nameless support was taken");
+    CHECK_MSG(!read(R"({"moved_m": 0.001, "levels": {"levelx": {"bodies": ["a"]}}})", refused, error), "a file with no touch_units was taken");
+    CHECK_MSG(!read(R"({"touch_units": -1.0, "moved_m": 0.001, "levels": {"levelx": {"bodies": ["a"]}}})", refused, error), "a touch below zero was taken");
+    CHECK_MSG(!read(R"({"touch_units": 2.0, "levels": {"levelx": {"bodies": ["a"]}}})", refused, error), "a file with no moved_m was taken");
+    CHECK_MSG(!read(R"({"touch_units": 2.0, "moved_m": 0.0, "levels": {"levelx": {"bodies": ["a"]}}})", refused, error), "a moved distance of nothing was taken");
     // Apply: a level that is not listed is untouched, a name the level did not build is refused.
     entt::registry registry;
     const entt::entity crate = registry.create();
@@ -1132,7 +1145,7 @@ void AFileOfRestingBodiesIsReadAndRefusesWhatItCannotPut() {
     std::filesystem::remove_all(dir, ec);
 }
 
-// WakeAround: what touches a body the port is about to move wakes, and what is further than the reach, or is not asleep, does not.
+// WakeAround: what touches a body the port is about to move wakes, and what is further than the touch, or is not asleep, does not.
 void AWakeAroundBodyWakesWhatLiesOnIt() {
     entt::registry registry;
     const auto box = [&](double xPx, double yPx, bool asleep) {
@@ -1149,7 +1162,8 @@ void AWakeAroundBodyWakesWhatLiesOnIt() {
     const entt::entity apart = box(0.0, -40.0, true);   // 10 units clear
     const entt::entity awake = box(30.5, 0.0, false);   // beside it, awake already
     Resting::Rules rules;
-    rules.wakeReachPx = 2.0;
+    rules.touchUnits = 2.0;
+    rules.movedMetres = 0.001;
     // With no rules in the registry nothing wakes: a rig that never loaded resting.json is the engine's own.
     CHECK_MSG(Resting::WakeAround(registry, crate) == 0, "no rules, no waking");
     CHECK(registry.get<RigidBodyComponent>(onIt).isSleeping);

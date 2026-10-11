@@ -96,6 +96,12 @@ add_mp_test(test_mp_player)
 # the converted levels, so the suite takes no SKIPS_WITH_77.
 add_mp_test(test_mp_timebase)
 
+# What wakes a sleeper when the body it rests on goes (planning step 163, R3b-4 and R3c-5): Box2D wakes both bodies of a contact
+# that is destroyed, the engine does not, and sim/Resting::Watch is the contact rule - a wall destroyed, a crate burnt, a
+# door opened, a lift or platform moved, a body a portal carries off - on bare rigs stepped by the engine's own solver, and
+# 3-10's knight, which falls on the tick its wall breaks. The level case skips itself without the converted levels.
+add_mp_test(test_mp_wake)
+
 # Where a picture is drawn between ticks: the tick's own place, as the original draws it, the camera
 # included, and the engine's smoothing kept only where the display outruns the tick (planning step
 # 150). The rules and the rate watch are pure; the walk and the level sample read the converted levels

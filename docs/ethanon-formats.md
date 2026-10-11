@@ -2787,9 +2787,36 @@ The original's Box2D is 2.2.x (`reference/ethanon/toolkit/Source/src/box2d/Box2D
   `teleportToOther` moves a traveller with it (PortalManager, `SetPositionXY(other.GetPositionXY())`). What lay on the body is woken by the contact's end, above.
 - **The engine does not do the second half.** `PhysicsSystem` wakes a sleeper when a contact begins with a stirring body, or a joint's neighbour stirs, or it is moved
   (`PhysicsSystem.cpp:1072-1115`, `:504-523`), and not when a contact ends: a stone asleep on a crate that a portal takes away would hang in the air. The port wakes what lies on or
-  against a traveller before it goes (`Resting::WakeAround`, `game/data/resting.json` `wake_reach_px`, 2 units: a guess), which is Box2D's rule, not an addition to it. 3-12 needs it:
+  against a traveller before it goes (`Resting::WakeAround`, which since planning step 163 asks the same contact question as `Resting::Watch` below, and no longer reads a distance:
+  `wake_reach_px`, 6 units, a guess, is gone), which is Box2D's rule, not an addition to it. 3-12 needs it:
   its stone is held inside the permanent `antiportal_1375`'s field by the small crate, so taking the crate away is the only way to free it.
-- The library stills `3-12_t2.0.png` and `3-12_t8.0.png` show the stone cradled between the crate's top-right corner and the column's top-left corner and the crate on its ledge,
+- **What wakes a sleeper when what it rests on is destroyed or moved** (planning step 163, WAKE; backlog R3b-4 and R3c-5). **A destroyed body**: the script's `DeleteEntity` ends in
+  `ETHPhysicsEntityController::Destroy`, `m_world->DestroyBody(m_body)` (`ETHPhysicsEntityController.cpp:167-184`, the call at `:181`); `b2World::DestroyBody` destroys every contact
+  of the body (`b2World.cpp:158-166`, `b2ContactManager::Destroy`, `b2ContactManager.cpp:37-100`) and `b2Contact::Destroy` wakes both bodies of each contact that had manifold points
+  (`b2Contact.cpp:101-109`) - at once, inside the destroying call, so the sleeper is awake for the very next step. A contact has points while the shapes' separation is within their
+  radii (`b2CollidePolygons`' sum of the two polygons' `b2_polygonRadius`, 0.01 m each, `b2Settings.h:67, 76`; a polygon against a circle the polygon's alone, `b2CollideCircle.cpp:65-74`;
+  a circle against a circle none, `:23-46`) and a sensor has none (`b2Contact.cpp:173-182`), so a sleeper wakes for what it touches and not for a body it only overlaps the box of.
+  **A moved body**: `SetPosXY`, `AddToPosXY`, `AddToAngle` and `SetAngle` are `SetTransform` then `SetAwake(true)` on the MOVED body (`ETHPhysicsEntityController.cpp:98-103`, `136-140`,
+  `148-152`, `158-162`; `b2Body::SetTransform`, `b2Body.cpp:402-426`, wakes nothing itself); the sleeper beside it is woken by the next step: `b2ContactManager::Collide` updates the
+  contacts that have an awake non-static body (`b2ContactManager.cpp:105-168`, `activeA`/`activeB` at `:118-123`), which ends or changes the sleeper's (`b2Contact.cpp:210-214`, or
+  `Destroy` once the broad phase no longer overlaps them, `b2ContactManager.cpp:157-163`), and an awake body that still touches it brings it into its island (`b2World.cpp:431`). A
+  contact between two bodies neither of which is awake and non-static is not updated: a SLEEPER ON A STATIC BODY THAT IS MOVED would be left asleep by Box2D (a static body is never
+  `active`, `SetAwake` on it wakes no island, `b2World.cpp` seeds skip static bodies) - READ from the source of `Collide` and the island loop, not run on the original - which is
+  the likely reason the original's three scripted movers wake their neighbours themselves (the listing does not say why).
+  **`awakeEntitiesAround`** (`assets/MiscCallbacks.angelscript`, listing L69717, md5 `48fe65ce`): `getEntitiesFromNeighbourBuckets(GetBucket(thisEntity.GetPositionXY()))`, then
+  `SetAwake(true)` on the physics controller of every entity there that is not static (#4-65); called from `ETHCallback_lift` (L83504, #321, after `AddToPositionXY`), from
+  `ETHCallback_door_lift` (L84120, #619, only when the interpolated position differs from `currentPos`, before `SetPositionXY`) and from `ETHCallback_moving_platform` (L74234, #17,
+  after `linearMotion`), every frame the mover moves. The bucket is 128 level units (the section on the scene's buckets above): the 3 x 3 buckets round the mover's entity point, a
+  distance and not a contact, which the port does not build (backlog G3-6). `ETHPhysicsSimulator` makes its world with `doSleep = true` (`ETHPhysicsSimulator.cpp:131-132`) and builds
+  every body from a default `b2BodyDef` (`allowSleep` true), so the original's knights, crates and stones do sleep, as the port's do.
+  **The port**: `Resting::Watch` keeps, for every sleeping loose body, the bodies it touched when it was first seen asleep (the surfaces within `resting.json` `touch_units`, 0.5 level
+  units, that its masks meet and that are solid: Box2D's contact list) and wakes it, at the end of `Game::BeforeStep` and so before the physics step that would leave it hanging,
+  when one of them is destroyed, is no longer solid, or has been moved by more than `moved_m` (1e-4 m, the engine's own `kSleepWakeDistance`, `PhysicsSystem.cpp:88`); an awake loose
+  body's own motion is the engine's (it wakes what rests on it when it stirs) and only its place is kept up to date. One rule for every way the port removes or moves a support, so
+  no destroying site has to remember to call it. The engine's own rule for a sleeper beside a KINEMATIC body is unchanged and stronger than Box2D's (it keeps what touches one
+  awake, `PhysicsSystem.cpp:1089-1094`), so a sleeper that touches a lift or a platform is awake before it moves; a body that rests within the touch but outside the engine's contact margin
+  (4-07's crate, 0.03 level units off the bobbing slab `bounce_2107`, asleep on tick 437) is woken by the watch on the tick the slab moves, as is a sleeper the level placed there.
+- The library stills `3-12_t2.0.png` and `3-12_t8.0.png` show the stone cradled between the crate's top-right corner and a "column"'s top-left corner (step 152's reading, never checked against the level's placements: a static block at the stone's height to its right is `double_block_plat_low_emissive_ent_1535`, at (238, 64); the locked door, at (370, 286), is not it) and the crate on its ledge,
   identical at 2 and 8 seconds: the original's pile is at rest from its first frame, which the engine's solver cannot hold (a stone of 1.131 on corners presses a crate of 0.144
   sideways every tick; the pair still drifts at equal weights, and at a fifth of the world's gravity), so `resting.json` puts it to sleep where the level places it.
 

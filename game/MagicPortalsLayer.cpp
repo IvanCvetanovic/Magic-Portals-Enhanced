@@ -11403,6 +11403,17 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, con
     // the camera the sim takes from outside.
     m_level.dragon.viewWidthPx = ViewPx().x;
     Game::BeforeStep(m_data, registry, m_level, direction, step);
+    // The sleepers whose support the tick took away or moved, woken at the end of BeforeStep (Resting::Watch, planning step 163).
+    for (const Resting::Looked& looked : m_level.restingLooked) {
+        std::ostringstream rests;
+        for (const auto& [name, gap] : looked.supports) rests << (rests.tellp() > 0 ? ", " : "") << name << " (gap " << gap << ")";
+        SUPERSONIC_LOG_INFO("Magic Portals") << "resting: " << looked.sleeperName << " asleep on tick " << m_ticks << ", resting on "
+                                             << (looked.supports.empty() ? std::string("nothing") : rests.str()) << std::endl;
+    }
+    for (const Resting::Woken& woken : m_level.restingWoken) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << "resting: " << woken.sleeperName << " woken on tick " << m_ticks << ", its support "
+                                             << woken.supportName << " " << Resting::CauseName(woken.cause) << std::endl;
+    }
     // The dragon's callback runs HERE, before the step, and the other bosses'
     // after it (AfterStep): its take-off's stop is read on its own tick.
     latchMusic();

@@ -175,6 +175,11 @@ struct Level {
     // from the port's template table for 3-32, which places none - and entered in
     // `built` under a name of its own, and in Fire and the portals as a placed one is.
     Restock::State restock;
+    // The sleepers Resting::Watch woke at the end of the last BeforeStep, because what they rested on was destroyed, stopped being
+    // solid or was moved (planning step 163): kept for the layer's log line, and cleared by the next BeforeStep.
+    std::vector<Resting::Woken> restingWoken;
+    // And the sleepers it looked at for the first time (what each rests on and how far off), for the same line.
+    std::vector<Resting::Looked> restingLooked;
     // Chapter 4's torches, and the wall of light one of them drops.
     Torch::State torch;
     // The slabs that bob in chapter 4's weightless rooms. Kinematic, so each

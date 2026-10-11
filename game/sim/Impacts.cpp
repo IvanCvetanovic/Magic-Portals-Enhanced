@@ -217,6 +217,12 @@ bool ShapeOf(entt::registry& registry, entt::entity entity, Shape& out) {
     return true;
 }
 
+bool Collides(entt::registry& registry, entt::entity a, entt::entity b) {
+    Solid solidA;
+    Solid solidB;
+    return SolidOf(registry, a, solidA) && SolidOf(registry, b, solidB) && Collide(solidA, solidB);
+}
+
 Gap Between(const Shape& a, const Shape& b) {
     Gap gap;
     if (a.core.empty() || b.core.empty()) {

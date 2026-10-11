@@ -93,6 +93,10 @@ struct Gap {
 // is no such line, and the direction is the one between the cores' centres.
 Gap Between(const Shape& a, const Shape& b);
 
+// Whether the solver would take the two as a pair: the one's layer in the other's mask both ways round (PhysicsSystem's
+// broadphase), and both of them solid. What Box2D's contact filter (ShouldCollide) is for the sleeper's contacts (sim/Resting).
+bool Collides(entt::registry& registry, entt::entity a, entt::entity b);
+
 // How many steps of a body's velocities are kept, back to the last time it met
 // or left something: a second at the port's 60 Hz, which is longer than any fall
 // a level's height allows (the player falls 256 units in about 0.36 s at the
