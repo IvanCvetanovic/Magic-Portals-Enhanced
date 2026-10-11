@@ -3413,3 +3413,113 @@ refusals 3. Images: 256 deleted, 0.19 GB; free disk 113.988 -> 114.169 GiB.
 **Inferred mood:** a guess from the facts - a calm, productive run: two mechanics steps that each corrected an earlier assumption in the verifier's favour, a route phase that
 brought the last 42 levels in with one failed gate of the git state and nothing else, and a push; what is left is the comparison with the original and the owner's calls, and
 the routes' honest list of what rests on the port.
+
+### 2026-10-11 09:31 - Session 29: program wave 4b - the pixel-centre rule for edge pictures, the final comparison measured, pushed
+
+*Written 2026-10-11 at the close by this run's close role, from the records - planning step 165 of `docs/planning/2026-09-11-magic-portals-remaster.md`, each role's reports
+under the gitignored `out/parity/program/` (`PX/impl.md`, `fix1.md`, `fix2.md`, `commit.md`, `verify1.json` to `verify3.json`; `R4b/CMP/` with `pairing.md`, `residuals.md`,
+`per_level.md`, `groups.json`, `audit.json`; `R4b/verify1.json`, `R4b/finalize.md`) - and git, not from a transcript. 09:31 is the earliest file left under `PX/` (the step's first
+spot check), not a measured start; the wave's one commit is 15:54 and the push report is stamped 18:48. The run was on the owner's standing order of 2026-10-10 ("just continue doing
+each step until you are finished or until i tell you to stop"). Every number below is one a record states, or one this role measured and says so. This role built nothing,
+launched no executable and captured nothing; it deleted scratch, ran the image purge, edited the two tracked files and `out/parity/BASELINE.txt`, and committed.*
+
+**Built:**
+- **Step 165 (PX, `7eae0e4`)**: the pixel-centre rule for every level picture at the frame's edge. A picture whose edge lies in the frame's outer half pixel gets a strip, a second
+  quad of its own material over the gap its edge leaves (`EdgeCover::StripsOf`, `MagicPortalsLayer::syncEdgeCovers`, `game/data/edge_cover.json`), and a picture whose inward edge
+  is in the outer pixel (the black bars a tremble moves past the top) gets a strip or, where it covers no pixel centre, is left out of the frame for that frame; the strips come
+  from a pool of 24 made before any other entity. **GAMEPLAY: none.** Gate 1 met: 2-05's column 1279, rows 421-586, (8.92, 14.63, 16.66) -> (0.98, 1.16, 1.29) against the
+  original's (1.04, 1.16, 1.34), 164 of 166 rows equal. The f420 sweep: 127 of 128 byte-identical to the baseline (2-05's 211 px aside), 0 px outside the ring on all 128. **Gate 2
+  NOT met**: edge rows above 12 fell 777 -> 614 on the left and right columns (2,210 -> 2,047 on all four sides) and the whole fall is 2-05's; **gate 4 PARTIAL** (a pan and a shake
+  read against the rule, not against the original's footage). Of step 145's deviation 1 only 2-05 is closed. 57 suites, 57 passed, 32,314 checks (`test_mp_edgecover` new, 414);
+  128 of 128 routes win on the census's ticks; reachability 108 / 20 / 0; the level walk 134 visits, 1,460 sets, 1,100 drawn, peak 109, 0 failures. Opens PX-1 to PX-8.
+- **The final comparison's measuring pass (CMP, read-only)**: the port at f420 (and f75, f135, f240, f450 and each level's own HUD tick as extra sets) against the library's stills of
+  all 128 levels, 140 launches, 2,282 images, 16 readers of 8 levels, one triage rule. **26 `match`, 44 `minor`, 58 `differs`** (the readers' own tally 26 / 47 / 55), 468 residuals
+  (82 high, 125 medium, 261 low) in 18 causes and CMP-low. **52 of the 58 `differs` levels differ by one cause alone** (this role's count from `per_level.md`: every high residual of those 52 is the player or the arch drawn lit), CMP-1: the player and the exit arch are drawn lit on the 78
+  levels that carry `ignore_emissive`, a key neither the port nor the converter reads (decoded in the listing, unbuilt). Eight more groups are decoded (the hinge's attach point B,
+  equal-z order by bucket, two spawn markers with no callback, the red key's light, the blinks, the help block, 4-02's slab, 2-01's crate scale); three need a clip of the original, three
+  are the owner's, three are unknown. Not ticked in section 5 and not met in section 6's definition of done: "the largest fixed" waits for wave 4c.
+- **Independent verification** (`R4b/verify1.json`): 14 gates passed, 6 low findings, the comparison files and 128 frames checked, six pair images re-read (0 wrong), the committed build's
+  57 suites run once (rc 0, 32,314 checks), 128 fresh launches equal to PX's sweep byte for byte.
+- **The push**: the finalize role pushed `f240af9..7eae0e4` (a fast-forward, one commit, 12 files, +2,296 / -3; no force). `git rev-parse HEAD origin/main` agreed at the start of this
+  close after a fetch, and the commit is by IvanCvetanovic, no trailer.
+- **The close (this role)**: `docs/parity-backlog.md` updated - section 5's box annotated as MEASURED and left unticked, the definition-of-done bullet annotated, step 145's deviation 1 left
+  `[ ]` with the commit and push range, PX-2 to PX-4's "next: the final comparison" lines annotated (it did not attribute them), a bracket note on wave 4a's "wave 4b" list, the "Wave 4b"
+  paragraph with its table, how far to trust the comparison, the groups table, suites, Smart App Control, baseline, purge and GAMEPLAY, "What the next wave should take (wave 4c)", 20 new open
+  rows (CMP-1 to CMP-18, CMP-low and CMP-R1, the comparison's own limits), and the owner's calls; and this entry. 28 rows opened by the wave (PX 8, one closed at birth; CMP 20), no older row closed.
+- **The wave's image purge** (the owner's standing order, 2026-10-03: delete images once finished with them). Before it: free disk 113.441 GiB, `out/parity` 19.571 GiB. The new standing baseline is
+  the final build's f420 sweep, `program/PX/after/sweep` (128 PNGs, 1280 x 720; taken at 10:22-10:40 on `MagicPortals.exe` `195f5bfa`, PX's round 1; the committed build is `a5013ee6`, and its 128
+  launches in the comparison's verifier equal this folder md5 for md5), checked at this close (PNG signature, IEND tail with no NUL padding, 1280 x 720, md5 equal to its line of `PX/after/capture.txt`
+  and to `R4b/verify1/sweep_md5.txt`) before and after. `out/parity/BASELINE.txt` now lists it, `program/R4b/CMP/port_f420` (128 frames and the two popup-up frames in `popup_up/`) and
+  `program/R4b/CMP/pairs` (256 pair and overlay images), which the next wave measures its fixes against (it replaced `program/WAKE/after/sweep`; `purge_images.py` reads the file as path prefixes,
+  checked before relying on it). I deleted the comparison's scratch first (`CMP/pairs_other`, `CMP/port_other`, `CMP/crops`: 1,896 images, 1.263 GB) and 97 scratch `--saves` folders under
+  `PX/`, `R4b/` and `R4/verify2/` (1,994 `scores.json` / `achievements.json` copies, all verified JSON before deleting; nothing under `merge_w1/sweep_saves`, `ui1/saves_gold` or `saves/`),
+  then dry-ran `purge_images.py all` (744 files, 0.45 GB, 0 refused: PX's moves, crops and `verify2/after` sweep, and WAKE's old baseline) and ran it with `--delete` (744 deleted).
+  **Freed 2,640 images, 1.708 GB; `out/parity` 19.571 -> 17.980 GiB; free disk 113.441 -> 114.822 GiB** (the disk gained less than `out/parity` lost: other processes write to C:, INFERRED).
+  The three kept folders still hold 128, 130 and 256 PNGs, all opening, md5s unchanged. `git status` was unchanged by the purge.
+
+**Broke / dead ends:**
+- **Smart App Control refused 13 launches** (pairs of CodeIntegrity 3033/3077 events from 09:21, counted at this close): 12 of this repository's executables and 1 of python. PX's implementer
+  had `test_mp.exe` refused four times (a first link and its one relink on each build) and `MagicPortals.exe` twice, so **no suite ran on its build** and its gates said so; its first
+  verification had the game exe refused once at 12:22:18 after 130 good launches; the fix round had the game exe refused four times on one set of sources (three links and a retry, the relink
+  budget spent, so none of its game gates ran and the record said "not re-measured"); the harness fix's first link was refused once (14:52:54). The comparison's 140 launches, the
+  verifier's 130 game launches and one runner launch had none. One `python.exe` launch was refused at 17:14:08 loading scipy's `_flapack` extension, in the comparison phase (a triage tool; the
+  tools should avoid scipy). Earlier waves: 83, 19, 2, 4, 9 and 3 (wave 4a).
+- **PX's first build failed its own gate**: strips made on demand moved 133 px of additive glow outside the ring on five levels (the renderer breaks depth ties by the registry's store order and a late
+  strip changes it); the fix was a pool made first. The cause is INFERRED, the gather order was never dumped. The first verification then found the level walk failing (259 failures: a hidden
+  strip keeps the lightmap paths of the picture it copied) and the shake half of gate 4 unmet (the top ring row popped: the complement was added); the second found the walk failing still on 4 (a
+  strip's ids a frame behind its picture's, in the harness: `LevelVisit::measure`); the third passed. Its own disturbances were recorded (the JSON toggled in place and restored, a window minimised twice).
+- **The edge rows are mostly not what step 145 thought.** The 84 levels' rows the backlog named (1-21 and 1-23 right, 4-01 left, 4-09 right) are single 5/6/5 steps with equal inner pixels, not a quad
+  edge in the band; PX moved none of them and its slivers (a picture that goes on inward from an edge in the pixel's inner half) stay MSAA blends. The comparison's tools (blurred difference
+  maps and boxes on pair images) did not attribute them either.
+- **The comparison's pairing is the weakest part.** `h6.3` against f420 is the record's convention and was never measured: on the script clock f420 is 0.3-1.2 s early, f450 is the extra set, and the
+  original runs two clocks the port runs as one (its HUD 0.49-0.94 s ahead of its world), so no single port tick matches a still's HUD and its movers; the calibration is four platform levels in chapters
+  1-3 and none in chapter 4, where the highest mean abs among the "match" levels sit (4-18 11.38, 4-12 10.30). The captures used the all-gold save the library's stills were taken on
+  (`09268640`), not the owner's; the 128 f420 frames equal the owner's-seed sweep byte for byte except 1-02 and 1-03 (popup closed by a scheduled tap). The verifier asked for "match" to be read as
+  "no residual above low", which the backlog now says.
+- **The readers**: reliable on the audit's 16 levels (0 missed) and still missed the help block on 2-03 and 2-06, which were outside it. The triage found what no reader of 8 levels could: one cause filed
+  with different confidence in nine chunks (the emissive: decoded in four, inferred in three, "not established" in two) and graded high in one chunk and medium in the next (the arch), three levels'
+  moved planks that are one cause (2-31, 3-20, 4-31), and draw-order cases one rule predicts. Two attributions were wrong: the chapter-4 readers' `door_bg.ent` for the arch (it is `door.ent`) and the
+  1-11 / 1-12 rings' z (probably the agents' own particles at z 0). Five levels' verdicts moved at the triage (3-25, 3-26, 3-27 and 3-32 to `differs`, 4-02 to `minor`).
+- **My own slip, caught**: the first script that compared the baseline sweep with the comparison's frames keyed both folders by file name, and the two folders name their files differently
+  (`<id>_f420.png` against `<id>_<level>_f420.png`), so it reported all 128 as different; I redid it by level id (128 compared, 1-02 and 1-03 only, the popup levels). I also checked that the verifier's
+  md5 list was read by id and not by path before relying on it.
+
+**Decision:**
+- The new baseline is `PX/after/sweep`, not a fresh capture: the committed build's output equals it on all 128 (the verifier's own launches) and on 126 of the comparison's frames, and this close built and
+  launched nothing, so it could not cause a refusal. Its exe line says `195f5bfa`, not `a5013ee6`; the backlog says so.
+- Step 145's deviation 1 stays `[ ]`: PX closed 2-05 only, and the 2,047 rows remain. The comparison's "next" lines on PX-2 to PX-4 ("the final comparison attributes the pixels") were not met, and
+  the backlog says it instead of ticking them. Section 5's box is annotated MEASURED and left unticked, and section 6's definition-of-done bullet says "the largest fixed" is not met.
+- Wave 4c's list gives each open mechanics row the status its own row holds, not "decoded" across the board: Order 11.1's first clause and R3b-2's gate are one callback and decoded; R3b-5 needs a
+  clip (CMP-4), WT-10 is unexplained (CMP-18, after CMP-2), STK-8 is the owner's. The hinge fix re-flies nine routes (2-30 is predicted unchanged), not ten. Two more owner's calls were added (the halo
+  scale, CMP-8, and R24 through 3-08's guard, CMP-17).
+- The backlog's "State at" date was already 2026-10-11. The working copy of `docs/parity-backlog.md` is CRLF and its index form LF, as before; the diff against the index is 367 added and 5 changed lines.
+
+**Where it stands / next:** wave 4c - the decoded groups in order of severity (CMP-1, CMP-3, CMP-7, CMP-9, CMP-10, then CMP-2, CMP-6, CMP-15 and CMP-16, which change gameplay), the routes they move
+re-flown once after them (the nine hinge routes, 4-29 with 3-09's check, 4-02 and 2-01) together with the breakable wall's contact (Order 11.1's first clause and R3b-2's gate: 1-19, 1-20, 1-22),
+the rig clips the groups name (1-30's pile, 3-05 and 3-22, the static portals' rings), the owner's calls (the halo scale, the engine's friction and restitution steps, R24, whether the two clocks are
+modelled, CAP-2), and a second measuring pass on the fixed build against the kept frames. Then the ship preparation: `docs/permission.md` is still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE"
+placeholder, the play build (`tools\parity\play_build.bat` exists, none built), the owner's calls (2-30's creep R3-2, G10-14 and WT-1, G10-2's 60 Hz, R24 and R25, the guessed 0.08 crate friction R3b-3,
+2-32 ahead of the dragon's camera R3-3, STK-8, PIC-1), and the repository's going public, which needs his explicit word.
+
+**Assets check:** yes - `git status --short`, run after appending this entry and the backlog edits, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference | wc -l` prints 0). The forbidden-extension grep over the staged names printed nothing; `git diff --name-only f240af9..7eae0e4` (the
+pushed range, 12 files) printed nothing for `png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, `^out/` or `^reference/`. The owner's save folder holds `scores.json` alone (164 bytes, md5
+`40bfef3ac396b4e94bdd97990401435a`).
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** `f240af9..7eae0e4`: 1 commit, 12 files, +2,296 / -3; this close's commit is two files (+367 lines in the backlog before this entry). 57 suites, 32,314 checks (56 and 31,788 at the start).
+Routes won 128 of 128 (2,366 checks, unchanged). Reachability 108 / 20 / 0. The comparison: 128 levels, 140 launches, 2,282 images, 468 residuals (82 / 125 / 261), 19 groups, 26 / 44 / 58
+(`match` / `minor` / `differs`), the audit 16 of 16 agreeing. Rows opened 28 (PX 8, CMP 20), 1 closed. Smart App Control refusals 13 (12 executables, 1 python). Images: 2,640 deleted, 1.708 GB;
+free disk 113.441 -> 114.822 GiB.
+
+**Inferred mood:** a guess from the facts - a long, careful day more than a triumphant one: a rendering fix that needed three verifications and closed one level of the 84 it was aimed at, a
+measuring pass that turned "how different is it" into a short list of causes (one of which explains 52 of the 58 worst levels and is decoded, so the next wave's first step is cheap), and a
+small ration of Smart App Control interruptions; what is left is mostly known and orderly.

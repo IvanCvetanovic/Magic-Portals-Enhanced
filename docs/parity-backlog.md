@@ -1674,6 +1674,17 @@ work no step of §7 owns, and the owner's calls:
 
 - [ ] 128-level sweep: capture the port at the library's `_h6.3` moment for every level, compare with
       `out/parity/original/levels/`, list residual differences per level, fix upstream (converter / port), repeat.
+      *MEASURED 2026-10-11 (wave 4b; NOT ticked, and not ticked until its structural groups are fixed).* The port at f420 (the build `a5013ee6`,
+      step 165's) against the library's `_h6.3` stills, and the `_h0.3`, `_h2.8` and t-series stills at their own ticks, read by 16 readers of
+      8 levels each, then triaged by one rule: **26 `match`, 44 `minor`, 58 `differs`** of 128 (the readers' own tally was 26 / 47 / 55; five
+      levels re-graded). `match` means no residual above low (phase, clock, tone), not pixel-equal; `minor` that the worst is medium;
+      `differs` that one is high. 468 residuals (82 high, 125 medium, 261 low) fall in 18 causes, CMP-1 to CMP-18, and CMP-low (the rows
+      after step 165's, before "Blockers"); 52 of the 58 `differs` levels differ by CMP-1 alone (the close's count from the per-level
+      table). The pairing is measured only in part (h6.3 = f420 is the record's convention, early by 0.3 to 1.2 s on the script clock;
+      calibrated on chapters 1-3 only), the seed is the all-gold save the library's stills were taken on (`09268640`, not the owner's
+      `40bfef3a`), and the readers' audit covers 16 of 128 levels with 0 missed: see "Wave 4b" in section 6 and row CMP-R1 for the limits.
+      Evidence: `out/parity/program/R4b/CMP/` (`pairing.md`, `per_level.md`, `residuals.md`, `groups.json`, `audit.json`; the pair and overlay
+      images `pairs/<id>_h63_pair.png` and `_overlay.png`, and the port's frames `port_f420/`, are kept and named in `out/parity/BASELINE.txt`).
 
 ## 6. After the 2026-09-29 audit: the program to "only the owner's testing left"
 
@@ -1822,6 +1833,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
+  *Wave 4b, 2026-10-11: the first half is done - the comparison has run and its residuals are recorded (CMP-1 to CMP-18, CMP-low and
+  CMP-R1, rows after step 165's). "The largest fixed" is NOT met: the largest cause, CMP-1 (the player and the exit arch drawn
+  lit on 78 levels), is decoded and unbuilt, and so are eight more groups; wave 4c takes them.*
 - The owner's open calls are listed in one place.
 
 **Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
@@ -2212,7 +2226,7 @@ once: 3-10's knight, and the census's 2-23, 2-24, 2-32, 4-07, 3-12 and 1-30). No
 and R3c-5 as to the port's gap (step 163) and R3c-8 (step 164). The open ones are each an owner call, a measurement on the original, a re-fly that waits for its mechanism, or a small
 source change that waits for the next edit of its file.
 
-**What the next wave should take (wave 4b)**, in the program's order: (1) **the levels still without a route: none** (128 of 128). What is left of the routes is the re-flies each row
+**What the next wave should take (wave 4b)** *[wave 4b took PX and (2)'s comparison, its record is the "Wave 4b" paragraph that follows; (1), (3) and what is left of (2) are re-listed there as wave 4c's]*, in the program's order: (1) **the levels still without a route: none** (128 of 128). What is left of the routes is the re-flies each row
 names when its mechanism is built or its rig check is run: 1-19 and 1-20 (Order 11.1, R4a-1), 1-22 (R3b-2 and R3-2, R4a-3), 1-24 (STK-8, R4a-4), 1-30 (R3b-5, R4a-5), 2-29 (WT-10,
 R4a-6), 3-10 and 3-16 (R3c-4, R4a-7), 4-10 and 4-12 (a zero-g wall-slide measured on the original, R4a-2) and the routes of R4a-8; (2) **the final comparison** against the original's
 library (section 5), with the pixel-centre rule for every picture at the frame's edge (step 145's deviation 1) done first, and its residuals recorded: G1a-11 (the player drawn lit on
@@ -2223,6 +2237,129 @@ the six darkest levels), G1a-8 (the marks' place and the `?`), R3c-11's rig chec
 the standing ones in "The owner's calls" below; and **the repository's going public, which still needs the owner's explicit word**. **With the wave**: R3b-6 and R3c-9 (`win_by` of
 the 85 older routes tightened when those files are next touched), 3-20's knife-edge (R3-4), the comment-only fixes that wait for their file's next real edit (the two comments of
 `game/sim/Resting.hpp` among them: a widely included header, so a comment-only edit would relink both executables and risk a refused launch) and WAKE-7's tests, with R4a-10's one check.
+
+**Wave 4b (the pixel-centre rule at the frame's edge, then the final comparison's measuring pass: PX, then CMP; 2026-10-11 09:31 to the push, whose report is stamped
+18:48; closed 2026-10-11, PUSHED).** One rendering step and one read-only measuring pass, each checked by independent verification, on the owner's standing order of
+2026-10-10. `origin/main` is `7eae0e4` (`f240af9..7eae0e4`, a fast-forward, one commit, 12 files, +2,296 / -3, pushed by the finalize role); 09:31 is the earliest file
+left under `out/parity/program/PX/` (the step's first spot check), not a measured start. The engine pin stayed `710bffc` and no converter file changed, so `out/levels`,
+`out/assets` and `out/data` are the ones the wave started from.
+
+| Step | Row | Commit | Outcome | GAMEPLAY | Routes win |
+|---|---|---|---|---|---|
+| 165 | PX | `7eae0e4` | the pixel-centre rule for every level picture at the frame's edge: a strip of the picture's own material over the gap its edge leaves in the outer pixel (`EdgeCover::StripsOf`, `MagicPortalsLayer::syncEdgeCovers`, `game/data/edge_cover.json`), the complement for a picture whose inward edge is in the outer pixel (a strip, or the quad left out of the frame where it covers no pixel centre), from a pool of 24 made before any other entity; gate 1 met (2-05's column 1279, rows 421-586, (8.92, 14.63, 16.66) -> (0.98, 1.16, 1.29), the original's (1.04, 1.16, 1.34), 164 of 166 rows equal), gate 2 NOT met (edge rows above 12: 777 -> 614 on the left and right columns, 2,210 -> 2,047 on all four sides, the whole fall 2-05's), gate 4 PARTIAL; verified three times (round 1: 1 high, 1 medium; round 2: 1 high, 2 medium; round 3: 10 gates, 5 low) and once more by the comparison's verifier (14 gates, 6 low); 57 suites, 57 passed, 32,314 checks (`test_mp_edgecover` new, 414; `test_mp_layer` 3,876); 108 / 20 / 0; the level walk 134 / 1,460 / 1,100 / peak 109 / 0 failures; the f420 sweep 127 of 128 byte-identical to the standing baseline (2-05's 211 px aside), 0 px outside the ring on all 128 | none (a second quad in the outer pixel; nothing the simulation reads moves) | 128 of 128 on the census's ticks (no route file touched) |
+| - | CMP | none (read-only) | the final comparison's measuring pass: 128 levels against the library's stills, 468 residuals in 18 causes and CMP-low; **26 `match`, 44 `minor`, 58 `differs`**; independently verified (14 gates, 6 low, 0 of 6 spot-checked pair images wrong) | none (no source edit) | - |
+
+**PX** (planning step 165, `7eae0e4`). The original draws one sample a pixel, at its centre, so a picture whose edge lies in the frame's outer half pixel fills that pixel
+whole; the port's 4x MSAA left it a blend with what lies behind. The first build made its strips on demand and moved 133 px of additive glow outside the ring on five
+levels (the renderer breaks depth ties by store order); the pool made first fixed it (the cause is INFERRED: the gather order was never dumped). Round 1's verification
+found the level walk failing (259 failures: a hidden strip kept its picture's lightmap paths) and the shake's top row popping (the complement was added); round 2's found
+the walk still failing on 4 (a strip's ids a frame behind its picture's, fixed in `LevelVisit::measure`); round 3 passed 10 gate rows. **Of step 145's deviation 1 only
+2-05 is closed** (the row stays `[ ]`, with PX-1 to PX-8 below its block). The final build is `MagicPortals.exe` `a5013ee6` and `test_mp.exe` `32f4a14b`;
+`game/data/edge_cover.json`'s notes were edited after the gates (md5 `4b313617` -> `d7484711`, no key changed, PX-8).
+
+**CMP** (the comparison's measuring pass, `out/parity/program/R4b/CMP/`; no source edit, no relink, no route edit). The port at f420 (and, as extra sets, f75, f135, f240,
+f450 and each level's own HUD tick) against the library's `_h6.3`, `_h0.3`, `_h2.8` and t-series stills of all 128 levels (140 launches of `MagicPortals.exe`, 0 refusals;
+2,282 images, each opening at its size with its IEND chunk), 16 readers of 8 levels each, then one triage rule: `differs` = a real residual of severity high, `minor` =
+the worst is medium, `match` = only low (**no residual above low: phase, clock, tone; not pixel-equal**), the same cause graded the same on every level. **Counts: 26
+`match`, 44 `minor`, 58 `differs`** (the readers' own tally: 26 / 47 / 55; five levels re-graded); by chapter 1: 11 / 20 / 1, chapter 2: 0 / 0 / 32, chapter 3: 0 / 19 /
+13, chapter 4: 15 / 5 / 12. **52 of the 58 `differs` levels differ by CMP-1 alone** (the close's count from `per_level.md`: all their high residuals are the player or the
+exit arch drawn lit); the other six have their own: 1-30 (CMP-4), 2-31 (CMP-2), 3-05 (CMP-5), 4-20 (CMP-7), 4-29 (CMP-6), 4-31 (CMP-3 and CMP-2). 468 residuals (82 high,
+125 medium, 261 low), every one of the 207 high and medium in a group (the verification parsed all 303 evidence lines). **The section-5 box is not ticked** and will not
+be until the structural groups are fixed.
+
+**How far to trust it.** (a) **Pairing**: `h6.3` against f420 is the record's convention and not a measurement; the original runs two clocks the port runs as one (its HUD
+0.49-0.94 s ahead of its world, mean 0.76 s), so no single port tick matches a still's HUD and its movers; the script clock was fitted on four platform levels in chapters
+1-3 (+-0.4 s level to level) and not on chapter 4, whose "match" levels carry the highest mean abs (4-18 11.38, 4-12 10.30) on a phase explanation nobody measured. (b)
+**Seed**: every capture used the all-gold save the library's stills were taken on (`09268640`), not the owner's (`40bfef3a`): the plaque is the only difference at tick 90
+(1-01 0 px, 3-16 42,165 px, 2-32 42,202 px) and the 128 f420 frames equal the owner's-seed sweep byte for byte except 1-02 and 1-03 (popup closed by a scheduled tap). (c)
+**Readers**: the audit re-measured 16 of 128 levels (one per chunk): 16 of 16 agree, 0 missed, 0 not real, and its own first pass missed items the readers had; it covers
+12.5 percent of the levels and re-measured pixels, not causes, and the readers did miss the help block on 2-03 and 2-06 outside the sample (CMP-10). The triage checked 11
+cause attributions against the listing (md5 `48fe65ce`) and the Ethanon source: 10 hold, the draw-order one only on 7 levels. The verification re-derived the CMP-1 census
+(78 levels carry `ignore_emissive`) and re-read six pair images, and re-ran every suite. The limits are row CMP-R1.
+
+The groups (one open row each below, the block before "Blockers"; `movesRoutes` = the fix changes a physics or sim number a winning route leans on, so GAMEPLAY):
+
+| Id | Levels | Severity | Kind | Fixability | Moves routes | Cause in one line |
+|---|---|---|---|---|---|---|
+| CMP-1 | 78 | high | light | decoded | no | `ignore_emissive` and `door_emissive` are read by neither the port nor the converter: the player and the exit arch are drawn lit |
+| CMP-2 | 10 | high | structural | decoded | yes | the port drops the revolute joint's attach point B: planks stand where placed, not where the joint pulls them (2-31 29 u) |
+| CMP-3 | 9 | high | structural | decoded | no | equal-z pictures are drawn in file order; the original orders them by 128-unit bucket |
+| CMP-4 | 4 | high | structural | needs-rig | yes | piles at rest in the original topple or creep in the port (1-30, 2-13, 2-05) |
+| CMP-5 | 2 | high | structural | needs-rig | yes | 3-05's knight A absent for 8 s in the original; 3-22's knight leaves its plank early |
+| CMP-6 | 2 | high | structural | decoded | yes | `minion_spawn6` (4-29) and `minion_spawn_` (3-09) have no `ETHCallback`: the original spawns no knight |
+| CMP-7 | 2 | high | light | decoded | no | the red key's own `AddLight` is not built (4-20; 4-19 holds the other red key) |
+| CMP-8 | 50 | medium | light | owner-call | no | `halo_brightness_scale` 0.6 is a `_guess`: halos read weaker (torches 0.75-0.9, blue lamp 0.5-0.86) |
+| CMP-9 | 32 | medium | light | decoded | no | script emissive blinks not built: barrels, the wall's `blink`, teleportable crates |
+| CMP-10 | 13 | medium | structural | decoded | no | the help block is plain and opaque; the original draws alpha 0.76 breathing 1.05-1.13x |
+| CMP-11 | 5 | medium | structural | owner-call | yes | crates and barrels creep or rest elsewhere (friction and restitution decoded, held: G10-14, WT-1) |
+| CMP-12 | 4 | medium | particles | unknown | no | the blue lamp's orb is smaller and bluer, its bracket dark |
+| CMP-13 | 4 | medium | particles | needs-rig | no | the static portals' rings cover the original's grey spoked iris |
+| CMP-14 | 3 | medium | light | unknown | no | lit stone reads softer on lightmapped levels (67 carry `eth_lightmap`, 3 judged) |
+| CMP-15 | 1 | medium | structural | decoded | yes | 4-02's rider drifts off a bobbing slab (`MoveKinematic` sets a velocity the original's `SetTransform` does not) |
+| CMP-16 | 1 | medium | structural | decoded | yes | 2-01's crate carries `scale` 0.75 the port ignores (178 x 175 px against 134 x 130) |
+| CMP-17 | 1 | medium | structural | owner-call | yes | 3-08's lone guard rests 30 px right, astride a seam (R24) |
+| CMP-18 | 1 | medium | structural | unknown | yes | 2-29's stone 125-135 px behind in every still (WT-10) |
+| CMP-low | 120 | low | phase | unknown | if CAP-2 | clock and phase, the 2 px rest skin, opening camera, bob centre, tone: no step |
+
+**Suites and checks**: 57 suites, 57 passed, 32,314 checks (the runner's no-argument launch, run in the second and third PX verifications and by the comparison's
+verifier; 31,788 at the start of the wave); `test_mp_routes` 128 of 128 on the census's ticks, 2,366 checks. **Reachability** 108 / 20 / 0, 0 differ, at every step and in
+every verification (it still has no destroyier term: R4a-4). **Zero warnings** rests on PX's build logs (0 lines containing `warning`); the comparison's verifier did not
+rebuild, and the executables are newer than every compiled source (CMP-R1). **Smart App Control**: 13 refusals (each a pair of CodeIntegrity 3033/3077 events) from 09:21,
+the wave's start, counted at this close, of which 12 are this repository's executables and 1 is python's: PX's implementer 6 (`test_mp.exe` 4 times, `MagicPortals.exe`
+twice), its first verification 1 (the game exe, 12:22:18, after 130 good launches), the fix round 4 (the game exe on one set of sources: three links and a retry) and the
+harness fix 1 (14:52:54); the comparison's own 140 launches and the verifier's 130 game launches and one runner launch had none, and one `python.exe` launch was refused
+at 17:14:08 loading scipy's `_flapack` extension (a triage tool; not a wave executable). Wave 1: 83, wave 2: 19, wave 3a: 2, wave 3b-1: 4, wave 3b-2: 9, wave 4a: 3. The
+owner's folder holds `scores.json` alone (164 bytes, md5 `40bfef3a`) before and after every role.
+
+**The standing f420 baseline** is now `out/parity/program/PX/after/sweep` (128 PNGs, 1280 x 720; `out/parity/BASELINE.txt` names it, with `program/R4b/CMP/port_f420` (128
+PNGs and the two popup-up frames of 1-02 and 1-03 in `popup_up/`) and `program/R4b/CMP/pairs` (256: 128 pairs and 128 overlays), which the next wave measures its fixes
+against). Its caveat: it was taken at 10:22-10:40 on `MagicPortals.exe` `195f5bfa` (PX's round 1, the pool build), not on the committed `a5013ee6`; the committed build's
+output equals it byte for byte on all 128 (the comparison's verifier's own 128 launches on `a5013ee6`, md5 for md5) and on 126 of the comparison's frames (1-02 and 1-03
+differ by the popup tap), and the close checked all 128 (PNG signature, closing IEND chunk, 1280 x 720, md5 equal to its line of `PX/after/capture.txt`,
+`R4b/verify1/sweep_md5.txt`) before and after the purge. Against the previous baseline (`WAKE/after/sweep`, deleted) it differs on 2-05 alone. **The wave's image purge**
+(the owner's standing order of 2026-10-03): the comparison's scratch (`CMP/pairs_other`, `CMP/port_other`, `CMP/crops`) 1,896 images, 1.263 GB, and the purge tool's `all`
+tier 744 images, 0.445 GB (PX's moves, crops and `verify2/after` sweep, and WAKE's old baseline; 0 refused), **2,640 images, 1.708 GB in all; `out/parity` 19.571 ->
+17.980 GiB, free disk 113.441 -> 114.822 GiB** (the disk gained less than `out/parity` lost; INFERRED: other processes write to C:). Also deleted: 97 scratch `--saves`
+folders under `PX/`, `R4b/` and `R4/verify2/` (1,994 `scores.json` / `achievements.json` copies; nothing under `merge_w1/sweep_saves`, `ui1/saves_gold` or `saves/`).
+Kept: the three folders above, `original/`, `smoke/`, `markers/`, `saves/`, `asbc/`, the audit, every mp4 and every text, json, script and log file; about 11,000 older
+images outside `program/` stay by the purge tool's design.
+
+**GAMEPLAY changed in wave 4b: none.** PX adds a second quad in the frame's outer pixel and the comparison changed nothing. The groups' fixes are each stated in their
+row: CMP-2, CMP-4, CMP-5, CMP-6, CMP-15, CMP-16 and CMP-18 would change gameplay (each as the original does) and wave 4c takes them in one batch with one re-fly of the
+routes; CMP-1, CMP-3, CMP-7, CMP-9, CMP-10 and CMP-12 to CMP-14 change drawing only. R24, R25, G10-2's matched 60 Hz, 2-30's creep (R3-2), 3-13's 0.08 (R3b-3) and the
+engine pin were not touched.
+
+**The wave's rows**: PX-1 to PX-8 (8; PX-1 is settled history, closed at birth) and CMP-1 to CMP-18, CMP-low and CMP-R1 (20): 28 opened, 1 closed; no older row was closed
+(step 145's deviation 1 is partly closed, 2-05). G1a-11 is the general case of CMP-1.
+
+**What the next wave should take (wave 4c)**, in this order: (1) **the groups whose fixability is `decoded`, in order of severity, each its own step with its gates** (a
+drawing step's gate: the f420 sweep changes only the levels its group names, the rest byte-identical to `PX/after/sweep`, or each change explained against it (CMP-3 also
+reviews the other 119 levels for flips); the group's boxes read the original's; the group's pair images re-taken): CMP-1 first (high, 78 levels, 52 of the 58 `differs`
+levels, no route moves), CMP-3 (high, 9 levels), CMP-7 (high, 4-20 and 4-19), then CMP-9 (32 levels) and CMP-10 (13): all drawing only. Then the four that change gameplay
+and move routes: CMP-2 (high: the converter carries attach point B, the hinge uses it; a change on both sides of the `.tscn`, re-converted into a staging directory under
+`out/` and compared before it replaces anything), CMP-6 (high: two names out of `entity_roles.json`), CMP-15 (4-02's slab) and CMP-16 (2-01's crate scale). **The routes
+they move are re-flown once, after all four**: 2-28, 2-29, 2-31, 3-15, 3-19, 3-20, 3-22, 4-11 and 4-31 (CMP-2; 2-30 is predicted unchanged; 3-20's knife-edge, R3-4), 4-29
+and a re-check of 3-09 (CMP-6), 4-02 (CMP-15) and 2-01 (CMP-16), each against `R4/census_after_round1.md`. (2) **The open mechanics rows, each at the status it holds**:
+the breakable wall's contact as the original has it, one callback (`ETHBeginContactCallback_breakable_wall`): Order 11.1's first clause (a `destroyable` stone dies at the
+first wall it breaks, #42-60: decoded, GAMEPLAY, an owner row the standing ruling decides for the original) and R3b-2's gate (a stone must be faster than scale(1.5),
+#16-33: decoded as R4a-3 reads it; R3b-2's own row still says the callback is not decoded), re-flying 1-19 and 1-20 (R4a-1) and 1-22 (R4a-3), re-checking 3-12's and
+3-14's breaks, and the thrown stones of 1-24 and 1-25, in the same re-fly as (1)'s. **Not decoded, so not a step yet**: R3b-5 (the piles: a clip first, CMP-4; re-fly 1-30
+(R4a-5), 2-13 and 2-05 after it), WT-10 (2-29's stone clock: unexplained, CMP-18, traced after CMP-2; re-fly 2-29 from tap 320, R4a-6) and STK-8 (the owner's ruling, and
+1-24's door with it, R4a-4). (3) **The rig checks and the owner's calls the groups name**: rig clips (`docs/parity.md` sections 1-2): the arrival at 1-30's pile (CMP-4),
+3-05 for 10 s without moving and 3-22 for 14 s (CMP-5), the static portals' ring brightness against the 58 footage frames (CMP-13), R3c-11's list and R4a-2's zero-g
+wall-slide; one experiment on the port alone: 2-17 with the lightmap off and at full resolution (CMP-14); and the owner's calls: the halo scale (CMP-8: one global scale,
+per-entity scales, or leave; CMP-12 follows it), the engine's friction and restitution steps (CMP-11: G10-14, WT-1), R24 (CMP-17), whether the HUD / world clock offset is
+modelled (CMP-low a) and the engine's contact margin (CAP-2, CMP-low b: it would move every route's rest heights). The edge rows and slivers (PX-2 to PX-4) and the pan
+and tremble against footage (PX-3) were not reached by the comparison and stay the next measuring pass's, which re-takes the comparison on the fixed build against
+`CMP/port_f420` and `CMP/pairs`, at f420 and at the level's own HUD tick or f450 where a mover or the spiral is in frame (CMP-R1); the section-5 box ticks only when the
+structural groups are fixed. (4) **The ship preparation**: the grant in `docs/permission.md` (still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder, so the
+record of the scope is incomplete: the owner's to fill), the play build (`tools\parity\play_build.bat` exists; no play build has been made) and the owner's calls, listed
+here once: 2-30's creep (R3-2), the engine's friction and restitution steps (G10-14, WT-1), G10-2's matched 60 Hz, R24 and R25, `crate_low_emissive`'s guessed 0.08
+(R3b-3), 2-32 ahead of the dragon's camera (R3-3), STK-8, PIC-1's smoothing above 80 Hz, the halo scale (CMP-8) and the standing ones in "The owner's calls" below; and
+**the repository's going public, which still needs the owner's explicit word**. **With the wave**: R3b-6 and R3c-9 (`win_by` of the 85 older routes tightened when those
+files are next touched), 3-20's knife-edge (R3-4), the comment-only fixes that wait for their file's next real edit (the two comments of `game/sim/Resting.hpp` among
+them: a widely included header) and WAKE-7's tests, with R4a-10's one check.
+
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -3006,17 +3143,17 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       window minimised twice, 2-02's stray shot). Nothing is left to do.
 - [ ] **PX-2. A picture that goes on inward from an edge in the pixel's inner half stays an MSAA blend** (deviation 6; the "slivers"). 1,631 `edge sliver` log lines in
       113 of the 128 route logs and 206 in 35 sweep logs (3-03 ticks 280-287, 3-14 frames 604-607 and 3-16 frame 44 among them). A strip adds samples and a cull takes a
-      whole quad, so neither takes those samples away; no f420 pixel and no pixel outside the ring is affected. Next: the final comparison attributes the pixels; if a
+      whole quad, so neither takes those samples away; no f420 pixel and no pixel outside the ring is affected. Next: the final comparison attributes the pixels (it did not: row CMP-R1); if a
       later step wants them, move the sliver's quad by a fraction of a pixel with its uv carried (its own byte-identical gate), or give a strip the picture's own gather
       position so it stops losing same-depth ties to its neighbour.
 - [ ] **PX-3. 1-12's right columns at frames 113-115 are unattributed, and the code does not move them** (deviation 6). They are byte-identical with the switch off, the first half
       alone and the complement, and the log names no picture with an edge in the band there. The third verification reads them as scene content, a soft dark band sliding
-      in under the horizontal shake (column means 69, 66, 56, 41 across columns 1276-1279 at frame 113): INFERRED, not proven. Next: the final comparison; gate 4 was read
+      in under the horizontal shake (column means 69, 66, 56, 41 across columns 1276-1279 at frame 113): INFERRED, not proven. Next: the final comparison (it read stills at fixed ticks, no tremble or pan: CMP-R1); gate 4 was read
       against the rule, never against the original's own tremble or pan footage.
 - [ ] **PX-4. Of step 145's deviation 1 only 2-05 is closed; 2,047 edge rows above 12 remain** (deviation 6). Left and right 614 (777 before), all four sides 2,047 (left
       260, right 354, top 515, bottom 918; 2,210 before); 398 have the blend's signature (left 83, right 82, top 62, bottom 171). The rows the backlog named (1-21 and
       1-23 right, 4-01 left, 4-09 right) are single 5/6/5 steps with equal inner pixels, not a quad edge in the band; the first suspect is a sub-pixel difference in where
-      a picture's edge falls (INFERRED, not measured). Next: the final comparison groups the rows by cause.
+      a picture's edge falls (INFERRED, not measured). Next: the final comparison groups the rows by cause. *Wave 4b: it did not (CMP-R1): the readers' tools are blurred difference maps and boxes on the pair images, which do not show a one-pixel column's 5/6/5 step (INFERRED); the rows are the next measuring pass's.*
 - [ ] **PX-5. Two pixel-neutral effects, no code change** (deviation 7). A strip loses a same-depth, same-key tie to its neighbour because the pool stands first in the
       stores (3-14 frames 604-607: no pixel changes), and a quad whose edge sits at the frame's boundary within 1e-5 px is culled every frame (2-23: 633 cull lines per
       bar), which no pixel shows. Next: a guard that leaves such a quad alone, only if a later step wants the log quiet.
@@ -3037,6 +3174,223 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       edited after the second verification (md5 `4b313617`, the file every gate measured) and again by the commit (`d7484711`: the `_about` frame sentence and
       `turn_rad`'s `_guess` line); the non-underscore keys are equal throughout and no launch followed the last edit. Next: dump the gather order if the pool is ever
       questioned; the next launch of the runner or the game reads `d7484711`.
+
+**The final comparison's rows** (wave 4b; 128 levels, 18 causes and CMP-low; GAMEPLAY: none in the comparison itself, each row says its fix's). Evidence is under
+`out/parity/program/R4b/CMP/` (`residuals.md` has every reader's line with its box, `groups.json` the causes and proposals, `per_level.md` the table): the pair images
+`pairs/<id>_h63_pair.png` (the original above the port, half scale) and `pairs/<id>_h63_overlay.png`, port frames `port_f420/<id>_f420.png`, are kept (named in
+`out/parity/BASELINE.txt`); the `_h0.3`, `_h2.8` and f450 pair images and the readers' crops were deleted at the wave's close and are re-taken by `capture_CMP.sh` and
+`pairs_run.py`. A box is `x1,y1,x2,y2` (or a pair of corners) in the 1280 x 720 frame. The listing is `out/parity/asbc/all_functions.txt` (md5 `48fe65ce`). Every cause
+below was CHECKED by the comparison's triage against the listing or the Ethanon source (its own re-derivation of 11 reader attributions: 10 held); the independent
+verification re-derived only CMP-1's census (78 levels carry `ignore_emissive`, 0 hits in `game/`, the converter, `data/` and `tests/`) and re-read six pair images.
+Fixability: `decoded` (the mechanism is read from the listing and a fix can be specified), `needs-rig` (a clip of the original is needed), `owner-call`, `unknown`.
+- [ ] **CMP-1. Script-driven emissive: the player and the exit arch are drawn lit on the 78 levels that carry `ignore_emissive`** (high; light; `decoded`; moves no
+      route). Levels: 2-01 to 2-32, 3-01 to 3-32, 4-01 and 4-20 to 4-32 (the player in all 78; the arch in frame on 45). Evidence: 2-01 player box [965,60,1060,195] and
+      arch [915,275,1190,645] in `pairs/2-01_h63_pair.png`; 2-05 arch [1030,0,1280,330]; 2-03 arch [0,260,205,640]; the player is a black silhouette in the original on
+      chapter 2 and on 4-20 to 4-27 and 4-29 to 4-32 (high), dim and matte on chapter 3, 4-01 and 4-28 (medium). Measured ratios fit the rule: 4-01's player
+      0.70/0.70/1.00 = its ambient (0.7, 0.7, 1) with emissive 0; 3-05's 0.33/0.31/0.41 = ambient (0.1, 0.1, 0.2) + 0.2; 3-09's arch 0.373/0.368/0.559 = (ambient + 0.1)
+      / min(1, ambient + 0.7). Cause (listing): `Game::readProperties` #55-82 reads the properties node's `ignore_emissive` and `door_emissive` (absent = 0), #285-300
+      call `door.SetEmissiveColor(door_emissive)`, and `Game::preLoop` #355-393 sets the character's emissive to 0, or 0.2 when `g_currentWorld == 2` (chapter 3), on
+      such levels. The port and the converter read neither key (the converter already writes both as metadata); `art.json`'s character (1,1,1) and `door.ent`'s 0.7 are
+      drawn as the files say. The arch is `door.ent` (window01.png), not `door_bg.ent`, which the chapter-4 readers named. Chapter 1 and 4-02 to 4-19 carry neither key
+      and read clean (the control). Joins: "Script-driven emissive" (section 1), G1a-11 (the six darkest levels: this is its general case), planning step 45. Next: read
+      both keys and the chapter index where `art.json`'s emissives are applied (player 0.2 on world 2, else 0; `door.ent` = `door_emissive`, on `ignore_emissive` levels
+      only), the rule and its citations in `game/data/lighting.json`. Gate: the f420 sweep changes only the 78 levels (the other 50 byte-identical to `PX/after/sweep`),
+      the player and arch boxes read the original's (chapter 2 player RGB 8-35, arch 5-12 grey); pin 2-01, 3-05, 4-01 and 4-22 in `test_mp_art` or `test_mp_layer`.
+      GAMEPLAY: none. Of the 58 `differs` levels, 52 differ by this cause alone.
+- [ ] **CMP-2. Revolute-joint pose: the port drops attach point B, so a plank or arm stands where it was placed, not where the original's joint pulls it** (high;
+      structural; `decoded`; MOVES ROUTES). Seen: 2-31 (box [0,480,520,720], `pairs/2-31_h63_pair.png`, identical in all three original stills and every port frame, so
+      a static pose), 3-20 (box x720-1090 y395-505; best shift (+6, 0) on the plank, box x845-960 y395-505), 4-31 (box [960,190,1170,285], the bar's edges 9 px off,
+      measured on columns 1100 and 1140). In scope, 10 hinge levels: 2-28, 2-29, 2-30, 2-31, 3-15, 3-19, 3-20, 3-22, 4-11, 4-31. Cause: `ETHRevoluteJoint.cpp:35-44`
+      sets both local anchors (A = attach point A x half of A's box, B = attach point B x half of B's box, B the first entity the joint's custom data names) and Box2D
+      pulls the dynamic body so the two world points meet; the converter writes only `joint_anchor_x/y` (A's) and `game/sim/Hinge.cpp:197-205` says B's dropped attach
+      point "costs nothing". Predicted pulls of the plank centre: 2-31 (-14.0, +28.5) u [measured (-14, +29)], 3-20 (-2.0, 0) [2.1 u], 4-31 (0, -3.0) [3 u = 9 px], 2-30
+      (0, 0) [matches]: all four to 0.5 u; unmeasured: 3-19 (0, +8), 3-15 (+4, 0), 2-28 (+0.6, +2), 2-29 (+0.6, 0), 4-11 (-0.4, 0), 3-22 (0, 0). Neighbours: step 134's
+      note that the 2-31 route rests on the port's seesaw, R3-4, WT-10 (CMP-18). Next: the converter carries `attachPointB` (x, y) per instance beside
+      `joint_anchor_x/y` (a change on both sides of the `.tscn`: convert into a staging directory under `out/`, compare with what the port reads, then replace;
+      `tests/test_mp_levels` counts), `Hinge.cpp` sets `connectedAnchor` = attach B x half-box of B (rotated by B's angle) and places the body where the joint puts it.
+      Gate: the four measured shifts reproduced to 0.5 u on f420 frames of 2-31, 3-20 and 4-31 with 2-30 unchanged; `test_mp_hinge` pins; then re-fly the nine routes
+      (2-28, 2-29, 2-31, 3-15, 3-19, 3-20, 3-22, 4-11, 4-31), once, after the wave's other gameplay fixes. GAMEPLAY: yes (2-31's seesaw moves 29 u down and 14 u left,
+      3-19's plank 8 u).
+- [ ] **CMP-3. Equal-z pictures are drawn in scene-file order; the original orders them by 128-unit bucket** (high on 4-31, medium on the rest; structural; `decoded`;
+      moves no route). Levels: 1-07, 1-11, 1-12, 1-20, 2-14, 2-30, 4-11, 4-16, 4-31. Evidence: 4-31 box [810,170,985,285] (`pairs/4-31_h63_pair.png` and `_overlay.png`:
+      the arm's left half and pivot are hidden behind the anchor block in the port); 1-07 box (545,270)-(1080,715); 1-20 box 384,452,470,497 (the pillar drawn over the
+      cracked stone's first tile); 2-14 box 103,367,193,547; 2-30 box 0,380,482,720; 4-11 box 1045,395,1110,600 (the port's disc covers the door's left frame); 4-16 box
+      1095,445,1190,495; and 1-11 box 250,200,470,340 and 1-12 box 430,305,590,470 (the rings). Cause: Ethanon keys one multimap by the draw hash, equal depths tie, and
+      a tie falls to insertion order = visible buckets row by row (`ETHBucketManager.cpp:81-91`), then the bucket's list (`ETHScene.cpp:541-576`,
+      `ETHEntityRenderingManager.cpp:119-131`); the bucket is 128 level units (`Game::start`, `SGlobalScale::scaleEntities`: floor(x x 2.8125 / 360) = floor(x / 128));
+      the later bucket draws on top. It predicts all 9 static orders on the 7 levels that show one (1-07, 1-20, 2-14, 2-30, 4-11, 4-16, 4-31) and none is contradicted;
+      1-11 and 1-12 fit only if the ring is the agent's own particle at z 0, so the readers' attribution to a z -4 antiportal or a `shock_area` is probably wrong there
+      (the step must confirm which entity the ring is). The port orders by `z_index`, then file order (`Sprites::Find`, `MagicPortalsLayer.cpp:2302`). Within one bucket
+      step 118's note (an entity the scale moved to another bucket goes to the front) applies and is untested. Joins: step 72's deviation (1-07's ring behind art the
+      original draws it in front of), Order 11.3's deviation 9. Next: break z ties by (floor(y/128), floor(x/128)) of the node's current position, then file order
+      (`Sprites::Find`, `buildSprites`). Gate: the 9 static orders on f420 frames, 1-11's and 1-12's rings as the original's, the other 119 levels reviewed for flips,
+      `test_mp_pictures` pin. GAMEPLAY: none.
+- [ ] **CMP-4. Piles that stand at rest in the original fall or never settle in the port** (high on 1-30, medium on 2-13 and 2-05, low on 3-12; structural; `needs-rig`;
+      MOVES ROUTES). Evidence: 1-30 box 360,180,1000,660 (`pairs/1-30_h63_pair.png`: the crate pile at rest in all six original stills, toppled by f75 in the port;
+      pile-region mean abs 3-4 between the original's own stills against 12-17); 2-13 box 1100,195,1280,360 (the barrel pile slides about 105 px, 30 px by f75); 2-05
+      original right pile [670,455,810,630] against the port's [670,535,880,630] (stacks tilt 1-4 degrees and lose the top crate); 3-12 box 385,105,595,360 (held asleep
+      by `resting.json`, low). Cause as recorded: the engine's eight solver iterations cannot hold a heavy body on lighter ones and awake piles never sleep (G10-14,
+      WT-7); only 3-12's pile is put to sleep. The stills answer R3b-5's "compare those levels' stills" for 1-30, 2-13 and 2-05 (at rest from the first frame in every
+      still); they cannot say asleep from merely stable, and that decides what a player's arrival does (1-30's route enters the pile: R4a-5, the portal exit (202.9,
+      183.9) lies inside `crate_small`'s column and the solver shoves him 8.7 px on tick 74). Next: a clip of the original with the player arriving at 1-30's pile; then
+      `game/data/resting.json` entries for the piles with the stills as `_measured` (as 3-12's), and re-fly 1-30, 2-13 and 2-05; or the engine's friction step (CMP-11,
+      owner's call). Gate: 1-30's pile region from mean abs 12-17 to the original's 3-4, `test_mp_resting` pins, `test_mp_routes` 128 of 128. GAMEPLAY: yes (a pile a
+      body meets is asleep until touched).
+- [ ] **CMP-5. Knight timing the stills contradict: 3-05's knight A is absent for 8 s in the original; 3-22's knight leaves its plank before its 10 s hold ends** (high
+      on 3-05, medium on 3-22; structural; `needs-rig`; MOVES ROUTES). Evidence: 3-05 box x1130-1280 y490-640 (`pairs/3-05_h63_pair.png`, lower right: the port's knight
+      A (spawn (760,208), wayA1 (622,208) hold 4000, wayA0 (420,208) hold 2000) walks into view at the lift door by f420; none of the original's six stills, 0.3 to 8 s,
+      shows it, so a clock offset cannot hide it; the reader put it at about three chances in four that it is real); 3-22 box x880-1100 y360-670 (wayB1's holdTime 10000
+      ms from arrival, about f200, cannot end by f420: the port's knight stands on the plank at f240 as the original does and is on the floor by f420, the original's on
+      the plank in four stills). Candidate causes, unproven: a bucket-gated spawn (the marker is static = 1 and a static entity's callback runs only in a visible
+      bucket: G3-2, though the opening pan sweeps that bucket), the port's minion hold, a frictionless slide down the 19-degree plank (R24/R25, R3c-3). No footage of
+      either level exists (`out/parity/footage/INDEX.md`). Next: record 3-05 for 10 s without moving and 3-22 for 14 s (`docs/parity.md` sections 1-2), then fix in
+      `sim/Minions` or the spawn gate. Gate: knight A's first frame and 3-22's departure tick against the clip; the stealth routes (3-04, 3-05, 3-11, 3-24: achievements
+      26-28, 32, 42) and 3-22's re-flown. GAMEPLAY: yes if real. Joins: G3-2, R24/R25, R3c-3, R3c-8.
+- [ ] **CMP-6. A knight the original never spawns: the markers `minion_spawn6` (4-29) and `minion_spawn_` (3-09) have no `ETHCallback`** (high; structural; `decoded`;
+      MOVES ROUTES). Evidence: 4-29 box [860,495,1050,632] (`pairs/4-29_h63_pair.png`, lower right: sky, gem and a black knight in the port, empty in the original; six
+      original stills and 12 footage frames, `out/parity/footage/L1_out_4-29_sheet.png`, show none); 3-09's lone guard (`minion_spawn_` id 908 at (410,48), wayA, hold
+      9999999) is in neither still. Cause: Ethanon runs `ETHCallback_` + the entity's exact name without extension (`ETHASUtil.cpp:63-79`); the listing has
+      `ETHCallback_minion_spawn` (bytes 426511..426876) and no `_minion_spawn6` or `_minion_spawn_`, so those markers spawn nothing; `data/entity_roles.json` lists all
+      three as `enemy_spawn` and `Minions.cpp:928` spawns from each. The original's scenes: 60 `minion_spawn`, one `minion_spawn6` (level28c id 1766 at (414,208),
+      static), one `minion_spawn_`. Next: remove the two names from `enemy_spawn` (or mark them no-spawn with the citation); `test_mp_minions` pins the census (60
+      spawning markers); re-fly 4-29 (its route was flown for the knights A and B, B being `minion_spawn6_1766`) and re-check 3-09's. Gate: 4-29 f420 shows no knight at
+      the gem, reachability 108 / 20 / 0, `test_mp_routes` 128 of 128. GAMEPLAY: yes (one knight fewer on 4-29, the 3-09 guard gone).
+- [ ] **CMP-7. The red key's own light is not built** (high; light; `decoded`; moves no route). Levels: 4-20 (seen), 4-19 (holds the other red key; reads `match`, its
+      light not separated from `red_key_state`'s halo). Evidence: 4-20 box 760,255,1040,465 (`pairs/4-20_h63_pair.png`: RGB 57,19,22 in the original against 26,25,35 in
+      the port; the strip beside him 86,0,0 against 0,0,0; the key lies at the spawn and is taken on tick 1). Cause (listing): `ETHCallback_key` #119-186 (bytes
+      438490..442683): for a visible key whose `color` is `red`, every frame `AddLight(position + (0,0,6 x scale), (1,0,0), range 48 x scale)`; `game/data/keys.json`
+      `_not_built` names it. Joins planning step 69; no backlog row. Next: `sim/Keys` and the layer add the point light while a red key is visible (the torches' own
+      `AddLight` path), the numbers in `keys.json` with the citation. Gate: 4-20 f420 box from (26,25,35) to the original's (57,19,22), 4-19 unchanged within noise, the
+      lighting suites. GAMEPLAY: none.
+- [ ] **CMP-8. Lights and halos read weaker than the original on about 50 levels** (medium, mostly low-to-medium per level; light; `owner-call`; moves no route).
+      Levels: 1-01, 1-02, 1-04 to 1-07, 1-09 to 1-12, 1-14 to 1-18, 1-22, 1-28, 1-29, 1-31, 2-10, 2-11, 2-16, 2-17, 2-19, 2-24, 3-01, 3-02, 3-04 to 3-08, 3-10 to 3-12,
+      3-14, 3-17 to 3-29, 3-31. Evidence: 1-01 box (700,30)-(900,380) (`pairs/1-01_h63_overlay.png`; torch box R 190 against 221); 1-12 box 560,0,900,330 (R 189-205
+      against 218-238); 1-11 box 1040,0,1280,340 (block means at (1200,80) 171,99,51 against 214,119,53); 1-28 box 1100,0,1280,330 (signed grid -7/-12/-19); 3-01 box
+      x990-1280 y0-440; 3-25 to 3-27 right edge, cells x1120-1280 y0-270 121/113, 144/132, 69/54 (original / port). Cause: `game/data/lighting.json`
+      `halo_brightness_scale` 0.6 is a marked `_guess` (Ethanon has no such factor; its own formula is 1), tuned to one frame's flame (step 49); the flame is 0.7265
+      live on average, so 0.6 draws the halo at 0.44 of the formula and 0.69 would match the fit's 0.5. The ratios differ by entity (torches 0.75-0.9, blue lamp 0.5-0.6
+      near and 0.8-0.86 far, orange crystals 0.55-0.9, fire agents 0.85-0.9), so one knob may not close them; the port also flickers less (13 against 32 grey levels on
+      1-01). Constant across the six stills, so not a pulse. Joins: G5's missed gates (step 49), "Found by 11.2 (step 110)", "Halo magnitude". Next, the owner's call:
+      (a) one global scale fitted on the 128 x 6 stills this comparison holds, (b) per-entity scales (torch, `blue_light`, `diamond_light_*`, fire agent), or (c) leave.
+      Gate if taken: the box ratios to 1.0 +-0.05 on a held-out half of the levels, G5's `LM_E<1_halo` rows still pass at hd art, the flicker amplitude re-read.
+      GAMEPLAY: none.
+- [ ] **CMP-9. Script emissive blinks not built: barrels, the breakable wall's `blink` flag and teleportable crates** (medium; light; `decoded`; moves no route). 32
+      levels in scope: 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-04, 2-05, 2-08, 2-12 to 2-19, 2-21 to 2-25, 2-28, 2-29, 2-32, 3-14, 3-15, 3-19, 4-10, 4-16, 4-25, 4-32 (the
+      readers filed it on 17). Evidence: 2-12 barrel box 778,520,866,630 (R 15.9-23.8 over the stills against a constant 10.5); 2-14 wall box 800,358,890,508 (72-88
+      against 50) and barrel box 205,395,292,508; 3-14 wall box 560,410,915,495 (78-101 against 66); 2-05 crates [710,156,890,330] (the original shows their grain, the
+      port's are dark); 4-25 crate [678,92,770,182] (textured in the original, black in the port); the walls' pulse 1.18-1.53x. Cause (listing):
+      `ETHCallback_barrel_bomb` #1-30 `blinkEmissive(thisEntity, 0.2, 300 ms, minEmissive)` every frame (16 barrel levels; the readers called it "unknown, not decoded"
+      on 2-17, 2-21, 2-23 and 2-24); `ETHCallback_breakable_wall` #88-151, for a wall with the uint `blink`, `blinkColor` and `blinkEmissive` 0.8 <-> 1 on 300 ms legs
+      (8 levels: 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-14, 3-14); `crateCallback` #38-121, a teleportable `_no_emissive` crate's emissive 0.2 -> 0 over 600 ms (14
+      levels; `art.json` `non_teleportable._not_built`); also decoded, not built: the fire agent's `bounce(1.02 -> 0.98, 300 ms)`. The blink triangle already exists
+      (`Art.hpp`, built for the non-teleportable crate and the antiportal). Joins: "Found by step 120, decoded, not built", "The restock's pictures" (the barrel's
+      blink); the wall's blink is in no row. Next: three more callers of the existing blink in `sim/Art` and the layer (data in `art.json` with the listing citations)
+      and the fire agent's pulse. Gate: the readers' boxes inside the original's range at the right phase, pins in `test_mp_sprites`, the f420 sweep changes only the 32
+      levels. GAMEPLAY: none.
+- [ ] **CMP-10. The help block ("?") is drawn plain and opaque; the original draws it at alpha 0.76 breathing 1.05-1.13x** (medium; structural; `decoded`; moves no
+      route). 13 levels in scope: 1-02, 1-03, 1-10, 1-11, 1-13, 1-19, 1-25, 1-32, 2-03, 2-06, 3-09, 4-01, 4-02; in frame and filed on 1-02, 1-10, 1-11, 1-13, 1-25; in
+      frame and unfiled on 2-03 and 2-06 (their pair images show the same greyer face, about 16 percent dimmer over the dark sky: the readers missed a decoded
+      difference). Evidence: 1-10 box 520,386,605,470 (`pairs/1-10_h63_pair.png`: face 171-173 against the port's 213, width 72-76 against 68 px; the same on 1-11 box
+      490,120,580,215 and 1-13 box 85,236,165,318); 1-25 box 785,280,875,370 (150); 1-02 box (1152,184)-(1226,261). Cause (listing): `ETHCallback_help_block` (bytes
+      371476..371655) `SetAlpha(0.76)` and `bounce(thisEntity, 1.05, 1.13, 250 ms)` every frame (`utilEntityEffect` bounce, bytes 327057..327527); `helpBlockInput`
+      (`Popup.cpp`) only reads the touch. Alpha 0.76 over the dark wall predicts the measured 171-173. No backlog row names it. Next: draw alpha 0.76 and the smoothEnd
+      triangle 1.05 -> 1.13 over 250 ms on `help_block.ent` in the layer (numbers in `art.json` or `ui.json` with the citation; the tap rect unchanged, it uses
+      `box_scale`). Gate: the face reads 171-173 and 72-76 px on 1-10, 1-11, 1-13; a `test_mp_sprites` pin. GAMEPLAY: none.
+- [ ] **CMP-11. Crates and barrels that creep or rest elsewhere than the original's** (medium; structural; `owner-call`; MOVES ROUTES if taken). Levels: 2-20 (box
+      880,195,1000,295: the small crate on the big one slides and tilts, (-5,+5) px at f75, (-14,+6) at f450), 2-24 (box 625,45,725,175: the top barrel 6 px low and
+      creeping), 2-22 (box 945,100,1250,290: a crate rotated 2 degrees), 3-03 (box x1072-1280 y448-640, `pairs/3-03_h63_overlay.png`: the crate rests 11 px (4 u) off
+      the 2x2 block), 3-05 (box x820-995 y190-360: 3 px). Cause as recorded: friction is decoded and held at 1 (G10-14: the engine's friction solve walks a resting
+      box), restitution decoded and held (WT-1), `crate_low_emissive` held at friction 0.08, a guess, with no restitution applied (R3b-3); WT-7 names 2-20's creep. The
+      comparison adds 2-24 and 2-22 and the original's stills as the reference. Next, the owner's call: queue the engine's friction and restitution steps with the
+      Penumbra port's engine work, or not. Until then nothing here changes: R3b-3's 0.08 and 2-30's creep (R3-2) stand. GAMEPLAY: yes, every route that pushes a crate
+      (3-03's does).
+- [ ] **CMP-12. The blue lamp's orb is smaller and bluer than the original's, its bracket dark** (medium; particles; `unknown`; moves no route). Levels: 1-05 (box
+      (770,70)-(860,190), window mean R 204.0 against 216.1), 1-08 (box (120,40)-(400,240), 199.3 against 212.6), 1-19 (box 420,0,700,200), 1-22 (box 590,40,730,140,
+      core R 233 in the original against 211). Known and open (steps 91-92: not the depth; size and brightness left). The original's orb is a white core with concentric
+      rings reaching the bowl's lip; the port's is smaller and bluer with the rim showing through its top arc; the wall it lights is 15-50 percent darker (shared with
+      CMP-8). Next: settle CMP-8 first (the same pixels), then the orb's draw (added colour, `hard_halo.png` tier) against the five `blue_light` levels' stills. Gate:
+      orb window R within 3 of the stills. GAMEPLAY: none.
+- [ ] **CMP-13. Static portals read differently: the port's rings cover the original's grey spoked iris** (medium on 1-01 and 1-02, low on 1-15 and 3-03; particles;
+      `needs-rig`; moves no route). Evidence: 1-01 portals (350,140)-(500,280), (140,385)-(290,550), (880,470)-(1010,610) (`pairs/1-01_h63_pair.png`); 1-02 box
+      (360,380)-(510,510); 1-15 box 820,40,1100,620; 3-03 box x0-112 y336-448. Cause (known: step 59's two recorded particle deviations, R22): the ring particles are
+      brighter over their life than the original's (1.62x on 1-01's 582, its pulsing part 3.02x; the original's pulse s.d. peaks at 49-57 px, the port's rings alone at
+      23-33); tint, 0.8 scale, inline systems and the `AM_ADD` blend are ruled out; the original cycles whitish-pink / red / grey-ring-with-pink / pink across its six
+      stills and the port never shows the grey iris phase in five frames; the lower-left portal reads larger and bluer (150 px against 105). Next: the rings'
+      life-versus-brightness curve against the 58 footage frames (`out/parity/visuals/particles/verify3/measure_v3.txt`), then the particles in `effects.json`; R22 is
+      the gate's re-baseline choice. Gate: ring excess r 25-45 px on 1-01's 582 inside 65.6 +-25 percent. GAMEPLAY: none.
+- [ ] **CMP-14. Lit stone reads softer than the original on lightmapped levels** (medium; light; `unknown`; moves no route). Levels judged: 2-17 (box 100,630,1180,715),
+      2-18 (box 180,630,1080,715), 2-19 (box 910,95,985,260); 67 levels carry `eth_lightmap`, 2-16 has one and was not tested. Evidence: the original shows crisp
+      relief, cracks and bright grit on floors and cracked pillars, the port smoothed stones; the Laplacian s.d. of the cracked `breakable_wall` is 17.2-17.8 against
+      12.4-12.6 on 2-17 to 2-19, but 11.9 against 11.8 on 2-21 and 2-24, which have no lightmap. Cause: unexplained; untested candidates are a lightmap (a quarter of
+      the hd art per axis) stretched and filtered where the original keeps detail, or a weaker normal-mapped relief. Not in the backlog. Next: render 2-17 with the
+      lightmap off and at full resolution and read the Laplacian against `h6.3`; if it explains the gap, widen to the other 64 lightmapped levels. Gate: the wall's
+      Laplacian s.d. 12.4 -> 17.2 on 2-17, no change on the unlightmapped levels. GAMEPLAY: none.
+- [ ] **CMP-15. A rider drifts off a bobbing slab: the astronaut on 4-02's bounce slab floats away at the slab's peak speed** (medium; structural; `decoded` but NOT
+      RUN; MOVES A ROUTE). Evidence: 4-02 box 350,330,450,520 (`pairs/4-02_h63_pair.png` and `_overlay.png`: the astronaut doubled, the port's about 17 px higher): the
+      original's eye stays at y 380 +-0.5 in all six stills while the slab bobs 475-481 under him; the port's drifts up 3.2 px/s (383.1 at f75, 364.3 at f420) = the
+      slab's peak speed (1 u x 1.2 rad/s = 3.4 px/s). Cause (code reading and the speed match, not run): the slab is `static` 1, density 0 in `level1c.esc` and
+      `ETHCallback_bounce` calls `linearMotion` (bytes 353694..353862), so the original's `SetPosition` is `b2Body::SetTransform` with no velocity (G3-1);
+      `Bounce.cpp:119-122` calls `Mover::MoveKinematic`, which sets the velocity the contact solve reads, so a zero-gravity rider keeps it; `Mover::PlaceKinematic` (no
+      velocity) exists. 4-07's slabs carry no rider and 4-17 shows no drift. Next: `PlaceKinematic` in place of `MoveKinematic` (G3-4's throwaway build), read the rider
+      on 4-02; if the engine's push-out does not hold him, record an engine gap with the number (not this step). Gate: the astronaut's eye y within +-1 px of 380
+      through f450, a `test_mp_bounce` pin, the 4-02 and 4-17 routes re-run. GAMEPLAY: yes (an idle astronaut stays on his block). Joins: G3-1, G3-4.
+- [ ] **CMP-16. 2-01's crate is drawn 33 percent too big and, in the original, is smaller and lighter** (medium; structural; `decoded`; MOVES A ROUTE). Evidence: 2-01
+      original crate [443,57,577,187] against the port's [420,15,598,190] (`pairs/2-01_h63_pair.png` and `_overlay.png`: a crate inside a larger crate; the same at
+      `h0.3` and `h2.8`): the original's is 134 x 130 px, the port's 178 x 175. Cause: `level0a.esc` id 796 (`crate_no_emissive`) carries the custom data `scale` 0.75,
+      the only custom scale on a non-agent node in the 128 levels; `SGlobalScale::scaleEntity` multiplies it through `ETHEntity::Scale(float)`
+      (`ETHEntity.cpp:591-599`), which rebuilds the body from the scaled box (`ETHPhysicsEntityController.cpp:186-193`), so the original's body is 0.75 x 58 = 43.5 u
+      and the port keeps 58 u. Planning step 71 names it "an unowned scaleEntities gap". The 2-01 route pushes this crate from tick 61 ("five times the player's
+      weight"). Next: read `metadata/scale` on a crate into picture, collision box and mass; re-fly 2-01. Gate: the crate 134 x 130 px at f420, a `test_mp_levels` pin,
+      `test_mp_routes` 128 of 128. GAMEPLAY: yes (a smaller, lighter crate on 2-01).
+- [ ] **CMP-17. 3-08's lone guard rests 30 px right of and 7 px below the original's, astride the ledge seam** (medium; structural; `owner-call`; MOVES A ROUTE if R24
+      changes). Evidence: 3-08 box x144-256 y48-192 (`pairs/3-08_h63_pair.png`, top left). The guard (spawn (410,48), wayA0 (372,48), hold 9999999) stops about 11 u
+      earlier than the original's (`minions.json` `arrive_px` 8, `settle_px` 16) and ends over the seam of two ledge blocks; the same row was closed for 3-01 by step
+      152 and 3-01 matches here at dx 0; why 3-08 stops at the seam is not isolated. Next: nothing until R24 (the patrol's arrival point, the owner's) is ruled. Joins:
+      R24, step 76's lone guards' coast. GAMEPLAY: yes if R24 changes.
+- [ ] **CMP-18. 2-29's rolling stone is 125-135 px behind the original's in every still (WT-10)** (medium; structural; `unknown`; MOVES A ROUTE). Evidence: 2-29 box
+      35,455,520,632 (`pairs/2-29_h63_pair.png`; the same lag at `h2.8` and at f450): in the original's h6.3 the stone is against the barrel at x 37-122, the port's at
+      f420 at x 342-515 with the barrel unmoved; a constant 125-135 px (0.75 s at its 61 u/s). So the release from the hinged plank is late: the port tips at about tick
+      340 and is still rolling at 61 u/s at tick 420 at x 209. Unexplained by the recorded row; the hinge pose (CMP-2) is predicted to move only 0.6 u here. Next, as
+      WT-10 says: trace the plank's tipping time (the stone 1.131 against the plank and the hinge) after CMP-2 lands, then re-fly 2-29 from tap 320 (R4a-6). GAMEPLAY:
+      yes.
+- [ ] **CMP-low. Residuals no play would notice** (low; 120 levels, 227 residuals; `unknown`, no step proposed). (a) PHASE (about 100 levels): animation, particle,
+      flame, blink, mover and knight phases. Not defects of the port: the stills were timed by wall seconds on an emulator at 15-29 fps and the original runs two clocks
+      the port runs as one (the HUD 0.49-0.94 s ahead of its world: `ui.json` `level_start._start_after`); a level-by-level fit puts `h6.3` at f440-f492, and chapter
+      4's `h0.3` matches the port's f180-195, not f75 (4-09 at 1.98 against 11.40 at f420), so chapter 4's clock is later than the f75 / f240 / f450 sets assume
+      (unmeasured: the calibration is chapters 1-3). (b) CAP-2 and FRAME: the engine's contact skin rests the player and crates 1.6-1.8 px low and the camera follows
+      the player, so the world reads 2 px high on 15 levels (11 at (0,2): 2-07, 2-09, 2-13, 1-13, 1-19, 1-25, 1-26, 3-10, 3-14, 3-18, 3-30; the rest 1-24 (1,3), 2-25
+      (0,-5, the camera), 3-07 (0,-2, a shake of the original's still), 2-32 (-94,0, the game-over fade)); a 2 px offset alone drops `edge_iou` to 0.33-0.46 with
+      nothing visible. (c) CAMERA: the original opens on `camera_start` and eases to the player, the port opens on the player by the owner's choice (G3-2): `h0.3`
+      offsets of 13-46 px on 11 levels; 2-25's camera is 5 px different at h6.3 (the follow lag `_guess` 0.12 against `Follower(1000,100)`: R3c-6). (d) BOB: the
+      original's diamonds sit about 3.6 px lower than the port's centre (+3.6 mean on 22 chapter-4 diamonds; the same sign on 1-05, 1-06, 1-08, 1-25, 1-26, 1-28 and
+      4-04; 3-01 reads the other way; the amplitude 4.2 px matches the decode). (e) TONE: 1-1.5 percent darker blue and grey on 4-09 to 4-16. (f) the space sky's spiral
+      turns 1.0-2.9 percent under its decoded rate (P5, "Left by step 122"). (g) unexplained singletons: 1-21's pink tint on a plank, 2-11's redder crate by the door,
+      4-18's player 6 px farther from the well, 4-20's key resting on the other side. (h) known rows: 2-32's dragon timing and game-over fade (step 77: f420 reads mean
+      abs 14.97, f450 2.71), 3-29's `!` mark age (G1a-8), 4-22's sparkle depth (Order 8.4). Dropped as not defects: 4-20's achievement card (a fresh-save capture
+      condition), 1-02 and 1-03's pad pulse (the anchored popup tick), 3-07's 2 px shake of the original's still, 1-03's 2 px edge tab. Next: no step. (a) needs the rig
+      only if the owner wants the HUD / world clock offset modelled; (b) is an engine step (CAP-2: a contact margin, `PhysicsSettings` has none) that would move every
+      route's rest heights; (c) is decided; (d) and (e) cost a footage read when a step next touches motions or sky. Joins: CAP-2, G3-2, G3-5, "Camera at 1-13", P5,
+      step 77, G1a-8, Order 8.4, R3c-6.
+- [ ] **CMP-R1. The comparison's own limits** (the verification's six low findings, `R4b/verify1.json`, and the triage's). (1) **The pairing is the record's convention,
+      measured in part**: `h6.3` against f420 is not a measurement (f420 is 0.3-1.2 s early on the script clock; f450 is the extra set, +-0.4 s level to level); the
+      script clock was fitted on four chapter 1-3 platform levels and 2-32's dragon; `h0.3` and `h2.8` use f75, f135, the level's own HUD tick (`CMP/hud_ticks.json`,
+      +-8 ticks, 17 levels "gone") or f240. A reader judging a mover, a dragon or a knight off f420 judged the clock first. (2) **`match` is not pixel-equal**: the 26
+      `match` levels have no residual above low (phase, clock, tone); 4-09 reads mean abs 7.50 at f420 (1.57 at its own HUD tick), 4-18 11.38 and 4-12 10.30 (a spiral
+      nebula and two platforms at the other end of their swing, by the readers), and chapter 4, where the HUDs are oldest, was not calibrated. Take the next comparison
+      at the level's own HUD tick or f450 where a mover or the spiral is in frame. (3) **The seed is the all-gold save** `out/parity/ui1/saves_gold/scores.json` (md5
+      `09268640`), not the owner's `40bfef3a`, because the library's stills were taken on an all-gold save and show the plaque on every level; the owner's save differs
+      only in the plaque card (at tick 90: 1-01 0 px, 3-16 42,165 px, 2-32 42,202 px, in x 23-201, y 13-250); at f420 the plaque is gone and the 128 gold-seed frames
+      equal the owner's-seed sweep byte for byte except 1-02 and 1-03, which are captured with the popup closed (`--tap 1178,358@300-305`; their popup-up frames, kept
+      in `port_f420/popup_up/`, equal the sweep). (4) **The readers' audit**: 16 of 128 levels (levels 4, 12, 20 and 28 of each chapter), 16 agree, 0 missed, 0 not
+      real; it re-measured pixels, not causes; 0 of 16 bounds a per-level miss rate at about 17-19 percent (95 percent); the readers did miss the help block on 2-03 and
+      2-06 outside the sample (CMP-10), and the structural single-level findings (1-30, 2-01, 2-31, 3-05, 4-02, 4-29, 4-31) are all outside it. The verification re-read
+      six pair images (1-23, 4-09, 4-26, 3-10, 3-20, 1-20): 0 wrong. (5) **Causes**: the triage checked the mechanisms against the listing and source (10 of 11
+      attributions held); nobody re-derived the halo magnitudes, the lightmap softness, the pile physics or any phase attribution, and 3-05's and 3-22's knights have no
+      footage. (6) **Not compared**: edge rows (PX-2 to PX-4: the 2,047 rows above 12 and the slivers were not attributed), any pan or tremble against the original's
+      footage (PX-3), a window other than 1280 x 720 (PX-6). (7) **Build currency and zero warnings** rest on mtimes (the executables `a5013ee6` and `32f4a14b` are
+      newer than every compiled source) and on PX's build logs (0 `warning` lines), not on a rebuild at the close or a ninja up-to-date check. (8) One python launch,
+      `python.exe` loading scipy's `_flapack` at 17:14:08, was refused by Smart App Control in the comparison phase (not a wave executable; the triage tools should
+      avoid scipy). Next: the next measuring pass, after wave 4c's fixes, on the fixed build, with (1), (2) and (6) in hand.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -4084,7 +4438,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       half pixel drawn out to it, or given a cover like the sky's); gates: 2-05's column 1279, rows 421-586, back to
       (0-1, 0-1, 0-1), and the 84 levels' 566 scattered edge rows above 12 (1-21 and 1-23 right, 4-01 left and 4-09
       right among them).
-      *Partly closed by step 165 (PX, wave 4b), 2026-10-11*: **2-05 only.** The pixel-centre rule is built: a strip of a
+      *Partly closed by step 165 (PX, wave 4b), 2026-10-11*: **2-05 only.** (Commit `7eae0e4`, pushed in `f240af9..7eae0e4`. The row stays `[ ]`: 2,047 edge rows remain (PX-4) and the final comparison did not attribute them, row CMP-R1.) The pixel-centre rule is built: a strip of a
       picture's own material over the gap its edge leaves in the frame's outer pixel (`edge_cover.json`;
       `EdgeCover::StripsOf`, `MagicPortalsLayer::syncEdgeCovers`), from a pool made before any other entity so the
       renderer's tie order does not move (the first build, made on demand, moved 133 px outside the ring on five levels),
@@ -4194,3 +4548,11 @@ from a drop of about 16 units and crushes a knight from about 3.3 (STK9: 3-12, 1
 (WAKE: 3-10's knight, 2-23, 2-24); the levels whose routes rest on a port behaviour no clip shows (1-19 and 1-20: the stone outlives its wall; 1-22: a creeping stone; 4-10 and 4-12:
 the wall-slide; 2-29: the stone's timing; 3-10: the knight whose wall breaks); the grant in `docs/permission.md`, still its placeholder; and the repository's going public, which needs
 his explicit word.
+*Added by wave 4b's close*: wave 4b is pushed (`origin/main` `7eae0e4`; PX, the pixel-centre rule, GAMEPLAY none) and the final comparison has run (26 `match`, 44
+`minor`, 58 `differs`; 52 of the 58 by one cause, CMP-1, decoded and unbuilt); the halo scale (CMP-8: `halo_brightness_scale` 0.6 is a guess; one global scale, per-entity
+scales, or leave); whether the engine's friction and restitution steps are queued (CMP-11: five levels' crates and barrels creep or rest elsewhere, and every route that
+pushes a crate rests on it); R24, now also 3-08's lone guard (CMP-17); whether the original's two clocks (its HUD 0.5-0.9 s ahead of its world) are modelled (CMP-low a);
+the engine's contact margin (CAP-2: the player and crates at rest 1.6-1.8 px low, a 2 px offset on 15 levels; it would move every route's rest heights); what to look for
+in play now that the comparison names the differences a player could see: the player and the exit arch lit on chapters 2-4 (CMP-1), a plank or a seesaw standing where it
+was placed (2-31, 3-19, 3-20, 4-31: CMP-2), the knight beside 4-29's gem that the original never spawns (CMP-6), 3-05's first knight arriving early (CMP-5) and 1-30's
+pile toppling (CMP-4); the grant in `docs/permission.md`, still its placeholder; and the repository's going public, which needs his explicit word.
