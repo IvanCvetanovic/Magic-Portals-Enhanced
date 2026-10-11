@@ -1,0 +1,31 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-24, authored for wave 4a (round 1) on the build with the portal tap, stone and wake rules. The player never moves: he stands",
+    "on the ramp where he lands (256, 143); the launcher at (74, -42) throws a stone down the open left side every 90 ticks (the first on tick 90), and",
+    "the breakable wall at (448, 177) is the floor over the door room. The level's own pair, which is its golden score of 2: a portal",
+    "over the wall at (448, 110) (tap 40, placed 95) and one in the stones' fall line at (74, 90) (tap 110, placed 163). The second",
+    "stone (thrown on 180) goes in on 206 and breaks the wall on 245 at stone hit 6.67 (the original's gate is a stone above 1.5); the first,",
+    "thrown while only the far portal stood, fell past.",
+    "THE DOOR CANNOT BE WALKED TO IN THIS PORT: dropped through the hole he lands on the door's platform at x 405 and walking right",
+    "he is killed on tick 366 at x 432 (PLAYER DIED: destroyier_ent_1051), because destroyier.ent's 16 px killing box at (448, 344)",
+    "(x 440 to 456, y 336 to 352) stands on the platform's top across the door's trigger (x 443 to 451, y 319 to 343) and his body",
+    "meets the box 3 to 5 units before the trigger from either side (STK-8: the listing has no callback that makes a destroyier",
+    "kill a player; the owner's testimony of 11 September says it does). So the route goes over it with a second pair: a portal",
+    "high over the door at (445, 100) (tap 262, placed 316) and one on the player (tap 322, 6 after the landing): he comes out at",
+    "(445, 102), falls 211 units and meets the door's trigger on tick 343 with his feet 5 units above the box. From the start the",
+    "ray reaches a target only down to y 118 (a tap at y 130 is stopped by the ramp's top-right corner at (384, 129)); every x",
+    "436 to 456 and every y 60 to 118 won, and the tap waits until 262, 17 ticks after the wall, because the falling stone is the",
+    "ray's end (the tap on 239 ended at (431.3, 103.1) on its surface, outside the door's x). Won on tick 343. Four portals and no",
+    "crystal (the ramp's timed one at (366, 118) goes by): medal 1; no achievement."
+  ],
+  "level": "level23",
+  "win_by": 355,
+  "holds": [],
+  "taps": [
+    {"tick": 40, "at": [448, 110]},
+    {"tick": 110, "at": [74, 90]},
+    {"tick": 262, "at": [445, 100]},
+    {"tick": 322, "at": [250, 142]}
+  ]
+}

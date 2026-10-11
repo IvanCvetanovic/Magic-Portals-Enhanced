@@ -1,0 +1,32 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-03, weightless (no_gravity: no walking, a tap's recoil is the only motion: 140 u/s away from where its",
+    "ray ended, added to his velocity, and nothing slows him). The door (160, 170) is 246 u left of the start,",
+    "behind block00 (x 288-352, y 108-172); the level's crystals (288, 320, 352 at y 78) mark the way over it.",
+    "A tap level with him to the right, (440, 78), opens a harmless portal in open space and its recoil drifts",
+    "him left at 140 u/s along y 78, over the block (its top is 108, his feet 96), through the crystals at 352",
+    "(tick 44) and 320 (57). The door shot goes on tick 58 (28 ticks after the first; the 400 ms is 26) from",
+    "(338, 78): its ray passes 7 u over the block's top-left corner, so (160, 170) is its end with no retry, the",
+    "portal opens in the door on 115 (a 56-tick flight) and its recoil, added to the drift, sends him up and",
+    "left at (-16, -64) u/s, to (323, 16). A tap on him there on 117, (323, 12), opens the second portal on 119",
+    "and he goes through it and out of the door portal into the door: won on tick 120.",
+    "Leans on the decoded zero-g recoil (G10, step 148), the shot's flight (G4) and the portal's exit at its",
+    "partner's own point (transit.json); nothing here is a creep, a push or a one-tick margin. Margins, each",
+    "measured by moving one tap and leaving the rest: the first tap 4 ticks earlier to 3 later (5 earlier is",
+    "inside the 400 ms that run from the level's start), the door shot 3 earlier to 6 later (4 earlier is inside",
+    "the 400 ms after the first tap) and",
+    "the tap on him 3 earlier to 6 later (a tap before the door shot lands is refused); the door shot's aim at",
+    "any x 150-180, y 150-190 (y 140 and above puts the exit above the door's trigger, which starts at y 161.5; x 145 and below lands too late for the",
+    "last tap); the tap on him at x 323-340, y 0.5-30. Unlocks no achievement (none belongs to 4-03); two of",
+    "the five crystals taken, medal 2 (3 portals)."
+  ],
+  "level": "level2c",
+  "win_by": 132,
+  "holds": [],
+  "taps": [
+    {"tick": 29, "at": [440, 78]},
+    {"tick": 58, "at": [160, 170]},
+    {"tick": 117, "at": [323, 12]}
+  ]
+}

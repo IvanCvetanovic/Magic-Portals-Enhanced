@@ -1,0 +1,34 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-30 (wave 4a, round 1). The door sits high on the right, over block00_ent_910 and _911, and the way to it is walled by a pile",
+    "of crates: the 28-unit double_block_plat_ent_896 on the floor (the player cannot step up it), two columns of small crates on it,",
+    "the wood plank across them and the 58-unit crate on the plank, up to wall04's foot. Every piece but one is not teleportable, so a",
+    "shot at it fails; the exception is crate_small_ent_897, the lower left crate (teleportable 1). A shot at it ends where the ray meets",
+    "it plus 10 units, at (202.9, 181.9), a portal INSIDE the pile's left column (tick 31, open on 66), and one on the player (tick 72)",
+    "puts him there: he comes out inside the column, the crate is shoved out left, the pile gives way (the big crate, the plank and the",
+    "tan crate fall to the left, the right-hand crates tumble to the right) and he stands on the double block at x 255.1, under where the",
+    "plank was (still from tick 190). NOT MEASURED ON THE ORIGINAL: that collapse is the port's solver around a body that appears inside",
+    "the pile (the pile is awake at the start, as backlog row R3b-5 records, and the log prints no woken line, so WAKE is not in it; the",
+    "original's pile rests in its stills, and if R3b-5 puts it to sleep the portal's arrival wakes it first - not tried); the first shot's tick is",
+    "good for -5 to +6 (25 to 36: 25 is the 400 ms) and the second's for -4 to +4 (67 to 75; a later one, 76, lets the pile settle him at x 239.5",
+    "and the last tap lands on a crate), each winning on tick 228. The two crates that tumbled onto the block in front of him close",
+    "his ray along the floor, so the second pair goes over them: a shot to (372, 40) under the ceiling over block00_ent_910 (tick 106,",
+    "taken after the head-height retry, drift 0.000: the camera is still until tick 115, which is why it is shot early; 58 ticks of flight,",
+    "open on 164, the ticks 100 to 115 all win), then one on the player once he has stopped sliding (tick 201): he comes out of the high portal,",
+    "takes the three crystals on the way down, lands on block00_ent_910 (tick 215) and walks right into the door. Won on tick 228.",
+    "No achievement (4 portals, medal 3). Leans on R23 (the +10 past a teleportable body's contact, the head-height retry), G4's flight and",
+    "G10's walk and fall."
+  ],
+  "level": "level29",
+  "win_by": 240,
+  "holds": [
+    {"walk": "right", "from": 214, "to": 245}
+  ],
+  "taps": [
+    {"tick": 30, "at": [208, 181]},
+    {"tick": 71, "at": [70, 203]},
+    {"tick": 105, "at": [372, 40]},
+    {"tick": 200, "at": [255, 178]}
+  ]
+}

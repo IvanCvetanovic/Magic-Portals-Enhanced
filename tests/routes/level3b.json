@@ -1,0 +1,16 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-04, wave 4a round 1, the stealth level: won on foot with no taps and with no knight ever seeing him, so achievement 26 (both knights alive, no spot counted) unlocks at the door on tick 297. Built on the knights that see and shoot (planning steps 158 and 159), the stones that kill and the sleepers that wake; no knight spots, shoots or dies on this run (the sounds line holds no enemy_spotted, enemy_shot or kill).",
+    "The walk: right from the start along the top (the 128-unit block and the three steps down: crystals 1145 and 1146 on the way), onto the 232 block at the right (landing on tick 144, x 410), then LEFT without a pause: off that block's left end (x 384) onto the middle platform (top 298, landing on 169), left along it and off its end (x 256) onto the platform below (top 368, landing on 225), left along that and the one beside it (top 362) and off its end (x 78) onto the door's platform (top 480, landing on 260), left to the door (tick 297). Going right off the 232 block instead (what a held right does) drops him in the lower knight's row and it spots him on tick 177.",
+    "WHY NO KNIGHT SEES HIM (the sight is the three 128-unit buckets of the knight's own row along its facing, within a 120 degree cone, planning step 158; the facing is the last walk's direction). Knight 913 (the upper one, row 2) walks left to the left end of its platform (x 24.4, bucket 0) by tick 83 and holds there 6000 ms facing LEFT, until tick 457: it looks at buckets 0, -1 and -2 of row 2, so the player, in row 2 only from tick 164 to 249 and always to its right, is behind it and in none of them. Knight 908 (the lower one, row 3) is at x 244.7 from tick 50 to 111 facing left, while he is far up in row 0, then walks right along its platform and is at its right end (x 439.4) on tick 300, where it holds 4000 ms facing RIGHT, looking at buckets 3, 4 and 5 of row 3 (x 384 on); he is in row 3 only from tick 250, at x 174 and going left, behind it. The window is the knights' own routine, so the walk may be late: waiting on the 232 block until tick 330 before going left (a probe) is won on 483, still unseen (he is in row 2 from tick 350 to 435 and the upper knight holds to 457; he is in row 3 from 436 with the lower one still standing facing right).",
+    "Margins: the walk is not a knife-edge. Moved on its own, a hold's edge may come 12 ticks early (traced: 16 early turns him left on the 160 step, where the 128 block's face at x 328 stops him for good) or up to 128 ticks late, and the level is still won unseen with 26 (checked by out/parity/program/R4/r1_3-01/sweep.py on a copy with a wide win_by; the first walk's start can only move later). Won on tick 297 (13 inside win_by); no DEV flag, PutPlayer or skipped tick; no portal shot (the level's budget is the default 2, the route uses none). Medal 2: no portals, the two crystals of the stairs (a gold needs all five of the level's crystals)."
+  ],
+  "level": "level3b",
+  "win_by": 310,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 143},
+    {"walk": "left", "from": 144, "to": 310}
+  ],
+  "taps": []
+}

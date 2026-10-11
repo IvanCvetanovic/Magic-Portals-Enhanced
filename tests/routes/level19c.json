@@ -1,0 +1,36 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-20 (dark, red key): the player starts on the red key (taken on tick 1: achievement 61) at (710, 144) and the exit",
+    "door is at (64, 114) behind door_locked_1343, which the red keyhole at (178, 142) opens. Two things stop him on foot:",
+    "block00_no_emissive_ent_1622 (x 390 to 454, y 114 to 178) stands on the walkway, and the walkway has a 34-unit gap",
+    "(x 256 to 290) before the keyhole. Both are crossed by a portal in the air and a portal on the player. Walk left to",
+    "x 537 (the crystal at (608), 35) and stop (73) so that the camera is still when the finger goes down. Tap 1 (92, at",
+    "(422, 88)): the ray clears the block's top corner (454, 114) by 10 units and the shot, 34 ticks in the air, opens a",
+    "portal there on 126. He walks on to x 503 (the crystal at (496), 102), and tap 2 (130, on himself) opens the second on",
+    "him: out at (422, 100) on 132, the crystal at (422, 98) on 133, on the block's top on 135. Walking left takes him off",
+    "its west end, down onto the platform (hit 5.35, 160; the crystals at (368) and (336), 153 and 163), and he stops at",
+    "x 312, short of the gap (hold to 181; he stands 22 units from the edge, so a stop 6 ticks late still stands). Tap 3",
+    "(200, at (190, 144)) opens a portal over the west platform (232) and tap 4 (236, on himself) puts him there at 238 with",
+    "the key, inside the keyhole's 26 units: door_unlocked on 240, key into the keyhole 282, keyhole and door_locked gone on",
+    "332. The last walk starts on 262, so he is pressing on the locked door from 274 (impact 1.44) and walks on the tick it",
+    "goes: won on tick 368. All five crystals: medal 3, 4 portals, achievement 61 only. Leans on the portal tap's ray (R23),",
+    "G4's 3.2 u/tick shot, G10's 144 u/s walk, the capsule's stand at the gap's edge, and the key's carry through a portal",
+    "and its unlock clock (keys.json: 1,000 ms hold and 500 ms fade; no clip shows a key carried through a portal).",
+    "Every tap's aim holds for 12 units either way and every walk's edges for 6 ticks; each self-tap (130, 236) comes 4 ticks after its portal lands (126, 232) and holds 8 ticks later."
+  ],
+  "level": "level19c",
+  "win_by": 380,
+  "holds": [
+    {"walk": "left", "from": 2, "to": 73},
+    {"walk": "left", "from": 94, "to": 108},
+    {"walk": "left", "from": 136, "to": 181},
+    {"walk": "left", "from": 262, "to": 420}
+  ],
+  "taps": [
+    {"tick": 92, "at": [422, 88]},
+    {"tick": 130, "at": [501, 144]},
+    {"tick": 200, "at": [190, 144]},
+    {"tick": 236, "at": [310, 144]}
+  ]
+}

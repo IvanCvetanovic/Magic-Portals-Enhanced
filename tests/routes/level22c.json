@@ -1,0 +1,35 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-23 (wave 4a, round 1 of the routes for the levels that had none; the golden score is 2 portals, this route uses 4). wall04_no_emissive_ent_1756 (x 320 to",
+    "384, y 64 to 320) shuts the floor off from the door platform, and block00_no_emissive_ent_1757 (x 320 to 384, y -12 to 52) leaves a 12-unit slit above it; no",
+    "shot from the floor gets past the wall (a grid of 120 shots, 30 aims from each of the floor's x 108, 180, 250 and 312, ended on the wall's face, on the upper",
+    "platform's underside, or, turned by the reflector, at x 330 or less). reflect_agent_1759 (320, 128, vertical plane) turns a shot that comes within 32 of it,",
+    "mirrored in x: a shot fired up the floor at it leaves it mirrored in y, so a tap on the agent (tap 28 at (320, 128): the ray ends on the wall's face, a red",
+    "cross, the shot is turned on 83, G9) opens its portal at (108, 49.6), the player's spot mirrored about the agent's height, in the air over the upper platform",
+    "(placed on 147, a 119-tick shot there and back). One on the player (tap 150, carried on 152) and he lands on the upper platform",
+    "(platform_no_emissive_ent_1753, top y 112) at (108, 94.4) on 162. From it the head-height retry (R23: the ray from 30 units over his head, 64.4, clears the",
+    "wall's top at 64 and passes the slit) takes a shot to (416, 55) over the door platform (tap 180, placed on 271; a tap at x 400 passes from y 50 to 62 and ends",
+    "on the wall from 64, at x 416 y 48 passes and y 41 is not won), one on the player (tap 279, carried on 281) and he falls 150 units onto the door platform",
+    "(landing on 301), walks right from 286 and reaches the door on tick 308 (4 shots, none failed or wasted, aim drift 0, never out of the view). No achievement",
+    "(medal 1: 4 portals against the golden score 2, 4,928 ms; achievements.json has only 64 for 4-22 to 4-24), no crystal taken: the two on the way down, (448,",
+    "56) and (448, 96), lie 32 units from the portal's x (a portal at x 440 takes both). A one-pair solution for the golden score was looked for and not found: a",
+    "reflected leg always leaves the agent with its x turned, so from the left it goes left; a shot fired left from the floor's end (312, 206) is turned right, but",
+    "steeply up, and ends in the slit's mouth at (326.9, 63.9) (measured: a traveller sent there, a self tap on 141 and carried on 142, is pushed up to y 40 and",
+    "out to the left, x 314, by wall04 and block00, and falls back to the floor at x 301.8); every ray from the floor ends on the wall. Margins, each measured by",
+    "moving the file: all four taps together 3 ticks earlier to 12 later (24 later is not won); the third tap's y 48 to 62 (x 386 to 446), the first tap's point 15",
+    "units either way, the self taps 15 either way, the walk's start 274 to 316. The first tap is 2 ticks over the 400 ms floor (26 ticks of 16 ms); each later tap",
+    "follows the last shot's landing by 3 ticks or more and the tap before it by 26 or more."
+  ],
+  "level": "level22c",
+  "win_by": 320,
+  "holds": [
+    {"walk": "right", "from": 286, "to": 340}
+  ],
+  "taps": [
+    {"tick": 28, "at": [320, 128]},
+    {"tick": 150, "at": [108, 206.4]},
+    {"tick": 180, "at": [416, 55]},
+    {"tick": 279, "at": [108, 94.4]}
+  ]
+}

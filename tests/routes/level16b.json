@@ -1,0 +1,33 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-17 (added in wave 4a, R4 round 1). Both keys are carried by knights from the first ticks (knight D, minion_spawn_1517, took the yellow key on tick 46 and is sealed in the pit's left room behind the blue door; knight E, minion_spawn_1521, took the blue one on 69 and patrols",
+    "platform_1506), the exit door lies behind the yellow door, and the player cannot jump: so the level is won by killing the two carriers with its two shock diamonds, walking the blue key to its keyhole, and then ONE portal hop out of the pit. No shot is fired before tick 796.",
+    "THE WAY, all on foot until the last hop: right along the start platform and off its end (215-290; he lands on platform_1490 at (402.8, 126.4) on 297, 28 units behind knight A, which holds at its right end x 431 from ~295 to ~480 facing right and never turns on him), then left along the",
+    "platform (302-420): the first diamond (shock_diamond_ent_1503, (288, 128)) on 338, and off the platform's left end (x ~130) onto platform_1506 at (110.3, 206.4) on 429, 42 units behind E, which holds at its right end x 152.7 facing right until ~480.",
+    "Right (436-500): the diamond, trailing him, strikes E on 450 (30 px; the diamond is spent) and the blue key is his on 451; the second diamond (shock_diamond_ent_1589, (192, 208)) on 459; off the platform's end (x 256, ~497) and down 194 units onto the top of wall04 at x 277.2 (landed 519).",
+    "Left (522-574) off wall04's edge and down into the pit's right room (landed 543), to x 161.3 under keyhole_1520 (164, 458): the key follows him (26 px) and opens it on 569 (key_unlocked 611); the keyhole and the blue door are gone on 661.",
+    "Left again (670-722) through the opened gap into the left room: D holds at x 38.6 (from ~655 to ~830, facing left), the second diamond strikes it on 715 as he is pressed against it at x ~54 (the touch ends its hold, it turns and 'spots' him on that same tick and is dead on it, so it never shoots) and the yellow key is his on 716.",
+    "Right to the middle of the right room (740-790, x 155.0 on 791): one shot at (335, 320) (tap 796, in the air over the left end of platform_1510 by keyhole_ent_1197; the ray passes 36 units above wall04's corner, and it flies 65 ticks, placed 862), and a portal on the player (tap 868, at (155.0, 462.4),",
+    "through on 870): out at (335, 320), onto the platform (334.4) with the yellow key, 5 units from the keyhole (door_unlocked 872, key_unlocked 914; keyhole_ent_1197 and door_locked_ent_1196 gone on 964). Right from 900, against the door and then through the gap along the platform into the door: won on tick 1001.",
+    "Two shots, none failed or wasted; medal 2 (2 portals, 16.0 s); no chapter achievement; the only sighting is knight D's, on its own death tick. Every tap and walk edge was moved 1 to 4 ticks and all win (most also 8 and 12); the three places with less room are the ones that wait on the knights' cycles:",
+    "the drop (215-290) must come while A is at its right end (A is at x 431 on ~295-480 and ~820-1000), the descent to E (the left walk's end near 420 puts the player on E's right-end hold, 305-480; E walks left to x 71 on 280-340 and 560-620), and the approach to D (it holds at x 38.6 from ~655 to ~830).",
+    "The player is never outside the 455 x 256 view (the pit camera sits at y 384). Leans on G10's walk (a step off a ledge carries about 15 units), G4's flight, R23's tap-time ray (the shot ends in free air at the tap), G1a and G1b (the knights see only along their facing in their own 128-unit row, and none shoots),",
+    "the shock diamond (Diamonds.cpp: 30 px, spent on its strike, picked up one tick before it can strike) and a key's carry through a portal and its 26 px unlock (Keys.cpp). Not measured on the original: the diamond's strike on a knight that has its back turned, and the 194-unit fall onto wall04."
+  ],
+  "level": "level16b",
+  "win_by": 1015,
+  "holds": [
+    {"walk": "right", "from": 215, "to": 290},
+    {"walk": "left", "from": 302, "to": 420},
+    {"walk": "right", "from": 436, "to": 500},
+    {"walk": "left", "from": 522, "to": 574},
+    {"walk": "left", "from": 670, "to": 722},
+    {"walk": "right", "from": 740, "to": 790},
+    {"walk": "right", "from": 900, "to": 1100}
+  ],
+  "taps": [
+    {"tick": 796, "at": [335, 320]},
+    {"tick": 868, "at": [155, 462.4]}
+  ]
+}

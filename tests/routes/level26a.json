@@ -1,0 +1,41 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "2-27 (wave 4a, round 1): the door room (x 0..143, over platform_no_emissive_ent_962) is shut by crate_no_emissive_1000 and",
+    "_1001, burnable and not teleportable. The only fire is the fixed fire_agent_ent_974 at (235, 123), 34 u from the crates'",
+    "face: a shot that comes within 32 of it becomes a fireball that flies on along the shot's heading (G8), so the way is a",
+    "shot through the flame, aimed by the handle's reflector (reflect_agent_ent_961 follows arrows_ent_960, step 139; it has no",
+    "plane, so it mirrors by the side the shot comes from: from the lower left it flips x, G9 step 157). Walk right to x 189.8",
+    "(ticks 1-12: a reflected leg of the whole length ends at the shooter's x, which puts the portal clear of single_block_994).",
+    "Drag 1 (10-31) takes the handle from (260, 256) to (400, 215) and the reflector eases after it. Shot 1 (tap 80, at the",
+    "reflector) is caught on 138 and its leg flies up-left (27.9 degrees, 17 clear of the snap's 45) through the flame: burned on",
+    "180 at (259.5, 141.0), the fireball bursts on crate 1000 on 207 (gone on 270) and crate 1001 falls 64 u onto the platform,",
+    "into 1000's place (knocked on 288, asleep on 317). Shot 2, the same tap on 215, is burned on 315 and its fireball bursts",
+    "on 1001 on 342 (gone on 405).",
+    "Drag 2 (285-306, after shot 2's catch on 273) lowers the handle to (400, 180); shot 3 (tap 365, at the reflector, still",
+    "easing in at y 181) is caught on 429 and its leg, now 34.7 degrees and 46 u clear of the flame (32 burns it), flies up-left",
+    "over the crates' place and opens a portal in the air at (189.8, 35.7) on 502. A portal on the player (tap 505) takes him",
+    "there (507); he falls 90 u onto the platform (crystals 1020 and 1021 on the way, landed 522), walks left from 523 (crystal",
+    "1022 on 546) and is in the door on tick 575 (win_by 587). Achievements: none (medal 3, 2 portals). Windows measured, the",
+    "others fixed and the win kept: every tap and drag from 6 ticks early to 6 late (shot 3 from 50 early to 3 late, the self-tap",
+    "from 4 early; each waits on the landing before it), shots 1 and 2 and both drags +-8 u in x and y, shot 3 +-8 u in x and 20 u",
+    "above to 7 u below the reflector (8 below puts the catch past the snap's 45 degrees: the leg turns down-right, the portal",
+    "opens against the right wall and the player falls to his death). Rests on G9's 32-unit catch and plane-less snap (decoded,",
+    "no footage of a reflected shot, G9-4) and on crate 1001's fall into 1000's place (it is awake, not a woken sleeper: no",
+    "'woken' line in the trace); an unmoved 1001 would let the second fireball pass under it."
+  ],
+  "level": "level26a",
+  "win_by": 587,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 12},
+    {"walk": "left", "from": 523, "to": 640}
+  ],
+  "taps": [
+    {"tick": 10, "release": 31, "at": [260, 256], "to": [400, 215], "shot": false},
+    {"tick": 80, "at": [400, 215]},
+    {"tick": 215, "at": [400, 215]},
+    {"tick": 285, "release": 306, "at": [400, 215], "to": [400, 180], "shot": false},
+    {"tick": 365, "at": [400, 180]},
+    {"tick": 505, "at": [189.8, 326.4]}
+  ]
+}

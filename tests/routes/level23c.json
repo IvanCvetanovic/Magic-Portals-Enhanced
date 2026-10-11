@@ -1,0 +1,36 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-24 (wave 4a, round 1; a dark level, no knight). door_lift_1786 bars the way to the door and rises only while button_1785",
+    "(178, 108) is held, which lies in a pocket over double_block_plat_1778 that nothing the player can reach sees: so the stone",
+    "rolling_stone_1781, which sits on single_block_plat_1780 in a nook, is carried there by a portal pair, and its weight holds the",
+    "button. The pocket's portal is placed FIRST because the port's entries are edges (Portals.cpp, the sweep): a stone already inside a",
+    "portal when its partner opens is not taken, so the second portal has to open on the stone. The player walks right over",
+    "button_1784 (304, 220), which raises door_lift_1782 (up from tick 28, and held up only while the button is pressed), and on to",
+    "x 360, where door_lift_1786 stops him. Tap 1 (down on 62, the shot leaves on 63) at (188, 72): it passes under the raised door,",
+    "over the corner of the platform (the log says 'after the head-height retry') and opens in the pocket on tick 124. It must not",
+    "pass within 24 units of light_off_1689 (222, 52), which spends any shot that does: from x 360 this one passes 36 units clear, and",
+    "a tap at (208, 70) passes 23 and lights the torch with it (the first draft aimed at (205, 60), lit it and opened nothing). He",
+    "then walks left the whole way to the crystal at (16, 208) (taken on 202; the third crystal is what makes the medal gold, the other",
+    "two lie on the way) and taps the stone from x 29 (down on 212, up 213) at (60, 60): the ray meets the stone's skin and the portal",
+    "opens 10 units inside it at (60.2, 58.8) on tick 252, with the stone in it, and the stone goes through on that tick, drops onto",
+    "double_block_plat_1778 and presses button_1785 (253), and door_lift_1786 is up long before he is back at x 360 (the right walk",
+    "from 214). Won on tick 387, medal 3 (2 portals = the golden score, all 3 crystals), 2 shots, aim drift 0.015 px. No achievement.",
+    "Each tap moved alone with the rest held (test_mp_routes --only on a copy): tap 1's tick 42 to 82, tap 2's tick 186 to 234; tap",
+    "1's point is a diagonal band across the pocket (at y 70 x 160 to 202, at y 82 x 184 to 208, at x 196 y 64 to 88: its two edges are",
+    "the platform's corner and the torch); tap 2's point x 44 to 76 at y 28 to 60 (a portal takes the stone when its centre is within 44 units of the",
+    "stone's, the stone's 30 and the portal's 14). Unmeasured on the original: that a stone already inside a portal when its partner opens is left where it is (the",
+    "original looks for an object in a portal each frame, step 156's deviation 5); the route does not lean on it either way."
+  ],
+  "level": "level23c",
+  "win_by": 399,
+  "holds": [
+    {"walk": "right", "from": 3, "to": 66},
+    {"walk": "left", "from": 68, "to": 205},
+    {"walk": "right", "from": 214, "to": 480}
+  ],
+  "taps": [
+    {"tick": 62, "at": [188, 72]},
+    {"tick": 212, "at": [60, 60]}
+  ]
+}

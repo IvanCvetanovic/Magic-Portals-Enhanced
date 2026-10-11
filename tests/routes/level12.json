@@ -1,0 +1,49 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-13 (wave 4a, round 1, on the build with R23's tap rules, G9, G1, the stones and WAKE): the door stands on platform_ent_914 (top y 256, x 380 to 512), beyond the wall of platform_ent_651 and 655 (x 256 to 288, y 14 to 398).",
+    "The only ways round the wall are under its foot (y 398), through the lift door at x 355 to 385 and up through a slot in the room beyond; the player cannot jump, so the level is four portal pairs, 8 shots, none failed:",
+    "the stone onto the cracked floor, the player over the cave's gap, past the lift, and up to the door's platform. Won on tick 852; medal 2 (one crystal of five, crystal_ent_956), and no achievement:",
+    "1-13's rule (78) asks for the gold medal and at most 8 portals, and this run has the portals but not the other four crystals. Leans on the reflector (G9), the stone's demolition of a breakable wall, a sleeping stone woken by a portal,",
+    "the lift door's rise and its latch (step 133: 3,700 ms each way, about 231 ticks), the tap-time ray that ends at the first body and retries from head height, and the door's body over the player's head.",
+    "Pair 1, the stone onto the cracked floor: the far portal FIRST, a shot to (215, 150) over the pit (tap 29, placed on 66; the ray from the spawn clears platform_ent_1064's end corner (176, 159) by 14); then the near one by the reflector,",
+    "a shot at reflect_agent_584 (248, 149), aimed at (240, 149) (tap 72): it is caught within 32 of the reflector on tick 109, mirrored in x as a vertical plane does, and its leg flies on from the reflector for the length it was fired and ends against the stone's side,",
+    "at (133.9, 97.4), inside the stone's reach; the portal is in place on 142. A body is carried when it ENTERS a portal that has a partner: one that is already inside a portal when its partner is not yet there counts as inside, so the near portal has to be the",
+    "second. The stone goes through on 142, falls from (215, 150), breaks breakable_wall_577 on 156 (wall_broken), lands on double_block_plat_ent_656 on 174 and settles against the wall (x 225.9) asleep from 246.",
+    "The player never touches it. The walk down: right from 150 off the bridge's end (x 160; he is over the pit from about 176, left of the stone's edge) to the double block on 196 (x 169.8); left from 200 off the block's end (x 128) onto block00_ent_658's top on 234 (108, 426.4);",
+    "right from 238 off its end onto the cave floor on 255 and on to x 175.6 on 268, 16 units short of the floor's end (x 192): the gap beyond it to x 256 is a fall out of the level.",
+    "Pair 2, over the gap into the corridor: a shot from the floor's end to (322, 440) (tap 272, placed on 312; the ray runs under the wall's foot and over the gap; its point holds from x 310 to 332 and y 410 to 458), one on the player (tap 314, through on 316):",
+    "he comes out in the corridor and lands on button_772 on 321, and door_lift_774 starts to rise on 320 (door_opened). He stands there until the door's bottom has cleared his head and then walks right from 388 to x 454.8 on 446: he is under the door",
+    "from 398 to 418 with its bottom 18 to 27 units over his head (the earliest start is 379; the button needs no one on it, the door rises to its top on its own, fully up about tick 551).",
+    "He stops at x 454.8 so that the tap on himself falls 12 units outside the 64-unit move pad in the screen's corner (a tap on him at x 496.8 was taken by the pad and fired nothing).",
+    "Then he waits for the door to come down (closing from 552), because the next ray crosses its footprint. Pair 3, up through the slot between the door platform's underside and the double block: from (454.8, 458.4) a shot to (360, 262) (tap 674, placed on 737; the point holds",
+    "from x 346 to 368 and y 254 to 276); its ray passes the slot at x 380 to 386 at y 303 to 316, 15 under platform_ent_914's corner (380, 288) and 19 over double_block_plat_776's corner (386, 335), and crosses the lift's footprint (x 355 to 385)",
+    "at y 313.8 to 251.6, which needs the door's top below it: the first ray clears it from about tick 656 and the head-height retry's ray from 638 (a tap on 636 ends red_cross); 674 leaves the first ray 9.7 units over the door's top (y 323.5).",
+    "One on the player (tap 740, through on 742): he comes out at (360, 262), takes crystal_ent_956 (358, 272) on 743 and lands on the double block's top, the room's floor, on 753 at (360, 317.4).",
+    "Pair 4, onto the door's platform: a shot to (392, 204) (tap 774, placed on 805; the ray from (360, 317.4) passes 9.5 over platform_ent_914's corner (380, 256) and the point holds from x 376 to 416 and y 196 to 228, the camera's view starting at y 189),",
+    "one on the player (tap 818, through on 820): he lands on the platform on 828 at (392, 238.4), walks right from 830 and reaches door_ent_728 on tick 852.",
+    "Margins: each tap moved alone holds 4 ticks earlier and 4 later or more (the tap at 29 from 25 to 34, the one at 72 from 66 to 80, the slot tap from 638 to 678); the walks' edges move 4 ticks either way (the first walk's start 10 earlier or 6 later, the door-pass walk's start from 379 to 391).",
+    "No stone, fire or knight touches him; he is never outside the camera's view; the only jumps are the four traversals.",
+    "NOT MEASURED ON THE ORIGINAL: the slot hop's ray passes 15 and 19 units from the two polygon corners that bound the opening (platform_ent_914's underside and double_block_plat_776's top) and rests on R23's ray and the port's colliders;",
+    "the passage under the rising lift (18 units of head room at the narrowest) rests on the port's door body; the final comparison should replay this level on the emulator."
+  ],
+  "level": "level12",
+  "win_by": 865,
+  "holds": [
+    {"walk": "right", "from": 150, "to": 182},
+    {"walk": "left", "from": 200, "to": 232},
+    {"walk": "right", "from": 238, "to": 266},
+    {"walk": "right", "from": 388, "to": 444},
+    {"walk": "right", "from": 830, "to": 870}
+  ],
+  "taps": [
+    {"tick": 29, "at": [215, 150]},
+    {"tick": 72, "at": [240, 149]},
+    {"tick": 272, "at": [322, 440]},
+    {"tick": 314, "at": [175.6, 458.4]},
+    {"tick": 674, "at": [360, 262]},
+    {"tick": 740, "at": [454.8, 458.4]},
+    {"tick": 774, "at": [392, 204]},
+    {"tick": 818, "at": [360, 317.4]}
+  ]
+}

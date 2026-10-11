@@ -1,0 +1,39 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-22, authored for wave 4a (round 1) on the build with the portal tap, reflector, knights, stone and wake rules. Two breakable",
+    "walls (x 300 and 332) shut the way to the door and only a rolling stone breaks one; the two stones sit on a platform (x 70 to",
+    "234, top y 82) that the player, on the floor below it, cannot reach. So he is put on it. A portal over the platform's right",
+    "end at (232, 60) (tap 40, placed 82; from the floor the ray must clear the single block's top-right corner, and every x from",
+    "226 to 238 at y 50 to 70 does) and one on the player (tap 86, 4 after the landing): he comes out on the block (88). He walks",
+    "left (92-258) behind stone 727, which he pushes into stone 753, along the platform; 753 leaves its left end at about tick 225",
+    "and 727 after it, both land on the ramp and roll down (he takes two crystals on the way, 172 and 112). 753 breaks the first",
+    "wall on 308 and rolls on, undamped, to the second wall, which it breaks on 434. That tick is the route's one loose number: it",
+    "moved between 400 and 446 under a 1-tick change of any earlier input (the held-friction creep of R3-2, the stones' roll has no",
+    "damping in this port), and 508 under a 3-tick one, so the last two taps wait for it with 24 ticks to spare. He walks back right",
+    "(264-304) to stand at x 214.8 on the block (the window is x 200 to 230, the hold's end good for 298 to 310, and 311 walks him",
+    "off the block's right end), and",
+    "when the second wall is gone shoots a portal into the door room at (417, 190) (tap 458, placed 526; over the door, the ray",
+    "passes under the blocks at y 98 and over both stones) and one on himself (tap 532): he comes out over the door and falls into",
+    "it. Won on tick 535. Four portals, two of five crystals: medal 2 (the golden score is 2 portals and all five crystals; the",
+    "pair that carries the player is the extra pair). No achievement. Leans on: the player's push of two stones along a platform",
+    "(about 0.3 u a tick, ticks 90 to 225: the port's solver), the stones' undamped roll (R3-2) and the portal pair's one use.",
+    "AND ON A RULE THE ORIGINAL MAY NOT HAVE: wall 1 breaks at stone hit 3.11, wall 2 at hit 0.088, a stone creeping up to it. The",
+    "port breaks a wall on touch (R3b-2), where the decoded callback (ETHBeginContactCallback_breakable_wall #16-33) needs a stone",
+    "faster than scale(1.5), and its stones pass no momentum on (no restitution step, G10-14); so wall 2 is probably meant, in the",
+    "original, for the second stone 727 arriving fast (here 727 comes to rest at the ramp's foot, unused; inferred, not measured).",
+    "Build that gate and this route must be re-flown (wall 2 would need a fast stone)."
+  ],
+  "level": "level21",
+  "win_by": 548,
+  "holds": [
+    {"walk": "left", "from": 92, "to": 258},
+    {"walk": "right", "from": 264, "to": 304}
+  ],
+  "taps": [
+    {"tick": 40, "at": [232, 60]},
+    {"tick": 86, "at": [255, 205]},
+    {"tick": 458, "at": [417, 190]},
+    {"tick": 532, "at": [222, 64]}
+  ]
+}

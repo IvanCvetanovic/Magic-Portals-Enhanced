@@ -1,0 +1,18 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-09, weightless (round 1 of wave 4a, on the build with the original's time base, the portal tap and the zero-g recoil): the player floats at (292, 128) between the two crates and the door lies",
+    "156 units to his right and 36 up at (448, 92), its trigger at (448, 112), with nothing in the way. One tap is the whole level: a shot at (194.6, 138.0), 97 units behind him and 10 below, goes down on tick 28",
+    "(the first tap waits for the 400 ms, 26 ticks of 16 ms) and leaves on 29, and its recoil, 139 u/s away from the tap (step 148), sends him right and a little up at constant speed: 2.3 u a tick",
+    "through the gap between the crates, from (292, 128) to (435.9, 113.2) where his body meets the door's trigger, the door reached on tick 91 (the portal the shot opens on tick 53 behind him is never",
+    "used). The aim has room: at x 194.6 a tap at y 111 to 168 wins (108 and below, 170 and above miss the door), and at y 138 a tap at x 150 to 260 wins; the tap may go",
+    "down on any tick from 25 (24 and earlier is refused as too early in the level), the win following it tick for tick. Leans on the zero-g recoil (step 148) and R23's tap rules (step 156).",
+    "Won on tick 91. Unlocks no achievement (medal 1, 1 portal, 1,456 ms)."
+  ],
+  "level": "level8c",
+  "win_by": 103,
+  "holds": [],
+  "taps": [
+    {"tick": 28, "at": [194.6, 138.0]}
+  ]
+}

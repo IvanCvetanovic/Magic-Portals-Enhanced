@@ -1,0 +1,35 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-10, weightless: every tap kicks the player 140 u/s away from where its shot ends and nothing slows him; a body he flies into takes the speed into it and leaves the rest. Behind",
+    "breakable_wall_ent_2098 lies the door, and barrel_bomb_ent_2099 stands against the wall's face: a barrel goes off only when a fireball (or a flame) reaches it. fire_agent_2108 at (160, 128) turns a shot",
+    "that comes within 32 units into a fireball that flies on along the shot's line, and kills the player whose centre is within 32 units of it. So the shot at the barrel is fired from the far side of the",
+    "flame, left of it: he goes round under the flame to the block at the left, shoots at the barrel from there (the line passes the flame 14 units from its centre) and comes back over its top once the wall is gone.",
+    "Taps 1-2 (30, 59) are one move: a shot straight up at (216, 60) kicks him down at 140 u/s, and a shot straight down at (216, 235), 29 ticks later, kicks the same 140 back: he is at rest at (216, 195.7) on",
+    "tick 60, 68 units under the flame. Both shots open mid-air portals (45, 65) that he never goes near. Tap 3 (87) is aimed down-right at the face of block00_ent_2096 (its far point (400, 254) is past the block;",
+    "the ray ends at (320, 228.6): a failed shot, no portal): the kick (-133, -42) is a glide up and left that passes the flame at 47.6 units (tick 120), takes the three crystals (142, 142, 154) and ends against",
+    "block00_ent_2154 at (42.5, 140.7) on tick 166, which takes the sideways speed and leaves a climb of 42 u/s. Tap 4 (167) is the shot at the barrel's face (318, 126), burned by the flame on tick 188 at",
+    "(130.4, 135.0): the fireball flies on and reaches the barrel on tick 267, and the blast takes the wall on 268. Its kick pushes him into the block (the climb is 36 u/s now). Tap 5 (199) at (40.8, 120.3) is aimed",
+    "down-left into the block's face (a failed shot): the kick (138, -59) takes him up and right, over the flame (closest 53.6 units, tick 255). Tap 6 (249) at (155.9, 71.1), aimed up-left at (130.2, 29.8) (a mid-air",
+    "portal, open on 258, which retires the first one at (216, 60) before he is within 31 units of it, tick 262): the kick (212, 60) turns him down and right, through the gap where the wall was (between",
+    "block00_ent_2097 and _2096) and into the door on tick 329. Medal 3, 3 portals, no achievement.",
+    "NOT MEASURED ON THE ORIGINAL: the climb along the block's face (taps 4 to 6, 42 and 36 u/s) and the rest against it. The port's player has friction 0 (Player.hpp kFriction) where dark_mage.ent has 0.9, and",
+    "zerog.json says nothing of a body kicked along a wall: a row for the final comparison, as 3-07's push is.",
+    "The ticks that win to win_by 342, tap by tap with the rest as they are (the others do not): tap 3 on 85 to 89, tap 4 on 162 to 173 (at least), tap 5 on 193 to 203, tap 6 on 246 to 252 (a tap 6 on 253 or later",
+    "leaves the portal at (216, 60) standing and he is taken through it on 262). Aims: taps 4, 5 and 6 win 2 units either way, tap 1's x 2, tap 3's y 2 (its far point is 256 at the view's edge at most), tap 2's",
+    "x -3 to +1. The closest 400 ms margins are tap 2 29 ticks after tap 1 and tap 3 28 after tap 2 (26 is the floor).",
+    "KNIFE-EDGE, said plainly: taps 1 and 2 are a pair. Moved together by -4 to +2 (tap 3 fixed) they win on 329 as they do, but either alone moves the stop point of the first move by 2.3 units a tick, the glide of",
+    "tap 3 turns that into 4 to 6 units at the block, and taps 5 and 6, aimed at points 35 to 45 units from him and not re-aimed, do not forgive it: the player then dies at the flame or is not at the door by 342."
+  ],
+  "level": "level9c",
+  "win_by": 342,
+  "holds": [],
+  "taps": [
+    {"tick": 30, "at": [216, 60]},
+    {"tick": 59, "at": [216, 235]},
+    {"tick": 87, "at": [400, 254]},
+    {"tick": 167, "at": [318, 126]},
+    {"tick": 199, "at": [4.8, 126.4]},
+    {"tick": 249, "at": [130.2, 29.8]}
+  ]
+}

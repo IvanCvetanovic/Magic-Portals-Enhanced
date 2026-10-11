@@ -1,0 +1,41 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-18 (wave 4a, round 1, on the build with R23's tap rules, G9, G1, the stones and WAKE): crate_ent_883 is the weight for button_687, which holds door_lift_671 open",
+    "(a lift door stays up only while its switch is held, step 133), and two pillars stand between the spawn and the door: wall04_ent_880 hangs from the ceiling to y 174 (x 372 to 436)",
+    "and wall04_ent_881 stands on the floor to y 160 (x 488 to 552), too tall to walk round or over. The player cannot jump, so the level is four portal pairs: the player up onto",
+    "the block he stands beside, the crate onto the button, the player past the first block, the player over the standing pillar. Won on tick 422; 8 shots, none failed, medal 2,",
+    "no achievement (1-18 has no rule of its own). Leans on: a portal carries the crate (teleportable) and the player alike, the tap-time ray that ends at the first body, and the lift door's latch.",
+    "Pair 1, the player onto block00_ent_882 (x 64 to 128, top y 162): a shot to (112, 130) (tap 28, placed on 50; a ray from the spawn at x 157 has to clear the block's top corner (128, 162), so the point is over the block,",
+    "and x 104 to 120 holds), then one on the player (tap 57, through on 59): he falls the 14 units onto the block and stands at (112, 144.4).",
+    "Pair 2, the crate onto the button: the far portal FIRST, a shot to (288, 100) over the button (tap 86, placed on 137), then the near one, a shot to (40, 160) 6 units over the crate's top",
+    "(tap 138, placed on 155): the crate is inside the second portal's 14 units as it opens and goes through on 155. An entry is an edge, so a portal that opens on a body already in it",
+    "never carries it; the near portal after the far one is the only order that works (tried the other way round the crate never moved). It comes out of (288, 100),",
+    "falls onto the button (the lift's door_opened on 164) and rests on block00_ent_826 from 195, which holds the lift open for the rest of the level. The near portal's y holds from 152 (below that it is out of the crate's reach) and its x from 20 to 60.",
+    "Pair 3, the player past the block: a shot from the block top to (343, 50) (tap 167, placed on 239; 250 units, the longest flight), a ray that passes 20 units over the crate, which now fills",
+    "x 259 to 317 up to y 104 (a lower point is a ray into it), then one on the player (tap 241, through on 243): he comes out at (343, 50) and falls to the floor between the block and the hanging pillar",
+    "(landing on 261, x 343). He walks right from 266 to x 390.6, under the hanging pillar (his head is at y 188 against its 174), and stops there; the camera is within 0.4 of still by tick 298.",
+    "Pair 4, over the standing pillar: a shot to (520, 135) (tap 298, placed on 339), a ray that passes 7.3 units under the hanging pillar's right corner (436, 174) and 7.3 over the standing pillar's",
+    "left corner (488, 160), and the point holds from x 496 to 532 and from y 119 to 143 (a ray from this spot through that slit); then one on the player (tap 341, through on 343):",
+    "he comes out at (520, 135) and falls onto the pillar's top at y 160, walks right from 346 off it, drops into the gap between it and the lift (the two crystals at x 576 on 360 and 362),",
+    "walks on under the open door (it has been fully up since tick 204) and into door_ent_484 on tick 422.",
+    "Margins: each tap moved alone holds 3 ticks either way (tap 3 two earlier, tap 2 two later), because each waits the 25 ticks the one before it needs; the first walk starts anywhere from 258 to 270 and ends from 280 on, the second starts up to 8 ticks earlier (he walks into the portal) or later. The player is never",
+    "outside the camera's view; the only jumps are the three portal traversals."
+  ],
+  "level": "level17",
+  "win_by": 435,
+  "holds": [
+    {"walk": "right", "from": 266, "to": 284},
+    {"walk": "right", "from": 346, "to": 520}
+  ],
+  "taps": [
+    {"tick": 28, "at": [112, 130]},
+    {"tick": 57, "at": [157, 206.4]},
+    {"tick": 86, "at": [288, 100]},
+    {"tick": 138, "at": [40, 160]},
+    {"tick": 167, "at": [343, 50]},
+    {"tick": 241, "at": [112, 144.4]},
+    {"tick": 298, "at": [520, 135]},
+    {"tick": 341, "at": [390.6, 206.4]}
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-22 (wave 4a, round 1 of the routes for the levels that had none; golden score 4 portals). block00_no_emissive_ent_1715 (x 192 to 256, up to y 114)",
+    "shuts the start platform off from moving_platform_1716 (x 256 to 320, speed 0.4, stride 110: it starts 110 down, top y 248, rises to the door platform's",
+    "height, top y 138, on about tick 236 and on to y 28), and door_lift_1721 (x 353 to 383) shuts the corridor to the door until button_1723, in the",
+    "chamber under the door platform, is pressed; rolling_stone_1720 stands 50 units right of it. Four portals, far first and near second, twice.",
+    "A portal at (288, 80) (tap 28, placed on 106: the ray rises over the block's corner) and one on the player (109, carried on 111) put him down over",
+    "the moving platform; he lands on it on 130 (taking crystal_ent_1728 on the way) and rides it up. From it the chamber is open under the door",
+    "platform's left end: a portal in the air over the button at (386, 204) (tap 138, placed on 163; the stone's exit: the chamber is 64 high, the stone 60)",
+    "and one in the stone (tap 174 at (436, 204): the ray ends 10 units inside it, at (416.6, 199.4), placed on 209). The stone goes in on 209 and comes",
+    "out over the button, which is pressed, and door_lift_1721 opens on 210 (to y -28.4 by about 244). Right is held from 210: he stands against the",
+    "door platform's left face (x 311.8 on 221) while the moving platform lifts him and steps across on 244, takes crystal_ent_1729 and _1730, walks",
+    "under the raised door and reaches the door on tick 289 (4 shots, aim drift at most 0.16 px, never out of the view). Unlocks achievement 64, Alone in",
+    "the dark I (the level in the dark, with the golden score: medal 3, 4 portals, 4,624 ms), and all 3 crystals. No knight, and the stone is sent from 150 units",
+    "away. Margins, each measured by moving the file: the hold's start 150 to 225 wins on 289 (235 on 297, 245 on 306, 255 and later is not won); the taps",
+    "after the first move together 3 earlier to 12 later (from the third on, 16 later; 18 is not won) and the last alone 6 earlier to 12 later; the first",
+    "tap's point x 258 to 298 and y 50 to 95, the third tap's x 362 to 404 and y 184 to 216, the fourth's x 416 to 456 and y 184 to 224 all win. The first tap is",
+    "2 ticks over the 400 ms floor (26 ticks of 16 ms); the later ones follow the last shot's landing by 3 ticks or more and the tap before it by 26 or more."
+  ],
+  "level": "level21c",
+  "win_by": 300,
+  "holds": [
+    {"walk": "right", "from": 210, "to": 310}
+  ],
+  "taps": [
+    {"tick": 28, "at": [288, 80]},
+    {"tick": 109, "at": [32, 158.4]},
+    {"tick": 138, "at": [386, 204]},
+    {"tick": 174, "at": [436, 204]}
+  ]
+}

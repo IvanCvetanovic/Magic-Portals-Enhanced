@@ -1,0 +1,22 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-05, weightless (round 1 of wave 4a, on the build with the original's time base, the portal tap and the zero-g recoil): wall04 (x 240 to 304, down to y 166) and the shock agent's ring",
+    "(shock_agent_ent_2133, areaRadius 52, at (272, 208)) close the way to the door at (368, 190) for a player who only drifts, so the portals go round them. A portal in the door itself at (372, 205) -",
+    "the door's trigger lies at (368, 210) - is the exit: the first tap goes down on tick 28 (the first tap waits for the 400 ms, 26 ticks of 16 ms), the shot leaves on 29 and flies 49 ticks at",
+    "3.2 u a tick (the decoded projectile, G4) straight through the ring (an area, which stops no shot) and opens the portal on tick 78. Its recoil, 139 u/s away from the tap",
+    "(step 148), carries the player left and a little up at constant speed to (77.3, 143.0) by the release of the second tap on tick 81. That tap may only follow once the first has landed (a tap",
+    "released on 77 or earlier is refused as a shot in flight): it is put 2.7 units behind him, so the portal it opens is the entry he stands in, as 4-02's second tap is, and he goes through on",
+    "tick 82 and comes out in the door; the door is reached on 83 and the level won. Margins, each measured by moving one number of the file: the exit's x 360 to 382 wins (358 dies on 91: he leaves",
+    "the trigger the tick after the traversal), its y 165 to 240; the entry tap's x 58 to 94 and y 123 to 163 (a point 26 or more ahead of him leaves the portal in front of a player who never",
+    "reaches it, one 18 or more beyond 94 behind him out of his reach: he drifts out of the level and dies on tick 112); its down tick 77 to 86 (76 is refused). Leans on the zero-g recoil (step 148), G4's flight",
+    "(step 149) and R23's tap rules (step 156: the destination is the tap-time ray's finalPos). Won on tick 83. Unlocks no achievement (medal 1, 2 portals, 1,328 ms). Not measured on the original: the entry portal opened on the player's own spot (as 4-02's is)."
+  ],
+  "level": "level4c",
+  "win_by": 95,
+  "holds": [],
+  "taps": [
+    {"tick": 28, "at": [372, 205]},
+    {"tick": 80, "at": [80.0, 142.5]}
+  ]
+}

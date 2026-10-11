@@ -1,0 +1,41 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-26, a route for the level that had none (wave 4a, round 1; build f20f0a4, WAKE). The door (428, 48) stands on platform_ent_1214,",
+    "behind door_lift_1043 (x 293 to 323, y 1 to 127): any ray from the ramps into the room above that platform crosses the door's span, so",
+    "no portal can be opened there until it is up. It rises 102.4 units while button_1044 (480, 230, on single_block_plat_ent_1075) is",
+    "pressed and falls when it is let go (step 133). The player cannot reach the button; a stone can. The launcher at (102, -42) sends a",
+    "stone down the shaft at x 102 every 156 ticks (it meets the ramp on ticks 191, 347 and 503), and each one rolls down the ramps and out",
+    "of the level. A portal over the button's block at (446, 180), shot from the start across the room (tap 40, in place on 164: the ray",
+    "passes 12 units under single_block_plat_ent_1041 and 27 over single_block_plat_ent_1076), and one in the shaft at (102, 100) (tap 230,",
+    "in place on 256, after stone 1 has gone by): stone 2 goes in on tick 332 and comes out of the first moving up, stops under the",
+    "platform, falls onto the right chamfer of single_block_plat_ent_1076 (345), rolls on to the block under the button and stops against the",
+    "wall at x 482 (asleep on 427). The button is pressed from tick 358, the door is up by 402, and the resting stone holds it there. A shot",
+    "through the doorway to (355, 76) (tap 392, in place on 492: the ray crosses the doorway at y 90, and the platform's corner (324, 96)",
+    "10 units under it) and one on the player (tap 500, through on 502): he comes out on the platform at (355, 78) and walks right into the",
+    "door (hold from 504, door on tick 529). The player never leaves the start block: the stones roll away from him (stone 3 meets the ramp",
+    "at x 110 on 503). 4 shots, none failed, medal 1 (8464 ms), no achievement (id 11 wants 8 stones alive at the door).",
+    "STANDS ON THE PORT'S OWN BODY PHYSICS, not measured on the original: the stone comes out of the portal moving up, is stopped 12 units under",
+    "platform_ent_1214 by the engine's contact brake (a Box2D stone would meet the platform with its speed), falls on the chamfer and rolls to the",
+    "wall at x 482 where it falls asleep on the button. So B's x window below (440 to 454) and the stone's end place are the port's; whether the",
+    "original's stone ends on the button the same way is a row for the final comparison.",
+    "WINDOWS (each measured with the others held): tap B 25 to 106 (the 400 ms from the level's start ends on tick 25; after 106 tap A meets",
+    "the first shot in flight); tap A 164 to 310 (before 164 it is in flight at B's landing, after 310 stone 2 has gone by before it lands);",
+    "B's aim x 440 to 454 at y 160 to 200 (x 436 and less lands the stone on the flat of block 1076, where it falls asleep on 373, the",
+    "button stays up and the shot at the doorway ends on the closed door; x 456 or more is off the view); tap C 370 to 400 (before 370 the door",
+    "still crosses the ray, after 400 tap D finds the shot in flight); C's aim x 325 to 375 at y 66 to 88 (y 92 at x 360 or more ends on the",
+    "platform's corner at (324, 101); x 385 is a flight too long for tap D at 500, and (400, 60) is the restart button's corner of the screen);",
+    "tap D from 491 on (the tick the shot is in place) and the walk from 498. Aim drift 0.001 px."
+  ],
+  "level": "level25",
+  "win_by": 541,
+  "holds": [
+    {"walk": "right", "from": 504, "to": 541}
+  ],
+  "taps": [
+    {"tick": 40, "at": [446, 180]},
+    {"tick": 230, "at": [102, 100]},
+    {"tick": 392, "at": [355, 76]},
+    {"tick": 500, "at": [30, 174.3]}
+  ]
+}

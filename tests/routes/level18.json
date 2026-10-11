@@ -1,0 +1,33 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-19: the door sits in a pocket (x 416 to 512, floor y 410) shut by platform_ent_730 on the left, the level's wall on the right and breakable_wall_731 across the top; only the rolling stone, falling on that wall from above,",
+    "breaks it (a hit of 1.5 or more), and a player cannot get past platform_ent_730 (top y 234) except through a portal. Three pairs, six shots, no failed one.",
+    "Pair 1, the stone: a portal in the air above the wall at (450, 182) (tap 30; a point a few units higher is under the pause buttons, which take the tap), then one on the stone at (224, 286) (tap 75,",
+    "the shot ends 10 units into it at (243, 282)): the stone goes through on 94, comes out over the wall, breaks it on 109 (hit 3.99) and falls into the pocket onto double_block_plat_ent_811 (hit 7.66), resting there from 164 at x 450.",
+    "Pair 2, the player: a portal over platform_ent_730's flat top at (398, 185) (tap 106; any x from 394 to 402 and any y from 160 to 200 wins; the line from the start clears the post's chamfered corner), then one on the player",
+    "at (321, 264) (tap 138): he goes through on 140 and lands on the post's top at (398, 216.4) on 149. Right for 4 ticks (152 to 155) to x 407.6; a stand beyond x 414.6 slides off the chamfered corner into the pocket (the window",
+    "of final x for the last shot is about 401 to 412).",
+    "Pair 3, the stone out again: the stone lies on the door (a stone 60 across in a pocket 96 wide covers x 446 to 482 at the most, and the door's trigger is x 458 to 466 plus the player's 9.1 on each side), so a portal in the air",
+    "at (330, 170) over the start ledge (tap 173) and then one on the stone's top at (442, 340) (tap 208: the view of a player standing on the post ends at y 344.4, and a point from x 449 on or from y 344 is on the walk pad; its",
+    "first ray meets the post's corner and the head-height retry carries it): the stone goes through on 242, comes out at (330, 170) and falls on the ledge to rest. Right from 243: he walks off the post's edge, takes crystal_ent_1073 on 254,",
+    "lands at x 446 on 269 and is in the door on 271.",
+    "THIS ROUTE STANDS ON A PORT GAP. rolling_stone_728 carries `destroyable` 1, and in the original the wall it breaks destroys the stone too (ETHBeginContactCallback_breakable_wall #42-60; planning step 109, deviation 1; backlog order 11.1),",
+    "so the pocket would be empty after pair 1 and pair 3 would not be needed (and its portal at (442, 340) would hang in the player's fall). The port keeps the stone, which seals the door, so this route removes it by play. If that row is built,",
+    "drop the last two taps (173, 208) and the walk's second half. Won on tick 271; every tap's tick can move 4 ticks either way, the 4-tick walk's start or end 2, and no achievement is unlocked."
+  ],
+  "level": "level18",
+  "win_by": 285,
+  "holds": [
+    {"walk": "right", "from": 152, "to": 155},
+    {"walk": "right", "from": 243, "to": 285}
+  ],
+  "taps": [
+    {"tick": 30, "at": [450, 182]},
+    {"tick": 75, "at": [224, 286]},
+    {"tick": 106, "at": [398, 185]},
+    {"tick": 138, "at": [321, 264]},
+    {"tick": 173, "at": [330, 170]},
+    {"tick": 208, "at": [442, 340]}
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-25, a route for the level that had none (wave 4a, round 1; build f20f0a4, WAKE). The door room - the door at (63, 80) and its",
+    "crystals, above double_block_plat_ent_918 (x 0 to 128) - is sealed: that platform, breakable_wall_922 (x 126 to 254) and the post",
+    "platform_ent_1138 (x 254 to 286, up to the ceiling) close it, so no shot from the bridge can open a portal inside it. The level's",
+    "own tool is the launcher at (454, -42): a stone down the shaft right of the bridge, the first one reaching y 200 on tick 120, the",
+    "next every 92 ticks or so (the help block's picture says it: a stone goes into one portal and comes out of the other). A portal",
+    "across the shaft at (454, 200) (tap 30, in place on 77) and one in the air under the wall at (190, 180) (tap 84, in place on 114):",
+    "the first stone goes in on tick 121 and comes out of the second with its velocity turned back (transit.json), up, and breaks",
+    "breakable_wall_922 on tick 122 (impact 8.67 against the 1.5 a wall needs); it falls to the bridge and sleeps at (190, 226) on",
+    "168, clear of the way. Through the hole, a shot over the platform's right end to (116, 114) (tap 130, in place on 191, a flight of",
+    "60 ticks: the ray passes the platform's corner (128, 128) by 6 units) and one on the player (tap 196, through on 198): he comes",
+    "out at (116, 116) on the platform and walks left into the door (hold from 200, door on tick 217). 4 shots, none failed or",
+    "wasted, medal 2; no achievement (1-25 has no rule of its own).",
+    "WINDOWS (each measured with the others held): tap A 25 to 38 (the 400 ms from the level's start ends on tick 25; after 38 tap B",
+    "meets the first shot in flight); tap B 76 to 91; B's y 160 to 202 (from 203 down the stone rises one step of 14 units and stops",
+    "short of the wall's face: the port's contact brake stops a fast body some 9 to 13 units before a surface, where a stone would",
+    "reach it; in open air the same stone rises on to the ceiling); tap C 125 to 136 (before 125 the stone is on the ray, after 136",
+    "tap D finds the shot in flight); C's aim x 110 to 127 at y 111 to 120 ((112, 122) meets the platform's corner; y below 110.4 is off",
+    "the view); tap D from 190 on, and the walk from 194 on. Aim drift 0.003 px."
+  ],
+  "level": "level24",
+  "win_by": 230,
+  "holds": [
+    {"walk": "left", "from": 200, "to": 230}
+  ],
+  "taps": [
+    {"tick": 30, "at": [454, 200]},
+    {"tick": 84, "at": [190, 180]},
+    {"tick": 130, "at": [116, 114]},
+    {"tick": 196, "at": [290, 238.4]}
+  ]
+}

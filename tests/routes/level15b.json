@@ -1,0 +1,47 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-16, authored in wave 4a, round 1. Won on tick 1090 with all three knights alive, which unlocks achievement 33 at the door (it asks for exactly three minion.ent left).",
+    "Ten shots, none refused or wasted, and no shock diamond strikes a knight. The corridor's floor is shut by two stone blocks (block00_low_emissive_1749, x 480 to 544, and _1750, x 640 to 704, tops at y 162),",
+    "by the lift door at x 383 to 413 (raised for 6 s by button_1737 at x 339 to 365: no tap on it) and by knights; the player cannot jump, so he is carried over each obstacle the way F14 shows the original",
+    "does at this level's start: a portal in the open air above the place he wants to reach (y 100 is row 0, and a knight sees only the row it stands in), then a portal beside himself.",
+    "Tap 32 at (140, 40): a portal over the double block (shot on 33, in place on 82). Tap 88 at (80, 205), beside him: through on 90, down on the block at x 140, the crystal taken on 100.",
+    "Tap 122 at (350, 100): a portal in the air over the button (in place on 182). Knight B (minion_spawn_913) stands at x 295 until about 365 and then walks left to x 198 (there on ~475): tap 403 at (132, 122), beside him,",
+    "goes through on 405 and lands on the button with B walking away from him. The lift starts rising on 418 and clears his head from about 590: he stands against it from 435 (a bump of 1.44) and walks under it",
+    "to x 424.3 in front of block 1749 (the walk ends on 609). Tap 619 at (500, 100) (in place on 654; from this x the line clears the block's top-left corner at (480, 162), from against its face it does not)",
+    "and tap 664 at (432, 205): through on 666, on to block 1749 at x 501, the second shock diamond taken on 671 (carried, never used: it strikes the first knight within 30 units of it and none comes near).",
+    "Tap 705 at (697, 100): a portal over block 1750's right end (in place on 762). Knight C (minion_spawn_1759) took the key on tick 29 at (778, 207), patrols x 729 to 822 and is at 822 from about 780.",
+    "Tap 772 at (494, 144): through on 774, down on block 1750 at x 697, 25 units from the keyhole (672, 144). Right from 790 to 804: off the block's end, on to the floor at x 731.2, 91 units behind C.",
+    "Tap 814 at (680, 100): a portal in the air over block 1750 (in place on 845). Tap 856 at (822, 206), ON the knight: a portal opens in his body (R23: a minion takes the portal), in place on 878, and he is through it the same tick,",
+    "key and all, out at (680, 100) and down on to the block. The key is within 26 units of the keyhole on 895 (door_unlocked) and in it on 937; keyhole and door_locked_ent_1689 go on 987.",
+    "Left from 858 to 868, against the block's right face (x 712.7): the knight on the block cannot see him there (left standing at x 731 he is sighted on 889 and shot dead on ~953). Right from 990, the door gone:",
+    "out of the block's shade the knight sights him on 1003 and fires once, on 1044, at the spot where he stood; he walks on at 2.4 units a tick, the shot flies at 1.92, and he is in the exit door on 1090.",
+    "TWO THINGS THIS ROUTE LEANS ON ARE NOT MEASURED ON THE ORIGINAL: that a portal opened on a knight carries it through (the decoded R23 rule; 3-10's design has a knight carry a key through a portal), and that a knight set down on the block stays",
+    "there (it asks, on 951, and never walks again: G1a's blocked-way rule, R3c-4, its way ray to the next waypoint meeting the floor it stands on). If the original's knight walked on from the block it would come down on the lane behind him.",
+    "A scratch route that kills knights B and C with the two shock diamonds instead also wins (on tick 1057) and unlocks nothing: achievement 33 asks for no kill.",
+    "Windows (the others fixed, the win and the achievement kept; a tap's window is the ticks it can go on): taps 32 from 25 to 39, 88 from 81 to 96, 122 from 114 to 140, 403 from 391 to 409 (the lift's clock starts when he lands), 619 from 601 to 630, 664 from 653 to 679,",
+    "705 from 690 to 716, 772 from 761 to 788, 814 from 798 to 826, 856 from 844 to 876; the walks: right from 411 to 439 and to 603 to 621, right from 776 to 804 and to 790 to 817, left from 844 to 868 and to 858 to 882, right from 976 to 1004.",
+    "Points: tap 32 x 120 to 150, 122 x 335 to 365, 619 x 486 to 514, 664 x 420 to 444, 705 x 670 to 703, 814 x 656 to 696 (700 is not won), 856 y 196 to 220. A tap before tick 25 is refused (the 400 ms from the level's start).",
+    "Medal 2 (silver): one of the three crystals, 10 portals, 17,440 ms. The aim's drift is 0.63 px."
+  ],
+  "level": "level15b",
+  "win_by": 1103,
+  "holds": [
+    {"walk": "right", "from": 425, "to": 609},
+    {"walk": "right", "from": 790, "to": 804},
+    {"walk": "left", "from": 858, "to": 868},
+    {"walk": "right", "from": 990, "to": 1300}
+  ],
+  "taps": [
+    {"tick": 32, "at": [140, 40]},
+    {"tick": 88, "at": [80, 205]},
+    {"tick": 122, "at": [350, 100]},
+    {"tick": 403, "at": [132, 122]},
+    {"tick": 619, "at": [500, 100]},
+    {"tick": 664, "at": [432, 205]},
+    {"tick": 705, "at": [697, 100]},
+    {"tick": 772, "at": [494, 144]},
+    {"tick": 814, "at": [680, 100]},
+    {"tick": 856, "at": [822, 206]}
+  ]
+}

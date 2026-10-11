@@ -1,0 +1,26 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-01, wave 4a round 1, on the build that has the portal tap (R23), the reflector, the knights that see and shoot, the stones that kill and the sleepers that wake. Walked and flown: three portal hops over a level the player cannot jump and whose steps he cannot climb (a 22 unit step stops him: the walk right ends against the 640 block at x 631.8).",
+    "A pair is shot far first, near second: the far portal is shot and lands, then a portal is shot on the player, and he is carried through when THAT second portal opens (a body already standing in a lone portal when the far one opens is not carried: a first try that shot the near one first stood in it for ever). A pair is gone once it has been used. Each tap waits for the one before to land and for the 400 ms (26 ticks: the fifth tap, on 346, is 32 after the one before it, and 340 is the earliest tick that is not refused).",
+    "Hop 1 over the 78 unit gap and the killer floor (x 372 to 450): right from the start, off the first platform onto the knight's platform and off that onto the low one (landing on 93); the hold ends on 117 at x 340.3, 32 units short of the edge. A portal on the far floor at (484, 206) on 134 (lands 173; the ray from the player clears the far block's corner at (450, 224) by 15), one on the player at (341, 206) on 180: carried on 182. Right again from 186 to x 596.8 (the hold ends on 230), under the hanging wall (his head at 188, the wall's bottom at 160).",
+    "Hop 2 up the steps (22, 22 and 32 units, which he cannot climb): a portal 26 over the top of the 768 block at (800, 122) on 245 (lands 309: the ray clears the 640 block's top by 13 and the 768 block's face by 12), one on the player at (598, 206) on 314: carried on 316, falls onto the block (x 801, y 130.4). Hop 3 to the door's platform, whose left end is 92 units off and 16 higher: a portal over it at (950, 114) on 346 (lands 387), one on the player at (800, 128) on 392: carried on 394, stands on the platform at x 950 and walks right 26 units into the door (hold from 396). Won on tick 407 (13 inside win_by).",
+    "THE KNIGHTS (planning steps 158 and 159). MEASURED: one sighting, knight 913's exclamation on tick 62 (the run's one enemy_spotted), and no enemy_shot, no knight killed and no portal lost (six placed, all three pairs used). The one exposure is that knight, which holds for ever on the platform he lands on (tick 64) and looks along row 1: its first shot is due on tick 127 (its 2000 ms dwell clock) and only if he is still in its sight then. He is on its platform from tick 64 to about 80; a probe that stopped him on that platform after landing was unshot for pauses up to 39 ticks and shot at 127 from 40, so the route has about 39 ticks in hand there. READ FROM THE GEOMETRY, NOT MEASURED: knight 1811 patrols above the steps in row 0 (its y is 121) and looks along row 0 only, over three 128-unit buckets of its facing. It faces left from its first tick (it walks left to its post near x 515, bucket 4, and holds 4000 ms) and so looks at x 256 to 639 only: the start platform and his fall (row 0, x 72 to 210, ticks 1 to 63) are outside that. It walks right at about tick 300 and holds at x 547 facing right (buckets 4 to 6, x 512 to 895): the portal at (800, 124) (row 0, bucket 6, open from tick 309 to 316) is then in its reach, and the hanging wall at x 560 to 624 (y -96 to 160) lies across the ray. He is in row 1 (centre y 136 to 206, then 130.4 on the 768 block) from tick 70 to 394, which it never looks along, and in row 0 again only on the door's platform (centre y 114, x 950 on, bucket 7, past its buckets 4 to 6); the far portal at (950, 116) is in bucket 7 as well. The ray from knight 913 to him on the lower platforms crosses its own platform's body.",
+    "Margins: every tap and every walk edge moved 6 ticks either way (a script, out/parity/program/R4/r1_3-01/sweep.py) and the level was still won, bar the first walk's start (tick 1, which cannot move earlier); the fifth tap is the one with a floor, 26 ticks after the fourth. No DEV flag, PutPlayer or skipped tick. Achievements: none. The door gives medal 2 (six portals against the golden score 6, but three of the level's six crystals); a gold needs every crystal and this route does not collect them."
+  ],
+  "level": "level0b",
+  "win_by": 420,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 117},
+    {"walk": "right", "from": 186, "to": 230},
+    {"walk": "right", "from": 396, "to": 420}
+  ],
+  "taps": [
+    {"tick": 134, "at": [484, 206]},
+    {"tick": 180, "at": [341, 206]},
+    {"tick": 245, "at": [800, 122]},
+    {"tick": 314, "at": [598, 206]},
+    {"tick": 346, "at": [950, 114]},
+    {"tick": 392, "at": [800, 128]}
+  ]
+}

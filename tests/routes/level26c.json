@@ -1,0 +1,34 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-27 (wave 4a, round 1): the door stands in the room under the start platform, shut in by light_wall_ent_1859 (368, 160), 30 x 126, which only the torch (146, 42)",
+    "takes away. The torch can be shot from the start platform or from the air over its left end and from nowhere on the floor (the line to it meets the underside of",
+    "platform_no_emissive_ent_1900, y 128). This is the level of achievement 75, 'Turn lights off, please II', and the route is won that way: light the torch, take the",
+    "wall, walk through, and put the torch out again before the door. The rule (listing #1777-1816) reads the game state and a light_off.ent standing; the original's rule",
+    "tests no medal, which its description does, and none is tested here: the five crystals are not taken (medal 1, 0 portals).",
+    "A shot at the torch (tap 30, away on 31, lit on 99: the torch's 24 px reach) starts the wall's 1500 ms and it is gone on tick 193. The level is lit from 99, so the",
+    "two knights (minion_spawn_1766 at x 167, minion_spawn_1902 at 209, on the floor, row 1) see, but only their own row, and the player on the platform (row 0) is unseen",
+    "until he drops into it. Left along the platform from 136 (the edge, x 318.5, on 173), a drop of 160 units (down on 189 at x 297, the right hold of 184 does nothing",
+    "in the air) and right from 191: the centre crosses the wall's gap, x 353 to 383, on 215 to 227. The knights spot him (B 186, A 194) and stand still; one shot is made",
+    "(B, 227, over 216 units at 2 a tick, so it ends about tick 335 on the spot he left) and he is in the door on 249. A second shot at the torch from the air over the",
+    "platform's left end (tap 184, away on 185 at y 134.8, where the ray is blocked and the head-height retry ends it at the intended (146, 42)) meets the flame on tick",
+    "233 and puts it out: the level is dark again, both knights are blind, and the wall is built again behind him, his body 6.9 units clear of its face (x 383, he is at",
+    "397.5). Won on tick 249 with achievement 75, 2 shots, nothing refused or wasted, the player never outside the view.",
+    "Margins. The put-out must come after he has passed the wall: a tap on 183 builds it on 230 with his body 0.3 units into the face (no push follows; won, 75), 177 to 182",
+    "build it into him and the engine pushes him through (won, 75, a tick or more earlier), 176 builds it on 219 at x 368 or less and traps him. The tap must be released",
+    "by 186: a tap on 186 or later is a red_cross on the platform (a wasted shot, no 75, still won on 249). The left walk may start on 135 to 139 (134 or earlier is the same",
+    "red_cross), and its end on 172 or later; the right hold on 176 to 191; the first tap on 25 to 40 (60 or later finds the wall still up). Not measured on the original:",
+    "the wall built where a body has just left it, and a knight's shot ended on a spot its target has left. Leans on the torch, its signal and its wall (sim/Torch), G1a",
+    "(the knights see only a lit level and only their row), the head-height retry (R23), G10 and G4."
+  ],
+  "level": "level26c",
+  "win_by": 261,
+  "holds": [
+    {"walk": "left", "from": 136, "to": 176},
+    {"walk": "right", "from": 184, "to": 400}
+  ],
+  "taps": [
+    {"tick": 30, "at": [146, 42]},
+    {"tick": 184, "at": [146, 42]}
+  ]
+}

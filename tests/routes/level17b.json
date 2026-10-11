@@ -1,0 +1,30 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-18 (added in wave 4a, R4 round 1). The yellow key is carried from tick 1 by knight A (minion_spawn_1811), which patrols x 187-275 on the floor of a pit under the level's low ceiling, and the keyhole (264, 134) is on the start block's far side: so the key has to be freed from A and",
+    "brought back up by the level's own pieces, a shock diamond and a portal pair, in a pit the player can only leave by a portal. THE WAY: left off the start block (1-20: he lands on single_block_plat_2089 at (175.8, 201.2) on tick 27) and a portal in the air over the shock diamond",
+    "(80, 288) on the far ceiling, 90 units off across the 24-unit shaft between the two ceilings (tap 55 at (90, 283), placed 86), then one on the player (tap 95, through on 97): he stands on double_block_plat_2091 beside rolling_stone_2090 (asleep, its nearest point 28 units from him, and never touched)",
+    "and takes the diamond on 98. A pan - a drag 130-141 that moves the view up 100 units (camera.json drag: the finger down 50 units pans the view up 100, and the follow waits 4 s unless he walks or goes through a portal) - shows the start block's sky: a shot to (214, 100)",
+    "(tap 150, placed 214; the ray passes 28 units above the start block's corner) waits there for the way back. Right at 270 off 2091's end and down the shaft (x 118.6, landed 288): knight A holds at x 187 facing him and spots him on 286, but he walks right at once and the diamond, trailing him,",
+    "strikes A on 314 (30 px; the diamond is spent, and A is dead 11 ticks before its shot would be due, 650 ms after the sighting) and he takes the key on 315. A portal on the player (tap 320, at (177.4, 364.4), through on 322) pairs with the waiting one and he comes out at (214, 100), lands on the start block (331)",
+    "with the key and walks right: the key opens keyhole_ent_2071 as he comes within 26 px (door_unlocked 363, key into the keyhole 405; the keyhole and door_locked_ent_2070 are gone on 455). He stands against the door from ~370 and walks on through the gap along the platform into the door: won on tick 520.",
+    "Four shots, none failed or wasted; medal 2 (4 portals, 8.3 s); no chapter achievement; knight A's sighting is the only one (B, far at x 23, never sees him). THE DESCENT is timed by the pit's patrols: A's round is 240 ticks, at its left end (x 187, holding) on ~280-310 and at its right end (275) on ~160-190;",
+    "B (x 23-95) is at its left end on ~280-320 and at x 88-95 on ~160-200 and ~395-440, and a diamond carried down while B is within 30 px of the shaft's foot would strike B and be spent: the walk's start can be any of 264 to 277 (the end at 312). Every tap and walk edge was moved 1 to 4 ticks and all win;",
+    "the first tap is good from 30 to ~65, the pan from 105 to ~135, the shot to (214, 100) from 150 to 230 or later (it lives 20 s) and the self tap from 316 to ~350. The player is outside the 455 x 256 view for 5 ticks at most (the portal arrival, 322-326). Leans on G4's flight, R23's tap-time ray",
+    "(the shots end in free air, no contact), the camera's drag pan (step 138), the knights' sight and shot (A is dead before it fires), G10's walk (a step off the ceiling's end falls into the shaft), the shock diamond (30 px, spent on its strike, Diamonds.cpp) and a key following its carrier through a portal (Keys.cpp)."
+  ],
+  "level": "level17b",
+  "win_by": 535,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 20},
+    {"walk": "right", "from": 270, "to": 312},
+    {"walk": "right", "from": 345, "to": 600}
+  ],
+  "taps": [
+    {"tick": 55, "at": [90, 283]},
+    {"tick": 95, "at": [175.8, 201.2]},
+    {"tick": 130, "release": 141, "at": [300, 250], "to": [300, 300], "shot": false},
+    {"tick": 150, "at": [214, 100]},
+    {"tick": 320, "at": [177.4, 364.4]}
+  ]
+}

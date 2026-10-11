@@ -1,0 +1,33 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-28 (wave 4a, R4 round 1; no route before): four portals, two hops, no knight and no stone. The key lies at (320, 160) on the block (320, 192) under",
+    "shock_agent_2128's ring (radius 36, its centre swinging 128 + 64 cos(1.8 x 0.016 x tick) on the vertical axis): the ring leaves the block's top clear from",
+    "tick 58 to 160 of each 218-tick turn and sweeps it from 160 to 276, and this route stands on the block for ticks 127 to 136 only (the ring's centre is",
+    "at y 75, 83 units above him). A portal in the air over the block at (332, 124) (tap 25: a tap on 22 is refused by the 400 ms; the shot leaves on",
+    "26 and opens on 113: the ray from the player clears the block at (224, 160) by 11 units and the moving platform at (160, 144) by far) and one on the",
+    "player (tap 118, after the first has opened): he comes out at (332, 126) on tick 120, falls onto the block, takes the key on 124 (26 units of pickup)",
+    "and walks right off the block's edge (x 352) onto the block (384, 240), where he stops at x 368 on tick 143, 48 units from the ring's axis and 150 from",
+    "the static ring at (448, 76). A portal at (556, 165) over the block (546, 208) (tap 146, the first tap 26 ticks after the last: the ray runs under the",
+    "moving platform (448, 176), whose centre is 141 that tick, 25 units over the ray, and the shot opens on 200) and one on the player (tap 200): out at",
+    "(557.5, 167) on 202, 15 units from the keyhole (572, 170), which takes the key on 203. The yellow door (608, 128) is gone on 296, 93 ticks later (the",
+    "keyhole's one-second fade and half-second fade-out): he walks on to the door's edge (x 584.7) and waits there, then over the block (608, 224), down",
+    "onto the double block (704, 240) and into the exit door. Won on tick 340 with 4 portals (the golden score is 6): no achievement. The first walk",
+    "stays on the block (320, 192) for 10 ticks and has left it 24 ticks before the ring comes back to its top (160). Windows, each tap alone with the rest as written: the first shot 25 to 31",
+    "(32 puts the self tap into its flight), the self tap 112 to 120, the second shot 144 to 147 (the 400 ms before it; the last tap would be in its flight after) and the last tap 200 to 206;",
+    "both walks' edges move 3 ticks each way and win. Leans on G4 (the shot's flight: 3.4 u a tick),",
+    "R23 (the tap-time ray), G3 (the platforms' swing and the ring's) and G10 (the walk 2.4 u a tick)."
+  ],
+  "level": "level27b",
+  "win_by": 352,
+  "holds": [
+    {"walk": "right", "from": 125, "to": 142},
+    {"walk": "right", "from": 204, "to": 345}
+  ],
+  "taps": [
+    {"tick": 25, "at": [332, 124]},
+    {"tick": 118, "at": [32, 150]},
+    {"tick": 146, "at": [556, 165]},
+    {"tick": 200, "at": [376, 215]}
+  ]
+}

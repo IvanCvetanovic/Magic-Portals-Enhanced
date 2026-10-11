@@ -1,0 +1,37 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-21 (level20b), wave 4a round 1: won by sending all three knights through portals to the keyholes their keys open (or into the pit), in 843 ticks.",
+    "The player starts in a pocket (x 290 to 352) on the top platform, shut in by a block, the ceiling and a wall that hangs to y 128. Every way on is a door a knight's key opens, and a key opens a keyhole within 26 units of it: the blue door at x 128 (keyhole (78, 202), knight B's key), the yellow door at x 400 (keyhole (368, 144), knight A's key) and the yellow door at x 640 (keyhole (602, 114), knight C's key) in front of the exit. So each knight is sent through a pair: the exit portal first, then a portal tapped on the knight, which is inside it at once. Both ends are spent on a traversal (the player's hops too).",
+    "Six of the twelve shots (27, 315, 371, 521, 674, 744) clear a block or a platform only by the head-height retry (R23, planning step 156: the ray from 30 units over his head); the tap's point is where the shot ends, and a portal tapped on a knight opens 10 units past its contact.",
+    "B (top platform, patrols x 122 to 206, holds at 199.7 for 2,000 ms facing right): a portal at (105, 62) over the block (tap 27, open on 91) and one on the player (93): he comes out at the platform's left end (traversal 95), behind B. A portal at (62, 200) in the strip left of the platform (121, open on 155) and one on B (159): B turns left at the end of its hold and sights him on 161 (the one sighting of the run; its shot gate is 39 ticks) and is through on 183, before the shot is made. It comes out 2 units past the floor's end (x 64), the blue key opens its keyhole (door_unlocked 185) and B falls into the pit (minion_fell 221, enemy_killer); the blue door is gone on 277.",
+    "Left off the platform's end (203-207, he lands at (86, 206)), right to x 183.2 (264-310): the strip between the blue door and the 64-high block at x 192 to 256, whose body stops every ray of A's sight, so A never sees him there.",
+    "A (floor, x 279 to 362; holds at 361.7 facing right from 313 to about 565): a portal at (345, 150), 23 from its keyhole (tap 315, open on 363), and one at (375, 206), 17.5 from A's body (371, open on 425): A is through on 425 with its key 23 from the keyhole (door_unlocked 427) and lands at (345, 217); the yellow door at 400 is gone on 519.",
+    "Into the room beyond that door (x 416 to 448): a portal at (428, 188) (tap 521, open on 592; not (430, 200), which the walk pad in the view's bottom-right corner takes: a tap inside 64 units of that corner is its) and one on the player (594): he arrives on 596. A walks back left from 565 and holds at x 279 facing left, so it cannot see the room until it turns right at the end of its hold, on 813.",
+    "C (right floor, patrols x 546.6 to 655; holds at 546.6 facing left from about 600 to 790): from the room, over the 64-high block at x 448 to 512, a portal at (577, 122) at the left end of the platform in front of the keyhole (tap 623, open on 671; C's key is 24.4 from the keyhole there), and one at (546.6, 196.5), 20 over C's head, which overlaps its body (tap 674, open on 705): C is through on 705 (door_unlocked 707), slides off the platform's end and lands on the floor at x 571 by 742; the yellow door at 640 is gone on 799.",
+    "The last pair: a portal at (606, 118) on the platform (tap 744, after C has landed: the ray ends on the first body, so a falling knight in the line moves it; open on 800) and one on the player (801): he comes out on 803 at (606, 120) beside the door that is gone, and walks right to the exit at x 714.",
+    "Won on tick 843. He leaves the room on 803, ten ticks before A could sight it, and no knight fires in the run (B's shot would be made on 200 and B is gone on 183). Windows (scratch variants, each its own replay): every stretch of the file moved on its own by -2 to +3 ticks wins on 841 to 846 (-3 fails only at taps 27, 121 and 801, which are 1 to 3 ticks over their gates), later by 30 ticks wins on 873, and every tap's point moved by 1.5 units either way wins; B's turn at 160 and C's hold from 600 to 790 are the clocks it keys on.",
+    "Leans on R23 (the tap-time ray and the retry, step 156), G1a and G1b (the knights' row, buckets and occluding ray, and a shot 39 ticks behind a sighting, steps 158 and 159), G10 (the walk is 144 u/s, the air brake of the drop), G4 (the shot's flight) and the step 153 capsule. Not measured on the original: B falling into the pit from 2 units past the floor's end (the port's circle slides off the edge), and a knight inside a portal that opens 20 units above its body. Unlocks no achievement."
+  ],
+  "level": "level20b",
+  "win_by": 855,
+  "holds": [
+    {"walk": "left", "from": 203, "to": 207},
+    {"walk": "right", "from": 264, "to": 310},
+    {"walk": "right", "from": 802, "to": 900}
+  ],
+  "taps": [
+    {"tick": 27, "at": [105, 62]},
+    {"tick": 93, "at": [327, 78.4]},
+    {"tick": 121, "at": [62, 200]},
+    {"tick": 159, "at": [196, 89]},
+    {"tick": 315, "at": [345, 150]},
+    {"tick": 371, "at": [375, 206]},
+    {"tick": 521, "at": [428, 188]},
+    {"tick": 594, "at": [183.2, 206.4]},
+    {"tick": 623, "at": [577, 122]},
+    {"tick": 674, "at": [546.6, 196.5]},
+    {"tick": 744, "at": [606, 118]},
+    {"tick": 801, "at": [428, 206.4]}
+  ]
+}

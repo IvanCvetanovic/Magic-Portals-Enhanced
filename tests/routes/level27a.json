@@ -1,0 +1,26 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "2-28 (wave 4a, R4 round 1), WALKING ONLY: the level's budget is 0 (max_portals 0, the no_portal_sign at the start), so a tap is refused and the route makes none. The way is a long walk with the level's own tools.",
+    "Right along the top (5-168): at tick 147 the player meets crate_small_no_emissive_946, 15 u from the platform's end, and pushes it ahead of him off the end (x 446); he follows it (tick 165) and lands on",
+    "anchor_885 at (466, 132) on tick 184, the crate already down at (493, 133). carranca_888 spits its first fireball on tick 183 (and again on 365 and 547); it bursts on the crate on tick 197 (the crate burns and is gone",
+    "~255) while the player, who turned left on 186, is already at x 420. Left along the anchor (186-) and onto spinning_platform_890, which tips under him left-down (tick 236, crystal_ent_950 on the way); he slides off its",
+    "end onto single_block_plat_945 (tick 256, 224 u down) and walks left until moving_platform_942's side stops him at x 264. That platform swings 32 u about y 208 as linearMotion does (G3), y = 208 + 32 cos(0.016 t), so its",
+    "top is at 176 on tick 262 and he waits there, pressing left, until its descent has brought its top within the capsule's round foot (9.1 u) of the floor he stands on: he steps onto it on ~345 and rides it, pressed against the",
+    "face of block00_936 (x 200), down to its lowest (392) and up again; on ~537 its top is within a capsule radius of block00_936's top (y 162) and he rolls over the block's corner onto it (crystal_ent_954 on 532),",
+    "walks along the block, drops off its left end at x 128 (567), lands on the floor (576) and walks into the door: won on tick 589. No fireball reaches him after the first: the one spat on 365 bursts at x 373 on tick 437 (the",
+    "plank stands on end where he left it, by the place of the burst; he is at x 200 then) and the third (547) is 380 u behind him when he drops. The platform's second rise sets the pace: nothing wins before tick ~537,",
+    "since the first rise ends on 250, while he is still on the plank.",
+    "Margins (each replayed, all won on 589): the right walk may end on 164 to 185 (164, 165, 168, 171, 175 and 185 tried; 161 to 163 and 160 leave him walking back along the top platform, not won), and the left walk may start on 178 to 230",
+    "(178, 183, 190, 200 and 230 tried). NOT MEASURED ON THE ORIGINAL: the two step-ups (onto the moving platform and onto block00_936) rest on the capsule's round foot rolling over a corner of a body's height up to its radius",
+    "(the port's capsule, step 153), and the plank's tip under a walking player is the port's hinge. Leans on G3 (the swing), G10 (the walk), CAP (the capsule) and the crate pushed off the platform.",
+    "Unlocks: nothing. Medal 2 (0 portals, 2 of the 5 crystals: gold needs all five); achievement 20 (\"Crate spare II\": finish 2-28 without burning the crate, gold and a crate_small_no_emissive alive at the door) is not won: the crate, pushed off the platform, lands in the carranca's lane and the first fireball burns it; a route that spares it (and takes all five crystals) was not looked for in this round."
+  ],
+  "level": "level27a",
+  "win_by": 602,
+  "holds": [
+    {"walk": "right", "from": 5, "to": 168},
+    {"walk": "left", "from": 186, "to": 700}
+  ],
+  "taps": []
+}

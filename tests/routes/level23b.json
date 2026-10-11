@@ -1,0 +1,22 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-24 (level23b), wave 4a round 1: the stealth level, won UNSEEN by hopping the shock ring on the floor.",
+    "The ring at (256, 192), areaRadius 60, kills the player whose point is within 60 of its centre, and it fills the floor from x 197.7 to 314.3 at his height (y 206.4): there is no way on foot. A second ring, at (320, 44) with radius 80, hangs over the knight's platform and touches nothing he walks on.",
+    "Right along the floor from the start (64, 208) to x 169.6 (hold 1-44, 144 u/s), 86 units from the ring's centre, 27 short of its edge. A portal on the floor beyond the ring at (340, 208), 85 from the ring's centre (tap 50, down 50 and up 51: the tap-time ray runs past the ring, which it passes by name, and ends on the tap; the shot flies about 46 ticks and the portal opens on 97).",
+    "A portal on the player (tap 100 at his own point, (170, 206)) once the far one is open, and he comes out at (340, 210) on tick 102 and walks right along the floor to the door at x 448 (hold 100-400; the door is reached on tick 142).",
+    "The knight on the platform above (minion_spawn_913, patrolling the platform's top at y 117.4, x 148 to 362) looks along its own row, floor(y / 128) = 0; the player's point is at y 206.4, row 1, the whole way, so it never sights him: no exclamation, no enemy_shot, no enemy_spotted in the run. The stealth achievement 42 unlocks at the door (medal 2, 2 portals).",
+    "Windows (scratch variants, each its own replay, the tap points as filed): the first tap may come on any tick from 26 to 54, the walk may end on any tick from 40 to 50 (x 160 to 184) and the tap on the player on any tick from 96 (the portal opens on 97) to at least 250; all 77 variants tried win with no sighting and achievement 42, on 138 to 292. Each tap's point moved 8 units along either axis still wins (20 units loses: the first tap's x or y +20, the second's x -20 or y +20).",
+    "Leans on G1a (planning step 158: the knights see only their own row), G10 (the walk is 144 u/s), G4 (the shot's flight) and R23 (step 156: the ray's end is the tap; a shock agent is on its ignore list)."
+  ],
+  "level": "level23b",
+  "win_by": 155,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 44},
+    {"walk": "right", "from": 100, "to": 400}
+  ],
+  "taps": [
+    {"tick": 50, "at": [340, 208]},
+    {"tick": 100, "at": [170, 206]}
+  ]
+}

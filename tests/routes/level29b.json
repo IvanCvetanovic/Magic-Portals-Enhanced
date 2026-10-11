@@ -1,0 +1,46 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-30 (wave 4a, R4 round 1; no route before): the fire diamond for the knight and the crates, the gutter mouth to hand the fire back, then two portals for the blue key. Five shots, three of",
+    "them fireballs and two portals (the door asks for 2 portals; golden score 4); no knight ever sights him (no exclamation and no shot in the run) and no achievement is unlocked.",
+    "Knight A (minion_spawn_2193) takes the yellow key at its spawn (408, 238), walks to wayB0 (x 455.2) by tick 47 and holds there facing right for 5000 ms, until 360: all of it is done behind it.",
+    "Right 1-139: the fire diamond (242, 238) is his on 64 (from then every tap is a fireball) and he stops at x 395.4, 60 units behind the holding knight. Tap 150 at (455, 240) (a fireball along",
+    "the floor at 2.1 u a tick; the tap's y may be 232 to 246) burns the knight, which is gone on 174 with the key at (455.2, 236.3). Right 175-235: the key is his on 190 (26 units); the floor's flat",
+    "top ends at x 502.4 and a chamfer takes it to its end face at 512, so at about x 509 he walks off (tick ~221), falls 46 units onto crate_2356 (top y 299.6, x 517-575), lands on 232 and walks on",
+    "to x 539.7. The two crates fill the chute in front of both keyholes, so the fire takes them one at a time from on top: tap 246 at (539.7, 340) shoots straight down at the crate under him",
+    "(burning 252, gone 315: BURN_TIME 1000 ms), he drops 57 units onto crate_2355 (top y 357.1) and tap 335 at (539.7, 385) does the same (burning 341, gone 404). He stands on a burning crate for 63",
+    "ticks each time and is not hurt (a flame kills him, a burning crate only fades). He is on the chute's floor (y 414) on 416 and the yellow key, 19 units from keyhole_ent_2353 (558, 394), went into",
+    "it on 413; door_locked_ent_2052 is gone on 506. Left 421-451 to x 465.3 along the floor of the nook under the level's floor: the gutter mouth (node (478, 316), trigger 10 x 76 at offset (0, 46):",
+    "x 473-483, y 324-400) takes the diamond trailing him as it passes, on 452 (fire_diamond_drained), and the portals work again; he stands 6 ticks so the diamond has surely passed, and right 458-476 to",
+    "x 510.9, the nook's mouth. The blue key lies on the ledge (578-768, top y 254) at (734.9, 238), whose underside and the two doors close the chute's top, and the only ray that reaches the air over it",
+    "from below passes the ledge's left corner. The camera on the chute's floor shows y 256 to 512, so a drag (tick 480 to 494, 'shot': false: the finger down 50 units from (420, 300) to (420, 350))",
+    "pans the view up 100 (camera.json drag: twice the finger's move; the follow waits 4 s unless he walks or goes through a portal) to y 156-412, which holds both the target and him. Tap 498 at",
+    "(605, 180) (the ray from (510.9, 396.4) crosses y 254 at x 573, 5 units left of the ledge's face; the target may be x 584 to 624, y 158 to 210) opens a portal there on 566 after a 67-tick flight,",
+    "and tap 572 at (510.9, 399) on the player takes him to it on 574: he falls onto the ledge (586) and walks right (590-636) to the blue key, taken on 634 (26 units). Left 637-724 along the ledge:",
+    "off its left end on ~695, down the chute along the blue door's face (x 579) to the floor on 713, and the key goes into keyhole_2053 (530, 394) on 714 (25.5 units; the walk on to x 523 would carry it",
+    "in anyway); door_locked_2352 is gone on 807. Right 748-881: he waits at the door's face (x 570.7) from 769, walks through on 807, off the platform's end (x 640, ~836) onto the block (704, 496)",
+    "on 847 and into the exit door (704, 432; its trigger at y 469): won on tick 860. The route stands on no sliding or creeping contact: the crate shots need no aim (straight down from on top of",
+    "the crate) and the drain is a 10-unit slot the diamond must pass, with a pause after it. Every tap and every walk edge was moved by 1 to 3 ticks and wins (the first walk's start cannot move",
+    "earlier; the key walks only change the win tick by the same ticks). Leans on G10 (the walk 2.4 u a tick, the capsule on a chamfer), G4 (the shot's flight), R23 (the tap-time ray, and a diamond",
+    "carrier's tap a fireball), G1a (the holding knight's cone: behind it he is unseen), fire (steps 114 and 134), the gutter (Diamonds), the camera drag (step 138) and the keys (Keys)."
+  ],
+  "level": "level29b",
+  "win_by": 872,
+  "holds": [
+    {"walk": "right", "from": 1, "to": 139},
+    {"walk": "right", "from": 175, "to": 235},
+    {"walk": "left", "from": 421, "to": 451},
+    {"walk": "right", "from": 458, "to": 476},
+    {"walk": "right", "from": 590, "to": 636},
+    {"walk": "left", "from": 637, "to": 724},
+    {"walk": "right", "from": 748, "to": 881}
+  ],
+  "taps": [
+    {"tick": 150, "at": [455, 240]},
+    {"tick": 246, "at": [539.7, 340]},
+    {"tick": 335, "at": [539.7, 385]},
+    {"tick": 480, "release": 494, "at": [420, 300], "to": [420, 350], "shot": false},
+    {"tick": 498, "at": [605, 180]},
+    {"tick": 572, "at": [510.9, 399]}
+  ]
+}

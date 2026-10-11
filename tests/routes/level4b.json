@@ -1,0 +1,26 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-05 (round 1 of wave 4a's route phase; the level had no route). STEALTH LEVEL, won on tick 1136 with four shots (portals): achievements 27 ('four portals or less') and 28 ('finish 3-5 without getting noticed by any minion') both unlock at the door. No knight sights the player or a portal in the run (the log has no 'spots' line and no enemy_spotted or enemy_shot sound) and nothing is killed. No crate or stone is touched (he picks up one crystal, the one at (176,208), on the drop, tick 663): each lift door is opened by the player stepping over its button and he walks under it while it is up (a door opens only from shut and closes only from fully raised, planning step 133).",
+    "WHY IT IS TIMED. The player cannot jump. The wall at x 352-416 with door_lift_1916 under it cuts the floor, and knight A, patrolling the floor beyond it, cannot be walked past, so he crosses the floor only where no knight looks and hops over A with a portal pair. A knight sees only the row of its own entity point (floor(y / 128): the floor is row 1, the islands row 0, where he stands at y 110), three 128-unit buckets along its facing, in a 120 degree cone, and sights portals the same way (planning step 158): a knight facing away from him never sees him, nor does any knight while he is on an island. Knight B (x 87-217, the left floor) walks left 600-725, holds at x 87 to 845 and walks right from 850. Knight A (x 426-615) walks right 450-635, holds at x 615 facing right 640-885, then walks left to x 426 (1065), holds there to 1190 and walks right again.",
+    "THE WALK. He waits on the start island (row 0, unseen) and walks off its east edge on 638 (right 638-803): he lands on the floor at x 187 on 667, right of knight B (B is at x 145, walking left, so it has him behind it; a walk off on 597 or before is sighted by B). Right along the floor over button_1917 (x 323-349): door_lift_1916 starts opening on 723, its bottom stops him at x 360 until it has cleared his head, he walks under it from about 750 (it closes again from 849: nothing holds it), passes x 426 at about 773 and stops at x 499.5 on 803, left of A (A holds at x 615 facing right: he is behind it).",
+    "HOP 1 (over A, to the single block at (640,144), row 0). Tap 814 at (612,112), a point above that block's west end: from (499.5, 206.4) the ray passes 13 units right of the east face of the double block at (478,144) (x 542) and 15 left of this block's west face (x 608), so the stop must lie between x 477 and 589 (outside, the shot is doomed). It flies 39 ticks and opens at (613.6,114) on 854 (the aim's drift is 0.57 px: the camera is still settling after the walk). Tap 860 at (505,204) opens the second portal on the player on 862 and carries him to the block at once.",
+    "THE WAIT AND THE FALL. He stands on the block until A has turned (885): right 866-973, he is off the block's east edge on 891 and lands on the floor at x 697 on 907, behind A (walking left, at about x 595, facing left), and on to button_1915 (x 849-875): door_lift_1906 starts opening on 969 and is clear of his head from about 1006 to about 1190 (it closes from 1126). He turns round at x 846 (left 975-1019) and stops at x 750.",
+    "HOP 2 (to the door's platform, platform_low_emissive_ent_1910). Tap 1037 at (800,108): from (749.9, 206.4) the ray passes 8 units left of the platform's west corner (x 796, y 132) and 37 from the reflector at (740,144), which catches a shot within 32; the exit lies 4 units right of the corner, so he stands on the platform; the stop may be anywhere from x 740 to 781. It flies 27 ticks and opens on 1065 (drift 0.21 px). Tap 1069 at (758,204) opens the second portal on him on 1071 and he arrives at (799.8,110); right 1074-1150, under the raised door_lift_1906 (about 1100), and into the door on 1136. One shot flies at a time: tap 860 comes after the first shot has landed (854) and tap 1069 after the second (1065).",
+    "MARGINS. Each of the eleven hold and tap ticks tolerates at least 4 ticks either way (swept one at a time over +-15: out/parity/program/R4/r1_305/sens2_final.txt); the whole timeline tolerates a shift of -15 to +18 ticks (earlier, the fall comes before A has turned and is sighted; later, hop 2 is not done before A turns right on 1190) and the first half alone (the walk and hop 1) of -39 to +6. It leans on rules not measured on the original: the knights' sight and facing (planning steps 158-159), the tap-time ray (R23, step 156), the reflector's 32-unit catch (step 157) and the door's stride (step 133); a sighting would end the run's claim to 28, not its win."
+  ],
+  "level": "level4b",
+  "win_by": 1148,
+  "holds": [
+    {"walk": "right", "from": 638, "to": 803},
+    {"walk": "right", "from": 866, "to": 973},
+    {"walk": "left", "from": 975, "to": 1019},
+    {"walk": "right", "from": 1074, "to": 1150}
+  ],
+  "taps": [
+    {"tick": 814, "at": [612, 112]},
+    {"tick": 860, "at": [505, 204]},
+    {"tick": 1037, "at": [800, 108]},
+    {"tick": 1069, "at": [758, 204]}
+  ]
+}

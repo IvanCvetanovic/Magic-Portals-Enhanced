@@ -1,0 +1,51 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-26 (wave 4a, round 1; a dark level with one knight). The chamber the player starts in (x 0 to 176) is shut by the wall",
+    "double_block_plat_1854 (x 176 to 208, down to the floor), the slab 1856 over it (y 64 to 96) and the ledge 1855 (x 0 to 128, y 144",
+    "to 176), and the way on is over the top and through light_wall_1859, which only the torch light_off_1689 (238, 30) takes away. Three",
+    "portal pairs, each the first portal where he will stand and the second tapped on his own point (it opens on him, the first having",
+    "landed, and takes him through at once). 1: he walks right to the wall (x 167; the crystal at (160, 208) is on the way) and taps",
+    "(116, 122) on tick 45: the shot clears the ledge's corner and the portal stands on the ledge from 70; the tap on him on 76 takes him",
+    "up on 78. 2: he walks left along the ledge to x 22.4 (the crystals (112, 128) and (16, 128) on the way) and taps (98, 44) on 124, a",
+    "point of the slab's top that the ray reaches over the slab's corner at (80, 64); it stands from 153; the tap on him on 160 takes",
+    "him up on 162, to (98, 46), where the crystal (96, 48) is. 3: the torch tap at (238, 30) on 190 (the earliest the 400 ms allow",
+    "is 186) lights it on 222 - the shot is spent and opens no portal - and the light wall, flagged, goes on 316 (1500 ms). He walks",
+    "right along the slab, drops 64 units into the cup over slab 1893 and stops against the wall at x 264. The knight (minion_spawn_1766)",
+    "walks to wayB0 (368, 208) by tick 46 and holds there 6000 ms; it is blind to the player until the torch is lit and then sees only",
+    "his row (y 128 to 255), so he in the cup (y 110) is never in its sight. A shot on 323 at (430, 206), over the end of slab 1893 and",
+    "past the gone wall (the log says 'after the head-height retry'), stands from 376; the knight spots that portal on 377 and would",
+    "shoot it about 40 ticks later (650 ms) plus its flight; the tap on him on 382 takes him there on 384 and he walks 7 units into",
+    "the door: won on tick 389, medal 2 (6 portals; the golden score is 4; 4 of 5 crystals, the fifth at (320, 208) is in the",
+    "knight's lane), 7 shots, aim drift 0.001 px. No achievement. The knight never sees the player and no shot is made at him. The",
+    "route steers clear of the lane under slab 1893, where the knight stands blocking the way at x 361: dropping off the slab's end to",
+    "the lane and walking past it (the four-portal way the golden score suggests) was tried only as far as the drop, which lands him at",
+    "x 324 in the knight's row, where it spots him on 422 and kills him on 487 if he stands still; it is not in the route.",
+    "Each tap moved with its successors (test_mp_routes --only on a copy): none can be earlier than what it waits for (the first tap",
+    "25, the 400 ms; tap 2 from 71, the first portal landing on 70; tap 4 from 152; the torch from 186, 26 ticks after tap 4; the shot",
+    "over the cup from 315, whose release must fall on or after the tick the wall is gone, 316; the last tap from 375, the landing on",
+    "376), and every one can be 15 ticks later, the win moving with it. The last tap alone can be as late as 432 (+50) and not 442: the",
+    "knight shoots on 418 and its shot ends on the portal on 438, which kills it. Points, each moved alone: tap 1 at y 124 x 104 to 128",
+    "(and at x 116 y 100 to 136); tap 3 x 88 to 106 at y 30 to 54; the torch x 232 and up at y 10 to 52; the cup shot x 380 to 440 at",
+    "y 190 to 218; a tap on the player may be up to 10 units off him. NOT MEASURED ON THE ORIGINAL: a portal opened on the player's own",
+    "point, which all three of his hops rely on (4-02's and 4-05's routes rest on it too), and the knight's refusal to see him in the",
+    "cup (the row rule, step 158); the golden score of 4 portals asks for a way this route does not take (see above)."
+  ],
+  "level": "level25c",
+  "win_by": 401,
+  "holds": [
+    {"walk": "right", "from": 3, "to": 40},
+    {"walk": "left", "from": 80, "to": 118},
+    {"walk": "right", "from": 193, "to": 272},
+    {"walk": "right", "from": 386, "to": 440}
+  ],
+  "taps": [
+    {"tick": 45, "at": [116, 122]},
+    {"tick": 76, "at": [167.1, 206.4]},
+    {"tick": 124, "at": [98, 44]},
+    {"tick": 160, "at": [22.4, 126.4]},
+    {"tick": 190, "at": [238, 30]},
+    {"tick": 322, "at": [430, 206]},
+    {"tick": 382, "at": [264.1, 110.4]}
+  ]
+}

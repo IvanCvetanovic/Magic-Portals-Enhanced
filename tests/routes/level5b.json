@@ -1,0 +1,24 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-06 (round 1 of wave 4a's route phase; the level had no route). Won on tick 474 with four shots (portals): medal 2 (4 portals) and no achievement. 29 ('Run like hell') needs GOLD (every one of the five timed crystals, which expire on 6.8, 7.6, 13, 16.5 and 17 seconds, within four portals) with all three knights alive; this route takes one crystal and gold was not attempted in play: by a paper count on this build, where the knights are solid (not measured on the original, R3c-2), the crystals at (784,128) and (814,128) lie in knight C's lane and the second is east of C, so reaching it would take a third portal pair (six portals, the golden score being four), which is unverified. Nothing is killed; knight A sights the player once and knight C sights a portal once (below).",
+    "The player cannot jump: the bar at x 322-354 (floor to y 144) cuts the floor, and knight A (a lone guard: its first waypoint holds for ever) stands at x 398 in the cave under the single block at (384,160), whose top and the bar's are one ledge, y 144. HOP 1 (to that ledge, row 0): tap 34 at (396,126) is a shot over the bar, clear of everything from (130,94); it flies 77 ticks and opens on 112; tap 118 at (138,94) puts the second portal on the player and he is carried on 120 to (396,126), the ledge's east end. Knights A and B are in row 1, which he is not in, and C (x 744-801, its entity point y 126: row 0, his own) holds at x 801 facing right, 400 units to the east, with him far behind it and out of its cone, so nothing sees him up there.",
+    "THE RUN. Right off the ledge's east end (right 124-221): he lands on the floor at x 442 (146), 44 units in front of knight A, which faces right and sights him on 139. He is seen once and RUNS: A stands, fires on 180 after its far 650 ms at where he is then (x 524), the shot flies two units a tick and ends there on 236, when he is 100 units on; its second shot, fired on 306 at the platform where he stands, ends on 438, 72 units from where he is by then (a hit is 16). He picks up the crystal at (496,208) (159) and stops at x 624 on 222, 16 short of the floor's end. The moving platform (x 640-704) swings y = 204 + 42 cos(0.0256 x tick), lowest on tick 245 (step 154: speed 1.6, stride 42, from a stride down): he steps onto it on 242 (right 232-247, stopping at x 660) and rides it up to its top, level with the block ahead, on 368.",
+    "HOP 2 (over knight C, to the door's platform). Right 346-369 (the block's wall holds him until the platform is level): onto the block at (768,160) and a stop at x 720 (C's lane begins at 737, so 8 units clear; from x 705 or less he falls back off the block's edge). C holds at x 801 facing right from 85 to 470, so he is behind it. Tap 388 at (924,100): a shot whose ray passes 14 above C's head (y 130) and opens above the door's platform on 446 (drift 0.17 px): C sights the portal on 447 (a portal is a sight target) but its shot would leave about 40 ticks later, on 487; tap 454 at (723,124) opens the second portal on him on 456 and he arrives at (924,102), falls to the platform and walks right 462-560 into the door on 474.",
+    "MARGINS. Each of the eleven hold and tap ticks tolerates 5 or more ticks either way (swept one at a time over +-12); the boarding window is about 228-263 (the platform's top within 4 units of the floor's). It leans on rules not measured on the original: knight A's sight and the flight of its shots (planning steps 158-159: a shot goes to where he stood, and a player who walks on is not hit), the platform's swing (step 154) and the tap-time ray over C (R23, step 156); a build whose shots were faster, or that turned C to face left by 447, would end it."
+  ],
+  "level": "level5b",
+  "win_by": 486,
+  "holds": [
+    {"walk": "right", "from": 124, "to": 221},
+    {"walk": "right", "from": 232, "to": 247},
+    {"walk": "right", "from": 346, "to": 369},
+    {"walk": "right", "from": 462, "to": 560}
+  ],
+  "taps": [
+    {"tick": 34, "at": [396, 126]},
+    {"tick": 118, "at": [138, 94]},
+    {"tick": 388, "at": [924, 100]},
+    {"tick": 454, "at": [723, 124]}
+  ]
+}

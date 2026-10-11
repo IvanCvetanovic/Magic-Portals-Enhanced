@@ -1,0 +1,43 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-31 (wave 4a, round 1). The door stands on platform_966 (top y 136), and the only way in is a ray over that platform's left corner and",
+    "through BOTH door_lift_978 and door_lift_977, which hang over its left end, so both must be up when the shot is aimed: button_980 (idx 1)",
+    "is on the left ledge, button_982 (idx 2) on the floating block00_ent_981. A press runs a door's whole 3000 ms rise (step 133's latch) and",
+    "it stays up while its button is held. The floor is no way: door_lift_976, button_975 and crate_small_973 (the pit) are not used.",
+    "Pair 1 lifts the player to the ledge: a portal over it at (110, 60) (shot on tick 31, open on 75; the ray clears the ledge's corner by 15)",
+    "and one on the player (79). Pair 2 lifts him to the block: a portal over it at (256, 40) (109, open on 151; the ray clears the block's corner",
+    "by 12) and one on the player (155): he lands on button_982 on tick 156 and door_lift_977 starts to rise (fully up on 344). The block is the",
+    "one place from which crate_ent_968 can be shot (crate_969 is not teleportable and stands in front of it at the floor) and from which the",
+    "ledge can be shot over: pair 3 sends the crate to the ledge. The DESTINATION portal goes first, at (64, 70) over button_980 (185, open on",
+    "238), and the crate's second, at (415, 168) (245; the ray ends 10 units inside the crate's top, after the head-height retry, at (420.5,",
+    "173.3)): a body already inside a portal when its partner opens does not go through (tried: with the crate's portal first the crate stood in",
+    "it until the run ended). The crate leaves on tick 303 and falls onto the button; door_lift_978 starts to rise (303; 0.64 of its rise on 385). The player",
+    "stays on button_982 throughout, so door_lift_977 stays up. Pair 4 is the player into the door room: the view is 455 wide, so the target",
+    "(x 696) is outside it while he stands at x 256, and a finger dragged 110 units left (ticks 345-366, 'shot': false) pans the camera 220",
+    "right, to 476 (step 138's decoded drag: twice the finger's move; the camera is held there, and the player's x 256 is 7.5 inside its left",
+    "edge). A shot to (696, 110) on tick 385 (the ray crosses x 576 at y 93 and x 585 at y 94, and the foot of door_lift_978 is at y 71; placed",
+    "on 517, a 132-tick flight) and one on the player (527): he comes out at (696, 112), over the platform, and walks right into the door",
+    "(531). door_lift_977 starts to close as he leaves the button, 40 units behind him. Won on tick 531; no achievement (8 portals, medal 1).",
+    "Windows, each tap on its own with the rest as written: the first shot -5 to +4, the second to the fourth -4 to +4 (the next tap is still",
+    "held off by the last shot's flight or the 400 ms), the destination portal -4 to +7, the crate's shot -7 to +10 and more, the drag -60 to +15,",
+    "the high shot -15 to +9 (-18 is before the drag has ended, +12 would put the last tap in the shot's flight), the last tap from 518 on and",
+    "the last walk from the last tap's own tick to 14 ticks later. Leans on R23's tap-time ray, step 133's door latch, G4's flight and step 138's drag."
+  ],
+  "level": "level30",
+  "win_by": 545,
+  "holds": [
+    {"walk": "right", "from": 529, "to": 565}
+  ],
+  "taps": [
+    {"tick": 30, "at": [110, 60]},
+    {"tick": 78, "at": [182, 206]},
+    {"tick": 108, "at": [256, 40]},
+    {"tick": 154, "at": [110, 94.4]},
+    {"tick": 184, "at": [64, 70]},
+    {"tick": 244, "at": [415, 168]},
+    {"tick": 345, "release": 366, "at": [340, 100], "to": [230, 100], "shot": false},
+    {"tick": 384, "at": [696, 110]},
+    {"tick": 526, "at": [258, 40]}
+  ]
+}

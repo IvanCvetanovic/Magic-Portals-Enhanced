@@ -1,0 +1,35 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "1-20: the door (126, 117) is on double_block_plat_ent_1050's top (y 128) in the alcove at the top left, shut from the east by platform_ent_1051 (a post from the ceiling to y 144) and by the plat itself; the way in is over the plat's left end (x 64), by a shot",
+    "that comes back off reflect_agent_1082 (the vertical mirror at x 8, y 144, which catches within 32), through the gap where breakable_wall_ent_1056 stands (x 53 to 83). Three pairs and a mirror shot, 8 shots, none failed.",
+    "1. The stone over the player breaks the first wall. Left (1 to 60) along breakable_wall_ent_1061's top to block 1062's face, x 488.9. A portal in the air over the wall at (540, 100) (tap 76, opens on 98), then one at the stone's left edge (tap 108 at (580, 46): the",
+    "shot ends 10 units into rolling_stone_728 at (584.4, 41.3), left of plank 1057's corner; the stone must be the SECOND portal's: observed here, a stone already inside a portal when it opens does not enter it when the second opens): the stone goes through on 146, lands on the wall at x 540 and breaks it on 159 (hit 2.28, the",
+    "threshold is 1.5), and the player falls with the wall to the floor (crystals 1089 and 1090 on 167 and 176), landing on 171 at (488.9, 206.4).",
+    "2. The stone onto the ramp. Left 175 to 212 to x 397.6. A portal over the ramp at (250, 160) (tap 232, opens on 274; from here the line clears the ramp's apex (318, 192) by 11 and a point above y 148 is under platform_ent_1058), then one on the stone at (538, 194) (tap 292; ends at (520, 195.6)): the stone",
+    "goes through on 324, comes out at (250, 160), rolls down the ramp, breaks breakable_wall_ent_1056 on 384 (hit 2.35) and rests against the step of single_block_plat_ent_1064 at (92.5, 217.8) from 403.",
+    "3. The player onto the ramp. A portal at (300, 168) (tap 340): 168 and not 150, because a player put out within 18 units under platform_ent_1058's underside (y 144) is inside it, and in this build he then walks through the plank and the post (observed: tap 340 at (300, 150) wins on tick 509 that way; not used here); then one on himself at (400, 206) (tap 395): through on 397, down at (300.5, 178.6) on 402. Left 430 to 520 down the ramp (crystal 1114 on 468) to the stone, x 130.",
+    "4. The mirror. A tap at (14, 154) (tap 505; x 4 to 22 and y 140 to 168 win): the first ray meets the stone, the head-height retry from 30 units above does not, and the shot flies from the player's centre to it; reflect_agent_1082 turns it on 534, and the leg, as long as the way it was fired (159 units)",
+    "from the reflector's point, passes 14 over the plat's left corner and opens a portal at (123.8, 78.8), over the door, on 572. One on the player (tap 590 at (130, 220)): through on 592, he falls through the door's trigger and wins on tick 596, and unlocks achievement 48 (Be smarter I, 8 portals or fewer) with exactly 8.",
+    "THIS ROUTE STANDS ON A PORT GAP. rolling_stone_728 carries `destroyable` 1 and in the original dies at the first wall it breaks (ETHBeginContactCallback_breakable_wall #42-60; planning step 109, deviation 1; backlog order 11.1); the port keeps it rolling, so one stone does both walls",
+    "here. The original's players need rolling_stone_1048 (on plank 1058, in view only from the plank's right end, over block 1059) for the second wall; that way was not tried. If the row is built, this route needs re-flying from tap 232 on.",
+    "Every tap's tick can move 6 ticks either way, the walks 8 or more; won on tick 596."
+  ],
+  "level": "level19",
+  "win_by": 610,
+  "holds": [
+    {"walk": "left", "from": 1, "to": 60},
+    {"walk": "left", "from": 175, "to": 212},
+    {"walk": "left", "from": 430, "to": 520}
+  ],
+  "taps": [
+    {"tick": 76, "at": [540, 100]},
+    {"tick": 108, "at": [580, 46]},
+    {"tick": 232, "at": [250, 160]},
+    {"tick": 292, "at": [538, 194]},
+    {"tick": 340, "at": [300, 168]},
+    {"tick": 395, "at": [400, 206]},
+    {"tick": 505, "at": [14, 154]},
+    {"tick": 590, "at": [130, 220]}
+  ]
+}
