@@ -3212,3 +3212,107 @@ and this entry; a 10-file WIP commit on a side branch. Routes won: 86 of 86 at t
 **Inferred mood:** a guess from the facts - a very long run of long runs that mostly worked: the disk freed, two big waves landed
 and pushed, one honest owner question left standing, and then a deliberate stop with everything saved because the budget, not
 the work, ran out.
+
+### 2026-10-10 16:20 - Session 27: program wave 3b-2 finished - the portal tap, the reflector, the knights, the stone, the routes, pushed
+
+*Written 2026-10-11 at the close by this run's close role, from the records - planning steps 156-161 of
+`docs/planning/2026-09-11-magic-portals-remaster.md`, each role's reports under the gitignored `out/parity/program/<id>/` (`impl.md`,
+`commit.md`, `deviations.txt`, the verifiers' `verify*.json`, `R3c/finalize.md`, the round notes) - and git, not from a transcript. 16:20 is
+the creation time of `out/parity/program/G9/interrupted/`, the first record of the resumed run, not a measured start; the last commit of the
+wave is 01:50 the next morning. The wave began on 2026-10-05 (R23, session 26's stopped run, `8e81ccf`) and this run's brief cites the owner's
+standing order of 2026-10-10 to continue until finished or told to stop. Every number below is one a record states, or one this role measured
+and says so. This role built, launched and captured nothing; it checked the baseline, ran the image purge and edited the two tracked files and `out/parity/BASELINE.txt`.*
+
+**Built:**
+- **Step 156 (R23, `8e81ccf`, from the stopped run)**: the portal tap as the original handles it - the shot flies to the tap-time ray's end and opens
+  its portal there or fails there, only a tap that reaches the hourglass restarts the 400 ms, the zero-g recoil is away from the ray's end. 53 suites,
+  52 passed, 29,723 checks; 80 of 86 routes win.
+- **Step 157 (G9, `1faf09b`)**: the reflector catches within 32 units (the port's 16 was a guess), mirrors on its plane's axis and sends the shot on
+  from its own point, by one reflector at most. Re-done from the interrupted first attempt (kept on `wip/wave3b2-g9-interrupted`). 53 suites, 52
+  passed, 29,788; 74 of 86 routes.
+- **Step 158 (G1a, `d4a094e`)**: the knights see - a 120 degree cone through three 128-unit buckets of their own row, a ray past every body but the
+  knights' and the player's, the `!` and `?` with their sounds, the search a blocked way gives, the dark levels' torch rule. 54 suites, 53 passed,
+  30,125 (new `test_mp_sight`, 383); 69 of 86 routes.
+- **Step 159 (G1b, `a682880`)**: the knights shoot and kill the player or a portal, every shot ends in a burst and a shake of 10, a touch caps a
+  knight's hold at 1000 ms, a barrel's blast and a stone's crush kill a knight, the seven stealth achievements read the real `SpotCount()`. 55 suites,
+  54 passed, 30,225 (new `test_mp_shoot`, 100); 61 of 86 routes.
+- **Step 160 (STK, `356c32e`)**: a rolling stone that hits the player fast enough (hitIntensity above 2.5) kills him - the verifier's one medium of
+  step 159, built before the route phase so the routes were re-authored against the final rules. 55 suites, 54 passed, 30,329; 61 of 86 routes (3-12
+  now dies under its stone).
+- **Step 161 (the route phase, `53d8db2`)**: 25 route files re-authored in one round of seven roles; 61 untouched. **86 of 86 routes win** (chapter 1
+  21, 2 29, 3 17, 4 19; 1,598 checks, 0 failures); of the 25, 21 win on another tick (16 later, 5 earlier), 4 on the same, 19 carry a new `win_by`;
+  of the 61, 60 on the same tick and 3-02 388 -> 400. Slack 9 to 70 ticks, median 30; thin: 4-18 (9), 4-02 (13), 3-13 (14), 4-08 (15). The independent
+  verifier passed 11 of 11 gates. 55 suites, 55 passed, 30,714; reachability 108 / 20 / 0 throughout.
+- **The push**: the finalize role pushed `00de2b1..53d8db2` (a fast-forward, 75 files, +6,134 / -1,099; no force). The wave's six steps plus the
+  session-26 devlog commit are on `origin/main`; waves 3a and 3b-1 went at `00de2b1` in session 26.
+- **The close (this role)**: `docs/parity-backlog.md` updated (the "State at" date, the Definition-of-done bullets, the Wave 3b-2 paragraph completed
+  with a step table, the route census, suites, Smart App Control, the baseline, GAMEPLAY and what wave 4 takes; four rows ticked as closed by the
+  route phase - R23-9, G9-6, G1a-9, G1b-8 - R3c-1 to R3c-13 added; 61 rows for the wave in all, 12 closed) and this entry.
+- **The wave's image purge** (the owner's standing order, 2026-10-03: delete images once finished with them). Each role deleted its own scratch
+  as it went (the counts were not recorded). At the close the new standing baseline is the final build's f420 sweep, `program/STK/after/sweep`
+  (128 PNGs, 1280 x 720, taken on `MagicPortals.exe` `4ae49bca`, the build the committed sources make; the route phase's verifier took 128 launches that
+  were byte-identical to it before deleting its own PNGs). This role md5-checked all 128 against `STK/after/capture.txt` (0 bad, valid PNG
+  signatures, 1280 x 720) before and after, wrote it as the only non-comment line of `out/parity/BASELINE.txt` (replacing `R3b/fix1/after/sweep` and
+  the four intermediate sweeps session 26 had kept), dry-ran `purge_images.py all` (653 files, 0.49 GB, 0 refused) and ran it with `--delete`
+  (653 deleted). **Freed 0.49 GB (0.46 GiB); free disk 114.58 -> 115.04 GiB; `out/parity` 17.92 -> 17.46 GiB.** Kept: the baseline sweep,
+  `original/`, `smoke/`, `markers/`, `saves/`, `asbc/`, the audit, every mp4, every text, json, script and log file. About 9.6 GB of older images
+  (`specs/lighting` 2.6 GB, `visuals/briefs` 2.0, `visuals/particles` 1.9, `specs/ui1` 1.0, others) stay because the purge tool's tiers keep
+  them by design; they are not this wave's and I did not touch them. `git status` was unchanged by the purge.
+
+**Broke / dead ends:**
+- **The first G9 attempt was interrupted** (stopped to save the owner's usage, session 26) and its tree was unverified; step 157 was redone on 10-10.
+  The Build Tools' MSVC had moved from 14.50 to 14.51 on 10-05, so `build/` was deleted and reconfigured before G9's first edit.
+- **Smart App Control refused 9 launches of this repository's executables** (counted at this close from a CodeIntegrity 3033/3077 query from
+  2026-10-05 07:38; its other 16 pairs are other programs'): R23's runner twice, G9's runner and `MagicPortals.exe`, G1a's `MagicPortals.exe`, STK's
+  runner three times and its first verifier's once; none in G1b, the route phase, the finalize or this close. Each refused executable was deleted
+  and relinked (R23's runner twice) and the relinked one ran. Wave 1: 83, wave 2: 19, wave 3a: 2, wave 3b-1: 4.
+- **STK needed three verifier rounds.** Round 1 failed (12 of 15 gates; the corrected `test_mp_layer` and the whole-suite run had not run behind a
+  refusal: high; the backlog had ticked G1b-10 before its test ran: medium); the step's own new cases had 3 failures on their first run (a resting-stone
+  speed threshold of 500 px/s where the engine carries 466, and a stealth control in which an unlogged knight sighted the player in the first ticks).
+  Round 2 failed one gate (the planning step's Suites gate row was stale). Round 3 passed 12 of 12 with one medium, **STK-9** (the impact watch reads a free
+  fall 0.33 to 0.67 low, so the port kills from a higher drop than the original: derived, not measured, not text, left open on purpose).
+- **Comment fixes left undone on purpose**: a comment-only edit of `MagicPortalsLayer.cpp` or `test_mp_layer.cpp` relinks the executables the sweep and
+  the route replays rest on, and a freshly linked exe risks a refusal that notifies the owner. They wait for the next real edit (STK-5, PIC-3 kind).
+- **Routes bent around the new rules, three of them on port behaviour no clip shows**: 3-07 is won on foot with no taps by shoving a holding knight,
+  3-22 by a rush past its knight on a margin of about one tick (12 of 12 variants with a 1 to 3 tick pause are shot), 4-29 by pushing the key knight.
+  3-10's knight hangs over a broken wall for about 600 ticks because the port wakes a sleeper only for a portal's traveller (Box2D wakes it on the
+  contact's destruction); observed, not fixed. If the original's knight lifted by a portal does walk, G1a's blocked-way rule over-blocks and 4-28 and
+  4-29 must be re-flown. All of it is rows R3c-2 to R3c-5 and R3c-11; none was checked on the emulator.
+- The finalize role's first attempt to append step 161 through a shell heredoc failed with a parse error and appended nothing; the text went in through
+  a file. The briefs of the route roles named the G1b executables where STK had relinked them (`4ae49bca`, not `71b76a09`); the roles checked md5s.
+
+**Decision:**
+- STK was built before the route phase (the owner's rule is "as the original does", and the original's stone kills), so the routes were authored once,
+  against the final rules, rather than twice. No route file was edited inside a step; each step recorded a census instead.
+- The wave was pushed with the verifier's one medium (STK-9) open: no winning route has a stone begin above 0.106 against a threshold of 2.5, so no route
+  is near the line. STK-9 needs its own step before anything is shipped.
+- The new baseline is `STK/after/sweep`, not a fresh capture: the route phase changed no source, and the verifier's own sweep was byte-identical to it.
+- This close did not run `port_build.bat`: the verifier's build had already recompiled the stale `MagicPortalsSpike` (`R3c/verify1/build.log`, 0 warning
+  lines), and a `ninja -n` shows only the CMake glob re-check. Nothing was relinked and no executable launched, so no refusal.
+- `docs/permission.md` still holds its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder: said in the backlog's ship preparation, not worked around.
+
+**Where it stands / next:** wave 4 - routes for the 42 levels with none (recorded causes: 1-17, 2-27, 3-23; nine hold a lift door; 3-04, 3-05, 3-11 and 3-24
+are the stealth levels), STK-9's step, the final comparison against the original's library with the pixel-centre edge rule first, and the ship preparation.
+The owner's open calls: 2-30's creep (R3-2), the engine's friction and restitution steps (G10-14, WT-1), G10-2's 60 Hz, R24 and R25, the guessed 0.08 crate
+friction (R3b-3), 2-32 ahead of the dragon's camera (R3-3), STK-8 (what he saw near a launcher's drop), the grant.
+
+**Assets check:** yes - `git status --short`, run after appending this entry and the backlog edits, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference` prints 0 lines). The forbidden-extension grep over the staged names printed nothing; the
+owner's save folder holds `scores.json` alone (164 bytes, md5 `40bfef3ac396b4e94bdd97990401435a`).
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** `00de2b1..53d8db2`: 7 commits (6 steps and the session-26 devlog), 75 files, +6,134 / -1,099; this close's commit is two files. Routes won 86 of 86
+(1,598 checks), 25 re-authored files (+533 / -443). 55 suites, 30,714 checks. Reachability 108 / 20 / 0. Rows opened by the wave 61 (R23 11, G9 7, G1a 11,
+G1b 10, STK 9, R3c 13), 12 closed. Smart App Control refusals 9. Images: 653 deleted, 0.49 GB; free disk 114.58 -> 115.04 GiB.
+
+**Inferred mood:** a guess from the facts - steady and a little relieved: a long run in which each step's gates mostly held, the one verifier that failed
+(STK, twice) was fixed rather than argued with, the routes came back 86 of 86 in a single round, and the wave was pushed; what is left standing is a short
+list of honest questions for the owner and the emulator, not unfinished work.

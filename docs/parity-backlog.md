@@ -1,6 +1,6 @@
 # Magic Portals parity — backlog
 
-State at 2026-10-05 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
+State at 2026-10-11 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
 match the original, in the order it should be done. Every spec named here lives under
 `Magic-Portals-Enhanced/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
 
@@ -328,6 +328,7 @@ work no step of §7 owns, and the owner's calls:
   `finalPos`, the head-height retry as the shot's own, a reflected leg that lands 10 short of a wall, the blocker read at the
   shot's position, the field flag read at the shot's position (G4-8), and the zero-g recoil aimed at `finalPos`; `light_off`'s
   kill, G8's flame and R17's agent were already built. What is left of it: the "Step 156's recorded deviations" rows.*
+  *Wave 3b-2's close: R23's tap is built (steps 156-157) and its six routes are re-authored (step 161); R22 is the one still unbuilt here.*
 - **The owner's calls still open**: **R24 and R25**, applied by step 76, still the owner's to rule (the "Step 76, THE
   OWNER'S TO RULE" row; the player's point is R25's other half, and 7.3, 10.1, 10.1b and 10.4 each record it again);
   **the two PORT-WIDE rows** - the script clock the original floors to whole milliseconds, and every body's picture
@@ -557,6 +558,7 @@ work no step of §7 owns, and the owner's calls:
       the floored clock in step 151 (`af008a9`): 84 win.*
       *Wave 3b-1: unchanged - CK-1 is still the one open site. The time base carries every body through the same floor
       (`ScriptClock::ScriptSpeed`, step 152) and the 86 routes were re-timed on it in step 155.*
+      *Wave 3b-2: unchanged - no step took CK-1, which is still the one open site.*
 - [x] **PORT-WIDE, found verifying step 78 (order 3.4): the picture of any body is drawn one tick behind the sim.**
       ***BUILT by step 150 (program wave 3a, PIC, local, not pushed): see the paragraph at the end of this row.***
       `buildSprites` gives every body-linked quad an `InterpolatedTransformComponent` (`game/MagicPortalsLayer.cpp:2590`)
@@ -1224,6 +1226,7 @@ work no step of §7 owns, and the owner's calls:
       pin it (a `ghost_minion.ent` landing makes no tremble). The same holds for any later minion fall sound
       (#132-140), the dark mage's `holdTime` cap (#12-55) and `ScoreDashboard`'s `minion.ent`-only counts. Next: the
       merge agent of `visuals-d`.
+      *The `holdTime` cap (#12-55) was built in step 159 (G1a-10, G1b: a touch caps a knight's hold at 1000 ms).*
 - [ ] **Order 11.4 finding, the eyes follow the player's tick point, not its drawn one** (step 97; INFERRED from the
       code, not measured). `effectOwnerPoint`'s `Kind::Player` reads the sim body, which has no
       `InterpolatedTransformComponent`, while the player's picture is drawn between ticks; under `--fixed-step` every
@@ -1765,6 +1768,12 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       chapter 2: 29, chapter 3: 17, chapter 4: 19), **2-30 on a creep a port artifact makes (R3-2: its route is a stop-gap)**. 49
       won and 37 did not at the start of the phase; 1-11 (835) and 2-30 (1,386) are won again. **The 42 not won** are the 42 listed
       at step 144's tail, unchanged. Open until all 128.*
+      *Wave 3b-2 (steps 156-161), pushed as `00de2b1..53d8db2`: step 156 (R23) leaves 80 of the 86 winning, 157 (G9) 74, 158 (G1a) 69, 159 (G1b) 61 and
+      160 (STK) 61 (3-12 now dies under its stone), each with no route file touched. **Step 161 (the route phase, `53d8db2`) re-authors the 25
+      that did not win: 86 of 128 levels are won again by a route `test_mp_routes` replays** (86 files, 1,598 checks, 0 failures; chapter 1: 21,
+      chapter 2: 29, chapter 3: 17, chapter 4: 19; the independent verifier passed 11 of 11 gates). Of the 61 routes nobody edited 60 win on the
+      same tick and 3-02 on 400 (was 388); of the 25 re-authored 21 win on another tick (16 later, 5 earlier) and 19 carry a new `win_by`.
+      **The 42 not won** are the 42 listed at step 144's tail, unchanged. Open until all 128.*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1795,6 +1804,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       *Wave 3b-1: 108 / 20 / 0 with 0 differ at steps 152-154, after both amendments of step 152 and in the third verifier's run on
       the final build. The flood models no weight, no capsule, no platform's swing and no timing, so none of the group's changes can
       move a verdict, and the routes (1-11 among them, now won) are the evidence.*
+      *Wave 3b-2: 108 / 20 / 0 with 0 differ at steps 156-160 and in the route phase's verifier on the final build. The flood models no tap-time
+      ray, no reflector, no knight's sight or shot and no stone's kill of the player, so none of the wave's changes can move a verdict; the routes
+      are the evidence.*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1985,6 +1997,9 @@ whole build after the route phase and **none passed** (`R3b/verify1.json` to `ve
 still `0b8d3c5` and `main` is 18 commits ahead with this close** (wave 3a's nine, wave 3b-1's eight and this docs commit). The
 engine pin stays `710bffc`; no converter change, so `out/levels`, `out/assets` and `out/data` are the ones the wave started from.
 17:28 is the creation time of `out/parity/program/WT/`, the wave's first record, not a measured start.
+*Pushed on 2026-10-05, with wave 3a, as `0b8d3c5..00de2b1` (the 18 commits above): the suite was green at 86 of 86 and the one failed verification
+gate (2-30's creep, R3-2) was judged an owner question and not a defect. The "local, not pushed" in this paragraph and in wave 3a's is the state at
+each wave's own close.*
 
 | Step | Row | Track | Commit | Outcome | GAMEPLAY | Routes added |
 |---|---|---|---|---|---|---|
@@ -2063,8 +2078,13 @@ friction, or the creep accepted until the engine's friction step (R3-2, R3-8) - 
 steps (G10-14, WT-1) are queued with the Penumbra port's engine work. **With the wave**: R3-3 (2-32 ahead of the dragon's camera)
 and R3b-6 (`win_by` tightened, 3-20 widened) once G1 has moved the routes it moves.
 
-**Wave 3b-2 (the portal tap, the reflector and the knights: R23, G9, G1a, G1b; IN PROGRESS, each step a local commit, nothing pushed
-until the wave's route phase has re-authored the routes and an independent verifier has checked the whole build).** **Step 156 (R23,
+**Wave 3b-2 (the portal tap, the reflector, the knights and the stone: R23, G9, G1a, G1b, STK, then the route phase; 2026-10-05 08:11 to
+2026-10-11 01:50; closed 2026-10-11, PUSHED).** Six steps, each a local commit while it ran, pushed together once the routes were re-authored and an
+independent verifier had checked the whole build: `origin/main` is `53d8db2` (`00de2b1..53d8db2`, a fast-forward, 75 files, +6,134 / -1,099).
+The wave ran in two parts: R23 and a first try at G9 on 2026-10-05 (stopped for the owner's usage at a clean point, the unverified G9 tree kept on
+`wip/wave3b2-g9-interrupted`), and G9 again, G1a, G1b, STK and the route phase on 2026-10-10 and 11 (the run's brief cites the owner's standing order of 2026-10-10 to continue until
+finished or told to stop). The step paragraphs below were written at each step's commit and say "local, NOT pushed"; that was true then. The
+closing paragraphs after step 161 are the wave's close. **Step 156 (R23,
 the portal tap as the original handles it) is built, verified and committed locally**: the independent verifier passed all thirteen
 gates (`out/parity/program/R23/verify1.json`; five low problems, whose text findings the commit applied); 53 suites, 52 passed,
 29,723 checks, `test_mp_routes` red on six routes by design (1-23, 2-10, 2-17, 2-19, 3-13 and 3-15; 80 of 86 win, each on step 155's
@@ -2098,6 +2118,28 @@ checks, zero warnings (read from the build logs by the verifier, not rebuilt); o
 seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red on 25 routes (61 of 86 win: G1a's 17 and eight new; 3-02 wins on 400) - **the routes are re-authored by the wave's route phase, after G1b**; the stone's kill of the player (G1b-5) is open and is to be built or ruled out before it; reachability 108 / 20 / 0; the f420 sweep is 127 of 128 byte-identical to step 158's (3-16 differs: its first shot is in the air at tick 420);
 55 suites, 54 passed (the new `test_mp_shoot`, 100 checks), 30,225 checks, zero warnings (read from the build logs by the verifier, not rebuilt), no Smart App Control refusal. The rows are "Step 159's recorded deviations" (G1b-1 to G1b-10), under G1a's.
 **Step 160 (STK, a rolling stone kills the player it hits fast enough) is built, measured, independently verified three times (round 1: 12 of 15 gates passed, three not run behind Smart App Control, one high, one medium and four low findings, fixed: the unrun suites now run and pass; round 2: 13 of 14; round 3: all 12 gates, one medium and five low, whose text findings the commit applied) and committed locally, not pushed**: the verifier's one MEDIUM of step 159 (G1b-5), built before the route phase so the routes are re-authored against the final rules. `ETHBeginContactCallback_rolling_stone` #107-129 sets the player's hp to 0 where the stone's own speed along the line to his point, over 50 px a unit, is above 2.5 (125 level units a second): the layer's impact watch reads the begin as it reads the stone's shake and the knights' crush, `Game::StoneHitsPlayer` asks `demolish.json` `stone.kills_player_above`, and `AfterStep` folds the kill into Hazards as a death area's death; the beholder's rocks stay Boss's. **GAMEPLAY changed, plainly, on the 26 levels with a stone that has the callback** (planning step 160). `test_mp_routes` is red on the same 25 routes (61 of 86 win, every one on its step-159 tick; **3-12 now dies on tick 200 under its stone**, where it did not win before) - **the routes are re-authored by the wave's route phase, after G1b and this step, on this build; no route file was touched**; reachability 108 / 20 / 0; the f420 sweep is 128 of 128 byte-identical to step 159's (no stone begins on the player by tick 420 on any level); 55 suites, of which **54 pass on the fix's whole run** (`test_mp.exe` `1aee46d3`: 30,329 checks; `test_mp_demolish` 178, `test_mp_layer` 3,706, only `test_mp_routes` red; the first run's three failures in the step's own new cases were corrected and the G1b-10 test passes), zero warnings. The rows are "Step 160's recorded deviations" (STK-1 to STK-9), under G1b's; **STK-9, the verifier's one medium of round 3 (the watch reads a free fall a step or two low), is open and is not text**.
+**Step 161 (the route phase of wave 3b-2, `53d8db2`, "Magic Portals: routes re-authored on the portal-tap and knights build") re-authors the routes on the wave's final build: 86 of 86 win** (`test_mp_routes` 1,598 checks, 0 failures; at its start 61 won and 25 did not, 1,213 checks and 50 failures: `R3c/census_start.md`). Seven roles re-authored the 25 in one round, each on its own route files and the replay `test_mp.exe test_mp_routes --only <level>`; the commit holds 25 files of `tests/routes/` (+533 / -443) and the planning step, and no source, test, data, converter or engine file. The independent verifier (`out/parity/program/R3c/verify1.json`) passed all 11 gates on its first round, with one medium (STK-9, open, not a route problem) and five low findings. **GAMEPLAY: none** (routes are test data). The finalize role then pushed the wave (`git push origin main` printed `00de2b1..53d8db2`; after a fresh fetch `git rev-parse HEAD origin/main` agree). The rows are "The route phase's recorded deviations of wave 3b-2" (R3c-1 to R3c-13), after R3b-8.
+
+| Step | Row | Commit | Outcome | GAMEPLAY | Routes win |
+|---|---|---|---|---|---|
+| 156 | R23 | `8e81ccf` | built; independent verifier 13 of 13 gates, 5 low; 53 suites, 52 passed, 29,723 checks (`test_mp_routes` red by design); reachability 108 / 20 / 0; f420 sweep 128 of 128 byte-identical to the standing baseline; 2 Smart App Control refusals (the runner's) | **yes**, on every tap: the shot flies to the tap-time ray's end and opens its portal there or fails there (a crate, a stone or a knight takes it 10 units in; a button, a `destroyier.ent` and the anchor doom it at their face; the head-height retry is the shot's own; a reflected leg lands 10 short of a wall); only the tap that reaches the hourglass restarts the 400 ms; the zero-g recoil is away from the ray's end; `no_portal_705` is no zone | 80 of 86 (1-23, 2-10, 2-17, 2-19, 3-13, 3-15 red) |
+| 157 | G9 | `1faf09b` | built, re-done from an interrupted first attempt (`wip/wave3b2-g9-interrupted`); verifier 13 of 13, 3 low; 53 suites, 52 passed, 29,788; 108 / 20 / 0; sweep 128 of 128 identical to R23's; 2 refusals (the runner's and `MagicPortals.exe`'s) | **yes**, on the 19 levels with a reflector: it catches a shot strictly within 32 units (the port's 16 was a guess), mirrors it on its plane's axis (a plane-less one on the side it came from) and sends it on from its own point for `min(the length it was fired, the way its leg came)`, by one reflector at most | 74 of 86 (+ 1-12, 1-21, 2-11, 2-16, 2-25, 3-14 red) |
+| 158 | G1a | `d4a094e` | built; verifier 13 of 13, 6 low; 54 suites, 53 passed, 30,125 (the new `test_mp_sight`, 383 checks); 108 / 20 / 0; sweep 125 of 128 identical to G9's (3-16, 3-23, 3-29 differ, each explained); 1 refusal | **yes**, on the 35 levels with a knight: a knight sees (a 120 degree cone through three 128-unit buckets of its own row, past every body but the knights' and the player's), stands while it does, shows `!` with its sound, searches (`?`) when its way is blocked, and is blind on the six darkest levels until a torch is lit; `anti_sight_wall.ent` blocks sight | 69 of 86 (+ 3-07, 3-22, 3-32, 4-28, 4-29 red; 3-02 on 401) |
+| 159 | G1b | `a682880` | built; verifier 11 gates, 1 medium (the stone's kill of the player: STK) and 5 low; 55 suites, 54 passed, 30,225 (the new `test_mp_shoot`, 100); 108 / 20 / 0; sweep 127 of 128 identical to G1a's (3-16 differs); 0 refusals | **yes**, on the 35 knight levels: a knight fires an `enemy_shoot.ent` that kills the player or, by its stored id, a portal; every shot ends in a burst and a shake of 10; a touch caps a knight's hold at 1000 ms; a barrel's blast and a stone's crush kill a knight; the seven stealth achievements read the real `SpotCount()` | 61 of 86 (25 red; 3-02 on 400) |
+| 160 | STK | `356c32e` | built; verified three times (12 of 15 gates with 3 not run behind Smart App Control and one high; one failed gate, a stale gate row of the planning step, 10 of 11 in `verify2.json` and 13 of 14 in the step's own text; 12 of 12 with one medium, STK-9, and 5 low); 55 suites, 54 passed, 30,329; 108 / 20 / 0; sweep 128 of 128 identical to G1b's; 4 refusals (the runner's three, a verifier's one) | **yes**, on the 26 levels with a stone that has the callback: a stone whose own speed along the line to the player's point is above 2.5 hitIntensity kills him | 61 of 86 (3-12 now dies on tick 200 under its stone) |
+| 161 | routes | `53d8db2` | the route phase: 25 route files re-authored, 61 untouched; verifier 11 of 11; 55 suites, 55 passed, 30,714; 108 / 20 / 0; the verifier's sweep 128 of 128 identical to STK's; 0 refusals; pushed | **none** (test data) | **86 of 86** |
+
+**Routes** (step 161, `53d8db2`): **86 of 128 levels are won by a route `test_mp_routes` replays on the final build** (86 files, 1,598 checks, 0 failures; chapter 1: 21 of 21, chapter 2: 29 of 29, chapter 3: 17 of 17, chapter 4: 19 of 19). The census went 86 -> 80 (R23) -> 74 (G9) -> 69 (G1a) -> 61 (G1b) -> 61 (STK: 3-12's failure changed from crushed knights to the player's death under its stone) with no route file touched, then 86 after the phase's one round. **At the start of the phase 25 did not win**: R23's six, G9's six, G1a's five, G1b's six and 3-10 and 3-12; their first problems were a tap whose ray ended short of or behind the tap (a doomed shot, a body 10 units in), a reflected leg still in the air at the next tap or opening elsewhere, a knight's sighting that stood it, shot the player or never let it walk, a stone's crush of the knight the route needs (3-10) and a stone's kill of the player (3-12). **Ticks moved**, against the last census of the previous wave (`R3b/verify3/all_t1.log`): of the 25 re-authored **21 win on another tick (16 later, 5 earlier) and 4 on the same** (2-16 397, 2-17 519, 3-14 1,141, 3-15 976), and 19 carry a new `win_by`; the largest moves are 3-10 804 -> 1,435 (+631), 4-29 1,541 -> 1,023 (-518), 3-07 732 -> 351 (-381), 3-31 1,458 -> 1,668 (+210) and 3-03 607 -> 776 (+169). **Of the 61 routes nobody edited, 60 win on the same tick and 1 on another**: 3-02 (`level1b`) 388 -> 400, moved under steps 156-160 with the cause not isolated (R3c-7). The median move of the 22 that moved is 46.5 ticks. Win ticks run 87 (4-02) to 3,343 (3-32), every win inside its `win_by` with 9 to 70 ticks of slack (median 30; the 25 re-authored 14 to 42). **The thin ones** are 4-18 (9), 4-02 (13), 3-13 (14) and 4-08 (15); **the knife-edges** are 3-20 (a second walk that must end on tick 238), 3-22 (a rush on a margin of about one tick, R3c-3), 3-13 (its crate's guessed friction, R3b-3) and 2-25's tap 313 (it works only while the camera still leads him, R3c-6). **Failed, and why**: no route was lost at the end; what the re-authoring found is in planning step 161. The knights see only the three 128-unit buckets of their own row, so 3-03, 3-31, 3-32, 4-28, 4-29 and 4-30 now win with no sighting at all, 3-09 is never sighted, 3-27 once and 3-08 twice (its player walks on out of both shots); 3-22 is won by a rush past its knight and 3-07 on foot by shoving one (R3c-2, R3c-3); a knight lifted off its floor never walks again, which 4-28 and 4-29 are won around (R3c-4); 3-10's knight does not fall when its wall breaks (R3c-5); R23's ray ends at the first body, so 2-10, 2-19, 1-23 and 3-13 wait for a burning or falling body to go before a tap; G9's reflector catches within 32, so 2-16, 1-21 and 2-25 end their shots outside it and 3-14 moves the player; 3-12 stands at x 45.2 out of its stone's way; 3-15's entry portal lies inside an `anti_sight_wall`. The stealth achievements: 4-30's unseen route unlocks 76 at the door, the seen routes of 3-02 and 4-25 unlock none, and 26, 28, 32 and 42 (3-04, 3-05, 3-11, 3-24: no route) are pinned only by `test_mp_layer` and `test_mp_achievements` (R3c-8).
+
+**Suites**: 55 suites, 55 passed, 30,714 checks at the end (29,723 after R23, 29,788 after G9, 30,125 after G1a with the new `test_mp_sight`, 30,225 after G1b with `test_mp_shoot`, 30,329 after STK, and 30,714 with the routes' 1,598 checks in place of 1,213); `test_mp_routes` was red by design inside every step and is green now. **Reachability**: 108 / 20 / 0, 0 differ at every step and in the verifier's run. **Verification**: R23, G9 and G1a each passed 13 of 13 gates (5, 3 and 6 low findings, the text ones applied at their commits), G1b 11 of 11 (one medium, which STK built, and five low), STK's three rounds 12 of 15 (three not run behind Smart App Control, one high), one failed gate (a stale gate row of the planning step: 10 of 11 in `verify2.json`, 13 of 14 in the step's own text) and 12 of 12 (one medium, STK-9, and five low), and the route phase's whole-build verifier 11 of 11 on its first round. **Smart App Control**: 9 refused launches in the wave, counted at this close from a CodeIntegrity 3033/3077 query from 2026-10-05 07:38 (its other events are other programs'): R23's runner twice (10-05 08:28 and 08:36), G9's runner (10-10 16:32) and `MagicPortals.exe` (16:35), G1a's `MagicPortals.exe` (18:15), STK's runner three times (21:42, 21:46, 21:46) and its first verifier's once (22:18); none in G1b, the route phase, the finalize or this close, and each refused executable was deleted and relinked and the relinked one ran (R23's runner twice; wave 1: 83, wave 2: 19, wave 3a: 2, wave 3b-1: 4). Zero warnings rests on each step's build logs and the verifier's `port_build.bat` (MagicPortalsSpike only, R3c-12); the close built nothing.
+
+**The standing f420 baseline** is now `out/parity/program/STK/after/sweep` (128 PNGs, 1280 x 720, taken by STK on `MagicPortals.exe` `4ae49bca`, the executable the committed sources build: the route phase changed no source, and its verifier's 128 launches were byte-identical to this folder before it deleted its own PNGs). The close checked all 128 md5s against `STK/after/capture.txt`, the PNG signatures and the size, before the purge and again after it. `out/parity/BASELINE.txt` names it alone, replacing `R3b/fix1/after/sweep` and the four intermediate sweeps (R23, G9, G1a, G1b) that session 26 had kept as each next step's "before"; the purge deleted the other 653 images under `out/parity/program` (0.49 GB; free disk 114.58 -> 115.04 GB).
+
+**GAMEPLAY changed in wave 3b-2**, each as the original does and each in its planning step: R23 (every tap: the shot flies to the tap-time ray's end and opens its portal there or fails there; only a tap that reaches the hourglass restarts the 400 ms; the zero-g recoil is away from the ray's end; `no_portal_705` is no zone), G9 (on the 19 levels with a reflector: it catches within 32 units and turns the shot on its own point, by one reflector at most), G1a (on the 35 knight levels: a knight sees through a 120 degree cone in its own row, stands while it does, shows `!` and `?` with their sounds, searches when its way is blocked, and is blind on the six darkest levels until a torch is lit), G1b (the knights shoot and kill the player and portals, every shot ends in a burst and a shake of 10, a touch caps a knight's hold at 1000 ms, a barrel's blast and a stone's crush kill a knight, the seven stealth achievements are real) and STK (on the 26 stone levels, a stone that hits the player fast enough kills him). None in the route phase (test data). R24 and R25 were not touched and G10-2 was not reopened (`clock.json` `matched_hz` stays 60); the engine pin stays `710bffc` and no converter file changed, so `out/levels`, `out/assets` and `out/data` are the ones the wave started from.
+
+**The wave's rows**: R23-1 to R23-11, G9-1 to G9-7, G1a-1 to G1a-11, G1b-1 to G1b-10, STK-1 to STK-9 and R3c-1 to R3c-13 (61 rows), of which 12 are closed: R23-1, R23-9, G9-6, G1a-1, G1a-7, G1a-9, G1a-10, G1b-5, G1b-8, G1b-10, STK-5, R3c-12. The open ones are each an owner call, a measurement on the original, or a small source change that waits for the next edit of its file (the comment-only ones were left on purpose, because an edit of a `.cpp` relinks the executables and every refused launch notifies the owner).
+
+**What the next wave should take (wave 4)**, in the program's order: (1) **routes for the levels not won**: the 42 with no route (1-13, 1-17, 1-18, 1-19, 1-20, 1-22, 1-24, 1-25, 1-26, 1-30, 1-31; 2-27, 2-28, 2-29; 3-01, 3-04, 3-05, 3-06, 3-11, 3-16, 3-17, 3-18, 3-21, 3-23, 3-24, 3-25, 3-26, 3-28, 3-30; 4-03, 4-04, 4-05, 4-09, 4-10, 4-12, 4-13, 4-20, 4-22, 4-23, 4-24, 4-26, 4-27), with the causes already recorded: 1-17 (a pocket sealed to shots until its crates are cleared), 2-27 (step 139's finding: only a shot its fixed flame turns into a fireball, aimed by the handle's reflector, reaches the door room's crates; G9's reflector now catches within 32, so the aim has to be found again on this build) and 3-23 (step 140's finding: both keys are carried by knights; step 134's flame can burn a minion, and the knights now see and shoot, so it is a G1 route too); nine of the 42 hold a lift door (1-13, 1-18, 1-26, 1-31, 2-29, 3-05, 3-16, 4-22, 4-24); four are the stealth levels 3-04, 3-05, 3-11 and 3-24, whose routes would also show achievements 26, 28, 32 and 42 (R3c-8); the rest have no recorded attempt. The rules a route author works under now are in planning step 161 and rows R3c-2 to R3c-5 and R3c-10. **Before the routes or beside them, STK-9's own step** (the impact watch reads a free fall 0.33 to 0.67 low: measure a stone on the player or take the unbraked free-flight arithmetic, re-pin the falls, re-run the routes; no winning route is near the line, R3c-1); (2) **the final comparison** against the original's library (section 5), with the pixel-centre rule for every picture at the frame's edge (step 145's deviation 1) done first, and its residuals recorded: G1a-11 (the player drawn lit on the six darkest levels), G1a-8 (the marks' place and the `?`), the rig checks of R3c-11 and the rows that already wait on it; (3) **the ship preparation**: the grant in `docs/permission.md` (which still holds its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder, so the record of the scope is incomplete), the play build (`tools\parity\play_build.bat`; there is none built) and the owner's calls, listed here once: 2-30's creep (R3-2: the stone's decoded friction, G10-2 lower, or the creep accepted until the engine's friction step), the engine's friction and restitution steps (G10-14, WT-1: queued with the Penumbra port's engine work or not), G10-2's matched 60 Hz, R24 and R25, `crate_low_emissive`'s guessed 0.08 (R3b-3), 2-32 ahead of the dragon's camera (R3-3), STK-8 (what he saw near a launcher's drop: a sensor, or a thrown stone), PIC-1's smoothing above 80 Hz, and the standing ones in "The owner's calls" below. **With the wave**: R3b-6 and R3c-9 (`win_by` tightened when those files are next touched) and 3-20's knife-edge (R3-4); R3-3 is unchanged (2-32's route was not touched and wins on 3,205).
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
 - [ ] **CK-1. The player's ground walk-cell flipbook runs on the engine's unfloored 16.667 ms tick** (the one failed gate of the
@@ -2311,12 +2353,14 @@ seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red 
       `ghost_minion.ent`) are not in it, so a tap through the boss of 3-32 or 4-32 is not doomed there where the original's would be (the old flight did not meet them either).
 - [ ] **R23-8. The field test is `<=` and in double** (`Holds`; R1's `_not_modelled`): the original's is strict and in float32, so a tap or a position exactly 32 x scale from a ring's centre is a
       refusal here and an acceptance there.
-- [ ] **R23-9. Six routes lose their win on this build** (the census in step 156: 1-23, 2-10, 2-17, 2-19, 3-13, 3-15; no route file was touched): each has a tap the ray ends short of or
+- [x] **R23-9. Six routes lose their win on this build** (the census in step 156: 1-23, 2-10, 2-17, 2-19, 3-13, 3-15; no route file was touched): each has a tap the ray ends short of or
       behind the tap (a doomed shot at a field-held stone, a burning crate, a teleportable body 10 units in), and 80 of 86 win on the same tick. **The routes are
       re-authored by the wave's route phase, after G1b** (PIC's pictures are already in this build), not in a step. Residual risk to carry into it (the verifier's low): the
       head-height retry now moves shots (126 of the 180 grid taps ran it) and four of the six (2-17, 2-19, 3-13, 3-15) end "after the retry"; its trigger rests on step 103's
       grabber reading and on the registry as the ray's world (R23-7), and whether those taps were wrong in the original cannot be checked without the emulator. Prefer taps
       whose ray end is the intended point (the log's `to (x, y)`), and spot-check one on the original in the emulator rig if a route hinges on a retry's end.
+      *CLOSED by step 161 (`53d8db2`): all six are re-authored and win (1-23 597, 2-10 463, 2-17 519, 2-19 478, 3-13 1,043, 3-15 976). The retry risk
+      stands as R3c-10; the rig as R3c-11.*
 - [ ] **R23-10. The clock's rule rests on the listing alone**: the program's spec said every refusal restarts the 400 ms, the decode says only the tap that reaches the hourglass
       (or fires) does; built as decoded. No clip shows the restart after an hourglass tap or budget 0's tap (F3's take a2 follows by 2.8 s) and the emulator rig was not run for
       either. Next: the final comparison (section 5), one capture of two taps within 400 ms of an hourglass tap.
@@ -2339,11 +2383,12 @@ seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red 
       callback-20 sample is 31.92-32.04 u from reflect_agent_826 across the 0.05 rounding of the printed player point), so a true radius a little over or under 32 would flip that one catch.
 - [ ] **G9-5. The plane-less reflector's snap is at exact multiples of PI/4 in double**; the original's constants are float32 (`PIb` 1.570796327f), so a shot exactly on a diagonal of a plane-less
       reflector can go either way. The one such placement is 2-27's, which no route reaches yet (its reflector follows the handle, step 139; a route for 2-27 will find which side its shot comes from).
-- [ ] **G9-6. Twelve routes fail on this build and no route file was touched**: R23's six (R23-9) and 1-12, 1-21, 2-11, 2-16, 2-25, 3-14 (planning step 157's census, `G9/impl.md`): in the first four the
+- [x] **G9-6. Twelve routes fail on this build and no route file was touched**: R23's six (R23-9) and 1-12, 1-21, 2-11, 2-16, 2-25, 3-14 (planning step 157's census, `G9/impl.md`): in the first four the
       route's reflected shot is still flying at the next tap (the new leg starts at the reflector and is as long as the old one was fired, or as far as it came: the hourglass), in 2-25 the reflected shot
       opens its portal at (319.6, 144) where R23's opened at the tap (524.7, 190), and the player is burned by a carranca's fireball on tick 383, and in 3-14 the shot of tick 637 toward (175, 262)
       passes reflect_agent_1244 at 25.3 units (over the old 16, under 32), is turned, and opens its portal at (313.3, 252.9): the two later taps fail. The other 74 win on their step-155 ticks with the same shots. **The wave's route phase re-authors all 86
       after G1b**; prefer a shot that passes a reflector at 32 or more, or one the route means to turn (the log's "sound shot_reflected").
+      *CLOSED by step 161 (`53d8db2`): all six are re-authored and win (1-12 473, 1-21 498, 2-11 433, 2-16 397, 2-25 538, 3-14 1,141).*
 - [ ] **G9-7. A turn on the spawn pass queues its effects in the wrong order inside the tick** (found by the verifier, `G9/verify1.json` problem 3, by code reading only; low, cosmetic): when a shooter
       stands within 32 of a reflector, `flyOnePass(false)` turns the shot and `flyOnePass(true)` launches the new leg in the same `Tick`, and `MagicPortalsLayer` queues the launches (the new leg's
       `projectile_shoot`) before the reflected record's waves, mark and flash; the original adds the reflector's effects on the tap's frame and the new leg's flash on the frame after. Not measured,
@@ -2365,10 +2410,12 @@ seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red 
       or age; the 128-unit bucket rests on the listing and the formats doc, corroborated by that still (the `!` stands at x 382.0, one step inside the bucket line at 384; 256-unit buckets would put it near 398). The library stills `3-16_h6.3` and `3-23_t8.0` show the original's knight
       standing where the port stands it, with its first shot's flash (G1b). `F14.md`'s "about 4 s after the HUD" for 3-16's first shot and that still's 6.3 s are two shots of the 2000 ms interval seen from two markers (step 159). The mark's depth is the effects' stream's (knight z - 32), seen above the knight; its order against other sprites is not
       measured. Next: the final comparison (section 5), one capture of a knight turning to face the player across a bucket line and of a blocked way's `?` on the emulator rig.
-- [ ] **G1a-9. Seventeen routes failed after step 158 and 25 fail after step 159 (see G1b-8); no route file was touched** (planning step 158's census, `G1a/census.md`): the twelve of step 157 and 3-07, 3-22, 3-32, 4-28 and 4-29 (3-02 wins 13 ticks later). Their first problems: 3-07 knights
+- [x] **G1a-9. Seventeen routes failed after step 158 and 25 fail after step 159 (see G1b-8); no route file was touched** (planning step 158's census, `G1a/census.md`): the twelve of step 157 and 3-07, 3-22, 3-32, 4-28 and 4-29 (3-02 wins 13 ticks later). Their first problems: 3-07 knights
       that see and stand, with knight A walking ahead of the player; 3-22 the key knight's dwell zeroed by its sighting; 3-32 the boss's escort drops straight down because its ray to its waypoint is blocked by the double block (the old
       port drifted it onto the block); 4-28 the key knight standing at the wall while it sees the player; 4-29 a knight lifted onto the upper platform that searches instead of walking on to `button_2037`. 3-02's 13 ticks (388 to 401) are INFERRED from the traces of this build (no step-157 build
       remained to retrace them); re-measure them when the route is looked at. **The wave's route phase re-authors all 86 after G1b.**
+      *CLOSED by step 161 (`53d8db2`): all 17 are re-authored and win (3-07 351, 3-22 1,219, 3-32 3,343, 4-28 791, 4-29 1,023 among them); 3-02's 400
+      stays INFERRED (R3c-7).*
 - [x] **G1a-10. The contact's hold cap is not built** (BUILT by step 159: `Minions::State::Tick` judges the begin of the contact with the player's body and caps `holdMs` at 1000; test_mp_shoot pins it on a rig and on 3-16's knight B) (found by the independent check; decoded here from the listing, `docs/ethanon-formats.md` section 22's last bullet): `ETHBeginContactCallback_minion` #12-55 caps a
       knight's own `holdTime` at `min(holdTime, 1000)` when it begins contact with a non-sensor `dark_mage.ent`. It has been open since step 97 (Order 11.4's "the dark mage's `holdTime` cap (#12-55)" row above) and interacts with the sight's
       dwell reset: a knight the player touches while it sees him would walk on after at most 1000 ms of dwell where the port stands it through a long hold, which moves the routes that brush a knight (3-02's "held up by a
@@ -2393,8 +2440,10 @@ seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red 
 - [ ] **G1b-6. The knight is one circle where the original's is two.** The hold cap's contact and a stone's crush begin when the port's 7-unit circle touches the player's capsule or the stone, where the original's capsule (14 x 36, two circles of radius 9.1 by its own scale) may touch earlier at the head;
       a crush's hitIntensity is the impact watch's approach velocity along the line between the two entity points, the same number the stone's own impact row reads (INFERRED equal to the callback's `dp2(velocity, normal) / getScale()`).
 - [ ] **G1b-7. A barrel's blast kills a knight one tick after it.** The grabbed knights go through the flame's one-tick-later burn (`Fire::State::minionsAlight`); whether the original's minion callback runs before or after the barrel's on the blast's own frame is unknown. The blast's reach is the port's sphere against the knight's one circle, with `Fire::Blast`'s ray to its centre.
-- [ ] **G1b-8. 25 routes fail and no route file was touched** (planning step 159's census, `G1b/census.md`): G1a's 17 (the twelve of step 157 unchanged; 3-07, 3-32 and 4-29 now die to a shot, 3-22 and 4-28 as before) and eight new: **3-03, 3-08, 3-09, 3-27, 3-31, 4-30** (a knight's shot ends on the player) and **3-10, 3-12** (a stone crushes the knights the route needs).
+- [x] **G1b-8. 25 routes fail and no route file was touched** (planning step 159's census, `G1b/census.md`): G1a's 17 (the twelve of step 157 unchanged; 3-07, 3-32 and 4-29 now die to a shot, 3-22 and 4-28 as before) and eight new: **3-03, 3-08, 3-09, 3-27, 3-31, 4-30** (a knight's shot ends on the player) and **3-10, 3-12** (a stone crushes the knights the route needs).
       3-02 wins on 400 (was 401; INFERRED to be the contact's hold cap, no cap-less build was retraced: if it ever matters, retrace once with `contact.hold_cap_ms` set very large) and no longer unlocks 24. **The routes are re-authored by the wave's route phase, after G1b, on this build.** (Step 160 moved only 3-12, which now dies on tick 200 under `rolling_stone_1198` at hitIntensity 4.28 instead of failing on the crushed knights; the other 24 fail as before. The same phase re-authors it.)
+      *CLOSED by step 161 (`53d8db2`): all 25 are re-authored and win (3-03 776, 3-08 1,666, 3-09 838, 3-27 1,214, 3-31 1,668, 4-30 1,337, 3-10 1,435,
+      3-12 639); 3-02 wins on 400 (R3c-7).*
 - [ ] **G1b-9. The shake of every shot's end is global.** `startEarthquake(10, 0)` runs wherever the shot is; a knight's shot a screen away still shakes the view (the original's, and the ghost's).
 - [x] **G1b-10. The layer's `SpottedCount()` has no test of its own** (BUILT by step 160 as `AKnightsSightingKeepsTheStealthAchievementFromTheDoor` and PASSING on `test_mp.exe` `1aee46d3` after the verifier's round-1 fix: `test_mp_layer` 3,706 checks, 0 failures. Three controls that wait 20, 30 and 40 ticks reach 3-02's door with no knight having sighted him and 24 is dispatched in each; the seen run (two sightings, both knights alive) does not dispatch it, so a `SpottedCount()` that returned 0 fails the seen run - shown by construction, not by a mutation run; the number's equality with `SimLevel()->minions.SpotCount()` beyond zero and non-zero is STK-6) (the independent check's, low; a test, not text, so not built by the commit). `MagicPortalsLayer::SpottedCount()` is `return m_level.minions.SpotCount()`; the seven stealth conditions are pinned against a fake world (`test_mp_achievements`) and the one end-to-end evidence is the route census (3-02: `achievements: 24@401` before, `none` now), so, before this case, reverting that one line to `return 0` failed no suite (it now fails the seen run, by construction).
 
@@ -2409,6 +2458,7 @@ seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red 
 - [ ] **STK-7. The resting-stone case is weaker than its comment says.** `AStoneRestingAgainstThePlayerKillsNothing` waits about 125 ticks after the stone's landing before the player touches it, past the watch's 60 steps, so it would pass even if both the 60-step window and the reset on a contact change were broken: it shows that a stone long at rest kills nothing, not that a recently fast stone is read afresh (the claim its comment makes). Next: a case that lets the stone rest a few ticks only after a fast fall and touches it then. Round 3 adds that the layer's falls read 0.33 to 2.33 and 3.33 and nothing between (the per-tick quantum is 1/3), so the strict edge itself is pinned only at `Demolish::KillsPlayer`/`HitPlayer` by `nextafter`: pin 2.33 and 2.67 at the pipeline if a gap gives them, in the same edit that touches the case's comment (and the G1b-10 case's, STK-5).
 - [ ] **STK-8. Should `destroyier.ent` still kill the player? (a question for the owner; the verifier's low finding.)** The listing has no `ETHBeginContactCallback_destroyier` and no reader of `destroyier.ent` but the stone's callback (`ETHBeginContactCallback_rolling_stone` #73-105 destroys the stone that touches it; L68589), yet `data/entity_roles.json` lists `destroyier.ent` among the hazards that kill the player and the layer builds a 16 px trigger for it (`launchers.json`'s note: the owner confirmed on 11 September that it "also kills the player"). With the stone's own kill built (STK) what he saw near a launcher's drop may have been a thrown stone landing on the player at hitIntensity above 2.5 (1-26's launched stones read 8.1 on the player in the verifier's replay), not a sensor. No footage shows either (INDEX.md and the F*.md notes searched; the mp4s were not decoded, no ffmpeg on PATH). Not changed here. Next: ask the owner what he saw; if it was a stone, drop the player-kill of `destroyier.ent` (`hazards.json`, `entity_roles.json`) and keep it a despawner of thrown stones.
 - [ ] **STK-9. The impact watch reads a free fall one to two gravity quanta low, so the port kills from a higher drop than the original (the verifier's one MEDIUM of round 3; DERIVED, not measured; NOT text, so not changed by the commit).** The original's physics has no damping and `rolling_stone.ent` no gravity scale, so a stone free-falls at 500 u/s^2 in 1/30 s steps; the port's per-tick quantum is exactly 1/3 and its falls read 0.333, 1.0, 1.333, 1.667, 2.0, 2.333 and 3.333 for gaps of 2, 6, 10, 14, 18, 24 and 40 px, where Box2D's own timing (BeginContact in the next step's collide with the velocity the previous step left, no speculative braking, a 0.5 px skin) reads 0.667, 1.333, 2.0, 2.333, 2.667, 3.0 and 4.0: 0.33 to 0.67 higher. The original crosses 2.5 at a drop over about 16 px, the port only over about 25 to 30 (24 px reads 2.33, no kill; 40 px reads 3.33, kill). Cause: the engine's speculative contact brakes a closing pair a step or two early (`Impacts.hpp`, planning step 152) and `Approaching()` recovers the speed at the start of the braking, not the speed gravity would have given at the touch; step 160's deviation 1 said the watch "reconstructs" the callback's speed, which it does only to within that offset. No winning route has a stone begin near the threshold (at most 0.0), 3-12's kill is 71 % over, and the knights' crush (1.23) errs the same strict way, so no route is thin; **until this is settled a re-authored route should keep any stone's begin on the player under about 1.5** (the offset is at most 0.67, so that reads under 2.2 on the original). Next, before the route phase is called final or at latest before shipping: measure one stone landing on the player on the original (STK-1's capture) or settle it by arithmetic on the decoded gravity; if it holds, make the stone rows (the kill, the knights' crush, the shake, the hit sound) read the unbraked free flight (the peak velocity plus g dt along the line for each braked step between the peak and the begin), re-pin the falls of `AStoneThatBeginsToTouchThePlayerKillsHimAboveTwoAndAHalfAlone` and record it as a gameplay change of the watch (steps 142 and 152's reading).
+      *Step 161's verifier checked it against all 86 routes: none is near the line, and the wave pushed with it open (R3c-1).*
 
 **PIC's recorded deviations**, each an open row for the step named (planning step 150 has the evidence, `RECORDED DEVIATIONS` 1-9):
 - [ ] **PIC-1. The smoothing's line is a guess and unmeasured on a real fast display.** `smoothing.above_hz` 80 / `release_below_hz` 72 /
@@ -2493,6 +2543,7 @@ seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red 
       *Step 155 re-flew 2-32 (won on 3,205 where 2,718, `win_by` 3,235). The third verifier measured the player's centre never
       outside the view (0 ticks; the earlier 194-tick stretch is gone) and up to 221.3 u ahead of the dragon's camera, of a
       half-view of 227.55. Still the owner's: would a person play it so? If not, its fix is a walk lagged by about 20 u.*
+      *Step 161 (wave 3b-2) did not touch 2-32's route: it still wins on 3,205 (`win_by` 3,235).*
 - [ ] **R3-4. Two routes are knife-edge**: 3-20 (`level19b`) wins only for a second walk ending on tick 238 (237 does not win,
       239 dies on tick 240) and 3-22 (`level21b`) only for a walk of 428-430 (its neighbours do not win). Both replay
       deterministically and say so in their notes. Next: re-flow them when the time base or G3 moves them, or give each a walk
@@ -2501,6 +2552,8 @@ seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red 
       *Step 155 re-flew both: 3-20 is won on 555 with its second walk ending on 238 only (237 and 239 do not win), 3-22 on 1,181
       with a drop good for one tick (7 of its 56 +-3 variants die); 3-13's crate friction is a third (R3b-3), the looser `win_by`
       R3b-6.*
+      *Step 161: 3-22 is re-flown again, now a rush past its knight on a margin of about one tick (R3c-3), and 3-20 is untouched (555, `win_by` 585,
+      a second walk that must still end on tick 238).*
 - [ ] **R3-5. Brief camera lags outside the view after a portal exit**: 4-18 (ticks 190-194, up to 292.6 u from the camera centre,
       65 u past the edge), 1-21 (429-431) and 3-09 (322-325); the follow catches up in 3 to 5 ticks. Not a route fault. Next: the
       final comparison against footage. (deviation 5)
@@ -2521,6 +2574,9 @@ seven stealth achievements read the real `SpotCount()`. `test_mp_routes` is red 
       the three verifiers after the route phase (`verify1.json` to `verify3.json`) all returned `pass: false` and the last failed
       one gate, 2-30 (R3-2). Nothing is pushed: 17 local commits are ahead of `origin/main` (`0b8d3c5`), 18 with this close. The
       decision stands with the owner: push waves 3a and 3b-1 together with 2-30 on a stop-gap, or settle it first.*
+      *Superseded at wave 3b-2's close: waves 3a and 3b-1 were pushed on 2026-10-05 as `0b8d3c5..00de2b1` (the lead's judgment that the failed gate was an
+      owner question and not a defect, DEVLOG session 26), and wave 3b-2 on 2026-10-11 as `00de2b1..53d8db2`; `test_mp_routes` is green at 86 of 86 with 2-30 on its
+      stop-gap. The row stays open only as the owner's answer: 2-30 itself is R3-2.*
 
 **WT's recorded deviations** (step 152), each an open row for the step named (planning step 152 has the evidence, `RECORDED DEVIATIONS` 1-9,
 and `THE SECOND VERIFIER AND THE COMMIT` the findings of `out/parity/program/WT/verify2.json`; G10-14 above is deviation 9). The routes the new
@@ -2668,6 +2724,7 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       not for 1.8 or less; the other 85 routes keep their ticks at 6). A body that leaves a sleeper's side any other way - a
       breakable wall broken, a lift that moves, a crate that burns - does not wake it, where Box2D would (`b2Contact.cpp:105-109,
       210-214`). Next: wake on those events if a level shows the hang (G3-6 covers what rests on a moving platform).
+      *Step 161: 3-10 is the level that shows the hang (R3c-5): its knight stays over a broken wall until its hold ends.*
 - [ ] **R3b-5. Only one pile is named from a still** (the amendment, deviation 12). 3-12's pile is asleep from tick 0 because the
       library's stills at 2 and 8 seconds show it at rest; 1-30's pile, 2-20's stacked crate and 2-29's stone are awake at tick 420
       (the suite's named list) and are not in `resting.json`, since no still of theirs has been compared. Next: compare those three
@@ -2677,6 +2734,8 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       slack 9 (4-18) to 70, median 31), and 3-20's second walk is a knife-edge (R3-4). Not touched in step 155: tightening a
       `win_by` changes a file the verifier measured. Next: tighten to the won tick plus 10 to 15 and widen 3-20's second walk to at
       least 3 ticks a side, once the time base stops moving (wave 3b-2's G1, G9, R23 and R22 move routes again).
+      *Step 161: 19 `win_by` values changed in the route phase (the 25 re-authored routes carry 14 to 42 ticks of slack) and the 61 untouched ones keep
+      theirs (R3c-9).*
 - [ ] **R3b-7. The route phase's commit names step 155, not 154, on its Record line** (step 155, deviation 7): the brief's N was the
       last time-base step's number, on the assumption that no step was added, and the commit adds step 155. `af008a9`'s Record line
       names 150 though it adds 151 (the wave 3a table says so). Record only; a message-only amend of an unpushed commit if the owner
@@ -2689,6 +2748,81 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       and library-still fits were not re-derived; and no fresh build was made, so that a rebuild equals the executables rests on
       timestamps and dependency data. The first verifier's `port_build.bat` run relinked a stale `MagicPortalsSpike.exe` (never
       launched). Next: the final comparison; a verifier that must not relink builds named targets.
+
+**The route phase's recorded deviations of wave 3b-2** (step 161), each an open row for the step named (planning step 161 has the evidence,
+`RECORDED DEVIATIONS` 1-5; `out/parity/program/R3c/` the round notes `round1_*.md`, `verify1.json` and `finalize.md` the rest):
+- [ ] **R3c-1. STK-9 is the verifier's one medium, and no route is near it.** The impact watch reads a free fall 0.33 to 0.67 low (STK-9), so the
+      port kills from a higher drop than the original. Checked against all 86 routes: every stone-on-player begin reads 0.106 or less (3-13 tick 766
+      0.106, 4-21 tick 258 -0.40, 3-12 tick 474 0.0; 2-04, 2-07 and 3-10 about 0) and the only stone begin on a knight is 3-12's crush at 5.0 against
+      1.23, so the offset cannot move a route (`R3c/verify1.json`). Not a blocker for the push (the verifier's word) and not text. Next: STK-9's own step
+      before anything is shipped (measure a stone on the player, or take the unbraked free-flight arithmetic and re-pin the falls: the step's own
+      estimate is that 24 px would read 3.0 and kill, 40 px 4.0; then re-run `test_mp_routes`); until then a re-authored route keeps a stone's begin
+      on the player under about 1.5.
+- [ ] **R3c-2. 3-07 is won on foot with no taps, by shoving a holding knight** (`level6b`, tick 351, `win_by` 380; the verifier's low). It walks left,
+      drops at x 89.6 (about tick 150) behind both lane knights while they face right (until about tick 405) and walks right from tick 160, pushing
+      knight B ahead of him along the lane at about 1.7 units a tick. A walk begun on tick 300 is sighted as knight A turns (410) and killed on 456, one
+      begun on 430 on 506; starts 215 to about 260 win and every edge of +-3 wins. The push is the port's solid contact with the knight's hold-brake
+      (`kBodyFriction` 1): the original's `ETHBeginContactCallback_minion` #12-55 does fire on a non-sensor `dark_mage.ent` begin, so the bodies touch
+      there, but that the player moves the knight ahead at that rate is NOT measured. The level's portal puzzle is not exercised. Next: the rig (R3c-11).
+- [ ] **R3c-3. 3-22 is won by a rush past its knight, on a knife-edge** (`level21b`, tick 1,219, `win_by` 1,255; R3-4's other half). The knight at wayB0
+      sees the player once (tick 1,010) and makes no shot: he runs on without stopping, is within 42 units of it by about tick 1,050 (the 650 ms far gate
+      is up on 1,051, so the wait is already the 1,000 ms near one) and touches it on 1,061, which caps its hold, so it walks on pushed ahead of him. A
+      pause of 1 to 3 ticks in the last walk gets him shot in all 12 variants tried; the margin is about one tick. A portal hop past the knight was NOT
+      tried (no other way past was found; the player cannot jump). It rests on the contact's hold cap (G1a-10, built) and on the push (R3c-2). Next: the
+      rig (R3c-11); re-fly it with a margin if the original's hold differs.
+- [ ] **R3c-4. A knight lifted off its floor never walks again under G1a's blocked-way rule, and two routes are won around it** (4-28 `level27c` 791,
+      4-29 `level28c` 1,023). The way ray to the knight's next waypoint meets the floor it stands on, so it searches (`?`) instead of walking. Both levels
+      look designed for the knight to walk on from the portal's exit (4-28: the flame stands over wayA1's x; 4-29: to `button_2037` and the keyhole) and
+      neither has another way for the carried key to reach its keyhole. 4-29 pushes the key knight along the floor with the player's body (the knight in
+      its hold brake, x velocity x 0.3 a tick; the port's bodies grip, `kBodyFriction` 1, where the original's minion is frictionless, so the original
+      would push at least as easily and where it stops would differ); 4-28 burns it with the flame's fireball after the gravity well parks it at (255, 40).
+      If the ORIGINAL's knight does walk there, G1a over-blocks and both routes must be re-flown (a knight that walks on its own, or into the flame).
+      Next: the rig (R3c-11: 4-29 with a knight sent up by a portal at (400, 60); 4-28 with a portal at (220, 70)).
+- [ ] **R3c-5. 3-10's knight does not fall when its wall breaks: the sleeping-body wake after a breakable wall's destruction** (`level9b`, tick 1,435,
+      `win_by` 1,460; R3b-4's condition "if a level shows the hang" is met). Knight B takes the key on tick 78, walks the wall (x 256 to 384, y 134 to 166)
+      and holds at wayB1 for 15 s at (276.6, 128.4) from about tick 290; the route breaks that wall with its stone on tick 483 and the knight stays
+      hanging with its floor gone until its hold ends (about tick 1,215), because it is asleep (`kSleepTime` 0.5 s) and `Resting::WakeAround` wakes a
+      sleeper only for a portal's traveller; the original's Box2D wakes it when the contact is destroyed (`b2Contact.cpp:105-109`). The route idles about
+      600 ticks; the knight then walks on, falls through the portal at (277, 335), shoots once at the player's old spot (he walks right from tick 1,320
+      at 2.4 units a tick and is gone) and its key opens the keyhole at 1,320. A port gap, observed and NOT fixed. Next: wake on a destroyed breakable
+      wall (and on a lift's move or a crate's burn, R3b-4), then re-fly 3-10 (the knight would fall at tick 483 and the later timings assume its arrival
+      at the keyhole near 1,280).
+- [ ] **R3c-6. Three re-authored routes aim with more drift than any earlier one** (the verifier's low): 1-21 5.33 px, 3-12 5.05 and 2-25 4.01, against
+      2.4 (1-08) at most in the 61 untouched; the camera moves between a tap's down and up ticks. The driver confirms the shot goes where the finger is
+      (0.05 px), so they win; only the point the file names is that far from the real aim. 2-25's tap 313, named (505, 222) and aimed at (501, 222), is 38 px
+      from the reflector against its catch of 32 and works only while the camera still leads the player by about 30 units (a tap on 316 or later is
+      inside the 64-unit walk pad and fires nothing); a camera retune or a change of the 400 ms between taps breaks it. Next: move the tap's ticks to a
+      pair where the camera is still, or write the real point in the file, when the route is next touched.
+- [ ] **R3c-7. 3-02 (`level1b`) wins on 400 where it won on 388** (inside its `win_by` 420; the one untouched route that moved). It moved under steps
+      156-160 and the cause was not isolated to one step: its run has one knight sighting, at tick 377, and no kill; G1a-9 INFERS +13 (to 401) from
+      the stand and G1b-8 INFERS one tick back from the contact's hold cap, with no cap-less retrace. It no longer unlocks 24. Next: retrace once with
+      `contact.hold_cap_ms` very large if it ever matters.
+- [ ] **R3c-8. The stealth achievements are shown by one unseen route and two seen ones.** 4-30's unseen route unlocks 76 at the door; the seen routes
+      of 3-02 (one sighting) and 4-25 unlock none; 26, 28, 32 and 42 sit on 3-04, 3-05, 3-11 and 3-24, which have no route, so they are pinned only by
+      `test_mp_layer` and `test_mp_achievements` against a fake world. Next: wave 4's routes for those four levels.
+- [ ] **R3c-9. `win_by` is still looser than it need be in the untouched routes** (the verifier's low; R3b-6 continued): 4-21 70 ticks, 2-07 60, 4-32 56,
+      2-03 53, 2-14 50 (slack 9 to 70, median 30 over the 86; the 25 re-authored 14 to 42, 19 with a new `win_by`); the thin ones are 4-18 (9), 4-02
+      (13), 3-13 (14) and 4-08 (15). Not touched: tightening one changes a file the verifier measured. Next: tighten to the won tick plus 10 to 15 when
+      the rules stop moving (R3b-6).
+- [ ] **R3c-10. Routes lean on rules no clip shows** (planning step 161, `RULINGS APPLIED`): 1-12 and 2-11 use the reflector's leg as the level's own tool
+      (G9-4: the listing's arithmetic, no reflected shot is filmed); the taps of 2-17, 2-19, 3-13 and 3-15 whose ray ends "after the head-height retry"
+      (R23-9's residual risk: the retry now moves shots); 3-15's entry portal is a 3-unit aim (x 194 to 196, y 88 to 95) inside `anti_sight_wall_ent_1699`;
+      3-12 stands at x 45.2 out of its stone's way on STK's rule (a player from x 47.6 right is struck) and unlocks no achievement; 4-30 toggles the torch
+      twice more than its old route; 3-07 and 3-22 are R3c-2 and R3c-3; and every route waits for a burning or falling body to go before the tap whose ray
+      would end on it (2-10 until tick 321, 2-19 338, 1-23 375, 3-13's corridor portal tap 836). Next: the final comparison and the rig (R3c-11).
+- [ ] **R3c-11. Rig checks on the original, one list** (the finalize's "left for later"): 3-07's shove of a holding knight (R3c-2); 4-28 and 4-29 with a
+      knight sent up by a portal, does it walk (R3c-4); 3-22's rush, and a portal hop past it (R3c-3); 3-10's knight when its wall breaks (R3c-5); a retry
+      tap's end (R23-9) and two taps within 400 ms of an hourglass tap (R23-10); a stone against the player (STK-1); a `!` and a `?` (G1a-8). All need the
+      emulator rig (`docs/parity.md`); none was run in this wave.
+- [x] **R3c-12. `MagicPortalsSpike` was stale in the default target** (the verifier's low). CLOSED inside the route phase: the verifier's `port_build.bat`
+      recompiled `spike/main.cpp` and relinked `MagicPortalsSpike.exe` (`R3c/verify1/build.log`: 2 steps, rc 0, no warning line; never launched, so no Smart
+      App Control event), and no source has changed since (a `ninja -n` at the wave's close shows only the CMake glob re-check). The steps build named
+      targets only.
+- [ ] **R3c-13. The last verification's limits** (`R3c/verify1.json` `notRun`; R3b-8's kind): a forced rebuild of `MagicPortals.exe` and `test_mp.exe` was
+      not done (they were current, so zero warnings for them rests on the implementers' build logs; only MagicPortalsSpike's build was the verifier's
+      own); the full ctest was not run (the brief forbids it: one launch of the one runner instead); there was no comparison against the original in the
+      emulator rig and no visual read of captures (the sweep was compared byte for byte, not looked at); and the verifier read `origin/main` from the
+      local tracking ref (the finalize fetched before the push: it read `00de2b1`). Next: the final comparison.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -2826,6 +2960,9 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       begin of a contact with the player caps a knight's hold at 1000 ms. A barrel's blast and a rolling stone's crush now kill a knight (the original's `explode` and `ETHBeginContactCallback_rolling_stone`); there is no
       sword in the original. `SpottedCount()` is wired, so the seven stealth achievements are real. **GAMEPLAY changed, plainly: knights shoot and kill the player and portals on 35 levels** (planning step 159). **`test_mp_routes` is red on 25 routes
       (61 of 86 win; G1a's 17 and eight new: 3-03, 3-08, 3-09, 3-27, 3-31 and 4-30 shot, 3-10 and 3-12 with their knights crushed) and no route file was touched: the routes are re-authored by the wave's route phase, after G1b.** The rows are G1b-1 to G1b-10.*
+      *Wave 3b-2's close: the row is built (G1a, G1b, and STK's stone) and its routes are re-authored by step 161 (3-07, 3-22, 3-32, 4-28 and 4-29
+      for G1a's sight; 3-03, 3-08, 3-09, 3-27, 3-31, 4-30, 3-10 and 3-12 for G1b's shot, the crush and the stone; 3-02 wins on 400; 86 of 86 win).
+      The wave's open rows on it are listed in "What the next wave should take"; the rig checks are R3c-11.*
 - [x] **G2. Lifts run on their own**; the original's idle at marker `a`, and a tap inside their rect sends them at
       60 u/s (`ETHCallback_lift` L83504, `sendLiftToOtherPoint`) and fires no portal. 14 lifts on 13 levels. *Routes
       that ride the self-running lifts, which its step re-authors*: 2-02, 2-07, 2-09 (step 114; the Tests row), 1-27,
@@ -2947,6 +3084,8 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       shot to (150, 80) 29.9 u from `reflect_agent_826`) - all inside 32 (step 126) - and 3-14, 2-25 (step 127).
       *Measured in step 157: of the 86 routes exactly six have a reflected shot on this build - 1-12, 1-21, 2-11, 2-16, 2-25 and 3-14 (2-11 and 2-16 were not on this list) - and 1-23 has none: its tick-110 shot
       from (62.6, 206.4) toward (150, 80) passes 36.1 u from level22's `reflect_agent_826` at (84, 112), outside 32 (the step-126 figure of 29.9 u does not hold for the route as it is now). 2-27 has no route.*
+      *Wave 3b-2's close: the six routes with a reflected shot are re-authored by step 161 (1-12 473, 1-21 498, 2-11 433, 2-16 397, 2-25 538, 3-14
+      1,141); 2-27 still has no route.*
 - [x] **G10. The player moves as the decode says** - `speed 3`, `SetGravityScale(2)`, velocity set outright, in the
       air `vel.x x min(1, 0.86 x fps/60)`; the port's `move_toward` numbers are Godot-era guesses. *Every route leans on
       it* (with G4); its step re-plays all 70 (86 since wave 2). *Built in step 148 (wave 3a, local, not pushed): the
@@ -3775,7 +3914,11 @@ toward a tap, and standing still on a slope), the portal shot's decoded flight (
 levels' fireballs at their carranca's |dir| x 130) and every body's picture and the camera at the tick's own place. In play since step 152 (WT, local, not pushed):
 every body falls at the original's pace (the world's 2000 u/s^2 where it was 980), a minion walks 62.4 u/s (was 39) and a 2-32 knight 81.6 (51), a gravity well pulls every body
 and not the player alone, and every body weighs its own `.ent`'s weight (a barrel 4 times the player, a big crate 5, a stone 11); the decoded frictions and restitution are NOT yet in
-the game (G10-14, WT-1). In play since wave 3b-1's later steps (local, not pushed): the player is a capsule 18.2 x 36.2 standing 3.9 units lower, with a ground sensor 18 below him (step 153); every moving platform on 11 levels and the three patrolling agents swing twice as far at half the rate (step 154); the crates of 3-13, 3-03, 3-05 and 4-09 are pushed at 1.89 u/tick, 3-12's pile does not move until touched and a body a portal takes away wakes what lay on it (R3B FIX 1). 2-30 is won only on a stone's creep: the designed leap dies at the shipped air brake (R3-2). There is no play build: `build-play\` went with `w1b` and wave
+the game (G10-14, WT-1). In play since wave 3b-1's later steps (local, not pushed): the player is a capsule 18.2 x 36.2 standing 3.9 units lower, with a ground sensor 18 below him (step 153); every moving platform on 11 levels and the three patrolling agents swing twice as far at half the rate (step 154); the crates of 3-13, 3-03, 3-05 and 4-09 are pushed at 1.89 u/tick, 3-12's pile does not move until touched and a body a portal takes away wakes what lay on it (R3B FIX 1). 2-30 is won only on a stone's creep: the designed leap dies at the shipped air brake (R3-2). In play since wave 3b-2 (pushed, `origin/main` `53d8db2`): a tap's shot
+flies to where the tap-time ray ends and opens its portal there or fails there, and only a tap that reaches the hourglass restarts the 400 ms (step 156); a reflector catches a
+shot within 32 units and sends it on from its own point (step 157); the knights see (a 120 degree cone in their own row, a ray, `!` and `?`, blind on the six darkest levels
+until a torch is lit), shoot and kill the player or a portal, a touch caps their hold at 1000 ms, and a barrel's blast and a stone's crush kill them (steps 158-159); a rolling
+stone that hits the player fast enough kills him (step 160); and the seven stealth achievements are real. 86 of 128 levels are won by a replayed route. There is no play build: `build-play\` went with `w1b` and wave
 2 made none; run `tools\parity\play_build.bat` in `C:\Users\icvet\Desktop\Magic-Portals-Enhanced` to build one from
 `main` (a fresh link, whose first launch Smart App Control may refuse once).
 
@@ -3808,3 +3951,8 @@ and every suite green but the last independent verification failed one gate, 2-3
 three ways: G10-2 lower, the stone's decoded friction, or the creep accepted until the engine's friction step; whether
 `crate_low_emissive`'s 0.08 stays until that step (R3b-3); whether a person would play 2-32 ahead of the dragon's camera (R3-3); and
 whether the engine's friction solve and restitution at the touch (G10-14, WT-1) are queued with the Penumbra port's engine work.
+*Added by wave 3b-2's close*: the push question is answered - waves 3a, 3b-1 and 3b-2 are pushed (`origin/main` `53d8db2`), 86 of 86 routes won, 2-30 on its creep (R3-2) still the owner's;
+whether `destroyier.ent` still kills the player or only despawns a thrown stone, now that a stone's own kill is built (STK-8: what he saw near a launcher's drop); STK-9's step before
+anything is shipped (the stone's kill reads a free fall a little low); the rig checks that decide whether G1a's blocked-way rule over-blocks (does a knight lifted by a portal walk: 4-28,
+4-29) and whether the player can shove a holding knight (3-07, 3-22) (R3c-4, R3c-2, R3c-3); the sleeping-body wake after a breakable wall's destruction (3-10, R3c-5); and the grant in
+`docs/permission.md`, still its placeholder. The seven stealth achievements are real now: step 143's call is closed by steps 158-159.
