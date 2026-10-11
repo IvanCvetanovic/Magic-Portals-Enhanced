@@ -270,6 +270,14 @@ bool Find(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
             }
             sprite.zIndex = static_cast<int>(zIndex);
         }
+        // The depth the original sorts at: eth_z, which the converter writes unrounded
+        // wherever it is not 0 (z_index is its rounding and does the ordering here).
+        if (const Tscn::Value* z = owner->Meta("eth_z"); z != nullptr) {
+            if (!z->AsNumber(sprite.depth)) {
+                error = At(*owner) + owner->name + "'s eth_z is not a number";
+                return false;
+            }
+        }
         found.push_back(std::move(sprite));
     }
 
@@ -280,6 +288,39 @@ bool Find(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
     for (std::size_t i = 0; i < found.size(); ++i) found[i].order = static_cast<int>(i);
     out = std::move(found);
     return true;
+}
+
+Bucket BucketOf(const glm::dvec2& at, const DrawOrder& rule) {
+    return Bucket{static_cast<int>(std::floor((at.y + rule.lineToleranceUnits) / rule.bucketUnits)),
+                  static_cast<int>(std::floor((at.x + rule.lineToleranceUnits) / rule.bucketUnits))};
+}
+
+void Rank(std::vector<Standing>& standing, const DrawOrder& rule) {
+    std::size_t first = 0;
+    while (first < standing.size()) {
+        std::size_t last = first + 1;
+        while (last < standing.size() && standing[last].zIndex == standing[first].zIndex) ++last;
+        if (last - first > 1) {
+            std::vector<std::size_t> by(last - first);
+            std::vector<int> slots(last - first);
+            std::vector<Bucket> buckets(last - first);
+            for (std::size_t k = 0; k < by.size(); ++k) {
+                by[k] = k;
+                slots[k] = standing[first + k].slot;
+                buckets[k] = BucketOf(standing[first + k].at, rule);
+            }
+            std::sort(slots.begin(), slots.end());
+            // A stable sort: the tie that is left is the file's, which is the place in the run.
+            std::stable_sort(by.begin(), by.end(), [&](std::size_t a, std::size_t b) {
+                const double da = standing[first + a].depth;
+                const double db = standing[first + b].depth;
+                if (da != db) return da < db;
+                return buckets[a] < buckets[b];
+            });
+            for (std::size_t k = 0; k < by.size(); ++k) standing[first + by[k]].slot = slots[k];
+        }
+        first = last;
+    }
 }
 
 } // namespace MagicPortals::Sprites

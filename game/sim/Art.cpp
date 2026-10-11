@@ -654,6 +654,19 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     read.scaleFactor = depth["scale_factor"].AsNumber();
 
+    // The bucket two pictures at one depth are ordered by, and how far under a line a position is still on it. No
+    // default: a bucket of 1 or of the engine's 256 draws pairs the other way round (the group's 9 observed orders), and
+    // no tolerance puts every entity the level placed on a line in the bucket before it.
+    const Json::Value& drawOrder = root["draw_order"];
+    if (!drawOrder.IsObject() || !Finite(drawOrder["bucket_units"]) || !(drawOrder["bucket_units"].AsNumber() > 0.0) ||
+        !Finite(drawOrder["line_tolerance_units"]) || !(drawOrder["line_tolerance_units"].AsNumber() >= 0.0) ||
+        !(drawOrder["line_tolerance_units"].AsNumber() < 1.0)) {
+        error = path + ": draw_order needs a bucket_units above 0 and a line_tolerance_units from 0 to under 1";
+        return false;
+    }
+    read.drawOrder.bucketUnits = drawOrder["bucket_units"].AsNumber();
+    read.drawOrder.lineToleranceUnits = drawOrder["line_tolerance_units"].AsNumber();
+
     // The minions and knights: minion.ent's picture, whose frame is chosen by its
     // script rather than played, and every number that script frames it by. None
     // has a default: without them it is drawn on rows, columns or feet nobody read.

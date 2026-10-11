@@ -729,6 +729,65 @@
     "scale_factor": 2.8125
   },
 
+  "draw_order": {
+    "_source": [
+      "Which of two pictures at ONE depth is drawn over the other (planning step 167; the final comparison's",
+      "CMP-3). The renderer keys one multimap by the draw hash, which for a type-0 entity is its z normalised over",
+      "the scene's height range (ETHEntityRenderingManager.cpp:68-73, :119-131), so equal z ties; an equal key is",
+      "inserted after its peers, and the insertion order is the order ETHScene::MapEntitiesToBeRendered walks the",
+      "entities in (ETHScene.cpp:541-576): the visible buckets one after the other, GetIntersectingBuckets with y",
+      "the OUTER loop and x the inner, both ascending (ETHBucketManager.cpp:52-90), and each bucket's list in its",
+      "order. So the picture whose entity stands in the later bucket - the lower row, or the same row and the",
+      "higher column - is drawn over the other. A bucket is floor(position / bucket size) per axis",
+      "(ETHBucketManager.cpp:47-50).",
+      "THE BUCKET IS 128 OF THE LEVEL'S UNITS. Game::start (listing out/parity/asbc/all_functions.txt, line 21003,",
+      "#3-17) builds vector2(128, 128) x g_scale.getScale() and pushes it as the last argument of the five-argument",
+      "LoadScene (#44-49), which hands the scene that size (ETHScriptWrapper.Scene.cpp:637-642; the engine's own",
+      "scale stays 1); getScale is screenHeight / 256 (updateScaleFactor, bytes 5592..5699), 2.8125 at the 720 px",
+      "of R12 (depth.scale_factor). SGlobalScale::scaleEntities (bytes 6838..7228) then moves every entity that does",
+      "not carry scalable = 0 - none of the 128 levels' .esc carries the datum - to position x getScale",
+      "(scaleEntity, bytes 6072..6337, #38-53), so an entity at level unit x ends in bucket",
+      "floor(x x 2.8125 / 360) = floor(x / 128). The other reading, 128 DRAWN pixels (45.5 units a bucket), is the",
+      "one the comparison found mispredicts 1-07 (R4b/CMP/groups.json CMP-3)."
+    ],
+    "_measured": [
+      "The 9 pair orders the final comparison read on the original's stills (R4b/CMP/groups.json CMP-3), each the",
+      "later bucket on top: 1-07 antiportal_687 (row 1, column 2) over platform_ent_7 and block00_ent_702 (1, 1);",
+      "1-20 breakable_wall_ent_1061 (1, 4) over single_block_plat_ent_1062 (1, 3); 2-14 platform_no_emissive_ent_1028",
+      "(1, 1) over single_block_plat_no_emissive_ent_1148 (1, 0); 4-11 door_ent_2048 (1, 3) over antiportal_ent_2250",
+      "(1, 2); 4-16 block00_ent_2397 (1, 3) over double_block_plat_ent_2439 (0, 3); 4-31 spinning_platform_no_emissive_",
+      "ent_2117 (0, 4) over anchor_2095 (0, 3); 2-30's ring (0, 0) behind everything it overlaps. (Rows and columns",
+      "as Sprites::BucketOf gives them: the comparison's own notation was (column, row).)"
+    ],
+    "_not_built": [
+      "INSIDE ONE BUCKET the order is the scene file's, as Godot's is. The step-118 note reads MoveEntity",
+      "(ETHBucketManager.cpp:245-252) as putting a moved type-0 entity at the FRONT of its new bucket, and",
+      "scaleEntities as moving nearly every entity (the load bucket is the unscaled position over 360), so the",
+      "moved ones would be drawn in REVERSE file order. None of the 9 pairs stands in one bucket. The one",
+      "same-bucket pair the original shows, 4-16's block00_ent_2393 and double_block_plat_ent_2439 (file places 12",
+      "and 24, both moved from load bucket (0, 1) to (0, 3)), is drawn in the FILE's order by it: on the 2,448",
+      "frame pixels where their two pictures differ by more than 24 grey levels (mean 69.0), the original's h6.3",
+      "still differs from the port's f420 (the file's order) by 0.81 and from the other order by 68.9",
+      "(out/parity/program/CMP3/measure_samebucket.py). The chain is also open at the engine's walk of",
+      "GetEntityArray (a boost::unordered_map, so the order across load buckets is the hash's) and at the depth",
+      "normalisation's running minimum and maximum (ETHScene.cpp:531-532). Not built; planning step 167 says so."
+    ],
+    "bucket_units": 128.0,
+    "_line_tolerance_units": [
+      "How far under a bucket line a position still reads as ON it, in the level's units (the port's own: the original",
+      "has no such number). The levels put entities exactly on the lines - 1-11's anti_portal_agent_710 at x 128,",
+      "platform_ent_7 at (128, 240), 4-16's wall04_ent_2386 at y 128 - and the original's positions are exact floats,",
+      "so each is in the bucket its line opens (floor(128 x 2.8125 / 360) = 1). The port's bodies hold metres in float32,",
+      "and a body that never moved reads back x 127.99999 in units (ToPixels of its position: about 1e-5 of a unit off",
+      "at the level's coordinates, 1e-4 at the far end of the longest), which floor puts in the bucket before. 0.001 is",
+      "ten to a hundred times that noise and a thousandth of anything a body does in a tick (planning step 167).",
+      "_guess: the tolerance only. The port's own number, neither decoded nor measured on the original: a margin over",
+      "the float32 noise above. 0 puts the entities the level placed on a line in the bucket before it (the mutation",
+      "of planning step 167, gate 3)."
+    ],
+    "line_tolerance_units": 0.001
+  },
+
   "minion": {
     "_source": [
       "The minions and knights of worlds 3 and 4 (sim/Minions), as minion.ent draws them and",

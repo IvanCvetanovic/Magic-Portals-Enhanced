@@ -64,6 +64,7 @@ struct Sprite {
     double rotation = 0.0;     // the entity node's, in Godot's radians: clockwise on the screen
     glm::dvec2 offsetPx{0.0};  // the sprite's offset x scale, in the entity node's frame
     int zIndex = 0;            // the entity node's z_index
+    double depth = 0.0;        // its node's eth_z, unrounded (0 where it states none): z_index is its rounding
     int order = 0;             // its place in the level's drawing order, from the back
     bool additive = false;     // blend_mode 1: added to what is behind it rather than mixed
 };
@@ -99,6 +100,70 @@ bool Find(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
 // Where a sprite's centre is, in the level's pixels: the node's position plus
 // the offset, turned with the node.
 glm::dvec2 CentrePx(const Sprite& sprite);
+
+// ---- WHICH OF TWO PICTURES AT ONE DEPTH IS DRAWN OVER THE OTHER ------------------
+//
+// Find's order is Godot's: z_index, then the file. Ethanon's is not. Its renderer
+// keys one multimap by a draw hash that, for a type-0 entity, is the entity's z
+// normalised over the scene's height range (ETHEntityRenderingManager.cpp:119-131),
+// so two pictures at one z TIE, and a tie is drawn in the order they were inserted
+// (std::multimap::insert puts an equal key after its peers) - which is the order
+// ETHScene::MapEntitiesToBeRendered walks the entities in: the visible buckets one
+// after the other, a row at a time and each row from its lowest column to its
+// highest (ETHBucketManager::GetIntersectingBuckets, :52-90: y is the outer loop),
+// and inside one bucket its list (ETHScene.cpp:541-576). The bucket of an entity is
+// floor(position / the scene's bucket size) (ETHBucketManager.cpp:47-50), and the
+// scene's is 128 x getScale drawn pixels, 128 of the level's units at any screen
+// (art.json draw_order). So the picture whose entity stands in the LATER bucket - the
+// lower row, or the same row and the higher column - is drawn over the other.
+//
+// WHAT IS NOT BUILT: inside ONE bucket the order is the file's, as Godot's is. The
+// step-118 note says SGlobalScale::scaleEntities moves each entity the scale carries
+// to another bucket, and ETHBucketManager::MoveEntity (:245-252) puts a type-0 entity
+// at the FRONT of its new bucket, so the moved ones would sit in REVERSE file order
+// ahead of the unmoved. None of the 9 pairs the comparison read stands in one bucket;
+// the one same-bucket pair that can be read (4-16's block00_ent_2393 and
+// double_block_plat_ent_2439, both moved, both in bucket (0, 3)) is drawn in the file's
+// order by the original: on
+// the 2,448 frame pixels where the two pictures differ, 0.81 grey levels from the port's
+// frame against 68.9 from the other order (art.json draw_order._not_built).
+
+// The rule (art.json draw_order): the scene's bucket, in the level's units, and how far under a bucket line a position may read
+// and still be ON it. The levels put entities on the lines exactly - x = 128, y = 256 - and the original's positions are float
+// values that stay exact; the port's bodies hold metres, and an entity that never moved reads back 127.99999 from them, which
+// floor would put in the bucket before. The tolerance is far above that noise (about 1e-4 of a unit at the level's edge) and far
+// below anything a body does.
+struct DrawOrder {
+    double bucketUnits = 0.0;
+    double lineToleranceUnits = 0.0;
+};
+
+// A bucket: row = floor(y / bucketUnits), column = floor(x / bucketUnits), each read the tolerance's way. Ordered the way the
+// original walks them: by row, then by column.
+struct Bucket {
+    int row = 0;
+    int column = 0;
+    auto operator<=>(const Bucket&) const = default;
+};
+Bucket BucketOf(const glm::dvec2& at, const DrawOrder& rule);
+
+// One picture's standing for Rank: its z_index and unrounded depth, where its
+// entity stands, and the slot it holds now.
+struct Standing {
+    int zIndex = 0;
+    double depth = 0.0;
+    glm::dvec2 at{0.0};
+    int slot = 0;
+};
+
+// Re-deals the slots of `standing`, which is in Find's order (z_index ascending, the
+// file's order inside one z_index): within each run of one z_index the slots it holds
+// go back out by (depth, bucket row, bucket column, place in the run), so that the
+// slots stay the same SET - nothing after the run moves, and a gap Find left (a
+// picture the layer took out) stays a gap. Where the buckets are all one, every slot
+// goes back to where it was. Pure in `standing`: the same standings give the same
+// slots whatever they held before.
+void Rank(std::vector<Standing>& standing, const DrawOrder& rule);
 
 // An image's size, from its header: a PNG or a BMP, the two kinds of file the
 // converter copies, or a JPEG, which five of the original's entities name for a

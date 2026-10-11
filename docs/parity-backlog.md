@@ -429,7 +429,7 @@ work no step of §7 owns, and the owner's calls:
       (0.305, -0.009, 0.000). The other four readable rings of that gate read 33.25 / 32.00 / 32.89 / 33.00,
       all in band; 1-10 `638` still has fewer than 8 sectors on screen. `out/parity/visuals/4.2/work/edge_after_42.json`,
       reproduced independently by 4.2's verifier at 33.26 on its own capture. No amendment to 00_order §7 4.1 needed.
-- [ ] **Step 72 deviation (84 on `visuals-b`), the port draws 1-07's antiportal ring BEHIND art the original draws
+- [x] **Step 72 deviation (84 on `visuals-b`), the port draws 1-07's antiportal ring BEHIND art the original draws
       it in front of**
       (SE step 72, order 4.2; 00_order §7 step 4.2's 1-07 `antiportal_687` row, required max `c_R` 0.36-0.42 and min
       0.18-0.24, measured **0.2875 / 0.1786** — NOT MET as written). **The row fails on draw order, not on colour.**
@@ -473,6 +473,12 @@ work no step of §7 owns, and the owner's calls:
       `scaleEntities` moves every entity that does not carry `scalable = 0`, so the engine buckets the drawn
       coordinates; and a moved type-0 entity goes to the FRONT of its new bucket, so a bucket's order after the load is
       not its load order.
+      *Draw order settled by step 167 (CMP3, wave 4c-1), 2026-10-11; ticked with its limit: the ring's gate as written was NOT re-read.* The port now draws pictures
+      at one depth in the original's bucket order (`Sprites::Rank`; the bucket is 128 level units, `game/data/art.json` `draw_order`): `antiportal_687` (row 1, column 2)
+      is over `platform_ent_7` and `block00_ent_702` (1, 1), as the original's stills show; 1-07's box reads 4.54 -> 3.20 mean abs against h6.3 (the stills' spread
+      3.22) and the pair image has the red disc over all four blocks. This row's gate is a `c_R` blink reading (0.36-0.42 and 0.18-0.24, measured 0.2875 / 0.1786), and
+      step 167 read the box and the pair image, not that estimator, so the row's "re-read the row as written" is still undone. Next: run the 4.2
+      estimator once on 1-07 when the effects' phase is next measured (CMP-low a); nothing else of this row is open.
 - [ ] **Step 72 deviation (84 on `visuals-b`), 4-07's gate ring reads low under art BOTH builds draw in front of it**
       (SE step 72;
       00_order §7 step 4.2's 4-07 `antiportal_2166` row): required max `c_R` 0.36-0.42 and min 0.18-0.24, measured
@@ -1189,6 +1195,8 @@ work no step of §7 owns, and the owner's calls:
       (`RenderSystem::SortTransparentDraws`, engine `src/core/RenderSystem.cpp:158-176`); the flame's own particles do
       not move. The same class as the step-88 merge's 15 pixels on 4-14. Quantisation-level noise; it blocks nothing.
       Next: the effects runtime's owner or the engine's transparent sort.
+      *Joined by step 167 (CMP3, wave 4c-1), not closed*: step 167 deals the level's PICTURES at one depth by the original's bucket order; this row's flame quads are
+      effects, ordered by the engine's transparent sort and K13's table, and no measurement of step 167 reads these 17 pixels.
 - [ ] **Order 11.3 finding, the original checks a death before the door** (step 96, the third check; GAMEPLAY, not
       built). `GameStateController::update` calls #110 `checkGameLost`, then #113 `checkGameEnd`, whose #21-32 refuse
       once `finishGame` (122645..122773 #3-8) has set `gameLost` and `gameFinished`: a character that dies and reaches
@@ -2620,6 +2628,9 @@ them: a widely included header) and WAKE-7's tests, with R4a-10's one check.
 - [x] **G1a-1. Which target `findEntityInSight` returns when two are in sight** (CLOSED by step 159, decode.md section 5 and `docs/ethanon-formats.md` section 23: `Add` pushes BACK, `MoveEntity` pushes FRONT for an `ET_HORIZONTAL` entity, and the player and `portal.ent` are both type 0, so the player is before a later portal in one bucket, older portals before newer, a nearer bucket before a farther; the port's order was right. The one reversal, a portal whose hover crosses into the player's bucket, is G1b-3.) (the player and a portal): the port walks the buckets in the original's order (the agent's, the next, the one after) and puts the player before the
       portals inside one; the original's order inside a bucket is the bucket list's (a mover is moved to the FRONT of its new bucket, an added static to the back), undecoded. It decides G1b's shot target, not G1a's sighting. 
 - [ ] **G1a-2. The bucket a mover is stored in lags its position by a frame** (`ETHBucketManager::MoveEntity` queues the move); the port uses the tick's own position. At most one frame at a bucket line.
+      *Built for the pictures' draw order only, by step 167 (CMP3, wave 4c-1), 2026-10-11; the row stays open*: a picture's bucket is the one its entity stood in after the
+      previous tick (`ownerPx`), so a body that crosses a line is drawn with the bucket it left for one frame (`ETHScene.cpp:513`); the sim's own uses of the bucket
+      (G1a-1, G1b-3) are not changed by it.
 - [ ] **G1a-3. `char_feet.ent` is not a body here**: the original's look, which does not ignore it, can meet the feet octagon (14 x 10, 18 under the player's point) of a player more than 13 units below the ray's end; the port's
       ray cannot. Only a steep ray from below passes it.
 - [ ] **G1a-4. `isFinished` is `goals.completed || hazards.playerDied`**, both set a tick later than the original's `finishGame` (the level's end and a death). It matters on the tick a sighting begins.
@@ -3206,6 +3217,41 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       Smart App Control: read from `build1.log` and `build2.log`, 0 `warning` lines; the executables `4240c9bd` and `b9430d66` are newer than every compiled source). Next: the
       next build of these sources reads the second; nothing for the first unless the pins are questioned.
 
+**Step 167's recorded deviations** (pictures at one depth in the original's bucket order, CMP-3, wave 4c-1; planning step 167 has the evidence, `RECORDED DEVIATIONS` 1-8; `out/parity/program/CMP3/` the reports and `verify1.json`; GAMEPLAY: none; the row CMP-3 is closed by it):
+- [ ] **CMP3-1. The step-118 note's in-bucket rule is not built** (deviation 1; the verification's low 2). The note says `MoveEntity` puts a moved type-0 entity at the FRONT of its
+      new bucket, so a bucket's moved pictures would be drawn in reverse file order. None of the nine pairs stands in one bucket; the original draws the same-bucket pairs it
+      shows in the FILE's order: 4-16's `block00_ent_2393` and `double_block_plat_ent_2439` (file places 12 and 24, the later over the earlier; 0.81 mean abs from the port's order against 68.9 from the other, on 2,448 px; the
+      verification re-measured it, 0.81 on 2,449 px, the still correlating +0.95 with the over-drawn block's texture) and 1-21's `antiportal_822` under `wall04_ent_813`
+      (|still - port| 0.86 over 9,223 px, correlation +0.79 / -0.37), plus one consistent pair, 1-21's ring over `single_block_plat_ent_827` (1.60 against 11.2 reversed; another
+      load bucket, so not decisive). The chain is open at the engine's walk of `GetEntityArray` (a `boost::unordered_map`: the order across load buckets is the hash's) and at the
+      depth normalisation's running range (`ETHScene.cpp:531-532`). Building it would reverse same-bucket pairs on 19 more levels by the static model with nothing to settle
+      them (`order_pixels.json`, `v1_a_first` against `v2_a_first`, `sameBucket`); 2-05's overlap is under the touch arrow, 4-26's level is black, 4-19's pair could not be located.
+      Next: a still that shows a same-bucket pair reversed reopens it; or dump the engine's walk. Nothing otherwise.
+- [ ] **CMP3-2. `line_tolerance_units` 0.001 is the port's own number** (deviation 3; the verification's low 7). The levels put entities exactly on a bucket line (x or y a
+      multiple of 128) and the port's float32 bodies read back 127.99999; 0.001 makes a position that close under a line ON it (ten to a hundred times the noise). The commit marks
+      it `_guess` in `art.json`'s `_line_tolerance_units` note (the file is `37140679` in the commit, `77728052` in every gate; only that `_` note differs and no launch followed).
+      Next: nothing, unless a body is seen drawn in the wrong bucket at a line.
+- [ ] **CMP3-3. Two source leftovers, neither moves a pixel on the shipped levels** (deviations 4 and 5). `light_off.ent` (ET_VERTICAL, 4-22 to 4-27) and `black_bar.ent` are dealt as
+      type 0 (the port is not told a placement's type; a vertical entity's draw hash adds its y, so it never ties with a type-0 picture, and no pair of a `light_off` picture changes
+      order); pictures the layer adds after the level's own (a restocked barrel, the dark dragon's platform, a well's ring, a shock agent's ring, the door's glow) keep the slot they
+      are given; `m_rankedSprites` is not cleared by `unloadSprites` (the next build sets it first). Next: tell the reader a placement's type if a vertical entity's pair ever
+      matters; clear `m_rankedSprites` when the layer is next edited for a real change (an edit relinks both executables, and every refused launch notifies the owner).
+- [ ] **CMP3-4. Causes INFERRED, not measured** (deviation 6; the verification's low 5 and 6). 1-01's slightly worse piece (3.30 -> 3.96 over 157 px), 2-13's and 4-28's flat
+      pieces (4-28's is a faint crescent of a wave ring beside the crystal, not the bridge01 / ramp_right pair `explain_changes.md` names), the 11 "dynamic" levels (1-10, 1-17,
+      1-22, 1-23, 1-30, 2-18, 2-19, 3-03, 3-07, 3-12, 3-13: camera solves with inlier shares 0.18 to 0.63), 2-30's remaining box error (red-channel; only about 26 % of it in the
+      seven blocks over 10 grey levels, so "flame and ring-glow phase" is a reading of the rest), and the nine predicted levels left unchanged (2-26, 2-32 and 3-16 on weak
+      solves, 0.14 to 0.21). The verification's estimator reads 2-13 slightly away (29.0 -> 32.1 over 126 px) where the implementer's reads it flat (22.4 -> 23.2): both stand.
+      Next: read them again after CMP-9 (the barrels), CMP-4 (the piles) and the effects' phase (CMP-low a).
+- [x] **CMP3-5. Settled history** (deviations 2 and 7; the verification's low 1 and 4). The bucket a picture is drawn in is the one the last frame left (G1a-2's lag, built for
+      pictures; the original resolves a move after the draw, `ETHScene.cpp:513`); the three Smart App Control refusals (the runner rebuilt for the column-major mutation, launched
+      twice in one loop, and the first `MagicPortals.exe`); the literal "only the nine" sweep clause is not met and the 40 are explained, the owner told the count; `test_mp_pictures`
+      is not where the order lives. Nothing is left to do.
+- [ ] **CMP3-6. What the verification did not run** (deviation 8; the verification's `notRun`). The mutation re-runs (`bucket_units` 1e9: 5 failures in `test_mp_sprites` and 36 in
+      `test_mp_layer`; `line_tolerance_units` 0: 4 and 5; read from the implementer's logs), **the column-major mutation (never run by anyone; replaced by 2-27, 3-05 and 1-05 on the
+      stills)**, a fresh compile for the zero-warnings gate (read from `build6.log`: 0 warning lines, every source older than the executables `ab08b2e8` and `842da3d8`), a full ctest
+      loop (the repository's rule) and the reconciliation of its static predictor (34 levels) with the implementer's (47). Next: run the column-major mutation once when the runner
+      is next relinked for a real change; nothing for the others.
+
 **The final comparison's rows** (wave 4b; 128 levels, 18 causes and CMP-low; GAMEPLAY: none in the comparison itself, each row says its fix's). Evidence is under
 `out/parity/program/R4b/CMP/` (`residuals.md` has every reader's line with its box, `groups.json` the causes and proposals, `per_level.md` the table): the pair images
 `pairs/<id>_h63_pair.png` (the original above the port, half scale) and `pairs/<id>_h63_overlay.png`, port frames `port_f420/<id>_f420.png`, are kept (named in
@@ -3255,7 +3301,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       Gate: the four measured shifts reproduced to 0.5 u on f420 frames of 2-31, 3-20 and 4-31 with 2-30 unchanged; `test_mp_hinge` pins; then re-fly the nine routes
       (2-28, 2-29, 2-31, 3-15, 3-19, 3-20, 3-22, 4-11, 4-31), once, after the wave's other gameplay fixes. GAMEPLAY: yes (2-31's seesaw moves 29 u down and 14 u left,
       3-19's plank 8 u).
-- [ ] **CMP-3. Equal-z pictures are drawn in scene-file order; the original orders them by 128-unit bucket** (high on 4-31, medium on the rest; structural; `decoded`;
+- [x] **CMP-3. Equal-z pictures are drawn in scene-file order; the original orders them by 128-unit bucket** (high on 4-31, medium on the rest; structural; `decoded`;
       moves no route). Levels: 1-07, 1-11, 1-12, 1-20, 2-14, 2-30, 4-11, 4-16, 4-31. Evidence: 4-31 box [810,170,985,285] (`pairs/4-31_h63_pair.png` and `_overlay.png`:
       the arm's left half and pivot are hidden behind the anchor block in the port); 1-07 box (545,270)-(1080,715); 1-20 box 384,452,470,497 (the pillar drawn over the
       cracked stone's first tile); 2-14 box 103,367,193,547; 2-30 box 0,380,482,720; 4-11 box 1045,395,1110,600 (the port's disc covers the door's left frame); 4-16 box
@@ -3269,6 +3315,23 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       original draws it in front of), Order 11.3's deviation 9. Next: break z ties by (floor(y/128), floor(x/128)) of the node's current position, then file order
       (`Sprites::Find`, `buildSprites`). Gate: the 9 static orders on f420 frames, 1-11's and 1-12's rings as the original's, the other 119 levels reviewed for flips,
       `test_mp_pictures` pin. GAMEPLAY: none.
+      *Closed by step 167 (CMP3, wave 4c-1), 2026-10-11; committed locally, the hash goes in at the wave's close. GAMEPLAY: none (the 128 routes win on exactly the census's
+      ticks).* Built as the Next says, with the bucket's own order: `Sprites::Rank` deals the slots of each `z_index` by (exact depth, bucket row, bucket column, place in
+      the file), the later bucket (the lower row, then the higher column) over the earlier; the bucket is 128 level units and the line tolerance 0.001, both in
+      `game/data/art.json` `draw_order` with their citations; the layer deals at build and again a frame late when a picture's bucket changes. Pins: `test_mp_sprites`
+      1,571 -> 1,675 and `test_mp_layer` 3,905 -> 3,987 (`test_mp_pictures` holds step 150's interpolation, not which picture is over which, so the Gate's pin sits in the two
+      suites that own the API). Measured: the f420 sweep changed 49 levels (79 byte-identical), all 9 of the group among them; the nine boxes, mean abs against h6.3 before
+      -> after (the stills' spread): 1-07 4.54 -> 3.20 (3.22), 1-11 1.62 -> 1.31 (5.82), 1-12 16.48 -> 14.34 (35.48), 1-20 57.67 -> 0.77 (0.00), 2-14 2.52 -> 0.23 (4.27),
+      2-30 6.51 -> 5.03 (3.45), 4-11 11.09 -> 3.35 (13.93), 4-16 49.75 -> 1.03 (0.29), 4-31 9.74 -> 5.23 (0.00); 57 suites, 32,569 checks, `test_mp_routes` 128 of 128 on the
+      census's ticks, reachability 108 / 20 / 0, 0 warnings. Independently verified (`CMP3/verify1.json`: 9 gates ok, 7 low). **What it leaves**: (a) the Gate's "changes only
+      the levels the group names" is NOT met as written: 40 levels outside the nine change at f420 too (edge contacts; on their changed pixels 33 move toward the stills,
+      5 are flat and 2 slightly away, 1-01 (157 px, at most 16 grey levels) and 2-13), each explained in `out/parity/program/CMP3/explain_changes.md`, the causes of 11 of
+      them and of 4-28's piece INFERRED; (b) two of the nine boxes are not to the spread, each another cause: 2-30 (5.03 against 3.45: the doorway flame and the fire diamond's
+      glow, phase, INFERRED) and 4-31 (5.23 against 0.00: R3's hinge pose, the arm 9 px low, CMP-2's); 1-20 and 4-16 are at the port's own floor, their stills agreeing;
+      (c) the step-118 note's in-bucket rule is NOT built, and the stills contradict it on two decisive pairs (CMP3-1); (d) 1-11's and 1-12's rings are the agents' own
+      particle system at z 0 (`onda.png`), not a z -4 antiportal or a `shock_area` as the group suspected; (e) the row-major axis is settled on 2-27, 3-05 and 1-05 beside
+      the source, the column-major mutation never run (CMP3-6). The deviations are rows CMP3-1 to CMP3-6 above. Settles the draw order of step 72's deviation (ticked there,
+      with its limit) and joins Order 11.3's deviation 9 and G1a-2 without closing either.
 - [ ] **CMP-4. Piles that stand at rest in the original fall or never settle in the port** (high on 1-30, medium on 2-13 and 2-05, low on 3-12; structural; `needs-rig`;
       MOVES ROUTES). Evidence: 1-30 box 360,180,1000,660 (`pairs/1-30_h63_pair.png`: the crate pile at rest in all six original stills, toppled by f75 in the port;
       pile-region mean abs 3-4 between the original's own stills against 12-17); 2-13 box 1100,195,1280,360 (the barrel pile slides about 105 px, 30 px by f75); 2-05

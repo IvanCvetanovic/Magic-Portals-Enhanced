@@ -80,6 +80,8 @@
 #include <fstream>
 #include <functional>
 #include <limits>
+#include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -10104,6 +10106,313 @@ void TheScriptSetsTheDoorAndThePlayerEmissiveOnIgnoreEmissiveLevels() {
                   "1-01's player at dark_mage.ent's 1");
     }
     one.OnDetach(first);
+}
+
+// ---- pictures at one depth in the original's bucket order (planning step 167, CMP-3) ----------------
+//
+// Ethanon draws two pictures at one depth in the order it walks their buckets, a row at a time and each row from its
+// lowest column, so the later bucket is over the earlier (art.json draw_order, Sprites::Rank). The layer deals the slots
+// when it builds a level and again, a frame late as the original resolves a bucket move after the frame is drawn
+// (ETHScene.cpp:513), when an entity crosses a bucket line. Everything that hangs off a picture's slot - its particle
+// systems and its light's halo - is in the slot with it.
+
+void PutBodyAt(entt::registry& registry, entt::entity body, const glm::dvec2& atPx); // defined with the minions' cases below
+
+// A picture's z, by node; quiet NaN for a node with none (every comparison with it is false, so a CHECK on it fails).
+float DrawnZOfNode(const MagicPortalsLayer& layer, const std::string& node) {
+    for (const MagicPortalsLayer::PictureReport& report : layer.PictureReports()) {
+        if (report.node == node) return report.z;
+    }
+    return std::numeric_limits<float>::quiet_NaN();
+}
+
+// The first particle system of a node's entity, as the layer drew it; null where it has none.
+std::optional<MagicPortalsLayer::EmitterReport> FirstSystemOfNode(const MagicPortalsLayer& layer, const std::string& node) {
+    for (const MagicPortalsLayer::EmitterReport& report : layer.EmitterReports()) {
+        if (report.node == node && report.slot == 0) return report;
+    }
+    return std::nullopt;
+}
+
+void PicturesAtOneDepthAreDrawnInTheOriginalsBucketOrder() {
+    struct Pair {
+        const char* level;
+        const char* tag;
+        const char* over;
+        const char* under;
+    };
+    // The 9 orders the original's stills show (R4b/CMP/groups.json CMP-3), each with the later bucket on top. In
+    // every one the scene file has the other drawn over, so each FAILS if the layer takes Find's order back.
+    const Pair observed[] = {
+        {"level6", "1-07", "antiportal_687", "platform_ent_7"},
+        {"level6", "1-07", "antiportal_687", "block00_ent_702"},
+        {"level6", "1-07", "antiportal_687", "single_block_plat_ent_784"},
+        {"level19", "1-20", "breakable_wall_ent_1061", "single_block_plat_ent_1062"},
+        {"level13a", "2-14", "platform_no_emissive_ent_1028", "single_block_plat_no_emissive_ent_1148"},
+        {"level29a", "2-30", "seesaw_ent_915", "antiportal_917"},
+        {"level10c", "4-11", "door_ent_2048", "antiportal_ent_2250"},
+        {"level15c", "4-16", "block00_ent_2397", "double_block_plat_ent_2439"},
+        {"level30c", "4-31", "spinning_platform_no_emissive_ent_2117", "anchor_2095"},
+    };
+    // Each held at build AND after the level has run: the first sweep of this step had 1-20's and 2-14's pairs right at
+    // build and the file's order again from the first tick, because a body that stands on a bucket line (x 128, y 256 - the
+    // levels put 17 of these pictures there) reads 127.99999 from its metres and the bucket was the one before.
+    for (const char* level : {"level6", "level19", "level13a", "level29a", "level10c", "level15c", "level30c"}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) continue;
+        CloseTheLevelStartPopup(layer, registry);
+        for (const int ticksMore : {0, 6, 60}) {
+            for (int tick = 0; tick < ticksMore; ++tick) {
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+            for (const Pair& pair : observed) {
+                if (std::string(pair.level) != level) continue;
+                const float over = DrawnZOfNode(layer, pair.over);
+                const float under = DrawnZOfNode(layer, pair.under);
+                CHECK_MSG(over > under, std::string(pair.tag) + " after " + std::to_string(ticksMore) + " more ticks: " + pair.over +
+                                            " (" + std::to_string(over) + ") over " + pair.under + " (" +
+                                            std::to_string(under) + ")");
+            }
+        }
+        layer.OnDetach(registry);
+    }
+
+    // THE CONTROL, in one bucket: 4-16's block00_ent_2393 and double_block_plat_ent_2439 both stand in bucket (0, 3), and
+    // the original draws them in the file's order (its still reads 0.81 grey levels from the port's, 68.9 from the
+    // other order: art.json draw_order._not_built).
+    {
+        entt::registry same;
+        publishViewport(same);
+        MagicPortalsLayer one(TestPaths(), "level15c");
+        one.OnAttach(same);
+        CHECK_MSG(one.SimLevel() != nullptr && one.ArtError().empty(), one.LoadError() + one.ArtError());
+        if (one.SimLevel() != nullptr && one.ArtError().empty()) {
+            CloseTheLevelStartPopup(one, same);
+            for (int tick = 0; tick < 30; ++tick) {
+                tickWith(one, same, kRest, {}, {});
+                one.OnUpdate(same, MagicPortalsLayer::kTick);
+            }
+            const float first = DrawnZOfNode(one, "block00_ent_2393");
+            const float second = DrawnZOfNode(one, "double_block_plat_ent_2439");
+            CHECK_MSG(first < second, "one bucket: the file's order, block00_ent_2393 under double_block_plat_ent_2439: " +
+                                          std::to_string(first) + " " + std::to_string(second));
+        }
+        one.OnDetach(same);
+    }
+
+    // 1-11 AND 1-12'S RINGS are not pictures but the agents' own particle systems, at the agent's z 0 and in its slot.
+    // 1-11's anti_portal_agent_710 stands in bucket (0, 1), over which the platform double_block_plat_ent_708
+    // (1, 1) is drawn; the original cuts the ring at the platform's edge. 1-12's reflect_agent_761 (1, 1) is drawn
+    // over wall04_ent_759 (0, 1), and its ring over the wall.
+    struct Ring {
+        const char* level;
+        const char* agent;
+        const char* block;
+        bool ringOver;
+    };
+    for (const Ring& ring : {Ring{"level10", "anti_portal_agent_710", "double_block_plat_ent_708", false},
+                             Ring{"level11", "reflect_agent_761", "wall04_ent_759", true}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), ring.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) continue;
+        CloseTheLevelStartPopup(layer, registry);
+        for (const int ticksMore : {0, 60}) {
+            for (int tick = 0; tick < ticksMore; ++tick) {
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+            const std::optional<MagicPortalsLayer::EmitterReport> system = FirstSystemOfNode(layer, ring.agent);
+            const float block = DrawnZOfNode(layer, ring.block);
+            CHECK_MSG(system.has_value(), std::string(ring.agent) + " carries a particle system");
+            if (!system) continue;
+            CHECK_MSG(ring.ringOver ? system->z > block : system->z < block,
+                      std::string(ring.agent) + "'s ring (" + std::to_string(system->z) + ") " +
+                          (ring.ringOver ? "over " : "behind ") + ring.block + " (" + std::to_string(block) + ") after " +
+                          std::to_string(ticksMore) + " more ticks");
+            // It stands in its owner's slot: after the picture, and before the next slot.
+            CHECK_MSG(system->z > system->ownerZ && system->z < system->ownerZ + 0.004f,
+                      std::string(ring.agent) + "'s ring is in its owner's slot");
+        }
+        layer.OnDetach(registry);
+    }
+}
+
+// What the ranking is not allowed to touch: Find's order (the phases, the sky and the emitters' stream are drawn in it),
+// each z_index's set of slots, and so the player's slot and what slotAfter counts.
+void TheRankingOnlyDealsTheSlotsOfOneZIndexAmongItsPictures() {
+    MagicPortals::Tiers::Rules tiers;
+    std::string error;
+    CHECK_MSG(MagicPortals::Tiers::LoadRules(MagicPortalsLayer::Paths{}.portData + "/tiers.json", tiers, error), error);
+    int moved = 0;
+    for (const char* level : {"level6", "level15c", "level30c", "level31", "level0a"}) {
+        MagicPortals::Tscn::Scene scene;
+        std::vector<MagicPortals::Sprites::Sprite> found;
+        const MagicPortalsLayer::Paths paths;
+        CHECK_MSG(MagicPortals::Tscn::Load(paths.levels + "/" + level + ".tscn", scene, error) &&
+                      MagicPortals::Sprites::Find(scene, paths.art, tiers, found, error),
+                  std::string(level) + ": " + error);
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) continue;
+        // Run for a second, so what the frame-by-frame ranking does is in what is read.
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 60; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        const std::vector<MagicPortalsLayer::PictureReport> pictures = layer.PictureReports();
+        // The layer takes the no-portal sign and the skies out of Find's list or keeps them, but never reorders it.
+        // (A picture the layer adds after them - the door's glow, a ring - is not Find's, and is left out.)
+        const auto findsIt = [&found](const std::string& node) {
+            return std::any_of(found.begin(), found.end(),
+                               [&node](const MagicPortals::Sprites::Sprite& s) { return s.node == node; });
+        };
+        std::size_t at = 0;
+        bool sameOrder = true;
+        int known = 0;
+        for (const MagicPortalsLayer::PictureReport& picture : pictures) {
+            if (!findsIt(picture.node)) continue;
+            ++known;
+            while (at < found.size() && found[at].node != picture.node) ++at;
+            if (at == found.size()) sameOrder = false;
+            if (at < found.size()) ++at;
+        }
+        CHECK_MSG(sameOrder && known > 0, std::string(level) + ": the pictures are in Find's order");
+        // Slot k holds z = -1.5 + 0.004 k, and one more slot past the player's (at 1.42, after every picture at z_index 1
+        // and below): so a picture at z_index 0 or below is at slot (z + 1.5) / 0.004.
+        std::map<int, std::vector<int>> slotsByZ;
+        std::map<int, std::vector<int>> findByZ;
+        for (const MagicPortalsLayer::PictureReport& picture : pictures) {
+            if (picture.zIndex > 0 || !findsIt(picture.node)) continue;
+            slotsByZ[picture.zIndex].push_back(static_cast<int>(std::lround((static_cast<double>(picture.z) + 1.5) / 0.004)));
+        }
+        for (const MagicPortals::Sprites::Sprite& sprite : found) {
+            if (sprite.zIndex > 0) continue;
+            const bool placed = std::any_of(pictures.begin(), pictures.end(), [&sprite](const MagicPortalsLayer::PictureReport& p) {
+                return p.node == sprite.node;
+            });
+            if (placed) findByZ[sprite.zIndex].push_back(sprite.order);
+        }
+        bool sameSets = slotsByZ.size() == findByZ.size();
+        for (auto& [z, slots] : slotsByZ) {
+            std::vector<int> want = findByZ[z];
+            std::sort(slots.begin(), slots.end());
+            std::sort(want.begin(), want.end());
+            if (slots != want) sameSets = false;
+        }
+        CHECK_MSG(sameSets, std::string(level) + ": each z_index holds the slots Find gave it");
+        // And at least one picture of it is not where Find put it, on the levels the rule moves.
+        std::size_t k = 0;
+        for (const MagicPortalsLayer::PictureReport& picture : pictures) {
+            if (picture.zIndex > 0 || !findsIt(picture.node)) continue;
+            while (k < found.size() && found[k].node != picture.node) ++k;
+            if (k < found.size() &&
+                static_cast<int>(std::lround((static_cast<double>(picture.z) + 1.5) / 0.004)) != found[k].order) {
+                ++moved;
+                break;
+            }
+        }
+        layer.OnDetach(registry);
+    }
+    CHECK_MSG(moved >= 4, "the rule moves a picture on the levels it is for: " + std::to_string(moved));
+}
+
+// A BODY THAT CROSSES A BUCKET LINE IS DEALT AGAIN. 2-01 (level0a)'s crate_no_emissive_796 stands in bucket (0, 1) and the
+// platform_no_emissive_ent_791 in (0, 2): the crate is behind it. Walked into the platform's bucket the file's order is
+// the tie, and the crate is over it (the file puts it later); walked back it is behind it again. The original resolves a
+// move after the frame is drawn, so the frame after the one that moves it deals the slots.
+void ABodyThatCrossesABucketLineIsDealtAgain() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const auto found = layer.SimLevel()->built.entities.find("crate_no_emissive_796");
+    CHECK(found != layer.SimLevel()->built.entities.end());
+    if (found == layer.SimLevel()->built.entities.end()) return;
+    const entt::entity crate = found->second;
+    const auto frames = [&](const glm::dvec2& atPx, int count) {
+        for (int i = 0; i < count; ++i) {
+            PutBodyAt(registry, crate, atPx);
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+    };
+    const std::string platform = "platform_no_emissive_ent_791";
+    const std::string node = "crate_no_emissive_796";
+    // Held where the level put it: column 1 (x 238), a column before the platform's (x 320).
+    frames(glm::dvec2(238.0, 42.0), 3);
+    CHECK_MSG(DrawnZOfNode(layer, node) < DrawnZOfNode(layer, platform),
+              "column 1: the crate is behind the platform in column 2");
+    // Into column 2 (x 300): one frame to move, the next deals.
+    frames(glm::dvec2(300.0, 42.0), 1);
+    const float crossing = DrawnZOfNode(layer, node);
+    const float crossingPlatform = DrawnZOfNode(layer, platform);
+    frames(glm::dvec2(300.0, 42.0), 1);
+    CHECK_MSG(crossing < crossingPlatform,
+              "the frame the crate crosses is drawn with the bucket it left (the original's move resolves after the draw)");
+    CHECK_MSG(DrawnZOfNode(layer, node) > DrawnZOfNode(layer, platform),
+              "the frame after, in the platform's bucket: the file's order, the crate over it");
+    frames(glm::dvec2(238.0, 42.0), 2);
+    CHECK_MSG(DrawnZOfNode(layer, node) < DrawnZOfNode(layer, platform), "walked back: behind it again");
+    // A crossing at ANY depth: a different pair's order never moves for it.
+    CHECK_MSG(DrawnZOfNode(layer, "block00_no_emissive_ent_840") > DrawnZOfNode(layer, platform),
+              "block00_no_emissive_ent_840 (column 2, row 0) stays over the platform in the file's order");
+    layer.OnDetach(registry);
+}
+
+// What hangs off a slot moves with it. 1-11's anti_portal_agent_599 patrols 36 units either side of x 384, the line between
+// bucket columns 2 and 3 of row 0, where wall04_ent_712 stands (column 2, later in the file): in column 2 the agent is
+// the wall's tie in file order and behind it, in column 3 over it. Its ring - its own particle system, in its slot - keeps
+// the same distance in front of its picture on every frame, whichever slot the picture is dealt.
+void ASystemFollowsItsPicturesSlot() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level10");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    std::set<long> pictureSlots;
+    float offset = std::numeric_limits<float>::quiet_NaN();
+    bool follows = true;
+    bool behind = false;
+    bool over = false;
+    int frames = 0;
+    for (; frames < 900; ++frames) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::optional<MagicPortalsLayer::EmitterReport> system = FirstSystemOfNode(layer, "anti_portal_agent_599");
+        if (!system) {
+            follows = false;
+            break;
+        }
+        pictureSlots.insert(std::lround((static_cast<double>(system->ownerZ) + 1.5) / 0.004));
+        const float here = system->z - system->ownerZ;
+        if (std::isnan(offset)) offset = here;
+        if (std::fabs(here - offset) > 1e-4f) follows = false;
+        const float wall = DrawnZOfNode(layer, "wall04_ent_712");
+        if (system->ownerZ < wall) behind = true;
+        if (system->ownerZ > wall) over = true;
+    }
+    CHECK_MSG(follows, "the ring keeps its distance in front of its picture on every frame");
+    CHECK_MSG(behind && over && pictureSlots.size() >= 2,
+              "the agent is behind wall04_ent_712 in column 2 and over it in column 3: " + std::to_string(pictureSlots.size()) +
+                  " slots over " + std::to_string(frames) + " frames");
+    layer.OnDetach(registry);
 }
 
 // ---- the timed crystals' dials (the visuals plan's 3.1) -------------------------
@@ -20873,6 +21182,10 @@ void runTests() {
     EverySpriteIsDrawnAtItsAmbient();
     AShotIsDimmedAndADarkLevelIsDark();
     TheScriptSetsTheDoorAndThePlayerEmissiveOnIgnoreEmissiveLevels();
+    PicturesAtOneDepthAreDrawnInTheOriginalsBucketOrder();
+    TheRankingOnlyDealsTheSlotsOfOneZIndexAmongItsPictures();
+    ABodyThatCrossesABucketLineIsDealtAgain();
+    ASystemFollowsItsPicturesSlot();
     EveryTimedCrystalHasADialBehindIt();
     ATimedCrystalCountsDownOnItsDialAndNeverFades();
     ATakenCrystalsDialShrinksAway();

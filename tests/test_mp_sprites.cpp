@@ -3708,6 +3708,263 @@ void AShockRingWithoutItsNumbersIsRefused() {
             "a span below 0");
 }
 
+// ---- equal-depth pictures in the original's bucket order (planning step 167, CMP-3) -----------------
+//
+// Ethanon draws two pictures at one depth in the order it walks their buckets: a row at a time, each row
+// from its lowest column, so the later bucket is over the earlier (Sprites.hpp; art.json draw_order). Rank
+// deals the slots of one z_index by it. Every case below FAILS if Rank deals the file's order back.
+
+// The rule art.json draw_order says, with the tolerance as the port reads it unless a case sets another.
+Sprites::DrawOrder RuleOf(double tolerance = 0.001) { return Sprites::DrawOrder{128.0, tolerance}; }
+
+Sprites::Standing StandsAt(int zIndex, double x, double y, int slot, double depth = 0.0) {
+    return Sprites::Standing{zIndex, depth, glm::dvec2(x, y), slot};
+}
+
+std::vector<int> SlotsOf(const std::vector<Sprites::Standing>& standing) {
+    std::vector<int> slots;
+    for (const Sprites::Standing& s : standing) slots.push_back(s.slot);
+    return slots;
+}
+
+// (A braced initialiser inside CHECK_MSG would be split at its comma.)
+Sprites::Bucket Bk(int row, int column) { return Sprites::Bucket{row, column}; }
+
+void ABucketIsTheFloorOfThePositionOver128() {
+    using Sprites::BucketOf;
+    CHECK_MSG(BucketOf(glm::dvec2(0.0, 0.0), RuleOf()) == Bk(0, 0), "the origin is in (0, 0)");
+    CHECK_MSG(BucketOf(glm::dvec2(127.99, 127.99), RuleOf()) == Bk(0, 0), "just under 128 on both axes is still (0, 0)");
+    CHECK_MSG(BucketOf(glm::dvec2(128.0, 0.0), RuleOf()) == Bk(0, 1), "x 128 is column 1: the x axis is the column");
+    CHECK_MSG(BucketOf(glm::dvec2(0.0, 128.0), RuleOf()) == Bk(1, 0), "y 128 is row 1: the y axis is the row");
+    CHECK_MSG(BucketOf(glm::dvec2(-0.5, -128.5), RuleOf()) == Bk(-2, -1), "a negative position floors, as GetBucket does");
+    CHECK_MSG(BucketOf(glm::dvec2(462.0, 112.0), RuleOf()) == Bk(0, 3), "4-16's double_block_plat_ent_2439 at (462, 112)");
+    CHECK_MSG(Bk(0, 5) < Bk(1, 0) && Bk(1, 0) < Bk(1, 1),
+              "ordered as the original walks them: a row at a time, each row by its column");
+}
+
+void ATieIsDealtByRowThenColumn() {
+    // Three pictures at one z_index, in the file's order A, B, C holding slots 0, 1, 2.
+    //   A at (x 300, y 200): row 1, column 2      B at (x 300, y 20): row 0, column 2      C at (x 20, y 200): row 1, column 0
+    // Walked: B (row 0), then C (row 1, column 0), then A (row 1, column 2). The LAST walked is drawn over the rest.
+    std::vector<Sprites::Standing> standing = {StandsAt(0, 300, 200, 0), StandsAt(0, 300, 20, 1), StandsAt(0, 20, 200, 2)};
+    Sprites::Rank(standing, RuleOf());
+    CHECK_MSG(SlotsOf(standing) == std::vector<int>({2, 0, 1}),
+              "A over C over B: B is dealt the first slot, C the second, A the third");
+    // The row is the OUTER loop: a picture in a higher row and a lower column is still over one in a lower row and a
+    // higher column (the order x-major would give is the other).
+    std::vector<Sprites::Standing> rows = {StandsAt(0, 20, 200, 0), StandsAt(0, 600, 20, 1)};
+    Sprites::Rank(rows, RuleOf());
+    CHECK_MSG(SlotsOf(rows) == std::vector<int>({1, 0}), "(row 1, column 0) is over (row 0, column 4)");
+}
+
+void ATieInOneBucketKeepsTheFilesOrder() {
+    // Inside one bucket the order is the scene file's: the step-118 note's reversal is not built, and the one
+    // same-bucket pair the original shows is in the file's order (art.json draw_order._not_built).
+    std::vector<Sprites::Standing> standing = {StandsAt(0, 462, 112, 5), StandsAt(0, 446, 32, 6), StandsAt(0, 470, 90, 9)};
+    Sprites::Rank(standing, RuleOf());
+    CHECK_MSG(SlotsOf(standing) == std::vector<int>({5, 6, 9}), "three pictures in bucket (0, 3) keep their slots");
+    // And two buckets' worth: the file's order inside each, the later bucket after.
+    std::vector<Sprites::Standing> two = {StandsAt(0, 300, 20, 0), StandsAt(0, 20, 20, 1), StandsAt(0, 310, 30, 2),
+                                          StandsAt(0, 30, 10, 3)};
+    Sprites::Rank(two, RuleOf());
+    CHECK_MSG(SlotsOf(two) == std::vector<int>({2, 0, 3, 1}),
+              "column 0's pair (the 2nd and 4th) first in the file's order, then column 2's (the 1st and 3rd)");
+}
+
+void ARankStaysInsideItsZIndexAndKeepsItsSlots() {
+    // Three runs: z_index -2 (slots 0, 1), z_index 0 (slots 2, 4, 7 - a gap where the layer took a picture out), and
+    // z_index 3 (slot 8). Each run's pictures stand in the opposite order from the file's.
+    std::vector<Sprites::Standing> standing = {StandsAt(-2, 500, 500, 0), StandsAt(-2, 10, 10, 1),
+                                               StandsAt(0, 900, 10, 2),   StandsAt(0, 500, 10, 4),
+                                               StandsAt(0, 10, 10, 7),    StandsAt(3, 10, 10, 8)};
+    Sprites::Rank(standing, RuleOf());
+    CHECK_MSG(SlotsOf(standing) == std::vector<int>({1, 0, 7, 4, 2, 8}),
+              "each run's own slots dealt back out reversed, the gaps at 3, 5 and 6 left, the single picture alone");
+    // A picture behind (a lower z_index) is never moved over one in front, whatever its bucket.
+    std::vector<Sprites::Standing> deep = {StandsAt(-6, 900, 900, 0), StandsAt(0, 10, 10, 1)};
+    Sprites::Rank(deep, RuleOf());
+    CHECK_MSG(SlotsOf(deep) == std::vector<int>({0, 1}), "z_index decides first");
+}
+
+void ADeeperUnroundedDepthIsBehindWhateverItsBucket() {
+    // level31 has one node at eth_z -19.5 (z_index -20): the original sorts it at its own depth, in front of the
+    // -20s, not tied with them.
+    std::vector<Sprites::Standing> standing = {StandsAt(-20, 10, 10, 0, -19.5), StandsAt(-20, 900, 900, 1, -20.0),
+                                               StandsAt(-20, 500, 10, 2, -20.0)};
+    Sprites::Rank(standing, RuleOf());
+    CHECK_MSG(SlotsOf(standing) == std::vector<int>({2, 1, 0}),
+              "the -20s by their buckets (the one in row 0 first, the one in row 7 second), then the -19.5 last");
+}
+
+void ARankIsPureInTheStandings() {
+    // The same standings give the same slots whatever slots they held: a picture that crosses a bucket line and
+    // comes back is where it was.
+    const std::vector<Sprites::Standing> placed = {StandsAt(0, 300, 20, 0), StandsAt(0, 20, 200, 1), StandsAt(0, 20, 20, 2)};
+    std::vector<Sprites::Standing> first = placed;
+    Sprites::Rank(first, RuleOf());
+    std::vector<Sprites::Standing> second = first;
+    Sprites::Rank(second, RuleOf());
+    CHECK_MSG(SlotsOf(first) == std::vector<int>({1, 2, 0}) && SlotsOf(second) == SlotsOf(first), "ranked twice, the same");
+    // The first picture walks into column 0's bucket, where the third stands: the file's order inside it.
+    std::vector<Sprites::Standing> moved = second;
+    moved[0].at = glm::dvec2(30, 20);
+    Sprites::Rank(moved, RuleOf());
+    CHECK_MSG(SlotsOf(moved) == std::vector<int>({0, 2, 1}),
+              "it joins the third's bucket after the file's order and the second's row after both");
+    moved[0].at = glm::dvec2(300, 20);
+    Sprites::Rank(moved, RuleOf());
+    CHECK_MSG(SlotsOf(moved) == SlotsOf(first), "and walked back, it is where it was");
+}
+
+void TheDrawOrderRuleIsTheScenesBucket() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    CHECK_MSG(rules.drawOrder.bucketUnits == 128.0,
+              "128 of the level's units: Game::start's 128 x getScale over scaleEntities' x getScale");
+    CHECK_MSG(rules.drawOrder.lineToleranceUnits == 0.001, "a position within 0.001 under a line is on it");
+    std::ifstream file(kPortData + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const auto refused = [&real](const std::string& from, const std::string& to, const std::string& name) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos && text.find(from, at + 1) == std::string::npos, "once: " + from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-draw-order-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules read;
+        std::string why;
+        CHECK_MSG(!Art::LoadRules(path.string(), read, why), "refused: " + name);
+        CHECK_MSG(why.find("draw_order needs a bucket_units") != std::string::npos, name + ": " + why);
+    };
+    refused("\"draw_order\": {", "\"draw_order_gone\": {", "absent");
+    refused("\"bucket_units\": 128.0,\n    \"_line_tolerance_units\"", "\"bucket_units\": 0,\n    \"_line_tolerance_units\"",
+            "a bucket of nothing");
+    refused("\"bucket_units\": 128.0,\n    \"_line_tolerance_units\"", "\"bucket_units\": \"128\",\n    \"_line_tolerance_units\"",
+            "a bucket not a number");
+    refused("\"line_tolerance_units\": 0.001", "\"line_tolerance_units\": -0.001", "a tolerance under 0");
+    refused("\"line_tolerance_units\": 0.001", "\"line_tolerance_units\": 1", "a tolerance of a whole unit");
+    refused("\"line_tolerance_units\": 0.001", "\"line_tolerance_units\": \"0.001\"", "a tolerance not a number");
+}
+
+// A body that never moved reads back a hair under its line (ToPixels of float metres: 127.99999 for 128), and is still ON
+// it: the entity the level put at x 128 is in column 1, as the original has it, for as long as it stands.
+void APositionAHairUnderALineIsOnIt() {
+    const Sprites::DrawOrder rule = RuleOf(0.001);
+    CHECK_MSG(Sprites::BucketOf(glm::dvec2(127.99999, 255.99999), rule) == Bk(2, 1), "127.99999, 255.99999 is (row 2, column 1)");
+    CHECK_MSG(Sprites::BucketOf(glm::dvec2(127.99, 127.99), rule) == Bk(0, 0), "a hundredth under is not");
+    CHECK_MSG(Sprites::BucketOf(glm::dvec2(127.99999, 127.99999), RuleOf(0.0)) == Bk(0, 0),
+              "and with no tolerance it would be the bucket before (the first sweep's 1-20 and 2-14)");
+    // Rank reads the same: a pillar on the line x 128 and a block at x 200, one row, file order block, pillar.
+    std::vector<Sprites::Standing> standing = {StandsAt(0, 200, 10, 0), StandsAt(0, 127.99999, 10, 1)};
+    Sprites::Rank(standing, rule);
+    CHECK_MSG(SlotsOf(standing) == std::vector<int>({0, 1}), "the pillar at 127.99999 is in column 1 with the block: the file's order");
+    Sprites::Rank(standing, RuleOf(0.0));
+    CHECK_MSG(SlotsOf(standing) == std::vector<int>({1, 0}), "without it the pillar is in column 0, behind the block");
+}
+
+// The scene's one bucket is the number three of the port's files carry: the red key's, the knights' sight and
+// the pictures' order.
+void TheSceneHasOneBucketInThreeFiles() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    for (const char* name : {"keys.json", "minions.json"}) {
+        std::ifstream in(kPortData + "/" + name, std::ios::binary);
+        std::ostringstream text;
+        text << in.rdbuf();
+        const std::string body = text.str();
+        const std::string key = "\"bucket_units\": ";
+        const std::size_t at = body.find(key);
+        CHECK_MSG(at != std::string::npos, std::string(name) + " names the bucket");
+        if (at == std::string::npos) continue;
+        CHECK_MSG(std::strtod(body.c_str() + at + key.size(), nullptr) == rules.drawOrder.bucketUnits,
+                  std::string(name) + "'s bucket_units is the pictures'");
+    }
+}
+
+// The levels' own pairs. Find gives Godot's order; Rank deals the original's. Each `over` is drawn over each `under`
+// in the original's stills (R4b/CMP/groups.json CMP-3), the file puts it the other way, and Rank must agree.
+void TheOriginalsObservedPairsAreDealtItsWay() {
+    struct Pair {
+        const char* level;
+        const char* tag;
+        const char* over;
+        const char* under;
+    };
+    const Pair observed[] = {
+        {"level6", "1-07", "antiportal_687", "platform_ent_7"},
+        {"level6", "1-07", "antiportal_687", "block00_ent_702"},
+        {"level6", "1-07", "antiportal_687", "single_block_plat_ent_784"},
+        {"level19", "1-20", "breakable_wall_ent_1061", "single_block_plat_ent_1062"},
+        {"level13a", "2-14", "platform_no_emissive_ent_1028", "single_block_plat_no_emissive_ent_1148"},
+        {"level29a", "2-30", "seesaw_ent_915", "antiportal_917"},
+        {"level10c", "4-11", "door_ent_2048", "antiportal_ent_2250"},
+        {"level15c", "4-16", "block00_ent_2397", "double_block_plat_ent_2439"},
+        {"level30c", "4-31", "spinning_platform_no_emissive_ent_2117", "anchor_2095"},
+    };
+    for (const Pair& pair : observed) {
+        std::vector<Sprites::Sprite> sprites;
+        if (!LoadLevel(pair.level, sprites)) continue;
+        const Sprites::Sprite* over = Of(sprites, pair.over);
+        const Sprites::Sprite* under = Of(sprites, pair.under);
+        const std::string at = std::string(pair.tag) + " " + pair.over + " over " + pair.under;
+        CHECK_MSG(over != nullptr && under != nullptr && over->zIndex == under->zIndex && over->depth == under->depth,
+                  at + ": two pictures at one depth");
+        if (over == nullptr || under == nullptr) continue;
+        std::vector<Sprites::Standing> standing;
+        for (const Sprites::Sprite& s : sprites) standing.push_back(Sprites::Standing{s.zIndex, s.depth, s.atPx, s.order});
+        Sprites::Rank(standing, RuleOf());
+        const auto slotOf = [&](const Sprites::Sprite* s) {
+            return standing[static_cast<std::size_t>(s - sprites.data())].slot;
+        };
+        CHECK_MSG(slotOf(over) > slotOf(under), at + ": dealt the later slot");
+        // The pin is the rule's and not the file's: the file draws the pair the other way round.
+        CHECK_MSG(over->order < under->order, at + ": the file draws it the other way (so the pin is the rule's)");
+    }
+    // The control: 4-16's two in one bucket, in the file's order.
+    std::vector<Sprites::Sprite> sprites;
+    if (LoadLevel("level15c", sprites)) {
+        std::vector<Sprites::Standing> standing;
+        for (const Sprites::Sprite& s : sprites) standing.push_back(Sprites::Standing{s.zIndex, s.depth, s.atPx, s.order});
+        Sprites::Rank(standing, RuleOf());
+        const Sprites::Sprite* a = Of(sprites, "block00_ent_2393");
+        const Sprites::Sprite* b = Of(sprites, "double_block_plat_ent_2439");
+        CHECK_MSG(a != nullptr && b != nullptr && a->order < b->order &&
+                      standing[static_cast<std::size_t>(a - sprites.data())].slot <
+                          standing[static_cast<std::size_t>(b - sprites.data())].slot,
+                  "4-16's block00_ent_2393 and double_block_plat_ent_2439, one bucket (0, 3): the file's order");
+    }
+}
+
+void FindReadsTheNodesUnroundedDepth() {
+    std::vector<Sprites::Sprite> sprites;
+    if (LoadLevel("level31", sprites)) {
+        int deeper = 0;
+        for (const Sprites::Sprite& sprite : sprites) {
+            if (sprite.depth == -19.5) {
+                ++deeper;
+                CHECK_MSG(sprite.zIndex == -20, sprite.node + ": z_index is the rounding of -19.5");
+            }
+        }
+        CHECK_MSG(deeper == 1, "level31 has one node at eth_z -19.5: " + std::to_string(deeper));
+    }
+    std::vector<Sprites::Sprite> eight;
+    if (LoadLevel("level8", eight)) {
+        const Sprites::Sprite* wall = Of(eight, "wall_w3_ent_832");
+        const Sprites::Sprite* crystal = Of(eight, "crystal_ent_790");
+        CHECK_MSG(wall != nullptr && wall->depth == -20.0 && crystal != nullptr && crystal->depth == 0.0,
+                  "eth_z -20 on the wall and none (0) on the crystal");
+    }
+    // Find's order is untouched by any of it: z_index then the file, numbered from the back.
+    bool ordered = true;
+    for (std::size_t i = 0; i < eight.size(); ++i) ordered = ordered && eight[i].order == static_cast<int>(i);
+    CHECK_MSG(ordered, "Find still numbers the sprites in its own order");
+}
+
 MP_SUITE_MAIN("test_mp_sprites") {
     AnImageSaysItsSizeInItsHeader();
     AnythingElseIsRefusedByName();
@@ -3754,6 +4011,15 @@ MP_SUITE_MAIN("test_mp_sprites") {
     BlackBarsWithoutTheirPlacesAreRefused();
     TheShockRingIsShockAreaEnt();
     AShockRingWithoutItsNumbersIsRefused();
+    ABucketIsTheFloorOfThePositionOver128();
+    ATieIsDealtByRowThenColumn();
+    ATieInOneBucketKeepsTheFilesOrder();
+    ARankStaysInsideItsZIndexAndKeepsItsSlots();
+    ADeeperUnroundedDepthIsBehindWhateverItsBucket();
+    ARankIsPureInTheStandings();
+    TheDrawOrderRuleIsTheScenesBucket();
+    APositionAHairUnderALineIsOnIt();
+    TheSceneHasOneBucketInThreeFiles();
 
     std::error_code original;
     if (std::filesystem::is_directory(kOriginal + "/entities", original)) {
@@ -3788,5 +4054,7 @@ MP_SUITE_MAIN("test_mp_sprites") {
     TheScaledPlacementsAreDrawnAtTheirScale();
     TheScriptsRepaintWhatTheLevelsPlace();
     ThePlacementsCarryTheSystemsTheirLevelsState();
+    TheOriginalsObservedPairsAreDealtItsWay();
+    FindReadsTheNodesUnroundedDepth();
     return ::test::summary("test_mp_sprites", 70);
 }

@@ -1604,6 +1604,9 @@ private:
         int burnable{-1};
         bool blinked{false};
         double blinkMs{0.0};
+        // The bucket its entity stood in when the slots were last dealt (art.json
+        // draw_order, Sprites::Rank): what a move across a bucket line is seen against.
+        Sprites::Bucket bucket;
     };
     // A placed picture's callback (motions.json `placed`): its row, its
     // linearMotion when it has one, and its turn.
@@ -1621,6 +1624,14 @@ private:
     void buildCamera(entt::registry& registry);
     void buildDrawables(entt::registry& registry);
     void buildSprites(entt::registry& registry);
+    // The slots of the level's pictures at one depth, dealt again where an entity has
+    // crossed a bucket line since the last frame (art.json draw_order): the bucket the
+    // original orders a tie by is the one its entity was in after the frame before's
+    // draw (ETHScene.cpp:513 resolves a move once the frame is drawn), which is where
+    // each ownerPx was left. The picture and everything that hangs off its slot move.
+    void rankSprites();
+    // The z a level picture holds in `slot`: the player's slot is kept free.
+    float pictureZ(int slot) const;
     // The four black bars round the scene (m_blackBars), with the level's art.
     void buildBlackBars(entt::registry& registry);
     void buildHud(entt::registry& registry);
@@ -2067,6 +2078,10 @@ private:
     entt::entity m_shot{entt::null};      // the portal shot in flight, when there is one
 
     std::vector<DrawnSprite> m_sprites; // the level's art, in drawing order
+    // m_sprites[0, m_rankedSprites) are the level's own pictures, in Sprites::Find's order, whose
+    // slots rankSprites deals; what the layer adds after them (a restocked barrel, the dark
+    // dragon's platform) keeps the slot it was given.
+    std::size_t m_rankedSprites{0};
     bool m_artReady{false};             // the level's art was read, and is drawn
     std::string m_artError;
     bool m_showBoxes{false};

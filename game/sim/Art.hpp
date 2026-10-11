@@ -34,6 +34,7 @@
 
 #include "sim/Lighting.hpp"
 #include "sim/Particles.hpp"
+#include "sim/Sprites.hpp"
 
 namespace MagicPortals::Art {
 
@@ -528,6 +529,8 @@ struct Rules {
     // over this (art.json depth). A level's nodes were multiplied by it at load and
     // what a script adds at a literal z was not.
     double scaleFactor = 0.0;
+    // Which of two pictures at one depth is drawn over the other (art.json draw_order, Sprites::Rank).
+    Sprites::DrawOrder drawOrder;
 
     // A script's raw depth in the level's units, where the port orders its art.
     double LevelDepth(double worldZ) const { return worldZ / scaleFactor; }

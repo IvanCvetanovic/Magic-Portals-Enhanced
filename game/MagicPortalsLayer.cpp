@@ -2759,6 +2759,52 @@ float MagicPortalsLayer::systemZ(float base, Slot klass, int slot, int systems) 
 
 float MagicPortalsLayer::PlayerSlotZ() const { return slotAt(m_playerSlot, Slot::Picture); }
 
+float MagicPortalsLayer::pictureZ(int slot) const {
+    // The player's slot is kept free.
+    return slotAt(slot < m_playerSlot ? slot : slot + 1, Slot::Picture);
+}
+
+void MagicPortalsLayer::rankSprites() {
+    if (m_rankedSprites == 0 || m_rankedSprites > m_sprites.size()) return;
+    const Sprites::DrawOrder& rule = m_artRules.drawOrder;
+    // Where each entity stands, as the last frame left it. A sky, a satellite and the space sky's four are
+    // pinned to the camera by the port: the original moves them every frame, and a bucket that changed on
+    // every frame would be no order at all, so they keep the node's own bucket.
+    const auto standsAt = [](const DrawnSprite& drawn) {
+        const bool pinned = drawn.sky >= 0 || drawn.satellite || drawn.space != SpaceRole::None;
+        return pinned ? drawn.sprite.atPx : drawn.ownerPx;
+    };
+    bool crossed = false;
+    for (std::size_t i = 0; i < m_rankedSprites && !crossed; ++i) {
+        crossed = Sprites::BucketOf(standsAt(m_sprites[i]), rule) != m_sprites[i].bucket;
+    }
+    if (!crossed) return;
+    std::vector<Sprites::Standing> standing;
+    standing.reserve(m_rankedSprites);
+    for (std::size_t i = 0; i < m_rankedSprites; ++i) {
+        const DrawnSprite& drawn = m_sprites[i];
+        standing.push_back(Sprites::Standing{drawn.sprite.zIndex, drawn.sprite.depth, standsAt(drawn), drawn.sprite.order});
+    }
+    Sprites::Rank(standing, rule);
+    for (std::size_t i = 0; i < m_rankedSprites; ++i) {
+        DrawnSprite& drawn = m_sprites[i];
+        drawn.bucket = Sprites::BucketOf(standsAt(drawn), rule);
+        if (standing[i].slot == drawn.sprite.order) continue;
+        drawn.sprite.order = standing[i].slot;
+        const float was = drawn.z;
+        drawn.z = pictureZ(drawn.sprite.order);
+        // What hangs off the picture's slot at build moves with it: its light's halo, and every system
+        // of its own that stands in the slot (a lifted one stands at a depth, which did not change).
+        const float by = drawn.z - was;
+        for (Emitter& emitter : m_emitters) {
+            if (emitter.sprite == static_cast<int>(i) && !emitter.lifted) emitter.z += by;
+        }
+        for (PlacedLight& placed : m_placedLights) {
+            if (placed.sprite == static_cast<int>(i)) placed.haloZ += by;
+        }
+    }
+}
+
 std::vector<MagicPortalsLayer::TimerReport> MagicPortalsLayer::TimerReports() const {
     std::vector<TimerReport> reports;
     reports.reserve(m_timers.size());
@@ -4641,6 +4687,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     using namespace Supersonic;
     std::vector<Sprites::Sprite> sprites;
     m_artError.clear();
+    m_rankedSprites = 0;
     m_sign = NoPortalSign{};
     m_sky = Sky::Controller{};
     m_space = Sky::Space{};
@@ -4768,6 +4815,21 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     m_playerSlot = static_cast<int>(std::count_if(sprites.begin(), sprites.end(), [this](const Sprites::Sprite& s) {
         return static_cast<double>(s.zIndex) <= m_playerZ;
     }));
+    // THE SLOTS OF PICTURES AT ONE DEPTH are dealt by the bucket their entities stand in (art.json
+    // draw_order, Sprites::Rank): the original draws a tie in the order it walks the buckets, the lower
+    // row and then the higher column last, so that one is over the other. Only the slot a picture holds
+    // changes: `sprites` keeps Find's order, which the phases below, the sky and the emitters' stream
+    // are all drawn in, and every run of one z_index keeps its set of slots, so nothing counted by
+    // z_index (the player's slot, slotAfter) moves.
+    {
+        std::vector<Sprites::Standing> standing;
+        standing.reserve(sprites.size());
+        for (const Sprites::Sprite& sprite : sprites) {
+            standing.push_back(Sprites::Standing{sprite.zIndex, sprite.depth, sprite.atPx, sprite.order});
+        }
+        Sprites::Rank(standing, m_artRules.drawOrder);
+        for (std::size_t i = 0; i < sprites.size(); ++i) sprites[i].order = standing[i].slot;
+    }
     const auto indexOf = [](const auto& list, const std::string& name) {
         for (std::size_t i = 0; i < list.size(); ++i) {
             if (list[i].name == name) return static_cast<int>(i);
@@ -4850,8 +4912,8 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         }
         DrawnSprite drawn;
         drawn.quad = makeSprite(registry, "Magic Portals Sprite", sprite.texture, sprite.additive);
-        // The player's slot is kept free.
-        drawn.z = slotAt(sprite.order < m_playerSlot ? sprite.order : sprite.order + 1, Slot::Picture);
+        drawn.z = pictureZ(sprite.order);
+        drawn.bucket = Sprites::BucketOf(sprite.atPx, m_artRules.drawOrder);
         // THE EXIT DOOR AND THE DOORWAY'S BLACK, each the first node of its entity,
         // as readProperties' two SeekEntity calls find them (art.json door). Both
         // bob on a `no_gravity` level, with the glow this function adds at its end.
@@ -5132,6 +5194,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         drawn.sprite = std::move(sprite);
         m_sprites.push_back(std::move(drawn));
     }
+    m_rankedSprites = m_sprites.size();
     // 2-32'S DRAGON IS DRAWN A CELL AT A TIME (dragon.json picture): dragon.ent
     // cuts dragon_boss.png 2 x 2, and the port cuts it through Tiers::FrameCut, the
     // one cut rule (00_order K5). The file has no hd twin, so a frame is 226 x 180
@@ -5658,6 +5721,7 @@ bool MagicPortalsLayer::templatePicture(const Restock::Added& added, DrawnSprite
 
 void MagicPortalsLayer::syncSprites(entt::registry& registry) {
     using namespace Supersonic;
+    rankSprites();
     // A restock the port could not build, said once a level (the original prints
     // 'Spawn entity not found ' for a missing marker, addEntityAtSpawnPoint #85-101;
     // the port also cannot build a template it has no node for).
